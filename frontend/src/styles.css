@@ -108,3 +108,11 @@ a:hover {
 .pos { color: var(--pos); }
 .neg { color: var(--neg); }
 .muted { color: var(--text-muted); }
+
+/* Fetch-state text utilities, same reasoning as the valence trio above:
+ * `.stale` (a refetch failed over data still on screen, or a measured
+ * "nothing to report yet") and `.error` (a hard first-load failure) were
+ * each declared near-identically in five-plus workspace files before v54's
+ * sb-async rollout started collapsing them into one definition here. */
+.stale { color: var(--warn); font-size: var(--text-table); }
+.error { color: var(--neg); font-size: var(--text-table); }

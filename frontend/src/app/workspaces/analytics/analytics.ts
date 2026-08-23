@@ -29,6 +29,7 @@ import {
   TierRow,
 } from '../../stores/analytics.store';
 import { ConnectionStore } from '../../stores/connection.store';
+import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { Chip, QualityChip, qualityTone } from '../../ui/chip';
 import { ChipRow } from '../../ui/chip-row';
@@ -129,12 +130,18 @@ interface ProposalView extends ProposalRow {
     ConfirmDialog,
     PaginationComponent,
     SectionHead,
+    Async,
   ],
   template: `
     <sb-section-head heading="Analytics">
-      @if (store.error(); as message) {
-        <!-- Beside the data, never instead of it: one failed refetch should
-             not empty a table that is still the best information available. -->
+      <!-- Only for Tuning: the other four tabs each carry their own
+           sb-async now, which already turns this same store.error() into
+           either a first-load error panel or a demoted stale badge scoped
+           to the panel that actually failed -- showing it here too would
+           duplicate it. Tuning has no sb-async (its fetch is one of several
+           independent, event/action-driven pieces of that tab, not a single
+           mount-time load), so this remains its only error surface. -->
+      @if (activeTab() === 'tuning' && store.error(); as message) {
         <span actions class="stale" role="status">{{ message }}</span>
       }
     </sb-section-head>
@@ -144,101 +151,136 @@ interface ProposalView extends ProposalRow {
     @switch (activeTab()) {
       <!-- -- performance ---------------------------------------------- -->
       @case ('performance') {
-        @if (store.missingRelocated(); as missing) {
-          @if (missing.length) {
-            <!-- The relocation's own alarm. These six moved off the Dashboard
-                 header on the promise that they would appear here; a missing
-                 one otherwise looks exactly like a metric with no value yet. -->
-            <p class="alert" role="alert">
-              Not returned by the API: {{ missing.join(', ') }}. These metrics
-              moved here from the Dashboard and should be present.
-            </p>
+        <sb-async
+          [loading]="performanceAsync().loading"
+          [error]="performanceAsync().error"
+          [empty]="performanceAsync().empty"
+          [staleAsOf]="performanceAsync().staleAsOf"
+          emptyReason="measured-zero"
+          emptyTitle="No closed trades in this range"
+          [skeletonRows]="5"
+          [skeletonCols]="3"
+          (retry)="store.load()"
+        >
+          @if (store.missingRelocated(); as missing) {
+            @if (missing.length) {
+              <!-- The relocation's own alarm. These six moved off the Dashboard
+                   header on the promise that they would appear here; a missing
+                   one otherwise looks exactly like a metric with no value yet. -->
+              <p class="alert" role="alert">
+                Not returned by the API: {{ missing.join(', ') }}. These metrics
+                moved here from the Dashboard and should be present.
+              </p>
+            }
           }
-        }
 
-        <h2 class="section">Snapshot</h2>
-        <div class="panels">
-          <sb-panel heading="Record">
-            <sb-chip-row class="chips">
-              @for (metric of store.relocated(); track metric.key) {
-                <sb-metric-chip
-                  [label]="metric.label"
-                  [value]="metric.value"
-                  [unit]="metric.unit"
-                  [decimals]="metric.decimals"
-                  [tone]="metric.pnl ? 'pnl' : 'plain'"
-                />
-              }
-            </sb-chip-row>
-          </sb-panel>
+          <h2 class="section">Snapshot</h2>
+          <div class="panels">
+            <sb-panel heading="Record">
+              <sb-chip-row class="chips">
+                @for (metric of store.relocated(); track metric.key) {
+                  <sb-metric-chip
+                    [label]="metric.label"
+                    [value]="metric.value"
+                    [unit]="metric.unit"
+                    [decimals]="metric.decimals"
+                    [tone]="metric.pnl ? 'pnl' : 'plain'"
+                  />
+                }
+              </sb-chip-row>
+            </sb-panel>
 
-          <sb-panel heading="Overall">
-            <dl>
-              <div><dt>Win rate</dt><dd class="num">{{ fmtRate(store.winRate()) }}</dd></div>
-              <div>
-                <dt>Expectancy</dt>
-                <dd class="num">{{ fmtExpectancy(store.expectancyR()) }}</dd>
-              </div>
-              <div><dt>Trades</dt><dd class="num">{{ fmtCount(store.totals().total) }}</dd></div>
-              <div><dt>Open</dt><dd class="num">{{ fmtCount(store.totals().open) }}</dd></div>
-              <div><dt>Closed</dt><dd class="num">{{ fmtCount(store.totals().closed) }}</dd></div>
-            </dl>
-          </sb-panel>
-        </div>
-
-        <!-- SR50. Everything below comes from GET /analytics/snapshot, which
-             the server has been building and serving all along. -->
-        @if (store.snapshotError(); as message) {
-          <!-- Its own line, not the tab-wide error: the panels above came from
-               a different endpoint and are not implicated. -->
-          <p class="stale" role="status">Snapshot unavailable — {{ message }}</p>
-        }
-
-        <div class="panels">
-          <sb-panel heading="Risk-adjusted">
-            <sb-chip-row class="chips">
-              <sb-metric-chip label="Profit factor" [value]="store.profitFactor()" />
-              <sb-metric-chip label="Sharpe" [value]="store.sharpe()" />
-              <sb-metric-chip label="Sortino" [value]="store.sortino()" />
-              <!-- Max drawdown is always a loss, and always reported positive
-                   by the server. Amber, not red: it is the cost of the track
-                   record, not a loss happening now. -->
-              <sb-metric-chip
-                label="Max drawdown"
-                [value]="store.maxDrawdownPct()"
-                unit="%"
-                [decimals]="1"
-                tone="caution"
-              />
-              <sb-metric-chip
-                label="Total P&L"
-                [value]="store.totalPnl()"
-                tone="pnl"
-                [unit]="currencyUnit()"
-              />
-            </sb-chip-row>
-          </sb-panel>
-
-          @if (store.streaks(); as streaks) {
-            <sb-panel heading="Streaks">
+            <sb-panel heading="Overall">
               <dl>
+                <div><dt>Win rate</dt><dd class="num">{{ fmtRate(store.winRate()) }}</dd></div>
                 <div>
-                  <dt>Current</dt>
-                  <dd class="num">{{ currentStreak(streaks) }}</dd>
+                  <dt>Expectancy</dt>
+                  <dd class="num">{{ fmtExpectancy(store.expectancyR()) }}</dd>
                 </div>
-                <div>
-                  <dt>Best win run</dt>
-                  <dd class="num">{{ fmtCount(streaks.bestWin) }}</dd>
-                </div>
-                <div>
-                  <dt>Worst loss run</dt>
-                  <dd class="num">{{ fmtCount(streaks.worstLoss) }}</dd>
-                </div>
+                <div><dt>Trades</dt><dd class="num">{{ fmtCount(store.totals().total) }}</dd></div>
+                <div><dt>Open</dt><dd class="num">{{ fmtCount(store.totals().open) }}</dd></div>
+                <div><dt>Closed</dt><dd class="num">{{ fmtCount(store.totals().closed) }}</dd></div>
               </dl>
             </sb-panel>
-          }
-        </div>
+          </div>
+        </sb-async>
 
+        <!-- SR50. Everything below comes from GET /analytics/snapshot, a
+             separate fetch from 'performance' above — its own sb-async so a
+             snapshot failure cannot blank the record/overall panels. -->
+        <sb-async
+          [loading]="snapshotAsync().loading"
+          [error]="snapshotAsync().error"
+          [empty]="snapshotAsync().empty"
+          [staleAsOf]="snapshotAsync().staleAsOf"
+          emptyReason="measured-zero"
+          emptyTitle="No closed trades in this range"
+          [skeletonRows]="4"
+          [skeletonCols]="3"
+          (retry)="store.load()"
+        >
+          <div class="panels">
+            <sb-panel heading="Risk-adjusted">
+              <sb-chip-row class="chips">
+                <sb-metric-chip label="Profit factor" [value]="store.profitFactor()" />
+                <sb-metric-chip label="Sharpe" [value]="store.sharpe()" />
+                <sb-metric-chip label="Sortino" [value]="store.sortino()" />
+                <!-- Max drawdown is always a loss, and always reported positive
+                     by the server. Amber, not red: it is the cost of the track
+                     record, not a loss happening now. -->
+                <sb-metric-chip
+                  label="Max drawdown"
+                  [value]="store.maxDrawdownPct()"
+                  unit="%"
+                  [decimals]="1"
+                  tone="caution"
+                />
+                <sb-metric-chip
+                  label="Total P&L"
+                  [value]="store.totalPnl()"
+                  tone="pnl"
+                  [unit]="currencyUnit()"
+                />
+              </sb-chip-row>
+            </sb-panel>
+
+            @if (store.streaks(); as streaks) {
+              <sb-panel heading="Streaks">
+                <dl>
+                  <div>
+                    <dt>Current</dt>
+                    <dd class="num">{{ currentStreak(streaks) }}</dd>
+                  </div>
+                  <div>
+                    <dt>Best win run</dt>
+                    <dd class="num">{{ fmtCount(streaks.bestWin) }}</dd>
+                  </div>
+                  <div>
+                    <dt>Worst loss run</dt>
+                    <dd class="num">{{ fmtCount(streaks.worstLoss) }}</dd>
+                  </div>
+                </dl>
+              </sb-panel>
+            }
+          </div>
+        </sb-async>
+
+        <!-- Distributions through "By segment" — same 'performance' fetch as
+             the Snapshot section above, split into its own sb-async only
+             because the Journal panel (a third, independent fetch) sits
+             between this block and the by-confidence/by-dimension tables
+             further down; the DOM order is not being restructured. -->
+        <sb-async
+          [loading]="performanceAsync().loading"
+          [error]="performanceAsync().error"
+          [empty]="performanceAsync().empty"
+          [staleAsOf]="performanceAsync().staleAsOf"
+          emptyReason="measured-zero"
+          emptyTitle="No closed trades in this range"
+          [skeletonRows]="8"
+          [skeletonCols]="6"
+          (retry)="store.load()"
+        >
         <h2 class="section">Distributions</h2>
         <!-- SR54. Everything below is scoped by the range control; the two
              panels above are deliberately all-time, so the heading says which
@@ -376,18 +418,27 @@ interface ProposalView extends ProposalRow {
         </div>
 
         <h2 class="section">By segment</h2>
+        </sb-async>
+
         <!-- SR55. NOT a rebuilt Journal page: spec v14 Decision 4 collapsed
              that deliberately. The digest and lessons are analytics and live
              here; a single trade's excursions live beside the note that
-             explains them, on the detail view. -->
-        <sb-panel heading="Journal">
-          @if (store.journalError(); as message) {
-            <p class="stale" role="status">Journal unavailable — {{ message }}</p>
-          } @else if (store.journalEmpty()) {
-            <p class="stale" role="status">
-              No journal entries yet — they are written when a trade closes.
-            </p>
-          } @else {
+             explains them, on the detail view. Its own sb-async: the journal
+             lives in its own store/module and a failed read here must not
+             touch the tables below. -->
+        <sb-async
+          [loading]="journalAsync().loading"
+          [error]="journalAsync().error"
+          [empty]="journalAsync().empty"
+          [staleAsOf]="journalAsync().staleAsOf"
+          emptyReason="measured-zero"
+          emptyTitle="No journal entries yet"
+          emptyHint="They are written when a trade closes."
+          [skeletonRows]="3"
+          [skeletonCols]="1"
+          (retry)="store.load()"
+        >
+          <sb-panel heading="Journal">
             <p class="series-note">
               From {{ store.journalEntryCount() }}
               {{ store.journalEntryCount() === 1 ? 'entry' : 'entries' }}.
@@ -408,16 +459,26 @@ interface ProposalView extends ProposalRow {
                 }
               </ul>
             }
-          }
-        </sb-panel>
+          </sb-panel>
+        </sb-async>
 
+        <sb-async
+          [loading]="performanceAsync().loading"
+          [error]="performanceAsync().error"
+          [empty]="performanceAsync().empty"
+          [staleAsOf]="performanceAsync().staleAsOf"
+          emptyReason="measured-zero"
+          emptyTitle="No closed trades in this range"
+          [skeletonRows]="8"
+          [skeletonCols]="6"
+          (retry)="store.load()"
+        >
         <sb-panel heading="By confidence level" [flush]="true">
           <sb-data-table
             [rows]="confidencePage.visible()"
             [columns]="confidenceColumns()"
             [visible]="confidenceKeys"
             [rowKey]="confidenceKey"
-            [loading]="store.loading()"
             [emptyState]="confidenceEmpty"
             [pagination]="confidencePage.pageSpec()"
             (pageChange)="confidencePage.setPage($event)"
@@ -442,12 +503,12 @@ interface ProposalView extends ProposalRow {
             [columns]="breakdownColumns()"
             [visible]="breakdownKeys"
             [rowKey]="breakdownKey"
-            [loading]="store.loading()"
             [emptyState]="breakdownEmpty()"
             [pagination]="breakdownPage.pageSpec()"
             (pageChange)="breakdownPage.setPage($event)"
           />
         </sb-panel>
+        </sb-async>
       }
 
       <!-- -- strategies ----------------------------------------------- -->
@@ -475,61 +536,72 @@ interface ProposalView extends ProposalRow {
           rate has fallen meaningfully below what OOS testing promised.
         </p>
 
-        <sb-panel heading="Strategy registry" [flush]="true">
-          <p class="panel-subtitle">out-of-sample validation status per strategy</p>
-          <sb-data-table
-            [rows]="strategyPage.visible()"
-            [columns]="strategyColumns()"
-            [visible]="strategyKeys"
-            [rowKey]="strategyKey"
-            [loading]="store.loading()"
-            [emptyState]="strategyEmpty"
-            [pagination]="strategyPage.pageSpec()"
-            (pageChange)="strategyPage.setPage($event)"
-          />
+        <sb-async
+          [loading]="strategiesAsync().loading"
+          [error]="strategiesAsync().error"
+          [empty]="strategiesAsync().empty"
+          [staleAsOf]="strategiesAsync().staleAsOf"
+          emptyReason="measured-zero"
+          emptyTitle="No strategy has a closed trade in this range"
+          [skeletonRows]="8"
+          [skeletonCols]="6"
+          (retry)="store.load()"
+        >
+          <sb-panel heading="Strategy registry" [flush]="true">
+            <p class="panel-subtitle">out-of-sample validation status per strategy</p>
+            <sb-data-table
+              [rows]="strategyPage.visible()"
+              [columns]="strategyColumns()"
+              [visible]="strategyKeys"
+              [rowKey]="strategyKey"
+              [emptyState]="strategyEmpty"
+              [pagination]="strategyPage.pageSpec()"
+              (pageChange)="strategyPage.setPage($event)"
+            />
 
-          <!-- SR61. The twelve column tips from strategies.html:30-41. A
-               glossary under the table rather than a tip icon per header,
-               per this task's Step 2: the SPA has no tip-icon component and
-               adding one would be a design decision, not a copy task. -->
-          <details class="glossary">
-            <summary>What these columns mean</summary>
-            <dl>
-              @for (entry of strategyGlossary; track entry.term) {
-                <div><dt>{{ entry.term }}</dt><dd>{{ entry.gloss }}</dd></div>
-              }
-            </dl>
-          </details>
-        </sb-panel>
+            <!-- SR61. The twelve column tips from strategies.html:30-41. A
+                 glossary under the table rather than a tip icon per header,
+                 per this task's Step 2: the SPA has no tip-icon component and
+                 adding one would be a design decision, not a copy task. -->
+            <details class="glossary">
+              <summary>What these columns mean</summary>
+              <dl>
+                @for (entry of strategyGlossary; track entry.term) {
+                  <div><dt>{{ entry.term }}</dt><dd>{{ entry.gloss }}</dd></div>
+                }
+              </dl>
+            </details>
+          </sb-panel>
 
-        @if (store.heatmap(); as heatmap) {
-          <sb-panel heading="Win rate by strategy and horizon" [flush]="true">
-            <div class="scroller">
-              <table class="heat">
-                <thead>
-                  <tr>
-                    <th></th>
-                    @for (horizon of heatmap.horizons; track horizon) {
-                      <th class="num">{{ horizon }}</th>
-                    }
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (strategy of heatmap.strategies; track strategy) {
+          @if (store.heatmap(); as heatmap) {
+            <sb-panel heading="Win rate by strategy and horizon" [flush]="true">
+              <div class="scroller">
+                <table class="heat">
+                  <thead>
                     <tr>
-                      <th scope="row">{{ strategy }}</th>
+                      <th></th>
                       @for (horizon of heatmap.horizons; track horizon) {
-                        <td class="num cell" [style.--heat]="heat(strategy, horizon)">
-                          {{ heatLabel(strategy, horizon) }}
-                        </td>
+                        <th class="num">{{ horizon }}</th>
                       }
                     </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-          </sb-panel>
-        }
+                  </thead>
+                  <tbody>
+                    @for (strategy of heatmap.strategies; track strategy) {
+                      <tr>
+                        <th scope="row">{{ strategy }}</th>
+                        @for (horizon of heatmap.horizons; track horizon) {
+                          <td class="num cell" [style.--heat]="heat(strategy, horizon)">
+                            {{ heatLabel(strategy, horizon) }}
+                          </td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </sb-panel>
+          }
+        </sb-async>
       }
 
       <!-- -- calibration ---------------------------------------------- -->
@@ -547,89 +619,98 @@ interface ProposalView extends ProposalRow {
           revisiting before it's trusted for sizing or filtering decisions.
         </p>
 
-        <sb-panel heading="Quality score vs outcome" [flush]="true">
-          <!-- SR61. The Jinja chart drew an 80% line across the deciles; the
-               SPA rewrite dropped it and kept only this sentence. Restored
-               below -- 80 is calibration.py:_meets_band's A-tier bar,
-               verified -- with the table underneath for the exact figures. -->
-          <p class="panel-subtitle">
-            Each decile's realised win rate, against an 80% target.
-          </p>
-          @if (store.decileHistogram().length) {
-            <sb-histogram [bins]="store.decileHistogram()" [max]="100" [referenceLine]="80" />
-          }
-          <sb-data-table
-            [rows]="decilePage.visible()"
-            [columns]="decileColumns"
-            [visible]="decileKeys"
-            [rowKey]="decileKey"
-            [loading]="store.loading()"
-            [emptyState]="decileEmpty"
-            [pagination]="decilePage.pageSpec()"
-            (pageChange)="decilePage.setPage($event)"
-          />
-        </sb-panel>
+        <sb-async
+          [loading]="calibrationAsync().loading"
+          [error]="calibrationAsync().error"
+          [empty]="calibrationAsync().empty"
+          [staleAsOf]="calibrationAsync().staleAsOf"
+          emptyReason="measured-zero"
+          emptyTitle="No closed trades to calibrate against"
+          [skeletonRows]="8"
+          [skeletonCols]="6"
+          (retry)="store.load()"
+        >
+          <sb-panel heading="Quality score vs outcome" [flush]="true">
+            <!-- SR61. The Jinja chart drew an 80% line across the deciles; the
+                 SPA rewrite dropped it and kept only this sentence. Restored
+                 below -- 80 is calibration.py:_meets_band's A-tier bar,
+                 verified -- with the table underneath for the exact figures. -->
+            <p class="panel-subtitle">
+              Each decile's realised win rate, against an 80% target.
+            </p>
+            @if (store.decileHistogram().length) {
+              <sb-histogram [bins]="store.decileHistogram()" [max]="100" [referenceLine]="80" />
+            }
+            <sb-data-table
+              [rows]="decilePage.visible()"
+              [columns]="decileColumns"
+              [visible]="decileKeys"
+              [rowKey]="decileKey"
+              [emptyState]="decileEmpty"
+              [pagination]="decilePage.pageSpec()"
+              (pageChange)="decilePage.setPage($event)"
+            />
+          </sb-panel>
 
-        <sb-panel heading="Tier calibration" [flush]="true">
-          <!-- SR61. stats.html:19 and :21. Both numbers verified against code
-               before being written down: the A/B/C SCORE bands are
-               quality.py:_tier (>=75, 50-74, <50) and the win-rate bands
-               each tier is judged against are calibration.py:EXPECTED_BAND
-               (A >=80, B 70-80, C <70). They are different scales and the
-               original copy was right to name only the first. -->
-          <p class="panel-subtitle">
-            Every plan is graded A (score ≥75), B (50–74) or C (below 50) when
-            it is built. This table checks whether that grading holds up: does
-            tier A actually win more often live than tier C? "Pass" means the
-            tier's live win rate falls inside the band it is supposed to
-            deliver — and a verdict needs at least 10 closed trades, below
-            which it reads as unknown rather than as a failure.
-          </p>
-          <p class="section-help">
-            If A/B rows stay empty or thin (N small), it usually means too few
-            trades have closed yet at that tier — not that the tiering is
-            broken. See the Strategies tab for why a strategy's badge
-            (VALIDATED vs WEAK) may be dragging its tier down.
-          </p>
-          <sb-data-table
-            [rows]="tierPage.visible()"
-            [columns]="tierColumns()"
-            [visible]="tierKeys"
-            [rowKey]="tierKey"
-            [loading]="store.loading()"
-            [emptyState]="tierEmpty"
-            [pagination]="tierPage.pageSpec()"
-            (pageChange)="tierPage.setPage($event)"
-          />
-        </sb-panel>
+          <sb-panel heading="Tier calibration" [flush]="true">
+            <!-- SR61. stats.html:19 and :21. Both numbers verified against code
+                 before being written down: the A/B/C SCORE bands are
+                 quality.py:_tier (>=75, 50-74, <50) and the win-rate bands
+                 each tier is judged against are calibration.py:EXPECTED_BAND
+                 (A >=80, B 70-80, C <70). They are different scales and the
+                 original copy was right to name only the first. -->
+            <p class="panel-subtitle">
+              Every plan is graded A (score ≥75), B (50–74) or C (below 50) when
+              it is built. This table checks whether that grading holds up: does
+              tier A actually win more often live than tier C? "Pass" means the
+              tier's live win rate falls inside the band it is supposed to
+              deliver — and a verdict needs at least 10 closed trades, below
+              which it reads as unknown rather than as a failure.
+            </p>
+            <p class="section-help">
+              If A/B rows stay empty or thin (N small), it usually means too few
+              trades have closed yet at that tier — not that the tiering is
+              broken. See the Strategies tab for why a strategy's badge
+              (VALIDATED vs WEAK) may be dragging its tier down.
+            </p>
+            <sb-data-table
+              [rows]="tierPage.visible()"
+              [columns]="tierColumns()"
+              [visible]="tierKeys"
+              [rowKey]="tierKey"
+              [emptyState]="tierEmpty"
+              [pagination]="tierPage.pageSpec()"
+              (pageChange)="tierPage.setPage($event)"
+            />
+          </sb-panel>
 
-        <sb-panel heading="Badge drift" [flush]="true">
-          <!-- SR61. stats.html:48 and :50. The rule is
-               calibration.py:DRIFT_LIVE_N_FLOOR (20) and
-               DRIFT_THRESHOLD_POINTS (10.0), both verified. -->
-          <p class="panel-subtitle">
-            "Decay" = edge decay. A strategy earns a VALIDATED badge from a
-            historical out-of-sample backtest with a committed win rate; this
-            table compares that to how it is actually performing live. A decay
-            flag is an early warning that the edge may no longer hold in
-            current market conditions.
-          </p>
-          <p class="section-help">
-            Flagged only once a strategy has at least 20 closed live trades
-            (fewer than that is too noisy to judge) AND live win rate is more
-            than 10 percentage points below its out-of-sample win rate.
-          </p>
-          <sb-data-table
-            [rows]="driftPage.visible()"
-            [columns]="driftColumns()"
-            [visible]="driftKeys"
-            [rowKey]="driftKey"
-            [loading]="store.loading()"
-            [emptyState]="driftEmpty"
-            [pagination]="driftPage.pageSpec()"
-            (pageChange)="driftPage.setPage($event)"
-          />
-        </sb-panel>
+          <sb-panel heading="Badge drift" [flush]="true">
+            <!-- SR61. stats.html:48 and :50. The rule is
+                 calibration.py:DRIFT_LIVE_N_FLOOR (20) and
+                 DRIFT_THRESHOLD_POINTS (10.0), both verified. -->
+            <p class="panel-subtitle">
+              "Decay" = edge decay. A strategy earns a VALIDATED badge from a
+              historical out-of-sample backtest with a committed win rate; this
+              table compares that to how it is actually performing live. A decay
+              flag is an early warning that the edge may no longer hold in
+              current market conditions.
+            </p>
+            <p class="section-help">
+              Flagged only once a strategy has at least 20 closed live trades
+              (fewer than that is too noisy to judge) AND live win rate is more
+              than 10 percentage points below its out-of-sample win rate.
+            </p>
+            <sb-data-table
+              [rows]="driftPage.visible()"
+              [columns]="driftColumns()"
+              [visible]="driftKeys"
+              [rowKey]="driftKey"
+              [emptyState]="driftEmpty"
+              [pagination]="driftPage.pageSpec()"
+              (pageChange)="driftPage.setPage($event)"
+            />
+          </sb-panel>
+        </sb-async>
       }
 
       <!-- -- tuning --------------------------------------------------- -->
@@ -793,39 +874,45 @@ interface ProposalView extends ProposalRow {
           rate toward "undecided".
         </p>
 
-        <sb-panel heading="Lifecycle funnel">
-          @if (store.funnelChart().length) {
-            <sb-histogram [bins]="store.funnelChart()" />
-            <p class="series-note">{{ store.inFlight() }} currently in flight (not counted above).</p>
-          } @else {
-            <p class="stale">No plans posted yet.</p>
-          }
-        </sb-panel>
-
-        <div class="panels">
-          <sb-panel heading="Fill rate">
-            <sb-chip-row class="chips">
-              <sb-metric-chip label="Filled" [value]="store.fillRatePct()" unit="%" [decimals]="1" />
-              <sb-metric-chip label="Median days to fill" [value]="store.medianDaysToFill()" [decimals]="1" />
-            </sb-chip-row>
-          </sb-panel>
-
-          <sb-panel heading="Badge distribution">
-            @if (store.badgeChart().length) {
-              <sb-histogram [bins]="store.badgeChart()" [isNegative]="isWeakBadge" />
-            } @else {
-              <p class="stale">No plans posted yet.</p>
+        <sb-async
+          [loading]="plansAsync().loading"
+          [error]="plansAsync().error"
+          [empty]="plansAsync().empty"
+          [staleAsOf]="plansAsync().staleAsOf"
+          emptyReason="measured-zero"
+          emptyTitle="No plans posted yet"
+          [skeletonRows]="6"
+          [skeletonCols]="4"
+          (retry)="store.load()"
+        >
+          <sb-panel heading="Lifecycle funnel">
+            @if (store.funnelChart().length) {
+              <sb-histogram [bins]="store.funnelChart()" />
+              <p class="series-note">{{ store.inFlight() }} currently in flight (not counted above).</p>
             }
           </sb-panel>
-        </div>
 
-        <sb-panel heading="Tier distribution">
-          @if (store.tierChart().length) {
-            <sb-histogram [bins]="store.tierChart()" />
-          } @else {
-            <p class="stale">No plans posted yet.</p>
-          }
-        </sb-panel>
+          <div class="panels">
+            <sb-panel heading="Fill rate">
+              <sb-chip-row class="chips">
+                <sb-metric-chip label="Filled" [value]="store.fillRatePct()" unit="%" [decimals]="1" />
+                <sb-metric-chip label="Median days to fill" [value]="store.medianDaysToFill()" [decimals]="1" />
+              </sb-chip-row>
+            </sb-panel>
+
+            <sb-panel heading="Badge distribution">
+              @if (store.badgeChart().length) {
+                <sb-histogram [bins]="store.badgeChart()" [isNegative]="isWeakBadge" />
+              }
+            </sb-panel>
+          </div>
+
+          <sb-panel heading="Tier distribution">
+            @if (store.tierChart().length) {
+              <sb-histogram [bins]="store.tierChart()" />
+            }
+          </sb-panel>
+        </sb-async>
       }
     }
 
@@ -926,7 +1013,6 @@ interface ProposalView extends ProposalRow {
        margin-bottom was the only thing separating the header from the
        content below, so it moves to the primitive's own host tag. */
     sb-section-head { margin-bottom: var(--space-14); }
-    .stale { color: var(--warn); font-size: var(--text-table); }
 
     sb-panel { display: block; margin-top: var(--space-14); }
 
@@ -1143,6 +1229,61 @@ export class Analytics {
       ? (requested as AnalyticsTab)
       : 'performance';
   });
+
+  /* -- per-panel async state --------------------------------------------
+   * Three independent fetches back the Performance tab (performance,
+   * snapshot, journal — see analytics.store.ts loadPerformance), so a
+   * failed snapshot must not blank the equity curve or vice versa. Each
+   * gets its own AsyncInputs rather than one wrapper around the page. */
+
+  protected readonly performanceAsync = computed(() =>
+    asyncInputs(
+      { data: this.store.performance, loading: this.store.loading, error: this.store.error },
+      { isEmpty: () => this.store.totals().total === 0 },
+    ),
+  );
+
+  protected readonly snapshotAsync = computed(() =>
+    asyncInputs(
+      {
+        data: this.store.snapshot,
+        loading: this.store.loading,
+        error: this.store.snapshotError,
+      },
+      { isEmpty: () => this.store.totals().total === 0 },
+    ),
+  );
+
+  protected readonly journalAsync = computed(() =>
+    asyncInputs(
+      { data: this.store.journal, loading: this.store.loading, error: this.store.journalError },
+      { isEmpty: (data) => data.digest.length === 0 && data.lessons.length === 0 },
+    ),
+  );
+
+  protected readonly strategiesAsync = computed(() =>
+    asyncInputs(
+      { data: this.store.strategies, loading: this.store.loading, error: this.store.error },
+      { isEmpty: (data) => data.strategies.length === 0 },
+    ),
+  );
+
+  protected readonly calibrationAsync = computed(() =>
+    asyncInputs(
+      { data: this.store.calibration, loading: this.store.loading, error: this.store.error },
+      {
+        isEmpty: (data) =>
+          data.deciles.length === 0 && data.tiers.length === 0 && data.drift.length === 0,
+      },
+    ),
+  );
+
+  protected readonly plansAsync = computed(() =>
+    asyncInputs(
+      { data: this.store.plans, loading: this.store.loading, error: this.store.error },
+      { isEmpty: (data) => data.funnel.posted === 0 },
+    ),
+  );
 
   /* -- formatters (shared with the column declarations) ---------------- */
 
