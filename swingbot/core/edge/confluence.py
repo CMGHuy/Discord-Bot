@@ -31,6 +31,30 @@ from swingbot.core.market.levels import ALL_STRATEGY_FAMILIES
 FAMILY_ORDER: tuple[str, ...] = tuple(ALL_STRATEGY_FAMILIES)
 _INDEX = {name: i for i, name in enumerate(FAMILY_ORDER)}
 
+# measured-on: 4e04251 TRAIN 2020-01-01..2023-12-31
+# scripts/backtest/measure_confluence_redundancy.py over the 78-ticker
+# watchlist x {4w,2m,3m,4m,6m}, every 20th bar: 707,655 candidate prices,
+# 75/78 tickers contributing (CRWV/SNDK/SPCX have no cached history).
+# R[i][j] = (C[i][j]/C[i][i] + C[j][i]/C[j][j]) / 2 -- the symmetrised
+# probability that family j also lands on a price family i landed on.
+# Row/column order is FAMILY_ORDER above, which is levels.ALL_STRATEGY_FAMILIES;
+# tests/edge/test_confluence_matrix.py asserts that element for element.
+REDUNDANCY = [
+    [1.0000, 0.7941, 0.8268, 0.7417, 0.3109, 0.6246, 0.6088, 0.6003, 0.7808, 0.5045, 0.6891, 0.6696],   # EMA
+    [0.7941, 1.0000, 0.7434, 0.6918, 0.2354, 0.5903, 0.5516, 0.5443, 0.6534, 0.4387, 0.6193, 0.6905],   # VWAP
+    [0.8268, 0.7434, 1.0000, 0.8290, 0.4592, 0.7159, 0.6981, 0.6956, 0.8091, 0.5916, 0.7526, 0.6855],   # AVWAP
+    [0.7417, 0.6918, 0.8290, 1.0000, 0.6939, 0.8376, 0.7587, 0.7702, 0.7740, 0.6676, 0.7558, 0.6655],   # Fibonacci
+    [0.3109, 0.2354, 0.4592, 0.6939, 1.0000, 0.5733, 0.5913, 0.6459, 0.4986, 0.4876, 0.3971, 0.2881],   # Rolling S/R
+    [0.6246, 0.5903, 0.7159, 0.8376, 0.5733, 1.0000, 0.6397, 0.6457, 0.6497, 0.5765, 0.6570, 0.5824],   # Zigzag Pivot
+    [0.6088, 0.5516, 0.6981, 0.7587, 0.5913, 0.6397, 1.0000, 0.8871, 0.7249, 0.5826, 0.5922, 0.5341],   # Bollinger Bands
+    [0.6003, 0.5443, 0.6956, 0.7702, 0.6459, 0.6457, 0.8871, 1.0000, 0.7161, 0.5920, 0.5982, 0.5310],   # Donchian Channel
+    [0.7808, 0.6534, 0.8091, 0.7740, 0.4986, 0.6497, 0.7249, 0.7161, 1.0000, 0.5935, 0.6741, 0.6069],   # Floor Pivot
+    [0.5045, 0.4387, 0.5916, 0.6676, 0.4876, 0.5765, 0.5826, 0.5920, 0.5935, 1.0000, 0.4946, 0.4474],   # Trendline
+    [0.6891, 0.6193, 0.7526, 0.7558, 0.3971, 0.6570, 0.5922, 0.5982, 0.6741, 0.4946, 1.0000, 0.5611],   # FVG
+    [0.6696, 0.6905, 0.6855, 0.6655, 0.2881, 0.5824, 0.5341, 0.5310, 0.6069, 0.4474, 0.5611, 1.0000],   # Volume Profile
+]
+
+
 
 def effective_count(families: Sequence[str],
                     matrix: Sequence[Sequence[float]] | None = None) -> float:
