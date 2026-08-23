@@ -7,7 +7,12 @@ budgets, parallelisation, `implemented/` — lives in `document-conventions.md`.
 This file is session hygiene: commits, shared state, and versioning.
 
 - Conventional commits (`feat:`, `fix:`, `test:`, `docs:`, `refactor:`), one
-  commit per task; full suite + `make check` green before each.
+  commit per task; the task's own narrow test run
+  (`scripts/dev/testrun.py file ...`, or `fast` when it crosses files) plus
+  `make check` green before each. **The full suite runs once, as the plan's
+  final verification task** — not per task, and not again after the merge to
+  `main` unless that merge resolved conflicts. See
+  `document-conventions.md` -> "One full suite run, at the end of the plan".
 - Active plans live in `docs/superpowers/plans/*.md` with a Progress block at
   the top; the per-task execution ledger is `.superpowers/sdd/progress.md`
   (gitignored). Update both when completing plan tasks — both have drifted

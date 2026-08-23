@@ -119,6 +119,12 @@ hypothesis or nothing.
   pre-commit gate. Always go through the wrapper: it prints a one-line verdict
   instead of ~1150 progress lines. Better still for a full run, dispatch the
   `test-runner` subagent so none of it reaches this context.
+- **When executing a plan, `... full` runs once — as the plan's final
+  verification task**, over everything the plan implemented, and a red result
+  there is where the fixing starts. Per-task verification is the narrow run.
+  **Do not re-run the suite after merging the plan branch to `main`** — the
+  branch was already green; only a merge that resolved conflicts earns another
+  run. Written up in `docs/claude/document-conventions.md`.
 - Hand wide/exploratory searches to the `Explore` agent so raw grep output
   never lands in this context.
 
@@ -311,7 +317,9 @@ Not auto-loaded — read the relevant one before starting work in that area.
   past 30 tasks or 120 KB. Over budget, **split, never compress**: cost per task
   is a near-constant 2.7–5.7 KB in every plan here, so the landmines are long,
   not verbose, and thinning a task just recreates the placeholders
-  `writing-plans` forbids. Read before writing any spec or plan.
+  `writing-plans` forbids. Also carries the **verification cadence**: the full
+  suite is one closing task per plan, never a per-task step, and not re-run
+  after the merge. Read before writing any spec or plan.
 - `docs/claude/skills-tools.md` — which Superpowers skill or subagent to reach
   for on a given kind of task in this repo.
 - `docs/claude/testing-cost.md` — measured suite timings, why `-n 4` beats

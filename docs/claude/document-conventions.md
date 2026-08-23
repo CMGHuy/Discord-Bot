@@ -267,6 +267,37 @@ Be honest about a group of one. A phase that is genuinely a chain says so —
 and that sentence is worth as much as a wide group, because it stops the next
 session re-deriving the dependency graph to find out.
 
+## One full suite run, at the end of the plan
+
+**A plan verifies itself once, as its own final task — not after every step.**
+The per-task check is the narrow one: `python scripts/dev/testrun.py file
+tests/test_<the file that task touched>.py` (~7s), or `... fast` (~27s) when the
+task's blast radius genuinely crosses files. `... full` is **not** a per-task
+step, and a plan that writes "run the full suite" into every task's verification
+block is writing a plan that costs an extra 40–260s per task for information the
+narrow run already gave.
+
+So every plan ends with a verification task that runs the full suite **once**,
+over everything the plan implemented:
+
+```markdown
+### Task A9: Full-suite verification
+
+Run `python scripts/dev/testrun.py full` (or dispatch the `test-runner`
+subagent) once, over all of Phase A. Expect `0 failed`, `0 xfailed`.
+**If it is not green, fix forward from those failures** — they are this plan's
+regressions, and the task is not done until the run is.
+```
+
+That final run is the gate, and it is a real one: it is where the plan's
+regressions surface, so a red result is the start of the work, not a reason to
+re-litigate earlier tasks. Fix from the failures the run names.
+
+**After merging the plan's branch to `main`, do not run the suite again.**
+The branch was green when the merge started and a conflict-free merge does not
+produce code nobody ran. The one exception is a merge that actually resolved
+conflicts — that resolution is new, unrun code, and it gets the one run.
+
 ## Plans that are no longer live move to `implemented/`
 
 **When a plan stops being live work, `git mv` it — and every spec it was built
