@@ -72,3 +72,39 @@ def test_opex_composes_with_an_explicit_stop_mult(df, monthly_opex, monkeypatch)
 def test_zero_widen_is_a_no_op(df, monthly_opex, monkeypatch):
     monkeypatch.setattr(config, "OPEX_STOP_WIDEN_PCT", 0.0)
     assert opex.stop_mult() == 1.0
+
+
+from swingbot.core.planning.account import compute_position_size
+
+#: The mode key is `sizing_mode` (account.py:473), NOT `mode` -- an unknown
+#: key would silently fall through to the risk_pct default and make the
+#: account_pct case below pass for the wrong reason. Both absolute caps are
+#: pinned to 0 so the schema's own defaults cannot clip these figures.
+BASE_CFG = {
+    "balance": 10_000.0,
+    "risk_pct": 1.0,
+    "position_pct": 20.0,
+    "max_position_pct": 100.0,
+    "max_position_value_absolute": 0.0,
+    "max_risk_amount_absolute": 0.0,
+    "sizing_mode": "risk_pct",
+}
+
+
+def test_risk_pct_mode_scales_down(monthly_opex):
+    got = compute_position_size(100.0, 95.0, dict(BASE_CFG))
+    # 1% of 10k = $100 risk / $5 stop = 20 shares, cut 25% -> 15
+    assert got["shares"] == pytest.approx(15, abs=0.01)
+
+
+def test_account_pct_mode_scales_down(monthly_opex):
+    got = compute_position_size(100.0, 95.0,
+                                {**BASE_CFG, "sizing_mode": "account_pct"})
+    # 20% of 10k = $2000 / $100 = 20 shares, cut 25% -> 15
+    assert got["shares"] == pytest.approx(15, abs=0.01)
+
+
+def test_size_is_untouched_when_the_flag_is_off(monkeypatch):
+    monkeypatch.setattr(config, "OPEX_CAUTION_ENABLED", False)
+    got = compute_position_size(100.0, 95.0, dict(BASE_CFG))
+    assert got["shares"] == pytest.approx(20, abs=0.01)

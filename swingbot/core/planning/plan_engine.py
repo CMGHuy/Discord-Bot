@@ -780,7 +780,13 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         # neither silently replaces the other. Off an opex day stop_mult() is
         # exactly 1.0 and this line is a no-op.
         applied_stop_mult = stop_mult if stop_mult is not None else _resolve_stop_mult(strategy)
-        applied_stop_mult = (applied_stop_mult or 1.0) * opex.stop_mult()
+        _opex_stop_mult = opex.stop_mult()
+        if _opex_stop_mult != 1.0:
+            # Guarded rather than composed unconditionally: `None` here is
+            # the contract for "no multiplier applied" and is asserted on by
+            # tests/edge/test_edge_stops.py, so an unconditional `or 1.0`
+            # would rewrite every ordinary plan's stop_mult_applied to 1.0.
+            applied_stop_mult = (applied_stop_mult or 1.0) * _opex_stop_mult
         candidates = atr_target_candidates(close, atr_val, direction)
         result = _atr_plan(close, atr_val, direction, horizon_key, strategy,
                            stop_mult=applied_stop_mult, candidate_levels=candidates)
