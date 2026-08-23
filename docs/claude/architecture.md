@@ -68,6 +68,15 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   off/shadow/on, `SCALE_OUT_ENABLED`, `INTRADAY_MANAGER_V2`) are documented in
   the README; `shadow` mode logs to `data/shadow_plans.jsonl` via
   `backtesting/shadow_log.py`.
+- **Opex-day caution (v44):** `swingbot/core/market/opex.py` holds both the
+  US options-expiration calendar (`opex_tier` -> `"monthly"`/`"weekly"`/None,
+  stdlib only) and the policy built on it — effective confidence/confluence
+  thresholds, the near-close suppression window, the ATR stop and position-size
+  multipliers, and the embed badge. Behind `OPEX_CAUTION_ENABLED`, default off,
+  and the flag is re-checked in `_resolve()` so passing an explicit tier cannot
+  bypass it. Deliberately **not** a `market_context` CTX column: `market_context.get()`
+  returns None whenever `REGIME_GATES_ENABLED` is off, which would let an
+  unrelated flag silently disable this one.
 - Tests build OHLCV frames with `tests/conftest.py:make_ohlcv` /
   `make_trend_df` (columns `Open,High,Low,Close,Volume`, business-day
   DatetimeIndex) and `tests/helpers.py`. Read conftest before writing new
