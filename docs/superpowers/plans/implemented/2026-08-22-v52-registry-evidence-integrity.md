@@ -24,6 +24,48 @@ cell, not by a revert.
 
 # Registry evidence integrity Implementation Plan
 
+## Progress
+
+**Completed:** Tasks 1-5, 2026-08-23. Shipped as ui 1.8.3 / bot 1.4.3.
+
+**Decay distribution over the committed registry at close (22 rows):** 22
+fresh, 0 aging, 0 stale, 0 unknown. Every row is stamped, and the oldest
+(`2026-07-17`, 37 days) does not turn `aging` until 2026-10-15. The
+instrument therefore ships reading all-clear on today's data -- that is the
+measurement, not a reason to lower the thresholds. Its first real verdict is
+due in October, and the same holds for the refusal tokens: no committed row
+trips a gate (minimum `n` in the registry is 30, twice the validation floor),
+so Task 3 ships as a guard against the next sweep, having caught nothing in
+the existing file.
+
+**Two deviations from the plan as written, both to keep a Global Constraint:**
+
+1. **`badge_stats` carries `run_date`, not `decay`.** Task 2 Step 2 allowed
+   plan_engine to "carry the field through". `plan.badge_stats` is persisted
+   to `plans.json`, so carrying the *verdict* would have stored exactly what
+   "derived at read time, never persisted" forbids. The fact travels; every
+   surface re-derives the verdict. `calibration.badge_drift` does the same
+   (`oos_run_date`, not `oos_decay`) because its rows are cached into
+   `snapshots.json`. Both are asserted in
+   `tests/admin/test_badge_decay_surface.py`.
+2. **The admin payload field is `evidence_decay`, not `decay`.** The registry
+   row already carries `decayed`, meaning the pre-registered live-vs-OOS
+   win-rate drift alert -- a different fact. Two keys one character apart
+   meaning different things is a bug waiting to be written.
+
+**Two render sites the plan's list of four missed,** found by Task 2 Step 1
+and both surfaced: `core/scanning/embeds.py:badge_field_for` (the alert
+embed's pedigree field) and `commands/views.py` (the `/breakdown` embed).
+`snapshots.py:109` turned out not to be a render site -- it only passes
+registry entries into `build_snapshot`.
+
+**Behaviour change in the emit path worth knowing about:** a cell with
+`0 < n < 15` used to be written as a WEAK row and is now refused with
+`hard-gate:below-min-n`. `tests/test_emit_registry.py`'s tiny-N case changed
+accordingly; `get_badge` falls through to its WEAK/n=0 default for such a
+cell, which is the same status and an honester sample.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Two integrity gaps in `core/backtesting/registry.py` and the script
@@ -103,7 +145,7 @@ they are one and two missed quarterly re-verification cycles. State that in the
 docstring, because a threshold whose justification is not written down gets
 "tuned" by the next session.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 """Read-time decay verdicts derived from a registry row's run_date."""
@@ -167,12 +209,12 @@ def test_decay_is_not_persisted(tmp_path):
     assert all("decay" not in row for row in raw), "decay must be derived, never stored"
 ```
 
-- [ ] **Step 2: Implement.** `decay_for` is a pure function; `get_badge`
+- [x] **Step 2: Implement.** `decay_for` is a pure function; `get_badge`
   populates `decay=decay_for(rec.get("run_date", ""))` on the returned `Badge`.
   Do not touch the matching cascade at `registry.py:62-70` — it encodes a
   subtle and hard-won fallback (confluence plans matching `source="strategy"`
   rows) that this plan has no business changing.
-- [ ] **Step 3: Verify** — the new file plus `tests/test_emit_registry.py` and
+- [x] **Step 3: Verify** — the new file plus `tests/test_emit_registry.py` and
   anything under `tests/backtesting/`.
 
 ---
@@ -190,21 +232,21 @@ def test_decay_is_not_persisted(tmp_path):
 - Produces: no new function — a field in the admin payload and a qualifier in
   the digest line.
 
-- [ ] **Step 1: Find every render site first.**
+- [x] **Step 1: Find every render site first.**
   `grep -rn "get_badge\|load_registry\|\.status" --include=*.py swingbot/` and
   read each hit. The four known consumers are `plan_engine.py:983`,
   `queries.py:204`, `insights.py:114`, `snapshots.py:109` — confirm that list is
   complete rather than trusting it. A badge rendered somewhere this task misses
   is exactly the silent surface the plan exists to remove.
-- [ ] **Step 2:** `plan_engine.py` reads the badge on the **live path**. It may
+- [x] **Step 2:** `plan_engine.py` reads the badge on the **live path**. It may
   carry the field through to whatever it builds, but it must not branch on it —
   see the Global Constraint. Assert that in a test: a stale badge and a fresh
   badge with identical numbers must produce identical plans.
-- [ ] **Step 3: Write the failing test**, including the no-branching assertion
+- [x] **Step 3: Write the failing test**, including the no-branching assertion
   above and a `"unknown"` rendering that does not read as a warning (an
   unstamped legacy row is not a stale one).
-- [ ] **Step 4: Implement** as display only.
-- [ ] **Step 5: Verify** — the new file plus `tests/admin/`, `tests/planning/`
+- [x] **Step 4: Implement** as display only.
+- [x] **Step 5: Verify** — the new file plus `tests/admin/`, `tests/planning/`
   and `tests/analytics/test_insights.py`.
 
 ---
@@ -237,14 +279,14 @@ actually produces:
 writes and whether `tests/test_emit_registry.py` already asserts a schema. This
 task extends that path — it does not replace it.
 
-- [ ] **Step 1: Write the failing test** — one case per token, plus: a healthy
+- [x] **Step 1: Write the failing test** — one case per token, plus: a healthy
   run returns `None`; a refused run emits **zero** rows, not a partial row; the
   token is printed to stderr so a sweep's log records why a cell is missing; and
   tokens are stable literals (assert the exact strings, since downstream tooling
   is meant to match them without parsing prose).
-- [ ] **Step 2: Implement.** Refusal is per-row: one unhealthy cell must not
+- [x] **Step 2: Implement.** Refusal is per-row: one unhealthy cell must not
   discard the healthy cells in the same sweep.
-- [ ] **Step 3: Verify** — `python scripts/dev/testrun.py file tests/test_emit_registry.py`
+- [x] **Step 3: Verify** — `python scripts/dev/testrun.py file tests/test_emit_registry.py`
 
 ---
 
@@ -254,30 +296,30 @@ task extends that path — it does not replace it.
 - Modify: `docs/claude/backtest-methodology.md`
 - Modify: `swingbot/core/backtesting/registry.py` (module docstring)
 
-- [ ] **Step 1:** Add a short section to the methodology doc: the two decay
+- [x] **Step 1:** Add a short section to the methodology doc: the two decay
   thresholds with their one-and-two-missed-cycles justification, the four
   refusal tokens, and the explicit statement that **decay does not gate**.
-- [ ] **Step 2:** Note in the same edit that the standing footnote about
+- [x] **Step 2:** Note in the same edit that the standing footnote about
   Fibonacci / RSI / Support-Resistance holding a badge that "describes deleted
   arithmetic" is now *also* visible in the data as a decay verdict. Leave the
   footnote — the decay field says the row is old, not that its arithmetic was
   deleted, and those are different facts.
-- [ ] **Step 3:** Keep the addition tight. That file is 52 lines and read before
+- [x] **Step 3:** Keep the addition tight. That file is 52 lines and read before
   every backtest; it earns its length by being short.
 
 ---
 
 ### Task 5: Close-out
 
-- [ ] **Step 1:** Full suite via the `test-runner` subagent. `0 failed`, `0 xfailed`.
-- [ ] **Step 2:** `VERSION.json` — bot patch and ui patch, then regenerate and
+- [x] **Step 1:** Full suite via the `test-runner` subagent. `0 failed`, `0 xfailed`.
+- [x] **Step 2:** `VERSION.json` — bot patch and ui patch, then regenerate and
   commit `version_history.json` in the same commit. The local gate runs before
   the bump and structurally cannot catch a miss.
-- [ ] **Step 3:** Run the decay verdict over the committed registry and record
+- [x] **Step 3:** Run the decay verdict over the committed registry and record
   the distribution in the commit message — how many rows are fresh, aging, stale,
   unknown. If most rows come back stale, that is a finding worth stating plainly
   rather than a reason to soften the thresholds.
-- [ ] **Step 4:** `git mv` this plan into `implemented/`, remove the worktree,
+- [x] **Step 4:** `git mv` this plan into `implemented/`, remove the worktree,
   `git branch -d` (never `-D`; never a `backup*` or `stable-*` branch).
 
 ---

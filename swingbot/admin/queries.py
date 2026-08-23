@@ -42,7 +42,7 @@ from swingbot.core.tracking.performance import TradeLog, primary_strategy_label
 from swingbot.core.planning.plan_engine import PlanStatus, plan_to_dict
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.market.strategy_types import HORIZONS, STRATEGY_GATES
-from swingbot.core.backtesting.registry import load_registry
+from swingbot.core.backtesting.registry import decay_for, load_registry
 
 from .dashboard import is_today_berlin as _is_today_berlin
 
@@ -213,6 +213,9 @@ def _registry_rows() -> list[dict]:
             "live_wr": live_wr,
             "delta_vs_oos": (live_wr - rec["win_rate"]) if live_wr is not None else None,
             "decayed": bool(drift.get("drift_alert")),
+            # Age of the evidence, derived here and never stored. Distinct from
+            # "decayed" above, which is the live-vs-OOS win-rate drift alert.
+            "evidence_decay": decay_for(rec.get("run_date", "")),
             "gate_description": _gate_description(rec["strategy"]),
         })
     return rows

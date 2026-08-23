@@ -23,6 +23,7 @@ from swingbot.core.planning import account
 from swingbot.core.planning.account import compute_position_size, load_account_config
 from swingbot.core.analytics.rank import follow_breakdown, follow_score
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
+from swingbot.core.backtesting.registry import decay_for
 from swingbot.core.planning.plan_engine import WEAK_CAUTION_TEXT, badge_stats_line
 from swingbot.core.backtesting.registry import Badge
 from swingbot.core.scanning import embed_theme as theme
@@ -388,10 +389,12 @@ def badge_field_for(plan) -> tuple[str, str] | None:
     if plan is None:
         return None
     stats = plan.badge_stats or {}
+    run_date = stats.get("run_date", "")
     badge = Badge(status=plan.badge, n=stats.get("n", 0),
                   win_rate=stats.get("win_rate", 0.0),
                   expectancy_r=stats.get("expectancy_r", 0.0),
-                  window=stats.get("window", ""))
+                  window=stats.get("window", ""), run_date=run_date,
+                  decay=decay_for(run_date))
     if plan.badge == "VALIDATED":
         return ("✅ VALIDATED", badge_stats_line(badge))
     caution = WEAK_CAUTION_TEXT.format(win_rate=badge.win_rate, n=badge.n)

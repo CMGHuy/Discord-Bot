@@ -57,6 +57,11 @@ export interface StrategyRow {
   delta_vs_oos: number | null;
   /** Pre-registered decay rule: live_n >= 20 and live_wr < oos_wr - 10. */
   decayed: boolean;
+  /** Age of the evidence itself, derived server-side from `run_date` at read
+   *  time and never stored: `fresh` | `aging` | `stale` | `unknown`. A
+   *  different fact from `decayed` above, which is live-vs-OOS win-rate drift.
+   *  Display only — nothing is gated on it. */
+  evidence_decay: string;
   gate_description: string | null;
   /** Rolling 10-trade win rate, oldest first. Carries nulls for windows the
    *  server could not compute, which the sparkline cannot plot. */

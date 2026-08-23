@@ -17,6 +17,7 @@ import discord
 from swingbot import config
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
+from swingbot.core.backtesting.registry import decay_for, decay_note
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.market.strategy import HORIZONS
@@ -143,7 +144,9 @@ def breakdown_embed(plan) -> discord.Embed:
     badge_lines = (
         f"Status: {stats.get('status', plan.badge)}\n"
         f"OOS N={stats.get('n', 0)}, WR {stats.get('win_rate', 0):.1f}%, "
-        f"ExpR {stats.get('expectancy_r', 0):+.3f}\nWindow: {stats.get('window', 'n/a')}"
+        f"ExpR {stats.get('expectancy_r', 0):+.3f}"
+        f"{decay_note(decay_for(stats.get('run_date', '')))}"
+        f"\nWindow: {stats.get('window', 'n/a')}"
     )
     embed.add_field(name="🏷️ Badge / track record", value=badge_lines, inline=False)
 

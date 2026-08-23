@@ -147,6 +147,7 @@ def edge_decay_report(closed: list[dict]) -> list[str]:
         lines.append(
             f"📉 **{r['strategy']}** live WR {r['live_wr']:.0f}% (n={r['live_n']}) "
             f"vs OOS {r['oos_wr']:.1f}% (n={r['oos_n']}) — drifted {abs(r['delta_wr']):.1f} points."
+            + registry.decay_note(registry.decay_for(r.get("oos_run_date", "")))
         )
     return lines
 
