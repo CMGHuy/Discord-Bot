@@ -78,6 +78,7 @@ const STRATEGY_ROW = {
   live_wr: 40,
   delta_vs_oos: -15,
   decayed: true,
+  evidence_decay: 'unknown',
   gate_description: null,
   win_rate_series: [],
 };

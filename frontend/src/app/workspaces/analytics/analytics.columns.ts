@@ -69,6 +69,12 @@ export const STRATEGY_COLUMNS: ColumnDef<StrategyRow>[] = [
   { key: 'delta_vs_oos', header: 'Δ vs OOS', numeric: true, value: (r) => delta(r.delta_vs_oos) },
   { key: 'window', header: 'Window', value: (r) => r.window },
   { key: 'run_date', header: 'Run date', value: (r) => (r.run_date ? date(r.run_date) : null) },
+  // Reads next to the run date it is derived from. "fresh" renders as ABSENT
+  // rather than the word: no news is not news, and a table of "fresh" cells
+  // just costs the eye a column. "unknown" is undated, not a warning.
+  { key: 'evidence_decay', header: 'Evidence',
+    value: (r) => (r.evidence_decay === 'fresh' ? ABSENT
+                   : r.evidence_decay === 'unknown' ? 'undated' : r.evidence_decay) },
   { key: 'gate_description', header: 'Gate', value: (r) => r.gate_description },
 ];
 

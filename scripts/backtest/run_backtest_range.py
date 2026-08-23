@@ -10,6 +10,7 @@ PASS gate per spec: win_rate >= 80, expectancy_r > 0, N >= 30 (train) / 15
 (validation), scratches+timeouts <= 50% of closed trades."""
 import argparse
 import json
+import math
 import sys
 import warnings
 from collections import defaultdict
@@ -206,25 +207,73 @@ def _tickers_for_run(universe: str | None) -> list:
     return sorted(load_watchlist())
 
 
+# Hard gates on the registry emit path. A run that fails any of these produces
+# NO row rather than a row that looks like evidence -- half a row is worse than
+# none, being indistinguishable from evidence downstream. Tokens are stable
+# literals so a sweep's log can be matched without parsing prose.
+REFUSAL_TOKENS = (
+    "hard-gate:zero-trades",       # n == 0 -- a signal bug, not a result
+    "hard-gate:below-min-n",       # n under the methodology's floor for the window
+    "hard-gate:nonfinite-metric",  # win_rate or expectancy_r is NaN/inf/None
+    "hard-gate:missing-window",    # nothing to date the evidence by
+)
+
+
+def _is_finite(value):
+    """A real number. `bool` is an int in Python and is never a metric here."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    return math.isfinite(value)
+
+
+def registry_refusal(result, *, min_n=15):
+    """Return the refusal token for an unhealthy candidate row, else None.
+
+    `result` is a candidate registry record (n / win_rate / expectancy_r /
+    window / run_date). Checked in the order of REFUSAL_TOKENS; a missing or
+    non-numeric `n` counts as zero trades, since a run that recorded no trade
+    count recorded no trades.
+    """
+    n = result.get("n")
+    if not isinstance(n, (int, float)) or isinstance(n, bool) or n <= 0:
+        return "hard-gate:zero-trades"
+    if n < min_n:
+        return "hard-gate:below-min-n"
+    if not _is_finite(result.get("win_rate")) or not _is_finite(result.get("expectancy_r")):
+        return "hard-gate:nonfinite-metric"
+    if not result.get("window") or not result.get("run_date"):
+        return "hard-gate:missing-window"
+    return None
+
+
 def build_registry_records(summaries, *, source, window, run_date,
                            horizon=None, pass_wr=80.0, min_n=15):
     """Turn pooled per-strategy summaries into validation-registry records.
 
     A record is VALIDATED only when it clears the acceptance gates on the
-    window it was measured on; everything else (including tiny-N) is WEAK.
+    window it was measured on; everything else is WEAK. A cell that fails a
+    hard gate (see registry_refusal) yields no record at all -- refusal is
+    per-row, so one unhealthy cell never discards the healthy cells beside it.
     """
     recs = []
     for s in summaries:
         wr = s.get("win_rate")
         er = s.get("expectancy_r")
-        validated = (wr is not None and wr >= pass_wr
-                     and er is not None and er > 0
-                     and s["n"] >= min_n)
+        candidate = {"source": source, "strategy": s.get("strategy"), "horizon": horizon,
+                     "n": s.get("n"), "win_rate": wr, "expectancy_r": er,
+                     "window": window, "run_date": run_date}
+        token = registry_refusal(candidate, min_n=min_n)
+        if token:
+            print(f"{token} source={source} strategy={s.get('strategy')} "
+                  f"horizon={horizon} -- no registry row emitted",
+                  file=sys.stderr, flush=True)
+            continue
+        validated = wr >= pass_wr and er > 0 and s["n"] >= min_n
         recs.append({"source": source, "strategy": s["strategy"], "horizon": horizon,
                      "status": "VALIDATED" if validated else "WEAK",
                      "n": s["n"],
-                     "win_rate": round(wr, 1) if wr is not None else 0.0,
-                     "expectancy_r": round(er, 3) if er is not None else 0.0,
+                     "win_rate": round(wr, 1),
+                     "expectancy_r": round(er, 3),
                      "window": window, "run_date": run_date})
     return recs
 

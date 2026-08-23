@@ -18,7 +18,7 @@ from swingbot import config
 from swingbot.core.market import levels
 from swingbot.core.market import opex
 from swingbot.core.market.levels import MAX_TARGET2_LEG_MULTIPLE
-from swingbot.core.backtesting.registry import Badge, get_badge
+from swingbot.core.backtesting.registry import Badge, decay_note, get_badge
 from swingbot.core.market.strategy_types import (
     BREAKEVEN_TRIGGER_FRACTION,
     HORIZONS,
@@ -994,14 +994,19 @@ def stamp_badge(plan: TradePlanV2) -> None:
     """Set badge + badge_stats from the committed validation registry."""
     b = get_badge(plan.source, plan.strategy, plan.horizon_key)
     plan.badge = b.status
+    # run_date only -- badge_stats is persisted to plans.json, and a stored
+    # decay verdict is wrong the day after it is written. Nothing here branches
+    # on staleness: a stale badge and a fresh one with identical numbers build
+    # byte-identical plans (tests/admin/test_badge_decay_surface.py).
     plan.badge_stats = {"status": b.status, "n": b.n, "win_rate": b.win_rate,
-                        "expectancy_r": b.expectancy_r, "window": b.window}
+                        "expectancy_r": b.expectancy_r, "window": b.window,
+                        "run_date": b.run_date}
 
 
 def badge_stats_line(badge: Badge) -> str:
     window = badge.window.replace("-01-01..", "-").replace("-12-31", "") or "n/a"
     return (f"OOS {window}: N={badge.n}, WR {badge.win_rate:.1f}%, "
-            f"ExpR {badge.expectancy_r:+.3f}")
+            f"ExpR {badge.expectancy_r:+.3f}{decay_note(badge.decay)}")
 
 
 def record_transition(plan: TradePlanV2, new_status: str, reason: str | None = None,

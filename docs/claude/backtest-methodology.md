@@ -28,6 +28,25 @@ interpreting any backtest, grid, or validation result.
   plan's target inside — replaces the pre-v31 per-strategy fixed
   reward:risk override table and its 0.30 floor, both deleted),
   `BREAKEVEN_TRIGGER_FRACTION = 0.5`, `tp1_fraction = 0.50`.
+- **Evidence age.** Every registry row's `run_date` yields a read-time decay
+  verdict (`registry.decay_for`): `fresh`, `aging` at 90 days, `stale` at 180
+  days, `unknown` when the row carries no usable date — fail-closed, an
+  unstamped row is never `fresh`. 90/180 are one and two missed quarterly
+  re-verification cycles, not round numbers picked for feel. The verdict is
+  **derived at read time and never persisted** (a stored verdict is wrong the
+  day after it is written; only the raw `run_date` travels), and **it gates
+  nothing** — no plan refused, no alert suppressed, no badge downgraded.
+  Excluding stale evidence would change which plans get built, which needs its
+  own pre-registered hypothesis. The Fibonacci / RSI / Support-Resistance
+  footnote in the v31 row below still stands on its own: decay says a row is
+  old, not that its arithmetic was deleted. Those are different facts.
+- **Registry emit hard gates.** `run_backtest_range.py --emit-registry` writes
+  **no row** for an unhealthy cell rather than one that looks like evidence,
+  printing a stable token to stderr so the sweep's log records why a cell is
+  missing: `hard-gate:zero-trades`, `hard-gate:below-min-n`,
+  `hard-gate:nonfinite-metric`, `hard-gate:missing-window`. Refusal is per-row —
+  one bad cell never discards the healthy cells beside it — and a refused cell
+  is recovered by re-running it, never by hand-editing the JSON.
 - **No ML in the live path** — numpy/logistic audits live in `scripts/` only,
   never imported by `swingbot/`.
 - Grid/validation results are written to `docs/superpowers/results/*.md` with

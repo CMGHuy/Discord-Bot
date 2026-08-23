@@ -132,6 +132,7 @@ def badge_drift(closed: list[dict], registry_entries: list[dict]) -> list[dict]:
                      and live_wr < oos_wr - DRIFT_THRESHOLD_POINTS)
 
         rows.append({"strategy": strat, "oos_n": oos_n, "oos_wr": oos_wr,
+                     "oos_run_date": r.get("run_date", ""),
                      "live_n": live_n, "live_wr": live_wr, "delta_wr": delta,
                      "drift_alert": alert})
     return rows
