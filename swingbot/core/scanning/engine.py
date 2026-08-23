@@ -83,6 +83,7 @@ from swingbot.core.planning.plan_store import PlanStore
 from .regime import get_htf_bias, get_market_regime
 from swingbot.core.infra.state import StateStore
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS
+from swingbot.core.marketdata import data_refresh, data_store
 from swingbot.core.marketdata import universe
 from swingbot.core.charts.decision_chart import render_decision_chart
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
@@ -615,6 +616,29 @@ def _check_near_close(ticker: str, df) -> list:
     return warnings
 
 
+def _load_cached_daily(ticker: str):
+    """v47: today's daily bar from market_data/daily/{TICKER}.csv, or None.
+
+    None means "cold" -- missing, stale, or unreadable -- and the caller
+    fetches it instead. `market_data_refresh` (commands/scanning.py) already
+    keeps this cache warm for exactly load_watchlist(), so in steady state this
+    is the path every ticker takes and the scan makes no network calls at all.
+
+    Staleness reuses data_refresh.is_stale() rather than reimplementing it: it
+    already handles "file missing" and takes an explicit max_age_hours, so the
+    scan's freshness bar (SCAN_CACHE_MAX_AGE_HOURS, 6h) stays independent of
+    the background loop's own 12h daily refetch cadence.
+    """
+    try:
+        if data_refresh.is_stale(ticker, "daily",
+                                 max_age_hours=config.SCAN_CACHE_MAX_AGE_HOURS):
+            return None
+        return data_store.load_normalized(ticker, "daily")
+    except Exception as exc:
+        log.debug("Crawl: cache lookup failed for %s (%s) -- treating as cold", ticker, exc)
+        return None
+
+
 def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     """
     Phase 1 of every scan: fetches the latest daily OHLCV data for every
@@ -623,8 +647,15 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     confidence scoring, etc. downstream never fetch anything themselves,
     they only ever see what this function already pulled fresh.
 
-    Fetched ONE TICKER AT A TIME, sequentially -- deliberately NOT a
-    concurrent thread pool anymore. This used to run through a bounded
+    v47: cache-first. A ticker whose market_data/daily/{TICKER}.csv is
+    present and fresher than SCAN_CACHE_MAX_AGE_HOURS is served from disk and
+    never reaches the fetch path at all -- `market_data_refresh` already keeps
+    that cache warm for exactly load_watchlist(), so in steady state the whole
+    crawl costs no network. Only genuine misses (the "cold" list) are fetched,
+    and everything below is about them.
+
+    Cold tickers are fetched ONE AT A TIME, sequentially -- deliberately NOT a
+    concurrent thread pool. This used to run through a bounded
     ThreadPoolExecutor for speed, but yfinance's `download()` (which
     get_daily_data() calls) is built on a shared module-level global
     (`_DFS`) that earlier yfinance releases -- including 0.2.66, the
@@ -662,10 +693,28 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     results = LRUFrames()   # Task E83: bounded, evicts oldest frames past 200 tickers
     started = time.monotonic()
 
+    cold = []
+    warm = 0
     for ticker in tickers:
         if is_stop_requested():
-            log.info("Crawl: stop requested -- ending early (%d/%d ticker(s) fetched so far)",
+            log.info("Crawl: stop requested -- ending early (%d/%d ticker(s) resolved so far)",
                       len(results), len(tickers))
+            if progress is not None:
+                progress.stopped = True
+            return results
+        df = _load_cached_daily(ticker)
+        if df is not None:
+            results[ticker] = df
+            warm += 1
+            if progress is not None:
+                progress.done += 1
+                progress.current_ticker = ticker
+            continue
+        cold.append(ticker)
+
+    # Placeholder -- Task 4 replaces this with the threshold + process pool.
+    for ticker in cold:
+        if is_stop_requested():
             if progress is not None:
                 progress.stopped = True
             break
@@ -681,7 +730,8 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
             progress.current_ticker = ticker
 
     elapsed = time.monotonic() - started
-    log.info("Crawl complete in %.1fs: %d/%d ticker(s) fetched successfully", elapsed, len(results), len(tickers))
+    log.info("Crawl complete in %.1fs: %d/%d ticker(s) resolved (%d from cache, %d fetched)",
+              elapsed, len(results), len(tickers), warm, len(cold))
     return results
 
 
