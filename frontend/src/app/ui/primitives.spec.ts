@@ -51,6 +51,17 @@ const PROMOTED_ALLOWLIST = new Map<string, string[]>([
   ['workspaces/trades/trade-detail.ts', ['head']],
 ]);
 
+describe('the valence law is not forked', () => {
+  for (const { name, source } of callSites()) {
+    it(`${name} does not redefine .pos, .neg or .muted`, () => {
+      const offenders = ['pos', 'neg', 'muted'].filter((cls) =>
+        new RegExp(`^\\s*\\.${cls}\\s*[,{]`, 'm').test(source),
+      );
+      expect(offenders).toEqual([]);
+    });
+  }
+});
+
 describe('no call site redefines a promoted composite', () => {
   const PROMOTED = ['head', 'row-link', 'note', 'chips'];
   for (const { name, source } of callSites()) {

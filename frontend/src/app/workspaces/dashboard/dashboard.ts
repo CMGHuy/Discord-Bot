@@ -734,8 +734,6 @@ import { TradeGroup } from './trade-group';
        background-tint hover instead. */
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
-    .pos { color: var(--pos); }
-    .neg { color: var(--neg); }
     /* Smaller than the % it rides beside -- the percentage is the headline
        figure, the amount is context for it, not a second headline -- but
        the SAME colour: it is the same gain or loss in different units, and

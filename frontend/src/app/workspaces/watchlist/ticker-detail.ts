@@ -136,9 +136,6 @@ export const TICKER_TRADES_CAP = 25;
     }
 
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
-
-    .pos { color: var(--pos); }
-    .neg { color: var(--neg); }
   `,
 })
 export class TickerDetail {

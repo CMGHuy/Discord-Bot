@@ -94,3 +94,17 @@ a:hover {
   font-size: var(--text-chip);
   line-height: 1.5;
 }
+
+/* Valence utilities.
+ *
+ * Global, and they have to be. Three workspaces had each declared their own
+ * `.pos` / `.neg`, which is how a colour law dies — not by being overruled,
+ * but by drifting a shade at a time in three files nobody diffs together.
+ * `tokens.css` owns what the hues MEAN; this owns the one way to apply them
+ * to text.
+ *
+ * Colour is never the only carrier — see the numeric law: a sign is a glyph
+ * as well as a hue, because a screenshot pasted into Discord loses neither. */
+.pos { color: var(--pos); }
+.neg { color: var(--neg); }
+.muted { color: var(--text-muted); }

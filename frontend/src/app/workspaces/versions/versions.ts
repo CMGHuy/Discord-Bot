@@ -58,9 +58,9 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     }
 
     @if (store.empty() && store.loading()) {
-      <p class="muted">Loading version history…</p>
+      <p class="muted muted-reset">Loading version history…</p>
     } @else if (!store.releases().length) {
-      <p class="muted">
+      <p class="muted muted-reset">
         No version history recorded. Run
         <code>python scripts/dev/build_version_matrix.py</code> to generate it.
       </p>
@@ -157,7 +157,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
         </p>
       }
       @if (store.filter() && !store.visible().length) {
-        <p class="muted">No releases carry that version.</p>
+        <p class="muted muted-reset">No releases carry that version.</p>
       }
 
       <ul class="stream">
@@ -198,7 +198,11 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .stale code, .muted code { font-family: var(--font-mono); font-size: var(--text-micro); }
 
     .error { color: var(--neg); margin: 0; }
-    .muted { color: var(--text-muted); margin: 0; }
+    /* .muted itself is forbidden here (the gate blocks redefining the
+       selector at all, not just its colour); this only resets the
+       browser's default <p> margin, so it is its own class alongside
+       .muted in the markup. */
+    .muted-reset { margin: 0; }
     .basis { margin: 0; color: var(--text-secondary); font-size: var(--text-table);
              max-width: 68ch; }
 

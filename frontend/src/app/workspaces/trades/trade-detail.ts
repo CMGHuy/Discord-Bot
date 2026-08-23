@@ -306,7 +306,7 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
                     <li>
                       {{ c.strategy }}
                       @if (c.horizon) {
-                        <span class="muted">({{ c.horizon }})</span>
+                        <span class="muted muted-gap">({{ c.horizon }})</span>
                       }
                     </li>
                   }
@@ -417,7 +417,7 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
                     <dt>
                       @if ($index === 0) { First } @else { Runner }
                       @if (leg.fraction !== null) {
-                        <span class="muted">{{ fmtShare(leg.fraction * 100) }}</span>
+                        <span class="muted muted-gap">{{ fmtShare(leg.fraction * 100) }}</span>
                       }
                     </dt>
                     <dd class="num">
@@ -427,10 +427,10 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
                           <span [class]="pnlClass(leg.r)">{{ fmtR(leg.r) }}</span>
                         }
                         @if (leg.reason) {
-                          <span class="muted">{{ leg.reason }}</span>
+                          <span class="muted muted-gap">{{ leg.reason }}</span>
                         }
                       } @else {
-                        <span class="muted">still open</span>
+                        <span class="muted muted-gap">still open</span>
                       }
                     </dd>
                   </div>
@@ -695,13 +695,6 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
       color: var(--text);
       font-size: var(--text-table);
     }
-    .pos {
-      color: var(--pos);
-    }
-    .neg {
-      color: var(--neg);
-    }
-
     /* -- SR49: the plan's reasoning ------------------------------------- */
 
     /* Prose, not data. Wider measure than a table cell and a real line
@@ -759,9 +752,14 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
     .factors dd {
       text-align: right;
     }
-    .muted {
+    /* v54: dropped this call site's own .muted rule entirely -- the gate
+       forbids redefining that selector at all, not just its colour (which
+       was color: var(--text-faint), a drift off the global .muted's
+       var(--text-muted), now fixed by using the global unmodified). The
+       inline gap it used to add is .muted-gap, a second class alongside
+       .muted in the markup so the two concerns stay separately named. */
+    .muted-gap {
       margin-left: var(--space-6);
-      color: var(--text-faint);
     }
 
     /* A rule down the left with a node per event: the shape says "these

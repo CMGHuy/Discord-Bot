@@ -1029,7 +1029,6 @@ interface ProposalView extends ProposalRow {
     dt { color: var(--text-secondary); font-size: var(--text-table); }
     dd { color: var(--text); font-size: var(--text-table); }
 
-    .muted { color: var(--text-muted); font-size: var(--text-table); }
     /* The global .section-help (styles.css) already supplies colour,
        font-size, line-height and margin-bottom -- this only adds the
        reading-width cap and this page's own sibling spacing. */

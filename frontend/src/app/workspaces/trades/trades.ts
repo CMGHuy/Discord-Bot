@@ -397,8 +397,6 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
 
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
-    .pos { color: var(--pos); }
-    .neg { color: var(--neg); }
     .pnl-amount { color: var(--text-secondary); font-size: var(--text-chip); }
 
     .actions { display: inline-flex; gap: var(--space-4); }
