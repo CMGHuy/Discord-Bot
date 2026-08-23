@@ -92,6 +92,8 @@ export class Select {
         [attr.min]="min()"
         [attr.max]="max()"
         [attr.step]="step()"
+        [attr.name]="name()"
+        [attr.autocomplete]="autocomplete()"
         [attr.aria-label]="label() ? null : ariaLabel()"
         (input)="value.set($any($event.target).value)"
       />
@@ -152,6 +154,12 @@ export class TextInput {
   readonly min = input<number | null>(null);
   readonly max = input<number | null>(null);
   readonly step = input<number | null>(null);
+
+  /** `name` and `autocomplete` pass straight through to the native input.
+   *  Login is the one call site that needs them -- a password manager
+   *  keys off both, and dropping them would be a real regression. */
+  readonly name = input<string | null>(null);
+  readonly autocomplete = input<string | null>(null);
 }
 
 @Component({

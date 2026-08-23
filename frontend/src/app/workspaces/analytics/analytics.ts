@@ -35,7 +35,7 @@ import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
 import { createClientPage } from '../../ui/data-table/client-page';
-import { Select } from '../../ui/form-controls';
+import { Select, TextInput } from '../../ui/form-controls';
 import { ABSENT, date, dateTime } from '../../ui/format';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
 import { Histogram, HistogramBin } from '../../ui/histogram';
@@ -121,6 +121,7 @@ interface ProposalView extends ProposalRow {
     QualityChip,
     Sparkline,
     Select,
+    TextInput,
     Button,
     ConfirmDialog,
     PaginationComponent,
@@ -241,16 +242,18 @@ interface ProposalView extends ProposalRow {
              is which rather than leaving the reader to guess. -->
         <sb-panel [heading]="derivedHeading()">
           <sb-control-row class="range" role="group" aria-label="Analytics date range">
-            <label>
-              From
-              <input type="date" [value]="store.rangeFrom() ?? ''"
-                     (change)="onRangeFrom($event)" />
-            </label>
-            <label>
-              To
-              <input type="date" [value]="store.rangeTo() ?? ''"
-                     (change)="onRangeTo($event)" />
-            </label>
+            <sb-text-input
+              type="date"
+              label="From"
+              [value]="store.rangeFrom() ?? ''"
+              (valueChange)="onRangeFrom($event)"
+            />
+            <sb-text-input
+              type="date"
+              label="To"
+              [value]="store.rangeTo() ?? ''"
+              (valueChange)="onRangeTo($event)"
+            />
             @if (store.rangeActive()) {
               <button sb-button type="button" variant="ghost"
                       (click)="store.clearRange()">
@@ -968,24 +971,6 @@ interface ProposalView extends ProposalRow {
 
     .range { margin-bottom: var(--space-8); }
 
-    .range label {
-      display: grid;
-      gap: var(--space-4);
-      color: var(--text-secondary);
-      font-size: var(--text-chip);
-    }
-
-    .range input {
-      /* Matches the shared form controls rather than inheriting the browser's
-         date input, which sets its own font and breaks the row's baseline. */
-      font: inherit;
-      color: var(--text-primary);
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: var(--space-4) var(--space-6);
-    }
-
     .range .sample {
       margin-left: auto;
       color: var(--text-faint);
@@ -1235,14 +1220,12 @@ export class Analytics {
     return `${n} closed ${n === 1 ? 'trade' : 'trades'}`;
   });
 
-  protected onRangeFrom(event: Event): void {
-    this.store.setRange((event.target as HTMLInputElement).value || null,
-                        this.store.rangeTo());
+  protected onRangeFrom(value: string): void {
+    this.store.setRange(value || null, this.store.rangeTo());
   }
 
-  protected onRangeTo(event: Event): void {
-    this.store.setRange(this.store.rangeFrom(),
-                        (event.target as HTMLInputElement).value || null);
+  protected onRangeTo(value: string): void {
+    this.store.setRange(this.store.rangeFrom(), value || null);
   }
 
   /* -- cell templates --------------------------------------------------- */

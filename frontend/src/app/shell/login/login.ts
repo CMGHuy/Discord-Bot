@@ -1,14 +1,17 @@
 import {
+  AfterViewInit,
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   computed,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 
 import { SessionStore } from '../../stores/session.store';
 import { Button } from '../../ui/button';
+import { TextInput } from '../../ui/form-controls';
 
 /**
  * The login form, rendered *instead of* the shell.
@@ -22,13 +25,19 @@ import { Button } from '../../ui/button';
  */
 @Component({
   selector: 'sb-login',
-  imports: [FormsModule, Button],
+  imports: [Button, TextInput],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './login.html',
   styleUrl: './login.css',
 })
-export class Login {
+export class Login implements AfterViewInit {
   private readonly session = inject(SessionStore);
+
+  /** Replaces the raw `autofocus` attribute, which had nothing to attach to
+   *  once the field became `sb-text-input`: `{ read: ElementRef }` reaches
+   *  past the component instance to its host element, whose actual
+   *  focusable target is the native input element one level inside. */
+  private readonly usernameField = viewChild('usernameField', { read: ElementRef<HTMLElement> });
 
   protected readonly username = signal('');
   protected readonly password = signal('');
@@ -43,7 +52,15 @@ export class Login {
     () => this.username().trim() === '' || this.password() === '',
   );
 
-  protected submit(): void {
+  ngAfterViewInit(): void {
+    this.usernameField()?.nativeElement.querySelector('input')?.focus();
+  }
+
+  /** The `<form>` no longer has NgForm around to preventDefault a real
+   *  submit and re-emit it as `ngSubmit` -- dropping FormsModule means
+   *  handling the native `submit` event, and preventing it, directly. */
+  protected submit(event: SubmitEvent): void {
+    event.preventDefault();
     if (this.submitting() || this.incomplete()) return;
     void this.session.login(this.username(), this.password());
   }

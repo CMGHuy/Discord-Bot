@@ -17,7 +17,7 @@ import {
 } from '../../stores/system.store';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
-import { Select, SelectOption } from '../../ui/form-controls';
+import { Checkbox, Select, SelectOption } from '../../ui/form-controls';
 import { ControlRow, Panel } from '../../ui/layout';
 
 /**
@@ -31,7 +31,7 @@ import { ControlRow, Panel } from '../../ui/layout';
 @Component({
   selector: 'sb-logs-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, ConfirmDialog, ControlRow, Select],
+  imports: [Panel, Button, Checkbox, ConfirmDialog, ControlRow, Select],
   template: `
     <sb-panel [heading]="store.logs()?.path ?? 'Log'">
       <sb-control-row panel-actions class="actions">
@@ -77,14 +77,11 @@ import { ControlRow, Panel } from '../../ui/layout';
       <div class="triage">
         <div class="levels" role="group" aria-label="Log levels">
           @for (level of levels; track level) {
-            <label class="level" [class]="'level-' + level.toLowerCase()">
-              <input
-                type="checkbox"
-                [checked]="store.logLevels()[level]"
-                (change)="store.setLogLevel(level, $any($event.target).checked)"
-              />
-              {{ level }}
-            </label>
+            <sb-checkbox
+              [label]="level"
+              [checked]="store.logLevels()[level]"
+              (checkedChange)="store.setLogLevel(level, $event)"
+            />
           }
         </div>
 
@@ -143,7 +140,7 @@ import { ControlRow, Panel } from '../../ui/layout';
        .triage, .levels and .level below are NOT converted: .level is a
        <label> element whose native checkbox association depends on staying
        a label, and .triage/.levels only group them. .count moved to
-       sb-select (v54) -- it wraps its own <select> in a <label> internally,
+       sb-select (v54) -- it wraps its own select in a label internally,
        so the same association survives one layer of encapsulation deeper. */
 
     /* -- SR57: triage controls --------------------------------------- */
@@ -156,12 +153,13 @@ import { ControlRow, Panel } from '../../ui/layout';
       font-size: var(--text-chip);
     }
     .levels { display: flex; flex-wrap: wrap; gap: var(--space-8); }
-    .level { display: flex; align-items: center; gap: var(--space-4); }
-    /* ERROR and WARNING are the only two hues here, per the colour rule --
-       INFO and DEBUG stay secondary text rather than earning a colour. */
-    .level-error { color: var(--neg); }
-    .level-warning { color: var(--warn); }
-    .level-info, .level-debug { color: var(--text-secondary); }
+    /* v54: the level checkboxes lost their per-level label colour (ERROR
+       red, WARNING amber) migrating to sb-checkbox -- its .field rule sets
+       an explicit color: var(--text), which blocks inheritance from any
+       class applied to the host. The level name is still spelled out in
+       the label text, so the information survives; only the colour cue
+       does not. Not fixable without a Checkbox tint input, out of scope
+       for a call-site migration. */
     .hidden-count {
       margin-left: auto;
       color: var(--text-faint);

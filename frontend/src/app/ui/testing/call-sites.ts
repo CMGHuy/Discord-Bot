@@ -15,7 +15,11 @@ export function callSites(): { name: string; source: string }[] {
         continue;
       }
       if (!/\.(ts|html)$/.test(entry) || entry.endsWith('.spec.ts')) continue;
-      out.push({ name: full.slice(APP.length + 1), source: readFileSync(full, 'utf8') });
+      // Forward slashes always, regardless of path.join's platform separator
+      // -- Windows' backslashes would otherwise silently break every
+      // gate that keys an allowlist Map by this name (Task 4 onward).
+      const name = full.slice(APP.length + 1).replace(/\\/g, '/');
+      out.push({ name, source: readFileSync(full, 'utf8') });
     }
   };
   walk(APP);

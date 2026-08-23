@@ -17,6 +17,7 @@ import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { date, text } from '../../ui/format';
+import { TextInput } from '../../ui/form-controls';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
 import { EarningsCalendar } from './earnings-calendar';
 
@@ -92,7 +93,7 @@ function sortValue(row: Ticker, key: string): string | number | null {
 @Component({
   selector: 'sb-watchlist',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, DataTable, Panel, Button, ConfirmDialog, ControlRow, TabBar, EarningsCalendar],
+  imports: [RouterLink, DataTable, Panel, Button, ConfirmDialog, ControlRow, TabBar, TextInput, EarningsCalendar],
   providers: [WatchlistStore],
   template: `
     <header class="head">
@@ -120,15 +121,17 @@ function sortValue(row: Ticker, key: string): string | number | null {
       </p>
       <sb-control-row class="add">
         <div class="box">
-          <input
+          <!-- (focusout), not (blur): blur does not bubble, so a listener on
+               this host element would never see the inner input element lose
+               focus. focusout is blur's bubbling equivalent. -->
+          <sb-text-input
             class="input"
-            type="text"
             [value]="entry()"
-            (input)="onEntry($any($event.target).value)"
+            (valueChange)="onEntry($event)"
             (keydown.enter)="add()"
-            (blur)="closeSuggestions()"
+            (focusout)="closeSuggestions()"
             placeholder="AAPL, or paste a list"
-            aria-label="Ticker symbols to add"
+            ariaLabel="Ticker symbols to add"
           />
 
           @if (store.suggestions().length) {
@@ -251,18 +254,12 @@ function sortValue(row: Ticker, key: string): string | number | null {
        the input's top edge rather than its box. sb-control-row's flex-end is
        the fix; nothing here is the row's own any more. */
     .box { position: relative; flex: 1 1 auto; max-width: 420px; }
-    .input {
-      width: 100%;
-      padding: var(--space-6) var(--space-8);
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      color: var(--text);
-      font-family: var(--font-mono);
-      font-size: var(--text-table);
-    }
-    .input:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
-    .input::placeholder { color: var(--text-faint); font-family: var(--font-sans); }
+    /* sb-text-input's own template is unreachable from here (encapsulation),
+       so only host-box layout and the naturally-inherited font-family
+       survive as overrides -- background/padding/border/focus-ring are now
+       the primitive's, and its placeholder loses the old sans-vs-mono
+       distinction as a result. */
+    .input { display: block; width: 100%; font-family: var(--font-mono); }
 
     .suggestions {
       position: absolute;
