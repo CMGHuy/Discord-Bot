@@ -10,6 +10,7 @@ import {
 
 import { RiskPosition } from '../../api/models';
 import { RiskStore } from '../../stores/risk.store';
+import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
@@ -46,16 +47,20 @@ import { Sparkline } from '../../ui/sparkline';
 @Component({
   selector: 'sb-risk',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ConfirmDialog, DataTable, Panel, RowLink, SectionHead, Sparkline],
+  imports: [Async, Button, ConfirmDialog, DataTable, Panel, RowLink, SectionHead, Sparkline],
   // Provided on the component: created on entry, destroyed on exit, so the
   // workspace cannot hold stale exposure while you are looking at another.
   providers: [RiskStore],
   template: `
     <sb-section-head heading="Risk">
       @if (store.error(); as message) {
-        <!-- Beside the numbers rather than instead of them: stale exposure
-             with a warning beats an empty page, because "no positions
-             shown" would be a claim about the account. -->
+        <!-- Kept unconditional, unlike Dashboard/Trades: the killswitch and
+             scan-health panels below stay outside the sb-async wrap (see
+             its comment) and have no error surface of their own -- this is
+             the only place their staleness shows. It does duplicate the
+             wrapped panel's own error/stale display on a first-load
+             failure, which is an acceptable trade for not losing the
+             killswitch's error visibility. -->
         <span actions class="stale" role="status">{{ message }}</span>
       }
     </sb-section-head>
@@ -120,8 +125,28 @@ import { Sparkline } from '../../ui/sparkline';
       (cancelled)="asking.set(false)"
     />
 
-    <!-- heat ------------------------------------------------------------ -->
-
+    <!-- heat, exposure, sector/cluster breakdown --------------------------
+         One sb-async around the three panels that read the fetch's numbers.
+         The killswitch panel above and the scan-health panel below stay
+         outside it deliberately: the killswitch is an operational control
+         that must stay usable at zero open risk (an operator may want to
+         engage it exactly when flat, to stop the bot opening anything new),
+         and scan health answers "is the scanner healthy", a question that
+         has nothing to do with whether risk exposure happens to be zero
+         right now. Both already degrade gracefully via the store's own
+         null-safe defaults while the first fetch is in flight. -->
+    <sb-async
+      [loading]="async().loading"
+      [error]="async().error"
+      [empty]="async().empty"
+      [staleAsOf]="async().staleAsOf"
+      emptyReason="measured-zero"
+      emptyTitle="No open risk"
+      emptyHint="No position is currently exposed."
+      [skeletonRows]="6"
+      [skeletonCols]="5"
+      (retry)="store.load()"
+    >
     <sb-panel heading="Portfolio heat">
       <div class="heat">
         <span class="heat-figure num" [class]="heatClass()">
@@ -190,7 +215,6 @@ import { Sparkline } from '../../ui/sparkline';
         [columns]="columns()"
         [visible]="visible"
         [rowKey]="rowKey"
-        [loading]="store.loading() && store.empty()"
         [emptyState]="emptyState"
       />
     </sb-panel>
@@ -237,6 +261,7 @@ import { Sparkline } from '../../ui/sparkline';
         }
       </sb-panel>
     </div>
+    </sb-async>
 
     <sb-panel heading="Scan health">
       <div class="scan">
@@ -281,8 +306,6 @@ import { Sparkline } from '../../ui/sparkline';
        containers the thing that scrolls instead.
        No backticks in here: these styles live in a TS template literal. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
-
-    .stale { color: var(--warn); font-size: var(--text-table); }
 
     /* -- killswitch -- */
     .kill {
@@ -398,6 +421,10 @@ import { Sparkline } from '../../ui/sparkline';
 })
 export class Risk {
   protected readonly store = inject(RiskStore);
+
+  protected readonly async = computed(() =>
+    asyncInputs(this.store, { isEmpty: (data) => data.positions.length === 0 }),
+  );
 
   /** The dialog is open. Only ever set from the button, so there is no state
    *  where a confirmation is showing for a toggle nobody asked for. */
