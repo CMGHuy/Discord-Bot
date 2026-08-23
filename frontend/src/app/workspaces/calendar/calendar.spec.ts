@@ -300,3 +300,63 @@ describe('Calendar day drawer', () => {
     expect(el(fixture).querySelector('.day-row')).toBeNull();
   });
 });
+
+function seedUnflushed(): { fixture: ComponentFixture<Calendar>; backend: HttpTestingController } {
+  installDialogPolyfill();
+  TestBed.resetTestingModule();
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
+      provideHttpClientTesting(),
+    ],
+  });
+  const fixture = TestBed.createComponent(Calendar);
+  const backend = TestBed.inject(HttpTestingController);
+  return { fixture, backend };
+}
+
+describe('Calendar states', () => {
+  it('shows a skeleton while loading, before the first response', () => {
+    const { fixture } = seedUnflushed();
+    fixture.detectChanges();
+
+    expect(el(fixture).querySelector('.skeleton')).toBeTruthy();
+  });
+
+  it('shows the error state on a first-load failure', async () => {
+    const { fixture, backend } = seedUnflushed();
+    fixture.detectChanges();
+    backend
+      .expectOne((r) => r.url === '/api/v1/calendar/pnl')
+      .flush({ error: { code: 'unavailable', message: 'nope' } }, { status: 503, statusText: 'x' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(el(fixture).querySelector('.failed')).toBeTruthy();
+  });
+
+  it('shows the measured-zero empty state, not a spinner, for a month with no closed trades — and does not hide the all-history weekday table', async () => {
+    const { fixture, backend } = seedUnflushed();
+    fixture.detectChanges();
+    backend
+      .expectOne((r) => r.url === '/api/v1/calendar/pnl')
+      .flush({
+        ...RESPONSE,
+        days: [],
+        totals: { net_pnl_amount: 0, net_r: 0, trade_count: 0, win_rate: null },
+        best_day: null,
+        worst_day: null,
+        streak: { direction: 'none', days: 0 },
+      } satisfies PnlCalendar);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const host = el(fixture);
+    expect(host.textContent).toContain('No closed trades this month');
+    expect(host.querySelector('.skeleton')).toBeNull();
+    // All-time, deliberately outside the this-month empty gate.
+    expect(host.textContent).toContain('By weekday (all history)');
+    expect(host.querySelectorAll('.dow-row').length).toBe(RESPONSE.day_of_week.length);
+  });
+});

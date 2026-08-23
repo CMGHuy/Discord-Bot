@@ -74,6 +74,20 @@ function seed(payload: VersionHistory): ComponentFixture<Versions> {
   return fixture;
 }
 
+function seedUnflushed(): { fixture: ComponentFixture<Versions>; backend: HttpTestingController } {
+  TestBed.resetTestingModule();
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
+      provideHttpClientTesting(),
+    ],
+  });
+  const fixture = TestBed.createComponent(Versions);
+  const backend = TestBed.inject(HttpTestingController);
+  return { fixture, backend };
+}
+
 describe('Versions', () => {
   it('does not widen when components are added', async () => {
     const fixture = seed(SIX);
@@ -141,5 +155,48 @@ describe('Versions', () => {
     fixture.detectChanges();
     expect(host.querySelector('.tooltip')).toBeNull();
     expect(host.querySelector('.spotlight')).toBeNull();
+  });
+});
+
+describe('Versions states', () => {
+  it('shows a skeleton while loading, before the first response', () => {
+    const { fixture } = seedUnflushed();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.skeleton')).toBeTruthy();
+  });
+
+  it('shows the error state on a first-load failure', async () => {
+    const { fixture, backend } = seedUnflushed();
+    fixture.detectChanges();
+    backend
+      .expectOne('/api/v1/versions')
+      .flush({ error: { code: 'unavailable', message: 'nope' } }, { status: 503, statusText: 'x' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.failed')).toBeTruthy();
+  });
+
+  it('shows the no-data-yet empty state, not a spinner, when no history is recorded', async () => {
+    const { fixture, backend } = seedUnflushed();
+    fixture.detectChanges();
+    backend.expectOne('/api/v1/versions').flush({
+      generated_at: null,
+      basis: null,
+      live: {},
+      stale: false,
+      components: [],
+      current: {},
+      releases: [],
+    } satisfies VersionHistory);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.textContent).toContain('No version history');
+    expect(el.querySelector('.skeleton')).toBeNull();
   });
 });

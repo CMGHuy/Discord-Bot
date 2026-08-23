@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  computed,
   effect,
   inject,
   signal,
@@ -9,6 +10,7 @@ import {
 } from '@angular/core';
 
 import { Release } from '../../api/models';
+import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { ControlRow } from '../../ui/layout';
 import { PaginationComponent } from '../../ui/pagination';
@@ -40,7 +42,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
   selector: 'sb-versions',
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [VersionsStore],
-  imports: [Button, ControlRow, PaginationComponent, SectionHead],
+  imports: [Button, ControlRow, PaginationComponent, SectionHead, Async],
   template: `
     <sb-section-head heading="Versions">
       @if (store.stale()) {
@@ -53,18 +55,18 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
       }
     </sb-section-head>
 
-    @if (store.error(); as error) {
-      <p class="error" role="alert">{{ error }}</p>
-    }
-
-    @if (store.empty() && store.loading()) {
-      <p class="muted muted-reset">Loading version history…</p>
-    } @else if (!store.releases().length) {
-      <p class="muted muted-reset">
-        No version history recorded. Run
-        <code>python scripts/dev/build_version_matrix.py</code> to generate it.
-      </p>
-    } @else {
+    <sb-async
+      [loading]="async().loading"
+      [error]="async().error"
+      [empty]="async().empty"
+      [staleAsOf]="async().staleAsOf"
+      emptyReason="no-data-yet"
+      emptyTitle="No version history"
+      emptyHint="Run python scripts/dev/build_version_matrix.py to generate it."
+      [skeletonRows]="8"
+      [skeletonCols]="3"
+      (retry)="store.load()"
+    >
       @if (store.basis(); as basis) {
         <p class="basis">{{ basis }}</p>
       }
@@ -186,7 +188,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
       </ul>
 
       <sb-pagination [pagination]="store.pageSpec()" (pageChange)="store.setPage($event)" />
-    }
+    </sb-async>
   `,
   styles: `
     /* minmax(0, 1fr): an auto track is floored at its widest child, which is
@@ -194,10 +196,8 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
        No backticks in here: these styles live in a TS template literal. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
 
-    .stale { color: var(--warn); font-size: var(--text-table); }
     .stale code, .muted code { font-family: var(--font-mono); font-size: var(--text-micro); }
 
-    .error { color: var(--neg); margin: 0; }
     /* .muted itself is forbidden here (the gate blocks redefining the
        selector at all, not just its colour); this only resets the
        browser's default <p> margin, so it is its own class alongside
@@ -318,6 +318,10 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 export class Versions {
   protected readonly store = inject(VersionsStore);
   private readonly strip = viewChild<ElementRef<HTMLElement>>('strip');
+
+  protected readonly async = computed(() =>
+    asyncInputs(this.store, { isEmpty: (data) => data.releases.length === 0 }),
+  );
 
   protected readonly hovered = signal<{ lane: string; segment: LaneSegment } | null>(null);
 
