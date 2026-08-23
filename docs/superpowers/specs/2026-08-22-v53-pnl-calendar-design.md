@@ -66,27 +66,40 @@ the drill-down panel.
 
 **New core module:** `swingbot/core/analytics/pnl_calendar.py`.
 
-- `bucket_trades_by_day(trades, tz="Europe/Berlin")` — groups closed trades by
-  calendar day using the same day-boundary convention as `is_today_berlin()`
-  (`swingbot/admin/dashboard.py`) and `weekly_digest()`
-  (`swingbot/core/analytics/insights.py:52`), keyed on `closed_at`.
-- `day_summary(trades_for_day)` → `{net_pnl_amount, net_r, trade_count,
-  win_rate, trades: [joined trade dicts]}`.
-- `month_grid(year, month, strategy=None, horizon=None)` → one `day_summary`
-  per day-with-trades in the month (days with none are simply absent — the
-  frontend renders those as empty cells), plus the month total
-  (`net_pnl_amount`, `net_r`, `win_rate`, `trade_count`).
-- `day_of_week_breakdown(trades, strategy=None, horizon=None)` → per-weekday
-  (Mon–Fri only — no weekend trading) `{avg_pnl_amount, avg_r, win_rate,
-  trade_count}` across all history matching the filter.
-- `best_worst_and_streak(trades, strategy=None, horizon=None)` → best day
-  ever, worst day ever (each `{date, net_pnl_amount, net_r}`), and the
-  current streak (`{direction: "winning"|"losing"|"flat", days}, `counting
-  consecutive trading days from the most recent one with any closed trade).
+Names below are the ones the plan implements; the exact signatures live in
+each task's `Interfaces` block.
 
-All four take an already-joined trade list built once per request by a
-`load_joined_trades(strategy=None, horizon=None)` helper in the same module,
-so the two new routes below each do exactly one join pass.
+- `day_of(closed_at)` — the day key, per "Timezone and day boundaries" below.
+- `joined_rows(trades, entries)` — the join described above, one row per
+  closed trade.
+- `filter_rows(rows, strategy=None, horizon=None)` and
+  `available_filters(rows)` — narrowing, and the dropdown vocabulary. The
+  vocabulary is derived from the **unfiltered** set, so a dropdown never
+  shrinks to only the option already chosen.
+- `bucket_by_day(rows)` — groups rows by day key.
+- `day_summary(day, rows)` → `{date, net_pnl_amount, net_r, trade_count,
+  win_rate}`.
+- `month_grid(rows, month)` → one `day_summary` per day-with-trades in the
+  month (days with none are simply absent — the frontend renders those as
+  empty cells), plus the month total over the month's rows as one pool, so a
+  1-trade day and a 9-trade day do not carry equal weight in the win rate.
+- `day_of_week_breakdown(rows)` → per-weekday (Mon–Fri only — no weekend
+  trading) `{weekday, avg_pnl_amount, avg_r, win_rate, trade_count}`,
+  averaged **per trade** rather than per day, across all history. All five
+  weekdays are always present so the table does not reflow as a filter
+  narrows.
+- `best_worst_days(rows)` → `{best, worst}`, each a full `day_summary` — a
+  *day*, not a trade, since the worst day in the book is usually several
+  ordinary losses rather than one spectacular one.
+- `day_streak(rows)` → `{direction: "winning"|"losing"|"flat"|None, days}`,
+  counting back from the most recent day that had a close. A gap with no
+  trades does **not** break the run; treating it as a break would cap almost
+  every streak at five.
+
+All of these are pure functions over lists of dicts.
+`load_rows(trade_log=None, journal=None)` is the module's single I/O
+boundary, so each route does exactly one join pass, and the injectable
+stores let tests avoid monkeypatching `config.DATA_DIR`.
 
 **New route file:** `swingbot/admin/api_v1/calendar.py`, registered in
 `swingbot/admin/api_v1/__init__.py` alongside `analytics`, `trades`,
@@ -166,12 +179,26 @@ drawer so adjacent days can be compared without closing it first.
 
 ## Timezone and day boundaries
 
-All day-bucketing uses Europe/Berlin, matching the existing `is_today_berlin`
-convention used elsewhere in the admin backend — a trade's day is whichever
-Berlin calendar date its `closed_at` falls in. This must be applied
-consistently in `bucket_trades_by_day` and in the day-drill-down lookup, or a
-trade could appear in one day's grid cell but 404 when that same day is
-clicked (off-by-one around midnight UTC vs. Berlin).
+**A day is `closed_at[:10]` — the UTC calendar day, taken as a string slice.**
+
+This section originally specified Europe/Berlin, matching the admin's
+`is_today_berlin` helper. That was corrected while writing the plan, on
+three findings:
+
+- The established convention in `core/analytics` is already the slice —
+  `metrics.calendar_returns` buckets on `closed_at[:7]` and
+  `cumulative_pnl_by_strategy` on `closed_at[:10]`. A Berlin-converted day
+  here would put a late close on a different day than the *monthly* figures
+  the Analytics page renders from the same records.
+- `closed_at` is always written as UTC ISO
+  (`datetime.now(timezone.utc).isoformat()`), so the slice is unambiguous
+  and needs no `zoneinfo` dependency in a pure module.
+- In practice the two rarely differ: US market close is 20:00–21:00 UTC,
+  which is the same calendar date in both zones.
+
+The slice must be applied identically in the bucketing and in the
+day-drill-down lookup — otherwise a trade appears in one grid cell but 404s
+when that cell is clicked.
 
 ## Testing
 
