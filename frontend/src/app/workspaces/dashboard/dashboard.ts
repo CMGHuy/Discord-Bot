@@ -15,6 +15,7 @@ import { DashboardScope, TradeRow } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { DashboardStore } from '../../stores/dashboard.store';
+import { Async, asyncInputs } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { ChipRow } from '../../ui/chip-row';
 import { ColumnDef, Density, EmptyState, RowContext } from '../../ui/data-table/data-table.types';
@@ -83,7 +84,7 @@ import { TradeGroup } from './trade-group';
   selector: 'sb-dashboard',
   imports: [
     RouterLink, MetricCard, MetricChip, Panel, TradeGroup,
-    StatusCell, PlanCell, ConfidenceCell, Button, ChipRow, ControlRow,
+    StatusCell, PlanCell, ConfidenceCell, Async, Button, ChipRow, ControlRow,
     PlanLifecycleDiagram, RowLink, SectionHead,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -94,39 +95,29 @@ import { TradeGroup } from './trade-group';
   // those three touch the Trades workspace's own copy.
   providers: [DashboardStore],
   template: `
-    <!-- The stale message and the scope toggle are wrapped in one
-         actions-projected group so they cluster together on the right
-         under sb-section-head's space-between -- as two separate
-         projections they would land at opposite ends with the heading
-         squeezed between three items instead of two. -->
+    <!-- v54: sb-async's own staleAsOf badge (below) now owns the "these
+         numbers stopped updating" signal -- a second one here would be a
+         duplicate, not a backstop, so store.error() no longer binds here
+         directly (it also skipped the v13 refetch mapping asyncInputs
+         provides, which this raw binding never applied). -->
     <sb-section-head heading="Dashboard">
-      <div actions class="head-actions">
-        @if (store.error(); as message) {
-          <!-- Beside the numbers, not instead of them: the previous values
-               are still the best information available, and replacing nine
-               live figures with an error panel because one poll failed is
-               worse than showing them slightly stale. -->
-          <span class="stale" role="status">{{ message }}</span>
+      <!-- SR58. The Jinja dashboard's three date scopes. A server parameter,
+           not a client filter: the realised figures below are computed from
+           the scoped set, and a client-side scope over an all-time payload
+           could not narrow them at all. -->
+      <sb-control-row actions class="scope" role="group" aria-label="Date scope">
+        @for (option of scopes; track option.mode) {
+          <button
+            sb-button
+            type="button"
+            [variant]="store.scope() === option.mode ? 'secondary' : 'ghost'"
+            [attr.aria-pressed]="store.scope() === option.mode"
+            (click)="store.setScope(option.mode)"
+          >
+            {{ option.label }}
+          </button>
         }
-
-        <!-- SR58. The Jinja dashboard's three date scopes. A server parameter,
-             not a client filter: the realised figures below are computed from
-             the scoped set, and a client-side scope over an all-time payload
-             could not narrow them at all. -->
-        <sb-control-row class="scope" role="group" aria-label="Date scope">
-          @for (option of scopes; track option.mode) {
-            <button
-              sb-button
-              type="button"
-              [variant]="store.scope() === option.mode ? 'secondary' : 'ghost'"
-              [attr.aria-pressed]="store.scope() === option.mode"
-              (click)="store.setScope(option.mode)"
-            >
-              {{ option.label }}
-            </button>
-          }
-        </sb-control-row>
-      </div>
+      </sb-control-row>
     </sb-section-head>
 
     <!-- SR59. Copied from dashboard.html:60-68, not paraphrased: it states
@@ -142,6 +133,21 @@ import { TradeGroup } from './trade-group';
       background scan only ever posts and logs fully-qualifying setups.
     </p>
 
+    <!-- v54: rows=3 cols=5, measured against the .primary row of five
+         metric cards (skeletonRows/skeletonCols verified at Slow 3G --
+         Task 21 G6). -->
+    <sb-async
+      [loading]="async().loading"
+      [error]="async().error"
+      [empty]="async().empty"
+      [staleAsOf]="async().staleAsOf"
+      emptyReason="measured-zero"
+      emptyTitle="No open positions"
+      emptyHint="The scan found no qualifying setups in this scope."
+      [skeletonRows]="3"
+      [skeletonCols]="5"
+      (retry)="store.load()"
+    >
     <!-- SR58 / reorg: Realised today, Account balance, Open P&L, Risk used
          and Realised average all read together as one row -- Realised is
          scoped by the toggle above and the other three are always all-open,
@@ -399,6 +405,7 @@ import { TradeGroup } from './trade-group';
       }
       · <code>!account</code> to change
     </p>
+    </sb-async>
 
     <ng-template #statusCell let-row>
       <sb-status-cell [row]="row" />
@@ -552,7 +559,6 @@ import { TradeGroup } from './trade-group';
     /* Groups the stale message and the scope toggle into one actions
        projection -- as two separate ones they would land at opposite
        ends of sb-section-head's space-between instead of clustered. */
-    .head-actions { display: flex; align-items: baseline; gap: var(--space-14); }
     /* :host's own grid gap (below) already separates this from .primary
        above it -- no margin of its own needed, just the right alignment. */
     .realized-count {
@@ -571,10 +577,6 @@ import { TradeGroup } from './trade-group';
        No backticks in here: these styles live in a TS template literal. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
 
-    .stale {
-      color: var(--warn);
-      font-size: var(--text-table);
-    }
     /* Flexbox, not a fixed grid track count, across all three rows below
        (.primary, .chips, .lifecycle): equal width was never the actual
        requirement, filling the row was -- a label long enough to need more
@@ -769,6 +771,12 @@ export class Dashboard {
   /** For the currency symbol alone. `ConnectionStore` is root-provided and
    *  the shell already keeps it fresh, so reading it here costs no request. */
   private readonly connection = inject(ConnectionStore);
+
+  /** Zero open positions is a RESULT (the scan found nothing qualifying in
+   *  this scope), not missing data -- measured-zero, not no-data-yet. */
+  protected readonly async = computed(() =>
+    asyncInputs(this.store, { isEmpty: (data) => data.open_trades === 0 }),
+  );
 
   /** The suffix a money card renders after its number — a leading space, then
    *  the account's symbol. Three cards had `" USD"` written into the template

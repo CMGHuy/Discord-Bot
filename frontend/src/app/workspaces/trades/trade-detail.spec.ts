@@ -242,3 +242,41 @@ describe('TradeDetail — the fields that rendered nowhere', () => {
     expect(render('live')).toContain('Close');
   });
 });
+
+describe('TradeDetail states', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        { provide: EventStream, useValue: new FakeEventStream() },
+      ],
+    });
+  });
+
+  it('shows a skeleton in the tab body while loading, before the first response', () => {
+    const fixture = TestBed.createComponent(TradeDetail);
+    fixture.componentRef.setInput('id', ID);
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.skeleton')).toBeTruthy();
+  });
+
+  it('shows the error state on a first-load failure', () => {
+    const fixture = TestBed.createComponent(TradeDetail);
+    fixture.componentRef.setInput('id', ID);
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController)
+      .expectOne(`/api/v1/trades/${ID}`)
+      .flush({ error: { code: 'unavailable', message: 'nope' } }, { status: 503, statusText: 'x' });
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.failed')).toBeTruthy();
+  });
+});

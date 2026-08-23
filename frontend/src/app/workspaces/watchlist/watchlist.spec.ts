@@ -1,8 +1,21 @@
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import {
+  HttpTestingController,
+  provideHttpClientTesting,
+} from '@angular/common/http/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideZonelessChangeDetection } from '@angular/core';
+import { provideRouter } from '@angular/router';
 import { describe, expect, it } from 'vitest';
 
+import {
+  authInterceptor,
+  errorInterceptor,
+  loadingInterceptor,
+} from '../../api/interceptors';
 import { Ticker } from '../../api/models';
 import { SortSpec } from '../../ui/data-table/data-table.types';
-import { compareTickers, isWithinCurrentWeek } from './watchlist';
+import { compareTickers, isWithinCurrentWeek, Watchlist } from './watchlist';
 
 function ticker(overrides: Partial<Ticker>): Ticker {
   return {
@@ -88,5 +101,68 @@ describe('isWithinCurrentWeek', () => {
 
   it('is false for a date eight days in the past', () => {
     expect(isWithinCurrentWeek(daysFromNow(-8))).toBe(false);
+  });
+});
+
+function seed(): { fixture: ComponentFixture<Watchlist>; backend: HttpTestingController } {
+  TestBed.resetTestingModule();
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      provideRouter([]),
+      provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
+      provideHttpClientTesting(),
+    ],
+  });
+  const fixture = TestBed.createComponent(Watchlist);
+  const backend = TestBed.inject(HttpTestingController);
+  return { fixture, backend };
+}
+
+describe('Watchlist states', () => {
+  it('shows a skeleton while loading, before the first response', () => {
+    const { fixture } = seed();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.skeleton')).toBeTruthy();
+  });
+
+  it('shows the error state on a first-load failure', async () => {
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+    backend
+      .expectOne('/api/v1/watchlist/tickers')
+      .flush({ error: { code: 'unavailable', message: 'nope' } }, { status: 503, statusText: 'x' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.failed')).toBeTruthy();
+  });
+
+  it('shows the no-data-yet empty state, not a spinner, for an empty watchlist', async () => {
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+    backend.expectOne('/api/v1/watchlist/tickers').flush({ tickers: [] });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.textContent).toContain('No tickers on the watchlist');
+    expect(el.querySelector('.skeleton')).toBeNull();
+  });
+
+  it('keeps the add-ticker control usable while the watchlist is empty', async () => {
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+    backend.expectOne('/api/v1/watchlist/tickers').flush({ tickers: [] });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('input')).toBeTruthy();
+    const addButton = [...el.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Add');
+    expect(addButton).toBeTruthy();
   });
 });

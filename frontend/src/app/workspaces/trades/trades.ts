@@ -14,6 +14,7 @@ import { Router } from '@angular/router';
 
 import { ApiClient } from '../../api/api-client';
 import { TradeQuery, TradeRow } from '../../api/models';
+import { Async, asyncInputs } from '../../ui/async';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { Density } from '../../ui/data-table/data-table.types';
@@ -81,6 +82,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [TradesStore],
   imports: [
+    Async,
     ControlRow,
     DataTable,
     ColumnPickerComponent,
@@ -238,28 +240,39 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
       />
     </sb-filter-bar>
 
-    @if (store.error(); as message) {
-      <p class="error">{{ message }}</p>
-    }
-
-    <sb-data-table
-      [rows]="store.rows()"
-      [columns]="allColumns()"
-      [visible]="visible()"
-      [rowKey]="rowKey"
-      [sort]="store.sort()"
-      [pagination]="store.pagination()"
-      [loading]="store.loading()"
-      [expansion]="expansionTemplate()"
-      [emptyState]="emptyState()"
-      (sortChange)="onSort($event)"
-      (pageChange)="navigate({ page: $event }, false)"
-      (rowActivate)="open($event)"
-      [pinned]="pinned"
-      (reorder)="onReorder($event)"
-      [showPerPage]="true"
-      (perPageChange)="onPerPage($event)"
-    />
+    <!-- v54: rows=12 cols=8, measured against a full table page at Slow
+         3G (Task 21 G6). measured-zero always -- an empty filtered set is
+         a measured answer, not missing data; asyncInputs already suppresses
+         no-data-yet for the pre-first-response case. -->
+    <sb-async
+      [loading]="async().loading"
+      [error]="async().error"
+      [empty]="async().empty"
+      [staleAsOf]="async().staleAsOf"
+      emptyReason="measured-zero"
+      [emptyTitle]="store.activeFilterCount() > 0 ? 'No trades match this filter' : 'No trades yet'"
+      [emptyHint]="store.activeFilterCount() > 0 ? 'Clear the filters to see the full log.' : undefined"
+      [skeletonRows]="12"
+      [skeletonCols]="8"
+      (retry)="store.load()"
+    >
+      <sb-data-table
+        [rows]="store.rows()"
+        [columns]="allColumns()"
+        [visible]="visible()"
+        [rowKey]="rowKey"
+        [sort]="store.sort()"
+        [pagination]="store.pagination()"
+        [expansion]="expansionTemplate()"
+        (sortChange)="onSort($event)"
+        (pageChange)="navigate({ page: $event }, false)"
+        (rowActivate)="open($event)"
+        [pinned]="pinned"
+        (reorder)="onReorder($event)"
+        [showPerPage]="true"
+        (perPageChange)="onPerPage($event)"
+      />
+    </sb-async>
 
     <!-- cells ---------------------------------------------------------- -->
 
@@ -387,13 +400,6 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
        asked for did not happen". */
     .command-error { color: var(--neg); font-size: var(--text-table); }
 
-    .error {
-      padding: var(--space-8) var(--space-10);
-      border: 1px solid var(--warn);
-      border-radius: var(--radius);
-      color: var(--warn);
-      font-size: var(--text-table);
-    }
 
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
@@ -640,13 +646,13 @@ export class Trades {
       }));
   });
 
-  protected readonly emptyState = computed(() =>
-    this.store.activeFilterCount() > 0
-      ? {
-          title: 'No trades match these filters',
-          hint: 'Clear them to see the full history.',
-        }
-      : { title: 'No trades yet', hint: 'They appear here as the bot opens them.' },
+  /** measured-zero always -- an empty filtered set is a measured answer,
+   *  not missing data. sb-async's own empty branch (below) pre-empts
+   *  sb-data-table's [emptyState] entirely (the table never renders while
+   *  empty() is true), so that prop is gone rather than left as a second,
+   *  now-unreachable answer to the same question. */
+  protected readonly async = computed(() =>
+    asyncInputs(this.store, { isEmpty: (data) => data.items.length === 0 }),
   );
 
   constructor() {

@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { CalendarDay, CalendarTrade, CalendarWeekday } from '../../api/models';
 import { CalendarMetric, CalendarStore } from '../../stores/calendar.store';
 import { ConnectionStore } from '../../stores/connection.store';
+import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { ABSENT, money, rMultiple } from '../../ui/format';
 import { ControlRow, Drawer, Panel } from '../../ui/layout';
@@ -17,12 +18,18 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 @Component({
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow, Drawer, MetricCard, Panel, SectionHead, Select],
+  imports: [Button, ControlRow, Drawer, MetricCard, Panel, SectionHead, Select, Async],
   // Provided on the component: created on entry, destroyed on exit, so the
   // workspace cannot hold a stale month while you are looking elsewhere.
   providers: [CalendarStore],
   template: `
     <sb-section-head heading="Calendar">
+      <!-- Kept unconditional (unlike Dashboard/Trades): "By weekday (all
+           history)" below stays outside the sb-async wrap -- it answers a
+           different, all-time question that a THIS MONTH empty state must
+           not gate -- and has no error surface of its own, so this remains
+           its only one. Duplicates the wrapped panels' own error/stale
+           display on a first-load failure; accepted the same way Risk does. -->
       @if (store.error(); as message) {
         <span actions class="stale" role="status">{{ message }}</span>
       }
@@ -67,66 +74,83 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       />
     </sb-control-row>
 
-    <div class="totals">
-      <sb-metric-card
-        label="Net this month"
-        [value]="store.metric() === 'r' ? (store.totals()?.net_r ?? null) : (store.totals()?.net_pnl_amount ?? null)"
-        [unit]="store.metric() === 'r' ? 'R' : currency()"
-        [tone]="totalsTone()"
-      />
-      <sb-metric-card label="Trades" [value]="store.totals()?.trade_count ?? null" [decimals]="0" />
-      <sb-metric-card label="Win rate" [value]="store.totals()?.win_rate ?? null" unit="%" [decimals]="1" />
-    </div>
+    <sb-async
+      [loading]="async().loading"
+      [error]="async().error"
+      [empty]="async().empty"
+      [staleAsOf]="async().staleAsOf"
+      emptyReason="measured-zero"
+      emptyTitle="No closed trades this month"
+      emptyHint="Pick another month, or widen the filters."
+      [skeletonRows]="6"
+      [skeletonCols]="7"
+      (retry)="store.load()"
+    >
+      <div class="totals">
+        <sb-metric-card
+          label="Net this month"
+          [value]="store.metric() === 'r' ? (store.totals()?.net_r ?? null) : (store.totals()?.net_pnl_amount ?? null)"
+          [unit]="store.metric() === 'r' ? 'R' : currency()"
+          [tone]="totalsTone()"
+        />
+        <sb-metric-card label="Trades" [value]="store.totals()?.trade_count ?? null" [decimals]="0" />
+        <sb-metric-card label="Win rate" [value]="store.totals()?.win_rate ?? null" unit="%" [decimals]="1" />
+      </div>
 
-    <div class="callouts">
-      <sb-panel heading="Best day">
-        <p class="callout">{{ extremeLabel(store.bestDay()) }}</p>
-      </sb-panel>
-      <sb-panel heading="Worst day">
-        <p class="callout">{{ extremeLabel(store.worstDay()) }}</p>
-      </sb-panel>
-      <sb-panel heading="Current streak">
-        <p class="callout">{{ streakLabel() }}</p>
-      </sb-panel>
-    </div>
+      <div class="callouts">
+        <sb-panel heading="Best day">
+          <p class="callout">{{ extremeLabel(store.bestDay()) }}</p>
+        </sb-panel>
+        <sb-panel heading="Worst day">
+          <p class="callout">{{ extremeLabel(store.worstDay()) }}</p>
+        </sb-panel>
+        <sb-panel heading="Current streak">
+          <p class="callout">{{ streakLabel() }}</p>
+        </sb-panel>
+      </div>
 
-    <sb-panel [flush]="true">
-      <div class="grid" role="grid" [attr.aria-label]="label()">
-        <!-- NOT class="week": the grid tests assert every \`.week\` holds
-             exactly 7 \`.cell\` children, and a header row sharing that class
-             would contribute a row of zero. -->
-        <div class="weekhead" role="row">
-          @for (head of weekdayHeads; track head) {
-            <div class="head-cell" role="columnheader">{{ head }}</div>
-          }
-        </div>
-        @for (week of weeks(); track week[0].date) {
-          <div class="week" role="row">
-            @for (cell of week; track cell.date) {
-              <div
-                class="cell"
-                role="gridcell"
-                [attr.data-date]="cell.date"
-                [class.outside]="!cell.inMonth"
-                [class.weekend]="cell.weekend"
-                [class.pos]="intensity(cell) > 0"
-                [class.neg]="intensity(cell) < 0"
-                [style.--heat]="magnitude(cell)"
-              >
-                <span class="dom">{{ cell.dayOfMonth }}</span>
-                @if (dayFor(cell); as day) {
-                  <button sb-button variant="link" type="button" class="value" (click)="store.selectDay(day.date)">
-                    {{ display(day) }}
-                    <span class="n">{{ day.trade_count }}</span>
-                  </button>
-                }
-              </div>
+      <sb-panel [flush]="true">
+        <div class="grid" role="grid" [attr.aria-label]="label()">
+          <!-- NOT class="week": the grid tests assert every \`.week\` holds
+               exactly 7 \`.cell\` children, and a header row sharing that class
+               would contribute a row of zero. -->
+          <div class="weekhead" role="row">
+            @for (head of weekdayHeads; track head) {
+              <div class="head-cell" role="columnheader">{{ head }}</div>
             }
           </div>
-        }
-      </div>
-    </sb-panel>
+          @for (week of weeks(); track week[0].date) {
+            <div class="week" role="row">
+              @for (cell of week; track cell.date) {
+                <div
+                  class="cell"
+                  role="gridcell"
+                  [attr.data-date]="cell.date"
+                  [class.outside]="!cell.inMonth"
+                  [class.weekend]="cell.weekend"
+                  [class.pos]="intensity(cell) > 0"
+                  [class.neg]="intensity(cell) < 0"
+                  [style.--heat]="magnitude(cell)"
+                >
+                  <span class="dom">{{ cell.dayOfMonth }}</span>
+                  @if (dayFor(cell); as day) {
+                    <button sb-button variant="link" type="button" class="value" (click)="store.selectDay(day.date)">
+                      {{ display(day) }}
+                      <span class="n">{{ day.trade_count }}</span>
+                    </button>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </sb-panel>
+    </sb-async>
 
+    <!-- All-time, not this-month: deliberately outside the sb-async above
+         so a THIS MONTH empty state cannot hide it (see the section-head
+         comment). Degrades safely via weekdays()'s own [] default before
+         the first load. -->
     <sb-panel heading="By weekday (all history)">
       <table class="dow">
         <thead>
@@ -188,7 +212,6 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   styles: `
     /* No backticks in here: these styles live in a TS template literal. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
-    .stale { color: var(--warn); font-size: var(--text-table); }
 
     /* The month stepper: two buttons with the month between them. Centred
        rather than bottom-aligned like the controls around it, because the
@@ -301,6 +324,10 @@ export class Calendar {
   private readonly connection = inject(ConnectionStore);
 
   protected readonly weekdayHeads = WEEKDAY_HEADS;
+
+  protected readonly async = computed(() =>
+    asyncInputs(this.store, { isEmpty: (data) => data.totals.trade_count === 0 }),
+  );
 
   /** The account's own symbol, never a literal `$` -- see `MetricCard`'s
    *  note. An admin running a euro account must not read euro figures

@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  computed,
   effect,
   inject,
   signal,
@@ -15,6 +16,7 @@ import {
   LogSource,
   SystemStore,
 } from '../../stores/system.store';
+import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Checkbox, Select, SelectOption } from '../../ui/form-controls';
@@ -31,7 +33,7 @@ import { ControlRow, Panel } from '../../ui/layout';
 @Component({
   selector: 'sb-logs-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, Checkbox, ConfirmDialog, ControlRow, Select],
+  imports: [Panel, Button, Checkbox, ConfirmDialog, ControlRow, Select, Async],
   template: `
     <sb-panel [heading]="store.logs()?.path ?? 'Log'">
       <sb-control-row panel-actions class="actions">
@@ -63,9 +65,6 @@ import { ControlRow, Panel } from '../../ui/layout';
         </button>
       </sb-control-row>
 
-      @if (store.logsError(); as message) {
-        <p class="error" role="status">{{ message }}</p>
-      }
       @if (store.logsMessage(); as message) {
         <p class="message" role="status">{{ message }}</p>
       }
@@ -100,8 +99,18 @@ import { ControlRow, Panel } from '../../ui/layout';
         }
       </div>
 
-      @if (store.logs(); as logs) {
-        @if (logs.content) {
+      <sb-async
+        [loading]="logsAsync().loading"
+        [error]="logsAsync().error"
+        [empty]="logsAsync().empty"
+        [staleAsOf]="logsAsync().staleAsOf"
+        emptyReason="no-data-yet"
+        emptyTitle="This log is empty"
+        [skeletonRows]="15"
+        [skeletonCols]="1"
+        (retry)="store.loadLogs()"
+      >
+        @if (store.logs(); as logs) {
           <!-- A <pre>, not a table: log lines are already formatted and any
                attempt to structure them here would be guessing at a format
                the bot is free to change. -->
@@ -117,12 +126,8 @@ import { ControlRow, Panel } from '../../ui/layout';
             <p class="none">Every line is filtered out. Check a level above.</p>
           }
           <p class="meta">Last {{ logs.lines }} lines · {{ logs.path }}</p>
-        } @else {
-          <p class="none">This log is empty.</p>
         }
-      } @else if (!store.logsLoading()) {
-        <p class="none">No log loaded.</p>
-      }
+      </sb-async>
     </sb-panel>
 
     <sb-confirm-dialog
@@ -198,12 +203,18 @@ import { ControlRow, Panel } from '../../ui/layout';
     }
     .meta { margin-top: var(--space-6); color: var(--text-faint); font-size: var(--text-chip); }
     .none { color: var(--text-faint); font-size: var(--text-table); }
-    .error { color: var(--neg); font-size: var(--text-table); }
     .message { color: var(--text-secondary); font-size: var(--text-table); }
   `,
 })
 export class LogsTab {
   protected readonly store = inject(SystemStore);
+
+  protected readonly logsAsync = computed(() =>
+    asyncInputs(
+      { data: this.store.logs, loading: this.store.logsLoading, error: this.store.logsError },
+      { isEmpty: (logs) => !logs.content },
+    ),
+  );
 
   protected readonly sources: LogSource[] = ['bot', 'admin'];
 

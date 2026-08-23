@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { Async, type AsyncEmptyReason } from './async';
+import { asyncInputs, Async, type AsyncEmptyReason } from './async';
 
 @Component({
   imports: [Async],
@@ -85,5 +85,38 @@ describe('Async', () => {
     const { el } = render({ error: 'boom', loading: true, empty: true });
     expect(el.textContent).toContain('boom');
     expect(el.querySelector('.skeleton')).toBeNull();
+  });
+});
+
+const at = () => new Date('2026-08-23T15:42:00');
+
+describe('asyncInputs', () => {
+  const src = (data: unknown, loading: boolean, error: string | null) => ({
+    data: () => data as never,
+    loading: () => loading,
+    error: () => error,
+  });
+  const opts = { isEmpty: (d: unknown[]) => d.length === 0, now: at };
+
+  it('reports a first-load failure as an error', () => {
+    expect(asyncInputs(src(null, false, 'boom'), opts))
+      .toEqual({ loading: false, error: 'boom', empty: false, staleAsOf: null });
+  });
+
+  it('demotes a refetch failure to stale so the numbers stay on screen', () => {
+    expect(asyncInputs(src([1], false, 'boom'), opts))
+      .toEqual({ loading: false, error: null, empty: false, staleAsOf: '15:42' });
+  });
+
+  it('reports loading only while there is nothing to show', () => {
+    expect(asyncInputs(src(null, true, null), opts).loading).toBe(true);
+    // A background refresh over existing data is not a loading state: the
+    // skeleton would blank a screen the reader is already reading.
+    expect(asyncInputs(src([1], true, null), opts).loading).toBe(false);
+  });
+
+  it('reports empty only once data has actually arrived', () => {
+    expect(asyncInputs(src(null, false, null), opts).empty).toBe(false);
+    expect(asyncInputs(src([], false, null), opts).empty).toBe(true);
   });
 });

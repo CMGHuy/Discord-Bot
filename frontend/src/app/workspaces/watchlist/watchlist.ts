@@ -12,6 +12,7 @@ import { Router } from '@angular/router';
 
 import { Ticker } from '../../api/models';
 import { WatchlistStore } from '../../stores/watchlist.store';
+import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
@@ -95,7 +96,7 @@ function sortValue(row: Ticker, key: string): string | number | null {
 @Component({
   selector: 'sb-watchlist',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DataTable, Panel, Button, ConfirmDialog, ControlRow, TabBar, TextInput, EarningsCalendar, RowLink, SectionHead],
+  imports: [DataTable, Panel, Button, ConfirmDialog, ControlRow, TabBar, TextInput, EarningsCalendar, RowLink, SectionHead, Async],
   providers: [WatchlistStore],
   template: `
     <sb-section-head heading="Watchlist">
@@ -104,7 +105,14 @@ function sortValue(row: Ticker, key: string): string | number | null {
            row instead of clustered beside each other. -->
       <div actions class="head-status">
         <span class="count">{{ store.count() }} watched</span>
-        @if (store.error(); as message) {
+        <!-- Only for Earnings: the Watchlist tab's own sb-async already
+             turns this same store.error() into a scoped error panel or
+             demoted stale badge on the table below, so showing it here too
+             would duplicate it. Earnings has no sb-async of its own -- it
+             renders sb-earnings-calendar from store.tickers(), which stays
+             on its last good value on a refetch failure -- so this remains
+             its only error surface. -->
+        @if (activeTab() === 'earnings' && store.error(); as message) {
           <span class="stale" role="status">{{ message }}</span>
         }
       </div>
@@ -186,27 +194,39 @@ function sortValue(row: Ticker, key: string): string | number | null {
       <p class="error" role="alert">{{ message }}</p>
     }
 
-    <sb-panel heading="Watchlist" [flush]="true">
-      <!-- A row blinks when its earnings date falls within the current
-           week (Monday-Sunday, same boundary the Earnings tab's calendar
-           uses) -- a gentle pulse, not a hard flash; see data-table.ts's
-           .blink rule and its prefers-reduced-motion fallback. -->
-      <p class="section-help panel-note">
-        A row pulses when that ticker reports earnings this week.
-      </p>
-      <sb-data-table
-        [rows]="sortedRows()"
-        [columns]="columns()"
-        [visible]="visible"
-        [rowKey]="rowKey"
-        [rowClass]="rowClassFn"
-        [sort]="sort()"
-        [loading]="store.loading() && store.empty()"
-        [emptyState]="emptyState"
-        (sortChange)="setSort($event)"
-        (rowActivate)="open($event)"
-      />
-    </sb-panel>
+    <sb-async
+      [loading]="async().loading"
+      [error]="async().error"
+      [empty]="async().empty"
+      [staleAsOf]="async().staleAsOf"
+      emptyReason="no-data-yet"
+      emptyTitle="No tickers on the watchlist"
+      emptyHint="Add a ticker to start scanning."
+      [skeletonRows]="10"
+      [skeletonCols]="4"
+      (retry)="store.load()"
+    >
+      <sb-panel heading="Watchlist" [flush]="true">
+        <!-- A row blinks when its earnings date falls within the current
+             week (Monday-Sunday, same boundary the Earnings tab's calendar
+             uses) -- a gentle pulse, not a hard flash; see data-table.ts's
+             .blink rule and its prefers-reduced-motion fallback. -->
+        <p class="section-help panel-note">
+          A row pulses when that ticker reports earnings this week.
+        </p>
+        <sb-data-table
+          [rows]="sortedRows()"
+          [columns]="columns()"
+          [visible]="visible"
+          [rowKey]="rowKey"
+          [rowClass]="rowClassFn"
+          [sort]="sort()"
+          [emptyState]="emptyState"
+          (sortChange)="setSort($event)"
+          (rowActivate)="open($event)"
+        />
+      </sb-panel>
+    </sb-async>
 
     <sb-confirm-dialog
       [open]="pending() !== null"
@@ -253,7 +273,6 @@ function sortValue(row: Ticker, key: string): string | number | null {
 
     .head-status { display: flex; align-items: baseline; gap: var(--space-14); }
     .count { color: var(--text-secondary); font-size: var(--text-table); }
-    .stale { color: var(--warn); font-size: var(--text-table); }
 
     /* Was align-items: flex-start, which is why the Add button sat level with
        the input's top edge rather than its box. sb-control-row's flex-end is
@@ -297,7 +316,6 @@ function sortValue(row: Ticker, key: string): string | number | null {
     .hit-have { margin-left: auto; color: var(--text-faint); font-size: var(--text-chip); }
 
     .result { margin-top: var(--space-10); color: var(--text-secondary); font-size: var(--text-table); }
-    .error { color: var(--neg); font-size: var(--text-table); }
 
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
@@ -311,6 +329,20 @@ function sortValue(row: Ticker, key: string): string | number | null {
 export class Watchlist {
   private readonly router = inject(Router);
   protected readonly store = inject(WatchlistStore);
+
+  /** `store.empty()` means "not loaded yet" (a boolean, not nullable data),
+   *  so the nullable `data` asyncInputs() expects is synthesised here rather
+   *  than added to the store for this one call site. */
+  protected readonly async = computed(() =>
+    asyncInputs(
+      {
+        data: () => (this.store.empty() ? null : this.store.tickers()),
+        loading: this.store.loading,
+        error: this.store.error,
+      },
+      { isEmpty: (tickers) => tickers.length === 0 },
+    ),
+  );
 
   protected readonly tabs = TABS;
   /** Bound from `?tab=` via the app-wide withComponentInputBinding(), same

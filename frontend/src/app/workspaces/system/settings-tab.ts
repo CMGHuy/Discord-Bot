@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 
 import { SettingField } from '../../api/models';
 import { SystemStore } from '../../stores/system.store';
+import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-controls';
 import { dateTime } from '../../ui/format';
@@ -24,7 +25,7 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
 @Component({
   selector: 'sb-settings-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, TextInput, Select, Checkbox, ControlRow],
+  imports: [Panel, Button, TextInput, Select, Checkbox, ControlRow, Async],
   template: `
     @if (store.settingsStale()) {
       <!-- Spec v14 Decision 8: warn, do not silently reload. Another
@@ -40,10 +41,23 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
       </p>
     }
 
-    @if (store.settingsError(); as message) {
-      <p class="form-error" role="status">{{ message }}</p>
-    }
-
+    <!-- The search/filter bar, the section fields and the save bar are all
+         meaningless before the schema has loaded (nothing to search, dirty
+         defaults to false against an empty draft), so they -- and
+         settingsError, which is this same fetch -- move inside one
+         sb-async. "Recent changes" and "Export and import" below stay
+         outside: independent data, and a plain download link respectively. -->
+    <sb-async
+      [loading]="settingsAsync().loading"
+      [error]="settingsAsync().error"
+      [empty]="settingsAsync().empty"
+      [staleAsOf]="settingsAsync().staleAsOf"
+      emptyReason="no-data-yet"
+      emptyTitle="No settings loaded"
+      [skeletonRows]="10"
+      [skeletonCols]="2"
+      (retry)="store.loadSettings()"
+    >
     <!-- SR56. Over a hundred fields had no way to find one by name. The
          controls sit above the form rather than in the save bar: they change
          what you are looking at, not what you are about to commit. -->
@@ -280,6 +294,7 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
         }
       </p>
     }
+    </sb-async>
 
     <!-- audit, export, import ------------------------------------------ -->
 
@@ -569,6 +584,16 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
 })
 export class SettingsTab {
   protected readonly store = inject(SystemStore);
+
+  /** Settings is a fixed schema -- once loaded it is never meaningfully
+   *  "empty" -- so isEmpty always reports false and this sb-async exists
+   *  only for the loading skeleton and the error/stale display. */
+  protected readonly settingsAsync = computed(() =>
+    asyncInputs(
+      { data: this.store.settings, loading: this.store.settingsLoading, error: this.store.settingsError },
+      { isEmpty: () => false },
+    ),
+  );
 
   /** Through the store, not by injecting `ApiClient`: components read
    *  stores, and one exception is how "the component can fetch" starts. */
