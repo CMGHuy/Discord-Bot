@@ -5,7 +5,12 @@ simulator the live scan uses. No lookahead: every computation sees
 df.iloc[:i+1] only."""
 from __future__ import annotations
 
+import os
+from concurrent.futures import ProcessPoolExecutor
+
 import numpy as np
+
+from swingbot import config
 
 from swingbot.core.market import levels
 from swingbot.core.planning.plan_engine import build_confluence_plan, primary_strategy_for, simulate_exit
@@ -142,23 +147,79 @@ def _aggregate(results: list) -> dict:
     }
 
 
+def _replay_ticker(args) -> dict:
+    """All horizons for ONE ticker -- the process-pool entry point, so it must
+    be module-level and take a single picklable argument.
+
+    Grouped per ticker rather than per (ticker, horizon) pair on purpose: the
+    OHLCV frame is the expensive thing to move across a process boundary (~2MB
+    for a ten-year daily history), and a per-pair split would ship the same
+    frame once per horizon -- ten times the IPC for parallelism a 2-4 core box
+    cannot use anyway. At 300-500 tickers there are already far more tasks
+    than cores.
+
+    Returns {horizon_key: [exit_result, ...]}. The horizon travels in the
+    RESULT rather than being inferred from completion order, which is what
+    makes the pooled path order-independent.
+    """
+    ticker, df, horizons, start, end, gates, scale_out = args
+    out = {hk: [] for hk in horizons}
+    for hk in horizons:
+        for i, plan in replay_scenarios(ticker, df, hk, gates=gates):
+            signal_date = str(df.index[i].date())
+            if start and signal_date < start:
+                continue
+            if end and signal_date > end:
+                continue
+            out[hk].append(simulate_exit(df, i, plan, scale_out=scale_out))
+    return out
+
+
+def _resolve_replay_workers(workers: int | None) -> int:
+    if workers is not None:
+        return max(1, int(workers))
+    configured = int(getattr(config, "FETCH_WORKERS", 0) or 0)
+    if configured > 0:
+        return configured
+    return max(1, (os.cpu_count() or 2) - 1)
+
+
 def run_scenario_backtest(frames: dict, start, end, *, gates,
-                          scale_out=True, horizons=None) -> dict:
+                          scale_out=True, horizons=None, workers=None) -> dict:
     """frames: {ticker: OHLCV df}. start/end (ISO or None) restrict SIGNAL
     dates -- the exit walk may run past `end`, same convention as
-    run_backtest_daterange."""
+    run_backtest_daterange.
+
+    v47: each ticker is replayed across a process pool, all horizons inside
+    one task. Every task is fully independent -- it reads one frame and
+    contributes only to its own result lists -- and aggregation happens
+    strictly after every task returns, so the output is identical to the
+    sequential walk. `workers=1` forces the sequential path; None resolves
+    FETCH_WORKERS (0 = auto).
+
+    This is CPU-bound work on in-memory frames with no network and no yfinance
+    involvement, so it carries none of the crawl's thread-safety constraints --
+    processes are used here purely because the work is GIL-bound Python.
+    """
     horizons = horizons or list(HORIZONS)
     results_by_hz: dict = {hk: [] for hk in horizons}
-    for ticker, df in frames.items():
-        for hk in horizons:
-            for i, plan in replay_scenarios(ticker, df, hk, gates=gates):
-                signal_date = str(df.index[i].date())
-                if start and signal_date < start:
-                    continue
-                if end and signal_date > end:
-                    continue
-                results_by_hz[hk].append(simulate_exit(df, i, plan,
-                                                       scale_out=scale_out))
+
+    tasks = [
+        (ticker, df, horizons, start, end, gates, scale_out)
+        for ticker, df in frames.items()
+    ]
+
+    n = _resolve_replay_workers(workers)
+    if n <= 1 or len(tasks) <= 1:
+        per_ticker_results = [_replay_ticker(t) for t in tasks]
+    else:
+        with ProcessPoolExecutor(max_workers=n) as pool:
+            per_ticker_results = list(pool.map(_replay_ticker, tasks))
+
+    for per_ticker in per_ticker_results:
+        for hk, results in per_ticker.items():
+            results_by_hz[hk].extend(results)
+
     all_results = [r for rs in results_by_hz.values() for r in rs]
     return {"pooled": _aggregate(all_results),
             "by_horizon": {hk: _aggregate(rs) for hk, rs in results_by_hz.items()}}
