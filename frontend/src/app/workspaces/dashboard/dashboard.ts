@@ -16,6 +16,7 @@ import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { DashboardStore } from '../../stores/dashboard.store';
 import { Button } from '../../ui/button';
+import { ChipRow } from '../../ui/chip-row';
 import { ColumnDef, Density, EmptyState, RowContext } from '../../ui/data-table/data-table.types';
 import { ConfidenceCell } from '../../ui/confidence-cell';
 import { PlanCell } from '../../ui/plan-cell';
@@ -82,7 +83,7 @@ import { TradeGroup } from './trade-group';
   selector: 'sb-dashboard',
   imports: [
     RouterLink, MetricCard, MetricChip, Panel, TradeGroup,
-    StatusCell, PlanCell, ConfidenceCell, Button, ControlRow,
+    StatusCell, PlanCell, ConfidenceCell, Button, ChipRow, ControlRow,
     PlanLifecycleDiagram, RowLink, SectionHead,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -184,7 +185,7 @@ import { TradeGroup } from './trade-group';
       {{ store.realizedWins() }}W / {{ store.realizedLosses() }}L
     </span>
 
-    <div class="chips">
+    <sb-chip-row class="chips">
       <sb-metric-chip label="Open trades" [value]="store.openTrades()" [decimals]="0" />
       <!-- Confidence is a QUALITY judgement, not money, so it stays plain:
            green and red mean P&L direction on this screen and nothing else. -->
@@ -199,7 +200,7 @@ import { TradeGroup } from './trade-group';
         [unit]="premiumUnit()"
         [decimals]="0"
       />
-    </div>
+    </sb-chip-row>
 
     <!-- SR59. The chip carries the number and the "max" qualifier; this is
          the reasoning behind it, from dashboard_fragment.html:81-87. -->
@@ -596,13 +597,12 @@ import { TradeGroup } from './trade-group';
     }
     .primary > sb-metric-card { flex: 1 1 auto; min-width: 140px; }
 
-    .chips {
-      display: flex;
-      align-items: stretch;
-      flex-wrap: wrap;
-      gap: var(--space-8);
-    }
-    .chips > sb-metric-chip { flex: 1 1 auto; min-width: 150px; }
+    /* Overrides sb-chip-row's own align-items: center -- stretch is what
+       makes every card in the row match its tallest sibling. The type
+       selector plus this class gives it enough specificity to beat the
+       primitive's own :host rule. */
+    sb-chip-row.chips { align-items: stretch; }
+    sb-chip-row.chips > sb-metric-chip { flex: 1 1 auto; min-width: 150px; }
 
     /* SR53. One row, lifecycle order, sized to the count rather than the
        label -- the number is what is being read. */

@@ -10,6 +10,7 @@ import {
 
 import { Release } from '../../api/models';
 import { Button } from '../../ui/button';
+import { ControlRow } from '../../ui/layout';
 import { PaginationComponent } from '../../ui/pagination';
 import { SectionHead } from '../../ui/section-head';
 import { LaneSegment, VersionsStore } from '../../stores/versions.store';
@@ -39,7 +40,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
   selector: 'sb-versions',
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [VersionsStore],
-  imports: [Button, PaginationComponent, SectionHead],
+  imports: [Button, ControlRow, PaginationComponent, SectionHead],
   template: `
     <sb-section-head heading="Versions">
       @if (store.stale()) {
@@ -70,7 +71,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 
       <div class="headline">
         <span class="label">Running now</span>
-        <div class="chips">
+        <sb-control-row>
           @for (component of store.components(); track component) {
             @if (store.current()[component]; as version) {
               <button sb-button variant="chip" type="button" class="chip" [class.on]="isFiltered(component, version)"
@@ -80,7 +81,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
               </button>
             }
           }
-        </div>
+        </sb-control-row>
       </div>
 
       <div class="strip" #strip>
@@ -164,7 +165,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
           <li class="entry">
             <span class="when">{{ release.date }}</span>
             <div class="what">
-              <div class="chips">
+              <sb-control-row>
                 @for (component of store.components(); track component) {
                   @if (release.versions[component]; as version) {
                     @if (release.changed.includes(component)) {
@@ -177,7 +178,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
                     }
                   }
                 }
-              </div>
+              </sb-control-row>
               <p class="subject">{{ release.subject }}</p>
             </div>
           </li>
@@ -207,8 +208,9 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 
     /* Chips WRAP and lanes STACK. This is the property the whole design rests
        on: a new component costs vertical space and never horizontal, so the
-       page cannot be widened by adding one. Do not replace with a grid. */
-    .chips { display: flex; flex-wrap: wrap; gap: var(--space-6); }
+       page cannot be widened by adding one -- sb-control-row wraps by
+       default (v54), which is why these two rows now use it rather than a
+       hand-rolled .chips flex rule. Do not replace with a grid. */
     /* font-family/font-size/colour/padding override the chip variant's
        defaults for this denser, monospaced release-version scale; the
        variant owns background, border and the .on state. */

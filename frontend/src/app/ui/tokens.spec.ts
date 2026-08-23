@@ -153,14 +153,15 @@ const NOT_CONTROL_ROWS = new Set([
   // controls to bottom-align -- flagged only because the strip's segments
   // happen to be sb-button underneath.
   'lane',
-  // The Dashboard's three data-card rows (five metric cards, the metric-chip
-  // row, the lifecycle strip) -- rows of DISPLAYED figures, not controls, so
+  // The Dashboard's two remaining data-card rows (five metric cards, the
+  // lifecycle strip) -- rows of DISPLAYED figures, not controls, so
   // sb-control-row's bottom-alignment answer does not apply. Flex here is
   // what lets a card size to its own content (a long label) while still
   // filling the row, and align-items: stretch is what makes every card in
   // the row match its tallest sibling -- both are the point, not a stand-in
-  // for sb-control-row.
-  'primary', 'chips', 'lifecycle',
+  // for sb-control-row. The third, the metric-chip row, is sb-chip-row now
+  // (v54 Task 8) -- a component, not a hand-rolled class this gate can see.
+  'primary', 'lifecycle',
   // The plan-lifecycle diagram + its legend, centred as one figure beside
   // the paragraph it illustrates -- not a row of controls either.
   'lifecycle-figure',

@@ -31,6 +31,7 @@ import {
 import { ConnectionStore } from '../../stores/connection.store';
 import { Button } from '../../ui/button';
 import { Chip, QualityChip, qualityTone } from '../../ui/chip';
+import { ChipRow } from '../../ui/chip-row';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
@@ -119,6 +120,7 @@ interface ProposalView extends ProposalRow {
     Histogram,
     LineChart,
     Chip,
+    ChipRow,
     QualityChip,
     Sparkline,
     Select,
@@ -157,7 +159,7 @@ interface ProposalView extends ProposalRow {
         <h2 class="section">Snapshot</h2>
         <div class="panels">
           <sb-panel heading="Record">
-            <div class="chips">
+            <sb-chip-row class="chips">
               @for (metric of store.relocated(); track metric.key) {
                 <sb-metric-chip
                   [label]="metric.label"
@@ -167,7 +169,7 @@ interface ProposalView extends ProposalRow {
                   [tone]="metric.pnl ? 'pnl' : 'plain'"
                 />
               }
-            </div>
+            </sb-chip-row>
           </sb-panel>
 
           <sb-panel heading="Overall">
@@ -194,7 +196,7 @@ interface ProposalView extends ProposalRow {
 
         <div class="panels">
           <sb-panel heading="Risk-adjusted">
-            <div class="chips">
+            <sb-chip-row class="chips">
               <sb-metric-chip label="Profit factor" [value]="store.profitFactor()" />
               <sb-metric-chip label="Sharpe" [value]="store.sharpe()" />
               <sb-metric-chip label="Sortino" [value]="store.sortino()" />
@@ -214,7 +216,7 @@ interface ProposalView extends ProposalRow {
                 tone="pnl"
                 [unit]="currencyUnit()"
               />
-            </div>
+            </sb-chip-row>
           </sb-panel>
 
           @if (store.streaks(); as streaks) {
@@ -276,7 +278,7 @@ interface ProposalView extends ProposalRow {
             </p>
           }
 
-          <div class="chips">
+          <sb-chip-row class="chips">
             @for (metric of store.derivedMetrics(); track metric.key) {
               <sb-metric-chip
                 [label]="metric.label"
@@ -286,7 +288,7 @@ interface ProposalView extends ProposalRow {
                 [tone]="metric.pnl ? 'pnl' : 'plain'"
               />
             }
-          </div>
+          </sb-chip-row>
         </sb-panel>
 
         <div class="panels">
@@ -802,10 +804,10 @@ interface ProposalView extends ProposalRow {
 
         <div class="panels">
           <sb-panel heading="Fill rate">
-            <div class="chips">
+            <sb-chip-row class="chips">
               <sb-metric-chip label="Filled" [value]="store.fillRatePct()" unit="%" [decimals]="1" />
               <sb-metric-chip label="Median days to fill" [value]="store.medianDaysToFill()" [decimals]="1" />
-            </div>
+            </sb-chip-row>
           </sb-panel>
 
           <sb-panel heading="Badge distribution">
@@ -957,7 +959,10 @@ interface ProposalView extends ProposalRow {
       .panels { grid-template-columns: 1fr; }
     }
 
-    .chips {
+    /* Overrides sb-chip-row's own flex-wrap default with a grid -- the
+       type selector plus this class gives it enough specificity to beat
+       the primitive's own :host rule. */
+    sb-chip-row.chips {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: var(--space-8);
