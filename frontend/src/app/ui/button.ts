@@ -1,6 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'icon';
+export type ButtonVariant =
+  | 'primary'
+  | 'secondary'
+  | 'danger'
+  | 'ghost'
+  | 'icon'
+  | 'chip'
+  | 'segment'
+  | 'link';
 
 /**
  * The five button variants spec 3's inventory names, and no others.
@@ -81,6 +89,52 @@ export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'icon
       line-height: 1;
     }
     :host(.icon:not([disabled]):hover) { color: var(--text); background: var(--surface-raised); }
+
+    /* A filter toggle. Reads as a chip, behaves as a button: versions/ had
+       four of these hand-rolled because no variant covered a control that is
+       a chip in appearance and a toggle in function. \`.on\` is the pressed
+       state and pairs with aria-pressed at the call site. */
+    :host(.chip) {
+      min-height: 0;
+      padding: var(--space-4) var(--space-8);
+      border-color: var(--border);
+      border-radius: var(--radius-chip);
+      background: var(--surface-raised);
+      color: var(--text-secondary);
+      font-size: var(--text-chip);
+      font-weight: 500;
+    }
+    :host(.chip:not([disabled]):hover) { border-color: var(--border-strong); color: var(--text); }
+    :host(.chip.on) {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--text);
+    }
+
+    /* One cell of a segmented control. The group owns the outer border and
+       the radius; a segment owns only its divider, so segments sit flush. */
+    :host(.segment) {
+      border-color: transparent;
+      border-radius: 0;
+      background: transparent;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+    :host(.segment:not([disabled]):hover) { color: var(--text); }
+    :host(.segment.current) { background: var(--surface-overlay); color: var(--text); }
+
+    /* A button that must look like a link because it sits in running text.
+       Still a button: it performs an action rather than navigating, and an
+       <a> without an href is not focusable. */
+    :host(.link) {
+      min-height: 0;
+      padding: 0;
+      background: transparent;
+      color: var(--accent);
+      font-size: var(--text-table);
+      font-weight: 500;
+    }
+    :host(.link:not([disabled]):hover) { text-decoration: underline; }
   `,
 })
 export class Button {
