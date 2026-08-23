@@ -60,12 +60,14 @@ export class Shell {
   private readonly preferences = inject(PreferencesStore);
   private readonly viewport = inject(ViewportService);
 
-  /** The six workspaces, in the IA's order: what is true now, then the
-   *  entities, then the analysis, then the two administrative ones. */
+  /** The seven workspaces, in the IA's order: what is true now, then the
+   *  entities, then the two analysis views, then the two administrative
+   *  ones. */
   protected readonly nav: NavEntry[] = [
     { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
     { path: '/trades', label: 'Trades', icon: 'trades' },
     { path: '/analytics', label: 'Analytics', icon: 'analytics' },
+    { path: '/calendar', label: 'Calendar', icon: 'calendar' },
     { path: '/watchlist', label: 'Watchlist', icon: 'watchlist' },
     { path: '/risk', label: 'Risk', icon: 'risk' },
     { path: '/system', label: 'System', icon: 'system' },

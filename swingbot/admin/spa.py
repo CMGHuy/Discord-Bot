@@ -45,8 +45,8 @@ APP_DIR = os.path.join(os.path.dirname(__file__), "static", "app")
 #: clicking, and 404s when reached by reload or bookmark — the failure looks
 #: like a routing bug in the SPA and is not one.
 WORKSPACES = (
-    "dashboard", "trades", "analytics", "watchlist", "risk", "system",
-    "versions",
+    "dashboard", "trades", "analytics", "calendar", "watchlist", "risk",
+    "system", "versions",
     "cockpit", "universe",
 )
 

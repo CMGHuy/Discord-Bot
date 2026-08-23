@@ -5,7 +5,7 @@ import { CalendarMetric, CalendarStore } from '../../stores/calendar.store';
 import { ConnectionStore } from '../../stores/connection.store';
 import { Button } from '../../ui/button';
 import { ABSENT, money, rMultiple } from '../../ui/format';
-import { Drawer, Panel } from '../../ui/layout';
+import { ControlRow, Drawer, Panel } from '../../ui/layout';
 import { MetricCard } from '../../ui/metric-card';
 import { Select } from '../../ui/form-controls';
 import { GridCell, monthLabel, monthMatrix } from './calendar.helpers';
@@ -16,7 +16,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 @Component({
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, Drawer, MetricCard, Panel, Select],
+  imports: [Button, ControlRow, Drawer, MetricCard, Panel, Select],
   // Provided on the component: created on entry, destroyed on exit, so the
   // workspace cannot hold a stale month while you are looking elsewhere.
   providers: [CalendarStore],
@@ -28,7 +28,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       }
     </header>
 
-    <div class="controls">
+    <sb-control-row>
       <div class="months">
         <button sb-button type="button" variant="ghost"
                 (click)="store.stepMonth(-1)" aria-label="Previous month">‹</button>
@@ -63,7 +63,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         [value]="store.horizon()"
         (valueChange)="store.setHorizon($event)"
       />
-    </div>
+    </sb-control-row>
 
     <div class="totals">
       <sb-metric-card
@@ -190,12 +190,9 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     h1 { margin: 0; font-size: var(--text-title); font-weight: 600; }
     .stale { color: var(--warn); font-size: var(--text-table); }
 
-    .controls {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: flex-end;
-      gap: var(--space-14);
-    }
+    /* The month stepper: two buttons with the month between them. Centred
+       rather than bottom-aligned like the controls around it, because the
+       month is running text and sb-control-row's answer is for controls. */
     .months { display: flex; align-items: center; gap: var(--space-8); }
     .month { min-width: 10ch; font-weight: 600; }
 

@@ -142,6 +142,11 @@ const NOT_CONTROL_ROWS = new Set([
   // Text and figures. Baseline or centre on running text is correct.
   'head', 'meta', 'cell', 'count', 'figures', 'tags',
   'jobhead', // a chip beside a timestamp
+  // The calendar's month stepper: two buttons with the month LABEL
+  // between them. The row sits inside an sb-control-row already; its
+  // middle child is running text, and bottom-aligning that text
+  // against two buttons is the regression, not the fix.
+  'months',
   // The Dashboard's three data-card rows (five metric cards, the metric-chip
   // row, the lifecycle strip) -- rows of DISPLAYED figures, not controls, so
   // sb-control-row's bottom-alignment answer does not apply. Flex here is

@@ -20,6 +20,10 @@ describe('Icon', () => {
     expect(render(name).querySelector('svg')).not.toBeNull();
   });
 
+  it('has a path for the calendar icon', () => {
+    expect(ICON_NAMES).toContain('calendar');
+  });
+
   it('renders nothing for an unknown name, and does not throw', () => {
     // A missing icon should leave a gap, not take the screen down with it.
     expect(() => render('not-an-icon')).not.toThrow();

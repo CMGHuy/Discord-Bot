@@ -6,6 +6,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { routes } from './app.routes';
+import { authGuard } from './shell/auth.guard';
 import { SessionStore } from './stores/session.store';
 import { installMatchMediaPolyfill } from './testing/match-media-polyfill';
 import { TradeDetail } from './workspaces/trades/trade-detail';
@@ -72,6 +73,16 @@ describe('routing, authenticated', () => {
   it('does not let the list route shadow the detail route', async () => {
     const harness = await RouterTestingHarness.create('/watchlist/AAPL');
     expect(harness.routeNativeElement?.textContent).toContain('AAPL');
+  });
+
+  it('serves the calendar workspace behind the auth guard', async () => {
+    const route = routes.find((r) => r.path === 'calendar');
+    expect(route).toBeDefined();
+    expect(route?.canMatch).toEqual([authGuard]);
+
+    // The lazy chunk must actually resolve to the component, not just exist.
+    const loaded = await route!.loadComponent!();
+    expect(loaded).toBeDefined();
   });
 });
 
