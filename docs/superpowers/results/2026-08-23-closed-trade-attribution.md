@@ -1,6 +1,6 @@
 # v50 — Closed-trade attribution: measurement result
 
-**Plan:** `docs/superpowers/plans/2026-08-22-v50-closed-trade-attribution.md`
+**Plan:** `docs/superpowers/plans/implemented/2026-08-22-v50-closed-trade-attribution.md`
 **Measured:** 2026-08-23, commit `ac80ae7`
 **Instrument:** `metrics.exit_reason_split`, `metrics.hold_by_outcome`
 **Outcome: the instrument is built, tested and wired into the weekly digest.
