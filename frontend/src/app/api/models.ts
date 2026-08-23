@@ -986,3 +986,83 @@ export interface VersionHistory {
 
 /** A selected `{component, version}` pair, or null for "no filter". */
 export type VersionFilter = { component: string; version: string } | null;
+
+/* -- calendar ----------------------------------------------------------- */
+
+/** One day cell. `net_pnl_amount` and `net_r` are null when nothing on that
+ *  day had a computable figure -- which is NOT the same as a flat $0 day,
+ *  and the grid must render the two differently. */
+export interface CalendarDay {
+  date: string;
+  net_pnl_amount: number | null;
+  net_r: number | null;
+  trade_count: number;
+  win_rate: number | null;
+}
+
+/** The visible month's pooled figures. Same fields as a day, minus the
+ *  date -- a month total carrying a `date` invites reading it as a day. */
+export interface CalendarTotals {
+  net_pnl_amount: number | null;
+  net_r: number | null;
+  trade_count: number;
+  win_rate: number | null;
+}
+
+export interface CalendarWeekday {
+  weekday: string;
+  avg_pnl_amount: number | null;
+  avg_r: number | null;
+  win_rate: number | null;
+  trade_count: number;
+}
+
+export interface CalendarStreak {
+  direction: string | null;
+  days: number;
+}
+
+export interface CalendarFilters {
+  strategies: string[];
+  horizons: string[];
+}
+
+/** One row in the day drawer: the trade record joined with its journal
+ *  entry. The journal half (`mfe_r`, `mae_r`, `exit_efficiency`, `tags`,
+ *  `auto_lesson`) is absent for an unjournaled trade. */
+export interface CalendarTrade {
+  trade_id: string;
+  ticker: string;
+  strategy: string;
+  horizon: string | null;
+  direction: string | null;
+  day: string;
+  closed_at: string | null;
+  outcome: string | null;
+  pnl_amount: number | null;
+  r_multiple: number | null;
+  mfe_r: number | null;
+  mae_r: number | null;
+  exit_efficiency: number | null;
+  tags: string[];
+  auto_lesson: string | null;
+}
+
+/** `days`/`totals` are the requested month; `day_of_week`, `best_day`,
+ *  `worst_day` and `streak` are all of history under the same filter --
+ *  a weekday average drawn from one month would be 4-5 observations. */
+export interface PnlCalendar {
+  month: string;
+  days: CalendarDay[];
+  totals: CalendarTotals;
+  day_of_week: CalendarWeekday[];
+  best_day: CalendarDay | null;
+  worst_day: CalendarDay | null;
+  streak: CalendarStreak;
+  filters: CalendarFilters;
+}
+
+export interface CalendarDayTrades {
+  date: string;
+  trades: CalendarTrade[];
+}
