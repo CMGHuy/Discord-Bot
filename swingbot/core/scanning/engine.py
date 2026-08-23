@@ -837,23 +837,42 @@ def _sector_etfs_for_tickers(tickers: list) -> tuple:
 
 
 def _fetch_frames(symbols: list) -> dict:
-    """Sequential fetch for a small side-list of symbols (sector ETFs,
-    currently at most the 11 SPDR sector funds in etfs.json) -- same
-    one-ticker-at-a-time contract as _crawl_latest_data and for the same
-    reason (the pinned yfinance version's shared module global isn't
-    thread-safe), just without progress tracking since this list is far
-    too short to need a UI progress bar. A symbol whose fetch fails is
-    simply absent from the result, exactly like _crawl_latest_data."""
+    """Cache-first resolution for a small side-list of symbols (sector ETFs,
+    currently at most the 11 SPDR sector funds in etfs.json).
+
+    v47: warm symbols come from market_data/daily/*.csv and cost no network;
+    the cold remainder goes through _fetch_cold_frames, which is sequential at
+    this size (11 symbols is far below COLD_FETCH_PROCESS_THRESHOLD) and so
+    keeps the same one-at-a-time behaviour this list has always had. A symbol
+    whose fetch fails is simply absent from the result, exactly like
+    _crawl_latest_data."""
     frames = {}
+    cold = []
     for symbol in symbols:
-        try:
-            df = get_daily_data(symbol, period=config.DEFAULT_HISTORY_PERIOD)
-        except Exception as e:
-            log.warning("Sector RS: could not fetch %s: %s", symbol, e)
-            df = None
+        df = _load_cached_daily(symbol)
+        if df is not None:
+            frames[symbol] = df
+        else:
+            cold.append(symbol)
+    for symbol, df in _fetch_cold_frames(cold):
         if df is not None:
             frames[symbol] = df
     return frames
+
+
+def _daily_frame_for(symbol: str):
+    """v47: cache-first single-symbol daily frame, for the regime benchmark.
+
+    Returns None on a cache miss whose fetch also failed -- callers already
+    treat that as "unavailable this scan"."""
+    df = _load_cached_daily(symbol)
+    if df is not None:
+        return df
+    try:
+        return get_daily_data(symbol, period=config.DEFAULT_HISTORY_PERIOD)
+    except Exception as exc:
+        log.warning("Could not resolve daily frame for %s: %s", symbol, exc)
+        return None
 
 
 def _apply_sector_rs(item: "ScanItem", ticker: str, sector_of_ticker: dict,
@@ -1386,7 +1405,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     spy_df = None
     rs_cache = None
     try:
-        spy_df = get_daily_data(config.MARKET_REGIME_TICKER)
+        spy_df = _daily_frame_for(config.MARKET_REGIME_TICKER)
         if spy_df is not None:
             rs_cache = rs_factors.refresh_rs_cache(fresh_data, spy_df)
     except Exception as e:
