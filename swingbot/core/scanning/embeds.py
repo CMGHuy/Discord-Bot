@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 
 import discord
 
+from swingbot.core.market import opex
 from swingbot import config
 from swingbot.core.planning import account
 from swingbot.core.planning.account import compute_position_size, load_account_config
@@ -217,6 +218,20 @@ def _build_requirement_checks(scenario, target_confluence: tuple, conf,
             detail=f"Lv{conf.level} {conf.label} (needs Lv{effective_min_confidence}+)",
         ),
     ]
+
+    # Appended only while the window is open, so an ordinary day's embeds
+    # and funnel counters keep exactly the shape they have today. A failing
+    # check blocks the post via `all_requirements_met` and is counted in the
+    # funnel, which is what makes the quiet hour explainable afterwards.
+    if opex.suppress_new_entries():
+        checks.append(RequirementCheck(
+            key="opex_close_window", label="Outside the opex close window", passed=False,
+            detail=(
+                f"Monthly opex: no new entries within "
+                f"{config.OPEX_NEAR_CLOSE_SUPPRESS_MINUTES} min of the 16:00 US/Eastern close."
+            ),
+        ))
+
     return checks
 
 

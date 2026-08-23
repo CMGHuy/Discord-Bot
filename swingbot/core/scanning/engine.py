@@ -888,7 +888,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
         "mtf_misaligned": 0,
         "failed_counts": {
             "min_reward": 0, "min_stop_distance": 0, "max_stop_distance": 0,
-            "min_risk_reward": 0, "min_confluence": 0, "min_confidence": 0,
+            "min_risk_reward": 0, "min_confluence": 0, "min_confidence": 0, "opex_close_window": 0,
         },
         "conf_level_counts": {},   # {1..5: number of scenarios scored at that level}
         "data_quality_failed": False,   # E47: this ticker tripped the E16 data-quality gate
@@ -1349,7 +1349,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     data_quality_failed_count = 0   # E47: feeds check_kill_triggers' data_fail_frac
     failed_counts = {
         "min_reward": 0, "min_stop_distance": 0, "max_stop_distance": 0,
-        "min_risk_reward": 0, "min_confluence": 0, "min_confidence": 0,
+        "min_risk_reward": 0, "min_confluence": 0, "min_confidence": 0, "opex_close_window": 0,
     }
     conf_level_counts: dict = {}   # {1..5: number of scenarios scored at that level}
     filtered_by_confirmation = 0
@@ -1579,6 +1579,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "failed_min_risk_reward": failed_counts["min_risk_reward"],
             "failed_min_confluence": failed_counts["min_confluence"],
             "failed_min_confidence": failed_counts["min_confidence"],
+            "failed_opex_close_window": failed_counts["opex_close_window"],
             "awaiting_confirmation": filtered_by_confirmation,
             "mtf_misaligned": mtf_misaligned,
             "rs_blocked": rs_blocked,
