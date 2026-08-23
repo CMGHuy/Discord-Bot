@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-23 08:24:08 UTC",
+  "generated_at": "2026-08-23 11:14:37 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.8.2",
-    "bot": "1.4.1"
+    "bot": "1.4.2"
   },
   "releases": [
     {
@@ -771,6 +771,19 @@
       },
       "changed": [
         "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-08-23",
+      "last_seen": "2026-08-23",
+      "commit": "fbd20d29",
+      "subject": "release(bot): 1.4.2 -- closed-trade attribution in the weekly digest",
+      "versions": {
+        "ui": "1.8.2",
+        "bot": "1.4.2"
+      },
+      "changed": [
         "bot"
       ]
     }
