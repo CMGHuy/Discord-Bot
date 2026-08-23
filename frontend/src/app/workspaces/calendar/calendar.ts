@@ -40,6 +40,8 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       <div class="metric" role="group" aria-label="Metric">
         @for (option of metrics(); track option.value) {
           <button
+            sb-button
+            variant="segment"
             type="button"
             [class.active]="store.metric() === option.value"
             (click)="store.setMetric(option.value)"
@@ -113,7 +115,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
               >
                 <span class="dom">{{ cell.dayOfMonth }}</span>
                 @if (dayFor(cell); as day) {
-                  <button type="button" class="value" (click)="store.selectDay(day.date)">
+                  <button sb-button variant="link" type="button" class="value" (click)="store.selectDay(day.date)">
                     {{ display(day) }}
                     <span class="n">{{ day.trade_count }}</span>
                   </button>
@@ -197,14 +199,12 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     .month { min-width: 10ch; font-weight: 600; }
 
     .metric { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); }
+    /* padding/border override the segment variant's defaults for a
+       tighter two-cell toggle; the variant owns colour, weight and the
+       active-cell background is our own since this pair has no divider. */
     .metric button {
-      height: var(--control-h);
       padding: 0 var(--space-10);
-      background: none;
       border: 0;
-      color: var(--text-secondary);
-      font: inherit;
-      cursor: pointer;
     }
     .metric button.active { background: var(--surface-raised); color: var(--text); }
 
@@ -252,23 +252,20 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     .cell.pos { background: color-mix(in srgb, var(--pos) calc(var(--heat, 0) * 55%), transparent); }
     .cell.neg { background: color-mix(in srgb, var(--neg) calc(var(--heat, 0) * 55%), transparent); }
 
+    /* align-items/padding/colour/font override the link variant's defaults
+       -- a data figure, not a coloured hyperlink; the variant owns the
+       hover underline. */
     .value {
-      display: flex;
       align-items: baseline;
       justify-content: space-between;
-      gap: var(--space-6);
       padding: 0;
-      background: none;
       border: 0;
       color: var(--text);
       font: inherit;
       font-family: var(--font-mono);
       font-size: var(--text-table);
-      cursor: pointer;
-      text-align: left;
     }
-    .value:hover { text-decoration: underline; }
-    .value:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+    .value:focus-visible { outline-offset: 1px; }
     .n { color: var(--text-secondary); font-size: var(--text-micro); }
 
     .dow { width: 100%; border-collapse: collapse; font-size: var(--text-table); }

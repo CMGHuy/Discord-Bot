@@ -8,6 +8,7 @@ import {
   signal,
 } from '@angular/core';
 
+import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
 
 /**
@@ -25,13 +26,15 @@ import { Icon } from '../ui/icon';
 @Component({
   selector: 'sb-profile-menu',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon],
+  imports: [Button, Icon],
   host: {
     '(document:click)': 'onDocumentClick($event)',
     '(document:keydown.escape)': 'close()',
   },
   template: `
     <button
+      sb-button
+      variant="icon"
       #trigger
       type="button"
       class="avatar"
@@ -52,7 +55,7 @@ import { Icon } from '../ui/icon';
     @if (open()) {
       <div class="menu" role="menu">
         <span class="who">{{ username() || 'Signed in' }}</span>
-        <button type="button" role="menuitem" (click)="signOut()">
+        <button sb-button variant="ghost" type="button" role="menuitem" (click)="signOut()">
           <sb-icon name="signout" />
           <span>Sign out</span>
         </button>
@@ -62,17 +65,16 @@ import { Icon } from '../ui/icon';
   styles: `
     :host { position: relative; display: inline-flex; }
 
+    /* padding/border/line-height override the icon variant's defaults --
+       a tight circle around the photo, not the variant's usual hit-target
+       padding. border-radius is the shape; the variant doesn't set one. */
     .avatar {
-      display: inline-flex;
       padding: 0;
       border: 0;
-      background: none;
       border-radius: 50%;
-      cursor: pointer;
       line-height: 0;
     }
     .avatar img { border-radius: 50%; display: block; }
-    .avatar:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 
     .menu {
       position: absolute;
@@ -93,21 +95,14 @@ import { Icon } from '../ui/icon';
       color: var(--text-secondary);
       padding: 0 var(--space-4);
     }
+    /* justify-content/padding/font-size override the ghost variant's
+       defaults (centred, roomy, table-sized) for a compact left-aligned
+       menu row; the variant owns colour, hover and focus. */
     .menu button {
-      display: flex;
-      align-items: center;
-      gap: var(--space-6);
+      justify-content: flex-start;
       padding: var(--space-4) var(--space-6);
-      background: none;
-      border: 0;
-      border-radius: var(--radius);
-      color: var(--text);
       font-size: var(--text-body);
-      text-align: left;
-      cursor: pointer;
     }
-    .menu button:hover { background: var(--surface); }
-    .menu button:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
   `,
 })
 export class ProfileMenu {

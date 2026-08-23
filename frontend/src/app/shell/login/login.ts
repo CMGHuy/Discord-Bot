@@ -8,6 +8,7 @@ import {
 import { FormsModule } from '@angular/forms';
 
 import { SessionStore } from '../../stores/session.store';
+import { Button } from '../../ui/button';
 
 /**
  * The login form, rendered *instead of* the shell.
@@ -21,7 +22,7 @@ import { SessionStore } from '../../stores/session.store';
  */
 @Component({
   selector: 'sb-login',
-  imports: [FormsModule],
+  imports: [FormsModule, Button],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './login.html',
   styleUrl: './login.css',

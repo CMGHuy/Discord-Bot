@@ -17,6 +17,7 @@ import {
 } from '../../stores/system.store';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
+import { Select, SelectOption } from '../../ui/form-controls';
 import { ControlRow, Panel } from '../../ui/layout';
 
 /**
@@ -30,7 +31,7 @@ import { ControlRow, Panel } from '../../ui/layout';
 @Component({
   selector: 'sb-logs-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, ConfirmDialog, ControlRow],
+  imports: [Panel, Button, ConfirmDialog, ControlRow, Select],
   template: `
     <sb-panel [heading]="store.logs()?.path ?? 'Log'">
       <sb-control-row panel-actions class="actions">
@@ -87,17 +88,13 @@ import { ControlRow, Panel } from '../../ui/layout';
           }
         </div>
 
-        <label class="count">
-          Lines
-          <select
-            [value]="store.logLines()"
-            (change)="store.setLogLines(+$any($event.target).value)"
-          >
-            @for (choice of lineChoices; track choice) {
-              <option [value]="choice">{{ choice }}</option>
-            }
-          </select>
-        </label>
+        <sb-select
+          class="count"
+          label="Lines"
+          [options]="lineOptions"
+          [value]="store.logLines().toString()"
+          (valueChange)="store.setLogLines(+$event)"
+        />
 
         @if (store.hiddenLogLines(); as hidden) {
           <!-- Said out loud: a filter that silently removes most of a log is
@@ -143,9 +140,11 @@ import { ControlRow, Panel } from '../../ui/layout';
   styles: `
     /* .actions keeps its class as a marker only -- sb-control-row supplies
        display, alignment, wrap and gap.
-       .triage, .levels, .level and .count below are NOT converted: .level and
-       .count are <label> elements whose native checkbox/select association
-       depends on staying a label, and .triage/.levels only group them. */
+       .triage, .levels and .level below are NOT converted: .level is a
+       <label> element whose native checkbox association depends on staying
+       a label, and .triage/.levels only group them. .count moved to
+       sb-select (v54) -- it wraps its own <select> in a <label> internally,
+       so the same association survives one layer of encapsulation deeper. */
 
     /* -- SR57: triage controls --------------------------------------- */
     .triage {
@@ -163,7 +162,6 @@ import { ControlRow, Panel } from '../../ui/layout';
     .level-error { color: var(--neg); }
     .level-warning { color: var(--warn); }
     .level-info, .level-debug { color: var(--text-secondary); }
-    .count { display: flex; align-items: center; gap: var(--space-4); color: var(--text-secondary); }
     .hidden-count {
       margin-left: auto;
       color: var(--text-faint);
@@ -214,7 +212,12 @@ export class LogsTab {
   /** SR57 — driven off the store's constants, so the filter can never offer
    *  a level the parser does not recognise. */
   protected readonly levels = LOG_LEVELS;
-  protected readonly lineChoices = LOG_LINE_CHOICES;
+  /** `sb-select`'s options, string-valued -- the line count is the value
+   *  itself, not just a label. */
+  protected readonly lineOptions: SelectOption[] = LOG_LINE_CHOICES.map((choice) => ({
+    value: String(choice),
+    label: String(choice),
+  }));
 
   private readonly logBox = viewChild<ElementRef<HTMLElement>>('logBox');
 

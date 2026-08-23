@@ -2,7 +2,8 @@
      [class.overlay-open]="overlayOpen()">
   <!-- Below sm the sidebar is an overlay, so something has to summon it. -->
   @if (overlay()) {
-    <button class="menu-button" type="button" aria-label="Open navigation" (click)="openOverlay()">
+    <button sb-button variant="icon" class="menu-button" type="button"
+            aria-label="Open navigation" (click)="openOverlay()">
       <sb-icon name="menu" />
     </button>
   }
@@ -52,6 +53,8 @@
            that a navigation is about to dismiss. -->
       @if (!overlay()) {
         <button
+          sb-button
+          variant="icon"
           class="collapse"
           type="button"
           [attr.aria-label]="railed() ? 'Expand sidebar' : 'Collapse sidebar'"
@@ -124,23 +127,13 @@
         </span>
       }
 
-      <!-- The selected size is bound on the OPTIONS, not as `[value]` on the
-           select. Angular updates a host element's property bindings before
-           it materialises the embedded views inside it, so `[value]="zoom()"`
-           ran against a select that had no options yet: the assignment was
-           discarded and the control sat on whichever option rendered first,
-           reporting 90% no matter what was stored. -->
-      <label class="zoom">
-        <span class="zoom-label">Text</span>
-        <select
-          aria-label="Text size"
-          (change)="setZoom(+$any($event.target).value)"
-        >
-          @for (choice of zoomChoices; track choice) {
-            <option [value]="choice" [selected]="choice === zoom()">{{ choice }}%</option>
-          }
-        </select>
-      </label>
+      <sb-select
+        class="zoom"
+        label="Text"
+        [options]="zoomOptions"
+        [value]="zoom().toString()"
+        (valueChange)="setZoom(+$event)"
+      />
 
       <sb-connection-status
         [state]="connection.state()"

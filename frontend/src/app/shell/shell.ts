@@ -14,6 +14,8 @@ import { EventStream } from '../api/event-stream';
 import { ConnectionStore } from '../stores/connection.store';
 import { PreferencesStore } from '../stores/preferences.store';
 import { ViewportService } from '../ui/breakpoints';
+import { Button } from '../ui/button';
+import { Select, SelectOption } from '../ui/form-controls';
 import { Icon, IconName } from '../ui/icon';
 import { ProfileMenu } from './profile-menu';
 import { SessionStore } from '../stores/session.store';
@@ -46,7 +48,7 @@ const ZOOM_DEFAULT = 100;
   selector: 'sb-shell',
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive, ConnectionStatus, ToastHost,
-    Icon, ProfileMenu,
+    Button, Icon, ProfileMenu, Select,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',
@@ -128,7 +130,12 @@ export class Shell {
    */
   protected readonly zoom = signal(ZOOM_DEFAULT);
 
-  protected readonly zoomChoices = ZOOM_CHOICES;
+  /** `sb-select`'s options, string-valued -- `SelectOption` has no numeric
+   *  form, and the zoom percent is the value itself, not just a label. */
+  protected readonly zoomOptions: SelectOption[] = ZOOM_CHOICES.map((choice) => ({
+    value: String(choice),
+    label: `${choice}%`,
+  }));
 
   /**
    * Applied to `<html>` rather than to a shell element, so it also reaches

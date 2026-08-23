@@ -38,13 +38,6 @@
   top: var(--space-10);
   left: var(--space-10);
   z-index: 20;
-  display: inline-flex;
-  padding: var(--space-6);
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  cursor: pointer;
 }
 
 /* On the rail: icons only, centred, labels hidden but still in the DOM so
@@ -74,17 +67,8 @@
 }
 
 .collapse {
-  display: inline-flex;
   align-self: flex-start;
-  padding: var(--space-6);
-  background: none;
-  border: 0;
-  border-radius: var(--radius);
-  color: var(--text-secondary);
-  cursor: pointer;
 }
-.collapse:hover { color: var(--text); background: var(--surface-raised); }
-.collapse:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 
 @media (prefers-reduced-motion: reduce) {
   .shell, .shell.overlay .sidebar { transition: none; }
@@ -255,22 +239,6 @@
    faint text -- colouring both would spend two hues on one boolean. */
 .market-open { color: var(--pos); }
 
-.zoom {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  color: var(--text-faint);
-  font-size: var(--text-micro);
-}
-
-.zoom select {
-  font: inherit;
-  color: var(--text-secondary);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 0 var(--space-4);
-}
 
 /* A column, not a row: the rail is 52px wide, so two versions side by side
    cannot fit there however they are spaced. */

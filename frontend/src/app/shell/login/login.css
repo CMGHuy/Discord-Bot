@@ -71,24 +71,6 @@
   font-size: var(--text-table);
 }
 
-button {
-  padding: var(--space-8);
-  background: var(--surface-raised);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  color: var(--text);
-  font-family: inherit;
-  font-size: var(--text-body);
-  cursor: pointer;
-  transition: border-color var(--transition), color var(--transition);
-}
-
-button:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-button:disabled {
-  color: var(--text-faint);
-  cursor: default;
-}
+/* Every property the raw button used to set (padding, background, border,
+   colour, font, hover, disabled) is now owned by the primary variant --
+   nothing left here to override. */

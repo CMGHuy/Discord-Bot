@@ -147,6 +147,12 @@ const NOT_CONTROL_ROWS = new Set([
   // middle child is running text, and bottom-aligning that text
   // against two buttons is the regression, not the fix.
   'months',
+  // Versions' release-lane row: a component-name label beside a bar-chart
+  // strip of absolutely-positioned segment bars (v54's segment variant,
+  // for their paint only). It reads as data visualisation, not a row of
+  // controls to bottom-align -- flagged only because the strip's segments
+  // happen to be sb-button underneath.
+  'lane',
   // The Dashboard's three data-card rows (five metric cards, the metric-chip
   // row, the lifecycle strip) -- rows of DISPLAYED figures, not controls, so
   // sb-control-row's bottom-alignment answer does not apply. Flex here is

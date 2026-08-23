@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 
 import { Release } from '../../api/models';
+import { Button } from '../../ui/button';
 import { PaginationComponent } from '../../ui/pagination';
 import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 
@@ -37,7 +38,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
   selector: 'sb-versions',
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [VersionsStore],
-  imports: [PaginationComponent],
+  imports: [Button, PaginationComponent],
   template: `
     <header class="head">
       <h1>Versions</h1>
@@ -72,7 +73,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
         <div class="chips">
           @for (component of store.components(); track component) {
             @if (store.current()[component]; as version) {
-              <button type="button" class="chip" [class.on]="isFiltered(component, version)"
+              <button sb-button variant="chip" type="button" class="chip" [class.on]="isFiltered(component, version)"
                       (click)="store.toggleFilter(component, version)"
                       [attr.title]="component + ' ' + version + ' — click to filter'">
                 {{ component }} <strong>{{ version }}</strong>
@@ -93,7 +94,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
                      title="This component did not exist yet"></div>
               }
               @for (segment of lane.segments; track segment.start) {
-                <button type="button" class="segment" [class.current]="segment.current"
+                <button sb-button variant="segment" type="button" class="segment" [class.current]="segment.current"
                         [style.left.%]="segment.start * 100"
                         [style.width.%]="segment.width * 100"
                         [style.background]="segment.current ? null : versionTint(segment.version)"
@@ -149,7 +150,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
       @if (store.filter(); as active) {
         <p class="filtered" role="status">
           Showing releases with {{ active.component }} {{ active.version }}.
-          <button type="button" class="link" (click)="store.toggleFilter(active.component, active.version)">
+          <button sb-button variant="link" type="button" class="link" (click)="store.toggleFilter(active.component, active.version)">
             Show all
           </button>
         </p>
@@ -167,7 +168,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
                 @for (component of store.components(); track component) {
                   @if (release.versions[component]; as version) {
                     @if (release.changed.includes(component)) {
-                      <button type="button" class="chip moved"
+                      <button sb-button variant="chip" type="button" class="chip moved"
                               (click)="store.toggleFilter(component, version)">
                         {{ component }} {{ previousOf(release, component) }}<strong>{{ version }}</strong>
                       </button>
@@ -211,15 +212,16 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
        on: a new component costs vertical space and never horizontal, so the
        page cannot be widened by adding one. Do not replace with a grid. */
     .chips { display: flex; flex-wrap: wrap; gap: var(--space-6); }
+    /* font-family/font-size/colour/padding override the chip variant's
+       defaults for this denser, monospaced release-version scale; the
+       variant owns background, border and the .on state. */
     .chip {
       font-family: var(--font-mono); font-size: var(--text-micro);
-      color: var(--text-muted); background: var(--surface-raised);
-      border: 1px solid var(--border); border-radius: var(--radius-chip);
-      padding: var(--space-2) var(--space-6); cursor: pointer;
+      color: var(--text-muted);
+      padding: var(--space-2) var(--space-6);
     }
     .chip strong { color: var(--text); font-weight: 600; }
-    .chip.on { border-color: var(--accent); color: var(--accent); }
-    .chip.moved { cursor: pointer; }
+    .chip.on { color: var(--accent); }
     .chip.quiet { color: var(--text-faint); cursor: default; }
 
     .strip { display: flex; flex-direction: column; gap: var(--space-6);
@@ -233,7 +235,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
        which is why it is inset rather than added stroke width. Every segment
        gets one, current included, so the seam is consistent end to end. */
     .segment { position: absolute; top: 0; height: 100%; border: 0; padding: 0;
-               border-radius: 2px; cursor: pointer;
+               border-radius: 2px;
                box-shadow: inset 0 0 0 1px var(--bg); }
     .segment.current { background: var(--accent); }
     .absent { position: absolute; top: 0; height: 100%;
@@ -291,8 +293,11 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .note { margin: 0; color: var(--text-faint); font-size: var(--text-micro); }
 
     .filtered { margin: 0; font-size: var(--text-table); color: var(--text-secondary); }
-    .link { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer;
-            font: inherit; text-decoration: underline; }
+    /* Always underlined, not just on hover -- this sits in a sentence and
+       must read as an inline link at rest; the variant only underlines on
+       hover. font: inherit is the same reasoning that gave the variant its
+       name: this button must look like plain running text. */
+    .link { border: 0; font: inherit; text-decoration: underline; }
 
     .stream { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column;
               gap: var(--space-10); }

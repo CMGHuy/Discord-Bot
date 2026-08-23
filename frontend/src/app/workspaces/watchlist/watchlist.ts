@@ -137,7 +137,7 @@ function sortValue(row: Ticker, key: string): string | number | null {
             <ul class="suggestions">
               @for (hit of store.suggestions(); track hit.symbol) {
                 <li>
-                  <button type="button" (mousedown)="pick(hit.symbol)">
+                  <button sb-button variant="ghost" type="button" (mousedown)="pick(hit.symbol)">
                     <span class="hit-symbol">{{ hit.symbol }}</span>
                     <span class="hit-name">{{ hit.name }}</span>
                     @if (store.symbols().has(hit.symbol)) {
@@ -275,21 +275,21 @@ function sortValue(row: Ticker, key: string): string | number | null {
       border: 1px solid var(--border-strong);
       border-radius: var(--radius);
     }
+    /* justify-content/align-items/width/colour/font override the ghost
+       variant's defaults for a full-width, baseline-aligned result row;
+       the variant owns background and hover. */
     .suggestions button {
-      display: flex;
+      justify-content: flex-start;
       align-items: baseline;
       gap: var(--space-8);
       width: 100%;
       padding: var(--space-4) var(--space-8);
-      background: transparent;
       border: 0;
       color: var(--text);
       font: inherit;
       font-size: var(--text-table);
       text-align: left;
-      cursor: pointer;
     }
-    .suggestions button:hover { background: var(--surface); }
     .hit-symbol { font-family: var(--font-mono); }
     .hit-name { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .hit-have { margin-left: auto; color: var(--text-faint); font-size: var(--text-chip); }

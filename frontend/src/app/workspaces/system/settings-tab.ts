@@ -162,6 +162,8 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
                        own --control-h (28px). Decoupled now, so it can look
                        like a button again without that clash. -->
                   <button
+                    sb-button
+                    variant="icon"
                     type="button"
                     class="reset"
                     [title]="'Reset to ' + field.default"
@@ -494,7 +496,6 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
       color: var(--accent);
       font: inherit;
       font-size: var(--text-chip);
-      cursor: pointer;
     }
     .reset:hover { background: var(--surface-raised); border-color: var(--border-strong); color: var(--text); }
 
