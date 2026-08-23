@@ -5,14 +5,14 @@ test exist, with the same tri-state logic on either side. The SHIPPED
 CONFIGURATION is not: RS_LEADER_PERCENTILE=0 structurally disables the bullish
 arm (a percentile is never negative, so it always passes), because a bullish
 gate measured negative at every threshold tested on TRAIN. In production this
-gate only ever blocks bearish setups. See docs/strategy.md's RS gate section.
+gate only ever blocks bearish setups. See docs/strategy-gates.md's RS gate section.
 
 Tri-state on purpose. 'exempt' is NOT 'pass': an FX pair and a scan where the
 RS benchmark itself failed to compute both skip the check, and conflating
 either with a real pass would report a comparison that never ran. (A single
 ticker with too little history for its own RS reading is a known, separate
 gap -- it gets rs_percentile()'s 50.0 sentinel and reaches here as if it were
-a real reading, not as exempt; see docs/strategy.md.)
+a real reading, not as exempt; see docs/strategy-gates.md.)
 
 The rs_available flag exists because rs_percentile() returns 50.0 -- not None --
 when it cannot compute (edge/factors.py:33-37). Without the flag, a scan-wide

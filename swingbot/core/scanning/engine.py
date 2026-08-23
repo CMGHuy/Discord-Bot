@@ -1601,7 +1601,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             # little history gets rs_percentile()'s synthetic 50.0 sentinel
             # (edge/factors.py), which reaches here as an *available* reading
             # indistinguishable from a genuine median, so it's judged as one.
-            # See docs/strategy.md's RS gate section for the full writeup; not
+            # See docs/strategy-gates.md's RS gate section for the full writeup; not
             # fixed here because it's a decision-making behavior change the
             # v34 VALIDATION run never measured. Default ON (config.RS_GATE)
             # since v34 Task 8's one-shot VALIDATION PASS -- 48.50% -> 49.66%

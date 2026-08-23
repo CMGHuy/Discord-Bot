@@ -20,7 +20,10 @@ Run `!commands` (or `!help`) in Discord any time for the full command list.
 
 | Document | What's in it |
 |---|---|
-| [docs/strategy.md](docs/strategy.md) | How the bot decides: levels, filters, horizons, confidence, regime |
+| [docs/strategy.md](docs/strategy.md) | How the bot decides — index over the three files below |
+| [docs/strategy-signals.md](docs/strategy-signals.md) | Finding setups: levels from every method, filters, duplicate merging, horizons |
+| [docs/strategy-plans.md](docs/strategy-plans.md) | Building the plan: entry, target, stop, confidence, alert contents, tracking |
+| [docs/strategy-gates.md](docs/strategy-gates.md) | Gates: market regime, relative strength, trend alignment, symbol resolution |
 | [docs/setup.md](docs/setup.md) | Creating the Discord bot, configuring `.env`, installing, running 24/7 |
 | [docs/commands.md](docs/commands.md) | Every Discord command |
 | [docs/features.md](docs/features.md) | Plan Engine v2, analytics, the admin cockpit and SPA |
