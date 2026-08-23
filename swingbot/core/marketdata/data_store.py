@@ -204,6 +204,53 @@ def load_from_disk(ticker: str, interval: str, base_dir: str = DATA_DIR) -> pd.D
     return pd.read_csv(path, index_col=0, parse_dates=True)
 
 
+OHLCV_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
+
+
+def load_normalized(ticker: str, interval: str, base_dir: str = DATA_DIR) -> pd.DataFrame | None:
+    """v47: load_from_disk() plus the shape guarantees a live download gives.
+
+    The cache-first scan (core/scanning/engine.py:_crawl_latest_data) feeds
+    these frames to exactly the same consumers a fresh yf.download() frame
+    reaches -- market_context.attach(), refresh_rs_cache(), every indicator in
+    _scan_one. A to_csv/read_csv round-trip does NOT preserve dtype or index
+    tz-awareness (see data_refresh._align_tz, which exists for this reason), so
+    normalizing here is what makes "read the cache instead of fetching" a
+    throughput change rather than a behaviour change.
+
+    Returns None for missing, unreadable or unusable files -- every caller
+    already treats a missing frame as "no data for this ticker this scan", so a
+    corrupt CSV degrades to a cache miss instead of killing the scan.
+    """
+    try:
+        df = load_from_disk(ticker, interval, base_dir=base_dir)
+    except Exception as exc:
+        log.warning("cache read failed for %s/%s: %s", ticker, interval, exc)
+        return None
+    if df is None or df.empty:
+        return None
+
+    df = _normalize_columns(df)
+    if not all(c in df.columns for c in OHLCV_COLUMNS):
+        log.warning("cached frame for %s/%s is missing OHLCV columns (has %s)",
+                    ticker, interval, list(df.columns))
+        return None
+    df = df[OHLCV_COLUMNS].astype("float64")
+
+    if not isinstance(df.index, pd.DatetimeIndex):
+        try:
+            df.index = pd.to_datetime(df.index)
+        except Exception as exc:
+            log.warning("cached frame for %s/%s has an unparseable index: %s",
+                        ticker, interval, exc)
+            return None
+    if df.index.tz is not None:
+        df.index = df.index.tz_localize(None)
+    df = df[~df.index.duplicated(keep="last")].sort_index()
+
+    return df if not df.empty else None
+
+
 def download_and_cache(ticker: str, interval: str = "daily", base_dir: str = DATA_DIR) -> dict:
     tf = timeframe_name(interval)
     df = fetch_interval_data(ticker, tf)

@@ -10,7 +10,8 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   daily only, ~77 tickers, what every existing backtest/grid script reads).
   `marketdata/data_store.py` → `market_data/` (grouped by candle timeframe:
   `{timeframe}/{TICKER}.csv`, e.g. `market_data/daily/AAPL.csv`, ~521 daily +
-  78 hourly, what the edge-engine tasks depend on). Both are gitignored.
+  78 hourly, what the edge-engine tasks depend on -- and, since v47, what
+  the live scan reads first). Both are gitignored.
   Check which one a script reads before pointing it at a path.
 - **`market_data/` is timeframe-first, not ticker-first.** Folders are the
   semantic names in `data_store.TIMEFRAMES` (`monthly`, `weekly`, `daily`,
@@ -84,6 +85,18 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
 - Scans run through `map_tickers()` (`SCAN_WORKERS`, default 4). Anything
   touching shared state (`state.confirm_or_update`, funnel counters) must stay
   serial/post-join.
+- **The live scan reads `market_data/daily/` now (v47).** `_crawl_latest_data`
+  is cache-first: `_load_cached_daily()` serves any ticker whose CSV is fresher
+  than `SCAN_CACHE_MAX_AGE_HOURS` (6h), and only the cold remainder is fetched.
+  So the two OHLCV caches are no longer "backtest reads one, scan reads
+  neither" -- `market_data/` is now on the live path, and a change to
+  `data_store.load_normalized()` affects live alerts.
+- **Cold fetches use PROCESSES, never threads** (`_fetch_cold_frames`). yfinance
+  0.2.66's `download()` writes a shared module global (`_DFS`) non-reentrantly;
+  a thread pool here once attributed one ticker's price data to another and
+  logged both as open trades with identical values.
+  `tests/scanning/test_no_cross_ticker_mixing.py` is the standing guard -- if
+  you ever make this concurrent a different way, that test must still pass.
 - **Trade History: filtering, sorting and paging must stay on the SAME side.**
   The dashboard's `ct-*` controls used to hide/reorder rows in the DOM while
   the server shipped up to 500 pre-rendered rows. Once paging moved

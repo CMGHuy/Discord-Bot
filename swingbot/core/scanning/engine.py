@@ -48,7 +48,7 @@ import logging
 import os
 import time
 from collections import OrderedDict, defaultdict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -83,6 +83,7 @@ from swingbot.core.planning.plan_store import PlanStore
 from .regime import get_htf_bias, get_market_regime
 from swingbot.core.infra.state import StateStore
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS
+from swingbot.core.marketdata import data_refresh, data_store
 from swingbot.core.marketdata import universe
 from swingbot.core.charts.decision_chart import render_decision_chart
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
@@ -615,6 +616,101 @@ def _check_near_close(ticker: str, df) -> list:
     return warnings
 
 
+def _resolve_workers() -> int:
+    """FETCH_WORKERS, with 0 meaning auto.
+
+    A Field default is a string cast by int() (config.py:705), so a computed
+    cpu_count default cannot live in the schema -- 0-as-auto is how it is
+    expressed. Leaves one core for the bot's own event loop; the work is
+    network-bound anyway, so oversubscribing buys nothing.
+    """
+    configured = int(getattr(config, "FETCH_WORKERS", 0) or 0)
+    if configured > 0:
+        return configured
+    return max(1, (os.cpu_count() or 2) - 1)
+
+
+def _fetch_one_ticker(ticker: str) -> tuple:
+    """Process-pool entry point: must be module-level to be picklable.
+
+    Returns (ticker, DataFrame|None). Never raises -- a worker that raised
+    would surface as a BrokenProcessPool and take the whole batch with it,
+    which is exactly the "one bad ticker never aborts the crawl" contract
+    _crawl_latest_data has always had.
+    """
+    try:
+        return ticker, get_daily_data(ticker, period=config.DEFAULT_HISTORY_PERIOD)
+    except Exception as exc:
+        log.error("Crawl: error fetching data for %s: %s", ticker, exc)
+        return ticker, None
+
+
+def _fetch_cold_frames(tickers: list, progress: "ScanProgress" = None) -> list:
+    """v47: fetch the cache misses, sequentially or pooled.
+
+    PROCESSES, never threads. The pinned yfinance 0.2.66 builds download() on a
+    shared module-level global (_DFS) that it writes non-reentrantly; the
+    reentrancy fix landed only in yfinance 1.4.0, a major bump this project has
+    not taken. A ThreadPoolExecutor here once let two tickers' downloads clobber
+    each other mid-flight -- two real watchlist tickers were logged as open
+    trades with byte-identical entry/stop/target/confidence values, one
+    ticker's price data attributed to the other. Separate processes have
+    separate interpreters and separate memory, so _DFS is not shared and cannot
+    be clobbered across workers.
+
+    Returns order-preserving (ticker, DataFrame|None) pairs.
+    """
+    if not tickers:
+        return []
+
+    threshold = int(getattr(config, "COLD_FETCH_PROCESS_THRESHOLD", 10))
+    if len(tickers) <= threshold:
+        pairs = []
+        for ticker in tickers:
+            if is_stop_requested():
+                if progress is not None:
+                    progress.stopped = True
+                break
+            pairs.append(_fetch_one_ticker(ticker))
+            if progress is not None:
+                progress.done += 1
+                progress.current_ticker = ticker
+        return pairs
+
+    workers = _resolve_workers()
+    log.info("Crawl: %d cold ticker(s) over the threshold of %d -- fetching across %d process(es)",
+              len(tickers), threshold, workers)
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        pairs = list(pool.map(_fetch_one_ticker, tickers))
+    if progress is not None:
+        progress.done += len(pairs)
+        progress.current_ticker = tickers[-1]
+    return pairs
+
+
+def _load_cached_daily(ticker: str):
+    """v47: today's daily bar from market_data/daily/{TICKER}.csv, or None.
+
+    None means "cold" -- missing, stale, or unreadable -- and the caller
+    fetches it instead. `market_data_refresh` (commands/scanning.py) already
+    keeps this cache warm for exactly load_watchlist(), so in steady state this
+    is the path every ticker takes and the scan makes no network calls at all.
+
+    Staleness reuses data_refresh.is_stale() rather than reimplementing it: it
+    already handles "file missing" and takes an explicit max_age_hours, so the
+    scan's freshness bar (SCAN_CACHE_MAX_AGE_HOURS, 6h) stays independent of
+    the background loop's own 12h daily refetch cadence.
+    """
+    try:
+        if data_refresh.is_stale(ticker, "daily",
+                                 max_age_hours=config.SCAN_CACHE_MAX_AGE_HOURS):
+            return None
+        return data_store.load_normalized(ticker, "daily")
+    except Exception as exc:
+        log.debug("Crawl: cache lookup failed for %s (%s) -- treating as cold", ticker, exc)
+        return None
+
+
 def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     """
     Phase 1 of every scan: fetches the latest daily OHLCV data for every
@@ -623,8 +719,15 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     confidence scoring, etc. downstream never fetch anything themselves,
     they only ever see what this function already pulled fresh.
 
-    Fetched ONE TICKER AT A TIME, sequentially -- deliberately NOT a
-    concurrent thread pool anymore. This used to run through a bounded
+    v47: cache-first. A ticker whose market_data/daily/{TICKER}.csv is
+    present and fresher than SCAN_CACHE_MAX_AGE_HOURS is served from disk and
+    never reaches the fetch path at all -- `market_data_refresh` already keeps
+    that cache warm for exactly load_watchlist(), so in steady state the whole
+    crawl costs no network. Only genuine misses (the "cold" list) are fetched,
+    and everything below is about them.
+
+    Cold tickers are fetched ONE AT A TIME, sequentially -- deliberately NOT a
+    concurrent thread pool. This used to run through a bounded
     ThreadPoolExecutor for speed, but yfinance's `download()` (which
     get_daily_data() calls) is built on a shared module-level global
     (`_DFS`) that earlier yfinance releases -- including 0.2.66, the
@@ -662,26 +765,32 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     results = LRUFrames()   # Task E83: bounded, evicts oldest frames past 200 tickers
     started = time.monotonic()
 
+    cold = []
+    warm = 0
     for ticker in tickers:
         if is_stop_requested():
-            log.info("Crawl: stop requested -- ending early (%d/%d ticker(s) fetched so far)",
+            log.info("Crawl: stop requested -- ending early (%d/%d ticker(s) resolved so far)",
                       len(results), len(tickers))
             if progress is not None:
                 progress.stopped = True
-            break
-        try:
-            df = get_daily_data(ticker, period=config.DEFAULT_HISTORY_PERIOD)
-        except Exception as e:
-            log.error("Crawl: error fetching data for %s: %s", ticker, e)
-            df = None
+            return results
+        df = _load_cached_daily(ticker)
         if df is not None:
             results[ticker] = df
-        if progress is not None:
-            progress.done += 1
-            progress.current_ticker = ticker
+            warm += 1
+            if progress is not None:
+                progress.done += 1
+                progress.current_ticker = ticker
+            continue
+        cold.append(ticker)
+
+    for ticker, df in _fetch_cold_frames(cold, progress):
+        if df is not None:
+            results[ticker] = df
 
     elapsed = time.monotonic() - started
-    log.info("Crawl complete in %.1fs: %d/%d ticker(s) fetched successfully", elapsed, len(results), len(tickers))
+    log.info("Crawl complete in %.1fs: %d/%d ticker(s) resolved (%d from cache, %d fetched)",
+              elapsed, len(results), len(tickers), warm, len(cold))
     return results
 
 
@@ -728,23 +837,42 @@ def _sector_etfs_for_tickers(tickers: list) -> tuple:
 
 
 def _fetch_frames(symbols: list) -> dict:
-    """Sequential fetch for a small side-list of symbols (sector ETFs,
-    currently at most the 11 SPDR sector funds in etfs.json) -- same
-    one-ticker-at-a-time contract as _crawl_latest_data and for the same
-    reason (the pinned yfinance version's shared module global isn't
-    thread-safe), just without progress tracking since this list is far
-    too short to need a UI progress bar. A symbol whose fetch fails is
-    simply absent from the result, exactly like _crawl_latest_data."""
+    """Cache-first resolution for a small side-list of symbols (sector ETFs,
+    currently at most the 11 SPDR sector funds in etfs.json).
+
+    v47: warm symbols come from market_data/daily/*.csv and cost no network;
+    the cold remainder goes through _fetch_cold_frames, which is sequential at
+    this size (11 symbols is far below COLD_FETCH_PROCESS_THRESHOLD) and so
+    keeps the same one-at-a-time behaviour this list has always had. A symbol
+    whose fetch fails is simply absent from the result, exactly like
+    _crawl_latest_data."""
     frames = {}
+    cold = []
     for symbol in symbols:
-        try:
-            df = get_daily_data(symbol, period=config.DEFAULT_HISTORY_PERIOD)
-        except Exception as e:
-            log.warning("Sector RS: could not fetch %s: %s", symbol, e)
-            df = None
+        df = _load_cached_daily(symbol)
+        if df is not None:
+            frames[symbol] = df
+        else:
+            cold.append(symbol)
+    for symbol, df in _fetch_cold_frames(cold):
         if df is not None:
             frames[symbol] = df
     return frames
+
+
+def _daily_frame_for(symbol: str):
+    """v47: cache-first single-symbol daily frame, for the regime benchmark.
+
+    Returns None on a cache miss whose fetch also failed -- callers already
+    treat that as "unavailable this scan"."""
+    df = _load_cached_daily(symbol)
+    if df is not None:
+        return df
+    try:
+        return get_daily_data(symbol, period=config.DEFAULT_HISTORY_PERIOD)
+    except Exception as exc:
+        log.warning("Could not resolve daily frame for %s: %s", symbol, exc)
+        return None
 
 
 def _apply_sector_rs(item: "ScanItem", ticker: str, sector_of_ticker: dict,
@@ -1277,7 +1405,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     spy_df = None
     rs_cache = None
     try:
-        spy_df = get_daily_data(config.MARKET_REGIME_TICKER)
+        spy_df = _daily_frame_for(config.MARKET_REGIME_TICKER)
         if spy_df is not None:
             rs_cache = rs_factors.refresh_rs_cache(fresh_data, spy_df)
     except Exception as e:
