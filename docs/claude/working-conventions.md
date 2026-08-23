@@ -174,3 +174,19 @@ When writing or invoking a new long-running script, either confirm it already
 logs per-unit progress, or add a `print(..., flush=True)` (or `log.info`) per
 completed unit before kicking it off — don't discover this gap hours into an
 unmonitorable run.
+
+## Subagents must keep a progress file
+
+**A subagent dispatched for multi-step or long-running work keeps a plain-text
+progress file the controller can safely check** — in the
+subagent-driven-development workflow, its own `task-N-report.md` under
+`.superpowers/sdd/<plan>/` — updated at each real milestone, not written once as
+a draft at the start and left stale until the final report.
+
+The subagent's own tool-call transcript is off-limits for the controller to read
+directly (it risks overflowing that context), so a report file touched only at
+the start and at the very end leaves the controller with no way to tell "still
+working" from "silently stalled" for hours.
+
+This binds hardest when the subagent kicks off a background sweep or backtest of
+its own and then waits on it: **update the file before waiting, not only after.**

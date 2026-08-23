@@ -130,7 +130,7 @@ Every task in every part implicitly includes all of these.
 
 ## Close-out
 
-Per `docs/claude/document-conventions.md`, when this plan stops being live
+Per `docs/claude/document-lifecycle.md`, when this plan stops being live
 work: tick the boxes, write the Progress block below, then `git mv` **all
 three parts of this plan and the spec** into `implemented/` in the closing
 commit. The `ui` patch bump (`1.8.1 → 1.8.2`) is its **own** commit, goes

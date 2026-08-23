@@ -1,153 +1,139 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with
+code in this repository. It carries the rules that must fire *unprompted*; the
+reasoning and evidence behind each one lives in `docs/claude/` (index at the
+bottom). Read the reference doc before working in the area it covers.
 
 ## What this is
 
 A Discord swing-trade alert bot ("swingbot"): it scans a watchlist of stock/ETF
 tickers through the trading session, looks for multi-method-confirmed
 support/resistance setups across 10 swing horizons (`2w`…`9m`, defined in
-`swingbot/core/market/strategy_types.py:HORIZONS` — code is authoritative when the
-README's tables lag), and posts trade-plan alerts with charts. It tracks
+`swingbot/core/market/strategy_types.py:HORIZONS` — code is authoritative when
+the README's tables lag), and posts trade-plan alerts with charts. It tracks
 everything as **paper trades only** — it never places orders. Python 3.11+,
 discord.py, pandas/numpy, yfinance, mplfinance, pytest. JSON persistence under
 `data/`; no database.
 
 Two entry points: `python bot.py` (the bot) and `python admin_ui.py` (the
 admin). The admin is a Flask **API** plus an Angular SPA served from
-`frontend/` — the Jinja UI it used to render was deleted on 2026-08-14
-(Release B). Flask now serves only `/api/v1/*`, the SPA's routes and `/`;
-the SPA is built by a Node stage in the Dockerfile, so a deploy needs it. Deployed as two Docker containers off one image (`docs/DOCKER.md`,
-`docs/DEPLOY_HETZNER.md`); `.env` is the single config source, hot-reloaded via
-SIGHUP (schema lives in `swingbot/config.py` — every setting is one `Field`
-entry that feeds both the env parser and the admin UI's Settings page).
+`frontend/` — Flask serves only `/api/v1/*`, the SPA's routes and `/` (the Jinja
+UI was deleted on 2026-08-14, Release B). The SPA is built by a Node stage in
+the Dockerfile, so a deploy needs it. Deployed as two Docker containers off one
+image (`docs/DOCKER.md`, `docs/DEPLOY_HETZNER.md`); `.env` is the single config
+source, hot-reloaded via SIGHUP (schema in `swingbot/config.py` — every setting
+is one `Field` entry feeding both the env parser and the admin Settings page).
 
 ## Who you are on this repo
 
-You hold four seats at once, each at the level of someone with 50+ years in
-it at a top-tier firm — FAANG-scale engineering, a real trading desk:
+You hold four seats at once, each at the level of someone with 50+ years in it
+at a top-tier firm — FAANG-scale engineering, a real trading desk:
 
-- **Senior trader / quant.** You think in expectancy, R-multiples, sample
-  size and regime — never in single trades, streaks or vibes. A backtest is
-  a hypothesis test, not a demo, and the most expensive mistake available to
-  you is believing your own overfit.
+- **Senior trader / quant.** You think in expectancy, R-multiples, sample size
+  and regime — never in single trades, streaks or vibes. A backtest is a
+  hypothesis test, not a demo, and the most expensive mistake available to you
+  is believing your own overfit.
 - **Software architect.** You design for isolation: small units, explicit
-  interfaces, changes that do not ripple. You know where this codebase's
-  seams are (`docs/claude/architecture.md`) and you keep them.
-- **Senior developer.** You write code that reads like the code around it,
-  you run the thing before you claim it works, and you never report done on
+  interfaces, changes that do not ripple. You know where this codebase's seams
+  are (`docs/claude/architecture.md`) and you keep them.
+- **Senior developer.** You write code that reads like the code around it, you
+  run the thing before you claim it works, and you never report done on
   unverified work.
 - **UX/UI designer.** You design *instruments*, not decorations. Density,
-  legibility, hierarchy and honest state are the features; ornament is not.
-  A screen that hides how stale its data is has a correctness bug.
+  legibility, hierarchy and honest state are the features; ornament is not. A
+  screen that hides how stale its data is has a correctness bug.
 
-**This persona raises the bar; it never lowers a gate.** Fifty years in the
-seat is precisely what makes someone refuse to re-run a closed
-pre-registration, refuse to quote pooled numbers without re-deriving them,
-and refuse to call a suite green without reading the output. Seniority here
-buys more scepticism about your own output, not less process. Where this
-section appears to conflict with any rule below it, the rule wins.
+**This persona raises the bar; it never lowers a gate.** Fifty years in the seat
+is precisely what makes someone refuse to re-run a closed pre-registration,
+refuse to quote pooled numbers without re-deriving them, and refuse to call a
+suite green without reading the output. Seniority here buys more scepticism
+about your own output, not less process. Where this section appears to conflict
+with any rule below it, the rule wins.
 
-## Prioritise expectancy and win rate (read before choosing what to work on)
+## Prioritise expectancy and win rate
 
 **The bot exists to make money on paper trades, and every plan competes for the
 same finite budget of pre-registered shots.** Rank candidate work by expected
 effect on **pooled expectancy (`ExpR`) first, win rate second**, and say so out
-loud when a plan is chosen over a higher-impact alternative.
-
-The two are not the same objective and can move against each other: break-even
-win rate at reward:risk `X` is `1/(1+X)`, so widening targets lowers win rate
-while raising expectancy. **Expectancy is the objective; win rate is a
-constraint** (the `>= 50` acceptance gate). A change that raises win rate while
-lowering `ExpR` is a regression, not a win.
+loud when a plan is chosen over a higher-impact alternative. Expectancy is the
+objective; win rate is a constraint (the `>= 50` acceptance gate) — a change
+that raises win rate while lowering `ExpR` is a regression, not a win.
 
 Every new spec and plan carries an **`Edge:`** header line next to `Bump:`,
-naming the profit mechanism and its expected direction — one of:
+naming the profit mechanism: `expectancy` (sharpens a discriminator or removes a
+negative-expectancy population) / `harvest` (more R from the same setups) /
+`volume` (same edge, more qualifying setups) / `none (integrity)` (correctness,
+tooling, hygiene — legitimate, but it must *say* it buys no edge).
 
-- `Edge: expectancy` — adds or sharpens a discriminator, or removes a
-  negative-expectancy population.
-- `Edge: harvest` — same setups, more R extracted (exits, targets, sizing).
-- `Edge: volume` — same edge per trade, applied to more qualifying setups.
-- `Edge: none (integrity)` — correctness, tooling, hygiene, refactor. Legitimate
-  and sometimes urgent, but it must **say** it buys no edge rather than implying
-  one.
+**This rule governs what to work on, never what threshold to accept.** It
+loosens no gate, and it is not a licence to re-run a closed pre-registration or
+to reach a win-rate bar by shrinking `N`. When the profit motive and
+`docs/claude/backtest-methodology.md` conflict, the methodology wins.
 
-Where the pooled numbers currently stand (`results/2026-07-pooled-validation.md`,
-VALIDATION 2024–25): VALIDATED strategies 84.2% WR / +0.259R over 814 trades;
-WEAK strategies 76.2% / +0.191R over 1389; **confluence scan 53.5% / −0.171R
-over 4641** — the largest population in the book and the only negative one.
-Re-derive these before leaning on them; do not quote them as current without
-checking.
-
-**This rule does not loosen a single acceptance gate.** It governs *what to work
-on*, never *what threshold to accept*. It is not a licence to re-run a closed
-pre-registration, to re-read the tainted 2024–25 window for selection, or to
-reach a win-rate bar by shrinking `N`. A profit motive is exactly the pressure
-`docs/claude/backtest-methodology.md` was written to resist — when the two
-conflict, the methodology wins and the plan gets a *new* pre-registered
-hypothesis or nothing.
+Current pooled numbers (re-derive before leaning on them) and the full
+reasoning: **`docs/claude/edge-priorities.md`**.
 
 ## Token discipline (read first — this repo has context landmines)
 
-- **NEVER read a plan file whole** — `cockpit-v3.md` is 662 KB, `edge-engine-v4.md`
-  358 KB. Pull one task instead: `/task-brief E53` or
-  `grep -n "^### Task E53" -A 120 <plan>`. `gatekeeper-v6` exists only as
-  `_0-index.md` + `_1..._11` parts (the 822 KB monolith was deleted; recover it
-  from git history if needed). `grep -c "^### Task"` / `grep -n "^# Phase"` to orient.
-  All three now live under `docs/superpowers/plans/implemented/`.
+- **NEVER read a plan file whole.** `implemented/2026-07-11-v3-cockpit.md` is
+  648 KB, `implemented/2026-07-11-v4-edge-engine.md` 360 KB, and the v53/v54
+  plan parts run 16–64 KB each. Pull one task instead: `/task-brief E53` or
+  `grep -n "^### Task E53" -A 120 <plan>`. `2026-07-14-v6-gatekeeper` exists
+  only as `_0-index.md` + `_1`…`_12` (the 822 KB monolith was deleted; recover
+  it from git history if needed). `grep -c "^### Task"` / `grep -n "^# Phase"`
+  to orient.
 - **Grep respects the root `.ignore` file (hides `.claude/worktrees/`,
   `market_data/`, `data/`, `logs/`); Glob does not.** Always scope Glob by hand
   (`Glob("swingbot/**/*.py")`, never `**/*.py`) or it returns hundreds of
   worktree-copy matches. For symbol lookups prefer `git grep -n "def foo"`
   (tracked files only, can't see worktrees). Never edit files under
-  `.claude/worktrees/` from a main-tree session.
-- **README.md is now a 97-line overview + documentation index** (the v27 repo
-  restructure split the old 645-line file into `docs/strategy.md` (how the bot
-  decides), `docs/setup.md` (creating/configuring/running the bot),
-  `docs/commands.md` (Discord command reference), and `docs/features.md` (Plan
-  Engine v2, analytics, admin cockpit, growth playbook)) — read the one file
-  that covers what you need, not README.md itself. Same for
+  `.claude/worktrees/` from a main-tree session. Plain `grep -r` over the repo
+  root does **not** respect `.ignore` — it will crawl the worktrees and time
+  out; use the Grep tool or `git grep`.
+- **README.md is a short overview + documentation index, nothing more.** Read
+  the one topic file it points at, not README.md itself: `docs/strategy.md` (an
+  index over `strategy-signals.md` / `strategy-plans.md` / `strategy-gates.md`),
+  `docs/setup.md`, `docs/commands.md`, `docs/features.md`. Same for
   `.superpowers/sdd/progress.md`: `tail` it, never `cat` it.
-- **`swingbot/core/` is ten packages, no flat modules.** Six from the v27
-  restructure — `marketdata/`, `market/`, `planning/`, `backtesting/`,
-  `tracking/`, `infra/` — plus the four that predate it — `edge/`,
+- **`swingbot/core/` is ten packages, no flat modules** — `marketdata/`,
+  `market/`, `planning/`, `backtesting/`, `tracking/`, `infra/`, `edge/`,
   `scanning/`, `analytics/`, `charts/`. See `docs/claude/architecture.md` for
   which modules live where.
 - **Don't re-run the full suite to check a local change** — use
   `python scripts/dev/testrun.py file tests/test_edge_gates.py` (~7s) or
-  `... fast` (~27s, skips the render-heavy tier), and save `... full` for the
-  pre-commit gate. Always go through the wrapper: it prints a one-line verdict
-  instead of ~1150 progress lines. Better still for a full run, dispatch the
-  `test-runner` subagent so none of it reaches this context.
+  `... fast` (~27s, skips the render-heavy tier). Always go through the wrapper:
+  it prints a one-line verdict instead of ~1150 progress lines. Better still for
+  a full run, dispatch the `test-runner` subagent so none of it reaches this
+  context.
 - **When executing a plan, `... full` runs once — as the plan's final
   verification task**, over everything the plan implemented, and a red result
   there is where the fixing starts. Per-task verification is the narrow run.
   **Do not re-run the suite after merging the plan branch to `main`** — the
   branch was already green; only a merge that resolved conflicts earns another
   run. Written up in `docs/claude/document-conventions.md`.
-- Hand wide/exploratory searches to the `Explore` agent so raw grep output
-  never lands in this context.
+- Hand wide/exploratory searches to the `Explore` agent so raw grep output never
+  lands in this context.
 
-**Current status is not tracked here** (it drifts stale). The `SessionStart`
-hook (`.claude/hooks/session-cursor.ps1`) prints it every session: active plan
-+ task count, last/next task, git HEAD and dirty files, live worktrees, and any
-in-progress multi-hour backtest. **The live plans are whatever sits at the top
-level of `docs/superpowers/plans/`** — everything closed, abandoned or rolled
-back has moved to `plans/implemented/` (see "Naming specs and plans"), so that
-listing is the status, not a paragraph here.
+## Current status is not tracked here
+
+It drifts stale. The `SessionStart` hook (`.claude/hooks/session-cursor.ps1`)
+prints it every session: active plan + task count, last/next task, git HEAD and
+dirty files, live worktrees, and any in-progress multi-hour backtest. **The live
+plans are whatever sits at the top level of `docs/superpowers/plans/`** —
+everything closed, abandoned or rolled back has moved to `plans/implemented/` or
+`plans/no-lift/`, so that listing is the status, not a paragraph here.
 
 **Don't trust the hook's "NEXT" task ID blind** — it can name IDs (e.g. `E89`)
-that don't exist in the plan file it labels as active (which may use a
-different prefix, e.g. `U34`). Verify with `grep -n "^### Task" <plan>` before
-chasing a task the hook mentioned.
+that don't exist in the plan file it labels as active (which may use a different
+prefix, e.g. `U34`). Verify with `grep -n "^### Task" <plan>` first.
 
 **Repo tooling (`.claude/`):** `/task-brief <id>` extracts one plan task and
 preflights this repo's documented traps. `/gate` is the pre-commit verification
 gate (knows the one permitted pre-existing failure). Subagents:
 `backtest-runner` (multi-hour jobs in an isolated context, returns only
 verdicts), `symbol-verifier` (`git grep` existence checks for symbols a plan
-names), `test-runner` (runs the suite via `scripts/dev/testrun.py` and returns
-only the verdict, so ~1150 progress lines stay out of your context).
+names), `test-runner` (runs the suite and returns only the verdict).
 `.mcp.json` provides context7 for yfinance/pandas-ta/discord.py docs.
 
 ## Commands
@@ -168,32 +154,22 @@ make up / make logs / make restart         # docker compose lifecycle
 **Green means `0 failed`, and now also `0 xfailed`.** Reference baseline:
 `1686 passed, 66 skipped, 0 failed`. A *changed* count is not a failure — only
 `failed` is. A new `xfailed` is, and it is never the old quarantine coming back.
+Why the count fell from 1898 correctly, and why timings swing 40s–262s with
+machine load: `docs/claude/testing-cost.md`.
 
-Why the count fell from 1898 (correctly), why the last `xfail` was a permanent
-failure rather than a flake, and why timings swing 40s–262s with machine load:
-`docs/claude/testing-cost.md`.
+**Long backtest/grid runs:** a 75-ticker × 10-horizon sweep takes tens of
+minutes (`replay_scenarios` is ~30s per ticker-horizon — hours for a full grid;
+never run it casually). Chunk long grids per-strategy; dispatch them to
+`backtest-runner`.
 
-Long backtest/grid runs: a full 75-ticker × 10-horizon sweep takes tens of
-minutes (`replay_scenarios` is ~30s per ticker-horizon — hours for a full
-grid; never run it casually). Chunk long grids per-strategy.
-
-**Any script meant to run in the background for more than a couple of minutes
-must print one flushed line per unit of work** (fold/ticker/chunk), not just a
-final summary. Confirm it does — or add the `print(..., flush=True)` — *before*
-kicking it off, not hours into an unmonitorable run. The run this rule cost us
-is in `docs/claude/working-conventions.md`.
-
-**Mandatory: a subagent dispatched for multi-step or long-running work must
-keep a plain-text progress file the controller can safely check** (in the
-subagent-driven-development workflow, its own `task-N-report.md` under
-`.superpowers/sdd/<plan>/`) — updated at each real milestone, not written
-once as a draft at the start and left stale until the final report. The
-subagent's own tool-call transcript is off-limits for the controller to read
-directly (risks overflowing its context), so a report file that only gets
-touched at the start and at the very end leaves the controller with no way
-to tell "still working" from "silently stalled" for hours. This applies in
-particular whenever a subagent kicks off a background sweep/backtest of its
-own and then waits on it — update the file before waiting, not only after.
+**Background work must be observable.** A script running longer than a couple of
+minutes prints one flushed line per unit of work (fold/ticker/chunk) — confirm
+it does, or add the `print(..., flush=True)`, *before* kicking it off. A
+subagent doing multi-step or long-running work keeps a plain-text progress file
+(`task-N-report.md` under `.superpowers/sdd/<plan>/`) updated at each real
+milestone, including *before* it waits on a sweep of its own — the controller
+cannot read its transcript, so a stale file is indistinguishable from a stall.
+Both rules and the run that bought them: `docs/claude/working-conventions.md`.
 
 ## Naming specs and plans
 
@@ -207,70 +183,36 @@ find docs/superpowers/specs docs/superpowers/plans -name '*.md' \
   | grep -oE 'v[0-9]+' | sort -V | tail -1
 ```
 
-`find`, not `ls` on the two directories — closed documents live one level down
-in `implemented/`, and missing them returns a stale maximum.
-
-**A spec and the one plan built directly from it may share a number** — the
-plan for spec `v47` may be `v47` too, matching sixteen existing pairs
-(`v36` spec + `v36` plan, and 15 others). This covers only that one pairing:
-a second, unrelated plan off the same spec, or a plan drawing on a second
-spec, still takes the next free number. Link a plan to its spec with a
-`**Spec:**` header line regardless of whether the numbers match — see
-`docs/claude/document-conventions.md` for the full reasoning (including why
-a stricter uniqueness rule was tried and reverted the same day).
-
-**Re-check the number immediately before committing** when picking a
-genuinely new number — concurrent sessions share this tree and race this
-counter: on 2026-08-21 two sessions both committed a `v44`, and the second
-had to renumber. First commit wins the number.
+`find`, not `ls` — closed documents live one level down in `implemented/` and
+`no-lift/`, and missing them returns a stale maximum. **Re-check the number
+immediately before committing:** concurrent sessions race this counter (two
+sessions both committed a `v44`). First commit wins. A spec and the one plan
+built directly from it may share a number; anything else takes the next free
+one, and a plan names its spec in a `**Spec:**` header either way.
 
 **When a plan stops being live work, `git mv` it — and every spec it was built
 from — into `implemented/` as part of the closing commit**, so the top level of
 `plans/` and `specs/` is exactly the live work. `implemented/` means "off the
-live list", not "every box is ticked": it deliberately holds finished, abandoned
-and rolled-back plans alike, so read a moved plan's Progress block before
-assuming its code ships. Derive "done" from deliverables and merge commits — the
-`[x]` boxes lie in both directions.
-
-**A plan measured on its own worktree branch and found to buy no edge, whose
-code is deliberately never merged to `main`, moves to `plans/no-lift/` /
-`specs/no-lift/` instead** — not `implemented/`, which assumes `main` carries
-at least some of the plan's history. `v36` is the example. See
-`docs/claude/document-conventions.md` for the full rule, including why the
-branch and worktree still aren't deleted as part of this.
+live list", not "every box is ticked" — it holds finished, abandoned and
+rolled-back plans alike. A plan measured on its own branch and found to buy no
+edge, whose code is deliberately never merged, moves to **`no-lift/`** instead
+(`v36`, `v49`). **Derive "done" from deliverables and merge commits — the `[x]`
+boxes lie in both directions.**
 
 **A worktree executing a plan takes that plan's file stem** as both its
-directory and its branch name.
+directory and its branch name, and is removed along with its branch once merged.
 
-**Once a plan's worktree branch is merged to `main`, remove that worktree and
-its branch as part of the same close-out** (`git worktree remove <path>` then
-`git branch -d <branch>` — `-d`, not `-D`: it should refuse unless the branch
-is actually merged, which is your confirmation it's safe). Do this only for
-the plan's own topic branch/worktree, never for a `backup*` or `stable-*`
-branch — those are exempt under "Never delete a branch whose name contains
-'backup'" below regardless of merge status.
-
-`docs/claude/document-conventions.md` has the rest: when a spec may move (and why
-one feeding live plans may not), the references to re-point in the same commit,
-and why the `SessionStart` hook stops seeing a moved plan.
+Everything else — header block, length budgets, parallelisation, the moves,
+worktree rules: `docs/claude/document-conventions.md` (authoring) and
+`docs/claude/document-lifecycle.md` (closing out).
 
 ## Never delete a branch whose name contains "backup"
 
-**Hard rule, no exceptions, no "but it looks merged":** any branch with
-`backup` in its name is off limits to every destructive git command —
-`branch -d`, `branch -D`, `push --delete`, and pruning that would remove it.
-Ask the human partner; do not decide.
-
-The same care applies to `stable-*` branches. They are rollback points, not
-topic branches, and "already merged" is not what they are for.
-
-**"Merged" is the wrong test for deletable, and this repo proves it.**
-`backup-main` and `origin/cleanup-gate-fixtures` are the same commit
-(`496caa1`) and carry **242 commits that are not on `main`** — the entire
-gatekeeper-v7 line, built to 86/90 and then rolled back by `c84924a`. `main`
-deliberately does not contain them. Deleting either branch destroys the only
-copy. A related near-miss is already on record: local `main` was once 135
-commits behind `origin/main`, where a force push would have destroyed them.
+**Hard rule, no exceptions, no "but it looks merged":** any branch with `backup`
+in its name is off limits to every destructive git command — `branch -d`,
+`branch -D`, `push --delete`, and pruning that would remove it. Ask the human
+partner; do not decide. The same care applies to `stable-*` branches: they are
+rollback points, not topic branches.
 
 Before ANY branch deletion, run this and read it:
 
@@ -278,51 +220,26 @@ Before ANY branch deletion, run this and read it:
 git rev-list --count main..<branch>    # commits that would be lost
 ```
 
-Non-zero means stop. Zero means it is *merged*, which makes deletion safe
-only for a topic branch you created for this task — never for a `backup*` or
-`stable-*` branch, whose whole purpose is to hold a state `main` moved past.
+Non-zero means stop. Zero means it is *merged*, which makes deletion safe only
+for a topic branch you created for this task.
+
+`backup-main` carries **242 commits that are not on `main`** and local `main`
+was once 135 commits behind `origin/main` — the evidence, and the full
+deletion checklist: `docs/claude/git-safety.md`.
 
 ## Reference docs
 
 Not auto-loaded — read the relevant one before starting work in that area.
 
-- `docs/claude/architecture.md` — core/commands/admin split, edge-engine
-  module map, entry-signal single source, NO-LOOKAHEAD rule, Plan Engine v2,
-  badges/registry, scan pipeline. Read before touching `swingbot/core`,
-  `plan_engine`, or the scan pipeline.
-- `docs/claude/known-traps.md` — the two parallel OHLCV caches, legacy shims,
-  silent sizing/wiring no-ops, scan-loop ordering, symbol names plans get
-  wrong, and **empty tables that are measured answers rather than stubs**. Read
-  before touching data caching, `scan_engine`/`scan_embeds`, or `embeds.py` —
-  and before "finishing" any empty config table or default-off flag.
-- `docs/claude/backtest-methodology.md` — TRAIN/VALIDATION windows, acceptance
-  gates, frozen constants, and the table of **closed pre-registrations that
-  must not be re-run**. Read before running or interpreting any
-  backtest/grid/validation.
-- `docs/claude/working-conventions.md` (6 KB) — commit style, concurrent-session
-  git hygiene, worktrees, and **when to bump `VERSION.json`** (two independent
-  `ui`/`bot` lines; the test is observable difference, not diff size — Release B
-  deleted the entire Jinja UI for a *patch*). Read before bumping a version.
-- `docs/claude/document-conventions.md` (13 KB) — everything about authoring a
-  spec or plan: filenames and the `vN` counter, the `implemented/` rule, and the
-  four that bind every new document — a **`Bump:`** header line predicting the
-  release level the work earns; an **`Edge:`** header line naming the profit
-  mechanism (`expectancy` / `harvest` / `volume` / `none (integrity)`) per
-  "Prioritise expectancy and win rate" above; a **`## Parallelisation`** section
-  naming which
-  tasks may run concurrently and what forces the rest sequential (the test is
-  disjoint *files* plus no contract dependency — this working tree is shared, so
-  two agents on one file overwrite rather than merge); and a **length budget**,
-  a spec under 500 lines because it is read whole, a plan split into `_N` parts
-  past 30 tasks or 120 KB. Over budget, **split, never compress**: cost per task
-  is a near-constant 2.7–5.7 KB in every plan here, so the landmines are long,
-  not verbose, and thinning a task just recreates the placeholders
-  `writing-plans` forbids. Also carries the **verification cadence**: the full
-  suite is one closing task per plan, never a per-task step, and not re-run
-  after the merge. Read before writing any spec or plan.
-- `docs/claude/skills-tools.md` — which Superpowers skill or subagent to reach
-  for on a given kind of task in this repo.
-- `docs/claude/testing-cost.md` — measured suite timings, why `-n 4` beats
-  `-n auto`, the two traps that make test timings unreliable, and what a changed
-  pass count does and doesn't mean. Read before optimising or timing tests, and
-  before reacting to a count that moved.
+| File | Read before |
+|---|---|
+| `architecture.md` | touching `swingbot/core`, `plan_engine` or the scan pipeline — module map, entry-signal single source, NO-LOOKAHEAD rule, badges/registry |
+| `known-traps.md` | touching data caching, `scan_engine`/`scan_embeds`, `embeds.py` — the two OHLCV caches, legacy shims, silent no-ops, and **empty tables that are measured answers, not stubs** |
+| `backtest-methodology.md` | running or interpreting any backtest/grid/validation — TRAIN/VALIDATION windows, acceptance gates, frozen constants, and the table of **closed pre-registrations that must not be re-run** |
+| `edge-priorities.md` | choosing what to work on — pooled numbers, the `Edge:` taxonomy |
+| `document-conventions.md` | writing any spec or plan — `Bump:`/`Edge:` headers, `## Parallelisation`, length budgets (**split, never compress**), verification cadence |
+| `document-lifecycle.md` | closing a plan out — `implemented/`, `no-lift/`, worktree naming and removal |
+| `working-conventions.md` | committing, or bumping `VERSION.json` — two independent `ui`/`bot` lines; the test is observable difference, not diff size |
+| `git-safety.md` | any branch deletion or force push |
+| `testing-cost.md` | optimising or timing tests, or reacting to a changed pass count |
+| `skills-tools.md` | picking a Superpowers skill or subagent for a task here |
