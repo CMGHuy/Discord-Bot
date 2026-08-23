@@ -721,7 +721,7 @@ def exit_reason_split(closed: list[dict]) -> list[dict]:
         out.append({"reason": reason,
                     "n": len(members),
                     "share_pct": len(members) / len(closed) * 100,
-                    "total_r": round(sum(rs), 4),
+                    "total_r": round(float(sum(rs)), 4),  # float even at 0: a stable type per row
                     "avg_r": round(sum(rs) / len(rs), 4) if rs else None,
                     "win_rate": win_rate(members)})
     return out
