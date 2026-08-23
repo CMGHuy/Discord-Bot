@@ -92,9 +92,23 @@ def test_duplicate_families_are_collapsed():
     assert confluence.effective_count(fams, m) == pytest.approx(1.0)
 
 
-def test_missing_matrix_raises_rather_than_defaulting():
-    # Until Task 4 lands the constant there is no safe default: an implicit
-    # identity would make this component a no-op that still passes its tests.
+def test_none_resolves_to_the_frozen_constant_now_that_it_exists():
+    """Task 4 landed REDUNDANCY, so `matrix=None` means "use the frozen one".
+
+    Before Task 4 this test asserted the opposite -- that None RAISED -- because
+    an implicit identity default would have made the component a silent no-op
+    that still passed every test above. That guard expired the moment the
+    constant landed; the contract it protects is now the one asserted below.
+    """
+    fams = list(confluence.FAMILY_ORDER[:4])
+    assert confluence.effective_count(fams, None) == pytest.approx(
+        confluence.effective_count(fams, confluence.REDUNDANCY))
+
+
+def test_absent_constant_still_raises_rather_than_defaulting(monkeypatch):
+    """The original guard, kept: with no constant available there is still no
+    safe default, and an identity fallback must never be invented."""
+    monkeypatch.delattr(confluence, "REDUNDANCY", raising=True)
     with pytest.raises(ValueError, match="no redundancy matrix"):
         confluence.effective_count([confluence.FAMILY_ORDER[0]], None)
 
