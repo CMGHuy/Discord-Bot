@@ -82,29 +82,11 @@ class JournalStore:
             return False
 
 
-def _resolve_outcome(trade: dict) -> str:
-    """status is the coarse open/win/loss/closed vocabulary TradeLog has
-    always used; a v2-manager close additionally carries a specific
-    close_reason ("scratch"/"timeout"/...) inside the generic "closed"
-    status (see plan-engine-v2 Task 70's status mapping: only "win"/
-    "loss"/"closed" ever land in the field, with the real nuance in the
-    leg reason or close_reason). Prefer that finer-grained reason when
-    status itself is the generic "closed" bucket."""
-    status = trade.get("status")
-    if status in ("win", "loss"):
-        return status
-    legs = trade.get("legs") or []
-    candidates = []
-    if legs:
-        candidates.append(legs[-1].get("reason", ""))
-    candidates.append((trade.get("close_reason") or ""))
-    for reason in candidates:
-        reason = reason.lower()
-        if "scratch" in reason:
-            return "scratch"
-        if "timeout" in reason:
-            return "timeout"
-    return status or "closed"
+#: v50: the vocabulary now lives in metrics.py so both modules share one
+#: definition. Kept as module-level names because journal's own tests and
+#: call sites reference them, and because metrics must never import journal
+#: (journal.py:15 imports metrics -- the reverse edge is a circular import).
+_resolve_outcome = metrics.resolve_outcome
 
 
 def _holding_days(trade: dict) -> float | None:
@@ -134,14 +116,10 @@ def _auto_lesson(outcome: str, mfe_r: float | None, mae_r: float | None,
     return f"Outcome {outcome} at {r_realized:+.2f}R."
 
 
-_RUNNER_SUBSTRINGS = ("runner_tp2", "runner_trail", "runner_be")
+_RUNNER_SUBSTRINGS = metrics._RUNNER_SUBSTRINGS
 
 
-def _close_reason_text(trade: dict) -> str:
-    legs = trade.get("legs") or []
-    if legs:
-        return (legs[-1].get("reason") or "").lower()
-    return (trade.get("close_reason") or "").lower()
+_close_reason_text = metrics.close_reason_text
 
 
 def tags_for(trade: dict, m: dict | None) -> list[str]:

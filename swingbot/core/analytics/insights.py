@@ -92,6 +92,34 @@ def weekly_digest(entries: list[dict], closed: list[dict], today: dt.date) -> li
             f"Lv{r['level']}: {r['win_rate']:.0f}% (n={r['n']})" for r in level_rows
         ))
 
+    lines.append("")
+    lines.append("**Where the R came from:**")
+    for row in metrics.exit_reason_split(week_closed):
+        if row["n"] == 0:
+            # Reported, not dropped: an exit path that never fired is a finding
+            # about the exit design, and it is only legible next to the ones
+            # that did.
+            lines.append(f"• {row['reason']} — n=0")
+            continue
+        avg = f"{row['avg_r']:+.2f}R" if row["avg_r"] is not None else "n/a"
+        lines.append(f"• {row['reason']} — n={row['n']} ({row['share_pct']:.0f}%)"
+                     f" · total {row['total_r']:+.2f}R · avg {avg}")
+
+    hold = metrics.hold_by_outcome(week_closed)
+    win_d = f"{hold['avg_winner_days']:.1f}d" if hold["avg_winner_days"] is not None else "n/a"
+    los_d = f"{hold['avg_loser_days']:.1f}d" if hold["avg_loser_days"] is not None else "n/a"
+    if hold["ratio"] is None:
+        # None means "not enough trades on one side to divide", which must not
+        # render as 0.00x -- that would read as "losers exit instantly".
+        ratio_str = f"ratio n/a (needs {metrics.MIN_TRADES_FOR_RATIO}+ each side)"
+    else:
+        # A measurement and its band, never a diagnosis: one ratio over one
+        # week is not a validated finding about how this bot exits.
+        ratio_str = f"loser/winner hold ratio {hold['ratio']:.2f}x ({hold['severity']})"
+    lines.append("")
+    lines.append(f"**Hold time by outcome:** winners {win_d} (n={hold['n_winners']})"
+                 f" · losers {los_d} (n={hold['n_losers']}) · {ratio_str}")
+
     notes = [e for e in week_entries if (e.get("note") or "").strip()][:3]
     if notes:
         lines.append("")

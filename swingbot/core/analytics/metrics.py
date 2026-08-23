@@ -15,6 +15,68 @@ from datetime import datetime
 import numpy as np
 
 
+#: Every exit reason the code actually emits, plus "other".
+#:
+#: Sources: journal's _RUNNER_SUBSTRINGS ("runner_tp2", "runner_trail",
+#: "runner_be"), reversal.py's `close_reason == "reversed"`, and the
+#: "scratch"/"timeout" branches of resolve_outcome below.
+#:
+#: "other" is deliberate and must never be silently dropped: a non-empty
+#: "other" bucket means a reason string exists that this list does not know,
+#: which is a finding about the data, not a formatting problem.
+EXIT_REASONS: tuple[str, ...] = (
+    "tp1", "runner_tp2", "runner_trail", "runner_be",
+    "stop", "scratch", "timeout", "reversed", "other",
+)
+
+_RUNNER_SUBSTRINGS = ("runner_tp2", "runner_trail", "runner_be")
+
+_EXIT_REASON_SET = frozenset(EXIT_REASONS)
+
+
+def resolve_outcome(trade: dict) -> str:
+    """status is the coarse open/win/loss/closed vocabulary TradeLog has
+    always used; a v2-manager close additionally carries a specific
+    close_reason ("scratch"/"timeout"/...) inside the generic "closed"
+    status (see plan-engine-v2 Task 70's status mapping: only "win"/
+    "loss"/"closed" ever land in the field, with the real nuance in the
+    leg reason or close_reason). Prefer that finer-grained reason when
+    status itself is the generic "closed" bucket.
+
+    v50: moved here verbatim from journal._resolve_outcome so metrics and
+    journal share one vocabulary. journal.py imports metrics (journal.py:15),
+    never the reverse -- putting it here is what keeps that edge one-way.
+    """
+    status = trade.get("status")
+    if status in ("win", "loss"):
+        return status
+    legs = trade.get("legs") or []
+    candidates = []
+    if legs:
+        candidates.append(legs[-1].get("reason", ""))
+    candidates.append((trade.get("close_reason") or ""))
+    for reason in candidates:
+        reason = reason.lower()
+        if "scratch" in reason:
+            return "scratch"
+        if "timeout" in reason:
+            return "timeout"
+    return status or "closed"
+
+
+def close_reason_text(trade: dict) -> str:
+    """The trade's raw close reason, lowercased, never None.
+
+    A v2-manager close hides the real reason in the LAST leg while
+    `close_reason` keeps a coarser value, so the leg wins when present.
+    v50: moved here verbatim from journal._close_reason_text.
+    """
+    legs = trade.get("legs") or []
+    if legs:
+        return (legs[-1].get("reason") or "").lower()
+    return (trade.get("close_reason") or "").lower()
+
+
 def equity_curve(closed: list[dict], starting_balance: float) -> dict:
     """Walk realized P&L in chronological close order to build a running
     account-balance series.
@@ -606,6 +668,120 @@ def holding_period_split(closed: list[dict]) -> list[dict]:
                     "win_rate": win_rate(members),
                     "avg_return_pct": round(sum(rets) / len(rets), 4) if rets else None})
     return out
+
+
+def _exit_reason_bucket(trade: dict) -> str:
+    """Which EXIT_REASONS bucket a closed trade belongs to.
+
+    Exact match on the raw reason text first, so "runner_tp2" cannot be
+    swallowed by a looser substring rule that would also match "tp2" inside it;
+    then resolve_outcome, which is the one place that knows prose like
+    "scratch exit" means scratch; then "other". Never a fuzzy fallback beyond
+    those two -- absorbing an unknown string into whichever bucket it happens to
+    share letters with is how a table like this starts lying.
+    """
+    text = close_reason_text(trade)
+    if text in _EXIT_REASON_SET:
+        return text
+    outcome = resolve_outcome(trade)
+    if outcome in _EXIT_REASON_SET:
+        return outcome
+    return "other"
+
+
+def exit_reason_split(closed: list[dict]) -> list[dict]:
+    """R attributed to the exit path that produced it -- one row per
+    EXIT_REASONS entry, in EXIT_REASONS order.
+
+    `total_r` AND `avg_r`, always. The question this answers is *where the R
+    comes from*, and a reason with a superb average over three trades has
+    contributed nothing; neither column is readable without `n` next to it.
+
+    Every reason is reported even at n=0, on holding_period_split's rule: a
+    bucket that never fires is a finding about the exit design, not a row to
+    drop. `avg_r` and `win_rate` are None for an empty bucket, never 0 -- "no
+    trades exited this way" and "they all lost" must not look the same.
+
+    A trade whose R is uncomputable still counts in `n` and contributes nothing
+    to `total_r`: it happened, and pretending it scored 0R would be worse than
+    admitting the record is incomplete.
+
+    `share_pct` is deliberately unrounded so the rows sum to exactly 100;
+    rounding is the formatter's job.
+    """
+    if not closed:
+        return []
+    buckets: dict[str, list[dict]] = {reason: [] for reason in EXIT_REASONS}
+    for trade in closed:
+        buckets[_exit_reason_bucket(trade)].append(trade)
+    out = []
+    for reason in EXIT_REASONS:
+        members = buckets[reason]
+        rs = [r for r in (r_multiple(t) for t in members) if r is not None]
+        out.append({"reason": reason,
+                    "n": len(members),
+                    "share_pct": len(members) / len(closed) * 100,
+                    "total_r": round(float(sum(rs)), 4),  # float even at 0: a stable type per row
+                    "avg_r": round(sum(rs) / len(rs), 4) if rs else None,
+                    "win_rate": win_rate(members)})
+    return out
+
+
+#: Disposition-ratio severity bands, taken verbatim from HKUDS/Vibe-Trading's
+#: `trade-journal` skill. They are that project's numbers, calibrated on retail
+#: broker exports, and have NOT been measured on this repo's trades: a severity
+#: label here is a prompt to go and look, never a verdict.
+_DISPOSITION_HIGH = 1.5
+_DISPOSITION_MEDIUM = 1.2
+
+
+def hold_by_outcome(closed: list[dict]) -> dict:
+    """Average days held, split by whether the trade won or lost, plus their
+    ratio -- `avg_loser_days / avg_winner_days`.
+
+    In a human that ratio is the disposition effect, a bias. In a mechanical
+    bot it is an exit-design defect: if losers are systematically held longer
+    than winners, the stop and the timeout are doing work the target should be
+    doing, and every extra day in a loser is R bleeding out.
+
+    Scratches and timeouts are excluded from both sides. They are neither a
+    winner nor a loser, and folding them in would turn this into a statement
+    about horizon length rather than exit design. Trades without both
+    timestamps are skipped entirely, so `n_winners`/`n_losers` count the
+    trades this answer actually rests on, not every trade of that outcome.
+
+    `ratio` and `severity` are None -- never 0 -- unless BOTH sides clear
+    MIN_TRADES_FOR_RATIO, applied to each side independently: forty losers
+    cannot license a ratio built on two winners. They are also None when the
+    winners averaged zero days held, because dividing by that is meaningless
+    rather than infinite.
+    """
+    winners: list[float] = []
+    losers: list[float] = []
+    for trade in closed:
+        held = _holding_days(trade)
+        if held is None:
+            continue
+        outcome = resolve_outcome(trade)
+        if outcome == "win":
+            winners.append(held)
+        elif outcome == "loss":
+            losers.append(held)
+    avg_w = (sum(winners) / len(winners)) if winners else None
+    avg_l = (sum(losers) / len(losers)) if losers else None
+    ratio = severity = None
+    if (len(winners) >= MIN_TRADES_FOR_RATIO
+            and len(losers) >= MIN_TRADES_FOR_RATIO and avg_w):
+        raw = avg_l / avg_w
+        ratio = round(raw, 4)
+        severity = ("high" if raw >= _DISPOSITION_HIGH else
+                    "medium" if raw >= _DISPOSITION_MEDIUM else "low")
+    return {"avg_winner_days": round(avg_w, 2) if avg_w is not None else None,
+            "avg_loser_days": round(avg_l, 2) if avg_l is not None else None,
+            "ratio": ratio,
+            "severity": severity,
+            "n_winners": len(winners),
+            "n_losers": len(losers)}
 
 
 def calendar_returns(closed: list[dict]) -> list[dict]:
