@@ -525,7 +525,7 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
           <label class="note-label" for="trade-note">Note</label>
           <textarea
             id="trade-note"
-            class="note"
+            class="note-field"
             rows="10"
             [value]="store.noteText()"
             [disabled]="store.noteStatus() === 'unjournaled'"
@@ -821,7 +821,10 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
       color: var(--text-secondary);
       font-size: var(--text-table);
     }
-    .note {
+    /* Renamed from .note (v54): that name collides with the promoted
+       sb-note callout composite -- this is an unrelated journal-notes
+       textarea field, not a callout, and the shared name was coincidence. */
+    .note-field {
       width: 100%;
       padding: var(--space-8);
       /* --bg, not --surface: the field sits ON a surface, and the darkest
@@ -834,11 +837,11 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
       font-size: var(--text-table);
       resize: vertical;
     }
-    .note:focus-visible {
+    .note-field:focus-visible {
       outline: 1px solid var(--accent);
       outline-offset: -1px;
     }
-    .note:disabled {
+    .note-field:disabled {
       color: var(--text-faint);
       cursor: not-allowed;
     }

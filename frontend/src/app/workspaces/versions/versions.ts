@@ -141,7 +141,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
       </div>
 
       @if (store.dense()) {
-        <p class="note">
+        <p class="section-help">
           Ordered by time; at this density segment widths are approximate — the dates
           above are the ground truth.
         </p>
@@ -287,7 +287,10 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     }
     .ticks .now { color: var(--text-muted); }
 
-    .note { margin: 0; color: var(--text-faint); font-size: var(--text-micro); }
+    /* Overrides the global .section-help's own margin/colour/size --
+       this caption is fainter and smaller than the standard explanatory
+       paragraph, and sits flush against the strip above it. */
+    .section-help { margin: 0; color: var(--text-faint); font-size: var(--text-micro); }
 
     .filtered { margin: 0; font-size: var(--text-table); color: var(--text-secondary); }
     /* Always underlined, not just on hover -- this sits in a sentence and

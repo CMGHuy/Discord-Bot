@@ -633,7 +633,7 @@ interface ProposalView extends ProposalRow {
       <!-- -- tuning --------------------------------------------------- -->
       @case ('tuning') {
         <sb-panel heading="Run a TRAIN grid">
-          <p class="note">
+          <p class="section-help">
             A grid search runs one strategy's parameters through every
             combination in its tuning grid against the fixed TRAIN window
             (2020-01-01 .. 2023-12-31) —
@@ -643,7 +643,7 @@ interface ProposalView extends ProposalRow {
           </p>
 
           @if (store.jobActive()) {
-            <p class="note">
+            <p class="section-help">
               A job is running. The server allows one at a time, so the
               launcher returns when it finishes.
             </p>
@@ -679,7 +679,7 @@ interface ProposalView extends ProposalRow {
               <span class="muted">started {{ fmtDateTime(job.started_at) }}</span>
             </div>
             <pre class="log">{{ job.log_tail || 'No output yet.' }}</pre>
-            <p class="note">
+            <p class="section-help">
               Progress arrives on the <code>jobs</code> event. Nothing on this
               page polls, and the log stays put when the job ends.
             </p>
@@ -693,7 +693,7 @@ interface ProposalView extends ProposalRow {
         @if (store.grid().length) {
           <sb-panel [heading]="gridHeading()" [flush]="true">
             @if (store.proposeResult(); as message) {
-              <p class="note" role="status">{{ message }}</p>
+              <p class="section-help" role="status">{{ message }}</p>
             }
             @if (store.proposeError(); as message) {
               <p class="alert" role="alert">{{ message }}</p>
@@ -708,7 +708,7 @@ interface ProposalView extends ProposalRow {
               (pageChange)="gridPage.setPage($event)"
             />
 
-            <p class="note">
+            <p class="section-help">
               A row clears the bar at 30 or more evaluated trades, a win rate of
               80% or better, positive expectancy, and no more than half the
               candidate signals excluded. Among the rows that clear it, prefer
@@ -733,7 +733,7 @@ interface ProposalView extends ProposalRow {
         }
 
         <sb-panel heading="Proposals">
-          <p class="note">
+          <p class="section-help">
             A proposal is a staged parameter change, not an applied one:
             applying means editing <code>entry_filters.DEFAULT_PARAMS</code> by
             hand, running the suite, and only then spending a validation shot.
@@ -1025,13 +1025,11 @@ interface ProposalView extends ProposalRow {
     dd { color: var(--text); font-size: var(--text-table); }
 
     .muted { color: var(--text-muted); font-size: var(--text-table); }
-    .note {
-      color: var(--text-secondary);
-      font-size: var(--text-table);
-      line-height: 1.5;
-      max-width: 70ch;
-    }
-    .note + .note, .note + .launch { margin-top: var(--space-10); }
+    /* The global .section-help (styles.css) already supplies colour,
+       font-size, line-height and margin-bottom -- this only adds the
+       reading-width cap and this page's own sibling spacing. */
+    .section-help { max-width: 70ch; }
+    .section-help + .section-help, .section-help + .launch { margin-top: var(--space-10); }
     code { font-family: var(--font-mono); }
 
     /* -- heatmap ------------------------------------------------------
@@ -1083,7 +1081,7 @@ interface ProposalView extends ProposalRow {
       line-height: 1.5;
       white-space: pre-wrap;
     }
-    .log + .note { padding: var(--space-10) var(--space-14); }
+    .log + .section-help { padding: var(--space-10) var(--space-14); }
 
     .proposal {
       margin-top: var(--space-10);
