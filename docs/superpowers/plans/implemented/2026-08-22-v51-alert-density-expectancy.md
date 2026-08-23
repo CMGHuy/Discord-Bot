@@ -8,6 +8,16 @@ confluence population's negative expectancy is concentrated on high-alert-densit
 days, where many simultaneous alerts are one market-wide condition wearing many
 tickers. If true, a later throttle removes a negative population. If false, that
 is recorded and the idea is closed.
+Edge (MEASURED 2026-08-23): **none — predicted `expectancy`, measured no edge.**
+Amended per Task 5 Step 3. TRAIN gave no monotone decline: confluence expectancy
+ran −0.001 → −0.007 → −0.110 → **+0.081** across `quiet`/`normal`/`busy`/`flood`,
+reversing at the densest and largest bucket. Worse for the stated mechanism, the
+per-day provenance showed density is ~4× **horizon-depth** dominated, not ticker
+breadth (a confluence `flood` day is 13.8 trades over just 3.5 tickers), so the
+measure never tested "one market-wide condition wearing many tickers" at all. The
+idea is closed in this form. Full numbers, the regime-artefact check and the one
+thing a successor would have to pre-register:
+`docs/superpowers/results/2026-08-23-alert-density-train.md`.
 Origin: EXTERNAL — HKUDS/Vibe-Trading, read 2026-08-22, now vendored
 (untracked, gitignored) at `Vibe-Trading-main/` in this repo's root. The
 busy-day vs quiet-day PnL
@@ -18,6 +28,50 @@ universe, not that project's.
 **Revert lever:** none required. This plan ships no running code — one script
 under `scripts/` and one results document. It cannot affect trading performance.
 Any throttle it might justify is a separate spec with its own pre-registration.
+
+## Progress — closed 2026-08-23 (all 5 tasks, 18 steps)
+
+Executed on branch `worktree-2026-08-22-v51-alert-density-expectancy`.
+Deliverables: `scripts/backtest/measure_alert_density.py`,
+`tests/scripts/test_alert_density.py` (14 tests),
+`docs/superpowers/results/2026-08-23-alert-density-train.{md,json}`.
+Full suite `2187 passed, 66 skipped, 0 failed, 0 xfailed`. No `VERSION.json`
+bump — confirmed by diff: nothing under `swingbot/`, `bot.py`, `admin_ui.py` or
+`frontend/` changed.
+
+**Deviations from the plan as written**, all forced by the code rather than
+chosen:
+
+1. **Test import style.** The plan's test imports
+   `from scripts.backtest.measure_alert_density import ...`. `scripts/` is not a
+   package (no `__init__.py`, and its modules import each other bare), so the
+   test follows `tests/scripts/test_run_backtest_range.py`'s `sys.path` +
+   bare-import convention instead. Test bodies are otherwise verbatim.
+2. **`opened_at` does not exist on a backtest trade.** `BacktestTrade` exposes
+   `entry_date`; the confluence path exposes only `ExitResult.entry_index`. The
+   pure functions keep the plan's `opened_at` contract and the sweep maps at the
+   boundary. Both populations use the **signal bar's** date, which is what
+   `BacktestTrade.entry_date` already is and what `run_scenario_backtest` windows
+   confluence trades by.
+3. **Task 2 could not call `run_scenario_backtest`.** It returns aggregates only
+   — `_replay_ticker` computes `signal_date` and discards it — so per-trade entry
+   dates for the confluence population are unobtainable from it. The sweep calls
+   `replay_scenarios` + `simulate_exit` directly: the same primitives
+   `_replay_ticker` uses, not a second harness, and no change under `swingbot/`
+   (which Global Constraints forbid).
+4. **Task 3 ran as a backgrounded job writing to a log file, not the
+   `backtest-runner` subagent** (standing instruction in this session not to
+   dispatch agents unasked). The stated purpose was met: none of the 1360
+   progress lines entered the controlling context, and the log served as the
+   checkable progress file. Wall clock ~33 min, not the multi-hour shape the plan
+   assumed.
+5. **Added, before any result was seen:** `density_profile` and `per_day_rows`
+   (distinct tickers/horizons per day) plus each day's SPY return in the payload,
+   and a `--dump-trades` provenance flag. Task 4 Step 3 mandates distinguishing a
+   real gradient from a regime artefact, which bucket aggregates alone cannot do.
+   The frozen bucket edges and the density definition were **not** touched, and
+   nothing was re-measured after the numbers landed. This addition is what
+   surfaced the finding that the measure is depth-dominated.
 
 # Alert-density expectancy Implementation Plan
 
@@ -97,7 +151,7 @@ DENSITY_BUCKETS = (("quiet", 1, 1), ("normal", 2, 3), ("busy", 4, 7), ("flood", 
 Every bucket is reported even at `n=0`, following `holding_period_split`'s rule
 that the shape of the answer is the point.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 """Entry-day density and its buckets. Pure arithmetic over trade lists."""
@@ -161,9 +215,9 @@ def test_empty_input_returns_empty():
     assert bucket_trades([]) == []
 ```
 
-- [ ] **Step 2: Implement** the three functions. No I/O in any of them — the
+- [x] **Step 2: Implement** the three functions. No I/O in any of them — the
   sweep wraps them in Task 2.
-- [ ] **Step 3: Verify** — `python scripts/dev/testrun.py file tests/scripts/test_alert_density.py`
+- [x] **Step 3: Verify** — `python scripts/dev/testrun.py file tests/scripts/test_alert_density.py`
 
 ---
 
@@ -179,16 +233,16 @@ def test_empty_input_returns_empty():
   existing replay path used by `scripts/backtest/run_backtest_range.py --train`.
 - Produces: a JSON payload and a printed table.
 
-- [ ] **Step 1:** Ensure the CSV cache exists.
-- [ ] **Step 2:** Emit trades for TRAIN across the full universe and all ten
+- [x] **Step 1:** Ensure the CSV cache exists.
+- [x] **Step 2:** Emit trades for TRAIN across the full universe and all ten
   horizons. Reuse `run_backtest_range.py`'s existing plumbing rather than
   writing a second replay — a divergent second harness is how two answers to one
   question get produced.
-- [ ] **Step 3:** One flushed line per ticker-horizon:
+- [x] **Step 3:** One flushed line per ticker-horizon:
   `print(f"[{n}/{total}] {ticker} {horizon} trades={k}", flush=True)`. **Confirm
   it prints before backgrounding anything** — the repo has already paid for that
   lesson once.
-- [ ] **Step 4:** Report per bucket: `n`, `win_rate`, `expectancy_r`, `total_r`,
+- [x] **Step 4:** Report per bucket: `n`, `win_rate`, `expectancy_r`, `total_r`,
   and the share of all trades. Also report the **same table split by
   `source == "confluence"` vs the rest**, because confluence is the population
   the hypothesis is actually about and pooling it with the validated strategies
@@ -198,14 +252,14 @@ def test_empty_input_returns_empty():
 
 ### Task 3: Run it
 
-- [ ] **Step 1:** Dispatch the `backtest-runner` subagent — this is a full
+- [x] **Step 1:** Dispatch the `backtest-runner` subagent — this is a full
   75-ticker × 10-horizon pass and none of its per-ticker output should reach the
   controlling context.
-- [ ] **Step 2:** The subagent keeps a plain-text progress file updated **at each
+- [x] **Step 2:** The subagent keeps a plain-text progress file updated **at each
   real milestone**, including before it starts waiting on its own sweep. A report
   file written once at the start and again at the end leaves the controller
   unable to tell "still working" from "silently stalled" for hours.
-- [ ] **Step 3:** Capture the JSON payload to
+- [x] **Step 3:** Capture the JSON payload to
   `docs/superpowers/results/2026-08-XX-alert-density-train.json`.
 
 ---
@@ -217,11 +271,11 @@ def test_empty_input_returns_empty():
 **Files:**
 - Create: `docs/superpowers/results/2026-08-XX-alert-density-train.md`
 
-- [ ] **Step 1:** The full table, both splits, every bucket including empty ones.
-- [ ] **Step 2:** State the definition used ("trades opened on the same calendar
+- [x] **Step 1:** The full table, both splits, every bucket including empty ones.
+- [x] **Step 2:** State the definition used ("trades opened on the same calendar
   date, a proxy for alert count — not every alert becomes a trade") and the
   bucket edges, before the numbers.
-- [ ] **Step 3:** Honest observations. Three outcomes, all of them finished work:
+- [x] **Step 3:** Honest observations. Three outcomes, all of them finished work:
   - **A monotone decline** in expectancy from `quiet` to `flood` on the
     confluence population is the hypothesis surviving. Name the successor spec
     it justifies (a daily alert cap or a density-aware confidence penalty) and
@@ -234,7 +288,7 @@ def test_empty_input_returns_empty():
     density a proxy for regime and the finding a restatement of the regime
     filter. Say which of the two it is, or say that the data cannot distinguish
     them.
-- [ ] **Step 4:** Cross-check against `data/scan_telemetry.jsonl` for the ~2
+- [x] **Step 4:** Cross-check against `data/scan_telemetry.jsonl` for the ~2
   weeks it covers, clearly labelled as anecdote with `n` stated. It cannot
   confirm or refute anything at that length; it is there to catch a gross
   definitional error, not to add evidence.
@@ -243,14 +297,14 @@ def test_empty_input_returns_empty():
 
 ### Task 5: Close-out
 
-- [ ] **Step 1:** Full suite via the `test-runner` subagent. `0 failed`, `0 xfailed`.
-- [ ] **Step 2:** **No `VERSION.json` bump** — nothing in `swingbot/` changed.
+- [x] **Step 1:** Full suite via the `test-runner` subagent. `0 failed`, `0 xfailed`.
+- [x] **Step 2:** **No `VERSION.json` bump** — nothing in `swingbot/` changed.
   Confirm that by diffing the shipped package, not by memory.
-- [ ] **Step 3:** Amend the `Edge:` header if the measurement came back null —
+- [x] **Step 3:** Amend the `Edge:` header if the measurement came back null —
   a plan that predicted `expectancy` and measured nothing is the most useful
   record this repo can keep, and it belongs in the document, not in a commit
   message.
-- [ ] **Step 4:** `git mv` this plan into `implemented/` (which holds finished,
+- [x] **Step 4:** `git mv` this plan into `implemented/` (which holds finished,
   abandoned and null-result plans alike), remove the worktree, `git branch -d`
   (never `-D`; never a `backup*` or `stable-*` branch).
 
