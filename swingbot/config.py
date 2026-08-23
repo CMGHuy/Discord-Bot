@@ -448,6 +448,16 @@ FIELDS: list[Field] = [
                "drawdown deepens: no cut at 0-8% DD, 0.75x at 8-12%, 0.50x at 12-16%, 0.25x at 16-20%, "
                "and 0.0x (new entries paused) above 20%. Once paused, entries resume only after DD recovers "
                "below 15% (hysteresis prevents flapping at the 20% line)."),
+    Field("KILLSWITCH_DEFAULT_ON", "KILLSWITCH_DEFAULT_ON", "Account Defaults",
+          "Kill switch engaged by default",
+          type="checkbox", default="false",
+          help="Whether the new-entry kill switch (E47, swingbot/core/edge/throttle.py) starts ENGAGED "
+               "the first time data/killswitch.json is created -- a fresh install, or after that file is "
+               "deleted. Once the file exists, its own stored 'on' value is the source of truth and this "
+               "setting has no further effect; toggle the switch itself with `!killswitch on|off` or the "
+               "admin Risk page. OFF by default so the bot is always free to open new positions as "
+               "qualifying setups appear -- flip to true only if you want new installs to start paused "
+               "pending manual review."),
 
     # --- Secondary alerts (email + push, fires only on high-confidence qualifying setups) ---
     Field("SECONDARY_ALERT_MIN_CONFIDENCE", "SECONDARY_ALERT_MIN_CONFIDENCE", "Secondary Alerts",

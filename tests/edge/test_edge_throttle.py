@@ -67,6 +67,22 @@ def test_kill_state_roundtrip(tmp_path, monkeypatch):
     assert throttle.kill_state()["on"] is False
 
 
+def test_kill_state_falls_back_to_config_default_when_no_file(tmp_path, monkeypatch):
+    """Before data/killswitch.json exists (fresh install), the effective
+    'on' value comes from KILLSWITCH_DEFAULT_ON, not a bare hardcoded False --
+    so an operator who deliberately ships a pre-paused install gets that
+    without having to seed the JSON file by hand."""
+    from swingbot.core.edge import throttle
+    missing_path = str(tmp_path / "killswitch.json")
+    monkeypatch.setattr(throttle, "KILLSWITCH_PATH", missing_path)
+
+    monkeypatch.setattr(throttle.config, "KILLSWITCH_DEFAULT_ON", False)
+    assert throttle.kill_state()["on"] is False
+
+    monkeypatch.setattr(throttle.config, "KILLSWITCH_DEFAULT_ON", True)
+    assert throttle.kill_state()["on"] is True
+
+
 def test_recycle_candidates():
     import datetime as dt
     from swingbot.core.planning.plan_manager import recycle_candidates

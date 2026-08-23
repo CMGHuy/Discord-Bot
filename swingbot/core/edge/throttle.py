@@ -85,7 +85,8 @@ KILL_DATA_FAIL_FRAC = 0.20
 
 
 def kill_state() -> dict:
-    return read_json(KILLSWITCH_PATH, {"on": False, "reason": None, "at": None})
+    return read_json(KILLSWITCH_PATH,
+                      {"on": config.KILLSWITCH_DEFAULT_ON, "reason": None, "at": None})
 
 
 def set_kill(on: bool, reason: str = "manual") -> dict:
