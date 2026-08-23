@@ -99,3 +99,44 @@ def calendar_pnl():
         # Derived from the UNFILTERED set -- see `available_filters`.
         "filters": pc.available_filters(everything),
     })
+
+
+def _date_param() -> str:
+    """The required `?date=YYYY-MM-DD`. Absent or malformed is a 400."""
+    raw = (request.args.get("date") or "").strip()
+    if not raw:
+        raise ApiError("invalid", "date is required (YYYY-MM-DD)", 400)
+    try:
+        dt.datetime.strptime(raw, "%Y-%m-%d")
+    except ValueError:
+        raise ApiError("invalid", "date must be a YYYY-MM-DD value", 400)
+    return raw
+
+
+@api_v1.route("/calendar/pnl/day", methods=["GET"])
+@require_auth
+def calendar_pnl_day():
+    """Every trade closed on one day -- the grid's drill-down drawer.
+
+    404 rather than an empty 200 when the day holds nothing: every date the
+    grid emits has at least one close (days with none are omitted), so an
+    empty result means the client asked for a day that is not in the book,
+    which is a different answer from "that day was flat".
+
+    Ordered by close time so the drawer reads as the day happened.
+    """
+    from swingbot.core.analytics import pnl_calendar as pc
+
+    _reject_unknown_params()
+    date = _date_param()
+    strategy, horizon = _filter_args()
+
+    rows = pc.filter_rows(pc.load_rows(), strategy=strategy, horizon=horizon)
+    day_rows = sorted(
+        (r for r in rows if r["day"] == date),
+        key=lambda r: r["closed_at"] or "",
+    )
+    if not day_rows:
+        raise ApiError("not_found", f"no closed trades on {date}", 404)
+
+    return jsonify({"date": date, "trades": day_rows})
