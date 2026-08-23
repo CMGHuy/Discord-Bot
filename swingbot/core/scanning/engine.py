@@ -73,6 +73,7 @@ from swingbot.core.market.reversal import evaluate_reversal, reversals_for_ticke
 from swingbot.core.market.events import earnings_within_window
 from swingbot.core.market.explain import build_explanation
 from swingbot.core.market.market_events import get_market_events
+from swingbot.core.market import opex
 from swingbot.core.infra.notifier import notify_secondary
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.core.planning.quality import atr_percentile as _atr_percentile
@@ -831,7 +832,7 @@ def map_tickers(fn, tickers: list, workers: int | None = None) -> list:
 
 
 def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
-              regime, effective_min_confluence: int,
+              regime, effective_min_confluence: int, effective_min_confidence: int,
               rs_cache: dict = None, spy_df=None, breadth: float = None) -> dict:
     """
     Per-ticker analysis body of _sync_run_scan's ANALYZE phase, extracted
@@ -1139,7 +1140,9 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             # point never disappears here just because one number
             # falls short; it's tallied below and shown (marked) by
             # the caller instead of silently dropped.
-            requirements = _build_requirement_checks(scenario, target_confluence, conf, effective_min_confluence)
+            requirements = _build_requirement_checks(
+                scenario, target_confluence, conf,
+                effective_min_confluence, effective_min_confidence)
             all_ok = True
             for r in requirements:
                 if not r.passed:
@@ -1220,7 +1223,14 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         extra = [s for s in universe.universe_symbols(config.SCAN_UNIVERSE)
                  if s not in set(tickers)]
         tickers = tickers + extra
+    # One calendar lookup per scan, passed down rather than re-derived per
+    # ticker per horizon. `None` off an opex day (and whenever the feature is
+    # off) leaves both thresholds exactly as configured.
+    opex_tier_today = opex.current_tier()
     effective_min_confluence = config.MIN_TARGET_CONFLUENCE_COUNT if min_confluence is None else min_confluence
+    effective_min_confluence = opex.effective_min_confluence(
+        effective_min_confluence, opex_tier_today)
+    effective_min_confidence = opex.effective_min_confidence_level(opex_tier_today)
     log.info("Scan starting: horizon_filter=%s require_confirmation=%s watchlist=%d ticker(s) min_confluence=%d",
               horizon_filter, require_confirmation, len(tickers), effective_min_confluence)
 
@@ -1375,6 +1385,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # uniformly to the aggregated candidates, not decided per-ticker.
     per_ticker_results = map_tickers(
         lambda t: _scan_one(t, fresh_data.get(t), horizons_to_scan, progress, regime, effective_min_confluence,
+                            effective_min_confidence,
                             rs_cache=rs_cache, spy_df=spy_df, breadth=breadth),
         tickers,
     )

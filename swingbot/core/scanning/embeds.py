@@ -171,7 +171,9 @@ def _sources_str(sources) -> str:
     return ", ".join(dict.fromkeys(sources)) if sources else "n/a"
 
 
-def _build_requirement_checks(scenario, target_confluence: tuple, conf, effective_min_confluence: int) -> list:
+def _build_requirement_checks(scenario, target_confluence: tuple, conf,
+                              effective_min_confluence: int,
+                              effective_min_confidence: int) -> list:
     """
     Evaluates EVERY configured requirement against one scenario --
     always all of them, never stopping at the first failure -- and
@@ -211,8 +213,8 @@ def _build_requirement_checks(scenario, target_confluence: tuple, conf, effectiv
             ),
         ),
         RequirementCheck(
-            key="min_confidence", label="Min confidence level", passed=conf.level >= config.MIN_ALERT_CONFIDENCE_LEVEL,
-            detail=f"Lv{conf.level} {conf.label} (needs Lv{config.MIN_ALERT_CONFIDENCE_LEVEL}+)",
+            key="min_confidence", label="Min confidence level", passed=conf.level >= effective_min_confidence,
+            detail=f"Lv{conf.level} {conf.label} (needs Lv{effective_min_confidence}+)",
         ),
     ]
     return checks
