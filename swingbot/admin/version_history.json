@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-08-23 07:43:51 UTC",
+  "generated_at": "2026-08-23 08:24:08 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.8.1",
-    "bot": "1.4.0"
+    "ui": "1.8.2",
+    "bot": "1.4.1"
   },
   "releases": [
     {
@@ -757,6 +757,20 @@
         "bot": "1.4.0"
       },
       "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-08-23",
+      "last_seen": "2026-08-23",
+      "commit": "91e1b33c",
+      "subject": "docs(v47): record the live scan's new cache dependency, bump versions",
+      "versions": {
+        "ui": "1.8.2",
+        "bot": "1.4.1"
+      },
+      "changed": [
+        "ui",
         "bot"
       ]
     }
