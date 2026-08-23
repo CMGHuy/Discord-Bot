@@ -620,6 +620,30 @@ FIELDS: list[Field] = [
           type="number", default="4", min=1, max=16, step=1,
           help="Thread-pool size for per-ticker scanning. 4 is CX23-safe; raise only with "
                "the E82 telemetry watching."),
+    Field("SCAN_CACHE_MAX_AGE_HOURS", "SCAN_CACHE_MAX_AGE_HOURS", "Universe & Scanning",
+          "Scan cache max age (hours)",
+          type="number", default="6", min=1, max=48, step=1,
+          help="How old market_data/daily/{TICKER}.csv may be before a scan treats the "
+               "ticker as cold and refetches it. Deliberately below data_refresh's own 12h "
+               "daily window so the scan's freshness bar is independent of the background "
+               "refresh loop's refetch cadence. Swing horizons run 2w-9m, so only today's "
+               "daily bar matters -- a warm ticker costs no network at all."),
+    Field("COLD_FETCH_PROCESS_THRESHOLD", "COLD_FETCH_PROCESS_THRESHOLD", "Universe & Scanning",
+          "Cold-fetch process-pool threshold",
+          type="number", default="10", min=1, max=500, step=1,
+          help="Cold (missing/stale) ticker count at or below which the scan fetches "
+               "sequentially, exactly as it always has. Above it, the cold list is fanned "
+               "out across FETCH_WORKERS processes. Below the threshold the process-pool "
+               "startup cost outweighs the saving, and the sequential path carries zero "
+               "new risk surface."),
+    Field("FETCH_WORKERS", "FETCH_WORKERS", "Universe & Scanning",
+          "Cold-fetch / replay process-pool size",
+          type="number", default="0", min=0, max=32, step=1,
+          help="Process-pool size for the cold-ticker fetch fallback and the offline "
+               "scenario replay. 0 means auto: max(1, cpu_count() - 1). PROCESSES, not "
+               "threads -- the pinned yfinance 0.2.66 builds download() on a shared "
+               "non-reentrant module global, and concurrent threads once attributed one "
+               "ticker's price data to another. Separate processes do not share it."),
     Field("MARKET_DATA_AUTO_REFRESH", "MARKET_DATA_AUTO_REFRESH", "Universe & Scanning",
           "Auto-refresh market data cache",
           type="checkbox", default="true",
