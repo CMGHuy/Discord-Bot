@@ -18,6 +18,8 @@ and is the repo's one shared R computation.
 """
 from __future__ import annotations
 
+import datetime as _dt
+
 from swingbot.core.analytics import metrics
 from swingbot.core.tracking.performance import primary_strategy_label
 
@@ -214,3 +216,103 @@ def month_grid(rows: list[dict], month: str) -> dict:
     # `date` on a month total would invite reading it as a day.
     totals.pop("date", None)
     return {"month": month, "days": days, "totals": totals}
+
+
+# Monday-first, and only the five days a US-market swing bot can close on.
+# Saturday and Sunday are not modelled: a weekend cell is rendered inert by
+# the frontend rather than reported as a zero here.
+WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri")
+
+
+def _avg_or_none(values: list[float | None]) -> float | None:
+    present = [v for v in values if v is not None]
+    if not present:
+        return None
+    return round(sum(present) / len(present), 2)
+
+
+def day_of_week_breakdown(rows: list[dict]) -> list[dict]:
+    """Per-weekday averages across every row given, Mon..Fri.
+
+    Averaged PER TRADE, not per day: "what does a Monday trade typically
+    do" is the question, and averaging day-averages would let a Monday with
+    one trade outweigh a Monday with eight.
+
+    All five weekdays are always present, even at n=0, so the table keeps
+    its shape as a strategy/horizon filter narrows the set.
+    """
+    by_weekday: dict[str, list[dict]] = {name: [] for name in WEEKDAYS}
+    for row in rows:
+        try:
+            index = _dt.date.fromisoformat(row["day"]).weekday()
+        except ValueError:
+            continue
+        if index < len(WEEKDAYS):     # 5 and 6 are Sat/Sun -- see WEEKDAYS.
+            by_weekday[WEEKDAYS[index]].append(row)
+
+    return [
+        {
+            "weekday": name,
+            "avg_pnl_amount": _avg_or_none([r["pnl_amount"] for r in group]),
+            "avg_r": _avg_or_none([r["r_multiple"] for r in group]),
+            "win_rate": metrics.win_rate([{"status": r["outcome"]} for r in group]),
+            "trade_count": len(group),
+        }
+        for name, group in ((n, by_weekday[n]) for n in WEEKDAYS)
+    ]
+
+
+def best_worst_days(rows: list[dict]) -> dict:
+    """The single best and worst DAY by net dollars, each a full summary.
+
+    A day, not a trade: the worst day in the book is often several ordinary
+    losses rather than one spectacular one, and that is the fact worth
+    surfacing. Days with no computable dollar total are excluded from the
+    ranking rather than sorted as zero.
+    """
+    buckets = bucket_by_day(rows)
+    summaries = [day_summary(day, buckets[day]) for day in sorted(buckets)]
+    ranked = [s for s in summaries if s["net_pnl_amount"] is not None]
+    if not ranked:
+        return {"best": None, "worst": None}
+    return {
+        "best": max(ranked, key=lambda s: s["net_pnl_amount"]),
+        "worst": min(ranked, key=lambda s: s["net_pnl_amount"]),
+    }
+
+
+def day_streak(rows: list[dict]) -> dict:
+    """The current run of same-signed days, counted back from the latest.
+
+    Only days that actually had closes participate. A gap -- a weekend, a
+    holiday, a quiet Wednesday -- is an absence of evidence and does NOT
+    break the run; treating it as a break would cap almost every streak at
+    five and make the figure meaningless.
+
+    A zero-dollar day is its own `"flat"` direction rather than being folded
+    into either side, and ends whatever run was building.
+    """
+    buckets = bucket_by_day(rows)
+    summaries = [day_summary(day, buckets[day]) for day in sorted(buckets, reverse=True)]
+    ranked = [s for s in summaries if s["net_pnl_amount"] is not None]
+    if not ranked:
+        return {"direction": None, "days": 0}
+
+    def _sign(summary: dict) -> str:
+        amount = summary["net_pnl_amount"]
+        if amount > 0:
+            return "winning"
+        if amount < 0:
+            return "losing"
+        return "flat"
+
+    direction = _sign(ranked[0])
+    if direction == "flat":
+        return {"direction": "flat", "days": 1}
+
+    days = 0
+    for summary in ranked:
+        if _sign(summary) != direction:
+            break
+        days += 1
+    return {"direction": direction, "days": days}

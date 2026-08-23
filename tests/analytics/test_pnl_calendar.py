@@ -201,3 +201,106 @@ def test_month_grid_on_a_month_with_no_trades_is_empty_not_an_error():
     assert grid["totals"]["trade_count"] == 0
     assert grid["totals"]["net_pnl_amount"] is None
     assert grid["totals"]["win_rate"] is None
+
+
+from swingbot.core.analytics.pnl_calendar import (best_worst_days, day_streak,
+                                                  day_of_week_breakdown)
+
+
+def test_day_of_week_breakdown_always_returns_the_five_trading_days():
+    """A weekend never has closes, so Sat/Sun are not modelled at all --
+    but Mon-Fri appear even with no data, so the table does not reflow as
+    a filter narrows."""
+    rows = joined_rows([_trade("a" * 16, closed_at="2026-08-03T20:00:00+00:00")], [])
+    breakdown = day_of_week_breakdown(rows)
+    assert [b["weekday"] for b in breakdown] == ["Mon", "Tue", "Wed", "Thu", "Fri"]
+    # 2026-08-03 is a Monday.
+    assert breakdown[0]["trade_count"] == 1
+    assert breakdown[0]["avg_pnl_amount"] == pytest.approx(50.0)
+    assert breakdown[1]["trade_count"] == 0
+    assert breakdown[1]["avg_pnl_amount"] is None
+    assert breakdown[1]["win_rate"] is None
+
+
+def test_day_of_week_breakdown_averages_per_trade_not_per_day():
+    """Two Monday closes of +50 and -20 average +15.0 per trade."""
+    rows = joined_rows(
+        [
+            _trade("a" * 16, closed_at="2026-08-03T20:00:00+00:00", pnl=50.0),
+            _trade("b" * 16, closed_at="2026-08-10T20:00:00+00:00", pnl=-20.0,
+                   status="loss", exit_price=96.0),
+        ],
+        [],
+    )
+    monday = day_of_week_breakdown(rows)[0]
+    assert monday["trade_count"] == 2
+    assert monday["avg_pnl_amount"] == pytest.approx(15.0)
+    assert monday["win_rate"] == pytest.approx(50.0)
+
+
+def test_best_and_worst_days_are_whole_days_not_single_trades():
+    """08-03 nets +30 (two trades), 08-05 nets -90 (one). The worst DAY is
+    08-05 even though 08-03 contains the single worst trade."""
+    rows = joined_rows(
+        [
+            _trade("a" * 16, closed_at="2026-08-03T20:00:00+00:00", pnl=50.0),
+            _trade("b" * 16, closed_at="2026-08-03T21:00:00+00:00", pnl=-20.0,
+                   status="loss", exit_price=96.0),
+            _trade("c" * 16, closed_at="2026-08-05T20:00:00+00:00", pnl=-90.0,
+                   status="loss", exit_price=91.0),
+        ],
+        [],
+    )
+    extremes = best_worst_days(rows)
+    assert extremes["best"]["date"] == "2026-08-03"
+    assert extremes["best"]["net_pnl_amount"] == pytest.approx(30.0)
+    assert extremes["worst"]["date"] == "2026-08-05"
+    assert extremes["worst"]["net_pnl_amount"] == pytest.approx(-90.0)
+
+
+def test_best_worst_days_are_none_on_an_empty_set():
+    assert best_worst_days([]) == {"best": None, "worst": None}
+
+
+def test_day_streak_counts_consecutive_same_sign_days_backwards():
+    """08-03 -40, 08-04 +10, 08-05 +30 -> a 2-day winning streak."""
+    rows = joined_rows(
+        [
+            _trade("a" * 16, closed_at="2026-08-03T20:00:00+00:00", pnl=-40.0,
+                   status="loss", exit_price=96.0),
+            _trade("b" * 16, closed_at="2026-08-04T20:00:00+00:00", pnl=10.0),
+            _trade("c" * 16, closed_at="2026-08-05T20:00:00+00:00", pnl=30.0),
+        ],
+        [],
+    )
+    assert day_streak(rows) == {"direction": "winning", "days": 2}
+
+
+def test_day_streak_is_not_broken_by_a_gap_with_no_trades():
+    """A weekend, a holiday, or a quiet Wednesday is an ABSENCE of evidence,
+    not a losing day. Only days that actually had closes are counted."""
+    rows = joined_rows(
+        [
+            _trade("a" * 16, closed_at="2026-08-03T20:00:00+00:00", pnl=10.0),
+            # 08-04 .. 08-13 have no closes at all.
+            _trade("b" * 16, closed_at="2026-08-14T20:00:00+00:00", pnl=20.0),
+        ],
+        [],
+    )
+    assert day_streak(rows) == {"direction": "winning", "days": 2}
+
+
+def test_day_streak_reports_flat_for_a_zero_day_and_stops_there():
+    rows = joined_rows(
+        [
+            _trade("a" * 16, closed_at="2026-08-03T20:00:00+00:00", pnl=10.0),
+            _trade("b" * 16, closed_at="2026-08-04T20:00:00+00:00", pnl=0.0,
+                   status="closed", exit_price=100.0),
+        ],
+        [],
+    )
+    assert day_streak(rows) == {"direction": "flat", "days": 1}
+
+
+def test_day_streak_on_an_empty_set():
+    assert day_streak([]) == {"direction": None, "days": 0}
