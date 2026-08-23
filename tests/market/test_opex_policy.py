@@ -122,3 +122,22 @@ def test_badge_present_for_both_tiers(opex_on):
     assert weekly is not None
     assert monthly != weekly
     assert opex.badge(None) is None
+
+
+def test_an_explicit_tier_cannot_bypass_the_flag(monkeypatch):
+    """Callers pass a resolved tier down so the calendar is read once per
+    scan. That shortcut must not also be a way around the master switch."""
+    monkeypatch.setattr(config, "OPEX_CAUTION_ENABLED", False)
+    monkeypatch.setattr(config, "MIN_ALERT_CONFIDENCE_LEVEL", 4)
+    monkeypatch.setattr(config, "OPEX_MONTHLY_CONFIDENCE_BUMP", 1)
+    monkeypatch.setattr(config, "OPEX_MONTHLY_CONFLUENCE_BUMP", 1)
+    monkeypatch.setattr(config, "OPEX_NEAR_CLOSE_SUPPRESS_MINUTES", 60)
+    monkeypatch.setattr(config, "OPEX_STOP_WIDEN_PCT", 10.0)
+    monkeypatch.setattr(config, "OPEX_SIZE_REDUCTION_PCT", 25.0)
+    near_close = dt.datetime(2026, 8, 21, 15, 30, tzinfo=opex.US_MARKET_TZ)
+    assert opex.effective_min_confidence_level(opex.MONTHLY) == 4
+    assert opex.effective_min_confluence(2, opex.MONTHLY) == 2
+    assert opex.suppress_new_entries(near_close, opex.MONTHLY) is False
+    assert opex.stop_mult(opex.MONTHLY) == 1.0
+    assert opex.size_mult(opex.MONTHLY) == 1.0
+    assert opex.badge(opex.MONTHLY) is None

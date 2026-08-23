@@ -16,6 +16,7 @@ import numpy as np
 
 from swingbot import config
 from swingbot.core.market import levels
+from swingbot.core.market import opex
 from swingbot.core.market.levels import MAX_TARGET2_LEG_MULTIPLE
 from swingbot.core.backtesting.registry import Badge, get_badge
 from swingbot.core.market.strategy_types import (
@@ -774,7 +775,12 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         # exists to hide behind. That's a different, unvalidated idea from
         # "give the ATR stop the room this strategy's winners actually
         # used", so they stay structure-derived on purpose.
+        # Opex composes ON TOP of whatever multiplier was already resolved --
+        # an explicit caller override or E31's per-strategy MAE figure -- so
+        # neither silently replaces the other. Off an opex day stop_mult() is
+        # exactly 1.0 and this line is a no-op.
         applied_stop_mult = stop_mult if stop_mult is not None else _resolve_stop_mult(strategy)
+        applied_stop_mult = (applied_stop_mult or 1.0) * opex.stop_mult()
         candidates = atr_target_candidates(close, atr_val, direction)
         result = _atr_plan(close, atr_val, direction, horizon_key, strategy,
                            stop_mult=applied_stop_mult, candidate_levels=candidates)

@@ -149,6 +149,15 @@ def current_tier(now: dt.datetime | None = None) -> str | None:
 
 
 def _resolve(tier):
+    """The tier the policy should act on.
+
+    The flag is re-checked here, not only inside `current_tier()`: callers
+    pass an explicit tier so one scan resolves the calendar once, and without
+    this guard `OPEX_CAUTION_ENABLED=false` would still widen a stop for
+    anyone who handed a tier straight in.
+    """
+    if not _enabled():
+        return None
     return current_tier() if tier is _UNSET else tier
 
 
@@ -207,6 +216,8 @@ def suppress_new_entries(now: dt.datetime | None = None, tier=_UNSET) -> bool:
     # decides the tier and the window consistently -- otherwise a test could
     # pin the window to a Friday afternoon while the tier came from the real
     # wall clock.
+    if not _enabled():
+        return False
     resolved = current_tier(now) if tier is _UNSET else tier
     if resolved != MONTHLY:
         return False
