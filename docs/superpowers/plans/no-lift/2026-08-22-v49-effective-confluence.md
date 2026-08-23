@@ -1,10 +1,14 @@
 Version: ui 1.8.0 · bot 1.3.2
 Spec: docs/superpowers/specs/2026-08-22-v49-effective-confluence-design.md
-Bump: bot minor (1.3.2 → 1.4.0) — changes what `count_confirming_strategies`
-returns for every scenario, moving both the `MIN_TARGET_CONFLUENCE_COUNT` gate
-and the confidence base level. Observably different alert stream. `ui` none.
-Edge: expectancy — removes a negative-expectancy population (scenarios whose
-confluence count is inflated by redundant detectors).
+Bump: NONE — amended 2026-08-23. The predicted `bot minor` never applied:
+the component was measured, found degenerate, and never wired or merged, so
+nothing about the shipped alert stream changed.
+Edge: none (measured, no lift) — amended 2026-08-23. The predicted
+`expectancy` did not materialise. The redundancy the spec hypothesised is
+real and large (off-diagonal mean 0.628), but the reduction saturates so far
+below the gate that `effective_count_int` returns 1 for all 4,095 family
+subsets, which would reject every scenario rather than remove a
+negative-expectancy population. See the Status block below.
 Origin: EXTERNAL — HKUDS/Vibe-Trading, read 2026-08-22, now vendored
 (untracked, gitignored) at `Vibe-Trading-main/` in this repo's root. Reduction
 adapted from
@@ -12,6 +16,79 @@ adapted from
 `agent/src/factors/bench_runner_strict.py`. Not measured on this repo's data
 before adoption. **Revert lever:** `EFFECTIVE_CONFLUENCE_ENABLED = false` —
 see "Reverting" below.
+
+## Status: CLOSED — NO LIFT, 2026-08-23
+
+**Measured, found degenerate, deliberately not merged.** Tasks 1-4 were built
+and are green (full suite 2196 passed, 0 failed, 0 xfailed) on branch
+`worktree-2026-08-22-v49-effective-confluence`. **Tasks 5-11 — Phase 3 wiring
+and the entire Phase 4 pre-registration — were not run.** The one-shot
+VALIDATION budget was NOT spent and remains available.
+
+Filed under `plans/no-lift/`, not `implemented/`: `main` carries this document
+and the results doc, but none of the component's code.
+
+**The premise held; the arithmetic did not.** The sweep (707,655 candidate
+prices, 75/78 tickers, TRAIN 2020-2023) confirms exactly the redundancy the
+spec predicted — Bollinger/Donchian 0.887, Fibonacci/Zigzag 0.838, the
+EMA/VWAP/AVWAP cluster 0.79-0.83, Rolling S/R the lone near-independent
+outlier at 0.235. Off-diagonal mean 0.628, nowhere near Task 4 Step 5's
+near-identity stop condition of 0.15.
+
+But enumerated over **all 4,095 non-empty family subsets**,
+`effective_count_int` returns **1 for every one**. Maximum reachable `N_eff`
+across all twelve families is 1.746, and the pre-registered FLOOR takes that
+to 1. With `MIN_TARGET_CONFLUENCE_COUNT = 2`, the flag-on arm rejects every
+scenario: both Phase 4 TRAIN cells (`MIN in {2,3}`) produce zero alerts, and
+VALIDATION clauses 3 (`N >= 15`) and 4 (alert reduction `<= 25%`) fail by
+construction at `N = 0` and 100%. Running Phase 4 could only have spent the
+one-shot budget confirming arithmetic already determined.
+
+Phase 3 was skipped for a different reason: a flag whose sole effect when
+enabled is to silence every alert is a footgun, not a dark launch.
+
+This is the same class of outcome as Task 4 Step 5's near-identity stop, at
+the opposite tail — the plan wrote the stop for "nothing to discount" and this
+is "the discount consumes everything". A finished measurement, not a failed
+task.
+
+**Do not rescue this by tuning.** floor->ceil, rescaling the matrix, or
+dropping `MIN` to 1 each produce a survivable alert count and each is a
+different hypothesis fitted to a known outcome — a re-opened pre-registration,
+which `docs/claude/backtest-methodology.md` forbids. Any of them needs a NEW
+spec with a NEW pre-registered hypothesis, written knowing this result.
+
+Full result, the rejected rescues, and an honest caveat on the instrument:
+`docs/superpowers/results/2026-08-23-v49-confluence-redundancy.md`.
+
+### Five defects found in this plan while executing
+
+Recorded because they are the plan's, not the executor's, and two would have
+caused real damage had Phase 3 gone ahead:
+
+1. **Task 5's config Field specifies `type="bool"`.** `config._CASTERS` has no
+   such caster, so an unknown type falls through to the raw string and the
+   shipped default `"false"` arrives as the **truthy string** `'false'`. The
+   component would have shipped **ON**, with its documented revert lever
+   reading as engaged. `type="checkbox"` is the one that casts.
+2. **Task 1's `test_missing_matrix_raises_rather_than_defaulting` is built to
+   expire.** It asserts `matrix=None` raises, commented "until Task 4 lands
+   the constant" — and no task updates it. The full suite goes red at exactly
+   the moment Task 4 completes. Split into a live-contract test plus the
+   original guard with `REDUNDANCY` deleted first.
+3. **Task 4 Step 5's stop condition covers only one tail.** It stops on
+   near-identity (no redundancy to discount) but says nothing about total
+   redundancy, which is just as fatal and is what actually happened.
+4. **The near-identity threshold is stated per-cell, not in aggregate.**
+   "every off-diagonal < 0.15" would not have fired here even in the
+   degenerate direction; what governs viability is the SUM in the denominator.
+5. **Task 3's instrument measures a wider population than production.** It
+   tallies co-occurrence over every candidate price, whereas
+   `count_confirming_strategies` only ever counts at scenario target prices.
+   Followed as specified and recorded as a caveat; it does not change the
+   verdict (average redundancy would have to fall from 0.628 to below ~0.33).
+
+---
 
 # Effective confluence count Implementation Plan
 
