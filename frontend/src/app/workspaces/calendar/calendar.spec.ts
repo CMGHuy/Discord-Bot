@@ -146,3 +146,65 @@ describe('Calendar grid', () => {
     ]);
   });
 });
+
+describe('Calendar summary strip', () => {
+  it("shows the visible month's pooled totals", async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const strip = el(fixture).querySelector('.totals');
+    expect(strip?.textContent).toContain('60');   // net -60
+    expect(strip?.textContent).toContain('3');    // 3 trades
+    expect(strip?.textContent).toContain('33');   // 33.33% WR
+  });
+
+  it('lists all five weekdays even where there is no data', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const rows = el(fixture).querySelectorAll('.dow-row');
+    expect(rows).toHaveLength(5);
+    expect(rows[0].textContent).toContain('Mon');
+    // Tuesday has n=0 and must read as absent, never as 0.00.
+    expect(rows[1].textContent).toContain('—');
+  });
+
+  it('reports best day, worst day and the current streak', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const callouts = el(fixture).querySelector('.callouts');
+    expect(callouts?.textContent).toContain('2026-08-03');
+    expect(callouts?.textContent).toContain('2026-08-05');
+    expect(callouts?.textContent).toContain('losing');
+    expect(callouts?.textContent).toContain('1');
+  });
+
+  it('says so plainly when there is no streak at all', async () => {
+    const fixture = seed({
+      ...RESPONSE,
+      streak: { direction: null, days: 0 },
+      best_day: null,
+      worst_day: null,
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const callouts = el(fixture).querySelector('.callouts');
+    expect(callouts?.textContent).toContain('—');
+  });
+
+  it('switches the weekday table to R with the metric toggle', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+
+    fixture.componentInstance.store.setMetric('r');
+    fixture.detectChanges();
+
+    const monday = el(fixture).querySelectorAll('.dow-row')[0];
+    expect(monday.textContent).toContain('R');
+  });
+});

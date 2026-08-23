@@ -1,25 +1,22 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
-import { CalendarDay } from '../../api/models';
+import { CalendarDay, CalendarWeekday } from '../../api/models';
 import { CalendarMetric, CalendarStore } from '../../stores/calendar.store';
+import { ConnectionStore } from '../../stores/connection.store';
 import { Button } from '../../ui/button';
 import { ABSENT, money, rMultiple } from '../../ui/format';
 import { Panel } from '../../ui/layout';
+import { MetricCard } from '../../ui/metric-card';
 import { Select } from '../../ui/form-controls';
 import { GridCell, monthLabel, monthMatrix } from './calendar.helpers';
 
 /** Monday-first, matching `monthMatrix` and the API's weekday breakdown. */
 const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-const METRICS: { value: CalendarMetric; label: string }[] = [
-  { value: 'money', label: '$' },
-  { value: 'r', label: 'R' },
-];
-
 @Component({
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, Panel, Select],
+  imports: [Button, MetricCard, Panel, Select],
   // Provided on the component: created on entry, destroyed on exit, so the
   // workspace cannot hold a stale month while you are looking elsewhere.
   providers: [CalendarStore],
@@ -41,7 +38,7 @@ const METRICS: { value: CalendarMetric; label: string }[] = [
       </div>
 
       <div class="metric" role="group" aria-label="Metric">
-        @for (option of metrics; track option.value) {
+        @for (option of metrics(); track option.value) {
           <button
             type="button"
             [class.active]="store.metric() === option.value"
@@ -66,6 +63,29 @@ const METRICS: { value: CalendarMetric; label: string }[] = [
         [value]="store.horizon()"
         (valueChange)="store.setHorizon($event)"
       />
+    </div>
+
+    <div class="totals">
+      <sb-metric-card
+        label="Net this month"
+        [value]="store.metric() === 'r' ? (store.totals()?.net_r ?? null) : (store.totals()?.net_pnl_amount ?? null)"
+        [unit]="store.metric() === 'r' ? 'R' : currency()"
+        [tone]="totalsTone()"
+      />
+      <sb-metric-card label="Trades" [value]="store.totals()?.trade_count ?? null" [decimals]="0" />
+      <sb-metric-card label="Win rate" [value]="store.totals()?.win_rate ?? null" unit="%" [decimals]="1" />
+    </div>
+
+    <div class="callouts">
+      <sb-panel heading="Best day">
+        <p class="callout">{{ extremeLabel(store.bestDay()) }}</p>
+      </sb-panel>
+      <sb-panel heading="Worst day">
+        <p class="callout">{{ extremeLabel(store.worstDay()) }}</p>
+      </sb-panel>
+      <sb-panel heading="Current streak">
+        <p class="callout">{{ streakLabel() }}</p>
+      </sb-panel>
     </div>
 
     <sb-panel [flush]="true">
@@ -104,6 +124,24 @@ const METRICS: { value: CalendarMetric; label: string }[] = [
         }
       </div>
     </sb-panel>
+
+    <sb-panel heading="By weekday (all history)">
+      <table class="dow">
+        <thead>
+          <tr><th>Day</th><th class="num">Avg</th><th class="num">Win rate</th><th class="num">n</th></tr>
+        </thead>
+        <tbody>
+          @for (weekday of store.weekdays(); track weekday.weekday) {
+            <tr class="dow-row">
+              <th scope="row">{{ weekday.weekday }}</th>
+              <td class="num">{{ weekdayValue(weekday) }}</td>
+              <td class="num">{{ weekdayWinRate(weekday) }}</td>
+              <td class="num">{{ weekday.trade_count }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </sb-panel>
   `,
   styles: `
     /* No backticks in here: these styles live in a TS template literal. */
@@ -132,6 +170,14 @@ const METRICS: { value: CalendarMetric; label: string }[] = [
       cursor: pointer;
     }
     .metric button.active { background: var(--surface-raised); color: var(--text); }
+
+    .totals { display: flex; flex-wrap: wrap; gap: var(--space-14); }
+    .callouts {
+      display: grid;
+      gap: var(--space-14);
+      grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    }
+    .callout { margin: 0; font-family: var(--font-mono); font-size: var(--text-table); }
 
     .grid { display: grid; }
     .week, .weekhead { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
@@ -187,18 +233,53 @@ const METRICS: { value: CalendarMetric; label: string }[] = [
     .value:hover { text-decoration: underline; }
     .value:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
     .n { color: var(--text-secondary); font-size: var(--text-micro); }
+
+    .dow { width: 100%; border-collapse: collapse; font-size: var(--text-table); }
+    .dow th, .dow td { padding: var(--space-6) var(--space-10); border-bottom: 1px solid var(--border); }
+    .dow thead th {
+      color: var(--text-secondary);
+      font-size: var(--text-micro);
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      text-align: left;
+    }
+    .dow .num { font-family: var(--font-mono); text-align: right; }
   `,
 })
 export class Calendar {
   readonly store = inject(CalendarStore);
+  private readonly connection = inject(ConnectionStore);
 
   protected readonly weekdayHeads = WEEKDAY_HEADS;
-  protected readonly metrics = METRICS;
+
+  /** The account's own symbol, never a literal `$` -- see `MetricCard`'s
+   *  note. An admin running a euro account must not read euro figures
+   *  labelled in dollars. */
+  protected readonly currency = computed(() => this.connection.currency());
+
+  /** The toggle's two choices. Computed rather than a module constant so
+   *  the money side is labelled with the account's currency. */
+  protected readonly metrics = computed<{ value: CalendarMetric; label: string }[]>(() => [
+    { value: 'money', label: this.currency() },
+    { value: 'r', label: 'R' },
+  ]);
 
   protected readonly label = computed(() => monthLabel(this.store.month()));
   protected readonly weeks = computed<GridCell[][]>(() =>
     monthMatrix(this.store.month()),
   );
+
+  /** `plain` while there is nothing to colour, so a loading strip is not
+   *  briefly green; `pnl` is the only tone allowed to go green or red, and
+   *  it takes its sign from the value itself. */
+  protected readonly totalsTone = computed(() => {
+    const totals = this.store.totals();
+    const value =
+      this.store.metric() === 'r' ? totals?.net_r : totals?.net_pnl_amount;
+    if (value === null || value === undefined) return 'plain' as const;
+    return 'pnl' as const;
+  });
 
   /** The day behind a cell, or null. Cells outside the month and weekends
    *  never resolve: a close cannot land on either, so offering a click
@@ -222,6 +303,36 @@ export class Calendar {
   /** The cell's number, formatted for the metric on show. */
   protected display(day: CalendarDay): string {
     if (this.store.metric() === 'r') return rMultiple(day.net_r);
-    return day.net_pnl_amount === null ? ABSENT : money(day.net_pnl_amount, '$', 0);
+    return day.net_pnl_amount === null
+      ? ABSENT
+      : money(day.net_pnl_amount, this.currency(), 0);
+  }
+
+  /** `"50%"`, or ABSENT at n=0 -- never `"0%"`, which would read as a real
+   *  all-losses weekday rather than as no data. */
+  protected weekdayWinRate(weekday: CalendarWeekday): string {
+    return weekday.win_rate === null ? ABSENT : `${weekday.win_rate.toFixed(0)}%`;
+  }
+
+  /** A weekday's average, in the metric on show. */
+  protected weekdayValue(weekday: CalendarWeekday): string {
+    if (this.store.metric() === 'r') return rMultiple(weekday.avg_r);
+    return weekday.avg_pnl_amount === null
+      ? ABSENT
+      : money(weekday.avg_pnl_amount, this.currency(), 2);
+  }
+
+  /** "2026-08-05 · -90 €" -- the date is the point, so it leads. */
+  protected extremeLabel(day: CalendarDay | null): string {
+    if (!day) return ABSENT;
+    return `${day.date} · ${this.display(day)}`;
+  }
+
+  /** "1 losing day", or ABSENT when there is no run to report. */
+  protected streakLabel(): string {
+    const streak = this.store.streak();
+    if (!streak || streak.direction === null || streak.days === 0) return ABSENT;
+    const unit = streak.days === 1 ? 'day' : 'days';
+    return `${streak.days} ${streak.direction} ${unit}`;
   }
 }
