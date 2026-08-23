@@ -46,7 +46,7 @@ APP_DIR = os.path.join(os.path.dirname(__file__), "static", "app")
 #: like a routing bug in the SPA and is not one.
 WORKSPACES = (
     "dashboard", "trades", "analytics", "calendar", "watchlist", "risk",
-    "system", "versions",
+    "system", "versions", "ui",
     "cockpit", "universe",
 )
 

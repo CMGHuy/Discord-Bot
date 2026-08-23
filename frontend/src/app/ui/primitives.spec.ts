@@ -4,12 +4,28 @@ import { describe, expect, it } from 'vitest';
 
 import { callSites } from './testing/call-sites';
 
+/**
+ * Raw buttons that stay raw, each with the reason.
+ *
+ * One entry, and it should stay that way. A gate that starts life with a
+ * fistful of exceptions teaches everyone that exceptions are normal.
+ */
+const RAW_BUTTON_ALLOWLIST = new Map<string, string>([
+  // The whole toast IS the dismiss control -- a full-bleed surface with its
+  // own kind-coloured background, not a button sitting inside a toast. Giving
+  // it a variant would mean a variant used exactly once, which is a worse
+  // answer than one justified exception.
+  ['shell/toast-host.ts', 'class="toast"'],
+]);
+
 describe('no call site hand-rolls a button', () => {
   for (const { name, source } of callSites()) {
     it(`${name} routes every button through sb-button`, () => {
+      const allowed = RAW_BUTTON_ALLOWLIST.get(name);
       const raw = [...source.matchAll(/<button\b[^>]*>/gs)]
-        .map(([tag]) => tag)
-        .filter((tag) => !tag.includes('sb-button'));
+        .map(([tag]) => tag.replace(/\s+/g, ' '))
+        .filter((tag) => !tag.includes('sb-button'))
+        .filter((tag) => !(allowed && tag.includes(allowed)));
       expect(raw).toEqual([]);
     });
   }
@@ -71,6 +87,49 @@ describe('no call site redefines a promoted composite', () => {
         !allowed.has(cls) && new RegExp(`^\\s*\\.${cls}\\s*[,{]`, 'm').test(source),
       );
       expect(offenders).toEqual([]);
+    });
+  }
+});
+
+/**
+ * Colour literals outside tokens.css.
+ *
+ * Empty, and that is the point: `--chart-1..8` (wave `_4`) moved the last
+ * eight out of `ui/line-chart.ts`. An entry here is a hue that escaped the
+ * valence law.
+ */
+const HEX_ALLOWLIST = new Map<string, string>([]);
+
+describe('no colour is declared outside tokens.css', () => {
+  for (const { name, source } of callSites()) {
+    it(`${name} declares no hex literal`, () => {
+      const allowed = HEX_ALLOWLIST.get(name);
+      // (?<!&) -- an HTML numeric character reference (&#9650; is a
+      // triangle glyph, not a colour) matches this pattern just as well as
+      // a real hex literal whenever its digits happen to fall in a-f/0-9.
+      const hexes = [...source.matchAll(/(?<!&)#[0-9a-fA-F]{3,8}\b/g)]
+        .map(([hex]) => hex)
+        .filter((hex) => !(allowed && allowed.includes(hex)));
+      expect(hexes).toEqual([]);
+    });
+  }
+});
+
+describe('every allowlist entry is justified', () => {
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/primitives.spec.ts'), 'utf8');
+
+  // PROMOTED_ALLOWLIST is this file's own addition (v54 Task 5, the
+  // trade-detail.ts rich-heading exception) -- the plan's own list here
+  // named only the three it introduced, but the principle is general.
+  for (const list of [
+    'RAW_CONTROL_ALLOWLIST', 'RAW_BUTTON_ALLOWLIST', 'HEX_ALLOWLIST', 'PROMOTED_ALLOWLIST',
+  ]) {
+    it(`${list} has a comment above every entry`, () => {
+      const body = SOURCE.slice(SOURCE.indexOf(`const ${list}`));
+      const block = body.slice(0, body.indexOf(']);'));
+      const entries = [...block.matchAll(/^\s*\[['"]/gm)];
+      const comments = [...block.matchAll(/^\s*\/\//gm)];
+      expect(comments.length).toBeGreaterThanOrEqual(entries.length);
     });
   }
 });
