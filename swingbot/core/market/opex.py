@@ -110,3 +110,148 @@ def opex_tier(day: dt.date) -> str | None:
     if day.weekday() == 4 and day not in _FRIDAY_HOLIDAYS:
         return WEEKLY
     return None
+
+
+# ---------------------------------------------------------------------------
+# Policy layer
+#
+# Everything below reads config. `_UNSET` distinguishes "caller did not say"
+# from an explicit `None` meaning "not an opex day": a scan resolves the tier
+# once and passes it down, rather than re-deriving it per ticker per horizon.
+# ---------------------------------------------------------------------------
+
+_UNSET = object()
+
+
+def _enabled() -> bool:
+    from swingbot import config
+    return bool(getattr(config, "OPEX_CAUTION_ENABLED", False))
+
+
+def current_tier(now: dt.datetime | None = None) -> str | None:
+    """Today's tier, in US market time. None when the feature is off.
+
+    `now` may carry any timezone -- it is converted before the date is taken,
+    which is the whole point. A naive datetime is rejected rather than
+    guessed at: assuming it meant UTC or local time is exactly the mistake
+    this function exists to prevent.
+    """
+    if not _enabled():
+        return None
+    if now is None:
+        now = dt.datetime.now(US_MARKET_TZ)
+    elif now.tzinfo is None:
+        raise ValueError(
+            "opex.current_tier() needs an aware datetime -- a naive one has no "
+            "defined US date. Pass tzinfo, or omit the argument entirely."
+        )
+    return opex_tier(now.astimezone(US_MARKET_TZ).date())
+
+
+def _resolve(tier):
+    return current_tier() if tier is _UNSET else tier
+
+
+def minutes_to_us_close(now: dt.datetime | None = None) -> float:
+    """Minutes until 16:00 America/New_York on `now`'s US date.
+
+    Negative once the close has passed. Building the close from the
+    already-converted local date is what makes this DST-correct on both
+    sides without a table.
+    """
+    if now is None:
+        now = dt.datetime.now(US_MARKET_TZ)
+    local = now.astimezone(US_MARKET_TZ)
+    close = dt.datetime.combine(local.date(), US_CLOSE_TIME, tzinfo=US_MARKET_TZ)
+    return (close - local).total_seconds() / 60.0
+
+
+def effective_min_confidence_level(tier=_UNSET) -> int:
+    """`MIN_ALERT_CONFIDENCE_LEVEL`, raised on a monthly expiration.
+
+    Capped at 5 because the level is a 1-5 select; a bump past the top of the
+    scale would silently mean "never alert".
+    """
+    from swingbot import config
+    base = int(config.MIN_ALERT_CONFIDENCE_LEVEL)
+    if _resolve(tier) != MONTHLY:
+        return base
+    bump = int(getattr(config, "OPEX_MONTHLY_CONFIDENCE_BUMP", 0) or 0)
+    return min(5, base + bump)
+
+
+def effective_min_confluence(base: int, tier=_UNSET) -> int:
+    """`base` (already resolved from config or a `!check` override), raised
+    on either tier. Capped at 10, the top of the setting's own range."""
+    from swingbot import config
+    resolved = _resolve(tier)
+    if resolved == MONTHLY:
+        bump = getattr(config, "OPEX_MONTHLY_CONFLUENCE_BUMP", 0)
+    elif resolved == WEEKLY:
+        bump = getattr(config, "OPEX_WEEKLY_CONFLUENCE_BUMP", 0)
+    else:
+        return base
+    return min(10, int(base) + int(bump or 0))
+
+
+def suppress_new_entries(now: dt.datetime | None = None, tier=_UNSET) -> bool:
+    """True inside the monthly-expiration near-close window.
+
+    Monthly only, and only BEFORE the close: once 16:00 ET has passed the
+    remaining figure goes negative and this returns False again. The bot's
+    session runs to 23:00 Berlin (17:00 ET), so without that lower bound the
+    window would keep firing for an hour after the event it guards.
+    """
+    from swingbot import config
+    # Resolved against `now` rather than via _resolve(), so an injected clock
+    # decides the tier and the window consistently -- otherwise a test could
+    # pin the window to a Friday afternoon while the tier came from the real
+    # wall clock.
+    resolved = current_tier(now) if tier is _UNSET else tier
+    if resolved != MONTHLY:
+        return False
+    window = float(getattr(config, "OPEX_NEAR_CLOSE_SUPPRESS_MINUTES", 0) or 0)
+    if window <= 0:
+        return False
+    remaining = minutes_to_us_close(now)
+    return 0 <= remaining <= window
+
+
+def stop_mult(tier=_UNSET) -> float:
+    """Multiplier for the ATR stop distance. 1.0 leaves it untouched."""
+    from swingbot import config
+    if _resolve(tier) != MONTHLY:
+        return 1.0
+    return 1.0 + float(getattr(config, "OPEX_STOP_WIDEN_PCT", 0.0) or 0.0) / 100.0
+
+
+def size_mult(tier=_UNSET) -> float:
+    """Multiplier for position size. 1.0 leaves it untouched."""
+    from swingbot import config
+    if _resolve(tier) != MONTHLY:
+        return 1.0
+    cut = float(getattr(config, "OPEX_SIZE_REDUCTION_PCT", 0.0) or 0.0)
+    return max(0.0, 1.0 - cut / 100.0)
+
+
+def badge(tier=_UNSET) -> tuple[str, str] | None:
+    """`(title, body)` for the alert embed, or None off an expiration day.
+
+    Posted on EVERY alert that day, whether or not the tightened gates
+    changed the outcome -- following the `heat_blocked` precedent in
+    embeds.py, where a constraint is flagged rather than hidden.
+    """
+    resolved = _resolve(tier)
+    if resolved == MONTHLY:
+        return (
+            "⚠️ MONTHLY OPEX",
+            "Monthly options expiration: pinning toward big round strikes and "
+            "unwind volatility into the close are both elevated. Entry bar raised.",
+        )
+    if resolved == WEEKLY:
+        return (
+            "⚠️ Weekly opex",
+            "Weekly options expiration. Pinning risk is milder than a monthly "
+            "expiration, but present.",
+        )
+    return None
