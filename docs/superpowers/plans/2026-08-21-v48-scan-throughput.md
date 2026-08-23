@@ -89,7 +89,7 @@ dependency bump.
 - Produces: `config.SCAN_CACHE_MAX_AGE_HOURS: int`, `config.COLD_FETCH_PROCESS_THRESHOLD: int`,
   `config.FETCH_WORKERS: int` (0 = auto). Every later task reads these.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/test_config_flags.py`:
 
@@ -117,12 +117,12 @@ def test_v47_throughput_fields_exist_with_documented_defaults():
     assert config.SCAN_CACHE_MAX_AGE_HOURS < REFRESH_HOURS["daily"]
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_config_flags.py::test_v47_throughput_fields_exist_with_documented_defaults -v`
 Expected: FAIL with `KeyError: 'SCAN_CACHE_MAX_AGE_HOURS'`
 
-- [ ] **Step 3: Add the fields**
+- [x] **Step 3: Add the fields**
 
 In `swingbot/config.py`, immediately after the `SCAN_WORKERS` `Field(...)` entry:
 
@@ -153,12 +153,12 @@ In `swingbot/config.py`, immediately after the `SCAN_WORKERS` `Field(...)` entry
                "ticker's price data to another. Separate processes do not share it."),
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_config_flags.py::test_v47_throughput_fields_exist_with_documented_defaults -v`
 Expected: PASS
 
-- [ ] **Step 5: Add the keys to `.env.example`**
+- [x] **Step 5: Add the keys to `.env.example`**
 
 In the scanning section of `.env.example`:
 
@@ -168,13 +168,13 @@ COLD_FETCH_PROCESS_THRESHOLD=10
 FETCH_WORKERS=0
 ```
 
-- [ ] **Step 6: Verify the sync guard passes**
+- [x] **Step 6: Verify the sync guard passes**
 
 Run: `python -m pytest tests/test_env_example_sync.py -v`
 Expected: PASS (this is the test that catches a `Field` added without an
 `.env.example` key)
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add swingbot/config.py .env.example tests/test_config_flags.py
@@ -206,7 +206,7 @@ cache can be trusted. **This task is the load-bearing guard for the whole plan.*
   (all `float64`), a tz-naive `DatetimeIndex`, sorted, de-duplicated. Returns
   `None` if the file is missing or unreadable. Task 3 calls this.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/marketdata/test_frame_equivalence.py`:
 
@@ -272,12 +272,12 @@ def test_unreadable_file_returns_none_rather_than_raising(cache_dir):
     assert data_store.load_normalized("BAD", "daily", base_dir=cache_dir) is None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/marketdata/test_frame_equivalence.py`
 Expected: FAIL with `AttributeError: module 'swingbot.core.marketdata.data_store' has no attribute 'load_normalized'`
 
-- [ ] **Step 3: Implement `load_normalized`**
+- [x] **Step 3: Implement `load_normalized`**
 
 In `swingbot/core/marketdata/data_store.py`, directly after `load_from_disk`:
 
@@ -329,12 +329,12 @@ def load_normalized(ticker: str, interval: str, base_dir: str = DATA_DIR) -> pd.
     return df if not df.empty else None
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python scripts/dev/testrun.py file tests/marketdata/test_frame_equivalence.py`
 Expected: PASS (4 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/marketdata/data_store.py tests/marketdata/test_frame_equivalence.py
@@ -357,7 +357,7 @@ git commit -m "feat(v47): normalize cache-loaded frames to the live-download sha
   `LRUFrames` return type. Task 4 replaces the placeholder sequential fetch of
   the `cold` list; Task 6 reuses `_load_cached_daily`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/scanning/test_crawl_cache_first.py`:
 
@@ -440,12 +440,12 @@ def test_progress_counters_still_advance(monkeypatch, no_network):
     assert progress.stage == "crawling data"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/scanning/test_crawl_cache_first.py`
 Expected: FAIL — `AttributeError: <module 'swingbot.core.scanning.engine'> does not have the attribute '_load_cached_daily'`
 
-- [ ] **Step 3: Add `_load_cached_daily` and rewrite the crawl loop**
+- [x] **Step 3: Add `_load_cached_daily` and rewrite the crawl loop**
 
 Add the import near the other marketdata imports in `swingbot/core/scanning/engine.py` (line 87 area):
 
@@ -532,17 +532,17 @@ sequentially" paragraph now describes the *cold* path only. Keep the entire
 yfinance `_DFS` rationale — it is still why threads are forbidden — and add one
 sentence saying warm tickers never reach it.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python scripts/dev/testrun.py file tests/scanning/test_crawl_cache_first.py`
 Expected: PASS (5 tests)
 
-- [ ] **Step 5: Confirm no scanning regression**
+- [x] **Step 5: Confirm no scanning regression**
 
 Run: `python scripts/dev/testrun.py file tests/scanning/`
 Expected: PASS, `0 failed`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add swingbot/core/scanning/engine.py tests/scanning/test_crawl_cache_first.py
@@ -565,7 +565,7 @@ git commit -m "feat(v47): serve the scan crawl from the daily cache, collect col
   is the module-level process-pool entry point. Task 5 tests
   `_fetch_cold_frames`; Task 6 reuses it.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/scanning/test_cold_fetch_pool.py`:
 
@@ -656,12 +656,12 @@ def test_empty_cold_list_is_a_no_op(monkeypatch):
     assert scan_engine._fetch_cold_frames([]) == []
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/scanning/test_cold_fetch_pool.py`
 Expected: FAIL — `_resolve_workers` / `_fetch_cold_frames` / `ProcessPoolExecutor` not found on the module
 
-- [ ] **Step 3: Implement the fetch helpers**
+- [x] **Step 3: Implement the fetch helpers**
 
 Extend the existing import at `swingbot/core/scanning/engine.py:51`:
 
@@ -744,7 +744,7 @@ def _fetch_cold_frames(tickers: list, progress: "ScanProgress" = None) -> list:
     return pairs
 ```
 
-- [ ] **Step 4: Replace the Task 3 placeholder**
+- [x] **Step 4: Replace the Task 3 placeholder**
 
 In `_crawl_latest_data`, replace the entire `# Placeholder -- Task 4 replaces
 this...` block with:
@@ -755,7 +755,7 @@ this...` block with:
             results[ticker] = df
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `python scripts/dev/testrun.py file tests/scanning/test_cold_fetch_pool.py`
 Expected: PASS (6 tests)
@@ -763,7 +763,7 @@ Expected: PASS (6 tests)
 Run: `python scripts/dev/testrun.py file tests/scanning/test_crawl_cache_first.py`
 Expected: PASS (5 tests) — the Task 3 behaviour is unchanged by the swap
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add swingbot/core/scanning/engine.py tests/scanning/test_cold_fetch_pool.py
@@ -786,7 +786,7 @@ incidental coverage.
 - Consumes: `engine._fetch_cold_frames`, `engine._fetch_one_ticker` (Task 4).
 - Produces: nothing consumed by later tasks.
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 Create `tests/scanning/test_no_cross_ticker_mixing.py`:
 
@@ -898,13 +898,13 @@ def test_fetch_one_ticker_returns_its_own_symbol(identifiable_fetch):
     assert df["Close"].iloc[0] == _signature_price("NVDA")
 ```
 
-- [ ] **Step 2: Run the test**
+- [x] **Step 2: Run the test**
 
 Run: `python scripts/dev/testrun.py file tests/scanning/test_no_cross_ticker_mixing.py`
 Expected: PASS (4 tests). If any fail, **stop** — the concurrency in Task 4 is
 unsafe and must be fixed before proceeding, not worked around in the test.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/scanning/test_no_cross_ticker_mixing.py
@@ -930,7 +930,7 @@ benchmark (`engine.py:1267`) and up to 11 SPDR sector ETFs (`_fetch_frames`,
   `engine._daily_frame_for(symbol: str)` — cache-first single-symbol accessor
   used for the regime benchmark.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/scanning/test_sidelist_cache_first.py`:
 
@@ -1007,12 +1007,12 @@ def test_daily_frame_for_falls_back_to_fetch(monkeypatch, no_network):
     assert no_network == ["SPY"]
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/scanning/test_sidelist_cache_first.py`
 Expected: FAIL — `_daily_frame_for` not found, and `_fetch_frames` still fetches warm symbols
 
-- [ ] **Step 3: Rewrite `_fetch_frames` and add `_daily_frame_for`**
+- [x] **Step 3: Rewrite `_fetch_frames` and add `_daily_frame_for`**
 
 Replace the body of `_fetch_frames` (keeping its docstring's "a symbol whose
 fetch fails is simply absent" contract, and updating it to say cache-first):
@@ -1069,18 +1069,18 @@ with:
         spy_df = _daily_frame_for(config.MARKET_REGIME_TICKER)
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python scripts/dev/testrun.py file tests/scanning/test_sidelist_cache_first.py`
 Expected: PASS (5 tests)
 
-- [ ] **Step 5: Confirm the sector-RS behaviour is unchanged**
+- [x] **Step 5: Confirm the sector-RS behaviour is unchanged**
 
 Run: `python scripts/dev/testrun.py file tests/scanning/test_sector_rs.py`
 Expected: PASS, `0 failed` — `_apply_sector_rs`'s "at least 2 sector ETF frames"
 guard depends on `_fetch_frames`'s contract, which this task preserves
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add swingbot/core/scanning/engine.py tests/scanning/test_sidelist_cache_first.py
@@ -1105,7 +1105,7 @@ git commit -m "feat(v47): serve the regime benchmark and sector ETFs from the da
   `backtest_scenarios._replay_ticker(args) -> dict[str, list]` is the pool entry
   point (one task per ticker, all horizons inside).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/backtesting/test_scenario_parallel.py`:
 
@@ -1212,12 +1212,12 @@ def test_single_worker_never_builds_a_pool(frames, monkeypatch):
     assert "pooled" in result
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/backtesting/test_scenario_parallel.py`
 Expected: FAIL — `run_scenario_backtest() got an unexpected keyword argument 'workers'`
 
-- [ ] **Step 3: Rewrite `run_scenario_backtest`**
+- [x] **Step 3: Rewrite `run_scenario_backtest`**
 
 Add to the imports at the top of `swingbot/core/backtesting/backtest_scenarios.py`:
 
@@ -1309,17 +1309,17 @@ def run_scenario_backtest(frames: dict, start, end, *, gates,
             "by_horizon": {hk: _aggregate(rs) for hk, rs in results_by_hz.items()}}
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python scripts/dev/testrun.py file tests/backtesting/test_scenario_parallel.py`
 Expected: PASS (4 tests)
 
-- [ ] **Step 5: Confirm the existing scenario tests still pass**
+- [x] **Step 5: Confirm the existing scenario tests still pass**
 
 Run: `python scripts/dev/testrun.py file tests/backtesting/test_backtest_scenarios.py`
 Expected: PASS, `0 failed`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add swingbot/core/backtesting/backtest_scenarios.py tests/backtesting/test_scenario_parallel.py
@@ -1341,18 +1341,18 @@ git commit -m "feat(v47): replay scenario backtests across a process pool"
 - Consumes: everything above.
 - Produces: nothing.
 
-- [ ] **Step 1: Run the full suite**
+- [x] **Step 1: Run the full suite**
 
 Run: `python scripts/dev/testrun.py full`
 Expected: `0 failed`, `0 xfailed`. The pass count will have risen by ~28 (the new
 tests); a changed count is not a failure, a `failed` or `xfailed` is.
 
-- [ ] **Step 2: Syntax pass**
+- [x] **Step 2: Syntax pass**
 
 Run: `python -m py_compile bot.py admin_ui.py $(git ls-files 'swingbot/**/*.py')`
 Expected: no output
 
-- [ ] **Step 3: Update the known-traps entry**
+- [x] **Step 3: Update the known-traps entry**
 
 `docs/claude/known-traps.md` currently says the two OHLCV caches are separate and
 that the live scan does not read `market_data/`. That is now false. Replace the
@@ -1376,14 +1376,14 @@ that the live scan does not read `market_data/`. That is now false. Replace the
   you ever make this concurrent a different way, that test must still pass.
 ```
 
-- [ ] **Step 4: Bump the versions**
+- [x] **Step 4: Bump the versions**
 
 In `VERSION.json`: `bot` `1.3.2` → `1.3.3`, `ui` `1.8.0` → `1.8.1`, and set both
 `_updated` timestamps to now. Patch on both lines: the bot does what it did
 before but faster (no user has to look at it anew), and the UI gains three new
 Settings rows, which is "a new control" — a patch.
 
-- [ ] **Step 5: Measure the result and fill in the Progress block**
+- [x] **Step 5: Measure the result and fill in the Progress block**
 
 Success criterion 1 is "a warm scan issues zero OHLCV network calls". Measure it
 rather than assuming it. With the cache warm (let `market_data_refresh` run once,
@@ -1422,14 +1422,14 @@ Then add to the bottom of this plan file, filling in the real numbers:
 - Full suite: `1686+N passed, 66 skipped, 0 failed, 0 xfailed`.
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add VERSION.json docs/claude/known-traps.md docs/superpowers/plans/2026-08-21-v48-scan-throughput.md
 git commit -m "docs(v47): record the live scan's new cache dependency, bump versions"
 ```
 
-- [ ] **Step 7: Close the plan out**
+- [x] **Step 7: Close the plan out**
 
 Per `docs/claude/document-conventions.md`, move the plan and its spec into
 `implemented/` as part of the closing commit:
@@ -1439,3 +1439,59 @@ git mv docs/superpowers/plans/2026-08-21-v48-scan-throughput.md docs/superpowers
 git mv docs/superpowers/specs/2026-08-21-v47-scan-throughput-design.md docs/superpowers/specs/implemented/
 git commit -m "docs(v47): close out the scan-throughput plan"
 ```
+
+---
+
+## Progress (executed via executing-plans, 2026-08-23)
+
+All 8 tasks implemented and committed on branch
+`worktree-2026-08-21-v48-scan-throughput`, base `7b24c71`. Full suite:
+**2103 passed, 136 skipped, 0 failed, 0 xfailed**. `bot` 1.4.0 -> 1.4.1,
+`ui` 1.8.1 -> 1.8.2 (the plan predicted 1.3.2 -> 1.3.3 / 1.8.0 -> 1.8.1; `main`
+had moved past both, so the LEVEL it specified was applied, not its literal
+targets).
+
+**Measured warm crawl (Step 5): 10 tickers, 10 frames, 0 fetches, 0.4s
+(cold, same box, same run: 10 fetches, 3.3s).** Every warm frame was compared
+against the cold frame it replaced -- same row count, same last close, no
+mismatches -- so this is "the cache served identical data", not merely "the
+cache served something". Success criterion 1 (a warm scan issues zero OHLCV
+network calls) holds.
+
+**That is 10 tickers, not the production 78.** A worktree carries its own
+gitignored `data/`, which seeds to a 3-ticker watchlist, and no `market_data/`
+cache existed in either tree. A fixed 10-symbol list was fetched live to create
+one. The per-ticker saving is what scales; the wall-clock figures above should
+not be read as a 78-ticker or 500-ticker projection.
+
+Four defects in the plan were found and corrected while executing:
+
+- **Task 2's round-trip test asserted the wrong invariant.**
+  `assert_frame_equal` compared index `freq`, which `make_ohlcv` sets to
+  `<BusinessDay>` via `pd.bdate_range`. A real `yf.download()` frame has
+  `freq=None` -- market holidays break the cadence -- so the round-tripped
+  `None` is the *live* shape and the fixture was the outlier. Re-stamping a
+  freq to satisfy the test would have asserted a regularity real data lacks.
+- **Task 3's closing log line miscounted.** It computed the cache count as
+  `len(results) - len(cold)`, but `results` holds warm + successfully-fetched,
+  not warm + cold, so any failed cold fetch understated the cache hits. Counted
+  `warm` explicitly.
+- **Task 5's end-to-end test would have hit the live network.** It set
+  `COLD_FETCH_PROCESS_THRESHOLD=2` over a 12-ticker batch without patching
+  `ProcessPoolExecutor`, and a real pool's workers are separate interpreters
+  that never see a monkeypatched `get_daily_data`. All 12 would have gone to
+  Yahoo. The inline-pool stand-in is now module-level and used there too.
+- **Task 7's test file costs ~80s** and had no marker, which would have put a
+  heavy backtest-replay file straight into the ~40s fast tier. It now carries
+  `pytestmark = pytest.mark.slow`. Measured before marking: **the process pool
+  is not the cost** -- deselecting the only real-pool test changed the file's
+  runtime by ~8s; the rest is `replay_scenarios` compute. The date-window test
+  dropped to `workers=1` (it asserts filtering, not pooling), and both equality
+  assertions now check `pooled["n"] > 0` first, since two empty aggregates
+  compare equal and this file is the gate protecting the closed
+  pre-registrations.
+
+**No backtest was re-run and no pre-registration was touched.** `Edge: none
+(integrity)` is accurate: scan output is unchanged by construction, and
+`tests/backtesting/test_scenario_parallel.py` asserts the parallel replay is
+output-identical to the sequential one on non-empty aggregates.
