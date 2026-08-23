@@ -8,7 +8,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 
 import { Ticker } from '../../api/models';
 import { WatchlistStore } from '../../stores/watchlist.store';
@@ -19,6 +19,7 @@ import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.
 import { date, text } from '../../ui/format';
 import { TextInput } from '../../ui/form-controls';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
+import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { EarningsCalendar } from './earnings-calendar';
 
@@ -94,7 +95,7 @@ function sortValue(row: Ticker, key: string): string | number | null {
 @Component({
   selector: 'sb-watchlist',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, DataTable, Panel, Button, ConfirmDialog, ControlRow, TabBar, TextInput, EarningsCalendar, SectionHead],
+  imports: [DataTable, Panel, Button, ConfirmDialog, ControlRow, TabBar, TextInput, EarningsCalendar, RowLink, SectionHead],
   providers: [WatchlistStore],
   template: `
     <sb-section-head heading="Watchlist">
@@ -220,7 +221,7 @@ function sortValue(row: Ticker, key: string): string | number | null {
     <!-- cells ----------------------------------------------------------- -->
 
     <ng-template #symbolCell let-row>
-      <a class="row-link" [routerLink]="['/watchlist', row.symbol]">{{ row.symbol }}</a>
+      <sb-row-link [link]="['/watchlist', row.symbol]">{{ row.symbol }}</sb-row-link>
     </ng-template>
 
     <ng-template #actionsCell let-row>
@@ -298,8 +299,7 @@ function sortValue(row: Ticker, key: string): string | number | null {
     .result { margin-top: var(--space-10); color: var(--text-secondary); font-size: var(--text-table); }
     .error { color: var(--neg); font-size: var(--text-table); }
 
-    .row-link { color: var(--accent); font-family: var(--font-mono); text-decoration: none; }
-    .row-link:hover { text-decoration: underline; }
+    sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
     /* The Watchlist panel is flush (the table needs edge-to-edge rows),
        which zeroes the body's own padding -- restores just the left/right

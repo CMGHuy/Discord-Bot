@@ -7,7 +7,6 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { RouterLink } from '@angular/router';
 
 import { RiskPosition } from '../../api/models';
 import { RiskStore } from '../../stores/risk.store';
@@ -17,6 +16,7 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, RowContext } from '../../ui/data-table/data-table.types';
 import { dateTime, num, text } from '../../ui/format';
 import { Panel } from '../../ui/layout';
+import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { Sparkline } from '../../ui/sparkline';
 
@@ -46,7 +46,7 @@ import { Sparkline } from '../../ui/sparkline';
 @Component({
   selector: 'sb-risk',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Button, ConfirmDialog, DataTable, Panel, SectionHead, Sparkline],
+  imports: [Button, ConfirmDialog, DataTable, Panel, RowLink, SectionHead, Sparkline],
   // Provided on the component: created on entry, destroyed on exit, so the
   // workspace cannot hold stale exposure while you are looking at another.
   providers: [RiskStore],
@@ -264,7 +264,7 @@ import { Sparkline } from '../../ui/sparkline';
     <!-- cells ----------------------------------------------------------- -->
 
     <ng-template #tickerCell let-row>
-      <a class="row-link" [routerLink]="['/trades', row.trade_id]">{{ row.ticker }}</a>
+      <sb-row-link [link]="['/trades', row.trade_id]">{{ row.ticker }}</sb-row-link>
     </ng-template>
 
     <ng-template #riskCell let-row>
@@ -389,8 +389,7 @@ import { Sparkline } from '../../ui/sparkline';
     .scan-label { color: var(--text-secondary); font-size: var(--text-micro); text-transform: uppercase; letter-spacing: 0.1em; }
     .scan sb-sparkline { flex: 1 1 auto; min-width: 80px; max-width: 320px; }
 
-    .row-link { color: var(--accent); font-family: var(--font-mono); text-decoration: none; }
-    .row-link:hover { text-decoration: underline; }
+    sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
     @media (max-width: 720px) {
       .kill { flex-direction: column; align-items: stretch; }

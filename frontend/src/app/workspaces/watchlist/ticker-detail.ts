@@ -19,6 +19,7 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, RowContext } from '../../ui/data-table/data-table.types';
 import { held, num, pct } from '../../ui/format';
 import { Panel } from '../../ui/layout';
+import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 
 /** How many of this ticker's trades the table shows.
@@ -49,7 +50,7 @@ export const TICKER_TRADES_CAP = 25;
 @Component({
   selector: 'sb-ticker-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Panel, DataTable, ChartContainer, SectionHead, TradeChart],
+  imports: [RouterLink, Panel, DataTable, ChartContainer, RowLink, SectionHead, TradeChart],
   providers: [TradesStore, ChartStore],
   template: `
     <!-- The breadcrumb sits above the header rather than inside it: it
@@ -98,7 +99,7 @@ export const TICKER_TRADES_CAP = 25;
     <!-- cells ----------------------------------------------------------- -->
 
     <ng-template #tickerCell let-row>
-      <a class="row-link" [routerLink]="['/trades', row.id]">{{ row.ticker }}</a>
+      <sb-row-link [link]="['/trades', row.id]">{{ row.ticker }}</sb-row-link>
     </ng-template>
 
     <ng-template #pnlCell let-row>
@@ -134,8 +135,7 @@ export const TICKER_TRADES_CAP = 25;
       font-size: var(--text-table);
     }
 
-    .row-link { color: var(--accent); font-family: var(--font-mono); text-decoration: none; }
-    .row-link:hover { text-decoration: underline; }
+    sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
     .pos { color: var(--pos); }
     .neg { color: var(--neg); }

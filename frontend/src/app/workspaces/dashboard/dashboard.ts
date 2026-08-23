@@ -35,6 +35,7 @@ import {
 } from '../trades/trades.columns';
 import { dateTime, held, money, num, pct, rMultiple } from '../../ui/format';
 import { ControlRow, Panel } from '../../ui/layout';
+import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { MetricCard } from '../../ui/metric-card';
 import { MetricChip } from '../../ui/metric-chip';
@@ -82,7 +83,7 @@ import { TradeGroup } from './trade-group';
   imports: [
     RouterLink, MetricCard, MetricChip, Panel, TradeGroup,
     StatusCell, PlanCell, ConfidenceCell, Button, ControlRow,
-    PlanLifecycleDiagram, SectionHead,
+    PlanLifecycleDiagram, RowLink, SectionHead,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // Provided here rather than in root: the store is created on entry and
@@ -425,7 +426,7 @@ import { TradeGroup } from './trade-group';
     <!-- A real anchor, not a click handler: row activation is mouse-only by
          the table's design, so this is the keyboard route into a position. -->
     <ng-template #tickerCell let-row>
-      <a class="row-link" [routerLink]="['/trades', row.id]">{{ row.ticker }}</a>
+      <sb-row-link [link]="['/trades', row.id]">{{ row.ticker }}</sb-row-link>
     </ng-template>
 
     <!-- The % alone didn't say how much money that was -- pairing it with
@@ -726,8 +727,12 @@ import { TradeGroup } from './trade-group';
     }
     .all-link:hover { text-decoration: underline; }
 
-    .row-link { color: var(--accent); font-family: var(--font-mono); text-decoration: none; }
-    .row-link:hover { text-decoration: underline; }
+    /* Only colour and font-family reach through sb-row-link's own
+       :host{display:contents} into its inner .row-link's color: inherit --
+       text-decoration cannot: the primitive explicitly resets it to none,
+       even on hover, so the old underline becomes the primitive's own
+       background-tint hover instead. */
+    sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
     .pos { color: var(--pos); }
     .neg { color: var(--neg); }

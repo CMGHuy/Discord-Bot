@@ -10,7 +10,7 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 
 import { ApiClient } from '../../api/api-client';
 import { TradeQuery, TradeRow } from '../../api/models';
@@ -37,6 +37,7 @@ import { FilterBar, FilterChips } from '../../ui/filter-bar';
 import { dateTime, money, pct, text } from '../../ui/format';
 import { Select, TextInput } from '../../ui/form-controls';
 import { ControlRow } from '../../ui/layout';
+import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { ConfidenceCell } from '../../ui/confidence-cell';
 import { DirectionArrow } from '../../ui/direction-arrow';
@@ -80,7 +81,6 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [TradesStore],
   imports: [
-    RouterLink,
     ControlRow,
     DataTable,
     ColumnPickerComponent,
@@ -95,6 +95,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
     PlanCell,
     ConfidenceCell,
     QualityChip,
+    RowLink,
     SectionHead,
   ],
   template: `
@@ -263,7 +264,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
     <!-- cells ---------------------------------------------------------- -->
 
     <ng-template #numCell let-row>
-      <a class="row-link" [routerLink]="['/trades', row.id]">{{ shortId(row) }}</a>
+      <sb-row-link [link]="['/trades', row.id]">{{ shortId(row) }}</sb-row-link>
     </ng-template>
 
     <ng-template #statusCell let-row>
@@ -394,8 +395,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
       font-size: var(--text-table);
     }
 
-    .row-link { color: var(--accent); font-family: var(--font-mono); text-decoration: none; }
-    .row-link:hover { text-decoration: underline; }
+    sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
     .pos { color: var(--pos); }
     .neg { color: var(--neg); }
