@@ -727,6 +727,63 @@ def exit_reason_split(closed: list[dict]) -> list[dict]:
     return out
 
 
+#: Disposition-ratio severity bands, taken verbatim from HKUDS/Vibe-Trading's
+#: `trade-journal` skill. They are that project's numbers, calibrated on retail
+#: broker exports, and have NOT been measured on this repo's trades: a severity
+#: label here is a prompt to go and look, never a verdict.
+_DISPOSITION_HIGH = 1.5
+_DISPOSITION_MEDIUM = 1.2
+
+
+def hold_by_outcome(closed: list[dict]) -> dict:
+    """Average days held, split by whether the trade won or lost, plus their
+    ratio -- `avg_loser_days / avg_winner_days`.
+
+    In a human that ratio is the disposition effect, a bias. In a mechanical
+    bot it is an exit-design defect: if losers are systematically held longer
+    than winners, the stop and the timeout are doing work the target should be
+    doing, and every extra day in a loser is R bleeding out.
+
+    Scratches and timeouts are excluded from both sides. They are neither a
+    winner nor a loser, and folding them in would turn this into a statement
+    about horizon length rather than exit design. Trades without both
+    timestamps are skipped entirely, so `n_winners`/`n_losers` count the
+    trades this answer actually rests on, not every trade of that outcome.
+
+    `ratio` and `severity` are None -- never 0 -- unless BOTH sides clear
+    MIN_TRADES_FOR_RATIO, applied to each side independently: forty losers
+    cannot license a ratio built on two winners. They are also None when the
+    winners averaged zero days held, because dividing by that is meaningless
+    rather than infinite.
+    """
+    winners: list[float] = []
+    losers: list[float] = []
+    for trade in closed:
+        held = _holding_days(trade)
+        if held is None:
+            continue
+        outcome = resolve_outcome(trade)
+        if outcome == "win":
+            winners.append(held)
+        elif outcome == "loss":
+            losers.append(held)
+    avg_w = (sum(winners) / len(winners)) if winners else None
+    avg_l = (sum(losers) / len(losers)) if losers else None
+    ratio = severity = None
+    if (len(winners) >= MIN_TRADES_FOR_RATIO
+            and len(losers) >= MIN_TRADES_FOR_RATIO and avg_w):
+        raw = avg_l / avg_w
+        ratio = round(raw, 4)
+        severity = ("high" if raw >= _DISPOSITION_HIGH else
+                    "medium" if raw >= _DISPOSITION_MEDIUM else "low")
+    return {"avg_winner_days": round(avg_w, 2) if avg_w is not None else None,
+            "avg_loser_days": round(avg_l, 2) if avg_l is not None else None,
+            "ratio": ratio,
+            "severity": severity,
+            "n_winners": len(winners),
+            "n_losers": len(losers)}
+
+
 def calendar_returns(closed: list[dict]) -> list[dict]:
     """Compounded return per calendar month of close, oldest first.
 
