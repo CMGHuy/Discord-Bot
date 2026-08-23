@@ -48,7 +48,7 @@ import logging
 import os
 import time
 from collections import OrderedDict, defaultdict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -616,6 +616,78 @@ def _check_near_close(ticker: str, df) -> list:
     return warnings
 
 
+def _resolve_workers() -> int:
+    """FETCH_WORKERS, with 0 meaning auto.
+
+    A Field default is a string cast by int() (config.py:705), so a computed
+    cpu_count default cannot live in the schema -- 0-as-auto is how it is
+    expressed. Leaves one core for the bot's own event loop; the work is
+    network-bound anyway, so oversubscribing buys nothing.
+    """
+    configured = int(getattr(config, "FETCH_WORKERS", 0) or 0)
+    if configured > 0:
+        return configured
+    return max(1, (os.cpu_count() or 2) - 1)
+
+
+def _fetch_one_ticker(ticker: str) -> tuple:
+    """Process-pool entry point: must be module-level to be picklable.
+
+    Returns (ticker, DataFrame|None). Never raises -- a worker that raised
+    would surface as a BrokenProcessPool and take the whole batch with it,
+    which is exactly the "one bad ticker never aborts the crawl" contract
+    _crawl_latest_data has always had.
+    """
+    try:
+        return ticker, get_daily_data(ticker, period=config.DEFAULT_HISTORY_PERIOD)
+    except Exception as exc:
+        log.error("Crawl: error fetching data for %s: %s", ticker, exc)
+        return ticker, None
+
+
+def _fetch_cold_frames(tickers: list, progress: "ScanProgress" = None) -> list:
+    """v47: fetch the cache misses, sequentially or pooled.
+
+    PROCESSES, never threads. The pinned yfinance 0.2.66 builds download() on a
+    shared module-level global (_DFS) that it writes non-reentrantly; the
+    reentrancy fix landed only in yfinance 1.4.0, a major bump this project has
+    not taken. A ThreadPoolExecutor here once let two tickers' downloads clobber
+    each other mid-flight -- two real watchlist tickers were logged as open
+    trades with byte-identical entry/stop/target/confidence values, one
+    ticker's price data attributed to the other. Separate processes have
+    separate interpreters and separate memory, so _DFS is not shared and cannot
+    be clobbered across workers.
+
+    Returns order-preserving (ticker, DataFrame|None) pairs.
+    """
+    if not tickers:
+        return []
+
+    threshold = int(getattr(config, "COLD_FETCH_PROCESS_THRESHOLD", 10))
+    if len(tickers) <= threshold:
+        pairs = []
+        for ticker in tickers:
+            if is_stop_requested():
+                if progress is not None:
+                    progress.stopped = True
+                break
+            pairs.append(_fetch_one_ticker(ticker))
+            if progress is not None:
+                progress.done += 1
+                progress.current_ticker = ticker
+        return pairs
+
+    workers = _resolve_workers()
+    log.info("Crawl: %d cold ticker(s) over the threshold of %d -- fetching across %d process(es)",
+              len(tickers), threshold, workers)
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        pairs = list(pool.map(_fetch_one_ticker, tickers))
+    if progress is not None:
+        progress.done += len(pairs)
+        progress.current_ticker = tickers[-1]
+    return pairs
+
+
 def _load_cached_daily(ticker: str):
     """v47: today's daily bar from market_data/daily/{TICKER}.csv, or None.
 
@@ -712,22 +784,9 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
             continue
         cold.append(ticker)
 
-    # Placeholder -- Task 4 replaces this with the threshold + process pool.
-    for ticker in cold:
-        if is_stop_requested():
-            if progress is not None:
-                progress.stopped = True
-            break
-        try:
-            df = get_daily_data(ticker, period=config.DEFAULT_HISTORY_PERIOD)
-        except Exception as e:
-            log.error("Crawl: error fetching data for %s: %s", ticker, e)
-            df = None
+    for ticker, df in _fetch_cold_frames(cold, progress):
         if df is not None:
             results[ticker] = df
-        if progress is not None:
-            progress.done += 1
-            progress.current_ticker = ticker
 
     elapsed = time.monotonic() - started
     log.info("Crawl complete in %.1fs: %d/%d ticker(s) resolved (%d from cache, %d fetched)",
