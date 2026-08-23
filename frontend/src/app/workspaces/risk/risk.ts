@@ -17,6 +17,7 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, RowContext } from '../../ui/data-table/data-table.types';
 import { dateTime, num, text } from '../../ui/format';
 import { Panel } from '../../ui/layout';
+import { SectionHead } from '../../ui/section-head';
 import { Sparkline } from '../../ui/sparkline';
 
 /**
@@ -45,20 +46,19 @@ import { Sparkline } from '../../ui/sparkline';
 @Component({
   selector: 'sb-risk',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Button, ConfirmDialog, DataTable, Panel, Sparkline],
+  imports: [RouterLink, Button, ConfirmDialog, DataTable, Panel, SectionHead, Sparkline],
   // Provided on the component: created on entry, destroyed on exit, so the
   // workspace cannot hold stale exposure while you are looking at another.
   providers: [RiskStore],
   template: `
-    <header class="head">
-      <h1>Risk</h1>
+    <sb-section-head heading="Risk">
       @if (store.error(); as message) {
         <!-- Beside the numbers rather than instead of them: stale exposure
              with a warning beats an empty page, because "no positions
              shown" would be a claim about the account. -->
-        <span class="stale" role="status">{{ message }}</span>
+        <span actions class="stale" role="status">{{ message }}</span>
       }
-    </header>
+    </sb-section-head>
 
     <!-- killswitch ------------------------------------------------------ -->
 
@@ -282,8 +282,6 @@ import { Sparkline } from '../../ui/sparkline';
        No backticks in here: these styles live in a TS template literal. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
 
-    .head { display: flex; align-items: baseline; gap: var(--space-14); }
-    h1 { margin: 0; font-size: var(--text-title); font-weight: 600; }
     .stale { color: var(--warn); font-size: var(--text-table); }
 
     /* -- killswitch -- */

@@ -37,3 +37,29 @@ describe('no call site hand-rolls a form control', () => {
     });
   }
 });
+
+/**
+ * Promoted classes a call site may still define, each with the reason
+ * sb-section-head cannot cover it. Adding a name here is a claim about
+ * the file, so it needs a reason.
+ */
+const PROMOTED_ALLOWLIST = new Map<string, string[]>([
+  // Trade detail's <h1> is a ticker span plus a live sb-status-indicator --
+  // rich content, not a string. sb-section-head's `heading` input is
+  // `string` only (Task 5's given design); there is no slot to project a
+  // component into in its place.
+  ['workspaces/trades/trade-detail.ts', ['head']],
+]);
+
+describe('no call site redefines a promoted composite', () => {
+  const PROMOTED = ['head', 'row-link', 'note', 'chips'];
+  for (const { name, source } of callSites()) {
+    it(`${name} defines none of the promoted classes`, () => {
+      const allowed = new Set(PROMOTED_ALLOWLIST.get(name) ?? []);
+      const offenders = PROMOTED.filter((cls) =>
+        !allowed.has(cls) && new RegExp(`^\\s*\\.${cls}\\s*[,{]`, 'm').test(source),
+      );
+      expect(offenders).toEqual([]);
+    });
+  }
+});

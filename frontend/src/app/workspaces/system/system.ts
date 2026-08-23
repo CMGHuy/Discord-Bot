@@ -9,6 +9,7 @@ import { Router } from '@angular/router';
 
 import { SYSTEM_TABS, SystemStore, SystemTab } from '../../stores/system.store';
 import { Tab, TabBar } from '../../ui/layout';
+import { SectionHead } from '../../ui/section-head';
 import { LogsTab } from './logs-tab';
 import { ScanTab } from './scan-tab';
 import { SettingsTab } from './settings-tab';
@@ -42,18 +43,17 @@ const TAB_IDS = new Set<string>(SYSTEM_TABS);
 @Component({
   selector: 'sb-system',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TabBar, SettingsTab, LogsTab, ScanTab],
+  imports: [TabBar, SettingsTab, LogsTab, ScanTab, SectionHead],
   providers: [SystemStore],
   template: `
-    <header class="head">
-      <h1>System</h1>
+    <sb-section-head heading="System">
       @if (store.dirty()) {
         <!-- Visible from every tab: the draft survives switching away, and
              unsaved configuration you have forgotten about is worse than
              the reminder. -->
-        <span class="dirty" role="status">Unsaved settings</span>
+        <span actions class="dirty" role="status">Unsaved settings</span>
       }
-    </header>
+    </sb-section-head>
 
     <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="goToTab($event)" />
 
@@ -77,8 +77,6 @@ const TAB_IDS = new Set<string>(SYSTEM_TABS);
        containers the thing that scrolls instead.
        No backticks in here: these styles live in a TS template literal. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
-    .head { display: flex; align-items: baseline; gap: var(--space-14); }
-    h1 { margin: 0; font-size: var(--text-title); font-weight: 600; }
     .dirty { color: var(--warn); font-size: var(--text-table); }
   `,
 })

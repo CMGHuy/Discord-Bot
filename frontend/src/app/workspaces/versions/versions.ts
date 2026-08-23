@@ -11,6 +11,7 @@ import {
 import { Release } from '../../api/models';
 import { Button } from '../../ui/button';
 import { PaginationComponent } from '../../ui/pagination';
+import { SectionHead } from '../../ui/section-head';
 import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 
 /**
@@ -38,19 +39,18 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
   selector: 'sb-versions',
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [VersionsStore],
-  imports: [Button, PaginationComponent],
+  imports: [Button, PaginationComponent, SectionHead],
   template: `
-    <header class="head">
-      <h1>Versions</h1>
+    <sb-section-head heading="Versions">
       @if (store.stale()) {
         <!-- The frozen file is behind VERSION.json. Saying so is the whole
              point: a timeline silently missing the newest release looks
              complete, which is the one way this page could mislead. -->
-        <span class="stale" role="status">
+        <span actions class="stale" role="status">
           History not regenerated — run <code>scripts/dev/build_version_matrix.py</code>
         </span>
       }
-    </header>
+    </sb-section-head>
 
     @if (store.error(); as error) {
       <p class="error" role="alert">{{ error }}</p>
@@ -192,9 +192,6 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
        how one panel takes the page sideways.
        No backticks in here: these styles live in a TS template literal. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
-
-    .head { display: flex; align-items: baseline; gap: var(--space-14); flex-wrap: wrap; }
-    h1 { margin: 0; font-size: var(--text-title); font-weight: 600; }
 
     .stale { color: var(--warn); font-size: var(--text-table); }
     .stale code, .muted code { font-family: var(--font-mono); font-size: var(--text-micro); }

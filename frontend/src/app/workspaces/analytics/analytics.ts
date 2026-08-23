@@ -38,6 +38,7 @@ import { createClientPage } from '../../ui/data-table/client-page';
 import { Select, TextInput } from '../../ui/form-controls';
 import { ABSENT, date, dateTime } from '../../ui/format';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
+import { SectionHead } from '../../ui/section-head';
 import { Histogram, HistogramBin } from '../../ui/histogram';
 import { LineChart, LineChartSeries } from '../../ui/line-chart';
 import { MetricChip } from '../../ui/metric-chip';
@@ -125,16 +126,16 @@ interface ProposalView extends ProposalRow {
     Button,
     ConfirmDialog,
     PaginationComponent,
+    SectionHead,
   ],
   template: `
-    <header class="head">
-      <h1>Analytics</h1>
+    <sb-section-head heading="Analytics">
       @if (store.error(); as message) {
         <!-- Beside the data, never instead of it: one failed refetch should
              not empty a table that is still the best information available. -->
-        <span class="stale" role="status">{{ message }}</span>
+        <span actions class="stale" role="status">{{ message }}</span>
       }
-    </header>
+    </sb-section-head>
 
     <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="goToTab($event)" />
 
@@ -919,13 +920,10 @@ interface ProposalView extends ProposalRow {
     />
   `,
   styles: `
-    .head {
-      display: flex;
-      align-items: baseline;
-      gap: var(--space-14);
-      margin-bottom: var(--space-14);
-    }
-    h1 { font-size: var(--text-title); font-weight: 600; }
+    /* This component has no :host layout of its own -- .head's
+       margin-bottom was the only thing separating the header from the
+       content below, so it moves to the primitive's own host tag. */
+    sb-section-head { margin-bottom: var(--space-14); }
     .stale { color: var(--warn); font-size: var(--text-table); }
 
     sb-panel { display: block; margin-top: var(--space-14); }

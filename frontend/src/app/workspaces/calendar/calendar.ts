@@ -8,6 +8,7 @@ import { ABSENT, money, rMultiple } from '../../ui/format';
 import { ControlRow, Drawer, Panel } from '../../ui/layout';
 import { MetricCard } from '../../ui/metric-card';
 import { Select } from '../../ui/form-controls';
+import { SectionHead } from '../../ui/section-head';
 import { GridCell, monthLabel, monthMatrix } from './calendar.helpers';
 
 /** Monday-first, matching `monthMatrix` and the API's weekday breakdown. */
@@ -16,17 +17,16 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 @Component({
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow, Drawer, MetricCard, Panel, Select],
+  imports: [Button, ControlRow, Drawer, MetricCard, Panel, SectionHead, Select],
   // Provided on the component: created on entry, destroyed on exit, so the
   // workspace cannot hold a stale month while you are looking elsewhere.
   providers: [CalendarStore],
   template: `
-    <header class="head">
-      <h1>Calendar</h1>
+    <sb-section-head heading="Calendar">
       @if (store.error(); as message) {
-        <span class="stale" role="status">{{ message }}</span>
+        <span actions class="stale" role="status">{{ message }}</span>
       }
-    </header>
+    </sb-section-head>
 
     <sb-control-row>
       <div class="months">
@@ -188,8 +188,6 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   styles: `
     /* No backticks in here: these styles live in a TS template literal. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
-    .head { display: flex; align-items: baseline; gap: var(--space-14); }
-    h1 { margin: 0; font-size: var(--text-title); font-weight: 600; }
     .stale { color: var(--warn); font-size: var(--text-table); }
 
     /* The month stepper: two buttons with the month between them. Centred

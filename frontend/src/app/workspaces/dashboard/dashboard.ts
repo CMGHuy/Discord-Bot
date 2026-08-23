@@ -35,6 +35,7 @@ import {
 } from '../trades/trades.columns';
 import { dateTime, held, money, num, pct, rMultiple } from '../../ui/format';
 import { ControlRow, Panel } from '../../ui/layout';
+import { SectionHead } from '../../ui/section-head';
 import { MetricCard } from '../../ui/metric-card';
 import { MetricChip } from '../../ui/metric-chip';
 import { PlanLifecycleDiagram } from '../../ui/plan-lifecycle-diagram';
@@ -81,7 +82,7 @@ import { TradeGroup } from './trade-group';
   imports: [
     RouterLink, MetricCard, MetricChip, Panel, TradeGroup,
     StatusCell, PlanCell, ConfidenceCell, Button, ControlRow,
-    PlanLifecycleDiagram,
+    PlanLifecycleDiagram, SectionHead,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // Provided here rather than in root: the store is created on entry and
@@ -91,34 +92,40 @@ import { TradeGroup } from './trade-group';
   // those three touch the Trades workspace's own copy.
   providers: [DashboardStore],
   template: `
-    <header class="head">
-      <h1>Dashboard</h1>
-      @if (store.error(); as message) {
-        <!-- Beside the numbers, not instead of them: the previous values
-             are still the best information available, and replacing nine
-             live figures with an error panel because one poll failed is
-             worse than showing them slightly stale. -->
-        <span class="stale" role="status">{{ message }}</span>
-      }
-
-      <!-- SR58. The Jinja dashboard's three date scopes. A server parameter,
-           not a client filter: the realised figures below are computed from
-           the scoped set, and a client-side scope over an all-time payload
-           could not narrow them at all. -->
-      <sb-control-row class="scope" role="group" aria-label="Date scope">
-        @for (option of scopes; track option.mode) {
-          <button
-            sb-button
-            type="button"
-            [variant]="store.scope() === option.mode ? 'secondary' : 'ghost'"
-            [attr.aria-pressed]="store.scope() === option.mode"
-            (click)="store.setScope(option.mode)"
-          >
-            {{ option.label }}
-          </button>
+    <!-- The stale message and the scope toggle are wrapped in one
+         actions-projected group so they cluster together on the right
+         under sb-section-head's space-between -- as two separate
+         projections they would land at opposite ends with the heading
+         squeezed between three items instead of two. -->
+    <sb-section-head heading="Dashboard">
+      <div actions class="head-actions">
+        @if (store.error(); as message) {
+          <!-- Beside the numbers, not instead of them: the previous values
+               are still the best information available, and replacing nine
+               live figures with an error panel because one poll failed is
+               worse than showing them slightly stale. -->
+          <span class="stale" role="status">{{ message }}</span>
         }
-      </sb-control-row>
-    </header>
+
+        <!-- SR58. The Jinja dashboard's three date scopes. A server parameter,
+             not a client filter: the realised figures below are computed from
+             the scoped set, and a client-side scope over an all-time payload
+             could not narrow them at all. -->
+        <sb-control-row class="scope" role="group" aria-label="Date scope">
+          @for (option of scopes; track option.mode) {
+            <button
+              sb-button
+              type="button"
+              [variant]="store.scope() === option.mode ? 'secondary' : 'ghost'"
+              [attr.aria-pressed]="store.scope() === option.mode"
+              (click)="store.setScope(option.mode)"
+            >
+              {{ option.label }}
+            </button>
+          }
+        </sb-control-row>
+      </div>
+    </sb-section-head>
 
     <!-- SR59. Copied from dashboard.html:60-68, not paraphrased: it states
          a specific rule about what does and does not reach this screen, and a
@@ -540,7 +547,10 @@ import { TradeGroup } from './trade-group';
     .footnote code { font-family: var(--font-mono); }
 
     /* -- SR58: scope toggle ---------------------------------------- */
-    .scope { margin-left: auto; }
+    /* Groups the stale message and the scope toggle into one actions
+       projection -- as two separate ones they would land at opposite
+       ends of sb-section-head's space-between instead of clustered. */
+    .head-actions { display: flex; align-items: baseline; gap: var(--space-14); }
     /* :host's own grid gap (below) already separates this from .primary
        above it -- no margin of its own needed, just the right alignment. */
     .realized-count {
@@ -559,16 +569,6 @@ import { TradeGroup } from './trade-group';
        No backticks in here: these styles live in a TS template literal. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
 
-    .head {
-      display: flex;
-      align-items: baseline;
-      gap: var(--space-14);
-    }
-    h1 {
-      margin: 0;
-      font-size: var(--text-title);
-      font-weight: 600;
-    }
     .stale {
       color: var(--warn);
       font-size: var(--text-table);

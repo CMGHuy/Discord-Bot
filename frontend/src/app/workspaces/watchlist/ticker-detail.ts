@@ -19,6 +19,7 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, RowContext } from '../../ui/data-table/data-table.types';
 import { held, num, pct } from '../../ui/format';
 import { Panel } from '../../ui/layout';
+import { SectionHead } from '../../ui/section-head';
 
 /** How many of this ticker's trades the table shows.
  *
@@ -48,16 +49,19 @@ export const TICKER_TRADES_CAP = 25;
 @Component({
   selector: 'sb-ticker-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Panel, DataTable, ChartContainer, TradeChart],
+  imports: [RouterLink, Panel, DataTable, ChartContainer, SectionHead, TradeChart],
   providers: [TradesStore, ChartStore],
   template: `
-    <header class="head">
-      <a class="back" routerLink="/watchlist">← Watchlist</a>
-      <h1>{{ symbol() }}</h1>
-      <span class="counts">
+    <!-- The breadcrumb sits above the header rather than inside it: it
+         reads first, before the title, and sb-section-head has no slot
+         that lands content on that side of the heading -- only
+         heading:string and a right-aligned [actions]. -->
+    <a class="back" routerLink="/watchlist">← Watchlist</a>
+    <sb-section-head [heading]="symbol()">
+      <span actions class="counts">
         {{ openCount() }} open · {{ closedCount() }} closed
       </span>
-    </header>
+    </sb-section-head>
 
     <sb-chart-container
       [loading]="chart.loading()"
@@ -110,11 +114,16 @@ export const TICKER_TRADES_CAP = 25;
        No backticks in here: these styles live in a TS template literal. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
 
-    .head { display: flex; align-items: baseline; gap: var(--space-14); }
     .back { color: var(--text-secondary); font-size: var(--text-table); text-decoration: none; }
     .back:hover { color: var(--text); }
-    h1 { margin: 0; font-family: var(--font-mono); font-size: var(--text-title); font-weight: 600; }
-    .counts { color: var(--text-secondary); font-size: var(--text-table); }
+    /* font-family is the one thing sb-section-head's own h1 rule leaves to
+       inherit -- setting it on the host reaches the internal h1 through
+       normal CSS inheritance, which crosses the encapsulation boundary
+       even though selectors cannot. */
+    sb-section-head { font-family: var(--font-mono); }
+    /* Resets the mono inherited from the host above -- only the ticker
+       heading wants it; the count badge stays the app's default sans. */
+    .counts { color: var(--text-secondary); font-size: var(--text-table); font-family: var(--font-sans); }
 
     .all-link { color: var(--accent); font-size: var(--text-table); text-decoration: none; }
     .all-link:hover { text-decoration: underline; }

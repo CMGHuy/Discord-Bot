@@ -37,6 +37,7 @@ import { FilterBar, FilterChips } from '../../ui/filter-bar';
 import { dateTime, money, pct, text } from '../../ui/format';
 import { Select, TextInput } from '../../ui/form-controls';
 import { ControlRow } from '../../ui/layout';
+import { SectionHead } from '../../ui/section-head';
 import { ConfidenceCell } from '../../ui/confidence-cell';
 import { DirectionArrow } from '../../ui/direction-arrow';
 import { PlanCell } from '../../ui/plan-cell';
@@ -94,11 +95,11 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
     PlanCell,
     ConfidenceCell,
     QualityChip,
+    SectionHead,
   ],
   template: `
-    <header class="head">
-      <h1>Trades</h1>
-      <sb-control-row class="head-actions">
+    <sb-section-head heading="Trades">
+      <sb-control-row actions class="head-actions">
         <!-- A plain anchor, not a fetch: the browser gets a Save dialog and
              the server's filename, both of which an XHR throws away.
              The title names what comes out, because it is NOT what is on
@@ -147,7 +148,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
           (visibleChange)="visible.set($event)"
         />
       </sb-control-row>
-    </header>
+    </sb-section-head>
 
     @if (store.clearResult(); as message) {
       <!-- The count, not just "done": "cleared 0" and "cleared 40" are
@@ -375,13 +376,6 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
     />
   `,
   styles: `
-    .head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--space-10);
-    }
-    h1 { font-size: var(--text-title); font-weight: 600; }
     /* sb-control-row supplies display, alignment, wrap and gap. */
     .export { color: var(--accent); font-size: var(--text-table); text-decoration: none; }
     .export:hover { text-decoration: underline; }

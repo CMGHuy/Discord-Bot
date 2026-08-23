@@ -19,6 +19,7 @@ import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.
 import { date, text } from '../../ui/format';
 import { TextInput } from '../../ui/form-controls';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
+import { SectionHead } from '../../ui/section-head';
 import { EarningsCalendar } from './earnings-calendar';
 
 const TABS: Tab[] = [
@@ -93,16 +94,20 @@ function sortValue(row: Ticker, key: string): string | number | null {
 @Component({
   selector: 'sb-watchlist',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, DataTable, Panel, Button, ConfirmDialog, ControlRow, TabBar, TextInput, EarningsCalendar],
+  imports: [RouterLink, DataTable, Panel, Button, ConfirmDialog, ControlRow, TabBar, TextInput, EarningsCalendar, SectionHead],
   providers: [WatchlistStore],
   template: `
-    <header class="head">
-      <h1>Watchlist</h1>
-      <span class="count">{{ store.count() }} watched</span>
-      @if (store.error(); as message) {
-        <span class="stale" role="status">{{ message }}</span>
-      }
-    </header>
+    <sb-section-head heading="Watchlist">
+      <!-- One wrapper, not two separate actions projections -- otherwise
+           .count and .stale land at opposite ends of the space-between
+           row instead of clustered beside each other. -->
+      <div actions class="head-status">
+        <span class="count">{{ store.count() }} watched</span>
+        @if (store.error(); as message) {
+          <span class="stale" role="status">{{ message }}</span>
+        }
+      </div>
+    </sb-section-head>
 
     <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="goToTab($event)" />
 
@@ -245,8 +250,7 @@ function sortValue(row: Ticker, key: string): string | number | null {
        No backticks in here: these styles live in a TS template literal. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
 
-    .head { display: flex; align-items: baseline; gap: var(--space-14); }
-    h1 { margin: 0; font-size: var(--text-title); font-weight: 600; }
+    .head-status { display: flex; align-items: baseline; gap: var(--space-14); }
     .count { color: var(--text-secondary); font-size: var(--text-table); }
     .stale { color: var(--warn); font-size: var(--text-table); }
 
