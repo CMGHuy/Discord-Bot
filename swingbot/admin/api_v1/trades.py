@@ -201,7 +201,14 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
     # the runner's own numbers -- working_stop (break-even, then wherever the
     # chandelier trail has since moved it) and TP2, not the original entry
     # stop/TP1 that already happened. `or` falls back to the original level
-    # only for the pre-Task-66 edge case where one of these was never set.
+    # when a PARTIAL plan has no TP2 (most strategies run without one -- see
+    # test_partial_plan_falls_back_when_the_runner_fields_are_unset) or
+    # predates working_stop -- showing the last known level beats showing
+    # nothing. This is also why a PARTIAL row's "stop" can legitimately sit
+    # below entry for a short (it's the runner floor protecting TP1's
+    # profit, not the original risk level) -- see PlanCell's `trailing`
+    # input / trade-detail's `stopLabel()`, which label it "Trailing stop"
+    # rather than leaving it looking like an inverted original stop.
     is_partial = plan.get("status") == "PARTIAL"
     current_stop = (plan.get("working_stop") if is_partial else None) or plan.get("stop_loss")
     current_target = (plan.get("tp2") if is_partial else None) or plan.get("tp1")

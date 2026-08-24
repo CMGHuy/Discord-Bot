@@ -416,6 +416,7 @@ import { TradeGroup } from './trade-group';
         [target]="row.target"
         [stop]="row.stop_loss"
         [trigger]="row.trigger_price"
+        [trailing]="row.status === 'PARTIAL'"
       />
     </ng-template>
     <!-- Direction folds into this cell (no separate Direction column here --

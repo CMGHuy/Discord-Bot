@@ -1,6 +1,6 @@
 import pytest
 
-from swingbot.core.tracking.performance import closed_pnl_pct
+from swingbot.core.tracking.performance import closed_pnl_pct, closed_r_multiple
 
 
 def test_no_legs_matches_plain_exit_vs_entry():
@@ -68,3 +68,71 @@ def test_missing_sizing_snapshot_on_legged_trade_returns_none():
 def test_missing_price_data_returns_none():
     assert closed_pnl_pct({"direction": "bullish", "legs": []}) is None
     assert closed_pnl_pct({"direction": "bullish", "entry": 100.0, "legs": []}) is None
+
+
+# -- closed_r_multiple ------------------------------------------------------
+
+def test_r_no_legs_matches_plain_exit_vs_entry_over_risk():
+    t = {
+        "direction": "bullish", "entry": 100.0, "exit_price": 95.0,
+        "stop_loss": 90.0, "legs": [],
+    }
+    # risk = 10, realized = -5 -> -0.5R
+    assert closed_r_multiple(t) == pytest.approx(-0.5)
+
+
+def test_r_no_legs_bearish_sign_flip():
+    t = {
+        "direction": "bearish", "entry": 100.0, "exit_price": 95.0,
+        "stop_loss": 105.0, "legs": [],
+    }
+    # risk = 5, realized = +5 -> +1.0R
+    assert closed_r_multiple(t) == pytest.approx(1.0)
+
+
+def test_r_scaled_out_win_uses_fraction_weighted_leg_r_not_last_leg_only():
+    # Same production scenario as the pnl_pct test above: TP1 banked a real
+    # gain (r=0.375), the runner then closed at breakeven (r=0.0). The OLD
+    # formula priced R off exit_price alone (the runner leg only) and would
+    # have shown a NEGATIVE R here (91.41 < entry, runner leg alone), even
+    # though the trade banked real R on TP1.
+    t = {
+        "direction": "bullish", "entry": 91.59, "exit_price": 91.41,
+        "stop_loss": 91.11,
+        "legs": [
+            {"fraction": 0.5, "exit_price": 92.34, "r": 1.5625, "reason": "tp1"},
+            {"fraction": 0.5, "exit_price": 91.41, "r": -0.375, "reason": "tp1_runner_be"},
+        ],
+    }
+    r = closed_r_multiple(t)
+    assert r is not None
+    assert r == pytest.approx(0.5 * 1.5625 + 0.5 * -0.375, abs=0.01)
+    assert r > 0, "TP1's positive R must not be erased by pricing the runner leg alone"
+
+
+def test_r_matches_plan_engine_backtest_blend_formula():
+    # Mirrors plan_engine._scale_out_exit_walk's r_total = frac1*rr + frac2*r2
+    # exactly, for a two-leg exit with a known original risk.
+    t = {
+        "direction": "bullish", "entry": 100.0, "stop_loss": 98.0,  # risk=2
+        "exit_price": 100.0,
+        "legs": [
+            {"fraction": 0.5, "exit_price": 100.7, "r": 0.35, "reason": "tp1"},
+            {"fraction": 0.5, "exit_price": 100.0, "r": 0.0, "reason": "tp1_runner_be"},
+        ],
+    }
+    assert closed_r_multiple(t) == pytest.approx(0.5 * 0.35 + 0.5 * 0.0, abs=0.01)
+
+
+def test_r_falls_back_to_computing_from_exit_price_when_leg_r_missing():
+    t = {
+        "direction": "bullish", "entry": 100.0, "stop_loss": 98.0,  # risk=2
+        "exit_price": 100.0,
+        "legs": [{"fraction": 1.0, "exit_price": 101.0, "reason": "timeout"}],
+    }
+    # (101 - 100) / 2 = 0.5R
+    assert closed_r_multiple(t) == pytest.approx(0.5)
+
+
+def test_r_missing_stop_loss_returns_none():
+    assert closed_r_multiple({"direction": "bullish", "entry": 100.0, "legs": []}) is None

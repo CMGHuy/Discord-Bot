@@ -92,4 +92,25 @@ describe('PlanCell', () => {
     expect(el.querySelector('.entry')!.textContent!.trim()).toBe('—');
     expect(el.querySelector('.entry')!.classList.contains('pending')).toBe(false);
   });
+
+  /* -- the trailing-stop tooltip ---------------------------------------- */
+
+  it('says "Trailing stop" once TP1 has banked, not plain "Stop"', () => {
+    // A PARTIAL short's stop legitimately sits BELOW entry (it protects the
+    // profit TP1 already locked in, not the original risk) -- which reads
+    // as backwards unless the tooltip says why.
+    const f = TestBed.createComponent(PlanCell);
+    f.componentRef.setInput('entry', 71.64);
+    f.componentRef.setInput('target', null);
+    f.componentRef.setInput('stop', 69.85);
+    f.componentRef.setInput('trailing', true);
+    f.detectChanges();
+    expect(f.nativeElement.querySelector('[title]').getAttribute('title'))
+      .toBe('Entry 71.64 · Target — · Trailing stop 69.85');
+  });
+
+  it('says plain "Stop" when not trailing (the default)', () => {
+    expect(render(178, 195, 170).querySelector('[title]')!.getAttribute('title'))
+      .toBe('Entry 178.00 · Target 195.00 · Stop 170.00');
+  });
 });

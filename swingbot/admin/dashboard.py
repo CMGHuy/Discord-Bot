@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 # calls it.
 from swingbot.core.planning.account import compute_position_size, load_account_config
 from swingbot.core.marketdata.data import get_current_price, prefetch_prices
-from swingbot.core.tracking.performance import closed_pnl_pct, trade_proximity
+from swingbot.core.tracking.performance import closed_pnl_pct, closed_r_multiple, trade_proximity
 
 from .helpers import _primary_strategy_label
 
@@ -148,14 +148,12 @@ def closed_pnl(t) -> float | None:
 
 
 def closed_r(t) -> float | None:
-    ex, en, sl_v = t.get("exit_price"), t.get("entry"), t.get("stop_loss")
-    if not ex or not en or not sl_v:
-        return None
-    risk = abs(en - sl_v)
-    if not risk:
-        return None
-    realized = (ex - en) if t["direction"] == "bullish" else (en - ex)
-    return round(realized / risk, 2)
+    """Delegates to performance.closed_r_multiple -- see its docstring for
+    why a plain (exit_price - entry) / risk calculation is wrong for a
+    scaled-out (v2 two-leg) trade: exit_price there is only the runner's
+    own exit, so the TP1 leg's R was silently dropped (same bug class as
+    closed_pnl -- see its own docstring)."""
+    return closed_r_multiple(t)
 
 
 # ---------------------------------------------------------------------------

@@ -23,7 +23,7 @@ from swingbot.core.planning import account
 from swingbot.core.planning.account import compute_position_size, load_account_config
 from swingbot.core.analytics.rank import follow_breakdown, follow_score
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
-from swingbot.core.tracking.performance import closed_pnl_pct
+from swingbot.core.tracking.performance import closed_pnl_pct, closed_r_multiple
 from swingbot.core.backtesting.registry import decay_for
 from swingbot.core.planning.plan_engine import WEAK_CAUTION_TEXT, badge_stats_line
 from swingbot.core.backtesting.registry import Badge
@@ -872,13 +872,11 @@ def build_closed_trade_embed(trade: dict) -> discord.Embed:
     pct = closed_pnl_pct(trade)
     pnl_str = f"{pct:+.2f}%" if pct is not None else "n/a"
 
-    # R-multiple — risk_per_share is stored on the trade if sizing was active
-    risk = trade.get("risk_per_share") or abs(entry - trade.get("stop_loss", entry)) or None
-    if risk and exit_price is not None:
-        realized = (exit_price - entry) if is_bull else (entry - exit_price)
-        r_str    = f"{realized / risk:+.2f}R"
-    else:
-        r_str = "n/a"
+    # R-multiple — same last-leg-only bug as pnl_str above applied here too
+    # (a plain (exit_price - entry) / risk calc only ever prices the
+    # runner's own leg); see closed_r_multiple's docstring.
+    r = closed_r_multiple(trade)
+    r_str = f"{r:+.2f}R" if r is not None else "n/a"
 
     title = f"{icon} {trade['ticker']} — {outcome_word}"
     embed = discord.Embed(title=title, color=color)

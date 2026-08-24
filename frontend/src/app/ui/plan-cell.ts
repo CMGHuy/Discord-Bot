@@ -62,6 +62,16 @@ export class PlanCell {
    */
   readonly trigger = input<number | null>(null);
 
+  /**
+   * True once TP1 has banked and `stop`/`target` are the runner's own
+   * working_stop/TP2 rather than the original plan levels. For a
+   * short that working stop legitimately sits BELOW entry -- it protects
+   * the profit TP1 already locked in, not the original risk -- which reads
+   * as backwards (a short's stop "should" be on the far side of entry from
+   * target) unless the tooltip says why.
+   */
+  readonly trailing = input<boolean>(false);
+
   /** True when the first number is a trigger rather than a fill. */
   protected readonly showsTrigger = computed(
     () => this.entry() === null && this.trigger() !== null,
@@ -77,7 +87,8 @@ export class PlanCell {
     const lead = this.showsTrigger()
       ? `Trigger ${this.fmt(this.trigger())} (not yet filled)`
       : `Entry ${this.fmt(this.entry())}`;
-    return `${lead} · Target ${this.fmt(this.target())} · Stop ${this.fmt(this.stop())}`;
+    const stopWord = this.trailing() ? 'Trailing stop' : 'Stop';
+    return `${lead} · Target ${this.fmt(this.target())} · ${stopWord} ${this.fmt(this.stop())}`;
   });
 
   protected fmt(v: number | null): string {

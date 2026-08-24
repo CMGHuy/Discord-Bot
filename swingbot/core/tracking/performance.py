@@ -255,6 +255,56 @@ def closed_pnl_pct(t: dict) -> float | None:
     return round(raw if t.get("direction") == "bullish" else -raw, 2)
 
 
+def closed_r_multiple(t: dict) -> float | None:
+    """Realized R-multiple for a closed trade: actual P&L against the
+    ORIGINALLY-planned risk (entry -> the plan's starting stop_loss), not
+    wherever a break-even/trail move may have since tightened it to.
+
+    Same last-leg-only bug as closed_pnl_pct (which see) applies to R too:
+    a plain (exit_price - entry) / risk calculation only ever prices the
+    RUNNER's own leg for a scaled-out trade, dropping the TP1 leg's R
+    entirely. Each leg already carries its own `r` -- computed live by
+    plan_manager.py's _step_active/_close_runner against this exact same
+    original-risk denominator -- so the correct blended R-multiple is
+    simply the fraction-weighted sum of those (identical to how
+    plan_engine.py's own backtest simulator computes r_total for a
+    two-leg exit: `frac1 * rr + frac2 * r2`). A leg missing `r` (should
+    not happen on any trade logged after legs existed, but cheap to guard)
+    falls back to deriving it from that leg's own exit_price.
+
+    Falls back to the plain single-exit formula for a trade with no legs,
+    where the two agree exactly anyway.
+    """
+    legs = t.get("legs")
+    if legs:
+        entry, stop_loss = t.get("entry"), t.get("stop_loss")
+        if not entry or not stop_loss:
+            return None
+        risk = abs(entry - stop_loss)
+        if not risk:
+            return None
+        sign = 1 if t.get("direction") == "bullish" else -1
+        total = 0.0
+        for leg in legs:
+            r = leg.get("r")
+            if r is None:
+                exit_p = leg.get("exit_price")
+                if exit_p is None:
+                    return None
+                r = (exit_p - entry) * sign / risk
+            total += leg.get("fraction", 0) * r
+        return round(total, 2)
+
+    ex, en, sl_v = t.get("exit_price"), t.get("entry"), t.get("stop_loss")
+    if not ex or not en or not sl_v:
+        return None
+    risk = abs(en - sl_v)
+    if not risk:
+        return None
+    realized = (ex - en) if t.get("direction") == "bullish" else (en - ex)
+    return round(realized / risk, 2)
+
+
 def _apply_exit_price(t: dict, price: float, reason: str) -> None:
     """Records `price` as `t`'s exit, realizing whatever fraction of the
     position is still open as one more leg on top of any TP1 already

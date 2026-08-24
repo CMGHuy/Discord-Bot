@@ -294,6 +294,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
         [target]="row.target"
         [stop]="row.stop_loss"
         [trigger]="row.trigger_price"
+        [trailing]="row.status === 'PARTIAL'"
       />
     </ng-template>
 

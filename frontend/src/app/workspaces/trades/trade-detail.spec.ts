@@ -200,6 +200,28 @@ describe('TradeDetail — the fields that rendered nowhere', () => {
     expect(text).toContain('still open');
   });
 
+  it('shows the trade id in the header', () => {
+    // Previously only visible (truncated) in the Trades list's # column --
+    // reaching this page by clicking a row lost the one thing someone might
+    // come here to copy (e.g. for `!trade ID`).
+    const text = render('plan');
+    expect(text).toContain(ID);
+  });
+
+  it('labels the stop "Trailing stop" once TP1 has banked (PARTIAL)', () => {
+    // A PARTIAL short's stop legitimately sits BELOW entry (it protects the
+    // profit TP1 already locked in, not the original risk), which reads as
+    // backwards unless the label says why.
+    const text = render('plan', DETAIL, 'PARTIAL');
+    expect(text).toContain('Trailing stop');
+  });
+
+  it('labels the stop plain "Stop" before any TP1 (ACTIVE)', () => {
+    const text = render('plan', DETAIL, 'ACTIVE');
+    expect(text).toContain('Stop');
+    expect(text).not.toContain('Trailing stop');
+  });
+
   it('does not show a Scale-out panel for a position with one leg', () => {
     // One leg is not a scale-out, and a panel saying "First 100%" is noise on
     // every ordinary trade.

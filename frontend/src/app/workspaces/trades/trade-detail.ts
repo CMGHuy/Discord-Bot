@@ -91,6 +91,12 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
           />
         </h1>
         <div class="tags">
+          <!-- The id a Discord command (!trade ID) or the API needs to name
+               this exact trade -- previously only visible in the Trades
+               list's # column (and truncated there, see shortId()), so
+               reaching this page by clicking a row lost the one thing
+               someone might come here to copy. -->
+          <span class="trade-id" [title]="'Trade ID: ' + trade.id">{{ trade.id }}</span>
           @if (trade.horizon) {
             <span class="tag">{{ trade.horizon }}</span>
           }
@@ -150,7 +156,7 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
                   <dd class="num">{{ fmt(trade.entry) }}</dd>
                 </div>
                 <div>
-                  <dt>Stop</dt>
+                  <dt>{{ stopLabel() }}</dt>
                   <dd class="num neg">{{ fmt(trade.stop_loss) }}</dd>
                 </div>
                 <div>
@@ -402,7 +408,7 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
               </div>
               <dl>
                 <div>
-                  <dt>Stop</dt>
+                  <dt>{{ stopLabel() }}</dt>
                   <dd class="num neg">{{ fmt(trade.stop_loss) }}</dd>
                 </div>
                 <div>
@@ -697,6 +703,13 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
       color: var(--text-secondary);
       font-size: var(--text-chip);
     }
+    /* Plain text, not a chip -- an id is not a category the way horizon/
+       strategy/tier are, and boxing it the same would suggest it is one. */
+    .trade-id {
+      font-family: var(--font-mono);
+      font-size: var(--text-chip);
+      color: var(--text-faint);
+    }
 
     .panels {
       display: grid;
@@ -945,6 +958,18 @@ export class TradeDetail {
   );
 
   protected readonly ifItGetsThereHeading = computed(() => 'If it gets there');
+
+  /** "Stop" vs "Trailing stop" -- a PARTIAL position's `stop_loss` field is
+   *  no longer the original risk-defining level (the API returns the
+   *  runner's own working_stop there once TP1 has banked). For a short
+   *  that trailing stop legitimately sits BELOW entry -- it protects profit
+   *  already locked in by TP1, not the original risk -- which reads as
+   *  backwards (a short's stop "should" be above entry) unless the label
+   *  says why. A closed PARTIAL-turned-win/loss keeps showing "Stop" since
+   *  by then it is simply what the position actually exited against. */
+  protected readonly stopLabel = computed(() =>
+    this.store.trade()?.status === 'PARTIAL' ? 'Trailing stop' : 'Stop',
+  );
 
   protected readonly fmt = num;
   protected readonly fmtText = text;
