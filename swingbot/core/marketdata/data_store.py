@@ -332,10 +332,34 @@ def update_cache(symbols: list, interval: str = "1d", base_dir: str = DATA_DIR,
 INTRADAY_MAX_AGE_SECONDS = 4 * 3600
 
 
+def _align_tz(a, b):
+    """Make two DatetimeIndexes comparable before a union. Intraday frames
+    come back tz-aware from yfinance; a CSV round-trip through load_from_disk
+    does not preserve tz-awareness (see data_refresh.py's twin of this
+    helper), so a freshly-fetched frame and its own cached history disagree
+    on tz unless reconciled here first."""
+    try:
+        if a.index.tz is not None and b.index.tz is None:
+            a = a.copy(); a.index = a.index.tz_localize(None)
+        elif a.index.tz is None and b.index.tz is not None:
+            b = b.copy(); b.index = b.index.tz_localize(None)
+    except (AttributeError, TypeError):
+        pass
+    return a, b
+
+
 def get_intraday(symbol: str, interval: str = "1h", base_dir: str = DATA_DIR,
                  fetch_fn=None) -> "pd.DataFrame | None":
     """Cached 1h bars for the E29 entry-timing annotation. NEVER required:
-    every caller must treat None as 'no intraday data, stay neutral'."""
+    every caller must treat None as 'no intraday data, stay neutral'.
+
+    market_data/hourly/{TICKER}.csv is also maintained by data_refresh.py's
+    background loop, which builds it up to Yahoo's ~3-year intraday ceiling.
+    A stale-cache refetch here only ever asks for ~700 days, so it MUST union
+    with whatever is already on disk rather than replace it -- a plain
+    save_to_disk() once wiped years of that archived history out from under
+    the background loop the moment this ran first.
+    """
     path = cache_path(symbol, interval, base_dir=base_dir)
     fresh_enough = (os.path.exists(path)
                     and time.time() - os.path.getmtime(path) < INTRADAY_MAX_AGE_SECONDS)
@@ -354,5 +378,13 @@ def get_intraday(symbol: str, interval: str = "1h", base_dir: str = DATA_DIR,
         df = None
     if df is None or df.empty:
         return load_from_disk(symbol, interval, base_dir=base_dir)  # stale > nothing
-    save_to_disk(df, symbol, interval, base_dir=base_dir)
-    return df
+
+    existing = load_from_disk(symbol, interval, base_dir=base_dir)
+    if existing is None or existing.empty:
+        merged = df
+    else:
+        existing, df = _align_tz(existing, df)
+        merged = pd.concat([existing, df])
+        merged = merged[~merged.index.duplicated(keep="last")].sort_index()
+    save_to_disk(merged, symbol, interval, base_dir=base_dir)
+    return merged

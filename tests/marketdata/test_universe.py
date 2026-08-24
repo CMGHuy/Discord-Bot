@@ -221,6 +221,39 @@ def test_get_intraday_none_on_fetch_error(tmp_path):
     assert get_intraday("TEST", base_dir=str(tmp_path), fetch_fn=broken) is None
 
 
+def test_get_intraday_merges_stale_refetch_with_existing_history(tmp_path):
+    """A stale-cache refetch must UNION with what's already on disk, the same
+    contract data_refresh._merge_save() gives every other timeframe -- a
+    shallower provider response must never destroy deeper accumulated
+    history. This is what production lost: get_intraday() plain-overwrote
+    market_data/hourly/{TICKER}.csv with a fresh ~700-day window and wiped
+    years of archived history that data_refresh.py had built up."""
+    import time
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core.marketdata.data_store import (
+        cache_path, get_intraday, load_from_disk, save_to_disk,
+    )
+
+    old = make_ohlcv(np.full(40, 100.0), start="2019-01-01")
+    save_to_disk(old, "TEST", "1h", base_dir=str(tmp_path))
+    path = cache_path("TEST", "1h", base_dir=str(tmp_path))
+    stale_time = time.time() - 5 * 3600  # older than INTRADAY_MAX_AGE_SECONDS (4h)
+    os.utime(path, (stale_time, stale_time))
+
+    fresh = make_ohlcv(np.full(40, 100.0), start="2026-07-01")
+
+    def fake_fetch(symbol, interval):
+        return fresh
+
+    get_intraday("TEST", base_dir=str(tmp_path), fetch_fn=fake_fetch)
+
+    merged = load_from_disk("TEST", "1h", base_dir=str(tmp_path))
+    assert merged.index.min() == old.index.min(), (
+        "existing pre-2026 history was discarded by the stale refetch")
+    assert merged.index.max() == fresh.index.max()
+
+
 # --- Scan parallelization (E20) ---------------------------------------------
 
 def test_map_tickers_preserves_order_and_matches_serial():
