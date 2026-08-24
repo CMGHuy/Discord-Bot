@@ -177,6 +177,7 @@ class ScanItem:
     stop_confluence: tuple = None
     combined_from: list = field(default_factory=list)
     htf_info: dict = None             # from get_htf_bias() -- None when HTF check is off or inconclusive
+    htf_bias: str | None = None       # "bullish"/"bearish" from the same get_htf_bias() call, always stored (not just on counter-trend like htf_info) so attach_plan_v2/_build_quality_inputs can reuse it instead of recomputing
     plan_v2: object = None            # TradePlanV2 | None
     plan_v2_rejected: str | None = None  # e.g. "no_qualifying_target" (v31 Task 6) -- distinguishes a real "no trade here" from a builder exception
     level_map: tuple = None           # (supports, resistances); staged in _scan_one for attach_plan_v2, called later in _sync_run_scan once confirmation is decided (Task E20 fix)
@@ -520,12 +521,15 @@ def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
         avg_vol = df["Volume"].rolling(20).mean().iloc[-1]
         if avg_vol:
             volume_ratio = float(df["Volume"].iloc[-1] / avg_vol)
-    htf = get_htf_bias(df, horizon_key)
     target_confluence = getattr(item, "target_confluence", None)
     confluence_count = target_confluence[0] if target_confluence else 0
     return {
         "regime": regime.trend if regime else None,
-        "htf_bias": htf["bias"] if htf else None,
+        # item.htf_bias was already computed once by _scan_one's own
+        # get_htf_bias(df, horizon_key) call for this exact ticker/horizon --
+        # same pattern as target_confluence/confidence_level just below,
+        # reused off the item instead of calling get_htf_bias a 3rd time.
+        "htf_bias": getattr(item, "htf_bias", None),
         "confluence_count": confluence_count,
         "volume_ratio": volume_ratio,
         "atr_pct": _atr_percentile(df),
@@ -1264,6 +1268,15 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
                                             max_stop_distance_pct=effective_max_stop,
                                             min_risk_reward=config.MIN_RISK_REWARD_RATIO)
         stats["checked"] += 1
+        # Depends only on df/horizon_key, not scenario.direction -- hoisted
+        # above the scenario loop (v56) so a horizon with both a bullish and
+        # a bearish scenario computes this once instead of twice, instead of
+        # once per scenario for no reason. Guarded on `scenarios` itself (not
+        # computed unconditionally) so the far more common no-entry-point
+        # horizon -- most ticker/horizon pairs never build a scenario at all
+        # -- doesn't pay for a call the old per-scenario placement would
+        # never have made either.
+        htf_result = get_htf_bias(df, horizon_key) if scenarios else None
         if not scenarios:
             # Either no genuine support AND resistance both exist
             # (no strategy found a real entry point at all), or a
@@ -1327,13 +1340,9 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             base_level_stats = trade_log.get_stats(base_level_preview)
             track_record = (base_level_stats["win_rate"], base_level_stats["closed"])
 
-            # HTF bias moved ahead of score_confidence (v32 Task 7) so its
-            # reading can feed the unified factor registry's htf_bias input
-            # -- it used to run only after, purely for the counter-trend
-            # penalty (retired, v33 Task 6). Still computed here first so
-            # the htf_counter_trend boolean below reuses this same result
-            # rather than fetching it twice.
-            htf_result = get_htf_bias(df, horizon_key)
+            # htf_result computed once above the scenario loop (v56) --
+            # score_confidence's htf_bias input and the htf_counter_trend
+            # boolean below both reuse it rather than fetching it again.
             macro_verdict = macro_aligned(df, horizon_key, scenario.direction)
 
             conf = score_confidence(scenario, regime_trend=(regime.trend if regime else None), df=df,
@@ -1411,6 +1420,8 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
                 result=result, plan=scenario, conf=conf, requirements=requirements,
                 target_confluence=target_confluence, stop_confluence=stop_confluence,
                 htf_info=htf_info_for_item,
+                htf_bias=htf_result["bias"] if htf_result else None,
+                rs_percentile=rs_pctile,
             )
             if all_ok:
                 item.level_map = (supports, resistances)
@@ -1673,16 +1684,14 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                                item.result.ticker, item.result.horizon_key, item.result.trend,
                                config.SIGNAL_CONFIRMATION_SCANS)
                     continue
-            # rs_percentile/breadth computed BEFORE attach_plan_v2 below (Task
-            # E37 wiring fix) specifically so quality scoring can see them --
-            # they used to be set after attach_plan_v2 ran, so every live
-            # plan's quality_inputs saw them as unset regardless of data
-            # availability. Unconditional for every item, same as before.
-            if rs_cache is not None:
-                item.rs_percentile = rs_factors.rs_percentile(
-                    fresh_data.get(item.result.ticker), spy_df,
-                    universe_rels=list(rs_cache["rels"].values()),
-                )
+            # item.rs_percentile is already set (Task E37 wiring fix requires
+            # it be available before attach_plan_v2 below, for quality
+            # scoring) -- _scan_one computed it once per ticker (rs_pctile,
+            # the same rs_cache/spy_df, identical for every item from that
+            # ticker regardless of horizon/scenario) and stamped it onto
+            # every ScanItem it built, so recomputing rs_percentile() here --
+            # an O(universe size) pass over rs_cache["rels"] -- for every
+            # surviving item was pure redundant work (v56).
             # Sector RS (v34 Task 5): combine into item.rs_combined right
             # after rs_percentile above, same "before attach_plan_v2" timing
             # for the same reason -- so quality scoring/plan building could

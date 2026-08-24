@@ -147,6 +147,19 @@ def test_build_quality_inputs_never_duplicates_direction_or_badge_status():
                         "breadth", "confidence_level"}
 
 
+def test_build_quality_inputs_reuses_items_htf_bias_without_recomputing(monkeypatch):
+    # _scan_one already calls get_htf_bias(df, horizon_key) once per
+    # ticker/horizon and stamps the result onto item.htf_bias -- this must
+    # be reused here, not recomputed a 3rd time (v56 perf fix). Proven by
+    # making get_htf_bias raise if called at all, and by item.htf_bias
+    # surviving into the output verbatim rather than being derived from df.
+    monkeypatch.setattr(engine, "get_htf_bias",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not recompute")))
+    item = SimpleNamespace(target_confluence=(2, ["EMA21", "Fib"]), htf_bias="bearish")
+    out = engine._build_quality_inputs(item, _scenario(), make_ohlcv([100.0] * 60), "4w")
+    assert out["htf_bias"] == "bearish"
+
+
 def test_build_quality_inputs_confluence_count_defaults_to_zero_without_field():
     # A minimal test double (or any object missing target_confluence) must
     # degrade to 0, not crash -- component_confluence does int(count) with
