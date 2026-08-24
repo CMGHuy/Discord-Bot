@@ -122,12 +122,26 @@ def is_etf(symbol: str) -> bool:
 # engine.py's _sync_run_scan, and both ticker loops in
 # scripts/backtest/run_backtest_range.py) -- skip + log, same pattern.
 
+# ~2 years of trading days -- generously covers the slowest indicator any
+# swing horizon uses (EMA200 for the 6-month horizon) plus margin, same
+# order of magnitude as DEFAULT_HISTORY_PERIOD's cold-fetch window. The
+# market_data/ cache is deliberately allowed to grow far deeper than this
+# over time (data_refresh.py's archive-outgrows-the-provider-window
+# design), so a whole-dataframe scan of an old ticker's cache hits decades
+# of history no live scan reads -- and real data-provider artifacts do live
+# back there (PFE has an 18-day identical-close run in 1977). Checking only
+# the trailing window keeps this screen about "is the feed reliable right
+# now", which is the question it exists to answer.
+QUALITY_CHECK_LOOKBACK_BARS = 500
+
+
 def data_quality_issues(df: pd.DataFrame, symbol: str) -> list[str]:
     """Bad data makes every downstream number a lie -- flag, skip, report."""
     issues: list[str] = []
     if df is None or len(df) < 30:
         return [f"{symbol}: <30 bars of history"]
 
+    df = df.tail(QUALITY_CHECK_LOOKBACK_BARS)
     close = df["Close"]
     # 1) frozen feed: >5 consecutive identical closes
     runs = (close != close.shift()).cumsum()

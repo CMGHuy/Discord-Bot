@@ -191,6 +191,31 @@ def test_negative_price_and_gap_flagged():
     assert any("gap" in i for i in issues)
 
 
+def test_ancient_frozen_run_outside_the_lookback_window_is_not_flagged():
+    """The market_data/ cache is deliberately allowed to grow deeper than any
+    live scan needs (data_refresh.py's whole design: 'archive grows past the
+    provider's window over time') -- restoring a ticker's full decades-deep
+    history (as happened 2026-08-24 recovering from the get_intraday
+    overwrite bug) must not resurrect ancient data-provider artifacts (e.g.
+    PFE genuinely has an 18-day identical-close run in 1977) as if they were
+    live feed problems today. Only the trailing window a scan actually reads
+    should be checked."""
+    from swingbot.core.marketdata.universe import data_quality_issues, QUALITY_CHECK_LOOKBACK_BARS
+    df = _clean_frame(n=QUALITY_CHECK_LOOKBACK_BARS + 200)
+    # Plant the frozen run well before the lookback window starts.
+    df.iloc[5:15, df.columns.get_loc("Close")] = 55.5
+    assert data_quality_issues(df, "X") == []
+
+
+def test_recent_frozen_run_inside_the_lookback_window_is_still_flagged():
+    from swingbot.core.marketdata.universe import data_quality_issues, QUALITY_CHECK_LOOKBACK_BARS
+    df = _clean_frame(n=QUALITY_CHECK_LOOKBACK_BARS + 200)
+    # Plant the frozen run in the most recent bars -- inside the window.
+    last = len(df) - 1
+    df.iloc[last - 9:last, df.columns.get_loc("Close")] = 55.5
+    assert any("identical closes" in i for i in data_quality_issues(df, "X"))
+
+
 # --- Intraday confirmation data cache (E19) ---------------------------------
 
 def test_get_intraday_roundtrip_and_cache(tmp_path):
