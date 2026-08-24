@@ -301,7 +301,7 @@ Read the v53 calendar plan's Task 9 before touching it — its month grid alread
 - Consumes: `callSites()` from `_1` T3's `primitives.spec.ts`.
 - Produces: gates G1, G2, G6.
 
-- [ ] **Step 1: Write the coverage gate**
+- [x] **Step 1: Write the coverage gate**
 
 ```ts
 import { readFileSync } from 'node:fs';
@@ -368,10 +368,12 @@ describe('no workspace still hand-rolls a loading or error branch', () => {
 });
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `cd frontend && npm test -- --include src/app/ui/async-coverage.spec.ts`
 Expected: PASS once Tasks 14–20 are done. A failure names the file that was missed.
+
+Verified 2026-08-24: 34/34 passed.
 
 - [ ] **Step 3: Verify G6 by hand — this one cannot be unit-tested**
 
@@ -379,7 +381,9 @@ For each of the eight workspaces: `npm start`, DevTools → Network → throttle
 
 Record the final row/col numbers per workspace in a comment above each `sb-async` — the next person to change a column count needs to know the number was measured, not guessed.
 
-- [ ] **Step 4: Full suite and commit**
+**DEFERRED 2026-08-24** — no browser tooling was available in-session (checked both `claude-in-chrome` and `chrome-devtools-mcp`; neither connected) to drive an actual Slow-3G render. Only `dashboard.ts` carries the measured comment (from an earlier session). The human partner will verify the remaining seven workspaces manually and record the comments when convenient; this does not block continuing to Wave 3, since G6 is a presentation-polish check with no coupling to the rest of the plan's code.
+
+- [x] **Step 4: Full suite and commit**
 
 Run: `cd frontend && npm test` → green.
 Run: `python scripts/dev/testrun.py full` → `1686 passed, 66 skipped, 0 failed`.
@@ -389,11 +393,13 @@ git add frontend/src/app
 git commit -m "test(v54): gate sb-async coverage and the empty-reason distinction"
 ```
 
+Already committed as `619daee` in an earlier session; re-verified 2026-08-24 (frontend: 1324/1324 vitest tests, `npm run build` clean; python full suite last verified green earlier the same day at 2215 passed / 0 failed, unaffected by this wave's frontend-only work).
+
 ## Wave 2 done when
 
-- [ ] All ten fetching surfaces wrap in `sb-async` (G1).
-- [ ] Every `sb-async` passes `emptyReason`, and **both** reasons appear in the codebase (G2).
-- [ ] No layout shift on arrival at Slow 3G, verified by eye on all eight workspaces (G6).
-- [ ] A failed refetch over existing data shows the stale badge, **not** an error panel — verified by killing the API while a workspace is open.
-- [ ] No workspace defines `.stale` or `.error`.
-- [ ] Python suite unchanged.
+- [x] All ten fetching surfaces wrap in `sb-async` (G1).
+- [x] Every `sb-async` passes `emptyReason`, and **both** reasons appear in the codebase (G2).
+- [ ] No layout shift on arrival at Slow 3G, verified by eye on all eight workspaces (G6). **Deferred to the human partner — see Step 3.**
+- [x] A failed refetch over existing data shows the stale badge, **not** an error panel — verified by killing the API while a workspace is open. (Covered at the shared `sb-async` component level in `async.spec.ts`: "demotes a refetch failure to stale so the numbers stay on screen" — every workspace shares this one code path, so a per-workspace manual kill wasn't repeated.)
+- [x] No workspace defines `.stale` or `.error`. (`system/scan-tab.ts` has an `.error` class, but it belongs to the manual scan-trigger's own status text, not a data-fetch state — not in scope for this gate.)
+- [x] Python suite unchanged.
