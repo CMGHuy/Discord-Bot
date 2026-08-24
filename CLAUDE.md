@@ -16,6 +16,12 @@ everything as **paper trades only** — it never places orders. Python 3.11+,
 discord.py, pandas/numpy, yfinance, mplfinance, pytest. JSON persistence under
 `data/`; no database.
 
+**"Production" always means the Hetzner VM** (`167.233.26.185`,
+`docs/DEPLOY_HETZNER.md`) — never this dev machine. `scripts/ops/ssh-hetzner.sh`
+connects to it (`scripts/ops/ssh-hetzner.sh "docker compose ps"` for one
+command, no args for an interactive shell); not committed, since it shells
+through WSL to a key at `~/.ssh/id_rsa` inside WSL's home.
+
 Two entry points: `python bot.py` (the bot) and `python admin_ui.py` (the
 admin). The admin is a Flask **API** plus an Angular SPA served from
 `frontend/` — Flask serves only `/api/v1/*`, the SPA's routes and `/` (the Jinja
