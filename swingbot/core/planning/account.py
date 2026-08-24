@@ -69,7 +69,20 @@ try:
 except Exception:
     _BERLIN_TZ = None
 
-CONFIG_PATH = os.path.join(app_config.DATA_DIR, "account.json")
+def _default_config_path() -> str:
+    """Resolved fresh on every call (not a module-level constant) -- a
+    `path: str = <module-level constant>`-style default is evaluated ONCE,
+    at import time, baking in whatever `app_config.DATA_DIR` was then. A test that
+    monkeypatches `config.DATA_DIR` to an isolated tmp_path AFTER this
+    module has already been imported (the normal case: pytest imports every
+    test module, and transitively this one, at collection time, before any
+    fixture runs) then has no effect on a caller that omits `path` -- every
+    such call keeps hitting the REAL data/account.json instead. Confirmed
+    live: tests/tracking/test_one_trade_per_ticker.py's manual-close and
+    reversal tests passed serially (the real account.json happened to be
+    present and valid on that machine) but failed under xdist parallel
+    workers, which all raced writes to that SAME real file at once."""
+    return os.path.join(app_config.DATA_DIR, "account.json")
 
 # balance_history is append-only and grows one entry per closed trade (plus
 # manual balance overrides) -- cheap to keep a very long tail of, but capped
@@ -112,7 +125,8 @@ def _sum_realized_pnl(trades_path: str = None) -> float:
     return round(total, 2)
 
 
-def load_account_config(path: str = CONFIG_PATH) -> dict:
+def load_account_config(path: str = None) -> dict:
+    path = path or _default_config_path()
     # Canonical defaults -- every key that exists in the account config schema.
     # Used both as the seed for a brand-new account.json AND as a fallback for
     # keys that were added after an existing file was first created (so loading
@@ -171,8 +185,8 @@ def load_account_config(path: str = CONFIG_PATH) -> dict:
     return dict(defaults)
 
 
-def save_account_config(config: dict, path: str = CONFIG_PATH):
-    atomic_write_json(path, config)
+def save_account_config(config: dict, path: str = None):
+    atomic_write_json(path or _default_config_path(), config)
 
 
 def _append_balance_history(cfg: dict, entry: dict) -> dict:
@@ -183,7 +197,7 @@ def _append_balance_history(cfg: dict, entry: dict) -> dict:
     return cfg
 
 
-def set_balance(balance: float, path: str = CONFIG_PATH) -> dict:
+def set_balance(balance: float, path: str = None) -> dict:
     """
     Sets the account's BASE balance -- not the final displayed balance.
     The effective balance shown everywhere is always base_balance + all-time
@@ -213,28 +227,28 @@ def set_balance(balance: float, path: str = CONFIG_PATH) -> dict:
     return config
 
 
-def set_risk_pct(risk_pct: float, path: str = CONFIG_PATH) -> dict:
+def set_risk_pct(risk_pct: float, path: str = None) -> dict:
     config = load_account_config(path)
     config["risk_pct"] = risk_pct
     save_account_config(config, path)
     return config
 
 
-def set_max_open_positions(max_open: int, path: str = CONFIG_PATH) -> dict:
+def set_max_open_positions(max_open: int, path: str = None) -> dict:
     config = load_account_config(path)
     config["max_open_positions"] = max_open
     save_account_config(config, path)
     return config
 
 
-def set_max_position_pct(max_pct: float, path: str = CONFIG_PATH) -> dict:
+def set_max_position_pct(max_pct: float, path: str = None) -> dict:
     config = load_account_config(path)
     config["max_position_pct"] = max_pct
     save_account_config(config, path)
     return config
 
 
-def set_max_position_value_absolute(amount: float, path: str = CONFIG_PATH) -> dict:
+def set_max_position_value_absolute(amount: float, path: str = None) -> dict:
     """Hard currency cap on position value -- see compute_position_size()'s
     docstring for why this exists alongside (not instead of) max_position_pct."""
     config = load_account_config(path)
@@ -243,7 +257,7 @@ def set_max_position_value_absolute(amount: float, path: str = CONFIG_PATH) -> d
     return config
 
 
-def set_max_risk_amount_absolute(amount: float, path: str = CONFIG_PATH) -> dict:
+def set_max_risk_amount_absolute(amount: float, path: str = None) -> dict:
     """Hard currency cap on real risk-if-stopped -- see compute_position_size()'s
     docstring for why this exists alongside (not instead of) risk_pct."""
     config = load_account_config(path)
@@ -252,7 +266,7 @@ def set_max_risk_amount_absolute(amount: float, path: str = CONFIG_PATH) -> dict
     return config
 
 
-def set_sizing_mode(mode: str, path: str = CONFIG_PATH) -> dict:
+def set_sizing_mode(mode: str, path: str = None) -> dict:
     mode = mode.strip().lower()
     if mode in ("account", "account_pct", "alloc", "allocation"):
         mode = "account_pct"
@@ -273,14 +287,14 @@ def set_sizing_mode(mode: str, path: str = CONFIG_PATH) -> dict:
     return config
 
 
-def set_position_pct(pct: float, path: str = CONFIG_PATH) -> dict:
+def set_position_pct(pct: float, path: str = None) -> dict:
     config = load_account_config(path)
     config["position_pct"] = pct
     save_account_config(config, path)
     return config
 
 
-def get_balance_history(path: str = CONFIG_PATH) -> list:
+def get_balance_history(path: str = None) -> list:
     """Chronological list of {ts, balance, pnl_amount, reason/trade_id/ticker}
     entries -- one per closed trade settlement plus any manual `!account
     balance` overrides -- for the admin Performance page's balance-over-time
@@ -288,7 +302,7 @@ def get_balance_history(path: str = CONFIG_PATH) -> list:
     return load_account_config(path).get("balance_history", [])
 
 
-def get_balance_history_points(path: str = CONFIG_PATH) -> list:
+def get_balance_history_points(path: str = None) -> list:
     """Adapter: (date_str, balance) tuples from balance_history for growth_path()."""
     return [(entry["ts"][:10], entry["balance"]) for entry in get_balance_history(path)]
 
@@ -303,7 +317,7 @@ def _to_berlin(ts_iso: str) -> datetime | None:
     return dt.astimezone(_BERLIN_TZ) if _BERLIN_TZ else dt
 
 
-def get_daily_summary(path: str = CONFIG_PATH) -> dict:
+def get_daily_summary(path: str = None) -> dict:
     """
     Today's account-balance movement (Europe/Berlin calendar day, matching
     the same day boundary performance.py's by-day-of-week breakdown
@@ -378,7 +392,7 @@ def get_daily_summary(path: str = CONFIG_PATH) -> dict:
     }
 
 
-def apply_realized_pnl(pnl_amount: float, meta: dict = None, path: str = CONFIG_PATH) -> dict:
+def apply_realized_pnl(pnl_amount: float, meta: dict = None, path: str = None) -> dict:
     """
     Records one trade's realized currency P&L in balance_history (for the
     Performance page's balance-over-time chart) and returns the resulting

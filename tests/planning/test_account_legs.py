@@ -2,7 +2,32 @@ import json
 
 import pytest
 
+from swingbot import config
 from swingbot.core.planning import account
+
+
+def test_account_functions_use_data_dir_at_call_time_not_import_time(tmp_path, monkeypatch):
+    """account.py's path defaults used to bake in whatever config.DATA_DIR
+    was at MODULE IMPORT time (a module-level `path: str = CONFIG_PATH`
+    constant) -- monkeypatching config.DATA_DIR afterwards, the normal test
+    isolation pattern, had no effect on any caller that omits `path`
+    (e.g. performance.py's _settle_account_balance -> apply_realized_pnl
+    with no path= at all). Confirmed live: tests/tracking/
+    test_one_trade_per_ticker.py's manual-close/reversal tests passed
+    serially (the real data/account.json happened to exist and be valid)
+    but failed under xdist parallel workers, which all raced writes to
+    that SAME real file at once. Every account.py function must resolve
+    DATA_DIR fresh on each call instead."""
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+
+    result = account.apply_realized_pnl(50.0, {"trade_id": "t1"})
+
+    # The write must land at tmp_path/account.json -- not wherever a stale,
+    # import-time-bound default would have pointed -- with the balance this
+    # call actually computed (base_balance + 50), not left at the default.
+    on_disk = json.loads((tmp_path / "account.json").read_text())
+    assert on_disk["balance"] == pytest.approx(result["balance"])
+    assert result["balance"] == pytest.approx(config.ACCOUNT_BALANCE + 50.0)
 
 
 def test_self_healing_recompute_sums_legs(tmp_path):
