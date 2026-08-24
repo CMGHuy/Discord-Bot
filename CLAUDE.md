@@ -173,22 +173,31 @@ Both rules and the run that bought them: `docs/claude/working-conventions.md`.
 
 ## Naming specs and plans
 
-**`docs/superpowers/{specs,plans}/YYYY-MM-DD-vN-<document-name>.md`** — date,
-then version, then name. `vN` is one repo-wide counter shared by both
-directories; never reuse a number and never renumber a committed one. A document
-split across files reuses the parent's number with a `_N` suffix. Next number:
+**`docs/superpowers/{specs,plans}/YYYY-MM-DD-<document-name>.md` while a
+document is live — no `vN` yet.** The version number is assigned only at
+close-out, the same `git mv` into `implemented/`/`no-lift/` that already ends
+a document's live status — never at authoring time. Baking a number in up
+front assumes today's plan is the next one to finish; reordering which plan
+actually gets worked on and closed turns that assumption into a collision
+(two documents wanting the same number) or a gap (a claimed number nothing
+ever used). Next number, computed **at close-out, not when drafting**:
 
 ```bash
 find docs/superpowers/specs docs/superpowers/plans -name '*.md' \
   | grep -oE 'v[0-9]+' | sort -V | tail -1
 ```
 
-`find`, not `ls` — closed documents live one level down in `implemented/` and
-`no-lift/`, and missing them returns a stale maximum. **Re-check the number
-immediately before committing:** concurrent sessions race this counter (two
-sessions both committed a `v44`). First commit wins. A spec and the one plan
-built directly from it may share a number; anything else takes the next free
-one, and a plan names its spec in a `**Spec:**` header either way.
+`find`, not `ls`. **Re-check the number immediately before the closing
+commit** — concurrent sessions still race this counter; first commit wins.
+Never reuse a number or renumber one already stamped on a committed file. A
+spec and the one plan built directly from it still share a number: whichever
+half closes first mints it, the other inherits it when it closes too. A
+document split across files reuses the parent's number with a `_N` suffix,
+assigned at the same moment. While a document is live it is referenced
+entirely by its numberless stem (worktree/branch names, `**Spec:**` header
+links, `/task-brief` lookups); full mechanics, including why that never
+leaves a stale reference to fix up: `docs/claude/document-conventions.md` and
+`document-lifecycle.md`.
 
 **When a plan stops being live work, `git mv` it — and every spec it was built
 from — into `implemented/` as part of the closing commit**, so the top level of
