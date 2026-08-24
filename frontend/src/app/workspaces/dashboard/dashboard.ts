@@ -485,10 +485,15 @@ import { TradeGroup } from './trade-group';
       }
     </ng-template>
 
-    <!-- See pnlCell above -- same real-vs-projected split, same reasoning. -->
+    <!-- See pnlCell above -- same real-vs-projected split, same reasoning.
+         The real branch colours by sign too (pnlClass), same as the
+         projected branch already did -- a closed loss's R used to render
+         in the same plain colour as a win's, which read as "no P&L info"
+         at a glance where the pnl_pct column right next to it was
+         unmistakably red or green. -->
     <ng-template #rMultipleCell let-row>
       @if (row.r_multiple !== null) {
-        {{ fmtR(row.r_multiple) }}
+        <span [class]="pnlClass(row.r_multiple)">{{ fmtR(row.r_multiple) }}</span>
       } @else {
         <span
           class="expected"
