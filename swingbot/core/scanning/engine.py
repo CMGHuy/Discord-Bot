@@ -665,7 +665,25 @@ def _run_bounded(fn, args: tuple, timeout_seconds: float, label: str):
             "treating this as a failed fetch", label, timeout_seconds)
         for proc in pool._processes.values():
             proc.kill()
-        pool.shutdown(wait=False, cancel_futures=True)
+        # wait=True (v56, was False): confirmed live on production 2026-08-24
+        # that wait=False lets this function return with the pool's manager
+        # thread still alive in the background -- unjoined, since Executor's
+        # own __exit__ shutdown(wait=True) call on the way out of the `with`
+        # block is a no-op by then (this shutdown() already cleared
+        # _executor_manager_thread/_processes to None, which is exactly what
+        # that second call's own guards check). A NEW ProcessPoolExecutor
+        # created by the very next _run_bounded call then fork()s while that
+        # orphaned thread is still running -- and every subsequent call that
+        # scan pass failed instantly with "process ... terminated abruptly"
+        # (15 tickers' cold-fetch fallback, the live-price batch, and the
+        # sector-ETF fetch all failed in the same few seconds). The worker
+        # is already SIGKILLed above, so the manager thread notices via its
+        # sentinel almost immediately -- wait=True here joins that thread
+        # before returning, so it can no longer be alive at the next call's
+        # fork() point. This is NOT the same risk shutdown()'s wait=True
+        # normally carries (blocking on a live, possibly-still-hung worker):
+        # that worker is already dead.
+        pool.shutdown(wait=True, cancel_futures=True)
         return None
 
 

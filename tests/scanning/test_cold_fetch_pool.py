@@ -85,7 +85,12 @@ def test_run_bounded_kills_the_worker_past_the_budget(monkeypatch, caplog):
     result = scan_engine._run_bounded(lambda: None, (), 0.05, "stuck-label")
     assert result is None
     assert pool._processes[1].killed
-    assert pool.shutdown_calls == [(False, True)]
+    # wait=True (v56, was False): the killed worker's manager thread must be
+    # joined here, not left running in the background -- an orphaned manager
+    # thread alive at the NEXT _run_bounded call's fork() point is what
+    # caused every subsequent process-pool call that scan pass to fail
+    # instantly with "terminated abruptly" on production 2026-08-24.
+    assert pool.shutdown_calls == [(True, True)]
     assert "stuck-label" in caplog.text
 
 

@@ -945,7 +945,16 @@ async def config_watcher():
                 last_shown = None
                 while True:
                     await asyncio.sleep(2.0)
-                    if progress.stage == "crawling data":
+                    if progress.stage == "starting":
+                        # Same fix as check_cmd's own poller (v56) -- the
+                        # default stage before _sync_run_scan's thread has
+                        # done anything, most commonly while queued behind
+                        # another scan holding _scan_lock. Without this
+                        # branch the generic "Analyzing" label below fires
+                        # with a literal 0/0 (0%), indistinguishable from
+                        # a genuinely stuck scan.
+                        label = "⏳ **Waiting to start** (UI trigger) — queued behind another scan"
+                    elif progress.stage == "crawling data":
                         pct = round(progress.done / progress.total * 100) if progress.total else 0
                         ticker_bit = f" `{progress.current_ticker}`" if progress.current_ticker else ""
                         label = (
@@ -1552,7 +1561,18 @@ async def check_cmd(ctx, *args: str):
             # mistake "still working, just between updates" for "stuck".
             await asyncio.sleep(0.8)
             elapsed = _elapsed_str()
-            if progress.stage == "crawling data":
+            if progress.stage == "starting":
+                # ScanProgress's own default stage, before _sync_run_scan's
+                # background thread has done anything -- most commonly
+                # because another scan (the automatic session scan, or a
+                # concurrent !check) is still holding _scan_lock. Without
+                # this branch, the generic "Analyzing" label below fires
+                # instead (its if/elif chain has no case for "starting"),
+                # showing a literal "0/0 (0%)" that reads identically to a
+                # genuinely stuck scan -- this is what a real production
+                # report described (v56).
+                label = f"⏳ **Waiting to start** (queued behind another scan) · ⏱️ {elapsed}"
+            elif progress.stage == "crawling data":
                 ticker_bit = f" `{progress.current_ticker}`" if progress.current_ticker else ""
                 pct = round(progress.done / progress.total * 100) if progress.total else 0
                 label = (

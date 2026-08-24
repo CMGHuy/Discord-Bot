@@ -113,6 +113,41 @@ def _align_tz(a, b):
     return a, b
 
 
+_ADJUSTMENT_MISMATCH_TOLERANCE = 0.01   # 1%: real EOD closes agree exactly; a split/dividend shifts price by far more
+
+_PRICE_COLUMNS = ["Open", "High", "Low", "Close"]
+
+
+def _adjustment_ratio(existing, fresh, symbol: str, timeframe: str):
+    """Detects a stock split/dividend that landed between refreshes.
+
+    yfinance's auto_adjust re-derives EVERY historical bar's price from the
+    ticker's FULL corporate-action history each time it's called -- a split
+    or dividend that lands between two refreshes changes `fresh`'s prices
+    for dates `existing` already has on disk, not just new ones. Compares
+    the two on their overlapping dates (median ratio, robust to the odd
+    stale/rounding-off bar) and returns the fresh/existing ratio if they
+    disagree by more than a real adjustment ever would from EOD noise
+    alone, else None (no adjustment change -- the common case, every scan).
+    """
+    common = existing.index.intersection(fresh.index)
+    if len(common) == 0:
+        return None
+    ratios = (fresh.loc[common, "Close"] / existing.loc[common, "Close"]).dropna()
+    ratios = ratios[ratios > 0]
+    if ratios.empty:
+        return None
+    ratio = float(ratios.median())
+    if abs(ratio - 1.0) <= _ADJUSTMENT_MISMATCH_TOLERANCE:
+        return None
+    log.warning(
+        "%s/%s: adjustment-basis mismatch detected on %d overlapping bar(s) "
+        "(fresh/cached price ratio %.4f) -- re-scaling %d cached bar(s) to "
+        "the new basis before merging (split/dividend since the last refresh?)",
+        symbol, timeframe, len(common), ratio, len(existing))
+    return ratio
+
+
 def _merge_save(existing, fresh, symbol: str, timeframe: str,
                 base_dir: str) -> tuple:
     """UNION existing with fresh and write atomically. Returns (df, added).
@@ -121,11 +156,30 @@ def _merge_save(existing, fresh, symbol: str, timeframe: str,
     stops serving them. This is what lets the archive grow deeper than the
     provider's window over time -- a plain save_to_disk() here would let a
     shallower response silently destroy accumulated history.
+
+    Before unioning, re-scales `existing`'s price columns to `fresh`'s
+    adjustment basis if `_adjustment_ratio` finds they've diverged (v56) --
+    without this, a split/dividend between refreshes left every bar BEFORE
+    the overlap on the old basis while bars AT/AFTER it took the new one,
+    producing a single-bar cliff at the seam. universe.data_quality_issues'
+    own ">40% bar without volume spike (bad split adjust?)" check exists
+    for exactly this artifact, and it was firing live in production
+    2026-08-24 -- this is the actual bad-split-adjust it was warning about,
+    not a false positive. Volume is deliberately left unscaled: the quality
+    check and every live consumer of these frames key off price move (and
+    a volume RATIO, not an absolute value), so a volume-only split factor
+    isn't needed to fix the observed symptom and isn't worth the extra risk
+    of getting split-vs-dividend volume conventions wrong here.
     """
     if existing is None or len(existing) == 0:
         merged, added = fresh, len(fresh)
     else:
         existing, fresh = _align_tz(existing, fresh)
+        ratio = _adjustment_ratio(existing, fresh, symbol, timeframe)
+        if ratio is not None:
+            existing = existing.copy()
+            cols = [c for c in _PRICE_COLUMNS if c in existing.columns]
+            existing[cols] = existing[cols] * ratio
         before = set(existing.index)
         merged = pd.concat([existing, fresh])
         merged = merged[~merged.index.duplicated(keep="last")].sort_index()
