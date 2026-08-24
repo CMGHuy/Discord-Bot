@@ -213,6 +213,27 @@ def append_leg(t: dict, leg: dict) -> None:
     t.setdefault("legs", []).append(leg)
 
 
+def _apply_exit_price(t: dict, price: float, reason: str) -> None:
+    """Records `price` as `t`'s exit, realizing whatever fraction of the
+    position is still open as one more leg on top of any TP1 already
+    banked -- the same shape `_close_runner`'s real leg takes. Shared by
+    `close_trade_manual` (closing right now) and `backfill_exit_price`
+    (repairing a past close that recorded none); callers still own
+    status/closed_at and settling the account balance."""
+    legs = t.get("legs")
+    if legs:
+        remaining = round(1.0 - sum(leg.get("fraction", 0) for leg in legs), 6)
+        if remaining > 0:
+            entry, sl = t.get("entry"), t.get("stop_loss")
+            is_bull = t.get("direction") == "bullish"
+            risk = abs(entry - sl) if entry is not None and sl else None
+            r = (((price - entry) if is_bull else (entry - price)) / risk
+                 if risk else 0.0)
+            append_leg(t, {"fraction": remaining, "exit_price": price,
+                           "r": r, "reason": reason})
+    t["exit_price"] = price
+
+
 class TradeLog:
     def __init__(self, path: str = None):
         self.path = path or os.path.join(config.DATA_DIR, "trades.json")
@@ -884,20 +905,46 @@ class TradeLog:
 
     def close_trade_manual(self, trade_id: str, reason: str = "manual") -> bool:
         """
-        Marks an open trade as closed without an exit price (used by the
-        admin UI's "Close" button -- a human override, not a stop/target
-        hit). Locked the same way as every other mutator here so a
-        concurrent write from the bot's own scan loop (a different
-        process, same trades.json) can't race with it and corrupt or lose
-        data. Returns True if a matching OPEN trade was found and closed.
+        Marks an open trade as closed, fetching the live market price to
+        stand in as its exit (used by the admin UI's "Close" button -- a
+        human override of TIMING, not of price: the position really did
+        exit at whatever the market was doing at that moment, so it
+        settles like any other close -- account balance, pnl_pct,
+        r_multiple -- rather than leaving all three permanently null. A
+        PARTIAL trade's still-open remainder (whatever `legs` hasn't
+        already banked) is realized as one more leg at that price, on top
+        of TP1. Falls back to the old no-exit-price close if the price
+        fetch fails or the ticker has no live quote -- a network hiccup
+        must never block the close itself.
+
+        Locked the same way as every other mutator here so a concurrent
+        write from the bot's own scan loop (a different process, same
+        trades.json) can't race with it and corrupt or lose data. The
+        price fetch itself happens OUTSIDE the lock (it's a network call)
+        and is re-validated against the trade's live status once inside.
+        Returns True if a matching OPEN trade was found and closed.
         """
+        with _LOCK:
+            ticker = next((t["ticker"] for t in self._trades
+                           if t["id"] == trade_id and t["status"] == "open"), None)
+        price = None
+        if ticker:
+            try:
+                from swingbot.core.marketdata.data import get_current_price
+                price = get_current_price(ticker)
+            except Exception:
+                price = None
+
         closed_trade = None
         with _LOCK:
             for t in self._trades:
                 if t["id"] == trade_id and t["status"] == "open":
+                    if price:
+                        _apply_exit_price(t, price, reason="manual")
                     t["status"] = "closed"
                     t["closed_at"] = datetime.now(timezone.utc).isoformat()
                     t["close_reason"] = reason
+                    self._settle_account_balance(t)
                     self._save()
                     closed_trade = t
                     break
@@ -905,6 +952,31 @@ class TradeLog:
             _journal_close_safely(closed_trade)
             _refresh_snapshot_safely()
             return True
+        return False
+
+    def backfill_exit_price(self, trade_id: str, price: float) -> bool:
+        """One-time repair for a trade that closed with no exit price on
+        record -- the old close_trade_manual() left every manual admin
+        close this way. Fills in exit_price (and, for a trade that already
+        banked a TP1 leg, one more leg for whatever fraction was still
+        open) and re-settles the account balance from a price recovered
+        after the fact, e.g. the historical close on the day it closed --
+        see scripts/ops/backfill_manual_close_price.py.
+
+        Never overwrites a real settlement: no-ops if the trade is still
+        open, or already has an exit_price, so this can only fill a gap,
+        not second-guess a real close. Does not touch status/closed_at --
+        those are already correct; only the pricing was ever missing.
+        """
+        with _LOCK:
+            for t in self._trades:
+                if t["id"] == trade_id:
+                    if t["status"] == "open" or t.get("exit_price") is not None:
+                        return False
+                    _apply_exit_price(t, price, reason="manual")
+                    self._settle_account_balance(t)
+                    self._save()
+                    return True
         return False
 
     def delete_trade(self, trade_id: str) -> bool:

@@ -16,6 +16,10 @@ from swingbot.core.tracking.performance import TradeLog
 @pytest.fixture
 def tlog(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    # close_trade_manual fetches a live price to settle with -- default it to
+    # "no quote available" so every test not specifically about that price
+    # fetch stays offline and deterministic; tests that care override this.
+    monkeypatch.setattr("swingbot.core.marketdata.data.get_current_price", lambda *a, **k: None)
     (tmp_path / "trades.json").write_text("[]", encoding="utf-8")
     (tmp_path / "account.json").write_text(json.dumps({
         "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
@@ -120,9 +124,10 @@ def test_reversed_close_is_excluded_from_expectancy_r(tlog):
 
 
 def test_reversed_close_settles_realized_pnl(tlog):
-    """close_trade_manual leaves P&L blank because it records no exit price.
-    A reversal exits at a real price, so realized P&L must be filled in --
-    otherwise 'cut the loss sooner' is invisible in Trade History."""
+    """A reversal always exits at a real, caller-supplied price, so realized
+    P&L must be filled in regardless of whether a live quote happens to be
+    reachable for a manual close -- otherwise 'cut the loss sooner' is
+    invisible in Trade History."""
     tid = _log(tlog, entry=100.0)
     closed = tlog.close_trade_reversed(tid, 97.5)
     if closed.get("shares"):          # only meaningful when sizing produced shares
@@ -130,14 +135,90 @@ def test_reversed_close_settles_realized_pnl(tlog):
         assert closed["realized_pnl_amount"] < 0     # closed below entry on a long
 
 
-def test_manual_close_still_realizes_nothing(tlog):
-    """The settle change must not start realizing P&L for admin-UI closes,
-    which record no exit price."""
+def test_manual_close_without_a_live_quote_realizes_nothing(tlog):
+    """A network hiccup on the price fetch must not block the close, and
+    must not fabricate an exit price -- P&L stays blank exactly as it did
+    before this trade had a real quote to settle against."""
     tid = _log(tlog)
     tlog.close_trade_manual(tid, reason="manual")
     t = tlog.get_trade_by_id(tid)
     assert t["exit_price"] is None
     assert t["realized_pnl_amount"] is None
+
+
+def test_manual_close_with_a_live_quote_settles_realized_pnl(tlog, monkeypatch):
+    """The admin UI's "Close" button is a human override of TIMING, not of
+    price -- the position really did exit at whatever the market was doing,
+    so once a live quote is available the close must settle exactly like
+    any other (exit_price recorded, account balance updated), not leave
+    P&L permanently blank the way the old no-price close did."""
+    monkeypatch.setattr("swingbot.core.marketdata.data.get_current_price", lambda *a, **k: 105.0)
+    tid = _log(tlog, entry=100.0)
+    tlog.close_trade_manual(tid, reason="manual")
+    t = tlog.get_trade_by_id(tid)
+    assert t["exit_price"] == 105.0
+    if t.get("shares"):
+        assert t["realized_pnl_amount"] is not None
+        assert t["realized_pnl_amount"] > 0     # closed above entry on a long
+
+
+def test_manual_close_settles_the_still_open_remainder_as_a_leg(tlog, monkeypatch):
+    """A PARTIAL position (TP1 already banked as one leg) manually closed
+    must realize the REMAINDER at the live quote too, not just the TP1
+    leg -- otherwise the blended $ P&L silently ignores whatever size was
+    still open when the human closed it."""
+    monkeypatch.setattr("swingbot.core.marketdata.data.get_current_price", lambda *a, **k: 108.0)
+    tid = _log(tlog, entry=100.0, target=110.0)
+    tl_trade = tlog.get_trade_by_id(tid)
+    tl_trade["legs"].append({"fraction": 0.5, "exit_price": 110.0, "r": 2.0, "reason": "tp1"})
+    tlog._save()
+    tlog.close_trade_manual(tid, reason="manual")
+    t = tlog.get_trade_by_id(tid)
+    assert t["exit_price"] == 108.0
+    assert len(t["legs"]) == 2
+    assert t["legs"][-1]["fraction"] == pytest.approx(0.5)
+    assert t["legs"][-1]["exit_price"] == 108.0
+    if t.get("shares"):
+        assert t["realized_pnl_amount"] is not None
+
+
+# ── backfill_exit_price: repairing a past no-price manual close ─────────────
+
+def test_backfill_exit_price_fills_a_recorded_gap(tlog):
+    """A trade closed by the OLD close_trade_manual has status='closed' and
+    exit_price=None forever -- backfill_exit_price is how that gets repaired
+    after the fact, from a price recovered elsewhere (e.g. the historical
+    close on the day it closed)."""
+    tid = _log(tlog, entry=100.0)
+    tlog.close_trade_manual(tid, reason="manual")   # no quote mocked -> no exit_price
+    assert tlog.get_trade_by_id(tid)["exit_price"] is None
+
+    ok = tlog.backfill_exit_price(tid, 105.0)
+    assert ok is True
+    t = tlog.get_trade_by_id(tid)
+    assert t["exit_price"] == 105.0
+    if t.get("shares"):
+        assert t["realized_pnl_amount"] is not None
+        assert t["realized_pnl_amount"] > 0
+
+
+def test_backfill_exit_price_never_overwrites_a_real_close(tlog, monkeypatch):
+    """A trade that already settled at a real price must not have that
+    replaced by a backfill guess -- this can only fill a gap, never
+    second-guess a real close."""
+    monkeypatch.setattr("swingbot.core.marketdata.data.get_current_price", lambda *a, **k: 105.0)
+    tid = _log(tlog, entry=100.0)
+    tlog.close_trade_manual(tid, reason="manual")
+    assert tlog.get_trade_by_id(tid)["exit_price"] == 105.0
+
+    assert tlog.backfill_exit_price(tid, 999.0) is False
+    assert tlog.get_trade_by_id(tid)["exit_price"] == 105.0
+
+
+def test_backfill_exit_price_is_a_noop_on_a_still_open_trade(tlog):
+    tid = _log(tlog)
+    assert tlog.backfill_exit_price(tid, 105.0) is False
+    assert tlog.get_trade_by_id(tid)["status"] == "open"
 
 
 def test_reversing_an_already_closed_trade_is_a_noop(tlog):
