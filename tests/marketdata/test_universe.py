@@ -547,6 +547,70 @@ def test_pending_gaps_lists_failures(tmp_path, monkeypatch):
     assert ("AAA", "daily") == (gaps[0][0], gaps[0][1])
 
 
+# --- Time-budgeted sweeps (bounds market_data_refresh so a slow/large sweep
+# can never run long enough to starve the Discord gateway heartbeat) --------
+
+def test_refresh_all_stops_at_its_time_budget(tmp_path, monkeypatch):
+    """A slow sweep must never be allowed to run unbounded -- an unbounded
+    background refresh is what let market_data_refresh monopolize the box
+    long enough that Discord's gateway heartbeat got missed and the bot
+    showed offline. deadline_seconds caps it: whatever wasn't reached this
+    pass simply waits for the next scheduled tick, its staleness carried
+    over rather than lost."""
+    import time as time_mod
+    from swingbot.core.marketdata import data_refresh
+
+    calls = []
+
+    def slow_fetch(symbol, tf):
+        calls.append(symbol)
+        time_mod.sleep(0.05)
+        return make_ohlcv(np.full(5, 100.0))
+
+    monkeypatch.setattr(data_refresh, "fetch_interval_data", slow_fetch)
+    symbols = [f"SYM{i}" for i in range(20)]
+    res = data_refresh.refresh_all(symbols, ["daily"], base_dir=str(tmp_path),
+                                   persist_state=False, deadline_seconds=0.12)
+
+    assert res["deadline_hit"] is True
+    assert 0 < len(calls) < len(symbols)   # made real progress, but stopped early
+
+
+def test_refresh_all_deadline_hit_is_false_when_unbounded(tmp_path, monkeypatch):
+    from swingbot.core.marketdata import data_refresh
+
+    monkeypatch.setattr(data_refresh, "fetch_interval_data",
+                        lambda s, tf: make_ohlcv(np.full(5, 100.0)))
+    res = data_refresh.refresh_all(["AAA"], ["daily"], base_dir=str(tmp_path),
+                                   persist_state=False)
+    assert res["deadline_hit"] is False
+
+
+def test_refresh_all_deadline_does_not_abandon_partial_progress(tmp_path, monkeypatch):
+    """Symbols already refreshed before the deadline hit must keep their
+    result -- a time-boxed sweep degrades to 'less done', never to 'undoes
+    what it already did'."""
+    import time as time_mod
+    from swingbot.core.marketdata import data_refresh
+    from swingbot.core.marketdata.data_store import load_from_disk
+
+    def slow_fetch(symbol, tf):
+        time_mod.sleep(0.05)
+        return make_ohlcv(np.full(5, 100.0))
+
+    monkeypatch.setattr(data_refresh, "fetch_interval_data", slow_fetch)
+    res = data_refresh.refresh_all(["AAA", "BBB", "CCC", "DDD"], ["daily"],
+                                   base_dir=str(tmp_path), persist_state=False,
+                                   deadline_seconds=0.08)
+
+    assert res["deadline_hit"] is True
+    completed = res["summary"]["daily"]["full"]
+    assert 0 < completed < 4
+    for key in list(res["state"].keys())[:completed]:
+        symbol = key.split("|")[0]
+        assert load_from_disk(symbol, "daily", base_dir=str(tmp_path)) is not None
+
+
 def test_cap_alerts_ranks_by_follow_score():
     from swingbot.commands.scanning import cap_alerts
 

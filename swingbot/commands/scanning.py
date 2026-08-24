@@ -1320,6 +1320,15 @@ async def market_data_refresh():
     take minutes under Yahoo throttling, which would otherwise stall every
     Discord command for the duration.
 
+    Time-budgeted (MARKET_DATA_REFRESH_BUDGET_SECONDS) on top of that: a
+    large stale backlog (after extended downtime) or a slow/rate-limited
+    provider can make even the to_thread-offloaded sweep run long enough to
+    starve the Discord gateway heartbeat on a small box and drop the bot's
+    connection -- production incident, 2026-08-24. Whatever the budget
+    doesn't reach this tick carries its staleness into the next one; nothing
+    is lost, the sweep just degrades to "less done per wake" instead of
+    "unbounded."
+
     Failures are logged and counted, never raised: a rate-limited window or
     a single delisted symbol must not kill the loop.
     """
@@ -1338,6 +1347,7 @@ async def market_data_refresh():
         )
         result = await asyncio.to_thread(
             refresh_all, symbols, timeframes, sleep_seconds=0.3,
+            deadline_seconds=config.MARKET_DATA_REFRESH_BUDGET_SECONDS,
         )
     except Exception as exc:
         log.exception("market_data_refresh: refresh failed: %s", exc)
@@ -1351,6 +1361,13 @@ async def market_data_refresh():
                     " ..." if len(result["failures"]) > 5 else "")
     elif line != "all timeframes already fresh":
         log.info("market_data_refresh: %s", line)
+
+    if result.get("deadline_hit"):
+        log.warning(
+            "market_data_refresh: hit its %ds time budget and stopped early -- "
+            "remaining pairs carry over to the next wake.",
+            config.MARKET_DATA_REFRESH_BUDGET_SECONDS,
+        )
 
     # Anything still unresolved stays on the books and is re-attempted on the
     # next tick (failed pairs go stale after FAILED_RETRY_HOURS instead of

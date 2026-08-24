@@ -668,6 +668,15 @@ FIELDS: list[Field] = [
           help="How often the auto-refresh loop WAKES UP. It does not fetch on every wake -- "
                "the per-timeframe staleness rule decides that. Lower this only if you want "
                "new hourly candles picked up sooner."),
+    Field("MARKET_DATA_REFRESH_BUDGET_SECONDS", "MARKET_DATA_REFRESH_BUDGET_SECONDS",
+          "Universe & Scanning", "Market data refresh time budget (seconds)",
+          type="number", default="120", min=15, max=3600, step=15,
+          help="Hard cap on one refresh sweep's wall-clock time. Once hit, the sweep stops "
+               "starting new fetches and picks up whatever it didn't reach on the next wake -- "
+               "nothing is lost, staleness just carries over. Exists because an unbounded sweep "
+               "(a large stale backlog after downtime, or a slow/rate-limited provider) can run "
+               "long enough on a small box to starve the Discord gateway heartbeat and drop the "
+               "bot's connection -- this is what happened in production on 2026-08-24."),
     Field("MARKET_DATA_TIMEFRAMES", "MARKET_DATA_TIMEFRAMES", "Universe & Scanning",
           "Auto-refreshed timeframes",
           type="text", default="monthly,weekly,daily,hourly",

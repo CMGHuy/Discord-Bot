@@ -253,8 +253,20 @@ def _record(state: dict, symbol: str, tf: str, r: dict, base_dir: str) -> None:
 def refresh_all(symbols, timeframes=TRAINING_TIMEFRAMES, base_dir: str = DATA_DIR,
                 force: bool = False, sleep_seconds: float = 0.0,
                 on_progress=None, state: dict = None,
-                persist_state: bool = True) -> dict:
-    """Refresh every (symbol, timeframe) pair. Never raises."""
+                persist_state: bool = True, deadline_seconds: float = None) -> dict:
+    """Refresh every (symbol, timeframe) pair. Never raises.
+
+    deadline_seconds: once this many wall-clock seconds have elapsed since
+    the call began, stop starting new refreshes and return what's done so
+    far -- whatever pairs weren't reached simply carry their existing
+    staleness into the next scheduled tick, nothing is lost or undone.
+    None (the default) is unbounded, for scripts/tests that want a complete
+    pass. The live background loop (market_data_refresh in
+    commands/scanning.py) always passes one: an unbounded sweep is what let
+    it run long enough, under a large stale backlog or a slow/rate-limited
+    provider, to starve the Discord gateway heartbeat and drop the bot's
+    connection.
+    """
     timeframes = [timeframe_name(t) for t in timeframes]
     summary = {tf: {"full": 0, "incremental": 0, "fresh": 0, "failed": 0,
                     "added": 0} for tf in timeframes}
@@ -262,8 +274,15 @@ def refresh_all(symbols, timeframes=TRAINING_TIMEFRAMES, base_dir: str = DATA_DI
     if state is None:
         state = load_state() if persist_state else {}
 
+    started = time.monotonic()
+    deadline_hit = False
     for tf in timeframes:
+        if deadline_hit:
+            break
         for symbol in symbols:
+            if deadline_seconds is not None and time.monotonic() - started >= deadline_seconds:
+                deadline_hit = True
+                break
             try:
                 r = refresh_symbol(symbol, tf, base_dir=base_dir, force=force,
                                    state=state)
@@ -287,7 +306,8 @@ def refresh_all(symbols, timeframes=TRAINING_TIMEFRAMES, base_dir: str = DATA_DI
 
     if persist_state:
         save_state(state)
-    return {"summary": summary, "failures": failures, "state": state}
+    return {"summary": summary, "failures": failures, "state": state,
+            "deadline_hit": deadline_hit}
 
 
 def pending_gaps(state: dict = None) -> list:
