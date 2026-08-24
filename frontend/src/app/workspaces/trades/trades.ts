@@ -403,7 +403,11 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
 
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
-    .pnl-amount { color: var(--text-secondary); font-size: var(--text-chip); }
+    /* No size or colour of its own -- it used to render smaller and muted,
+       which read as a footnote rather than the dollar side of the same
+       figure the % (pnlClass, above) already names. Both are the headline
+       number now, just in different units, so it inherits pnlClass()'s
+       colour from the span it sits inside instead of its own muted tone. */
 
     .actions { display: inline-flex; gap: var(--space-4); }
 

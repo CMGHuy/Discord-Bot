@@ -736,14 +736,13 @@ import { TradeGroup } from './trade-group';
        background-tint hover instead. */
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
-    /* Smaller than the % it rides beside -- the percentage is the headline
-       figure, the amount is context for it, not a second headline -- but
-       the SAME colour: it is the same gain or loss in different units, and
-       a muted colour here read as a separate, less-certain number rather
-       than as the dollar side of the same figure. No colour of its own, so
-       it inherits pnlClass() from the span it sits inside (row.pnl_pct on
-       the Closed table, livePnlPct(row) on the other three). */
-    .pnl-amount { font-size: var(--text-chip); }
+    /* No size or weight of its own -- it used to render smaller than the %
+       it rides beside, which read as a footnote rather than the dollar side
+       of the same figure. Both are the headline number now, just in
+       different units. No colour of its own either, so it inherits
+       pnlClass() from the span it sits inside (row.pnl_pct on the Closed
+       table, livePnlPct(row) on the other three) -- it is the same gain or
+       loss, not a separate number. */
     /* Same "not real yet" language as PlanCell's own .entry.pending -- a
        dashed underline rather than a colour, since the pos/neg palette
        already means something else (gain vs loss) and this axis (realised
