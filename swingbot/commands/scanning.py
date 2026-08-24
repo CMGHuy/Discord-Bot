@@ -420,7 +420,7 @@ async def _send_alerts(destination, alerts, route_by_confidence: bool = False):
         mirrored = False
         if simple_channel is not None and simple_text:
             try:
-                await simple_channel.send(simple_text)
+                await simple_channel.send(embed=simple_text)
                 mirrored = True
             except Exception as _se:
                 log.warning("Could not post simple alert for %s to channel %s: %s "

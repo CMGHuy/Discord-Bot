@@ -1,5 +1,5 @@
 """
-DISCORD_CHANNEL_TRADES_SIMPLE_ID: the chartless text mirror of the main
+DISCORD_CHANNEL_TRADES_SIMPLE_ID: the chartless embed mirror of the main
 alerts channel.
 
 Two halves:
@@ -17,6 +17,7 @@ driven with asyncio.run().
 import asyncio
 import types
 
+import discord
 import pytest
 
 from swingbot import config
@@ -34,54 +35,65 @@ from tests.scanning.test_embeds_v3 import make_item, make_plan_v2
 
 def test_simple_alert_renders_every_required_field(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "off")
-    text = build_simple_alert(make_item())
+    embed = build_simple_alert(make_item())
 
-    assert "NVDA" in text                    # ticker
-    assert "LONG" in text                    # direction
-    assert "High (Lv4/5, 80/100)" in text    # confidence level AND score
-    assert "2 Weeks" in text                 # horizon
-    assert "RSI Pullback" in text            # setup (strategy)
-    assert "EMA, Fibonacci" in text          # setup (confluence sources)
-    assert "Entry  100.00" in text
-    assert "TP1    110.00" in text
-    assert "TP2    115.00" in text
-    assert "SL     95.00" in text
-
-
-def test_simple_alert_puts_each_price_on_its_own_line_below_setup():
-    """The four numbers are the point of the message; they used to share one
-    backtick-and-middot line, which made them its least readable part."""
-    lines = build_simple_alert(make_item()).splitlines()
-    idx = {l.split()[0]: i for i, l in enumerate(lines) if l.strip()}
-    assert idx["Setup:"] < idx["Entry"] < idx["TP1"] < idx["TP2"] < idx["SL"]
-    for label in ("Entry", "TP1", "TP2", "SL"):
-        row = next(l for l in lines if l.startswith(label))
-        assert "`" not in row and "·" not in row, row
+    assert isinstance(embed, discord.Embed)
+    assert "NVDA" in embed.title                       # ticker
+    assert "LONG" in embed.title                        # direction
+    assert "High (Lv4/5, 80/100)" in embed.description  # confidence level AND score
+    assert "2 Weeks" in embed.description               # horizon
+    assert "RSI Pullback" in embed.description           # setup (strategy)
+    assert "EMA, Fibonacci" in embed.description         # setup (confluence sources)
+    assert "Entry **100.00**" in embed.description
+    assert "TP1 **110.00**" in embed.description
+    assert "TP2 **115.00**" in embed.description
+    assert "SL **95.00**" in embed.description
 
 
-def test_simple_alert_marks_a_bearish_signal_short():
+def test_simple_alert_groups_entry_tp1_tp2_sl_on_one_clearly_labeled_line():
+    """Entry/TP1/TP2/SL belong on one scannable line -- they used to be one
+    price per line, which was the least readable part on a phone -- and each
+    carries its own emoji label so it's unambiguous which number is which."""
+    embed = build_simple_alert(make_item())
+    plan_lines = [l for l in embed.description.splitlines() if "Entry" in l]
+    assert len(plan_lines) == 1, embed.description
+    line = plan_lines[0]
+    assert "🎯 Entry" in line
+    assert "💰 TP1" in line and "💰 TP2" in line
+    assert "🛑 SL" in line
+
+
+def test_simple_alert_marks_a_bearish_signal_short_with_down_triangle_and_red():
     item = make_item()
     item.result.trend = "bearish"
-    text = build_simple_alert(item)
-    assert "SHORT" in text and "LONG" not in text
-    assert "🔴" in text
+    embed = build_simple_alert(item)
+    assert "SHORT" in embed.title and "LONG" not in embed.title
+    assert "▼" in embed.title
+    assert embed.color == discord.Color.red()
+
+
+def test_simple_alert_marks_a_bullish_signal_long_with_up_triangle_and_green():
+    embed = build_simple_alert(make_item())
+    assert "LONG" in embed.title
+    assert "▲" in embed.title
+    assert embed.color == discord.Color.green()
 
 
 def test_simple_alert_omits_tp2_when_there_is_no_second_target(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "off")
     item = make_item()
     item.plan.target2_price = None
-    text = build_simple_alert(item)
-    assert "TP2" not in text
-    assert "TP1    110.00" in text and "SL     95.00" in text
+    embed = build_simple_alert(item)
+    assert "TP2" not in embed.description
+    assert "TP1 **110.00**" in embed.description and "SL **95.00**" in embed.description
 
 
 def test_simple_alert_carries_no_chart_or_image_reference():
     """The whole point of the simple channel: no render, no attachment."""
-    text = build_simple_alert(make_item(plan_v2=make_plan_v2()))
-    assert "attachment://" not in text
-    assert ".png" not in text
-    assert isinstance(text, str)
+    embed = build_simple_alert(make_item(plan_v2=make_plan_v2()))
+    assert "attachment://" not in embed.description
+    assert ".png" not in embed.description
+    assert embed.image.url is None
 
 
 @pytest.mark.parametrize("flag,expected_entry,expected_tp1,expected_tp2", [
@@ -95,18 +107,18 @@ def test_simple_alert_prices_follow_the_same_cutover_as_the_full_embed(
     on would make the two channels quote different targets for one signal."""
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", flag)
     item = make_item(plan_v2=make_plan_v2())
-    text = build_simple_alert(item)
+    embed = build_simple_alert(item)
 
     expected = embeds_mod.plan_numbers_for_display(item.plan_v2, {
         "entry": item.plan.entry, "stop_loss": item.plan.stop_loss,
         "take_profit": item.plan.take_profit, "target2": item.plan.target2_price})
 
-    assert f"Entry  {expected['entry']:.2f}" in text
-    assert f"TP1    {expected['take_profit']:.2f}" in text
-    assert f"TP2    {expected['target2']:.2f}" in text
-    assert f"Entry  {expected_entry}" in text
-    assert f"TP1    {expected_tp1}" in text
-    assert f"TP2    {expected_tp2}" in text
+    assert f"Entry **{expected['entry']:.2f}**" in embed.description
+    assert f"TP1 **{expected['take_profit']:.2f}**" in embed.description
+    assert f"TP2 **{expected['target2']:.2f}**" in embed.description
+    assert f"Entry **{expected_entry}**" in embed.description
+    assert f"TP1 **{expected_tp1}**" in embed.description
+    assert f"TP2 **{expected_tp2}**" in embed.description
 
 
 # --------------------------------------------------------------------------
@@ -150,8 +162,8 @@ def test_configured_simple_channel_receives_a_mirror_of_every_alert(wired):
     main, simple = wired
     asyncio.run(_send_alerts(main, [_alert("A"), _alert("B")]))
 
-    assert len(main.sent) == 2                       # full alerts still posted
-    assert [c[0] for c in simple.sent] == ["A", "B"]  # one mirror each, in order
+    assert len(main.sent) == 2                                # full alerts still posted
+    assert [c["embed"] for c in simple.sent] == ["A", "B"]    # one mirror each, in order
 
 
 def test_blank_simple_channel_id_disables_mirroring(monkeypatch, wired):
@@ -200,8 +212,8 @@ def test_mirrored_alert_is_posted_silently_to_the_full_channel(wired):
     main, simple = wired
     asyncio.run(_send_alerts(main, [_alert()]))
 
-    assert main.sent[0]["silent"] is True     # full alert delivered, no ping
-    assert simple.sent == [("SIMPLE-TEXT",)]  # mirror sent plainly -> it pings
+    assert main.sent[0]["silent"] is True            # full alert delivered, no ping
+    assert simple.sent == [{"embed": "SIMPLE-TEXT"}]  # mirror sent as an embed -> it pings
 
 
 def test_the_simple_mirror_itself_is_never_silenced(wired):

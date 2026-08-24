@@ -700,24 +700,32 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     return embed
 
 
-def build_simple_alert(item) -> str:
+def build_simple_alert(item) -> discord.Embed:
     """The DISCORD_CHANNEL_TRADES_SIMPLE_ID mirror of a full alert: the same
     signal stripped to the fields needed to act on it -- ticker, direction,
     confidence level + score, horizon, setup, entry, TP1, TP2, SL. No chart is
     generated or attached (that is the point: this channel stays readable on a
-    phone and costs no render time), no embed, no track record, no sizing, no
+    phone and costs no render time), no track record, no sizing, no
     requirement annotations, no plan buttons.
+
+    A colored Embed rather than a plain string -- the color bar is the
+    fastest long/short signal on a phone, matching the SPA table's own
+    direction convention (sb-direction-arrow: long=green/▲, short=red/▼,
+    the one recorded exception to green/red meaning outcome rather than
+    direction). Entry/TP1/TP2/SL are packed onto ONE line, each carrying its
+    own emoji label (🎯/💰/💰/🛑) so which number is which stays unambiguous
+    even without the old one-per-line layout.
 
     Prices come from plan_numbers_for_display() -- the SAME funnel
     _build_trade_plan_table() feeds the full embed from -- so the two channels
     can never quote different numbers for one signal. Anything that moves
     pricing (the PLAN_ENGINE_V2 cutover included) moves both at once.
-
-    Returns a plain Discord message string, not an Embed.
     """
     result, plan, conf = item.result, item.plan, item.conf
     is_bull = result.trend == "bullish"
     direction = "LONG" if is_bull else "SHORT"
+    arrow = "▲" if is_bull else "▼"
+    color = discord.Color.green() if is_bull else discord.Color.red()
 
     nums = plan_numbers_for_display(_v2_plan(item), {
         "entry": plan.entry, "stop_loss": plan.stop_loss,
@@ -733,25 +741,22 @@ def build_simple_alert(item) -> str:
     if sources != "n/a":
         setup = f"{setup} · {sources}"
 
-    # One price per line, below Setup. These four numbers are the whole point
-    # of the message, and packing them onto one backtick-and-middot line made
-    # them the least readable part of it -- exactly backwards on a phone.
-    # Labels are padded to a common width so the values line up even in
-    # Discord's proportional font.
-    lines = [
-        f"{'🟢' if is_bull else '🔴'} **{direction} — {result.ticker}**",
-        f"Confidence: {conf.label} (Lv{conf.level}/5, {conf.score}/100)",
-        f"Horizon: {result.horizon_label}",
-        f"Setup: {setup}",
-        "",
-        f"Entry  {nums['entry']:.2f}",
-        f"TP1    {nums['take_profit']:.2f}",
-    ]
+    plan_line = f"🎯 Entry **{nums['entry']:.2f}**  ·  💰 TP1 **{nums['take_profit']:.2f}**"
     tp2 = nums["target2"]
     if tp2 is not None:
-        lines.append(f"TP2    {tp2:.2f}")
-    lines.append(f"SL     {nums['stop_loss']:.2f}")
-    return "\n".join(lines)
+        plan_line += f"  ·  💰 TP2 **{tp2:.2f}**"
+    plan_line += f"  ·  🛑 SL **{nums['stop_loss']:.2f}**"
+
+    return discord.Embed(
+        title=f"{arrow} {direction} — {result.ticker}",
+        description=(
+            f"Confidence: {conf.label} (Lv{conf.level}/5, {conf.score}/100)\n"
+            f"Horizon: {result.horizon_label}\n"
+            f"Setup: {setup}\n\n"
+            f"{plan_line}"
+        ),
+        color=color,
+    )
 
 
 def regenerate_chart_for_trade(trade: dict) -> str | None:
