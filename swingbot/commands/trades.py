@@ -11,6 +11,7 @@ from swingbot.core.scanning import engine as scan_engine
 from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.bot_core import bot
 from swingbot.core.tracking.risk_metrics import compute_risk_metrics
+from swingbot.core.tracking.performance import closed_pnl_pct
 
 try:
     from zoneinfo import ZoneInfo as _ZoneInfo
@@ -266,9 +267,8 @@ def _build_trade_detail_embed(match: dict) -> discord.Embed:
         # account.py / performance.py's _settle_account_balance). "n/a" for
         # a manual close (no exit price) or a trade logged before sizing
         # snapshots existed.
-        if exit_price and match["entry"]:
-            raw_pct = (exit_price - match["entry"]) / match["entry"] * 100
-            pnl_pct = raw_pct if is_bull else -raw_pct
+        pnl_pct = closed_pnl_pct(match)
+        if pnl_pct is not None:
             embed.add_field(name="Realized P&L", value=f"{pnl_pct:+.2f}%", inline=True)
         else:
             embed.add_field(name="Realized P&L", value="n/a", inline=True)
@@ -441,14 +441,6 @@ def _berlin_date(iso_ts: str):
     return (dt.astimezone(_BERLIN_TZ) if _BERLIN_TZ else dt).date()
 
 
-def _closed_pnl_pct(t: dict) -> float | None:
-    entry, exit_p = t.get("entry"), t.get("exit_price")
-    if not entry or not exit_p:
-        return None
-    raw = (exit_p - entry) / entry * 100
-    return raw if t["direction"] == "bullish" else -raw
-
-
 @bot.command(name="summary")
 async def summary_cmd(ctx):
     """
@@ -472,7 +464,7 @@ async def summary_cmd(ctx):
 
     amounts = [t["realized_pnl_amount"] for t in closed_today if t.get("realized_pnl_amount") is not None]
     net_amount = sum(amounts) if amounts else None
-    pnl_pcts = [p for t in closed_today if (p := _closed_pnl_pct(t)) is not None]
+    pnl_pcts = [p for t in closed_today if (p := closed_pnl_pct(t)) is not None]
     avg_pnl_pct = sum(pnl_pcts) / len(pnl_pcts) if pnl_pcts else None
 
     acct = account_module.get_daily_summary()
@@ -515,7 +507,7 @@ async def summary_cmd(ctx):
         lines = []
         for t in sorted(closed_today, key=lambda t: t.get("closed_at") or ""):
             icon = "✅" if t["status"] == "win" else ("❌" if t["status"] == "loss" else "🔒")
-            pct = _closed_pnl_pct(t)
+            pct = closed_pnl_pct(t)
             amt = t.get("realized_pnl_amount")
             pct_str = f"{pct:+.2f}%" if pct is not None else "n/a"
             amt_str = f"{amt:+.2f}" if amt is not None else "n/a"

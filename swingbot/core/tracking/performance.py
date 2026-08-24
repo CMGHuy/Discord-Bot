@@ -213,6 +213,48 @@ def append_leg(t: dict, leg: dict) -> None:
     t.setdefault("legs", []).append(leg)
 
 
+def closed_pnl_pct(t: dict) -> float | None:
+    """Signed % return on the full original position for a closed trade --
+    the percentage-terms analogue of realized_pnl_amount.
+
+    A scaled-out (v2 two-leg) trade does NOT reduce to a single
+    (exit_price - entry) calculation: close_plan_trade() sets `exit_price`
+    to only the LAST leg's exit (the runner), so pricing a % off it alone
+    silently drops the TP1 leg's contribution entirely. For a win that gave
+    back some of its TP1 gain on the runner -- a common, healthy outcome --
+    that understatement can even flip the sign negative: a losing
+    percentage shown next to a winning dollar amount, which is exactly what
+    made scaled-out WIN trades (never losses -- a stop-out closes the whole
+    position at once, before any scale-out could happen) look like they had
+    no P&L% at all.
+
+    Derived instead from realized_pnl_amount (already correctly blended
+    across every leg by settle_legs) against the ORIGINAL full position
+    value (shares * entry) -- mathematically identical to the
+    fraction-weighted average of each leg's own % return, and always
+    sign-consistent with the $ amount shown beside it.
+
+    Falls back to the plain single-exit formula for a trade with no legs
+    (every loss, every legacy/v1 trade), where the two formulas agree
+    exactly anyway -- kept as its own branch rather than always going
+    through realized_pnl_amount so a trade whose sizing snapshot failed
+    (shares is None, e.g. account balance was 0 at open time) still gets a
+    % reading even though it never got a $ one.
+    """
+    if t.get("legs"):
+        shares, entry = t.get("shares"), t.get("entry")
+        amount = t.get("realized_pnl_amount")
+        if not shares or not entry or amount is None:
+            return None
+        return round(amount / (shares * entry) * 100, 2)
+
+    entry, exit_p = t.get("entry"), t.get("exit_price")
+    if not entry or not exit_p:
+        return None
+    raw = (exit_p - entry) / entry * 100
+    return round(raw if t.get("direction") == "bullish" else -raw, 2)
+
+
 def _apply_exit_price(t: dict, price: float, reason: str) -> None:
     """Records `price` as `t`'s exit, realizing whatever fraction of the
     position is still open as one more leg on top of any TP1 already
@@ -1255,16 +1297,12 @@ class TradeLog:
         self.refresh()
         closed = [t for t in self._trades if t["status"] in ("win", "loss")]
 
-        def _pnl_pct(t):
-            try:
-                entry = float(t["entry"])
-                exit_p = float(t["exit_price"])
-                if entry <= 0:
-                    return None
-                is_bull = t["direction"] == "bullish"
-                return ((exit_p - entry) / entry * 100) if is_bull else ((entry - exit_p) / entry * 100)
-            except (TypeError, KeyError, ZeroDivisionError):
-                return None
+        # closed_pnl_pct (module-level, above) rather than a plain
+        # (exit_price - entry) calc: a scaled-out (v2 two-leg) win trade's
+        # exit_price is only the runner leg's own exit, so pricing a %
+        # off it alone silently dropped the TP1 leg's contribution to
+        # these avg_pnl breakdowns.
+        _pnl_pct = closed_pnl_pct
 
         def _closed_dow(t):
             _DOW = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -1352,14 +1390,12 @@ class TradeLog:
             except (TypeError, ValueError):
                 exit_p = 0.0
 
-            is_bull = t.get("direction") == "bullish"
-            pnl_pct = None
-            if entry > 0 and exit_p > 0:
-                pnl_pct = round(
-                    ((exit_p - entry) / entry * 100) if is_bull
-                    else ((entry - exit_p) / entry * 100),
-                    3,
-                )
+            # closed_pnl_pct (module-level, above), not a plain (exit_price -
+            # entry) calc: a scaled-out (v2 two-leg) win trade's exit_price
+            # is only the runner leg's own exit, so pricing a % off it alone
+            # silently dropped the TP1 leg's contribution -- which then fed
+            # a wrong r_multiple below too (pnl_pct / risk_pct).
+            pnl_pct = closed_pnl_pct(t)
 
             opened_at = t.get("opened_at") or ""
             closed_at = t.get("closed_at") or ""

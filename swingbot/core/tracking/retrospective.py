@@ -22,7 +22,7 @@ import logging
 import os
 from collections import defaultdict
 
-from swingbot.core.tracking.performance import primary_strategy_label
+from swingbot.core.tracking.performance import closed_pnl_pct, primary_strategy_label
 from swingbot.core.planning import account as account_module
 from swingbot import config as app_config
 from swingbot.core.analytics import calibration
@@ -184,14 +184,10 @@ def summarize_badge_split(closed: list) -> str | None:
 
 
 def _pnl_pct(trade: dict) -> float | None:
-    entry = trade.get("entry")
-    exit_ = trade.get("exit_price")
-    if not entry or not exit_:
-        return None
-    pnl = (exit_ - entry) / entry * 100
-    if trade.get("direction") == "bearish":
-        pnl = -pnl
-    return round(pnl, 2)
+    """Delegates to performance.closed_pnl_pct -- see its docstring for why
+    a plain (exit_price - entry) calc understates (and can even flip the
+    sign of) a scaled-out (v2 two-leg) trade's win."""
+    return closed_pnl_pct(trade)
 
 
 def _r_multiple(trade: dict) -> float | None:

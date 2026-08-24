@@ -23,6 +23,7 @@ from swingbot.core.planning import account
 from swingbot.core.planning.account import compute_position_size, load_account_config
 from swingbot.core.analytics.rank import follow_breakdown, follow_score
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
+from swingbot.core.tracking.performance import closed_pnl_pct
 from swingbot.core.backtesting.registry import decay_for
 from swingbot.core.planning.plan_engine import WEAK_CAUTION_TEXT, badge_stats_line
 from swingbot.core.backtesting.registry import Badge
@@ -861,13 +862,15 @@ def build_closed_trade_embed(trade: dict) -> discord.Embed:
     entry      = trade.get("entry", 0.0)
     is_bull    = trade.get("direction") == "bullish"
 
-    # Realized P&L — only meaningful when we have an exit price
-    if exit_price is not None and entry:
-        raw_pct = (exit_price - entry) / entry * 100
-        pct     = raw_pct if is_bull else -raw_pct
-        pnl_str = f"{pct:+.2f}%"
-    else:
-        pnl_str = "n/a"
+    # Realized P&L — only meaningful when we have an exit price. Goes
+    # through closed_pnl_pct() rather than a plain (exit_price - entry)
+    # calc: for a scaled-out (v2 two-leg) trade, exit_price is only the
+    # runner leg's own exit (see close_plan_trade), so pricing a % off it
+    # alone silently dropped the TP1 leg's contribution -- a win that gave
+    # back some of its TP1 gain on the runner could show a NEGATIVE % here
+    # right next to a positive Gain/Loss amount.
+    pct = closed_pnl_pct(trade)
+    pnl_str = f"{pct:+.2f}%" if pct is not None else "n/a"
 
     # R-multiple — risk_per_share is stored on the trade if sizing was active
     risk = trade.get("risk_per_share") or abs(entry - trade.get("stop_loss", entry)) or None

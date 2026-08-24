@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 # calls it.
 from swingbot.core.planning.account import compute_position_size, load_account_config
 from swingbot.core.marketdata.data import get_current_price, prefetch_prices
-from swingbot.core.tracking.performance import trade_proximity
+from swingbot.core.tracking.performance import closed_pnl_pct, trade_proximity
 
 from .helpers import _primary_strategy_label
 
@@ -138,11 +138,13 @@ def is_today_berlin(iso_ts: str | None) -> bool:
 # partial and needs the identical callables; duplicating them is how the two
 # paths drift.
 def closed_pnl(t) -> float | None:
-    ex, en = t.get("exit_price"), t.get("entry")
-    if not ex or not en:
-        return None
-    raw = (ex - en) / en * 100
-    return round(raw if t["direction"] == "bullish" else -raw, 2)
+    """Delegates to performance.closed_pnl_pct -- see its docstring for why
+    a plain (exit_price - entry) calculation is wrong for a scaled-out (v2
+    two-leg) trade: exit_price there is only the runner's own exit, so a
+    win that gave back some of its TP1 gain could show a NEGATIVE % next
+    to a positive realized_pnl_amount. This was the Closed table bug where
+    win rows silently stopped showing a P&L%."""
+    return closed_pnl_pct(t)
 
 
 def closed_r(t) -> float | None:
