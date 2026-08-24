@@ -82,9 +82,13 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   `jsonio.write_json` (use `atomic_write_json`), no `TradeLog().all_trades()`
   (use `get_trades(limit=None)`). **A plan file is a design document, not
   ground truth about the current code** — grep the symbol before you call it.
-- Scans run through `map_tickers()` (`SCAN_WORKERS`, default 4). Anything
-  touching shared state (`state.confirm_or_update`, funnel counters) must stay
-  serial/post-join.
+- Scans run through `map_tickers()` (`SCAN_WORKERS`, default 1 as of v56 --
+  was 4, but measured directly against the real watchlist: cpu-time/wall-time
+  stayed ~1.0x at every worker count 1-8, since the per-ticker work is
+  pure-Python-glue-heavy, not vectorized enough to release the GIL for a
+  useful stretch, so more threads bought no real parallelism and were
+  measurably slower than serial). Anything touching shared state
+  (`state.confirm_or_update`, funnel counters) must stay serial/post-join.
 - **The live scan reads `market_data/daily/` now (v47).** `_crawl_latest_data`
   is cache-first: `_load_cached_daily()` serves any ticker whose CSV is fresher
   than `SCAN_CACHE_MAX_AGE_HOURS` (6h), and only the cold remainder is fetched.

@@ -627,9 +627,16 @@ FIELDS: list[Field] = [
                "Gate is defined in swingbot/core/edge/gates.py:in_earnings_blackout but not "
                "yet wired into the scan/alert path -- flag-gated filter candidate for E33."),
     Field("SCAN_WORKERS", "SCAN_WORKERS", "Universe & Scanning", "Scan thread-pool size",
-          type="number", default="4", min=1, max=16, step=1,
-          help="Thread-pool size for per-ticker scanning. 4 is CX23-safe; raise only with "
-               "the E82 telemetry watching."),
+          type="number", default="1", min=1, max=16, step=1,
+          help="Thread-pool size for per-ticker scanning. Was 4, changed to 1 (v56): "
+               "measured directly against the 78-ticker watchlist, cpu-time/wall-time stayed "
+               "~1.0x at every worker count from 1-8 -- per-ticker work (collect_candidate_levels "
+               "et al.) is dominated by pure-Python list/set/dict/sort glue around small pandas "
+               "calls, not big enough vectorized ops to release the GIL for a useful stretch, so "
+               "more threads bought zero real parallelism and 4 was measurably slower than 1 "
+               "(pure thread/GIL contention overhead). Only raise this with real multi-core "
+               "speedup confirmed (e.g. after moving analyze to a process pool) or a much larger "
+               "SCAN_UNIVERSE, watched with the E82 telemetry."),
     Field("SCAN_CACHE_MAX_AGE_HOURS", "SCAN_CACHE_MAX_AGE_HOURS", "Universe & Scanning",
           "Scan cache max age (hours)",
           type="number", default="6", min=1, max=48, step=1,
