@@ -654,6 +654,18 @@ FIELDS: list[Field] = [
                "threads -- the pinned yfinance 0.2.66 builds download() on a shared "
                "non-reentrant module global, and concurrent threads once attributed one "
                "ticker's price data to another. Separate processes do not share it."),
+    Field("COLD_FETCH_TIMEOUT_SECONDS", "COLD_FETCH_TIMEOUT_SECONDS", "Universe & Scanning",
+          "Cold-fetch pool wall-clock budget (seconds)",
+          type="number", default="180", min=30, max=1800, step=15,
+          help="Hard cap on how long the cold-ticker process pool waits before giving up "
+               "on whatever hasn't returned yet. yf.download()'s own timeout=10 default is "
+               "not a reliable ceiling -- a stalled DNS lookup or a fork-inherited lock can "
+               "wedge a worker past it with no exception and no CPU use. Without this "
+               "budget the whole crawl (and every session_scan tick behind it, since "
+               "discord.ext.tasks.Loop will not start the next tick until this one "
+               "returns) can hang indefinitely: production incident 2026-08-24, bot "
+               "appeared offline for 2+ hours behind one stuck ticker. Past the budget, "
+               "whatever hasn't resolved is logged and treated as a failed fetch."),
     Field("MARKET_DATA_AUTO_REFRESH", "MARKET_DATA_AUTO_REFRESH", "Universe & Scanning",
           "Auto-refresh market data cache",
           type="checkbox", default="true",

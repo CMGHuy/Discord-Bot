@@ -12,6 +12,8 @@ global is not shared. This test asserts the routing that makes that claim true:
 each ticker's frame carries a price signature derived from its own symbol, so a
 swap is detectable without any network and without trusting Yahoo's data.
 """
+from concurrent.futures import Future
+
 import pytest
 
 from swingbot import config
@@ -52,11 +54,14 @@ class _InlinePool:
     def __exit__(self, *a):
         return False
 
-    def map(self, fn, items):
-        # Deliberately reversed: a correct implementation carries the
-        # ticker in the RESULT, so completion order cannot misattribute.
-        done = {t: fn(t) for t in reversed(list(items))}
-        return [done[t] for t in items]
+    def submit(self, fn, ticker):
+        # _fetch_cold_frames keys each result off the Future object this
+        # call returns (via a {future: ticker} dict), never off completion
+        # order or position -- so misattribution is structurally impossible
+        # regardless of what order these resolve in.
+        fut = Future()
+        fut.set_result(fn(ticker))
+        return fut
 
 
 BATCH = ["AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "GOOG", "META", "NFLX",

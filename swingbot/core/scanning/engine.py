@@ -48,7 +48,7 @@ import logging
 import os
 import time
 from collections import OrderedDict, defaultdict
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait as _futures_wait
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -680,8 +680,42 @@ def _fetch_cold_frames(tickers: list, progress: "ScanProgress" = None) -> list:
     workers = _resolve_workers()
     log.info("Crawl: %d cold ticker(s) over the threshold of %d -- fetching across %d process(es)",
               len(tickers), threshold, workers)
+    budget = int(getattr(config, "COLD_FETCH_TIMEOUT_SECONDS", 180))
+    results: dict = {}
     with ProcessPoolExecutor(max_workers=workers) as pool:
-        pairs = list(pool.map(_fetch_one_ticker, tickers))
+        futures = {pool.submit(_fetch_one_ticker, t): t for t in tickers}
+        done, not_done = _futures_wait(futures, timeout=budget)
+        for fut in done:
+            ticker = futures[fut]
+            try:
+                _, df = fut.result()
+            except Exception as exc:
+                log.error("Crawl: error fetching data for %s: %s", ticker, exc)
+                df = None
+            results[ticker] = df
+        if not_done:
+            # yfinance's own per-request timeout (10s, yf.download default) is not
+            # a reliable ceiling -- a stalled DNS lookup or a fork-inherited lock
+            # can wedge a worker past it with no exception and no CPU use. Without
+            # this budget, one such ticker hangs pool.map() forever: production
+            # incident 2026-08-24, where the whole session_scan loop (and the
+            # bot_heartbeat.json timestamp the admin dashboard's live/offline dot
+            # reads) froze for 2+ hours behind a single stuck cold fetch. Anything
+            # still running past the budget is logged, treated as a failed fetch
+            # (same contract as any other _fetch_one_ticker failure), and its
+            # worker process is killed outright -- shutdown(wait=False) alone only
+            # cancels futures that never started, it does not stop one mid-flight.
+            stuck = [futures[f] for f in not_done]
+            log.error(
+                "Crawl: %d ticker(s) still fetching past the %ds budget -- treating as "
+                "failed and killing the stuck worker process(es): %s",
+                len(stuck), budget, ", ".join(stuck))
+            for ticker in stuck:
+                results[ticker] = None
+            for proc in pool._processes.values():
+                proc.kill()
+            pool.shutdown(wait=False, cancel_futures=True)
+    pairs = [(t, results.get(t)) for t in tickers]
     if progress is not None:
         progress.done += len(pairs)
         progress.current_ticker = tickers[-1]
