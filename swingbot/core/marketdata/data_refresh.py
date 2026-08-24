@@ -232,7 +232,23 @@ def _record(state: dict, symbol: str, tf: str, r: dict, base_dir: str) -> None:
         rec["rows"] = r.get("rows", 0)
         # Earliest bar we hold. Tracked because it is the ONLY evidence that
         # the archive is outgrowing the provider's window: it should stay put
-        # (or move earlier) forever, and must never drift later.
+        # (or move earlier) forever, and a later value is worth an alert.
+        #
+        # The alert must still adopt the new value as the baseline (rather
+        # than freezing `rec["earliest"]` at the old one forever) -- production
+        # bug 2026-08-24: get_intraday() once overwrote instead of merged
+        # (fixed in 2b67124), permanently truncating dozens of tickers'
+        # hourly archives. Freezing the baseline here meant every refresh
+        # tick since kept re-comparing against a 2016 earliest the archive
+        # can now never reach again (Yahoo doesn't serve it), so the SAME
+        # already-reported, already-fixed-going-forward loss logged an ERROR
+        # every 4 hours forever instead of once. The same freeze would also
+        # misfire on a legitimate, benign cause: a near-boundary archive's
+        # front edge eroding a few days as Yahoo's rolling intraday window
+        # advances over time is not a bug and must not re-alert forever
+        # either. Adopting the new value each time means a regression is
+        # reported exactly once per new drop, and a genuinely worse repeat
+        # regression (past the newly-adopted floor) still alerts correctly.
         try:
             df = load_from_disk(symbol, tf, base_dir=base_dir)
             if df is not None and len(df):
@@ -242,8 +258,7 @@ def _record(state: dict, symbol: str, tf: str, r: dict, base_dir: str) -> None:
                     log.error(
                         "COVERAGE REGRESSION %s/%s: earliest bar moved %s -> %s "
                         "(history was lost, not merged)", symbol, tf, prev, earliest)
-                else:
-                    rec["earliest"] = earliest
+                rec["earliest"] = earliest
                 rec["latest"] = str(df.index.max())[:10]
         except Exception:
             pass
