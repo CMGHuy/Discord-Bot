@@ -1028,15 +1028,24 @@ async def trade_monitor():
     notification is posted to DISCORD_CHANNEL_TRADES_HISTORY_ID immediately,
     without waiting for the next scheduled scan.
 
-    Skips silently if a full scan is already running (which does the same
-    SL/TP check inside update_open_trades, but not the near-TP timeout --
-    that's this task's alone) to avoid a race on trades.json.
+    Runs regardless of whether a full scan is in progress. It used to skip
+    whenever scan_engine.is_scan_running() was true, on the theory that the
+    full scan's own SL/TP check (TradeLog.update_open_trades) already
+    covered this tick -- but that function deliberately EXCLUDES every
+    trade with a plan_id (see its own docstring: a v2 plan's real stop/
+    target moves after TP1 and update_open_trades only ever sees the
+    stale original levels), which is every trade once PLAN_ENGINE_V2 is
+    on. With scans now taking minutes, the skip left plan-linked trades'
+    stops and targets unmonitored for most of the day -- production
+    incident, 2026-08-24: two trades sat "open" for hours after clearly
+    breaching their stop. close_if_live_price_hit() and run_manager_tick()
+    both write through their own store's lock (TradeLog._LOCK,
+    plan_store._LOCK) and no-op on a trade/plan a concurrent scan already
+    closed, so running alongside a scan is safe, not just tolerated.
+
     Also skips when there are no open trades, keeping the overhead
     proportional to actual activity.
     """
-    if scan_engine.is_scan_running():
-        return  # full scan already handles SL/TP this tick
-
     open_trades = trade_log.get_trades(status="open", limit=200)
     if not open_trades:
         return
