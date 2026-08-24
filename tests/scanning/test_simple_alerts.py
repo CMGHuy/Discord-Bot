@@ -70,6 +70,10 @@ def test_simple_alert_marks_a_bearish_signal_short_with_down_triangle_and_red():
     assert "SHORT" in embed.title and "LONG" not in embed.title
     assert "▼" in embed.title
     assert embed.color == discord.Color.red()
+    # The triangle itself is colored too (Discord embed titles can't carry
+    # color -- an ```ansi code block in the description is the only place
+    # that can), red = short, matching the SPA table's convention.
+    assert "[1;31m" in embed.description and "▼" in embed.description
 
 
 def test_simple_alert_marks_a_bullish_signal_long_with_up_triangle_and_green():
@@ -77,15 +81,29 @@ def test_simple_alert_marks_a_bullish_signal_long_with_up_triangle_and_green():
     assert "LONG" in embed.title
     assert "▲" in embed.title
     assert embed.color == discord.Color.green()
+    assert "[1;32m" in embed.description and "▲" in embed.description
 
 
 def test_simple_alert_omits_tp2_when_there_is_no_second_target(monkeypatch):
+    """Legacy (non-v2) scenario plans have no runner/trail concept -- a
+    missing second target here genuinely means there isn't one."""
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "off")
     item = make_item()
     item.plan.target2_price = None
     embed = build_simple_alert(item)
     assert "TP2" not in embed.description
     assert "TP1 **110.00**" in embed.description and "SL **95.00**" in embed.description
+
+
+def test_simple_alert_shows_trail_when_v2_plan_has_no_hard_tp2(monkeypatch):
+    """A v2 scale-out plan's runner is managed to a trailing stop instead of
+    a fixed second target -- TP2 must say so, not silently vanish, matching
+    the full embed's own leg_rows() convention ('TP2 105.00 / trail')."""
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = make_item(plan_v2=make_plan_v2())
+    item.plan_v2.tp2 = None
+    embed = build_simple_alert(item)
+    assert "TP2 **trail**" in embed.description
 
 
 def test_simple_alert_carries_no_chart_or_image_reference():

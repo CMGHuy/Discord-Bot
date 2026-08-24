@@ -722,12 +722,13 @@ def build_simple_alert(item) -> discord.Embed:
     pricing (the PLAN_ENGINE_V2 cutover included) moves both at once.
     """
     result, plan, conf = item.result, item.plan, item.conf
+    plan_v2 = _v2_plan(item)
     is_bull = result.trend == "bullish"
     direction = "LONG" if is_bull else "SHORT"
     arrow = "▲" if is_bull else "▼"
     color = discord.Color.green() if is_bull else discord.Color.red()
 
-    nums = plan_numbers_for_display(_v2_plan(item), {
+    nums = plan_numbers_for_display(plan_v2, {
         "entry": plan.entry, "stop_loss": plan.stop_loss,
         "take_profit": plan.take_profit, "target2": plan.target2_price})
 
@@ -745,11 +746,24 @@ def build_simple_alert(item) -> discord.Embed:
     tp2 = nums["target2"]
     if tp2 is not None:
         plan_line += f"  ·  💰 TP2 **{tp2:.2f}**"
+    elif plan_v2 is not None:
+        # v2 scale-out plans manage the runner to a trailing stop instead of
+        # a fixed second target -- say so rather than silently dropping the
+        # field, same convention as the full embed's leg_rows().
+        plan_line += "  ·  💰 TP2 **trail**"
     plan_line += f"  ·  🛑 SL **{nums['stop_loss']:.2f}**"
+
+    # Embed titles can't carry color -- an ```ansi code block is the only
+    # place Discord renders one, so the colored direction triangle lives as
+    # the description's first line (title keeps its own plain-text copy for
+    # notification previews, which strip embeds down to the title).
+    ansi_code = 32 if is_bull else 31
+    direction_block = f"```ansi\n[1;{ansi_code}m{arrow} {direction} — {result.ticker}[0m\n```"
 
     return discord.Embed(
         title=f"{arrow} {direction} — {result.ticker}",
         description=(
+            f"{direction_block}"
             f"Confidence: {conf.label} (Lv{conf.level}/5, {conf.score}/100)\n"
             f"Horizon: {result.horizon_label}\n"
             f"Setup: {setup}\n\n"
