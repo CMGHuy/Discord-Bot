@@ -22,6 +22,19 @@ connects to it (`scripts/ops/ssh-hetzner.sh "docker compose ps"` for one
 command, no args for an interactive shell); not committed, since it shells
 through WSL to a key at `~/.ssh/id_rsa` inside WSL's home.
 
+**Any live fix or config change made directly on production must be mirrored
+back into this repo and committed before the task is considered done** — a
+`.env` edit, a `data/watchlist.json` trim, anything changed by hand over SSH
+while debugging a live incident. Production's `.env`/`data/` are gitignored
+and never deploy *from* this repo, so a change made only on the box is
+invisible here, silently reverts on the next manual edit, and leaves the two
+environments to drift apart. Mirroring means: the equivalent local file
+updated (`.env.example`/docs for a config value, the local `data/` mirror for
+a watchlist edit), and — if the change reveals a real code bug rather than
+just a bad setting — an actual code fix committed, not just the live
+workaround. Update `.env.example`'s own default alongside any `.env`
+config value this reveals should change (e.g. `DEFAULT_HISTORY_PERIOD`).
+
 Two entry points: `python bot.py` (the bot) and `python admin_ui.py` (the
 admin). The admin is a Flask **API** plus an Angular SPA served from
 `frontend/` — Flask serves only `/api/v1/*`, the SPA's routes and `/` (the Jinja
