@@ -12,6 +12,21 @@ from — into `docs/superpowers/plans/implemented/` and
 level of those two directories then holds exactly the live work: what is in
 flight, and what is designed but still to be built.
 
+**This closing commit is also where the document gets its permanent `vN`.**
+`document-conventions.md`'s "Naming" section covers the reasoning (numbering
+at authoring time breaks when execution order changes after the fact); the
+mechanical result here is that the `git mv` in this section is a rename, not
+just a move — `2026-08-24-scan-fetch-batching.md` becomes
+`2026-08-24-v55-scan-fetch-batching.md` in the same commit that relocates it
+into `implemented/`. Compute the next number immediately before this commit
+(`find docs/superpowers/specs docs/superpowers/plans -name '*.md' | grep -oE
+'v[0-9]+' | sort -V | tail -1`), and if the plan shares a spec that closes
+alongside it or already carries a number from an earlier close, reuse that
+number for both rather than minting a new one — see `document-conventions.md`
+for the shared-number case. **This also means the "fix the references in the
+same commit" step below now includes updating every cross-link to the
+newly-numbered filename**, not just to its new directory.
+
 - **`implemented/` means "off the live list", not "every box is ticked".** It
   holds three kinds of document, deliberately: plans that finished; plans
   abandoned part-way (`v3-cockpit` at 15/467, `v4-edge-engine` at 133/399); and
@@ -53,7 +68,10 @@ found to buy no edge, and deliberately never merged is a different case**: `git
 mv` it and its spec into `docs/superpowers/plans/no-lift/` and
 `docs/superpowers/specs/no-lift/` instead, on `main`, as its own commit (the
 worktree branch keeps its own closing commit separately — the two histories
-never need to agree, since `main` never received the branch).
+never need to agree, since `main` never received the branch). This `git mv`
+gets the plan its permanent `vN` exactly the same way the `implemented/` move
+does above — it is still the moment the document stops being live, the `no-
+lift/` case just means "on a different history" rather than "no number".
 
 - **This is not a softer version of `implemented/`.** A plan there may still
   have shipped inert, default-off code on `main` (`AVWAP_LEVELS_ENABLED`
@@ -76,23 +94,43 @@ never need to agree, since `main` never received the branch).
 ## Worktrees are named after the plan
 
 **A worktree created to execute a plan takes the plan's file stem**, so the
-branch, the directory and the document always name the same thing:
+branch, the directory and the document always name the same thing — and
+since a plan does not get its `vN` until it closes (`document-conventions.md`),
+that stem is the numberless one for the plan's entire execution:
 
 ```
-docs/superpowers/plans/2026-08-13-v21-spa-refresh.md
-  → .claude/worktrees/2026-08-13-v21-spa-refresh/   (branch: same name)
+docs/superpowers/plans/2026-08-13-spa-refresh.md          (live, no vN yet)
+  → .claude/worktrees/2026-08-13-spa-refresh/   (branch: same name)
+
+# only at close-out, after the worktree above is already gone (see below):
+docs/superpowers/plans/2026-08-13-spa-refresh.md
+  → docs/superpowers/plans/implemented/2026-08-13-v21-spa-refresh.md
 ```
+
+There is no point during execution where the worktree's name and the plan's
+current filename disagree — the plan has no number to disagree about until
+after the worktree that would have to be renamed is already removed.
 
 Never invent a fresh topic name — a worktree called `trade-history-filter` takes
-a second lookup to tie back to plan v9. For work that is not executing a plan, a
+a second lookup to tie back to its plan. For work that is not executing a plan, a
 short topic name is fine; the rule binds only when a plan exists.
 
-**Worktree execution is the default, not an opt-in.** Told to implement a `vN`
+**Worktree execution is the default, not an opt-in.** Told to implement a
 spec or plan with no instruction about where — no "inline", "in this session",
 "in the current tree" — create the worktree under the naming convention above
-before starting Task 1, without asking first. Asked to implement it directly in
-the main tree, do that instead; that is an explicit override, not a violation
-of this rule. The point of asking first would be to catch the case where a
-worktree is wrong for the task, and a plan document is precisely the case where
-it almost never is — plan execution is long-running, multi-commit, and wants
-the review-and-merge boundary a worktree gives it for free.
+before starting Task 1, without asking first. This applies whether the
+document is still in its live, numberless form (the common case — most
+plans start execution before they ever close) or, for one predating
+2026-08-24's move to deferred numbering, already carries a `vN`. Asked to
+implement it directly in the main tree, do that instead; that is an
+explicit override, not a violation of this rule. The point of asking first
+would be to catch the case where a worktree is wrong for the task, and a
+plan document is precisely the case where it almost never is — plan
+execution is long-running, multi-commit, and wants the review-and-merge
+boundary a worktree gives it for free.
+
+**And once a plan closes and the worktree merges, the worktree and its
+branch are removed** — this is the moment referenced above where the
+worktree is already gone before the `git mv` into `implemented/`/`no-lift/`
+renames the plan file to add its `vN`, so that rename never has a live
+worktree name to reconcile against.
