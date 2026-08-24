@@ -102,6 +102,10 @@ swingbot/admin/static/app/
 .claude/settings.local.json
 .claude/worktrees/
 
+# Local-machine-specific: shells out through WSL to a hardcoded key path.
+# Never committed -- see the file's own header for what it does.
+scripts/ops/ssh-hetzner.sh
+
 # ==========================================================================
 # Brainstorming and vendored reference material -- not source, never shipped
 # ==========================================================================
