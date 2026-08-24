@@ -25,13 +25,17 @@ Previous approach (pure trendln library):
 
 This rewrite adds a custom primary scanner that fixes both:
 
-  1. FULL HISTORY SCAN
-     _volume_confirmed_pivots() scans the ENTIRE available history
-     (not a capped window) to find every volume-confirmed swing pivot.
-     One anchor can be far back in time -- that's intentional. A
-     9-month-old structural low that the stock has respected four times
-     since is far more meaningful than two random bars from the last
-     3 weeks that happen to share a slope.
+  1. DEEP HISTORY SCAN
+     _volume_confirmed_pivots() scans well beyond any single horizon's
+     own lookback (MAX_PIVOT_SCAN_BARS -- 1500 bars, ~6 years of daily
+     data) to find every volume-confirmed swing pivot. One anchor can be
+     far back in time -- that's intentional. A 9-month-old structural low
+     that the stock has respected four times since is far more meaningful
+     than two random bars from the last 3 weeks that happen to share a
+     slope. It is NOT the entire available history: production's cache
+     holds decades for some tickers (45 years for AAPL), and the pairwise
+     scan below is O(pivots^3) -- uncapped, that measured 6-9 SECONDS per
+     call on real tickers. See MAX_PIVOT_SCAN_BARS's own comment.
 
   2. VOLUME CONFIRMATION
      A pivot is only accepted as a trendline anchor if its bar's volume
@@ -114,6 +118,23 @@ MAX_SLOPE_PCT_PER_BAR = 0.25
 # trendln fallback constants (unchanged from original).
 MIN_TRENDLINE_STRENGTH = 3
 MAX_TRENDLINES_PER_SIDE = 2
+
+# Hard cap on how much history the pairwise trendline scan considers.
+# _find_best_trendline is O(P^3) in the pivot count P (all-pairs line fit,
+# each scored by an O(P) touch-count pass), and production's actual
+# market_data/daily/ cache holds each ticker's FULL history since listing --
+# 11,500+ daily bars / 45 years for AAPL, not the 2y DEFAULT_HISTORY_PERIOD.
+# Measured live against that real cache: a single support+resistance pass
+# took 9.4s for AAPL, 6.9s for AMD -- called once per horizon (10, see
+# HORIZONS), that alone was enough to pin a CPU core for minutes per ticker
+# and was the dominant cost of the whole scan (v56 CPU incident). Nothing
+# this bot trades holds a horizon longer than 9 months, so an anchor beyond
+# a few years old buys no real information; 1500 bars (~6 years of daily
+# data) stays far beyond that -- comfortably covering this module's own
+# "9-month-old anchor" example above -- while capping worst-case cost to
+# hundredths of a second even on the oldest tickers (measured: AAPL/AMD
+# both drop to ~0.02s at this cap, same trendlines found).
+MAX_PIVOT_SCAN_BARS = 1500
 
 # How many display bars to use for the chart coordinate system.  Mirrors
 # DEFAULT_TRENDLINE_LOOKBACK_DAYS in trade_chart.py -- the fit itself
@@ -263,7 +284,15 @@ def _find_best_trendline(df: pd.DataFrame, current_price: float, side: str) -> d
       2. For every pair (i, j) fit the line through their bar_index/price.
       3. Score the line by how many other confirmed pivots also touch it.
       4. Return the highest-scoring valid line, or None.
+
+    `df` is trimmed to MAX_PIVOT_SCAN_BARS here, before pivot detection --
+    the single point both the hot scan path (trendline_levels) and the
+    chart-drawing path (strongest_trendline_pair) funnel through, so the
+    two can never disagree about which bars were even considered.
     """
+    if len(df) > MAX_PIVOT_SCAN_BARS:
+        df = df.tail(MAX_PIVOT_SCAN_BARS)
+
     kind = "low" if side == "support" else "high"
     pivots = _volume_confirmed_pivots(df, kind)
 
@@ -313,16 +342,18 @@ def _to_display_coords(line: dict, n_bars_total: int, display_bars: int) -> dict
 
 # ── Public API (same signatures as original) ──────────────────────────────────
 
-def trendline_levels(df: pd.DataFrame, lookback: int, current_price: float) -> list:
+def custom_scanner_levels(df: pd.DataFrame, current_price: float) -> list:
     """
-    Fits volume-confirmed support/resistance trendlines through the FULL
-    df history and returns (price, source_label) candidates in the exact
-    shape every other levels.py method produces -- 0 to 2 entries.
-
-    ``lookback`` is kept in the signature for API compatibility; the
-    actual scan always uses the full df so anchor points can be far apart.
-    Falls back to trendln if the custom scanner finds nothing on either side.
-    Never raises.
+    The volume-confirmed custom-scanner half of trendline_levels() --
+    everything except the trendln-library fallback. Its result depends
+    only on (df, current_price), NOT on any horizon-specific value (the
+    old signature took `lookback` but never used it here) -- so a caller
+    scanning the same ticker across every horizon (engine.py's per-ticker
+    horizon loop) can compute this ONCE and pass it into
+    collect_candidate_levels()/trendline_levels() for every horizon
+    instead of repeating the same O(pivots^3) scan 10 times over
+    identical input (v56: measured live, this was the dominant cost of a
+    production scan -- see MAX_PIVOT_SCAN_BARS's comment above).
     """
     if len(df) < MIN_BARS_FOR_TRENDLINE or current_price <= 0:
         return []
@@ -339,9 +370,43 @@ def trendline_levels(df: pd.DataFrame, lookback: int, current_price: float) -> l
         except Exception:
             pass
 
-    # Fallback: trendln when custom scanner finds nothing.
+    return [(p, s) for p, s in candidates if p and p > 0 and not pd.isna(p)]
+
+
+def trendline_levels(df: pd.DataFrame, lookback: int, current_price: float,
+                      custom_candidates: list | None = None) -> list:
+    """
+    Fits volume-confirmed support/resistance trendlines through the
+    (MAX_PIVOT_SCAN_BARS-capped) df history and returns (price,
+    source_label) candidates in the exact shape every other levels.py
+    method produces -- 0 to 2 entries.
+
+    ``lookback`` is kept in the signature for API compatibility; the
+    actual scan always uses the capped df so anchor points can be far
+    apart. Falls back to trendln (scoped to `lookback`, unlike the custom
+    scanner) if the custom scanner finds nothing on either side.
+
+    `custom_candidates`: pass custom_scanner_levels(df, current_price)'s
+    own result in when the caller already computed it (e.g. once per
+    ticker instead of once per horizon) to skip redoing that scan here.
+    None (the default) computes it fresh, unchanged behavior for every
+    other caller.
+
+    Never raises.
+    """
+    if len(df) < MIN_BARS_FOR_TRENDLINE or current_price <= 0:
+        return []
+
+    candidates = (custom_scanner_levels(df, current_price)
+                  if custom_candidates is None else custom_candidates)
+
+    # Fallback: trendln when custom scanner finds nothing. Still per-call
+    # (horizon-scoped via `lookback`) -- only the custom scanner above is
+    # ever hoisted, since this fallback is cheap (only reached for the
+    # minority of tickers with no reliable volume data) and its result
+    # genuinely depends on the horizon's own lookback window.
     if not candidates and _TRENDLN_AVAILABLE:
-        candidates.extend(_trendln_fallback_levels(df, lookback, current_price))
+        candidates = _trendln_fallback_levels(df, lookback, current_price)
 
     return [(p, s) for p, s in candidates if p and p > 0 and not pd.isna(p)]
 

@@ -177,7 +177,8 @@ def volume_profile_nodes(df: pd.DataFrame, lookback_days: int = 180,
     return {"hvn": hvn, "lvn": lvn}
 
 
-def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float) -> list:
+def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
+                              trendline_candidates: list | None = None) -> list:
     """
     Gathers raw (price, source_label) candidates from every method this
     bot knows: EMA fast/slow, rolling VWAP, Fibonacci retracements +
@@ -190,6 +191,16 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float) ->
     and (see fvg.py) unfilled Fair Value Gaps.
     Any single method failing (e.g. not enough data yet) is skipped
     rather than failing the whole ticker.
+
+    `trendline_candidates`: pass trendlines.custom_scanner_levels(df,
+    current_price)'s own result in when the caller already has it for
+    this exact (df, current_price) -- e.g. engine.py's per-ticker horizon
+    loop calls this once per horizon (10x) with an identical df/
+    current_price each time, and the trendline scanner's result never
+    actually depends on the horizon (`h`) at all, so recomputing its
+    O(pivots^3) pairwise scan from scratch on every horizon was pure
+    redundant work (v56). None (the default) computes it here, unchanged
+    behavior for every other caller.
     """
     candidates = []
     close = df["Close"]
@@ -298,7 +309,8 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float) ->
         # window as the Fibonacci swing anchor above, since both are
         # asking essentially the same question ("how far back does the
         # current swing structure go").
-        candidates.extend(trendline_levels(df, h["fib_lookback"], current_price))
+        candidates.extend(trendline_levels(df, h["fib_lookback"], current_price,
+                                            custom_candidates=trendline_candidates))
     except Exception:
         pass
 

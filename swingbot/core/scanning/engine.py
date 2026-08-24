@@ -55,6 +55,7 @@ from datetime import datetime, timezone
 from swingbot import config
 from swingbot.config import auto_reload_if_changed
 from swingbot.core.market import levels
+from swingbot.core.market import trendlines
 from swingbot.core.planning import account as account_module
 from swingbot.core.market import market_context
 from swingbot.core.planning.account import compute_unrealized_pnl, load_account_config
@@ -1230,6 +1231,18 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
         rs_pctile = rs_factors.rs_percentile(
             df, spy_df, universe_rels=list(rs_cache["rels"].values()))
 
+    # Trendline candidates (v56) depend only on this ticker's df/current_price
+    # -- not on horizon -- so they're computed once per ticker here rather
+    # than once per horizon inside collect_candidate_levels() below.
+    # _find_best_trendline's pairwise pivot scan is O(pivots^3); measured
+    # live against production's actual cache (tickers with 10+ years of
+    # history), a single call ran 6-9 SECONDS, and it was being repeated
+    # once per horizon (10x, identical result every time) -- the dominant
+    # cost of the whole scan and the direct cause of the CPU pegged at
+    # 100% incident this fix responds to. See trendlines.py's
+    # MAX_PIVOT_SCAN_BARS and custom_scanner_levels() docstrings.
+    trendline_candidates = trendlines.custom_scanner_levels(df, current_price)
+
     for horizon_key in horizons_to_scan:
         h = HORIZONS[horizon_key]
         if bars_available < MIN_BARS[horizon_key]:
@@ -1245,7 +1258,8 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
         # work (every S/R method rerun from scratch each time): up to 5x the
         # necessary CPU per ticker/horizon, the dominant cost of a scan over
         # a large universe. See levels.count_confirming_strategies's docstring.
-        candidates = levels.collect_candidate_levels(df, h, current_price)
+        candidates = levels.collect_candidate_levels(df, h, current_price,
+                                                       trendline_candidates=trendline_candidates)
         supports, resistances = levels.build_level_map(df, h, current_price, candidates=candidates)
         log.debug("%s (%s): %d support level(s), %d resistance level(s) found",
                    ticker, horizon_key, len(supports), len(resistances))

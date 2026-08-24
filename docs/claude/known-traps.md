@@ -89,6 +89,16 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   useful stretch, so more threads bought no real parallelism and were
   measurably slower than serial). Anything touching shared state
   (`state.confirm_or_update`, funnel counters) must stay serial/post-join.
+- **`market_data/daily/{TICKER}.csv` holds each ticker's FULL history since
+  listing, not `DEFAULT_HISTORY_PERIOD` (2y)** — `data_store.load_normalized()`
+  never trims it, so it grows every incremental refresh (11,500+ daily bars /
+  45 years for AAPL on production). Anything in the scan hot path that scales
+  worse than linear in `len(df)` will blow up on real data even though it
+  looks fine against short synthetic test frames — see
+  `trendlines.MAX_PIVOT_SCAN_BARS` (v56: an uncapped O(pivots³) trendline
+  scan measured 6–9 SECONDS *per horizon* on AAPL/AMD, the direct cause of a
+  production CPU-pegged-at-100% incident) before trusting a "should be fast"
+  assumption about full-history algorithms here.
 - **The live scan reads `market_data/daily/` now (v47).** `_crawl_latest_data`
   is cache-first: `_load_cached_daily()` serves any ticker whose CSV is fresher
   than `SCAN_CACHE_MAX_AGE_HOURS` (6h), and only the cold remainder is fetched.
