@@ -29,6 +29,7 @@ from swingbot.core.scanning import engine
 from swingbot.core.scanning.engine import ScanProgress
 from swingbot.core.tracking.performance import TradeLog
 from tests.helpers import make_ohlcv
+from tests.scanning.conftest import _InlineProcessPool
 
 
 @pytest.fixture(autouse=True)
@@ -86,7 +87,13 @@ def _scan_with_funnel(ticker, direction, rs, sector_rs=None, horizon="4w"):
             engine, "get_daily_data",
             lambda t, period=None: df.copy() if t == ticker else None,
         )
-        mp.setattr(engine, "get_current_price", lambda t: None)
+        # v55: force the batched live-price/cold-fetch path to resolve empty
+        # -- same "no live price -> falls back to the daily close" behavior
+        # the old get_current_price->None mock gave, without a real batch
+        # call hitting real network through a real ProcessPoolExecutor.
+        mp.setattr(engine, "get_daily_data_batch", lambda tickers, period=None: {})
+        mp.setattr(engine, "get_current_price_batch", lambda tickers: {})
+        mp.setattr(engine, "ProcessPoolExecutor", _InlineProcessPool)
         mp.setattr(engine, "trade_log",
                    TradeLog(path=os.path.join(config.DATA_DIR, "trades.json")))
         mp.setattr(engine, "is_stop_requested", lambda: False)

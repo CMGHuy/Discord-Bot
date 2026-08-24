@@ -7,11 +7,19 @@ import pytest
 
 from swingbot.core.scanning import engine as scan_engine
 from tests.helpers import make_ohlcv
+from tests.scanning.conftest import _InlineProcessPool
 
 
 @pytest.fixture
 def no_network(monkeypatch):
-    """Any get_daily_data call is recorded; none are allowed to hit yfinance."""
+    """Any get_daily_data call is recorded; none are allowed to hit yfinance.
+
+    v55: _fetch_cold_frames tries the batched get_daily_data_batch() first --
+    forced empty here so every cold ticker falls through to the single-ticker
+    get_daily_data() fallback this fixture already records, and
+    ProcessPoolExecutor is faked so _run_bounded never touches a real
+    subprocess.
+    """
     calls = []
 
     def _fake(ticker, period=None):
@@ -19,6 +27,8 @@ def no_network(monkeypatch):
         return make_ohlcv([10.0, 11.0, 12.0])
 
     monkeypatch.setattr(scan_engine, "get_daily_data", _fake)
+    monkeypatch.setattr(scan_engine, "get_daily_data_batch", lambda tickers, period=None: {})
+    monkeypatch.setattr(scan_engine, "ProcessPoolExecutor", _InlineProcessPool)
     return calls
 
 

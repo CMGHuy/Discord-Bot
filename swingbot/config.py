@@ -638,34 +638,40 @@ FIELDS: list[Field] = [
                "daily window so the scan's freshness bar is independent of the background "
                "refresh loop's refetch cadence. Swing horizons run 2w-9m, so only today's "
                "daily bar matters -- a warm ticker costs no network at all."),
-    Field("COLD_FETCH_PROCESS_THRESHOLD", "COLD_FETCH_PROCESS_THRESHOLD", "Universe & Scanning",
-          "Cold-fetch process-pool threshold",
-          type="number", default="10", min=1, max=500, step=1,
-          help="Cold (missing/stale) ticker count at or below which the scan fetches "
-               "sequentially, exactly as it always has. Above it, the cold list is fanned "
-               "out across FETCH_WORKERS processes. Below the threshold the process-pool "
-               "startup cost outweighs the saving, and the sequential path carries zero "
-               "new risk surface."),
     Field("FETCH_WORKERS", "FETCH_WORKERS", "Universe & Scanning",
-          "Cold-fetch / replay process-pool size",
+          "Offline replay process-pool size",
           type="number", default="0", min=0, max=32, step=1,
-          help="Process-pool size for the cold-ticker fetch fallback and the offline "
-               "scenario replay. 0 means auto: max(1, cpu_count() - 1). PROCESSES, not "
-               "threads -- the pinned yfinance 0.2.66 builds download() on a shared "
-               "non-reentrant module global, and concurrent threads once attributed one "
-               "ticker's price data to another. Separate processes do not share it."),
+          help="Process-pool size for the offline scenario replay (backtest_scenarios.py). "
+               "0 means auto: max(1, cpu_count() - 1). No longer consulted by the live scan's "
+               "cold-ticker fetch (v55: that path is one batched call per chunk, not one "
+               "process per ticker) -- see BATCH_FETCH_CHUNK_SIZE."),
+    Field("BATCH_FETCH_CHUNK_SIZE", "BATCH_FETCH_CHUNK_SIZE", "Universe & Scanning",
+          "Batched fetch chunk size (tickers)",
+          type="number", default="100", min=10, max=500, step=10,
+          help="Tickers per batched yf.download() call, for both the cold-ticker OHLCV "
+               "fetch and the live-price fetch (v55). One chunk covers today's whole "
+               "watchlist; a larger watchlist splits into multiple chunks, each an "
+               "independent bounded call so one bad chunk can't sink the rest."),
     Field("COLD_FETCH_TIMEOUT_SECONDS", "COLD_FETCH_TIMEOUT_SECONDS", "Universe & Scanning",
-          "Cold-fetch pool wall-clock budget (seconds)",
+          "Cold-fetch batch wall-clock budget (seconds)",
           type="number", default="180", min=30, max=1800, step=15,
-          help="Hard cap on how long the cold-ticker process pool waits before giving up "
-               "on whatever hasn't returned yet. yf.download()'s own timeout=10 default is "
-               "not a reliable ceiling -- a stalled DNS lookup or a fork-inherited lock can "
-               "wedge a worker past it with no exception and no CPU use. Without this "
-               "budget the whole crawl (and every session_scan tick behind it, since "
-               "discord.ext.tasks.Loop will not start the next tick until this one "
-               "returns) can hang indefinitely: production incident 2026-08-24, bot "
-               "appeared offline for 2+ hours behind one stuck ticker. Past the budget, "
-               "whatever hasn't resolved is logged and treated as a failed fetch."),
+          help="Hard cap on how long one batched cold-ticker fetch (one chunk of "
+               "BATCH_FETCH_CHUNK_SIZE tickers) waits before giving up. yf.download()'s own "
+               "timeout=10 default is not a reliable ceiling -- a stalled DNS lookup or a "
+               "fork-inherited lock can wedge a worker past it with no exception and no CPU "
+               "use. Without this budget the whole crawl (and every session_scan tick behind "
+               "it, since discord.ext.tasks.Loop will not start the next tick until this one "
+               "returns) can hang indefinitely: production incident 2026-08-24, bot appeared "
+               "offline for 2+ hours behind one stuck ticker. Past the budget, whatever "
+               "hasn't resolved is logged and treated as a failed fetch."),
+    Field("LIVE_PRICE_TIMEOUT_SECONDS", "LIVE_PRICE_TIMEOUT_SECONDS", "Universe & Scanning",
+          "Live-price batch wall-clock budget (seconds)",
+          type="number", default="60", min=15, max=600, step=15,
+          help="Hard cap on how long one batched live-price fetch (one chunk of "
+               "BATCH_FETCH_CHUNK_SIZE tickers, fetched every scan for the whole watchlist -- "
+               "see _fetch_live_prices) waits before giving up. Same rationale as "
+               "COLD_FETCH_TIMEOUT_SECONDS; a smaller default because this call is 1-day/"
+               "1-minute data, not up to 2 years of daily bars."),
     Field("MARKET_DATA_AUTO_REFRESH", "MARKET_DATA_AUTO_REFRESH", "Universe & Scanning",
           "Auto-refresh market data cache",
           type="checkbox", default="true",

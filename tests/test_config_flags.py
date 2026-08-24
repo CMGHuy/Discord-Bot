@@ -19,19 +19,17 @@ def test_invalid_mode_falls_back_to_off():
 
 
 def test_v47_throughput_fields_exist_with_documented_defaults():
-    """v47: the scan's cache-freshness bar, the cold-fetch cutover point and
-    the process-pool size are all configurable, and their defaults match the
-    spec. FETCH_WORKERS=0 means auto -- a Field default is a string cast by
-    int(), so a computed cpu_count default cannot live in the schema."""
+    """v47: the scan's cache-freshness bar and the offline-replay process-pool
+    size are configurable, and their defaults match the spec. FETCH_WORKERS=0
+    means auto -- a Field default is a string cast by int(), so a computed
+    cpu_count default cannot live in the schema."""
     by_key = {f.key: f for f in config.FIELDS}
 
     assert by_key["SCAN_CACHE_MAX_AGE_HOURS"].default == "6"
-    assert by_key["COLD_FETCH_PROCESS_THRESHOLD"].default == "10"
     assert by_key["FETCH_WORKERS"].default == "0"
 
-    # All three are integers on the module after parsing, not raw strings.
+    # Both are integers on the module after parsing, not raw strings.
     assert isinstance(config.SCAN_CACHE_MAX_AGE_HOURS, int)
-    assert isinstance(config.COLD_FETCH_PROCESS_THRESHOLD, int)
     assert isinstance(config.FETCH_WORKERS, int)
 
     # The scan's freshness bar must sit BELOW data_refresh's own 12h daily
@@ -39,3 +37,17 @@ def test_v47_throughput_fields_exist_with_documented_defaults():
     # considers due for replacement.
     from swingbot.core.marketdata.data_refresh import REFRESH_HOURS
     assert config.SCAN_CACHE_MAX_AGE_HOURS < REFRESH_HOURS["daily"]
+
+
+def test_v55_batch_fetch_fields_exist_with_documented_defaults():
+    """v55: the scan's batched cold-OHLCV and live-price fetches are all
+    configurable, and their defaults match the spec."""
+    by_key = {f.key: f for f in config.FIELDS}
+
+    assert by_key["BATCH_FETCH_CHUNK_SIZE"].default == "100"
+    assert by_key["COLD_FETCH_TIMEOUT_SECONDS"].default == "180"
+    assert by_key["LIVE_PRICE_TIMEOUT_SECONDS"].default == "60"
+
+    assert isinstance(config.BATCH_FETCH_CHUNK_SIZE, int)
+    assert isinstance(config.COLD_FETCH_TIMEOUT_SECONDS, int)
+    assert isinstance(config.LIVE_PRICE_TIMEOUT_SECONDS, int)

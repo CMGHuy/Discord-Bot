@@ -186,7 +186,7 @@ def _structured_df():
     return make_ohlcv(trend + box)
 
 
-def test_sync_run_scan_gates_attach_plan_v2_on_all_ok(monkeypatch, tmp_path):
+def test_sync_run_scan_gates_attach_plan_v2_on_all_ok(monkeypatch, tmp_path, stub_batch_fetch):
     """
     Real regression test for the `if all_ok:` gate around the
     attach_plan_v2(...) call at engine.py:676-677, driven through the
@@ -244,7 +244,6 @@ def test_sync_run_scan_gates_attach_plan_v2_on_all_ok(monkeypatch, tmp_path):
         engine, "get_daily_data",
         lambda ticker, period=None: df.copy() if ticker == "TEST" else None,
     )
-    monkeypatch.setattr(engine, "get_current_price", lambda ticker: None)
     monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
     monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
 
@@ -295,7 +294,7 @@ def test_attach_plan_v2_records_the_rejection_reason(monkeypatch):
     assert item.plan_v2_rejected == "no_qualifying_target"
 
 
-def test_a_builder_exception_is_still_a_warning_not_a_rejection(monkeypatch):
+def test_a_builder_exception_is_still_a_warning_not_a_rejection(monkeypatch, stub_batch_fetch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
     monkeypatch.setattr(engine, "build_confluence_plan",
                         lambda *a, **k: 1 / 0)
@@ -324,12 +323,11 @@ def _setup_minimal_scan(monkeypatch, tmp_path):
         engine, "get_daily_data",
         lambda ticker, period=None: df.copy() if ticker == "TEST" else None,
     )
-    monkeypatch.setattr(engine, "get_current_price", lambda ticker: None)
     monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
     monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
 
 
-def test_a_plan_that_cannot_clear_min_rr_never_reaches_scan_items(monkeypatch, tmp_path):
+def test_a_plan_that_cannot_clear_min_rr_never_reaches_scan_items(monkeypatch, tmp_path, stub_batch_fetch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     _setup_minimal_scan(monkeypatch, tmp_path)
     monkeypatch.setattr(engine, "build_confluence_plan", lambda *a, **k: None)
@@ -351,7 +349,7 @@ def test_a_plan_that_cannot_clear_min_rr_never_reaches_scan_items(monkeypatch, t
     assert alerts == []
 
 
-def test_shadow_mode_keeps_the_legacy_alert_when_v2_rejects(monkeypatch, tmp_path):
+def test_shadow_mode_keeps_the_legacy_alert_when_v2_rejects(monkeypatch, tmp_path, stub_batch_fetch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
     _setup_minimal_scan(monkeypatch, tmp_path)
     monkeypatch.setattr(engine, "build_confluence_plan", lambda *a, **k: None)
@@ -372,7 +370,7 @@ def test_shadow_mode_keeps_the_legacy_alert_when_v2_rejects(monkeypatch, tmp_pat
               for item in items), "shadow mode still builds/rejects plan_v2, just never suppresses the item"
 
 
-def test_illiquid_ticker_skips_new_signals_but_still_monitors_open_trades(monkeypatch, tmp_path):
+def test_illiquid_ticker_skips_new_signals_but_still_monitors_open_trades(monkeypatch, tmp_path, stub_batch_fetch):
     """
     Task E12 regression: the liquidity screen must gate NEW-signal scanning
     only (level maps / scenarios / confluence / plan-v2 for this ticker this
@@ -401,7 +399,6 @@ def test_illiquid_ticker_skips_new_signals_but_still_monitors_open_trades(monkey
         engine, "get_daily_data",
         lambda ticker, period=None: df.copy() if ticker == "TEST" else None,
     )
-    monkeypatch.setattr(engine, "get_current_price", lambda ticker: None)
     monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
 
     test_log = TradeLog(path=str(tmp_path / "trades.json"))
@@ -445,7 +442,7 @@ def test_illiquid_ticker_skips_new_signals_but_still_monitors_open_trades(monkey
     )
 
 
-def test_sync_run_scan_parallel_dispatch_matches_serial(monkeypatch, tmp_path):
+def test_sync_run_scan_parallel_dispatch_matches_serial(monkeypatch, tmp_path, stub_batch_fetch):
     """
     Task E20 fix round 1, Finding 2: every existing _sync_run_scan-driving
     test in this file uses a single-ticker watchlist
@@ -493,7 +490,6 @@ def test_sync_run_scan_parallel_dispatch_matches_serial(monkeypatch, tmp_path):
         engine, "get_daily_data",
         lambda ticker, period=None: dfs[ticker].copy() if ticker in dfs else None,
     )
-    monkeypatch.setattr(engine, "get_current_price", lambda ticker: None)
     monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
 
     def _run(workers: int):
@@ -579,7 +575,6 @@ def _drive_alert_loop(monkeypatch, tmp_path, intraday_fn):
         engine, "get_daily_data",
         lambda ticker, period=None: df.copy() if ticker == "TEST" else None,
     )
-    monkeypatch.setattr(engine, "get_current_price", lambda ticker: None)
     monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
     monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
 
@@ -606,7 +601,7 @@ def _drive_alert_loop(monkeypatch, tmp_path, intraday_fn):
     return seen
 
 
-def test_alert_loop_stamps_intraday_annotation_on_every_item(monkeypatch, tmp_path):
+def test_alert_loop_stamps_intraday_annotation_on_every_item(monkeypatch, tmp_path, stub_batch_fetch):
     """Task E29: the alert loop asks for a 1h/VWAP reading per posted alert
     and stamps it on the item so build_embed can render it."""
     calls = []
@@ -623,7 +618,7 @@ def test_alert_loop_stamps_intraday_annotation_on_every_item(monkeypatch, tmp_pa
     assert len(calls) == len(items)
 
 
-def test_intraday_lookup_failure_never_breaks_the_alert(monkeypatch, tmp_path):
+def test_intraday_lookup_failure_never_breaks_the_alert(monkeypatch, tmp_path, stub_batch_fetch):
     """An advisory annotation must never be able to take down an alert:
     a raising lookup leaves item.intraday at None (renders as no field)
     and the alert is still built."""
@@ -634,7 +629,7 @@ def test_intraday_lookup_failure_never_breaks_the_alert(monkeypatch, tmp_path):
     assert all(item.intraday is None for item in items)
 
 
-def test_mass_fetch_failure_raises_data_fail_frac_and_engages_kill_switch(monkeypatch, tmp_path):
+def test_mass_fetch_failure_raises_data_fail_frac_and_engages_kill_switch(monkeypatch, tmp_path, stub_batch_fetch):
     """Task E47 review Finding 1 regression: a total per-ticker fetch
     failure (get_daily_data returns None, the `df is None` early-return in
     _scan_one) must count toward data_fail_frac the same way the later E16
@@ -665,7 +660,6 @@ def test_mass_fetch_failure_raises_data_fail_frac_and_engages_kill_switch(monkey
         engine, "get_daily_data",
         lambda ticker, period=None: good_df.copy() if ticker == "OK" else None,
     )
-    monkeypatch.setattr(engine, "get_current_price", lambda ticker: None)
     monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
     monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
     monkeypatch.setattr(engine.account_module, "get_balance_history_points", lambda: [])

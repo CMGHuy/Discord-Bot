@@ -4,15 +4,15 @@ manual !check command. Not Discord-command code itself; bot_core.py and
 the cmd_*.py modules call into this.
 
 Every scan runs in two clearly separated phases, in order:
-  1. CRAWL -- fetch the latest daily OHLCV data for every watchlist
-     ticker, one at a time (see _crawl_latest_data()), before any
-     analysis touches a single price. This guarantees every scenario a
-     scan produces was built from data fetched at the START of that
-     scan, not a stale earlier fetch. Deliberately sequential, not a
-     thread pool, even though each fetch is network-bound and would
-     otherwise be a good concurrency candidate -- see
-     _crawl_latest_data()'s own docstring for why: the pinned yfinance
-     version isn't safe to call from multiple threads at once.
+  1. CRAWL -- fetch the latest daily OHLCV data (_crawl_latest_data()) and
+     the whole watchlist's live price (_fetch_live_prices()) for every
+     ticker, before any analysis touches a single price. This guarantees
+     every scenario a scan produces was built from data fetched at the
+     START of that scan, not a stale earlier fetch. Both are batched --
+     one (or a few, chunked) yf.download() call covering many tickers,
+     never several concurrent calls -- see _run_bounded()'s own docstring
+     for why concurrent calls specifically (not batched ones) are unsafe:
+     the pinned yfinance version isn't reentrant across threads.
   2. ANALYZE -- levels, scenarios, confidence scoring, chart
      generation, dedup -- entirely from what the crawl phase already
      fetched. Nothing in this phase ever fetches anything itself.
@@ -67,7 +67,8 @@ from swingbot.core.edge import throttle
 from swingbot.core.edge.rs_gate import rs_verdict
 from swingbot.core.infra.jsonio import read_json
 from .confidence import score_confidence
-from swingbot.core.marketdata.data import get_currency_symbol, get_current_price, get_daily_data
+from swingbot.core.marketdata.data import (get_currency_symbol, get_current_price, get_daily_data,
+                                   get_current_price_batch, get_daily_data_batch)
 from swingbot.core.market.mtf import adjacent_aligned, macro_aligned
 from swingbot.core.market.reversal import evaluate_reversal, reversals_for_ticker
 from swingbot.core.market.events import earnings_within_window
@@ -616,27 +617,65 @@ def _check_near_close(ticker: str, df) -> list:
     return warnings
 
 
-def _resolve_workers() -> int:
-    """FETCH_WORKERS, with 0 meaning auto.
+def _chunked(items: list, size: int) -> list:
+    """Splits `items` into consecutive slices of at most `size` each."""
+    size = max(1, int(size))
+    return [items[i:i + size] for i in range(0, len(items), size)]
 
-    A Field default is a string cast by int() (config.py:705), so a computed
-    cpu_count default cannot live in the schema -- 0-as-auto is how it is
-    expressed. Leaves one core for the bot's own event loop; the work is
-    network-bound anyway, so oversubscribing buys nothing.
+
+def _run_bounded(fn, args: tuple, timeout_seconds: float, label: str):
+    """Runs fn(*args) in a single-process pool with a hard wall-clock
+    budget. Returns fn's result, or None if the budget is exceeded (or fn
+    itself raised).
+
+    A PROCESS, not a thread -- two independent reasons stacked on top of
+    each other. First, the pinned yfinance 0.2.66 builds download() on a
+    shared, non-reentrant module global (_DFS); a separate process has its
+    own interpreter and memory, so nothing here can ever race a concurrent
+    caller's _DFS the way a ThreadPoolExecutor once did (see this module's
+    own docstring -- two real watchlist tickers once had their price data
+    swapped this way). Second -- why the budget exists at all -- a stalled
+    DNS lookup or a fork-inherited lock can wedge a worker past whatever
+    timeout `fn` itself was given, with no exception and no CPU use; only a
+    killed OS process is a reliable ceiling. Confirmed live on production
+    2026-08-24: a single stuck cold fetch froze session_scan, and every
+    tick behind it, for 2+ hours (d251cef fixed this for the per-ticker
+    pool it used to bound; this helper generalizes that same wait-then-kill
+    mechanism to one future per batched call instead of one per ticker).
+
+    shutdown(wait=False) alone only cancels futures that never started --
+    it does not stop one mid-flight, so a still-running worker is force-
+    killed outright.
     """
-    configured = int(getattr(config, "FETCH_WORKERS", 0) or 0)
-    if configured > 0:
-        return configured
-    return max(1, (os.cpu_count() or 2) - 1)
+    with ProcessPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(fn, *args)
+        done, not_done = _futures_wait([future], timeout=timeout_seconds)
+        if future in done:
+            try:
+                return future.result()
+            except Exception as exc:
+                log.error("%s failed: %s", label, exc)
+                return None
+        log.error(
+            "%s did not finish within %ss -- killing the worker process and "
+            "treating this as a failed fetch", label, timeout_seconds)
+        for proc in pool._processes.values():
+            proc.kill()
+        pool.shutdown(wait=False, cancel_futures=True)
+        return None
 
 
 def _fetch_one_ticker(ticker: str) -> tuple:
-    """Process-pool entry point: must be module-level to be picklable.
+    """Single-ticker fetch, module-level so it stays picklable for
+    _run_bounded(). No longer the primary cold-fetch path (v55:
+    _fetch_cold_frames batches instead) -- kept as the candidate_symbols()-
+    aliasing fallback for a ticker whose batch slice came back empty, since
+    a batched get_daily_data_batch() call only ever tries a ticker's
+    literal symbol.
 
     Returns (ticker, DataFrame|None). Never raises -- a worker that raised
-    would surface as a BrokenProcessPool and take the whole batch with it,
-    which is exactly the "one bad ticker never aborts the crawl" contract
-    _crawl_latest_data has always had.
+    would surface as a BrokenProcessPool and take down whatever else
+    _run_bounded is protecting alongside it.
     """
     try:
         return ticker, get_daily_data(ticker, period=config.DEFAULT_HISTORY_PERIOD)
@@ -646,80 +685,62 @@ def _fetch_one_ticker(ticker: str) -> tuple:
 
 
 def _fetch_cold_frames(tickers: list, progress: "ScanProgress" = None) -> list:
-    """v47: fetch the cache misses, sequentially or pooled.
+    """v55: fetch the cache misses via batched, chunked, bounded calls.
 
-    PROCESSES, never threads. The pinned yfinance 0.2.66 builds download() on a
-    shared module-level global (_DFS) that it writes non-reentrantly; the
-    reentrancy fix landed only in yfinance 1.4.0, a major bump this project has
-    not taken. A ThreadPoolExecutor here once let two tickers' downloads clobber
-    each other mid-flight -- two real watchlist tickers were logged as open
-    trades with byte-identical entry/stop/target/confidence values, one
-    ticker's price data attributed to the other. Separate processes have
-    separate interpreters and separate memory, so _DFS is not shared and cannot
-    be clobbered across workers.
+    Every cold ticker -- any count -- goes through one or more batched
+    get_daily_data_batch() calls (BATCH_FETCH_CHUNK_SIZE tickers per call,
+    default covers today's whole watchlist in one chunk) instead of a
+    per-ticker call. Each chunk runs through _run_bounded(), so a stalled
+    chunk is killed and treated as a failed fetch for every ticker in it
+    rather than wedging the crawl -- COLD_FETCH_TIMEOUT_SECONDS now bounds
+    one batched chunk instead of one ticker's fetch.
 
-    Returns order-preserving (ticker, DataFrame|None) pairs.
+    A ticker absent from its chunk's batch result (the whole chunk failed,
+    or just that ticker's own slice was empty) falls back to the single-
+    ticker _fetch_one_ticker(), which -- unlike the batch path -- also
+    tries candidate_symbols() aliasing. In steady state this remainder is
+    empty or near-empty.
+
+    Returns order-preserving (ticker, DataFrame|None) pairs -- the same
+    contract this function has always had.
     """
     if not tickers:
         return []
 
-    threshold = int(getattr(config, "COLD_FETCH_PROCESS_THRESHOLD", 10))
-    if len(tickers) <= threshold:
-        pairs = []
-        for ticker in tickers:
-            if is_stop_requested():
-                if progress is not None:
-                    progress.stopped = True
-                break
-            pairs.append(_fetch_one_ticker(ticker))
-            if progress is not None:
-                progress.done += 1
-                progress.current_ticker = ticker
-        return pairs
+    period = config.DEFAULT_HISTORY_PERIOD
+    chunk_size = int(getattr(config, "BATCH_FETCH_CHUNK_SIZE", 100))
+    timeout = int(getattr(config, "COLD_FETCH_TIMEOUT_SECONDS", 180))
+    resolved: dict = {}
+    remainder: list = []
 
-    workers = _resolve_workers()
-    log.info("Crawl: %d cold ticker(s) over the threshold of %d -- fetching across %d process(es)",
-              len(tickers), threshold, workers)
-    budget = int(getattr(config, "COLD_FETCH_TIMEOUT_SECONDS", 180))
-    results: dict = {}
-    with ProcessPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(_fetch_one_ticker, t): t for t in tickers}
-        done, not_done = _futures_wait(futures, timeout=budget)
-        for fut in done:
-            ticker = futures[fut]
-            try:
-                _, df = fut.result()
-            except Exception as exc:
-                log.error("Crawl: error fetching data for %s: %s", ticker, exc)
-                df = None
-            results[ticker] = df
-        if not_done:
-            # yfinance's own per-request timeout (10s, yf.download default) is not
-            # a reliable ceiling -- a stalled DNS lookup or a fork-inherited lock
-            # can wedge a worker past it with no exception and no CPU use. Without
-            # this budget, one such ticker hangs pool.map() forever: production
-            # incident 2026-08-24, where the whole session_scan loop (and the
-            # bot_heartbeat.json timestamp the admin dashboard's live/offline dot
-            # reads) froze for 2+ hours behind a single stuck cold fetch. Anything
-            # still running past the budget is logged, treated as a failed fetch
-            # (same contract as any other _fetch_one_ticker failure), and its
-            # worker process is killed outright -- shutdown(wait=False) alone only
-            # cancels futures that never started, it does not stop one mid-flight.
-            stuck = [futures[f] for f in not_done]
-            log.error(
-                "Crawl: %d ticker(s) still fetching past the %ds budget -- treating as "
-                "failed and killing the stuck worker process(es): %s",
-                len(stuck), budget, ", ".join(stuck))
-            for ticker in stuck:
-                results[ticker] = None
-            for proc in pool._processes.values():
-                proc.kill()
-            pool.shutdown(wait=False, cancel_futures=True)
-    pairs = [(t, results.get(t)) for t in tickers]
-    if progress is not None:
-        progress.done += len(pairs)
-        progress.current_ticker = tickers[-1]
-    return pairs
+    for chunk in _chunked(tickers, chunk_size):
+        if is_stop_requested():
+            if progress is not None:
+                progress.stopped = True
+            break
+        result = _run_bounded(
+            get_daily_data_batch, (chunk, period), timeout,
+            label=f"Crawl: cold-fetch batch of {len(chunk)} ticker(s)") or {}
+        for ticker in chunk:
+            if ticker in result:
+                resolved[ticker] = result[ticker]
+            else:
+                remainder.append(ticker)
+        if progress is not None:
+            progress.done += len(chunk)
+            progress.current_ticker = chunk[-1]
+
+    for ticker in remainder:
+        if is_stop_requested():
+            if progress is not None:
+                progress.stopped = True
+            break
+        _, df = _run_bounded(
+            _fetch_one_ticker, (ticker,), timeout,
+            label=f"Crawl: cold-fetch fallback for {ticker}") or (ticker, None)
+        resolved[ticker] = df
+
+    return [(t, resolved.get(t)) for t in tickers]
 
 
 def _load_cached_daily(ticker: str):
@@ -828,6 +849,40 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     return results
 
 
+def _fetch_live_prices(tickers: list, progress: "ScanProgress" = None) -> dict:
+    """v55: Phase 1b of every scan -- one batched live-price fetch (chunked)
+    for the WHOLE watchlist, not just cold tickers: a warm daily-bar cache
+    says nothing about today's live (incl. pre/post-market) price. Runs
+    through the same bounded process pool as the cold OHLCV fetch
+    (_run_bounded), so a stalled chunk can never hang the scan the way the
+    old analyze-phase loop's unbounded per-ticker get_current_price() calls
+    could -- LIVE_PRICE_TIMEOUT_SECONDS bounds one batched chunk.
+
+    Returns {ticker: price} for tickers whose chunk resolved. A ticker
+    absent from the result falls back to today's daily close in _scan_one,
+    exactly as a live-price fetch failure has always degraded.
+    """
+    if not tickers:
+        return {}
+    chunk_size = int(getattr(config, "BATCH_FETCH_CHUNK_SIZE", 100))
+    timeout = int(getattr(config, "LIVE_PRICE_TIMEOUT_SECONDS", 60))
+    started = time.monotonic()
+    prices: dict = {}
+    for chunk in _chunked(tickers, chunk_size):
+        if is_stop_requested():
+            if progress is not None:
+                progress.stopped = True
+            break
+        result = _run_bounded(
+            get_current_price_batch, (chunk,), timeout,
+            label=f"Crawl: live-price batch of {len(chunk)} ticker(s)")
+        if result:
+            prices.update(result)
+    log.info("Live-price fetch complete in %.1fs: %d/%d ticker(s) resolved",
+              time.monotonic() - started, len(prices), len(tickers))
+    return prices
+
+
 def _etf_symbol_of_sector() -> dict:
     """v34 Task 5 fix: the sector-name -> SPDR ETF symbol resolution,
     factored out so both `_sector_etfs_for_tickers` (which ETFs does this
@@ -875,10 +930,9 @@ def _fetch_frames(symbols: list) -> dict:
     currently at most the 11 SPDR sector funds in etfs.json).
 
     v47: warm symbols come from market_data/daily/*.csv and cost no network;
-    the cold remainder goes through _fetch_cold_frames, which is sequential at
-    this size (11 symbols is far below COLD_FETCH_PROCESS_THRESHOLD) and so
-    keeps the same one-at-a-time behaviour this list has always had. A symbol
-    whose fetch fails is simply absent from the result, exactly like
+    the cold remainder goes through _fetch_cold_frames, which batches this
+    small a list (11 symbols) into a single call (v55). A symbol whose
+    fetch fails is simply absent from the result, exactly like
     _crawl_latest_data."""
     frames = {}
     cold = []
@@ -995,7 +1049,8 @@ def map_tickers(fn, tickers: list, workers: int | None = None) -> list:
 
 def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
               regime, effective_min_confluence: int, effective_min_confidence: int,
-              rs_cache: dict = None, spy_df=None, breadth: float = None) -> dict:
+              rs_cache: dict = None, spy_df=None, breadth: float = None,
+              live_prices: dict = None) -> dict:
     """
     Per-ticker analysis body of _sync_run_scan's ANALYZE phase, extracted
     so it can run inside a map_tickers() worker thread (Task E20). Handles
@@ -1088,9 +1143,14 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
         return stats
     log.debug("Fetched %d bars for %s (close=%.2f)", len(df), ticker, float(df["Close"].iloc[-1]))
 
-    # Fetch live price (incl. premarket/aftermarket) once per ticker and use
-    # it both for SL/TP hit detection and as the current_price for new plans.
-    live = get_current_price(ticker)
+    # v55: live price (incl. premarket/aftermarket) was fetched for the whole
+    # watchlist in ONE batched call back in the crawl phase (_fetch_live_prices)
+    # -- this is a dict lookup, not a network call, so the "analyze phase never
+    # touches yfinance" invariant this module's docstring claims is actually
+    # true now, not aspirational. Used both for SL/TP hit detection and as the
+    # current_price for new plans; falls back to today's daily close exactly
+    # as a live-price fetch failure always has.
+    live = (live_prices or {}).get(ticker)
     current_price = live if (live and live > 0) else float(df["Close"].iloc[-1])
 
     newly_closed = trade_log.update_open_trades(ticker, df, live_price=current_price)
@@ -1402,6 +1462,11 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # it's sequential, not concurrent).
     fresh_data = _crawl_latest_data(tickers, progress)
 
+    # Phase 1b: one batched live-price fetch for the whole watchlist (v55),
+    # still inside the crawl phase so the ANALYZE phase below stays pure
+    # dict lookups -- see _fetch_live_prices and _scan_one's use of it.
+    live_prices = _fetch_live_prices(tickers, progress)
+
     # Market breadth (Task E28): % of the just-crawled universe trading above
     # its own 50-EMA, computed once per scan from data already in hand -- no
     # extra fetch. Pure pandas math over local frames, so no try/except
@@ -1548,7 +1613,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     per_ticker_results = map_tickers(
         lambda t: _scan_one(t, fresh_data.get(t), horizons_to_scan, progress, regime, effective_min_confluence,
                             effective_min_confidence,
-                            rs_cache=rs_cache, spy_df=spy_df, breadth=breadth),
+                            rs_cache=rs_cache, spy_df=spy_df, breadth=breadth, live_prices=live_prices),
         tickers,
     )
 

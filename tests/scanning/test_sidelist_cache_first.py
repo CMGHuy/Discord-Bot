@@ -6,10 +6,16 @@ import pytest
 
 from swingbot.core.scanning import engine as scan_engine
 from tests.helpers import make_ohlcv
+from tests.scanning.conftest import _InlineProcessPool
 
 
 @pytest.fixture
 def no_network(monkeypatch):
+    """v55: forces the batched get_daily_data_batch() path empty so every
+    cold symbol falls through to the single-ticker get_daily_data()
+    fallback this fixture records, with ProcessPoolExecutor faked so
+    _run_bounded never touches a real subprocess -- see
+    test_crawl_cache_first.py's identical fixture."""
     calls = []
 
     def _fake(ticker, period=None):
@@ -17,6 +23,8 @@ def no_network(monkeypatch):
         return make_ohlcv([10.0, 11.0, 12.0])
 
     monkeypatch.setattr(scan_engine, "get_daily_data", _fake)
+    monkeypatch.setattr(scan_engine, "get_daily_data_batch", lambda tickers, period=None: {})
+    monkeypatch.setattr(scan_engine, "ProcessPoolExecutor", _InlineProcessPool)
     return calls
 
 
@@ -44,6 +52,8 @@ def test_a_failing_etf_is_absent_not_fatal(monkeypatch):
         raise ValueError("no data")
 
     monkeypatch.setattr(scan_engine, "get_daily_data", _flaky)
+    monkeypatch.setattr(scan_engine, "get_daily_data_batch", lambda tickers, period=None: {})
+    monkeypatch.setattr(scan_engine, "ProcessPoolExecutor", _InlineProcessPool)
     monkeypatch.setattr(scan_engine, "_load_cached_daily", lambda t: None)
 
     frames = scan_engine._fetch_frames(["XLK"])

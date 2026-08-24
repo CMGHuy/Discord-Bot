@@ -45,7 +45,7 @@ def _structured_df():
     return make_ohlcv(trend + box)
 
 
-def test_score_confidence_receives_rs_breadth(monkeypatch, tmp_path):
+def test_score_confidence_receives_rs_breadth(monkeypatch, tmp_path, stub_batch_fetch):
     """Regression guard for the v32 premise: these were computed and
     then never handed to the gate. If this test fails, RS/breadth have
     stopped influencing which alerts fire."""
@@ -63,7 +63,6 @@ def test_score_confidence_receives_rs_breadth(monkeypatch, tmp_path):
         engine, "get_daily_data",
         lambda ticker, period=None: df.copy() if ticker in ("TEST", "SPY") else None,
     )
-    monkeypatch.setattr(engine, "get_current_price", lambda ticker: None)
     monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
     monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
 

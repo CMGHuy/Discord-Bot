@@ -41,6 +41,79 @@ def get_daily_data(ticker: str, period: str = "2y") -> pd.DataFrame:
     )
 
 
+def get_daily_data_batch(tickers: list, period: str = "2y") -> dict:
+    """v55: batched sibling of get_daily_data() -- one yf.download() call
+    for many tickers instead of one call each, replacing what used to be
+    N sequential/pooled network round trips with O(1) per chunk (see
+    scanning/engine.py's _fetch_cold_frames, which calls this per chunk).
+
+    group_by="ticker" gives a per-ticker slice keyed by symbol even for a
+    batch of one (verified against live data: still a 2-level column index),
+    so there is no special-casing between a chunk of 1 and a chunk of 100.
+
+    Returns {ticker: DataFrame} for tickers whose slice came back non-empty.
+    A ticker absent from the result (its own slice was empty/all-NaN, or
+    the whole call failed/raised) is simply missing -- same "unavailable
+    this scan" contract get_daily_data() already has. Unlike get_daily_data(),
+    this does NOT try candidate_symbols() aliasing -- it only ever asks for
+    the tickers' literal symbols; a ticker that needs alias resolution comes
+    back absent here and the caller falls back to get_daily_data() for it.
+    """
+    if not tickers:
+        return {}
+    try:
+        raw = yf.download(" ".join(tickers), period=period, interval="1d",
+                          group_by="ticker", auto_adjust=True, progress=False)
+    except Exception as exc:
+        log.error("get_daily_data_batch failed for %d ticker(s): %s", len(tickers), exc)
+        return {}
+    if raw is None or raw.empty:
+        return {}
+    out: dict = {}
+    for ticker in tickers:
+        try:
+            sub = raw[ticker].dropna(how="all")
+        except KeyError:
+            continue
+        if not sub.empty:
+            out[ticker] = sub
+    return out
+
+
+def get_current_price_batch(tickers: list) -> dict:
+    """v55: batched sibling of get_current_price() -- one yf.download() call
+    (1-day/1-minute, prepost=True) for many tickers' live price instead of a
+    Ticker().history() + fast_info fallback per ticker (see
+    scanning/engine.py's _fetch_live_prices).
+
+    Returns {ticker: price} using each ticker's last non-NaN Close. A ticker
+    absent from the result falls back to today's daily close in the caller --
+    same fallback get_current_price()'s own failure case already has. No
+    candidate_symbols() aliasing (see get_daily_data_batch).
+    """
+    if not tickers:
+        return {}
+    try:
+        raw = yf.download(" ".join(tickers), period="1d", interval="1m",
+                          group_by="ticker", prepost=True, progress=False)
+    except Exception as exc:
+        log.error("get_current_price_batch failed for %d ticker(s): %s", len(tickers), exc)
+        return {}
+    if raw is None or raw.empty:
+        return {}
+    out: dict = {}
+    for ticker in tickers:
+        try:
+            closes = raw[ticker]["Close"].dropna()
+        except KeyError:
+            continue
+        if not closes.empty:
+            price = float(closes.iloc[-1])
+            if price > 0:
+                out[ticker] = price
+    return out
+
+
 # Maps an ISO currency code (as reported by Yahoo Finance) to the symbol
 # people actually recognize on a chart. Anything not listed falls back to
 # "<CODE> " (e.g. "PLN ") rather than guessing wrong.
