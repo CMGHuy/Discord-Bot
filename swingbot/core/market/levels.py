@@ -461,7 +461,7 @@ def strategy_family(label: str) -> str:
 
 
 def count_confirming_strategies(df: pd.DataFrame, h: dict, current_price: float, target_price: float,
-                                 tolerance_pct: float) -> tuple:
+                                 tolerance_pct: float, candidates: list = None) -> tuple:
     """
     Simulates EVERY supported strategy independently against this
     ticker (via collect_candidate_levels -- the same raw, pre-cluster
@@ -480,12 +480,24 @@ def count_confirming_strategies(df: pd.DataFrame, h: dict, current_price: float,
     independent strategies agree", not "how many individual numbers
     happened to land nearby".
 
+    `candidates`: pass collect_candidate_levels(df, h, current_price)'s own
+    result in when the caller already has it for this exact (df, h,
+    current_price) -- e.g. engine.py's scan loop calls this twice per
+    scenario (target + stop) plus once more via build_level_map, all with
+    identical df/h/current_price, and collect_candidate_levels re-runs every
+    support/resistance method (EMA, VWAP, Fibonacci, zigzag pivots,
+    trendline fit, FVG, ...) from scratch -- computing it once per
+    ticker/horizon instead of up to 5 times cuts that redundant work
+    accordingly. None (the default) computes it here, unchanged behavior
+    for every other caller.
+
     Returns (count, sorted_family_names). (0, []) if target_price is
     falsy (nothing to measure deviation against).
     """
     if not target_price:
         return 0, []
-    candidates = collect_candidate_levels(df, h, current_price)
+    if candidates is None:
+        candidates = collect_candidate_levels(df, h, current_price)
     families = set()
     for price, label in candidates:
         if not price or price <= 0:
@@ -528,9 +540,16 @@ def simulate_all_strategy_levels(df: pd.DataFrame, h: dict, current_price: float
     return by_family
 
 
-def build_level_map(df: pd.DataFrame, h: dict, current_price: float):
-    """Returns (supports, resistances): Level lists below/above current_price, nearest first."""
-    clustered = _cluster_levels(collect_candidate_levels(df, h, current_price))
+def build_level_map(df: pd.DataFrame, h: dict, current_price: float, candidates: list = None):
+    """Returns (supports, resistances): Level lists below/above current_price, nearest first.
+
+    `candidates`: see count_confirming_strategies()'s docstring -- pass a
+    precomputed collect_candidate_levels(df, h, current_price) in to avoid
+    recomputing it when the caller already has it for this same
+    (df, h, current_price). None (the default) computes it here."""
+    if candidates is None:
+        candidates = collect_candidate_levels(df, h, current_price)
+    clustered = _cluster_levels(candidates)
     supports = sorted([lv for lv in clustered if lv.price < current_price], key=lambda l: -l.price)
     resistances = sorted([lv for lv in clustered if lv.price > current_price], key=lambda l: l.price)
     return supports, resistances

@@ -1216,7 +1216,15 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             continue
 
         log.debug("%s (%s): building levels (price=%.2f, bars=%d)", ticker, horizon_key, current_price, bars_available)
-        supports, resistances = levels.build_level_map(df, h, current_price)
+        # Computed once here and threaded through to build_level_map() and
+        # every count_confirming_strategies() call below (up to 2 scenarios x
+        # 2 calls each) -- all of them run against this exact same
+        # (df, h, current_price), so recomputing per call was pure redundant
+        # work (every S/R method rerun from scratch each time): up to 5x the
+        # necessary CPU per ticker/horizon, the dominant cost of a scan over
+        # a large universe. See levels.count_confirming_strategies's docstring.
+        candidates = levels.collect_candidate_levels(df, h, current_price)
+        supports, resistances = levels.build_level_map(df, h, current_price, candidates=candidates)
         log.debug("%s (%s): %d support level(s), %d resistance level(s) found",
                    ticker, horizon_key, len(supports), len(resistances))
         floor_pct = levels.atr_floor_pct(df, current_price, h)
@@ -1301,9 +1309,11 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             # can never disagree about what "N strategies agree" means.
             target_confluence = levels.count_confirming_strategies(
                 df, h, current_price, scenario.take_profit, tolerance_pct=config.CONFLUENCE_DEVIATION_PCT,
+                candidates=candidates,
             )
             stop_confluence = levels.count_confirming_strategies(
                 df, h, current_price, scenario.stop_loss, tolerance_pct=config.CONFLUENCE_DEVIATION_PCT,
+                candidates=candidates,
             )
 
             # Empirical win rate of previously-closed trades that

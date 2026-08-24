@@ -13,6 +13,19 @@ def _structured_df():
     box = [trend[-1] * (1 + 0.05 * np.sin(i / 4)) for i in range(60)]
     return make_ohlcv(trend + box)
 
+def test_build_level_map_accepts_precomputed_candidates():
+    # engine.py computes collect_candidate_levels() once per ticker/horizon
+    # and passes it in here rather than letting build_level_map recompute
+    # it -- must produce the identical (supports, resistances) either way.
+    df = _structured_df()
+    h = HORIZONS["4w"]
+    price = float(df["Close"].iloc[-1])
+    candidates = levels.collect_candidate_levels(df, h, price)
+    supports_pre, resistances_pre = levels.build_level_map(df, h, price, candidates=candidates)
+    supports, resistances = levels.build_level_map(df, h, price)
+    assert [s.price for s in supports_pre] == [s.price for s in supports]
+    assert [r.price for r in resistances_pre] == [r.price for r in resistances]
+
 @pytest.fixture(scope="module")
 def scenario_env():
     df = _structured_df()

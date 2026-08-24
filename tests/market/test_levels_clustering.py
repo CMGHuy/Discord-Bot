@@ -37,3 +37,17 @@ def test_confluence_count_monotone_in_agreeing_levels():
 def test_confluence_count_falsy_target_is_zero():
     df = make_ohlcv([100.0] * 60)
     assert levels.count_confirming_strategies(df, HORIZONS["4w"], 100.0, 0.0, 5.0) == (0, [])
+
+def test_confluence_count_accepts_precomputed_candidates():
+    # engine.py calls collect_candidate_levels() once per ticker/horizon and
+    # passes the result into both build_level_map() and every
+    # count_confirming_strategies() call for that horizon, instead of each
+    # of those recomputing it -- must give byte-identical output either way.
+    df = make_ohlcv([100 + i * 0.4 for i in range(150)])
+    h = HORIZONS["4w"]
+    price = float(df["Close"].iloc[-1])
+    target = price * 1.05
+    candidates = levels.collect_candidate_levels(df, h, price)
+    precomputed = levels.count_confirming_strategies(df, h, price, target, 5.0, candidates=candidates)
+    recomputed = levels.count_confirming_strategies(df, h, price, target, 5.0)
+    assert precomputed == recomputed
