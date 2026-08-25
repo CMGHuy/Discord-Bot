@@ -46,6 +46,20 @@ set is version-dependent. **Do not write a rule against a guessed field name.**
 Task 1 captures real payloads from the installed build and every later task
 uses what it recorded.
 
+**Resolved (2026-08-25, ruling recorded in this plan's SDD ledger):** live
+capture was attempted and is environmentally blocked — `.claude/settings.json`
+hooks are read at CLI session startup, not hot-reloaded, so no PreToolUse hook
+added mid-session can fire for that same session's own tool calls (confirmed
+in both the controller's top-level session and a dispatched subagent). Rather
+than block the plan on a fresh CLI restart, the resolved field names in
+`tests/hooks/fixtures/payloads.json` come from this session's own live tool
+JSON schemas — the exact arguments a PreToolUse hook's `tool_input` mirrors —
+which is stronger evidence than the two disagreeing doc pages this task was
+built to arbitrate between. **Glob's pattern argument is `pattern`.** Tasks
+2-5 proceed on this. Task 5's "live verification" step still requires an
+actual fresh session (this plan's execution cannot self-verify it) and is
+flagged there.
+
 Known-good from the docs regardless of version, and safe to rely on:
 
 - Deny: exit 0 with `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "..."}}`. The reason reaches the model.
