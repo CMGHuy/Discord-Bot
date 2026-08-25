@@ -210,6 +210,8 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
     # input / trade-detail's `stopLabel()`, which label it "Trailing stop"
     # rather than leaving it looking like an inverted original stop.
     is_partial = plan.get("status") == "PARTIAL"
+    legs_realized = plan.get("legs_realized") or []
+    banked_leg = legs_realized[0] if is_partial and legs_realized else None
     current_stop = (plan.get("working_stop") if is_partial else None) or plan.get("stop_loss")
     current_target = (plan.get("tp2") if is_partial else None) or plan.get("tp1")
     return {
@@ -230,6 +232,9 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "stop_loss": current_stop,
         "target": current_target,
         "target2": plan.get("tp2"),
+        "banked_fraction": banked_leg.get("fraction") if banked_leg else None,
+        "banked_exit_price": banked_leg.get("exit_price") if banked_leg else None,
+        "banked_r": banked_leg.get("r") if banked_leg else None,
         "risk_reward": t.get("risk_reward_ratio"),
         "shares": t.get("shares"),
         "open_shares": _open_shares(t.get("shares"), plan.get("legs_realized") or []),
@@ -291,6 +296,9 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "stop_loss": t.get("stop_loss"),
         "target": t.get("take_profit"),
         "target2": t.get("target2"),
+        "banked_fraction": None,
+        "banked_exit_price": None,
+        "banked_r": None,
         "risk_reward": t.get("risk_reward_ratio"),
         "shares": t.get("shares"),
         # Legacy v1 trades have no PARTIAL status and never scale out --

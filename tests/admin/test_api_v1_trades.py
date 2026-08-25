@@ -54,6 +54,11 @@ TRADE_ROW = {
     "stop_loss": NULLABLE_NUMBER,
     "target": NULLABLE_NUMBER,
     "target2": NULLABLE_NUMBER,
+    # v58 -- the TP1 leg's own stats, once a PARTIAL plan has banked one.
+    # None until then; a legacy trade never scale-outs so always None.
+    "banked_fraction": NULLABLE_NUMBER,
+    "banked_exit_price": NULLABLE_NUMBER,
+    "banked_r": NULLABLE_NUMBER,
     "risk_reward": NULLABLE_NUMBER,
     "shares": NULLABLE_NUMBER,
     # The share count still exposed to price movement -- `shares` is the
@@ -910,7 +915,9 @@ def test_partial_plan_shows_the_runner_target_and_stop(seed, logged_in):
     runner, so "the plan" has to mean working_stop/TP2, not the original
     entry stop/TP1 that already happened."""
     plan = _plan("11111111-1111-4111-8111-111111111111", status="PARTIAL")
-    plan.update({"stop_loss": 95.0, "tp1": 110.0, "tp2": 130.0, "working_stop": 101.0})
+    plan.update({"stop_loss": 95.0, "tp1": 110.0, "tp2": 130.0, "working_stop": 101.0,
+                "legs_realized": [{"fraction": 0.5, "exit_price": 110.0,
+                                   "r": 1.8, "reason": "tp1"}]})
     trade = _trade("aaaaaaaaaaaaaaaa", plan_id=plan["plan_id"], status="open")
     seed(plans=[plan], trades=[trade])
 
@@ -918,6 +925,24 @@ def test_partial_plan_shows_the_runner_target_and_stop(seed, logged_in):
     assert row["target"] == 130.0      # tp2, not tp1
     assert row["stop_loss"] == 101.0   # working_stop, not the original stop
     assert row["target2"] == 130.0
+    assert row["banked_fraction"] == 0.5
+    assert row["banked_exit_price"] == 110.0
+    assert row["banked_r"] == 1.8
+
+
+def test_partial_plan_with_no_legs_realized_has_null_banked_fields(seed, logged_in):
+    """A PARTIAL plan predating legs_realized (or a race where the field
+    hasn't been written yet) shows nothing rather than a wrong leg."""
+    plan = _plan("11111111-1111-4111-8111-111111111111", status="PARTIAL")
+    plan.update({"stop_loss": 95.0, "tp1": 110.0, "tp2": 130.0, "working_stop": 101.0,
+                "legs_realized": []})
+    trade = _trade("aaaaaaaaaaaaaaaa", plan_id=plan["plan_id"], status="open")
+    seed(plans=[plan], trades=[trade])
+
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+    assert row["banked_fraction"] is None
+    assert row["banked_exit_price"] is None
+    assert row["banked_r"] is None
 
 
 def test_partial_plan_falls_back_when_the_runner_fields_are_unset(seed, logged_in):
@@ -944,6 +969,7 @@ def test_active_plan_is_unaffected_by_the_partial_fields(seed, logged_in):
     row = logged_in.get("/api/v1/trades").get_json()["items"][0]
     assert row["target"] == 110.0
     assert row["stop_loss"] == 95.0
+    assert row["banked_fraction"] is None
 
 
 # --- reported bug: no live P&L at all while a position is still open -----
