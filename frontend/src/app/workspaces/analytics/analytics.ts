@@ -108,6 +108,13 @@ interface ProposalView extends ProposalRow {
 @Component({
   selector: 'sb-analytics',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // v54 D1: this workspace's bulk is tables (strategy registry, tier
+  // calibration, badge drift, grid results, plans) -- tight rows, more per
+  // screen -- so it defaults to the instrument register. On the host (a
+  // static class, not a template wrapper) because :host is the ancestor the
+  // register's four variables need to reach; the Snapshot panels below
+  // override it back to register-presentation for the hero figures.
+  host: { class: 'register-instrument' },
   // Provided here rather than in root, matching Dashboard and Trades: the store
   // is created on entry and destroyed on exit, so this workspace never holds
   // stale analytics while you are looking at another one.
@@ -175,7 +182,13 @@ interface ProposalView extends ProposalRow {
           }
 
           <h2 class="section">Snapshot</h2>
-          <div class="panels">
+          <!-- v54 D1: this is the summary strip -- "how am I doing?", hero
+               figures -- so it overrides the workspace's instrument default
+               back to presentation. Both Snapshot panels-divs get the class
+               (this one and Risk-adjusted/Streaks below): together they are
+               the strip; everything past "Distributions" is tables/charts
+               and stays on the instrument default from the host. -->
+          <div class="panels register-presentation">
             <sb-panel heading="Record">
               <sb-chip-row class="chips">
                 @for (metric of store.relocated(); track metric.key) {
@@ -219,7 +232,9 @@ interface ProposalView extends ProposalRow {
           [skeletonCols]="3"
           (retry)="store.load()"
         >
-          <div class="panels">
+          <!-- Second half of the summary strip -- see the comment above the
+               Record/Overall panels-div. -->
+          <div class="panels register-presentation">
             <sb-panel heading="Risk-adjusted">
               <sb-chip-row class="chips">
                 <sb-metric-chip label="Profit factor" [value]="store.profitFactor()" />
