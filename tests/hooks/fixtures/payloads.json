@@ -1,0 +1,37 @@
+{
+  "_note": "Not captured live -- see docs/superpowers/plans/2026-08-25-v60-session-habit-guardrails.md Task 1 for why. Field names below are taken directly from this session's own tool JSON schemas (the exact tool_input a PreToolUse hook receives mirrors the tool's declared arguments), not from the docs pages that disagreed.",
+  "Glob": {
+    "tool_name": "Glob",
+    "tool_input": {
+      "pattern": "swingbot/**/*.py"
+    }
+  },
+  "Read": {
+    "tool_name": "Read",
+    "tool_input": {
+      "file_path": "swingbot/config.py"
+    }
+  },
+  "Bash": {
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "echo hi",
+      "description": "Print a test string"
+    }
+  },
+  "Edit": {
+    "tool_name": "Edit",
+    "tool_input": {
+      "file_path": "swingbot/config.py",
+      "old_string": "x",
+      "new_string": "y"
+    }
+  },
+  "Write": {
+    "tool_name": "Write",
+    "tool_input": {
+      "file_path": "scratch/notes.md",
+      "content": "..."
+    }
+  }
+}
