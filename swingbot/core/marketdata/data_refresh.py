@@ -115,6 +115,22 @@ def _align_tz(a, b):
 
 _ADJUSTMENT_MISMATCH_TOLERANCE = 0.01   # 1%: real EOD closes agree exactly; a split/dividend shifts price by far more
 
+# A corporate action rescales the ENTIRE history, so a genuine detection has
+# the deep overlap the cold/forced full-depth path produces. The WARM
+# incremental path overlaps exactly one bar by construction -- refresh_symbol
+# passes `start=existing.index.max()` and yfinance's date-only `start` is
+# inclusive, so `fresh` re-fetches the last cached bar's own date and nothing
+# older. The median of one ratio is that ratio, which turned a refresh landing
+# mid-session (a partially-formed daily bar, re-fetched settled after the
+# close) into a whole-history rescale on any >1% intraday mover.
+_MIN_OVERLAP_BARS = 3
+
+# A real split/dividend moves EVERY overlapping bar by an IDENTICAL factor.
+# Bars disagreeing by different amounts mean drifting prices or an already
+# two-basis archive -- rescaling on that median would smear the error across
+# the whole history rather than repair it.
+_ADJUSTMENT_RATIO_DISPERSION = 0.005
+
 _PRICE_COLUMNS = ["Open", "High", "Low", "Close"]
 
 
@@ -131,7 +147,11 @@ def _adjustment_ratio(existing, fresh, symbol: str, timeframe: str):
     alone, else None (no adjustment change -- the common case, every scan).
     """
     common = existing.index.intersection(fresh.index)
-    if len(common) == 0:
+    if len(common) < _MIN_OVERLAP_BARS:
+        # Too little overlap to tell a corporate action from ordinary price
+        # movement. Doing nothing is always safe: the merge below still takes
+        # `fresh`'s values for the dates they share, so a real split is picked
+        # up by the next full-depth (cold or forced) refresh instead.
         return None
     ratios = (fresh.loc[common, "Close"] / existing.loc[common, "Close"]).dropna()
     ratios = ratios[ratios > 0]
@@ -139,6 +159,15 @@ def _adjustment_ratio(existing, fresh, symbol: str, timeframe: str):
         return None
     ratio = float(ratios.median())
     if abs(ratio - 1.0) <= _ADJUSTMENT_MISMATCH_TOLERANCE:
+        return None
+    spread = float((ratios / ratio - 1.0).abs().max())
+    if spread > _ADJUSTMENT_RATIO_DISPERSION:
+        log.warning(
+            "%s/%s: prices disagree on %d overlapping bar(s) but NOT uniformly "
+            "(median ratio %.4f, worst bar %.2f%% away from it) -- that is "
+            "drifting prices or an already two-basis archive, not a corporate "
+            "action, so cached bars are left untouched",
+            symbol, timeframe, len(common), ratio, spread * 100)
         return None
     log.warning(
         "%s/%s: adjustment-basis mismatch detected on %d overlapping bar(s) "

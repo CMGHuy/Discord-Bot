@@ -273,3 +273,26 @@ def test_legacy_three_tuple_alert_is_not_silenced(wired):
     main, _ = wired
     asyncio.run(_send_alerts(main, [("EMBED", None, None)]))
     assert main.sent[0]["silent"] is False
+
+
+def test_overflow_digest_survives_the_real_four_tuple_shape(monkeypatch, wired):
+    """engine.py emits 4-tuples, but the overflow digest unpacked three names
+    (`for _, _, p in overflow`). The unpack runs before the `if p is not None`
+    filter, so ANY scan producing more than MAX_ALERTS_PER_SCAN alerts raised
+    ValueError before a single send -- losing every alert, not just the
+    overflow. Every existing test here passes <= 2 alerts under a cap of 10,
+    so the branch was never exercised with the shape production actually uses.
+    """
+    main, _ = wired
+    monkeypatch.setattr(config, "MAX_ALERTS_PER_SCAN", 1, raising=False)
+
+    kept = (discord.Embed(title="KEPT"), None,
+            types.SimpleNamespace(ticker="AAA", plan_id="p-aaa"), "A")
+    spilled = (discord.Embed(title="SPILLED"), None,
+               types.SimpleNamespace(ticker="BBB", plan_id="p-bbb"), "B")
+
+    asyncio.run(_send_alerts(main, [kept, spilled]))
+
+    assert len(main.sent) == 1, "the cap must still apply"
+    assert "+1 more: BBB" in kept[0].footer.text, \
+        "the capped-out alert must still be named in the digest footer"

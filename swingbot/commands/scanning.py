@@ -380,7 +380,12 @@ async def _send_alerts(destination, alerts, route_by_confidence: bool = False):
     cap = getattr(config, "MAX_ALERTS_PER_SCAN", 10)
     to_send, overflow = ordered[:cap], ordered[cap:]
     if overflow:
-        digest_items = [(p.ticker, round(follow_score(p))) for _, _, p in overflow if p is not None]
+        # Index rather than unpack: engine.py emits 4-tuples (…, simple_text)
+        # and a fixed 3-name unpack raised ValueError here -- before any send,
+        # so every alert was lost, not just the overflow. Same tolerant shape
+        # the send loop below already uses.
+        overflow_plans = [a[2] for a in overflow if len(a) > 2 and a[2] is not None]
+        digest_items = [(p.ticker, round(follow_score(p))) for p in overflow_plans]
         if digest_items:
             digest = "+%d more: %s" % (len(digest_items),
                                        ", ".join(f"{t} ({s})" for t, s in digest_items))
@@ -1221,7 +1226,12 @@ async def weekend_deep_scan() -> str:
         config.MIN_ALERT_CONFIDENCE_LEVEL = old_min_conf
 
     items = []
-    for _embed, _chart_path, plan in alerts:
+    for alert in alerts:
+        # Indexed, not unpacked: engine.py emits 4-tuples, so a 3-name unpack
+        # raised ValueError on the first alert -- and weekend_deep_scan_task
+        # marks the day fired before calling this, so the Saturday report was
+        # never posted on any weekend that actually found something.
+        plan = alert[2] if len(alert) > 2 else None
         if plan is None:
             continue
         try:

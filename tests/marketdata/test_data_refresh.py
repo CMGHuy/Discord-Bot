@@ -133,3 +133,44 @@ def test_merge_save_does_not_rescale_when_no_adjustment_changed(tmp_path):
 
     assert (merged["Close"] == 100.0).all()
     assert added == 5
+
+
+def test_a_single_bar_overlap_is_never_read_as_an_adjustment(tmp_path):
+    """The warm incremental path structurally overlaps ONE bar:
+    refresh_symbol passes `start=existing.index.max()` and yfinance's
+    date-only `start` is INCLUSIVE, so `fresh` re-fetches the last cached
+    bar's own date and nothing older. The median of one ratio is that ratio.
+
+    A refresh landing mid-session caches a partially-formed daily bar; the
+    next refresh, after the close, sees the settled close for the same date.
+    On any >1% intraday mover that difference exceeded the tolerance and
+    rescaled the ENTIRE cached history to a basis no split ever produced --
+    the exact two-basis corruption found on 8 production tickers (ABNB, AMD,
+    AMZN, ARM, ASML, QBTS, RKLB, SNDK -- all >1% intraday names; slow movers
+    were spared), which only a delete-and-cold-refetch could repair.
+    """
+    existing = _price_frame("2024-01-01", "2024-01-10", close=100.0)
+    fresh = _price_frame("2024-01-10", "2024-01-12", close=101.4)
+
+    assert len(existing.index.intersection(fresh.index)) == 1, \
+        "fixture must reproduce the warm path's single-bar overlap"
+    assert _adjustment_ratio(existing, fresh, "AAA", "daily") is None, \
+        "one bar of intraday drift was mistaken for a corporate action"
+
+    merged, _ = _merge_save(existing, fresh, "AAA", "daily", str(tmp_path))
+    assert (merged.loc[:"2024-01-09", "Close"] == 100.0).all(), \
+        "history was rescaled off a single overlapping bar"
+
+
+def test_a_non_uniform_disagreement_is_not_an_adjustment(tmp_path):
+    """A genuine split/dividend rescales EVERY bar by the SAME factor. If the
+    overlapping bars disagree by different amounts, the cause is drifting
+    prices (or an already-corrupted two-basis archive), not a corporate
+    action -- rescaling on that median would smear the error across history.
+    """
+    existing = _price_frame("2024-01-01", "2024-01-10", close=100.0)
+    fresh = _price_frame("2024-01-05", "2024-01-15", close=100.0)
+    fresh.loc["2024-01-05":"2024-01-07", ["Open", "High", "Low", "Close"]] = 130.0
+    fresh.loc["2024-01-08":"2024-01-10", ["Open", "High", "Low", "Close"]] = 118.0
+
+    assert _adjustment_ratio(existing, fresh, "AAA", "daily") is None
