@@ -6,11 +6,13 @@ an unrelated pre-existing feature -- this is the intraday PENDING/ACTIVE/
 PARTIAL board over the live PlanStore."""
 import discord
 
+from swingbot import config
 from swingbot.bot_core import bot
 from swingbot.core.analytics.rank import rank_plans
 from swingbot.core.planning.plan_engine import PlanStatus
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.scanning import embed_theme as theme
+from swingbot.core.scanning.embeds import banked_leg_pct_and_amount
 from swingbot.commands.views import (
     starred_ids,
     paginate,
@@ -49,10 +51,24 @@ def format_plans_board(plans, prices=None) -> str:
                              f"entry {p.entry_price:.2f}, stop {stop:.2f}{extra}")
             else:  # PARTIAL
                 leg = p.legs_realized[0] if p.legs_realized else None
-                banked = (f"banked {leg['r']:+.2f}R on {leg['fraction']:.0%}"
-                          if leg else "banked")
+                if leg:
+                    pct, amount = banked_leg_pct_and_amount(p, leg["exit_price"],
+                                                            leg["fraction"])
+                    cur = config.CURRENCY_SYMBOL
+                    banked = f"banked {leg['r']:+.2f}R/{pct:+.1f}%"
+                    if amount is not None:
+                        banked += f"/+{cur}{amount:,.2f}"
+                    banked += f" on {leg['fraction']:.0%}"
+                    entry = leg["exit_price"]
+                else:
+                    banked, entry = "banked", p.tp1
+                if p.tp2 is not None:
+                    target, target_label = p.tp2, "TP2"
+                else:
+                    target, target_label = p.tp1, "TP1 (no TP2)"
                 lines.append(f"{icon} `{p.ticker}` {p.direction} — {banked}, "
-                             f"trail {p.working_stop:.2f}")
+                             f"entry {entry:.2f} → {target_label} {target:.2f} "
+                             f"/ trail {p.working_stop:.2f}")
     return "\n".join(lines)
 
 
