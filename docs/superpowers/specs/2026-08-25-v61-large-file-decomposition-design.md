@@ -100,10 +100,16 @@ First, because its seams are the cleanest and it proves the package pattern on
 the lower-risk of the two big files. No backtest coupling.
 
 `runstate.py` (pause + heartbeat flags) · `alerts.py` (~250: ordering,
-capping, routing, delivery) · `presence.py` (~200: presence text, session
+capping, routing, delivery) · `presence.py` (~230: presence text, session
 transition, healthcheck) · `recap.py` (retrospective, digest, weekend scan) ·
-`commands.py` (~330: the eight `!` handlers) · `loops.py` (~800: the
-`@tasks.loop` scheduler layer)
+`commands.py` (~340: the seven `!` handlers — `recap`, `check`, `session`,
+`status`, `pause`, `resume`, `stop`) · `loops.py` (~800: the `@tasks.loop`
+scheduler layer)
+
+Two decorator pairs cannot be separated, because each resolves the other by
+name at import time: `@session_scan.error` on `_session_scan_error`, and
+`@market_data_refresh.before_loop` on `_before_market_data_refresh`. Both
+loops and both handlers therefore live in `loops.py`.
 
 **The specific risk here is registration.** `bot.py:39` does
 `from swingbot.commands import scanning  # noqa: F401` purely for its side
