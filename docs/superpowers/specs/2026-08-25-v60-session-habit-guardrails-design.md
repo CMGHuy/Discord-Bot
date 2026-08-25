@@ -39,14 +39,19 @@ repo:
 
 ## Design
 
-One PowerShell script, `.claude/hooks/guardrails.ps1`, registered as a
+One Python script, `.claude/hooks/guardrails.py`, registered as a
 `PreToolUse` hook in `.claude/settings.json`. That file today carries only
 `SessionStart` and `Stop` hooks; this adds a third block and changes nothing
 existing.
 
-PowerShell to match the three hooks already in `.claude/hooks/`
-(`session-cursor.ps1`, `notify.ps1`, `usage-watch.ps1`) and the `pwsh
--NoProfile -File` invocation they all use. No new runtime dependency.
+**Python, not PowerShell** — revised 2026-08-25 while writing the plan. The
+first draft said PowerShell to match the three hooks already in
+`.claude/hooks/`. Two stronger considerations overrode that: these rules are
+logic that must be *correct*, and pytest covers Python while nothing covers
+PowerShell; and `python` starts in ~100 ms against `pwsh -NoProfile`'s ~400 ms,
+which matters for something on the critical path of every tool call. The rule
+set is therefore one pure `evaluate(payload) -> dict | None`, unit-tested
+without a live session. Stdlib only; no new dependency.
 
 The hook reads the tool call on stdin as JSON, matches it against the rules
 below, and exits without output when nothing matches — the overwhelmingly
@@ -64,9 +69,17 @@ sometimes. The hook emits the nudge and allows the call.
 
 ### Rules
 
+**One contract detail is unresolved and must be measured, not assumed.** The
+official docs give Glob's pattern argument as `tool_input.glob`; this session's
+own Glob tool schema calls it `pattern`. The docs also list
+`permissionDecision` values inconsistently between pages (`"ask"` vs
+`"escalate"`) and note the set is version-dependent. The plan's first task
+therefore captures real payloads from the installed build, and the rule reads
+both candidate keys.
+
 | Tier | Tool | Trigger | Message names |
 |---|---|---|---|
-| deny | `Glob` | `pattern` starts with `**/` | `Glob("swingbot/**/*.py")` — scope it |
+| deny | `Glob` | pattern argument starts with `**/` and no `path` given | `Glob("swingbot/**/*.py")` — scope it |
 | deny | `Bash` | `grep -r` / `rg` whose path is the repo root or `.` | the `Grep` tool, or `git grep` |
 | deny | `Read` | path under `docs/superpowers/plans/implemented/` and file > 100 KB | `/task-brief <id>`, or `grep -n "^### Task <id>" -A 120 <plan>` |
 | deny | `Edit`/`Write` | path contains `.claude/worktrees/` | edit from that worktree's own session |
