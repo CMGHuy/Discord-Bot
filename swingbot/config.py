@@ -268,7 +268,7 @@ FIELDS: list[Field] = [
                "compute (SPY/RS-cache failure) -- an exemption is never counted "
                "as a pass. A single ticker with too little history for its own "
                "RS reading is NOT exempt: it gets the ambiguous 50.0 sentinel "
-               "and is judged as if it were a real median (see docs/strategy-gates.md). "
+               "and is judged as if it were a real median (see docs/strategy/strategy-gates.md). "
                "The bullish half is disabled (RS_LEADER_PERCENTILE=0) because it "
                "measured negative. ON by default since v34's one-shot VALIDATION: "
                "48.50% -> 49.66% win rate (+1.17pp) for 4.07% of alert volume, on "

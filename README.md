@@ -20,14 +20,14 @@ Run `!commands` (or `!help`) in Discord any time for the full command list.
 
 | Document | What's in it |
 |---|---|
-| [docs/strategy.md](docs/strategy.md) | How the bot decides — index over the three files below |
-| [docs/strategy-signals.md](docs/strategy-signals.md) | Finding setups: levels from every method, filters, duplicate merging, horizons |
-| [docs/strategy-plans.md](docs/strategy-plans.md) | Building the plan: entry, target, stop, confidence, alert contents, tracking |
-| [docs/strategy-gates.md](docs/strategy-gates.md) | Gates: market regime, relative strength, trend alignment, symbol resolution |
+| [docs/strategy/strategy.md](docs/strategy/strategy.md) | How the bot decides — index over the three files below |
+| [docs/strategy/strategy-signals.md](docs/strategy/strategy-signals.md) | Finding setups: levels from every method, filters, duplicate merging, horizons |
+| [docs/strategy/strategy-plans.md](docs/strategy/strategy-plans.md) | Building the plan: entry, target, stop, confidence, alert contents, tracking |
+| [docs/strategy/strategy-gates.md](docs/strategy/strategy-gates.md) | Gates: market regime, relative strength, trend alignment, symbol resolution |
 | [docs/setup.md](docs/setup.md) | Creating the Discord bot, configuring `.env`, installing, running 24/7 |
 | [docs/commands.md](docs/commands.md) | Every Discord command |
-| [docs/features.md](docs/features.md) | Plan Engine v2, analytics, the admin cockpit and SPA |
-| [DOCKER.md](docs/DOCKER.md) · [DEPLOY_HETZNER.md](docs/DEPLOY_HETZNER.md) | Container build and deployment |
+| [docs/features/features.md](docs/features/features.md) | Plan Engine v2, analytics, the admin cockpit and SPA |
+| [DOCKER.md](docs/deploy/DOCKER.md) · [DEPLOY_HETZNER.md](docs/deploy/DEPLOY_HETZNER.md) | Container build and deployment |
 
 ## Files
 
@@ -83,7 +83,7 @@ swingbot/
 - `data.py` — `!charts`, `!scrapeall`, `!download`, `!cached`
 
 **`swingbot/admin/`:**
-- `app.py` — the admin web UI (see [DOCKER.md](docs/DOCKER.md)), three pages via a sidebar: **Dashboard** (open trades, auto-refreshing every 5s so trades logged by `!check` show up without a manual reload, click any for full detail with chart + confidence breakdown, clear all open trades), **Settings** (every `.env` variable as a compact input field, hot-reloads the bot on save), **Logs** (live-updating tail of the bot's log file).
+- `app.py` — the admin web UI (see [DOCKER.md](docs/deploy/DOCKER.md)), three pages via a sidebar: **Dashboard** (open trades, auto-refreshing every 5s so trades logged by `!check` show up without a manual reload, click any for full detail with chart + confidence breakdown, clear all open trades), **Settings** (every `.env` variable as a compact input field, hot-reloads the bot on save), **Logs** (live-updating tail of the bot's log file).
 
 **Data files (created on first run, under `data/`):** `watchlist.json`, `state.json`,
 `trades.json`, `account.json`. Chart images go under `exports/`; the bot's rotating log file goes under `logs/`.

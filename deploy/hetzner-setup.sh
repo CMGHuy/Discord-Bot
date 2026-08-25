@@ -22,7 +22,7 @@
 #      this script deliberately does not try to guess your secrets)
 #   5. Configures ufw: allows SSH, denies everything else inbound by
 #      default -- the bot itself needs ZERO inbound ports (see
-#      docs/DEPLOY_HETZNER.md for why, and how to reach the admin UI safely)
+#      docs/deploy/DEPLOY_HETZNER.md for why, and how to reach the admin UI safely)
 set -euo pipefail
 
 REPO_URL="${1:?Usage: ./hetzner-setup.sh <git-repo-url> [deploy-user]}"
@@ -119,7 +119,7 @@ Next steps:
      then browse to http://localhost:1234 on YOUR machine.
      (To open it publicly instead: 'ufw allow 1234/tcp' -- only do this
      with a real ADMIN_PASSWORD set, and ideally a reverse proxy with
-     TLS in front of it. See docs/DEPLOY_HETZNER.md.)
+     TLS in front of it. See docs/deploy/DEPLOY_HETZNER.md.)
 
 ---- CI private key for HETZNER_SSH_KEY (keep this secret!) ----
 $CI_PRIVATE_KEY

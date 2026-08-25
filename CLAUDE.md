@@ -17,7 +17,7 @@ discord.py, pandas/numpy, yfinance, mplfinance, pytest. JSON persistence under
 `data/`; no database.
 
 **"Production" always means the Hetzner VM** (`167.233.26.185`,
-`docs/DEPLOY_HETZNER.md`) — never this dev machine. `scripts/ops/ssh-hetzner.sh`
+`docs/deploy/DEPLOY_HETZNER.md`) — never this dev machine. `scripts/ops/ssh-hetzner.sh`
 connects to it (`scripts/ops/ssh-hetzner.sh "docker compose ps"` for one
 command, no args for an interactive shell); not committed, since it shells
 through WSL to a key at `~/.ssh/id_rsa` inside WSL's home.
@@ -40,7 +40,7 @@ admin). The admin is a Flask **API** plus an Angular SPA served from
 `frontend/` — Flask serves only `/api/v1/*`, the SPA's routes and `/` (the Jinja
 UI was deleted on 2026-08-14, Release B). The SPA is built by a Node stage in
 the Dockerfile, so a deploy needs it. Deployed as two Docker containers off one
-image (`docs/DOCKER.md`, `docs/DEPLOY_HETZNER.md`); `.env` is the single config
+image (`docs/deploy/DOCKER.md`, `docs/deploy/DEPLOY_HETZNER.md`); `.env` is the single config
 source, hot-reloaded via SIGHUP (schema in `swingbot/config.py` — every setting
 is one `Field` entry feeding both the env parser and the admin Settings page).
 
@@ -111,9 +111,10 @@ reasoning: **`docs/claude/edge-priorities.md`**.
   root does **not** respect `.ignore` — it will crawl the worktrees and time
   out; use the Grep tool or `git grep`.
 - **README.md is a short overview + documentation index, nothing more.** Read
-  the one topic file it points at, not README.md itself: `docs/strategy.md` (an
-  index over `strategy-signals.md` / `strategy-plans.md` / `strategy-gates.md`),
-  `docs/setup.md`, `docs/commands.md`, `docs/features.md`. Same for
+  the one topic file it points at, not README.md itself: `docs/strategy/strategy.md`
+  (an index over `strategy-signals.md` / `strategy-plans.md` / `strategy-gates.md`,
+  all in `docs/strategy/`), `docs/setup.md`, `docs/commands.md`,
+  `docs/features/features.md` (index over `docs/features/features-*.md`). Same for
   `.superpowers/sdd/progress.md`: `tail` it, never `cat` it.
 - **`swingbot/core/` is ten packages, no flat modules** — `marketdata/`,
   `market/`, `planning/`, `backtesting/`, `tracking/`, `infra/`, `edge/`,

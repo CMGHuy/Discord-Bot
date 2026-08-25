@@ -37,11 +37,11 @@ python bot.py
 
 ## 5. Running it 24/7
 
-Host this somewhere always-on. The included Docker setup ([DOCKER.md](DOCKER.md))
+Host this somewhere always-on. The included Docker setup ([DOCKER.md](deploy/DOCKER.md))
 runs the bot plus an authenticated admin web UI as two containers
 sharing one project directory — works on any VPS, a Raspberry Pi, or a
 cloud VM. For a push-to-deploy pipeline on a Hetzner Cloud server
 specifically (GitHub Actions deploys automatically on every push to
-`main`), see [DEPLOY_HETZNER.md](DEPLOY_HETZNER.md). Without Docker, a
+`main`), see [DEPLOY_HETZNER.md](deploy/DEPLOY_HETZNER.md). Without Docker, a
 `systemd` service or `screen`/`tmux` session running `python bot.py`
 works fine too.

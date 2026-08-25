@@ -8,7 +8,7 @@ nothing in the repo has ever recorded which values of one go with which values
 of the other. This script recovers that from the only place it is written down:
 the history of the file itself.
 
-Both containers are built from ONE image (see `docs/DOCKER.md`), so at any commit the
+Both containers are built from ONE image (see `docs/deploy/DOCKER.md`), so at any commit the
 `ui` and `bot` values are what shipped *together*. That is the whole basis of the
 output. It is an observation about what was released as a unit, **not** a claim
 that anyone tested those two versions against each other, and not a prediction

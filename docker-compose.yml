@@ -156,7 +156,7 @@ services:
     # (https://www.bomeo-capital.com and https://bomeo-capital.com) with no
     # inbound port opened on the server -- the tunnel dials OUT to
     # Cloudflare's edge, the same outbound-only shape as the bot's own
-    # connection to Discord's Gateway. See docs/CLOUDFLARE_TUNNEL.md for how
+    # connection to Discord's Gateway. See docs/deploy/CLOUDFLARE_TUNNEL.md for how
     # to create the tunnel, add hostname routes for both pointing at
     # http://admin:1234, and get the token below.
     #
