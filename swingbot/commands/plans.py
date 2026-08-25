@@ -57,7 +57,7 @@ def format_plans_board(plans, prices=None) -> str:
                     cur = config.CURRENCY_SYMBOL
                     banked = f"banked {leg['r']:+.2f}R/{pct:+.1f}%"
                     if amount is not None:
-                        banked += f"/+{cur}{amount:,.2f}"
+                        banked += f"/{'+' if amount >= 0 else ''}{cur}{abs(amount):,.2f}"
                     banked += f" on {leg['fraction']:.0%}"
                     entry = leg["exit_price"]
                 else:
