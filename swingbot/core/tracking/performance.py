@@ -1117,24 +1117,40 @@ class TradeLog:
         Returns the list of newly-closed trade records (already saved to disk).
         """
         self.refresh()
+        # `plan_id`-linked trades are excluded for the same reason
+        # update_open_trades (see its filter) and check_near_tp_timeout skip
+        # them: a v2 trade record's take_profit/stop_loss are frozen at
+        # log_trade time and never updated after TP1, so run_manager_tick is
+        # the ONLY path that may close them. Closing one here booked the FULL
+        # position at TP1 and cleared `legs`, after which the tp1_partial
+        # event and the eventual close_plan_trade both found no open trade and
+        # silently did nothing -- the entire scale-out mechanism never reached
+        # trades.json or the account for any plan-linked trade.
         open_trades = [t for t in self._trades
-                       if t["ticker"] == ticker and t["status"] == "open"]
+                       if t["ticker"] == ticker and t["status"] == "open"
+                       and not t.get("plan_id")]
         if not open_trades:
             return []
 
         updates = []
         for trade in open_trades:
             is_bull = trade["direction"] == "bullish"
+            # Fill at the price actually observed, never the nominal
+            # stop/target level -- same convention as update_open_trades.
+            # Recording the nominal level re-introduced a fake exactly -1.00 R
+            # on every gap, and since this runs every 60s while a scan takes
+            # minutes it won that race on essentially every non-plan trade,
+            # truncating real losses at the stop and inflating expectancy.
             if is_bull:
                 if live_price <= trade["stop_loss"]:
-                    updates.append((trade["id"], "loss", trade["stop_loss"]))
+                    updates.append((trade["id"], "loss", live_price))
                 elif live_price >= trade["take_profit"]:
-                    updates.append((trade["id"], "win", trade["take_profit"]))
+                    updates.append((trade["id"], "win", live_price))
             else:
                 if live_price >= trade["stop_loss"]:
-                    updates.append((trade["id"], "loss", trade["stop_loss"]))
+                    updates.append((trade["id"], "loss", live_price))
                 elif live_price <= trade["take_profit"]:
-                    updates.append((trade["id"], "win", trade["take_profit"]))
+                    updates.append((trade["id"], "win", live_price))
 
         if not updates:
             return []
