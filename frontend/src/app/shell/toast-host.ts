@@ -8,7 +8,7 @@ import { ToastService } from './toast.service';
   template: `
     <div class="host" role="status" aria-live="polite">
       @for (toast of toasts.toasts(); track toast.id) {
-        <button class="toast" [class]="toast.kind" (click)="toasts.dismiss(toast.id)">
+        <button class="toast elev-overlay" [class]="toast.kind" (click)="toasts.dismiss(toast.id)">
           {{ toast.message }}
         </button>
       }
@@ -26,10 +26,10 @@ import { ToastService } from './toast.service';
     }
     .toast {
       padding: var(--space-8) var(--space-14);
-      background: var(--surface-raised);
-      border: 1px solid var(--border-strong);
+      /* Depth (background/border/box-shadow) comes from .elev-overlay; only
+         the left edge's width is this component's own, since that edge is
+         also the valence stripe the .warn/.error/.info rules colour below. */
       border-left-width: 2px;
-      border-radius: var(--radius);
       color: var(--text);
       font: inherit;
       font-size: var(--text-table);

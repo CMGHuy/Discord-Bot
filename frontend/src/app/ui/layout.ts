@@ -205,7 +205,7 @@ export class ControlRow {
   selector: 'sb-drawer',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <dialog #dialog class="drawer" (close)="closed.emit()" (cancel)="closed.emit()">
+    <dialog #dialog class="drawer elev-overlay" (close)="closed.emit()" (cancel)="closed.emit()">
       <header>
         <h2>{{ heading() }}</h2>
         <button type="button" class="close" aria-label="Close" (click)="dismiss()">×</button>
@@ -221,12 +221,9 @@ export class ControlRow {
       max-height: 100vh;
       margin: 0 0 0 auto;
       padding: 0;
-      background: var(--surface);
-      border: 0;
-      border-left: 1px solid var(--border-strong);
       color: var(--text);
     }
-    .drawer::backdrop { background: rgb(0 0 0 / 0.5); }
+    .drawer::backdrop { background: var(--scrim); }
 
     header {
       display: flex;

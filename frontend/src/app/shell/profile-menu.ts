@@ -53,7 +53,7 @@ import { Icon } from '../ui/icon';
     </button>
 
     @if (open()) {
-      <div class="menu" role="menu">
+      <div class="menu elev-overlay" role="menu">
         <span class="who">{{ username() || 'Signed in' }}</span>
         <button sb-button variant="ghost" type="button" role="menuitem" (click)="signOut()">
           <sb-icon name="signout" />
@@ -86,9 +86,6 @@ import { Icon } from '../ui/icon';
       flex-direction: column;
       gap: var(--space-4);
       padding: var(--space-6);
-      background: var(--surface-raised);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
     }
     .who {
       font-size: var(--text-chip);

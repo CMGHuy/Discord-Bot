@@ -15,7 +15,7 @@ const RAW_BUTTON_ALLOWLIST = new Map<string, string>([
   // own kind-coloured background, not a button sitting inside a toast. Giving
   // it a variant would mean a variant used exactly once, which is a worse
   // answer than one justified exception.
-  ['shell/toast-host.ts', 'class="toast"'],
+  ['shell/toast-host.ts', 'class="toast elev-overlay"'],
 ]);
 
 describe('no call site hand-rolls a button', () => {

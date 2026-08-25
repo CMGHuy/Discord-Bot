@@ -116,3 +116,29 @@ a:hover {
  * sb-async rollout started collapsing them into one definition here. */
 .stale { color: var(--warn); font-size: var(--text-table); }
 .error { color: var(--neg); font-size: var(--text-table); }
+
+/* L3 — the only level that casts a shadow.
+ *
+ * L0 --bg (the page, no border), L1 --surface (a panel, 1px border),
+ * L2 --surface-raised (a thing on a panel, 1px border) and L3 (this) are the
+ * whole ladder. Levels 0-2 are distinguished by surface lightness alone; a
+ * shadow at those levels is mud on near-black, not depth.
+ *
+ * So a shadow here says exactly one thing: THIS ELEMENT IS NOT PART OF THE
+ * PAGE FLOW. Dropdown, popover, tooltip, toast, drawer, dialog. Nothing else
+ * may take it, and primitives.spec.ts enforces that. */
+.elev-overlay {
+  background: var(--surface-overlay);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-overlay);
+}
+
+/* The dim behind a MODAL L3 element. Transient overlays (tooltip, dropdown,
+ * toast) do not take this — dimming the page for a tooltip would be absurd,
+ * and dimming it for a toast would make every notification modal. */
+.elev-scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+}
