@@ -53,4 +53,19 @@ describe('the chart series namespace', () => {
       expect(deltaE(token(SERIES[i]), token(SERIES[i + 1]))).toBeGreaterThan(15);
     }
   });
+
+  // v54 D5: --chart-1/2/3 are supposed to BE --accent/--info/--warn's own
+  // hex (tokens.css's own comment says so), kept as a second literal rather
+  // than `var(--accent)` -- a custom property's own computed value does not
+  // substitute a nested var() the way a normal property does, and
+  // line-chart.ts's seriesColour() reads --chart-* through exactly that
+  // unsubstituted path (getComputedStyle().getPropertyValue()), so aliasing
+  // would silently break the chart rather than silently duplicate a hex.
+  // This is the loud-failure alternative: pin the two copies equal, so a
+  // retune of one without the other fails here instead of drifting.
+  it('chart-1/2/3 stay equal to the accent/info/warn hex they are meant to be', () => {
+    expect(token('--chart-1')).toBe(token('--accent'));
+    expect(token('--chart-2')).toBe(token('--info'));
+    expect(token('--chart-3')).toBe(token('--warn'));
+  });
 });

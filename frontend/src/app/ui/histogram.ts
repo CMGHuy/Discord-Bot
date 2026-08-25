@@ -85,7 +85,7 @@ export interface HistogramBin {
        axis -- it keeps the body-text pair every other value in this app
        uses, so the number the reader is there to read does not get dimmer
        and smaller than its own label. */
-    .label { color: ${CHART_CHROME.tickColour}; font-size: ${CHART_CHROME.tickSize}; }
+    .label { color: var(${CHART_CHROME.tickColour}); font-size: var(${CHART_CHROME.tickSize}); }
     .count { color: var(--text-secondary); font-size: var(--text-chip); text-align: right; }
     .track {
       height: 10px;

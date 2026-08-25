@@ -217,7 +217,9 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
              max-width: 68ch; }
 
     .headline { display: flex; align-items: baseline; gap: var(--register-pad); flex-wrap: wrap; }
-    .label { font-size: var(--register-label); color: var(--text-faint);
+    /* --text-micro, not --register-label -- an eyebrow tag; see
+       styles.css's register comment for why an eyebrow must not grow. */
+    .label { font-size: var(--text-micro); color: var(--text-faint);
               text-transform: uppercase; letter-spacing: .04em; }
 
     /* Chips WRAP and lanes STACK. This is the property the whole design rests

@@ -387,7 +387,11 @@ import { Sparkline } from '../../ui/sparkline';
       border: 1px solid var(--border);
       border-radius: var(--radius);
       color: var(--text-secondary);
-      font-size: var(--register-label);
+      /* --text-micro, not --register-label: this is an eyebrow tag, not a
+         caption, and --register-label grows to --text-table in the
+         presentation register (styles.css's register comment) -- an eyebrow
+         must not grow just because it sits inside a presentation panel. */
+      font-size: var(--text-micro);
       text-transform: uppercase;
       letter-spacing: 0.08em;
     }
@@ -423,7 +427,8 @@ import { Sparkline } from '../../ui/sparkline';
     .scan { display: flex; align-items: center; gap: var(--register-pad); }
     .scan-figures { display: flex; align-items: baseline; gap: var(--space-6); }
     .scan-latest { font-size: var(--text-subhead); font-weight: 600; }
-    .scan-label { color: var(--text-secondary); font-size: var(--register-label); text-transform: uppercase; letter-spacing: 0.1em; }
+    /* --text-micro, not --register-label -- an eyebrow tag, see .state above. */
+    .scan-label { color: var(--text-secondary); font-size: var(--text-micro); text-transform: uppercase; letter-spacing: 0.1em; }
     .scan sb-sparkline { flex: 1 1 auto; min-width: 80px; max-width: 320px; }
 
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }

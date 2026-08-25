@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
-import { CHART_CHROME } from './chart/chart-frame';
+import { CHART_CHROME, token } from './chart/chart-frame';
 
 export interface LineChartPoint {
   date: string;
@@ -70,16 +70,14 @@ export function seriesPath(
  * tokens.css, and unharmonised with the valence law: nothing stopped one of
  * them drifting into green, on a screen where green means gain.
  *
- * Read through getComputedStyle because a canvas/SVG stroke needs a resolved
- * value, not a `var()`. `test-setup.ts` injects tokens.css into the test
- * document, so this resolves under vitest too.
+ * Read through `token()` (`chart-frame.ts`) because an SVG stroke needs a
+ * resolved value, not a `var()`. `test-setup.ts` injects tokens.css into the
+ * test document, so this resolves under vitest too.
  */
 const SERIES = Array.from({ length: 8 }, (_, i) => `--chart-${i + 1}`);
 
 function seriesColour(index: number): string {
-  return getComputedStyle(document.documentElement)
-    .getPropertyValue(SERIES[index % SERIES.length])
-    .trim();
+  return token(SERIES[index % SERIES.length]);
 }
 
 /**
@@ -148,8 +146,8 @@ function seriesColour(index: number): string {
     .tooltip {
       position: absolute;
       padding: var(--space-6) var(--space-8);
-      background: ${CHART_CHROME.tooltipSurface};
-      border: 1px solid ${CHART_CHROME.tooltipBorder};
+      background: var(${CHART_CHROME.tooltipSurface});
+      border: 1px solid var(${CHART_CHROME.tooltipBorder});
       border-radius: var(--radius);
       font-size: var(--text-chip);
       pointer-events: none;

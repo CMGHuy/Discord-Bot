@@ -447,7 +447,9 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
     dl > div { display: flex; justify-content: space-between; gap: var(--register-pad); }
     .group {
       color: var(--text-muted);
-      font-size: var(--register-label);
+      /* --text-micro, not --register-label -- this is an eyebrow tag; see
+         styles.css's register comment for why an eyebrow must not grow. */
+      font-size: var(--text-micro);
       text-transform: uppercase;
       letter-spacing: 0.1em;
     }
