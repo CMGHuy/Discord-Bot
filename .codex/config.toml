@@ -1,0 +1,7 @@
+# Project-scoped Codex permissions. This layer applies after the repository is
+# marked trusted in Codex.
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[windows]
+sandbox = "elevated"
