@@ -262,8 +262,27 @@ Every accent follows D1.
 | Alerts | confidence level | ANSI plan line + `+12.0% −6.0% 2.4R` |
 | Simple-alerts | confidence level *(was direction — the D1 casualty)* | same, no chart |
 | Closed-trades | outcome — win / loss / scratch | `▲ 197.15 → 214.90` + realised `+8.9% +1.6R` |
-| Retrospective | the day's net outcome | day totals; no ANSI block |
+| Retrospective | **n/a — it has no embed** (see below) | plain text, unchanged in shape |
 | Firehose | confidence level (naturally duller) | same as alerts |
+
+### Correction: the retrospective has no embed
+
+Found while planning, and recorded rather than quietly designed around.
+
+`build_daily_retrospective` (`swingbot/core/tracking/retrospective.py:377`)
+returns `list[str]` — plain-text chunks, posted by `_post_retrospective`
+(`swingbot/commands/scanning.py:1160`). There is no `discord.Embed` anywhere in
+that module, so it has no accent bar to assign a meaning to.
+
+It is chunked precisely because a day's recap exceeds Discord's per-message
+limit, and an embed description caps at 4096 characters with 6000 across the
+whole embed. Converting it would be a redesign of what the retrospective *is*,
+not a restyle of how it looks.
+
+**So the retrospective adopts the kit's formatters and glyphs only** —
+`fmt_price`, `fmt_pct`, `fmt_r`, `direction_glyph` — and keeps its plain-text
+shape. It is exempt from D1's accent rule for the honest reason that it has
+nothing to accent. Making it an embed is out of scope for v62.
 
 ### The alert, in full
 
