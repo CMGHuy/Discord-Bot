@@ -421,6 +421,22 @@ def entry_line(plan) -> str:
     return f"Entry: market ~{plan.trigger_price:.2f}"
 
 
+def _entry_price(plan) -> float:
+    """plan.entry_price, falling back to trigger_price for a plan whose
+    entry was never set (unfilled stop/limit entry)."""
+    return plan.entry_price if plan.entry_price is not None else plan.trigger_price
+
+
+def _sizing_snapshot(entry, plan) -> dict | None:
+    """A fresh account.compute_position_size() snapshot, or None if sizing
+    data isn't available -- swallows the exception rather than crashing,
+    same render-time-snapshot convention used everywhere in this module."""
+    try:
+        return account.compute_position_size(entry, plan.stop_loss)
+    except Exception:
+        return None
+
+
 def leg_rows(plan, currency: str, force_zero: bool = False) -> tuple[str, str]:
     """('50% @ 102.00 → +$17.50', '50% → TP2 105.00 / trail') for the
     two-leg sizing block. P&L uses the SAME sizing snapshot source as the
@@ -429,12 +445,9 @@ def leg_rows(plan, currency: str, force_zero: bool = False) -> tuple[str, str]:
     force_zero=True (kill switch, Edge plan E47) zeroes the P&L this leg
     would otherwise show -- entries are paused, so 0 is the honest number,
     not a theoretical one."""
-    entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+    entry = _entry_price(plan)
     frac1 = plan.tp1_fraction
-    try:
-        sizing = account.compute_position_size(entry, plan.stop_loss)
-    except Exception:
-        sizing = None
+    sizing = _sizing_snapshot(entry, plan)
     if force_zero and sizing:
         sizing = dict(sizing, shares=0.0)
     tp1_pct = f"{frac1:.0%} @ {plan.tp1:.2f}"
@@ -459,13 +472,10 @@ def banked_leg_pct_and_amount(plan, exit_price: float, fraction: float) -> tuple
     that returns nothing usable -- same render-time-snapshot convention and
     same silent-omission fallback leg_rows() already uses, not a zero and
     not a crash."""
-    entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+    entry = _entry_price(plan)
     sign = 1 if plan.direction == "bullish" else -1
     pct = (exit_price - entry) / entry * 100 * sign
-    try:
-        sizing = account.compute_position_size(entry, plan.stop_loss)
-    except Exception:
-        sizing = None
+    sizing = _sizing_snapshot(entry, plan)
     amount = None
     if sizing and sizing.get("shares"):
         amount = sizing["shares"] * fraction * (exit_price - entry) * sign
