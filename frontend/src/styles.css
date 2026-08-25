@@ -142,3 +142,39 @@ a:hover {
   inset: 0;
   background: var(--scrim);
 }
+
+/* The two registers — spec v54 D1.
+ *
+ * DENSITY IS A PROPERTY OF THE PANEL, NOT THE APP.
+ *
+ * Which one a panel takes is decided by what it ANSWERS:
+ *
+ *   presentation  "how am I doing?"      hero figures, room to breathe
+ *   instrument    "what happened to row 4,192?"   tight rows, more per screen
+ *
+ * Declared per PANEL, not per workspace, because analytics is genuinely both
+ * — its summary strip presents and its tables instrument — and a
+ * workspace-level rule would force it to misdeclare itself. A workspace sets
+ * a default on its root; a panel may opt out.
+ *
+ * Both pull from the same closed scales. Neither adds a value. */
+.register-presentation {
+  --register-gap: var(--space-20);
+  --register-pad: var(--space-20);
+  --register-figure: var(--text-metric);
+  --register-label: var(--text-table);
+}
+
+.register-instrument {
+  --register-gap: var(--space-8);
+  --register-pad: var(--space-10);
+  --register-figure: var(--text-table);
+  --register-label: var(--text-micro);
+}
+
+/* Panels read the four variables rather than the register class, so a panel
+ * that opts out of its workspace's default needs no special-casing. */
+.register-presentation,
+.register-instrument {
+  gap: var(--register-gap);
+}
