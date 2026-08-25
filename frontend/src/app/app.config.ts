@@ -18,6 +18,7 @@ import {
 } from './api/interceptors';
 import { routes } from './app.routes';
 import { PwaUpdateService } from './pwa/pwa-update.service';
+import { provideRouteFocus } from './shell/route-focus';
 import { SessionStore } from './stores/session.store';
 
 export const appConfig: ApplicationConfig = {
@@ -47,6 +48,10 @@ export const appConfig: ApplicationConfig = {
     // rather than through ActivatedRoute, which keeps a detail component
     // testable without standing up a router.
     provideRouter(routes, withComponentInputBinding()),
+    // In an SPA a route change moves nothing on its own: focus stays on the
+    // nav link just activated and the new page is never announced. This
+    // moves it to the new workspace's <h1> once it has actually rendered.
+    provideRouteFocus(),
     // Order matters and is not alphabetical. Requests pass through this list
     // front to back; responses and errors unwind back to front. So:
     //   auth      is LAST, which makes it FIRST on the way back -- it sees a

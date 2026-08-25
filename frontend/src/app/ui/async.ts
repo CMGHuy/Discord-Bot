@@ -33,6 +33,11 @@ export type AsyncEmptyReason = 'no-data-yet' | 'measured-zero';
   imports: [EmptyStateComponent],
   host: { '[attr.aria-busy]': 'loading() ? "true" : null' },
   template: `
+    <!-- One region per sb-async, and therefore one per fetch-backed surface.
+         Per-CELL live regions on a push-driven UI announce continuously,
+         which is unusable — worse than silence. The caller supplies a
+         summary ("3 trades updated"), not a running commentary. -->
+    <span class="sr-only" aria-live="polite" aria-atomic="true">{{ announce() }}</span>
     @if (error(); as message) {
       <div class="failed" role="alert">
         <p class="failed-text">{{ message }}</p>
@@ -66,6 +71,15 @@ export type AsyncEmptyReason = 'no-data-yet' | 'measured-zero';
   `,
   styles: `
     :host { display: block; position: relative; }
+
+    .sr-only {
+      position: absolute;
+      width: 1px; height: 1px;
+      margin: -1px; padding: 0;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
 
     .failed { padding: var(--space-14); text-align: center; }
     .failed-text { color: var(--neg); font-size: var(--text-table); }
@@ -135,6 +149,8 @@ export class Async {
   readonly staleAsOf = input<string | null>(null);
   readonly skeletonRows = input(6);
   readonly skeletonCols = input(4);
+  /** A short summary of what just changed, or null. Announced politely. */
+  readonly announce = input<string | null>(null);
 
   readonly retry = output<void>();
 

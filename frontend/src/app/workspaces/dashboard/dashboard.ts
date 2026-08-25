@@ -20,6 +20,7 @@ import { Button } from '../../ui/button';
 import { ChipRow } from '../../ui/chip-row';
 import { ColumnDef, Density, EmptyState, RowContext } from '../../ui/data-table/data-table.types';
 import { ConfidenceCell } from '../../ui/confidence-cell';
+import { Flash } from '../../ui/flash';
 import { PlanCell } from '../../ui/plan-cell';
 import { StatusCell } from '../../ui/status-cell';
 import {
@@ -86,7 +87,7 @@ import { TradeGroup } from './trade-group';
   imports: [
     RouterLink, MetricCard, MetricChip, Magnitude, Panel, TradeGroup,
     StatusCell, PlanCell, ConfidenceCell, Async, Button, ChipRow, ControlRow,
-    PlanLifecycleDiagram, RowLink, SectionHead,
+    Flash, PlanLifecycleDiagram, RowLink, SectionHead,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // v54 D1: this workspace answers "how am I doing?" -- hero figures, room
@@ -153,6 +154,7 @@ import { TradeGroup } from './trade-group';
       emptyHint="The scan found no qualifying setups in this scope."
       [skeletonRows]="3"
       [skeletonCols]="5"
+      [announce]="announce()"
       (retry)="store.load()"
     >
     <!-- SR58 / reorg: Realised today, Account balance, Open P&L, Risk used
@@ -462,7 +464,7 @@ import { TradeGroup } from './trade-group';
          cell already shows. -->
     <ng-template #pnlCell let-row>
       @if (row.pnl_pct !== null) {
-        <span [class]="pnlClass(row.pnl_pct)">
+        <span [sbFlash]="row.pnl_pct" [class]="pnlClass(row.pnl_pct)">
           {{ fmtPct(row.pnl_pct) }}
           <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
         </span>
@@ -471,7 +473,7 @@ import { TradeGroup } from './trade-group';
           class="pnl-plan"
           title="Live P&L, then projected P&L at target and at stop"
         >
-          <span [class]="pnlClass(livePnlPct(row))">
+          <span [sbFlash]="livePnlPct(row)" [class]="pnlClass(livePnlPct(row))">
             {{ fmtPct(livePnlPct(row)) }}
             <!-- Only once shares exist to have a dollar value at all -- a
                  PENDING row still projects a live PERCENTAGE off its
@@ -505,11 +507,12 @@ import { TradeGroup } from './trade-group';
          scale, not an observed max, here specifically). -->
     <ng-template #rMultipleCell let-row>
       @if (row.r_multiple !== null) {
-        <span [class]="pnlClass(row.r_multiple)">{{ fmtSigned(row.r_multiple) }}</span>
+        <span [sbFlash]="row.r_multiple" [class]="pnlClass(row.r_multiple)">{{ fmtSigned(row.r_multiple) }}</span>
         <sb-magnitude [value]="row.r_multiple" [max]="R_MAGNITUDE_MAX" />
       } @else {
         <span
           class="expected"
+          [sbFlash]="expectedR(row)"
           [class]="pnlClass(expectedR(row))"
           title="Projected R if price reaches target"
         >{{ fmtSigned(expectedR(row)) }}</span>
@@ -817,6 +820,13 @@ export class Dashboard {
    *  this scope), not missing data -- measured-zero, not no-data-yet. */
   protected readonly async = computed(() =>
     asyncInputs(this.store, { isEmpty: (data) => data.open_trades === 0 }),
+  );
+
+  /** A polite summary for the workspace's one live region — null while there
+   *  is nothing loaded yet to summarise. Text that does not change does not
+   *  re-announce; this is not a running commentary on every push. */
+  protected readonly announce = computed(() =>
+    this.store.empty() ? null : `${this.store.openTrades()} open trades`,
   );
 
   /** The suffix a money card renders after its number — a leading space, then

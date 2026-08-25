@@ -189,3 +189,10 @@ a:hover {
   --register-figure: var(--text-table);
   --register-label: var(--text-micro);
 }
+
+/* Cell-level value feedback. Scoped to the cell, never the card -- see
+   tokens.css on why a card flash under real-time push is a flicker. */
+@keyframes flash-up { from { background: var(--pos-soft); } to { background: transparent; } }
+@keyframes flash-down { from { background: var(--neg-soft); } to { background: transparent; } }
+.flash-up { animation: flash-up var(--dur-base) var(--ease-out); }
+.flash-down { animation: flash-down var(--dur-base) var(--ease-out); }

@@ -71,7 +71,22 @@
 
   --text: #e9ebf5;
   --text-secondary: #9ba3bd;
-  --text-muted: #6d7590;
+  /* v54 Task 42: the ONE deliberate exception to "no existing token changes
+   * value" (see plan's Global Constraints). Measured AA failure at the
+   * original #6d7590 -- 4.14:1 on --surface, 3.80:1 on --surface-raised,
+   * 3.47:1 on --surface-overlay, all below the 4.5:1 gate -- on a token used
+   * at --text-micro (11px) for real, readable labels (nav group headers,
+   * chip captions), not large text and not a rule/divider like
+   * --text-faint below. #878ea4 clears 4.5:1 on all four surfaces (worst
+   * case 4.85:1 on --surface-overlay, verified in contrast.spec.ts) with a
+   * safety margin over the gate; that is a documented, tested, single-token
+   * change with a measured reason, which is the opposite of the silent
+   * breakage the constraint exists to prevent. Recorded in the v54 spec's
+   * Non-goals section. */
+  --text-muted: #878ea4;
+  /* --text-faint is a RULE AND DIVIDER colour (~2.3:1 on --surface) -- never
+   * text that must be read. contrast.spec.ts's `no-text-uses-text-faint`
+   * assumes this and this comment is what it checks for. */
   --text-faint: #464d63;
 
   --pos: #17c98e;

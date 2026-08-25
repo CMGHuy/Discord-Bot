@@ -66,9 +66,23 @@ locally.
   face, no new logotype, no re-skin. v18/v20/v22 are extended, not superseded.
 - **No light theme.** `tokens.css` argues this out already and nothing here
   reopens it.
-- **No token churn.** Every existing token keeps its current value and
-  meaning. This spec adds tokens; it changes none, so no component can break
-  silently by being left alone.
+- **No token churn, with one deliberate, recorded exception.** Every existing
+  token keeps its current value and meaning — this spec adds tokens; with one
+  exception it changes none, so no component can break silently by being left
+  alone. **The exception: `_5`'s Task 42 measured `--text-muted` (`#6d7590`)
+  failing WCAG AA at `--text-micro` size on all three raised surfaces —
+  4.14:1 on `--surface`, 3.80:1 on `--surface-raised`, 3.47:1 on
+  `--surface-overlay`, all below the 4.5:1 gate — carrying real, readable
+  labels (nav group headers, chip captions), not large text and not a
+  rule/divider like `--text-faint`. Every other way out collided with
+  something worse (see the plan's Task 42): lowering the gate is a threshold
+  move the project's own rules forbid on convenience grounds, and
+  "large text"/"non-text" exemptions do not factually apply. Changed to
+  `#878ea4`, which clears 4.5:1 on all four surfaces (worst case 4.85:1 on
+  `--surface-overlay`) — human-partner decided 2026-08-25.** This is a
+  single documented, tested value change with
+  a measured reason, which is the opposite of the silent breakage this
+  constraint exists to prevent; it does not license a second one.
 - **No new data.** Nothing here asks the API for a field it does not serve.
 - **No workspace rewrites.** `analytics.ts` (1582 lines) and `trade-detail.ts`
   (1083) are large, but splitting them is not this plan's job and would

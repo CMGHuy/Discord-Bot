@@ -8,6 +8,8 @@ import {
   viewChild,
 } from '@angular/core';
 
+import { FocusTrap } from './focus-trap';
+
 /* Spec 3's layout inventory: panel, tab bar, split view, drawer. */
 
 /**
@@ -204,16 +206,28 @@ export class ControlRow {
 @Component({
   selector: 'sb-drawer',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [FocusTrap],
   template: `
     <dialog #dialog class="drawer elev-overlay" (close)="closed.emit()" (cancel)="closed.emit()">
-      <header>
-        <h2>{{ heading() }}</h2>
-        <button type="button" class="close" aria-label="Close" (click)="dismiss()">×</button>
-      </header>
-      <div class="body"><ng-content /></div>
+      <!-- Only present while open, so sbFocusTrap's constructor/ngOnDestroy
+           pair runs on exactly open and close -- see focus-trap.ts. -->
+      @if (open()) {
+        <div sbFocusTrap class="drawer-content">
+          <header>
+            <h2>{{ heading() }}</h2>
+            <button type="button" class="close" aria-label="Close" (click)="dismiss()">×</button>
+          </header>
+          <div class="body"><ng-content /></div>
+        </div>
+      }
     </dialog>
   `,
   styles: `
+    /* Structural only -- exists so sbFocusTrap has one element to own, not
+       a layout box. Everything inside lays out exactly as if it were still
+       a direct child of dialog. */
+    .drawer-content { display: contents; }
+
     .drawer {
       width: min(480px, 100vw);
       max-width: none;

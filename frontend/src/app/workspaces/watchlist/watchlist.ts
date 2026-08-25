@@ -210,6 +210,7 @@ function sortValue(row: Ticker, key: string): string | number | null {
       emptyHint="Add a ticker to start scanning."
       [skeletonRows]="10"
       [skeletonCols]="4"
+      [announce]="announce()"
       (retry)="store.load()"
     >
       <sb-panel heading="Watchlist" [flush]="true">
@@ -353,6 +354,12 @@ export class Watchlist {
       },
       { isEmpty: (tickers) => tickers.length === 0 },
     ),
+  );
+
+  /** A polite summary for the workspace's one live region — null until the
+   *  watchlist has loaded. */
+  protected readonly announce = computed(() =>
+    this.store.empty() ? null : `${this.store.count()} tickers`,
   );
 
   protected readonly tabs = TABS;

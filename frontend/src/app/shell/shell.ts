@@ -28,6 +28,12 @@ interface NavEntry {
   icon: IconName;
 }
 
+interface NavGroup {
+  id: string;
+  label: string;
+  entries: NavEntry[];
+}
+
 /**
  * Sidebar, workspace header, connection status, toast host, outlet.
  *
@@ -62,18 +68,44 @@ export class Shell {
   private readonly preferences = inject(PreferencesStore);
   private readonly viewport = inject(ViewportService);
 
-  /** The seven workspaces, in the IA's order: what is true now, then the
-   *  entities, then the two analysis views, then the two administrative
-   *  ones. */
-  protected readonly nav: NavEntry[] = [
-    { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-    { path: '/trades', label: 'Trades', icon: 'trades' },
-    { path: '/analytics', label: 'Analytics', icon: 'analytics' },
-    { path: '/calendar', label: 'Calendar', icon: 'calendar' },
-    { path: '/watchlist', label: 'Watchlist', icon: 'watchlist' },
-    { path: '/risk', label: 'Risk', icon: 'risk' },
-    { path: '/system', label: 'System', icon: 'system' },
-    { path: '/versions', label: 'Versions', icon: 'versions' },
+  /**
+   * Three groups, because eight flat entries stopped communicating.
+   *
+   * The split is by QUESTION, not by data type:
+   *   MONITOR  what is happening right now
+   *   REVIEW   what already happened
+   *   SYSTEM   what the bot itself is doing
+   *
+   * The /ui gallery is deliberately absent — it is a developer surface,
+   * reachable by URL.
+   */
+  protected readonly navGroups: NavGroup[] = [
+    {
+      id: 'nav-monitor',
+      label: 'MONITOR',
+      entries: [
+        { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+        { path: '/watchlist', label: 'Watchlist', icon: 'watchlist' },
+        { path: '/risk', label: 'Risk', icon: 'risk' },
+      ],
+    },
+    {
+      id: 'nav-review',
+      label: 'REVIEW',
+      entries: [
+        { path: '/trades', label: 'Trades', icon: 'trades' },
+        { path: '/calendar', label: 'Calendar', icon: 'calendar' },
+        { path: '/analytics', label: 'Analytics', icon: 'analytics' },
+      ],
+    },
+    {
+      id: 'nav-system',
+      label: 'SYSTEM',
+      entries: [
+        { path: '/system', label: 'System', icon: 'system' },
+        { path: '/versions', label: 'Versions', icon: 'versions' },
+      ],
+    },
   ];
 
   /**
