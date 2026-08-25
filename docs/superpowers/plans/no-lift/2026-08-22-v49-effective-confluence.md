@@ -21,7 +21,9 @@ see "Reverting" below.
 
 **Measured, found degenerate, deliberately not merged.** Tasks 1-4 were built
 and are green (full suite 2196 passed, 0 failed, 0 xfailed) on branch
-`worktree-2026-08-22-v49-effective-confluence`. **Tasks 5-11 — Phase 3 wiring
+`worktree-2026-08-22-v49-effective-confluence` (worktree/branch removed
+2026-08-25; commits preserved at tag `no-lift/2026-08-22-v49-effective-confluence`).
+**Tasks 5-11 — Phase 3 wiring
 and the entire Phase 4 pre-registration — were not run.** The one-shot
 VALIDATION budget was NOT spent and remains available.
 

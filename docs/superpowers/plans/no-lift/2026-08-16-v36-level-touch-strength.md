@@ -2,7 +2,9 @@
 
 > **CLOSED 2026-08-22, no-go — NOT merged to `main`.** Tasks 1–5's code was
 > implemented and tested on worktree branch
-> `worktree-2026-08-16-v36-level-touch-strength` only; Tasks 6/7 stopped
+> `worktree-2026-08-16-v36-level-touch-strength` (worktree/branch removed
+> 2026-08-25; commits preserved at tag `no-lift/2026-08-16-v36-level-touch-strength`)
+> only; Tasks 6/7 stopped
 > short of VALIDATION. See
 > `docs/superpowers/results/2026-08-22-level-touch-strength-train.md`:
 > the confidence factor measured net negative on TRAIN, the selection
