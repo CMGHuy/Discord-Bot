@@ -35,7 +35,8 @@ import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, SortSpec } from '../../ui/data-table/data-table.types';
 import { FilterBar, FilterChips } from '../../ui/filter-bar';
-import { dateTime, money, pct, text } from '../../ui/format';
+import { dateTime, money, signed, text } from '../../ui/format';
+import { Magnitude } from '../../ui/magnitude';
 import { Select, TextInput } from '../../ui/form-controls';
 import { ControlRow } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
@@ -96,6 +97,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
     DirectionArrow,
     PlanCell,
     ConfidenceCell,
+    Magnitude,
     QualityChip,
     RowLink,
     SectionHead,
@@ -298,12 +300,22 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
     </ng-template>
 
     <!-- See dashboard.ts's own pnlCell -- same pairing, same reasoning:
-         the % alone doesn't say how much money that was. -->
+         the % alone doesn't say how much money that was. v54 Task 28: the
+         header ('P&L %') already names the unit, so the cell no longer
+         repeats it -- signed() not fmtPct(). -->
     <ng-template #pnlCell let-row>
       <span [class]="pnlClass(row.pnl_pct)">
-        {{ fmtPct(row.pnl_pct) }}
+        {{ fmtSigned(row.pnl_pct) }}
         <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
       </span>
+    </ng-template>
+
+    <!-- v54 Task 28: sb-magnitude beneath the R figure -- the header ('R')
+         already names the unit, so the cell drops it (signed(), not
+         rMultiple()). -->
+    <ng-template #rMultipleCell let-row>
+      <span [class]="pnlClass(row.r_multiple)">{{ fmtSigned(row.r_multiple) }}</span>
+      <sb-magnitude [value]="row.r_multiple" [max]="maxRMultiple()" />
     </ng-template>
 
     <ng-template #tierCell let-row>
@@ -597,6 +609,7 @@ export class Trades {
   private readonly directionCell = viewChild.required<TemplateRef<unknown>>('directionCell');
   private readonly planCell = viewChild.required<TemplateRef<unknown>>('planCell');
   private readonly pnlCell = viewChild.required<TemplateRef<unknown>>('pnlCell');
+  private readonly rMultipleCell = viewChild.required<TemplateRef<unknown>>('rMultipleCell');
   private readonly tierCell = viewChild.required<TemplateRef<unknown>>('tierCell');
   private readonly confidenceCell =
     viewChild.required<TemplateRef<unknown>>('confidenceCell');
@@ -615,6 +628,7 @@ export class Trades {
       direction: this.directionCell(),
       plan: this.planCell(),
       pnl_pct: this.pnlCell(),
+      r_multiple: this.rMultipleCell(),
       tier: this.tierCell(),
       confidence_level: this.confidenceCell(),
       opened_at: this.openedCell(),
@@ -696,7 +710,10 @@ export class Trades {
     });
   }
 
-  protected fmtPct = pct;
+  // v54 Task 28: signed() not pct()/rMultiple() -- both columns' headers
+  // already name the unit ('P&L %', 'R'), so the cell drops it instead of
+  // repeating it down every row.
+  protected fmtSigned = signed;
   protected fmtText = text;
   protected fmtDate = dateTime;
   protected fmtNum(value: number | null, decimals = 2): string {
@@ -706,6 +723,14 @@ export class Trades {
   protected fmtMoney(value: number | null): string {
     return money(value, this.connection.currency());
   }
+
+  /** sb-magnitude's max, from the currently-loaded page rather than the
+   *  whole trade history -- a page the user is actually looking at, not a
+   *  scale that shifts under them as older extreme trades page out. Floored
+   *  at 1 so a page of small/absent R figures doesn't divide by ~0. */
+  protected readonly maxRMultiple = computed(() =>
+    Math.max(1, ...this.store.rows().map((r) => Math.abs(r.r_multiple ?? 0))),
+  );
 
   protected pnlClass(value: number | null): string {
     if (value === null) return '';
