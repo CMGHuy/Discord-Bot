@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
+import { CHART_CHROME } from './chart/chart-frame';
+
 export interface LineChartPoint {
   date: string;
   value: number;
@@ -146,8 +148,8 @@ function seriesColour(index: number): string {
     .tooltip {
       position: absolute;
       padding: var(--space-6) var(--space-8);
-      background: var(--surface-overlay);
-      border: 1px solid var(--border-strong);
+      background: ${CHART_CHROME.tooltipSurface};
+      border: 1px solid ${CHART_CHROME.tooltipBorder};
       border-radius: var(--radius);
       font-size: var(--text-chip);
       pointer-events: none;

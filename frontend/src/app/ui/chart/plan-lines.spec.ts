@@ -33,6 +33,9 @@ const PALETTE: ChartPalette = {
   posSoft: 'pos-soft-colour',
   negSoft: 'neg-soft-colour',
   infoSoft: 'info-soft-colour',
+  axis: 'axis-colour',
+  tooltipSurface: 'tooltip-surface-colour',
+  tooltipBorder: 'tooltip-border-colour',
 };
 
 const FULL: ChartLevels = {

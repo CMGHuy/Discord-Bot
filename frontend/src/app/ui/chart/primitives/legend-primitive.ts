@@ -111,11 +111,14 @@ class LegendRenderer implements IPrimitivePaneRenderer {
       const box = legendLayout([...lines], fontSize, mediaSize.width);
 
       context.save();
-      context.fillStyle = this.palette.surface;
+      // v54 D5: the box reads as this chart's version of the other three
+      // charts' `.tooltip` -- `chart-frame.ts`'s CHART_CHROME.tooltipSurface
+      // / tooltipBorder, not the plain chart surface/grid border.
+      context.fillStyle = this.palette.tooltipSurface;
       context.globalAlpha = 0.85;
       context.fillRect(MARGIN, MARGIN, box.width, box.height);
       context.globalAlpha = 1;
-      context.strokeStyle = this.palette.border;
+      context.strokeStyle = this.palette.tooltipBorder;
       context.lineWidth = 1;
       context.strokeRect(MARGIN + 0.5, MARGIN + 0.5, box.width - 1, box.height - 1);
 

@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
+import { CHART_CHROME } from './chart/chart-frame';
+
 /** One bar: a bin's label and how many observations fell in it. */
 export interface HistogramBin {
   label: string;
@@ -77,7 +79,10 @@ export interface HistogramBin {
       align-items: center;
       gap: var(--space-8);
     }
-    .label, .count { color: var(--text-secondary); font-size: var(--text-chip); }
+    /* v54 D5: "The bin labels are the axis" (this file's own docstring) --
+       so they take CHART_CHROME's tick colour/size, the same as every other
+       chart's axis text, not the body-text pair every other label uses. */
+    .label, .count { color: ${CHART_CHROME.tickColour}; font-size: ${CHART_CHROME.tickSize}; }
     .count { text-align: right; }
     .track {
       height: 10px;

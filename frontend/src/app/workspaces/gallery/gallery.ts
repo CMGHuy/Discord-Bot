@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 
+import { ChartResponse } from '../../api/models';
 import { Async, AsyncEmptyReason } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { ChartContainer } from '../../ui/chart-container';
@@ -303,6 +304,27 @@ interface GalleryRow {
       </sb-chart-container>
     </sb-panel>
 
+    <!-- -- charts -- one shared chrome (v54 D5) -------------------------------- -->
+    <sb-section-head [heading]="'Charts'" [level]="2" />
+    <p class="section-help">
+      The same series, drawn four ways. Axis, grid, tick size/colour and tooltip come
+      from one shared chrome (CHART_CHROME) and must be indistinguishable across all four.
+    </p>
+    <sb-panel heading="Sparkline">
+      <sb-sparkline [points]="chartComparisonSeries" label="Comparison series" />
+    </sb-panel>
+    <sb-panel heading="Histogram">
+      <sb-histogram [bins]="chartComparisonBins" />
+    </sb-panel>
+    <sb-panel heading="Line chart">
+      <sb-line-chart [series]="chartComparisonLineSeries" />
+    </sb-panel>
+    <sb-panel heading="Trade chart">
+      <sb-chart-container [loading]="false" [error]="null" [hasData]="true" [height]="200" caption="Comparison series">
+        <sb-trade-chart [data]="chartComparisonTradeData" />
+      </sb-chart-container>
+    </sb-panel>
+
     <!-- -- icons -------------------------------------------------------------- -->
     <sb-section-head [heading]="'Icons'" [level]="2" />
     <sb-panel>
@@ -450,6 +472,61 @@ export class Gallery {
       ],
     },
   ];
+
+  /** v54 D5 -- Task 37's chrome-comparison section: the same eight-point
+   *  series, shaped for each chart's own input contract, purely so their
+   *  shared chrome (axis, grid, tick size/colour, tooltip) is directly
+   *  comparable side by side. Not meant to be a meaningful reading of any
+   *  one chart's data -- see chartComparisonBins in particular, which turns
+   *  a price series into bins only for this reason. */
+  protected readonly chartComparisonSeries = [102, 104, 103, 107, 105, 109, 108, 112];
+
+  protected readonly chartComparisonBins: HistogramBin[] = [
+    { label: 'Day 1', count: 102 },
+    { label: 'Day 2', count: 104 },
+    { label: 'Day 3', count: 103 },
+    { label: 'Day 4', count: 107 },
+    { label: 'Day 5', count: 105 },
+    { label: 'Day 6', count: 109 },
+    { label: 'Day 7', count: 108 },
+    { label: 'Day 8', count: 112 },
+  ];
+
+  protected readonly chartComparisonLineSeries: LineChartSeries[] = [
+    {
+      name: 'Comparison',
+      points: [
+        { date: '2026-01-01', value: 102 },
+        { date: '2026-01-02', value: 104 },
+        { date: '2026-01-03', value: 103 },
+        { date: '2026-01-04', value: 107 },
+        { date: '2026-01-05', value: 105 },
+        { date: '2026-01-06', value: 109 },
+        { date: '2026-01-07', value: 108 },
+        { date: '2026-01-08', value: 112 },
+      ],
+    },
+  ];
+
+  protected readonly chartComparisonTradeData: ChartResponse = {
+    ticker: 'DEMO',
+    ohlcv: [
+      { t: 1767225600, o: 101, h: 103, l: 100, c: 102, v: 1000 },
+      { t: 1767312000, o: 102, h: 105, l: 101, c: 104, v: 1200 },
+      { t: 1767398400, o: 104, h: 105, l: 102, c: 103, v: 900 },
+      { t: 1767484800, o: 103, h: 108, l: 102, c: 107, v: 1500 },
+      { t: 1767571200, o: 107, h: 107, l: 104, c: 105, v: 1100 },
+      { t: 1767657600, o: 105, h: 110, l: 104, c: 109, v: 1700 },
+      { t: 1767744000, o: 109, h: 109, l: 106, c: 108, v: 1300 },
+      { t: 1767830400, o: 108, h: 113, l: 107, c: 112, v: 1600 },
+    ],
+    indicators: {},
+    volume_profile: [],
+    levels: null,
+    overlays: [],
+    notes: [],
+    currency: '$',
+  };
 
   protected readonly iconNames: IconName[] = [
     'dashboard', 'trades', 'analytics', 'calendar', 'watchlist', 'risk',

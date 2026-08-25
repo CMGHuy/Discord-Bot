@@ -83,6 +83,22 @@ export interface ChartPalette {
   posSoft: string;
   negSoft: string;
   infoSoft: string;
+  /** v54 D5: the right price scale's and time scale's own border —
+   *  `chart-frame.ts`'s `CHART_CHROME.axis`. `--border-strong`, not
+   *  `--border`: an axis is a boundary a reader orients against, not a
+   *  hairline between rows the way the grid is. lightweight-charts paints to
+   *  a canvas, so this reads the bare custom property through `token()`
+   *  rather than importing `CHART_CHROME` directly — its values are `var()`
+   *  expressions for the three CSS-styled charts, not resolvable colours. */
+  axis: string;
+  /** The on-canvas legend's box background — `CHART_CHROME.tooltipSurface` —
+   *  so `LegendPrimitive`'s corner box (this chart's nearest equivalent to
+   *  the other three charts' `.tooltip`) reads as the same surface. */
+  tooltipSurface: string;
+  /** The legend box's border — `CHART_CHROME.tooltipBorder`. Same token as
+   *  `axis` (both `--border-strong`); named separately because the two serve
+   *  different roles, matching `CHART_CHROME`'s own two separate keys. */
+  tooltipBorder: string;
 }
 
 export function chartPalette(): ChartPalette {
@@ -102,18 +118,31 @@ export function chartPalette(): ChartPalette {
     posSoft: token('--pos-soft'),
     negSoft: token('--neg-soft'),
     infoSoft: token('--info-soft'),
+    axis: token('--border-strong'),
+    tooltipSurface: token('--surface-overlay'),
+    tooltipBorder: token('--border-strong'),
   };
 }
 
-/** Chart options built from the palette. Grid lines are drawn in `--border`,
- *  the same hairline the tables use, so the chart recedes into the page
- *  rather than sitting on it as a separate visual system. */
+/** Chart chrome shared with the other three charts (v54 D5,
+ *  `chart-frame.ts`'s `CHART_CHROME`): grid lines in `--border`, the same
+ *  hairline the tables use, so the chart recedes into the page rather than
+ *  sitting on it as a separate visual system; the axis border one step up,
+ *  in `--border-strong`; scale-label text at `--text-micro`, the same size
+ *  every chart's axis/tick text now shares. `CHART_CHROME`'s own values are
+ *  `var()` expressions meant for a stylesheet — this reads the same
+ *  underlying custom properties through `palette`'s `token()` calls instead,
+ *  because lightweight-charts paints to a canvas and needs a resolved
+ *  number/colour, not a CSS variable reference. Read inside the function,
+ *  not cached at module load, for the same reason `chartPalette()` is: a
+ *  chart built after a token change must get the new value. */
 export function chartOptions(palette: ChartPalette): DeepPartial<ChartOptions> {
   return {
     autoSize: true,
     layout: {
       background: { color: palette.surface },
       textColor: palette.textMuted,
+      fontSize: parseFloat(token('--text-micro')) || 11,
       attributionLogo: false,
       // v5 draws the pane separators itself; left at the library's defaults
       // they are a mid-grey from its own theme, which is the one part of the
@@ -128,8 +157,8 @@ export function chartOptions(palette: ChartPalette): DeepPartial<ChartOptions> {
       vertLines: { color: palette.border },
       horzLines: { color: palette.border },
     },
-    rightPriceScale: { borderColor: palette.border },
-    timeScale: { borderColor: palette.border, timeVisible: false },
+    rightPriceScale: { borderColor: palette.axis },
+    timeScale: { borderColor: palette.axis, timeVisible: false },
     crosshair: {
       mode: CrosshairMode.Magnet,
       vertLine: { color: palette.textMuted, labelBackgroundColor: palette.accent },
