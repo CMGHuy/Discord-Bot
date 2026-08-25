@@ -384,3 +384,48 @@ def test_import_skips_unknown_keys_and_names_them(logged_in, env_file):
 def test_an_empty_import_is_rejected(logged_in, env_file):
     assert_error(logged_in.post("/api/v1/system/settings/import", json={"text": "   "}),
                  "invalid", 400)
+
+
+def test_a_newline_in_a_value_cannot_forge_a_second_setting(logged_in, env_file):
+    """_build_env_text writes `f"{key}={value}"` per line, so a value carrying
+    a newline forges an extra KEY=VALUE line. _validate type-checks only
+    number/float/select, leaving every text/password field a write primitive
+    for arbitrary config -- and the audit log records only the field the
+    client named, so settings_audit.jsonl and .env disagree permanently."""
+    env_file({"LOG_LEVEL": "WARNING", "REVERSAL_ENABLED": "true"})
+
+    resp = logged_in.put("/api/v1/system/settings", json={
+        "settings": {"DISCORD_CHANNEL_TRADES_ID": "123\nREVERSAL_ENABLED=false"}})
+
+    assert_error(resp, "invalid", 400)
+    assert env_file.read()["REVERSAL_ENABLED"] == "true", \
+        "a newline in an unrelated field forged a REVERSAL_ENABLED line"
+
+
+def test_a_carriage_return_in_a_value_is_rejected_too(logged_in, env_file):
+    """dotenv strips \r as line-ending whitespace, so a lone CR is the same
+    injection primitive as \n on a file later read back on Windows."""
+    env_file({"LOG_LEVEL": "WARNING"})
+    assert_error(
+        logged_in.put("/api/v1/system/settings",
+                      json={"settings": {"DISCORD_CHANNEL_TRADES_ID": "123\rLOG_LEVEL=DEBUG"}}),
+        "invalid", 400)
+
+
+def test_import_skips_a_value_carrying_a_line_break(logged_in, env_file):
+    """The import door reaches the same `f"{key}={value}"` writer. dotenv
+    parses a QUOTED multi-line value happily, and it is written back
+    unquoted -- forging a settings line the pasted file never declared.
+    Consistent with this path's existing contract (a bad numeric is skipped,
+    not rejected), the offending key is skipped rather than 400ing."""
+    env_file({"LOG_LEVEL": "WARNING", "REVERSAL_ENABLED": "true"})
+
+    resp = logged_in.post("/api/v1/system/settings/import", json={
+        "text": 'DISCORD_CHANNEL_TRADES_ID="123\nREVERSAL_ENABLED=false"\n'})
+
+    assert resp.status_code == 200
+    raw = env_file.path.read_text(encoding="utf-8")
+    assert "\nREVERSAL_ENABLED=false" not in raw, \
+        f"a quoted multi-line import value forged a raw line:\n{raw}"
+    assert env_file.read()["REVERSAL_ENABLED"] == "true", \
+        "a quoted multi-line import value forged a REVERSAL_ENABLED line"

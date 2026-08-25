@@ -402,6 +402,14 @@ def dedup_scan_items(items: list) -> list:
     return dedup_sector_items(deduped)
 
 
+def _item_ticker(item) -> str:
+    """A real ScanItem keeps its ticker on `.result`, not on itself -- reading
+    `item.ticker` raises AttributeError. Lightweight doubles carry it directly,
+    so both shapes resolve here rather than at each call site."""
+    result = getattr(item, "result", None)
+    return getattr(result, "ticker", None) or getattr(item, "ticker", "") or ""
+
+
 def dedup_sector_items(items: list) -> list:
     """Portfolio-level dedup (Task E78): multiple same-sector signals in one
     scan collapse to the highest-follow-score one, gaining `also_qualifying`
@@ -420,7 +428,7 @@ def dedup_sector_items(items: list) -> list:
     for sec, group in by_sector.items():
         group.sort(key=lambda i: getattr(i, "follow_score", 0) or 0, reverse=True)
         best = group[0]
-        best.also_qualifying = [g.ticker for g in group[1:]]
+        best.also_qualifying = [_item_ticker(g) for g in group[1:]]
         out.append(best)
     out.sort(key=lambda i: getattr(i, "follow_score", 0) or 0, reverse=True)
     return out

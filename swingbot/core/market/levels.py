@@ -680,7 +680,13 @@ def build_scenarios(current_price: float, supports: list, resistances: list, min
     if resistances and supports and current_price:
         t1 = resistances[0]
         dist1 = (t1.price - current_price) / current_price * 100
-        stop_price, stop_sources = supports[0].price, supports[0].sources
+        # Copy every source list out of its Level (here and below). Confidence
+        # scoring appends to `scenario.target_sources` IN PLACE, and the two
+        # directions draw on the SAME Level objects -- bullish target vs bearish
+        # stop are both resistances[0]. Sharing the list let a bullish-only
+        # label ("Candlestick: Hammer") surface as a source of the bearish
+        # trade's STOP, and mutated the Level the admin chart reads back.
+        stop_price, stop_sources = supports[0].price, list(supports[0].sources)
         stop_dist = abs(current_price - stop_price) / current_price * 100
         constraints = _check_constraints(dist1, stop_dist, current_price, stop_price, t1.price)
         if all(constraints.values()):
@@ -696,12 +702,12 @@ def build_scenarios(current_price: float, supports: list, resistances: list, min
                 if leg1 > 0 and leg2 <= leg1 * MAX_TARGET2_LEG_MULTIPLE:
                     target2_price = t2.price
                     target2_dist = (t2.price - current_price) / current_price * 100
-                    target2_sources = t2.sources
+                    target2_sources = list(t2.sources)
             scenarios.append(Scenario(
                 direction="bullish", entry=current_price, market_price=current_price,
                 stop_loss=stop_price, stop_sources=stop_sources,
                 stop_distance_pct=stop_dist, tight_stop=stop_dist < atr_floor, atr_floor_pct=atr_floor,
-                take_profit=t1.price, target_distance_pct=dist1, target_sources=t1.sources,
+                take_profit=t1.price, target_distance_pct=dist1, target_sources=list(t1.sources),
                 target2_price=target2_price, target2_distance_pct=target2_dist, target2_sources=target2_sources,
                 constraints=constraints,
             ))
@@ -709,7 +715,7 @@ def build_scenarios(current_price: float, supports: list, resistances: list, min
     if supports and resistances and current_price:
         t1 = supports[0]
         dist1 = (current_price - t1.price) / current_price * 100
-        stop_price, stop_sources = resistances[0].price, resistances[0].sources
+        stop_price, stop_sources = resistances[0].price, list(resistances[0].sources)
         stop_dist = abs(stop_price - current_price) / current_price * 100
         constraints = _check_constraints(dist1, stop_dist, current_price, stop_price, t1.price)
         if all(constraints.values()):
@@ -722,12 +728,12 @@ def build_scenarios(current_price: float, supports: list, resistances: list, min
                 if leg1 > 0 and leg2 <= leg1 * MAX_TARGET2_LEG_MULTIPLE:
                     target2_price = t2.price
                     target2_dist = (current_price - t2.price) / current_price * 100
-                    target2_sources = t2.sources
+                    target2_sources = list(t2.sources)
             scenarios.append(Scenario(
                 direction="bearish", entry=current_price, market_price=current_price,
                 stop_loss=stop_price, stop_sources=stop_sources,
                 stop_distance_pct=stop_dist, tight_stop=stop_dist < atr_floor, atr_floor_pct=atr_floor,
-                take_profit=t1.price, target_distance_pct=dist1, target_sources=t1.sources,
+                take_profit=t1.price, target_distance_pct=dist1, target_sources=list(t1.sources),
                 target2_price=target2_price, target2_distance_pct=target2_dist, target2_sources=target2_sources,
                 constraints=constraints,
             ))

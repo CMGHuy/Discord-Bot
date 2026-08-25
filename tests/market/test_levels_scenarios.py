@@ -103,3 +103,32 @@ def test_target_candidates_preserves_build_level_map_order(scenario_env):
         [lv.price for lv in resistances]
     assert levels.target_candidates(supports, resistances, "bearish") == \
         [lv.price for lv in supports]
+
+
+def test_scenario_source_lists_are_not_shared_between_directions():
+    """A bullish scenario's `target_sources` and a bearish scenario's
+    `stop_sources` are both built from `resistances[0].sources`. Confidence
+    scoring appends labels to `target_sources` IN PLACE (confidence.py's
+    "Bollinger Squeeze Breakout" / "Candlestick: ..." appends), so handing
+    both scenarios the same list object lets a bullish-only label leak onto
+    the bearish trade's STOP sources -- and onto the shared Level itself,
+    which the admin chart later reads to pick an overlay."""
+    price = 100.0
+    supports = [levels.Level(price=95.0, sources=["S-a"]),
+                levels.Level(price=90.0, sources=["S-b"])]
+    resistances = [levels.Level(price=105.0, sources=["R-a"]),
+                   levels.Level(price=110.0, sources=["R-b"])]
+    scenarios = levels.build_scenarios(price, supports, resistances,
+                                       min_reward_pct=1.0, atr_floor=0.0,
+                                       min_stop_distance_pct=0.5,
+                                       max_stop_distance_pct=15.0,
+                                       min_risk_reward=0.0)
+    bull = next(s for s in scenarios if s.direction == "bullish")
+    bear = next(s for s in scenarios if s.direction == "bearish")
+
+    bull.target_sources.append("Candlestick: Hammer")
+
+    assert "Candlestick: Hammer" not in bear.stop_sources, \
+        "bullish target label leaked onto the bearish scenario's stop sources"
+    assert "Candlestick: Hammer" not in resistances[0].sources, \
+        "scoring mutated the shared Level's own source list"

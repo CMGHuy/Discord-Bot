@@ -723,3 +723,27 @@ def test_deep_scan_report_renders():
     out = deep_scan_report([Item("AAA", 80, 1.2), Item("BBB", 60, 0.4)])
     assert "AAA" in out and "MACD" in out and "1.2%" in out
     assert "watchlist candidates" in out.lower()
+
+
+def test_sector_dedup_reads_ticker_off_the_real_scanitem_shape():
+    """`test_sector_dedup_collapses_to_best` above uses a stub carrying
+    `.ticker` directly, a shape the scan never produces: the real ScanItem
+    keeps its ticker on `.result`. dedup_sector_items is a documented no-op
+    today only because nothing stamps `.sector` yet -- the moment sector
+    stamping lands, `g.ticker` raises AttributeError inside dedup_scan_items,
+    which sits in no try/except and takes the whole scan down."""
+    from swingbot.core.scanning.engine import ScanItem, dedup_sector_items
+
+    class _Result:
+        def __init__(self, ticker):
+            self.ticker = ticker
+
+    best = ScanItem(result=_Result("XOM"), plan=None, conf=None)
+    other = ScanItem(result=_Result("CVX"), plan=None, conf=None)
+    best.sector = other.sector = "Energy"
+    best.follow_score, other.follow_score = 80, 70
+
+    out = dedup_sector_items([best, other])
+
+    assert [i.result.ticker for i in out] == ["XOM"]
+    assert out[0].also_qualifying == ["CVX"]

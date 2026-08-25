@@ -138,6 +138,14 @@ def _validate(values: Mapping) -> tuple[str, str] | None:
 
     for key, raw in values.items():
         f = fields[key]
+        # _build_env_text writes one `KEY=value` line per field, so a value
+        # carrying a line break forges an extra setting -- and the audit log
+        # records only the field the client named, leaving settings_audit.jsonl
+        # and .env permanently disagreeing. Every field type is checked: the
+        # type-specific rules below never reach `text`/`password`, which is
+        # exactly where an arbitrary string can arrive.
+        if isinstance(raw, str) and ("\n" in raw or "\r" in raw):
+            return ("invalid", f"{f.label} may not contain a line break")
         if f.type in ("number", "float") and not (raw is None or raw == ""):
             try:
                 number = float(raw)

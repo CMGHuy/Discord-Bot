@@ -244,6 +244,14 @@ def import_env_text(text: str) -> tuple[int, list[str]]:
         if f is None:
             unknown.append(key)
             continue
+        if "\n" in value or "\r" in value:
+            # dotenv parses a QUOTED multi-line value happily, but the writer
+            # below emits `KEY=value` unquoted -- so every line after the first
+            # becomes its own forged setting. Whether the forgery or the real
+            # line wins is just section ordering. Skipped rather than rejected,
+            # the same contract a bad numeric gets: this path applies a pasted
+            # file field by field, where partial success is the point.
+            continue
         if f.type in ("number", "float"):
             try:
                 float(value)
