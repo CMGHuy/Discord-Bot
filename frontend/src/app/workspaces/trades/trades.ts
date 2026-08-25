@@ -81,6 +81,12 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
 @Component({
   selector: 'sb-trades',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // v54 D1: this workspace is a table (plus the row-expansion detail grid
+  // below it) -- tight rows, more per screen -- so it defaults to the
+  // instrument register. On the host (a static class, not a template
+  // wrapper) because :host is the ancestor the register's four variables
+  // need to reach.
+  host: { class: 'register-instrument' },
   providers: [TradesStore],
   imports: [
     Async,
@@ -424,21 +430,28 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
 
     .actions { display: inline-flex; gap: var(--space-4); }
 
+    /* v54 D1: instrument register. gap/padding were --space-20/--space-10
+       --space-14 -- both shrink to the tighter --register-pad rung (10px),
+       which is the whole point of this being a table's row-expansion detail
+       rather than a presentation panel. dl's own inner gap and .actions'
+       stay hardcoded at --space-4, below the register-pad rung -- routing
+       them through the var would GROW those, which is exactly the
+       regression this register exists to prevent. */
     .groups {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: var(--space-20);
-      padding: var(--space-10) var(--space-14);
+      gap: var(--register-pad);
+      padding: var(--register-pad);
     }
     dl { display: grid; gap: var(--space-4); align-content: start; }
-    dl > div { display: flex; justify-content: space-between; gap: var(--space-10); }
+    dl > div { display: flex; justify-content: space-between; gap: var(--register-pad); }
     .group {
       color: var(--text-muted);
-      font-size: var(--text-micro);
+      font-size: var(--register-label);
       text-transform: uppercase;
       letter-spacing: 0.1em;
     }
-    dt { color: var(--text-secondary); font-size: var(--text-table); }
+    dt { color: var(--text-secondary); font-size: var(--register-label); }
     dd { color: var(--text); font-size: var(--text-table); }
   `,
 })

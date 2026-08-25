@@ -44,6 +44,12 @@ const TAB_IDS = new Set<string>(SYSTEM_TABS);
   selector: 'sb-system',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [TabBar, SettingsTab, LogsTab, ScanTab, SectionHead],
+  // v54 D1: the three tabs behind this shell (Settings, Logs, Scan) are all
+  // dense operational surfaces -- tight rows, more per screen -- so it
+  // defaults to the instrument register. On the host (a static class, not a
+  // template wrapper) because :host is the ancestor the register's four
+  // variables need to reach.
+  host: { class: 'register-instrument' },
   providers: [SystemStore],
   template: `
     <sb-section-head heading="System">
@@ -76,7 +82,10 @@ const TAB_IDS = new Set<string>(SYSTEM_TABS);
        Clamping the track is what makes the children's own overflow-x
        containers the thing that scrolls instead.
        No backticks in here: these styles live in a TS template literal. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
+    /* v54 D1: --space-20 was this rule's own literal before the registers
+       existed; --register-pad's instrument rung is --space-10, so the gap
+       between the tab bar and the active tab's body shrinks. */
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
     .dirty { color: var(--warn); font-size: var(--text-table); }
   `,
 })

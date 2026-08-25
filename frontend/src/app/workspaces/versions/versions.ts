@@ -43,6 +43,12 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [VersionsStore],
   imports: [Button, ControlRow, PaginationComponent, SectionHead, Async],
+  // v54 D1: this workspace is a lane strip plus a change stream -- both
+  // dense, repeating rows, more per screen -- so it defaults to the
+  // instrument register. On the host (a static class, not a template
+  // wrapper) because :host is the ancestor the register's four variables
+  // need to reach.
+  host: { class: 'register-instrument' },
   template: `
     <sb-section-head heading="Versions">
       @if (store.stale()) {
@@ -195,7 +201,10 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     /* minmax(0, 1fr): an auto track is floored at its widest child, which is
        how one panel takes the page sideways.
        No backticks in here: these styles live in a TS template literal. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
+    /* v54 D1: --space-20 was this rule's own literal before the registers
+       existed; --register-pad's instrument rung is --space-10, so the gap
+       between the headline/strip/legend/stream sections below shrinks. */
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
 
     .stale code, .muted code { font-family: var(--font-mono); font-size: var(--text-micro); }
 
@@ -207,8 +216,8 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .basis { margin: 0; color: var(--text-secondary); font-size: var(--text-table);
              max-width: 68ch; }
 
-    .headline { display: flex; align-items: baseline; gap: var(--space-10); flex-wrap: wrap; }
-    .label { font-size: var(--text-micro); color: var(--text-faint);
+    .headline { display: flex; align-items: baseline; gap: var(--register-pad); flex-wrap: wrap; }
+    .label { font-size: var(--register-label); color: var(--text-faint);
               text-transform: uppercase; letter-spacing: .04em; }
 
     /* Chips WRAP and lanes STACK. This is the property the whole design rests
@@ -220,7 +229,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
        defaults for this denser, monospaced release-version scale; the
        variant owns background, border and the .on state. */
     .chip {
-      font-family: var(--font-mono); font-size: var(--text-micro);
+      font-family: var(--font-mono); font-size: var(--register-label);
       color: var(--text-muted);
       padding: var(--space-2) var(--space-6);
     }
@@ -232,7 +241,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
               position: relative; overflow: hidden; }
     .lane { display: flex; align-items: center; gap: var(--space-8); }
     .lane-name { width: 4.5rem; flex: none; font-family: var(--font-mono);
-                 font-size: var(--text-micro); color: var(--text-muted); }
+                 font-size: var(--register-label); color: var(--text-muted); }
     .track { position: relative; flex: 1; height: 15px; min-width: 0; }
     /* The 2px surface-colour ring is the separator between two segments that
        happen to land on adjacent shades -- not a border drawn AROUND data,
@@ -282,9 +291,9 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .tooltip .when { color: var(--text-faint); }
 
     .legend {
-      display: flex; flex-wrap: wrap; gap: var(--space-14);
+      display: flex; flex-wrap: wrap; gap: var(--register-pad);
       margin: 0; padding: 0; list-style: none;
-      font-size: var(--text-micro); color: var(--text-muted);
+      font-size: var(--register-label); color: var(--text-muted);
       margin-left: calc(4.5rem + var(--space-8));
     }
     .legend span { display: flex; align-items: center; gap: var(--space-6); }
@@ -297,7 +306,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .ticks {
       display: flex; justify-content: space-between;
       margin-left: calc(4.5rem + var(--space-8));
-      font-family: var(--font-mono); font-size: var(--text-micro); color: var(--text-faint);
+      font-family: var(--font-mono); font-size: var(--register-label); color: var(--text-faint);
     }
     .ticks .now { color: var(--text-muted); }
 
@@ -314,9 +323,9 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .link { border: 0; font: inherit; text-decoration: underline; }
 
     .stream { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column;
-              gap: var(--space-10); }
-    .entry { display: flex; gap: var(--space-14); align-items: baseline; }
-    .when { flex: none; width: 6rem; font-family: var(--font-mono); font-size: var(--text-micro);
+              gap: var(--register-pad); }
+    .entry { display: flex; gap: var(--register-pad); align-items: baseline; }
+    .when { flex: none; width: 6rem; font-family: var(--font-mono); font-size: var(--register-label);
             color: var(--text-faint); }
     .what { min-width: 0; }
     .subject { margin: var(--space-4) 0 0; color: var(--text-secondary);

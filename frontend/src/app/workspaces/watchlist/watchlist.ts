@@ -97,6 +97,12 @@ function sortValue(row: Ticker, key: string): string | number | null {
   selector: 'sb-watchlist',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [DataTable, Panel, Button, ConfirmDialog, ControlRow, TabBar, TextInput, EarningsCalendar, RowLink, SectionHead, Async],
+  // v54 D1: the whole point of this workspace (spec v14 Decision 9) is the
+  // ticker table -- tight rows, more per screen -- so it defaults to the
+  // instrument register. On the host (a static class, not a template
+  // wrapper) because :host is the ancestor the register's four variables
+  // need to reach.
+  host: { class: 'register-instrument' },
   providers: [WatchlistStore],
   template: `
     <sb-section-head heading="Watchlist">
@@ -269,10 +275,15 @@ function sortValue(row: Ticker, key: string): string | number | null {
        Clamping the track is what makes the children's own overflow-x
        containers the thing that scrolls instead.
        No backticks in here: these styles live in a TS template literal. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
+    /* v54 D1: --space-20 was this rule's own literal before the registers
+       existed; --register-pad's instrument rung is --space-10, so both
+       gaps below shrink. */
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
 
-    .head-status { display: flex; align-items: baseline; gap: var(--space-14); }
-    .count { color: var(--text-secondary); font-size: var(--text-table); }
+    .head-status { display: flex; align-items: baseline; gap: var(--register-pad); }
+    /* The count caption beside the section head -- --text-table (13px)
+       shrinks to the instrument rung (11px); never grows. */
+    .count { color: var(--text-secondary); font-size: var(--register-label); }
 
     /* Was align-items: flex-start, which is why the Add button sat level with
        the input's top edge rather than its box. sb-control-row's flex-end is
@@ -313,7 +324,7 @@ function sortValue(row: Ticker, key: string): string | number | null {
     }
     .hit-symbol { font-family: var(--font-mono); }
     .hit-name { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .hit-have { margin-left: auto; color: var(--text-faint); font-size: var(--text-chip); }
+    .hit-have { margin-left: auto; color: var(--text-faint); font-size: var(--register-label); }
 
     .result { margin-top: var(--space-10); color: var(--text-secondary); font-size: var(--text-table); }
 
@@ -323,7 +334,7 @@ function sortValue(row: Ticker, key: string): string | number | null {
        which zeroes the body's own padding -- restores just the left/right
        inset so this note lines up with the panel heading above it, same
        fix as Dashboard's .panel-note. */
-    .panel-note { padding: var(--space-10) var(--space-14) 0; }
+    .panel-note { padding: var(--register-pad) var(--register-pad) 0; }
   `,
 })
 export class Watchlist {
