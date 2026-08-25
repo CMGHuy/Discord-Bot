@@ -53,7 +53,12 @@ export type MetricTone = 'plain' | 'pnl' | 'caution';
       letter-spacing: 0.1em;
     }
     .value {
-      font-size: var(--text-metric);
+      /* v54 D1: the register class on an ancestor panel/workspace sets
+         --register-figure to the rung its density picked; the fallback is
+         what this card rendered before the registers existed, so a card with
+         no register ancestor (not yet migrated, or deliberately opted out)
+         is unchanged. */
+      font-size: var(--register-figure, var(--text-metric));
       font-weight: 700;
       line-height: 1.1;
       /* No transition on the value: with push, numbers change whenever the
@@ -62,7 +67,7 @@ export type MetricTone = 'plain' | 'pnl' | 'caution';
     }
     .sub {
       color: var(--text-muted);
-      font-size: var(--text-table);
+      font-size: var(--register-label, var(--text-table));
     }
     .pos { color: var(--pos); }
     .neg { color: var(--neg); }

@@ -19,6 +19,11 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Button, ControlRow, Drawer, MetricCard, Panel, SectionHead, Select, Async],
+  // v54 D1: "how am I doing this month?" -- hero totals, room to breathe --
+  // so this workspace defaults to the presentation register. On the host
+  // (a static class, not a template wrapper) because :host IS the grid
+  // container the register's variables need to reach.
+  host: { class: 'register-presentation' },
   // Provided on the component: created on entry, destroyed on exit, so the
   // workspace cannot hold a stale month while you are looking elsewhere.
   providers: [CalendarStore],
@@ -210,8 +215,13 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     </sb-drawer>
   `,
   styles: `
-    /* No backticks in here: these styles live in a TS template literal. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
+    /* No backticks in here: these styles live in a TS template literal.
+       v54: gap reads --register-pad, set by the register-presentation class
+       on this same host element (above) -- --space-20 was this rule's own
+       literal before, and register-presentation's rung is the same value,
+       so this changes nothing visually while making the rhythm follow the
+       register instead of a hardcoded token. */
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
 
     /* The month stepper: two buttons with the month between them. Centred
        rather than bottom-aligned like the controls around it, because the

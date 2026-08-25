@@ -89,6 +89,12 @@ import { TradeGroup } from './trade-group';
     PlanLifecycleDiagram, RowLink, SectionHead,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // v54 D1: this workspace answers "how am I doing?" -- hero figures, room
+  // to breathe -- so it defaults to the presentation register. Set on the
+  // host (a static class, not a template wrapper) because :host IS the grid
+  // container the register's variables need to reach; a class in the
+  // template's own markup would land one level too deep.
+  host: { class: 'register-presentation' },
   // Provided here rather than in root: the store is created on entry and
   // destroyed on exit, so a workspace does not hold stale state while you
   // are looking at another one. Each `sb-trade-group` below provides its own
@@ -554,10 +560,14 @@ import { TradeGroup } from './trade-group';
        unused) -- reported as the four tables running together with no
        separation at all, so real margin plus each one's own card border
        (rather than a shared hairline that reads as just another row
-       divider) is what actually answers that, not a bigger number. */
+       divider) is what actually answers that, not a bigger number.
+       v54: --space-20 was this rule's own literal before the registers
+       existed -- it is also register-presentation's --register-pad rung, so
+       reading the variable changes nothing here and lets this workspace's
+       gutter follow its register if that ever changes. */
     sb-trade-group + sb-trade-group {
       display: block;
-      margin-top: var(--space-20);
+      margin-top: var(--register-pad);
     }
 
     .footnote {
@@ -587,8 +597,13 @@ import { TradeGroup } from './trade-group';
        the workspace past the viewport and took the page sideways with it.
        Clamping the track is what makes the children's own overflow-x
        containers the thing that scrolls instead.
-       No backticks in here: these styles live in a TS template literal. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
+       No backticks in here: these styles live in a TS template literal.
+       v54: gap reads --register-pad, set by the register-presentation class
+       on this same host element (above) -- --space-20 was this rule's own
+       literal before, and register-presentation's rung is the same value,
+       so this changes nothing visually while making the rhythm follow the
+       register instead of a hardcoded token. */
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
 
     /* Flexbox, not a fixed grid track count, across all three rows below
        (.primary, .chips, .lifecycle): equal width was never the actual
@@ -674,7 +689,10 @@ import { TradeGroup } from './trade-group';
          column width. Stacks below 720px instead (media query at the
          bottom), matching every other row on this page. */
       flex-wrap: nowrap;
-      gap: var(--space-20);
+      /* v54: --space-20 before -- same value as register-presentation's
+         --register-pad rung, so this is a no-op swap that lets the gutter
+         follow the register. */
+      gap: var(--register-pad);
       /* width: 100% alongside max-width, not max-width alone: this is a
          GRID item (the Dashboard's own :host) that ALSO happens to be a
          flex container -- under that combination "auto" resolved to a
