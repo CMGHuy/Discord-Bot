@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { chartOptions, chartPalette, tokenPx } from './chart-theme';
 
@@ -86,12 +86,57 @@ describe('chartOptions', () => {
     expect(options.grid?.horzLines?.color).toBe(palette.border);
   });
 
-  it('sizes scale text from --text-micro, not a library default', () => {
+  it('sizes scale text through tokenPx, not the old parseFloat(token(...)) bug', () => {
+    // jsdom does not implement computed-value resolution for font-size on a
+    // detached probe, so under test `var(--text-micro)` never resolves and
+    // tokenPx() falls through to ITS OWN fallback argument regardless of
+    // whether chartOptions() calls it correctly -- comparing
+    // options.layout?.fontSize against a second, independent tokenPx() call
+    // (or against the literal 11) would pass identically whether
+    // chartOptions() calls tokenPx() or has reverted to the original bug.
+    // Mocking what the probe's OWN getComputedStyle call resolves to is the
+    // only way to tell those two cases apart under this test environment:
+    // only the tokenPx() code path creates a probe element and reads it
+    // back through getComputedStyle at all.
+    const probeFontSize = '19px';
+    const real = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el, pseudo) => {
+      if (el instanceof HTMLElement && el.style.fontSize.startsWith('var(')) {
+        return { fontSize: probeFontSize } as CSSStyleDeclaration;
+      }
+      return real(el, pseudo);
+    });
+
     const options = chartOptions(chartPalette());
 
-    // tokenPx, not parseFloat(token(...)) -- a custom property's own calc()
-    // is never resolved by getPropertyValue, so this is the one way to
-    // pin the actual resolved pixel value rather than the fallback.
-    expect(options.layout?.fontSize).toBe(tokenPx('--text-micro', 11));
+    expect(options.layout?.fontSize).toBe(19);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+});
+
+describe('tokenPx', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reads back a real resolved font-size as a number', () => {
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+      fontSize: '23px',
+    } as CSSStyleDeclaration);
+
+    expect(tokenPx('--whatever', 11)).toBe(23);
+  });
+
+  it('falls back when the probe never resolves to a number', () => {
+    // What jsdom itself actually returns for `font-size: var(--x)` on a
+    // detached element -- the literal unresolved string, not a px value.
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+      fontSize: 'var(--whatever)',
+    } as CSSStyleDeclaration);
+
+    expect(tokenPx('--whatever', 11)).toBe(11);
   });
 });
