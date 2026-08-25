@@ -184,10 +184,11 @@ def _draw_trendline(ax, recent_len: int, window_bars: int, slope: float, interce
 def _floor_pivot_prices(df: pd.DataFrame) -> dict:
     """Classic floor trader pivots off the most recently completed bar -- same formula as levels.py."""
     prev = df.iloc[-2] if len(df) > 1 else df.iloc[-1]
-    pp = (prev["High"] + prev["Low"] + prev["Close"]) / 3
-    span = prev["High"] - prev["Low"]
-    return {"Floor Pivot": pp, "Floor R1": pp + span, "Floor S1": pp - span,
-            "Floor R2": pp + span * 1.5, "Floor S2": pp - span * 1.5}
+    high, low = prev["High"], prev["Low"]
+    pp = (high + low + prev["Close"]) / 3
+    span = high - low
+    return {"Floor Pivot": pp, "Floor R1": 2 * pp - low, "Floor S1": 2 * pp - high,
+            "Floor R2": pp + span, "Floor S2": pp - span}
 
 
 def _fib_anchor_points(df: pd.DataFrame, lookback: int) -> dict:

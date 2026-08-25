@@ -288,18 +288,23 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
 
     try:
         # Classic floor pivot points, from the most recently completed
-        # bar: PP = (H+L+C)/3, with R1/S1 and R2/S2 projected off it --
-        # a long-standing, widely-used way to project the next
+        # bar: PP = (H+L+C)/3, with R1/S1/R2/S2 projected off it -- a
+        # long-standing, widely-used way to project the next
         # support/resistance from nothing but the last session's range.
+        # Standard formula (Investopedia/Babypips, matches every retail
+        # charting platform's "floor trader" pivots):
+        #   R1 = 2*PP - L        S1 = 2*PP - H
+        #   R2 = PP + (H - L)    S2 = PP - (H - L)
         prev = df.iloc[-2] if len(df) > 1 else df.iloc[-1]
-        pp = (prev["High"] + prev["Low"] + prev["Close"]) / 3
-        span = prev["High"] - prev["Low"]
+        high, low = prev["High"], prev["Low"]
+        pp = (high + low + prev["Close"]) / 3
+        span = high - low
         if pd.notna(pp) and span > 0:
             candidates.append((float(pp), "Floor Pivot"))
-            candidates.append((float(pp + span), "Floor R1"))
-            candidates.append((float(pp - span), "Floor S1"))
-            candidates.append((float(pp + span * 1.5), "Floor R2"))
-            candidates.append((float(pp - span * 1.5), "Floor S2"))
+            candidates.append((float(2 * pp - low), "Floor R1"))
+            candidates.append((float(2 * pp - high), "Floor S1"))
+            candidates.append((float(pp + span), "Floor R2"))
+            candidates.append((float(pp - span), "Floor S2"))
     except Exception:
         pass
 

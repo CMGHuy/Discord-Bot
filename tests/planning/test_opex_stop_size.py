@@ -39,6 +39,11 @@ def test_stop_is_wider_on_monthly_opex(df, monkeypatch, monthly_opex):
     `entry_price`); on a bullish plan the stop sits below entry, so widening
     can only move it DOWN.
     """
+    # Isolate from level-lifecycle's own stop-widening (default-on -- see
+    # tests/market/test_levels_lifecycle_wiring.py), which would otherwise
+    # re-price the stop against a real nearby level and mask whether opex's
+    # widening itself moved it.
+    monkeypatch.setattr(config, "LEVEL_LIFECYCLE_STOPS_ENABLED", False, raising=False)
     wide = _plan(df)
     monkeypatch.setattr(opex, "current_tier", lambda *a, **k: None)
     base = _plan(df)

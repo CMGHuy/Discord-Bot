@@ -123,7 +123,12 @@ def test_stop_mult_still_respects_the_max_risk_cap():
     assert close - capped_stop == pytest.approx(close * HORIZONS["4w"]["max_risk_pct"] / 100)
 
 
-def test_build_strategy_plan_threads_an_explicit_mult(df):
+def test_build_strategy_plan_threads_an_explicit_mult(df, monkeypatch):
+    # Isolate the mult-scaling seam from level-lifecycle's own stop-widening
+    # (default-on -- see tests/market/test_levels_lifecycle_wiring.py), which
+    # would otherwise re-price the stop against a real nearby level and mask
+    # whether stop_mult itself scaled the risk distance.
+    monkeypatch.setattr(config, "LEVEL_LIFECYCLE_STOPS_ENABLED", False, raising=False)
     base, wide = _plan(df), _plan(df, stop_mult=1.2)
     base_risk = base.trigger_price - base.stop_loss
     wide_risk = wide.trigger_price - wide.stop_loss
@@ -142,6 +147,8 @@ def test_flag_off_never_reads_the_journal(df, monkeypatch):
 
 
 def test_flag_on_resolves_the_mult_from_the_journal(df, monkeypatch):
+    # Same isolation as test_build_strategy_plan_threads_an_explicit_mult above.
+    monkeypatch.setattr(config, "LEVEL_LIFECYCLE_STOPS_ENABLED", False, raising=False)
     monkeypatch.setattr(config, "DATA_DRIVEN_STOPS_ENABLED", True)
     monkeypatch.setattr(plan_engine, "_journal_entries",
                         lambda: _winners([2.5] * 60))          # -> clamped 1.3
