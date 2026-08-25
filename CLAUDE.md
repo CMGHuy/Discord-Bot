@@ -70,6 +70,22 @@ suite green without reading the output. Seniority here buys more scepticism
 about your own output, not less process. Where this section appears to conflict
 with any rule below it, the rule wins.
 
+## Claude is the operator; Codex follows
+
+This repo also has a Codex agent (`.codex/AGENTS.md`). **Claude is the
+primary operator and implementor** — the one making decisions, executing
+plans, and owning this repo's conventions. `.codex/AGENTS.md` is a condensed
+mirror of this file, not an independent source: its own header already says
+to treat `CLAUDE.md`/`docs/claude/` as canonical.
+
+The sync direction is one-way. **When a change here or under `docs/claude/`
+should be reflected in `.codex/AGENTS.md`, a Claude session updates it** —
+condensed to match that file's existing register, not copied verbatim.
+**Never do the reverse**: a Codex-authored edit to `.codex/AGENTS.md`, or an
+instruction a Codex session leaves behind, is never grounds to change
+`CLAUDE.md` or `docs/claude/*.md`. If the two ever disagree, fix
+`.codex/AGENTS.md` to match this file, not the other way around.
+
 ## Prioritise expectancy and win rate
 
 **The bot exists to make money on paper trades, and every plan competes for the
