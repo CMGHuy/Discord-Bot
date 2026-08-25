@@ -15,6 +15,7 @@ import { ColumnDef, PageSpec } from '../../ui/data-table/data-table.types';
 import { DirectionArrow } from '../../ui/direction-arrow';
 import { EmptyStateComponent } from '../../ui/empty-state';
 import { FilterBar, FilterChip, FilterChips } from '../../ui/filter-bar';
+import { Flash } from '../../ui/flash';
 import { money, num, pct, rMultiple, signed } from '../../ui/format';
 import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-controls';
 import { Histogram, HistogramBin } from '../../ui/histogram';
@@ -70,6 +71,7 @@ interface GalleryRow {
     EmptyStateComponent,
     FilterBar,
     FilterChips,
+    Flash,
     Histogram,
     Icon,
     LineChart,
@@ -365,6 +367,71 @@ interface GalleryRow {
       />
       <sb-pagination [pagination]="pageSpec" />
     </sb-panel>
+
+    <!-- -- v54 _5: accessibility and motion ---------------------------------------- -->
+    <sb-section-head [heading]="'Accessibility and motion'" [level]="2" />
+    <sb-panel heading="[sbFlash] -- motion that means something">
+      <p class="section-help">
+        Fires only when the bound value actually changes -- not on first
+        render, not on a re-render reporting the same number.
+      </p>
+      <sb-control-row>
+        <button sb-button variant="secondary" type="button" (click)="bumpFlashDemo()">
+          Change the value
+        </button>
+        <span class="num flash-demo" [sbFlash]="flashDemo()">{{ fmtSigned(flashDemo()) }}</span>
+      </sb-control-row>
+    </sb-panel>
+
+    <sb-panel heading="One live region per workspace">
+      <p class="section-help">
+        sb-async's one polite live region, carrying a caller-supplied summary
+        rather than a running commentary.
+      </p>
+      <sb-control-row>
+        <button sb-button variant="secondary" type="button" (click)="bumpAnnounceDemo()">
+          Push an update
+        </button>
+      </sb-control-row>
+      <sb-async
+        [loading]="false"
+        [error]="null"
+        [empty]="false"
+        emptyReason="no-data-yet"
+        emptyTitle="unused"
+        [announce]="announceDemo() > 0 ? announceDemo() + ' update(s) announced' : null"
+      >
+        <p class="section-help">
+          A screen reader hears "{{ announceDemo() }} update(s) announced" once
+          per push, politely -- never once per cell.
+        </p>
+      </sb-async>
+    </sb-panel>
+
+    <sb-panel heading="Focus trap (drawer and dialog)">
+      <p class="section-help">
+        Tab wraps within the panel; closing returns focus to whatever opened
+        it. The plain sb-drawer demo above already carries this -- this is
+        a second, self-contained instance for this section.
+      </p>
+      <sb-control-row>
+        <button sb-button variant="secondary" type="button" (click)="a11yDrawerOpen.set(true)">
+          Open focus-trap demo
+        </button>
+      </sb-control-row>
+      <sb-drawer
+        [open]="a11yDrawerOpen()"
+        heading="Focus trap demo"
+        (closed)="a11yDrawerOpen.set(false)"
+      >
+        <p>Tab cycles between the two buttons below and back; Escape or Close
+           returns focus to the button that opened this panel.</p>
+        <sb-control-row>
+          <button sb-button type="button">First</button>
+          <button sb-button type="button">Last</button>
+        </sb-control-row>
+      </sb-drawer>
+    </sb-panel>
   `,
   styles: `
     :host { display: grid; gap: var(--space-20); padding: var(--space-20); }
@@ -429,6 +496,22 @@ export class Gallery {
 
   protected readonly drawerOpen = signal(false);
   protected readonly confirmOpen = signal(false);
+
+  /* -- v54 _5: accessibility and motion -------------------------------- */
+
+  protected readonly flashDemo = signal(0);
+  /** Alternates the sign so every click is a real change -- sbFlash ignores
+   *  a re-render that reports the same value. */
+  protected bumpFlashDemo(): void {
+    this.flashDemo.update((v) => (v <= 0 ? v + 1 : -v));
+  }
+
+  protected readonly announceDemo = signal(0);
+  protected bumpAnnounceDemo(): void {
+    this.announceDemo.update((v) => v + 1);
+  }
+
+  protected readonly a11yDrawerOpen = signal(false);
 
   /* -- numerics (v54 Task 29) -- one row per case format.ts's own docstring
    * names: a missing value renders as an em dash, never as zero and never
