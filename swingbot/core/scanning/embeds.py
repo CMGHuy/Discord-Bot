@@ -449,6 +449,29 @@ def leg_rows(plan, currency: str, force_zero: bool = False) -> tuple[str, str]:
     return tp1_row, runner
 
 
+def banked_leg_pct_and_amount(plan, exit_price: float, fraction: float) -> tuple[float, float | None]:
+    """(%, $) for one already-closed leg of a scale-out plan.
+
+    % is always computable from the plan's own entry (falling back to
+    trigger_price the same way leg_rows() does, for a plan whose
+    entry_price was never set) and the leg's own exit price. The $ amount
+    needs a fresh account.compute_position_size() snapshot and is None when
+    that returns nothing usable -- same render-time-snapshot convention and
+    same silent-omission fallback leg_rows() already uses, not a zero and
+    not a crash."""
+    entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+    sign = 1 if plan.direction == "bullish" else -1
+    pct = (exit_price - entry) / entry * 100 * sign
+    try:
+        sizing = account.compute_position_size(entry, plan.stop_loss)
+    except Exception:
+        sizing = None
+    amount = None
+    if sizing and sizing.get("shares"):
+        amount = sizing["shares"] * fraction * (exit_price - entry) * sign
+    return pct, amount
+
+
 def _v2_plan(item):
     """The real TradePlanV2 attached to this scan item, or None -- a
     separately-named field (ScanItem.plan_v2), NOT an attribute of
