@@ -32,6 +32,8 @@ const REQUIRED = [
   '--surface-overlay',
   '--border',
   '--border-strong',
+  '--shadow-overlay',
+  '--scrim',
 
   '--text',
   '--text-secondary',
@@ -92,6 +94,10 @@ describe('design tokens', () => {
 
   it('keeps --transition as an alias so existing call sites still compile', () => {
     expect(CSS).toMatch(/^\s*--transition:/m);
+  });
+
+  it('defines exactly one elevation shadow, for L3', () => {
+    expect(CSS).toMatch(/^\s*--shadow-overlay:\s*0 8px 24px/m);
   });
 });
 

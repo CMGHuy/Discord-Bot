@@ -42,6 +42,16 @@ export function money(value: number | null | undefined, unit: string, decimals =
   return `${value > 0 ? '+' : ''}${value.toFixed(decimals)} ${unit}`;
 }
 
+/** An unsigned currency magnitude: a cap, an exposure, a risk amount -- not
+ *  a gain/loss. Deliberately not `money`. That one signs its output because
+ *  it formats a P&L movement; this one names a level, the same distinction
+ *  `share` draws against `pct`. `unit` comes from `ConnectionStore.currency()`,
+ *  never a literal -- see `money`'s own note. */
+export function amount(value: number | null | undefined, unit: string, decimals = 2): string {
+  if (value === null || value === undefined) return ABSENT;
+  return `${value.toFixed(decimals)} ${unit}`;
+}
+
 export function rMultiple(value: number | null | undefined): string {
   if (value === null || value === undefined) return ABSENT;
   return `${value > 0 ? '+' : ''}${value.toFixed(2)}R`;
@@ -137,4 +147,22 @@ export function date(iso: string | null | undefined): string {
 
 export function text(value: string | null | undefined): string {
   return value === null || value === undefined || value === '' ? ABSENT : value;
+}
+
+/**
+ * A signed figure, with the sign carried by a glyph as well as by colour.
+ *
+ * Colour is never the only channel: a screenshot pasted into Discord keeps
+ * the hue but a colour-blind reader does not, and `--pos`/`--neg` are close
+ * enough in lightness that a greyscale print loses them entirely.
+ *
+ * The minus is U+2212, not a hyphen. A hyphen is narrower than a digit even
+ * in a mono face, so a column of hyphen-negatives does not align with a
+ * column of positives — which defeats the tabular numerics the whole numeric
+ * law rests on. Zero takes no sign, because it has none.
+ */
+export function signed(value: number | null | undefined, decimals = 2): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return ABSENT;
+  if (value === 0) return num(0, decimals);
+  return value > 0 ? `+${num(value, decimals)}` : `−${num(Math.abs(value), decimals)}`;
 }

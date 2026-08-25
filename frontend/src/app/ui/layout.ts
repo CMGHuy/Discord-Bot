@@ -205,7 +205,7 @@ export class ControlRow {
   selector: 'sb-drawer',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <dialog #dialog class="drawer" (close)="closed.emit()" (cancel)="closed.emit()">
+    <dialog #dialog class="drawer elev-overlay" (close)="closed.emit()" (cancel)="closed.emit()">
       <header>
         <h2>{{ heading() }}</h2>
         <button type="button" class="close" aria-label="Close" (click)="dismiss()">×</button>
@@ -221,12 +221,19 @@ export class ControlRow {
       max-height: 100vh;
       margin: 0 0 0 auto;
       padding: 0;
-      background: var(--surface);
-      border: 0;
-      border-left: 1px solid var(--border-strong);
       color: var(--text);
     }
-    .drawer::backdrop { background: rgb(0 0 0 / 0.5); }
+    .drawer::backdrop { background: var(--scrim); }
+    /* elev-overlay's border-radius and 4-sided border assume a panel that
+     * floats clear of the viewport on every edge. This one doesn't -- right,
+     * top and bottom sit flush against the screen, so rounding those corners
+     * would curve them away from the actual corners and show the scrim
+     * through the gap. Only the left edge is a real boundary against the
+     * page behind it, so that is the only side that keeps a border. */
+    .drawer.elev-overlay {
+      border-radius: 0;
+      border-width: 0 0 0 1px;
+    }
 
     header {
       display: flex;

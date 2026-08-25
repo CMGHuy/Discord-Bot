@@ -1,5 +1,5 @@
 import { ColumnDef } from '../../ui/data-table/data-table.types';
-import { ABSENT, date, dateTime, share } from '../../ui/format';
+import { ABSENT, date, dateTime, share, signed } from '../../ui/format';
 import {
   BreakdownRow,
   ConfidenceRow,
@@ -38,15 +38,21 @@ export function rate(value: number | null | undefined): string {
  *  risk unit and two would round most strategies to the same number. */
 /** A signed difference in percentage points. Local to this file -- knip
  *  reports it as an "unused export" because nothing IMPORTS it, which is not
- *  the same as unused: the win-rate delta column below calls it. */
+ *  the same as unused: the win-rate delta column below calls it.
+ *  v54 Task 28: signed(), not a hand-rolled '+' -- a hand-rolled negative
+ *  used the default hyphen-minus, narrower than a digit even in the mono
+ *  face, which breaks the tabular alignment the numeric law exists for. */
 function delta(value: number | null | undefined): string {
-  if (value === null || value === undefined) return ABSENT;
-  return `${value > 0 ? '+' : ''}${value.toFixed(1)}`;
+  return signed(value, 1);
 }
 
+/** Expectancy in R. Three decimals, because it is typically a fraction of a
+ *  risk unit and two would round most strategies to the same number.
+ *  v54 Task 28: signed(), same reasoning as `delta` above. Every column
+ *  using this already names the unit in its own header ('ExpR'), so this
+ *  never appended one -- only the sign glyph was ever the gap. */
 export function expectancy(value: number | null | undefined): string {
-  if (value === null || value === undefined) return ABSENT;
-  return `${value > 0 ? '+' : ''}${value.toFixed(3)}`;
+  return signed(value, 3);
 }
 
 export function count(value: number | null | undefined): string {

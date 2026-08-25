@@ -1,6 +1,6 @@
 import { TradeRow } from '../../api/models';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
-import { age, held, heldPrecise, num, rMultiple, text } from '../../ui/format';
+import { age, held, heldPrecise, num, signed, text } from '../../ui/format';
 
 /**
  * The seven columns the Trades list shows by default — spec 3 Decision 2.
@@ -101,7 +101,11 @@ export function tradeColumns(): ColumnDef<TradeRow>[] {
     { key: 'stop_loss', header: 'Stop', value: (row) => num(row.stop_loss), numeric: true },
     { key: 'target', header: 'Target', value: (row) => num(row.target), numeric: true },
     { key: 'risk_reward', header: 'R:R', value: (row) => num(row.risk_reward), numeric: true },
-    { key: 'r_multiple', header: 'R', value: (row) => rMultiple(row.r_multiple), numeric: true, sortable: true },
+    // Rich cell (trades.ts's rMultipleCell) adds sb-magnitude beneath; value
+    // is the fallback used wherever cell isn't wired up. v54 Task 28: signed()
+    // not rMultiple() -- the header already names the unit ('R'), so the cell
+    // does not repeat it down every row.
+    { key: 'r_multiple', header: 'R', value: (row) => signed(row.r_multiple), numeric: true, sortable: true },
     { key: 'strategy', header: 'Strategy', value: (row) => text(row.strategy) },
     { key: 'horizon', header: 'Horizon', value: (row) => text(row.horizon) },
     { key: 'direction', header: 'Direction', width: '3.5rem' },

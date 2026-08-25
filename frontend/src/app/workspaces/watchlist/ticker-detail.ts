@@ -17,7 +17,7 @@ import { ChartContainer } from '../../ui/chart-container';
 import { TradeChart } from '../../ui/chart/trade-chart';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, RowContext } from '../../ui/data-table/data-table.types';
-import { held, num, pct } from '../../ui/format';
+import { held, num, signed } from '../../ui/format';
 import { Panel } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
@@ -102,8 +102,10 @@ export const TICKER_TRADES_CAP = 25;
       <sb-row-link [link]="['/trades', row.id]">{{ row.ticker }}</sb-row-link>
     </ng-template>
 
+    <!-- v54 Task 28: signed() not pct() -- the header ('P&L %') already
+         names the unit, so the cell does not repeat it. -->
     <ng-template #pnlCell let-row>
-      <span [class]="pnlClass(row.pnl_pct)">{{ fmtPct(row.pnl_pct) }}</span>
+      <span [class]="pnlClass(row.pnl_pct)">{{ fmtSigned(row.pnl_pct) }}</span>
     </ng-template>
   `,
   styles: `
@@ -200,7 +202,7 @@ export class TickerDetail {
     effect(() => this.chart.setTarget(this.symbol()));
   }
 
-  protected fmtPct = pct;
+  protected fmtSigned = signed;
 
   protected pnlClass(value: number | null): string {
     if (value === null) return '';

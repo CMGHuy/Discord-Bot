@@ -35,7 +35,8 @@ import {
   PINNED_COLUMNS,
   tradeColumns,
 } from '../trades/trades.columns';
-import { dateTime, held, money, num, pct, rMultiple } from '../../ui/format';
+import { amount, dateTime, held, money, num, signed } from '../../ui/format';
+import { Magnitude } from '../../ui/magnitude';
 import { ControlRow, Panel } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
@@ -83,7 +84,7 @@ import { TradeGroup } from './trade-group';
 @Component({
   selector: 'sb-dashboard',
   imports: [
-    RouterLink, MetricCard, MetricChip, Panel, TradeGroup,
+    RouterLink, MetricCard, MetricChip, Magnitude, Panel, TradeGroup,
     StatusCell, PlanCell, ConfidenceCell, Async, Button, ChipRow, ControlRow,
     PlanLifecycleDiagram, RowLink, SectionHead,
   ],
@@ -456,7 +457,7 @@ import { TradeGroup } from './trade-group';
     <ng-template #pnlCell let-row>
       @if (row.pnl_pct !== null) {
         <span [class]="pnlClass(row.pnl_pct)">
-          {{ fmtPct(row.pnl_pct) }}
+          {{ fmtSigned(row.pnl_pct) }}
           <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
         </span>
       } @else {
@@ -465,7 +466,7 @@ import { TradeGroup } from './trade-group';
           title="Live P&L, then projected P&L at target and at stop"
         >
           <span [class]="pnlClass(livePnlPct(row))">
-            {{ fmtPct(livePnlPct(row)) }}
+            {{ fmtSigned(livePnlPct(row)) }}
             <!-- Only once shares exist to have a dollar value at all -- a
                  PENDING row still projects a live PERCENTAGE off its
                  trigger, but has bought nothing yet. !== null, not a plain
@@ -479,9 +480,9 @@ import { TradeGroup } from './trade-group';
             }
           </span>
           <span class="sep">{{ ' → ' }}</span>
-          <span class="tp expected">{{ fmtPct(expectedPnlPct(row)) }}</span>
+          <span class="tp expected">{{ fmtSigned(expectedPnlPct(row)) }}</span>
           <span class="sep">{{ ' - ' }}</span>
-          <span class="sl expected">{{ fmtPct(expectedSlPct(row)) }}</span>
+          <span class="sl expected">{{ fmtSigned(expectedSlPct(row)) }}</span>
         </span>
       }
     </ng-template>
@@ -491,16 +492,22 @@ import { TradeGroup } from './trade-group';
          projected branch already did -- a closed loss's R used to render
          in the same plain colour as a win's, which read as "no P&L info"
          at a glance where the pnl_pct column right next to it was
-         unmistakably red or green. -->
+         unmistakably red or green.
+         v54 Task 28: the header ('R') already names the unit, signed() not
+         fmtR() so the cell does not repeat it; sb-magnitude beneath both
+         branches (see R_MAGNITUDE_MAX for why it is a fixed reference
+         scale, not an observed max, here specifically). -->
     <ng-template #rMultipleCell let-row>
       @if (row.r_multiple !== null) {
-        <span [class]="pnlClass(row.r_multiple)">{{ fmtR(row.r_multiple) }}</span>
+        <span [class]="pnlClass(row.r_multiple)">{{ fmtSigned(row.r_multiple) }}</span>
+        <sb-magnitude [value]="row.r_multiple" [max]="R_MAGNITUDE_MAX" />
       } @else {
         <span
           class="expected"
           [class]="pnlClass(expectedR(row))"
           title="Projected R if price reaches target"
-        >{{ fmtR(expectedR(row)) }}</span>
+        >{{ fmtSigned(expectedR(row)) }}</span>
+        <sb-magnitude [value]="expectedR(row)" [max]="R_MAGNITUDE_MAX" />
       }
     </ng-template>
 
@@ -979,11 +986,12 @@ export class Dashboard {
     const maxAbs = note['max_position_value_absolute'];
     if (typeof risk !== 'number' || typeof riskPct !== 'number') return null;
 
+    const currency = this.connection.currency();
     const cap = typeof maxAbs === 'number' && maxAbs > 0
-      ? `${maxPct}% of balance or ${maxAbs.toLocaleString()} absolute, whichever is tighter`
+      ? `${maxPct}% of balance or ${amount(maxAbs, currency)} absolute, whichever is tighter`
       : `${maxPct}% of balance`;
 
-    return `Risk % mode — risks ${risk.toLocaleString()} (${riskPct}%) if stopped `
+    return `Risk % mode — risks ${amount(risk, currency)} (${riskPct}%) if stopped `
       + `out, capped at ${cap}. Varies per trade with stop distance — switch to `
       + '!account sizing account for a fixed premium instead.';
   });
@@ -1062,9 +1070,21 @@ export class Dashboard {
       : this.currencyUnit(),
   );
 
-  protected fmtPct = pct;
+  // v54 Task 28: signed() not pct()/rMultiple() -- both columns' headers
+  // already name the unit ('P&L %', 'R'), so the cell drops it instead of
+  // repeating it down every row.
+  protected fmtSigned = signed;
   protected fmtDate = dateTime;
-  protected fmtR = rMultiple;
+
+  /** sb-magnitude's max for the R column. Not an observed max from the
+   *  store: the four groups below (Active/Pending/Partial/Closed) each fetch
+   *  their own page through their own TradeGroup-scoped TradesStore, and all
+   *  four share this one cell template -- there is no single "this table's
+   *  rows" to measure from here. R is already a normalised unit (the risk
+   *  taken, by definition 1R), so a fixed reference scale is the more
+   *  honest choice anyway: 3R covers a well-run multi-target scale-out
+   *  without every ordinary trade landing near the same width. */
+  protected readonly R_MAGNITUDE_MAX = 3;
 
   protected fmtMoney(value: number | null): string {
     return money(value, this.connection.currency());

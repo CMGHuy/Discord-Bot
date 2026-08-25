@@ -60,7 +60,7 @@ export interface PickableColumn {
       </button>
 
       @if (open()) {
-        <div class="panel" role="group" aria-label="Visible columns">
+        <div class="panel elev-overlay" role="group" aria-label="Visible columns">
           <ul>
             @for (column of pickable(); track column.key) {
               <li>
@@ -109,10 +109,6 @@ export interface PickableColumn {
       min-width: 200px;
       margin-top: var(--space-4);
       padding: var(--space-8);
-      background: var(--surface-raised);
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius);
-      box-shadow: 0 6px 24px rgb(0 0 0 / 0.5);
     }
     ul { list-style: none; }
     label {

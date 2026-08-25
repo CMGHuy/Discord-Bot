@@ -14,12 +14,14 @@ import { ColumnDef, PageSpec } from '../../ui/data-table/data-table.types';
 import { DirectionArrow } from '../../ui/direction-arrow';
 import { EmptyStateComponent } from '../../ui/empty-state';
 import { FilterBar, FilterChip, FilterChips } from '../../ui/filter-bar';
+import { money, num, pct, rMultiple, signed } from '../../ui/format';
 import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-controls';
 import { Histogram, HistogramBin } from '../../ui/histogram';
 import { Icon, IconName } from '../../ui/icon';
 import { ControlRow, Drawer, Panel, Tab, TabBar } from '../../ui/layout';
 import { LineChartSeries } from '../../ui/line-chart';
 import { LineChart } from '../../ui/line-chart';
+import { Magnitude } from '../../ui/magnitude';
 import { MetricCard } from '../../ui/metric-card';
 import { MetricChip } from '../../ui/metric-chip';
 import { PaginationComponent } from '../../ui/pagination';
@@ -70,6 +72,7 @@ interface GalleryRow {
     Histogram,
     Icon,
     LineChart,
+    Magnitude,
     MetricCard,
     MetricChip,
     Panel,
@@ -174,6 +177,61 @@ interface GalleryRow {
       />
     </sb-panel>
 
+    <!-- -- elevation (v54 Task 29) ------------------------------------------
+         The four levels side by side, so the ladder reads as a ramp rather
+         than one surface judged in isolation. L3 uses the real global
+         .elev-overlay class -- the same one every floating surface in this
+         app takes (Task 23). L0-L2 have no reusable class of their own
+         (sb-panel's own .panel rule is scoped to its own component by
+         Angular's style encapsulation and cannot be borrowed here), so all
+         three are local demo-only styles built straight from the tokens. -->
+    <sb-section-head [heading]="'Elevation'" [level]="2" />
+    <sb-panel heading="L0-L3, judged as a ramp">
+      <sb-control-row>
+        <div class="elev-step level-0">L0<br />bg</div>
+        <div class="elev-step level-1">L1<br />surface</div>
+        <div class="elev-step level-2">L2<br />surface-raised</div>
+        <div class="elev-step elev-overlay">L3<br />overlay</div>
+      </sb-control-row>
+    </sb-panel>
+
+    <!-- -- numerics (v54 Task 29) -------------------------------------------
+         One row per case format.ts's own docstring names -- positive,
+         negative, zero, absent -- across every signed/unsigned formatter,
+         so a regression in any one (wrong glyph, absence rendered as zero)
+         is visible at a glance rather than only in a unit test's assertion
+         text. sb-magnitude sits beside R, its real home (Task 28). -->
+    <sb-section-head [heading]="'Numerics'" [level]="2" />
+    <sb-panel heading="num / pct / R / signed / money -- positive, negative, zero, absent">
+      <table class="numerics-demo">
+        <thead>
+          <tr>
+            <th>Case</th>
+            <th class="num">num</th>
+            <th class="num">pct</th>
+            <th class="num">R</th>
+            <th class="num">signed</th>
+            <th class="num">money</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (c of numericCases; track c.label) {
+            <tr>
+              <td>{{ c.label }}</td>
+              <td class="num">{{ fmtNum(c.value) }}</td>
+              <td class="num">{{ fmtPct(c.value) }}</td>
+              <td class="num">
+                {{ fmtR(c.value) }}
+                <sb-magnitude [value]="c.value" [max]="3" />
+              </td>
+              <td class="num">{{ fmtSigned(c.value) }}</td>
+              <td class="num">{{ fmtMoney(c.value) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </sb-panel>
+
     <!-- -- sb-async: all four branches side by side ------------------------ -->
     <sb-section-head [heading]="'sb-async -- all four states'" [level]="2" />
     <sb-panel>
@@ -222,6 +280,11 @@ interface GalleryRow {
         <sb-direction-arrow direction="bearish" />
         <sb-confidence-cell [level]="4" [score]="81" direction="bullish" />
         <sb-plan-cell [entry]="100" [target]="120" [stop]="95" [trigger]="null" />
+      </sb-control-row>
+      <sb-control-row>
+        <sb-magnitude [value]="2.1" [max]="4" style="width: 80px" />
+        <sb-magnitude [value]="-1.3" [max]="4" style="width: 80px" />
+        <sb-magnitude [value]="null" [max]="4" style="width: 80px" />
       </sb-control-row>
     </sb-panel>
 
@@ -279,6 +342,34 @@ interface GalleryRow {
     :host { display: grid; gap: var(--space-20); padding: var(--space-20); }
     h1 { margin: 0; font-size: var(--text-title); font-weight: 600; }
     sb-panel { display: block; }
+
+    /* -- elevation demo (v54 Task 29) -- L0-L2 straight from the tokens;
+       L3 is the real global .elev-overlay class, not reimplemented here. */
+    .elev-step {
+      display: grid; place-items: center;
+      width: 96px; height: 64px; text-align: center;
+      font-size: var(--text-micro); color: var(--text-secondary);
+      border-radius: var(--radius);
+    }
+    .elev-step.level-0 { background: var(--bg); }
+    .elev-step.level-1 { background: var(--surface); border: 1px solid var(--border); }
+    .elev-step.level-2 { background: var(--surface-raised); border: 1px solid var(--border); }
+
+    /* -- numerics demo (v54 Task 29) -- .num right-aligns/monos each
+       formatted cell (same class every real table cell takes); the header
+       cells take it too so the unit-in-header column lines up over its
+       own right-aligned figures below it. */
+    .numerics-demo { border-collapse: collapse; }
+    .numerics-demo th, .numerics-demo td {
+      padding: var(--space-6) var(--space-10);
+      text-align: left;
+    }
+    .numerics-demo th.num, .numerics-demo td.num { text-align: right; }
+    .numerics-demo thead th {
+      color: var(--text-secondary); font-size: var(--text-micro);
+      border-bottom: 1px solid var(--border);
+    }
+    .numerics-demo sb-magnitude { display: inline-block; width: 48px; margin-left: var(--space-8); }
   `,
 })
 export class Gallery {
@@ -310,6 +401,21 @@ export class Gallery {
 
   protected readonly drawerOpen = signal(false);
   protected readonly confirmOpen = signal(false);
+
+  /* -- numerics (v54 Task 29) -- one row per case format.ts's own docstring
+   * names: a missing value renders as an em dash, never as zero and never
+   * as blank, and the two must stay visibly different from each other. */
+  protected fmtNum = num;
+  protected fmtPct = pct;
+  protected fmtR = rMultiple;
+  protected fmtSigned = signed;
+  protected fmtMoney = (value: number | null) => money(value, 'USD');
+  protected readonly numericCases: { label: string; value: number | null }[] = [
+    { label: 'Positive', value: 2.15 },
+    { label: 'Negative', value: -2.15 },
+    { label: 'Zero', value: 0 },
+    { label: 'Absent', value: null },
+  ];
 
   protected readonly asyncDemo = signal<'content' | 'loading' | 'error' | 'no-data-yet' | 'measured-zero'>(
     'content',

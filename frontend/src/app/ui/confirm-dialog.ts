@@ -32,7 +32,7 @@ import { ControlRow } from './layout';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Button, ControlRow],
   template: `
-    <dialog #dialog (close)="cancelled.emit()" (cancel)="cancelled.emit()">
+    <dialog #dialog class="elev-overlay" (close)="cancelled.emit()" (cancel)="cancelled.emit()">
       <h2>{{ title() }}</h2>
       <p class="consequence">{{ consequence() }}</p>
 
@@ -56,12 +56,9 @@ import { ControlRow } from './layout';
     dialog {
       max-width: 380px;
       padding: var(--space-20);
-      background: var(--surface-raised);
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius);
       color: var(--text);
     }
-    dialog::backdrop { background: rgb(0 0 0 / 0.6); }
+    dialog::backdrop { background: var(--scrim); }
 
     h2 { font-size: var(--text-subhead); font-weight: 600; }
     .consequence {

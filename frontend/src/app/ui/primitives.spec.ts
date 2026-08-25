@@ -15,7 +15,7 @@ const RAW_BUTTON_ALLOWLIST = new Map<string, string>([
   // own kind-coloured background, not a button sitting inside a toast. Giving
   // it a variant would mean a variant used exactly once, which is a worse
   // answer than one justified exception.
-  ['shell/toast-host.ts', 'class="toast"'],
+  ['shell/toast-host.ts', 'class="toast elev-overlay"'],
 ]);
 
 describe('no call site hand-rolls a button', () => {
@@ -132,4 +132,30 @@ describe('every allowlist entry is justified', () => {
       expect(comments.length).toBeGreaterThanOrEqual(entries.length);
     });
   }
+});
+
+/**
+ * G3 — a non-inset box-shadow appears in exactly one rule, the L3 rule.
+ *
+ * `inset` is deliberately exempt and is not a loophole: an inset shadow is a
+ * border drawn inside the box, not elevation. The four in this codebase are
+ * the active-nav indicator, two focus/selection rings and the today marker,
+ * and rewriting them as borders would change layout for no gain.
+ */
+describe('G3: only L3 casts a shadow', () => {
+  const shadows = (source: string) =>
+    [...source.matchAll(/box-shadow:\s*([^;]+);/g)]
+      .map(([, value]) => value.trim())
+      .filter((value) => !value.startsWith('inset'));
+
+  for (const { name, source } of callSites()) {
+    it(`${name} casts no elevation shadow`, () => {
+      expect(shadows(source)).toEqual([]);
+    });
+  }
+
+  it('ui/ casts exactly one, and it is the token', () => {
+    const global = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8');
+    expect(shadows(global)).toEqual(['var(--shadow-overlay)']);
+  });
 });

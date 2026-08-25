@@ -127,7 +127,7 @@ describe('Versions', () => {
     expect(leftPct + widthPct).toBeCloseTo(100, 1);
   });
 
-  it('shows paired versions on hover, worded "paired with" not "compatible", and spotlights the matching time slice in every lane', async () => {
+  it('shows paired versions on hover, worded "paired with" not "compatible", and dims everything except the matching time slice', async () => {
     const fixture = seed(PAIRED);
     await fixture.whenStable();
     fixture.detectChanges();
@@ -144,17 +144,24 @@ describe('Versions', () => {
     expect(tooltip?.textContent).toContain('paired with: bot 1.1.2');
     expect(tooltip?.textContent).not.toContain('compatible');
 
-    // The spotlight must line up exactly with the hovered segment's own
-    // geometry -- same fractions, not a hand-rederived copy.
-    const spotlight = host.querySelector('.spotlight') as HTMLElement;
-    expect(spotlight).toBeTruthy();
-    expect(spotlight.style.left).toBe(current.style.left);
-    expect(spotlight.style.width).toBe(current.style.width);
+    // Two real dim rectangles flank the hovered segment's own geometry --
+    // same fractions, not a hand-rederived copy -- leaving exactly its own
+    // left/width undimmed in between (v54 Task 24: replaced a single
+    // element's 9999px-spread shadow trick with real, gate-visible
+    // geometry).
+    const dims = host.querySelectorAll('.dim');
+    expect(dims).toHaveLength(2);
+    const segLeft = parseFloat(current.style.left);
+    const segWidth = parseFloat(current.style.width);
+    expect(parseFloat((dims[0] as HTMLElement).style.left)).toBeCloseTo(0, 5);
+    expect(parseFloat((dims[0] as HTMLElement).style.width)).toBeCloseTo(segLeft, 5);
+    expect(parseFloat((dims[1] as HTMLElement).style.left)).toBeCloseTo(segLeft + segWidth, 5);
+    expect(parseFloat((dims[1] as HTMLElement).style.width)).toBeCloseTo(100 - segLeft - segWidth, 5);
 
     current.dispatchEvent(new Event('pointerleave'));
     fixture.detectChanges();
     expect(host.querySelector('.tooltip')).toBeNull();
-    expect(host.querySelector('.spotlight')).toBeNull();
+    expect(host.querySelectorAll('.dim')).toHaveLength(0);
   });
 });
 

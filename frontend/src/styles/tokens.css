@@ -47,6 +47,28 @@
   --border: #232838;
   --border-strong: #333a4f;
 
+  /* -- elevation --------------------------------------------------------
+   * ONE shadow, and it means one thing: this element is not part of the
+   * page flow.
+   *
+   * Depth in a dark UI is carried by surface LIGHTNESS, not by shadow --
+   * the four surface tokens above already step 0a0b10 -> 10121a -> 171a25
+   * -> 1e2230, which is the ladder. A shadow under a panel on near-black
+   * reads as smudge rather than depth, so L1 and L2 have none and only L3
+   * (dropdown, popover, tooltip, toast, drawer, dialog) takes this.
+   *
+   * An `inset` box-shadow is NOT this: it is a border drawn inside the box
+   * (the active-nav indicator, a focus ring, the today marker) and stays
+   * allowed. The gate in primitives.spec.ts checks non-inset shadows only.
+   */
+  /* Box-shadow geometry (blur/offset) is intentionally exempt from the "px only for 1px/2px borders" rule per design spec D2 — shadow values have no natural expression via the closed --space-* scale. */
+  --shadow-overlay: 0 8px 24px rgba(0, 0, 0, .55), 0 2px 6px rgba(0, 0, 0, .4);
+
+  /* Alias for the dim behind a MODAL L3 element. --overlay-dim is the raw
+   * colour; this names what it is for, so a scrim stops being hand-rolled
+   * (versions.ts faked one with a 9999px spread). */
+  --scrim: var(--overlay-dim);
+
   --text: #e9ebf5;
   --text-secondary: #9ba3bd;
   --text-muted: #6d7590;

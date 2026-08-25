@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { heldPrecise, timeInZone } from './format';
+import { heldPrecise, signed, timeInZone } from './format';
 
 /* No prior spec file existed for format.ts; timeInZone is new (Watchlist
  * Earnings calendar) and carries real cross-timezone/DST behaviour worth
@@ -63,5 +63,30 @@ describe('heldPrecise', () => {
   it('renders an em dash for null or undefined', () => {
     expect(heldPrecise(null)).toBe('—');
     expect(heldPrecise(undefined)).toBe('—');
+  });
+});
+
+describe('signed', () => {
+  it('prefixes a plus so gain is legible without colour', () => {
+    expect(signed(1.5)).toBe('+1.50');
+  });
+
+  it('uses a real minus sign, not a hyphen', () => {
+    // U+2212. A hyphen is narrower than a digit and breaks tabular alignment
+    // down a column, which is the entire reason numerics are mono here.
+    expect(signed(-1.5)).toBe('−2.00'.replace('2.00', '1.50'));
+  });
+
+  it('renders zero without a sign, because zero has none', () => {
+    expect(signed(0)).toBe('0.00');
+  });
+
+  it('renders absence as the em dash, not as zero', () => {
+    expect(signed(null)).toBe('—');
+    expect(signed(undefined)).toBe('—');
+  });
+
+  it('honours a decimals override', () => {
+    expect(signed(1.5, 1)).toBe('+1.5');
   });
 });
