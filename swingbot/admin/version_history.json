@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-23 12:40:20 UTC",
+  "generated_at": "2026-08-25 17:53:34 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.8.4",
+    "ui": "1.8.5",
     "bot": "1.4.3"
   },
   "releases": [
@@ -804,10 +804,23 @@
     {
       "date": "2026-08-23",
       "last_seen": "2026-08-23",
-      "commit": "uncommitted",
-      "subject": "working tree",
+      "commit": "e740c67b",
+      "subject": "chore: ui 1.8.4 -- the P&L calendar workspace",
       "versions": {
         "ui": "1.8.4",
+        "bot": "1.4.3"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-08-25",
+      "last_seen": "2026-08-25",
+      "commit": "9f218384",
+      "subject": "release(ui): 1.8.5 -- Closed-table columns, P&L unit, Closed filter, Held, mobile cut-off",
+      "versions": {
+        "ui": "1.8.5",
         "bot": "1.4.3"
       },
       "changed": [
