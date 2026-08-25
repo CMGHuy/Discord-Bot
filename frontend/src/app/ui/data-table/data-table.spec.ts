@@ -594,6 +594,43 @@ describe('DataTable card mode', () => {
     expect(cards()[0].querySelector('.card-actions')).not.toBeNull();
   });
 
+  it('renders EVERY visible column -- a card drops nothing the table shows', () => {
+    // The card is a rendering MODE, not a reduced view: a phone has to be
+    // able to read the same figures a desktop does, or the density toggle
+    // and the column picker mean nothing there. Headline and body together
+    // are the visible set, exactly, with no key in both and none missing.
+    host.visible.set(['ticker', 'pnl', 'held']);
+    asCards();
+    const card = cards()[0];
+    const headline = [...card.querySelectorAll('.card-head .head-cell')];
+    const labels = [...card.querySelectorAll('.card-body dt')]
+      .map((d) => d.textContent!.trim());
+
+    // 'ticker' heads the card (no label of its own), the rest are labelled.
+    expect(headline).toHaveLength(1);
+    expect(headline[0].textContent).toContain('AAPL');
+    expect(labels).toEqual(['P&L %', 'Held']);
+  });
+
+  it('carries a value for every labelled row, not just the label', () => {
+    // A <dt> with an empty <dd> beside it is the failure that looks like a
+    // working card: the layout is right and the data is gone.
+    host.visible.set(['ticker', 'pnl', 'held']);
+    asCards();
+    const values = [...cards()[0].querySelectorAll('.card-body dd')]
+      .map((d) => d.textContent!.trim());
+    expect(values).toEqual(['4.2', '3d']);
+  });
+
+  it('marks each value .card-value, the hook a dense cell wraps on', () => {
+    // PlanCell and the Dashboard's P&L cell drop their table-only
+    // `white-space: nowrap` under this class -- a card has no horizontal
+    // scroller, so a run that does not wrap is simply off the side.
+    host.visible.set(['ticker', 'pnl', 'held']);
+    asCards();
+    expect(cards()[0].querySelectorAll('.card-body dd.card-value')).toHaveLength(2);
+  });
+
   it('still activates a row', () => {
     asCards();
     (cards()[1] as HTMLElement).click();

@@ -92,7 +92,7 @@ export const SPINNER_DELAY_MS = 200;
                 @for (col of bodyColumns(); track col.key) {
                   <div>
                     <dt>{{ col.header }}</dt>
-                    <dd [class.num]="col.numeric">
+                    <dd class="card-value" [class.num]="col.numeric">
                       @if (col.cell; as cellTemplate) {
                         <ng-container
                           [ngTemplateOutlet]="cellTemplate"
@@ -234,9 +234,75 @@ export const SPINNER_DELAY_MS = 200;
       font-size: var(--text-subhead);
     }
     .card-body { margin: 0; display: grid; gap: var(--space-6); }
-    .card-body > div { display: flex; justify-content: space-between; gap: var(--space-10); }
-    .card-body dt { color: var(--text-secondary); font-size: var(--text-chip); }
-    .card-body dd { margin: 0; }
+    /* align-items: baseline, so a label sits on the first line of a value
+       that wrapped to two rather than floating in the middle of it. */
+    .card-body > div {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--space-10);
+      min-width: 0;
+    }
+    /* The label never shrinks and never wraps -- it is two or three words and
+       it is what makes the value legible. The VALUE is what gives. */
+    .card-body dt {
+      flex: 0 0 auto;
+      color: var(--text-secondary);
+      font-size: var(--text-chip);
+    }
+    /* min-width: 0 is the load-bearing part.
+     *
+     * A flex item's automatic minimum size is its content's min-content
+     * width, so without this a long value pushes the row wider than the card
+     * instead of wrapping inside it. The table has .scroller as its
+     * backstop for exactly this; a CARD has none, so what overflows is not
+     * scrolled to, it is simply off the side of a phone and unreadable --
+     * the whole reason card mode exists is that it does not need one.
+     *
+     * text-align: right so the value column reads down the card the way the
+     * numeric columns do, and overflow-wrap so a long single token (a
+     * strategy name, an id) breaks rather than being the one thing that can
+     * still overflow. */
+    .card-body dd {
+      margin: 0;
+      min-width: 0;
+      flex: 0 1 auto;
+      text-align: right;
+      overflow-wrap: anywhere;
+    }
+    /* -- the wrap contract for rich cells -------------------------------
+     *
+     * A dense cell (PlanCell's .plan, the Dashboard's .pnl-plan) declares
+     * white-space: nowrap for the TABLE, where a price split over two lines
+     * stops reading as one number and .scroller is there when a run does not
+     * fit. In a card neither holds: no column to align to, and no scroller --
+     * body carries overflow-x: hidden, so a run that does not wrap is not
+     * scrolled to, it is CUT OFF. Measured at 375px: the Dashboard's P&L cell
+     * came to 279px inside a 255px box, losing the projected half of the line.
+     *
+     * Custom properties rather than a selector, because no selector can do
+     * this. Emulated encapsulation scopes EVERY compound selector, not just
+     * the last, so ".card-value .pnl-plan" compiles with a content attribute
+     * on BOTH parts -- and the two elements carry different ones (the dd is
+     * this component's, the span is the workspace's), so the rule matches
+     * from neither side. A global rule reaches both but then loses on
+     * specificity to the cell's own scoped ".plan[content-attr]". Custom
+     * properties inherit down the DOM and are indifferent to all of it.
+     *
+     * A cell opts in by reading the fallback form:
+     *     white-space: var(--cell-wrap, nowrap);   // the run itself
+     *     white-space: var(--sep-wrap, pre);       // its separators
+     * Outside a card neither is defined, so the nowrap/pre default applies
+     * and the table is unchanged.
+     *
+     * pre-wrap, not normal, for the separators: their spacing IS the spacing
+     * (PlanCell puts it in the text, not a margin), so collapsing it would run
+     * the numbers together -- while plain "pre" forbids the wrap this exists
+     * to allow. */
+    .card-value {
+      --cell-wrap: normal;
+      --sep-wrap: pre-wrap;
+    }
     /* Full width, because a 24px icon button is not a phone target. */
     .card-actions { display: grid; gap: var(--space-6); }
     .card-actions button { width: 100%; }

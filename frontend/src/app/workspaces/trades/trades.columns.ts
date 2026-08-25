@@ -3,12 +3,18 @@ import { ColumnDef } from '../../ui/data-table/data-table.types';
 import { age, held, heldPrecise, num, signed, text } from '../../ui/format';
 
 /**
- * The seven columns the Trades list shows by default — spec 3 Decision 2.
+ * The columns the Trades list shows by default — spec 3 Decision 2.
  *
- * Seven, not eighteen. The old dashboard showed everything at once and became
- * unreadable; the other eleven fields live in row expansion and are each
+ * A short set, not eighteen. The old dashboard showed everything at once and
+ * became unreadable; the remaining fields live in row expansion and are each
  * individually re-addable through the column picker, so nothing is lost, it is
  * merely not shouted.
+ *
+ * 'held' sits immediately left of 'opened_at' in both densities: how long a
+ * position has been (or was) held is read together with when it started, and
+ * the pair reads as one span rather than as two unrelated facts at opposite
+ * ends of the row. It was previously in Full only, which meant the default
+ * view could not answer "how long has this been running" at all.
  */
 export const COMPACT_COLUMNS = [
   'num',
@@ -20,6 +26,7 @@ export const COMPACT_COLUMNS = [
   'plan',
   'pnl_pct',
   'r_multiple',
+  'held',
   'opened_at',
   'closed_at',
 ];
@@ -42,8 +49,8 @@ export const FULL_COLUMNS = [
   'strategy',
   'horizon',
   'pnl_pct',
-  'held',
   'realized_pnl_amount',
+  'held',
   'opened_at',
   'closed_at',
 ];
@@ -196,6 +203,15 @@ export const STATUS_CHIPS: StatusChip[] = [
   // `open` is a server-side alias for ACTIVE-or-PARTIAL. One chip, because
   // "is my position live" is one question.
   { value: 'open', label: 'Open', param: 'status' },
+  // The lifecycle's other end, and the only one that was unreachable: Win
+  // and Loss between them cover only the trades that HAVE an outcome, so a
+  // scratch (closed at break-even, outcome neither) matched no chip at all,
+  // and there was no way to ask "everything that is done" in one click --
+  // which is the Dashboard's own Closed group, whose "All N →" link lands
+  // here on exactly this filter. Exact-match on the normalised status, the
+  // same field `_filter_by_status` compares case-insensitively, so it also
+  // picks up the legacy v1 rows that map to CLOSED.
+  { value: 'CLOSED', label: 'Closed', param: 'status' },
   { value: 'win', label: 'Win', param: 'outcome' },
   { value: 'loss', label: 'Loss', param: 'outcome' },
   { value: 'CANCELLED', label: 'Cancelled', param: 'status' },

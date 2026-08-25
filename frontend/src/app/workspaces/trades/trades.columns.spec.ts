@@ -44,8 +44,17 @@ describe('status chips', () => {
     }
   });
 
+  it('offers Closed -- Win and Loss between them miss a break-even scratch', () => {
+    // And there was no one-click "everything that is done", which is where
+    // the Dashboard's Closed group links to.
+    const closed = STATUS_CHIPS.find((c) => c.label === 'Closed');
+    expect(closed).toBeDefined();
+    expect(closed!.value).toBe('CLOSED');
+    expect(closed!.param).toBe('status');
+  });
+
   it('routes every lifecycle chip through status', () => {
-    for (const label of ['Pending', 'Open', 'Cancelled', 'Expired']) {
+    for (const label of ['Pending', 'Open', 'Closed', 'Cancelled', 'Expired']) {
       const chip = STATUS_CHIPS.find((c) => c.label === label)!;
       expect(chip.param).toBe('status');
     }
@@ -54,7 +63,7 @@ describe('status chips', () => {
   it('sends plan statuses in the case the rows actually carry', () => {
     // The bug was `cancelled` vs CANCELLED. `open` is exempt: it is a
     // server-side alias for ACTIVE-or-PARTIAL, not a status.
-    for (const label of ['Pending', 'Cancelled', 'Expired']) {
+    for (const label of ['Pending', 'Closed', 'Cancelled', 'Expired']) {
       const chip = STATUS_CHIPS.find((c) => c.label === label)!;
       expect(chip.value).toBe(chip.value.toUpperCase());
     }
@@ -92,7 +101,7 @@ describe('trade column sets', () => {
   it('compact is exactly the spec list', () => {
     expect(COMPACT_COLUMNS).toEqual([
       'num', 'status', 'ticker', 'confidence_level', 'direction',
-      'now', 'plan', 'pnl_pct', 'r_multiple', 'opened_at', 'closed_at',
+      'now', 'plan', 'pnl_pct', 'r_multiple', 'held', 'opened_at', 'closed_at',
     ]);
   });
 
@@ -100,8 +109,16 @@ describe('trade column sets', () => {
     expect(FULL_COLUMNS).toEqual([
       'num', 'status', 'ticker', 'confidence_level', 'direction',
       'now', 'plan', 'risk_reward', 'r_multiple', 'strategy', 'horizon',
-      'pnl_pct', 'held', 'realized_pnl_amount', 'opened_at', 'closed_at',
+      'pnl_pct', 'realized_pnl_amount', 'held', 'opened_at', 'closed_at',
     ]);
+  });
+
+  it('puts the holding period immediately left of Opened, in both densities', () => {
+    // How long it has been held and when it started are read together; the
+    // pair is one span, not two facts at opposite ends of the row.
+    for (const set of [COMPACT_COLUMNS, FULL_COLUMNS]) {
+      expect(set.indexOf('held')).toBe(set.indexOf('opened_at') - 1);
+    }
   });
 
   it('actions are pinned, not a member of either set', () => {

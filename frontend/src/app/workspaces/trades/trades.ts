@@ -35,7 +35,7 @@ import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, SortSpec } from '../../ui/data-table/data-table.types';
 import { FilterBar, FilterChips } from '../../ui/filter-bar';
-import { dateTime, money, signed, text } from '../../ui/format';
+import { dateTime, money, pct, signed, text } from '../../ui/format';
 import { Magnitude } from '../../ui/magnitude';
 import { Select, TextInput } from '../../ui/form-controls';
 import { ControlRow } from '../../ui/layout';
@@ -301,12 +301,14 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
     </ng-template>
 
     <!-- See dashboard.ts's own pnlCell -- same pairing, same reasoning:
-         the % alone doesn't say how much money that was. v54 Task 28: the
-         header ('P&L %') already names the unit, so the cell no longer
-         repeats it -- signed() not fmtPct(). -->
+         the % alone doesn't say how much money that was. The percentage
+         carries its unit (fmtPct, not fmtSigned) because this cell holds
+         two figures in two different units, and on a phone the header sits
+         in a <dt> beside them rather than above a column -- see
+         dashboard.ts's fmtPct note for the full reversal of v54 Task 28. -->
     <ng-template #pnlCell let-row>
       <span [class]="pnlClass(row.pnl_pct)">
-        {{ fmtSigned(row.pnl_pct) }}
+        {{ fmtPct(row.pnl_pct) }}
         <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
       </span>
     </ng-template>
@@ -711,10 +713,15 @@ export class Trades {
     });
   }
 
-  // v54 Task 28: signed() not pct()/rMultiple() -- both columns' headers
-  // already name the unit ('P&L %', 'R'), so the cell drops it instead of
-  // repeating it down every row.
+  // v54 Task 28 dropped the unit from both columns on the header's
+  // authority. That still holds for R -- one bare number under a header
+  // that reads 'R'. It no longer holds for P&L: the cell pairs a percentage
+  // with a money amount, and in card mode (below 640px) the header is a
+  // <dt> label beside the value rather than a column head above it, so
+  // '+2.34 (+118.20 USD)' loses which unit belongs to which figure. The
+  // percentage units itself; R does not. See dashboard.ts's matching note.
   protected fmtSigned = signed;
+  protected fmtPct = pct;
   protected fmtText = text;
   protected fmtDate = dateTime;
   protected fmtNum(value: number | null, decimals = 2): string {

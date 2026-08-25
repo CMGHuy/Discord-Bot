@@ -13,33 +13,44 @@ import {
 
 describe('deriveClosedVisible', () => {
   it('drops "now" and inserts "hold" immediately before "opened_at"', () => {
-    const base = ['num', 'status', 'ticker', 'now', 'plan', 'opened_at', 'closed_at'];
+    const base = ['ticker', 'now', 'plan', 'opened_at', 'closed_at'];
     expect(deriveClosedVisible(base)).toEqual([
-      'num', 'status', 'ticker', 'plan', 'hold', 'opened_at', 'closed_at',
+      'ticker', 'plan', 'hold', 'opened_at', 'closed_at',
     ]);
   });
 
   it('appends "hold" at the end when "opened_at" is itself hidden', () => {
-    const base = ['num', 'status', 'ticker', 'now'];
-    expect(deriveClosedVisible(base)).toEqual(['num', 'status', 'ticker', 'hold']);
+    const base = ['ticker', 'plan', 'now'];
+    expect(deriveClosedVisible(base)).toEqual(['ticker', 'plan', 'hold']);
   });
 
   it('does not duplicate "hold" if it is already in the base list', () => {
     // Can happen after reconcileReorder round-trips a shared list that a
     // prior derivation already touched.
-    const base = ['num', 'hold', 'opened_at'];
-    expect(deriveClosedVisible(base)).toEqual(['num', 'hold', 'opened_at']);
+    const base = ['ticker', 'hold', 'opened_at'];
+    expect(deriveClosedVisible(base)).toEqual(['ticker', 'hold', 'opened_at']);
   });
 
   it('leaves a list with neither "now" nor "opened_at" only gaining "hold"', () => {
-    expect(deriveClosedVisible(['num', 'status'])).toEqual(['num', 'status', 'hold']);
+    expect(deriveClosedVisible(['ticker', 'plan'])).toEqual(['ticker', 'plan', 'hold']);
   });
 
   it('drops "direction" -- it folds into the Confidence cell instead', () => {
-    const base = ['num', 'status', 'direction', 'confidence_level', 'opened_at'];
-    expect(deriveClosedVisible(base)).toEqual([
-      'num', 'status', 'confidence_level', 'hold', 'opened_at',
-    ]);
+    const base = ['direction', 'confidence_level', 'opened_at'];
+    expect(deriveClosedVisible(base)).toEqual(['confidence_level', 'hold', 'opened_at']);
+  });
+
+  it('drops "num" and "status" -- every row here is closed, and # is empty', () => {
+    // The group heading already says CLOSED, and the Dashboard attaches no
+    // cell to 'num', so both columns spent width saying nothing.
+    const base = ['num', 'status', 'ticker', 'pnl_pct', 'opened_at'];
+    expect(deriveClosedVisible(base)).toEqual(['ticker', 'pnl_pct', 'hold', 'opened_at']);
+  });
+
+  it('drops "held" so it cannot sit beside "hold" at a coarser precision', () => {
+    // 'held' ships in the default column set; both measure the same duration.
+    const base = ['ticker', 'held', 'opened_at'];
+    expect(deriveClosedVisible(base)).toEqual(['ticker', 'hold', 'opened_at']);
   });
 });
 
@@ -92,6 +103,16 @@ describe('reconcileReorder', () => {
     const order = ['num', 'ticker'];
     const base = ['num', 'ticker', 'direction'];
     expect(reconcileReorder(order, base)).toEqual(['num', 'ticker', 'direction']);
+  });
+
+  it('restores "num", "status" and "held" after a drag inside the Closed table', () => {
+    // Closed drops all three (see CLOSED_DROPS). Without this a drag there
+    // would delete them from the OTHER three groups' tables too.
+    const order = ['ticker', 'pnl_pct', 'hold'];
+    const base = ['num', 'status', 'ticker', 'pnl_pct', 'held'];
+    expect(reconcileReorder(order, base)).toEqual([
+      'ticker', 'pnl_pct', 'held', 'num', 'status',
+    ]);
   });
 });
 

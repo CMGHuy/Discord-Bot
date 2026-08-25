@@ -35,7 +35,7 @@ import {
   PINNED_COLUMNS,
   tradeColumns,
 } from '../trades/trades.columns';
-import { amount, dateTime, held, money, num, signed } from '../../ui/format';
+import { amount, dateTime, held, money, num, pct, signed } from '../../ui/format';
 import { Magnitude } from '../../ui/magnitude';
 import { ControlRow, Panel } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
@@ -457,7 +457,7 @@ import { TradeGroup } from './trade-group';
     <ng-template #pnlCell let-row>
       @if (row.pnl_pct !== null) {
         <span [class]="pnlClass(row.pnl_pct)">
-          {{ fmtSigned(row.pnl_pct) }}
+          {{ fmtPct(row.pnl_pct) }}
           <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
         </span>
       } @else {
@@ -466,7 +466,7 @@ import { TradeGroup } from './trade-group';
           title="Live P&L, then projected P&L at target and at stop"
         >
           <span [class]="pnlClass(livePnlPct(row))">
-            {{ fmtSigned(livePnlPct(row)) }}
+            {{ fmtPct(livePnlPct(row)) }}
             <!-- Only once shares exist to have a dollar value at all -- a
                  PENDING row still projects a live PERCENTAGE off its
                  trigger, but has bought nothing yet. !== null, not a plain
@@ -480,9 +480,9 @@ import { TradeGroup } from './trade-group';
             }
           </span>
           <span class="sep">{{ ' → ' }}</span>
-          <span class="tp expected">{{ fmtSigned(expectedPnlPct(row)) }}</span>
+          <span class="tp expected">{{ fmtPct(expectedPnlPct(row)) }}</span>
           <span class="sep">{{ ' - ' }}</span>
-          <span class="sl expected">{{ fmtSigned(expectedSlPct(row)) }}</span>
+          <span class="sl expected">{{ fmtPct(expectedSlPct(row)) }}</span>
         </span>
       }
     </ng-template>
@@ -765,8 +765,19 @@ import { TradeGroup } from './trade-group';
     /* The live-to-target-to-stop P&L line -- same layout language as
        PlanCell's own entry → target / stop (font, separators, fixed
        target/stop colours), just in percent rather than price. */
-    .pnl-plan { font-family: var(--font-mono); font-size: var(--text-table); white-space: nowrap; }
-    .pnl-plan .sep { color: var(--text-faint); white-space: pre; }
+    /* --cell-wrap/--sep-wrap: DataTable's card-mode wrap contract (see its
+       .card-value block). Undefined in a table, so this stays nowrap; inside
+       a card it becomes normal. This is the widest cell on the page -- four
+       figures in two units, '+2.34% (+118.20 USD) → +8.00% - −3.00%' -- and
+       it measured 279px inside a 255px card at 375px, which put the whole
+       projected half of the line past the edge with body's overflow-x:hidden
+       swallowing it. */
+    .pnl-plan {
+      font-family: var(--font-mono);
+      font-size: var(--text-table);
+      white-space: var(--cell-wrap, nowrap);
+    }
+    .pnl-plan .sep { color: var(--text-faint); white-space: var(--sep-wrap, pre); }
     .pnl-plan .tp { color: var(--pos); }
     .pnl-plan .sl { color: var(--neg); }
 
@@ -1070,10 +1081,17 @@ export class Dashboard {
       : this.currencyUnit(),
   );
 
-  // v54 Task 28: signed() not pct()/rMultiple() -- both columns' headers
-  // already name the unit ('P&L %', 'R'), so the cell drops it instead of
-  // repeating it down every row.
+  // v54 Task 28 dropped the unit from both columns on the grounds that the
+  // header already names it. That holds for R -- one number per cell, under
+  // a header that reads 'R'. It does not hold for P&L: the projected branch
+  // packs FOUR figures into one cell (live, its money amount in brackets,
+  // then TP and SL), and only three of them are percentages. Reported as
+  // unreadable, and it is: '+2.34 (+118.20 USD) → +8.00 - −3.00' gives no
+  // clue which of those numbers the header's unit applies to. So the P&L
+  // cell signs AND units its percentages (`fmtPct`) while R keeps the bare
+  // signed figure (`fmtSigned`).
   protected fmtSigned = signed;
+  protected fmtPct = pct;
   protected fmtDate = dateTime;
 
   /** sb-magnitude's max for the R column. Not an observed max from the

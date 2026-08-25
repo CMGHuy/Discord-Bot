@@ -17,7 +17,7 @@ import { ChartContainer } from '../../ui/chart-container';
 import { TradeChart } from '../../ui/chart/trade-chart';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, RowContext } from '../../ui/data-table/data-table.types';
-import { held, num, signed } from '../../ui/format';
+import { held, num, pct } from '../../ui/format';
 import { Panel } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
@@ -102,10 +102,13 @@ export const TICKER_TRADES_CAP = 25;
       <sb-row-link [link]="['/trades', row.id]">{{ row.ticker }}</sb-row-link>
     </ng-template>
 
-    <!-- v54 Task 28: signed() not pct() -- the header ('P&L %') already
-         names the unit, so the cell does not repeat it. -->
+    <!-- pct(), not signed(): every P&L% cell in the app units its own
+         figure, for the reason trades.ts's fmtPct note gives (in card mode
+         the header is a label beside the value, not a column head above a
+         run of them). This one is a single number, but reading the same as
+         the other three matters more than the two characters saved. -->
     <ng-template #pnlCell let-row>
-      <span [class]="pnlClass(row.pnl_pct)">{{ fmtSigned(row.pnl_pct) }}</span>
+      <span [class]="pnlClass(row.pnl_pct)">{{ fmtPct(row.pnl_pct) }}</span>
     </ng-template>
   `,
   styles: `
@@ -202,7 +205,8 @@ export class TickerDetail {
     effect(() => this.chart.setTarget(this.symbol()));
   }
 
-  protected fmtSigned = signed;
+  // The P&L cell units its own percentage -- see trades.ts's fmtPct note.
+  protected fmtPct = pct;
 
   protected pnlClass(value: number | null): string {
     if (value === null) return '';

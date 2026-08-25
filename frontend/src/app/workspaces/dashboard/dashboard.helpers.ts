@@ -13,14 +13,37 @@ import { TradeRow } from '../../api/models';
  *  so the two do not both spend a full column on one glyph plus a level. */
 const DASHBOARD_OMITS_DIRECTION = (key: string) => key !== 'direction';
 
+/** Columns the Closed group drops from the shared picker list.
+ *
+ *  'now' is a live price, which a closed position no longer has. 'hold' is
+ *  filtered out here only so the insertion below can place it deliberately
+ *  rather than wherever the picker left it.
+ *
+ *  'held' is dropped because 'hold' replaces it here and they are the same
+ *  fact: `held` rounds to the hour because it measures a LIVE position's
+ *  ticking age, `heldPrecise` gives day/hour/minute because a finished hold
+ *  no longer moves. Showing both would put the same duration in two adjacent
+ *  columns at two precisions -- which is exactly what happens if this is
+ *  forgotten, since 'held' now ships in the default column set.
+ *
+ *  'num' and 'status' are dropped because neither says anything in this
+ *  table. Every row here is CLOSED by construction -- that is what the group
+ *  heading means -- so the Status column repeats the heading down all six
+ *  rows; and the Dashboard, unlike Trades, attaches no cell to 'num' (see
+ *  dashboard.ts's `columns`), so the '#' column rendered an em dash on every
+ *  row. Two columns of width spent saying nothing, in the one group that
+ *  needs the width most (it carries 'hold' and 'closed_at' on top of what
+ *  the other three show). */
+const CLOSED_DROPS = new Set(['now', 'hold', 'held', 'num', 'status']);
+
 /** The Closed group's own column order, derived from the shared picker
- *  list: 'now' (a live price) is dropped, since a closed position no longer
- *  has one, and 'hold' -- the completed hold duration, day/hour/minute
- *  precision (`heldPrecise`) -- is inserted immediately before 'opened_at'.
- *  Falls back to the end of the list if 'opened_at' itself is hidden. */
+ *  list: `CLOSED_DROPS` above is removed, and 'hold' -- the completed hold
+ *  duration, day/hour/minute precision (`heldPrecise`) -- is inserted
+ *  immediately before 'opened_at'. Falls back to the end of the list if
+ *  'opened_at' itself is hidden. */
 export function deriveClosedVisible(base: readonly string[]): string[] {
   const filtered = base
-    .filter((key) => key !== 'now' && key !== 'hold')
+    .filter((key) => !CLOSED_DROPS.has(key))
     .filter(DASHBOARD_OMITS_DIRECTION);
   const idx = filtered.indexOf('opened_at');
   return idx === -1
@@ -39,21 +62,23 @@ export function deriveOpenVisible(base: readonly string[]): string[] {
  *
  * `order` is one group's rendered list (`deriveClosedVisible`/
  * `deriveOpenVisible` above), which differs from the shared list `base` by a
- * per-group insertion ('hold', Closed only) or omission ('now' in Closed;
- * 'closed_at' in the other three; 'direction' in all four). Persisting
- * `order` as-is would leak that difference into the shared list and
- * silently drop the omitted column from the other groups' tables too.
+ * per-group insertion ('hold', Closed only) or omission ('now', 'held',
+ * 'num' and 'status' in Closed; 'closed_at' in the other three; 'direction'
+ * in all four). Persisting `order` as-is would leak that difference into the
+ * shared list and silently drop the omitted column from the other groups'
+ * tables too.
  *
  * Drops 'hold' (never part of the picker) and restores whichever of
- * 'now'/'closed_at'/'direction' `order` is missing, at the END rather than
- * its old position -- a drag in one group's table moving a column that
- * belongs to a DIFFERENT group is a rare cross-table edge case, and losing
- * exact position there is a smaller cost than the reinsertion logic needed
- * to preserve it.
+ * `RESTORED_KEYS` `order` is missing, at the END rather than its old
+ * position -- a drag in one group's table moving a column that belongs to a
+ * DIFFERENT group is a rare cross-table edge case, and losing exact position
+ * there is a smaller cost than the reinsertion logic needed to preserve it.
  */
+const RESTORED_KEYS = ['now', 'closed_at', 'direction', 'held', 'num', 'status'];
+
 export function reconcileReorder(order: readonly string[], base: readonly string[]): string[] {
   const merged = order.filter((key) => key !== 'hold');
-  for (const key of ['now', 'closed_at', 'direction']) {
+  for (const key of RESTORED_KEYS) {
     if (base.includes(key) && !merged.includes(key)) merged.push(key);
   }
   return merged;

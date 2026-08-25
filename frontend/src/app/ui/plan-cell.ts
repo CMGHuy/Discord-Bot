@@ -29,7 +29,17 @@ import { num } from './format';
     </span>
   `,
   styles: `
-    .plan { font-family: var(--font-mono); font-size: var(--text-table); white-space: nowrap; }
+    /* nowrap is the TABLE rule -- three prices and two separators read as one
+       plan, and a column has a scroller behind it. --cell-wrap is DataTable's
+       card-mode override (see its .card-value block): undefined here, so a
+       table keeps nowrap; set to normal inside a card, where the run has no
+       column to align to and nothing to scroll and would otherwise be cut off
+       at the edge of a phone. */
+    .plan {
+      font-family: var(--font-mono);
+      font-size: var(--text-table);
+      white-space: var(--cell-wrap, nowrap);
+    }
     .entry  { color: var(--text-secondary); }
     /* A trigger is a price nothing has traded at yet. Dashed underline rather
        than a colour: the palette's hues all mean something already, and
@@ -44,8 +54,11 @@ import { num } from './format';
        between elements, so a margin-only gap renders correctly and leaves
        textContent as '178.00→195.00/170.00' -- which is what a screen reader
        announces and what anything reading the cell as a string gets. In a
-       mono font the literal spaces are exactly one cell wide anyway. */
-    .sep    { color: var(--text-faint); white-space: pre; }
+       mono font the literal spaces are exactly one cell wide anyway.
+       --sep-wrap is the card-mode counterpart of --cell-wrap above: pre-wrap
+       there, so the run can break at a separator without the spacing
+       collapsing and running the numbers together. */
+    .sep    { color: var(--text-faint); white-space: var(--sep-wrap, pre); }
   `,
 })
 export class PlanCell {
