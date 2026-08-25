@@ -35,6 +35,7 @@ import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, SortSpec } from '../../ui/data-table/data-table.types';
 import { FilterBar, FilterChips } from '../../ui/filter-bar';
+import { Flash } from '../../ui/flash';
 import { dateTime, money, pct, signed, text } from '../../ui/format';
 import { Magnitude } from '../../ui/magnitude';
 import { Select, TextInput } from '../../ui/form-controls';
@@ -99,6 +100,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
     TextInput,
     Button,
     ConfirmDialog,
+    Flash,
     StatusCell,
     DirectionArrow,
     PlanCell,
@@ -262,6 +264,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
       [emptyHint]="store.activeFilterCount() > 0 ? 'Clear the filters to see the full log.' : undefined"
       [skeletonRows]="12"
       [skeletonCols]="8"
+      [announce]="announce()"
       (retry)="store.load()"
     >
       <sb-data-table
@@ -313,7 +316,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
          in a <dt> beside them rather than above a column -- see
          dashboard.ts's fmtPct note for the full reversal of v54 Task 28. -->
     <ng-template #pnlCell let-row>
-      <span [class]="pnlClass(row.pnl_pct)">
+      <span [sbFlash]="row.pnl_pct" [class]="pnlClass(row.pnl_pct)">
         {{ fmtPct(row.pnl_pct) }}
         <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
       </span>
@@ -323,7 +326,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
          already names the unit, so the cell drops it (signed(), not
          rMultiple()). -->
     <ng-template #rMultipleCell let-row>
-      <span [class]="pnlClass(row.r_multiple)">{{ fmtSigned(row.r_multiple) }}</span>
+      <span [sbFlash]="row.r_multiple" [class]="pnlClass(row.r_multiple)">{{ fmtSigned(row.r_multiple) }}</span>
       <sb-magnitude [value]="row.r_multiple" [max]="maxRMultiple()" />
     </ng-template>
 
@@ -690,6 +693,13 @@ export class Trades {
   protected readonly async = computed(() =>
     asyncInputs(this.store, { isEmpty: (data) => data.items.length === 0 }),
   );
+
+  /** A polite summary for the workspace's one live region — null until the
+   *  first page has loaded. */
+  protected readonly announce = computed(() => {
+    const page = this.store.pagination();
+    return page ? `${page.total} trades` : null;
+  });
 
   constructor() {
     // The one place the URL becomes store state. Reading every parameter

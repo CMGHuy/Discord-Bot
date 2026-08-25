@@ -15,6 +15,7 @@ import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, RowContext } from '../../ui/data-table/data-table.types';
+import { Flash } from '../../ui/flash';
 import { dateTime, num, text } from '../../ui/format';
 import { Panel } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
@@ -47,7 +48,7 @@ import { Sparkline } from '../../ui/sparkline';
 @Component({
   selector: 'sb-risk',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Button, ConfirmDialog, DataTable, Panel, RowLink, SectionHead, Sparkline],
+  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Panel, RowLink, SectionHead, Sparkline],
   // v54 D1: exposure-by-position is a table and the rest of this workspace
   // (heat, sectors, clusters, scan health) is the same operational reading
   // that table's numbers roll up into -- tight rows, more per screen -- so
@@ -152,6 +153,7 @@ import { Sparkline } from '../../ui/sparkline';
       emptyHint="No position is currently exposed."
       [skeletonRows]="6"
       [skeletonCols]="5"
+      [announce]="announce()"
       (retry)="store.load()"
     >
     <sb-panel heading="Portfolio heat">
@@ -302,7 +304,7 @@ import { Sparkline } from '../../ui/sparkline';
     <ng-template #riskCell let-row>
       <!-- Plain, not red. This is risk budget, not a loss -- painting it red
            would claim money that has not been lost. -->
-      <span class="num">{{ fmt(row.risk_pct) }}%</span>
+      <span class="num" [sbFlash]="row.risk_pct">{{ fmt(row.risk_pct) }}%</span>
     </ng-template>
   `,
   styles: `
@@ -443,6 +445,12 @@ export class Risk {
 
   protected readonly async = computed(() =>
     asyncInputs(this.store, { isEmpty: (data) => data.positions.length === 0 }),
+  );
+
+  /** A polite summary for the workspace's one live region — null until the
+   *  first read of the portfolio has loaded. */
+  protected readonly announce = computed(() =>
+    this.store.empty() ? null : `${this.store.positions().length} open positions`,
   );
 
   /** The dialog is open. Only ever set from the button, so there is no state
