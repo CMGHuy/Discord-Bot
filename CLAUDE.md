@@ -168,9 +168,11 @@ prefix, e.g. `U34`). Verify with `grep -n "^### Task" <plan>` first.
 preflights this repo's documented traps. `/gate` is the pre-commit verification
 gate (knows the one permitted pre-existing failure).
 `.claude/hooks/guardrails.py` is a `PreToolUse` hook that **denies** the
-patterns this file forbids in prose — unscoped `Glob`, `grep -r` from the
-repo root, `Read` on a 100 KB+ `implemented/` plan, writes under
-`.claude/worktrees/` — and warns on bare `pytest` and `cat` of the big docs.
+patterns this file forbids in prose — unscoped `Glob`, recursive `grep`/`rg`
+from the repo root, `Read` on a 100 KB+ `implemented/` plan, writes into
+*another* tree's `.claude/worktrees/<name>/` (a worktree session editing its
+own files is normal work and stays allowed) — and warns on bare `pytest` and
+on `cat`/`Read` of the big docs.
 Rules live in one pure `evaluate()` function, unit-tested in
 `tests/hooks/test_guardrails.py`. It fails open by construction: if it and
 this file ever disagree, this file wins and the hook is what gets fixed.

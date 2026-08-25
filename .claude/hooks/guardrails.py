@@ -4,10 +4,11 @@ the mistake rather than relying on CLAUDE.md having been recalled.
 Rules encode what CLAUDE.md and .ignore already state. If a rule and
 CLAUDE.md ever disagree, CLAUDE.md wins and the rule is what gets fixed.
 
-Design: evaluate() is pure and does no I/O beyond os.path.getsize, so the
-whole rule set is unit-tested in tests/hooks/test_guardrails.py without a
-live session. Anything unrecognised returns None -- silent allow. A
-guardrail that blocks legitimate work costs more than the habit it prevents.
+Design: evaluate() reads no files and spawns no subprocesses -- os.path.getsize
+and os.getcwd() are the only OS calls -- so the whole rule set is unit-tested in
+tests/hooks/test_guardrails.py without a live session. Anything unrecognised
+returns None -- silent allow. A guardrail that blocks legitimate work costs more
+than the habit it prevents.
 """
 import json
 import os
@@ -32,12 +33,32 @@ def _warn(message: str) -> dict:
 
 GLOB_PATTERN_KEYS = ("pattern", "glob")
 _IMPLEMENTED_PLAN_MAX_BYTES = 100_000
-_GREP_ROOT_RE = re.compile(r"^\s*(grep|rg)\b(?=.*\s-\w*r)")
+
+# A recursive grep: -r, -R (also recursive), or --recursive. Deliberately does
+# NOT apply to rg, whose -r means --replace; rg recurses by default instead.
+_GREP_RECURSIVE_RE = re.compile(
+    r"(?:^|\s)(?:-[a-zA-Z]*[rR][a-zA-Z]*(?=\s|$)|--recursive(?=\s|$))"
+)
+# Where a positional-argument scan must stop: everything past a shell separator
+# belongs to another command, not to this grep's target list.
+_SHELL_SEPARATORS = {"|", "||", "&&", ";", "&", ">", ">>", "2>", "<"}
+_ROOT_TARGETS = {".", "./", ".\\"}
+
+
+def _is_repo_root_arg(value: str) -> bool:
+    """True for the repo root spelled any of the usual ways, quotes included."""
+    return value.strip().strip("\"'") in _ROOT_TARGETS
 
 
 def _rule_unscoped_glob(ti: dict):
-    if ti.get("path"):
-        return None
+    path = ti.get("path")
+    if path:
+        # A path only counts as scoping when it names something below the root;
+        # path="." is the very repo-root walk this rule exists to prevent.
+        if not isinstance(path, str):
+            return None
+        if not _is_repo_root_arg(path):
+            return None
     for key in GLOB_PATTERN_KEYS:
         pattern = ti.get(key)
         if isinstance(pattern, str) and pattern.startswith("**/"):
@@ -45,37 +66,76 @@ def _rule_unscoped_glob(ti: dict):
                 "Glob does not honour .ignore, so an unscoped pattern returns the three "
                 ".claude/worktrees/ copies of this repo -- ~500 matches for 232 real files, "
                 "and it points you at the wrong branch. Scope it by hand, e.g. "
-                'Glob("swingbot/**/*.py"), or pass path=.'
+                'Glob("swingbot/**/*.py"), or pass an explicit path=, e.g. path="swingbot" '
+                '(path="." is the same repo-root walk and does not count).'
             )
     return None
 
 
 def _rule_recursive_grep_from_root(ti: dict):
     cmd = ti.get("command")
-    if not isinstance(cmd, str) or not _GREP_ROOT_RE.match(cmd):
+    if not isinstance(cmd, str):
         return None
+    args = cmd.strip().split()
+    if not args:
+        return None
+    prog = args[0]
+    if prog not in ("grep", "rg"):
+        return None
+    # grep needs an explicit recursion flag; rg recurses by default.
+    if prog == "grep" and not _GREP_RECURSIVE_RE.search(" " + " ".join(args[1:])):
+        return None
+    targets = []
+    for arg in args[1:]:
+        if arg in _SHELL_SEPARATORS:
+            break                       # the rest is a different command
+        if not arg.startswith("-"):
+            targets.append(arg)
     # Scoped to a real subdirectory is fine; only bare '.' or no path is not.
-    tail = cmd.split()
-    targets = [a for a in tail[1:] if not a.startswith("-")]
-    if len(targets) >= 2 and targets[-1] not in (".", "./"):
+    if len(targets) >= 2 and not _is_repo_root_arg(targets[-1]):
         return None
     return _deny(
-        "Plain `grep -r` from the repo root does not respect .ignore -- it crawls "
-        "~2,600 files / 160 MB including three worktree copies and times out at 20s "
-        "returning nothing. Use the Grep tool (it honours .ignore) or `git grep -n` "
-        "for tracked files only."
+        "A recursive search from the repo root (`grep -r`/`-R`/`--recursive`, or `rg`, "
+        "which recurses by default) does not respect .ignore -- it crawls ~2,600 files "
+        "/ 160 MB including three worktree copies and times out at 20s returning "
+        "nothing. Use the Grep tool (it honours .ignore) or `git grep -n` for tracked "
+        "files only."
     )
+
+
+_WORKTREE_SEGMENT_RE = re.compile(r"\.claude/worktrees/([^/]+)")
+_CWD_UNKNOWN = object()
+
+
+def _current_worktree_name():
+    """Name of the worktree this process runs in, None for the main tree, or
+    _CWD_UNKNOWN when the cwd cannot be read (never block on uncertainty)."""
+    try:
+        cwd = os.getcwd().replace("\\", "/")
+    except OSError:
+        return _CWD_UNKNOWN
+    match = _WORKTREE_SEGMENT_RE.search(cwd)
+    return match.group(1) if match else None
 
 
 def _rule_worktree_write(ti: dict):
     path = ti.get("file_path")
-    if isinstance(path, str) and ".claude/worktrees/" in path.replace("\\", "/"):
-        return _deny(
-            "Never edit files under .claude/worktrees/ from a main-tree session -- "
-            "that edits a different branch and the change is invisible here. Work in "
-            "that worktree's own session instead."
-        )
-    return None
+    if not isinstance(path, str):
+        return None
+    match = _WORKTREE_SEGMENT_RE.search(path.replace("\\", "/"))
+    if not match:
+        return None                     # nothing to do with a worktree at all
+    own = _current_worktree_name()
+    if own is _CWD_UNKNOWN:
+        return None                     # cannot tell which tree we are -- allow
+    if own == match.group(1):
+        return None                     # this session's own worktree: normal work
+    return _deny(
+        "That path belongs to a different tree than this session. Never edit files "
+        "under .claude/worktrees/ from a main-tree session -- and the same holds "
+        "across worktrees: the edit lands on another branch and is invisible here. "
+        "Work in that worktree's own session instead."
+    )
 
 
 def _rule_huge_implemented_plan(ti: dict):
@@ -105,7 +165,8 @@ _BIG_DOCS = {
     "README.md": "README.md is a short overview + documentation index. Read the "
                  "topic file it points at instead -- docs/strategy/strategy.md, "
                  "docs/setup.md, docs/commands.md, docs/features/features.md.",
-    "progress.md": "progress.md is 173 KB. tail it, never cat it.",
+    "progress.md": "progress.md is 173 KB -- read only its tail (`tail` it, or Read "
+                   "with an offset), never the whole file.",
 }
 
 
@@ -131,12 +192,24 @@ def _rule_cat_big_doc(ti: dict):
     return None
 
 
+def _rule_read_big_doc(ti: dict):
+    """Read-side twin of _rule_cat_big_doc -- this harness tells agents to prefer
+    Read over cat, so Read("README.md") is the likelier spelling of the mistake."""
+    path = ti.get("file_path")
+    if not isinstance(path, str):
+        return None
+    advice = _BIG_DOCS.get(os.path.basename(path.replace("\\", "/")))
+    if advice is None:
+        return None
+    return _warn(advice + " Continuing anyway.")
+
+
 # Rules run in list order; the first non-None decision wins. Warn rules are
 # appended after deny rules on the same tool, so deny takes precedence.
 _RULES = {
     "Glob": [_rule_unscoped_glob],
     "Bash": [_rule_recursive_grep_from_root, _rule_bare_pytest, _rule_cat_big_doc],
-    "Read": [_rule_huge_implemented_plan],
+    "Read": [_rule_huge_implemented_plan, _rule_read_big_doc],
     "Edit": [_rule_worktree_write],
     "Write": [_rule_worktree_write],
     "NotebookEdit": [_rule_worktree_write],
