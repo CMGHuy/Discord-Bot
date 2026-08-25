@@ -25,7 +25,7 @@ from swingbot.core.analytics.rank import follow_breakdown, follow_score
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
 from swingbot.core.tracking.performance import closed_pnl_pct, closed_r_multiple
 from swingbot.core.backtesting.registry import decay_for
-from swingbot.core.planning.plan_engine import WEAK_CAUTION_TEXT, badge_stats_line
+from swingbot.core.planning.plan_engine import WEAK_CAUTION_TEXT, badge_stats_line, runner_floor
 from swingbot.core.backtesting.registry import Badge
 from swingbot.core.scanning import embed_theme as theme
 from swingbot.core.market.strategy import HORIZONS
@@ -480,6 +480,33 @@ def banked_leg_pct_and_amount(plan, exit_price: float, fraction: float) -> tuple
     if sizing and sizing.get("shares"):
         amount = sizing["shares"] * fraction * (exit_price - entry) * sign
     return pct, amount
+
+
+def partial_position_line(plan) -> str:
+    """'entry 102.00 -> target 150.00 / stop 118.67' for the runner half of
+    a PARTIAL plan -- the same entry -> target / stop shape used everywhere
+    else in the bot's embeds, so it reads as one more position rather than
+    a new format.
+
+    Entry is the TP1 leg's own fill price (legs_realized[0]['exit_price']),
+    not the plan's tp1 target level -- they are usually equal but the fill
+    can differ on a gap-through. Falls back to plan.tp1 if legs_realized is
+    somehow empty (a PARTIAL plan predating this field, same defensive
+    fallback plan_manager.py's own PARTIAL step already uses).
+
+    Target falls back to tp1 when the plan has no tp2 -- most strategies
+    don't set one -- with a "(tp1, no tp2)" note, matching the precedent
+    already set by admin/api_v1/trades.py's current_target."""
+    leg = plan.legs_realized[0] if plan.legs_realized else None
+    entry = leg["exit_price"] if leg else plan.tp1
+    if plan.tp2 is not None:
+        target, target_note = plan.tp2, ""
+    else:
+        target, target_note = plan.tp1, " (tp1, no tp2)"
+    orig_entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+    stop = (plan.working_stop if plan.working_stop is not None
+           else runner_floor(orig_entry, plan.tp1))
+    return f"entry {entry:.2f} → target {target:.2f}{target_note} / stop {stop:.2f}"
 
 
 def _v2_plan(item):
@@ -1106,11 +1133,15 @@ def build_plan_event_embed(plan, event) -> discord.Embed:
     elif event.transition == "be_moved":
         embed.add_field(name="New stop", value=f"{d['working_stop']:.2f} (entry)")
     elif event.transition == "tp1_partial":
-        embed.add_field(name="Banked",
-                        value=f"{d['fraction']:.0%} @ {d['exit_price']:.2f} "
-                              f"({d['r']:+.2f}R)")
-        embed.add_field(name="Runner",
-                        value="runner active, stop protecting 2/3 of the TP1 move",
+        pct, amount = banked_leg_pct_and_amount(plan, d["exit_price"], d["fraction"])
+        cur = config.CURRENCY_SYMBOL
+        banked = (f"{d['fraction']:.0%} @ {d['exit_price']:.2f} "
+                 f"({d['r']:+.2f}R · {pct:+.1f}%")
+        if amount is not None:
+            banked += f" · +{cur}{amount:,.2f}"
+        banked += ")"
+        embed.add_field(name="Banked", value=banked)
+        embed.add_field(name="Partial position", value=partial_position_line(plan),
                         inline=False)
     elif event.transition == "closed":
         embed.add_field(name="Exit", value=f"{d.get('exit_price', 0):.2f}")
