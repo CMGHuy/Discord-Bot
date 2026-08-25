@@ -16,6 +16,7 @@ import { asyncInputs, Async, type AsyncEmptyReason } from './async';
       [staleAsOf]="staleAsOf"
       [skeletonRows]="3"
       [skeletonCols]="2"
+      [announce]="announce"
       (retry)="retried = retried + 1"
     >
       <p class="content">loaded</p>
@@ -28,6 +29,7 @@ class Host {
   empty = false;
   reason: AsyncEmptyReason = 'no-data-yet';
   staleAsOf: string | null = null;
+  announce: string | null = null;
   retried = 0;
 }
 
@@ -85,6 +87,18 @@ describe('Async', () => {
     const { el } = render({ error: 'boom', loading: true, empty: true });
     expect(el.textContent).toContain('boom');
     expect(el.querySelector('.skeleton')).toBeNull();
+  });
+
+  it('exposes one polite live region for pushed updates', () => {
+    const { el } = render();
+    const region = el.querySelector('[aria-live]')!;
+    expect(region.getAttribute('aria-live')).toBe('polite');
+    expect(el.querySelectorAll('[aria-live]').length).toBe(1);
+  });
+
+  it('announces only what the caller gives it', () => {
+    const { el } = render({ announce: '3 trades updated' });
+    expect(el.querySelector('[aria-live]')!.textContent).toContain('3 trades updated');
   });
 });
 
