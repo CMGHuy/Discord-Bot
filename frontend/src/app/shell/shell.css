@@ -135,6 +135,18 @@
   list-style: none;
 }
 
+/* The group label rides the same `.label` clip rule the nav entries use, so
+   it disappears on the collapsed rail where 52px has no room for it and the
+   icons already group visually by their gaps. */
+.nav-group-label {
+  padding: var(--space-8) var(--space-10) var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--text-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.railed .nav-group-label { display: none; }
+
 /* Flex, not block: the icon and the label are two boxes of different heights
    and only a shared cross-axis centre keeps the glyph on the label's line.
    There used to be two `.nav a` rules -- a flex one further up the file and

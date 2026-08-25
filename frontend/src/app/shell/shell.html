@@ -24,25 +24,28 @@
       <span class="tag">paper</span>
     </div>
 
-    <ul class="nav">
-      @for (entry of nav; track entry.path) {
-        <li>
-          <a
-            [routerLink]="entry.path"
-            routerLinkActive="active"
-            [routerLinkActiveOptions]="{ exact: false }"
-            [attr.aria-label]="entry.label"
-            [attr.title]="railed() ? entry.label : null"
-            (click)="closeOverlay()"
-          >
-            <sb-icon [name]="entry.icon" />
-            <!-- The label stays in the DOM on the rail and is hidden
-                 visually, so the accessible name survives the collapse. -->
-            <span class="label">{{ entry.label }}</span>
-          </a>
-        </li>
-      }
-    </ul>
+    @for (group of navGroups; track group.id) {
+      <p class="nav-group-label" [id]="group.id">{{ group.label }}</p>
+      <ul class="nav" [attr.aria-labelledby]="group.id">
+        @for (entry of group.entries; track entry.path) {
+          <li>
+            <a
+              [routerLink]="entry.path"
+              routerLinkActive="active"
+              [routerLinkActiveOptions]="{ exact: false }"
+              [attr.aria-label]="entry.label"
+              [attr.title]="railed() ? entry.label : null"
+              (click)="closeOverlay()"
+            >
+              <sb-icon [name]="entry.icon" />
+              <!-- The label stays in the DOM on the rail and is hidden
+                   visually, so the accessible name survives the collapse. -->
+              <span class="label">{{ entry.label }}</span>
+            </a>
+          </li>
+        }
+      </ul>
+    }
 
     <!-- Both feet in one box that owns the `margin-top: auto`. Putting that
          on each child instead splits the free space between them when both
