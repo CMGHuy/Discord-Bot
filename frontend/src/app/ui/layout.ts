@@ -224,6 +224,16 @@ export class ControlRow {
       color: var(--text);
     }
     .drawer::backdrop { background: var(--scrim); }
+    /* elev-overlay's border-radius and 4-sided border assume a panel that
+     * floats clear of the viewport on every edge. This one doesn't -- right,
+     * top and bottom sit flush against the screen, so rounding those corners
+     * would curve them away from the actual corners and show the scrim
+     * through the gap. Only the left edge is a real boundary against the
+     * page behind it, so that is the only side that keeps a border. */
+    .drawer.elev-overlay {
+      border-radius: 0;
+      border-width: 0 0 0 1px;
+    }
 
     header {
       display: flex;
