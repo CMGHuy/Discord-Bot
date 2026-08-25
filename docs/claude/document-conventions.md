@@ -9,142 +9,96 @@ This file is only about *authoring* the documents. Closing one out — the
 
 ## Naming
 
-**`docs/superpowers/{specs,plans}/YYYY-MM-DD-<document-name>.md` while a
-document is live — no `vN` yet:**
+**`docs/superpowers/{specs,plans}/YYYY-MM-DD-vN-<document-name>.md` — every
+new spec and plan is numbered at creation, before the first commit that
+creates it:**
 
 ```
-2026-08-08-angular-migration.md              (plan, still live)
-2026-08-08-jinja-cutover-design.md           (spec, still live)
-2026-07-14-gatekeeper_0-index.md             (one document split into parts, still live)
+2026-08-25-v58-partial-plan-reframe-design.md   (spec, live, numbered from creation)
+2026-07-14-v6-gatekeeper_0-index.md             (one document split into parts, still numbered as one)
 ```
 
-The `vN` segment is inserted only at **close-out** — the same `git mv` into
-`implemented/`/`no-lift/` that already ends a document's live status
-(`document-lifecycle.md`) — never at authoring time:
-
-```
-2026-08-08-angular-migration.md      →   2026-08-08-v16-angular-migration.md
-                                           (renamed as part of the closing commit)
-```
-
-**Why the number moves to close-out.** A number assigned when a document is
-written assumes it will be the next one to finish — the counter is read once,
-up front, and then trusted for the document's entire live period, which can
-be days or weeks. If execution order changes after that (a different plan
-gets picked up first, this one gets deprioritized, a concurrent session
-closes something else first), the assumption breaks: the pre-claimed number
-either collides with whatever else lands in the meantime, or sits unused as
-a permanent gap. Deferring the number to the moment a document actually
-stops being live sidesteps this entirely — numbers are handed out in the
-order documents *finish*, never the order they were *drafted*, and the
-"next free" check happens exactly once, immediately before the commit that
-needs it, instead of being trusted stale for the document's whole lifetime.
+**History.** This repo briefly ran a *deferred*-numbering scheme
+(2026-08-24 – 2026-08-25): specs and plans stayed numberless while live, and
+got their `vN` only at close-out, to avoid a number claimed up front
+colliding with reordered execution or sitting unused as a permanent gap.
+That reasoning was sound on its own terms, but it broke on a case it didn't
+account for: `v56`/`v57` were spent as informal hotfix labels in commit-
+message subjects (`fix(v56): ...`, `perf(v56): ...`, `fix(v57): ...`) with
+no matching doc file at all — a scheme that only ever counted doc filenames
+had no way to see those numbers were already gone, and a document numbered
+at its own close-out under that scheme would have reissued one of them.
+Reverted back to numbering at creation for that reason, with the counter now
+reading two sources instead of one (below) so an informal commit-message
+`vN` can't be silently reissued again.
 
 **`vN` is one repo-wide counter that only ever increments.** Not
 per-feature, not per-document-type: specs and plans draw from the same
-sequence, so `v11` is the eleventh document to close in this repo, regardless
-of which feature it belongs to, whether it is a spec or a plan, or how long
-it sat live before closing. Next number, computed **at close-out, never when
-drafting**:
+sequence. Next number, computed from **both** doc filenames and git log —
+recomputed immediately before the commit that creates the document, not
+trusted from an earlier read:
 
 ```bash
-find docs/superpowers/specs docs/superpowers/plans -name '*.md' \
-  | grep -oE 'v[0-9]+' | sort -V | tail -1
+{ find docs/superpowers/specs docs/superpowers/plans -name '*.md' | grep -oE 'v[0-9]+'
+  git log --oneline --all | grep -oE '\(v[0-9]+\)' | grep -oE '[0-9]+' | sed 's/^/v/'
+} | sort -V | tail -1
 ```
 
-Use `find`, not `ls` on the two directories — closed documents live one level
-down in `implemented/`, and an `ls` that misses them returns a stale maximum
-and makes you reuse a number. Since only a document that has already closed
-carries a `vN`, this command naturally counts closed work only — a live
-document has nothing to be counted yet, which is what makes it safe to
-re-run immediately before every closing commit rather than trust an earlier
-read.
+Use `find`, not `ls`, on the two directories — closed documents live one
+level down in `implemented/`/`no-lift/`, and an `ls` that misses them
+returns a stale maximum. The `git log` half exists specifically for the
+`v56`/`v57` case above: a hotfix committed straight to `main` with a `vN`
+label in its subject line but no accompanying spec or plan file. Recompute
+right before committing, not once at the start of a session — concurrent
+sessions share this counter (`working-conventions.md`), and a number that
+was free five minutes ago may not be now.
 
-Never reuse a number, and never renumber one already stamped on a committed
-file — commit messages and cross-links reference it from the moment it is
-assigned. Revising a closed document in place keeps its number; only a
-genuinely new document takes the next. A document split across files reuses
-the parent's number with a `_N` part suffix rather than consuming N numbers
+**Concurrent-session collision.** If two sessions each compute the same
+"next" number and both commit, the first commit to land on `main` keeps it.
+The second is caught on the next `git fetch`/`pull` — `git log --all` will
+show the number already used — and that session recomputes and renames its
+own file **before** its own commit, never after one has already landed.
+Never reuse a number, and never renumber one already committed to `main` —
+commit messages and cross-links reference it from the moment it lands.
+Revising an existing document in place keeps its number; only a genuinely
+new document takes the next one. A document split across files shares the
+parent's number with a `_N` part suffix rather than consuming N numbers
 (`v6-gatekeeper_1…_12` are parts of one document, not twelve numbers) —
-assigned at the same close-out moment as the parent.
-
-### While a document is live, everything addresses it by its numberless stem
-
-Worktree and branch names (`document-lifecycle.md`), a plan's `**Spec:**`
-header, cross-references from other in-flight documents, `/task-brief`
-lookups — all of these use the numberless `YYYY-MM-DD-<name>.md` stem for as
-long as the document is live. Nothing about this leaves a stale reference to
-reconcile later: a worktree executing a plan is always removed at or before
-the same closing commit that stamps the plan's number — `document-lifecycle.md`
-covers exactly when — so there is never a live worktree pointing at a name
-that is about to change out from under it. The
-references that do survive past close-out — other documents' cross-links —
-are exactly what `document-lifecycle.md`'s existing "fix the references in
-the same commit" rule already re-points when a document moves into
-`implemented/`; giving the document its number in that same commit is one
-more edit inside a step that already happens.
+assigned once, at whichever part is written first.
 
 ### A spec and its plan may share a number
 
 **Duplication is allowed across `specs/` and `plans/`, specifically for a
-spec and the plan built from it.** Under deferred numbering this works as:
-**whichever half of the pair closes first mints the number; the other
-inherits the same number when it closes too**, rather than each computing
-its own. `v15-jinja-cutover-design.md` (spec) paired with
-`v15-jinja-cutover.md` (plan) is the shape this produces — it is in fact the
-common case historically: sixteen existing pairs already do this (`v0`,
-`v2`, `v5`, `v7`, `v8`, `v10`, `v30`–`v36`, `v39`, `v44`), all of them
-numbered up front under the old, authoring-time convention rather than
-minted at first close under this one — the two schemes agree on the
-outcome for a pair, just not on when the number is decided. Reusing the
-spec's number for its plan is the natural reading of "the `vN` work" — a
-reader can find both halves of one feature under one number without a
-cross-reference.
+spec and the plan built from it.** A plan written from an already-numbered
+spec reuses that spec's number directly — it's already known, no fresh count
+needed. `v15-jinja-cutover-design.md` (spec) paired with
+`v15-jinja-cutover.md` (plan) is the shape this produces; sixteen existing
+pairs do this (`v0`, `v2`, `v5`, `v7`, `v8`, `v10`, `v30`–`v36`, `v39`,
+`v44`). Reusing the spec's number for its plan is the natural reading of
+"the `vN` work" — a reader can find both halves of one feature under one
+number without a cross-reference.
 
-**This is a deliberate reversal of a stricter same-day rule** (uniqueness
-across both folders) that briefly lived in this section. That rule was
-reasoned through — and its rationale is worth keeping in mind even though the
-policy is reverted: a shared number is ambiguous when a spec spawns more than
-one plan (`v15-jinja-cutover` in fact fed `v16-angular-migration`, a
-*different* number, because the cutover itself was left to a later plan) or a
-plan draws on more than one spec, and it can silently consume a number that a
-concurrent session was about to claim for something unrelated. Those
-failure modes are real; they are just judged a smaller cost than the
-friction of forcing every spec/plan pair apart.
-
-**What duplication covers, precisely:** ONE spec and the ONE plan built
-directly from it may share a number. It does not relax "never reuse a
-number" for two unrelated documents — a second, unrelated plan spawned from
-the same spec, or a plan drawing on a second spec, still takes the next free
-number the usual way, computed at ITS OWN close-out:
-
-```bash
-find docs/superpowers/specs docs/superpowers/plans -name '*.md' \
-  | grep -oE 'v[0-9]+' | sort -V | tail -1
-```
+A shared number is ambiguous when a spec spawns more than one plan
+(`v15-jinja-cutover` in fact fed `v16-angular-migration`, a *different*
+number, because the cutover itself was left to a later plan) or a plan draws
+on more than one spec — those cases take the next free number the usual way,
+computed fresh at that document's own creation, same command as above.
 
 Still link a plan to its spec via the plan's `**Spec:**` header line even
-before either has a number — it is what tells the second half of the pair,
-at its own close-out, whose number to inherit, and it stays unambiguous
-where a shared number is not (a plan can name exactly which of a spec's
+though both may already carry the same number — it stays unambiguous where a
+shared number alone is not (a plan can name exactly which of a spec's
 several children it is, and the header survives a spec later feeding a
 second, differently-numbered plan).
-
-**Historical continuity:** the sixteen existing pairs were never an
-exception to reconcile — they are the convention this section restores, just
-under a scheme that decides the number later than they did.
 
 **Renaming a document is not renumbering it.** The 2026-08-13 sweep moved every
 existing file to this layout and rewrote all 151 references across 57 files; the
 numbers themselves were untouched. Two specs that had never had a number and no
 sibling plan to inherit one from (`one-trade-per-ticker`, `admin-design-system`)
 were retro-assigned `v19` and `v20` — the next free values — so no file is left
-in the old format. Their numbers therefore say nothing about when they were
-written, which is the one place the counter's chronology does not hold. The
-2026-08-24 move to deferred numbering is the same kind of change again:
-every document numbered before that date keeps the number it already has —
-this section governs what a *new* document does going forward, not a
-retroactive renumbering.
+in the old format. Every document numbered before a numbering-scheme change
+(2026-08-24's move to deferred numbering, and 2026-08-25's move back) keeps
+the number it already has — each change governs what a *new* document does
+going forward, never a retroactive renumbering.
 
 ## The header block
 

@@ -193,31 +193,39 @@ Both rules and the run that bought them: `docs/claude/working-conventions.md`.
 
 ## Naming specs and plans
 
-**`docs/superpowers/{specs,plans}/YYYY-MM-DD-<document-name>.md` while a
-document is live — no `vN` yet.** The version number is assigned only at
-close-out, the same `git mv` into `implemented/`/`no-lift/` that already ends
-a document's live status — never at authoring time. Baking a number in up
-front assumes today's plan is the next one to finish; reordering which plan
-actually gets worked on and closed turns that assumption into a collision
-(two documents wanting the same number) or a gap (a claimed number nothing
-ever used). Next number, computed **at close-out, not when drafting**:
+**`docs/superpowers/{specs,plans}/YYYY-MM-DD-vN-<document-name>.md` — every
+new spec and plan is numbered at creation, not at close-out** (reverted
+2026-08-25; a brief window under deferred numbering left `v56`/`v57` spent
+in commit-message hotfix labels with no matching doc file, which a
+doc-filenames-only counter can't see). Next number, computed from **both**
+sources — doc filenames and git log — since either can have already spent
+one:
 
 ```bash
-find docs/superpowers/specs docs/superpowers/plans -name '*.md' \
-  | grep -oE 'v[0-9]+' | sort -V | tail -1
+{ find docs/superpowers/specs docs/superpowers/plans -name '*.md' | grep -oE 'v[0-9]+'
+  git log --oneline --all | grep -oE '\(v[0-9]+\)' | grep -oE '[0-9]+' | sed 's/^/v/'
+} | sort -V | tail -1
 ```
 
-`find`, not `ls`. **Re-check the number immediately before the closing
-commit** — concurrent sessions still race this counter; first commit wins.
-Never reuse a number or renumber one already stamped on a committed file. A
-spec and the one plan built directly from it still share a number: whichever
-half closes first mints it, the other inherits it when it closes too. A
-document split across files reuses the parent's number with a `_N` suffix,
-assigned at the same moment. While a document is live it is referenced
-entirely by its numberless stem (worktree/branch names, `**Spec:**` header
-links, `/task-brief` lookups); full mechanics, including why that never
-leaves a stale reference to fix up: `docs/claude/document-conventions.md` and
-`document-lifecycle.md`.
+`find`, not `ls`. **Re-check the number immediately before the commit that
+creates the document** — concurrent sessions still race this counter; first
+commit wins, a loser recomputes and renames before its own commit (never
+after one lands). Never reuse a number or renumber one already stamped on a
+committed file. A plan built from an existing spec reuses the spec's number
+(already known, no fresh count); a plan built from scratch, or a spec with
+no plan, counts fresh at its own creation. A document split across files
+shares the parent's number with a `_N` suffix, assigned once at whichever
+part is written first. Full mechanics: `docs/claude/document-conventions.md`
+and `document-lifecycle.md`.
+
+**This numbers the document only — `VERSION.json`'s `ui`/`bot` release
+numbers are unaffected and still assigned only after real work lands**
+(`docs/claude/working-conventions.md`'s "Versioning" section, unchanged): a
+spec's `Bump:` header is a prediction, the release bump is its own commit
+after the work is green. Document `vN` is a stable identifier assigned at
+authoring time; release semver is assigned at release time — never read one
+from the other, and never let which plan a session picks up first dictate
+what a release becomes.
 
 **When a plan stops being live work, `git mv` it — and every spec it was built
 from — into `implemented/` as part of the closing commit**, so the top level of
