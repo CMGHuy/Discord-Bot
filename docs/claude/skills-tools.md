@@ -17,5 +17,9 @@ Referenced from the root `CLAUDE.md`.
   components, so the result matches the existing plan format.
 - `Explore` subagent for wide code searches; `feature-dev:code-reviewer` or
   `/code-review` for review passes.
+- **One subagent at a time** unless the human partner explicitly asks for
+  several — the rule and its reasoning live in the root `CLAUDE.md`'s "Repo
+  tooling" paragraph. A plan's `## Parallelisation` section maps what *could*
+  run concurrently; it is not permission to launch it.
 - Skip `frontend-design`/`dataviz` conventions for the admin UI unless asked —
   it follows the existing TradingView-style theme.
