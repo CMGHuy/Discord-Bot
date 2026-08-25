@@ -102,3 +102,38 @@ def test_reading_a_live_plan_is_allowed(tmp_path):
     live.parent.mkdir(parents=True)
     live.write_text("x" * 200_000)
     assert evaluate({"tool_name": "Read", "tool_input": {"file_path": str(live)}}) is None
+
+
+def test_bare_pytest_warns_but_allows():
+    out = evaluate({"tool_name": "Bash", "tool_input": {"command": "python -m pytest"}})
+    assert out["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert "testrun.py" in out["additionalContext"]
+
+
+def test_pytest_with_a_file_is_silent():
+    assert evaluate({"tool_name": "Bash",
+                     "tool_input": {"command": "python -m pytest tests/test_edge_gates.py -v"}}) is None
+
+
+def test_testrun_wrapper_is_silent():
+    assert evaluate({"tool_name": "Bash",
+                     "tool_input": {"command": "python scripts/dev/testrun.py fast"}}) is None
+
+
+def test_cat_on_progress_md_warns():
+    out = evaluate({"tool_name": "Bash",
+                    "tool_input": {"command": "cat .superpowers/sdd/progress.md"}})
+    assert out["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert "tail" in out["additionalContext"]
+
+
+def test_cat_on_readme_warns():
+    out = evaluate({"tool_name": "Bash", "tool_input": {"command": "cat README.md"}})
+    assert "documentation index" in out["additionalContext"]
+
+
+def test_deny_wins_over_warn_when_both_match():
+    # grep -r from root inside a command that also mentions pytest
+    out = evaluate({"tool_name": "Bash",
+                    "tool_input": {"command": "grep -r pytest ."}})
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"

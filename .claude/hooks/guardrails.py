@@ -100,9 +100,42 @@ def _rule_huge_implemented_plan(ti: dict):
 
 # Populated (Tasks 3-4 rules registered below): tool name -> list of rule callables.
 # Each rule takes tool_input (dict) and returns a decision dict or None.
+_BARE_PYTEST_RE = re.compile(r"python\s+-m\s+pytest\s*(-\w+\s*)*$")
+_BIG_DOCS = {
+    "README.md": "README.md is a short overview + documentation index. Read the "
+                 "topic file it points at instead -- docs/strategy/strategy.md, "
+                 "docs/setup.md, docs/commands.md, docs/features/features.md.",
+    "progress.md": "progress.md is 173 KB. tail it, never cat it.",
+}
+
+
+def _rule_bare_pytest(ti: dict):
+    cmd = ti.get("command")
+    if not isinstance(cmd, str) or not _BARE_PYTEST_RE.search(cmd.strip()):
+        return None
+    return _warn(
+        "A bare `python -m pytest` puts ~1150 progress lines into context. "
+        "`python scripts/dev/testrun.py fast` is ~27s and prints a one-line verdict; "
+        "`... file tests/test_foo.py` is ~7s. For a full run, dispatch the test-runner "
+        "subagent so none of the output reaches this context. Continuing anyway."
+    )
+
+
+def _rule_cat_big_doc(ti: dict):
+    cmd = ti.get("command")
+    if not isinstance(cmd, str) or not cmd.strip().startswith("cat "):
+        return None
+    for name, advice in _BIG_DOCS.items():
+        if name in cmd:
+            return _warn(advice + " Continuing anyway.")
+    return None
+
+
+# Rules run in list order; the first non-None decision wins. Warn rules are
+# appended after deny rules on the same tool, so deny takes precedence.
 _RULES = {
     "Glob": [_rule_unscoped_glob],
-    "Bash": [_rule_recursive_grep_from_root],
+    "Bash": [_rule_recursive_grep_from_root, _rule_bare_pytest, _rule_cat_big_doc],
     "Read": [_rule_huge_implemented_plan],
     "Edit": [_rule_worktree_write],
     "Write": [_rule_worktree_write],
