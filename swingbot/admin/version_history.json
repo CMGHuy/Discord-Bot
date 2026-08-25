@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-25 17:53:34 UTC",
+  "generated_at": "2026-08-25 19:31:02 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.8.5",
+    "ui": "1.9.0",
     "bot": "1.4.3"
   },
   "releases": [
@@ -821,6 +821,19 @@
       "subject": "release(ui): 1.8.5 -- Closed-table columns, P&L unit, Closed filter, Held, mobile cut-off",
       "versions": {
         "ui": "1.8.5",
+        "bot": "1.4.3"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-08-25",
+      "last_seen": "2026-08-25",
+      "commit": "6cf25ca7",
+      "subject": "release(ui): 1.9.0 -- v54 complete: nav groups, live regions, focus, motion",
+      "versions": {
+        "ui": "1.9.0",
         "bot": "1.4.3"
       },
       "changed": [
