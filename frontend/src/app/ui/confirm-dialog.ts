@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 
 import { Button } from './button';
+import { FocusTrap } from './focus-trap';
 import { ControlRow } from './layout';
 
 /**
@@ -30,26 +31,32 @@ import { ControlRow } from './layout';
 @Component({
   selector: 'sb-confirm-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow],
+  imports: [Button, ControlRow, FocusTrap],
   template: `
     <dialog #dialog class="elev-overlay" (close)="cancelled.emit()" (cancel)="cancelled.emit()">
-      <h2>{{ title() }}</h2>
-      <p class="consequence">{{ consequence() }}</p>
+      <!-- Only present while open, so sbFocusTrap's constructor/ngOnDestroy
+           pair runs on exactly open and close -- see focus-trap.ts. -->
+      @if (open()) {
+        <div sbFocusTrap>
+          <h2>{{ title() }}</h2>
+          <p class="consequence">{{ consequence() }}</p>
 
-      <sb-control-row class="actions">
-        <button sb-button variant="ghost" type="button" (click)="close()">
-          {{ cancelLabel() }}
-        </button>
-        <button
-          sb-button
-          [variant]="destructive() ? 'danger' : 'primary'"
-          type="button"
-          [loading]="working()"
-          (click)="confirmed.emit()"
-        >
-          {{ confirmLabel() }}
-        </button>
-      </sb-control-row>
+          <sb-control-row class="actions">
+            <button sb-button variant="ghost" type="button" (click)="close()">
+              {{ cancelLabel() }}
+            </button>
+            <button
+              sb-button
+              [variant]="destructive() ? 'danger' : 'primary'"
+              type="button"
+              [loading]="working()"
+              (click)="confirmed.emit()"
+            >
+              {{ confirmLabel() }}
+            </button>
+          </sb-control-row>
+        </div>
+      }
     </dialog>
   `,
   styles: `
@@ -59,6 +66,11 @@ import { ControlRow } from './layout';
       color: var(--text);
     }
     dialog::backdrop { background: var(--scrim); }
+
+    /* Structural only -- exists so sbFocusTrap has one element to own, not
+       a layout box. Everything inside lays out exactly as if it were still
+       a direct child of dialog. */
+    [sbFocusTrap] { display: contents; }
 
     h2 { font-size: var(--text-subhead); font-weight: 600; }
     .consequence {
