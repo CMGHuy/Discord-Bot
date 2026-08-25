@@ -138,3 +138,21 @@ export function date(iso: string | null | undefined): string {
 export function text(value: string | null | undefined): string {
   return value === null || value === undefined || value === '' ? ABSENT : value;
 }
+
+/**
+ * A signed figure, with the sign carried by a glyph as well as by colour.
+ *
+ * Colour is never the only channel: a screenshot pasted into Discord keeps
+ * the hue but a colour-blind reader does not, and `--pos`/`--neg` are close
+ * enough in lightness that a greyscale print loses them entirely.
+ *
+ * The minus is U+2212, not a hyphen. A hyphen is narrower than a digit even
+ * in a mono face, so a column of hyphen-negatives does not align with a
+ * column of positives — which defeats the tabular numerics the whole numeric
+ * law rests on. Zero takes no sign, because it has none.
+ */
+export function signed(value: number | null | undefined, decimals = 2): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return ABSENT;
+  if (value === 0) return num(0, decimals);
+  return value > 0 ? `+${num(value, decimals)}` : `−${num(Math.abs(value), decimals)}`;
+}
