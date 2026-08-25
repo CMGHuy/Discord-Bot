@@ -78,6 +78,12 @@ and spec lists are the top-level files in `docs/superpowers/plans/` and
 `docs/superpowers/specs/`; `implemented/` and `no-lift/` are not active work.
 Verify a reported next task actually appears in the active plan.
 
+Claude Code sessions also enforce the worst of these habits mechanically via
+`.claude/hooks/guardrails.py`, a `PreToolUse` hook that denies unscoped
+`Glob`, `grep -r` from the repo root, huge `implemented/` plan reads, and
+worktree writes from the main tree. That hook does not run for Codex; follow
+the prose rules above directly.
+
 ## Testing and long-running work
 
 Use the test wrapper rather than the full raw suite:

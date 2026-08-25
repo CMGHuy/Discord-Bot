@@ -166,7 +166,15 @@ prefix, e.g. `U34`). Verify with `grep -n "^### Task" <plan>` first.
 
 **Repo tooling (`.claude/`):** `/task-brief <id>` extracts one plan task and
 preflights this repo's documented traps. `/gate` is the pre-commit verification
-gate (knows the one permitted pre-existing failure). Subagents:
+gate (knows the one permitted pre-existing failure).
+`.claude/hooks/guardrails.py` is a `PreToolUse` hook that **denies** the
+patterns this file forbids in prose — unscoped `Glob`, `grep -r` from the
+repo root, `Read` on a 100 KB+ `implemented/` plan, writes under
+`.claude/worktrees/` — and warns on bare `pytest` and `cat` of the big docs.
+Rules live in one pure `evaluate()` function, unit-tested in
+`tests/hooks/test_guardrails.py`. It fails open by construction: if it and
+this file ever disagree, this file wins and the hook is what gets fixed.
+Subagents:
 `backtest-runner` (multi-hour jobs in an isolated context, returns only
 verdicts), `symbol-verifier` (`git grep` existence checks for symbols a plan
 names), `test-runner` (runs the suite and returns only the verdict).
