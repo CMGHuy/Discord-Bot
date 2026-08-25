@@ -111,6 +111,19 @@
           }
         ]
       }
+    ],
+
+    "PreToolUse": [
+      {
+        "matcher": "Glob|Read|Edit|Write|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/guardrails.py",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }
