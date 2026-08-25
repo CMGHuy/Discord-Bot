@@ -35,7 +35,7 @@ import {
   PINNED_COLUMNS,
   tradeColumns,
 } from '../trades/trades.columns';
-import { dateTime, held, money, num, pct, rMultiple } from '../../ui/format';
+import { amount, dateTime, held, money, num, pct, rMultiple } from '../../ui/format';
 import { ControlRow, Panel } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
@@ -973,11 +973,12 @@ export class Dashboard {
     const maxAbs = note['max_position_value_absolute'];
     if (typeof risk !== 'number' || typeof riskPct !== 'number') return null;
 
+    const currency = this.connection.currency();
     const cap = typeof maxAbs === 'number' && maxAbs > 0
-      ? `${maxPct}% of balance or ${maxAbs.toLocaleString()} absolute, whichever is tighter`
+      ? `${maxPct}% of balance or ${amount(maxAbs, currency)} absolute, whichever is tighter`
       : `${maxPct}% of balance`;
 
-    return `Risk % mode — risks ${risk.toLocaleString()} (${riskPct}%) if stopped `
+    return `Risk % mode — risks ${amount(risk, currency)} (${riskPct}%) if stopped `
       + `out, capped at ${cap}. Varies per trade with stop distance — switch to `
       + '!account sizing account for a fixed premium instead.';
   });

@@ -42,6 +42,16 @@ export function money(value: number | null | undefined, unit: string, decimals =
   return `${value > 0 ? '+' : ''}${value.toFixed(decimals)} ${unit}`;
 }
 
+/** An unsigned currency magnitude: a cap, an exposure, a risk amount -- not
+ *  a gain/loss. Deliberately not `money`. That one signs its output because
+ *  it formats a P&L movement; this one names a level, the same distinction
+ *  `share` draws against `pct`. `unit` comes from `ConnectionStore.currency()`,
+ *  never a literal -- see `money`'s own note. */
+export function amount(value: number | null | undefined, unit: string, decimals = 2): string {
+  if (value === null || value === undefined) return ABSENT;
+  return `${value.toFixed(decimals)} ${unit}`;
+}
+
 export function rMultiple(value: number | null | undefined): string {
   if (value === null || value === undefined) return ABSENT;
   return `${value > 0 ? '+' : ''}${value.toFixed(2)}R`;
