@@ -20,6 +20,7 @@ import { Icon, IconName } from '../../ui/icon';
 import { ControlRow, Drawer, Panel, Tab, TabBar } from '../../ui/layout';
 import { LineChartSeries } from '../../ui/line-chart';
 import { LineChart } from '../../ui/line-chart';
+import { Magnitude } from '../../ui/magnitude';
 import { MetricCard } from '../../ui/metric-card';
 import { MetricChip } from '../../ui/metric-chip';
 import { PaginationComponent } from '../../ui/pagination';
@@ -70,6 +71,7 @@ interface GalleryRow {
     Histogram,
     Icon,
     LineChart,
+    Magnitude,
     MetricCard,
     MetricChip,
     Panel,
@@ -222,6 +224,11 @@ interface GalleryRow {
         <sb-direction-arrow direction="bearish" />
         <sb-confidence-cell [level]="4" [score]="81" direction="bullish" />
         <sb-plan-cell [entry]="100" [target]="120" [stop]="95" [trigger]="null" />
+      </sb-control-row>
+      <sb-control-row>
+        <sb-magnitude [value]="2.1" [max]="4" style="width: 80px" />
+        <sb-magnitude [value]="-1.3" [max]="4" style="width: 80px" />
+        <sb-magnitude [value]="null" [max]="4" style="width: 80px" />
       </sb-control-row>
     </sb-panel>
 
