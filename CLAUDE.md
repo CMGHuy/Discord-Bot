@@ -142,12 +142,15 @@ reasoning: **`docs/claude/edge-priorities.md`**.
   it prints a one-line verdict instead of ~1150 progress lines. Better still for
   a full run, dispatch the `test-runner` subagent so none of it reaches this
   context.
-- **When executing a plan, `... full` runs once — as the plan's final
-  verification task**, over everything the plan implemented, and a red result
-  there is where the fixing starts. Per-task verification is the narrow run.
-  **Do not re-run the suite after merging the plan branch to `main`** — the
-  branch was already green; only a merge that resolved conflicts earns another
-  run. Written up in `docs/claude/document-conventions.md`.
+- **When executing a plan, the full suite runs once — as the plan's final
+  verification task** — `python scripts/dev/testrun.py full` for Python,
+  `cd frontend && npm test` for the Angular SPA — over everything the plan
+  implemented, and a red result there is where the fixing starts. Per-task
+  verification is the narrow run (one test file, or one `--include` spec).
+  This applies to whichever suite(s) a plan's own files touch, not Python
+  only. **Do not re-run a suite after merging the plan branch to `main`** —
+  the branch was already green; only a merge that resolved conflicts earns
+  another run. Written up in `docs/claude/document-conventions.md`.
 - Hand wide/exploratory searches to the `Explore` agent so raw grep output never
   lands in this context.
 

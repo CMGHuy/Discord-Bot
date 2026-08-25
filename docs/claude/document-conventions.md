@@ -281,30 +281,43 @@ session re-deriving the dependency graph to find out.
 ## One full suite run, at the end of the plan
 
 **A plan verifies itself once, as its own final task — not after every step.**
-The per-task check is the narrow one: `python scripts/dev/testrun.py file
-tests/test_<the file that task touched>.py` (~7s), or `... fast` (~27s) when the
-task's blast radius genuinely crosses files. `... full` is **not** a per-task
-step, and a plan that writes "run the full suite" into every task's verification
-block is writing a plan that costs an extra 40–260s per task for information the
-narrow run already gave.
+This applies to **every** suite a plan's own files touch, not just the Python
+one: a plan that only edits `frontend/` verifies itself once with
+`cd frontend && npm test`; a plan that touches both gets one full run of each,
+still only at the end. The per-task check is the narrow one — Python:
+`python scripts/dev/testrun.py file tests/test_<the file that task touched>.py`
+(~7s), or `... fast` (~27s) when the task's blast radius genuinely crosses
+files; frontend: `npm test -- --include <the one spec file that task
+touched>`. Neither `... full` nor a bare `npm test` (no `--include`) is a
+per-task step, and a plan that writes "run the full suite" into every task's
+verification block is writing a plan that costs an extra 40–260s (Python) or
+several seconds of a full Angular rebuild (frontend) per task for information
+the narrow run already gave.
 
-So every plan ends with a verification task that runs the full suite **once**,
-over everything the plan implemented:
+So every plan ends with a verification task that runs each touched suite's
+full run **once**, over everything the plan implemented:
 
 ```markdown
 ### Task A9: Full-suite verification
 
 Run `python scripts/dev/testrun.py full` (or dispatch the `test-runner`
 subagent) once, over all of Phase A. Expect `0 failed`, `0 xfailed`.
-**If it is not green, fix forward from those failures** — they are this plan's
-regressions, and the task is not done until the run is.
+If the plan touched `frontend/`, also run `cd frontend && npm test` once.
+**If either is not green, fix forward from those failures** — they are this
+plan's regressions, and the task is not done until both runs are.
 ```
 
 That final run is the gate, and it is a real one: it is where the plan's
 regressions surface, so a red result is the start of the work, not a reason to
 re-litigate earlier tasks. Fix from the failures the run names.
 
-**After merging the plan's branch to `main`, do not run the suite again.**
+**A full run triggered mid-plan to chase a real, already-observed failure
+(a compile error, a suspicious ordering bug) is debugging, not a second
+verification task** — it doesn't need its own plan step and isn't the
+violation this section forbids. What the section forbids is *routinely
+scheduling* a full run after every task as if it were the per-task check.
+
+**After merging the plan's branch to `main`, do not run either suite again.**
 The branch was green when the merge started and a conflict-free merge does not
 produce code nobody ran. The one exception is a merge that actually resolved
 conflicts — that resolution is new, unrun code, and it gets the one run.

@@ -92,6 +92,11 @@ Use the test wrapper rather than the full raw suite:
 - `python scripts/dev/testrun.py fast` for broader, non-render-heavy checks.
 - `python scripts/dev/testrun.py full` once as final verification of an entire
   plan; do not rerun it after a clean merge unless conflicts were resolved.
+- Same cadence for the frontend: `npm test -- --include <spec>` per task while
+  iterating, a bare `cd frontend && npm test` only once as the plan's final
+  verification if the plan touches `frontend/`. A full run triggered mid-plan
+  to chase an already-observed failure (compile error, ordering bug) is
+  debugging, not a second verification step.
 
 Green means zero failures and zero xfails. A changed test count is not itself a
 failure. Use `make check` for syntax validation when applicable. Backtests and
