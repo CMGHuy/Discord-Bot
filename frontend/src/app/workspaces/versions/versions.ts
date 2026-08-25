@@ -115,8 +115,9 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
         </div>
         @if (hovered(); as h) {
           <div class="overlay-row">
-            <div class="spotlight" [style.left.%]="h.segment.start * 100"
-                 [style.width.%]="h.segment.width * 100"></div>
+            <div class="dim" [style.left.%]="0" [style.width.%]="h.segment.start * 100"></div>
+            <div class="dim" [style.left.%]="(h.segment.start + h.segment.width) * 100"
+                 [style.width.%]="(1 - h.segment.start - h.segment.width) * 100"></div>
           </div>
         }
       </div>
@@ -254,12 +255,19 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .overlay-row { position: absolute; top: 0; bottom: 0;
                     left: calc(4.5rem + var(--space-8)); right: 0;
                     pointer-events: none; }
-    /* The 9999px spread dims everything outside this element's own left/width
-       in one paint -- clipped to .strip's bounds by its overflow: hidden,
-       so it never bleeds into the basis line above or the legend below. */
-    .spotlight { position: absolute; top: 0; bottom: 0;
-                  box-shadow: 0 0 0 9999px var(--overlay-dim);
-                  pointer-events: none; }
+    /* Two real rectangles flanking the hovered segment's own left/width,
+       clipped to .strip's bounds by its overflow: hidden -- real geometry
+       the G3 gate (and anyone reading this file) can see, replacing a
+       single 9999px-spread shadow that faked "dim everything outside me"
+       and was invisible to both.
+       Not .elev-scrim: that class is fixed to the whole viewport, for a
+       true modal backdrop, which would dim the whole page rather than
+       just this track -- same reasoning as sb-drawer's ::backdrop rule
+       (Task 23), reusing the --scrim token directly instead of a class
+       whose own geometry doesn't fit a locally-clipped highlight. */
+    .dim { position: absolute; top: 0; bottom: 0;
+            background: var(--scrim);
+            pointer-events: none; }
 
     /* Same custom-tooltip convention as line-chart.ts's pointer tooltip:
        position: absolute with no explicit left/top, so it renders at its

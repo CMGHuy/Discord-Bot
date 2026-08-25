@@ -334,7 +334,7 @@ Each is mechanically checkable; none is a judgement call.
 |---|---|
 | G1 | `sb-async` wraps every fetch-backed region: count equals the number of fetching surfaces, enumerated in the plan. |
 | G2 | Every `sb-async` empty branch passes an explicit reason. No default. |
-| G3 | `box-shadow` appears in exactly one rule in the codebase (the L3 rule). |
+| G3 | A non-`inset` `box-shadow` appears in exactly one rule (the L3 rule). `inset` shadows are borders drawn inside the box, not elevation, and stay allowed. |
 | G4 | Zero hex literals outside `tokens.css`. |
 | G5 | Every text-token / surface-token pair ≥ 4.5:1, or documented as non-text. |
 | G6 | No layout shift on data arrival: skeleton geometry matches loaded geometry for each surface. |
