@@ -112,7 +112,7 @@ interface ProposalView extends ProposalRow {
   // calibration, badge drift, grid results, plans) -- tight rows, more per
   // screen -- so it defaults to the instrument register. On the host (a
   // static class, not a template wrapper) because :host is the ancestor the
-  // register's four variables need to reach; the Snapshot panels below
+  // register's three variables need to reach; the Snapshot panels below
   // override it back to register-presentation for the hero figures.
   host: { class: 'register-instrument' },
   // Provided here rather than in root, matching Dashboard and Trades: the store

@@ -13,11 +13,22 @@
  * colour string, not a CSS variable reference — see `token()` below) and so
  * it read the same underlying tokens back out through its own `token()`
  * calls, independently of this object. Two names for one value is exactly
- * the drift risk this file exists to prevent: change `tickColour` here and
- * the canvas chart would not move. A bare name lets every consumer resolve
- * it through its own mechanism (`var(${CHART_CHROME.x})` in a stylesheet,
- * `token(CHART_CHROME.x)` on a canvas) while still reading the same object.
- */
+ * the drift risk this file exists to prevent: change `axis`/`grid`/
+ * `tooltipSurface`/`tooltipBorder` here and the canvas chart would not move.
+ * A bare name lets every consumer resolve it through its own mechanism
+ * (`var(${CHART_CHROME.x})` in a stylesheet, `token(CHART_CHROME.x)` on a
+ * canvas) while still reading the same object.
+ *
+ * `tickColour` is the one key still resolved twice rather than fixed by
+ * this refactor: the canvas chart's scale-label colour is
+ * `chart-theme.ts`'s `palette.textMuted` (`token('--text-muted')`), not
+ * `token(CHART_CHROME.tickColour)` -- because `textMuted` is a
+ * multi-purpose field there (also the crosshair and legend text), not a
+ * single-purpose tick colour, so routing it through this constant would
+ * couple those other uses to a name meant for axis ticks. It is the same
+ * underlying token today (`--text-muted`), so nothing currently drifts, but
+ * changing `tickColour` here would not move the canvas chart's scale
+ * labels the way it would move `histogram.ts`'s. */
 export const CHART_CHROME = {
   axis: '--border-strong',
   grid: '--border',

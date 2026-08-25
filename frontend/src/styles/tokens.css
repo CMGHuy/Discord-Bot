@@ -120,17 +120,23 @@
    *
    * The first three ARE --accent / --info / --warn's own hex, kept as a
    * literal rather than `var(--accent)` the way --quality-1..5 above alias
-   * the valence hues -- unlike a normal CSS property, a custom property's
-   * OWN computed value does not substitute a nested var() (substitution
-   * happens where the property is later USED, not where it's declared), so
-   * `getComputedStyle(...).getPropertyValue('--chart-1')` would return the
-   * literal text "var(--accent)" rather than a resolved colour -- and
-   * line-chart.ts's seriesColour() reads exactly that way, because an SVG
-   * stroke needs a resolved value. chart-palette.spec.ts pins these three
-   * to --accent/--info/--warn's actual values directly, so a retune of one
-   * without the other fails loudly there instead of drifting silently. The
-   * rest are new colours in that family's spirit rather than picked freely,
-   * so the charts still look like they belong to this app. */
+   * the valence hues. Real browsers DO substitute a nested var() inside a
+   * custom property's own computed value (CSS Custom Properties Level 1:
+   * "computed value: specified value, with variables substituted" -- this is
+   * what --quality-1..5 correctly relies on), so aliasing would be safe in
+   * production. It would not be safe in THIS repo's tests: jsdom's
+   * `getComputedStyle` does not perform that substitution (confirmed
+   * directly -- `getPropertyValue()` on a jsdom-rendered `var(--accent)`
+   * custom property returns the literal text "var(--accent)", not a
+   * resolved colour), and line-chart.ts's seriesColour() reads --chart-*
+   * through exactly that call, under vitest, because an SVG stroke needs a
+   * resolved value. chart-palette.spec.ts's own gate also requires a literal
+   * hex for unrelated reasons (it parses tokens.css as text, not through a
+   * browser). So these three stay literal, and chart-palette.spec.ts pins
+   * them to --accent/--info/--warn's actual values directly, so a retune of
+   * one without the other fails loudly there instead of drifting silently.
+   * The rest are new colours in that family's spirit rather than picked
+   * freely, so the charts still look like they belong to this app. */
   --chart-1: #7b5cfa;
   --chart-2: #46c2ff;
   --chart-3: #ffb43d;

@@ -52,7 +52,7 @@ import { Sparkline } from '../../ui/sparkline';
   // (heat, sectors, clusters, scan health) is the same operational reading
   // that table's numbers roll up into -- tight rows, more per screen -- so
   // it defaults to the instrument register. On the host (a static class, not
-  // a template wrapper) because :host is the ancestor the register's four
+  // a template wrapper) because :host is the ancestor the register's three
   // variables need to reach.
   host: { class: 'register-instrument' },
   // Provided on the component: created on entry, destroyed on exit, so the

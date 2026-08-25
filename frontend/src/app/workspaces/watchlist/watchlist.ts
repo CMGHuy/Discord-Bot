@@ -100,7 +100,7 @@ function sortValue(row: Ticker, key: string): string | number | null {
   // v54 D1: the whole point of this workspace (spec v14 Decision 9) is the
   // ticker table -- tight rows, more per screen -- so it defaults to the
   // instrument register. On the host (a static class, not a template
-  // wrapper) because :host is the ancestor the register's four variables
+  // wrapper) because :host is the ancestor the register's three variables
   // need to reach.
   host: { class: 'register-instrument' },
   providers: [WatchlistStore],

@@ -56,13 +56,17 @@ describe('the chart series namespace', () => {
 
   // v54 D5: --chart-1/2/3 are supposed to BE --accent/--info/--warn's own
   // hex (tokens.css's own comment says so), kept as a second literal rather
-  // than `var(--accent)` -- a custom property's own computed value does not
-  // substitute a nested var() the way a normal property does, and
-  // line-chart.ts's seriesColour() reads --chart-* through exactly that
-  // unsubstituted path (getComputedStyle().getPropertyValue()), so aliasing
-  // would silently break the chart rather than silently duplicate a hex.
-  // This is the loud-failure alternative: pin the two copies equal, so a
-  // retune of one without the other fails here instead of drifting.
+  // than `var(--accent)`. Real browsers DO substitute a nested var() inside
+  // a custom property's own value, so aliasing would be safe in production
+  // -- it is this repo's OWN test path that isn't: line-chart.ts's
+  // seriesColour() reads --chart-* via getComputedStyle().getPropertyValue()
+  // under vitest, and jsdom does not perform that substitution (confirmed
+  // directly), so an aliased value would reach an SVG stroke as the literal
+  // text "var(--accent)". This spec's own token() also requires a literal
+  // hex regardless (it parses tokens.css as text). So these stay literal,
+  // and this is the loud-failure alternative to aliasing: pin the two
+  // copies equal, so a retune of one without the other fails here instead
+  // of drifting.
   it('chart-1/2/3 stay equal to the accent/info/warn hex they are meant to be', () => {
     expect(token('--chart-1')).toBe(token('--accent'));
     expect(token('--chart-2')).toBe(token('--info'));

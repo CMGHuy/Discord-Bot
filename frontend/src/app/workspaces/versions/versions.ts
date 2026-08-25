@@ -46,7 +46,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
   // v54 D1: this workspace is a lane strip plus a change stream -- both
   // dense, repeating rows, more per screen -- so it defaults to the
   // instrument register. On the host (a static class, not a template
-  // wrapper) because :host is the ancestor the register's four variables
+  // wrapper) because :host is the ancestor the register's three variables
   // need to reach.
   host: { class: 'register-instrument' },
   template: `

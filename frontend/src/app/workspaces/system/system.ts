@@ -47,7 +47,7 @@ const TAB_IDS = new Set<string>(SYSTEM_TABS);
   // v54 D1: the three tabs behind this shell (Settings, Logs, Scan) are all
   // dense operational surfaces -- tight rows, more per screen -- so it
   // defaults to the instrument register. On the host (a static class, not a
-  // template wrapper) because :host is the ancestor the register's four
+  // template wrapper) because :host is the ancestor the register's three
   // variables need to reach.
   host: { class: 'register-instrument' },
   providers: [SystemStore],
