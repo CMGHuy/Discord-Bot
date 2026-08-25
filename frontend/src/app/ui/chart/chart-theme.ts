@@ -1,6 +1,17 @@
 import { CrosshairMode, DeepPartial } from 'lightweight-charts';
 import type { ChartOptions } from 'lightweight-charts';
 
+import { CHART_CHROME, token, tokenPx } from './chart-frame';
+
+// Re-exported so this file's existing importers (legend-primitive.ts,
+// chart-theme.spec.ts, and any test fixture that does
+// `import { token } from './chart-theme'`) are unaffected by token()/
+// tokenPx() now living in chart-frame.ts -- moved there because that file
+// has no runtime imports of its own, unlike this one (lightweight-charts,
+// for the option types below), and the two CSS-styled charts need these
+// functions too without bundling a canvas library they never draw to.
+export { token, tokenPx };
+
 /**
  * The chart's colours, read from the design tokens at runtime.
  *
@@ -19,17 +30,7 @@ import type { ChartOptions } from 'lightweight-charts';
  *
  * Read once per chart creation rather than cached at module load, so a chart
  * built after a token change gets the new values.
- *
- * Exported for `legend-primitive.ts` (v25 Task 9): it is the one other canvas
- * primitive that paints anything besides a colour — its font family and size
- * come from `--font-sans`/`--text-table` the same way every colour here comes
- * from `--pos`/`--accent`/etc. A second copy of this function would be exactly
- * the drift risk the paragraph above warns about for a stale hex fallback: it
- * would stop matching the moment this one's behaviour changed, silently.
  */
-export function token(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
 
 /* There are no hex fallbacks here any more, and that is the point.
  *
@@ -83,6 +84,22 @@ export interface ChartPalette {
   posSoft: string;
   negSoft: string;
   infoSoft: string;
+  /** v54 D5: the right price scale's and time scale's own border —
+   *  `chart-frame.ts`'s `CHART_CHROME.axis`. `--border-strong`, not
+   *  `--border`: an axis is a boundary a reader orients against, not a
+   *  hairline between rows the way the grid is. lightweight-charts paints to
+   *  a canvas, so this reads `CHART_CHROME.axis`'s bare custom-property name
+   *  through `token()` for a resolved colour, rather than the `var()`-wrapped
+   *  form the three CSS-styled charts embed straight into a stylesheet. */
+  axis: string;
+  /** The on-canvas legend's box background — `CHART_CHROME.tooltipSurface` —
+   *  so `LegendPrimitive`'s corner box (this chart's nearest equivalent to
+   *  the other three charts' `.tooltip`) reads as the same surface. */
+  tooltipSurface: string;
+  /** The legend box's border — `CHART_CHROME.tooltipBorder`. Same token as
+   *  `axis` (both `--border-strong`); named separately because the two serve
+   *  different roles, matching `CHART_CHROME`'s own two separate keys. */
+  tooltipBorder: string;
 }
 
 export function chartPalette(): ChartPalette {
@@ -93,7 +110,10 @@ export function chartPalette(): ChartPalette {
     warn: token('--warn'),
     text: token('--text'),
     textMuted: token('--text-muted'),
-    border: token('--border'),
+    // CHART_CHROME.grid -- this palette's only consumer is chartOptions()'s
+    // grid.vertLines/horzLines below, so it reads the shared constant like
+    // axis/tooltipSurface/tooltipBorder do, not a second literal of --border.
+    border: token(CHART_CHROME.grid),
     surface: token('--surface'),
     volume: token('--text-faint'),
     separator: token('--border-strong'),
@@ -102,18 +122,31 @@ export function chartPalette(): ChartPalette {
     posSoft: token('--pos-soft'),
     negSoft: token('--neg-soft'),
     infoSoft: token('--info-soft'),
+    axis: token(CHART_CHROME.axis),
+    tooltipSurface: token(CHART_CHROME.tooltipSurface),
+    tooltipBorder: token(CHART_CHROME.tooltipBorder),
   };
 }
 
-/** Chart options built from the palette. Grid lines are drawn in `--border`,
- *  the same hairline the tables use, so the chart recedes into the page
- *  rather than sitting on it as a separate visual system. */
+/** Chart chrome shared with the other three charts (v54 D5,
+ *  `chart-frame.ts`'s `CHART_CHROME`): grid lines in `CHART_CHROME.grid`, the
+ *  same hairline the tables use, so the chart recedes into the page rather
+ *  than sitting on it as a separate visual system; the axis border one step
+ *  up, at `CHART_CHROME.axis`; scale-label text sized from
+ *  `CHART_CHROME.tickSize`, the same size every chart's axis/tick text now
+ *  shares. `CHART_CHROME` holds bare custom-property NAMES so both this
+ *  canvas chart (via `token()`/`tokenPx()`, a resolved colour/number) and the
+ *  CSS-styled charts (via `var()` in a stylesheet) read the very same
+ *  constant rather than two copies of it. Read inside the function, not
+ *  cached at module load, for the same reason `chartPalette()` is: a chart
+ *  built after a token change must get the new value. */
 export function chartOptions(palette: ChartPalette): DeepPartial<ChartOptions> {
   return {
     autoSize: true,
     layout: {
       background: { color: palette.surface },
       textColor: palette.textMuted,
+      fontSize: tokenPx(CHART_CHROME.tickSize, 11),
       attributionLogo: false,
       // v5 draws the pane separators itself; left at the library's defaults
       // they are a mid-grey from its own theme, which is the one part of the
@@ -128,8 +161,8 @@ export function chartOptions(palette: ChartPalette): DeepPartial<ChartOptions> {
       vertLines: { color: palette.border },
       horzLines: { color: palette.border },
     },
-    rightPriceScale: { borderColor: palette.border },
-    timeScale: { borderColor: palette.border, timeVisible: false },
+    rightPriceScale: { borderColor: palette.axis },
+    timeScale: { borderColor: palette.axis, timeVisible: false },
     crosshair: {
       mode: CrosshairMode.Magnet,
       vertLine: { color: palette.textMuted, labelBackgroundColor: palette.accent },

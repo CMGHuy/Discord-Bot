@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
+import { CHART_CHROME, token } from './chart/chart-frame';
+
 export interface LineChartPoint {
   date: string;
   value: number;
@@ -61,18 +63,22 @@ export function seriesPath(
     .join(' ');
 }
 
-/** Eight categorical hues, fixed order -- the dataviz skill's dark-mode
- *  categorical palette (`references/palette.md`'s "Categorical palette"
- *  table, Dark column), verified directly against that file rather than
- *  assumed. This app is dark-only (`styles/tokens.css`'s own "Dark only"
- *  note: no `prefers-color-scheme` block, no `[data-theme]` hook), so the
- *  dark-surface steps are the only ones that apply here -- the light column
- *  is never rendered. A ninth series folds into "Other" per the skill's own
- *  rule rather than cycling back to hue 1. */
-const SERIES_COLORS = [
-  '#3987e5', '#d95926', '#199e70', '#c98500',
-  '#d55181', '#008300', '#9085e9', '#e66767',
-] as const;
+/**
+ * Series colours, read from the token namespace rather than declared here.
+ *
+ * These were eight raw hexes — the only colours in the app outside
+ * tokens.css, and unharmonised with the valence law: nothing stopped one of
+ * them drifting into green, on a screen where green means gain.
+ *
+ * Read through `token()` (`chart-frame.ts`) because an SVG stroke needs a
+ * resolved value, not a `var()`. `test-setup.ts` injects tokens.css into the
+ * test document, so this resolves under vitest too.
+ */
+const SERIES = Array.from({ length: 8 }, (_, i) => `--chart-${i + 1}`);
+
+function seriesColour(index: number): string {
+  return token(SERIES[index % SERIES.length]);
+}
 
 /**
  * A multi-series time chart with a shared axis, a legend past one series,
@@ -140,8 +146,8 @@ const SERIES_COLORS = [
     .tooltip {
       position: absolute;
       padding: var(--space-6) var(--space-8);
-      background: var(--surface-overlay);
-      border: 1px solid var(--border-strong);
+      background: var(${CHART_CHROME.tooltipSurface});
+      border: 1px solid var(${CHART_CHROME.tooltipBorder});
       border-radius: var(--radius);
       font-size: var(--text-chip);
       pointer-events: none;
@@ -182,7 +188,7 @@ export class LineChart {
   }
 
   protected colorFor(index: number): string {
-    return SERIES_COLORS[index % SERIES_COLORS.length];
+    return seriesColour(index);
   }
 
   protected readonly hoverIndex = signal<number | null>(null);

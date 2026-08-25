@@ -44,7 +44,12 @@ import { MetricTone } from './metric-card';
       letter-spacing: 0.1em;
       white-space: nowrap;
     }
-    .value { font-size: var(--text-subhead); font-weight: 600; }
+    /* v54 D1: the register class on an ancestor panel/workspace sets
+       --register-figure to the rung its density picked; the fallback is
+       what this chip rendered before the registers existed, so a chip with
+       no register ancestor (not yet migrated, or deliberately opted out)
+       is unchanged. Matches MetricCard's identical .value treatment. */
+    .value { font-size: var(--register-figure, var(--text-subhead)); font-weight: 600; }
     .pos { color: var(--pos); }
     .neg { color: var(--neg); }
     .warn { color: var(--warn); }

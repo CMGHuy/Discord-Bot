@@ -104,6 +104,48 @@
   --quality-4: var(--info);
   --quality-5: var(--pos);
 
+  /* -- chart series ------------------------------------------------------
+   * A SEPARATE NAMESPACE from the valence hues above, and deliberately so.
+   *
+   * The valence rule ("a sixth hue is a review defect") governs SEMANTIC
+   * colour: --pos means good, --neg means bad, and those meanings hold on
+   * every surface. A categorical series colour carries no meaning at all --
+   * it is an identifier, telling you which line is AAPL. The two namespaces
+   * must not overlap: a green series in an app where green means gain would
+   * lie to a reader every other screen has trained.
+   *
+   * So the one binding rule, checked by chart-palette.spec.ts: no member is
+   * within ΔE 10 of --pos or --neg, and adjacent members clear ΔE 15 so they
+   * stay apart at a 1px stroke.
+   *
+   * The first three ARE --accent / --info / --warn's own hex, kept as a
+   * literal rather than `var(--accent)` the way --quality-1..5 above alias
+   * the valence hues. Real browsers DO substitute a nested var() inside a
+   * custom property's own computed value (CSS Custom Properties Level 1:
+   * "computed value: specified value, with variables substituted" -- this is
+   * what --quality-1..5 correctly relies on), so aliasing would be safe in
+   * production. It would not be safe in THIS repo's tests: jsdom's
+   * `getComputedStyle` does not perform that substitution (confirmed
+   * directly -- `getPropertyValue()` on a jsdom-rendered `var(--accent)`
+   * custom property returns the literal text "var(--accent)", not a
+   * resolved colour), and line-chart.ts's seriesColour() reads --chart-*
+   * through exactly that call, under vitest, because an SVG stroke needs a
+   * resolved value. chart-palette.spec.ts's own gate also requires a literal
+   * hex for unrelated reasons (it parses tokens.css as text, not through a
+   * browser). So these three stay literal, and chart-palette.spec.ts pins
+   * them to --accent/--info/--warn's actual values directly, so a retune of
+   * one without the other fails loudly there instead of drifting silently.
+   * The rest are new colours in that family's spirit rather than picked
+   * freely, so the charts still look like they belong to this app. */
+  --chart-1: #7b5cfa;
+  --chart-2: #46c2ff;
+  --chart-3: #ffb43d;
+  --chart-4: #b48cff;
+  --chart-5: #2f7fd4;
+  --chart-6: #d07de0;
+  --chart-7: #7fd8e8;
+  --chart-8: #c9a227;
+
   /* -- type ------------------------------------------------------------
    * Named by role, not by size: the scale is closed (11/12/13/14/16/20/25)
    * and a component should be choosing "this is a chip" rather than

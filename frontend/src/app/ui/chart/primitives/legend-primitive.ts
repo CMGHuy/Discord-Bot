@@ -6,7 +6,7 @@ import type {
   Time,
 } from 'lightweight-charts';
 
-import { ChartPalette, token } from '../chart-theme';
+import { ChartPalette, token, tokenPx } from '../chart-theme';
 
 /**
  * The pane's top-left legend (spec v23 Decision 8): the method's name and its
@@ -103,19 +103,27 @@ class LegendRenderer implements IPrimitivePaneRenderer {
     if (lines.length === 0) return;
 
     target.useMediaCoordinateSpace(({ context, mediaSize }) => {
-      // `--text-table` (11px): the same size the tables around this chart
+      // `--text-table` (13px): the same size the tables around this chart
       // use for body text, so the legend reads as part of this app's type
-      // scale rather than importing TradingView's own.
-      const fontSize = parseFloat(token('--text-table')) || 11;
+      // scale rather than importing TradingView's own. v54 D5: was
+      // `parseFloat(token(...))`, which is always NaN -> the 11px fallback --
+      // `getComputedStyle().getPropertyValue()` never resolves a custom
+      // property's own `calc()`, so this had silently ignored --text-scale
+      // (and rendered a stale 11px, not this token's actual 13px) since the
+      // "+2px across the scale" bump. `tokenPx()` resolves it for real.
+      const fontSize = tokenPx('--text-table', 13);
       const family = token('--font-sans') || 'sans-serif';
       const box = legendLayout([...lines], fontSize, mediaSize.width);
 
       context.save();
-      context.fillStyle = this.palette.surface;
+      // v54 D5: the box reads as this chart's version of the other three
+      // charts' `.tooltip` -- `chart-frame.ts`'s CHART_CHROME.tooltipSurface
+      // / tooltipBorder, not the plain chart surface/grid border.
+      context.fillStyle = this.palette.tooltipSurface;
       context.globalAlpha = 0.85;
       context.fillRect(MARGIN, MARGIN, box.width, box.height);
       context.globalAlpha = 1;
-      context.strokeStyle = this.palette.border;
+      context.strokeStyle = this.palette.tooltipBorder;
       context.lineWidth = 1;
       context.strokeRect(MARGIN + 0.5, MARGIN + 0.5, box.width - 1, box.height - 1);
 

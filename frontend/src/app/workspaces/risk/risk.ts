@@ -48,6 +48,13 @@ import { Sparkline } from '../../ui/sparkline';
   selector: 'sb-risk',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Async, Button, ConfirmDialog, DataTable, Panel, RowLink, SectionHead, Sparkline],
+  // v54 D1: exposure-by-position is a table and the rest of this workspace
+  // (heat, sectors, clusters, scan health) is the same operational reading
+  // that table's numbers roll up into -- tight rows, more per screen -- so
+  // it defaults to the instrument register. On the host (a static class, not
+  // a template wrapper) because :host is the ancestor the register's three
+  // variables need to reach.
+  host: { class: 'register-instrument' },
   // Provided on the component: created on entry, destroyed on exit, so the
   // workspace cannot hold stale exposure while you are looking at another.
   providers: [RiskStore],
@@ -305,14 +312,18 @@ import { Sparkline } from '../../ui/sparkline';
        Clamping the track is what makes the children's own overflow-x
        containers the thing that scrolls instead.
        No backticks in here: these styles live in a TS template literal. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
+    /* v54 D1: --space-20 was this rule's own literal before the registers
+       existed; --register-pad's instrument rung is --space-10, so both
+       gaps below shrink -- the tighter rhythm density is the point of
+       opting this workspace into the instrument register. */
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
 
     /* -- killswitch -- */
     .kill {
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
-      gap: var(--space-20);
+      gap: var(--register-pad);
     }
     .kill-value {
       font-size: var(--text-subhead);
@@ -347,7 +358,10 @@ import { Sparkline } from '../../ui/sparkline';
     /* -- heat -- */
     .heat { display: flex; align-items: baseline; gap: var(--space-8); }
     .heat-figure { font-size: var(--text-metric); font-weight: 700; line-height: 1.1; }
-    .heat-cap { color: var(--text-muted); font-size: var(--text-table); }
+    /* The caption beside the hero figure -- same role as MetricCard's .sub,
+       which is what --register-label was introduced for. --text-table (13px)
+       shrinks to the instrument rung (11px); never grows. */
+    .heat-cap { color: var(--text-muted); font-size: var(--register-label); }
 
     .track {
       height: 6px;
@@ -373,6 +387,10 @@ import { Sparkline } from '../../ui/sparkline';
       border: 1px solid var(--border);
       border-radius: var(--radius);
       color: var(--text-secondary);
+      /* --text-micro, not --register-label: this is an eyebrow tag, not a
+         caption, and --register-label grows to --text-table in the
+         presentation register (styles.css's register comment) -- an eyebrow
+         must not grow just because it sits inside a presentation panel. */
       font-size: var(--text-micro);
       text-transform: uppercase;
       letter-spacing: 0.08em;
@@ -383,7 +401,7 @@ import { Sparkline } from '../../ui/sparkline';
     .split {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: var(--space-20);
+      gap: var(--register-pad);
     }
     .sectors > div {
       display: flex;
@@ -401,14 +419,15 @@ import { Sparkline } from '../../ui/sparkline';
       gap: var(--space-8);
       font-size: var(--text-table);
     }
-    .cluster-index { color: var(--text-faint); font-size: var(--text-chip); }
+    .cluster-index { color: var(--text-faint); font-size: var(--register-label); }
 
     .none { color: var(--text-faint); font-size: var(--text-table); }
 
     /* -- scan health -- */
-    .scan { display: flex; align-items: center; gap: var(--space-14); }
+    .scan { display: flex; align-items: center; gap: var(--register-pad); }
     .scan-figures { display: flex; align-items: baseline; gap: var(--space-6); }
     .scan-latest { font-size: var(--text-subhead); font-weight: 600; }
+    /* --text-micro, not --register-label -- an eyebrow tag, see .state above. */
     .scan-label { color: var(--text-secondary); font-size: var(--text-micro); text-transform: uppercase; letter-spacing: 0.1em; }
     .scan sb-sparkline { flex: 1 1 auto; min-width: 80px; max-width: 320px; }
 

@@ -51,6 +51,9 @@ const PALETTE: ChartPalette = {
   negSoft: 'neg-soft-colour',
   info: 'info-colour',
   infoSoft: 'info-soft-colour',
+  axis: 'axis-colour',
+  tooltipSurface: 'tooltip-surface-colour',
+  tooltipBorder: 'tooltip-border-colour',
 };
 
 /** Four daily bars. `t` is an epoch in SECONDS, as `/market/chart` sends it. */

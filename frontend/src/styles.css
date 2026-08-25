@@ -142,3 +142,50 @@ a:hover {
   inset: 0;
   background: var(--scrim);
 }
+
+/* The two registers — spec v54 D1.
+ *
+ * DENSITY IS A PROPERTY OF THE PANEL, NOT THE APP.
+ *
+ * Which one a panel takes is decided by what it ANSWERS:
+ *
+ *   presentation  "how am I doing?"      hero figures, room to breathe
+ *   instrument    "what happened to row 4,192?"   tight rows, more per screen
+ *
+ * Declared per PANEL, not per workspace, because analytics is genuinely both
+ * — its summary strip presents and its tables instrument — and a
+ * workspace-level rule would force it to misdeclare itself. A workspace sets
+ * a default on its root; a panel may opt out.
+ *
+ * Panels read these three variables directly (e.g. `gap: var(--register-pad)`
+ * on their own `:host`) rather than the register class setting `gap` itself —
+ * a fourth, `--register-gap`, used to do exactly that globally, and fought
+ * every workspace's own `gap` rule at equal CSS specificity (`:host` and a
+ * class both resolve to (0,1,0) in Angular's emitted selectors); which one
+ * won was decided by stylesheet insertion order, not anything declared here.
+ * Removed rather than fixed into meaning something distinct from
+ * `--register-pad`, since nothing needed a second gap value.
+ *
+ * `--register-label` is the CAPTION rung, not an eyebrow rung: MetricCard's
+ * uppercase `.label` stays at `--text-micro` in both registers on purpose
+ * (an eyebrow must not grow), and only its `.sub` caption reads
+ * `--register-label`. A workspace's own uppercase eyebrow text (a scan
+ * status, a group heading) should do the same — read `--text-micro`
+ * directly, not this variable — because `--register-label` genuinely is
+ * `--text-micro` in the instrument register (so the two are indistinguishable
+ * there) but is NOT in the presentation register, where an eyebrow nested
+ * inside a presentation panel would grow 11px → 13px, something no eyebrow
+ * anywhere else in this app does.
+ *
+ * Both pull from the same closed scales. Neither adds a value. */
+.register-presentation {
+  --register-pad: var(--space-20);
+  --register-figure: var(--text-metric);
+  --register-label: var(--text-table);
+}
+
+.register-instrument {
+  --register-pad: var(--space-10);
+  --register-figure: var(--text-table);
+  --register-label: var(--text-micro);
+}

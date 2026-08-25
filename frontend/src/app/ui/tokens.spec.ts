@@ -58,6 +58,15 @@ const REQUIRED = [
   '--quality-4',
   '--quality-5',
 
+  '--chart-1',
+  '--chart-2',
+  '--chart-3',
+  '--chart-4',
+  '--chart-5',
+  '--chart-6',
+  '--chart-7',
+  '--chart-8',
+
   '--dur-instant',
   '--dur-base',
   '--dur-slow',
