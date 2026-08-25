@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { chartOptions, chartPalette } from './chart-theme';
+import { chartOptions, chartPalette, tokenPx } from './chart-theme';
 
 /**
  * These tests exist to prove the fallbacks are not needed.
@@ -46,6 +46,13 @@ describe('chartPalette', () => {
     expect(palette.posSoft).toBe(tokenValue('--pos-soft'));
     expect(palette.negSoft).toBe(tokenValue('--neg-soft'));
     expect(palette.infoSoft).toBe(tokenValue('--info-soft'));
+    // v54 D5 (CHART_CHROME): axis and tooltipBorder are deliberately the same
+    // token (--border-strong) under two names for two different roles --
+    // asserted against tooltipSurface too so a future edit that merges them
+    // back into one field would fail here, not silently in the chart.
+    expect(palette.axis).toBe(tokenValue('--border-strong'));
+    expect(palette.tooltipSurface).toBe(tokenValue('--surface-overlay'));
+    expect(palette.tooltipBorder).toBe(tokenValue('--border-strong'));
   });
 
   it('leaves no entry empty', () => {
@@ -65,5 +72,26 @@ describe('chartOptions', () => {
 
     expect(options.layout?.panes?.separatorColor).toBe(palette.separator);
     expect(options.layout?.panes?.separatorHoverColor).toBe(palette.separatorHover);
+  });
+
+  it('themes the axis border, one step up from the grid', () => {
+    const palette = chartPalette();
+    const options = chartOptions(palette);
+
+    expect(options.rightPriceScale?.borderColor).toBe(palette.axis);
+    expect(options.timeScale?.borderColor).toBe(palette.axis);
+    // Not palette.border -- CHART_CHROME.grid, drawn by chartOptions.grid
+    // below, is the one place this task's axis/grid split still uses it.
+    expect(options.grid?.vertLines?.color).toBe(palette.border);
+    expect(options.grid?.horzLines?.color).toBe(palette.border);
+  });
+
+  it('sizes scale text from --text-micro, not a library default', () => {
+    const options = chartOptions(chartPalette());
+
+    // tokenPx, not parseFloat(token(...)) -- a custom property's own calc()
+    // is never resolved by getPropertyValue, so this is the one way to
+    // pin the actual resolved pixel value rather than the fallback.
+    expect(options.layout?.fontSize).toBe(tokenPx('--text-micro', 11));
   });
 });

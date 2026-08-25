@@ -80,10 +80,13 @@ export interface HistogramBin {
       gap: var(--space-8);
     }
     /* v54 D5: "The bin labels are the axis" (this file's own docstring) --
-       so they take CHART_CHROME's tick colour/size, the same as every other
-       chart's axis text, not the body-text pair every other label uses. */
-    .label, .count { color: ${CHART_CHROME.tickColour}; font-size: ${CHART_CHROME.tickSize}; }
-    .count { text-align: right; }
+       so the LABEL takes CHART_CHROME's tick colour/size, the same as every
+       other chart's axis text. The count is the observation itself, not the
+       axis -- it keeps the body-text pair every other value in this app
+       uses, so the number the reader is there to read does not get dimmer
+       and smaller than its own label. */
+    .label { color: ${CHART_CHROME.tickColour}; font-size: ${CHART_CHROME.tickSize}; }
+    .count { color: var(--text-secondary); font-size: var(--text-chip); text-align: right; }
     .track {
       height: 10px;
       background: var(--bg);

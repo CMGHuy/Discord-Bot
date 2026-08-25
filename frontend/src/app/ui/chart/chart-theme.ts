@@ -31,6 +31,27 @@ export function token(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+/**
+ * Resolves a custom property to an actual pixel number -- `token()` alone
+ * cannot do this for `--text-*`/`--space-*`: they are `calc(Npx *
+ * var(--text-scale))` expressions (`tokens.css`'s Text-size control), and
+ * `getComputedStyle().getPropertyValue()` on a *custom* property returns its
+ * raw, unparsed value rather than a resolved one -- `calc()` is never
+ * evaluated. `parseFloat` on that raw string is `NaN`, silently. Probed via
+ * a detached element's resolved `font-size` instead, which the engine does
+ * fully resolve, `--text-scale` included.
+ */
+export function tokenPx(name: string, fallback: number): number {
+  const probe = document.createElement('div');
+  probe.style.position = 'absolute';
+  probe.style.visibility = 'hidden';
+  probe.style.fontSize = `var(${name})`;
+  document.body.appendChild(probe);
+  const resolved = parseFloat(getComputedStyle(probe).fontSize);
+  document.body.removeChild(probe);
+  return Number.isFinite(resolved) ? resolved : fallback;
+}
+
 /* There are no hex fallbacks here any more, and that is the point.
  *
  * There used to be eight — SR3's audit classified them as the one permitted
@@ -131,18 +152,18 @@ export function chartPalette(): ChartPalette {
  *  in `--border-strong`; scale-label text at `--text-micro`, the same size
  *  every chart's axis/tick text now shares. `CHART_CHROME`'s own values are
  *  `var()` expressions meant for a stylesheet — this reads the same
- *  underlying custom properties through `palette`'s `token()` calls instead,
- *  because lightweight-charts paints to a canvas and needs a resolved
- *  number/colour, not a CSS variable reference. Read inside the function,
- *  not cached at module load, for the same reason `chartPalette()` is: a
- *  chart built after a token change must get the new value. */
+ *  underlying custom properties through `palette`'s `token()`/`tokenPx()`
+ *  calls instead, because lightweight-charts paints to a canvas and needs a
+ *  resolved number/colour, not a CSS variable reference. Read inside the
+ *  function, not cached at module load, for the same reason `chartPalette()`
+ *  is: a chart built after a token change must get the new value. */
 export function chartOptions(palette: ChartPalette): DeepPartial<ChartOptions> {
   return {
     autoSize: true,
     layout: {
       background: { color: palette.surface },
       textColor: palette.textMuted,
-      fontSize: parseFloat(token('--text-micro')) || 11,
+      fontSize: tokenPx('--text-micro', 11),
       attributionLogo: false,
       // v5 draws the pane separators itself; left at the library's defaults
       // they are a mid-grey from its own theme, which is the one part of the

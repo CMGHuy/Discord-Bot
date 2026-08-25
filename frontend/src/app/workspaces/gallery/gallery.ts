@@ -307,20 +307,26 @@ interface GalleryRow {
     <!-- -- charts -- one shared chrome (v54 D5) -------------------------------- -->
     <sb-section-head [heading]="'Charts'" [level]="2" />
     <p class="section-help">
-      The same series, drawn four ways. Axis, grid, tick size/colour and tooltip come
-      from one shared chrome (CHART_CHROME) and must be indistinguishable across all four.
+      The same eight-point series, drawn four ways. Not every chart draws every
+      chrome element -- the sparkline deliberately has none (axis, grid, ticks and
+      tooltip all read as noise at that size), the line chart and histogram draw no
+      axis or grid line -- but wherever an element IS drawn, it reads from the same
+      CHART_CHROME tokens: axis/tooltip border <code>--border-strong</code>, grid
+      <code>--border</code>, tick text <code>--text-muted</code> /
+      <code>--text-micro</code>, tooltip surface <code>--surface-overlay</code>.
+      Only the trade chart draws all four.
     </p>
-    <sb-panel heading="Sparkline">
+    <sb-panel heading="Sparkline (no chrome by design)">
       <sb-sparkline [points]="chartComparisonSeries" label="Comparison series" />
     </sb-panel>
-    <sb-panel heading="Histogram">
+    <sb-panel heading="Histogram (bin labels as axis text; counts stay body text)">
       <sb-histogram [bins]="chartComparisonBins" />
     </sb-panel>
-    <sb-panel heading="Line chart">
+    <sb-panel heading="Line chart (tooltip only)">
       <sb-line-chart [series]="chartComparisonLineSeries" />
     </sb-panel>
-    <sb-panel heading="Trade chart">
-      <sb-chart-container [loading]="false" [error]="null" [hasData]="true" [height]="200" caption="Comparison series">
+    <sb-panel heading="Trade chart (axis, grid, tick text and tooltip)">
+      <sb-chart-container [loading]="false" [error]="null" [hasData]="true" [height]="200" caption="Comparison series -- OHLCV, not the raw closes the other three panels show">
         <sb-trade-chart [data]="chartComparisonTradeData" />
       </sb-chart-container>
     </sb-panel>
