@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { num } from './format';
+import { money, num, pct, rMultiple, share } from './format';
 
 /**
  * Entry, target and stop in one cell — spec v18 Decision 4.
@@ -85,6 +85,24 @@ export class PlanCell {
    */
   readonly trailing = input<boolean>(false);
 
+  /* -- v58: the banked TP1 leg, shown in the tooltip once PARTIAL -------- */
+
+  /** Fraction of the position TP1 closed (0-1). Null until PARTIAL. */
+  readonly bankedFraction = input<number | null>(null);
+  /** The TP1 leg's own R-multiple. */
+  readonly bankedR = input<number | null>(null);
+  /** %-gain on the TP1 leg, from the position's ORIGINAL entry to the
+   *  leg's own exit price -- not the same number as the R-multiple. */
+  readonly bankedPct = input<number | null>(null);
+  /** $-amount for the same leg. Null when size is unknown -- omitted
+   *  rather than shown as zero. */
+  readonly bankedAmount = input<number | null>(null);
+  /** The TP1 leg's own fill price -- the runner's "entry" for display
+   *  purposes, distinct from `entry` above (the original position entry). */
+  readonly bankedEntry = input<number | null>(null);
+  /** Needed to format `bankedAmount`; the caller's own currency symbol. */
+  readonly currency = input<string | null>(null);
+
   /** True when the first number is a trigger rather than a fill. */
   protected readonly showsTrigger = computed(
     () => this.entry() === null && this.trigger() !== null,
@@ -101,10 +119,54 @@ export class PlanCell {
       ? `Trigger ${this.fmt(this.trigger())} (not yet filled)`
       : `Entry ${this.fmt(this.entry())}`;
     const stopWord = this.trailing() ? 'Trailing stop' : 'Stop';
-    return `${lead} · Target ${this.fmt(this.target())} · ${stopWord} ${this.fmt(this.stop())}`;
+    let out = `${lead} · Target ${this.fmt(this.target())} · ${stopWord} ${this.fmt(this.stop())}`;
+    const fraction = this.bankedFraction();
+    const r = this.bankedR();
+    const entry = this.bankedEntry();
+    if (fraction !== null && r !== null && entry !== null) {
+      const extras: string[] = [];
+      const pctVal = this.bankedPct();
+      if (pctVal !== null) extras.push(pct(pctVal));
+      const amountVal = this.bankedAmount();
+      const currencyVal = this.currency();
+      if (amountVal !== null && currencyVal !== null) extras.push(money(amountVal, currencyVal));
+      const extraText = extras.length ? ` (${extras.join(', ')})` : '';
+      out += ` · ${share(fraction * 100)} banked ${rMultiple(r)}${extraText} @ ${this.fmt(entry)}`;
+    }
+    return out;
   });
 
   protected fmt(v: number | null): string {
     return num(v);
   }
+}
+
+/** %-gain on an already-banked leg, from the position's ORIGINAL entry to
+ *  that leg's own fill price, signed by direction -- the number a trader
+ *  means by "how much did that leg make", not the R-multiple alone. */
+export function bankedLegPct(
+  entry: number | null,
+  bankedEntry: number | null,
+  direction: string,
+): number | null {
+  if (entry === null || bankedEntry === null || entry === 0) return null;
+  const raw = ((bankedEntry - entry) / entry) * 100;
+  return direction === 'bearish' ? -raw : raw;
+}
+
+/** $-amount for the same leg -- the ORIGINAL share count times the fraction
+ *  that leg closed, times the move from entry to its own fill price. Null
+ *  when any input needed to compute it is unknown. */
+export function bankedLegAmount(
+  entry: number | null,
+  bankedEntry: number | null,
+  bankedFraction: number | null,
+  shares: number | null,
+  direction: string,
+): number | null {
+  if (entry === null || bankedEntry === null || bankedFraction === null || shares === null) {
+    return null;
+  }
+  const raw = (bankedEntry - entry) * shares * bankedFraction;
+  return direction === 'bearish' ? -raw : raw;
 }
