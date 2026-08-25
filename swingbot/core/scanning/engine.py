@@ -45,6 +45,7 @@ MIN_REWARD_PCT+ move available, not on how much money to put behind it.
 import asyncio
 import json as _json
 import logging
+import multiprocessing
 import os
 import time
 from collections import OrderedDict, defaultdict
@@ -628,6 +629,34 @@ def _chunked(items: list, size: int) -> list:
     return [items[i:i + size] for i in range(0, len(items), size)]
 
 
+# E47 follow-up, confirmed live on production 2026-08-25: the default
+# ProcessPoolExecutor start method on Linux is 'fork', which clones the
+# parent's entire memory -- including yfinance 0.2.66's process-wide
+# singleton curl_cffi session (libcurl/OpenSSL handles, connection state,
+# internal locks) the instant it has been touched even once by the parent
+# (any earlier _fetch_one_ticker/get_current_price call, or the background
+# market_data_refresh loop, all running in this same long-lived process).
+# libcurl and OpenSSL are not fork-safe once used -- glibc's own malloc
+# arena locks aren't guaranteed safe across fork() either when other
+# threads are alive, and this process always has some (asyncio's default
+# to_thread executor, map_tickers' ThreadPoolExecutor). Every worker forked
+# after that point crashed on startup with a libc.so.6 segfault (`dmesg`:
+# identical faulting address/instruction pointer every time), which
+# concurrent.futures surfaces as BrokenProcessPool ("A process in the
+# process pool was terminated abruptly") -- not the timeout-kill path
+# below, a completely different failure that happened to look similar in
+# the logs. With v55's batched fetch (one fork per whole chunk, not per
+# ticker) a single crashed fork now fails 10-15+ tickers at once, which is
+# what pushed E47's data_fail_frac over the 20% kill-switch threshold on
+# every single scan. 'spawn' starts each worker as a brand-new interpreter
+# with no inherited C-level state, eliminating the hazard at the root
+# instead of chasing it fork-by-fork; the extra ~1-2s interpreter startup
+# per chunk is cheap against COLD_FETCH_TIMEOUT_SECONDS' 180s budget. This
+# is a no-op on Windows dev machines, which only ever had 'spawn' to begin
+# with (no fork() at all) -- exactly why this never reproduced off Linux.
+_SPAWN_CTX = multiprocessing.get_context("spawn")
+
+
 def _run_bounded(fn, args: tuple, timeout_seconds: float, label: str):
     """Runs fn(*args) in a single-process pool with a hard wall-clock
     budget. Returns fn's result, or None if the budget is exceeded (or fn
@@ -648,11 +677,14 @@ def _run_bounded(fn, args: tuple, timeout_seconds: float, label: str):
     pool it used to bound; this helper generalizes that same wait-then-kill
     mechanism to one future per batched call instead of one per ticker).
 
+    mp_context=_SPAWN_CTX (E47 follow-up, 2026-08-25): see that constant's
+    own comment -- 'fork' (the Linux default) crashes on startup here.
+
     shutdown(wait=False) alone only cancels futures that never started --
     it does not stop one mid-flight, so a still-running worker is force-
     killed outright.
     """
-    with ProcessPoolExecutor(max_workers=1) as pool:
+    with ProcessPoolExecutor(max_workers=1, mp_context=_SPAWN_CTX) as pool:
         future = pool.submit(fn, *args)
         done, not_done = _futures_wait([future], timeout=timeout_seconds)
         if future in done:

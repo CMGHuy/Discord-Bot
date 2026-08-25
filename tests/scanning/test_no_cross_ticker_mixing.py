@@ -55,7 +55,7 @@ class _InlinePool:
     ticker in the batch would hit the live network.
     """
 
-    def __init__(self, max_workers=None):
+    def __init__(self, max_workers=None, mp_context=None):
         pass
 
     def __enter__(self):

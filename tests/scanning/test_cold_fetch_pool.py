@@ -28,12 +28,12 @@ class _FakePool:
     behaviour (immediate success, immediate raise, or a Future that never
     resolves, simulating a wedged worker) they need."""
 
-    def __init__(self, submit_fn, max_workers=None):
+    def __init__(self, submit_fn, max_workers=None, mp_context=None):
         self._submit_fn = submit_fn
         self._processes = {1: _FakeProcess()}
         self.shutdown_calls = []
 
-    def __call__(self, max_workers=None):
+    def __call__(self, max_workers=None, mp_context=None):
         return self
 
     def __enter__(self):

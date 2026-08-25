@@ -14,7 +14,7 @@ class _InlineProcessPool:
     test_no_cross_ticker_mixing.py.
     """
 
-    def __init__(self, max_workers=None):
+    def __init__(self, max_workers=None, mp_context=None):
         pass
 
     def __enter__(self):
