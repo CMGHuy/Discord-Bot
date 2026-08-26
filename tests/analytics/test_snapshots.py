@@ -98,8 +98,8 @@ def test_export_all_writes_expected_files(tmp_path):
 def test_refresh_snapshot_excludes_open_trades_from_all_analytics(tmp_path, monkeypatch):
     snap_path = str(tmp_path / "analytics_snapshot.json")
     monkeypatch.setattr("swingbot.core.analytics.snapshots.DEFAULT_PATH", snap_path)
-    closed = [_t((i - 1) % 9 + 1) for i in range(1, 11)]
-    open_trades = [_t((i - 1) % 9 + 1, "open") for i in range(1, 11)]
+    closed = [_t((i - 1) % 8 + 1) for i in range(1, 11)]
+    open_trades = [_t((i - 1) % 8 + 1, "open") for i in range(1, 11)]
     for trade in open_trades:
         trade.pop("closed_at")
 
