@@ -5,6 +5,9 @@ the focused documents under `docs/claude/`. Treat those documents as the
 canonical project guidance. Read the relevant focused document before working
 in an area it covers; do not load plan files, indexes, or historical plans in
 full when a narrow extract will answer the question.
+`CLAUDE.md` is deliberately
+kept below 200 lines so every session can load its durable rules cheaply;
+focused guidance belongs in `docs/claude/` and is read on demand.
 
 **Claude Code is this repo's primary operator; this file is a downstream
 mirror of `CLAUDE.md`, maintained BY Claude sessions, not the other way
@@ -26,7 +29,8 @@ SSH to production, or make live changes unless the user explicitly asks. If an
 authorized live change is made, mirror its non-secret equivalent into this
 repository before considering the task complete: configuration in `.env.example`
 or docs, local mirrored data where appropriate, and a committed code fix if the
-incident exposed a real defect. Never expose or read `.env` or `.env.bak` unless
+incident exposed a real defect. When a production configuration default changes,
+update `.env.example` too. Never expose or read `.env` or `.env.bak` unless
 the user expressly authorizes it.
 
 The primary entry points are `python bot.py` and `python admin_ui.py`. The
@@ -103,6 +107,12 @@ failure. Use `make check` for syntax validation when applicable. Backtests and
 grids can run for hours; do not launch broad sweeps casually. Ensure long work
 emits flushed progress per meaningful unit, and keep an observable progress
 record for multi-step background work.
+
+Use at most one subagent at a time by default: dispatch it, wait for its result,
+and then decide whether another is needed. Parallel subagents require the human
+partner's explicit request; a plan's parallelisation section only describes what
+could safely run concurrently. The project Codex config enforces this one-agent
+limit.
 
 ## Specs, plans, and versioning
 
