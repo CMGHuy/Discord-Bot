@@ -554,7 +554,7 @@ def test_sync_run_scan_parallel_dispatch_matches_serial(monkeypatch, tmp_path, s
         assert funnel_serial[key] == funnel_parallel[key]
 
 
-def _drive_alert_loop(monkeypatch, tmp_path, intraday_fn):
+def _drive_alert_loop(monkeypatch, tmp_path, intraday_fn, alert_data_fn=None):
     """Run _sync_run_scan all the way THROUGH the alert-building loop.
 
     Every other _sync_run_scan test in this file short-circuits
@@ -584,9 +584,10 @@ def _drive_alert_loop(monkeypatch, tmp_path, intraday_fn):
     monkeypatch.setitem(engine.HORIZONS["4w"], "sr_target_min_pct", 1.0)
 
     monkeypatch.setattr(engine, "load_watchlist", lambda: ["TEST"])
+    monkeypatch.setattr(engine, "_load_cached_daily", lambda ticker: df.copy())
     monkeypatch.setattr(
         engine, "get_daily_data",
-        lambda ticker, period=None: df.copy() if ticker == "TEST" else None,
+        alert_data_fn or (lambda ticker, period=None: df.copy() if ticker == "TEST" else None),
     )
     monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
     monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
@@ -642,6 +643,16 @@ def test_intraday_lookup_failure_never_breaks_the_alert(monkeypatch, tmp_path, s
     assert all(item.intraday is None for item in items)
 
 
+def test_alert_data_fetch_failure_does_not_discard_the_alert(monkeypatch, tmp_path, stub_batch_fetch):
+    """Task v59 A-S4: a chart-data failure remains local to that alert."""
+    def _boom(*args, **kwargs):
+        raise RuntimeError("transient provider failure")
+
+    items = _drive_alert_loop(monkeypatch, tmp_path, lambda *args: None, _boom)
+
+    assert items, "a completed scan item must still produce an alert without a chart"
+
+
 def test_mass_fetch_failure_raises_data_fail_frac_and_engages_kill_switch(monkeypatch, tmp_path, stub_batch_fetch):
     """Task E47 review Finding 1 regression: a total per-ticker fetch
     failure (get_daily_data returns None, the `df is None` early-return in
@@ -683,3 +694,15 @@ def test_mass_fetch_failure_raises_data_fail_frac_and_engages_kill_switch(monkey
     st = throttle.kill_state()
     assert st["on"] is True, "80% fetch-failure rate must cross KILL_DATA_FAIL_FRAC and engage the switch"
     assert "data quality" in st["reason"]
+
+
+def test_crawl_retains_every_frame_for_a_large_universe(monkeypatch):
+    """Task v59 A-S1: a 500-ticker universe must not silently evict frames."""
+    tickers = [f"T{i:03d}" for i in range(500)]
+    monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
+    monkeypatch.setattr(engine, "_load_cached_daily", lambda ticker: {"ticker": ticker})
+
+    frames = engine._crawl_latest_data(tickers)
+
+    assert len(frames) == len(tickers)
+    assert all(frames.get(ticker) is not None for ticker in tickers)

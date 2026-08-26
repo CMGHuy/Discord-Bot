@@ -469,13 +469,11 @@ def scan_slowdown(path: str | None = None) -> bool:
 
 
 class LRUFrames(OrderedDict):
-    """Bounded frame store for universe-scale scans on an 8GB box (Task
-    E83): CX23 has 8GB, and 500 tickers x ~2MB frames uncapped would eat
-    1GB+ alongside pandas temporaries. Evicted frames simply come back as
-    a cache miss (`.get(ticker)` -> None) to every consumer in this module
-    -- every real call site already treats a missing frame as "no data for
-    this ticker this scan" (the same as a failed fetch), so there is no
-    separate reload path to wire.
+    """Frame store with an explicit capacity for one complete scan.
+
+    The crawl passes ``max_frames=len(tickers)``. A scan must retain every
+    fetched frame: an eviction would otherwise look like a data failure to
+    later analysis and open-trade monitoring.
 
     get() is overridden alongside __getitem__: CPython's dict.get() calls
     into the C-level hash table directly and does NOT dispatch through a
@@ -880,7 +878,7 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
         progress.done = 0
         progress.current_ticker = None
 
-    results = LRUFrames()   # Task E83: bounded, evicts oldest frames past 200 tickers
+    results = LRUFrames(max_frames=len(tickers))
     started = time.monotonic()
 
     cold = []
@@ -2020,7 +2018,16 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                        result.ticker, result.horizon_key, result.trend)
             continue
 
-        df = get_daily_data(result.ticker, period=config.DEFAULT_HISTORY_PERIOD)
+        # Reuse the frame this scan already crawled. A cache miss here is
+        # advisory (it only costs the alert its chart), so a transient fetch
+        # failure must not discard alerts that are otherwise ready to post.
+        df = fresh_data.get(result.ticker)
+        if df is None:
+            try:
+                df = get_daily_data(result.ticker, period=config.DEFAULT_HISTORY_PERIOD)
+            except Exception as exc:
+                log.warning("Could not fetch chart data for %s; posting without chart: %s",
+                            result.ticker, exc)
 
         log.info(
             "%s %s (%s): entry=%.2f stop=%.2f target1=%.2f (+%.1f%%)%s conf=Lv%d(%d/100) all_requirements_met=%s",
@@ -2096,16 +2103,17 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             # different arguments would be a different line from the one the
             # PNG draws, which is the whole failure this consolidation exists
             # to end.
-            try:
-                trendline_fit = fit_trendline(
-                    df,
-                    lookback=h.get("fib_lookback", DEFAULT_TRENDLINE_LOOKBACK_DAYS),
-                    current_price=plan.entry,
-                    is_bull=result.trend == "bullish",
-                )
-            except Exception:
-                log.warning("Trendline fit failed for %s (%s) -- trade stores no fit",
-                            result.ticker, result.horizon_key, exc_info=True)
+            if df is not None:
+                try:
+                    trendline_fit = fit_trendline(
+                        df,
+                        lookback=h.get("fib_lookback", DEFAULT_TRENDLINE_LOOKBACK_DAYS),
+                        current_price=plan.entry,
+                        is_bull=result.trend == "bullish",
+                    )
+                except Exception:
+                    log.warning("Trendline fit failed for %s (%s) -- trade stores no fit",
+                                result.ticker, result.horizon_key, exc_info=True)
 
             trade_id = trade_log.log_trade(
                 ticker=result.ticker, strategy=result.strategy, horizon_key=result.horizon_key,
@@ -2153,7 +2161,9 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         chart_filename = f"{result.ticker}_{trade_id or 'snapshot'}.png"
         log.debug("%s: generating trade chart (%s)", result.ticker, chart_filename)
         try:
-            if config.DECISION_CHART_ENABLED and item.plan_v2 is not None:
+            if df is None:
+                chart_path, chart_filename = None, None
+            elif config.DECISION_CHART_ENABLED and item.plan_v2 is not None:
                 # One-pager decision chart (Task E67): only when a v2 plan
                 # exists -- render_decision_chart reads TradePlanV2's own
                 # field names (trigger_price/tp1/tp2/...), which the legacy
