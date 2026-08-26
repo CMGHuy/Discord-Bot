@@ -422,6 +422,45 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
               </dl>
             </sb-panel>
 
+            @if (trade.status === 'PARTIAL' && store.bankedLeg(); as banked) {
+              <sb-panel heading="Partial position">
+                <dl>
+                  <div>
+                    <dt>Entry</dt>
+                    <dd class="num">{{ fmt(banked.exitPrice) }}</dd>
+                  </div>
+                  <div>
+                    <dt>Target</dt>
+                    <dd class="num pos">{{ fmt(trade.target) }}</dd>
+                  </div>
+                  <div>
+                    <dt>Trailing stop</dt>
+                    <dd class="num neg">{{ fmt(trade.stop_loss) }}</dd>
+                  </div>
+                  <div>
+                    <dt>Banked</dt>
+                    <dd class="num">
+                      @if (banked.fraction !== null) {
+                        {{ fmtShare(banked.fraction * 100) }}
+                      }
+                      @ {{ fmt(banked.exitPrice) }}
+                      @if (banked.r !== null) {
+                        <span [class]="pnlClass(banked.r)">{{ fmtR(banked.r) }}</span>
+                      }
+                      @if (store.bankedStats(); as stats) {
+                        <span class="muted muted-gap">{{ fmtPct(stats.pct) }}</span>
+                        @if (stats.amount !== null) {
+                          <span class="muted muted-gap" [class]="pnlClass(stats.amount)">
+                            {{ stats.amount > 0 ? '+' : '' }}{{ fmt(stats.amount) }}
+                          </span>
+                        }
+                      }
+                    </dd>
+                  </div>
+                </dl>
+              </sb-panel>
+            }
+
             <sb-panel heading="Actions">
               <sb-control-row class="commands">
                 @for (kind of actionsFor(trade.status); track kind) {
