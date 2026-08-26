@@ -16,6 +16,7 @@ from swingbot.core.analytics.rank import rank_plans
 from swingbot.bot_core import bot, in_session, log, SESSION_TZ, install_reload_signal_handler, on_config_reload
 from swingbot.core.marketdata.data import get_current_price
 from swingbot.core.infra.silent_channel import silence
+from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.market.strategy import HORIZONS
 from swingbot.core.marketdata.watchlist import load_watchlist
 
@@ -1139,7 +1140,26 @@ async def _trade_monitor_error(exc: Exception):
         trade_monitor.restart()
 
 
-_recap_fired_date: dt.date | None = None   # tracks the last date a recap was posted
+_recap_fired_date: dt.date | None = None   # process-local fast path; persisted below for restart safety
+_weekend_scan_fired_date: dt.date | None = None
+
+
+def _scheduled_jobs_path() -> str:
+    """Resolve at call time so config/test data directories remain respected."""
+    return os.path.join(config.DATA_DIR, "scheduled_jobs.json")
+
+
+def _scheduled_job_already_fired(job: str, today: dt.date) -> bool:
+    data = read_json(_scheduled_jobs_path(), {})
+    return isinstance(data, dict) and data.get(job) == today.isoformat()
+
+
+def _mark_scheduled_job_fired(job: str, today: dt.date) -> None:
+    data = read_json(_scheduled_jobs_path(), {})
+    if not isinstance(data, dict):
+        data = {}
+    data[job] = today.isoformat()
+    atomic_write_json(_scheduled_jobs_path(), data)
 
 
 async def _resolve_retrospective_channel(channel_id_override: int | None = None, *, caller: str = "daily_recap"):
@@ -1300,8 +1320,8 @@ async def daily_recap():
         return
 
     today = now.date()
-    if _recap_fired_date == today:
-        return  # already posted today
+    if _recap_fired_date == today or _scheduled_job_already_fired('daily_recap', today):
+        return  # already posted today, including before a process restart
 
     # Fire at SESSION_END_HOUR:15 Berlin time (15-min grace after session closes)
     trigger_hour   = config.SESSION_END_HOUR
@@ -1311,13 +1331,12 @@ async def daily_recap():
 
     log.info("daily_recap: posting end-of-session retrospective for %s", today)
     _recap_fired_date = today
+    _mark_scheduled_job_fired('daily_recap', today)
     try:
         await _post_retrospective()
     except Exception as exc:
         log.exception("daily_recap: failed to post retrospective: %s", exc)
 
-
-_weekend_scan_fired_date: dt.date | None = None   # tracks the last Saturday a deep scan was posted
 
 
 @tasks.loop(minutes=1)
@@ -1337,7 +1356,7 @@ async def weekend_deep_scan_task():
         return
 
     today = now.date()
-    if _weekend_scan_fired_date == today:
+    if _weekend_scan_fired_date == today or _scheduled_job_already_fired('weekend_deep_scan', today):
         return
 
     trigger_hour   = config.SESSION_END_HOUR
@@ -1347,6 +1366,7 @@ async def weekend_deep_scan_task():
 
     log.info("weekend_deep_scan_task: running relaxed-threshold deep scan for %s", today)
     _weekend_scan_fired_date = today
+    _mark_scheduled_job_fired('weekend_deep_scan', today)
     try:
         await weekend_deep_scan()
     except Exception:

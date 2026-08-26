@@ -227,8 +227,18 @@ COMMAND_USAGE = {
 
 
 def in_session(now: dt.datetime = None) -> bool:
+    """Whether ``now`` is in the configured Berlin session.
+
+    Equal start/end hours intentionally mean an always-on session; an end
+    before the start denotes a session that crosses midnight.
+    """
     now = now or dt.datetime.now(SESSION_TZ)
-    return config.SESSION_START_HOUR <= now.hour < config.SESSION_END_HOUR
+    start, end = config.SESSION_START_HOUR, config.SESSION_END_HOUR
+    if start == end:
+        return True
+    if start < end:
+        return start <= now.hour < end
+    return now.hour >= start or now.hour < end
 
 
 _reload_handler_installed = False
