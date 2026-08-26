@@ -514,6 +514,7 @@ class TradeLog:
         synthesizes a fraction=1.0 leg for a pre-TP1 loss/scratch that
         closes the ORIGINAL single position -- this method just appends
         whatever it's given so settle_legs always has a leg to work from."""
+        closed_trade = None
         with _LOCK:
             t = next((t for t in self._trades
                       if t.get("plan_id") == plan_id and t["status"] == "open"), None)
@@ -526,7 +527,10 @@ class TradeLog:
                                else t.get("exit_price"))
             t["closed_at"] = datetime.now(timezone.utc).isoformat()
             self._settle_account_balance(t)
+            closed_trade = dict(t)
             self._save()
+        _journal_close_safely(closed_trade)
+        _refresh_snapshot_safely()
 
     def _settle_account_balance(self, t: dict) -> None:
         """

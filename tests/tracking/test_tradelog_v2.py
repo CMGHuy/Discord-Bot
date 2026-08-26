@@ -53,3 +53,20 @@ def test_extended_stats_uses_leg_aware_closed_r_multiple(tmp_path):
     assert log.get_extended_stats(trades=[trade])["expectancy_r"] == pytest.approx(
         closed_r_multiple(trade)
     )
+
+def test_close_plan_trade_journals_and_refreshes_snapshot(tmp_path, monkeypatch):
+    log = TradeLog(path=str(tmp_path / "trades.json"))
+    log._trades = [{
+        "id": "t-close", "plan_id": "p-close", "ticker": "AAPL",
+        "status": "open", "direction": "bullish", "entry": 100.0,
+        "stop_loss": 95.0, "shares": None, "legs": [],
+    }]
+    journaled = []
+    refreshed = []
+    monkeypatch.setattr("swingbot.core.tracking.performance._journal_close_safely", journaled.append)
+    monkeypatch.setattr("swingbot.core.tracking.performance._refresh_snapshot_safely", lambda: refreshed.append(True))
+
+    log.close_plan_trade("p-close", {"fraction": 1.0, "exit_price": 105.0, "r": 1.0}, "win")
+
+    assert [trade["id"] for trade in journaled] == ["t-close"]
+    assert refreshed == [True]
