@@ -104,7 +104,8 @@ def refresh_snapshot() -> None:
         from swingbot.core.backtesting import registry
         from swingbot.core.tracking.performance import TradeLog
 
-        closed = TradeLog().get_trades(status="all", limit=None)
+        all_trades = TradeLog().get_trades(status="all", limit=None)
+        closed = [t for t in all_trades if t.get("status") in ("win", "loss", "closed")]
         starting_balance = account_module.load_account_config().get("base_balance", 0.0)
         registry_entries = registry.load_registry()
 

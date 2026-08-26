@@ -94,3 +94,23 @@ def test_export_all_writes_expected_files(tmp_path):
         header = next(csv.reader(f))
     assert header == ["key", "n", "wins", "losses", "win_rate", "expectancy_r",
                       "avg_r", "profit_factor", "total_pnl"]
+
+def test_refresh_snapshot_excludes_open_trades_from_all_analytics(tmp_path, monkeypatch):
+    snap_path = str(tmp_path / "analytics_snapshot.json")
+    monkeypatch.setattr("swingbot.core.analytics.snapshots.DEFAULT_PATH", snap_path)
+    closed = [_t((i - 1) % 9 + 1) for i in range(1, 11)]
+    open_trades = [_t((i - 1) % 9 + 1, "open") for i in range(1, 11)]
+    for trade in open_trades:
+        trade.pop("closed_at")
+
+    with patch("swingbot.core.tracking.performance.TradeLog") as MockLog, \
+         patch("swingbot.core.planning.account.load_account_config", return_value={"base_balance": 10_000.0}), \
+         patch("swingbot.core.backtesting.registry.load_registry", return_value=[]):
+        MockLog.return_value.get_trades.return_value = closed + open_trades
+        refresh_snapshot()
+
+    snap = load_snapshot(path=snap_path)
+    assert snap["overall"]["n"] == 10
+    for rows in snap["by"].values():
+        assert all(row["n"] == row["wins"] + row["losses"] for row in rows)
+    assert all(row["key"] != "unknown" for name in ("dow", "month") for row in snap["by"][name])
