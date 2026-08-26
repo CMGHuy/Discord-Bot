@@ -33,6 +33,8 @@ import logging
 
 import pandas as pd
 
+from swingbot.core.analytics.metrics import trade_return_pct
+
 log = logging.getLogger("swing-bot.risk_metrics")
 
 try:
@@ -48,10 +50,12 @@ MIN_CLOSED_TRADES = 5
 
 
 def _trade_return_pct(trade: dict) -> float:
-    """Signed % return for one closed trade -- mirrors the same calculation
-    scan_engine.py's closed-trade embed already uses."""
-    pct = (trade["exit_price"] - trade["entry"]) / trade["entry"] * 100
-    return -pct if trade["direction"] == "bearish" else pct
+    """Signed % return for one closed trade, delegated to the shared pure
+    calculation so risk metrics and native analytics cannot diverge."""
+    result = trade_return_pct(trade)
+    if result is None:
+        raise ValueError("closed trade is missing a computable return")
+    return result
 
 
 def compute_risk_metrics(closed_trades: list) -> dict | None:

@@ -161,17 +161,19 @@ def r_multiple(trade: dict) -> float | None:
     units did this trade make or lose" calls this instead of re-deriving
     it, per the Global Constraint "one definition per stat".
 
-    r = (exit - entry) / (entry - stop_loss), sign-flipped for a bearish
-    trade so a positive r always means "in the trade's favor" regardless
-    of direction. None when any of entry/stop_loss/exit_price is missing,
-    direction is not exactly "bullish" or "bearish", or when the stop
-    distance is exactly 0 (a malformed record -- dividing by zero risk is
-    meaningless, not infinite).
+    For a scaled-out trade, blends each leg's fraction-weighted ``r`` (or
+    derives a missing leg ``r`` from that leg's exit price), matching
+    ``performance.closed_r_multiple`` without importing it: performance
+    already imports this pure module. Otherwise r = (exit - entry) /
+    (entry - stop_loss), sign-flipped for a bearish trade so a positive r
+    always means "in the trade's favor" regardless of direction. None when
+    any required price is missing, direction is not exactly ``bullish`` or
+    ``bearish``, or when the stop distance is exactly 0 (a malformed record
+    -- dividing by zero risk is meaningless, not infinite).
     """
     entry = trade.get("entry")
     stop = trade.get("stop_loss")
-    exit_price = trade.get("exit_price")
-    if entry is None or stop is None or exit_price is None:
+    if entry is None or stop is None:
         return None
     direction = trade.get("direction")
     if direction not in ("bullish", "bearish"):
@@ -180,6 +182,23 @@ def r_multiple(trade: dict) -> float | None:
     if risk == 0:
         return None
     is_bull = direction == "bullish"
+    legs = trade.get("legs")
+    if legs:
+        total = 0.0
+        for leg in legs:
+            leg_r = leg.get("r")
+            if leg_r is None:
+                leg_exit = leg.get("exit_price")
+                if leg_exit is None:
+                    return None
+                raw = (leg_exit - entry) if is_bull else (entry - leg_exit)
+                leg_r = raw / risk
+            total += leg.get("fraction", 0) * leg_r
+        return round(total, 2)
+
+    exit_price = trade.get("exit_price")
+    if exit_price is None:
+        return None
     raw = (exit_price - entry) if is_bull else (entry - exit_price)
     return raw / risk
 
@@ -314,16 +333,32 @@ def trade_return_pct(trade: dict) -> float | None:
     risk_metrics._trade_return_pct exactly (same formula, same sign
     convention) so this module's native Sharpe/Sortino and risk_metrics.py's
     optional quantstats-backed ones can never quietly disagree. Returns
-    None (rather than raising) when entry/exit_price is missing or entry
-    is 0, unlike risk_metrics._trade_return_pct which assumes valid input --
-    this copy is the safe-to-call-on-anything version.
+    A scaled-out trade blends fraction-weighted returns from each leg's own
+    exit price, rather than pricing the runner alone. None (rather than
+    raising) when a required entry/exit price is missing or entry is 0,
+    unlike risk_metrics._trade_return_pct which assumes valid input -- this
+    copy is the safe-to-call-on-anything version.
     """
     entry = trade.get("entry")
+    if not entry:
+        return None
+    is_bear = trade.get("direction") == "bearish"
+    legs = trade.get("legs")
+    if legs:
+        total = 0.0
+        for leg in legs:
+            leg_exit = leg.get("exit_price")
+            if leg_exit is None:
+                return None
+            pct = (leg_exit - entry) / entry * 100
+            total += leg.get("fraction", 0) * (-pct if is_bear else pct)
+        return total
+
     exit_price = trade.get("exit_price")
-    if not entry or exit_price is None:
+    if exit_price is None:
         return None
     pct = (exit_price - entry) / entry * 100
-    return -pct if trade.get("direction") == "bearish" else pct
+    return -pct if is_bear else pct
 
 
 def sharpe(returns: list[float]) -> float | None:
