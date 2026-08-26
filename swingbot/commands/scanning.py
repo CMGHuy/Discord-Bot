@@ -862,6 +862,8 @@ async def config_watcher():
             session_scan.change_interval(minutes=config.SCAN_INTERVAL_MINUTES)
             log.info("Scan interval hot-reloaded to every %d min (takes effect next tick).",
                      config.SCAN_INTERVAL_MINUTES)
+        _apply_market_data_refresh_config(changed)
+
         log.info("Config auto-reloaded from .env -- %d setting(s) changed: %s",
                  len(changed), ", ".join(f"{k}={v[1]!r}" for k, v in changed.items()))
 
@@ -1255,13 +1257,18 @@ async def weekend_deep_scan() -> str:
 
     old_confirm = config.SIGNAL_CONFIRMATION_SCANS
     old_min_conf = config.MIN_ALERT_CONFIDENCE_LEVEL
+    relaxed_min_conf = max(1, old_min_conf - 1)
     config.SIGNAL_CONFIRMATION_SCANS = 1
-    config.MIN_ALERT_CONFIDENCE_LEVEL = max(1, old_min_conf - 1)
+    config.MIN_ALERT_CONFIDENCE_LEVEL = relaxed_min_conf
     try:
         alerts = await scan_engine.run_scan(horizon_filter="all", require_confirmation=False, bot=bot)
     finally:
-        config.SIGNAL_CONFIRMATION_SCANS = old_confirm
-        config.MIN_ALERT_CONFIDENCE_LEVEL = old_min_conf
+        # Do not overwrite values a concurrent hot reload applied while this
+        # temporary scheduler override was running.
+        if config.SIGNAL_CONFIRMATION_SCANS == 1:
+            config.SIGNAL_CONFIRMATION_SCANS = old_confirm
+        if config.MIN_ALERT_CONFIDENCE_LEVEL == relaxed_min_conf:
+            config.MIN_ALERT_CONFIDENCE_LEVEL = old_min_conf
 
     items = []
     for alert in alerts:
@@ -1456,6 +1463,20 @@ async def _before_market_data_refresh():
     await asyncio.sleep(60)
 
 
+def _apply_market_data_refresh_config(changed: dict) -> None:
+    if "MARKET_DATA_REFRESH_MINUTES" in changed and market_data_refresh.is_running():
+        market_data_refresh.change_interval(minutes=config.MARKET_DATA_REFRESH_MINUTES)
+        log.info("Market-data refresh interval hot-reloaded to every %d minute(s).",
+                 config.MARKET_DATA_REFRESH_MINUTES)
+    if "MARKET_DATA_AUTO_REFRESH" in changed:
+        if config.MARKET_DATA_AUTO_REFRESH and not market_data_refresh.is_running():
+            market_data_refresh.start()
+            log.info("Market-data auto-refresh enabled and started.")
+        elif not config.MARKET_DATA_AUTO_REFRESH and market_data_refresh.is_running():
+            market_data_refresh.cancel()
+            log.info("Market-data auto-refresh disabled and stopped.")
+
+
 @on_config_reload
 def _apply_scan_interval_change(changed: dict):
     """SCAN_INTERVAL_MINUTES is baked into @tasks.loop() at decoration time
@@ -1465,10 +1486,7 @@ def _apply_scan_interval_change(changed: dict):
         new_minutes = config.SCAN_INTERVAL_MINUTES
         session_scan.change_interval(minutes=new_minutes)
         log.info("Scan interval hot-reloaded to every %d minute(s) (takes effect next tick).", new_minutes)
-    if "MARKET_DATA_REFRESH_MINUTES" in changed and market_data_refresh.is_running():
-        market_data_refresh.change_interval(minutes=config.MARKET_DATA_REFRESH_MINUTES)
-        log.info("Market-data refresh interval hot-reloaded to every %d minute(s).",
-                 config.MARKET_DATA_REFRESH_MINUTES)
+    _apply_market_data_refresh_config(changed)
 
 
 @bot.event

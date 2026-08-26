@@ -1113,7 +1113,7 @@ def map_tickers(fn, tickers: list, workers: int | None = None) -> list:
 def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
               regime, effective_min_confluence: int, effective_min_confidence: int,
               rs_cache: dict = None, spy_df=None, breadth: float = None,
-              live_prices: dict = None) -> dict:
+              live_prices: dict = None, hard_filters: dict = None) -> dict:
     """
     Per-ticker analysis body of _sync_run_scan's ANALYZE phase, extracted
     so it can run inside a map_tickers() worker thread (Task E20). Handles
@@ -1157,6 +1157,15 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
     "scenarios_found": int, "fully_qualifying": int,
     "failed_counts": {...}, "conf_level_counts": {...}}.
     """
+    hard_filters = hard_filters or {
+        'min_reward_pct': config.MIN_REWARD_PCT,
+        'max_stop_loss_pct': config.MAX_STOP_LOSS_PCT,
+        'min_stop_distance_pct': config.MIN_STOP_DISTANCE_PCT,
+        'min_risk_reward_ratio': config.MIN_RISK_REWARD_RATIO,
+        'mtf_adjacent_gate': config.MTF_ADJACENT_GATE,
+        'confluence_deviation_pct': config.CONFLUENCE_DEVIATION_PCT,
+    }
+
     stats = {
         "items": [],
         "newly_closed": [],
@@ -1333,12 +1342,12 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
         # floor already. The max stop widening (the ceiling, not a floor)
         # is left at the horizon's full max_risk_pct -- widening a
         # ceiling can only let MORE scenarios qualify, never fewer.
-        effective_min_reward = max(config.MIN_REWARD_PCT, h.get("sr_target_min_pct", config.MIN_REWARD_PCT) * 0.15)
-        effective_max_stop = max(config.MAX_STOP_LOSS_PCT, h.get("max_risk_pct", config.MAX_STOP_LOSS_PCT))
+        effective_min_reward = max(hard_filters["min_reward_pct"], h.get("sr_target_min_pct", hard_filters["min_reward_pct"]) * 0.15)
+        effective_max_stop = max(hard_filters["max_stop_loss_pct"], h.get("max_risk_pct", hard_filters["max_stop_loss_pct"]))
         scenarios = levels.build_scenarios(current_price, supports, resistances, effective_min_reward,
-                                            atr_floor=floor_pct, min_stop_distance_pct=config.MIN_STOP_DISTANCE_PCT,
+                                            atr_floor=floor_pct, min_stop_distance_pct=hard_filters["min_stop_distance_pct"],
                                             max_stop_distance_pct=effective_max_stop,
-                                            min_risk_reward=config.MIN_RISK_REWARD_RATIO)
+                                            min_risk_reward=hard_filters["min_risk_reward_ratio"])
         stats["checked"] += 1
         # Depends only on df/horizon_key, not scenario.direction -- hoisted
         # above the scenario loop (v56) so a horizon with both a bullish and
@@ -1377,7 +1386,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             # genuine "opposed" verdict drops the scenario here; "exempt"
             # and "aligned" both fall through unchanged. Default OFF
             # (config.MTF_ADJACENT_GATE) -- flips on only after VALIDATION.
-            if config.MTF_ADJACENT_GATE:
+            if hard_filters["mtf_adjacent_gate"]:
                 mtf_verdict = adjacent_aligned(df, horizon_key, scenario.direction)
                 if mtf_verdict["status"] == "opposed":
                     log.debug("%s/%s %s dropped: %s", ticker, horizon_key,
@@ -1393,11 +1402,11 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             # scoring's target/stop confluence factors, so the two
             # can never disagree about what "N strategies agree" means.
             target_confluence = levels.count_confirming_strategies(
-                df, h, current_price, scenario.take_profit, tolerance_pct=config.CONFLUENCE_DEVIATION_PCT,
+                df, h, current_price, scenario.take_profit, tolerance_pct=hard_filters["confluence_deviation_pct"],
                 candidates=candidates,
             )
             stop_confluence = levels.count_confirming_strategies(
-                df, h, current_price, scenario.stop_loss, tolerance_pct=config.CONFLUENCE_DEVIATION_PCT,
+                df, h, current_price, scenario.stop_loss, tolerance_pct=hard_filters["confluence_deviation_pct"],
                 candidates=candidates,
             )
 
@@ -1508,6 +1517,18 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
     return stats
 
 
+def _hard_filters_snapshot() -> dict:
+    """Capture every per-ticker hard filter before worker threads start."""
+    return {
+        "min_reward_pct": config.MIN_REWARD_PCT,
+        "max_stop_loss_pct": config.MAX_STOP_LOSS_PCT,
+        "min_stop_distance_pct": config.MIN_STOP_DISTANCE_PCT,
+        "min_risk_reward_ratio": config.MIN_RISK_REWARD_RATIO,
+        "mtf_adjacent_gate": config.MTF_ADJACENT_GATE,
+        "confluence_deviation_pct": config.CONFLUENCE_DEVIATION_PCT,
+    }
+
+
 def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "ScanProgress" = None,
                     min_confluence: int = None) -> tuple:
     """
@@ -1546,6 +1567,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     effective_min_confluence = opex.effective_min_confluence(
         effective_min_confluence, opex_tier_today)
     effective_min_confidence = opex.effective_min_confidence_level(opex_tier_today)
+    hard_filters = _hard_filters_snapshot()
     log.info("Scan starting: horizon_filter=%s require_confirmation=%s watchlist=%d ticker(s) min_confluence=%d",
               horizon_filter, require_confirmation, len(tickers), effective_min_confluence)
 
@@ -1706,7 +1728,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     per_ticker_results = map_tickers(
         lambda t: _scan_one(t, fresh_data.get(t), horizons_to_scan, progress, regime, effective_min_confluence,
                             effective_min_confidence,
-                            rs_cache=rs_cache, spy_df=spy_df, breadth=breadth, live_prices=live_prices),
+                            rs_cache=rs_cache, spy_df=spy_df, breadth=breadth, live_prices=live_prices,
+                            hard_filters=hard_filters),
         tickers,
     )
 
