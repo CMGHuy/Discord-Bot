@@ -1141,7 +1141,8 @@ def build_plan_event_embed(plan, event) -> discord.Embed:
             event.detail.get("reason"),
             ("Plan closed — {ticker}", discord.Color.light_grey()))
     else:
-        template, color = _EVENT_STYLE[event.transition]
+        template, color = _EVENT_STYLE.get(
+            event.transition, ("Plan update — {ticker}", discord.Color.light_grey()))
     embed = discord.Embed(title=template.format(ticker=plan.ticker), color=color)
     embed.add_field(name="Plan (v2)", value=(
         f"{plan.strategy} · {plan.horizon_key} · {plan.direction} · "

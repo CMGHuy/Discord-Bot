@@ -34,6 +34,7 @@ _HEARTBEAT_FILE = os.path.join(config.DATA_DIR, "bot_heartbeat.json")
 # suppresses the very first check: a restart that happens to land
 # mid-session shouldn't fire a false "welcome" the moment it reconnects.
 _session_was_active: bool | None = None
+_ready_announcement_sent = False
 
 # Healthcheck messages sent so far in the CURRENT hour bucket, and which
 # bucket that is -- see _post_healthcheck()'s hourly-cleanup logic.
@@ -1028,6 +1029,13 @@ async def config_watcher():
                       " (stopped early)" if progress.stopped else "")
 
 
+@config_watcher.error
+async def _config_watcher_error(exc: Exception):
+    log.exception("config_watcher loop escaped -- restarting: %s", exc)
+    if not config_watcher.is_running():
+        config_watcher.restart()
+
+
 @tasks.loop(seconds=60)
 async def trade_monitor():
     """
@@ -1110,7 +1118,10 @@ async def trade_monitor():
         plan_events = []
     if plan_events:
         from swingbot.core.scanning.embeds import notify_plan_events
-        await notify_plan_events(bot, plan_events)   # Task 72
+        try:
+            await notify_plan_events(bot, plan_events)   # Task 72
+        except Exception as exc:
+            log.warning("trade_monitor: failed to post plan events: %s", exc)
 
     if all_newly_closed:
         from swingbot.core.scanning.embeds import notify_closed_trades
@@ -1119,6 +1130,13 @@ async def trade_monitor():
         except Exception as exc:
             log.warning("trade_monitor: failed to post close notifications: %s", exc)
         await _refresh_presence()
+
+
+@trade_monitor.error
+async def _trade_monitor_error(exc: Exception):
+    log.exception("trade_monitor loop escaped -- restarting: %s", exc)
+    if not trade_monitor.is_running():
+        trade_monitor.restart()
 
 
 _recap_fired_date: dt.date | None = None   # tracks the last date a recap was posted
@@ -1435,6 +1453,7 @@ def _apply_scan_interval_change(changed: dict):
 
 @bot.event
 async def on_ready():
+    global _ready_announcement_sent
     log.info("Logged in as %s (id=%s)", bot.user, bot.user.id if bot.user else "n/a")
     log.info("Watching %d guild(s): %s", len(bot.guilds), ", ".join(g.name for g in bot.guilds) or "none")
     wl_size = len(load_watchlist())
@@ -1463,7 +1482,11 @@ async def on_ready():
         market_data_refresh.start()
     await _refresh_presence()
 
-    # Sync slash commands to Discord (runs once on startup; safe to call every time)
+    if _ready_announcement_sent:
+        return
+    _ready_announcement_sent = True
+
+    # Sync slash commands and announce only once per process startup.
     try:
         synced = await bot.tree.sync()
         log.info("Synced %d slash command(s) to Discord.", len(synced))

@@ -17,6 +17,7 @@ import asyncio
 
 from swingbot.commands import scanning as scanning_mod
 from swingbot.core.scanning import engine as scan_engine
+from swingbot.core.planning.plan_manager import PlanEvent
 
 
 def _run(coro):
@@ -74,3 +75,16 @@ def test_trade_monitor_skips_cleanly_when_there_are_no_open_trades(monkeypatch):
     _run(scanning_mod.trade_monitor.coro())
 
     assert calls["tick"] == 0
+
+def test_unknown_plan_event_transition_does_not_escape_monitor(monkeypatch):
+    class Plan:
+        plan_id = "p1"
+        ticker = "AAPL"
+        strategy = "RSI"
+        horizon_key = "2w"
+        direction = "bullish"
+        badge = "VALIDATED"
+
+    monkeypatch.setattr("swingbot.core.planning.plan_store.PlanStore", lambda: type("Store", (), {"get": lambda _, __: Plan()})())
+    from swingbot.core.scanning.embeds import notify_plan_events
+    _run(notify_plan_events(scanning_mod.bot, [PlanEvent("p1", "pyramid_add", {})]))
