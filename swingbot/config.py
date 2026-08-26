@@ -895,7 +895,15 @@ def _load_dotenv_file() -> tuple:
 
 _DOTENV_LOADED, _DOTENV_FROM_CANONICAL_PATH = _load_dotenv_file()
 _apply_env()
-_ENV_MTIME: float = os.path.getmtime(ENV_PATH) if os.path.exists(ENV_PATH) else 0.0
+def _env_signature() -> tuple[int, int] | None:
+    try:
+        stat = os.stat(ENV_PATH)
+        return stat.st_mtime_ns, stat.st_size
+    except OSError:
+        return None
+
+
+_ENV_MTIME = _env_signature()
 
 
 def reload() -> dict:
@@ -907,7 +915,7 @@ def reload() -> dict:
     """
     global _DOTENV_LOADED, _DOTENV_FROM_CANONICAL_PATH, _ENV_MTIME
     _DOTENV_LOADED, _DOTENV_FROM_CANONICAL_PATH = _load_dotenv_file()
-    _ENV_MTIME = os.path.getmtime(ENV_PATH) if os.path.exists(ENV_PATH) else 0.0
+    _ENV_MTIME = _env_signature()
     changed = _apply_env()
     if changed:
         log.info("Config reloaded from %s -- %d value(s) changed:", ENV_PATH, len(changed))
@@ -929,13 +937,8 @@ def auto_reload_if_changed() -> dict:
     scan -- the mtime check is a single stat() call with no file I/O
     unless something actually changed.
     """
-    if not os.path.exists(ENV_PATH):
-        return {}
-    try:
-        current_mtime = os.path.getmtime(ENV_PATH)
-    except OSError:
-        return {}
-    if current_mtime <= _ENV_MTIME:
+    current_signature = _env_signature()
+    if current_signature is None or current_signature == _ENV_MTIME:
         return {}
     log.info(".env modified on disk (mtime changed) -- auto-reloading config before this scan")
     return reload()

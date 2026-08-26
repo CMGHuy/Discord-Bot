@@ -10,6 +10,7 @@ three pre-existing stores that used to write with plain json.dump.
 import json
 import logging
 import os
+import tempfile
 import time
 
 log = logging.getLogger("swing-bot.jsonio")
@@ -68,8 +69,8 @@ def atomic_write_json(path: str, obj) -> None:
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
+    fd, tmp = tempfile.mkstemp(prefix=f".{os.path.basename(path)}.", suffix=".tmp", dir=parent or None, text=True)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(obj, f, indent=2, default=str)
         f.flush()
         os.fsync(f.fileno())

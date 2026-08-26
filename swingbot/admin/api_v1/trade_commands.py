@@ -22,7 +22,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 from datetime import datetime, timezone
+
+from swingbot.core.infra.jsonio import atomic_write_json, read_json
 
 from flask import jsonify, request
 
@@ -45,6 +48,7 @@ log = logging.getLogger("swing-bot.admin.api_v1")
 
 _CLOSEABLE_PLAN = (PlanStatus.ACTIVE, PlanStatus.PARTIAL)
 _OPEN_LEGACY = "open"
+_QUEUE_LOCK = threading.Lock()
 
 
 def _queue_path() -> str:
@@ -62,16 +66,11 @@ def _queue_notify(record: dict) -> None:
     """
     try:
         path = _queue_path()
-        existing = []
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    existing = json.load(f)
-            except (OSError, json.JSONDecodeError):
-                existing = []
-        existing.append(record)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(existing, f)
+        with _QUEUE_LOCK:
+            existing = read_json(path, [])
+            existing = existing if isinstance(existing, list) else []
+            existing.append(record)
+            atomic_write_json(path, existing)
     except OSError as exc:
         log.warning("could not queue manual-close notification: %s", exc)
 

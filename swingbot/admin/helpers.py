@@ -11,6 +11,7 @@ import io
 import json
 import os
 import secrets
+import tempfile
 from datetime import datetime, timezone
 from itertools import groupby
 
@@ -114,8 +115,13 @@ def _write_env_text(text: str) -> None:
             backup = f.read()
         with open(ENV_PATH + ".bak", "w", encoding="utf-8") as f:
             f.write(backup)
-    with open(ENV_PATH, "w", encoding="utf-8") as f:
+    parent = os.path.dirname(ENV_PATH) or "."
+    fd, tmp = tempfile.mkstemp(prefix=".env.", suffix=".tmp", dir=parent, text=True)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(text)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, ENV_PATH)
 
 
 def _changed_non_hot_reloadable_fields(old_values: dict, form) -> list:

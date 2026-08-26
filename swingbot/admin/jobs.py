@@ -172,6 +172,10 @@ class JobManager:
         """Mark ORPHANED jobs failed -- ones whose watcher died with a previous
         process. A job this process is still watching is never reaped: see
         `_WATCHED`."""
+        with self._lock:
+            self._reap_stale_locked(jobs)
+
+    def _reap_stale_locked(self, jobs: dict) -> None:
         changed = False
         with _WATCHED_LOCK:
             watched = set(_WATCHED)
@@ -191,7 +195,7 @@ class JobManager:
             assert_train_only(args)
         with self._lock:
             jobs = _read_jobs()
-            self._reap_stale(jobs)
+            self._reap_stale_locked(jobs)
             if self._any_active(jobs):
                 raise RuntimeError("job already running")
 
