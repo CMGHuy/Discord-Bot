@@ -781,17 +781,10 @@ class TradeLog:
         closed = [t for t in trades if t["status"] in ("win", "loss", "closed")]
         open_trades = [t for t in trades if t["status"] == "open"]
 
-        r_multiples = []
-        for t in closed:
-            if t["status"] not in ("win", "loss"):
-                continue
-            risk = abs(t["entry"] - t["stop_loss"])
-            exit_price = t.get("exit_price")
-            if not risk or exit_price is None:
-                continue
-            is_bull = t["direction"] == "bullish"
-            realized = (exit_price - t["entry"]) if is_bull else (t["entry"] - exit_price)
-            r_multiples.append(realized / risk)
+        r_multiples = [
+            r for t in closed if t["status"] in ("win", "loss")
+            if (r := closed_r_multiple(t)) is not None
+        ]
 
         holding_days = []
         for t in closed:

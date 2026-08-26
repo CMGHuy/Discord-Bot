@@ -1,4 +1,6 @@
-from swingbot.core.tracking.performance import TradeLog
+import pytest
+
+from swingbot.core.tracking.performance import TradeLog, closed_r_multiple
 from swingbot.core.planning.plan_manager import PlanManager
 from swingbot.core.planning.plan_store import PlanStore
 from tests.fake_feed import FakePriceFeed
@@ -32,3 +34,22 @@ def test_full_lifecycle_writes_two_leg_win(tmp_path):
     assert t["legs"][0]["reason"] == "tp1"
     assert t["legs"][1]["reason"].startswith("tp1_runner")
     assert t["realized_pnl_amount"] is not None or t["shares"] is None
+
+
+def test_extended_stats_uses_leg_aware_closed_r_multiple(tmp_path):
+    trade = {
+        "status": "win",
+        "direction": "bullish",
+        "entry": 100.0,
+        "stop_loss": 95.0,
+        "exit_price": 100.25,
+        "legs": [
+            {"fraction": 0.5, "r": 2.0, "exit_price": 110.0},
+            {"fraction": 0.5, "r": 0.05, "exit_price": 100.25},
+        ],
+    }
+    log = TradeLog(path=str(tmp_path / "trades.json"))
+
+    assert log.get_extended_stats(trades=[trade])["expectancy_r"] == pytest.approx(
+        closed_r_multiple(trade)
+    )
