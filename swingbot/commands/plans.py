@@ -9,10 +9,9 @@ import discord
 from swingbot import config
 from swingbot.bot_core import bot
 from swingbot.core.analytics.rank import rank_plans
-from swingbot.core.planning.plan_engine import PlanStatus
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.scanning import embed_theme as theme
-from swingbot.core.scanning.embeds import banked_leg_pct_and_amount
+from swingbot.core.scanning.embeds import banked_leg_pct_and_amount, signed_money
 from swingbot.commands.views import (
     starred_ids,
     paginate,
@@ -20,59 +19,43 @@ from swingbot.commands.views import (
     PlanBoardView,
 )
 
-
-def format_plans_board(plans, prices=None) -> str:
-    prices = prices or {}
-    if not plans:
-        return "No live v2 plans."
-    groups = {PlanStatus.PENDING: [], PlanStatus.ACTIVE: [], PlanStatus.PARTIAL: []}
-    for p in plans:
-        if p.status in groups:
-            groups[p.status].append(p)
-
-    lines = ["📋 **Live plans — Plan Engine v2**"]
-    for status, rows in groups.items():
-        if not rows:
-            continue
-        lines.append(f"**{status}** ({len(rows)})")
-        for p in rows:
-            icon = "✅" if p.badge == "VALIDATED" else "⚠️"
-            if status == PlanStatus.PENDING:
-                lines.append(f"{icon} `{p.ticker}` {p.direction} — "
-                             f"trigger {p.trigger_price:.2f}, "
-                             f"expires after {p.expiry_bars} bars")
-            elif status == PlanStatus.ACTIVE:
-                stop = p.working_stop if p.working_stop is not None else p.stop_loss
-                extra = ""
-                live = prices.get(p.ticker)
-                if live:
-                    extra = f", {abs(p.tp1 - live) / live * 100:.1f}% to TP1"
-                lines.append(f"{icon} `{p.ticker}` {p.direction} — "
-                             f"entry {p.entry_price:.2f}, stop {stop:.2f}{extra}")
-            else:  # PARTIAL
-                leg = p.legs_realized[0] if p.legs_realized else None
-                if leg:
-                    pct, amount = banked_leg_pct_and_amount(p, leg["exit_price"],
-                                                            leg["fraction"])
-                    cur = config.CURRENCY_SYMBOL
-                    banked = f"banked {leg['r']:+.2f}R/{pct:+.1f}%"
-                    if amount is not None:
-                        banked += f"/{'+' if amount >= 0 else ''}{cur}{abs(amount):,.2f}"
-                    banked += f" on {leg['fraction']:.0%}"
-                    entry = leg["exit_price"]
-                else:
-                    banked, entry = "banked", p.tp1
-                if p.tp2 is not None:
-                    target, target_label = p.tp2, "TP2"
-                else:
-                    target, target_label = p.tp1, "TP1 (no TP2)"
-                lines.append(f"{icon} `{p.ticker}` {p.direction} — {banked}, "
-                             f"entry {entry:.2f} → {target_label} {target:.2f} "
-                             f"/ trail {p.working_stop:.2f}")
-    return "\n".join(lines)
-
-
 LIVE_STATUSES = ("PENDING", "ACTIVE", "PARTIAL")
+
+
+def _partial_tail(plan) -> str:
+    """The tail of a PARTIAL plan's board row: what was already banked,
+    then the runner as a position of its own.
+
+    Once TP1 has fired, the plan's own trigger_price/stop_loss/tp1 are
+    stale history -- the money question is what's in the bank and where the
+    remaining leg lives, so this replaces that tail rather than adding to
+    it. Every figure that can't be computed is omitted, never shown as 0.
+    Runner entry is the TP1 leg's actual fill price (which can differ from
+    the tp1 level on a gap-through), falling back to plan.tp1 for a PARTIAL
+    plan with no recorded leg -- the same defensive fallback
+    embeds.partial_position_line() uses."""
+    leg = plan.legs_realized[0] if plan.legs_realized else None
+    bits = []
+    if leg:
+        pct, amount = banked_leg_pct_and_amount(plan, leg["exit_price"],
+                                                leg["fraction"])
+        banked = f"banked {leg['r']:+.2f}R"
+        if pct is not None:
+            banked += f"/{pct:+.1f}%"
+        if amount is not None:
+            banked += f"/{signed_money(amount, config.CURRENCY_SYMBOL)}"
+        bits.append(f"{banked} on {leg['fraction']:.0%}")
+
+    runner_entry = leg["exit_price"] if leg else plan.tp1
+    runner = f"runner entry {runner_entry:.2f}"
+    if plan.working_stop is not None:
+        runner += f" SL {plan.working_stop:.2f}"
+    if plan.tp2 is not None:
+        runner += f" TP2 {plan.tp2:.2f}"
+    else:
+        runner += f" TP1 (no TP2) {plan.tp1:.2f}"
+    bits.append(runner)
+    return " · ".join(bits)
 
 
 def _plan_line(plan) -> str:
@@ -82,11 +65,15 @@ def _plan_line(plan) -> str:
     star = "⭐" if plan.plan_id in starred_ids() else ""
     score = follow_score(plan, today=dt.date.today())
     direction_word = "LONG" if plan.direction == "bullish" else "SHORT"
-    tp2_bit = f" TP2 {plan.tp2:.2f}" if plan.tp2 is not None else ""
+    if plan.status == "PARTIAL":
+        tail = _partial_tail(plan)
+    else:
+        tp2_bit = f" TP2 {plan.tp2:.2f}" if plan.tp2 is not None else ""
+        tail = (f"entry {plan.trigger_price:.2f} SL {plan.stop_loss:.2f} "
+                f"TP1 {plan.tp1:.2f}{tp2_bit}")
     return (
         f"{star}{theme.level_chip(plan.confidence_level)}{theme.badge_chip(plan.badge)} {plan.ticker} {direction_word} · "
-        f"{plan.status} · follow {score:.0f} · entry {plan.trigger_price:.2f} SL {plan.stop_loss:.2f} "
-        f"TP1 {plan.tp1:.2f}{tp2_bit}"
+        f"{plan.status} · follow {score:.0f} · {tail}"
     )
 
 
