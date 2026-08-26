@@ -21,7 +21,7 @@ import { ChipRow } from '../../ui/chip-row';
 import { ColumnDef, Density, EmptyState, RowContext } from '../../ui/data-table/data-table.types';
 import { ConfidenceCell } from '../../ui/confidence-cell';
 import { Flash } from '../../ui/flash';
-import { PlanCell } from '../../ui/plan-cell';
+import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
 import { StatusCell } from '../../ui/status-cell';
 import {
   readTableColumns,
@@ -426,6 +426,12 @@ import { TradeGroup } from './trade-group';
         [stop]="row.stop_loss"
         [trigger]="row.trigger_price"
         [trailing]="row.status === 'PARTIAL'"
+        [bankedFraction]="row.banked_fraction"
+        [bankedR]="row.banked_r"
+        [bankedEntry]="row.banked_exit_price"
+        [bankedPct]="bankedLegPct(row.entry, row.banked_exit_price, row.direction)"
+        [bankedAmount]="bankedLegAmount(row.entry, row.banked_exit_price, row.banked_fraction, row.shares, row.direction)"
+        [currency]="connection.currency()"
       />
     </ng-template>
     <!-- Direction folds into this cell (no separate Direction column here --
@@ -814,7 +820,7 @@ export class Dashboard {
   protected readonly store = inject(DashboardStore);
   /** For the currency symbol alone. `ConnectionStore` is root-provided and
    *  the shell already keeps it fresh, so reading it here costs no request. */
-  private readonly connection = inject(ConnectionStore);
+  protected readonly connection = inject(ConnectionStore);
 
   /** Zero open positions is a RESULT (the scan found nothing qualifying in
    *  this scope), not missing data -- measured-zero, not no-data-yet. */
@@ -1146,6 +1152,8 @@ export class Dashboard {
   /** See dashboard.helpers.ts's own comments for what each of these means
    *  and why it is null when it is. */
   protected expectedPnlPct = expectedPnlPct;
+  protected bankedLegPct = bankedLegPct;
+  protected bankedLegAmount = bankedLegAmount;
   protected expectedSlPct = expectedSlPct;
   protected livePnlPct = livePnlPct;
   protected liveUnrealizedAmount = liveUnrealizedAmount;

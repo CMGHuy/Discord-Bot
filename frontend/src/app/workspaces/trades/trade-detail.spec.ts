@@ -265,6 +265,69 @@ describe('TradeDetail — the fields that rendered nowhere', () => {
   });
 });
 
+describe('TradeDetail — partial position panel (v58)', () => {
+  let backend: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        { provide: EventStream, useValue: new FakeEventStream() },
+      ],
+    });
+    backend = TestBed.inject(HttpTestingController);
+  });
+
+  function renderPartial(legsRealized: unknown[] = [
+    { fraction: 0.5, exit_price: 110, r: 2.0, reason: 'tp1' },
+  ]) {
+    const fixture = TestBed.createComponent(TradeDetail);
+    fixture.componentRef.setInput('id', ID);
+    fixture.componentRef.setInput('tab', 'live');
+    fixture.detectChanges();
+    backend.expectOne(`/api/v1/trades/${ID}`).flush(
+      tradeResponse({ ...DETAIL, legs_realized: legsRealized, working_stop: 101.33 },
+                    'PARTIAL'),
+    );
+    fixture.detectChanges();
+    return (fixture.nativeElement as HTMLElement).textContent ?? '';
+  }
+
+  it('shows the runner as its own position once PARTIAL', () => {
+    const text = renderPartial();
+    expect(text).toContain('Partial position');
+    expect(text).toContain('110.00');   // the TP1 leg's own fill, as "Entry"
+    expect(text).toContain('50%');
+    expect(text).toContain('+2.00R');
+  });
+
+  it('shows the pct and dollar figures for the banked leg', () => {
+    const text = renderPartial();
+    // tradeResponse() defaults entry=100, shares=10: (110-100)*0.5*10 = 50
+    expect(text).toContain('+10.00%');
+    expect(text).toContain('+50.00');
+  });
+
+  it('does not render the panel before anything has banked', () => {
+    expect(renderPartial([])).not.toContain('Partial position');
+  });
+
+  it('does not render the panel outside PARTIAL', () => {
+    const fixture = TestBed.createComponent(TradeDetail);
+    fixture.componentRef.setInput('id', ID);
+    fixture.componentRef.setInput('tab', 'live');
+    fixture.detectChanges();
+    backend.expectOne(`/api/v1/trades/${ID}`).flush(tradeResponse(DETAIL, 'ACTIVE'));
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('Partial position');
+  });
+});
+
 describe('TradeDetail states', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({

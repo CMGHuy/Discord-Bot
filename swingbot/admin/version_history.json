@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-08-25 19:31:02 UTC",
+  "generated_at": "2026-08-26 07:56:37 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.9.0",
-    "bot": "1.4.3"
+    "ui": "1.9.1",
+    "bot": "1.4.4"
   },
   "releases": [
     {
@@ -838,6 +838,20 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-08-26",
+      "last_seen": "2026-08-26",
+      "commit": "75cd8664",
+      "subject": "release(ui,bot): 1.9.1 / 1.4.4 -- PARTIAL plan reads as a mini-position",
+      "versions": {
+        "ui": "1.9.1",
+        "bot": "1.4.4"
+      },
+      "changed": [
+        "ui",
+        "bot"
       ]
     }
   ]

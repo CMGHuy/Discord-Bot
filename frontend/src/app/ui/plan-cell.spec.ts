@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { PlanCell } from './plan-cell';
+import { PlanCell, bankedLegAmount, bankedLegPct } from './plan-cell';
 
 function render(entry: number | null, target: number | null, stop: number | null) {
   const f = TestBed.createComponent(PlanCell);
@@ -112,5 +112,78 @@ describe('PlanCell', () => {
   it('says plain "Stop" when not trailing (the default)', () => {
     expect(render(178, 195, 170).querySelector('[title]')!.getAttribute('title'))
       .toBe('Entry 178.00 · Target 195.00 · Stop 170.00');
+  });
+
+  /* -- v58: the banked-leg tooltip clause -------------------------------- */
+
+  function renderPartial(overrides: Partial<{
+    bankedFraction: number | null; bankedR: number | null;
+    bankedPct: number | null; bankedAmount: number | null;
+    bankedEntry: number | null; currency: string | null;
+  }> = {}) {
+    const f = TestBed.createComponent(PlanCell);
+    f.componentRef.setInput('entry', 51.0);
+    f.componentRef.setInput('target', 150.0);
+    f.componentRef.setInput('stop', 118.67);
+    f.componentRef.setInput('trailing', true);
+    f.componentRef.setInput('bankedFraction', 'bankedFraction' in overrides ? overrides.bankedFraction : 0.5);
+    f.componentRef.setInput('bankedR', 'bankedR' in overrides ? overrides.bankedR : 0.85);
+    f.componentRef.setInput('bankedPct', 'bankedPct' in overrides ? overrides.bankedPct : 4.1);
+    f.componentRef.setInput('bankedAmount', 'bankedAmount' in overrides ? overrides.bankedAmount : 42.0);
+    f.componentRef.setInput('bankedEntry', 'bankedEntry' in overrides ? overrides.bankedEntry : 102.0);
+    f.componentRef.setInput('currency', 'currency' in overrides ? overrides.currency : '$');
+    f.detectChanges();
+    return f.nativeElement as HTMLElement;
+  }
+
+  it('appends the banked leg to the tooltip once PARTIAL', () => {
+    expect(renderPartial().querySelector('[title]')!.getAttribute('title')).toBe(
+      'Entry 51.00 · Target 150.00 · Trailing stop 118.67 · '
+      + '50% banked +0.85R (+4.10%, +42.00 $) @ 102.00',
+    );
+  });
+
+  it('omits the dollar figure when amount or currency is unknown', () => {
+    expect(renderPartial({ bankedAmount: null }).querySelector('[title]')!.getAttribute('title'))
+      .toBe('Entry 51.00 · Target 150.00 · Trailing stop 118.67 · '
+        + '50% banked +0.85R (+4.10%) @ 102.00');
+  });
+
+  it('omits the whole banked clause when nothing has banked yet', () => {
+    const f = TestBed.createComponent(PlanCell);
+    f.componentRef.setInput('entry', 178);
+    f.componentRef.setInput('target', 195);
+    f.componentRef.setInput('stop', 170);
+    f.componentRef.setInput('trailing', true);
+    f.detectChanges();
+    expect(f.nativeElement.querySelector('[title]').getAttribute('title'))
+      .toBe('Entry 178.00 · Target 195.00 · Trailing stop 170.00');
+  });
+});
+
+describe('bankedLegPct / bankedLegAmount', () => {
+  it('signs pct positive for a long that gained', () => {
+    expect(bankedLegPct(100, 110, 'bullish')).toBe(10);
+  });
+
+  it('signs pct positive for a short that gained (price fell)', () => {
+    expect(bankedLegPct(100, 90, 'bearish')).toBe(10);
+  });
+
+  it('is null when either price is unknown', () => {
+    expect(bankedLegPct(null, 110, 'bullish')).toBeNull();
+    expect(bankedLegPct(100, null, 'bullish')).toBeNull();
+  });
+
+  it('computes the dollar amount from shares and fraction', () => {
+    expect(bankedLegAmount(100, 110, 0.5, 100, 'bullish')).toBe(500);
+  });
+
+  it('signs the dollar amount for a short', () => {
+    expect(bankedLegAmount(100, 90, 0.5, 100, 'bearish')).toBe(500);
+  });
+
+  it('is null when shares are unknown', () => {
+    expect(bankedLegAmount(100, 110, 0.5, null, 'bullish')).toBeNull();
   });
 });

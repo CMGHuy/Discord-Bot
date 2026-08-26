@@ -82,6 +82,12 @@ export interface TradeRow {
   stop_loss: number | null;
   target: number | null;
   target2: number | null;
+  /** The TP1 leg's own fraction/fill-price/R once a PARTIAL plan has banked
+   *  it. All three null until then; a legacy trade never scale-outs so
+   *  always null. */
+  banked_fraction: number | null;
+  banked_exit_price: number | null;
+  banked_r: number | null;
   risk_reward: number | null;
   shares: number | null;
   /** The share count still exposed to price movement right now -- `shares`

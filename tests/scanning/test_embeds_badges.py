@@ -92,3 +92,61 @@ def test_leg_rows_unsized(monkeypatch):
     tp1_row, _ = leg_rows(_plan(trigger_price=100.0, stop_loss=99.0,
                                 tp1=100.35), currency="$")
     assert "@ 100.35" in tp1_row and "$" not in tp1_row   # price shown, no P&L
+
+
+def test_banked_leg_pct_and_amount(monkeypatch):
+    import swingbot.core.scanning.embeds as embeds
+    monkeypatch.setattr(embeds.account, "compute_position_size",
+                        lambda entry, stop: {"shares": 100.0,
+                                             "position_value": 10_000.0,
+                                             "mode": "risk_pct"})
+    p = _plan(entry_price=100.0, stop_loss=95.0, direction="bullish")
+    pct, amount = embeds.banked_leg_pct_and_amount(p, 110.0, 0.5)
+    assert pct == 10.0
+    assert amount == 500.0
+
+
+def test_banked_leg_pct_and_amount_bearish_signs_correctly(monkeypatch):
+    import swingbot.core.scanning.embeds as embeds
+    monkeypatch.setattr(embeds.account, "compute_position_size",
+                        lambda entry, stop: {"shares": 100.0,
+                                             "position_value": 10_000.0,
+                                             "mode": "risk_pct"})
+    p = _plan(entry_price=100.0, stop_loss=105.0, direction="bearish")
+    pct, amount = embeds.banked_leg_pct_and_amount(p, 90.0, 0.5)
+    assert pct == 10.0     # price fell 10% -- a gain for a short
+    assert amount == 500.0
+
+
+def test_banked_leg_pct_and_amount_unsized(monkeypatch):
+    import swingbot.core.scanning.embeds as embeds
+    monkeypatch.setattr(embeds.account, "compute_position_size",
+                        lambda entry, stop: None)
+    p = _plan(entry_price=100.0, stop_loss=95.0, direction="bullish")
+    pct, amount = embeds.banked_leg_pct_and_amount(p, 110.0, 0.5)
+    assert pct == 10.0
+    assert amount is None
+
+
+def test_banked_leg_pct_and_amount_omits_everything_when_entry_is_unusable(monkeypatch):
+    """A plan with no usable entry (entry_price None AND trigger_price 0/None)
+    can't produce a % at all -- omit both figures rather than raising
+    ZeroDivisionError/TypeError, per this surface's omit-never-crash rule."""
+    import swingbot.core.scanning.embeds as embeds
+    monkeypatch.setattr(embeds.account, "compute_position_size",
+                        lambda entry, stop: {"shares": 100.0,
+                                             "position_value": 10_000.0,
+                                             "mode": "risk_pct"})
+    zero_entry = _plan(entry_price=0.0, trigger_price=0.0, stop_loss=95.0)
+    assert embeds.banked_leg_pct_and_amount(zero_entry, 110.0, 0.5) == (None, None)
+    no_entry = _plan(entry_price=None, trigger_price=None, stop_loss=95.0)
+    assert embeds.banked_leg_pct_and_amount(no_entry, 110.0, 0.5) == (None, None)
+
+
+def test_banked_leg_pct_and_amount_falls_back_to_trigger_price(monkeypatch):
+    import swingbot.core.scanning.embeds as embeds
+    monkeypatch.setattr(embeds.account, "compute_position_size",
+                        lambda entry, stop: None)
+    p = _plan(entry_price=None, trigger_price=100.0, stop_loss=95.0, direction="bullish")
+    pct, _ = embeds.banked_leg_pct_and_amount(p, 105.0, 0.5)
+    assert pct == 5.0
