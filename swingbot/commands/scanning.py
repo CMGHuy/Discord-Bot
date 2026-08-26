@@ -28,6 +28,11 @@ _MANUAL_CLOSE_QUEUE   = os.path.join(config.DATA_DIR, "manual_close_notify.json"
 _PAUSE_FILE = os.path.join(config.DATA_DIR, "scan_paused.flag")
 _HEARTBEAT_FILE = os.path.join(config.DATA_DIR, "bot_heartbeat.json")
 
+# Historical !check results are summaries, not an export. Keep enough for a
+# useful review while avoiding a burst of Discord sends for broad date ranges.
+_HISTORICAL_CHECK_MAX_RESULTS = 90
+_DISCORD_MESSAGE_LIMIT = 1900
+
 # Tracks whether the trading session (in_session()) was active as of the
 # last tick, so _check_session_transition() can tell "just opened"/"just
 # closed" apart from "still open"/"still closed" -- None means "not
@@ -1626,11 +1631,10 @@ async def check_cmd(ctx, *args: str):
     async def _poll_progress():
         last_shown = None
         while True:
-            # 0.8s (down from 1.5s) so the message visibly updates more
-            # often -- on a big watchlist the crawl/analyze phases can each
-            # run for tens of seconds, and a slower poll made it easy to
-            # mistake "still working, just between updates" for "stuck".
-            await asyncio.sleep(0.8)
+            # Progress labels change only as scan stages advance; a two-second
+            # cadence remains responsive without needlessly consuming Discord
+            # edit rate-limit capacity during a long scan.
+            await asyncio.sleep(2.0)
             elapsed = _elapsed_str()
             if progress.stage == "starting":
                 # ScanProgress's own default stage, before _sync_run_scan's
@@ -1771,14 +1775,22 @@ async def _check_historical(ctx, horizon: str, date_from: str | None, date_to: s
         )
         return
 
+    total = len(trades)
+    displayed = trades[:_HISTORICAL_CHECK_MAX_RESULTS]
+    truncation = (
+        f" Showing the first {_HISTORICAL_CHECK_MAX_RESULTS}; narrow the date range or horizon for the rest."
+        if total > len(displayed) else ""
+    )
     header = (
-        f"📋 **{len(trades)} recorded trade plan(s)** — {range_str}{horiz_str}\n"
+        f"📋 **{total} recorded trade plan(s)** — {range_str}{horiz_str}.{truncation}\n"
         "*(from the trade log — these are plans the bot actually posted)*\n"
     )
     await ctx.send(header)
 
-    # Send each trade as a short summary (avoid chart re-generation)
-    for t in trades:
+    # Pack summaries into Discord-safe messages instead of emitting one request
+    # per plan. The display cap above bounds request pressure for broad ranges.
+    summaries = []
+    for t in displayed:
         direction_emoji = "📈" if t.get("direction") == "bullish" else "📉"
         status_emoji = {"open": "🟡", "win": "✅", "loss": "❌", "closed": "⬜"}.get(t.get("status", ""), "⬜")
         entry   = t.get("entry_price", t.get("entry", "?"))
@@ -1797,7 +1809,19 @@ async def _check_historical(ctx, horizon: str, date_from: str | None, date_to: s
             f"Entry **{entry}** · Stop {stop} · Target {target}\n"
             f"Opened: {opened}  `ID: {tid}`  — use `!trade {tid}` for full details & chart"
         )
-        await ctx.send(line)
+        summaries.append(line)
+
+    chunk, chunk_len = [], 0
+    for line in summaries:
+        line_len = len(line) + (2 if chunk else 0)
+        if chunk and chunk_len + line_len > _DISCORD_MESSAGE_LIMIT:
+            await ctx.send("\n\n".join(chunk))
+            chunk, chunk_len = [], 0
+            line_len = len(line)
+        chunk.append(line)
+        chunk_len += line_len
+    if chunk:
+        await ctx.send("\n\n".join(chunk))
 
 
 @bot.command(name="session")
