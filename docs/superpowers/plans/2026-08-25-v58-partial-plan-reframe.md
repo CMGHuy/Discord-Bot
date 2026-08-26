@@ -1,3 +1,7 @@
+Version: ui 1.8.4 · bot 1.4.3
+Bump: ui patch · bot patch
+Edge: none (integrity)
+
 # Reframe the PARTIAL plan display as a mini-position — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
