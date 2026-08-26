@@ -161,6 +161,23 @@ fresh CI checkout, so its mtime is effectively *when the image was built*. That
 is the useful reading and the one the UI wants, but do not mistake it for a
 release date: it moves on every deploy, including deploys that bump nothing.
 
+## Mirroring production changes back
+
+**Any live fix or config change made directly on production must be mirrored
+back into this repo and committed before the task is considered done** — a
+`.env` edit, a `data/watchlist.json` trim, anything changed by hand over SSH
+while debugging a live incident. Production's `.env`/`data/` are gitignored
+and never deploy *from* this repo, so a change made only on the box is
+invisible here, silently reverts on the next manual edit, and leaves the two
+environments to drift apart.
+
+Mirroring means: the equivalent local file updated (`.env.example`/docs for a
+config value, the local `data/` mirror for a watchlist edit), and — if the
+change reveals a real code bug rather than just a bad setting — an actual code
+fix committed, not just the live workaround. Update `.env.example`'s own
+default alongside any `.env` config value this reveals should change (e.g.
+`DEFAULT_HISTORY_PERIOD`).
+
 ## Long-running scripts must report progress
 
 **Any script meant to run in the background for more than a couple of minutes

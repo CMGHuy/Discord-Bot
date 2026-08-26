@@ -212,7 +212,10 @@ Reuse the parent's number with a `_N` part suffix — `v6-gatekeeper_0-index` �
 `_11` is the worked example: one document, one number, twelve files, each 25–30
 tasks. Write a `_0-index` part carrying the header block, the goal, the global
 constraints, the parallelisation map and a table of what lives in each part; put
-the phases in the numbered parts.
+the phases in the numbered parts. The original 822 KB monolith `v6-gatekeeper`
+was split from was deleted outright rather than kept alongside the parts —
+recover it from git history if a session ever genuinely needs the pre-split
+version.
 
 A spec over budget usually is not one spec. Check whether it is really two
 subjects sharing a document — `v22` and `v23` were separated during their own

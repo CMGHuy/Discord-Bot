@@ -17,9 +17,18 @@ Referenced from the root `CLAUDE.md`.
   components, so the result matches the existing plan format.
 - `Explore` subagent for wide code searches; `feature-dev:code-reviewer` or
   `/code-review` for review passes.
-- **One subagent at a time** unless the human partner explicitly asks for
-  several — the rule and its reasoning live in the root `CLAUDE.md`'s "Repo
-  tooling" paragraph. A plan's `## Parallelisation` section maps what *could*
-  run concurrently; it is not permission to launch it.
+- **At most ONE subagent at a time, by default.** Dispatch one, wait for it to
+  return, then decide whether the next is still needed. Spawning several at
+  once requires the human partner to ask for it explicitly — "in parallel",
+  "fan out", a stated count — and a plan's `## Parallelisation` section is a
+  map of what *could* run concurrently, not standing permission to launch it.
+  This is a budget rule, not a style one: each agent is a full context that
+  re-derives what this session already knows, several at once can exhaust the
+  session limit mid-task (which has happened here, killing three of five
+  audits and losing their work), and the results land as one undigested wall
+  the controller must triage anyway. One agent, read its findings, act,
+  repeat — the serial version is usually faster in wall-clock terms too,
+  because the first result routinely changes what the second should even
+  look for.
 - Skip `frontend-design`/`dataviz` conventions for the admin UI unless asked —
   it follows the existing TradingView-style theme.
