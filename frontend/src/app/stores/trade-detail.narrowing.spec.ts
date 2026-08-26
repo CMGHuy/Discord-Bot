@@ -283,3 +283,95 @@ describe('TradeDetailStore — the fields that rendered nowhere', () => {
     expect(store.detailAbsent()).toBe(false);
   });
 });
+
+describe('TradeDetailStore — banked leg stats (v58)', () => {
+  let store: InstanceType<typeof TradeDetailStore>;
+  let backend: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        { provide: EventStream, useValue: new FakeEventStream() },
+        TradeDetailStore,
+      ],
+    });
+    store = TestBed.inject(TradeDetailStore);
+    backend = TestBed.inject(HttpTestingController);
+  });
+
+  function openPartial(overrides: {
+    entry?: number | null; shares?: number | null;
+    direction?: string; legsRealized?: unknown[];
+  } = {}) {
+    store.setId(ID);
+    TestBed.inject(ApplicationRef).tick();
+    backend.expectOne(`/api/v1/trades/${ID}`).flush({
+      id: ID,
+      ticker: 'AAPL',
+      strategy: 'RSI Divergence',
+      status: 'PARTIAL',
+      direction: overrides.direction ?? 'bullish',
+      entry: overrides.entry === undefined ? 100 : overrides.entry,
+      stop_loss: 101.33,
+      target: 105,
+      shares: overrides.shares === undefined ? 100 : overrides.shares,
+      has_note: false,
+      detail: {
+        ...LEGACY_DETAIL,
+        legs_realized: overrides.legsRealized
+          ?? [{ fraction: 0.5, exit_price: 110, r: 2.0, reason: 'tp1' }],
+      },
+    });
+  }
+
+  it('reads the banked leg once PARTIAL', () => {
+    openPartial();
+    expect(store.bankedLeg()).toEqual({
+      fraction: 0.5, exitPrice: 110, r: 2.0, reason: 'tp1',
+    });
+  });
+
+  it('is null before anything has banked', () => {
+    openPartial({ legsRealized: [] });
+    expect(store.bankedLeg()).toBeNull();
+  });
+
+  it('computes pct and dollar amount from the ORIGINAL entry', () => {
+    openPartial();
+    expect(store.bankedStats()).toEqual({ pct: 10, amount: 500 });
+  });
+
+  it('signs the pct and amount correctly for a short', () => {
+    openPartial({
+      direction: 'bearish', entry: 100,
+      legsRealized: [{ fraction: 0.5, exit_price: 90, r: 2.0, reason: 'tp1' }],
+    });
+    expect(store.bankedStats()).toEqual({ pct: 10, amount: 500 });
+  });
+
+  it('omits the dollar amount when shares are unknown', () => {
+    openPartial({ shares: null });
+    expect(store.bankedStats()).toEqual({ pct: 10, amount: null });
+  });
+
+  it('is null once the position is no longer PARTIAL', () => {
+    store.setId(ID);
+    TestBed.inject(ApplicationRef).tick();
+    backend.expectOne(`/api/v1/trades/${ID}`).flush({
+      id: ID, ticker: 'AAPL', strategy: 'RSI Divergence', status: 'CLOSED',
+      direction: 'bullish', entry: 100, stop_loss: 101.33, target: 105,
+      shares: 100, has_note: false,
+      detail: {
+        ...LEGACY_DETAIL,
+        legs_realized: [{ fraction: 0.5, exit_price: 110, r: 2.0, reason: 'tp1' }],
+      },
+    });
+    expect(store.bankedLeg()).toBeNull();
+    expect(store.bankedStats()).toBeNull();
+  });
+});

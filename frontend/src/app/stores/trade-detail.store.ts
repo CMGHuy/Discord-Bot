@@ -304,6 +304,39 @@ export const TradeDetailStore = signalStore(
       return realized.length ? realized : toLegs(detail.legs ?? []);
     }),
 
+    /** The TP1 leg, once a PARTIAL plan has banked it -- null before then.
+     *  `trade.target`/`trade.stop_loss` are already the runner's own
+     *  numbers once PARTIAL (server-side fallback, `admin/api_v1/trades.py`);
+     *  this is the one fact those fields don't carry: what already closed,
+     *  and at what price. */
+    bankedLeg: computed<Leg | null>(() => {
+      const trade = data();
+      const detail = trade?.detail;
+      if (!trade || !detail || trade.status !== 'PARTIAL') return null;
+      return toLegs(detail.legs_realized ?? [])[0] ?? null;
+    }),
+
+    /** %-gain and $-amount for that leg, from the position's ORIGINAL entry
+     *  (not the leg's own price) to the leg's exit -- the number a trader
+     *  means by "how much did that leg make". `amount` is null when
+     *  `shares` is unknown (a legacy record) -- omitted rather than shown
+     *  as zero, same convention `embeds.py`'s server-side $ fallback uses. */
+    bankedStats: computed<{ pct: number; amount: number | null } | null>(() => {
+      const trade = data();
+      const detail = trade?.detail;
+      if (!trade || !detail || trade.status !== 'PARTIAL' || trade.entry === null) {
+        return null;
+      }
+      const leg = toLegs(detail.legs_realized ?? [])[0];
+      if (!leg || leg.exitPrice === null || leg.fraction === null) return null;
+      const sign = trade.direction === 'bearish' ? -1 : 1;
+      const pct = ((leg.exitPrice - trade.entry) / trade.entry) * 100 * sign;
+      const amount = trade.shares === null
+        ? null
+        : trade.shares * leg.fraction * (leg.exitPrice - trade.entry) * sign;
+      return { pct, amount };
+    }),
+
     /** The stop-entry price still being waited on. For a PENDING plan this is
      *  the only actionable price on the screen -- `entry` is null until it
      *  fills. */
