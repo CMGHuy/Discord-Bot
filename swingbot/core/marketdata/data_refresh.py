@@ -24,6 +24,7 @@ import pandas as pd
 
 from swingbot import config
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
+from swingbot.core.marketdata.adjustments import merge_adjusted
 from swingbot.core.marketdata.data_store import (
     DATA_DIR,
     TRAINING_TIMEFRAMES,
@@ -203,15 +204,8 @@ def _merge_save(existing, fresh, symbol: str, timeframe: str,
     if existing is None or len(existing) == 0:
         merged, added = fresh, len(fresh)
     else:
-        existing, fresh = _align_tz(existing, fresh)
-        ratio = _adjustment_ratio(existing, fresh, symbol, timeframe)
-        if ratio is not None:
-            existing = existing.copy()
-            cols = [c for c in _PRICE_COLUMNS if c in existing.columns]
-            existing[cols] = existing[cols] * ratio
         before = set(existing.index)
-        merged = pd.concat([existing, fresh])
-        merged = merged[~merged.index.duplicated(keep="last")].sort_index()
+        merged = merge_adjusted(existing, fresh, symbol, timeframe, _align_tz)
         added = sum(1 for i in fresh.index if i not in before)
 
     path = cache_path(symbol, timeframe, base_dir=base_dir)

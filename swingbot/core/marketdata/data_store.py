@@ -32,6 +32,7 @@ import pandas as pd
 import yfinance as yf
 
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
+from swingbot.core.marketdata.adjustments import merge_adjusted
 
 log = logging.getLogger("swing-bot.data_store")
 
@@ -314,18 +315,19 @@ def update_cache(symbols: list, interval: str = "1d", base_dir: str = DATA_DIR,
         # compare `start` against a DatetimeIndex, and pandas raises
         # TypeError comparing datetime64 to a bare `datetime.date`.
         # `_default_ranged_fetch` stringifies this fine for yfinance either way.
-        fresh = fetch(symbol, last + pd.Timedelta(days=1))
-        fresh = fresh[fresh.index > last] if fresh is not None else None
+        # Re-fetch a small overlap so a split/dividend adjustment can be
+        # proven before old and fresh bars are unioned.
+        fresh = fetch(symbol, last - pd.Timedelta(days=3))
         if fresh is None or fresh.empty:
             result[symbol] = 0
             continue
-        merged = pd.concat([existing, fresh])
-        merged = merged[~merged.index.duplicated(keep="last")].sort_index()
+        added = len(fresh.index.difference(existing.index))
+        merged = merge_adjusted(existing, fresh, symbol, interval, _align_tz)
         path = cache_path(symbol, interval, base_dir=base_dir)
         tmp = path + ".tmp"
         merged.to_csv(tmp)
         os.replace(tmp, path)
-        result[symbol] = len(fresh)
+        result[symbol] = added
     return result
 
 
@@ -383,8 +385,6 @@ def get_intraday(symbol: str, interval: str = "1h", base_dir: str = DATA_DIR,
     if existing is None or existing.empty:
         merged = df
     else:
-        existing, df = _align_tz(existing, df)
-        merged = pd.concat([existing, df])
-        merged = merged[~merged.index.duplicated(keep="last")].sort_index()
+        merged = merge_adjusted(existing, df, symbol, interval, _align_tz)
     save_to_disk(merged, symbol, interval, base_dir=base_dir)
     return merged

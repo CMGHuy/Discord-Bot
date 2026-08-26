@@ -28,6 +28,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from swingbot.core.marketdata.universe import data_quality_issues  # noqa: E402
+from swingbot.core.marketdata.adjustments import adjustment_seam_issue  # noqa: E402
 
 
 def _validate_backtest_cache() -> int:
@@ -43,6 +44,9 @@ def _validate_backtest_cache() -> int:
         df = pd.read_csv(path, index_col="Date", parse_dates=True)
         checked += 1
         issues = data_quality_issues(df, symbol)
+        seam = adjustment_seam_issue(df, symbol, "daily")
+        if seam:
+            issues.append(seam)
         for i in issues:
             print("ISSUE:", i)
         bad += bool(issues)
@@ -69,6 +73,9 @@ def _validate_universe_cache(name: str) -> int:
             continue
         checked += 1
         issues = data_quality_issues(df, symbol)
+        seam = adjustment_seam_issue(df, symbol, "daily")
+        if seam:
+            issues.append(seam)
         for i in issues:
             print("ISSUE:", i)
         bad += bool(issues)

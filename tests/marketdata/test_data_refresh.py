@@ -174,3 +174,27 @@ def test_a_non_uniform_disagreement_is_not_an_adjustment(tmp_path):
     fresh.loc["2024-01-08":"2024-01-10", ["Open", "High", "Low", "Close"]] = 118.0
 
     assert _adjustment_ratio(existing, fresh, "AAA", "daily") is None
+
+
+def test_update_cache_rescales_a_split_across_its_overlap(tmp_path):
+    existing = _price_frame("2024-01-01", "2024-01-10", close=100.0)
+    data_store.save_to_disk(existing, "AAA", "daily", base_dir=str(tmp_path))
+    fresh = _price_frame("2024-01-08", "2024-01-15", close=50.0)
+
+    result = data_store.update_cache(
+        ["AAA"], base_dir=str(tmp_path), fetch_fn=lambda _symbol, _start: fresh,
+    )
+
+    merged = data_store.load_from_disk("AAA", "daily", base_dir=str(tmp_path))
+    assert result == {"AAA": 5}
+    assert (merged["Close"] == 50.0).all()
+
+
+def test_adjustment_seam_detector_flags_mixed_basis_and_ignores_clean_frame():
+    from swingbot.core.marketdata.adjustments import adjustment_seam_issue
+
+    mixed = _price_frame("2024-01-01", "2024-01-20", close=100.0)
+    mixed.loc["2024-01-11":, ["Open", "High", "Low", "Close"]] = 50.0
+
+    assert "likely adjustment-basis seam" in adjustment_seam_issue(mixed, "AAA", "daily")
+    assert adjustment_seam_issue(_price_frame("2024-01-01", "2024-01-20", 100.0), "AAA", "daily") is None
