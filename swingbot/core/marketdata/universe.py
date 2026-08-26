@@ -150,7 +150,7 @@ def data_quality_issues(df: pd.DataFrame, symbol: str) -> list[str]:
 
     # 2) unadjusted split: >40% single-bar move without a >=3x volume spike
     move = close.pct_change().abs()
-    vol_ratio = df["Volume"] / df["Volume"].rolling(20).mean()
+    vol_ratio = df["Volume"] / df["Volume"].rolling(20).mean().shift(1)
     suspicious = (move > 0.40) & ~(vol_ratio >= 3.0)
     if suspicious.fillna(False).any():
         d = df.index[suspicious.fillna(False)][0].date()

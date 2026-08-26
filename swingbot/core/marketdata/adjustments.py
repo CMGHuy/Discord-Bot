@@ -49,6 +49,8 @@ def merge_adjusted(existing, fresh, symbol: str, timeframe: str, align_tz):
         existing = existing.copy()
         columns = [column for column in _PRICE_COLUMNS if column in existing.columns]
         existing[columns] = existing[columns] * ratio
+        if "Volume" in existing.columns:
+            existing["Volume"] = existing["Volume"] / ratio
     return pd.concat([existing, fresh])[lambda frame: ~frame.index.duplicated(keep="last")].sort_index()
 
 

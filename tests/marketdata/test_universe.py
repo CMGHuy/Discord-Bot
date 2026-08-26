@@ -747,3 +747,15 @@ def test_sector_dedup_reads_ticker_off_the_real_scanitem_shape():
 
     assert [i.result.ticker for i in out] == ["XOM"]
     assert out[0].also_qualifying == ["CVX"]
+
+
+def test_large_gap_with_prior_twenty_bar_volume_spike_is_not_a_bad_split():
+    from swingbot.core.marketdata.universe import data_quality_issues
+
+    df = _clean_frame()
+    df.iloc[-21:-1, df.columns.get_loc("Volume")] = 50_000_000.0
+    df.iloc[-2, df.columns.get_loc("Close")] = 100.0
+    df.iloc[-1, df.columns.get_loc("Close")] = 144.6
+    df.iloc[-1, df.columns.get_loc("Volume")] = 164_000_000.0
+
+    assert not any("split" in issue for issue in data_quality_issues(df, "QBTS"))
