@@ -1,6 +1,7 @@
 import pandas as pd
 
 from swingbot.core.charts.trendline_fit import TRENDLINE_FIT_KEY, fit_trendline
+from swingbot.core.market.trendlines import strongest_trendline_pair
 
 _PERIOD = 20
 _AMPLITUDE = 8.0
@@ -79,3 +80,20 @@ def test_log_trade_omits_the_key_entirely_when_there_is_no_fit(tmp_path):
 
     stored = log.get_trade_by_id(trade_id)
     assert TRENDLINE_FIT_KEY not in stored
+
+
+def test_large_history_trendline_geometry_uses_the_trimmed_origin():
+    """Task v59 A-S2: a capped pivot scan must retain absolute geometry."""
+    tail = _frame()
+    padding = tail.iloc[:0].reindex(pd.date_range("2018-01-01", periods=1860, freq="B"))
+    padding[["Open", "High", "Low", "Close", "Volume"]] = [160.0, 161.0, 159.0, 160.0, 1_000_000.0]
+    df = pd.concat([padding, tail])
+
+    pair = strongest_trendline_pair(df, lookback=120, current_price=160.0)
+
+    assert pair is not None
+    assert pair["window_bars"] < len(df)
+    support = pair["support"]
+    assert support is not None
+    at_spot = support["intercept"] + support["slope"] * (pair["window_bars"] - 1)
+    assert 0 < at_spot <= 160.0 * 1.01

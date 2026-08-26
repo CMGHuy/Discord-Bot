@@ -176,7 +176,7 @@ def _sources_str(sources) -> str:
 
 def _build_requirement_checks(scenario, target_confluence: tuple, conf,
                               effective_min_confluence: int,
-                              effective_min_confidence: int) -> list:
+                              effective_min_confidence: int, *, opex_tier=None) -> list:
     """
     Evaluates EVERY configured requirement against one scenario --
     always all of them, never stopping at the first failure -- and
@@ -225,7 +225,7 @@ def _build_requirement_checks(scenario, target_confluence: tuple, conf,
     # and funnel counters keep exactly the shape they have today. A failing
     # check blocks the post via `all_requirements_met` and is counted in the
     # funnel, which is what makes the quiet hour explainable afterwards.
-    if opex.suppress_new_entries():
+    if opex.suppress_new_entries(tier=opex_tier):
         checks.append(RequirementCheck(
             key="opex_close_window", label="Outside the opex close window", passed=False,
             detail=(

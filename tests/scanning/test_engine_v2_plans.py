@@ -706,3 +706,17 @@ def test_crawl_retains_every_frame_for_a_large_universe(monkeypatch):
 
     assert len(frames) == len(tickers)
     assert all(frames.get(ticker) is not None for ticker in tickers)
+
+
+def test_logged_v2_fields_match_the_stored_v2_target():
+    """Task v59 A-S5: a capped v2 target cannot retain legacy R:R/source."""
+    from swingbot.core.market.levels import Level
+
+    legacy = SimpleNamespace(target_sources=["Legacy far target"], risk_reward_ratio=8.0)
+    plan_v2 = SimpleNamespace(trigger_price=100.0, stop_loss=95.0, tp1=110.0)
+    sources, rr = engine._logged_plan_fields(
+        plan_v2, legacy, ([], [Level(110.0, ["EMA50"])]), "bullish",
+    )
+
+    assert sources == ["EMA50"]
+    assert rr == pytest.approx(2.0)

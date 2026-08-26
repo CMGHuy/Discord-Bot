@@ -30,12 +30,12 @@ class _Scenario:
         self.risk_reward_ratio = 2.5
 
 
-def _checks(conf_level, min_confluence, min_confidence, confluence=(3, ("EMA",))):
+def _checks(conf_level, min_confluence, min_confidence, confluence=(3, ("EMA",)), opex_tier=None):
     # `target_confluence` is (count, families) -- the order
     # _build_requirement_checks unpacks it in.
     return embeds._build_requirement_checks(
         _Scenario(), confluence, _Conf(conf_level),
-        min_confluence, min_confidence,
+        min_confluence, min_confidence, opex_tier=opex_tier,
     )
 
 
@@ -73,16 +73,26 @@ def test_thresholds_are_unchanged_off_an_opex_day(monkeypatch):
 
 
 def test_close_window_check_appears_only_while_suppressing(monkeypatch):
-    monkeypatch.setattr(embeds.opex, "suppress_new_entries", lambda: True)
+    monkeypatch.setattr(embeds.opex, "suppress_new_entries", lambda **kwargs: True)
     keys = [c.key for c in _checks(5, 2, 4)]
     assert "opex_close_window" in keys
     assert _passed(_checks(5, 2, 4), "opex_close_window") is False
 
 
 def test_close_window_check_absent_outside_the_window(monkeypatch):
-    monkeypatch.setattr(embeds.opex, "suppress_new_entries", lambda: False)
+    monkeypatch.setattr(embeds.opex, "suppress_new_entries", lambda **kwargs: False)
     keys = [c.key for c in _checks(5, 2, 4)]
     assert "opex_close_window" not in keys
+
+
+def test_close_window_uses_the_scan_resolved_tier(monkeypatch):
+    """Task v59 A-S7: worker checks must not re-read the wall clock."""
+    seen = []
+    monkeypatch.setattr(embeds.opex, "suppress_new_entries", lambda *, tier: seen.append(tier) or False)
+
+    _checks(5, 2, 4, opex_tier=opex.MONTHLY)
+
+    assert seen == [opex.MONTHLY]
 
 
 def test_the_funnel_counters_have_a_slot_for_the_new_key():

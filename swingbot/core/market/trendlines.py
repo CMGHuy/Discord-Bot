@@ -290,7 +290,8 @@ def _find_best_trendline(df: pd.DataFrame, current_price: float, side: str) -> d
     chart-drawing path (strongest_trendline_pair) funnel through, so the
     two can never disagree about which bars were even considered.
     """
-    if len(df) > MAX_PIVOT_SCAN_BARS:
+    trim_start = max(len(df) - MAX_PIVOT_SCAN_BARS, 0)
+    if trim_start:
         df = df.tail(MAX_PIVOT_SCAN_BARS)
 
     kind = "low" if side == "support" else "high"
@@ -314,6 +315,15 @@ def _find_best_trendline(df: pd.DataFrame, current_price: float, side: str) -> d
             if result and (best is None or result["score"] > best["score"]):
                 best = result
 
+    if best is not None and trim_start:
+        # Pivot indices are relative to the trimmed frame. Convert the line
+        # back to the caller's full-frame coordinate system before any
+        # display-window conversion uses it.
+        best["intercept"] -= best["slope"] * trim_start
+        best["touches"] = [
+            (bar_idx + trim_start, price, vol_ratio)
+            for bar_idx, price, vol_ratio in best["touches"]
+        ]
     return best
 
 

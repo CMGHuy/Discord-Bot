@@ -45,6 +45,7 @@ MIN_REWARD_PCT+ move available, not on how much money to put behind it.
 import asyncio
 import json as _json
 import logging
+import math
 import multiprocessing
 import os
 import time
@@ -586,6 +587,26 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
                     horizon_key, exc_info=True)
 
 
+def _logged_plan_fields(plan_v2, scenario, level_map, direction: str) -> tuple[list, float]:
+    """Attribution and R:R for the exact prices persisted to a trade row."""
+    if plan_v2 is None:
+        return list(dict.fromkeys(scenario.target_sources)), scenario.risk_reward_ratio
+
+    target_levels = []
+    if level_map is not None:
+        supports, resistances = level_map
+        target_levels = resistances if direction == "bullish" else supports
+    sources = []
+    for level in target_levels:
+        if math.isclose(float(level.price), float(plan_v2.tp1), rel_tol=0.0, abs_tol=1e-8):
+            sources.extend(level.sources)
+    if not sources:
+        sources = ["V2 structural target"]
+    risk = abs(float(plan_v2.trigger_price) - float(plan_v2.stop_loss))
+    rr = abs(float(plan_v2.tp1) - float(plan_v2.trigger_price)) / risk if risk else 0.0
+    return list(dict.fromkeys(sources)), rr
+
+
 def _check_near_close(ticker: str, df) -> list:
     """
     For every open trade on this ticker, checks how close today's price is
@@ -1111,7 +1132,8 @@ def map_tickers(fn, tickers: list, workers: int | None = None) -> list:
 def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
               regime, effective_min_confluence: int, effective_min_confidence: int,
               rs_cache: dict = None, spy_df=None, breadth: float = None,
-              live_prices: dict = None, hard_filters: dict = None) -> dict:
+              live_prices: dict = None, hard_filters: dict = None,
+              opex_tier_today=None) -> dict:
     """
     Per-ticker analysis body of _sync_run_scan's ANALYZE phase, extracted
     so it can run inside a map_tickers() worker thread (Task E20). Handles
@@ -1462,7 +1484,8 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             # the caller instead of silently dropped.
             requirements = _build_requirement_checks(
                 scenario, target_confluence, conf,
-                effective_min_confluence, effective_min_confidence)
+                effective_min_confluence, effective_min_confidence,
+                opex_tier=opex_tier_today)
             all_ok = True
             for r in requirements:
                 if not r.passed:
@@ -1727,7 +1750,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         lambda t: _scan_one(t, fresh_data.get(t), horizons_to_scan, progress, regime, effective_min_confluence,
                             effective_min_confidence,
                             rs_cache=rs_cache, spy_df=spy_df, breadth=breadth, live_prices=live_prices,
-                            hard_filters=hard_filters),
+                            hard_filters=hard_filters, opex_tier_today=opex_tier_today),
         tickers,
     )
 
@@ -2092,6 +2115,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             plan_v2 = (item.plan_v2
                        if config.PLAN_ENGINE_V2 == "on" and item.plan_v2 is not None
                        else None)
+            logged_target_sources, logged_rr = _logged_plan_fields(
+                plan_v2, plan, item.level_map, result.trend)
 
             # Fit the trendline ONCE, here, against the frame the decision was
             # made on, and store it on the trade. The PNG and the chart
@@ -2121,10 +2146,10 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 entry=nums["entry"], stop_loss=nums["stop_loss"], take_profit=nums["take_profit"],
                 target2=nums["target2"],
                 confidence_score=conf.score, confidence_breakdown=conf.breakdown,
-                target_sources=list(dict.fromkeys(plan.target_sources)),
+                target_sources=logged_target_sources,
                 stop_sources=list(dict.fromkeys(plan.stop_sources)),
                 target2_sources=list(dict.fromkeys(plan.target2_sources)) if plan.target2_sources else [],
-                risk_reward_ratio=plan.risk_reward_ratio,
+                risk_reward_ratio=logged_rr,
                 explanation=explanation,
                 confirmed_by=item.combined_from,
                 plan_id=plan_v2.plan_id if plan_v2 is not None else None,
