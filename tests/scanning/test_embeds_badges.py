@@ -128,6 +128,21 @@ def test_banked_leg_pct_and_amount_unsized(monkeypatch):
     assert amount is None
 
 
+def test_banked_leg_pct_and_amount_omits_everything_when_entry_is_unusable(monkeypatch):
+    """A plan with no usable entry (entry_price None AND trigger_price 0/None)
+    can't produce a % at all -- omit both figures rather than raising
+    ZeroDivisionError/TypeError, per this surface's omit-never-crash rule."""
+    import swingbot.core.scanning.embeds as embeds
+    monkeypatch.setattr(embeds.account, "compute_position_size",
+                        lambda entry, stop: {"shares": 100.0,
+                                             "position_value": 10_000.0,
+                                             "mode": "risk_pct"})
+    zero_entry = _plan(entry_price=0.0, trigger_price=0.0, stop_loss=95.0)
+    assert embeds.banked_leg_pct_and_amount(zero_entry, 110.0, 0.5) == (None, None)
+    no_entry = _plan(entry_price=None, trigger_price=None, stop_loss=95.0)
+    assert embeds.banked_leg_pct_and_amount(no_entry, 110.0, 0.5) == (None, None)
+
+
 def test_banked_leg_pct_and_amount_falls_back_to_trigger_price(monkeypatch):
     import swingbot.core.scanning.embeds as embeds
     monkeypatch.setattr(embeds.account, "compute_position_size",

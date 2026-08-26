@@ -61,6 +61,43 @@ def test_tp1_partial_embed_omits_dollar_figure_when_unsized(monkeypatch):
     assert "$" not in banked
 
 
+def test_tp1_partial_embed_signs_a_negative_banked_amount(monkeypatch):
+    """A leg banked below entry (gap-through fill on a scale-out) must read
+    '-$500.00', never '+$-500.00' -- the same sign-safe form leg_rows() uses."""
+    import swingbot.core.scanning.embeds as embeds
+    from swingbot import config
+    monkeypatch.setattr(embeds.account, "compute_position_size",
+                        lambda entry, stop: {"shares": 100.0,
+                                             "position_value": 10_000.0,
+                                             "mode": "risk_pct"})
+    monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
+    e = _embed("tp1_partial", {"fraction": 0.5, "exit_price": 90.0, "r": -1.0},
+              entry_price=100.0, stop_loss=95.0,
+              legs_realized=[{"fraction": 0.5, "exit_price": 90.0,
+                              "r": -1.0, "reason": "tp1"}],
+              working_stop=101.33)
+    banked = next(f.value for f in e.fields if f.name == "Banked")
+    assert "-$500.00" in banked
+    assert "+$-" not in banked
+
+
+def test_tp1_partial_embed_omits_pct_when_entry_is_unusable(monkeypatch):
+    """banked_leg_pct_and_amount returns (None, None) for an unusable entry --
+    the embed must drop the % clause rather than crash on the format spec."""
+    import swingbot.core.scanning.embeds as embeds
+    from swingbot import config
+    monkeypatch.setattr(embeds.account, "compute_position_size",
+                        lambda entry, stop: None)
+    monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
+    e = _embed("tp1_partial", {"fraction": 0.5, "exit_price": 110.0, "r": 2.0},
+              entry_price=0.0, trigger_price=0.0,
+              legs_realized=[{"fraction": 0.5, "exit_price": 110.0,
+                              "r": 2.0, "reason": "tp1"}],
+              working_stop=101.33)
+    banked = next(f.value for f in e.fields if f.name == "Banked")
+    assert banked == "50% @ 110.00 (+2.00R)"
+
+
 def test_partial_position_line_falls_back_to_tp1_when_no_tp2():
     from swingbot.core.scanning.embeds import partial_position_line
     p = _plan(entry_price=100.0, stop_loss=95.0, tp1=102.0, tp2=None,
