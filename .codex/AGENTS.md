@@ -4,16 +4,15 @@ This repository's shared operating knowledge is maintained in `CLAUDE.md` and
 the focused documents under `docs/claude/`. Treat those documents as the
 canonical project guidance. Read the relevant focused document before working
 in an area it covers; do not load plan files, indexes, or historical plans in
-full when a narrow extract will answer the question.
-`CLAUDE.md` is deliberately
+full when a narrow extract will answer the question. `CLAUDE.md` is deliberately
 kept below 200 lines so every session can load its durable rules cheaply;
 focused guidance belongs in `docs/claude/` and is read on demand.
 
-**Claude Code is this repo's primary operator; this file is a downstream
-mirror of `CLAUDE.md`, maintained BY Claude sessions, not the other way
-around.** Never edit `CLAUDE.md` or `docs/claude/*.md` from a Codex session,
-including to "fix" a disagreement with this file — this file is the one that
-gets corrected to match `CLAUDE.md`, not the reverse.
+**Claude Code and Codex collaborate on this repository.** Claude's
+`CLAUDE.md` and `docs/claude/` remain the canonical shared guidance; this file
+is their concise Codex mirror. When either agent adopts new canonical guidance,
+it synchronizes this mirror before relying on it in Codex. Never reverse that
+flow: a Codex-specific instruction does not modify the canonical Claude docs.
 
 ## Project and production boundary
 
