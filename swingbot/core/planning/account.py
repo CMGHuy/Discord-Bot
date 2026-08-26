@@ -98,7 +98,11 @@ def _sum_realized_pnl(trades_path: str = None) -> float:
     Reads trades.json directly (rather than importing core.performance's
     TradeLog) to avoid a circular import -- performance.py already imports
     this module at load time. This is the single source of truth the
-    effective account balance is layered on top of.
+    effective account balance is layered on top of. A stored balance self-heals
+    on reload, but a premature balance_history point does not: history feeds
+    throttle.drawdown_pct (the kill-switch), growth_path, and the equity chart,
+    so an open trade must never be treated as settled merely because it has a
+    banked scale-out leg.
     """
     path = trades_path or os.path.join(app_config.DATA_DIR, "trades.json")
     if not os.path.exists(path):
@@ -111,7 +115,7 @@ def _sum_realized_pnl(trades_path: str = None) -> float:
     total = 0.0
     for t in trades:
         pnl = t.get("realized_pnl_amount")
-        if pnl is None and t.get("legs"):
+        if pnl is None and t.get("legs") and t.get("status") in ("win", "loss", "closed"):
             # v2 two-leg trade whose realized_pnl_amount never got written
             # (e.g. a crash between leg append and settle) -- rederive it
             # from the legs themselves rather than treating it as unsettled.

@@ -100,3 +100,29 @@ def test_get_balance_history_points_adapts_to_date_balance_tuples(tmp_path):
     path.write_text(json.dumps(cfg))
     points = account.get_balance_history_points(path=str(path))
     assert points == [("2025-07-12", 10_000.0), ("2026-07-12", 15_000.0)]
+
+def test_open_partial_legs_do_not_pre_settle_account_history(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    trades_path = tmp_path / "trades.json"
+    trades = [{
+        "id": "t3", "ticker": "AAPL", "direction": "bullish", "status": "open",
+        "entry": 100.0, "stop_loss": 99.0, "shares": 100.0,
+        "realized_pnl_amount": None,
+        "legs": [{"fraction": 0.5, "exit_price": 100.35, "r": 0.35,
+                  "reason": "tp1"}],
+    }]
+    trades_path.write_text(json.dumps(trades))
+
+    # TP1 is banked on the still-open runner, not yet account-settled.
+    assert account._sum_realized_pnl(trades_path=str(trades_path)) == 0.0
+
+    account.apply_realized_pnl(17.50, {"trade_id": "t3"})
+    trades[0]["status"] = "win"
+    trades[0]["realized_pnl_amount"] = 17.50
+    trades_path.write_text(json.dumps(trades))
+
+    cfg = account.load_account_config()
+    assert cfg["balance_history"][-1]["balance"] == pytest.approx(
+        config.ACCOUNT_BALANCE + 17.50
+    )
+    assert cfg["balance"] == pytest.approx(config.ACCOUNT_BALANCE + 17.50)
