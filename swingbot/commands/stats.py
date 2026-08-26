@@ -78,7 +78,7 @@ def _fake_item_from_plan(plan):
 @bot.command(name="top")
 async def top_cmd(ctx, n: int = None):
     n = n or config.DIGEST_MAX_PLANS
-    plans = _plan_store.all()
+    plans = PlanStore().all()
     top = top_plans(plans, n, today=dt.date.today())
     if not top:
         await ctx.send("No PENDING/ACTIVE plans right now.")

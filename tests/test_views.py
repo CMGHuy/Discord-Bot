@@ -16,7 +16,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 
+from swingbot import config
 from swingbot.commands import views as views_module
+from swingbot.core.planning.plan_store import PlanStore
+from tests.planning.test_plan_manager_pending import _pending
 from swingbot.commands.views import (
     PlanActionView,
     PlanBoardView,
@@ -112,7 +115,7 @@ def test_chart_button_plan_not_found_sends_ephemeral_message():
     view = PlanActionView("plan-404", author_id=42)
     interaction = _fake_interaction(user_id=42)
 
-    with patch.object(views_module._plan_store, "get", return_value=None) as mock_get, \
+    with patch.object(views_module.PlanStore, "get", return_value=None) as mock_get, \
          patch.object(views_module, "get_daily_data") as mock_get_daily_data, \
          patch.object(views_module, "generate_trade_chart") as mock_generate_chart:
         asyncio.run(view.children[0].callback(interaction))
@@ -138,7 +141,7 @@ def test_chart_button_happy_path_sends_chart_file():
 
     sent_file = None
     try:
-        with patch.object(views_module._plan_store, "get", return_value=plan), \
+        with patch.object(views_module.PlanStore, "get", return_value=plan), \
              patch.object(views_module, "get_daily_data", return_value=MagicMock()) as mock_get_daily_data, \
              patch.object(views_module, "get_currency_symbol", return_value="$"), \
              patch.object(views_module, "generate_trade_chart", return_value=tmp_path) as mock_generate_chart:
@@ -163,7 +166,7 @@ def test_chart_button_data_fetch_failure_sends_ephemeral_error():
     interaction = _fake_interaction(user_id=42)
     plan = _fake_plan()
 
-    with patch.object(views_module._plan_store, "get", return_value=plan), \
+    with patch.object(views_module.PlanStore, "get", return_value=plan), \
          patch.object(views_module, "get_daily_data", side_effect=ValueError("no data available")) as mock_get_daily_data, \
          patch.object(views_module, "generate_trade_chart") as mock_generate_chart:
         asyncio.run(view.children[0].callback(interaction))
@@ -181,7 +184,7 @@ def test_chart_button_render_failure_sends_ephemeral_error():
     interaction = _fake_interaction(user_id=42)
     plan = _fake_plan()
 
-    with patch.object(views_module._plan_store, "get", return_value=plan), \
+    with patch.object(views_module.PlanStore, "get", return_value=plan), \
          patch.object(views_module, "get_daily_data", return_value=MagicMock()), \
          patch.object(views_module, "get_currency_symbol", return_value="$"), \
          patch.object(views_module, "generate_trade_chart", side_effect=RuntimeError("render exploded")) as mock_generate_chart:
@@ -223,7 +226,7 @@ def test_breakdown_embed_has_one_field_per_section_and_every_quality_line():
 def test_breakdown_button_sends_ephemeral():
     view = PlanActionView("abcd1234-plan", author_id=1)
     interaction = _fake_interaction(user_id=1)
-    with patch.object(views_module._plan_store, "get", return_value=_fixture_plan()):
+    with patch.object(views_module.PlanStore, "get", return_value=_fixture_plan()):
         asyncio.run(view.breakdown_button.callback(interaction))
     interaction.response.send_message.assert_awaited_once()
     _, kwargs = interaction.response.send_message.call_args
@@ -302,3 +305,14 @@ def test_plan_board_view_has_6_children_after_pagination():
     calls = []
     view = PlanBoardView(_stub_render_fn(calls), author_id=1, items=list(range(20)))
     assert len(view.children) == 6  # 3 selects + refresh + prev + next
+
+def test_breakdown_button_reads_plan_created_after_views_import(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    plan = _pending(plan_id="late-plan", ticker="MSFT")
+    PlanStore().add(plan)
+    view = PlanActionView(plan.plan_id, author_id=1)
+    interaction = _fake_interaction(user_id=1)
+
+    asyncio.run(view.breakdown_button.callback(interaction))
+
+    interaction.response.send_message.assert_awaited_once()

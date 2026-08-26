@@ -78,7 +78,7 @@ class PlanActionView(discord.ui.View):
     @discord.ui.button(label="📊 Chart", style=discord.ButtonStyle.primary, custom_id="plan:chart")
     async def chart_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True, thinking=True)
-        plan = _plan_store.get(self.plan_id)
+        plan = PlanStore().get(self.plan_id)
         if plan is None:
             await interaction.followup.send("This plan no longer exists (closed/cancelled and pruned).", ephemeral=True)
             return
@@ -107,7 +107,7 @@ class PlanActionView(discord.ui.View):
 
     @discord.ui.button(label="🔍 Breakdown", style=discord.ButtonStyle.secondary, custom_id="plan:breakdown")
     async def breakdown_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        plan = _plan_store.get(self.plan_id)
+        plan = PlanStore().get(self.plan_id)
         if plan is None:
             await interaction.response.send_message("This plan no longer exists.", ephemeral=True)
             return

@@ -152,6 +152,10 @@ class PlanManager:
                 continue
             if not price or price <= 0:
                 continue
+            # price_fn may block long enough for the scan loop to persist a new
+            # plan. Reload before any _step() write so update() merges with that
+            # current on-disk store instead of serializing a stale snapshot.
+            self.store.reload()
             try:
                 new_events = self._step(plan, price)
             except Exception:
