@@ -44,7 +44,7 @@ import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { ConfidenceCell } from '../../ui/confidence-cell';
 import { DirectionArrow } from '../../ui/direction-arrow';
-import { PlanCell } from '../../ui/plan-cell';
+import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
 import { StatusCell } from '../../ui/status-cell';
 import {
   ACTION_LABELS,
@@ -306,6 +306,12 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
         [stop]="row.stop_loss"
         [trigger]="row.trigger_price"
         [trailing]="row.status === 'PARTIAL'"
+        [bankedFraction]="row.banked_fraction"
+        [bankedR]="row.banked_r"
+        [bankedEntry]="row.banked_exit_price"
+        [bankedPct]="bankedLegPct(row.entry, row.banked_exit_price, row.direction)"
+        [bankedAmount]="bankedLegAmount(row.entry, row.banked_exit_price, row.banked_fraction, row.shares, row.direction)"
+        [currency]="connection.currency()"
       />
     </ng-template>
 
@@ -468,7 +474,7 @@ export class Trades {
   private readonly preferences = inject(PreferencesStore);
   protected readonly store = inject(TradesStore);
   /** For the currency symbol alone, same as the Dashboard's own use of it. */
-  private readonly connection = inject(ConnectionStore);
+  protected readonly connection = inject(ConnectionStore);
 
   /* Query parameters, arriving as inputs through withComponentInputBinding.
    * All strings, because that is what a URL carries. */
@@ -749,6 +755,8 @@ export class Trades {
   protected fmtPct = pct;
   protected fmtText = text;
   protected fmtDate = dateTime;
+  protected bankedLegPct = bankedLegPct;
+  protected bankedLegAmount = bankedLegAmount;
   protected fmtNum(value: number | null, decimals = 2): string {
     return value === null || value === undefined ? '—' : value.toFixed(decimals);
   }
