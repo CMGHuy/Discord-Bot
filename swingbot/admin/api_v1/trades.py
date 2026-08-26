@@ -56,7 +56,7 @@ _LEGACY_STATUS = {
 # Statuses where a live price is meaningless -- the position is over.
 _TERMINAL = {"CLOSED", "CANCELLED"}
 
-FILTERS = frozenset({"status", "outcome", "ticker", "strategy", "horizon",
+FILTERS = frozenset({"status", "outcome", "ticker", "strategy", "horizon", "tier",
                      "direction", "origin", "has_note",
                      # SR52. `strategy` and `horizon` were already
                      # accepted and had no control; these two were accepted by
@@ -79,7 +79,7 @@ _FILTER_KEYS = {"confidence": "confidence_level"}
 # Filters compared case-insensitively. These hold vocabulary the UI displays
 # (VALIDATED, bullish, A) rather than free text, and `?badge=validated` failing
 # to match VALIDATED is the exact shape of the NG54 bug.
-_CASELESS_FILTERS = frozenset({"badge", "direction", "origin"})
+_CASELESS_FILTERS = frozenset({"badge", "direction", "origin", "tier"})
 
 # NG54. `status` normalises win and loss to CLOSED, so the two cannot be told
 # apart by it -- but the Jinja UI had an `outcome` filter over exactly that
@@ -225,6 +225,7 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "strategy": plan.get("strategy"),
         "horizon": plan.get("horizon_key"),
         "badge": plan.get("badge"),
+        "tier": t.get("tier") or plan.get("tier"),
         "confidence_level": t.get("confidence_level"),
         "confidence_score": t.get("confidence_score"),
         "quality_score": plan.get("quality_score"),
@@ -289,6 +290,7 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "strategy": t.get("strategy"),
         "horizon": t.get("horizon_key"),
         "badge": t.get("badge"),
+        "tier": t.get("tier"),
         "confidence_level": t.get("confidence_level"),
         "confidence_score": t.get("confidence_score"),
         "quality_score": t.get("quality_score"),
@@ -644,6 +646,9 @@ def list_trades():
             want = str(value).strip().lower()
             rows = [r for r in rows
                     if str(r.get("outcome") or "").lower() == want]
+        elif key == "ticker":
+            want = str(value).strip().lower()
+            rows = [r for r in rows if want in str(r.get("ticker") or "").lower()]
         elif key in _CASELESS_FILTERS:
             want = str(value).strip().lower()
             field = _FILTER_KEYS.get(key, key)

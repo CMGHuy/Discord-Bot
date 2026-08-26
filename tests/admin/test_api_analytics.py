@@ -159,6 +159,11 @@ def test_malformed_date_is_a_400_not_a_silently_ignored_filter(seed, logged_in):
                  "invalid", 400)
 
 
+def test_unknown_performance_parameter_is_rejected(seed, logged_in):
+    seed()
+    assert_error(logged_in.get("/api/v1/analytics/performance?form=all"), "invalid", 400)
+
+
 def test_distributions_and_series_are_present_and_scoped(seed, logged_in):
     seed(trades=_year())
     body = _perf(logged_in)

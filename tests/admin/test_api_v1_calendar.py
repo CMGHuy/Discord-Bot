@@ -107,6 +107,7 @@ def test_a_malformed_month_is_a_400_not_a_silent_whole_history(seed, logged_in):
     seed(trades=[_trade("a" * 16)])
     assert_error(logged_in.get("/api/v1/calendar/pnl?month=August"), "invalid", 400)
     assert_error(logged_in.get("/api/v1/calendar/pnl?month=2026-13"), "invalid", 400)
+    assert_error(logged_in.get("/api/v1/calendar/pnl?month=2026-1"), "invalid", 400)
 
 
 def test_month_defaults_to_the_current_month_when_omitted(seed, logged_in):

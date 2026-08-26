@@ -47,6 +47,7 @@ TRADE_ROW = {
     "strategy": NULLABLE_STR,
     "horizon": NULLABLE_STR,
     "badge": NULLABLE_STR,
+    "tier": NULLABLE_STR,
     "confidence_level": NULLABLE_NUMBER,
     "confidence_score": NULLABLE_NUMBER,
     "quality_score": NULLABLE_NUMBER,
@@ -391,6 +392,25 @@ def test_ticker_filter(seed, logged_in):
     body = logged_in.get("/api/v1/trades?ticker=MSFT").get_json()
     assert body["total"] == 1
     assert body["items"][0]["ticker"] == "MSFT"
+
+
+def test_ticker_filter_is_case_insensitive_substring_matching(seed, logged_in):
+    seed(plans=[
+        _plan("11111111-1111-4111-8111-111111111111", ticker="AAPL"),
+        _plan("22222222-2222-4222-8222-222222222222", ticker="MSFT"),
+    ])
+    body = logged_in.get("/api/v1/trades?ticker=apl").get_json()
+    assert [row["ticker"] for row in body["items"]] == ["AAPL"]
+
+
+def test_tier_filter_is_returned_and_applied(seed, logged_in):
+    seed(trades=[
+        {**_trade("11111111-1111-4111-8111-111111111111"), "tier": "A"},
+        {**_trade("22222222-2222-4222-8222-222222222222"), "tier": "B"},
+    ])
+    body = logged_in.get("/api/v1/trades?tier=a").get_json()
+    assert body["total"] == 1
+    assert body["items"][0]["tier"] == "A"
 
 
 def test_total_is_the_prefilter_count_not_the_page_length(seed, logged_in):

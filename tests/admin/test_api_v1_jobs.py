@@ -311,3 +311,10 @@ def test_create_proposal_from_a_finished_job(logged_in, admin_app, tmp_path, pro
         "the note is what stops a proposal being mistaken for an applied change"
     )
     assert (proposals_dir / body["filename"]).exists()
+
+
+def test_create_proposal_from_a_malformed_result_returns_api_error(logged_in, results_dir):
+    (results_dir / "job1.json").write_text('{"strategy": "RSI", "grid": [{}]}', encoding="utf-8")
+    response = logged_in.post("/api/v1/analytics/tuning/proposals",
+                              json={"job_id": "job1", "row_index": 0})
+    assert_error(response, "invalid", 400)

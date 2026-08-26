@@ -53,6 +53,8 @@ def _month_param() -> str:
     raw = (request.args.get("month") or "").strip()
     if not raw:
         return dt.date.today().strftime("%Y-%m")
+    if len(raw) != 7 or raw[4] != "-":
+        raise ApiError("invalid", "month must be a YYYY-MM value", 400)
     try:
         dt.datetime.strptime(raw, "%Y-%m")
     except ValueError:

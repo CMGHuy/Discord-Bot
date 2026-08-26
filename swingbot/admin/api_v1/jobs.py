@@ -160,7 +160,9 @@ def create_proposal():
         return error("not_found", "Could not find that job/row.", 404)
 
     row = result["grid"][row_index]
-    strategy = result["strategy"]
+    strategy = result.get("strategy")
+    if not isinstance(row, dict) or not isinstance(row.get("params"), dict) or not isinstance(strategy, str):
+        return error("invalid", "The tuning result row is malformed.", 400)
     proposal = {
         "strategy": strategy,
         "proposed_params": row["params"],

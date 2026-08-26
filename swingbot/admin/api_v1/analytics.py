@@ -94,6 +94,10 @@ def analytics_performance():
     annualised Sharpe here is `sharpe() * annualisation_factor()` rather than
     a second Sharpe expression written inline.
     """
+    unknown = set(request.args) - {"from", "to"}
+    if unknown:
+        raise ApiError("invalid", f"unknown parameter {sorted(unknown)[0]!r}; allowed: ['from', 'to']", 400)
+
     from swingbot.admin.dashboard import closed_pnl
     from swingbot.core.analytics import metrics as m
 
