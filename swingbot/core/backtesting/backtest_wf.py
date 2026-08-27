@@ -222,7 +222,7 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
                      risk_pct: float = 1.0, heat_cap_pct: float = 6.0,
                      sector_cap_pct: float = 3.0, max_open: int | None = None,
                      sectors: dict | None = None, throttles: bool = True,
-                     one_per_ticker: bool = False, reversals: bool = False,
+                     one_per_ticker: bool = True, reversals: bool = False,
                      rev_min_hold_days: float = 1.0,
                      rev_cooldown_days: float = 2.0,
                      rev_max_per_day: int = 1) -> dict:
