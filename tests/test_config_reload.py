@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 from swingbot import config
 from swingbot.commands import scanning as scanning_mod
+from swingbot.commands.scanning import recap
 from swingbot.core.scanning import engine
 
 
@@ -20,7 +21,7 @@ def test_weekend_scan_does_not_revert_hot_reloaded_value(monkeypatch):
         return []
 
     monkeypatch.setattr(config, "MIN_ALERT_CONFIDENCE_LEVEL", 3)
-    monkeypatch.setattr(scanning_mod.scan_engine, "run_scan", scan)
+    monkeypatch.setattr(recap.scan_engine, "run_scan", scan)
 
     asyncio.run(scanning_mod.weekend_deep_scan())
 
