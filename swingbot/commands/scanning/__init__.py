@@ -19,14 +19,8 @@ from swingbot.core.infra.silent_channel import silence
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.market.strategy import HORIZONS
 from swingbot.core.marketdata.watchlist import load_watchlist
-
-_TRIGGER_FILE         = os.path.join(config.DATA_DIR, "trigger_check.flag")
-# Queue file written by the admin UI when a trade is manually closed.
-# Each line is a JSON-encoded trade record; the bot drains it and posts
-# to DISCORD_CHANNEL_TRADES_HISTORY_ID, then deletes the file.
-_MANUAL_CLOSE_QUEUE   = os.path.join(config.DATA_DIR, "manual_close_notify.json")
-_PAUSE_FILE = os.path.join(config.DATA_DIR, "scan_paused.flag")
-_HEARTBEAT_FILE = os.path.join(config.DATA_DIR, "bot_heartbeat.json")
+from . import runstate
+from .runstate import _HEARTBEAT_FILE, _MANUAL_CLOSE_QUEUE, _PAUSE_FILE, _TRIGGER_FILE
 
 # Historical !check results are summaries, not an export. Keep enough for a
 # useful review while avoiding a burst of Discord sends for broad date ranges.
@@ -164,46 +158,6 @@ _GOODBYE_MESSAGES = (
     "trade{plural} still open somewhere out there in the dark. Sleep well. 😴",
 )
 
-
-def _write_heartbeat() -> None:
-    """
-    Stamps a small JSON file that the admin UI reads to show a blinking
-    green/red bot-liveness dot on the Dashboard. Written on every
-    session_scan tick (including off-hours / paused ticks) so the dot
-    goes red only when the bot process itself stops responding, not just
-    because it's outside the trading session window.
-    """
-    try:
-        os.makedirs(config.DATA_DIR, exist_ok=True)
-        with open(_HEARTBEAT_FILE, "w") as fh:
-            json.dump({
-                "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
-                "session_active": in_session(),
-                "scan_paused": is_scan_paused(),
-            }, fh)
-    except Exception:
-        pass
-
-
-def is_scan_paused() -> bool:
-    """Whether the automatic background scan loop is currently paused
-    (via the admin UI toggle or the !pause command). Manual scans
-    (!check, and the admin UI's "Run !check now" trigger) are NOT
-    affected by this -- pausing only stops the unattended, scheduled
-    scanning so the user can still check on demand."""
-    return os.path.exists(_PAUSE_FILE)
-
-
-def set_scan_paused(paused: bool) -> None:
-    os.makedirs(config.DATA_DIR, exist_ok=True)
-    if paused:
-        with open(_PAUSE_FILE, "w") as f:
-            f.write(dt.datetime.now(dt.timezone.utc).isoformat())
-    else:
-        try:
-            os.remove(_PAUSE_FILE)
-        except OSError:
-            pass  # already resumed by a parallel caller
 
 trade_log = scan_engine.trade_log
 
@@ -474,7 +428,7 @@ def _presence_text() -> str:
     """
     open_count = trade_log.get_stats()["open"]
     plural = "" if open_count == 1 else "s"
-    if is_scan_paused():
+    if runstate.is_scan_paused():
         return f"⏸ Paused · {open_count} open trade{plural}"
     if not in_session():
         return f"😴 Off-hours · {open_count} open trade{plural}"
@@ -504,7 +458,7 @@ async def _refresh_presence():
     logged and swallowed rather than taking down a scan.
     """
     try:
-        if is_scan_paused():
+        if runstate.is_scan_paused():
             status = discord.Status.dnd       # 🔴 red dot with dash
         elif not in_session():
             status = discord.Status.idle      # 🌙 yellow crescent (off-hours)
@@ -650,7 +604,7 @@ async def _session_scan_tick():
     await _refresh_presence()
     # Write heartbeat file so the admin dashboard can show a live green/red
     # status dot even when the bot is paused or outside the session window.
-    _write_heartbeat()
+    runstate._write_heartbeat()
 
     # Resolved once, up front, so the session welcome/goodbye check below
     # can run regardless of pause state (the session boundary is about
@@ -667,7 +621,7 @@ async def _session_scan_tick():
     if channel is not None:
         await _check_session_transition(channel)
 
-    if is_scan_paused():
+    if runstate.is_scan_paused():
         log.debug("session_scan tick skipped -- scanning is paused")
         return
     if not in_session():
@@ -837,7 +791,7 @@ async def heartbeat():
     latency_ms = round(bot.latency * 1000) if bot.latency else None
     log.info(
         "Heartbeat -- session=%s scan=%s watchlist=%d open_trades=%d gateway_latency=%sms",
-        "active" if in_session() else "inactive", "paused" if is_scan_paused() else "running",
+        "active" if in_session() else "inactive", "paused" if runstate.is_scan_paused() else "running",
         watchlist_size, open_count,
         latency_ms if latency_ms is not None else "n/a",
     )
@@ -1832,7 +1786,7 @@ async def session_cmd(ctx):
     start = config.SESSION_START_HOUR
     end = config.SESSION_END_HOUR
     status = "🟢 **Active**" if active else "🔴 **Inactive**"
-    paused_bit = "\n⏸️ **Scanning is paused** — use `!resume` or the admin UI to resume." if is_scan_paused() else ""
+    paused_bit = "\n⏸️ **Scanning is paused** — use `!resume` or the admin UI to resume." if runstate.is_scan_paused() else ""
     await ctx.send(
         f"{status} — session window: {start:02d}:00–{end:02d}:00 Europe/Berlin (7 days)\n"
         f"Current time: {now.strftime('%Y-%m-%d %H:%M %Z')}{paused_bit}"
@@ -1846,7 +1800,7 @@ async def status_cmd(ctx):
     active = in_session()
     session_status = "🟢 active" if active else "🔴 inactive"
     latency_ms = round(bot.latency * 1000) if bot.latency else None
-    paused = is_scan_paused()
+    paused = runstate.is_scan_paused()
     scan_line = "⏸️ **paused** (manual !check still works)" if paused else "▶️ running"
     await ctx.send(
         f"**Bot status**\n"
@@ -1864,10 +1818,10 @@ async def status_cmd(ctx):
 @bot.command(name="pause")
 async def pause_cmd(ctx):
     """Pause the automatic background scan loop. Manual !check still works."""
-    if is_scan_paused():
+    if runstate.is_scan_paused():
         await ctx.send("⏸️ Scanning is already paused.")
         return
-    set_scan_paused(True)
+    runstate.set_scan_paused(True)
     log.info("Automatic scanning paused via !pause (by %s).", ctx.author)
     await _refresh_presence()
     await ctx.send(
@@ -1879,10 +1833,10 @@ async def pause_cmd(ctx):
 @bot.command(name="resume")
 async def resume_cmd(ctx):
     """Resume the automatic background scan loop after a !pause."""
-    if not is_scan_paused():
+    if not runstate.is_scan_paused():
         await ctx.send("▶️ Scanning is already running.")
         return
-    set_scan_paused(False)
+    runstate.set_scan_paused(False)
     log.info("Automatic scanning resumed via !resume (by %s).", ctx.author)
     await _refresh_presence()
     await ctx.send("▶️ **Automatic scanning resumed.**")
