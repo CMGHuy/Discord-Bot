@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-08-26 07:56:37 UTC",
+  "generated_at": "2026-08-27 09:33:57 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.9.1",
-    "bot": "1.4.4"
+    "ui": "1.9.2",
+    "bot": "1.4.5"
   },
   "releases": [
     {
@@ -848,6 +848,20 @@
       "versions": {
         "ui": "1.9.1",
         "bot": "1.4.4"
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "commit": "d2c3456b",
+      "subject": "release(ui,bot): 1.9.2 / 1.4.5 -- v59 integrity fixes",
+      "versions": {
+        "ui": "1.9.2",
+        "bot": "1.4.5"
       },
       "changed": [
         "ui",
