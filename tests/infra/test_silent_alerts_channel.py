@@ -24,6 +24,7 @@ from swingbot import config
 from swingbot.commands import scanning as scanning_mod
 from swingbot.commands.scanning import _send_alerts
 from swingbot.commands.scanning import runstate
+from swingbot.commands.scanning import presence
 from swingbot.core.infra.silent_channel import SilentChannel, silence
 
 
@@ -144,8 +145,8 @@ def test_the_scan_tick_wraps_the_channel_it_resolves(monkeypatch):
     async def _capture(channel):
         captured["channel"] = channel
 
-    monkeypatch.setattr(scanning_mod, "_check_session_transition", _capture, raising=False)
-    monkeypatch.setattr(scanning_mod, "_refresh_presence", lambda: asyncio.sleep(0), raising=False)
+    monkeypatch.setattr(presence, "_check_session_transition", _capture, raising=False)
+    monkeypatch.setattr(presence, "_refresh_presence", lambda: asyncio.sleep(0), raising=False)
     monkeypatch.setattr(runstate, "_write_heartbeat", lambda: None, raising=False)
 
     asyncio.run(scanning_mod._session_scan_tick())
