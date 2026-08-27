@@ -40,10 +40,11 @@ def test_early_exit_r_zero_risk_does_not_divide_by_zero():
 
 # ── defaults unchanged ──────────────────────────────────────────────────────
 
-def test_defaults_allow_concurrent_same_ticker_positions():
-    """Both flags off -> behaves exactly as before this feature."""
+def test_default_blocks_concurrent_same_ticker_positions():
+    """The default mirrors the live account's one-position-per-ticker rule."""
     out = _replay([_sig("2020-01-01"), _sig("2020-01-02")])
-    assert out["trades_taken"] == 2
+    assert out["trades_taken"] == 1
+    assert out["trades_skipped"] == 1
     assert out["reversals"] == 0
 
 

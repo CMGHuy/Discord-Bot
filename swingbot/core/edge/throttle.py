@@ -86,12 +86,17 @@ KILL_DATA_FAIL_FRAC = 0.20
 
 def kill_state() -> dict:
     return read_json(KILLSWITCH_PATH,
-                      {"on": config.KILLSWITCH_DEFAULT_ON, "reason": None, "at": None})
+                      {"on": config.KILLSWITCH_DEFAULT_ON, "reason": None, "at": None,
+                       "manual_release": False})
 
 
 def set_kill(on: bool, reason: str = "manual") -> dict:
+    prior = kill_state()
+    if on and reason != "manual" and prior.get("manual_release"):
+        return prior
     state = {"on": on, "reason": reason if on else None,
-             "at": _dt.datetime.now(_dt.timezone.utc).isoformat()}
+             "at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+             "manual_release": not on}
     atomic_write_json(KILLSWITCH_PATH, state)
     return state
 
