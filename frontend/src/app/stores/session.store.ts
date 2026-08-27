@@ -179,7 +179,13 @@ export const SessionStore = signalStore(
      * both wrong and alarming on a tool that shows money.
      */
     expire(): void {
-      patchState(store, { status: 'anonymous', username: null, error: null });
+      patchState(store, {
+        status: 'anonymous', username: null,
+        // A rejected login emits the same 401 notification as an expired
+        // session. Preserve its just-written form error instead of clearing
+        // it before Angular has a chance to render it.
+        error: store.status() === 'authenticated' ? null : store.error(),
+      });
     },
   })),
   withHooks({

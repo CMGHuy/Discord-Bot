@@ -126,16 +126,23 @@ export const TradesStore = signalStore(
       ).length;
     }),
   })),
-  withMethods((store, api = inject(ApiClient)) => ({
+  withMethods((store, api = inject(ApiClient)) => {
+    let latestRequest = 0;
+    return {
     setQuery(query: TradeQuery): void {
       patchState(store, { query, queryReady: true });
     },
 
     load(): void {
+      const request = ++latestRequest;
       patchState(store, { loading: true });
       api.trades(store.query()).subscribe({
-        next: (data) => patchState(store, { data, loading: false, error: null }),
-        error: (error: ApiError) =>
+        next: (data) => {
+          if (request !== latestRequest) return;
+          patchState(store, { data, loading: false, error: null });
+        },
+        error: (error: ApiError) => {
+          if (request !== latestRequest) return;
           patchState(store, {
             loading: false,
             // `data` is deliberately untouched: a list that vanishes because
@@ -145,7 +152,8 @@ export const TradesStore = signalStore(
               error.code === 'unavailable'
                 ? 'The admin is not responding.'
                 : error.message,
-          }),
+          });
+        },
       });
     },
 
@@ -203,7 +211,8 @@ export const TradesStore = signalStore(
      *  Not query-dependent — see `tradesExportUrl`. The export is the whole
      *  trade log, and the button says so. */
     exportUrl: (): string => api.tradesExportUrl(),
-  })),
+    };
+  }),
   withHooks({
     onInit(store, events = inject(EventStream)) {
       const trades = events.changes('trades');

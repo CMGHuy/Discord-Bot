@@ -75,6 +75,7 @@ export const ChartStore = signalStore(
     isEmpty: computed(() => data() !== null && data()!.ohlcv.length === 0),
   })),
   withMethods((store, api = inject(ApiClient)) => {
+    let latestRequest = 0;
     /** Shared by the event effect and by `retry`, so the failure path and the
      *  happy path cannot drift into two different requests. */
     const load = (): void => {
@@ -85,13 +86,18 @@ export const ChartStore = signalStore(
 
       const tradeId = store.tradeId();
       const window = store.window();
+      const request = ++latestRequest;
       patchState(store, { loading: true, error: null });
       api.chart(ticker, {
         ...(tradeId === null ? {} : { trade_id: tradeId }),
         ...(window === null ? {} : { window }),
       }).subscribe({
-        next: (data) => patchState(store, { data, loading: false, error: null }),
-        error: (error: ApiError) =>
+        next: (data) => {
+          if (request !== latestRequest || data.ticker !== ticker) return;
+          patchState(store, { data, loading: false, error: null });
+        },
+        error: (error: ApiError) => {
+          if (request !== latestRequest) return;
           patchState(store, {
             loading: false,
             // The two degraded states spec Decision 10 names must be
@@ -105,7 +111,8 @@ export const ChartStore = signalStore(
                 : error.code === 'unavailable'
                   ? 'The admin is not responding.'
                   : error.message,
-          }),
+          });
+        },
       });
     };
 

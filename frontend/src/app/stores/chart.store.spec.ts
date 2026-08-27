@@ -174,6 +174,18 @@ describe('ChartStore', () => {
     backend.expectOne((req) => req.url === '/api/v1/market/chart/MSFT').flush(RESPONSE);
   });
 
+  it('discards an out-of-order response for the previous ticker', () => {
+    const oldRequest = load(null, 'AAPL');
+    store.setTarget('MSFT', null);
+    tick();
+    const currentRequest = backend.expectOne((req) => req.url === '/api/v1/market/chart/MSFT');
+
+    currentRequest.flush({ ...RESPONSE, ticker: 'MSFT' });
+    oldRequest.flush(RESPONSE);
+
+    expect(store.data()?.ticker).toBe('MSFT');
+  });
+
   it('sends the window when one is set', () => {
     store.setTarget('AAPL', 't1');
     store.setWindow(200);
