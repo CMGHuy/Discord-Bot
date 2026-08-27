@@ -8,6 +8,11 @@ Spec: `docs/superpowers/specs/2026-08-25-v59-audit-findings-remediation-design.m
 — read it first; it carries the diagnosis and failure scenario for every `A-*`
 id referenced below, and this plan does not repeat them.
 
+## Progress
+
+Completed 2026-08-27. All implementation tasks landed on `main`; final
+verification completed with `2447 passed, 66 skipped, 0 failed, 0 xfailed`.
+
 ## Goal
 
 Close every Group A finding. Group B is explicitly **out of scope**: those
