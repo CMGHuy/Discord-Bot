@@ -33,7 +33,7 @@ def check_move_purity(old_source: str, new_source: str, symbols: list) -> list:
 def _read_ref(spec: str) -> str:
     if ":" in spec:
         return subprocess.run(["git", "show", spec], capture_output=True,
-                              text=True, check=True).stdout
+                              text=True, encoding="utf-8", check=True).stdout
     with open(spec, encoding="utf-8") as fh:
         return fh.read()
 
