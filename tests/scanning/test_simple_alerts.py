@@ -23,6 +23,7 @@ import pytest
 from swingbot import config
 from swingbot.commands import scanning as scanning_mod
 from swingbot.commands.scanning import _send_alerts
+from swingbot.commands.scanning import alerts
 from swingbot.core.scanning import embeds as embeds_mod
 from swingbot.core.scanning.embeds import build_simple_alert
 
@@ -167,7 +168,7 @@ def wired(monkeypatch):
     monkeypatch.setattr(config, "DISCORD_CHANNEL_FIREHOSE_ID", "", raising=False)
     monkeypatch.setattr(config, "MAX_ALERTS_PER_SCAN", 10, raising=False)
     monkeypatch.setattr(config, "DISCORD_CHANNEL_TRADES_SIMPLE_ID", "999", raising=False)
-    monkeypatch.setattr(scanning_mod, "bot",
+    monkeypatch.setattr(alerts, "bot",
                         types.SimpleNamespace(get_channel=lambda _id: simple), raising=False)
     return main, simple
 
@@ -206,7 +207,7 @@ def test_legacy_three_tuple_alerts_still_send_and_mirror_nothing(wired):
 def test_a_failing_simple_channel_never_costs_the_real_alerts(monkeypatch, wired):
     main, _ = wired
     broken = FakeChannel(fail=True)
-    monkeypatch.setattr(scanning_mod, "bot",
+    monkeypatch.setattr(alerts, "bot",
                         types.SimpleNamespace(get_channel=lambda _id: broken), raising=False)
 
     asyncio.run(_send_alerts(main, [_alert("A"), _alert("B")]))
@@ -215,7 +216,7 @@ def test_a_failing_simple_channel_never_costs_the_real_alerts(monkeypatch, wired
 
 def test_unresolvable_simple_channel_id_is_skipped_not_fatal(monkeypatch, wired):
     main, _ = wired
-    monkeypatch.setattr(scanning_mod, "bot",
+    monkeypatch.setattr(alerts, "bot",
                         types.SimpleNamespace(get_channel=lambda _id: None), raising=False)
 
     asyncio.run(_send_alerts(main, [_alert()]))
@@ -261,7 +262,7 @@ def test_full_alert_keeps_its_notification_when_no_simple_channel(monkeypatch, w
 def test_failed_mirror_hands_the_notification_back_to_the_full_alert(monkeypatch, wired):
     main, _ = wired
     broken = FakeChannel("broken", fail=True)
-    monkeypatch.setattr(scanning_mod, "bot",
+    monkeypatch.setattr(alerts, "bot",
                         types.SimpleNamespace(get_channel=lambda _id: broken), raising=False)
 
     asyncio.run(_send_alerts(main, [_alert()]))
