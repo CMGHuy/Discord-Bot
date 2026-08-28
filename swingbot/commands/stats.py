@@ -9,6 +9,7 @@ import discord
 
 from swingbot import config
 from swingbot.bot_core import bot
+from swingbot.core import presentation as ui
 from swingbot.core.analytics.rank import rank_plans
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.commands.views import PlanActionView
@@ -121,12 +122,12 @@ def stats_embed(snap: dict) -> discord.Embed:
     embed = discord.Embed(
         title="📐 Analytics — overall performance",
         description=(
-            f"**N** {o['n']} ({o['wins']}W/{o['losses']}L)  ·  **Win rate** {_dash(o['win_rate'], '{:.1f}%')}  ·  "
-            f"**Expectancy** {_dash(o['expectancy_r'], '{:+.3f}')}R  ·  **Profit factor** {_dash(o['profit_factor'], '{:.2f}')}\n"
+            f"**N** {o['n']} ({o['wins']}W/{o['losses']}L)  ·  **Win rate** {ui.fmt_pct(o['win_rate'])}  ·  "
+            f"**Expectancy** {ui.fmt_r(o['expectancy_r'])}  ·  **Profit factor** {_dash(o['profit_factor'], '{:.2f}')}\n"
             f"**Sharpe** {_dash(o['sharpe'], '{:.2f}')}  ·  **Sortino** {_dash(o['sortino'], '{:.2f}')}  ·  "
-            f"**Max DD** {_dash(o['max_drawdown_pct'], '{:.1f}%')}  ·  **Total P&L** {o['total_pnl']:+.2f}"
+            f"**Max DD** {ui.fmt_pct(-abs(o['max_drawdown_pct']) if o['max_drawdown_pct'] is not None else None)}  ·  "
+            f"**Total P&L** {_dash(o['total_pnl'], '{:+.2f}')}"
         ),
-        color=discord.Color.blurple(),
     )
     streak = o["streaks"]
     streak_word = streak["current_kind"] or "none"
@@ -142,7 +143,7 @@ def stats_embed(snap: dict) -> discord.Embed:
     if strat_rows:
         embed.add_field(name="By strategy (top 5 by N)", value=_mini_table(strat_rows), inline=False)
 
-    embed.set_footer(text=f"Snapshot built {snap['built_at']}")
+    ui.apply_chrome(embed, accent=ui.accent_for_outcome("scratch"))
     return embed
 
 
@@ -209,12 +210,12 @@ async def stats_cmd(ctx, period: str = "all"):
     embed = discord.Embed(
         title=f"📐 Analytics — last {period}",
         description=(
-            f"**N** {len(closed)}  ·  **Win rate** {_dash(m.win_rate(closed), '{:.1f}%')}  ·  "
-            f"**Expectancy** {_dash(m.expectancy_r(closed), '{:+.3f}')}R  ·  "
+            f"**N** {len(closed)}  ·  **Win rate** {ui.fmt_pct(m.win_rate(closed))}  ·  "
+            f"**Expectancy** {ui.fmt_r(m.expectancy_r(closed))}  ·  "
             f"**Profit factor** {_dash(m.profit_factor(closed), '{:.2f}')}"
         ),
-        color=discord.Color.blurple(),
     )
+    ui.apply_chrome(embed, accent=ui.accent_for_outcome("scratch"))
     await ctx.send(embed=embed)
 
 
@@ -308,8 +309,9 @@ async def calibration_cmd(ctx):
         f"{max(d['win_rate'] for d in deciles):.1f}% WR" if deciles else "No quality-scored trades yet."
     )
 
-    embed = discord.Embed(title="📐 Calibration", description="\n".join(lines)[:4000], color=discord.Color.blurple())
+    embed = discord.Embed(title="📐 Calibration", description="\n".join(lines)[:4000])
     embed.add_field(name="Score deciles", value=decile_summary, inline=False)
+    ui.apply_chrome(embed, accent=ui.accent_for_outcome("scratch"))
 
     import asyncio
     import os

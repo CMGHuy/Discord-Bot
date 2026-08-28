@@ -1,4 +1,6 @@
 import datetime as dt
+import ast
+import pathlib
 import types
 
 import discord
@@ -112,7 +114,17 @@ def test_stats_embed_has_key_numbers():
     assert "Win rate" in joined
     assert "70.0%" in joined
     assert "Expectancy" in joined
-    assert "0.35" in joined
+    assert ui.fmt_r(0.35) in joined
+
+
+def test_stats_uses_shared_presentation_chrome_and_has_no_direct_colour():
+    tree = ast.parse(pathlib.Path("swingbot/commands/stats.py").read_text(encoding="utf-8"))
+    assert not [node.lineno for node in ast.walk(tree)
+                if isinstance(node, ast.Attribute) and node.attr in ("Color", "Colour")]
+    embed = stats_embed(_fixture_snapshot())
+    assert ui.DISCLAIMER in embed.footer.text
+    assert ui.fmt_pct(70.0) in embed.description
+    assert ui.fmt_r(0.35) in embed.description
 
 
 def test_stats_embed_none_heavy_snapshot_shows_dashes_not_none():
