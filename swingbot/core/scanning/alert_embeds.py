@@ -9,11 +9,12 @@ from swingbot import config
 from swingbot.core.analytics.rank import follow_breakdown, follow_score
 from swingbot.core.market import opex
 from swingbot.core.market.strategy import HORIZONS
+from swingbot.core import presentation as ui
 from swingbot.core.scanning import embed_theme as theme
 
 from .snapshots import _snapshot_and_diff
 from .requirements import _confidence_block, _sources_str, confidence_color
-from .plan_table import (_build_trade_plan_table, _v2_plan, badge_field_for,
+from .plan_table import (_v2_plan, badge_field_for,
                          quality_lines, plan_numbers_for_display, leg_rows)
 
 
@@ -216,10 +217,6 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
             False,
         ))
 
-    v2_priced = config.PLAN_ENGINE_V2 == "on" and plan_v2 is not None
-    plan_field_name = "🎯 Trade plan (v2)" if v2_priced else "🎯 Trade plan"
-    sections["plan"].append((plan_field_name, _build_trade_plan_table(item), False))
-
     # Always run -- this is the snapshot WRITE (updates the on-disk "last
     # seen" numbers for this ticker/horizon/direction combo), not just a
     # read, so the NEXT scan/!check of this same combo still diffs
@@ -256,7 +253,24 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
         for name, value, inline in sections[key]:
             embed.add_field(name=name, value=value, inline=inline)
 
-    embed.description = explanation[:4000]
+    # v62 D4: the plan is the first thing on the first screenful.  Keep all
+    # price selection behind the established legacy/v2 cutover funnel.
+    nums = plan_numbers_for_display(plan_v2, {
+        "entry": plan.entry,
+        "stop_loss": plan.stop_loss,
+        "take_profit": plan.take_profit,
+        "target2": plan.target2_price,
+    })
+    headline = ui.plan_headline(
+        direction=result.trend,
+        entry=nums["entry"],
+        target=nums["take_profit"],
+        stop=nums["stop_loss"],
+        target_pct=plan.target_distance_pct,
+        stop_pct=-abs(plan.stop_distance_pct),
+        r=plan.risk_reward_ratio,
+    )
+    embed.description = f"{headline}\n{explanation[:3500]}"
     if chart_filename:
         embed.set_image(url=f"attachment://{chart_filename}")
     theme.apply_footer(embed, plan_id=plan_v2.plan_id if plan_v2 else None)
