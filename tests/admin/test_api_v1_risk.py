@@ -226,9 +226,8 @@ def test_scan_health_ships_numbers_not_svg(logged_in, killswitch_file, tmp_path,
     one. Sub-project 3 owns how a sparkline looks in the SPA, and markup from
     the server takes that decision away from it."""
     from swingbot.core.scanning import engine
-    from swingbot.core.scanning import telemetry
 
-    monkeypatch.setattr(telemetry, "TELEMETRY_PATH", str(tmp_path / "scan_telemetry.jsonl"))
+    monkeypatch.setattr(engine, "TELEMETRY_PATH", str(tmp_path / "scan_telemetry.jsonl"))
     for _ in range(20):
         engine.log_scan_telemetry({"duration_s": 60, "tickers": 150})
     engine.log_scan_telemetry({"duration_s": 150, "tickers": 150})
