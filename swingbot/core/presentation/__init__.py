@@ -22,3 +22,13 @@ core.scanning for a colour would misdescribe that dependency.
 tests/presentation/test_no_adhoc_color.py enforces that no module outside
 this package touches discord.Color at all.
 """
+
+from swingbot.core.presentation.components import (  # noqa: F401
+    EmbedField, apply_chrome, blocked_by_field, confidence_field, follow_field,
+    plan_headline,
+)
+from swingbot.core.presentation.tokens import (  # noqa: F401
+    ABSENT, ACCENT_BLOCKED, ACCENT_RAMP, DISCLAIMER, SECTION_ORDER,
+    accent_for_level, accent_for_outcome, confidence_label, direction_glyph,
+    fmt_pct, fmt_price, fmt_r, follow_meter,
+)

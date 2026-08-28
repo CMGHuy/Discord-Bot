@@ -38,6 +38,14 @@ _UP = "▲"
 _DOWN = "▼"
 _MINUS = "−"
 
+DISCLAIMER = ("Technical signal only, based on today's still-developing daily "
+              "candle -- not financial advice.")
+
+SECTION_ORDER = (
+    "headline", "plan", "blocked", "quality", "confluence",
+    "changes", "branches", "track_record", "warnings",
+)
+
 
 def direction_glyph(direction: str) -> str:
     """Return the direction shape; unknown directions are explicitly absent."""

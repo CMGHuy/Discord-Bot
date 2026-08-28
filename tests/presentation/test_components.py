@@ -1,4 +1,6 @@
 from swingbot.core.presentation import components as c
+from swingbot.core.presentation import tokens as t
+import discord
 
 
 def test_plan_headline_is_a_fenced_ansi_block():
@@ -40,3 +42,32 @@ def test_blocked_by_is_full_width_not_inline():
 
 def test_blocked_by_is_none_when_everything_clears():
     assert c.blocked_by_field([]) is None
+
+
+def test_apply_chrome_sets_accent_footer_and_timestamp():
+    embed = discord.Embed(title="x")
+    c.apply_chrome(embed, accent=t.accent_for_level(5), plan_id="a4f19c2233445566")
+    assert embed.color.value == 0x17C98E
+    assert embed.timestamp is not None
+    assert t.DISCLAIMER in embed.footer.text and "plan a4f19c22" in embed.footer.text
+
+
+def test_apply_chrome_without_a_plan_id_shows_the_disclaimer_alone():
+    embed = discord.Embed(title="x")
+    c.apply_chrome(embed, accent=t.accent_for_level(3))
+    assert embed.footer.text == t.DISCLAIMER
+
+
+def test_apply_chrome_truncates_the_plan_id_to_eight_chars():
+    embed = discord.Embed(title="x")
+    c.apply_chrome(embed, accent=t.accent_for_level(1), plan_id="0123456789abcdef")
+    assert "plan 01234567" in embed.footer.text and "89abcdef" not in embed.footer.text
+
+
+def test_apply_chrome_returns_none_so_call_sites_read_as_a_statement():
+    assert c.apply_chrome(discord.Embed(title="x"), accent=t.accent_for_level(5)) is None
+
+
+def test_section_order_is_a_fixed_tuple_with_blocked_before_the_chart_fold():
+    assert t.SECTION_ORDER[:4] == ("headline", "plan", "blocked", "quality")
+    assert isinstance(t.SECTION_ORDER, tuple)

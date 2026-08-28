@@ -2,6 +2,8 @@
 
 from typing import NamedTuple
 
+import discord
+
 from swingbot.core.presentation import ansi, tokens
 
 
@@ -42,3 +44,14 @@ def blocked_by_field(unmet: list[tuple[str, str]]) -> EmbedField | None:
         return None
     body = "\n".join(f"{label}: {detail}" for label, detail in unmet)
     return EmbedField("⚠ Blocked by", body, False)
+
+
+def apply_chrome(embed: discord.Embed, *, accent: discord.Color,
+                 plan_id: str | None = None) -> None:
+    """Apply the required accent, footer, and timestamp in place."""
+    embed.color = accent
+    embed.timestamp = discord.utils.utcnow()
+    text = tokens.DISCLAIMER
+    if plan_id:
+        text = f"{text} · plan {plan_id[:8]}"
+    embed.set_footer(text=text)
