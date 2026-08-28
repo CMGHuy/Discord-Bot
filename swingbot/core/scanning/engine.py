@@ -71,6 +71,8 @@ from swingbot.core.edge.rs_gate import rs_verdict
 from swingbot.core.infra.jsonio import read_json
 from .confidence import score_confidence
 from . import runstate
+from . import telemetry
+from .telemetry import log_scan_telemetry, recent_telemetry, scan_slowdown
 from .runstate import is_scan_running, request_stop
 from swingbot.core.marketdata.data import (get_currency_symbol, get_current_price, get_daily_data,
                                    get_current_price_batch, get_daily_data_batch)
@@ -385,40 +387,6 @@ def dedup_sector_items(items: list) -> list:
         out.append(best)
     out.sort(key=lambda i: getattr(i, "follow_score", 0) or 0, reverse=True)
     return out
-
-
-TELEMETRY_PATH = os.path.join(config.DATA_DIR, "scan_telemetry.jsonl")
-
-
-def log_scan_telemetry(stats: dict, path: str | None = None) -> None:
-    """Task E82: one JSON line per scan (at, duration_s, tickers, errors,
-    data_skips, signals, alerts, open_heat) appended to scan_telemetry.jsonl
-    -- cheap append-only history for scan_slowdown()'s alarm and the admin
-    risk page's duration sparkline."""
-    import datetime as dt
-    row = {"at": dt.datetime.now(dt.timezone.utc).isoformat(), **stats}
-    with open(path or TELEMETRY_PATH, "a", encoding="utf-8") as f:
-        f.write(_json.dumps(row) + "\n")
-
-
-def recent_telemetry(n: int = 50, path: str | None = None) -> list:
-    try:
-        with open(path or TELEMETRY_PATH, encoding="utf-8") as f:
-            lines = f.readlines()[-n:]
-        return [_json.loads(l) for l in lines if l.strip()]
-    except OSError:
-        return []
-
-
-def scan_slowdown(path: str | None = None) -> bool:
-    """True when the latest logged scan took more than 2x the median of
-    the prior 20 -- a real slowdown, not noise from a single slow ticker."""
-    rows = recent_telemetry(21, path=path)
-    if len(rows) < 6:
-        return False
-    import statistics
-    prior = [r["duration_s"] for r in rows[:-1]]
-    return rows[-1]["duration_s"] > 2 * statistics.median(prior)
 
 
 class LRUFrames(OrderedDict):
@@ -2271,8 +2239,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "open_heat": heat_mod.open_heat(TradeLog().get_trades(status="open", limit=None),
                                             account_cfg.get("balance", 0.0)),
         }
-        log_scan_telemetry(scan_stats)
-        if scan_slowdown():
+        telemetry.log_scan_telemetry(scan_stats)
+        if telemetry.scan_slowdown():
             log.warning("Scan health: latest scan took %.1fs, more than 2x the median of "
                         "the prior 20 -- possible slowdown (network, cache, or universe "
                         "size growth).", scan_stats["duration_s"])
