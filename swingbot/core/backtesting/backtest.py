@@ -62,6 +62,7 @@ This is a directional sanity check, not a guarantee of future performance.
 from dataclasses import dataclass, field
 
 import numpy as np
+from swingbot.core.planning.exit_sim import simulate_exit
 import pandas as pd
 
 from swingbot.core.market.indicators import atr, elliott_wave3_entries
@@ -260,7 +261,7 @@ def run_backtest(
     if exit_model == "v2":
         from swingbot.core.planning.plan_engine import (
             PlanStatus, TradePlanV2, entry_type_for, exit_params_for,
-            select_tp2, simulate_exit,
+            select_tp2,
         )
         _exit_params = exit_params_for(strategy)
 
