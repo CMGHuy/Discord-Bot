@@ -232,6 +232,15 @@ def test_breakdown_embed_has_one_field_per_section_and_every_quality_line():
         assert label in quality_field.value and str(pts) in quality_field.value
 
 
+def test_views_has_no_direct_colour_and_breakdown_matches_plan_confidence():
+    tree = ast.parse(pathlib.Path("swingbot/commands/views.py").read_text(encoding="utf-8"))
+    assert not [node.lineno for node in ast.walk(tree)
+                if isinstance(node, ast.Attribute) and node.attr in ("Color", "Colour")]
+    embed = breakdown_embed(_fixture_plan())
+    assert embed.color.value == tk.ACCENT_RAMP[_fixture_plan().confidence_level]
+    assert tk.DISCLAIMER in embed.footer.text
+
+
 def test_breakdown_button_sends_ephemeral():
     view = PlanActionView("abcd1234-plan", author_id=1)
     interaction = _fake_interaction(user_id=1)

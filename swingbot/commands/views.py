@@ -15,6 +15,7 @@ import os
 import discord
 
 from swingbot import config
+from swingbot.core import presentation as ui
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
 from swingbot.core.backtesting.registry import decay_for, decay_note
@@ -134,8 +135,7 @@ def breakdown_embed(plan) -> discord.Embed:
     from swingbot.core.analytics.rank import follow_score, follow_breakdown
     import datetime as dt
 
-    embed = discord.Embed(title=f"🔍 Breakdown — {plan.ticker} ({plan.badge})",
-                          color=discord.Color.blurple())
+    embed = discord.Embed(title=f"🔍 Breakdown — {plan.ticker} ({plan.badge})")
 
     quality_lines = "\n".join(f"{label}: {pts:+d}" for label, pts in (plan.quality_breakdown or [])) or "no components recorded"
     embed.add_field(name=f"📐 Quality score ({plan.quality_score}/100)", value=quality_lines, inline=False)
@@ -167,6 +167,8 @@ def breakdown_embed(plan) -> discord.Embed:
         timeline = "No transitions recorded yet."
     embed.add_field(name="🕒 Status timeline", value=timeline[:1024], inline=False)
 
+    ui.apply_chrome(embed, accent=ui.accent_for_level(plan.confidence_level),
+                    plan_id=plan.plan_id)
     return embed
 
 
