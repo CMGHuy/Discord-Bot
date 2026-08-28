@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from swingbot import config
-from swingbot.core.planning import plan_engine
+from swingbot.core.planning import params, plan_engine
 from swingbot.core.edge.stops import MIN_SAMPLE, mae_informed_stop_mult
 from swingbot.core.planning.plan_engine import _atr_plan, atr_target_candidates, build_strategy_plan
 from swingbot.core.market.strategy_types import HORIZONS
@@ -141,7 +141,7 @@ def test_flag_off_never_reads_the_journal(df, monkeypatch):
     """Default-off means the journal is not even opened -- an unconditional
     read would make every plan build touch disk."""
     monkeypatch.setattr(config, "DATA_DRIVEN_STOPS_ENABLED", False)
-    monkeypatch.setattr(plan_engine, "_journal_entries",
+    monkeypatch.setattr(params, "_journal_entries",
                         lambda: pytest.fail("journal must not be read while the flag is off"))
     assert _plan(df) is not None
 
@@ -150,7 +150,7 @@ def test_flag_on_resolves_the_mult_from_the_journal(df, monkeypatch):
     # Same isolation as test_build_strategy_plan_threads_an_explicit_mult above.
     monkeypatch.setattr(config, "LEVEL_LIFECYCLE_STOPS_ENABLED", False, raising=False)
     monkeypatch.setattr(config, "DATA_DRIVEN_STOPS_ENABLED", True)
-    monkeypatch.setattr(plan_engine, "_journal_entries",
+    monkeypatch.setattr(params, "_journal_entries",
                         lambda: _winners([2.5] * 60))          # -> clamped 1.3
     wide = _plan(df)
     monkeypatch.setattr(config, "DATA_DRIVEN_STOPS_ENABLED", False)
@@ -162,7 +162,7 @@ def test_flag_on_resolves_the_mult_from_the_journal(df, monkeypatch):
 
 def test_flag_on_with_too_few_winners_changes_nothing(df, monkeypatch):
     monkeypatch.setattr(config, "DATA_DRIVEN_STOPS_ENABLED", True)
-    monkeypatch.setattr(plan_engine, "_journal_entries",
+    monkeypatch.setattr(params, "_journal_entries",
                         lambda: _winners([0.9] * (MIN_SAMPLE - 1)))
     plan = _plan(df)
     monkeypatch.setattr(config, "DATA_DRIVEN_STOPS_ENABLED", False)
@@ -176,7 +176,7 @@ def test_a_broken_journal_never_breaks_plan_construction(df, monkeypatch):
     def _boom():
         raise OSError("journal.json is corrupt")
 
-    monkeypatch.setattr(plan_engine, "_journal_entries", _boom)
+    monkeypatch.setattr(params, "_journal_entries", _boom)
     plan = _plan(df)
     monkeypatch.setattr(config, "DATA_DRIVEN_STOPS_ENABLED", False)
     assert plan is not None and plan.stop_loss == _plan(df).stop_loss
@@ -190,7 +190,7 @@ def test_the_note_stays_out_of_quality_breakdown(df, monkeypatch):
     23 single characters in the persisted JSON -- so the applied factor
     lives in its own field, and quality scoring stays untouched."""
     monkeypatch.setattr(config, "DATA_DRIVEN_STOPS_ENABLED", True)
-    monkeypatch.setattr(plan_engine, "_journal_entries", lambda: _winners([2.5] * 60))
+    monkeypatch.setattr(params, "_journal_entries", lambda: _winners([2.5] * 60))
     quality_inputs = {"regime": "bull", "htf_bias": "bullish", "confluence_count": 3,
                       "volume_ratio": 1.2, "atr_pct": 2.0, "trigger_distance_pct": 1.0}
     plan = build_strategy_plan(df, len(df) - 1, ticker="TEST", strategy="RSI",
@@ -368,7 +368,7 @@ def test_flag_on_resolves_tp2_and_time_stop_from_the_journal(df, monkeypatch):
     # test_tp2_r_override_converts_to_a_price_at_that_r_multiple) to be
     # adoptable as TP2 at all -- bumped from 1.2 to 3.0.
     monkeypatch.setattr(config, "DATA_DRIVEN_STOPS_ENABLED", True)
-    monkeypatch.setattr(plan_engine, "_journal_entries", lambda: [
+    monkeypatch.setattr(params, "_journal_entries", lambda: [
         {"strategy": "MACD", "outcome": "win", "mae_r": 0.4,
          "mfe_r": 3.0, "days_to_half_r": 3} for _ in range(60)
     ])
@@ -380,7 +380,7 @@ def test_flag_on_resolves_tp2_and_time_stop_from_the_journal(df, monkeypatch):
 
 def test_flag_off_resolves_neither(df, monkeypatch):
     monkeypatch.setattr(config, "DATA_DRIVEN_STOPS_ENABLED", False)
-    monkeypatch.setattr(plan_engine, "_journal_entries",
+    monkeypatch.setattr(params, "_journal_entries",
                         lambda: pytest.fail("journal must not be read while the flag is off"))
     plan = _macd_plan(df)
     assert plan.tp2_r_applied is None and plan.time_stop_days is None
