@@ -34,3 +34,11 @@ def follow_field(score: float, breakdown: str | None = None) -> EmbedField:
     if breakdown:
         value = f"{value}\n{breakdown}"
     return EmbedField("Follow", value, True)
+
+
+def blocked_by_field(unmet: list[tuple[str, str]]) -> EmbedField | None:
+    """Return a full-width actual-versus-required failed-gates field."""
+    if not unmet:
+        return None
+    body = "\n".join(f"{label}: {detail}" for label, detail in unmet)
+    return EmbedField("⚠ Blocked by", body, False)

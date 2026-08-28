@@ -24,3 +24,19 @@ def test_follow_field_without_a_breakdown_is_just_the_meter():
 def test_fields_are_a_named_tuple_so_they_unpack_into_add_field():
     name, value, inline = c.confidence_field(3, 50)
     assert (name, value, inline) == ("Confidence", "Lv3 · 50", True)
+
+
+def test_blocked_by_lists_each_unmet_requirement_with_actual_and_required():
+    field = c.blocked_by_field([("Reward", "3.1% — needs ≥ 5.0%"),
+                                ("R:R", "1.4:1 — needs ≥ 2.0:1")])
+    assert field.name == "⚠ Blocked by"
+    assert field.value == ("Reward: 3.1% — needs ≥ 5.0%\n"
+                           "R:R: 1.4:1 — needs ≥ 2.0:1")
+
+
+def test_blocked_by_is_full_width_not_inline():
+    assert c.blocked_by_field([("Reward", "x")]).inline is False
+
+
+def test_blocked_by_is_none_when_everything_clears():
+    assert c.blocked_by_field([]) is None
