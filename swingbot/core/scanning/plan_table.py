@@ -1,7 +1,8 @@
 """Trade-plan presentation helpers.
 
-`plan_numbers_for_display` is THE cutover switch deciding whether every
-consumer shows legacy scenario numbers or v2 plan numbers.
+The wide key:value table retired in v62 had 65--70 character rows that
+scrolled off a phone. The replacement is the two-line presentation headline.
+`plan_numbers_for_display` remains the legacy/v2 pricing cutover switch.
 """
 from swingbot import config
 from swingbot.core.backtesting.registry import Badge, decay_for
@@ -18,138 +19,6 @@ def plan_numbers_for_display(plan, legacy: dict) -> dict:
         return dict(legacy)
     return {"entry": plan.trigger_price, "stop_loss": plan.stop_loss,
             "take_profit": plan.tp1, "target2": plan.tp2}
-
-
-def _ansi_bad(text: str) -> str:
-    """Bold red, Discord ansi code-block palette -- used to mark a single failing requirement's row/value."""
-    return f"[1;31m{text}[0m"
-
-
-def _build_trade_plan_table(item) -> str:
-    """
-    Renders the full trade plan as a single aligned, monospace table
-    (key : value rows in an ansi code block) -- every summarized
-    parameter of the trade in one place, including which independent
-    strategies (EMA/VWAP/Fibonacci/structure/pivots/FVG/...) agreed on
-    the target and stop levels that produced this plan.
-
-    Every row is always shown with its real computed value, regardless
-    of whether it clears the configured requirement for that parameter
-    (min reward %, stop distance, risk:reward, min strategies
-    confirmed, min confidence) -- a scenario with a real entry point is
-    never hidden just because one number falls short. Whichever
-    row(s) correspond to an unmet requirement (see item.requirements)
-    are rendered in bold red with the actual requirement appended, so
-    it's always visible AT A GLANCE which specific parameter is holding
-    a setup back, not just that "something" failed.
-    """
-    result, plan, conf = item.result, item.plan, item.conf
-    is_bull = result.trend == "bullish"
-    level_word = "Resistance" if is_bull else "Support"
-    direction = "LONG (buy)" if is_bull else "SHORT (sell)"
-    stop_sign = "-" if is_bull else "+"
-
-    plan_v2 = getattr(item, "plan_v2", None)
-    nums = plan_numbers_for_display(plan_v2, {
-        "entry": plan.entry, "stop_loss": plan.stop_loss,
-        "take_profit": plan.take_profit, "target2": plan.target2_price})
-    entry, stop_loss = nums["entry"], nums["stop_loss"]
-    take_profit, target2 = nums["take_profit"], nums["target2"]
-    v2_priced = config.PLAN_ENGINE_V2 == "on" and plan_v2 is not None
-    if entry == plan.entry and stop_loss == plan.stop_loss:
-        # funnel returned the legacy numbers -- keep the scenario's own
-        # (differently-rounded) distance/RR fields byte-identical
-        stop_dist_pct = plan.stop_distance_pct
-        target_dist_pct = plan.target_distance_pct
-        target2_dist_pct = plan.target2_distance_pct
-        rr = plan.risk_reward_ratio
-    else:
-        stop_dist_pct = abs(entry - stop_loss) / entry * 100
-        target_dist_pct = abs(take_profit - entry) / entry * 100
-        target2_dist_pct = (abs(target2 - entry) / entry * 100
-                            if target2 is not None else None)
-        risk = abs(entry - stop_loss)
-        rr = round(abs(take_profit - entry) / risk, 2) if risk else plan.risk_reward_ratio
-
-    req_by_key = {r.key: r for r in item.requirements}
-
-    def _row_value(key: str, ok_value: str) -> str:
-        """Plain value if the requirement passed (or doesn't apply); the requirement's own
-        failure detail, bold red, if it didn't."""
-        r = req_by_key.get(key)
-        if r is None or r.passed:
-            return ok_value
-        return _ansi_bad(f"{ok_value}  ⚠ {r.detail}")
-
-    stop_value = f"{stop_loss:.2f}  ({stop_sign}{stop_dist_pct:.1f}%)"
-    min_stop_req, max_stop_req = req_by_key.get("min_stop_distance"), req_by_key.get("max_stop_distance")
-    if min_stop_req and not min_stop_req.passed:
-        stop_value = _ansi_bad(f"{stop_value}  ⚠ {min_stop_req.detail}")
-    elif max_stop_req and not max_stop_req.passed:
-        stop_value = _ansi_bad(f"{stop_value}  ⚠ {max_stop_req.detail}")
-
-    rows = [
-        ("Direction", direction),
-        ("Entry (now)", f"{entry:.2f}"),
-    ]
-    if v2_priced:
-        # Make it unmistakable that these prices came from the v2 plan
-        # engine, not the legacy scenario sizing.
-        rows.insert(0, ("Engine", "Plan Engine v2"))
-    rows += [
-        ("Stop loss", stop_value),
-        (f"{level_word} 1 (Target)", _row_value("min_reward", f"{take_profit:.2f}  (+{target_dist_pct:.1f}%)")),
-    ]
-    if target2 is not None:
-        rows.append((f"{level_word} 2 (Stretch)", f"{target2:.2f}  (+{target2_dist_pct:.1f}%)"))
-    rows.append(("Reward:Risk", _row_value("min_risk_reward", f"{rr}:1")))
-    rows.append(("Confidence", _row_value("min_confidence", f"{conf.label} (Lv{conf.level}/5)")))
-    rows.append(("Target confirmed by", _row_value("min_confluence", _sources_str(plan.target_sources))))
-    rows.append(("Stop confirmed by", _sources_str(plan.stop_sources)))
-
-    # Position sizing -- uses the live account config so !account changes
-    # are reflected immediately without a bot restart.
-    account_cfg = load_account_config()
-    pos = compute_position_size(entry, stop_loss, account_cfg)
-    kill_blocked = getattr(item, "kill_switch_blocked", None)
-    if kill_blocked is not None and pos:
-        # Kill switch (E47): unlike E7/E8's heat/cluster caps just below in
-        # build_embed (which only add a headline label -- this "Suggested
-        # size" row stays at its uncapped value for those two), the kill
-        # switch actually zeroes every number this row shows. Entries are
-        # fully paused scan-wide, so the honest suggested size IS zero,
-        # not a labeled-but-unchanged ideal.
-        pos = dict(pos, shares=0.0, position_value=0.0, risk_amount=0.0)
-    if pos and pos["balance"] > 0:
-        cur = config.CURRENCY_SYMBOL
-        cap_note = f"  [capped at {pos['max_position_pct']:.0f}% of account]" if pos["capped"] else ""
-        rows.append((
-            "Suggested size",
-            f"~{pos['shares']:.1f} shares  "
-            f"({cur}{pos['position_value']:,.0f} deployed, "
-            f"{cur}{pos['risk_amount']:,.0f} at risk @ {pos['risk_pct']}% rule){cap_note}",
-        ))
-        # Possible P&L in real currency, not just % -- the "Suggested size"
-        # row above already states the $ at risk, but never the $ upside,
-        # so there was no way to see the actual dollar trade-off (risk $X to
-        # make $Y) without doing the shares x distance math yourself.
-        possible_profit = pos["shares"] * abs(take_profit - entry)
-        pnl_line = f"+{cur}{possible_profit:,.0f} at target  /  -{cur}{pos['risk_amount']:,.0f} at stop"
-        if target2 is not None:
-            possible_profit2 = pos["shares"] * abs(target2 - entry)
-            pnl_line += f"  (+{cur}{possible_profit2:,.0f} at stretch target)"
-        rows.append(("Possible P&L", pnl_line))
-
-    if plan_v2 is not None:
-        rows.append(("Entry (v2)", entry_line(plan_v2)))
-        cur = config.CURRENCY_SYMBOL
-        tp1_row, runner_row = leg_rows(plan_v2, currency=cur, force_zero=kill_blocked is not None)
-        rows.append(("TP1 leg (50%)", tp1_row))
-        rows.append(("Runner leg (50%)", runner_row))
-
-    key_width = max(len(k) for k, _ in rows)
-    lines = [f"{k.ljust(key_width)} : {v}" for k, v in rows]
-    return "```ansi\n" + "\n".join(lines) + "\n```"
 
 
 def badge_field_for(plan) -> tuple[str, str] | None:
