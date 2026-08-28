@@ -5,6 +5,7 @@ import os
 import discord
 
 from swingbot import config
+from swingbot.core import presentation as ui
 from swingbot.core.scanning import engine as scan_engine
 from swingbot.bot_core import bot, CONFIDENCE_EXPLAINER, COMMANDS_BY_CATEGORY
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
@@ -190,9 +191,9 @@ async def commands_cmd(ctx):
     embed = discord.Embed(
         title="📖 Swing Trade Bot — Commands",
         description="Alerts only, never places trades. Prefix: `!`",
-        color=discord.Color.blurple(),
     )
     for category, cmds in COMMANDS_BY_CATEGORY.items():
         value = "\n".join(f"`{cmd}` — {desc}" for cmd, desc in cmds)
         embed.add_field(name=category, value=value, inline=False)
+    ui.apply_chrome(embed, accent=ui.accent_for_outcome("scratch"))
     await ctx.send(embed=embed)

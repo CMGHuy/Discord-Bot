@@ -9,7 +9,9 @@ plain functions + asyncio.run() exercise the identical code paths without
 any new pip package or pytest config file.
 """
 import asyncio
+import ast
 import os
+import pathlib
 import tempfile
 import types
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -18,6 +20,7 @@ import discord
 
 from swingbot import config
 from swingbot.commands import views as views_module
+from swingbot.core.presentation import tokens as tk
 from swingbot.core.planning.plan_store import PlanStore
 from tests.planning.test_plan_manager_pending import _pending
 from swingbot.commands.views import (
@@ -37,6 +40,12 @@ def _fake_interaction(user_id: int) -> MagicMock:
     interaction.response = AsyncMock()
     interaction.followup = AsyncMock()
     return interaction
+
+
+def test_info_has_no_direct_colour():
+    tree = ast.parse(pathlib.Path("swingbot/commands/info.py").read_text(encoding="utf-8"))
+    assert not [node.lineno for node in ast.walk(tree)
+                if isinstance(node, ast.Attribute) and node.attr in ("Color", "Colour")]
 
 
 def _fake_plan(**overrides) -> types.SimpleNamespace:
