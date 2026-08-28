@@ -229,11 +229,8 @@ def build_simple_alert(item) -> discord.Embed:
     phone and costs no render time), no track record, no sizing, no
     requirement annotations, no plan buttons.
 
-    A colored Embed rather than a plain string -- the color bar is the
-    fastest long/short signal on a phone, matching the SPA table's own
-    direction convention (sb-direction-arrow: long=green/▲, short=red/▼,
-    the one recorded exception to green/red meaning outcome rather than
-    direction). Entry/TP1/TP2/SL are packed onto ONE line, each carrying its
+    A coloured embed rather than a plain string. Its accent reports confidence;
+    direction stays explicit in the title and shared ANSI headline. Entry/TP1/TP2/SL are packed onto ONE line, each carrying its
     own emoji label (🎯/💰/💰/🛑) so which number is which stays unambiguous
     even without the old one-per-line layout.
 
@@ -247,7 +244,6 @@ def build_simple_alert(item) -> discord.Embed:
     is_bull = result.trend == "bullish"
     direction = "LONG" if is_bull else "SHORT"
     arrow = "▲" if is_bull else "▼"
-    color = discord.Color.green() if is_bull else discord.Color.red()
 
     nums = plan_numbers_for_display(plan_v2, {
         "entry": plan.entry, "stop_loss": plan.stop_loss,
@@ -274,21 +270,21 @@ def build_simple_alert(item) -> discord.Embed:
         plan_line += "  ·  💰 TP2 **trail**"
     plan_line += f"  ·  🛑 SL **{nums['stop_loss']:.2f}**"
 
-    # Embed titles can't carry color -- an ```ansi code block is the only
-    # place Discord renders one, so the colored direction triangle lives as
-    # the description's first line (title keeps its own plain-text copy for
-    # notification previews, which strip embeds down to the title).
-    ansi_code = 32 if is_bull else 31
-    direction_block = f"```ansi\n[1;{ansi_code}m{arrow} {direction} — {result.ticker}[0m\n```"
-
-    return discord.Embed(
+    headline = ui.plan_headline(
+        direction=result.trend, entry=nums["entry"], target=nums["take_profit"],
+        stop=nums["stop_loss"], target_pct=plan.target_distance_pct,
+        stop_pct=-abs(plan.stop_distance_pct), r=plan.risk_reward_ratio,
+    )
+    embed = discord.Embed(
         title=f"{arrow} {direction} — {result.ticker}",
         description=(
-            f"{direction_block}"
-            f"Confidence: {conf.label} (Lv{conf.level}/5, {conf.score}/100)\n"
+            f"{headline}\n"
+            f"Confidence: {ui.confidence_label(conf.level, conf.score)}\n"
             f"Horizon: {result.horizon_label}\n"
             f"Setup: {setup}\n\n"
             f"{plan_line}"
         ),
-        color=color,
     )
+    ui.apply_chrome(embed, accent=ui.accent_for_level(conf.level),
+                    plan_id=plan_v2.plan_id if plan_v2 else None)
+    return embed

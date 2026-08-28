@@ -26,6 +26,7 @@ from swingbot.commands.scanning import _send_alerts
 from swingbot.commands.scanning import alerts
 from swingbot.core.scanning import embeds as embeds_mod
 from swingbot.core.scanning.embeds import build_simple_alert
+from swingbot.core.presentation import tokens
 
 from tests.scanning.test_embeds_v3 import make_item, make_plan_v2
 
@@ -41,7 +42,7 @@ def test_simple_alert_renders_every_required_field(monkeypatch):
     assert isinstance(embed, discord.Embed)
     assert "NVDA" in embed.title                       # ticker
     assert "LONG" in embed.title                        # direction
-    assert "High (Lv4/5, 80/100)" in embed.description  # confidence level AND score
+    assert "Lv4 · 80" in embed.description              # confidence level AND score
     assert "2 Weeks" in embed.description               # horizon
     assert "RSI Pullback" in embed.description           # setup (strategy)
     assert "EMA, Fibonacci" in embed.description         # setup (confluence sources)
@@ -70,7 +71,7 @@ def test_simple_alert_marks_a_bearish_signal_short_with_down_triangle_and_red():
     embed = build_simple_alert(item)
     assert "SHORT" in embed.title and "LONG" not in embed.title
     assert "▼" in embed.title
-    assert embed.color == discord.Color.red()
+    assert embed.color.value == tokens.ACCENT_RAMP[item.conf.level]
     # The triangle itself is colored too (Discord embed titles can't carry
     # color -- an ```ansi code block in the description is the only place
     # that can), red = short, matching the SPA table's convention.
@@ -81,8 +82,20 @@ def test_simple_alert_marks_a_bullish_signal_long_with_up_triangle_and_green():
     embed = build_simple_alert(make_item())
     assert "LONG" in embed.title
     assert "▲" in embed.title
-    assert embed.color == discord.Color.green()
-    assert "[1;32m" in embed.description and "▲" in embed.description
+    assert embed.color.value == tokens.ACCENT_RAMP[make_item().conf.level]
+    assert "▲" in embed.description
+
+
+def test_simple_alert_long_and_short_at_the_same_level_share_an_accent():
+    long_item = make_item()
+    short_item = make_item()
+    short_item.result.trend = "bearish"
+    assert build_simple_alert(long_item).color.value == build_simple_alert(short_item).color.value
+
+
+def test_simple_alert_confidence_uses_the_shared_label():
+    item = make_item()
+    assert tokens.confidence_label(item.conf.level, item.conf.score) in build_simple_alert(item).description
 
 
 def test_simple_alert_omits_tp2_when_there_is_no_second_target(monkeypatch):
