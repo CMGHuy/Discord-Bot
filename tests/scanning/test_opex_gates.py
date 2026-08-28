@@ -73,14 +73,14 @@ def test_thresholds_are_unchanged_off_an_opex_day(monkeypatch):
 
 
 def test_close_window_check_appears_only_while_suppressing(monkeypatch):
-    monkeypatch.setattr(embeds.opex, "suppress_new_entries", lambda **kwargs: True)
+    monkeypatch.setattr(opex, "suppress_new_entries", lambda **kwargs: True)
     keys = [c.key for c in _checks(5, 2, 4)]
     assert "opex_close_window" in keys
     assert _passed(_checks(5, 2, 4), "opex_close_window") is False
 
 
 def test_close_window_check_absent_outside_the_window(monkeypatch):
-    monkeypatch.setattr(embeds.opex, "suppress_new_entries", lambda **kwargs: False)
+    monkeypatch.setattr(opex, "suppress_new_entries", lambda **kwargs: False)
     keys = [c.key for c in _checks(5, 2, 4)]
     assert "opex_close_window" not in keys
 
@@ -88,7 +88,7 @@ def test_close_window_check_absent_outside_the_window(monkeypatch):
 def test_close_window_uses_the_scan_resolved_tier(monkeypatch):
     """Task v59 A-S7: worker checks must not re-read the wall clock."""
     seen = []
-    monkeypatch.setattr(embeds.opex, "suppress_new_entries", lambda *, tier: seen.append(tier) or False)
+    monkeypatch.setattr(opex, "suppress_new_entries", lambda *, tier: seen.append(tier) or False)
 
     _checks(5, 2, 4, opex_tier=opex.MONTHLY)
 
@@ -96,18 +96,20 @@ def test_close_window_uses_the_scan_resolved_tier(monkeypatch):
 
 
 def test_the_funnel_counters_have_a_slot_for_the_new_key():
-    # engine.py counts a failed check with `failed_counts[r.key] += 1` on a
-    # plain dict, in both the per-ticker stats and the run-level merge. A key
-    # missing from either literal turns the suppression window into a
-    # KeyError mid-scan rather than a quiet hour.
-    from swingbot.core.scanning import engine
-    src = inspect.getsource(engine)
+    # v61 split the per-ticker stats init (analyze.py) from the run-level
+    # merge init (scan_run.py) -- each counts a failed check with
+    # `failed_counts[r.key] += 1` on its own dict. A key missing from
+    # either literal turns the suppression window into a KeyError mid-scan
+    # rather than a quiet hour.
+    from swingbot.core.scanning import analyze, scan_run
+    src = inspect.getsource(analyze) + inspect.getsource(scan_run)
     assert src.count('"opex_close_window": 0') == 2
 
 
 def test_the_funnel_summary_surfaces_the_suppressed_count():
     # Counting the failure without publishing it would leave the quiet hour
     # exactly as unexplained as the plan's rationale says it must not be.
-    from swingbot.core.scanning import engine
-    src = inspect.getsource(engine)
+    # The run-level summary line lives in scan_run.py (v61).
+    from swingbot.core.scanning import scan_run
+    src = inspect.getsource(scan_run)
     assert '"failed_opex_close_window": failed_counts["opex_close_window"]' in src

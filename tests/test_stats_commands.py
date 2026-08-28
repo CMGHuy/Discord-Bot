@@ -6,7 +6,7 @@ import pytest
 
 from swingbot.commands.stats import _fake_item_from_plan, stats_embed, top_plans
 from swingbot.core.planning.plan_engine import TradePlanV2
-from swingbot.core.scanning import embeds as embeds_mod
+from swingbot.core.scanning import embeds as embeds_mod, snapshots
 from swingbot.core.scanning.embeds import build_embed
 
 TODAY = dt.date(2026, 7, 11)
@@ -18,7 +18,7 @@ def _isolated_scan_snapshots(tmp_path, monkeypatch):
     on-disk snapshot cache (data/scan_snapshots.json) -- redirect it to a
     per-test tmp file so this test never pollutes the real data dir (see
     tests/test_embeds_v3.py's identical fixture)."""
-    monkeypatch.setattr(embeds_mod, "_SNAPSHOT_PATH", str(tmp_path / "scan_snapshots.json"))
+    monkeypatch.setattr(snapshots, "_SNAPSHOT_PATH", str(tmp_path / "scan_snapshots.json"))
 
 
 def _plan(ticker, status="PENDING", badge="VALIDATED", quality_score=50):

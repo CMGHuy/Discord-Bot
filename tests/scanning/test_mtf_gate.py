@@ -27,7 +27,7 @@ import numpy as np
 import pytest
 
 import swingbot.config as config
-from swingbot.core.scanning import analyze, dedup, engine, fetch, runstate
+from swingbot.core.scanning import analyze, dedup, engine, fetch, runstate, scan_run
 from swingbot.core.scanning.engine import ScanProgress
 from swingbot.core.tracking.performance import TradeLog
 from tests.helpers import make_ohlcv
@@ -91,9 +91,9 @@ def _scan_with_funnel(direction, next_horizon_trend=_UNSET, horizon="4w"):
         mp.setattr(config, "MIN_RISK_REWARD_RATIO", 0.01)
         mp.setattr(config, "MIN_ALERT_CONFIDENCE_LEVEL", 1)
         mp.setattr(config, "PLAN_ENGINE_V2", "shadow")
-        mp.setitem(engine.HORIZONS[horizon], "sr_target_min_pct", 1.0)
+        mp.setitem(scan_run.HORIZONS[horizon], "sr_target_min_pct", 1.0)
 
-        mp.setattr(engine, "load_watchlist", lambda: ["TEST"])
+        mp.setattr(scan_run, "load_watchlist", lambda: ["TEST"])
         mp.setattr(
             fetch, "get_daily_data",
             lambda ticker, period=None: df.copy() if ticker == "TEST" else None,
@@ -105,9 +105,10 @@ def _scan_with_funnel(direction, next_horizon_trend=_UNSET, horizon="4w"):
         mp.setattr(fetch, "get_daily_data_batch", lambda tickers, period=None: {})
         mp.setattr(fetch, "get_current_price_batch", lambda tickers: {})
         mp.setattr(fetch, "ProcessPoolExecutor", _InlineProcessPool)
-        mp.setattr(engine, "trade_log",
-                   TradeLog(path=os.path.join(config.DATA_DIR, "trades.json")))
-        mp.setattr(analyze, "trade_log", engine.trade_log)
+        test_log = TradeLog(path=os.path.join(config.DATA_DIR, "trades.json"))
+        mp.setattr(engine, "trade_log", test_log)
+        mp.setattr(scan_run, "trade_log", test_log)
+        mp.setattr(analyze, "trade_log", test_log)
         mp.setattr(runstate, "is_stop_requested", lambda: False)
 
         if next_horizon_trend is not _UNSET:

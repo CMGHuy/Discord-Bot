@@ -14,7 +14,7 @@ import pytest
 
 import swingbot.config as config
 from swingbot.core.edge import factors as rs_factors
-from swingbot.core.scanning import engine, fetch, runstate
+from swingbot.core.scanning import analyze, dedup, engine, fetch, runstate, scan_run
 from swingbot.core.scanning.confidence import ConfidenceResult
 from swingbot.core.tracking.performance import TradeLog
 from tests.helpers import make_ohlcv
@@ -56,14 +56,17 @@ def test_score_confidence_receives_rs_breadth(monkeypatch, tmp_path, stub_batch_
     monkeypatch.setattr(config, "MIN_STOP_DISTANCE_PCT", 0.0)
     monkeypatch.setattr(config, "MAX_STOP_LOSS_PCT", 50.0)
     monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 0.01)
-    monkeypatch.setitem(engine.HORIZONS["4w"], "sr_target_min_pct", 1.0)
+    monkeypatch.setitem(scan_run.HORIZONS["4w"], "sr_target_min_pct", 1.0)
 
-    monkeypatch.setattr(engine, "load_watchlist", lambda: ["TEST"])
+    monkeypatch.setattr(scan_run, "load_watchlist", lambda: ["TEST"])
     monkeypatch.setattr(
         fetch, "get_daily_data",
         lambda ticker, period=None: df.copy() if ticker in ("TEST", "SPY") else None,
     )
-    monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
+    test_log = TradeLog(path=str(tmp_path / "trades.json"))
+    monkeypatch.setattr(engine, "trade_log", test_log)
+    monkeypatch.setattr(scan_run, "trade_log", test_log)
+    monkeypatch.setattr(analyze, "trade_log", test_log)
     monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
 
     # Deterministic, controlled RS/breadth readings -- the real universe-wide
@@ -82,8 +85,8 @@ def test_score_confidence_receives_rs_breadth(monkeypatch, tmp_path, stub_batch_
         captured.append(kwargs)
         return ConfidenceResult(level=4, label="High", score=70, breakdown={})
 
-    monkeypatch.setattr(engine, "score_confidence", fake_score)
-    monkeypatch.setattr(engine, "dedup_scan_items", lambda items: [])
+    monkeypatch.setattr(analyze, "score_confidence", fake_score)
+    monkeypatch.setattr(dedup, "dedup_scan_items", lambda items: [])
 
     engine._sync_run_scan("4w", require_confirmation=False, progress=None, min_confluence=0)
 

@@ -57,9 +57,9 @@ def test_partial_row_shows_the_banked_leg_not_the_stale_original_levels(monkeypa
     """Once TP1 fires, trigger_price/stop_loss/tp1 are stale -- the row must
     lead with what was banked (R, %, $) and then frame the runner as its own
     position."""
-    import swingbot.core.scanning.embeds as embeds
+    from swingbot.core.planning import account
     from swingbot import config
-    monkeypatch.setattr(embeds.account, "compute_position_size",
+    monkeypatch.setattr(account, "compute_position_size",
                         lambda entry, stop: {"shares": 100.0,
                                              "position_value": 10_000.0,
                                              "mode": "risk_pct"})
@@ -72,8 +72,8 @@ def test_partial_row_shows_the_banked_leg_not_the_stale_original_levels(monkeypa
 
 
 def test_partial_row_labels_the_tp1_fallback_when_there_is_no_tp2(monkeypatch):
-    import swingbot.core.scanning.embeds as embeds
-    monkeypatch.setattr(embeds.account, "compute_position_size",
+    from swingbot.core.planning import account
+    monkeypatch.setattr(account, "compute_position_size",
                         lambda entry, stop: None)
     line = _line_for(_partial(tp2=None))
     assert "runner entry 110.00 SL 104.00 TP1 (no TP2) 110.00" in line
@@ -82,9 +82,9 @@ def test_partial_row_labels_the_tp1_fallback_when_there_is_no_tp2(monkeypatch):
 def test_partial_row_omits_the_dollar_figure_when_unsized(monkeypatch):
     """Sizing unavailable -> no $ clause at all. Never a '$0.00', which
     would read as a flat trade rather than an unknown one."""
-    import swingbot.core.scanning.embeds as embeds
+    from swingbot.core.planning import account
     from swingbot import config
-    monkeypatch.setattr(embeds.account, "compute_position_size",
+    monkeypatch.setattr(account, "compute_position_size",
                         lambda entry, stop: None)
     monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
     line = _line_for(_partial())
@@ -95,8 +95,8 @@ def test_partial_row_omits_the_dollar_figure_when_unsized(monkeypatch):
 def test_partial_row_survives_a_plan_with_no_recorded_leg(monkeypatch):
     """A PARTIAL plan predating legs_realized still renders -- banked clause
     dropped, runner entry falling back to the tp1 level."""
-    import swingbot.core.scanning.embeds as embeds
-    monkeypatch.setattr(embeds.account, "compute_position_size",
+    from swingbot.core.planning import account
+    monkeypatch.setattr(account, "compute_position_size",
                         lambda entry, stop: None)
     line = _line_for(_partial(legs_realized=[], working_stop=None))
     assert "banked" not in line
