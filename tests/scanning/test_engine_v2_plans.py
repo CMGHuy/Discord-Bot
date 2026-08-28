@@ -8,7 +8,7 @@ import swingbot.config as config
 from swingbot.core.planning import account as _account
 from swingbot.core.edge import throttle
 from swingbot.core.tracking.performance import TradeLog
-from swingbot.core.scanning import dedup, engine, fetch, runstate
+from swingbot.core.scanning import analyze, dedup, engine, fetch, runstate
 from swingbot.core.scanning.engine import ScanProgress
 from tests.helpers import make_ohlcv
 
@@ -120,7 +120,7 @@ def test_flag_shadow_attaches_plan_without_touching_legacy(monkeypatch):
 
 def test_plan_construction_failure_never_kills_the_scan(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
-    monkeypatch.setattr(engine, "build_confluence_plan",
+    monkeypatch.setattr(analyze, "build_confluence_plan",
                         lambda *a, **k: 1 / 0)
     item = _item()
     engine.attach_plan_v2(item, _scenario(), make_ohlcv([100.0] * 60),
@@ -299,7 +299,7 @@ def test_sync_run_scan_gates_attach_plan_v2_on_all_ok(monkeypatch, tmp_path, stu
 
 def test_attach_plan_v2_records_the_rejection_reason(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
-    monkeypatch.setattr(engine, "build_confluence_plan", lambda *a, **k: None)
+    monkeypatch.setattr(analyze, "build_confluence_plan", lambda *a, **k: None)
     item = _item()
     engine.attach_plan_v2(item, _scenario(), make_ohlcv([100.0] * 60),
                           "AAPL", "4w", level_map=None)
@@ -309,7 +309,7 @@ def test_attach_plan_v2_records_the_rejection_reason(monkeypatch):
 
 def test_a_builder_exception_is_still_a_warning_not_a_rejection(monkeypatch, stub_batch_fetch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
-    monkeypatch.setattr(engine, "build_confluence_plan",
+    monkeypatch.setattr(analyze, "build_confluence_plan",
                         lambda *a, **k: 1 / 0)
     item = _item()
     engine.attach_plan_v2(item, _scenario(), make_ohlcv([100.0] * 60),
@@ -343,7 +343,7 @@ def _setup_minimal_scan(monkeypatch, tmp_path):
 def test_a_plan_that_cannot_clear_min_rr_never_reaches_scan_items(monkeypatch, tmp_path, stub_batch_fetch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     _setup_minimal_scan(monkeypatch, tmp_path)
-    monkeypatch.setattr(engine, "build_confluence_plan", lambda *a, **k: None)
+    monkeypatch.setattr(analyze, "build_confluence_plan", lambda *a, **k: None)
 
     captured = {}
 
@@ -365,7 +365,7 @@ def test_a_plan_that_cannot_clear_min_rr_never_reaches_scan_items(monkeypatch, t
 def test_shadow_mode_keeps_the_legacy_alert_when_v2_rejects(monkeypatch, tmp_path, stub_batch_fetch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
     _setup_minimal_scan(monkeypatch, tmp_path)
-    monkeypatch.setattr(engine, "build_confluence_plan", lambda *a, **k: None)
+    monkeypatch.setattr(analyze, "build_confluence_plan", lambda *a, **k: None)
 
     captured = {}
 
@@ -416,6 +416,7 @@ def test_illiquid_ticker_skips_new_signals_but_still_monitors_open_trades(monkey
 
     test_log = TradeLog(path=str(tmp_path / "trades.json"))
     monkeypatch.setattr(engine, "trade_log", test_log)
+    monkeypatch.setattr(analyze, "trade_log", test_log)
 
     calls = {"update_open_trades": [], "check_near_close": []}
     real_update_open_trades = test_log.update_open_trades
@@ -430,7 +431,7 @@ def test_illiquid_ticker_skips_new_signals_but_still_monitors_open_trades(monkey
         return real_check_near_close(ticker, df)
 
     monkeypatch.setattr(test_log, "update_open_trades", _spy_update_open_trades)
-    monkeypatch.setattr(engine, "_check_near_close", _spy_check_near_close)
+    monkeypatch.setattr(analyze, "_check_near_close", _spy_check_near_close)
 
     captured = {}
 

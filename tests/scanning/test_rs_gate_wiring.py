@@ -25,7 +25,7 @@ import pytest
 
 import swingbot.config as config
 from swingbot.core.edge.factors import rs_score
-from swingbot.core.scanning import engine, fetch, runstate
+from swingbot.core.scanning import analyze, dedup, engine, fetch, runstate
 from swingbot.core.scanning.engine import ScanProgress
 from swingbot.core.tracking.performance import TradeLog
 from tests.helpers import make_ohlcv
@@ -96,6 +96,7 @@ def _scan_with_funnel(ticker, direction, rs, sector_rs=None, horizon="4w"):
         mp.setattr(fetch, "ProcessPoolExecutor", _InlineProcessPool)
         mp.setattr(engine, "trade_log",
                    TradeLog(path=os.path.join(config.DATA_DIR, "trades.json")))
+        mp.setattr(analyze, "trade_log", engine.trade_log)
         mp.setattr(runstate, "is_stop_requested", lambda: False)
 
         def _fake_apply_sector_rs(item, tk, sector_of_ticker,
@@ -109,7 +110,7 @@ def _scan_with_funnel(ticker, direction, rs, sector_rs=None, horizon="4w"):
                 item.sector_rs_percentile = None
                 item.rs_combined = rs
 
-        mp.setattr(engine, "_apply_sector_rs", _fake_apply_sector_rs)
+        mp.setattr(analyze, "_apply_sector_rs", _fake_apply_sector_rs)
 
         captured = {}
 
@@ -117,7 +118,7 @@ def _scan_with_funnel(ticker, direction, rs, sector_rs=None, horizon="4w"):
             captured["items"] = list(items)
             return []   # skip the alert-building loop -- irrelevant to the gate
 
-        mp.setattr(engine, "dedup_scan_items", _capture_and_shortcircuit)
+        mp.setattr(dedup, "dedup_scan_items", _capture_and_shortcircuit)
 
         progress = ScanProgress()
         engine._sync_run_scan(horizon, require_confirmation=False,
