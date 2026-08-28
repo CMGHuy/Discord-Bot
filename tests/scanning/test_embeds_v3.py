@@ -655,7 +655,7 @@ def _stub_regenerate_deps(monkeypatch, df):
     """get_daily_data and currency lookup, stubbed so the test never touches
     the network -- captures generate_trade_chart's kwargs instead of
     actually rendering a PNG."""
-    from swingbot.core.scanning import embeds as embeds_mod
+    from swingbot.core.scanning import lifecycle_embeds as embeds_mod
 
     monkeypatch.setattr(embeds_mod, "get_daily_data", lambda ticker: df)
     monkeypatch.setattr(embeds_mod, "get_currency_symbol", lambda ticker, default: default)
