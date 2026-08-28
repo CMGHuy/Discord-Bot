@@ -2,6 +2,8 @@
 
 import re
 
+from swingbot.core.presentation import tokens
+
 
 FG: dict[str, int] = {
     "grey": 30,
@@ -38,3 +40,22 @@ def block(lines: list[str]) -> str:
             raise ValueError(f"ansi line exceeds {MAX_LINE_WIDTH} visible chars ({width})")
     body = "\n".join(lines)
     return f"```ansi\n{body}\n```"
+
+
+def plan_lines(*, direction: str, entry: float | None, target: float | None,
+               stop: float | None, target_pct: float | None,
+               stop_pct: float | None, r: float | None) -> list[str]:
+    """Return the two-line, phone-safe plan headline."""
+    glyph = tokens.direction_glyph(direction)
+    glyph_colour = "green" if direction == "bullish" else "red"
+    levels = (
+        f"{paint(glyph, glyph_colour)} {tokens.fmt_price(entry)} → "
+        f"{paint(tokens.fmt_price(target), 'green')} / "
+        f"{paint(tokens.fmt_price(stop), 'red')}"
+    )
+    magnitudes = (
+        f"  {paint(tokens.fmt_pct(target_pct), 'green')} "
+        f"{paint(tokens.fmt_pct(stop_pct), 'red')} "
+        f"{paint(tokens.fmt_r(r), 'white', bold=False)}"
+    )
+    return [levels, magnitudes]
