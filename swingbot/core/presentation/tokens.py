@@ -33,6 +33,11 @@ def accent_for_outcome(outcome: str) -> discord.Color:
                                               ACCENT_RAMP[3]))
 
 
+def accent_blocked() -> discord.Color:
+    """Return the inert accent for a setup that failed a configured gate."""
+    return discord.Color(ACCENT_BLOCKED)
+
+
 ABSENT = "—"
 _UP = "▲"
 _DOWN = "▼"

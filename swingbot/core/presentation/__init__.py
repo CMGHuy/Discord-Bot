@@ -29,6 +29,6 @@ from swingbot.core.presentation.components import (  # noqa: F401
 )
 from swingbot.core.presentation.tokens import (  # noqa: F401
     ABSENT, ACCENT_BLOCKED, ACCENT_RAMP, DISCLAIMER, SECTION_ORDER,
-    accent_for_level, accent_for_outcome, confidence_label, direction_glyph,
+    accent_blocked, accent_for_level, accent_for_outcome, confidence_label, direction_glyph,
     fmt_pct, fmt_price, fmt_r, follow_meter,
 )

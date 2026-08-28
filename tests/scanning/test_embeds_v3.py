@@ -118,6 +118,25 @@ def test_no_description_line_scrolls_on_a_phone():
             assert ansi.visible_width(line) <= ansi.MAX_LINE_WIDTH, line
 
 
+def test_an_unmet_requirement_gets_its_own_field():
+    field = next(f for f in _build(make_item(all_ok=False)).fields if f.name == "⚠ Blocked by")
+    assert "needs" in field.value
+
+
+def test_a_blocked_alert_takes_the_inert_accent_not_red():
+    from swingbot.core.presentation import tokens
+    assert _build(make_item(all_ok=False)).color.value == tokens.ACCENT_BLOCKED
+
+
+def test_a_clean_alert_has_no_blocked_field():
+    assert all(f.name != "⚠ Blocked by" for f in _build(make_item()).fields)
+
+
+def test_blocked_by_sits_above_the_quality_fields():
+    names = [f.name for f in _build(make_item(all_ok=False)).fields]
+    assert names.index("⚠ Blocked by") < names.index("Confidence")
+
+
 def test_weak_plan_v2_uses_its_confidence_level_colour(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     item = make_item(plan_v2=make_plan_v2(badge="WEAK", confidence_level=1))

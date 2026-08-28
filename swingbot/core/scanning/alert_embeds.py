@@ -50,7 +50,14 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     title = f"{needs_review_marker}{priority_marker}{'🟢' if is_bull else '🔴'} {direction} — {result.ticker}"
     embed = discord.Embed(title=title, color=ui.accent_for_level(conf.level))
 
-    sections: dict[str, list[tuple]] = {k: [] for k in theme.SECTION_ORDER}
+    sections: dict[str, list[tuple]] = {k: [] for k in ui.SECTION_ORDER}
+
+    unmet = [(requirement.label, requirement.detail)
+             for requirement in item.requirements if not requirement.passed]
+    blocked = ui.blocked_by_field(unmet)
+    if blocked is not None:
+        sections["blocked"].append(blocked)
+        embed.color = ui.accent_blocked()
 
     heat_blocked = getattr(item, "heat_blocked", None)
     if heat_blocked is not None:
@@ -140,15 +147,6 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
         sections["headline"].append(("Setup", result.strategy, True))
     sections["headline"].append(("Swing type", result.horizon_label, True))
 
-    if not all_ok:
-        unmet = ", ".join(r.label for r in item.requirements if not r.passed)
-        sections["warnings"].append((
-            "⚠️ Not yet a clean setup",
-            f"Doesn't meet: {unmet}. Shown for visibility -- see the trade plan below for exactly why "
-            "(marked in bold red); not logged as a paper trade and won't auto-alert until it clears these.",
-            False,
-        ))
-
     if htf_info and htf_info.get("counter_trend") and not compact:
         ema_p = htf_info["ema_period"]
         htf_bias_word = htf_info["htf_bias"].capitalize()
@@ -195,7 +193,7 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
         if open_positions_warning:
             sections["warnings"].append(("⚠️ Position limit", open_positions_warning, False))
 
-    for key in theme.SECTION_ORDER:
+    for key in ui.SECTION_ORDER:
         for name, value, inline in sections[key]:
             embed.add_field(name=name, value=value, inline=inline)
 
