@@ -16,6 +16,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from swingbot.bot_core import bot, COMMANDS_BY_CATEGORY, CONFIDENCE_EXPLAINER
+from swingbot.core import presentation as ui
 from swingbot.core.market.strategy import HORIZONS
 from swingbot.core.scanning import engine as scan_engine
 
@@ -87,11 +88,11 @@ async def slash_help(interaction: discord.Interaction):
     embed = discord.Embed(
         title="📖 Swing Trade Bot — Commands",
         description="Alerts only, never places trades. Prefix: `!`  •  Slash: `/`",
-        color=discord.Color.blurple(),
     )
     for category, cmds in COMMANDS_BY_CATEGORY.items():
         value = "\n".join(f"`{cmd}` — {desc}" for cmd, desc in cmds)
         embed.add_field(name=category, value=value, inline=False)
+    ui.apply_chrome(embed, accent=ui.accent_for_outcome("scratch"))
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
