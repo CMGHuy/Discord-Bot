@@ -118,21 +118,21 @@ def test_no_description_line_scrolls_on_a_phone():
             assert ansi.visible_width(line) <= ansi.MAX_LINE_WIDTH, line
 
 
-def test_weak_plan_v2_gets_amber_color_and_weak_title_chip(monkeypatch):
+def test_weak_plan_v2_uses_its_confidence_level_colour(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     item = make_item(plan_v2=make_plan_v2(badge="WEAK", confidence_level=1))
     embed = _build(item)
-    assert embed.color.value == 0xE67E22
-    assert embed.title.startswith(f"{theme.level_chip(1)} ⚠️ WEAK · ")
+    assert embed.color.value == 0x9ACD32
+    assert "WEAK" not in embed.title
     assert "NVDA" in embed.title
 
 
-def test_validated_level_3_plan_gets_level_color_and_validated_title_chip(monkeypatch):
+def test_validated_plan_uses_the_confidence_level_colour_without_badge(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", confidence_level=3))
     embed = _build(item)
-    assert embed.color.value == 0xF1C40F
-    assert embed.title.startswith(f"{theme.level_chip(3)} ✅ VALIDATED · ")
+    assert embed.color.value == 0x9ACD32
+    assert "VALIDATED" not in embed.title
     assert "NVDA" in embed.title
 
 
@@ -145,14 +145,14 @@ def test_no_v2_plan_falls_back_to_confidence_color_and_plain_title(monkeypatch):
     assert "NVDA" in embed.title
 
 
-def test_quality_and_badge_fields_render_when_plan_v2_has_quality_breakdown(monkeypatch):
+def test_confidence_and_follow_fields_render_when_plan_v2_has_quality_breakdown(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     plan_v2 = make_plan_v2(badge="VALIDATED", confidence_level=5, quality_breakdown=[("regime", 15), ("htf", 8)])
     item = make_item(plan_v2=plan_v2)
     embed = _build(item)
     field_names = [f.name for f in embed.fields]
-    assert "✅ VALIDATED" in field_names
-    assert any(name.startswith("Quality: 72/100") for name in field_names)
+    assert "Confidence" in field_names
+    assert "Follow" in field_names
     # The plan now leads the description, rather than consuming a wide field.
     assert embed.description.startswith("```ansi\n")
 
@@ -201,18 +201,12 @@ def test_compact_layout_drops_confirmed_by_and_what_changed_and_branches(monkeyp
     assert "⚠️ Position limit" not in field_names
 
 
-def test_compact_layout_includes_one_line_quality_summary(monkeypatch):
+def test_compact_layout_includes_confidence_and_follow_fields(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", confidence_level=3))
     embed = _build(item, layout="compact")
-    quality_fields = [f for f in embed.fields if f.name == "📐 Quality"]
-    assert len(quality_fields) == 1
-    assert quality_fields[0].value.startswith("Level 3 · 72/100 · ✅ VALIDATED")
-    assert "OOS N=40 WR 82.5%" in quality_fields[0].value
-    # B2's two separate pedigree fields are replaced, not duplicated, in compact mode.
     field_names = [f.name for f in embed.fields]
-    assert "✅ VALIDATED" not in field_names
-    assert not any(name.startswith("Quality: 72/100") for name in field_names)
+    assert "Confidence" in field_names and "Follow" in field_names
 
 
 # --- Task B4: trigger-aware explanation wording ---------------------------
@@ -292,40 +286,30 @@ def test_ordered_alerts_ranks_plan_carrying_alerts_by_follow_score():
 
 # --- Task B7: WEAK block goes compact --------------------------------------
 
-def test_weak_plan_gets_single_line_caution_as_first_field(monkeypatch):
+def test_weak_plan_badge_is_not_rendered(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     plan_v2 = make_plan_v2(badge="WEAK", confidence_level=1,
                             badge_stats={"n": 42, "win_rate": 63.4, "expectancy_r": 0.1, "window": "2020-2023"})
     item = make_item(plan_v2=plan_v2)
     embed = _build(item, layout="detailed")
-    first_field = embed.fields[0]
-    assert first_field.name.startswith("⚠️ WEAK")
-    assert "N=42" in first_field.value
-    assert "63.4%" in first_field.value
-    assert first_field.value.strip() == first_field.value
-    assert "\n" not in first_field.value
+    blob = embed.title + embed.description + "".join(f.name + f.value for f in embed.fields)
+    assert "WEAK" not in blob
 
 
-def test_validated_plan_has_no_weak_field_anywhere(monkeypatch):
+def test_validated_plan_has_no_badge_field_anywhere(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", confidence_level=3))
     embed = _build(item, layout="detailed")
-    assert not any(f.name.startswith("⚠️ WEAK") for f in embed.fields)
+    blob = embed.title + embed.description + "".join(f.name + f.value for f in embed.fields)
+    assert "VALIDATED" not in blob and "WEAK" not in blob
 
 
-def test_weak_plan_detailed_mode_has_exactly_one_weak_field(monkeypatch):
-    # Guards against the duplicate-field bug: naively adding the new headline
-    # caution on top of the existing badge_field_for(plan_v2) append would
-    # leave two separately-named/valued "⚠️ WEAK"-ish fields in detailed mode.
+def test_weak_plan_keeps_confidence_and_follow_without_a_badge(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     item = make_item(plan_v2=make_plan_v2(badge="WEAK", confidence_level=1))
     embed = _build(item, layout="detailed")
-    weak_fields = [f for f in embed.fields if f.name.startswith("⚠️ WEAK")]
-    assert len(weak_fields) == 1
-    # And quality_lines(plan_v2) must still fire for WEAK plans -- it's
-    # independent of badge, only gated on quality_breakdown.
     field_names = [f.name for f in embed.fields]
-    assert any(name.startswith("Quality: 72/100") for name in field_names)
+    assert "Confidence" in field_names and "Follow" in field_names
 
 
 def test_ordered_alerts_keeps_legacy_alerts_after_plan_alerts_in_original_order():
@@ -351,14 +335,14 @@ def test_ordered_alerts_keeps_legacy_alerts_after_plan_alerts_in_original_order(
 
 # --- Task B6: "why follow this" follow-score breakdown field ---------------
 
-def test_follow_score_field_present_with_chip_and_components(monkeypatch):
+def test_follow_score_field_is_the_kit_meter_with_components(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     plan_v2 = make_plan_v2(badge="VALIDATED", confidence_level=5, quality_score=82)
     plan_v2.regime_aligned = True
     plan_v2.created_at = dt.date.today().isoformat()  # fresh as of "today"
     item = make_item(plan_v2=plan_v2)
     embed = _build(item)
-    follow_fields = [f for f in embed.fields if f.name == "🧭 Follow score"]
+    follow_fields = [f for f in embed.fields if f.name == "Follow"]
     assert len(follow_fields) == 1
     value = follow_fields[0].value
     assert "▰" in value
@@ -366,14 +350,14 @@ def test_follow_score_field_present_with_chip_and_components(monkeypatch):
     assert "quality" in value.lower()
 
 
-def test_follow_score_field_present_in_compact_layout_too(monkeypatch):
+def test_follow_score_field_is_present_in_compact_layout_too(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     plan_v2 = make_plan_v2(badge="VALIDATED", confidence_level=5, quality_score=82)
     plan_v2.regime_aligned = True
     plan_v2.created_at = dt.date.today().isoformat()
     item = make_item(plan_v2=plan_v2)
     embed = _build(item, layout="compact")
-    follow_fields = [f for f in embed.fields if f.name == "🧭 Follow score"]
+    follow_fields = [f for f in embed.fields if f.name == "Follow"]
     assert len(follow_fields) == 1
     assert "▰" in follow_fields[0].value
 

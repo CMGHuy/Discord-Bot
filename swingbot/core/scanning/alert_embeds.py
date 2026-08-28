@@ -13,9 +13,8 @@ from swingbot.core import presentation as ui
 from swingbot.core.scanning import embed_theme as theme
 
 from .snapshots import _snapshot_and_diff
-from .requirements import _confidence_block, _sources_str, confidence_color
-from .plan_table import (_v2_plan, badge_field_for,
-                         quality_lines, plan_numbers_for_display, leg_rows)
+from .requirements import _sources_str, confidence_color
+from .plan_table import (_v2_plan, plan_numbers_for_display, leg_rows)
 
 
 log = logging.getLogger("swing-bot.scan_engine")
@@ -48,27 +47,8 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     priority_marker = "⭐ " if (conf.level >= 4 and all_ok) else ""
     needs_review_marker = "⚠️ " if not all_ok else ""
     plan_v2 = _v2_plan(item)
-    # A v2-plan-carrying item gets a level/badge chip prefix on its title
-    # ("5️⃣ ✅ VALIDATED · ...") so pedigree is visible before opening the
-    # embed at all; items with no v2 plan keep today's plain title.
-    # v32 Task 11: was a tier chip (🅰/🅱/🅲); tier is retired in favour of
-    # plan_v2.confidence_level.
-    chip_prefix = f"{theme.level_chip(plan_v2.confidence_level)} {theme.badge_chip(plan_v2.badge)} · " if plan_v2 is not None else ""
-    title = f"{chip_prefix}{needs_review_marker}{priority_marker}{'🟢' if is_bull else '🔴'} {direction} — {result.ticker}"
-    if plan_v2 is not None:
-        # Badge/level dominates the color once a v2 plan exists -- "did this
-        # clear the validation bar, and how confident is it" outranks the
-        # legacy scan-time confidence-level color below.
-        embed_color = theme.plan_color(plan_v2.badge, plan_v2.confidence_level)
-    else:
-        # Embed color highlights CONFIDENCE (red=lowest -> green=highest) when
-        # every requirement is met; a scenario still missing one or more is
-        # always shown in neutral gray regardless of its score, so "this one
-        # needs a second look" reads at a glance from the color alone, before
-        # even opening the trade plan table where the specific failing
-        # parameter(s) are marked in bold red.
-        embed_color = confidence_color(conf.level) if all_ok else discord.Color.from_rgb(149, 165, 166)
-    embed = discord.Embed(title=title, color=embed_color)
+    title = f"{needs_review_marker}{priority_marker}{'🟢' if is_bull else '🔴'} {direction} — {result.ticker}"
+    embed = discord.Embed(title=title, color=ui.accent_for_level(conf.level))
 
     sections: dict[str, list[tuple]] = {k: [] for k in theme.SECTION_ORDER}
 
@@ -132,40 +112,7 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
             False,
         ))
 
-    if plan_v2 is not None and plan_v2.badge == "WEAK":
-        # First field on the embed for any WEAK plan, both layouts -- a
-        # single-line caution replacing the old multi-line badge_field_for
-        # block (see the `else:` branch below, which suppresses that field
-        # for WEAK so this doesn't duplicate it).
-        stats = plan_v2.badge_stats or {}
-        wr = stats.get("win_rate", 0.0)
-        n = stats.get("n", 0)
-        sections["headline"].append((
-            "⚠️ WEAK", f"OOS WR {wr:.1f}% (N={n}), below the 80% bar. Extra care.", False,
-        ))
-
-    if compact:
-        # One condensed line replaces B2's two separate pedigree fields
-        # (badge_field_for + quality_lines) -- fewer fields is the whole
-        # point of compact mode.
-        if plan_v2 is not None:
-            stats = plan_v2.badge_stats or {}
-            oos_bit = f" (OOS N={stats.get('n', 0)} WR {stats.get('win_rate', 0):.1f}%)" if stats else ""
-            quality_line = f"Level {plan_v2.confidence_level} · {plan_v2.quality_score}/100 · {theme.badge_chip(plan_v2.badge)}{oos_bit}"
-            sections["quality"].append(("📐 Quality", quality_line, False))
-    else:
-        badge_field = badge_field_for(plan_v2)
-        # WEAK's own badge_field is suppressed here -- the headline block
-        # above already covers it (single-line, first-positioned); appending
-        # it again here would duplicate the "⚠️ WEAK" field. VALIDATED is
-        # unaffected. quality_lines(...) is independent of badge and must
-        # keep rendering for WEAK plans, so it's no longer nested under the
-        # badge_field check.
-        if badge_field is not None and plan_v2.badge != "WEAK":
-            sections["quality"].append((badge_field[0], badge_field[1], False))
-        quality_field = quality_lines(plan_v2)
-        if quality_field is not None:
-            sections["quality"].append((quality_field[0], quality_field[1], False))
+    sections["quality"].append(ui.confidence_field(conf.level, conf.score))
 
     # "Why follow this" (Task B6) -- always added (both compact and detailed
     # layouts) when a v2 plan exists, regardless of which branch above fired,
@@ -179,7 +126,7 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
             f"{label} +{pts:.0f}" if "quality" not in label else label
             for label, pts in breakdown
         )
-        sections["quality"].append(("🧭 Follow score", f"{theme.follow_chip(score)}\n{breakdown_line}", False))
+        sections["quality"].append(ui.follow_field(score, breakdown_line))
 
     # combined_from always has at least the representative's own entry (set
     # during dedup), so the confirming strategy/horizon combo(s) are always
@@ -192,7 +139,6 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     else:
         sections["headline"].append(("Setup", result.strategy, True))
     sections["headline"].append(("Swing type", result.horizon_label, True))
-    sections["headline"].append(("Confidence", _confidence_block(conf), True))
 
     if not all_ok:
         unmet = ", ".join(r.label for r in item.requirements if not r.passed)
