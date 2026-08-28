@@ -40,17 +40,18 @@ def scan_files(admin_app, tmp_path, monkeypatch):
     """
     from swingbot.admin import app as admin_module
     from swingbot.core.scanning import engine
+    from swingbot.core.scanning import runstate
 
-    monkeypatch.setattr(engine, "_STOP_FILE", str(tmp_path / "stop_scan.flag"))
-    monkeypatch.setattr(engine, "_RUNNING_FILE", str(tmp_path / "scan_running.flag"))
+    monkeypatch.setattr(runstate, "_STOP_FILE", str(tmp_path / "stop_scan.flag"))
+    monkeypatch.setattr(runstate, "_RUNNING_FILE", str(tmp_path / "scan_running.flag"))
     assert admin_module.TRIGGER_FILE.startswith(str(tmp_path)), (
         "app.py's flag paths did not follow the test DATA_DIR"
     )
     return {
         "trigger": admin_module.TRIGGER_FILE,
         "pause": admin_module.PAUSE_FILE,
-        "stop": engine._STOP_FILE,
-        "running": engine._RUNNING_FILE,
+        "stop": runstate._STOP_FILE,
+        "running": runstate._RUNNING_FILE,
     }
 
 

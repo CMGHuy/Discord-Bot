@@ -70,6 +70,8 @@ from swingbot.core.edge import throttle
 from swingbot.core.edge.rs_gate import rs_verdict
 from swingbot.core.infra.jsonio import read_json
 from .confidence import score_confidence
+from . import runstate
+from .runstate import is_scan_running, request_stop
 from swingbot.core.marketdata.data import (get_currency_symbol, get_current_price, get_daily_data,
                                    get_current_price_batch, get_daily_data_batch)
 from swingbot.core.market.mtf import adjacent_aligned, macro_aligned
@@ -120,57 +122,6 @@ trade_log = TradeLog()
 # trades.json/state.json from different threads simultaneously.
 _scan_lock = asyncio.Lock()
 
-# Cooperative stop/running signaling for the currently in-progress scan.
-# File-based (same pattern as commands/scanning.py's pause flag and the
-# admin UI's scan-trigger flag) rather than an in-memory flag, because the
-# admin UI (Flask) and the bot are separate processes sharing only the
-# data/ directory on disk -- an in-memory Event in this process would be
-# invisible to the admin UI's "Stop scan" button. Checked cooperatively
-# (once per ticker) inside the crawl/analyze/alert-building loops below;
-# there's no way to forcibly kill a Python thread mid-fetch, so a scan
-# stops at the next checkpoint, not instantly.
-_STOP_FILE = os.path.join(config.DATA_DIR, "stop_scan.flag")
-_RUNNING_FILE = os.path.join(config.DATA_DIR, "scan_running.flag")
-
-
-def is_stop_requested() -> bool:
-    return os.path.exists(_STOP_FILE)
-
-
-def request_stop() -> None:
-    """Ask whatever scan is currently running to stop at its next checkpoint."""
-    os.makedirs(config.DATA_DIR, exist_ok=True)
-    with open(_STOP_FILE, "w") as f:
-        f.write(datetime.now(timezone.utc).isoformat())
-
-
-def _clear_stop() -> None:
-    try:
-        os.remove(_STOP_FILE)
-    except OSError:
-        pass  # already clear
-
-
-def is_scan_running() -> bool:
-    """Whether a scan (manual !check/`/check`, admin-UI-triggered, or the
-    automatic session scan) is currently executing. Used by the admin UI
-    to enable/disable its "Stop scan" button."""
-    return os.path.exists(_RUNNING_FILE)
-
-
-def _mark_running(running: bool) -> None:
-    if running:
-        os.makedirs(config.DATA_DIR, exist_ok=True)
-        with open(_RUNNING_FILE, "w") as f:
-            f.write(datetime.now(timezone.utc).isoformat())
-    else:
-        try:
-            os.remove(_RUNNING_FILE)
-        except OSError:
-            pass  # already clear
-
-
-@dataclass
 class ScanItem:
     result: object
     plan: object
@@ -796,7 +747,7 @@ def _fetch_cold_frames(tickers: list, progress: "ScanProgress" = None) -> list:
     remainder: list = []
 
     for chunk in _chunked(tickers, chunk_size):
-        if is_stop_requested():
+        if runstate.is_stop_requested():
             if progress is not None:
                 progress.stopped = True
             break
@@ -813,7 +764,7 @@ def _fetch_cold_frames(tickers: list, progress: "ScanProgress" = None) -> list:
             progress.current_ticker = chunk[-1]
 
     for ticker in remainder:
-        if is_stop_requested():
+        if runstate.is_stop_requested():
             if progress is not None:
                 progress.stopped = True
             break
@@ -888,7 +839,7 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     caller logs and skips it downstream) -- one bad ticker never aborts
     the crawl for the rest of the watchlist.
 
-    Checks is_stop_requested() once per ticker and ends the crawl early
+    Checks runstate.is_stop_requested() once per ticker and ends the crawl early
     (returning whatever was fetched so far) if a stop was requested --
     see the module-level _STOP_FILE docstring above for why this is
     file-based and only checked at per-ticker checkpoints, not instant.
@@ -905,7 +856,7 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     cold = []
     warm = 0
     for ticker in tickers:
-        if is_stop_requested():
+        if runstate.is_stop_requested():
             log.info("Crawl: stop requested -- ending early (%d/%d ticker(s) resolved so far)",
                       len(results), len(tickers))
             if progress is not None:
@@ -951,7 +902,7 @@ def _fetch_live_prices(tickers: list, progress: "ScanProgress" = None) -> dict:
     started = time.monotonic()
     prices: dict = {}
     for chunk in _chunked(tickers, chunk_size):
-        if is_stop_requested():
+        if runstate.is_stop_requested():
             if progress is not None:
                 progress.stopped = True
             break
@@ -1203,7 +1154,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
         "data_quality_failed": False,   # E47: this ticker tripped the E16 data-quality gate
     }
 
-    if is_stop_requested():
+    if runstate.is_stop_requested():
         # Cooperative, checked once per ticker just like the old serial
         # loop did -- see the module-level _STOP_FILE docstring for why
         # this is file-based and only checked at per-ticker checkpoints.
@@ -1957,7 +1908,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     log.info("Scan pass: %d ticker(s) evaluated, %d scenario(s) shown, %d after dedup",
               len(tickers), len(scan_items), len(deduped))
     for item in deduped:
-        if is_stop_requested():
+        if runstate.is_stop_requested():
             log.info("Alert building: stop requested -- ending early (%d/%d alert(s) built so far)",
                       len(alerts), len(deduped))
             if progress is not None:
@@ -2350,14 +2301,14 @@ async def run_scan(horizon_filter: str = "all", require_confirmation: bool = Tru
     """
     started = time.monotonic()
     async with _scan_lock:
-        _clear_stop()
-        _mark_running(True)
+        runstate._clear_stop()
+        runstate._mark_running(True)
         try:
             alerts, newly_closed, near_close_warnings = await asyncio.to_thread(
                 _sync_run_scan, horizon_filter, require_confirmation, progress, min_confluence
             )
         finally:
-            _mark_running(False)
+            runstate._mark_running(False)
     elapsed = time.monotonic() - started
     stopped_bit = " (stopped early by request)" if (progress is not None and progress.stopped) else ""
     log.info("Scan finished in %.1fs%s: %d alert(s), %d newly-closed trade(s), %d near-close warning(s)",
