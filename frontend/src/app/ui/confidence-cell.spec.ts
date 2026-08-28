@@ -70,4 +70,14 @@ describe('ConfidenceCell', () => {
     expect(el.querySelector('sb-direction-arrow')).not.toBeNull();
     expect(text(el)).toBe('▼ —');
   });
+
+  it('bands level 4 on the monotonic ramp, not on info blue', () => {
+    const root = getComputedStyle(document.documentElement);
+    expect(root.getPropertyValue('--quality-4').trim().toLowerCase()).toBe('#9acd32');
+  });
+
+  it('leaves info alone for the chart series namespace', () => {
+    const root = getComputedStyle(document.documentElement);
+    expect(root.getPropertyValue('--info').trim().toLowerCase()).toBe('#46c2ff');
+  });
 });

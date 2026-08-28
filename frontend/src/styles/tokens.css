@@ -116,7 +116,10 @@
   --quality-1: var(--neg);
   --quality-2: var(--warn);
   --quality-3: var(--text-secondary);
-  --quality-4: var(--info);
+  /* v62 D2: level 4 is ordinal yellow-green, not informational blue.
+   * Keep this literal in lockstep with presentation.tokens.ACCENT_RAMP[4];
+   * --info remains the chart-series colour used by --chart-2. */
+  --quality-4: #9acd32;
   --quality-5: var(--pos);
 
   /* -- chart series ------------------------------------------------------
