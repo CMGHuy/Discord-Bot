@@ -1,5 +1,7 @@
 from swingbot.core.planning.plan_manager import PlanEvent
 from swingbot.core.scanning.embeds import build_plan_event_embed
+from swingbot.core.scanning.lifecycle_embeds import PLAN_EVENT_STYLES
+from swingbot.core.presentation import tokens
 from swingbot.core.scanning import plan_table
 from tests.planning.test_plan_engine_model import _plan
 
@@ -124,3 +126,15 @@ def test_close_reasons_have_distinct_copy():
               for r in ("loss", "scratch", "tp1_runner_be", "tp1_runner_tp2",
                         "tp1_runner_trail")}
     assert len(set(titles.values())) == 5
+
+
+def test_every_plan_event_uses_a_shared_ramp_colour():
+    allowed = {tokens.ACCENT_RAMP[1], tokens.ACCENT_RAMP[3], tokens.ACCENT_RAMP[5], tokens.ACCENT_BLOCKED}
+    assert all(colour.value in allowed for _, colour in PLAN_EVENT_STYLES.values())
+
+
+def test_good_bad_and_neutral_plan_events_use_their_semantic_ramp_endpoints():
+    assert PLAN_EVENT_STYLES["tp1_partial"][1].value == tokens.ACCENT_RAMP[5]
+    assert PLAN_EVENT_STYLES["loss"][1].value == tokens.ACCENT_RAMP[1]
+    assert PLAN_EVENT_STYLES["filled"][1].value == tokens.ACCENT_RAMP[3]
+    assert PLAN_EVENT_STYLES["tp1_runner_tp2"][0].startswith("🟢")

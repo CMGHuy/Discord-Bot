@@ -284,31 +284,33 @@ async def notify_near_close(bot, warnings: list):
             log.warning("Could not post near-close warning for %s: %s", warning["trade"].get("id"), e)
 
 
-_EVENT_STYLE = {
-    "filled":                ("🎯 ENTRY TRIGGERED — {ticker}", discord.Color.blue()),
-    "cancelled_expired":     ("⏱ Plan expired — {ticker}", discord.Color.dark_grey()),
-    "cancelled_invalidated": ("❌ Plan invalidated — {ticker}", discord.Color.dark_red()),
-    "be_moved":              ("🛡 Stop moved to break-even — {ticker}", discord.Color.teal()),
-    "tp1_partial":           ("💰 TP1 banked — {ticker}", discord.Color.gold()),
-}
-_CLOSE_STYLE = {
-    "loss":            ("🔴 Stopped out — {ticker}", discord.Color.red()),
-    "scratch":         ("⚪ Scratched at break-even — {ticker}", discord.Color.light_grey()),
-    "tp1_runner_be":   ("🟢 Win — runner closed at its floor — {ticker}", discord.Color.green()),
-    "tp1_runner_tp2":  ("🟢🟢 Win — runner hit TP2 — {ticker}", discord.Color.green()),
-    "tp1_runner_trail": ("🟢 Win — trail locked profit — {ticker}", discord.Color.green()),
+_GOOD = ui.accent_for_outcome("win")
+_BAD = ui.accent_for_outcome("loss")
+_NEUTRAL = ui.accent_for_outcome("scratch")
+_INERT = ui.accent_blocked()
+
+PLAN_EVENT_STYLES = {
+    "filled":                ("🎯 ENTRY TRIGGERED — {ticker}", _NEUTRAL),
+    "cancelled_expired":     ("⏱ Plan expired — {ticker}", _INERT),
+    "cancelled_invalidated": ("❌ Plan invalidated — {ticker}", _INERT),
+    "be_moved":              ("🛡 Stop moved to break-even — {ticker}", _NEUTRAL),
+    "tp1_partial":           ("💰 TP1 banked — {ticker}", _GOOD),
+    "loss":                  ("🔴 Stopped out — {ticker}", _BAD),
+    "scratch":               ("⚪ Scratched at break-even — {ticker}", _NEUTRAL),
+    "tp1_runner_be":         ("🟢 Win — runner closed at its floor — {ticker}", _GOOD),
+    "tp1_runner_tp2":        ("🟢 Win — runner hit TP2 — {ticker}", _GOOD),
+    "tp1_runner_trail":      ("🟢 Win — trail locked profit — {ticker}", _GOOD),
 }
 
 
 def build_plan_event_embed(plan, event) -> discord.Embed:
     """Per-transition Discord embed for the v2 plan lifecycle (Task 72)."""
     if event.transition == "closed":
-        template, color = _CLOSE_STYLE.get(
-            event.detail.get("reason"),
-            ("Plan closed — {ticker}", discord.Color.light_grey()))
+        template, color = PLAN_EVENT_STYLES.get(
+            event.detail.get("reason"), ("Plan closed — {ticker}", _NEUTRAL))
     else:
-        template, color = _EVENT_STYLE.get(
-            event.transition, ("Plan update — {ticker}", discord.Color.light_grey()))
+        template, color = PLAN_EVENT_STYLES.get(
+            event.transition, ("Plan update — {ticker}", _NEUTRAL))
     embed = discord.Embed(title=template.format(ticker=plan.ticker), color=color)
     embed.add_field(name="Plan (v2)", value=(
         f"{plan.strategy} · {plan.horizon_key} · {plan.direction} · "
