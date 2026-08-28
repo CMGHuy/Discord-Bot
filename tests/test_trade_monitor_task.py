@@ -16,6 +16,7 @@ No pytest-asyncio in this repo -- coroutines are driven with asyncio.run().
 import asyncio
 
 from swingbot.commands import scanning as scanning_mod
+from swingbot.commands.scanning import loops
 from swingbot.core.scanning import engine as scan_engine
 from swingbot.core.planning.plan_manager import PlanEvent
 
@@ -30,10 +31,10 @@ def test_trade_monitor_still_checks_sl_tp_while_a_scan_is_running(monkeypatch):
     calls = {"close": 0, "near_tp": 0, "manager_tick": 0}
 
     monkeypatch.setattr(
-        scanning_mod.trade_log, "get_trades",
+        loops.trade_log, "get_trades",
         lambda status=None, limit=None: [{"ticker": "AAPL", "id": "t1", "status": "open"}],
     )
-    monkeypatch.setattr(scanning_mod, "get_current_price", lambda t: 100.0)
+    monkeypatch.setattr(loops, "get_current_price", lambda t: 100.0)
 
     def fake_close(ticker, live):
         calls["close"] += 1
@@ -47,8 +48,8 @@ def test_trade_monitor_still_checks_sl_tp_while_a_scan_is_running(monkeypatch):
         calls["manager_tick"] += 1
         return []
 
-    monkeypatch.setattr(scanning_mod.trade_log, "close_if_live_price_hit", fake_close)
-    monkeypatch.setattr(scanning_mod.trade_log, "check_near_tp_timeout", fake_near_tp)
+    monkeypatch.setattr(loops.trade_log, "close_if_live_price_hit", fake_close)
+    monkeypatch.setattr(loops.trade_log, "check_near_tp_timeout", fake_near_tp)
     monkeypatch.setattr("swingbot.core.planning.plan_manager.run_manager_tick", fake_tick)
 
     _run(scanning_mod.trade_monitor.coro())
@@ -65,7 +66,7 @@ def test_trade_monitor_skips_cleanly_when_there_are_no_open_trades(monkeypatch):
     """Unrelated to the scan-running bug: still a real early-exit worth
     keeping -- no work to do costs no work."""
     monkeypatch.setattr(scan_engine, "is_scan_running", lambda: False)
-    monkeypatch.setattr(scanning_mod.trade_log, "get_trades",
+    monkeypatch.setattr(loops.trade_log, "get_trades",
                         lambda status=None, limit=None: [])
 
     calls = {"tick": 0}
