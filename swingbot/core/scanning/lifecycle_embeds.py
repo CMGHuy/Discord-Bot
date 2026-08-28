@@ -9,6 +9,7 @@ from swingbot import config
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
 from swingbot.core.market.strategy import HORIZONS
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
+from swingbot.core import presentation as ui
 from swingbot.core.scanning import embed_theme as theme
 from swingbot.core.tracking.performance import closed_pnl_pct, closed_r_multiple
 from .snapshots import _format_duration_hms
@@ -88,15 +89,12 @@ def build_closed_trade_embed(trade: dict) -> discord.Embed:
     if manual:
         outcome_word = "MANUALLY CLOSED"
         icon  = "🔒"
-        color = discord.Color.from_rgb(90, 98, 117)   # grey
     elif won:
         outcome_word = "WIN ✅"
         icon  = "✅"
-        color = discord.Color.green()
     else:
         outcome_word = "LOSS ❌"
         icon  = "❌"
-        color = discord.Color.red()
 
     cur        = get_currency_symbol(trade["ticker"], config.CURRENCY_SYMBOL)
     exit_price = trade.get("exit_price")
@@ -111,16 +109,23 @@ def build_closed_trade_embed(trade: dict) -> discord.Embed:
     # back some of its TP1 gain on the runner could show a NEGATIVE % here
     # right next to a positive Gain/Loss amount.
     pct = closed_pnl_pct(trade)
-    pnl_str = f"{pct:+.2f}%" if pct is not None else "n/a"
+    pnl_str = ui.fmt_pct(pct)
 
     # R-multiple — same last-leg-only bug as pnl_str above applied here too
     # (a plain (exit_price - entry) / risk calc only ever prices the
     # runner's own leg); see closed_r_multiple's docstring.
     r = closed_r_multiple(trade)
-    r_str = f"{r:+.2f}R" if r is not None else "n/a"
+    r_str = ui.fmt_r(r)
 
     title = f"{icon} {trade['ticker']} — {outcome_word}"
-    embed = discord.Embed(title=title, color=color)
+    outcome = "win" if won else "loss" if not manual else "scratch"
+    embed = discord.Embed(title=title)
+    embed.description = ui.plan_headline(
+        direction=trade.get("direction", ""), entry=entry, target=exit_price,
+        stop=trade.get("stop_loss"), target_pct=pct, stop_pct=None, r=r,
+    )
+    ui.apply_chrome(embed, accent=ui.accent_for_outcome(outcome),
+                    plan_id=trade.get("plan_id"))
 
     # Realized $/€ gain/loss -- computed from the share count snapshotted
     # onto the trade when it was OPENED (see account.py / performance.py's

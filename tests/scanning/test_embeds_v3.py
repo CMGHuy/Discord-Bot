@@ -401,6 +401,19 @@ def _make_closed_trade(**overrides):
     return trade
 
 
+def test_closed_trade_outcomes_use_the_shared_ramp_endpoints():
+    from swingbot.core.presentation import tokens
+    assert build_closed_trade_embed(_make_closed_trade(status="win")).color.value == tokens.ACCENT_RAMP[5]
+    assert build_closed_trade_embed(_make_closed_trade(status="loss")).color.value == tokens.ACCENT_RAMP[1]
+    assert build_closed_trade_embed(_make_closed_trade(status="closed")).color.value == tokens.ACCENT_RAMP[3]
+
+
+def test_closed_trade_headline_uses_the_actual_exit_and_realised_metrics():
+    trade = _make_closed_trade(exit_price=111.25, realized_pnl_amount=50.0)
+    plain = ansi._ESCAPE_RE.sub("", build_closed_trade_embed(trade).description)
+    assert "111.25" in plain and "%" in plain and "R" in plain
+
+
 def _make_near_close_warning(**trade_overrides):
     trade = {
         "id": "trade-99", "ticker": "NVDA", "strategy": "RSI Pullback", "horizon_key": "2w",
