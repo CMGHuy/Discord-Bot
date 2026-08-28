@@ -111,9 +111,9 @@ def test_the_scan_hands_its_stored_fit_to_the_png():
     reach the live alert path at all -- unwired, every guarantee above is
     inert in production while every test still passes.
     """
-    from swingbot.core.scanning import engine
+    from swingbot.core.scanning import scan_run
 
-    source = inspect.getsource(engine)
+    source = inspect.getsource(scan_run)
     # Anchored on the assignment, not the bare name: the function is also
     # named in a comment a few lines above, and splitting on that reads the
     # wrong block.

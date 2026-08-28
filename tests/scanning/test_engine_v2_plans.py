@@ -65,7 +65,7 @@ def isolate_data_dir(tmp_path, monkeypatch):
     # module attribute fixes the second and does nothing for the first.
     account_path = str(tmp_path / "account.json")
     monkeypatch.setattr(
-        engine, "load_account_config",
+        scan_run, "load_account_config",
         lambda path=account_path: _account.load_account_config(path),
     )
     monkeypatch.setattr(
@@ -153,7 +153,7 @@ def test_build_quality_inputs_reuses_items_htf_bias_without_recomputing(monkeypa
     # be reused here, not recomputed a 3rd time (v56 perf fix). Proven by
     # making get_htf_bias raise if called at all, and by item.htf_bias
     # surviving into the output verbatim rather than being derived from df.
-    monkeypatch.setattr(engine, "get_htf_bias",
+    monkeypatch.setattr(analyze, "get_htf_bias",
                         lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not recompute")))
     item = SimpleNamespace(target_confluence=(2, ["EMA21", "Fib"]), htf_bias="bearish")
     out = engine._build_quality_inputs(item, _scenario(), make_ohlcv([100.0] * 60), "4w")
@@ -250,7 +250,7 @@ def test_sync_run_scan_gates_attach_plan_v2_on_all_ok(monkeypatch, tmp_path, stu
     # S/R distance (~1.35-1.78%), so no scenario would ever get built without
     # loosening this horizon setting too. This only relaxes a per-horizon
     # constant used to *build* a scenario -- unrelated to the all_ok gate.
-    monkeypatch.setitem(engine.HORIZONS["4w"], "sr_target_min_pct", 1.0)
+    monkeypatch.setitem(scan_run.HORIZONS["4w"], "sr_target_min_pct", 1.0)
 
     monkeypatch.setattr(scan_run, "load_watchlist", lambda: ["TEST"])
     monkeypatch.setattr(
@@ -330,7 +330,7 @@ def _setup_minimal_scan(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "MAX_STOP_LOSS_PCT", 50.0)
     monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 0.01)
     monkeypatch.setattr(config, "MIN_ALERT_CONFIDENCE_LEVEL", 1)
-    monkeypatch.setitem(engine.HORIZONS["4w"], "sr_target_min_pct", 1.0)
+    monkeypatch.setitem(scan_run.HORIZONS["4w"], "sr_target_min_pct", 1.0)
     monkeypatch.setattr(scan_run, "load_watchlist", lambda: ["TEST"])
     monkeypatch.setattr(
         fetch, "get_daily_data",
@@ -416,11 +416,12 @@ def test_illiquid_ticker_skips_new_signals_but_still_monitors_open_trades(monkey
 
     test_log = TradeLog(path=str(tmp_path / "trades.json"))
     monkeypatch.setattr(engine, "trade_log", test_log)
+    monkeypatch.setattr(scan_run, "trade_log", test_log)
     monkeypatch.setattr(analyze, "trade_log", test_log)
 
     calls = {"update_open_trades": [], "check_near_close": []}
     real_update_open_trades = test_log.update_open_trades
-    real_check_near_close = engine._check_near_close
+    real_check_near_close = analyze._check_near_close
 
     def _spy_update_open_trades(ticker, df, live_price=None):
         calls["update_open_trades"].append(ticker)
@@ -497,7 +498,7 @@ def test_sync_run_scan_parallel_dispatch_matches_serial(monkeypatch, tmp_path, s
     # Same per-horizon loosening as test_sync_run_scan_gates_attach_plan_v2_on_all_ok
     # -- see that test's docstring for why 4w's default sr_target_min_pct
     # would otherwise block this fixture from producing any scenario at all.
-    monkeypatch.setitem(engine.HORIZONS["4w"], "sr_target_min_pct", 1.0)
+    monkeypatch.setitem(scan_run.HORIZONS["4w"], "sr_target_min_pct", 1.0)
 
     monkeypatch.setattr(scan_run, "load_watchlist", lambda: ["T0", "T1", "T2"])
     monkeypatch.setattr(
@@ -582,7 +583,7 @@ def _drive_alert_loop(monkeypatch, tmp_path, intraday_fn, alert_data_fn=None):
     # without tripping the new target-selection rejection.
     monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 0.01)
     monkeypatch.setattr(config, "MIN_ALERT_CONFIDENCE_LEVEL", 1)
-    monkeypatch.setitem(engine.HORIZONS["4w"], "sr_target_min_pct", 1.0)
+    monkeypatch.setitem(scan_run.HORIZONS["4w"], "sr_target_min_pct", 1.0)
 
     monkeypatch.setattr(scan_run, "load_watchlist", lambda: ["TEST"])
     monkeypatch.setattr(fetch, "_load_cached_daily", lambda ticker: df.copy())
@@ -594,14 +595,14 @@ def _drive_alert_loop(monkeypatch, tmp_path, intraday_fn, alert_data_fn=None):
     monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
 
     # Network / filesystem-bound parts of the alert loop, stubbed.
-    monkeypatch.setattr(engine, "earnings_within_window", lambda t, d: None)
+    monkeypatch.setattr(scan_run, "earnings_within_window", lambda t, d: None)
     monkeypatch.setattr(scan_run, "get_market_events", lambda d: [])
-    monkeypatch.setattr(engine, "generate_trade_chart",
+    monkeypatch.setattr(scan_run, "generate_trade_chart",
                         lambda *a, **k: str(tmp_path / "chart.png"))
     monkeypatch.setattr(scan_run, "notify_secondary", lambda *a, **k: None)
 
     # The annotation under test.
-    monkeypatch.setattr(engine.rs_factors, "intraday_confirms", intraday_fn)
+    monkeypatch.setattr(scan_run.rs_factors, "intraday_confirms", intraday_fn)
 
     seen = []
 
