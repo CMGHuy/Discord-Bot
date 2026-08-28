@@ -2,7 +2,7 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-from swingbot.commands import scanning as scanning_mod
+from swingbot.commands.scanning import commands as commands_mod
 
 
 def _trade(number: int) -> dict:
@@ -26,10 +26,10 @@ def test_historical_check_batches_and_caps_large_result_sets(monkeypatch):
     ctx = MagicMock()
     ctx.send = AsyncMock()
     monkeypatch.setattr(
-        scanning_mod.trade_log, "get_trades", lambda **_kwargs: [_trade(i) for i in range(300)]
+        commands_mod.trade_log, "get_trades", lambda **_kwargs: [_trade(i) for i in range(300)]
     )
 
-    asyncio.run(scanning_mod._check_historical(ctx, "all", "2026-08-01", "2026-08-31"))
+    asyncio.run(commands_mod._check_historical(ctx, "all", "2026-08-01", "2026-08-31"))
 
     assert ctx.send.await_count <= 10
     messages = [call.args[0] for call in ctx.send.await_args_list]

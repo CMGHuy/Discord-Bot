@@ -3,6 +3,7 @@ import datetime as dt
 
 from swingbot import config
 from swingbot.commands import scanning as scanning_mod
+from swingbot.commands.scanning import loops as loops_mod
 from swingbot.core.infra.jsonio import read_json
 
 
@@ -25,12 +26,12 @@ def test_daily_recap_does_not_refire_after_simulated_restart(monkeypatch, tmp_pa
 
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
     monkeypatch.setattr(config, "SESSION_END_HOUR", 23)
-    monkeypatch.setattr(scanning_mod.dt, "datetime", FixedDateTime)
-    monkeypatch.setattr(scanning_mod, "_post_retrospective", post)
-    monkeypatch.setattr(scanning_mod, "_recap_fired_date", None)
+    monkeypatch.setattr(loops_mod.dt, "datetime", FixedDateTime)
+    monkeypatch.setattr(loops_mod.recap, "_post_retrospective", post)
+    monkeypatch.setattr(loops_mod, "_recap_fired_date", None)
 
     asyncio.run(scanning_mod.daily_recap.coro())
-    monkeypatch.setattr(scanning_mod, "_recap_fired_date", None)
+    monkeypatch.setattr(loops_mod, "_recap_fired_date", None)
     asyncio.run(scanning_mod.daily_recap.coro())
 
     assert calls == [True]

@@ -23,6 +23,7 @@ import pytest
 from swingbot import config
 from swingbot.commands import scanning as scanning_mod
 from swingbot.commands.scanning import _send_alerts
+from swingbot.commands.scanning import loops as loops_mod
 from swingbot.commands.scanning import runstate
 from swingbot.commands.scanning import presence
 from swingbot.core.infra.silent_channel import SilentChannel, silence
@@ -136,7 +137,7 @@ def test_the_scan_tick_wraps_the_channel_it_resolves(monkeypatch):
     so the wrap has to happen there, not at each of those call sites."""
     raw = FakeChannel("alerts")
     monkeypatch.setattr(config, "DISCORD_CHANNEL_TRADES_ID", "123", raising=False)
-    monkeypatch.setattr(scanning_mod, "bot",
+    monkeypatch.setattr(loops_mod, "bot",
                         types.SimpleNamespace(get_channel=lambda _id: raw), raising=False)
     monkeypatch.setattr(runstate, "is_scan_paused", lambda: True, raising=False)
 
@@ -149,6 +150,6 @@ def test_the_scan_tick_wraps_the_channel_it_resolves(monkeypatch):
     monkeypatch.setattr(presence, "_refresh_presence", lambda: asyncio.sleep(0), raising=False)
     monkeypatch.setattr(runstate, "_write_heartbeat", lambda: None, raising=False)
 
-    asyncio.run(scanning_mod._session_scan_tick())
+    asyncio.run(loops_mod._session_scan_tick())
 
     assert isinstance(captured["channel"], SilentChannel)

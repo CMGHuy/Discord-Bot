@@ -3,13 +3,14 @@ from unittest.mock import MagicMock
 
 from swingbot import config
 from swingbot.commands import scanning as scanning_mod
+from swingbot.commands.scanning import loops as loops_mod
 from swingbot.commands.scanning import recap
-from swingbot.core.scanning import engine
+from swingbot.core.scanning import scan_run
 
 
 def test_hard_filter_snapshot_survives_later_config_change(monkeypatch):
     monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 2.0)
-    filters = engine._hard_filters_snapshot()
+    filters = scan_run._hard_filters_snapshot()
     monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 9.0)
 
     assert filters["min_risk_reward_ratio"] == 2.0
@@ -34,6 +35,6 @@ def test_enabling_market_refresh_starts_the_loop(monkeypatch):
     monkeypatch.setattr(scanning_mod.market_data_refresh, "is_running", lambda: False)
     monkeypatch.setattr(scanning_mod.market_data_refresh, "start", start)
 
-    scanning_mod._apply_market_data_refresh_config({"MARKET_DATA_AUTO_REFRESH": (False, True)})
+    loops_mod._apply_market_data_refresh_config({"MARKET_DATA_AUTO_REFRESH": (False, True)})
 
     start.assert_called_once_with()
