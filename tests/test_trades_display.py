@@ -1,4 +1,47 @@
-from swingbot.commands.trades import format_trade_row
+import ast
+import pathlib
+
+from swingbot.commands.trades import _build_trade_detail_embed, format_trade_row
+from swingbot.core.presentation import tokens as tk
+
+
+MODULE = pathlib.Path("swingbot/commands/trades.py")
+
+
+def _winning_trade():
+    return {
+        "id": "trade-win", "ticker": "PENNY", "direction": "bullish",
+        "status": "win", "entry": 0.12345, "stop_loss": 0.1,
+        "take_profit": 0.2, "target2": None, "opened_at": "2026-08-28T12:00:00+00:00",
+        "closed_at": "2026-08-28T14:00:00+00:00", "exit_price": 0.2,
+        "confidence_label": "High", "confidence_level": 4,
+        "strategy": "RSI Pullback", "horizon_key": "2w",
+        "risk_reward_ratio": 2.5, "realized_pnl_amount": 15.0,
+    }
+
+
+def test_no_direct_colour_remains():
+    tree = ast.parse(MODULE.read_text(encoding="utf-8"))
+    hits = [node.lineno for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute) and node.attr in ("Color", "Colour")]
+    assert not hits, f"discord.Color still set at lines {hits}"
+
+
+def test_a_winning_trade_embed_takes_the_ramps_green():
+    embed = _build_trade_detail_embed(_winning_trade())
+    assert embed.color.value == tk.ACCENT_RAMP[5]
+
+
+def test_trade_detail_embed_carries_shared_chrome():
+    embed = _build_trade_detail_embed(_winning_trade())
+    assert embed.footer.text and tk.DISCLAIMER in embed.footer.text
+    assert embed.timestamp is not None
+
+
+def test_trade_detail_prices_render_through_the_kit():
+    embed = _build_trade_detail_embed(_winning_trade())
+    entry = next(field.value for field in embed.fields if field.name == "Entry")
+    assert tk.fmt_price(0.12345) in entry
 
 
 def _legs_trade(status="open", legs=None):

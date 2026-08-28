@@ -7,6 +7,7 @@ import discord
 
 from swingbot import config
 from swingbot.core.planning import account as account_module
+from swingbot.core import presentation as ui
 from swingbot.core.scanning import engine as scan_engine
 from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.bot_core import bot
@@ -217,23 +218,27 @@ def _build_trade_detail_embed(match: dict) -> discord.Embed:
     method = _primary_source_label(match)
 
     if is_open:
-        icon, color = "🔵", discord.Color.blue()
+        icon, accent = "🔵", ui.accent_for_outcome("scratch")
         status_word = "OPEN"
     elif match["status"] == "win":
-        icon, color = "✅", discord.Color.green()
+        icon, accent = "✅", ui.accent_for_outcome("win")
         status_word = "WIN ✅"
     elif match["status"] == "loss":
-        icon, color = "❌", discord.Color.red()
+        icon, accent = "❌", ui.accent_for_outcome("loss")
         status_word = "LOSS ❌"
     else:
-        icon, color = "🔒", discord.Color.from_rgb(90, 98, 117)
+        icon, accent = "🔒", ui.accent_for_outcome("scratch")
         status_word = "MANUALLY CLOSED"
 
-    embed = discord.Embed(title=f"{icon} Trade {match['id']} — {match['ticker']}", color=color)
+    embed = discord.Embed(title=f"{icon} Trade {match['id']} — {match['ticker']}")
 
     embed.add_field(name="Status", value=status_word, inline=True)
     embed.add_field(name="Direction", value=direction_word, inline=True)
-    embed.add_field(name="Confidence", value=f"{match['confidence_label']} (Lv{match['confidence_level']})", inline=True)
+    embed.add_field(
+        name="Confidence",
+        value=ui.confidence_label(match.get("confidence_level"), None),
+        inline=True,
+    )
 
     embed.add_field(name="Strategy", value=method, inline=True)
     embed.add_field(name="Horizon", value=match["horizon_key"], inline=True)
@@ -243,13 +248,21 @@ def _build_trade_detail_embed(match: dict) -> discord.Embed:
         embed.add_field(name="​", value="​", inline=True)   # keeps the 3-column grid even
 
     reward_pct = abs(match["take_profit"] - match["entry"]) / match["entry"] * 100 if match["entry"] else 0.0
-    embed.add_field(name="Entry", value=f"{cur}{match['entry']:.2f}", inline=True)
-    embed.add_field(name="Stop-loss", value=f"{cur}{match['stop_loss']:.2f}", inline=True)
-    embed.add_field(name="Target 1", value=f"{cur}{match['take_profit']:.2f} (+{reward_pct:.1f}%)", inline=True)
+    embed.add_field(name="Entry", value=ui.fmt_price(match["entry"], cur), inline=True)
+    embed.add_field(name="Stop-loss", value=ui.fmt_price(match["stop_loss"], cur), inline=True)
+    embed.add_field(
+        name="Target 1",
+        value=f"{ui.fmt_price(match['take_profit'], cur)} ({ui.fmt_pct(reward_pct)})",
+        inline=True,
+    )
 
     if match.get("target2"):
         t2_pct = abs(match["target2"] - match["entry"]) / match["entry"] * 100 if match["entry"] else 0.0
-        embed.add_field(name="Target 2 (stretch)", value=f"{cur}{match['target2']:.2f} (+{t2_pct:.1f}%)", inline=True)
+        embed.add_field(
+            name="Target 2 (stretch)",
+            value=f"{ui.fmt_price(match['target2'], cur)} ({ui.fmt_pct(t2_pct)})",
+            inline=True,
+        )
 
     embed.add_field(name="Opened", value=match["opened_at"][:16].replace("T", " ") + " UTC", inline=True)
 
@@ -260,7 +273,11 @@ def _build_trade_detail_embed(match: dict) -> discord.Embed:
             value=(match.get("closed_at") or "n/a")[:16].replace("T", " ") + " UTC",
             inline=True,
         )
-        embed.add_field(name="Exit price", value=f"{cur}{exit_price:.2f}" if exit_price else "n/a", inline=True)
+        embed.add_field(
+            name="Exit price",
+            value=ui.fmt_price(exit_price, cur) if exit_price else "n/a",
+            inline=True,
+        )
 
         # Realized P&L% + $/€ gain-loss -- the actual currency amount from
         # the position size snapshotted when this trade was opened (see
@@ -269,7 +286,7 @@ def _build_trade_detail_embed(match: dict) -> discord.Embed:
         # snapshots existed.
         pnl_pct = closed_pnl_pct(match)
         if pnl_pct is not None:
-            embed.add_field(name="Realized P&L", value=f"{pnl_pct:+.2f}%", inline=True)
+            embed.add_field(name="Realized P&L", value=ui.fmt_pct(pnl_pct), inline=True)
         else:
             embed.add_field(name="Realized P&L", value="n/a", inline=True)
 
@@ -279,10 +296,11 @@ def _build_trade_detail_embed(match: dict) -> discord.Embed:
     if match.get("close_reason"):
         embed.add_field(name="Close reason", value=match["close_reason"], inline=False)
 
-    footer = f"Trade ID: {match['id']}"
+    trade_id = match["id"]
     if match.get("plan_id") or match.get("legs"):
-        footer += " · Plan Engine v2"
-    embed.set_footer(text=footer)
+        trade_id += " · Plan Engine v2"
+    embed.add_field(name="Trade ID", value=trade_id, inline=False)
+    ui.apply_chrome(embed, accent=accent, plan_id=match.get("plan_id"))
     return embed
 
 
@@ -469,12 +487,8 @@ async def summary_cmd(ctx):
 
     acct = account_module.get_daily_summary()
 
-    color = (
-        discord.Color.green() if (net_amount or 0) > 0
-        else discord.Color.red() if (net_amount or 0) < 0
-        else discord.Color.from_rgb(90, 98, 117)
-    )
-    embed = discord.Embed(title=f"📋 Today's Summary — {today.isoformat()} (Berlin)", color=color)
+    outcome = "win" if (net_amount or 0) > 0 else "loss" if (net_amount or 0) < 0 else "scratch"
+    embed = discord.Embed(title=f"📋 Today's Summary — {today.isoformat()} (Berlin)")
 
     embed.add_field(name="🆕 Opened today", value=str(len(opened_today)), inline=True)
     embed.add_field(name="🏁 Closed today", value=str(len(closed_today)), inline=True)
@@ -489,16 +503,16 @@ async def summary_cmd(ctx):
 
     pnl_emoji = "🟢" if (avg_pnl_pct or 0) > 0 else "🔴" if (avg_pnl_pct or 0) < 0 else "⚪"
     net_emoji = "🟢" if (net_amount or 0) > 0 else "🔴" if (net_amount or 0) < 0 else "⚪"
-    embed.add_field(name="📊 Avg realized P&L", value=f"{pnl_emoji} {avg_pnl_pct:+.2f}%" if avg_pnl_pct is not None else "n/a", inline=True)
+    embed.add_field(name="📊 Avg realized P&L", value=f"{pnl_emoji} {ui.fmt_pct(avg_pnl_pct)}" if avg_pnl_pct is not None else "n/a", inline=True)
     embed.add_field(name="💰 Net gain/loss", value=f"{net_emoji} {net_amount:+.2f}" if net_amount is not None else "n/a", inline=True)
     embed.add_field(name="​", value="​", inline=True)
 
-    embed.add_field(name="🏦 Account balance", value=f"{acct['balance']:.2f}" if acct["balance"] is not None else "n/a", inline=True)
+    embed.add_field(name="🏦 Account balance", value=ui.fmt_price(acct["balance"]) if acct["balance"] is not None else "n/a", inline=True)
     bal_change = acct.get("pct_change_today")
     bal_emoji = "📈" if (bal_change or 0) > 0 else "📉" if (bal_change or 0) < 0 else "➖"
     embed.add_field(
         name="Balance change today",
-        value=f"{bal_emoji} {bal_change:+.2f}%" if bal_change is not None else "no change yet today",
+        value=f"{bal_emoji} {ui.fmt_pct(bal_change)}" if bal_change is not None else "no change yet today",
         inline=True,
     )
     embed.add_field(name="​", value="​", inline=True)
@@ -509,7 +523,7 @@ async def summary_cmd(ctx):
             icon = "✅" if t["status"] == "win" else ("❌" if t["status"] == "loss" else "🔒")
             pct = closed_pnl_pct(t)
             amt = t.get("realized_pnl_amount")
-            pct_str = f"{pct:+.2f}%" if pct is not None else "n/a"
+            pct_str = ui.fmt_pct(pct) if pct is not None else "n/a"
             amt_str = f"{amt:+.2f}" if amt is not None else "n/a"
             lines.append(f"{icon} `{t['id']}` {t['ticker']:6s} {pct_str:>8s}  ({amt_str})")
         text = "\n".join(lines)
@@ -520,7 +534,8 @@ async def summary_cmd(ctx):
     if opened_today:
         lines = [
             f"{'🟩' if t['direction'] == 'bullish' else '🟥'} `{t['id']}` {t['ticker']:6s} "
-            f"{'▲ LONG ' if t['direction'] == 'bullish' else '▼ SHORT'} {'⭐'*t.get('confidence_level', 0)}Lv{t['confidence_level']}"
+            f"{ui.direction_glyph(t['direction'])} {'LONG' if t['direction'] == 'bullish' else 'SHORT'} "
+            f"{ui.confidence_label(t.get('confidence_level'), None)}"
             for t in opened_today
         ]
         text = "\n".join(lines)
@@ -531,4 +546,5 @@ async def summary_cmd(ctx):
     if not opened_today and not closed_today:
         embed.add_field(name="​", value="No trades opened or closed yet today.", inline=False)
 
+    ui.apply_chrome(embed, accent=ui.accent_for_outcome(outcome))
     await ctx.send(embed=embed)
