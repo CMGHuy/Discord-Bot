@@ -244,11 +244,12 @@ async def notify_closed_trades(bot, newly_closed: list):
 def build_near_close_embed(warning: dict) -> discord.Embed:
     t = warning["trade"]
     is_sl = warning["near_which"] == "stop-loss"
-    color = discord.Color.red() if is_sl else discord.Color.green()
     approaching_word = "STOP-LOSS" if is_sl else "TAKE-PROFIT"
     cur = get_currency_symbol(t["ticker"], config.CURRENCY_SYMBOL)
     title = f"⚠️ APPROACHING {approaching_word} — {t['ticker']}"
-    embed = discord.Embed(title=title, color=color)
+    embed = discord.Embed(title=title)
+    ui.apply_chrome(embed, accent=ui.accent_for_outcome("loss" if is_sl else "win"),
+                    plan_id=t.get("plan_id"))
     embed.add_field(
         name="Approaching",
         value=f"**{approaching_word}** ({warning['sl_dist_pct' if is_sl else 'tp_dist_pct']:.1f}% away)",
