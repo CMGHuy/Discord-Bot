@@ -122,6 +122,7 @@ trade_log = TradeLog()
 # trades.json/state.json from different threads simultaneously.
 _scan_lock = asyncio.Lock()
 
+@dataclass
 class ScanItem:
     result: object
     plan: object
