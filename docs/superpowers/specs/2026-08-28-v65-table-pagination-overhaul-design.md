@@ -55,9 +55,10 @@ projections of `pagination()`, so neither can disagree with the other.
 
 Two call sites render `sb-pagination` directly rather than through the table —
 `analytics.ts:876` (strategy proposals, a card list) and `gallery.ts:368` (a
-component demo). Those are out of `DataTable`'s reach and keep the single
-bottom pager they have. The Gallery one gains a top pager only so the gallery
-demonstrates the real component.
+component demo). Neither is a row-list table, both are out of `DataTable`'s
+reach, and both keep the single bottom pager they have. The Gallery's *table*
+demo (`gallery.ts:362`) goes through `DataTable` and so picks the top pager up
+for free.
 
 ### D2 — The three unpaginated tables get `createClientPage`
 
@@ -286,8 +287,8 @@ the component dirty on tick.
 - **`opened_at` null or unparseable.** A `PENDING` row has no `opened_at`; the
   live path returns `ABSENT` (em dash), never `0m`. `format.ts`'s standing rule
   — a missing value is never rendered as zero — governs.
-- **Clock in tests.** A real 30s interval must never run under Karma; the
-  `CLOCK` token is overridden with a fixed `signal()` in the shared test setup.
+- **Clock in tests.** A real 30s interval must never run under Vitest; the
+  `CLOCK` token is overridden with a fixed `signal()` per suite.
 - **`perPage: All` with filler.** Filler off (D6); footer still renders.
 - **Empty table.** Empty state renders, filler does not, footer does not.
 
