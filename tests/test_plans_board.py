@@ -1,12 +1,41 @@
 import asyncio
+import ast
 import datetime as dt
+import pathlib
 import types
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from swingbot.commands import plans as plans_module
 from swingbot.commands.plans import render_board, _parse_board_args
+from swingbot.core.presentation import tokens as tk
 
 TODAY = dt.date(2026, 7, 11)
+
+
+def test_no_direct_colour_remains_in_either_module():
+    for path in ("swingbot/commands/plans.py", "swingbot/commands/history.py"):
+        tree = ast.parse(pathlib.Path(path).read_text(encoding="utf-8"))
+        hits = [node.lineno for node in ast.walk(tree)
+                if isinstance(node, ast.Attribute) and node.attr in ("Color", "Colour")]
+        assert not hits, f"{path}: discord.Color at {hits}"
+
+
+def test_the_board_accents_on_confidence_and_carries_chrome():
+    _, embed = render_board(
+        [_plan("AAA", "ACTIVE", confidence_level=5)],
+        status="All", level="All", badge="All", page=0, today=TODAY,
+    )
+    assert embed.color.value == tk.ACCENT_RAMP[5]
+    assert tk.DISCLAIMER in embed.footer.text
+    assert embed.timestamp is not None
+
+
+def test_rows_use_the_shared_direction_glyph():
+    content, _ = render_board(
+        [_plan("AAA", "ACTIVE", direction="bullish")],
+        status="All", level="All", badge="All", page=0, today=TODAY,
+    )
+    assert "▲" in content
 
 
 def _plan(ticker, status, badge="VALIDATED", confidence_level=5, quality_score=80, plan_id=None,
@@ -65,7 +94,7 @@ def test_partial_row_shows_the_banked_leg_not_the_stale_original_levels(monkeypa
                                              "mode": "risk_pct"})
     monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
     line = _line_for(_partial(tp2=120.0))
-    assert "banked +2.00R/+10.0%/+$500.00 on 50%" in line
+    assert "banked 2.0R/+10.0%/+$500.00 on 50%" in line
     assert "runner entry 110.00 SL 104.00 TP2 120.00" in line
     # The pre-TP1 tail is gone, not merely appended to.
     assert "entry 100.00" not in line and "SL 95.00" not in line
@@ -88,7 +117,7 @@ def test_partial_row_omits_the_dollar_figure_when_unsized(monkeypatch):
                         lambda entry, stop: None)
     monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
     line = _line_for(_partial())
-    assert "banked +2.00R/+10.0% on 50%" in line
+    assert "banked 2.0R/+10.0% on 50%" in line
     assert "$" not in line
 
 

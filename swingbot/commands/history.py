@@ -16,6 +16,7 @@ import asyncio
 from collections import defaultdict
 
 from swingbot.bot_core import bot
+from swingbot.core import presentation as ui
 from swingbot.core.scanning import engine as scan_engine
 from swingbot.core.marketdata.data import get_daily_data, get_currency_symbol
 from swingbot import config
@@ -34,6 +35,10 @@ USAGE = (
     "\nIf no recorded trade plans are found in the window, the bot runs a "
     "historical backtest and shows every setup that would have triggered."
 )
+
+
+def _fmt_plan_price(value, currency: str = "") -> str:
+    return ui.fmt_price(value, currency) if isinstance(value, (int, float)) else str(value)
 
 
 def _parse_plans_args(args: tuple):
@@ -106,7 +111,7 @@ def _format_logged_plan(t: dict) -> str:
     return (
         f"{direction_emoji} {status_emoji} **{t.get('ticker','?')}** `{horiz}` — "
         f"Lv{lv} · {strat}\n"
-        f"  Entry **{entry}** · Stop {stop} · Target {target}\n"
+        f"  Entry **{_fmt_plan_price(entry)}** · Stop {_fmt_plan_price(stop)} · Target {_fmt_plan_price(target)}\n"
         f"  Opened: {opened}  `ID: {tid}`  — `!trade {tid}` for full chart"
     )
 
@@ -239,7 +244,7 @@ def _format_generated_plan(strat: str, horiz: str, t, cur: str) -> str:
     """Format a backtest-generated setup as a trade plan summary."""
     direction_emoji = "📈" if t.direction == "bullish" else "📉"
     outcome_emoji   = {"win": "✅", "loss": "❌", "timeout": "⏳"}.get(t.outcome, "❓")
-    r_str = f"{t.r_multiple:+.2f}R" if t.r_multiple is not None else "—"
+    r_str = ui.fmt_r(t.r_multiple)
 
     if t.outcome == "timeout":
         exit_str = "→ ⏳ timed out (no exit within max hold)"
@@ -251,8 +256,8 @@ def _format_generated_plan(strat: str, horiz: str, t, cur: str) -> str:
     hold_str = f" · held {t.holding_days}d" if t.holding_days else ""
     return (
         f"{direction_emoji} {outcome_emoji} `{horiz}` **{strat}** — {t.entry_date} {exit_str}{hold_str}\n"
-        f"  Entry **{cur}{t.entry:.2f}** · Stop {cur}{t.stop_loss:.2f} · "
-        f"Target {cur}{t.take_profit:.2f}"
+        f"  Entry **{ui.fmt_price(t.entry, cur)}** · Stop {ui.fmt_price(t.stop_loss, cur)} · "
+        f"Target {ui.fmt_price(t.take_profit, cur)}"
     )
 
 

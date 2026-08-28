@@ -39,21 +39,21 @@ def _partial_tail(plan) -> str:
     if leg:
         pct, amount = banked_leg_pct_and_amount(plan, leg["exit_price"],
                                                 leg["fraction"])
-        banked = f"banked {leg['r']:+.2f}R"
+        banked = f"banked {ui.fmt_r(leg['r'])}"
         if pct is not None:
-            banked += f"/{pct:+.1f}%"
+            banked += f"/{ui.fmt_pct(pct)}"
         if amount is not None:
             banked += f"/{signed_money(amount, config.CURRENCY_SYMBOL)}"
         bits.append(f"{banked} on {leg['fraction']:.0%}")
 
     runner_entry = leg["exit_price"] if leg else plan.tp1
-    runner = f"runner entry {runner_entry:.2f}"
+    runner = f"runner entry {ui.fmt_price(runner_entry)}"
     if plan.working_stop is not None:
-        runner += f" SL {plan.working_stop:.2f}"
+        runner += f" SL {ui.fmt_price(plan.working_stop)}"
     if plan.tp2 is not None:
-        runner += f" TP2 {plan.tp2:.2f}"
+        runner += f" TP2 {ui.fmt_price(plan.tp2)}"
     else:
-        runner += f" TP1 (no TP2) {plan.tp1:.2f}"
+        runner += f" TP1 (no TP2) {ui.fmt_price(plan.tp1)}"
     bits.append(runner)
     return " · ".join(bits)
 
@@ -68,9 +68,9 @@ def _plan_line(plan) -> str:
     if plan.status == "PARTIAL":
         tail = _partial_tail(plan)
     else:
-        tp2_bit = f" TP2 {plan.tp2:.2f}" if plan.tp2 is not None else ""
-        tail = (f"entry {plan.trigger_price:.2f} SL {plan.stop_loss:.2f} "
-                f"TP1 {plan.tp1:.2f}{tp2_bit}")
+        tp2_bit = f" TP2 {ui.fmt_price(plan.tp2)}" if plan.tp2 is not None else ""
+        tail = (f"entry {ui.fmt_price(plan.trigger_price)} SL {ui.fmt_price(plan.stop_loss)} "
+                f"TP1 {ui.fmt_price(plan.tp1)}{tp2_bit}")
     return (
         f"{star}{ui.direction_glyph(plan.direction)} {plan.ticker} {direction_word} · "
         f"{plan.status} · follow {score:.0f} · {tail}"
@@ -123,10 +123,9 @@ def render_board(plans: list, *, status: str, level: str, badge: str, page: int,
         f"📋 **Live plans** — {len(ranked)} match (status={status}, level={level}, badge={badge}), "
         f"page {page_num + 1}/{max_page + 1}\n\n{body}"
     )
-    embed = discord.Embed(
-        title="📋 Live Plans Board", description=content[:4000],
-        color=discord.Color.blurple(),
-    )
+    embed = discord.Embed(title="📋 Live Plans Board", description=content[:4000])
+    accent_level = page_items[0].confidence_level if page_items else 3
+    ui.apply_chrome(embed, accent=ui.accent_for_level(accent_level))
     return content, embed
 
 
