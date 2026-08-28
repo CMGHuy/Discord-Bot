@@ -8,7 +8,7 @@ import swingbot.config as config
 from swingbot.core.planning import account as _account
 from swingbot.core.edge import throttle
 from swingbot.core.tracking.performance import TradeLog
-from swingbot.core.scanning import analyze, dedup, engine, fetch, runstate
+from swingbot.core.scanning import analyze, dedup, engine, fetch, runstate, scan_run
 from swingbot.core.scanning.engine import ScanProgress
 from tests.helpers import make_ohlcv
 
@@ -252,12 +252,12 @@ def test_sync_run_scan_gates_attach_plan_v2_on_all_ok(monkeypatch, tmp_path, stu
     # constant used to *build* a scenario -- unrelated to the all_ok gate.
     monkeypatch.setitem(engine.HORIZONS["4w"], "sr_target_min_pct", 1.0)
 
-    monkeypatch.setattr(engine, "load_watchlist", lambda: ["TEST"])
+    monkeypatch.setattr(scan_run, "load_watchlist", lambda: ["TEST"])
     monkeypatch.setattr(
         fetch, "get_daily_data",
         lambda ticker, period=None: df.copy() if ticker == "TEST" else None,
     )
-    monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
+    monkeypatch.setattr(scan_run, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
     monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
 
     captured = {}
@@ -331,12 +331,12 @@ def _setup_minimal_scan(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 0.01)
     monkeypatch.setattr(config, "MIN_ALERT_CONFIDENCE_LEVEL", 1)
     monkeypatch.setitem(engine.HORIZONS["4w"], "sr_target_min_pct", 1.0)
-    monkeypatch.setattr(engine, "load_watchlist", lambda: ["TEST"])
+    monkeypatch.setattr(scan_run, "load_watchlist", lambda: ["TEST"])
     monkeypatch.setattr(
         fetch, "get_daily_data",
         lambda ticker, period=None: df.copy() if ticker == "TEST" else None,
     )
-    monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
+    monkeypatch.setattr(scan_run, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
     monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
 
 
@@ -407,7 +407,7 @@ def test_illiquid_ticker_skips_new_signals_but_still_monitors_open_trades(monkey
     df = df.assign(Volume=10_000.0)
 
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
-    monkeypatch.setattr(engine, "load_watchlist", lambda: ["TEST"])
+    monkeypatch.setattr(scan_run, "load_watchlist", lambda: ["TEST"])
     monkeypatch.setattr(
         fetch, "get_daily_data",
         lambda ticker, period=None: df.copy() if ticker == "TEST" else None,
@@ -499,7 +499,7 @@ def test_sync_run_scan_parallel_dispatch_matches_serial(monkeypatch, tmp_path, s
     # would otherwise block this fixture from producing any scenario at all.
     monkeypatch.setitem(engine.HORIZONS["4w"], "sr_target_min_pct", 1.0)
 
-    monkeypatch.setattr(engine, "load_watchlist", lambda: ["T0", "T1", "T2"])
+    monkeypatch.setattr(scan_run, "load_watchlist", lambda: ["T0", "T1", "T2"])
     monkeypatch.setattr(
         fetch, "get_daily_data",
         lambda ticker, period=None: dfs[ticker].copy() if ticker in dfs else None,
@@ -511,7 +511,7 @@ def test_sync_run_scan_parallel_dispatch_matches_serial(monkeypatch, tmp_path, s
         # debounce state nor the progress/funnel state from one run may
         # leak into the other.
         monkeypatch.setattr(config, "SCAN_WORKERS", workers)
-        monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / f"trades_{workers}.json")))
+        monkeypatch.setattr(scan_run, "trade_log", TradeLog(path=str(tmp_path / f"trades_{workers}.json")))
         progress = ScanProgress()
 
         captured = {}
@@ -584,21 +584,21 @@ def _drive_alert_loop(monkeypatch, tmp_path, intraday_fn, alert_data_fn=None):
     monkeypatch.setattr(config, "MIN_ALERT_CONFIDENCE_LEVEL", 1)
     monkeypatch.setitem(engine.HORIZONS["4w"], "sr_target_min_pct", 1.0)
 
-    monkeypatch.setattr(engine, "load_watchlist", lambda: ["TEST"])
+    monkeypatch.setattr(scan_run, "load_watchlist", lambda: ["TEST"])
     monkeypatch.setattr(fetch, "_load_cached_daily", lambda ticker: df.copy())
     monkeypatch.setattr(
         fetch, "get_daily_data",
         alert_data_fn or (lambda ticker, period=None: df.copy() if ticker == "TEST" else None),
     )
-    monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
+    monkeypatch.setattr(scan_run, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
     monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
 
     # Network / filesystem-bound parts of the alert loop, stubbed.
     monkeypatch.setattr(engine, "earnings_within_window", lambda t, d: None)
-    monkeypatch.setattr(engine, "get_market_events", lambda d: [])
+    monkeypatch.setattr(scan_run, "get_market_events", lambda d: [])
     monkeypatch.setattr(engine, "generate_trade_chart",
                         lambda *a, **k: str(tmp_path / "chart.png"))
-    monkeypatch.setattr(engine, "notify_secondary", lambda *a, **k: None)
+    monkeypatch.setattr(scan_run, "notify_secondary", lambda *a, **k: None)
 
     # The annotation under test.
     monkeypatch.setattr(engine.rs_factors, "intraday_confirms", intraday_fn)
@@ -609,7 +609,7 @@ def _drive_alert_loop(monkeypatch, tmp_path, intraday_fn, alert_data_fn=None):
         seen.append(item)
         return SimpleNamespace(fields=[])
 
-    monkeypatch.setattr(engine, "build_embed", _capture_embed)
+    monkeypatch.setattr(scan_run, "build_embed", _capture_embed)
 
     engine._sync_run_scan("4w", require_confirmation=False, progress=None, min_confluence=0)
     assert seen, "fixture must produce at least one alert to exercise the loop"
@@ -680,14 +680,14 @@ def test_mass_fetch_failure_raises_data_fail_frac_and_engages_kill_switch(monkey
     good_df = _structured_df()
     tickers = ["OK", "BAD1", "BAD2", "BAD3", "BAD4"]
 
-    monkeypatch.setattr(engine, "load_watchlist", lambda: tickers)
+    monkeypatch.setattr(scan_run, "load_watchlist", lambda: tickers)
     monkeypatch.setattr(
         fetch, "get_daily_data",
         lambda ticker, period=None: good_df.copy() if ticker == "OK" else None,
     )
-    monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
+    monkeypatch.setattr(scan_run, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
     monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
-    monkeypatch.setattr(engine.account_module, "get_balance_history_points", lambda: [])
+    monkeypatch.setattr(scan_run.account_module, "get_balance_history_points", lambda: [])
     monkeypatch.setattr(dedup, "dedup_scan_items", lambda items: [])
 
     engine._sync_run_scan("4w", require_confirmation=False, progress=None, min_confluence=0)

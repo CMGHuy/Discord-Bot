@@ -88,4 +88,5 @@ def test_unknown_plan_event_transition_does_not_escape_monitor(monkeypatch):
 
     monkeypatch.setattr("swingbot.core.planning.plan_store.PlanStore", lambda: type("Store", (), {"get": lambda _, __: Plan()})())
     from swingbot.core.scanning.embeds import notify_plan_events
-    _run(notify_plan_events(scanning_mod.bot, [PlanEvent("p1", "pyramid_add", {})]))
+    bot = type("Bot", (), {"get_channel": lambda self, _channel_id: None})()
+    _run(notify_plan_events(bot, [PlanEvent("p1", "pyramid_add", {})]))
