@@ -24,7 +24,10 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   (JSON, locks and delivery channels — `jsonio.py`, `state.py`,
   `notifier.py`, `silent_channel.py`), plus the four that predate the
   restructure: `core/edge/`, `core/scanning/`, `core/analytics/`,
-  `core/charts/`.
+  `core/charts/`, and `core/presentation/`. `presentation/` owns every
+  Discord colour, glyph, number format and embed part: pure `tokens.py`,
+  phone-safe `ansi.py`, then whole embed parts in `components.py`. Nothing
+  outside it may touch `discord.Color`; its AST guard enforces that boundary.
 - **`swingbot/core/edge/`** (edge-engine-v4, current active work area) is
   growth/risk math, mostly pure functions: `sizing.py` (fractional-Kelly, vol
   targeting), `heat.py` (portfolio heat cap), `correlation.py` (cluster

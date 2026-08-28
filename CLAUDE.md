@@ -99,7 +99,9 @@ loosen a gate" caveat: `docs/claude/edge-priorities.md`.
   the one topic file it points at: `docs/strategy/strategy.md`,
   `docs/setup.md`, `docs/commands.md`, `docs/features/features.md`. Same for
   `.superpowers/sdd/progress.md`: `tail` it, never `cat` it.
-- **`swingbot/core/` is ten packages, no flat modules.** See
+- **`swingbot/core/` is eleven packages, no flat modules** — `marketdata/`,
+  `market/`, `planning/`, `backtesting/`, `tracking/`, `infra/`, `edge/`,
+  `scanning/`, `analytics/`, `charts/`, `presentation/`. See
   `docs/claude/architecture.md` for which modules live where.
 - **Don't re-run the full suite to check a local change** — use
   `python scripts/dev/testrun.py file tests/test_foo.py` (~7s) or `... fast`

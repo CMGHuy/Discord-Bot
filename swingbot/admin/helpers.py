@@ -22,7 +22,6 @@ from swingbot import config
 # import `_primary_strategy_label` from here, so this alias is used even
 # though nothing in this file calls it.
 from swingbot.core.tracking.performance import primary_strategy_label as _primary_strategy_label
-from swingbot.core.scanning.engine import CONFIDENCE_COLORS
 
 try:
     import docker as docker_sdk
@@ -343,15 +342,6 @@ def _hot_reload_bot_container():
         return True, "Settings saved and hot-reloaded -- no restart needed."
     except Exception as e:
         return False, f"Settings saved, but the hot-reload signal failed: {e}. Restart the bot manually with `docker compose restart bot` to apply."
-
-
-def _confidence_hex(level: int) -> str:
-    r, g, b = CONFIDENCE_COLORS.get(level, (150, 150, 150))
-    return f"#{r:02x}{g:02x}{b:02x}"
-
-
-def _sources_str(sources) -> str:
-    return ", ".join(dict.fromkeys(sources)) if sources else "n/a"
 
 
 def scan_duration_sparkline(durations: list, *, width: int = 220, height: int = 40) -> str:
