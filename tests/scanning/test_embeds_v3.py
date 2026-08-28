@@ -20,7 +20,7 @@ from swingbot.core.scanning.embeds import (
     RequirementCheck, build_closed_trade_embed, build_embed, build_near_close_embed, confidence_color,
     regenerate_chart_for_trade,
 )
-from swingbot.core.scanning import embeds as embeds_mod, plan_table
+from swingbot.core.scanning import embeds as embeds_mod, plan_table, snapshots
 from swingbot.core.scanning.engine import ScanItem
 
 
@@ -79,7 +79,7 @@ def _isolated_scan_snapshots(tmp_path, monkeypatch):
     on-disk snapshot cache (data/scan_snapshots.json) -- redirect it to a
     per-test tmp file so these tests never read stale state left behind by
     a previous run or another test, and never pollute the real data dir."""
-    monkeypatch.setattr(embeds_mod, "_SNAPSHOT_PATH", str(tmp_path / "scan_snapshots.json"))
+    monkeypatch.setattr(snapshots, "_SNAPSHOT_PATH", str(tmp_path / "scan_snapshots.json"))
 
 
 def _build(item, perf_stats=None, layout="detailed"):

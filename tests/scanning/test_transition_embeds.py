@@ -1,5 +1,6 @@
 from swingbot.core.planning.plan_manager import PlanEvent
 from swingbot.core.scanning.embeds import build_plan_event_embed
+from swingbot.core.scanning import plan_table
 from tests.planning.test_plan_engine_model import _plan
 
 
@@ -28,7 +29,7 @@ def test_be_moved_embed():
 def test_tp1_partial_embed_shows_banked_stats_and_partial_position(monkeypatch):
     import swingbot.core.scanning.embeds as embeds
     from swingbot import config
-    monkeypatch.setattr(embeds.account, "compute_position_size",
+    monkeypatch.setattr(plan_table.account, "compute_position_size",
                         lambda entry, stop: {"shares": 100.0,
                                              "position_value": 10_000.0,
                                              "mode": "risk_pct"})
@@ -50,7 +51,7 @@ def test_tp1_partial_embed_shows_banked_stats_and_partial_position(monkeypatch):
 def test_tp1_partial_embed_omits_dollar_figure_when_unsized(monkeypatch):
     import swingbot.core.scanning.embeds as embeds
     from swingbot import config
-    monkeypatch.setattr(embeds.account, "compute_position_size",
+    monkeypatch.setattr(plan_table.account, "compute_position_size",
                         lambda entry, stop: None)
     monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
     e = _embed("tp1_partial", {"fraction": 0.5, "exit_price": 110.0, "r": 2.0},
@@ -66,7 +67,7 @@ def test_tp1_partial_embed_signs_a_negative_banked_amount(monkeypatch):
     '-$500.00', never '+$-500.00' -- the same sign-safe form leg_rows() uses."""
     import swingbot.core.scanning.embeds as embeds
     from swingbot import config
-    monkeypatch.setattr(embeds.account, "compute_position_size",
+    monkeypatch.setattr(plan_table.account, "compute_position_size",
                         lambda entry, stop: {"shares": 100.0,
                                              "position_value": 10_000.0,
                                              "mode": "risk_pct"})
@@ -86,7 +87,7 @@ def test_tp1_partial_embed_omits_pct_when_entry_is_unusable(monkeypatch):
     the embed must drop the % clause rather than crash on the format spec."""
     import swingbot.core.scanning.embeds as embeds
     from swingbot import config
-    monkeypatch.setattr(embeds.account, "compute_position_size",
+    monkeypatch.setattr(plan_table.account, "compute_position_size",
                         lambda entry, stop: None)
     monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
     e = _embed("tp1_partial", {"fraction": 0.5, "exit_price": 110.0, "r": 2.0},
