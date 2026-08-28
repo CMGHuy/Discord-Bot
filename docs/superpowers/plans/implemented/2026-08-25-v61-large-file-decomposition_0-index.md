@@ -8,7 +8,7 @@
 **Goal:** Split the three largest source files into focused modules by
 relocating whole functions, with every moved body byte-identical.
 
-**Spec:** `docs/superpowers/specs/2026-08-25-v61-large-file-decomposition-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-08-25-v61-large-file-decomposition-design.md`
 
 **Architecture:** Each split file stays as a thin facade re-exporting its
 verified external surface, so ~30 call sites never change. Inside each
