@@ -251,9 +251,20 @@ class JobManager:
             return job_id
 
     def status(self, job_id: str) -> dict | None:
-        jobs = _read_jobs()
-        self._reap_stale(jobs)
-        return _read_jobs().get(job_id)
+        # Read AND reap under the same lock _watch() writes its final state
+        # under, not read-then-reap-then-reread: an unlocked read here can
+        # land in the gap between _watch() finishing proc.wait() and it
+        # taking self._lock to write "done" and discard from _WATCHED. A
+        # stale "running" snapshot handed to the reaper in that gap looks
+        # exactly like an orphan (pid already dead, no longer watched) and
+        # clobbers the result _watch() is about to correctly write --
+        # state="failed", returncode=None over a job that had in fact
+        # succeeded. See the _WATCHED docstring for the sibling race this
+        # fixes the other half of.
+        with self._lock:
+            jobs = _read_jobs()
+            self._reap_stale_locked(jobs)
+            return jobs.get(job_id)
 
     def tail(self, job_id: str, n: int = 100) -> str:
         job = self.status(job_id)
@@ -264,9 +275,11 @@ class JobManager:
         return "".join(lines[-n:])
 
     def all(self) -> list[dict]:
-        jobs = _read_jobs()
-        self._reap_stale(jobs)
-        return sorted(_read_jobs().values(), key=lambda j: j["started_at"], reverse=True)
+        # Same atomicity fix as status() -- see its comment.
+        with self._lock:
+            jobs = _read_jobs()
+            self._reap_stale_locked(jobs)
+            return sorted(jobs.values(), key=lambda j: j["started_at"], reverse=True)
 
 
 manager = JobManager()

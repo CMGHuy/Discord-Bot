@@ -72,6 +72,26 @@ def admin_app(tmp_path, monkeypatch):
     # caught by re-reading helpers.py closely rather than assuming
     # DATA_DIR alone was enough isolation.
     monkeypatch.setattr(config, "ENV_PATH", str(tmp_path / ".env"))
+    # app.py's before_request hook calls config.auto_reload_if_changed() on
+    # every request (see its docstring), which -- if the tmp .env's mtime
+    # signature differs from the cached config._ENV_MTIME, as it always
+    # will the first time -- calls config.reload(), which reassigns the
+    # MODULE GLOBAL config._ENV_MTIME to the CURRENT (tmp-path) signature.
+    # That reassignment happens via a plain `global` statement in
+    # production code, not through monkeypatch, so monkeypatch has no way
+    # to know about it and won't undo it at teardown on its own. Left
+    # alone, the tmp file's signature stays cached for the rest of this
+    # xdist worker's life: the next test in the same worker that reads the
+    # REAL .env sees a signature mismatch against that stale tmp-path
+    # value, thinks the real file "changed", and silently overwrites that
+    # test's own monkeypatched config with production .env values.
+    #
+    # Snapshot-and-restore trick: passing the attribute's OWN current value
+    # back into monkeypatch.setattr is a no-op right now, but it registers
+    # monkeypatch's teardown to restore exactly this value -- undoing
+    # whatever auto_reload_if_changed() reassigns it to during the test,
+    # the same way monkeypatch already protects ENV_PATH/DATA_DIR.
+    monkeypatch.setattr(config, "_ENV_MTIME", config._ENV_MTIME)
 
     # Seed the three JSON files every admin route touches at least
     # indirectly (TradeLog(), load_account_config(), and — from Task C7
