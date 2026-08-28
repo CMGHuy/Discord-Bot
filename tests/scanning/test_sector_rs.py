@@ -18,7 +18,7 @@ ScanItem -- nothing here applies a gate on them yet (that's Task 6).
 """
 import pytest
 
-from swingbot.core.scanning import engine
+from swingbot.core.scanning import engine, fetch
 from swingbot.core.scanning.engine import ScanItem
 
 
@@ -26,8 +26,8 @@ def _crawl_with_watchlist(tickers):
     """Mirrors the crawl-phase call sequence _sync_run_scan uses: work out
     which sector ETFs the watchlist touches, then fetch them -- same two
     calls Task 5 wires into the real crawl, alongside SPY."""
-    _sector_of_ticker, needed_etfs = engine._sector_etfs_for_tickers(tickers)
-    return engine._fetch_frames(needed_etfs)
+    _sector_of_ticker, needed_etfs = fetch._sector_etfs_for_tickers(tickers)
+    return fetch._fetch_frames(needed_etfs)
 
 
 def _scan_item_for(ticker, sector=None, sector_frames=None, rs_percentile=65.0):
@@ -48,7 +48,7 @@ def _scan_item_for(ticker, sector=None, sector_frames=None, rs_percentile=65.0):
 
 def test_sector_etfs_are_fetched_for_watchlist_sectors(monkeypatch):
     fetched = []
-    monkeypatch.setattr("swingbot.core.scanning.engine._fetch_frames",
+    monkeypatch.setattr("swingbot.core.scanning.fetch._fetch_frames",
                         lambda syms: fetched.extend(syms) or {})
     _crawl_with_watchlist(["AAPL", "JPM"])   # tech + financials
     assert "XLK" in fetched

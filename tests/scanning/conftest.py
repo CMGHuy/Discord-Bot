@@ -1,7 +1,7 @@
 import pytest
 
 from swingbot.core.market.levels import Scenario
-from swingbot.core.scanning import engine as scan_engine
+from swingbot.core.scanning import engine as scan_engine, fetch
 
 
 class _InlineProcessPool:
@@ -47,9 +47,9 @@ def stub_batch_fetch(monkeypatch):
     per-ticker get_current_price()->None mock used to produce), and swaps in
     an in-process fake pool so _run_bounded never touches a real subprocess.
     """
-    monkeypatch.setattr(scan_engine, "get_daily_data_batch", lambda tickers, period=None: {})
-    monkeypatch.setattr(scan_engine, "get_current_price_batch", lambda tickers: {})
-    monkeypatch.setattr(scan_engine, "ProcessPoolExecutor", _InlineProcessPool)
+    monkeypatch.setattr(fetch, "get_daily_data_batch", lambda tickers, period=None: {})
+    monkeypatch.setattr(fetch, "get_current_price_batch", lambda tickers: {})
+    monkeypatch.setattr(fetch, "ProcessPoolExecutor", _InlineProcessPool)
 
 
 @pytest.fixture

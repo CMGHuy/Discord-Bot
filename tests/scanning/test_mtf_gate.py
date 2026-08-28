@@ -27,7 +27,7 @@ import numpy as np
 import pytest
 
 import swingbot.config as config
-from swingbot.core.scanning import engine
+from swingbot.core.scanning import engine, fetch, runstate
 from swingbot.core.scanning.engine import ScanProgress
 from swingbot.core.tracking.performance import TradeLog
 from tests.helpers import make_ohlcv
@@ -95,19 +95,19 @@ def _scan_with_funnel(direction, next_horizon_trend=_UNSET, horizon="4w"):
 
         mp.setattr(engine, "load_watchlist", lambda: ["TEST"])
         mp.setattr(
-            engine, "get_daily_data",
+            fetch, "get_daily_data",
             lambda ticker, period=None: df.copy() if ticker == "TEST" else None,
         )
         # v55: force the batched live-price/cold-fetch path to resolve empty
         # (real batch calls would otherwise hit real network through a real
         # ProcessPoolExecutor) -- same "no live price -> falls back to the
         # daily close" behavior the old get_current_price->None mock gave.
-        mp.setattr(engine, "get_daily_data_batch", lambda tickers, period=None: {})
-        mp.setattr(engine, "get_current_price_batch", lambda tickers: {})
-        mp.setattr(engine, "ProcessPoolExecutor", _InlineProcessPool)
+        mp.setattr(fetch, "get_daily_data_batch", lambda tickers, period=None: {})
+        mp.setattr(fetch, "get_current_price_batch", lambda tickers: {})
+        mp.setattr(fetch, "ProcessPoolExecutor", _InlineProcessPool)
         mp.setattr(engine, "trade_log",
                    TradeLog(path=os.path.join(config.DATA_DIR, "trades.json")))
-        mp.setattr(engine, "is_stop_requested", lambda: False)
+        mp.setattr(runstate, "is_stop_requested", lambda: False)
 
         if next_horizon_trend is not _UNSET:
             def _fake_adjacent_aligned(_df, _horizon_key, scen_direction):

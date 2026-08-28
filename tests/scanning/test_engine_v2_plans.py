@@ -8,7 +8,7 @@ import swingbot.config as config
 from swingbot.core.planning import account as _account
 from swingbot.core.edge import throttle
 from swingbot.core.tracking.performance import TradeLog
-from swingbot.core.scanning import engine
+from swingbot.core.scanning import dedup, engine, fetch, runstate
 from swingbot.core.scanning.engine import ScanProgress
 from tests.helpers import make_ohlcv
 
@@ -254,11 +254,11 @@ def test_sync_run_scan_gates_attach_plan_v2_on_all_ok(monkeypatch, tmp_path, stu
 
     monkeypatch.setattr(engine, "load_watchlist", lambda: ["TEST"])
     monkeypatch.setattr(
-        engine, "get_daily_data",
+        fetch, "get_daily_data",
         lambda ticker, period=None: df.copy() if ticker == "TEST" else None,
     )
     monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
-    monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
+    monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
 
     captured = {}
 
@@ -266,7 +266,7 @@ def test_sync_run_scan_gates_attach_plan_v2_on_all_ok(monkeypatch, tmp_path, stu
         captured["items"] = list(items)
         return []   # skip the alert-building loop entirely -- plan_v2 is already decided by here
 
-    monkeypatch.setattr(engine, "dedup_scan_items", _capture_and_shortcircuit)
+    monkeypatch.setattr(dedup, "dedup_scan_items", _capture_and_shortcircuit)
 
     # --- Run 1: an unreachable min_confluence means every scenario fails
     # the min_confluence requirement -> all_ok=False for all of them.
@@ -333,11 +333,11 @@ def _setup_minimal_scan(monkeypatch, tmp_path):
     monkeypatch.setitem(engine.HORIZONS["4w"], "sr_target_min_pct", 1.0)
     monkeypatch.setattr(engine, "load_watchlist", lambda: ["TEST"])
     monkeypatch.setattr(
-        engine, "get_daily_data",
+        fetch, "get_daily_data",
         lambda ticker, period=None: df.copy() if ticker == "TEST" else None,
     )
     monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
-    monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
+    monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
 
 
 def test_a_plan_that_cannot_clear_min_rr_never_reaches_scan_items(monkeypatch, tmp_path, stub_batch_fetch):
@@ -351,7 +351,7 @@ def test_a_plan_that_cannot_clear_min_rr_never_reaches_scan_items(monkeypatch, t
         captured["items"] = list(items)
         return []
 
-    monkeypatch.setattr(engine, "dedup_scan_items", _capture_and_shortcircuit)
+    monkeypatch.setattr(dedup, "dedup_scan_items", _capture_and_shortcircuit)
 
     alerts, _, _ = engine._sync_run_scan("4w", require_confirmation=False, progress=None, min_confluence=0)
 
@@ -373,7 +373,7 @@ def test_shadow_mode_keeps_the_legacy_alert_when_v2_rejects(monkeypatch, tmp_pat
         captured["items"] = list(items)
         return []
 
-    monkeypatch.setattr(engine, "dedup_scan_items", _capture_and_shortcircuit)
+    monkeypatch.setattr(dedup, "dedup_scan_items", _capture_and_shortcircuit)
 
     engine._sync_run_scan("4w", require_confirmation=False, progress=None, min_confluence=0)
 
@@ -409,10 +409,10 @@ def test_illiquid_ticker_skips_new_signals_but_still_monitors_open_trades(monkey
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
     monkeypatch.setattr(engine, "load_watchlist", lambda: ["TEST"])
     monkeypatch.setattr(
-        engine, "get_daily_data",
+        fetch, "get_daily_data",
         lambda ticker, period=None: df.copy() if ticker == "TEST" else None,
     )
-    monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
+    monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
 
     test_log = TradeLog(path=str(tmp_path / "trades.json"))
     monkeypatch.setattr(engine, "trade_log", test_log)
@@ -438,7 +438,7 @@ def test_illiquid_ticker_skips_new_signals_but_still_monitors_open_trades(monkey
         captured["items"] = list(items)
         return []
 
-    monkeypatch.setattr(engine, "dedup_scan_items", _capture_and_shortcircuit)
+    monkeypatch.setattr(dedup, "dedup_scan_items", _capture_and_shortcircuit)
 
     engine._sync_run_scan("4w", require_confirmation=False, progress=None)
 
@@ -500,10 +500,10 @@ def test_sync_run_scan_parallel_dispatch_matches_serial(monkeypatch, tmp_path, s
 
     monkeypatch.setattr(engine, "load_watchlist", lambda: ["T0", "T1", "T2"])
     monkeypatch.setattr(
-        engine, "get_daily_data",
+        fetch, "get_daily_data",
         lambda ticker, period=None: dfs[ticker].copy() if ticker in dfs else None,
     )
-    monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
+    monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
 
     def _run(workers: int):
         # Fresh TradeLog and fresh ScanProgress per run -- neither the
@@ -519,7 +519,7 @@ def test_sync_run_scan_parallel_dispatch_matches_serial(monkeypatch, tmp_path, s
             captured["items"] = list(items)
             return []   # skip the alert-building loop -- plan_v2/funnel are already decided by here
 
-        monkeypatch.setattr(engine, "dedup_scan_items", _capture_and_shortcircuit)
+        monkeypatch.setattr(dedup, "dedup_scan_items", _capture_and_shortcircuit)
 
         engine._sync_run_scan("4w", require_confirmation=False, progress=progress, min_confluence=0)
         return captured["items"], progress.funnel
@@ -584,13 +584,13 @@ def _drive_alert_loop(monkeypatch, tmp_path, intraday_fn, alert_data_fn=None):
     monkeypatch.setitem(engine.HORIZONS["4w"], "sr_target_min_pct", 1.0)
 
     monkeypatch.setattr(engine, "load_watchlist", lambda: ["TEST"])
-    monkeypatch.setattr(engine, "_load_cached_daily", lambda ticker: df.copy())
+    monkeypatch.setattr(fetch, "_load_cached_daily", lambda ticker: df.copy())
     monkeypatch.setattr(
-        engine, "get_daily_data",
+        fetch, "get_daily_data",
         alert_data_fn or (lambda ticker, period=None: df.copy() if ticker == "TEST" else None),
     )
     monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
-    monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
+    monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
 
     # Network / filesystem-bound parts of the alert loop, stubbed.
     monkeypatch.setattr(engine, "earnings_within_window", lambda t, d: None)
@@ -681,13 +681,13 @@ def test_mass_fetch_failure_raises_data_fail_frac_and_engages_kill_switch(monkey
 
     monkeypatch.setattr(engine, "load_watchlist", lambda: tickers)
     monkeypatch.setattr(
-        engine, "get_daily_data",
+        fetch, "get_daily_data",
         lambda ticker, period=None: good_df.copy() if ticker == "OK" else None,
     )
     monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
-    monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
+    monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
     monkeypatch.setattr(engine.account_module, "get_balance_history_points", lambda: [])
-    monkeypatch.setattr(engine, "dedup_scan_items", lambda items: [])
+    monkeypatch.setattr(dedup, "dedup_scan_items", lambda items: [])
 
     engine._sync_run_scan("4w", require_confirmation=False, progress=None, min_confluence=0)
 
@@ -699,8 +699,8 @@ def test_mass_fetch_failure_raises_data_fail_frac_and_engages_kill_switch(monkey
 def test_crawl_retains_every_frame_for_a_large_universe(monkeypatch):
     """Task v59 A-S1: a 500-ticker universe must not silently evict frames."""
     tickers = [f"T{i:03d}" for i in range(500)]
-    monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
-    monkeypatch.setattr(engine, "_load_cached_daily", lambda ticker: {"ticker": ticker})
+    monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
+    monkeypatch.setattr(fetch, "_load_cached_daily", lambda ticker: {"ticker": ticker})
 
     frames = engine._crawl_latest_data(tickers)
 

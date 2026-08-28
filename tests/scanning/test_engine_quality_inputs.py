@@ -14,7 +14,7 @@ import pytest
 
 import swingbot.config as config
 from swingbot.core.edge import factors as rs_factors
-from swingbot.core.scanning import engine
+from swingbot.core.scanning import engine, fetch, runstate
 from swingbot.core.scanning.confidence import ConfidenceResult
 from swingbot.core.tracking.performance import TradeLog
 from tests.helpers import make_ohlcv
@@ -60,11 +60,11 @@ def test_score_confidence_receives_rs_breadth(monkeypatch, tmp_path, stub_batch_
 
     monkeypatch.setattr(engine, "load_watchlist", lambda: ["TEST"])
     monkeypatch.setattr(
-        engine, "get_daily_data",
+        fetch, "get_daily_data",
         lambda ticker, period=None: df.copy() if ticker in ("TEST", "SPY") else None,
     )
     monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
-    monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
+    monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
 
     # Deterministic, controlled RS/breadth readings -- the real universe-wide
     # computations need a real multi-ticker universe this fixture doesn't

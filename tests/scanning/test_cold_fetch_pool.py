@@ -6,7 +6,7 @@ from concurrent.futures import Future
 import pytest
 
 from swingbot import config
-from swingbot.core.scanning import engine as scan_engine
+from swingbot.core.scanning import engine as scan_engine, fetch
 from tests.helpers import make_ohlcv
 
 
@@ -59,7 +59,7 @@ class _FakeProcess:
 
 def _install_fake_pool(monkeypatch, submit_fn):
     pool = _FakePool(submit_fn)
-    monkeypatch.setattr(scan_engine, "ProcessPoolExecutor", pool)
+    monkeypatch.setattr(fetch, "ProcessPoolExecutor", pool)
     return pool
 
 
@@ -101,7 +101,7 @@ def test_run_bounded_kills_the_worker_past_the_budget(monkeypatch, caplog):
 def test_empty_cold_list_is_a_no_op(monkeypatch):
     def _boom(*a, **kw):
         raise AssertionError("must not build a pool for an empty list")
-    monkeypatch.setattr(scan_engine, "ProcessPoolExecutor", _boom)
+    monkeypatch.setattr(fetch, "ProcessPoolExecutor", _boom)
     assert scan_engine._fetch_cold_frames([]) == []
 
 
@@ -112,7 +112,7 @@ def test_one_chunk_covers_the_whole_cold_list_by_default(monkeypatch):
         calls.append(list(tickers))
         return {t: make_ohlcv([1.0, 2.0]) for t in tickers}
 
-    monkeypatch.setattr(scan_engine, "get_daily_data_batch", _batch)
+    monkeypatch.setattr(fetch, "get_daily_data_batch", _batch)
     _install_fake_pool(monkeypatch, lambda fn, *a: _done_future(fn(*a)))
 
     pairs = scan_engine._fetch_cold_frames(["AAPL", "MSFT", "NVDA"])
@@ -130,7 +130,7 @@ def test_chunking_splits_a_list_over_the_configured_chunk_size(monkeypatch):
         calls.append(list(tickers))
         return {t: make_ohlcv([1.0, 2.0]) for t in tickers}
 
-    monkeypatch.setattr(scan_engine, "get_daily_data_batch", _batch)
+    monkeypatch.setattr(fetch, "get_daily_data_batch", _batch)
     _install_fake_pool(monkeypatch, lambda fn, *a: _done_future(fn(*a)))
 
     pairs = scan_engine._fetch_cold_frames(["A", "B", "C", "D", "E"])
@@ -144,9 +144,9 @@ def test_ticker_missing_from_the_batch_falls_back_to_single_ticker_fetch(monkeyp
     """A batch call only ever tries a ticker's literal symbol; a ticker
     that needs candidate_symbols() aliasing (or genuinely has no data)
     comes back absent and must fall back to the single-ticker path."""
-    monkeypatch.setattr(scan_engine, "get_daily_data_batch",
+    monkeypatch.setattr(fetch, "get_daily_data_batch",
                         lambda tickers, period: {"AAPL": make_ohlcv([1.0, 2.0])})
-    monkeypatch.setattr(scan_engine, "get_daily_data",
+    monkeypatch.setattr(fetch, "get_daily_data",
                         lambda t, period=None: make_ohlcv([9.0, 9.0]))
     _install_fake_pool(monkeypatch, lambda fn, *a: _done_future(fn(*a)))
 
@@ -165,8 +165,8 @@ def test_one_failing_chunk_does_not_abort_the_rest(monkeypatch):
             raise ValueError("no data returned")
         return {t: make_ohlcv([1.0, 2.0]) for t in tickers}
 
-    monkeypatch.setattr(scan_engine, "get_daily_data_batch", _batch)
-    monkeypatch.setattr(scan_engine, "get_daily_data",
+    monkeypatch.setattr(fetch, "get_daily_data_batch", _batch)
+    monkeypatch.setattr(fetch, "get_daily_data",
                         lambda t, period=None: (_ for _ in ()).throw(ValueError("still bad")))
 
     def _submit(fn, *a):

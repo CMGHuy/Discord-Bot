@@ -19,7 +19,7 @@ Yahoo's data.
 import pytest
 
 from swingbot import config
-from swingbot.core.scanning import engine as scan_engine
+from swingbot.core.scanning import engine as scan_engine, fetch
 from tests.helpers import make_ohlcv
 
 
@@ -42,8 +42,8 @@ def _identifiable_single(ticker, period=None):
 
 @pytest.fixture
 def identifiable_fetch(monkeypatch):
-    monkeypatch.setattr(scan_engine, "get_daily_data_batch", _identifiable_batch)
-    monkeypatch.setattr(scan_engine, "get_daily_data", _identifiable_single)
+    monkeypatch.setattr(fetch, "get_daily_data_batch", _identifiable_batch)
+    monkeypatch.setattr(fetch, "get_daily_data", _identifiable_single)
 
 
 class _InlinePool:
@@ -79,7 +79,7 @@ BATCH = ["AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "GOOG", "META", "NFLX",
 
 
 def test_batched_fetch_never_mixes_tickers(monkeypatch, identifiable_fetch):
-    monkeypatch.setattr(scan_engine, "ProcessPoolExecutor", _InlinePool)
+    monkeypatch.setattr(fetch, "ProcessPoolExecutor", _InlinePool)
 
     pairs = scan_engine._fetch_cold_frames(list(BATCH))
 
@@ -96,7 +96,7 @@ def test_chunked_batches_never_mix_tickers(monkeypatch, identifiable_fetch):
     get_daily_data_batch() call must key its results correctly, and the
     reassembly across chunks must not shuffle anything either."""
     monkeypatch.setattr(config, "BATCH_FETCH_CHUNK_SIZE", 5)
-    monkeypatch.setattr(scan_engine, "ProcessPoolExecutor", _InlinePool)
+    monkeypatch.setattr(fetch, "ProcessPoolExecutor", _InlinePool)
 
     pairs = scan_engine._fetch_cold_frames(list(BATCH))
 
@@ -111,8 +111,8 @@ def test_chunked_batches_never_mix_tickers(monkeypatch, identifiable_fetch):
 def test_frames_reach_the_crawl_result_under_their_own_key(monkeypatch, identifiable_fetch):
     """End-to-end through _crawl_latest_data: nothing between the fetch and
     the LRUFrames result may re-key a frame."""
-    monkeypatch.setattr(scan_engine, "ProcessPoolExecutor", _InlinePool)
-    monkeypatch.setattr(scan_engine, "_load_cached_daily", lambda t: None)
+    monkeypatch.setattr(fetch, "ProcessPoolExecutor", _InlinePool)
+    monkeypatch.setattr(fetch, "_load_cached_daily", lambda t: None)
 
     frames = scan_engine._crawl_latest_data(list(BATCH))
 
@@ -133,8 +133,8 @@ def test_live_price_batch_never_mixes_tickers(monkeypatch):
     def _identifiable_price_batch(tickers):
         return {t: _signature_price(t) for t in tickers}
 
-    monkeypatch.setattr(scan_engine, "get_current_price_batch", _identifiable_price_batch)
-    monkeypatch.setattr(scan_engine, "ProcessPoolExecutor", _InlinePool)
+    monkeypatch.setattr(fetch, "get_current_price_batch", _identifiable_price_batch)
+    monkeypatch.setattr(fetch, "ProcessPoolExecutor", _InlinePool)
 
     prices = scan_engine._fetch_live_prices(list(BATCH))
 
