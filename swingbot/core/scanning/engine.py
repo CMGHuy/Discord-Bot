@@ -27,8 +27,7 @@ from .analyze import (ScanItem, build_decision_context, _build_quality_inputs,
                       _scan_one)
 from .scan_run import (ScanProgress, get_regime, _logged_plan_fields,
                        _sync_run_scan, run_scan, get_all_unrealized_pnl)
-from .embeds import (CONFIDENCE_COLORS, confidence_color,
-                     _build_requirement_checks, build_embed, build_simple_alert,
+from .embeds import (_build_requirement_checks, build_embed, build_simple_alert,
                      plan_numbers_for_display, regenerate_chart_for_trade,
                      build_closed_trade_embed, notify_closed_trades,
                      build_near_close_embed, notify_near_close,
@@ -45,7 +44,7 @@ __all__ = [
     "_build_quality_inputs", "attach_plan_v2", "_check_near_close",
     "_apply_sector_rs", "_scan_one", "ScanProgress", "get_regime",
     "_logged_plan_fields", "_sync_run_scan", "run_scan", "get_all_unrealized_pnl",
-    "CONFIDENCE_COLORS", "confidence_color", "_build_requirement_checks",
+    "_build_requirement_checks",
     "build_embed", "build_simple_alert", "plan_numbers_for_display",
     "regenerate_chart_for_trade", "build_closed_trade_embed", "notify_closed_trades",
     "build_near_close_embed", "notify_near_close", "build_plan_event_embed",

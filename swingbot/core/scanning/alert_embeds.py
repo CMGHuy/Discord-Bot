@@ -10,10 +10,9 @@ from swingbot.core.analytics.rank import follow_breakdown, follow_score
 from swingbot.core.market import opex
 from swingbot.core.market.strategy import HORIZONS
 from swingbot.core import presentation as ui
-from swingbot.core.scanning import embed_theme as theme
 
 from .snapshots import _snapshot_and_diff
-from .requirements import _sources_str, confidence_color
+from .requirements import _sources_str
 from .plan_table import (_v2_plan, plan_numbers_for_display, leg_rows)
 
 
@@ -26,7 +25,7 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     Counter-trend setups get a ⚠️ warning field added to the embed.
 
     Fields are accumulated into `sections` (keyed by
-    embed_theme.SECTION_ORDER) as (name, value, inline) tuples as they're
+    presentation.SECTION_ORDER) as (name, value, inline) tuples as they're
     computed, then flushed in that fixed order at the end -- so the field
     ORDER on the embed is always the same regardless of which optional
     fields happen to apply to this particular item.
@@ -48,7 +47,8 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     needs_review_marker = "⚠️ " if not all_ok else ""
     plan_v2 = _v2_plan(item)
     title = f"{needs_review_marker}{priority_marker}{'🟢' if is_bull else '🔴'} {direction} — {result.ticker}"
-    embed = discord.Embed(title=title, color=ui.accent_for_level(conf.level))
+    embed = discord.Embed(title=title)
+    embed.color = ui.accent_for_level(conf.level)
 
     sections: dict[str, list[tuple]] = {k: [] for k in ui.SECTION_ORDER}
 
@@ -217,7 +217,7 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     embed.description = f"{headline}\n{explanation[:3500]}"
     if chart_filename:
         embed.set_image(url=f"attachment://{chart_filename}")
-    theme.apply_footer(embed, plan_id=plan_v2.plan_id if plan_v2 else None)
+    ui.apply_chrome(embed, accent=embed.color, plan_id=plan_v2.plan_id if plan_v2 else None)
     return embed
 
 

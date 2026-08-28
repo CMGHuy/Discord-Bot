@@ -1,7 +1,5 @@
-"""Requirement evaluation and confidence presentation helpers."""
+"""Requirement evaluation helpers."""
 from dataclasses import dataclass
-
-import discord
 
 from swingbot import config
 from swingbot.core.market import opex
@@ -21,28 +19,6 @@ class RequirementCheck:
     label: str
     passed: bool
     detail: str    # human-readable "actual value (needs threshold)", used verbatim when displaying a failure
-
-
-CONFIDENCE_COLORS = {
-    1: (231, 76, 60),    # red -- Very Low
-    2: (230, 126, 34),   # orange -- Low
-    3: (241, 196, 15),   # yellow -- Medium
-    4: (154, 205, 50),   # yellow-green -- High
-    5: (39, 174, 96),    # green -- Very High
-}
-CONFIDENCE_EMOJI = {1: "🔴", 2: "🟠", 3: "🟡", 4: "🟢", 5: "🟢"}
-
-# Discord's ANSI code-block palette only has 8 foreground colors (30-37),
-# so the 5-level confidence scale maps onto the closest available color --
-# red -> yellow -> yellow -> green -> green. Always paired with "1;" for
-# bold, so the Confidence field visually matches the embed's own
-# confidence-color accent instead of rendering as plain white text.
-CONFIDENCE_ANSI = {1: 31, 2: 33, 3: 33, 4: 32, 5: 32}
-
-
-def confidence_color(level: int) -> discord.Color:
-    r, g, b = CONFIDENCE_COLORS.get(level, (150, 150, 150))
-    return discord.Color.from_rgb(r, g, b)
 
 
 def _sources_str(sources) -> str:
@@ -110,11 +86,4 @@ def _build_requirement_checks(scenario, target_confluence: tuple, conf,
         ))
 
     return checks
-
-
-def _confidence_block(conf) -> str:
-    ansi_code = CONFIDENCE_ANSI.get(conf.level, 37)
-    text = f"{CONFIDENCE_EMOJI.get(conf.level, '⚪')} {conf.label} (Lv{conf.level}/5, {conf.score}/100)"
-    return f"```ansi\n[1;{ansi_code}m{text}[0m\n```"
-
 

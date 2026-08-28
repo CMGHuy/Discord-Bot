@@ -8,6 +8,7 @@ from swingbot.commands.stats import _fake_item_from_plan, stats_embed, top_plans
 from swingbot.core.planning.plan_engine import TradePlanV2
 from swingbot.core.scanning import embeds as embeds_mod, snapshots
 from swingbot.core.scanning.embeds import build_embed
+from swingbot.core import presentation as ui
 
 TODAY = dt.date(2026, 7, 11)
 
@@ -62,7 +63,7 @@ def make_plan_v2(badge="VALIDATED", confidence_level=5, quality_score=72, plan_i
     )
 
 
-def test_fake_item_from_plan_builds_embed_without_crashing_and_engages_theming():
+def test_fake_item_from_plan_builds_embed_without_crashing_and_uses_the_shared_accent():
     plan = make_plan_v2(badge="VALIDATED", confidence_level=5)
     item = _fake_item_from_plan(plan)
 
@@ -77,10 +78,11 @@ def test_fake_item_from_plan_builds_embed_without_crashing_and_engages_theming()
     embed = build_embed(item, "", {"closed": 0}, None, None, layout="compact")
 
     assert isinstance(embed, discord.Embed)
-    # Level/badge chip prefix proves plan_v2 theming actually engaged, not
-    # just that build_embed returned without raising.
-    assert embed.title.startswith("5️⃣")
-    assert "VALIDATED" in embed.title
+    # Direction remains explicit in the title while confidence is expressed
+    # through the shared accent, not a numbered or badge chip.
+    assert embed.title.startswith("🟢 LONG")
+    assert embed.color.value == ui.accent_for_level(item.conf.level).value
+    assert "VALIDATED" not in embed.title
     assert "NVDA" in embed.title
 
 

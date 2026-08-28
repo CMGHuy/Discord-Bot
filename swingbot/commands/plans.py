@@ -10,7 +10,7 @@ from swingbot import config
 from swingbot.bot_core import bot
 from swingbot.core.analytics.rank import rank_plans
 from swingbot.core.planning.plan_store import PlanStore
-from swingbot.core.scanning import embed_theme as theme
+from swingbot.core import presentation as ui
 from swingbot.core.scanning.embeds import banked_leg_pct_and_amount, signed_money
 from swingbot.commands.views import (
     starred_ids,
@@ -72,7 +72,7 @@ def _plan_line(plan) -> str:
         tail = (f"entry {plan.trigger_price:.2f} SL {plan.stop_loss:.2f} "
                 f"TP1 {plan.tp1:.2f}{tp2_bit}")
     return (
-        f"{star}{theme.level_chip(plan.confidence_level)}{theme.badge_chip(plan.badge)} {plan.ticker} {direction_word} · "
+        f"{star}{ui.direction_glyph(plan.direction)} {plan.ticker} {direction_word} · "
         f"{plan.status} · follow {score:.0f} · {tail}"
     )
 

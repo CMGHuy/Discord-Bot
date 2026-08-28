@@ -10,7 +10,6 @@ from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, ge
 from swingbot.core.market.strategy import HORIZONS
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
 from swingbot.core import presentation as ui
-from swingbot.core.scanning import embed_theme as theme
 from swingbot.core.tracking.performance import closed_pnl_pct, closed_r_multiple
 from .snapshots import _format_duration_hms
 from .plan_table import banked_leg_pct_and_amount, partial_position_line, signed_money
@@ -206,7 +205,6 @@ def build_closed_trade_embed(trade: dict) -> discord.Embed:
 
     id_suffix = " · Plan Engine v2" if (trade.get("plan_id") or trade.get("legs")) else ""
     embed.add_field(name="Trade ID", value=f"`{trade['id']}`{id_suffix}", inline=False)
-    theme.apply_footer(embed, plan_id=trade.get("plan_id"))
     return embed
 
 
@@ -263,7 +261,6 @@ def build_near_close_embed(warning: dict) -> discord.Embed:
     embed.add_field(name="Stop-loss", value=f"{cur}{t['stop_loss']:.2f} ({warning['sl_dist_pct']:.1f}% away)", inline=True)
     embed.add_field(name="Recommended TP", value=f"{cur}{t['take_profit']:.2f} ({warning['tp_dist_pct']:.1f}% away)", inline=True)
     embed.add_field(name="Trade ID", value=f"`{t['id']}` -- use !trade {t['id']} for full detail", inline=False)
-    theme.apply_footer(embed, plan_id=t.get("plan_id"))
     return embed
 
 
@@ -311,7 +308,8 @@ def build_plan_event_embed(plan, event) -> discord.Embed:
     else:
         template, color = PLAN_EVENT_STYLES.get(
             event.transition, ("Plan update — {ticker}", _NEUTRAL))
-    embed = discord.Embed(title=template.format(ticker=plan.ticker), color=color)
+    embed = discord.Embed(title=template.format(ticker=plan.ticker))
+    ui.apply_chrome(embed, accent=color, plan_id=plan.plan_id)
     embed.add_field(name="Plan (v2)", value=(
         f"{plan.strategy} · {plan.horizon_key} · {plan.direction} · "
         f"{'✅' if plan.badge == 'VALIDATED' else '⚠️'} {plan.badge}"), inline=False)
@@ -337,7 +335,6 @@ def build_plan_event_embed(plan, event) -> discord.Embed:
                         inline=False)
     elif event.transition == "closed":
         embed.add_field(name="Exit", value=f"{d.get('exit_price', 0):.2f}")
-    embed.set_footer(text=f"v2 plan {plan.plan_id[:8]}")
     return embed
 
 

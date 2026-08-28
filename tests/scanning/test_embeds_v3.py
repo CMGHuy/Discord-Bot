@@ -15,13 +15,13 @@ from swingbot import config
 from swingbot.commands.scanning import _ordered_alerts
 from swingbot.core.market.explain import build_explanation
 from swingbot.core.planning.plan_engine import TradePlanV2
-from swingbot.core.scanning import embed_theme as theme
 from swingbot.core.scanning.embeds import (
-    RequirementCheck, build_closed_trade_embed, build_embed, build_near_close_embed, confidence_color,
+    RequirementCheck, build_closed_trade_embed, build_embed, build_near_close_embed,
     regenerate_chart_for_trade,
 )
 from swingbot.core.scanning import embeds as embeds_mod, plan_table, snapshots
 from swingbot.core.presentation import ansi
+from swingbot.core import presentation as ui
 from swingbot.core.scanning.engine import ScanItem
 
 
@@ -155,11 +155,11 @@ def test_validated_plan_uses_the_confidence_level_colour_without_badge(monkeypat
     assert "NVDA" in embed.title
 
 
-def test_no_v2_plan_falls_back_to_confidence_color_and_plain_title(monkeypatch):
+def test_no_v2_plan_falls_back_to_the_shared_confidence_accent_and_plain_title(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     item = make_item(plan_v2=None, all_ok=True)
     embed = _build(item)
-    assert embed.color.value == confidence_color(item.conf.level).value
+    assert embed.color.value == ui.accent_for_level(item.conf.level).value
     assert not embed.title.startswith(("1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"))
     assert "NVDA" in embed.title
 

@@ -15,8 +15,8 @@ Three modules, smallest dependency first:
                  sites ask for a part rather than assembling one out of
                  tokens, which is what stops the kit being half-used.
 
-It lives in core/ rather than in core/scanning/ (where embed_theme.py used
-to) because swingbot command modules need it, and commands depending on
+It lives in core/ rather than in core/scanning/ (where the old scanning theme
+lived) because swingbot command modules need it, and commands depending on
 core.scanning for a colour would misdescribe that dependency.
 
 tests/presentation/test_no_adhoc_color.py enforces that no module outside

@@ -7,7 +7,10 @@ import pytest
 
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
-GUARDED_PACKAGES: tuple[str, ...] = ("swingbot/core/presentation",)
+GUARDED_PACKAGES: tuple[str, ...] = (
+    "swingbot/core/presentation",
+    "swingbot/core/scanning",
+)
 ALLOWED = "swingbot/core/presentation"
 
 
