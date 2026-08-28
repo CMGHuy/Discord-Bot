@@ -28,6 +28,7 @@ from swingbot import config as app_config
 from swingbot.core.analytics import calibration
 from swingbot.core.analytics.insights import edge_decay_report
 from swingbot.core.analytics.journal import JournalStore
+from swingbot.core.presentation import tokens
 
 try:
     from zoneinfo import ZoneInfo
@@ -458,18 +459,18 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
     if win_rate is not None:
         header += f"**Day win rate:** {wr_emoji} {win_rate}%\n"
     if avg_pnl is not None:
-        header += f"**Avg P&L per trade:** {pnl_emoji} {avg_pnl:+.2f}%\n"
+        header += f"**Avg P&L per trade:** {pnl_emoji} {tokens.fmt_pct(avg_pnl)}\n"
     if total_pnl is not None:
-        header += f"**Sum P&L (paper):** {total_pnl:+.2f}%\n"
+        header += f"**Sum P&L (paper):** {tokens.fmt_pct(total_pnl)}\n"
     if avg_r is not None:
-        header += f"**Avg R-multiple:** {avg_r:+.2f}R\n"
+        header += f"**Avg R-multiple:** {tokens.fmt_r(avg_r)}\n"
     if gross_win > 0 or gross_loss > 0:
         pf_str = "∞" if profit_factor is None and gross_win > 0 else (f"{profit_factor:.2f}" if profit_factor is not None else "—")
         header += f"**Profit factor (today):** {pf_str}\n"
     if best_trade is not None:
-        header += f"**Best trade:** {best_trade['ticker']} {_pnl_pct(best_trade):+.2f}%\n"
+        header += f"**Best trade:** {best_trade['ticker']} {tokens.fmt_pct(_pnl_pct(best_trade))}\n"
     if worst_trade is not None and worst_trade is not best_trade:
-        header += f"**Worst trade:** {worst_trade['ticker']} {_pnl_pct(worst_trade):+.2f}%\n"
+        header += f"**Worst trade:** {worst_trade['ticker']} {tokens.fmt_pct(_pnl_pct(worst_trade))}\n"
 
     # Real-currency stats -- only meaningful for "today" (get_daily_summary()
     # always answers relative to the actual current Berlin day, so a !recap
@@ -520,15 +521,15 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
             days = _days_held(t)
             amt  = t.get("realized_pnl_amount")
             strategy = _strategy_label(t)[:15]
-            direction = "▲ Long" if t["direction"] == "bullish" else "▼ Short"
+            direction = f"{tokens.direction_glyph(t['direction'])} {'Long' if t['direction'] == 'bullish' else 'Short'}"
             result = _result_label(t)
             closed_rows.append(
                 f"{t['ticker']:<7} {direction:<5} {strategy:<16} Lv{t.get('confidence_level','-'):<2} "
-                f"{t.get('entry',0):>8.2f} {t.get('stop_loss',0):>8.2f} {t.get('take_profit',0):>8.2f} "
-                f"{(t.get('exit_price') or 0):>8.2f} "
-                f"{(f'{pnl:+.2f}%' if pnl is not None else '—'):>7} "
+                f"{tokens.fmt_price(t.get('entry')):>8} {tokens.fmt_price(t.get('stop_loss')):>8} {tokens.fmt_price(t.get('take_profit')):>8} "
+                f"{tokens.fmt_price(t.get('exit_price')):>8} "
+                f"{tokens.fmt_pct(pnl):>7} "
                 f"{(f'{amt:+.2f}' if amt is not None else '—'):>9} "
-                f"{(f'{r:+.2f}' if r is not None else '—'):>5} "
+                f"{tokens.fmt_r(r):>5} "
                 f"{(str(days) if days is not None else '—'):>4} "
                 f"{result:<8}"
             )
@@ -542,7 +543,7 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
         open_sep = "─" * len(open_header)
         open_rows = []
         for t in still_open:
-            direction = "▲ Long" if t["direction"] == "bullish" else "▼ Short"
+            direction = f"{tokens.direction_glyph(t['direction'])} {'Long' if t['direction'] == 'bullish' else 'Short'}"
             opened_str = _berlin_hm(t.get("opened_at", ""))
             opened_date = _berlin_date(t.get("opened_at", ""))
             # See date_label above for why not "%-d %b" (glibc-only, breaks on Windows).
@@ -550,7 +551,7 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
             open_rows.append(
                 f"{t['ticker']:<7} {direction:<5} {_strategy_label(t)[:15]:<16} Lv{t.get('confidence_level','-'):<2} "
                 f"{date_pfx + ' ' + opened_str:<17} "
-                f"{t.get('entry',0):>7.2f} {t.get('stop_loss',0):>7.2f} {t.get('take_profit',0):>7.2f}"
+                f"{tokens.fmt_price(t.get('entry')):>7} {tokens.fmt_price(t.get('stop_loss')):>7} {tokens.fmt_price(t.get('take_profit')):>7}"
             )
         messages.extend(_emit_table("Still open (all active positions):", open_header, open_sep, open_rows))
 

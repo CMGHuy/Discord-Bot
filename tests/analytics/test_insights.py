@@ -120,6 +120,14 @@ def test_retrospective_without_decay_omits_the_line():
     assert "Edge decay" not in joined
 
 
+def test_retrospective_uses_shared_signed_formatters_and_plain_chunks():
+    trades = [_closed_today("AAA", "loss")]
+    out = build_daily_retrospective(trades, today=_dt.date(2026, 3, 10))
+    body = "\n".join(out)
+    assert "−" in body
+    assert isinstance(out, list) and all(isinstance(chunk, str) for chunk in out)
+
+
 def test_retrospective_lessons_block_present_when_journaled(tmp_path, monkeypatch):
     monkeypatch.setattr("swingbot.core.analytics.journal.config.DATA_DIR", str(tmp_path))
     from swingbot.core.analytics.journal import JournalStore
