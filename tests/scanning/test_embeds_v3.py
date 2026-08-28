@@ -20,7 +20,7 @@ from swingbot.core.scanning.embeds import (
     RequirementCheck, build_closed_trade_embed, build_embed, build_near_close_embed, confidence_color,
     regenerate_chart_for_trade,
 )
-from swingbot.core.scanning import embeds as embeds_mod
+from swingbot.core.scanning import embeds as embeds_mod, plan_table
 from swingbot.core.scanning.engine import ScanItem
 
 
@@ -520,15 +520,15 @@ def _stub_sizing(monkeypatch, shares=100.0, position_value=10_000.0, risk_amount
     # embeds_mod's namespace, and the 2-arg account.compute_position_size(entry,
     # stop) that leg_rows() calls via the `account` module reference (same
     # split tests/test_embeds_badges.py's leg_rows tests already rely on).
-    monkeypatch.setattr(embeds_mod, "load_account_config",
+    monkeypatch.setattr(plan_table, "load_account_config",
                         lambda: {"balance": 10_000.0, "risk_pct": 1.0})
-    monkeypatch.setattr(embeds_mod, "compute_position_size",
+    monkeypatch.setattr(plan_table, "compute_position_size",
                         lambda entry, stop, cfg: {
                             "shares": shares, "position_value": position_value,
                             "risk_amount": risk_amount, "balance": 10_000.0,
                             "risk_pct": 1.0, "capped": False, "max_position_pct": 100.0,
                         })
-    monkeypatch.setattr(embeds_mod.account, "compute_position_size",
+    monkeypatch.setattr(plan_table.account, "compute_position_size",
                         lambda entry, stop: {
                             "shares": shares, "position_value": position_value,
                             "risk_amount": risk_amount, "balance": 10_000.0,
