@@ -528,6 +528,10 @@ FIELDS: list[Field] = [
           type="checkbox", default="true",
           help="The 60s monitor manages the full plan lifecycle: pending entry triggers, break-even "
                "moves, TP1 partials, runner trail, invalidation - with a Discord alert per transition."),
+    Field("INTRADAY_RTH_ONLY", "INTRADAY_RTH_ONLY", "Plan Engine v2",
+          "Manage plans only during regular US trading hours", type="checkbox", default="true",
+          help="The 60s plan manager ticks only Mon-Fri 09:30-16:00 America/New_York. "
+               "Set false only to reproduce pre-v64 24/7 behaviour."),
 
     # --- Data sources (optional external market-data APIs) ---
     Field("FMP_API_KEY", "FMP_API_KEY", "Data Sources", "Financial Modeling Prep API key",
