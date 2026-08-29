@@ -190,7 +190,7 @@ def test_calendar_and_by_strategy_carry_the_seeded_shape(seed, logged_in):
 def test_holding_split_reports_every_bucket_even_when_empty(seed, logged_in):
     seed(trades=_year())
     buckets = {b["bucket"] for b in _perf(logged_in)["holding_period_split"]}
-    assert buckets == {"0-2d", "3-7d", "8-30d", "31d+"}
+    assert buckets == {"0h-2h", "2h-4h", "4h-8h", "8h-24h", "1d-2d", "2d+"}
 
 
 def test_benchmark_block_is_present_even_when_yfinance_is_unavailable(seed, logged_in):

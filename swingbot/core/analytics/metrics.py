@@ -406,9 +406,14 @@ def sortino(returns: list[float]) -> float | None:
 
 _TRADING_DAYS_PER_YEAR = 252
 _MIN_HOLD_DAYS = 0.5  # an intraday round trip must not send the factor to infinity
-_HOLDING_BUCKETS = (("0-2d", 0.0, 2.0), ("3-7d", 2.0, 7.0),
-                    ("8-30d", 7.0, 30.0), ("31d+", 30.0, float("inf")))
-
+_HOLDING_BUCKETS = (
+    ("0h-2h", 0.0, 2 / 24),
+    ("2h-4h", 2 / 24, 4 / 24),
+    ("4h-8h", 4 / 24, 8 / 24),
+    ("8h-24h", 8 / 24, 1.0),
+    ("1d-2d", 1.0, 2.0),
+    ("2d+", 2.0, float("inf")),
+)
 
 def _parse(ts):
     """ISO timestamp -> datetime, or None. Accepts both the bare `YYYY-MM-DD`

@@ -245,13 +245,26 @@ def test_rolling_return_empty_when_fewer_trades_than_the_window():
 def test_holding_period_split_buckets_by_days_held():
     trades = _year_of_trades()
     split = {b["bucket"]: b for b in holding_period_split(trades)}
-    # 10, 10, 10 days land in 8-30d; 20 days lands there too.
-    assert split["8-30d"]["n"] == 4
-    assert split["0-2d"]["n"] == 0
-    # Each bucket reports its own win rate, so the UI can show where the edge is.
-    assert split["8-30d"]["win_rate"] == 50.0
+    assert split["2d+"]["n"] == 4
+    assert split["0h-2h"]["n"] == 0
+    assert split["2d+"]["win_rate"] == 50.0
 
 
+def test_holding_period_split_buckets_intraday_holds_by_hour():
+    trades = [
+        _t("2024-01-01T09:30:00", "2024-01-01T10:30:00", 100.0, 105.0),
+        _t("2024-01-01T09:30:00", "2024-01-01T12:30:00", 100.0, 95.0, status="loss"),
+        _t("2024-01-01T09:30:00", "2024-01-01T16:30:00", 100.0, 105.0),
+        _t("2024-01-01T09:30:00", "2024-01-02T08:30:00", 100.0, 105.0),
+        _t("2024-01-01T09:30:00", "2024-01-02T15:30:00", 100.0, 105.0),
+    ]
+    split = {b["bucket"]: b for b in holding_period_split(trades)}
+    assert split["0h-2h"]["n"] == 1
+    assert split["2h-4h"]["n"] == 1
+    assert split["4h-8h"]["n"] == 1
+    assert split["8h-24h"]["n"] == 1
+    assert split["1d-2d"]["n"] == 1
+    assert split["2d+"]["n"] == 0
 def test_holding_period_split_is_empty_on_no_trades():
     assert holding_period_split([]) == []
 
