@@ -37,6 +37,7 @@ function performancePayload(
     distributions: { returns: [], r_multiples: [] },
     rolling_returns: [],
     holding_period_split: [],
+    risk_reward_split: [],
     calendar: [],
     cumulative_by_strategy: {},
     benchmark: { spy_cum: {} },

@@ -162,6 +162,7 @@ def analytics_performance():
         },
         "rolling_returns": m.rolling_return_pct(scoped),
         "holding_period_split": m.holding_period_split(scoped),
+        "risk_reward_split": m.risk_reward_split(scoped),
         "calendar": m.calendar_returns(scoped),
         "cumulative_by_strategy": m.cumulative_pnl_by_strategy(scoped),
         # Best-effort: get_extended_stats swallows a failed yfinance fetch and

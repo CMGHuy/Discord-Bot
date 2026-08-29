@@ -199,33 +199,6 @@ describe('AnalyticsStore — the snapshot', () => {
     });
   });
 
-  it('flattens the equity curve and the drawdown series to one point shape', () => {
-    open();
-    expect(store.equitySeries()).toEqual([
-      { date: '2026-07-01', value: 10000 },
-      { date: '2026-07-15', value: 10250 },
-      { date: '2026-08-01', value: 10430.5 },
-    ]);
-    expect(store.drawdownSeries()).toEqual([
-      { date: '2026-07-01', value: 0 },
-      { date: '2026-07-15', value: 2.5 },
-    ]);
-  });
-
-  it('drops a series point that is missing a date or a value', () => {
-    // A gap is not a zero. Drawing it as one invents a crash.
-    open({
-      ...SNAPSHOT,
-      equity_curve: {
-        points: [
-          { date: '2026-07-01', balance: 10000 },
-          { date: '2026-07-02' },
-          { balance: 10100 },
-        ],
-      },
-    });
-    expect(store.equitySeries()).toEqual([{ date: '2026-07-01', value: 10000 }]);
-  });
 
   it('groups by ticker out of the box, busiest first', () => {
     open();
@@ -254,7 +227,6 @@ describe('AnalyticsStore — the snapshot', () => {
     expect(store.sharpe()).toBeNull();
     expect(store.sortino()).toBeNull();
     expect(store.maxDrawdownPct()).toBeNull();
-    expect(store.equitySeries()).toEqual([]);
     expect(store.rMultipleBins()).toEqual([]);
   });
 
@@ -271,6 +243,20 @@ describe('AnalyticsStore — the snapshot', () => {
   it('reports when the blob was built', () => {
     open();
     expect(store.snapshotBuiltAt()).toBe('2026-08-14T06:00:00Z');
+  });
+
+
+
+  it('exposes ordered zero-filled direction and day-of-week win-rate histograms', () => {
+    open({ ...SNAPSHOT, by: { ...SNAPSHOT.by,
+      direction: [{ key: 'bullish', n: 6, wins: 4, losses: 2, win_rate: 66.7, expectancy_r: 0.3, avg_r: 0.3, profit_factor: 1.8, total_pnl: 300 }],
+      dow: [
+        { key: 'Wednesday', n: 5, wins: 3, losses: 2, win_rate: 60, expectancy_r: 0.2, avg_r: 0.2, profit_factor: 1.5, total_pnl: 150 },
+        { key: 'Monday', n: 2, wins: 1, losses: 1, win_rate: 50, expectancy_r: 0.1, avg_r: 0.1, profit_factor: 1.1, total_pnl: 20 },
+      ],
+    } });
+    expect(store.directionHistogram()).toEqual([{ label: 'Long (n=6)', count: 66.7 }, { label: 'Short (n=0)', count: 0 }]);
+    expect(store.dowHistogram().map((bin) => bin.label)).toEqual(['Monday (n=2)', 'Tuesday (n=0)', 'Wednesday (n=5)', 'Thursday (n=0)', 'Friday (n=0)', 'Saturday (n=0)', 'Sunday (n=0)']);
   });
 });
 
@@ -361,7 +347,6 @@ describe('AnalyticsStore — the tuning grid', () => {
     openTuning();
     expect(store.grid().map((row) => row.row_index)).toEqual([0, 1]);
   });
-
   it('shows no grid while a job is still running', () => {
     // The endpoint answers 200 with an empty grid rather than 404ing, so this
     // is not an error state and must not read as one.

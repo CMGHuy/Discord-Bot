@@ -406,9 +406,14 @@ def sortino(returns: list[float]) -> float | None:
 
 _TRADING_DAYS_PER_YEAR = 252
 _MIN_HOLD_DAYS = 0.5  # an intraday round trip must not send the factor to infinity
-_HOLDING_BUCKETS = (("0-2d", 0.0, 2.0), ("3-7d", 2.0, 7.0),
-                    ("8-30d", 7.0, 30.0), ("31d+", 30.0, float("inf")))
-
+_HOLDING_BUCKETS = (
+    ("0h-2h", 0.0, 2 / 24),
+    ("2h-4h", 2 / 24, 4 / 24),
+    ("4h-8h", 4 / 24, 8 / 24),
+    ("8h-24h", 8 / 24, 1.0),
+    ("1d-2d", 1.0, 2.0),
+    ("2d+", 2.0, float("inf")),
+)
 
 def _parse(ts):
     """ISO timestamp -> datetime, or None. Accepts both the bare `YYYY-MM-DD`
@@ -704,6 +709,32 @@ def holding_period_split(closed: list[dict]) -> list[dict]:
                     "avg_return_pct": round(sum(rets) / len(rets), 4) if rets else None})
     return out
 
+
+
+_RISK_REWARD_BUCKETS = (
+    ("<1.5", 0.0, 1.5),
+    ("1.5-2", 1.5, 2.0),
+    ("2-3", 2.0, 3.0),
+    ("3-4", 3.0, 4.0),
+    ("4+", 4.0, float("inf")),
+)
+
+
+def risk_reward_split(closed: list[dict]) -> list[dict]:
+    """Trades bucketed by their planned entry risk/reward ratio."""
+    if not closed:
+        return []
+    out = []
+    for name, lo, hi in _RISK_REWARD_BUCKETS:
+        members = [
+            trade for trade in closed
+            if isinstance(trade.get("risk_reward_ratio"), (int, float))
+            and lo <= trade["risk_reward_ratio"] < hi
+        ]
+        returns = [value for value in (trade_return_pct(trade) for trade in members) if value is not None]
+        out.append({"bucket": name, "n": len(members), "win_rate": win_rate(members),
+                    "avg_return_pct": round(sum(returns) / len(returns), 4) if returns else None})
+    return out
 
 def _exit_reason_bucket(trade: dict) -> str:
     """Which EXIT_REASONS bucket a closed trade belongs to.
