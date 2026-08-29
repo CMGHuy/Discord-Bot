@@ -41,3 +41,27 @@ def test_legacy_plan_record_with_tier_still_loads():
     assert q.ticker == "AAPL"
     assert not hasattr(q, "tier")
     assert q.confidence_level is None
+
+
+def test_session_stamp_fields_default_to_none_and_round_trip():
+    p = _plan()
+    assert p.be_armed_session is None
+    assert p.runner_floor_session is None
+
+    p.be_armed_session = "2026-08-27"
+    p.runner_floor_session = "2026-08-28"
+    back = plan_from_dict(plan_to_dict(p))
+    assert back.be_armed_session == "2026-08-27"
+    assert back.runner_floor_session == "2026-08-28"
+
+
+def test_a_plan_persisted_before_v64_loads_with_unstamped_sessions():
+    legacy = plan_to_dict(_plan())
+    legacy["working_stop"] = 100.0
+    del legacy["be_armed_session"]
+    del legacy["runner_floor_session"]
+
+    back = plan_from_dict(legacy)
+    assert back.working_stop == 100.0
+    assert back.be_armed_session is None
+    assert back.runner_floor_session is None

@@ -76,6 +76,10 @@ class TradePlanV2:
     # quality_score -- optional because not every _apply_quality caller
     # (e.g. the offline decile-audit script) has a live scan's conf in hand.
     confidence_level: int | None = None
+    # The ET session dates on which break-even and runner-floor protections
+    # armed. None marks legacy plans whose persisted record predates v64.
+    be_armed_session: str | None = None
+    runner_floor_session: str | None = None
 
 
 def effective_stop(plan: TradePlanV2) -> float:

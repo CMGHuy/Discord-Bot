@@ -18,6 +18,9 @@ def _partial_env(tmp_path, prices, tp2=None, atr_fn=None):
     store.add(_active(tp2=tp2))
     mgr = PlanManager(store, feed.get_price, atr_fn=atr_fn)
     assert [e.transition for e in mgr.poll()] == ["tp1_partial"]
+    plan = store.get("p1")
+    plan.runner_floor_session = "2000-01-01"  # phase-two mechanics use a later session
+    store.update(plan)
     return store, mgr
 
 
@@ -86,6 +89,9 @@ def _bear_partial_env(tmp_path, prices):
     store.add(_bear_active())
     mgr = PlanManager(store, feed.get_price)
     assert [e.transition for e in mgr.poll()] == ["tp1_partial"]
+    plan = store.get("p1")
+    plan.runner_floor_session = "2000-01-01"  # phase-two mechanics use a later session
+    store.update(plan)
     return store, mgr
 
 
@@ -185,3 +191,9 @@ def test_legacy_partial_without_a_working_stop_falls_back_to_the_floor(tmp_path)
     assert [e.transition for e in events] == ["closed"]
     assert events[0].detail["reason"] == "tp1_runner_be"
     assert events[0].detail["exit_price"] == pytest.approx(103.0)
+
+@pytest.fixture(autouse=True)
+def _rth_gate_off(monkeypatch):
+    """Arithmetic tests stay independent of the wall clock."""
+    from swingbot import config
+    monkeypatch.setattr(config, "INTRADAY_RTH_ONLY", False)

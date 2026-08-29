@@ -51,3 +51,7 @@ def test_v55_batch_fetch_fields_exist_with_documented_defaults():
     assert isinstance(config.BATCH_FETCH_CHUNK_SIZE, int)
     assert isinstance(config.COLD_FETCH_TIMEOUT_SECONDS, int)
     assert isinstance(config.LIVE_PRICE_TIMEOUT_SECONDS, int)
+
+
+def test_intraday_rth_only_defaults_on():
+    assert config.INTRADAY_RTH_ONLY is True

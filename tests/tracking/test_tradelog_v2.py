@@ -1,6 +1,9 @@
+import datetime as dt
+
 import pytest
 
 from swingbot.core.tracking.performance import TradeLog, closed_r_multiple
+from swingbot.core.market.session import US_MARKET_TZ
 from swingbot.core.planning.plan_manager import PlanManager
 from swingbot.core.planning.plan_store import PlanStore
 from tests.fake_feed import FakePriceFeed
@@ -22,8 +25,9 @@ def test_full_lifecycle_writes_two_leg_win(tmp_path):
                       trade_log=log)
 
     transitions = []
-    for _ in range(4):
-        transitions.extend(e.transition for e in mgr.poll())
+    for day in range(27, 31):
+        now = dt.datetime(2026, 8, day, 12, 0, tzinfo=US_MARKET_TZ)
+        transitions.extend(e.transition for e in mgr.poll(now=now))
     assert transitions == ["filled", "tp1_partial", "closed"] or \
            transitions == ["filled", "tp1_partial", "be_moved", "closed"]
 
@@ -70,3 +74,8 @@ def test_close_plan_trade_journals_and_refreshes_snapshot(tmp_path, monkeypatch)
 
     assert [trade["id"] for trade in journaled] == ["t-close"]
     assert refreshed == [True]
+
+@pytest.fixture(autouse=True)
+def _rth_gate_off(monkeypatch):
+    from swingbot import config
+    monkeypatch.setattr(config, "INTRADAY_RTH_ONLY", False)

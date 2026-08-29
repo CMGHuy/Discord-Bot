@@ -30,9 +30,8 @@ event it exists to protect against.
 from __future__ import annotations
 
 import datetime as dt
-from zoneinfo import ZoneInfo
 
-US_MARKET_TZ = ZoneInfo("America/New_York")
+from swingbot.core.market.session import US_MARKET_TZ
 
 #: US equity regular-session close. Half-days (the 13:00 closes around
 #: Thanksgiving and Christmas) are deliberately not modelled: none of them is

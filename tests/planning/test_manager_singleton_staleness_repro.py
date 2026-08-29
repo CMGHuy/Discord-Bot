@@ -1,3 +1,5 @@
+import pytest
+
 """Repro for the 'trade fired by Discord but never shows/updates on the
 Dashboard' bug: run_manager_tick()'s module-level `_MANAGER` singleton
 snapshots PlanStore() ONCE, on its first tick, and never reloads it. Any
@@ -133,3 +135,8 @@ def test_legacy_trade_logged_between_ticks_is_not_erased_from_disk(tmp_path, mon
         "trades.json by the manager's own next write -- exactly the "
         "'fired by Discord but missing from the Dashboard' report"
     )
+
+@pytest.fixture(autouse=True)
+def _rth_gate_off(monkeypatch):
+    from swingbot import config
+    monkeypatch.setattr(config, "INTRADAY_RTH_ONLY", False)

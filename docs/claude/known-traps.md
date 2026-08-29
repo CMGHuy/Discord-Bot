@@ -167,3 +167,7 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   reader's problem and the API owns tolerating it (spec v12 Decision 2).
   Do not "fix" either by adding a parse to the watcher — that would trade
   away the property that makes it immune to schema changes.
+
+## `PlanManager.check_bar()` is unwired — do not "fix" it
+
+`check_bar` / `_check_bar_active` / `_check_bar_partial` model overnight gap fills and are tested, but production never calls them. The live bot exits exclusively through `poll()`. Keep the path inert: wiring it would create a second authority for `plans.json`. Change `_step_active` / `_step_partial` for live exits; mirror bar checks only to keep their tests honest.

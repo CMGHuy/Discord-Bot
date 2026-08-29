@@ -53,7 +53,7 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   TP1, stop to break-even, runner rides to TP2 with a chandelier ATR trail).
   `swingbot/core/backtesting/backtest.py run_backtest(..., exit_model="v2",
   scale_out=True)` uses the same simulator, so live behavior equals
-  backtested behavior by construction. `planning/plan_manager.py` +
+  backtested behavior. That is an **invariant this repo maintains, not one the code structure guarantees**: the live path polls a tape every 60s while the simulator walks daily bars, and v64 fixed extended-hours prints, sampled-tick stop fills, and same-session moved stops. Any new live-path exit rule must name the simulator line it matches. `planning/plan_manager.py` +
   `planning/plan_store.py` drive the live lifecycle from the 60s monitor;
   `backtesting/backtest_scenarios.py` replays the confluence scan
   historically.

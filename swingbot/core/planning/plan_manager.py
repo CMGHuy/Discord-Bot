@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from swingbot import config
+from swingbot.core.market.session import is_regular_session, session_date
 from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
                                        chandelier_stop, pending_expired,
                                        pending_invalidated, record_transition,
@@ -31,6 +32,10 @@ def gap_stop_fill(bar_open: float, level: float, direction: str) -> float:
 def gap_target_fill(bar_open: float, level: float, direction: str) -> float:
     """A gap THROUGH the target fills at the better open."""
     return max(bar_open, level) if direction == "bullish" else min(bar_open, level)
+
+
+def poll_stop_fill(price: float, stop: float, continuous: bool) -> float:
+    return stop if continuous else price
 
 
 @dataclass
@@ -127,11 +132,14 @@ class PlanManager:
         self.bar_count_fn = bar_count_fn    # (ticker, created_at) -> bars since
         self.atr_fn = atr_fn                # ticker -> current ATR(14) (Task 66)
         self.trade_log = trade_log          # TradeLog (Task 70)
+        self._last_seen: dict[str, tuple[str, float]] = {}
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def poll(self) -> list[PlanEvent]:
+    def poll(self, now=None) -> list[PlanEvent]:
+        if config.INTRADAY_RTH_ONLY and not is_regular_session(now):
+            return []
         # `self.store` (and `self.trade_log`) can be long-lived instances --
         # the module singleton `_MANAGER` below keeps both for the
         # process's whole life -- so reload each from disk first. Otherwise
@@ -157,11 +165,12 @@ class PlanManager:
             # current on-disk store instead of serializing a stale snapshot.
             self.store.reload()
             try:
-                new_events = self._step(plan, price)
+                new_events = self._step(plan, price, now)
             except Exception:
                 log.warning("poll: step failed for plan %s", plan.plan_id,
                             exc_info=True)
                 continue
+            self._last_seen[plan.plan_id] = (session_date(now), price)
             for event in new_events:
                 self._on_event(plan, event)
             events.extend(new_events)
@@ -209,15 +218,21 @@ class PlanManager:
             log.warning("trade-log hook failed for plan %s", plan.plan_id,
                         exc_info=True)   # bookkeeping must never break the manager
 
+    def _continuous(self, plan: TradePlanV2, stop: float, now=None) -> bool:
+        seen = self._last_seen.get(plan.plan_id)
+        if seen is None or seen[0] != session_date(now):
+            return False
+        return seen[1] > stop if plan.direction == 'bullish' else seen[1] < stop
+
     # -- per-status handlers -------------------------------------------------
 
-    def _step(self, plan: TradePlanV2, price: float) -> list[PlanEvent]:
+    def _step(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
         if plan.status == PlanStatus.PENDING:
             return self._step_pending(plan, price)
         if plan.status == PlanStatus.ACTIVE:
-            return self._step_active(plan, price)     # Tasks 61-63
+            return self._step_active(plan, price, now)     # Tasks 61-63
         if plan.status == PlanStatus.PARTIAL:
-            return self._step_partial(plan, price)    # Tasks 64-66
+            return self._step_partial(plan, price, now)    # Tasks 64-66
         return []
 
     def _step_pending(self, plan: TradePlanV2, price: float) -> list[PlanEvent]:
@@ -251,20 +266,27 @@ class PlanManager:
                               {"live_price": price})]
         return []
 
-    def _step_active(self, plan: TradePlanV2, price: float) -> list[PlanEvent]:
+    def _active_stop(self, plan: TradePlanV2, now=None) -> tuple[float, bool]:
+        if plan.working_stop is None:
+            return plan.stop_loss, False
+        if plan.be_armed_session == session_date(now):
+            return plan.stop_loss, False
+        return plan.working_stop, True
+    def _step_active(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
         is_bull = plan.direction == "bullish"
         sign = 1 if is_bull else -1
         entry = plan.entry_price
         risk = abs(entry - plan.stop_loss)
 
-        stop = plan.working_stop if plan.working_stop is not None else plan.stop_loss
+        stop, is_be_stop = self._active_stop(plan, now)
         hit_stop = price <= stop if is_bull else price >= stop
         if hit_stop:
-            reason = "scratch" if plan.working_stop is not None else "loss"
+            reason = "scratch" if is_be_stop else "loss"
+            fill = poll_stop_fill(price, stop, self._continuous(plan, stop, now))
             record_transition(plan, PlanStatus.CLOSED, reason=reason, at=self._now())
             self.store.update(plan)
             return [PlanEvent(plan.plan_id, "closed",
-                              {"reason": reason, "exit_price": price})]
+                              {"reason": reason, "exit_price": fill})]
 
         hit_tp1 = price >= plan.tp1 if is_bull else price <= plan.tp1
         if hit_tp1:
@@ -277,6 +299,7 @@ class PlanManager:
                    "r": r1, "reason": "tp1"}
             plan.legs_realized.append(leg)
             plan.working_stop = runner_floor(entry, plan.tp1)   # v39 runner floor
+            plan.runner_floor_session = session_date(now)
             record_transition(plan, PlanStatus.PARTIAL, reason="tp1_partial",
                               at=self._now())
             self.store.update(plan)
@@ -287,12 +310,13 @@ class PlanManager:
         reached_be = price >= be_trigger if is_bull else price <= be_trigger
         if reached_be and plan.working_stop is None:
             plan.working_stop = entry
+            plan.be_armed_session = session_date(now)
             self.store.update(plan)
             return [PlanEvent(plan.plan_id, "be_moved",
                               {"working_stop": entry, "live_price": price})]
         return []
 
-    def _step_partial(self, plan: TradePlanV2, price: float) -> list[PlanEvent]:
+    def _step_partial(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
         is_bull = plan.direction == "bullish"
         sign = 1 if is_bull else -1
         entry = plan.entry_price
@@ -316,7 +340,7 @@ class PlanManager:
                 self.store.update(plan)
                 return [PlanEvent(plan.plan_id, "pyramid_add", dict(add))]
 
-        hit_stop = price <= stop if is_bull else price >= stop
+        hit_stop = (price <= stop if is_bull else price >= stop) and plan.runner_floor_session != session_date(now)
         if hit_stop:
             # v39: "tp1_runner_be" now means "closed at the initial post-TP1
             # floor", not literally at entry. The string is unchanged on
@@ -325,7 +349,7 @@ class PlanManager:
                       else "tp1_runner_trail")
             return self._close_runner(plan, price, reason, risk, sign)
 
-        if plan.tp2 is not None:
+        if plan.tp2 is not None and plan.runner_floor_session != session_date(now):
             hit_tp2 = price >= plan.tp2 if is_bull else price <= plan.tp2
             if hit_tp2:
                 return self._close_runner(plan, price, "tp1_runner_tp2", risk, sign)
@@ -359,6 +383,7 @@ class PlanManager:
                           {"reason": reason, "exit_price": fill, "leg": leg})]
 
     # -- overnight/session-open bar check (Task 67) --------------------------
+    # UNWIRED: production exits exclusively through poll(); see known-traps.md.
     #
     # Same gap-fill convention as performance.update_open_trades (and the
     # tick-poll fills above): a stop/target can't fill better than the bar's
@@ -477,6 +502,7 @@ def run_manager_tick() -> list[PlanEvent]:
         from swingbot.core.tracking.performance import TradeLog
         _MANAGER = PlanManager(PlanStore(), _price_fn, atr_fn=_live_atr,
                                bar_count_fn=_bars_since, trade_log=TradeLog())
+    # Production reads the wall clock; poll's optional clock is test injection.
     return _MANAGER.poll()
 
 

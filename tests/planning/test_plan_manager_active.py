@@ -47,12 +47,16 @@ def test_stop_hit_pre_be_is_loss(tmp_path):
 
 
 def test_stop_hit_post_be_is_scratch(tmp_path):
-    store, mgr = _env(tmp_path, [105.0, 99.9])      # tick 1 arms BE, tick 2 hits it
-    assert [e.transition for e in mgr.poll()] == ["be_moved"]
-    events = mgr.poll()
+    import datetime as dt
+    from swingbot.core.market.session import US_MARKET_TZ
+
+    day1 = dt.datetime(2026, 8, 27, 12, 0, tzinfo=US_MARKET_TZ)
+    day2 = dt.datetime(2026, 8, 28, 12, 0, tzinfo=US_MARKET_TZ)
+    store, mgr = _env(tmp_path, [105.0, 99.9])
+    assert [event.transition for event in mgr.poll(now=day1)] == ["be_moved"]
+    events = mgr.poll(now=day2)
     assert events[0].detail["reason"] == "scratch"
     assert store.get("p1").status == PlanStatus.CLOSED
-
 
 def test_tp1_touch_banks_partial_and_moves_to_partial(tmp_path):
     store, mgr = _env(tmp_path, [110.5])
@@ -68,3 +72,9 @@ def test_tp1_touch_banks_partial_and_moves_to_partial(tmp_path):
                                                                  # 100 + (2/3)*(110-100)
     assert p.legs_realized == [{"fraction": 0.5, "exit_price": 110.5,
                                 "r": d["r"], "reason": "tp1"}]
+
+@pytest.fixture(autouse=True)
+def _rth_gate_off(monkeypatch):
+    """Arithmetic tests stay independent of the wall clock."""
+    from swingbot import config
+    monkeypatch.setattr(config, "INTRADAY_RTH_ONLY", False)
