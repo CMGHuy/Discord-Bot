@@ -299,6 +299,7 @@ class PlanManager:
                    "r": r1, "reason": "tp1"}
             plan.legs_realized.append(leg)
             plan.working_stop = runner_floor(entry, plan.tp1)   # v39 runner floor
+            plan.runner_floor_session = session_date(now)
             record_transition(plan, PlanStatus.PARTIAL, reason="tp1_partial",
                               at=self._now())
             self.store.update(plan)
@@ -339,7 +340,7 @@ class PlanManager:
                 self.store.update(plan)
                 return [PlanEvent(plan.plan_id, "pyramid_add", dict(add))]
 
-        hit_stop = price <= stop if is_bull else price >= stop
+        hit_stop = (price <= stop if is_bull else price >= stop) and plan.runner_floor_session != session_date(now)
         if hit_stop:
             # v39: "tp1_runner_be" now means "closed at the initial post-TP1
             # floor", not literally at entry. The string is unchanged on
@@ -348,7 +349,7 @@ class PlanManager:
                       else "tp1_runner_trail")
             return self._close_runner(plan, price, reason, risk, sign)
 
-        if plan.tp2 is not None:
+        if plan.tp2 is not None and plan.runner_floor_session != session_date(now):
             hit_tp2 = price >= plan.tp2 if is_bull else price <= plan.tp2
             if hit_tp2:
                 return self._close_runner(plan, price, "tp1_runner_tp2", risk, sign)
