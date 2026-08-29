@@ -266,16 +266,22 @@ class PlanManager:
                               {"live_price": price})]
         return []
 
+    def _active_stop(self, plan: TradePlanV2, now=None) -> tuple[float, bool]:
+        if plan.working_stop is None:
+            return plan.stop_loss, False
+        if plan.be_armed_session == session_date(now):
+            return plan.stop_loss, False
+        return plan.working_stop, True
     def _step_active(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
         is_bull = plan.direction == "bullish"
         sign = 1 if is_bull else -1
         entry = plan.entry_price
         risk = abs(entry - plan.stop_loss)
 
-        stop = plan.working_stop if plan.working_stop is not None else plan.stop_loss
+        stop, is_be_stop = self._active_stop(plan, now)
         hit_stop = price <= stop if is_bull else price >= stop
         if hit_stop:
-            reason = "scratch" if plan.working_stop is not None else "loss"
+            reason = "scratch" if is_be_stop else "loss"
             fill = poll_stop_fill(price, stop, self._continuous(plan, stop, now))
             record_transition(plan, PlanStatus.CLOSED, reason=reason, at=self._now())
             self.store.update(plan)
@@ -303,6 +309,7 @@ class PlanManager:
         reached_be = price >= be_trigger if is_bull else price <= be_trigger
         if reached_be and plan.working_stop is None:
             plan.working_stop = entry
+            plan.be_armed_session = session_date(now)
             self.store.update(plan)
             return [PlanEvent(plan.plan_id, "be_moved",
                               {"working_stop": entry, "live_price": price})]
