@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** `docs/superpowers/specs/2026-08-28-v64-live-exit-parity-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-08-28-v64-live-exit-parity-design.md`
 
 **Version:** ui 1.9.2 · bot 1.4.5
 **Bump:** bot minor (1.4.x → 1.5.0) · ui none
@@ -1427,3 +1427,8 @@ partial floor instead of full break-even, direction-aware break-even) are
 now measurable against a harness whose live twin matches it. **Each is a
 new pre-registered hypothesis with its own TRAIN grid and its own one-shot
 VALIDATION.** Nothing in this plan is evidence for any of them.
+
+
+## Close-out
+
+**Complete 2026-08-30.** All V64 tasks merged to main in 87a4e5a; the full Python suite completed with exit code 0. The planned bot minor bump was already represented by the prior bot 1.5.0 Discord-message release, so this close-out intentionally adds no duplicate release metadata.
