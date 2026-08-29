@@ -1,3 +1,5 @@
+import pytest
+
 import os
 
 import swingbot.config as config
@@ -63,3 +65,18 @@ def test_flag_on_still_expires_a_stale_pending_plan(tmp_path, monkeypatch):
     monkeypatch.setattr(pm, "_bars_since", lambda ticker, created_at: 6)
     events = pm.run_manager_tick()
     assert [e.transition for e in events] == ["cancelled_expired"]
+
+def test_run_manager_tick_is_a_no_op_outside_regular_hours(monkeypatch, tmp_path):
+    from swingbot import config
+    from swingbot.core.planning import plan_manager
+    monkeypatch.setattr(config, "INTRADAY_MANAGER_V2", True)
+    monkeypatch.setattr(config, "INTRADAY_RTH_ONLY", True)
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(plan_manager, "_MANAGER", None)
+    monkeypatch.setattr(plan_manager, "is_regular_session", lambda now=None: False)
+    assert plan_manager.run_manager_tick() == []
+
+@pytest.fixture(autouse=True)
+def _rth_gate_off(monkeypatch):
+    from swingbot import config
+    monkeypatch.setattr(config, 'INTRADAY_RTH_ONLY', False)

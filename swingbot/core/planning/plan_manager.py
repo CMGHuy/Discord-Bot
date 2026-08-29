@@ -501,6 +501,7 @@ def run_manager_tick() -> list[PlanEvent]:
         from swingbot.core.tracking.performance import TradeLog
         _MANAGER = PlanManager(PlanStore(), _price_fn, atr_fn=_live_atr,
                                bar_count_fn=_bars_since, trade_log=TradeLog())
+    # Production reads the wall clock; poll's optional clock is test injection.
     return _MANAGER.poll()
 
 
