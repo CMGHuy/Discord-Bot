@@ -64,7 +64,7 @@ export function count(value: number | null | undefined): string {
 /** `rolling` and `status` render through templates; their `value` is omitted
  *  so the table has nothing to fall back to and a missing cell is obvious. */
 export const STRATEGY_COLUMNS: ColumnDef<StrategyRow>[] = [
-  { key: 'strategy', header: 'Strategy' },
+  { key: 'strategy', header: 'Strategy', value: (r) => r.strategy },
   { key: 'rolling', header: 'Rolling WR', width: '90px' },
   { key: 'status', header: 'Badge' },
   { key: 'n', header: 'OOS N', numeric: true, value: (r) => count(r.n) },
@@ -99,7 +99,7 @@ export const CONFIDENCE_COLUMNS: ColumnDef<ConfidenceRow>[] = [
 /* -- calibration -------------------------------------------------------- */
 
 export const DECILE_COLUMNS: ColumnDef<DecileRow>[] = [
-  { key: 'decile', header: 'Score decile' },
+  { key: 'decile', header: 'Score decile', value: (r) => r.decile },
   { key: 'n', header: 'N', numeric: true, value: (r) => count(r.n) },
   { key: 'win_rate', header: 'Win rate', numeric: true, value: (r) => rate(r.win_rate) },
   { key: 'expectancy_r', header: 'ExpR', numeric: true, value: (r) => expectancy(r.expectancy_r) },
@@ -110,7 +110,7 @@ export const TIER_COLUMNS: ColumnDef<TierRow>[] = [
   { key: 'n', header: 'N', numeric: true, value: (r) => count(r.n) },
   { key: 'win_rate', header: 'Live WR', numeric: true, value: (r) => rate(r.win_rate) },
   { key: 'expectancy_r', header: 'ExpR', numeric: true, value: (r) => expectancy(r.expectancy_r) },
-  { key: 'expected_band', header: 'Design band' },
+  { key: 'expected_band', header: 'Design band', value: (r) => r.expected_band },
   { key: 'ok', header: 'In band' },
 ];
 
@@ -121,7 +121,7 @@ export const TIER_COLUMNS: ColumnDef<TierRow>[] = [
  * dimension, which is why it is built rather than declared. */
 export function breakdownColumns(label: string): ColumnDef<BreakdownRow>[] {
   return [
-    { key: 'key', header: label },
+    { key: 'key', header: label, value: (r) => r.key },
     { key: 'n', header: 'Trades', numeric: true, value: (r) => count(r.n) },
     { key: 'wins', header: 'Wins', numeric: true, value: (r) => count(r.wins) },
     { key: 'losses', header: 'Losses', numeric: true, value: (r) => count(r.losses) },
@@ -150,7 +150,7 @@ export function breakdownColumns(label: string): ColumnDef<BreakdownRow>[] {
 }
 
 export const DRIFT_COLUMNS: ColumnDef<DriftRow>[] = [
-  { key: 'strategy', header: 'Strategy' },
+  { key: 'strategy', header: 'Strategy', value: (r) => r.strategy },
   { key: 'oos_n', header: 'OOS N', numeric: true, value: (r) => count(r.oos_n) },
   { key: 'oos_wr', header: 'OOS WR', numeric: true, value: (r) => rate(r.oos_wr) },
   { key: 'live_n', header: 'Live N', numeric: true, value: (r) => count(r.live_n) },
