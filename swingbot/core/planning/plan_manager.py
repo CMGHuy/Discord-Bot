@@ -34,6 +34,10 @@ def gap_target_fill(bar_open: float, level: float, direction: str) -> float:
     return max(bar_open, level) if direction == "bullish" else min(bar_open, level)
 
 
+def poll_stop_fill(price: float, stop: float, continuous: bool) -> float:
+    return stop if continuous else price
+
+
 @dataclass
 class PlanEvent:
     plan_id: str
@@ -128,6 +132,7 @@ class PlanManager:
         self.bar_count_fn = bar_count_fn    # (ticker, created_at) -> bars since
         self.atr_fn = atr_fn                # ticker -> current ATR(14) (Task 66)
         self.trade_log = trade_log          # TradeLog (Task 70)
+        self._last_seen: dict[str, tuple[str, float]] = {}
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
@@ -160,11 +165,12 @@ class PlanManager:
             # current on-disk store instead of serializing a stale snapshot.
             self.store.reload()
             try:
-                new_events = self._step(plan, price)
+                new_events = self._step(plan, price, now)
             except Exception:
                 log.warning("poll: step failed for plan %s", plan.plan_id,
                             exc_info=True)
                 continue
+            self._last_seen[plan.plan_id] = (session_date(now), price)
             for event in new_events:
                 self._on_event(plan, event)
             events.extend(new_events)
@@ -212,15 +218,21 @@ class PlanManager:
             log.warning("trade-log hook failed for plan %s", plan.plan_id,
                         exc_info=True)   # bookkeeping must never break the manager
 
+    def _continuous(self, plan: TradePlanV2, stop: float, now=None) -> bool:
+        seen = self._last_seen.get(plan.plan_id)
+        if seen is None or seen[0] != session_date(now):
+            return False
+        return seen[1] > stop if plan.direction == 'bullish' else seen[1] < stop
+
     # -- per-status handlers -------------------------------------------------
 
-    def _step(self, plan: TradePlanV2, price: float) -> list[PlanEvent]:
+    def _step(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
         if plan.status == PlanStatus.PENDING:
             return self._step_pending(plan, price)
         if plan.status == PlanStatus.ACTIVE:
-            return self._step_active(plan, price)     # Tasks 61-63
+            return self._step_active(plan, price, now)     # Tasks 61-63
         if plan.status == PlanStatus.PARTIAL:
-            return self._step_partial(plan, price)    # Tasks 64-66
+            return self._step_partial(plan, price, now)    # Tasks 64-66
         return []
 
     def _step_pending(self, plan: TradePlanV2, price: float) -> list[PlanEvent]:
@@ -254,7 +266,7 @@ class PlanManager:
                               {"live_price": price})]
         return []
 
-    def _step_active(self, plan: TradePlanV2, price: float) -> list[PlanEvent]:
+    def _step_active(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
         is_bull = plan.direction == "bullish"
         sign = 1 if is_bull else -1
         entry = plan.entry_price
@@ -264,10 +276,11 @@ class PlanManager:
         hit_stop = price <= stop if is_bull else price >= stop
         if hit_stop:
             reason = "scratch" if plan.working_stop is not None else "loss"
+            fill = poll_stop_fill(price, stop, self._continuous(plan, stop, now))
             record_transition(plan, PlanStatus.CLOSED, reason=reason, at=self._now())
             self.store.update(plan)
             return [PlanEvent(plan.plan_id, "closed",
-                              {"reason": reason, "exit_price": price})]
+                              {"reason": reason, "exit_price": fill})]
 
         hit_tp1 = price >= plan.tp1 if is_bull else price <= plan.tp1
         if hit_tp1:
@@ -295,7 +308,7 @@ class PlanManager:
                               {"working_stop": entry, "live_price": price})]
         return []
 
-    def _step_partial(self, plan: TradePlanV2, price: float) -> list[PlanEvent]:
+    def _step_partial(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
         is_bull = plan.direction == "bullish"
         sign = 1 if is_bull else -1
         entry = plan.entry_price
