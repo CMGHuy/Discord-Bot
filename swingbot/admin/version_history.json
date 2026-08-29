@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-27 09:33:57 UTC",
+  "generated_at": "2026-08-29 10:44:51 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.9.2",
-    "bot": "1.4.5"
+    "bot": "1.5.0"
   },
   "releases": [
     {
@@ -865,6 +865,19 @@
       },
       "changed": [
         "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-08-29",
+      "last_seen": "2026-08-29",
+      "commit": "38cba284",
+      "subject": "release(bot): 1.5.0 -- the Discord message system",
+      "versions": {
+        "ui": "1.9.2",
+        "bot": "1.5.0"
+      },
+      "changed": [
         "bot"
       ]
     }
