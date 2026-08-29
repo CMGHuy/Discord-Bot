@@ -711,6 +711,16 @@ export const AnalyticsStore = signalStore(
         .map((p) => ({ date: p.date, value: p.return_pct })),
     }]),
     holdingSplit: computed(() => performance()?.holding_period_split ?? []),
+    holdingPeriodHistogram: computed<HistogramBin[]>(() =>
+      (performance()?.holding_period_split ?? []).map((bucket) => ({
+        label: `${bucket.bucket} (n=${bucket.n})`,
+        count: bucket.win_rate ?? 0,
+      }))),
+    riskRewardHistogram: computed<HistogramBin[]>(() =>
+      (performance()?.risk_reward_split ?? []).map((bucket) => ({
+        label: `${bucket.bucket} (n=${bucket.n})`,
+        count: bucket.win_rate ?? 0,
+      }))),
     calendarReturns: computed(() => performance()?.calendar ?? []),
 
     /** `calendarReturns` reshaped for `Histogram` -- `count` here is a

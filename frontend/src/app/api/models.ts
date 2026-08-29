@@ -367,6 +367,7 @@ export interface AnalyticsPerformance {
   distributions: { returns: HistogramBucket[]; r_multiples: HistogramBucket[] };
   rolling_returns: { date: string; return_pct: number }[];
   holding_period_split: HoldingBucket[];
+  risk_reward_split: HoldingBucket[];
   calendar: { month: string; return_pct: number; n: number }[];
   cumulative_by_strategy: Record<string, { date: string; cum_pct: number }[]>;
   benchmark: { spy_cum: Record<string, number> };

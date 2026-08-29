@@ -103,9 +103,10 @@ const PERFORMANCE: AnalyticsPerformance = {
   },
   rolling_returns: [{ date: '2026-08-01', return_pct: 3.2 }],
   holding_period_split: [
-    { bucket: '0-2d', n: 0, win_rate: null, avg_return_pct: null },
-    { bucket: '8-30d', n: 34, win_rate: 61.8, avg_return_pct: 1.8 },
+    { bucket: '0h-2h', n: 0, win_rate: null, avg_return_pct: null },
+    { bucket: '2d+', n: 34, win_rate: 61.8, avg_return_pct: 1.8 },
   ],
+  risk_reward_split: [],
   calendar: [{ month: '2026-08', return_pct: 3.2, n: 4 }],
   cumulative_by_strategy: {
     MACD: [{ date: '2026-08-02', cum_pct: 4.0 }],
@@ -800,6 +801,16 @@ describe('AnalyticsStore', () => {
       ]);
     });
 
+
+    it('exposes holding-period and planned-R:R win-rate histograms with sample sizes', () => {
+      tick();
+      respondPerformance({
+        holding_period_split: [{ bucket: '0h-2h', n: 0, win_rate: null, avg_return_pct: null }, { bucket: '2h-4h', n: 3, win_rate: 66.7, avg_return_pct: 1.1 }],
+        risk_reward_split: [{ bucket: '<1.5', n: 0, win_rate: null, avg_return_pct: null }, { bucket: '1.5-2', n: 4, win_rate: 50, avg_return_pct: 0.4 }],
+      });
+      expect(store.holdingPeriodHistogram()).toEqual([{ label: '0h-2h (n=0)', count: 0 }, { label: '2h-4h (n=3)', count: 66.7 }]);
+      expect(store.riskRewardHistogram()).toEqual([{ label: '<1.5 (n=0)', count: 0 }, { label: '1.5-2 (n=4)', count: 50 }]);
+    });
     it('overlays the SPY benchmark on the account-balance series when present', () => {
       tick();
       respondPerformance({ benchmark: { spy_cum: { '2026-01-01': 0, '2026-01-11': 3.2 } } });
