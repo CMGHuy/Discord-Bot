@@ -174,7 +174,7 @@ def test_distributions_and_series_are_present_and_scoped(seed, logged_in):
         "totals": dict, "relocated": dict, "win_rate": NULLABLE_NUMBER,
         "expectancy_r": NULLABLE_NUMBER, "by_confidence": dict, "derived": dict,
         "range": dict, "distributions": dict, "rolling_returns": list,
-        "holding_period_split": list, "calendar": list,
+        "holding_period_split": list, "risk_reward_split": list, "calendar": list,
         "cumulative_by_strategy": dict, "benchmark": dict,
     })
 

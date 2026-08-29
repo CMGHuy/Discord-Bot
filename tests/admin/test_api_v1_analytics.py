@@ -84,7 +84,7 @@ def test_performance_top_level_shape(seed, logged_in):
         "totals": dict, "relocated": dict, "win_rate": NULLABLE_NUMBER,
         "expectancy_r": NULLABLE_NUMBER, "by_confidence": dict,
         "range": dict, "derived": dict, "distributions": dict,
-        "rolling_returns": list, "holding_period_split": list,
+        "rolling_returns": list, "holding_period_split": list, "risk_reward_split": list,
         "calendar": list, "cumulative_by_strategy": dict, "benchmark": dict,
     })
 
