@@ -375,20 +375,12 @@ interface ProposalView extends ProposalRow {
           </sb-panel>
         }
 
-        <div class="panels">
-          <sb-panel heading="By holding period">
-            <!-- Every band renders, including empty ones: "the edge is all in
-                 8-30d" is only legible next to the bands that are empty. -->
-            <dl>
-              @for (band of store.holdingSplit(); track band.bucket) {
-                <div>
-                  <dt>{{ band.bucket }}</dt>
-                  <dd class="num">
-                    {{ fmtCount(band.n) }} · {{ fmtRate(band.win_rate) }}
-                  </dd>
-                </div>
-              }
-            </dl>
+        <div class="panels"><sb-panel heading="By holding period">
+            <sb-histogram
+              [bins]="store.holdingPeriodHistogram()"
+              [max]="100"
+              [referenceLine]="store.derived().win_rate"
+            />
           </sb-panel>
 
           <sb-panel heading="By month">
