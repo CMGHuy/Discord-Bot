@@ -185,3 +185,9 @@ def test_legacy_partial_without_a_working_stop_falls_back_to_the_floor(tmp_path)
     assert [e.transition for e in events] == ["closed"]
     assert events[0].detail["reason"] == "tp1_runner_be"
     assert events[0].detail["exit_price"] == pytest.approx(103.0)
+
+@pytest.fixture(autouse=True)
+def _rth_gate_off(monkeypatch):
+    """Arithmetic tests stay independent of the wall clock."""
+    from swingbot import config
+    monkeypatch.setattr(config, "INTRADAY_RTH_ONLY", False)

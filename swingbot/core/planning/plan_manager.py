@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from swingbot import config
+from swingbot.core.market.session import is_regular_session, session_date
 from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
                                        chandelier_stop, pending_expired,
                                        pending_invalidated, record_transition,
@@ -131,7 +132,9 @@ class PlanManager:
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def poll(self) -> list[PlanEvent]:
+    def poll(self, now=None) -> list[PlanEvent]:
+        if config.INTRADAY_RTH_ONLY and not is_regular_session(now):
+            return []
         # `self.store` (and `self.trade_log`) can be long-lived instances --
         # the module singleton `_MANAGER` below keeps both for the
         # process's whole life -- so reload each from disk first. Otherwise

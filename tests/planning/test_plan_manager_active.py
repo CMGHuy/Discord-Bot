@@ -68,3 +68,9 @@ def test_tp1_touch_banks_partial_and_moves_to_partial(tmp_path):
                                                                  # 100 + (2/3)*(110-100)
     assert p.legs_realized == [{"fraction": 0.5, "exit_price": 110.5,
                                 "r": d["r"], "reason": "tp1"}]
+
+@pytest.fixture(autouse=True)
+def _rth_gate_off(monkeypatch):
+    """Arithmetic tests stay independent of the wall clock."""
+    from swingbot import config
+    monkeypatch.setattr(config, "INTRADAY_RTH_ONLY", False)

@@ -1,3 +1,5 @@
+import pytest
+
 from swingbot.core.planning.plan_engine import PlanStatus
 from swingbot.core.planning.plan_manager import PlanManager
 from swingbot.core.planning.plan_store import PlanStore
@@ -90,3 +92,9 @@ def test_bearish_pending_invalidates_above_stop(tmp_path):
                     trigger_price=95.0, stop_loss=105.0, tp1=90.0))
     events = mgr.poll()
     assert [e.transition for e in events] == ["cancelled_invalidated"]
+
+@pytest.fixture(autouse=True)
+def _rth_gate_off(monkeypatch):
+    """Arithmetic tests stay independent of the wall clock."""
+    from swingbot import config
+    monkeypatch.setattr(config, "INTRADAY_RTH_ONLY", False)
