@@ -21,7 +21,6 @@ import {
   AnalyticsStrategies,
 } from '../api/models';
 import { HistogramBin } from '../ui/histogram';
-import { LineChartSeries } from '../ui/line-chart';
 
 /* -- row shapes ---------------------------------------------------------
  *
@@ -291,10 +290,6 @@ export interface BreakdownRow {
   total_pnl: number | null;
 }
 
-export interface SeriesPoint {
-  date: string;
-  value: number;
-}
 
 export interface Streaks {
   current: number | null;
@@ -335,14 +330,6 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 /** `{date, balance}` / `{date, dd_pct}` points, flattened to one shape. A point
  *  missing either half is dropped: a gap in a series is not a zero, and
  *  drawing it as one invents a crash that never happened. */
-function toSeries(raw: unknown[], valueKey: string): SeriesPoint[] {
-  return raw.flatMap((point) => {
-    if (!isPlainRecord(point)) return [];
-    const date = snapText(point['date']);
-    const value = snapNumber(point[valueKey]);
-    return date !== null && value !== null ? [{ date, value }] : [];
-  });
-}
 
 function toBreakdownRows(raw: unknown[]): BreakdownRow[] {
   return raw.flatMap((row) => {
@@ -595,17 +582,6 @@ export const AnalyticsStore = signalStore(
       };
     }),
 
-    /** The account balance over time — the series behind the Dashboard's
-     *  30-day sparkline, in full and in account currency. */
-    equitySeries: computed<SeriesPoint[]>(() =>
-      toSeries((snapshot()?.equity_curve?.points ?? []) as unknown[], 'balance'),
-    ),
-
-    /** How far below its own peak the account sat at each point. */
-    drawdownSeries: computed<SeriesPoint[]>(() =>
-      toSeries((snapshot()?.drawdown ?? []) as unknown[], 'dd_pct'),
-    ),
-
     rMultipleBins: computed<Bin[]>(() =>
       binRMultiples(
         ((snapshot()?.r_multiples ?? []) as unknown[])
@@ -729,13 +705,6 @@ export const AnalyticsStore = signalStore(
         label: `${bucket.lo.toFixed(2)}R`,
         count: bucket.count,
       }))),
-    rollingReturns: computed(() => performance()?.rolling_returns ?? []),
-    rollingReturnsChart: computed<LineChartSeries[]>(() => [{
-      name: 'Rolling return',
-      points: (performance()?.rolling_returns ?? [])
-        .map((p) => ({ date: p.date, value: p.return_pct })),
-    }]),
-    holdingSplit: computed(() => performance()?.holding_period_split ?? []),
     holdingPeriodHistogram: computed<HistogramBin[]>(() =>
       (performance()?.holding_period_split ?? []).map((bucket) => ({
         label: `${bucket.bucket} (n=${bucket.n})`,
@@ -757,24 +726,6 @@ export const AnalyticsStore = signalStore(
         label: month.month,
         count: month.return_pct,
       }))),
-
-    /** `{strategy: points}` flattened into sorted series, so the chart never
-     *  iterates object keys and never redraws in a different order. */
-    cumulativeByStrategy: computed(() => {
-      const block = performance()?.cumulative_by_strategy ?? {};
-      return Object.entries(block)
-        .map(([strategy, points]) => ({ strategy, points }))
-        .sort((a, b) => a.strategy.localeCompare(b.strategy));
-    }),
-
-    /** SPY's cumulative % return, as a sorted series. Empty when the fetch
-     *  was unavailable — the benchmark overlay is best-effort by design. */
-    benchmarkSeries: computed(() => {
-      const block = performance()?.benchmark?.spy_cum ?? {};
-      return Object.entries(block)
-        .map(([date, pct]) => ({ date, pct }))
-        .sort((a, b) => a.date.localeCompare(b.date));
-    }),
 
     /* -- SR55: the journal's analytics half ----------------------------- */
 
@@ -899,26 +850,6 @@ export const AnalyticsStore = signalStore(
       Object.entries(plans()?.tiers ?? {})
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([label, count]) => ({ label, count }))),
-  })),
-
-  withComputed(({ equitySeries, benchmarkSeries }) => ({
-    /** Account balance, with SPY's cumulative return overlaid when the
-     *  benchmark fetch succeeded -- best-effort, so an unavailable benchmark
-     *  degrades to the balance line alone rather than an empty chart. */
-    balanceWithBenchmark: computed<LineChartSeries[]>(() => {
-      const balance: LineChartSeries = { name: 'Account balance', points: equitySeries() };
-      const spy = benchmarkSeries();
-      if (spy.length === 0) return [balance];
-      return [balance, { name: 'SPY', points: spy.map((p) => ({ date: p.date, value: p.pct })) }];
-    }),
-  })),
-
-  withComputed(({ cumulativeByStrategy }) => ({
-    cumulativeByStrategyChart: computed<LineChartSeries[]>(() =>
-      cumulativeByStrategy().map((s) => ({
-        name: s.strategy,
-        points: s.points.map((p) => ({ date: p.date, value: p.cum_pct })),
-      }))),
   })),
 
   withComputed(({ deciles }) => ({

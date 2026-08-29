@@ -199,33 +199,6 @@ describe('AnalyticsStore — the snapshot', () => {
     });
   });
 
-  it('flattens the equity curve and the drawdown series to one point shape', () => {
-    open();
-    expect(store.equitySeries()).toEqual([
-      { date: '2026-07-01', value: 10000 },
-      { date: '2026-07-15', value: 10250 },
-      { date: '2026-08-01', value: 10430.5 },
-    ]);
-    expect(store.drawdownSeries()).toEqual([
-      { date: '2026-07-01', value: 0 },
-      { date: '2026-07-15', value: 2.5 },
-    ]);
-  });
-
-  it('drops a series point that is missing a date or a value', () => {
-    // A gap is not a zero. Drawing it as one invents a crash.
-    open({
-      ...SNAPSHOT,
-      equity_curve: {
-        points: [
-          { date: '2026-07-01', balance: 10000 },
-          { date: '2026-07-02' },
-          { balance: 10100 },
-        ],
-      },
-    });
-    expect(store.equitySeries()).toEqual([{ date: '2026-07-01', value: 10000 }]);
-  });
 
   it('groups by ticker out of the box, busiest first', () => {
     open();
@@ -254,7 +227,6 @@ describe('AnalyticsStore — the snapshot', () => {
     expect(store.sharpe()).toBeNull();
     expect(store.sortino()).toBeNull();
     expect(store.maxDrawdownPct()).toBeNull();
-    expect(store.equitySeries()).toEqual([]);
     expect(store.rMultipleBins()).toEqual([]);
   });
 

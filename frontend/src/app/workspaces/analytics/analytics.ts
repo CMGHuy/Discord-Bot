@@ -42,7 +42,6 @@ import { ABSENT, date, dateTime } from '../../ui/format';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
 import { SectionHead } from '../../ui/section-head';
 import { Histogram, HistogramBin } from '../../ui/histogram';
-import { LineChart, LineChartSeries } from '../../ui/line-chart';
 import { MetricChip } from '../../ui/metric-chip';
 import { PaginationComponent } from '../../ui/pagination';
 import { Sparkline } from '../../ui/sparkline';
@@ -126,7 +125,6 @@ interface ProposalView extends ProposalRow {
     DataTable,
     MetricChip,
     Histogram,
-    LineChart,
     Chip,
     ChipRow,
     QualityChip,
@@ -396,37 +394,6 @@ interface ProposalView extends ProposalRow {
         <div class="panels">
           <sb-panel heading="By planned R:R">
             <sb-histogram [bins]="store.riskRewardHistogram()" [max]="100" [referenceLine]="store.derived().win_rate" />
-          </sb-panel>
-        </div>
-        <h2 class="section">Over time</h2>
-        @if (store.equitySeries().length) {
-          <div class="panels">
-            <sb-panel heading="Account balance">
-              <sb-line-chart [series]="store.balanceWithBenchmark()" [valueFormat]="fmtLineValue" />
-              <p class="series-note">
-                {{ store.equitySeries().length }} points ·
-                {{ seriesRange(store.equitySeries()) }}
-              </p>
-            </sb-panel>
-
-            <sb-panel heading="Drawdown">
-              <sb-line-chart [series]="drawdownSeriesForChart()" [valueFormat]="fmtLineValue" />
-              <p class="series-note">
-                Peak-to-trough, as a share of the running high. Higher is worse.
-              </p>
-            </sb-panel>
-          </div>
-        }
-        <div class="panels">
-          <sb-panel heading="Rolling returns">
-            <sb-line-chart [series]="store.rollingReturnsChart()" [valueFormat]="fmtLineValue" />
-          </sb-panel>
-          <sb-panel heading="Cumulative return by strategy">
-            @if (store.cumulativeByStrategyChart().length) {
-              <sb-line-chart [series]="store.cumulativeByStrategyChart()" [valueFormat]="fmtLineValue" />
-            } @else {
-              <p class="stale">No strategies with closed trades yet.</p>
-            }
           </sb-panel>
         </div>
 
@@ -1499,11 +1466,6 @@ export class Analytics {
     this.breakdownPage.setPage(1);
   }
 
-  protected readonly fmtLineValue = (value: number): string => `${value.toFixed(2)}%`;
-
-  protected readonly drawdownSeriesForChart = computed<LineChartSeries[]>(() => [
-    { name: 'Drawdown', points: this.store.drawdownSeries() },
-  ]);
 
   /** "3 wins" rather than "3". The number alone does not say which way the run
    *  is going, and a current streak is the one figure here where that is the
@@ -1517,10 +1479,7 @@ export class Analytics {
     return `${streaks.current} ${noun === 'loss' ? (plural ? 'losses' : 'loss') : noun + plural}`;
   }
 
-  protected seriesRange(series: { date: string }[]): string {
-    if (!series.length) return ABSENT;
-    return `${date(series[0].date)} → ${date(series[series.length - 1].date)}`;
-  }
+
   protected readonly decileEmpty = {
     title: 'No scored trades yet',
     hint: 'Only closed trades carrying a quality score can be bucketed.',
