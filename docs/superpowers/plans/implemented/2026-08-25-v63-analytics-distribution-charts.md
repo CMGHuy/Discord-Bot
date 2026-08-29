@@ -6,7 +6,7 @@ Version: ui 1.9.0 · bot 1.4.3
 Bump: ui minor (1.9.0 → 1.10.0) · bot patch
 Edge: none (integrity)
 
-Spec: `docs/superpowers/specs/2026-08-25-v63-analytics-distribution-charts-design.md`
+Spec: `docs/superpowers/specs/implemented/2026-08-25-v63-analytics-distribution-charts-design.md`
 — read it first; it carries the diagnosis, the field-name research (e.g. why
 direction is `bullish`/`bearish` on the wire, not `long`/`short`) and the
 reasoning for every decision below. This plan does not repeat it.
@@ -832,3 +832,11 @@ all-time reference line for the two all-time charts).
   re-run either suite wholesale.
 - [ ] This is the only full run of either suite in this plan — every earlier
   task verified with its own narrow file/spec run.
+
+
+## Close-out
+
+**Complete 2026-08-29.** All ten delivered tasks were implemented and merged
+to `main` in `e1a83aa` (`merge(v63): add analytics distribution charts`). The
+full frontend suite passed (83 files, 1,626 tests), and the full Python suite
+completed with exit code 0. The plan worktree and merged branch were removed.
