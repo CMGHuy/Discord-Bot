@@ -383,6 +383,7 @@ class PlanManager:
                           {"reason": reason, "exit_price": fill, "leg": leg})]
 
     # -- overnight/session-open bar check (Task 67) --------------------------
+    # UNWIRED: production exits exclusively through poll(); see known-traps.md.
     #
     # Same gap-fill convention as performance.update_open_trades (and the
     # tick-poll fills above): a stop/target can't fill better than the bar's
