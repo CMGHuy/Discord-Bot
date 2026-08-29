@@ -392,6 +392,12 @@ interface ProposalView extends ProposalRow {
           </sb-panel>
         </div>
 
+
+        <div class="panels">
+          <sb-panel heading="By planned R:R">
+            <sb-histogram [bins]="store.riskRewardHistogram()" [max]="100" [referenceLine]="store.derived().win_rate" />
+          </sb-panel>
+        </div>
         <h2 class="section">Over time</h2>
         @if (store.equitySeries().length) {
           <div class="panels">
@@ -425,6 +431,14 @@ interface ProposalView extends ProposalRow {
         </div>
 
         <h2 class="section">By segment</h2>
+        <div class="panels">
+          <sb-panel heading="By direction">
+            <sb-histogram [bins]="store.directionHistogram()" [max]="100" [referenceLine]="store.winRate()" />
+          </sb-panel>
+          <sb-panel heading="By day of week">
+            <sb-histogram [bins]="store.dowHistogram()" [max]="100" [referenceLine]="store.winRate()" />
+          </sb-panel>
+        </div>
         </sb-async>
 
         <!-- SR55. NOT a rebuilt Journal page: spec v14 Decision 4 collapsed
