@@ -272,6 +272,20 @@ describe('AnalyticsStore — the snapshot', () => {
     open();
     expect(store.snapshotBuiltAt()).toBe('2026-08-14T06:00:00Z');
   });
+
+
+
+  it('exposes ordered zero-filled direction and day-of-week win-rate histograms', () => {
+    open({ ...SNAPSHOT, by: { ...SNAPSHOT.by,
+      direction: [{ key: 'bullish', n: 6, wins: 4, losses: 2, win_rate: 66.7, expectancy_r: 0.3, avg_r: 0.3, profit_factor: 1.8, total_pnl: 300 }],
+      dow: [
+        { key: 'Wednesday', n: 5, wins: 3, losses: 2, win_rate: 60, expectancy_r: 0.2, avg_r: 0.2, profit_factor: 1.5, total_pnl: 150 },
+        { key: 'Monday', n: 2, wins: 1, losses: 1, win_rate: 50, expectancy_r: 0.1, avg_r: 0.1, profit_factor: 1.1, total_pnl: 20 },
+      ],
+    } });
+    expect(store.directionHistogram()).toEqual([{ label: 'Long (n=6)', count: 66.7 }, { label: 'Short (n=0)', count: 0 }]);
+    expect(store.dowHistogram().map((bin) => bin.label)).toEqual(['Monday (n=2)', 'Tuesday (n=0)', 'Wednesday (n=5)', 'Thursday (n=0)', 'Friday (n=0)', 'Saturday (n=0)', 'Sunday (n=0)']);
+  });
 });
 
 /* SR51 — the grid results and Propose.
@@ -361,7 +375,6 @@ describe('AnalyticsStore — the tuning grid', () => {
     openTuning();
     expect(store.grid().map((row) => row.row_index)).toEqual([0, 1]);
   });
-
   it('shows no grid while a job is still running', () => {
     // The endpoint answers 200 with an empty grid rather than 404ing, so this
     // is not an error state and must not read as one.

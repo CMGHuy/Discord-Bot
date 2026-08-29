@@ -363,6 +363,20 @@ function toBreakdownRows(raw: unknown[]): BreakdownRow[] {
   });
 }
 
+
+const DIRECTION_ORDER: readonly [string, string][] = [
+  ['bullish', 'Long'],
+  ['bearish', 'Short'],
+];
+const DOW_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
+
+function zeroFilledHistogram(rows: BreakdownRow[], order: readonly (readonly [string, string])[]): HistogramBin[] {
+  const byKey = new Map(rows.map((row) => [row.key, row]));
+  return order.map(([key, label]) => {
+    const row = byKey.get(key);
+    return { label: `${label} (n=${row?.n ?? 0})`, count: row?.win_rate ?? 0 };
+  });
+}
 /** One histogram bin. */
 export interface Bin {
   label: string;
@@ -613,6 +627,17 @@ export const AnalyticsStore = signalStore(
         breakdown(),
     ),
 
+
+    directionHistogram: computed<HistogramBin[]>(() =>
+      zeroFilledHistogram(
+        toBreakdownRows((snapshot()?.by?.['direction'] ?? []) as unknown[]),
+        DIRECTION_ORDER,
+      )),
+    dowHistogram: computed<HistogramBin[]>(() =>
+      zeroFilledHistogram(
+        toBreakdownRows((snapshot()?.by?.['dow'] ?? []) as unknown[]),
+        DOW_ORDER.map((day) => [day, day] as const),
+      )),
     /* -- performance --------------------------------------------------- */
 
     /**
