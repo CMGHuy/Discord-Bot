@@ -1,5 +1,12 @@
 # v62 — The Discord message system: index and shared conventions
 
+## Progress
+
+Completed and merged to `main` in `6dd44bb` on 2026-08-29. Tasks M1–M29,
+the bot 1.5.0 release, the version-history regeneration, and the final Python
+and frontend verification all landed; this document is retained as the record
+of that completed delivery.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement each part task-by-task. Steps use
@@ -10,7 +17,7 @@ colour, glyph, number format and embed part the bot sends to Discord, adopted
 by all five automated channels and all command modules, with an AST guard test
 that makes bypassing it a test failure.
 
-**Spec:** `docs/superpowers/specs/2026-08-25-v62-discord-message-system-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-08-25-v62-discord-message-system-design.md`
 
 **Architecture:** `components.py` returns **whole embed parts**, not values —
 a call site that wants a confidence field asks for one rather than assembling
