@@ -10,11 +10,38 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from swingbot.commands.growth import growth_command, killswitch_command
+from swingbot.commands.growth import (
+    growth_command,
+    killswitch_command,
+    portfolio_report,
+    weekly_risk_report,
+)
 
 # ~85% of suite runtime lives in nine files like this one; excluded from
 # the fast tier (scripts/dev/testrun.py fast). See docs/claude/testing-cost.md.
 pytestmark = pytest.mark.slow
+
+
+def test_growth_percentages_match_the_alert_format():
+    """Command percentages use one decimal, a sign, and a Unicode minus."""
+    portfolio = portfolio_report({
+        "open_heat": 4.5,
+        "heat_cap": 6.0,
+        "sector_heat": {},
+        "clusters": [],
+        "growth": {"current_multiple": 1.32, "pct_to_target": 12.1},
+    })
+    weekly = weekly_risk_report({
+        "heat_utilization_pct": 62.0,
+        "mc": {"max_dd_p95": 0.18, "p_ruin": 0.002, "p_10x": 0.11},
+        "growth_delta": -0.014,
+    })
+
+    assert "heat: +4.5% / +6.0% cap" in portfolio
+    assert "growth path: 1.32x — +12.1%" in portfolio
+    assert "heat utilization: +62.0% of cap" in weekly
+    assert "p95 drawdown +18.0%, p(halve) +0.2%, p(10x within 1000 trades) +11.0%" in weekly
+    assert "growth path this week: −1.4%" in weekly
 
 
 @pytest.mark.parametrize("target", [1.0, 0.0, -3.0])

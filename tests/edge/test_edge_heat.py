@@ -72,8 +72,8 @@ def test_portfolio_report_renders_every_section():
              "kill": {"on": False, "reason": None},
              "growth": {"current_multiple": 1.32, "pct_to_target": 12.1}}
     out = portfolio_report(state)
-    assert "4.5% / 6.0%" in out
-    assert "Energy" in out and "3.0%" in out
+    assert "+4.5% / +6.0%" in out
+    assert "Energy" in out and "+3.0%" in out
     assert "XOM" in out and "CVX" in out
     assert "x0.75" in out
     assert "1.32x" in out
@@ -121,7 +121,7 @@ def test_weekly_risk_report_renders():
         "growth_delta": 0.014,
     })
     assert "62" in out and "NVDA" in out
-    assert "p95 drawdown 18%" in out
+    assert "p95 drawdown +18.0%" in out
     assert "+1.4%" in out
 
 

@@ -15,6 +15,7 @@ from swingbot.core.backtesting.backtest import (
     run_backtest, run_backtest_daterange, run_full_backtest,
 )
 from swingbot.bot_core import bot
+from swingbot.core import presentation as ui
 from swingbot.core.marketdata.data import get_daily_data
 from swingbot.core.market.strategy import HORIZONS
 from swingbot.core.marketdata.watchlist import load_watchlist
@@ -110,9 +111,9 @@ def _format_backtest_table(header, summaries):
     lines = [header, "```"]
     lines.append(f"{'Strategy':18s} {'Horiz':5s} {'Sig':>4s} {'Eval':>4s} {'Scr':>4s} {'TO':>4s} {'Win%':>6s} {'ExpR':>6s} {'MaxDD%':>7s} {'AvgDays':>7s}")
     for s in summaries:
-        wr = f"{s.win_rate:.0f}" if s.win_rate is not None else "n/a"
-        er = f"{s.expectancy_r:.2f}" if s.expectancy_r is not None else "n/a"
-        dd = f"{s.max_drawdown_pct:.1f}" if s.max_drawdown_pct is not None else "n/a"
+        wr = ui.fmt_pct(s.win_rate) if s.win_rate is not None else "n/a"
+        er = ui.fmt_r(s.expectancy_r) if s.expectancy_r is not None else "n/a"
+        dd = ui.fmt_pct(-abs(s.max_drawdown_pct)) if s.max_drawdown_pct is not None else "n/a"
         ad = f"{s.avg_holding_days:.0f}" if s.avg_holding_days is not None else "n/a"
         lines.append(f"{s.strategy:18s} {s.horizon_key:5s} {s.total_signals:4d} {s.evaluated:4d} {s.scratches:4d} {s.timeouts:4d} {wr:>6s} {er:>6s} {dd:>7s} {ad:>7s}")
     lines.append("```")
@@ -157,7 +158,12 @@ def _format_per_strategy_winrate(summaries):
         er = a["r_weighted"] / closed
         excluded_share = (a["scratches"] + a["timeouts"]) / closed
         flag = "✅" if (wr >= 80 and er > 0 and excluded_share <= 0.5) else "❌"
-        lines.append(f"{strat:20s} {a['evaluated']:5d} {a['scratches']:4d} {a['timeouts']:4d} {wr:5.1f}% {er:+7.3f}  {flag}")
+        wr_label = ui.fmt_pct(wr)
+        er_label = ui.fmt_r(er)
+        lines.append(
+            f"{strat:20s} {a['evaluated']:5d} {a['scratches']:4d} "
+            f"{a['timeouts']:4d} {wr_label:>6s} {er_label:>7s}  {flag}"
+        )
     lines.append("```")
     lines.append(
         "Pass = win rate ≥80% AND expectancy >0 AND ≤50% of closed trades excluded "
@@ -183,12 +189,15 @@ def _format_setup_list(header, summaries):
     )
     for strat, horiz, t in all_trades:
         result = t.outcome.upper()[:7]
-        r_str = f"{t.r_multiple:.2f}" if t.r_multiple is not None else "open"
+        r_str = ui.fmt_r(t.r_multiple) if t.r_multiple is not None else "open"
         exit_d = t.exit_date or "open"
         dir_s = "BULL" if t.direction == "bullish" else "BEAR"
+        entry = ui.fmt_price(t.entry)
+        stop = ui.fmt_price(t.stop_loss)
+        target = ui.fmt_price(t.take_profit)
         chunks.append(
             f"{t.entry_date:10s} {exit_d:10s} {strat[:14]:14s} {horiz:4s} {dir_s:5s} "
-            f"{t.entry:>8.2f} {t.stop_loss:>8.2f} {t.take_profit:>8.2f} {result:>8s} {r_str:>5s}"
+            f"{entry:>8s} {stop:>8s} {target:>8s} {result:>8s} {r_str:>5s}"
         )
     chunks.append("```")
     return "\n".join(chunks)
@@ -303,9 +312,9 @@ async def backtestwatchlist_cmd(ctx, *args):
         f"{'Ticker':7s} {'Strategy':18s} {'Horiz':5s} {'Eval':>4s} {'Win%':>6s} {'ExpR':>6s} {'MaxDD%':>7s}",
     ]
     for s in evaluated[:20]:
-        wr = f"{s.win_rate:.0f}" if s.win_rate is not None else "n/a"
-        er = f"{s.expectancy_r:.2f}" if s.expectancy_r is not None else "n/a"
-        dd = f"{s.max_drawdown_pct:.1f}" if s.max_drawdown_pct is not None else "n/a"
+        wr = ui.fmt_pct(s.win_rate) if s.win_rate is not None else "n/a"
+        er = ui.fmt_r(s.expectancy_r) if s.expectancy_r is not None else "n/a"
+        dd = ui.fmt_pct(-abs(s.max_drawdown_pct)) if s.max_drawdown_pct is not None else "n/a"
         lines.append(f"{s.ticker:7s} {s.strategy:18s} {s.horizon_key:5s} {s.evaluated:4d} {wr:>6s} {er:>6s} {dd:>7s}")
     lines.append("```")
     lines.append("⚠️ Overlapping trades counted independently, no fees/slippage, survivorship bias.")

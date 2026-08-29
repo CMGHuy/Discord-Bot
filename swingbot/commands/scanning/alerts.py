@@ -4,6 +4,7 @@ import discord
 
 from swingbot import config
 from swingbot.bot_core import bot, log
+from swingbot.core import presentation as ui
 from swingbot.core.analytics.rank import rank_plans
 
 def _ordered_alerts(alerts: list, today=None) -> list:
@@ -134,7 +135,7 @@ def deep_scan_report(items: list) -> str:
              "(forming setups at relaxed thresholds — NOT alerts, NOT validated signals)"]
     for it in sorted(items, key=lambda i: -(i.quality_score or 0))[:15]:
         lines.append(f"  {it.ticker:<6} {it.plan.strategy:<18} "
-                     f"q{it.quality_score} — {it.trigger_distance_pct:.1f}% from trigger")
+                     f"q{it.quality_score} — {ui.fmt_pct(it.trigger_distance_pct)} from trigger")
     return "\n".join(lines)
 
 

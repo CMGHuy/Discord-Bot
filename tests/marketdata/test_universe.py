@@ -721,7 +721,7 @@ def test_deep_scan_report_renders():
             self.ticker, self.quality_score, self.trigger_distance_pct = t, score, dist
             self.plan = type("P", (), {"strategy": "MACD"})()
     out = deep_scan_report([Item("AAA", 80, 1.2), Item("BBB", 60, 0.4)])
-    assert "AAA" in out and "MACD" in out and "1.2%" in out
+    assert "AAA" in out and "MACD" in out and "+1.2%" in out
     assert "watchlist candidates" in out.lower()
 
 
