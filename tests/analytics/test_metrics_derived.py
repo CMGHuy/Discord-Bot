@@ -23,6 +23,7 @@ from swingbot.core.analytics.metrics import (
     holding_period_split,
     in_date_range,
     pct_in_market,
+    risk_reward_split,
     rolling_return_pct,
     span_years,
     total_return_pct,
@@ -265,6 +266,32 @@ def test_holding_period_split_buckets_intraday_holds_by_hour():
     assert split["8h-24h"]["n"] == 1
     assert split["1d-2d"]["n"] == 1
     assert split["2d+"]["n"] == 0
+
+
+def test_risk_reward_split_buckets_by_planned_ratio():
+    trades = [
+        {**_t("2024-01-01", "2024-01-05", 100.0, 110.0), "risk_reward_ratio": 1.5},
+        {**_t("2024-02-01", "2024-02-05", 100.0, 95.0, status="loss"), "risk_reward_ratio": 1.8},
+        {**_t("2024-03-01", "2024-03-05", 100.0, 110.0), "risk_reward_ratio": 2.5},
+        {**_t("2024-04-01", "2024-04-05", 100.0, 110.0), "risk_reward_ratio": 5.0},
+    ]
+    split = {b["bucket"]: b for b in risk_reward_split(trades)}
+    assert split["1.5-2"]["n"] == 2
+    assert split["1.5-2"]["win_rate"] == 50.0
+    assert split["2-3"]["n"] == 1
+    assert split["4+"]["n"] == 1
+    assert split["<1.5"]["n"] == 0
+    assert split["<1.5"]["win_rate"] is None
+
+
+def test_risk_reward_split_is_empty_on_no_trades():
+    assert risk_reward_split([]) == []
+
+
+def test_risk_reward_split_ignores_trade_without_recorded_ratio():
+    split = {b["bucket"]: b for b in risk_reward_split([_t("2024-01-01", "2024-01-05", 100.0, 110.0)])}
+    assert sum(bucket["n"] for bucket in split.values()) == 0
+
 def test_holding_period_split_is_empty_on_no_trades():
     assert holding_period_split([]) == []
 
