@@ -1,4 +1,5 @@
 import { inject } from '@angular/core';
+import { Observable, catchError, finalize, map, of, shareReplay, tap } from 'rxjs';
 import {
   patchState,
   signalStore,
@@ -34,6 +35,7 @@ export const PreferencesStore = signalStore(
   withState<PreferencesSlice>({ values: {}, loaded: false }),
   withMethods((store, api = inject(ApiClient)) => {
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let inFlight: Observable<void> | null = null;
 
     /**
      * Write after the burst settles.
@@ -56,17 +58,25 @@ export const PreferencesStore = signalStore(
       }, WRITE_DEBOUNCE_MS);
     };
 
-    return {
-      load(): void {
-        if (store.loaded()) return;
-        api.preferences().subscribe({
-          next: ({ preferences }) =>
-            patchState(store, { values: preferences ?? {}, loaded: true }),
-          // A failed read leaves defaults in place and marks it loaded, so
-          // one bad request does not retry on every navigation.
+    const resolve = (): Observable<void> => {
+      if (store.loaded()) return of(undefined);
+      if (inFlight) return inFlight;
+      inFlight = api.preferences().pipe(
+        tap({
+          next: ({ preferences }) => patchState(store, { values: preferences ?? {}, loaded: true }),
           error: () => patchState(store, { loaded: true }),
-        });
-      },
+        }),
+        catchError(() => of(undefined)),
+        map(() => undefined),
+        finalize(() => { inFlight = null; }),
+        shareReplay({ bufferSize: 1, refCount: true }),
+      );
+      return inFlight;
+    };
+
+    return {
+      resolve,
+      load(): void { resolve().subscribe(); },
 
       /** The whole preferences map, for the pure readers in `ui/table-prefs`.
        *
