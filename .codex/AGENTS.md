@@ -127,6 +127,14 @@ parts — lettered `_2a`/`_2b` when one part needs several files — and never
 compress a task or split one across files. After any split, list
 `^### Task` ids across the resulting files and confirm the sequence has no gap.
 
+Write new specs and plans directly on `main` and commit them there as soon as
+they are finished: no feature branch, no worktree, no approval gate for the
+commit. Branch or create a worktree only when implementing a plan. A plan on an
+unmerged branch is invisible to the session-start tooling that reports the
+active plan, and checking out another branch removes it from the working tree
+entirely. Uniquely numbered markdown files do not conflict the way code does,
+so the branch ceremony buys nothing here.
+
 When work stops being live, move its plan and related spec as part of the
 closing commit: use `implemented/` for completed, abandoned, or rolled-back
 work; use `no-lift/` for deliberately unmerged work that showed no edge.

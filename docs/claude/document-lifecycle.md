@@ -1,8 +1,42 @@
-# Document lifecycle — closing plans out
+# Document lifecycle — where documents live, and closing plans out
 
 Referenced from the root `CLAUDE.md` and from `document-conventions.md`, which
-covers *authoring* a spec or plan. This file covers what happens when one stops
-being live work: where it moves, and what happens to its worktree.
+covers *authoring* a spec or plan. This file covers where a document lives
+while it is being written, and what happens when it stops being live work:
+where it moves, and what happens to its worktree.
+
+## Specs and plans are written and committed on `main`
+
+**Write a new spec or plan directly on `main`, and commit it there as soon as
+it is finished.** No feature branch, no worktree, no waiting for approval to
+commit. Branch or create a worktree only when you start *implementing* a plan.
+
+Three reasons, and the second is the one that actually bit:
+
+- **A document nobody can see is worse than one that needs editing.** Specs and
+  plans exist to be read and argued with. A perfect plan on an unmerged branch
+  has less value than a rough one on `main`, because only one of them is in
+  front of the person who would correct it.
+- **A plan stranded on a branch is invisible to the tooling.** The
+  `SessionStart` hook (`.claude/hooks/session-cursor.ps1`) reports the active
+  plan by reading the top level of `docs/superpowers/plans/` **in the current
+  working tree**. A plan on another branch is not there, so every new session
+  starts believing different work is active. Worse, checking out any other
+  branch removes those files from disk — which reads as "my plans are gone"
+  and is the specific failure this rule exists to prevent (2026-08-30, v67).
+- **Documents cannot conflict the way code does.** A new `vN`-numbered file is
+  a new path. The branch-then-merge ceremony buys isolation that a uniquely
+  named markdown file does not need, and costs the visibility above.
+
+**This does not weaken the numbering rule.** `vN` is still computed immediately
+before the commit that creates the document, from both doc filenames and git
+log — committing straight to `main` makes the concurrent-session race
+*more* likely to be caught early, not less, because the number lands where
+every other session can see it.
+
+**It does not apply to the code a plan describes.** Implementation still
+branches, and still uses a worktree when the plan says so — see "Worktrees are
+named after the plan" below. The rule is about the document, not the work.
 
 ## Plans that are no longer live move to `implemented/`
 
