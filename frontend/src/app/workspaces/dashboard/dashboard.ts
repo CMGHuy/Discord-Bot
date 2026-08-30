@@ -102,7 +102,6 @@ import { TradeGroup } from './trade-group';
   // are looking at another one. Each `sb-trade-group` below provides its own
   // `TradesStore` instance (see trade-group.ts) -- neither this one nor
   // those three touch the Trades workspace's own copy.
-  providers: [DashboardStore],
   template: `
     <!-- v54: sb-async's own staleAsOf badge (below) now owns the "these
          numbers stopped updating" signal -- a second one here would be a

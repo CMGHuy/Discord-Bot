@@ -1,16 +1,17 @@
-import { computed, effect, inject } from '@angular/core';
+import { computed, inject } from '@angular/core';
 import {
   patchState,
   signalStore,
   withComputed,
-  withHooks,
   withMethods,
   withState,
 } from '@ngrx/signals';
 
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
-import { EventStream } from '../api/event-stream';
+import { Observable } from 'rxjs';
+
+import { routeRequest } from '../routing/route-request';
 import { Dashboard, DashboardScope } from '../api/models';
 
 interface DashboardSlice {
@@ -199,42 +200,23 @@ export const DashboardStore = signalStore(
       return used / cap;
     }),
   })),
-  withMethods((store, api = inject(ApiClient)) => ({
-    /** SR58 — change the date scope and refetch. */
-    setScope(scope: DashboardScope): void {
-      if (scope === store.scope()) return;
-      patchState(store, { scope });
-      this.load();
-    },
-
-    load(): void {
-      patchState(store, { loading: true });
-      api.dashboard(store.scope()).subscribe({
-        next: (data) => patchState(store, { data, loading: false, error: null }),
-        error: (error: ApiError) =>
-          patchState(store, {
-            loading: false,
-            // `data` is deliberately untouched.
-            error:
-              error.code === 'unavailable'
-                ? 'The admin is not responding.'
-                : error.message,
-          }),
-      });
-    },
-  })),
-  withHooks({
-    onInit(store, events = inject(EventStream)) {
-      // Reading these inside the effect is the subscription. `account`
-      // covers the balance and equity curve; `trades` covers open P&L, open
-      // count and risk used, all of which move when a position does.
-      const account = events.changes('account');
-      const trades = events.changes('trades');
-      effect(() => {
-        account();
-        trades();
-        store.load();
-      });
-    },
+  withMethods((store, api = inject(ApiClient)) => {
+    const resolve = (): Observable<void> => routeRequest(api.dashboard(store.scope()), {
+      start: () => patchState(store, { loading: true }),
+      next: (data) => patchState(store, { data, loading: false, error: null }),
+      error: (error) => patchState(store, {
+        loading: false,
+        error: error.code === 'unavailable' ? 'The admin is not responding.' : error.message,
+      }),
+    });
+    return {
+      resolve,
+      load(): void { resolve().subscribe({ error: () => undefined }); },
+      setScope(scope: DashboardScope): void {
+        if (scope === store.scope()) return;
+        patchState(store, { scope });
+        resolve().subscribe({ error: () => undefined });
+      },
+    };
   }),
 );

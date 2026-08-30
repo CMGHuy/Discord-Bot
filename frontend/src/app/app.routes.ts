@@ -30,7 +30,7 @@ export const routes: Routes = [
   {
     path: 'dashboard',
     canMatch: [authGuard],
-    loadComponent: () => import('./workspaces/dashboard/dashboard').then((m) => m.Dashboard),
+    loadChildren: () => import('./workspaces/dashboard/dashboard.routes').then((m) => m.dashboardRoutes),
   },
   {
     path: 'trades',
