@@ -34,15 +34,16 @@ describe('PaginationComponent', () => {
   const buttons = () => [...el().querySelectorAll('button')] as HTMLButtonElement[];
   const range = () => el().querySelector('.range')!.textContent!.trim();
 
-  it('renders nothing when everything fits on one page', () => {
+  it('keeps a row count visible when everything fits on one page', () => {
     host.spec.set({ total: 12, page: 1, perPage: 25 });
     fixture.detectChanges();
 
-    expect(el().querySelector('.pager')).toBeNull();
+    expect(range()).toBe('12 rows');
+    expect(buttons()).toHaveLength(0);
   });
 
   it('counts pages from the total, not from the rows on screen', () => {
-    expect(el().querySelector('.of')!.textContent).toContain('1 / 4');
+    expect(el().querySelector('.of')!.textContent).toContain('/ 4');
   });
 
   it('shows the range of the current page', () => {
@@ -61,23 +62,23 @@ describe('PaginationComponent', () => {
   });
 
   it('emits the target page', () => {
-    buttons()[1].click();
+    buttons()[2].click();
     expect(host.pages).toEqual([2]);
 
     host.spec.set({ total: 90, page: 2, perPage: 25 });
     fixture.detectChanges();
-    buttons()[0].click();
+    buttons()[1].click();
     expect(host.pages).toEqual([2, 1]);
   });
 
   it('disables previous on the first page and next on the last', () => {
     expect(buttons()[0].disabled).toBe(true);
-    expect(buttons()[1].disabled).toBe(false);
+    expect(buttons()[2].disabled).toBe(false);
 
     host.spec.set({ total: 90, page: 4, perPage: 25 });
     fixture.detectChanges();
     expect(buttons()[0].disabled).toBe(false);
-    expect(buttons()[1].disabled).toBe(true);
+    expect(buttons()[2].disabled).toBe(true);
   });
 
   it('emits nothing when a disabled end is clicked anyway', () => {
@@ -89,7 +90,7 @@ describe('PaginationComponent', () => {
     host.spec.set({ total: 90, page: 1, perPage: 0 });
     fixture.detectChanges();
 
-    expect(el().querySelector('.pager')).toBeNull();
+    expect(range()).toBe('90 rows');
   });
 });
 
@@ -133,7 +134,7 @@ describe('PaginationComponent per-page selector', () => {
     // The trap this guards: nested inside the pager, choosing All removes the
     // pager and with it the only control that could undo the choice.
     const el = build(0, 3, true).nativeElement as HTMLElement;
-    expect(el.querySelector('.pager')).toBeNull();
+    expect(el.querySelector('.pager')).not.toBeNull();
     expect(el.querySelector('select')).not.toBeNull();
   });
 });
