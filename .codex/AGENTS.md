@@ -122,6 +122,11 @@ creating or committing the document, as documented in
 committed number. A plan created from an existing spec reuses that spec's
 number. Document numbers and `VERSION.json` release versions are independent.
 
+No plan file may exceed 1500 lines. Split an over-long plan into more `_N`
+parts — lettered `_2a`/`_2b` when one part needs several files — and never
+compress a task or split one across files. After any split, list
+`^### Task` ids across the resulting files and confirm the sequence has no gap.
+
 When work stops being live, move its plan and related spec as part of the
 closing commit: use `implemented/` for completed, abandoned, or rolled-back
 work; use `no-lift/` for deliberately unmerged work that showed no edge.
