@@ -11,6 +11,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { Router } from '@angular/router';
+import { CLOCK } from '../../ui/clock';
 
 import { ApiClient } from '../../api/api-client';
 import { TradeQuery, TradeRow } from '../../api/models';
@@ -469,6 +470,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
   `,
 })
 export class Trades {
+  private readonly now = inject(CLOCK);
   private readonly router = inject(Router);
   private readonly api = inject(ApiClient);
   private readonly preferences = inject(PreferencesStore);
@@ -663,7 +665,7 @@ export class Trades {
       actions: this.actionsCell(),
     } as Record<string, TemplateRef<{ $implicit: TradeRow }>>;
 
-    return tradeColumns().map((column) =>
+    return tradeColumns(this.now).map((column) =>
       cells[column.key] ? { ...column, cell: cells[column.key] } : column,
     );
   });

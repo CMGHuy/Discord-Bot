@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { heldPrecise, signed, timeInZone } from './format';
+import { held, signed, timeInZone } from './format';
 
 /* No prior spec file existed for format.ts; timeInZone is new (Watchlist
  * Earnings calendar) and carries real cross-timezone/DST behaviour worth
@@ -33,36 +33,36 @@ describe('timeInZone', () => {
   });
 });
 
-describe('heldPrecise', () => {
+describe('held', () => {
   it('renders minutes alone under an hour', () => {
-    expect(heldPrecise(0.5)).toBe('30m');
+    expect(held(0.5)).toBe('30m');
   });
 
   it('renders hours and minutes under a day', () => {
-    expect(heldPrecise(5.2)).toBe('5h 12m');
+    expect(held(5.2)).toBe('5h 12m');
   });
 
   it('drops a zero minutes remainder rather than showing "0m"', () => {
-    expect(heldPrecise(3)).toBe('3h');
+    expect(held(3)).toBe('3h');
   });
 
   it('renders days, hours and minutes past a day', () => {
-    expect(heldPrecise(27.25)).toBe('1d 3h 15m');
+    expect(held(27.25)).toBe('1d 3h 15m');
   });
 
   it('drops zero components past a day too', () => {
-    expect(heldPrecise(48)).toBe('2d');
-    expect(heldPrecise(49)).toBe('2d 1h');
-    expect(heldPrecise(24.25)).toBe('1d 15m');
+    expect(held(48)).toBe('2d');
+    expect(held(49)).toBe('2d 1h');
+    expect(held(24.25)).toBe('1d 15m');
   });
 
   it('renders "0m" rather than blank for a duration under a minute', () => {
-    expect(heldPrecise(0)).toBe('0m');
+    expect(held(0)).toBe('0m');
   });
 
   it('renders an em dash for null or undefined', () => {
-    expect(heldPrecise(null)).toBe('—');
-    expect(heldPrecise(undefined)).toBe('—');
+    expect(held(null)).toBe('—');
+    expect(held(undefined)).toBe('—');
   });
 });
 

@@ -12,10 +12,13 @@ import { Router } from '@angular/router';
 
 import { Ticker } from '../../api/models';
 import { WatchlistStore } from '../../stores/watchlist.store';
+import { PreferencesStore } from '../../stores/preferences.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
+import { createClientPage } from '../../ui/data-table/client-page';
+import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
 import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { date, text } from '../../ui/format';
 import { TextInput } from '../../ui/form-controls';
@@ -222,14 +225,18 @@ function sortValue(row: Ticker, key: string): string | number | null {
           A row pulses when that ticker reports earnings this week.
         </p>
         <sb-data-table
-          [rows]="sortedRows()"
+          [rows]="watchlistPage.visible()"
           [columns]="columns()"
           [visible]="visible"
           [rowKey]="rowKey"
           [rowClass]="rowClassFn"
           [sort]="sort()"
           [emptyState]="emptyState"
+          [pagination]="watchlistPage.pageSpec()"
+          [showPerPage]="true"
           (sortChange)="setSort($event)"
+          (pageChange)="watchlistPage.setPage($event)"
+          (perPageChange)="onPerPage($event)"
           (rowActivate)="open($event)"
         />
       </sb-panel>
@@ -341,6 +348,10 @@ function sortValue(row: Ticker, key: string): string | number | null {
 export class Watchlist {
   private readonly router = inject(Router);
   protected readonly store = inject(WatchlistStore);
+  private readonly preferences = inject(PreferencesStore);
+  static readonly TABLE_ID = 'watchlist';
+  protected readonly perPage = signal(readTablePerPage(this.preferences.values(), Watchlist.TABLE_ID));
+  protected onPerPage(value: number): void { this.perPage.set(value); this.preferences.update((prefs) => writeTablePerPage(prefs, Watchlist.TABLE_ID, value)); }
 
   /** `store.empty()` means "not loaded yet" (a boolean, not nullable data),
    *  so the nullable `data` asyncInputs() expects is synthesised here rather
@@ -399,6 +410,8 @@ export class Watchlist {
 
   protected readonly sortedRows = computed(() =>
     [...this.store.tickers()].sort((a, b) => compareTickers(a, b, this.sort())));
+
+  protected readonly watchlistPage = createClientPage(() => this.sortedRows(), () => this.perPage());
 
   /** Bound (not a method call in the template) so DataTable's identity
    *  check on the input doesn't see a new function every change-detection
