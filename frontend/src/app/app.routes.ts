@@ -38,13 +38,10 @@ export const routes: Routes = [
     loadChildren: () => import('./workspaces/trades/trades.routes').then((m) => m.tradesRoutes),
   },
   {
-    // Before nothing and after nothing in particular -- Angular matches in
-    // order, but 'trades/:id' cannot shadow 'trades' since the latter has no
-    // parameter. Kept adjacent so the pair reads as one workspace.
+    // Trade Detail has its own route-scoped store and resolver.
     path: 'trades/:id',
     canMatch: [authGuard],
-    loadComponent: () =>
-      import('./workspaces/trades/trade-detail').then((m) => m.TradeDetail),
+    loadChildren: () => import('./workspaces/trades/trade-detail.routes').then((m) => m.tradeDetailRoutes),
   },
   {
     path: 'analytics',
