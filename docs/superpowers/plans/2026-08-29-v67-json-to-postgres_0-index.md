@@ -83,6 +83,7 @@ table and exit criteria for the whole part.
 | 6 | `_6a-cutover.md` (P6-01…06) · `_6b-cleanup.md` (P6-07…12) | merge revision, backup/restore drill, production import, stage flip, dead-path deletion, docs, full-suite gate | 12 |
 | 7 | `_7a-data-access.md` (P7-01…06) · `_7b-datasets.md` (P7-07…12) | read-only role, production snapshot pull, SSH tunnel, database profiles, query tool, DataFrame accessors, dataset export | 12 |
 | 8 | `_8-schema-evolution.md` (P8-01…06) | the add/rename/drop/promote recipe, the promotion tool exercised end-to-end, codec property tests | 6 |
+| 9 | `_9a-round-trip.md` (P9-01…04) · `_9b-data-migrations.md` (P9-05…08) | allowlisted local→prod publish, downgrade coverage, the value-level data-migration runner and its rollback, reversible drop, the round-trip walk | 8 |
 
 **Read one task, not one part** — `/task-brief P2-07`, or
 `grep -n "^### Task P2-07" -A 120 docs/superpowers/plans/2026-08-29-v67-*_2b-*.md`.
@@ -90,11 +91,36 @@ A task id appears in exactly one file, so
 `grep -rn "^### Task P2-07" docs/superpowers/plans/` finds it without knowing
 which letter it landed in.
 
-Task ids are part-prefixed (`P1-01` … `P8-06`) so an id is unambiguous across
+Task ids are part-prefixed (`P1-01` … `P9-08`) so an id is unambiguous across
 files and an Alembic revision id can mirror it.
 
-**Numbering is not execution order.** Part 7 lands *before* P6-12, which is the
-plan's single full-suite gate and release commit — see `## Parallelisation`.
+**Numbering is not execution order.** Parts 7, 8 and 9 land *before* P6-12,
+which is the plan's single full-suite gate and release commit — see
+`## Parallelisation`.
+
+## Everything reversible, and both directions
+
+Two more requirements the spec implies and does not spell out, both of which
+would be expensive to retrofit and cheap to build in:
+
+**Data moves both ways.** Part 7 makes production readable from a dev machine
+(`make db-pull` → a local snapshot; `make db-tunnel` → live, read-only). Part 9
+adds the return path — an **allowlisted** publish of locally-computed artifacts
+(`tuning_results`, `tuning_proposals`, `fold_trades`). Trading state is refused
+by construction, with the reason attached: production owns it, and a push would
+overwrite real history with a stale local copy.
+
+**Everything has an undo, and every undo has been run.** One table, because
+"can I roll this back" is the question and the answer should not require
+knowing which layer broke:
+
+| What went wrong | Undo | Proven by |
+|---|---|---|
+| a schema revision | `alembic downgrade <rev>` | P9-02 walks the whole graph down and back up |
+| a value transform | `migrate_data.py rollback <name>` | P9-04 — the prior `doc` is snapshotted before the write |
+| a dropped field | `edit_field.py restore <table> <field>` | P9-05 |
+| a promotion | delete the name from `PROMOTED` | P8-02 — the doc copy is deliberately never stripped |
+| anything else | `scripts/ops/restore_db.sh <dump> <target>` | P6-04 — exercised once, for real, and recorded |
 
 ## Schema evolution is a first-class requirement
 
@@ -162,13 +188,15 @@ overwrites work rather than conflicting.
   (`profiles.py`/`datasets.py`/`scripts/ops/` versus `codec.py` tests and
   `scripts/db/promote_field.py`), and neither consumes a symbol the other
   introduces. Part 8's only hard dependency is Part 1's codec.
-- **Sequential: P6-12 last, after Parts 7 and 8.** It is the plan's single
+- **Sequential: Part 9 after Parts 7 and 8.** The push consumes Part 7's
+  profiles, and the reversible drop consumes Part 8's `edit_field.py`.
+- **Sequential: P6-12 last, after Parts 7, 8 and 9.** It is the plan's single
   full-suite gate, the version bump and the close-out, and it has to cover
   every part's code — including these two. Numbering is not execution order.
 - **Alembic is the one cross-part hazard.** Parts 2–5 running concurrently each
   generate revisions. Prefixes are reserved here — Part 1 `p1_*`, Part 2
   `p2_*`, Part 3 `p3_*`, Part 4 `p4_*`, Part 5 `p5_*`, Part 6 `p6_*`, Part 7
-  `p7_*`, Part 8 `p8_*` — so a collision surfaces as a name clash, not a silent
+  `p7_*`, Part 8 `p8_*`, Part 9 `p9_*` — so a collision surfaces as a name clash, not a silent
   branch. P6-01 asserts `alembic heads` returns exactly one. A real branch is
   resolved with a merge revision, **never** by editing a `down_revision` that
   has already run.
@@ -178,7 +206,7 @@ overwrites work rather than conflicting.
 Per task: the narrow run named in that task. **Not** the full suite.
 
 The plan verifies itself **once**, as P6-12 — which runs **last**, after Parts
-7 and 8, so that one run covers every part's code:
+7, 8 and 9, so that one run covers every part's code:
 
 ```bash
 python scripts/dev/testrun.py full     # expect 0 failed, 0 xfailed
@@ -214,3 +242,10 @@ Three more this plan adds, which the spec implies but does not list:
 10. Adding, renaming and dropping a record field all cost **zero migrations**,
     and promoting one to a column changes **no call site** — each demonstrated
     end-to-end, not asserted (Part 8).
+11. A locally-computed artifact publishes to production against an allowlist
+    that makes pushing trading state impossible rather than discouraged, and
+    the pull → train → push round trip has been walked end-to-end (Part 9).
+12. Every reversal has a tool and every tool has been exercised: `alembic
+    downgrade` over the whole graph, `migrate_data.py rollback` for a value
+    transform, `edit_field.py restore` for a dropped field, and
+    `restore_db.sh` for everything else (Part 9).
