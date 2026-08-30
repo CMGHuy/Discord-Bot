@@ -1,6 +1,8 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
+
+import { SKIP_ROUTE_REFRESH } from './interceptors';
 
 import {
   AnalyticsCalibration,
@@ -69,6 +71,7 @@ export class ApiClient {
   /** Relative, so it works identically behind `ng serve`'s proxy, behind
    *  Flask in the container, and behind any reverse proxy in front. */
   private readonly base = '/api/v1';
+  private readonly skipRouteRefresh = { context: new HttpContext().set(SKIP_ROUTE_REFRESH, true) };
 
   /* -- session --------------------------------------------------------- */
 
@@ -79,11 +82,11 @@ export class ApiClient {
   }
 
   login(username: string, password: string): Observable<Identity> {
-    return this.http.post<Identity>(`${this.base}/session`, { username, password });
+    return this.http.post<Identity>(`${this.base}/session`, { username, password }, this.skipRouteRefresh);
   }
 
   logout(): Observable<Identity> {
-    return this.http.delete<Identity>(`${this.base}/session`);
+    return this.http.delete<Identity>(`${this.base}/session`, this.skipRouteRefresh);
   }
 
   health(): Observable<Health> {
@@ -318,14 +321,14 @@ export class ApiClient {
   previewSettings(settings: Record<string, unknown>): Observable<SettingsPreview> {
     return this.http.post<SettingsPreview>(
       `${this.base}/system/settings/preview`,
-      { settings },
+      { settings }, this.skipRouteRefresh
     );
   }
 
   /** Returns the diff that was written, NOT the settings document — the
    *  form reloads through `settings()` so it re-reads what is on disk. */
   saveSettings(settings: Record<string, unknown>): Observable<SettingsSaveResult> {
-    return this.http.put<SettingsSaveResult>(`${this.base}/system/settings`, { settings });
+    return this.http.put<SettingsSaveResult>(`${this.base}/system/settings`, { settings }, this.skipRouteRefresh);
   }
 
   /** A URL, not a request -- same reason as the CSV export. */
@@ -392,7 +395,7 @@ export class ApiClient {
 
   savePreferences(preferences: Preferences): Observable<{ preferences: Preferences }> {
     return this.http.put<{ preferences: Preferences }>(
-      `${this.base}/system/preferences`, { preferences },
+      `${this.base}/system/preferences`, { preferences }, this.skipRouteRefresh
     );
   }
 

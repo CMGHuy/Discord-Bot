@@ -19,6 +19,7 @@ import { Select, SelectOption } from '../ui/form-controls';
 import { Icon, IconName } from '../ui/icon';
 import { ProfileMenu } from './profile-menu';
 import { RouteLoadingService } from '../routing/route-loading.service';
+import { RouteRefreshService } from '../routing/route-refresh.service';
 import { SessionStore } from '../stores/session.store';
 import { ConnectionStatus } from './connection-status';
 import { ToastHost } from './toast-host';
@@ -69,6 +70,7 @@ export class Shell {
   private readonly preferences = inject(PreferencesStore);
   private readonly viewport = inject(ViewportService);
   protected readonly routeLoading = inject(RouteLoadingService);
+  private readonly routeRefresh = inject(RouteRefreshService);
 
   /**
    * Three groups, because eight flat entries stopped communicating.

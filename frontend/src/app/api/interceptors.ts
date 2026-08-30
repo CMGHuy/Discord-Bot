@@ -1,10 +1,13 @@
-import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
+import { HttpContextToken, HttpErrorResponse, HttpInterceptorFn, HttpResponse } from '@angular/common/http';
 import { inject } from '@angular/core';
-import { catchError, finalize, throwError } from 'rxjs';
+import { catchError, finalize, tap, throwError } from 'rxjs';
 
 import { ApiError } from './api-error';
 import { LoadingService } from './loading.service';
 import { UnauthorizedService } from './unauthorized.service';
+import { RouteRefreshService } from '../routing/route-refresh.service';
+
+export const SKIP_ROUTE_REFRESH = new HttpContextToken<boolean>(() => false);
 
 /** Send the session cookie, and report a 401 exactly once per response.
  *
@@ -79,4 +82,14 @@ export const loadingInterceptor: HttpInterceptorFn = (req, next) => {
   // and unsubscribe is the common case here, because switchMap cancels the
   // previous request every time a filter changes.
   return next(req).pipe(finalize(() => loading.finished()));
+};
+
+/** Reload resolver-backed routes after successful mutations, never after reads. */
+export const routeRefreshInterceptor: HttpInterceptorFn = (req, next) => {
+  const refresh = inject(RouteRefreshService);
+  return next(req).pipe(tap((event) => {
+    if (event instanceof HttpResponse && req.method !== 'GET' && !req.context.get(SKIP_ROUTE_REFRESH)) {
+      refresh.requestMutationRefresh();
+    }
+  }));
 };

@@ -1,4 +1,5 @@
 import { Injectable, Signal, signal } from '@angular/core';
+import { Subject } from 'rxjs';
 
 /** The ten event types the server can raise, plus the two it synthesises.
  *  Mirrors spec v12's taxonomy table -- one type per *concern*, so several
@@ -61,6 +62,8 @@ export class EventStream {
   readonly lastSeq = signal<number | null>(null);
 
   private source: EventSource | null = null;
+  private readonly raisedSubject = new Subject<EventName>();
+  readonly raised = this.raisedSubject.asObservable();
   private readonly counters = new Map<EventName, ReturnType<typeof signal<number>>>();
   /** Timestamps of recent connection failures, inside the rolling window. */
   private failures: number[] = [];
@@ -131,6 +134,7 @@ export class EventStream {
 
   private bump(name: EventName): void {
     this.counterFor(name).update((n) => n + 1);
+    this.raisedSubject.next(name);
   }
 
   private bumpAll(): void {
