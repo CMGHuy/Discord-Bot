@@ -63,7 +63,9 @@ export const SPINNER_DELAY_MS = 200;
       @if (showSpinner()) {
         <span class="loading-spinner" aria-hidden="true"></span>
       }
-      @if (cards()) {
+      @if (pagination(); as page) {
+        <ng-container [ngTemplateOutlet]="pagerTemplate" [ngTemplateOutletContext]="{ $implicit: page, announce: true }" />
+      }      @if (cards()) {
         <!-- SR24. A rendering MODE of this component, not a second component:
              same column defs, same sort, same pagination. A separate mobile
              table drifts from the desktop one within two changes, and then
@@ -198,7 +200,16 @@ export const SPINNER_DELAY_MS = 200;
               }
             }
           }
+          @for (slot of fillerRows(); track slot) {
+            <tr class="filler" aria-hidden="true"><td [attr.colspan]="colspan()"></td></tr>
+          }
         </tbody>
+        @if (hasFooter()) {
+          <tfoot><tr>
+            @if (expansion()) { <td class="expander-cell"></td> }
+            @for (col of renderedColumns(); track col.key) { <td [class.num]="col.numeric">{{ footerText(col) }}</td> }
+          </tr></tfoot>
+        }
       </table>
       </div>
       }
@@ -208,15 +219,14 @@ export const SPINNER_DELAY_MS = 200;
       }
 
       @if (pagination(); as page) {
-        <sb-pagination
-          [pagination]="page"
-          [showPerPage]="showPerPage()"
-          (pageChange)="pageChange.emit($event)"
-          (perPageChange)="perPageChange.emit($event)"
-        />
+        <ng-container [ngTemplateOutlet]="pagerTemplate" [ngTemplateOutletContext]="{ $implicit: page, announce: false }" />
       }
     </div>
-  `,
+
+    <ng-template #pagerTemplate let-page let-announce="announce">
+      <sb-pagination [pagination]="page" [showPerPage]="showPerPage()" [announce]="announce"
+        (pageChange)="pageChange.emit($event)" (perPageChange)="perPageChange.emit($event)" />
+    </ng-template>  `,
   styles: `
     .cards { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-10); }
     .card {
@@ -424,6 +434,9 @@ export const SPINNER_DELAY_MS = 200;
     .arrow { display: inline-block; min-width: 0.7em; color: var(--accent); }
 
     .row:hover { background: var(--surface-raised); }
+    tr.filler > td { background: var(--bg); border-bottom: 0; height: calc(1lh + 2 * var(--space-6)); }
+    tfoot td { border-top: 1px solid var(--border-strong); border-bottom: 0; font-weight: 600; color: var(--text); }
+    thead th { position: sticky; top: var(--header-h); z-index: 2; background: var(--surface); }
 
     /* A pulse, not a hard on/off flash: WCAG's flash-rate guidance exists
        for a reason, and an opacity/background fade reads as "attention"
@@ -665,6 +678,21 @@ export class DataTable<T> {
   protected readonly colspan = computed(
     () => this.renderedColumns().length + (this.expansion() ? 1 : 0),
   );
+  protected readonly fillerRows = computed<number[]>(() => {
+    const page = this.pagination();
+    if (!page || page.perPage <= 0 || this.cards()) return [];
+    const missing = page.perPage - this.rows().length;
+    return missing > 0 ? Array.from({ length: missing }, (_, i) => i) : [];
+  });
+
+  protected readonly hasFooter = computed(
+    () => this.rows().length > 0 && this.renderedColumns().some((column) => column.footer),
+  );
+
+  protected footerText(column: ColumnDef<T>): string {
+    const value = column.footer?.(this.rows());
+    return value === null || value === undefined ? '' : String(value);
+  }
 
   /** Not while loading: "No trades match this filter" under a spinner is a
    *  claim the table cannot yet make. */

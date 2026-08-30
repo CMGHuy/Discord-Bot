@@ -57,22 +57,8 @@ export function rMultiple(value: number | null | undefined): string {
   return `${value > 0 ? '+' : ''}${value.toFixed(2)}R`;
 }
 
-/** Holding period, at the precision a swing trader actually reads: hours
- *  under a day, then days. "73.4 hours" is arithmetic; "3d 1h" is an answer. */
+/** Holding period at day/hour/minute precision. */
 export function held(hours: number | null | undefined): string {
-  if (hours === null || hours === undefined) return ABSENT;
-  if (hours < 24) return `${Math.round(hours)}h`;
-  const days = Math.floor(hours / 24);
-  const rest = Math.round(hours % 24);
-  return rest === 0 ? `${days}d` : `${days}d ${rest}h`;
-}
-
-/** A COMPLETED hold duration, at day/hour/minute precision -- unlike `held`,
- *  which rounds to the nearest hour because it measures a LIVE position's
- *  continuously-ticking age (minute-level jitter would be noise on a number
- *  that changes every render). A closed trade's hold period is fixed, so the
- *  extra precision is signal rather than noise. */
-export function heldPrecise(hours: number | null | undefined): string {
   if (hours === null || hours === undefined) return ABSENT;
   const totalMinutes = Math.round(hours * 60);
   const days = Math.floor(totalMinutes / 1440);
@@ -85,6 +71,12 @@ export function heldPrecise(hours: number | null | undefined): string {
   return parts.join(' ');
 }
 
+export function elapsedHours(iso: string | null | undefined, nowMs: number): number | null {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return null;
+  return Math.max(0, (nowMs - then) / 3_600_000);
+}
 /**
  * How long ago, coarsely — "4h", "3d", "2mo".
  *

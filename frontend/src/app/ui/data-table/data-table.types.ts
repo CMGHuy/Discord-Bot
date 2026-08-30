@@ -101,4 +101,6 @@ export interface ColumnDef<T> {
 
   /** Any CSS width. Left unset the column takes its content's width. */
   width?: string;
+
+  footer?: (rows: T[]) => string | number | null;
 }

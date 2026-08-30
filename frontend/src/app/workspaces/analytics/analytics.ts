@@ -8,6 +8,7 @@ import {
   input,
   signal,
   viewChild,
+  WritableSignal,
 } from '@angular/core';
 import { Router } from '@angular/router';
 
@@ -29,6 +30,7 @@ import {
   TierRow,
 } from '../../stores/analytics.store';
 import { ConnectionStore } from '../../stores/connection.store';
+import { PreferencesStore } from '../../stores/preferences.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { Chip, QualityChip, qualityTone } from '../../ui/chip';
@@ -37,6 +39,7 @@ import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
 import { createClientPage } from '../../ui/data-table/client-page';
+import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
 import { Select, TextInput } from '../../ui/form-controls';
 import { ABSENT, date, dateTime } from '../../ui/format';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
@@ -544,7 +547,9 @@ interface ProposalView extends ProposalRow {
               [rowKey]="strategyKey"
               [emptyState]="strategyEmpty"
               [pagination]="strategyPage.pageSpec()"
+              [showPerPage]="true"
               (pageChange)="strategyPage.setPage($event)"
+              (perPageChange)="onPerPage('strategy', $event)"
             />
 
             <!-- SR61. The twelve column tips from strategies.html:30-41. A
@@ -636,7 +641,9 @@ interface ProposalView extends ProposalRow {
               [rowKey]="decileKey"
               [emptyState]="decileEmpty"
               [pagination]="decilePage.pageSpec()"
+              [showPerPage]="true"
               (pageChange)="decilePage.setPage($event)"
+              (perPageChange)="onPerPage('decile', $event)"
             />
           </sb-panel>
 
@@ -668,7 +675,9 @@ interface ProposalView extends ProposalRow {
               [rowKey]="tierKey"
               [emptyState]="tierEmpty"
               [pagination]="tierPage.pageSpec()"
+              [showPerPage]="true"
               (pageChange)="tierPage.setPage($event)"
+              (perPageChange)="onPerPage('tier', $event)"
             />
           </sb-panel>
 
@@ -695,7 +704,9 @@ interface ProposalView extends ProposalRow {
               [rowKey]="driftKey"
               [emptyState]="driftEmpty"
               [pagination]="driftPage.pageSpec()"
+              [showPerPage]="true"
               (pageChange)="driftPage.setPage($event)"
+              (perPageChange)="onPerPage('drift', $event)"
             />
           </sb-panel>
         </sb-async>
@@ -776,7 +787,9 @@ interface ProposalView extends ProposalRow {
               [visible]="gridKeys"
               [rowKey]="gridRowKey"
               [pagination]="gridPage.pageSpec()"
+              [showPerPage]="true"
               (pageChange)="gridPage.setPage($event)"
+              (perPageChange)="onPerPage('grid', $event)"
             />
 
             <p class="section-help">
@@ -1196,6 +1209,10 @@ export class Analytics {
   private readonly router = inject(Router);
   protected readonly store = inject(AnalyticsStore);
   private readonly connection = inject(ConnectionStore);
+  private readonly preferences = inject(PreferencesStore);
+  private readonly perPageSignals = new Map<string, WritableSignal<number>>();
+  private perPageFor(table: string) { let current = this.perPageSignals.get(table); if (!current) { current = signal(readTablePerPage(this.preferences.values(), 'analytics-' + table)); this.perPageSignals.set(table, current); } return current; }
+  protected onPerPage(table: string, value: number): void { this.perPageFor(table).set(value); this.preferences.update((prefs) => writeTablePerPage(prefs, 'analytics-' + table, value)); }
 
   /** The account's currency symbol, as a metric-chip unit. Same fix as the
    *  Dashboard's: `" USD"` was written into the template while
@@ -1407,19 +1424,19 @@ export class Analytics {
   protected readonly pastJobsKeys = allKeys(PAST_JOBS_COLUMNS);
 
   protected readonly strategyKey = (row: StrategyRow) => row.strategy;
-  protected readonly strategyPage = createClientPage(() => this.store.strategyRows());
+  protected readonly strategyPage = createClientPage(() => this.store.strategyRows(), () => this.perPageFor('strategy')());
   protected readonly confidenceKey = (row: { level: number }) => String(row.level);
-  protected readonly confidencePage = createClientPage(() => this.store.byConfidence());
+  protected readonly confidencePage = createClientPage(() => this.store.byConfidence(), () => this.perPageFor('confidence')());
   protected readonly decileKey = (row: { decile: string }) => row.decile;
-  protected readonly decilePage = createClientPage(() => this.store.deciles());
+  protected readonly decilePage = createClientPage(() => this.store.deciles(), () => this.perPageFor('decile')());
   protected readonly tierKey = (row: TierRow) => row.tier;
-  protected readonly tierPage = createClientPage(() => this.store.tiers());
+  protected readonly tierPage = createClientPage(() => this.store.tiers(), () => this.perPageFor('tier')());
   protected readonly driftKey = (row: DriftRow) => row.strategy;
-  protected readonly driftPage = createClientPage(() => this.store.drift());
+  protected readonly driftPage = createClientPage(() => this.store.drift(), () => this.perPageFor('drift')());
   protected readonly gridRowKey = (row: GridRow) => String(row.row_index);
-  protected readonly gridPage = createClientPage(() => this.store.grid());
+  protected readonly gridPage = createClientPage(() => this.store.grid(), () => this.perPageFor('grid')());
   protected readonly pastJobRowKey = (row: JobSummary) => row.id;
-  protected readonly pastJobsPage = createClientPage(() => this.store.pastJobs());
+  protected readonly pastJobsPage = createClientPage(() => this.store.pastJobs(), () => this.perPageFor('past-jobs')());
   protected readonly pastJobsColumns = PAST_JOBS_COLUMNS; // static, no cell slots needed
 
   /** WEAK reads as the "loss" side of this bar list -- greyscale would be
@@ -1454,7 +1471,7 @@ export class Analytics {
   );
   protected readonly breakdownKeys = allKeys(breakdownColumns(''));
   protected readonly breakdownKey = (row: BreakdownRow) => row.key;
-  protected readonly breakdownPage = createClientPage(() => this.store.breakdownRows());
+  protected readonly breakdownPage = createClientPage(() => this.store.breakdownRows(), () => this.perPageFor('breakdown')());
 
   protected readonly breakdownEmpty = computed(() => ({
     title: `Nothing grouped by ${this.store.breakdownLabel().toLowerCase()} yet`,

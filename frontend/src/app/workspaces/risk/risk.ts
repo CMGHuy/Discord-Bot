@@ -9,18 +9,21 @@ import {
 } from '@angular/core';
 
 import { RiskPosition } from '../../api/models';
+import { PreferencesStore } from '../../stores/preferences.store';
 import { RiskStore } from '../../stores/risk.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
-import { ColumnDef, RowContext } from '../../ui/data-table/data-table.types';
+import { createClientPage } from '../../ui/data-table/client-page';
+import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { Flash } from '../../ui/flash';
 import { dateTime, num, text } from '../../ui/format';
 import { Panel } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { Sparkline } from '../../ui/sparkline';
+import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
 
 /**
  * Risk — exposure, heat against `PORTFOLIO_HEAT_CAP_PCT`, and the killswitch.
@@ -220,11 +223,17 @@ import { Sparkline } from '../../ui/sparkline';
 
     <sb-panel heading="Exposure by position" [flush]="true">
       <sb-data-table
-        [rows]="store.positions()"
+        [rows]="exposurePage.visible()"
         [columns]="columns()"
         [visible]="visible"
         [rowKey]="rowKey"
+        [sort]="sort()"
+        [pagination]="exposurePage.pageSpec()"
+        [showPerPage]="true"
         [emptyState]="emptyState"
+        (sortChange)="setSort($event)"
+        (pageChange)="exposurePage.setPage($event)"
+        (perPageChange)="onPerPage($event)"
       />
     </sb-panel>
 
@@ -442,6 +451,40 @@ import { Sparkline } from '../../ui/sparkline';
 })
 export class Risk {
   protected readonly store = inject(RiskStore);
+  private readonly preferences = inject(PreferencesStore);
+
+  static readonly TABLE_ID = 'risk-exposure';
+
+  protected readonly sort = signal<SortSpec | null>(null);
+  protected setSort(next: SortSpec): void { this.sort.set(next); }
+
+  protected readonly perPage = signal(
+    readTablePerPage(this.preferences.values(), Risk.TABLE_ID),
+  );
+
+  protected onPerPage(value: number): void {
+    this.perPage.set(value);
+    this.preferences.update((prefs) => writeTablePerPage(prefs, Risk.TABLE_ID, value));
+  }
+
+  protected readonly sortedPositions = computed(() => {
+    const sort = this.sort();
+    const rows = [...this.store.positions()];
+    if (!sort) return rows;
+    const dir = sort.direction === 'asc' ? 1 : -1;
+    return rows.sort((a, b) => {
+      const left = (a as unknown as Record<string, unknown>)[sort.key];
+      const right = (b as unknown as Record<string, unknown>)[sort.key];
+      if (left === null || left === undefined) return 1;
+      if (right === null || right === undefined) return -1;
+      return left < right ? -dir : left > right ? dir : 0;
+    });
+  });
+
+  protected readonly exposurePage = createClientPage(
+    () => this.sortedPositions(),
+    () => this.perPage(),
+  );
 
   protected readonly async = computed(() =>
     asyncInputs(this.store, { isEmpty: (data) => data.positions.length === 0 }),
@@ -475,12 +518,12 @@ export class Risk {
    *  which is the one order this table is read in, and a six-column table
    *  has nothing to hide. */
   protected readonly columns = computed<ColumnDef<RiskPosition>[]>(() => [
-    { key: 'ticker', header: 'Ticker', cell: this.tickerCell() },
-    { key: 'strategy', header: 'Strategy', value: (row) => text(row.strategy) },
-    { key: 'shares', header: 'Shares', value: (row) => num(row.shares, 0), numeric: true },
-    { key: 'entry', header: 'Entry', value: (row) => num(row.entry), numeric: true },
-    { key: 'stop_loss', header: 'Stop', value: (row) => num(row.stop_loss), numeric: true },
-    { key: 'risk_pct', header: 'Risk %', numeric: true, cell: this.riskCell() },
+    { key: 'ticker', header: 'Ticker', cell: this.tickerCell(), sortable: true },
+    { key: 'strategy', header: 'Strategy', value: (row) => text(row.strategy), sortable: true },
+    { key: 'shares', header: 'Shares', value: (row) => num(row.shares, 0), numeric: true, sortable: true, footer: (rows) => num(rows.reduce((sum, row) => sum + (row.shares ?? 0), 0), 0) },
+    { key: 'entry', header: 'Entry', value: (row) => num(row.entry), numeric: true, sortable: true },
+    { key: 'stop_loss', header: 'Stop', value: (row) => num(row.stop_loss), numeric: true, sortable: true },
+    { key: 'risk_pct', header: 'Risk %', numeric: true, cell: this.riskCell(), sortable: true, footer: (rows) => num(rows.reduce((sum, row) => sum + (row.risk_pct ?? 0), 0)) },
   ]);
 
   protected readonly heatClass = computed(() => (this.store.heatNearCap() ? 'warn' : ''));

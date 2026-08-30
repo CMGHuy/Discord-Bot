@@ -224,11 +224,12 @@ describe('DataTable', () => {
     expect(el().querySelector('.pager')).toBeNull();
   });
 
-  it('shows no pager when everything fits on one page', () => {
+  it('keeps the row count visible when everything fits on one page', () => {
     host.pagination.set({ total: 3, page: 1, perPage: 25 });
     fixture.detectChanges();
 
-    expect(el().querySelector('.pager')).toBeNull();
+    expect(el().querySelector('.pager .range')!.textContent).toContain('3 rows');
+    expect(el().querySelectorAll('.pager button')).toHaveLength(0);
   });
 
   it('derives the pager from `total`, not from the rows it was handed', () => {
@@ -236,14 +237,14 @@ describe('DataTable', () => {
     fixture.detectChanges();
 
     expect(el().querySelector('.pager .range')!.textContent).toContain('26–50 of 90');
-    expect(el().querySelector('.pager .of')!.textContent).toContain('2 / 4');
+    expect(el().querySelector('.pager .of')!.textContent).toContain('/ 4');
   });
 
   it('emits the requested page and disables the ends', () => {
     host.pagination.set({ total: 90, page: 1, perPage: 25 });
     fixture.detectChanges();
 
-    const [previous, next] = [...el().querySelectorAll('.pager button')] as HTMLButtonElement[];
+    const [, previous, next] = [...el().querySelectorAll('.pager button')] as HTMLButtonElement[];
     expect(previous.disabled).toBe(true);
 
     next.click();
@@ -251,7 +252,7 @@ describe('DataTable', () => {
 
     host.pagination.set({ total: 90, page: 4, perPage: 25 });
     fixture.detectChanges();
-    const last = [...el().querySelectorAll('.pager button')][1] as HTMLButtonElement;
+    const last = [...el().querySelectorAll('.pager button')][3] as HTMLButtonElement;
     expect(last.disabled).toBe(true);
   });
 
@@ -259,7 +260,7 @@ describe('DataTable', () => {
     host.pagination.set({ total: 90, page: 1, perPage: 0 });
     fixture.detectChanges();
 
-    expect(el().querySelector('.pager')).toBeNull();
+    expect(el().querySelector('.pager .range')!.textContent).toContain('90 rows');
   });
 
   /* -- property 3: expansion is the caller's template --------------------- */
