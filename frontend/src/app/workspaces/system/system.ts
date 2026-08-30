@@ -50,7 +50,6 @@ const TAB_IDS = new Set<string>(SYSTEM_TABS);
   // template wrapper) because :host is the ancestor the register's three
   // variables need to reach.
   host: { class: 'register-instrument' },
-  providers: [SystemStore],
   template: `
     <sb-section-head heading="System">
       @if (store.dirty()) {

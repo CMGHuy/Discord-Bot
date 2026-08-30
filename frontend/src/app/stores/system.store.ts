@@ -1,16 +1,16 @@
-import { computed, effect, inject } from '@angular/core';
+import { computed, inject } from '@angular/core';
 import {
   patchState,
   signalStore,
   withComputed,
-  withHooks,
   withMethods,
   withState,
 } from '@ngrx/signals';
 
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
-import { EventStream } from '../api/event-stream';
+import { routeRequest } from '../routing/route-request';
+import { Observable, of } from 'rxjs';
 import {
   Logs,
   ScanStatus,
@@ -436,57 +436,56 @@ export const SystemStore = signalStore(
       return field.key in draft ? draft[field.key] : fieldValue(field);
     };
 
-    const loadSettings = (): void => {
-      patchState(store, { settingsLoading: true });
-      api.settings().subscribe({
-        next: (settings) =>
-          patchState(store, {
-            settings,
-            settingsLoading: false,
-            settingsError: null,
-            settingsStale: false,
-          }),
-        error: (error: ApiError) =>
-          patchState(store, {
-            settingsLoading: false,
-            settingsError:
-              error.code === 'unavailable'
-                ? 'The admin is not responding.'
-                : error.message,
-          }),
+    const resolveSettings = (): Observable<void> => {
+      if (store.dirty()) {
+        patchState(store, { settingsStale: true });
+        return of(undefined);
+      }
+      return routeRequest(api.settings(), {
+        start: () => patchState(store, { settingsLoading: true }),
+        next: (settings) => patchState(store, {
+          settings, settingsLoading: false, settingsError: null, settingsStale: false,
+        }),
+        error: (error) => patchState(store, {
+          settingsLoading: false,
+          settingsError: error.code === 'unavailable'
+            ? 'The admin is not responding.' : error.message,
+        }),
       });
     };
 
-    const loadLogs = (): void => {
-      patchState(store, { logsLoading: true });
-      api.logs(store.logSource(), store.logLines()).subscribe({
-        next: (logs) =>
-          patchState(store, { logs, logsLoading: false, logsError: null }),
-        error: (error: ApiError) =>
-          patchState(store, {
-            logsLoading: false,
-            logsError:
-              error.code === 'unavailable'
-                ? 'The admin is not responding.'
-                : error.message,
-          }),
-      });
-    };
+    const resolveLogs = (): Observable<void> => routeRequest(
+      api.logs(store.logSource(), store.logLines()), {
+        start: () => patchState(store, { logsLoading: true }),
+        next: (logs) => patchState(store, { logs, logsLoading: false, logsError: null }),
+        error: (error) => patchState(store, {
+          logsLoading: false,
+          logsError: error.code === 'unavailable'
+            ? 'The admin is not responding.' : error.message,
+        }),
+      },
+    );
 
-    const loadScan = (): void => {
-      api.scanStatus().subscribe({
-        next: (scan) => patchState(store, { scan, scanError: null }),
-        error: (error: ApiError) =>
-          patchState(store, {
-            scanError:
-              error.code === 'unavailable'
-                ? 'The admin is not responding.'
-                : error.message,
-          }),
-      });
-    };
+    const resolveScan = (): Observable<void> => routeRequest(api.scanStatus(), {
+      start: () => undefined,
+      next: (scan) => patchState(store, { scan, scanError: null }),
+      error: (error) => patchState(store, {
+        scanError: error.code === 'unavailable'
+          ? 'The admin is not responding.' : error.message,
+      }),
+    });
 
+    const resolveTab = (tab: SystemTab): Observable<void> =>
+      ({ settings: resolveSettings, logs: resolveLogs, scan: resolveScan })[tab]();
+
+    const loadSettings = (): void => { resolveSettings().subscribe(); };
+    const loadLogs = (): void => { resolveLogs().subscribe(); };
+    const loadScan = (): void => { resolveScan().subscribe(); };
     return {
+      resolveSettings,
+      resolveLogs,
+      resolveScan,
+      resolveTab,
       loadSettings,
       loadLogs,
       loadScan,
@@ -774,30 +773,5 @@ export const SystemStore = signalStore(
         });
       },
     };
-  }),
-  withHooks({
-    onInit(store, events = inject(EventStream)) {
-      const settings = events.changes('settings');
-      effect(() => {
-        settings();
-        store.applySettingsEvent();
-      });
-
-      // Logs have no event of their own -- they are a file the admin tails.
-      // Loaded once here; the Logs tab has an explicit refresh, which is
-      // honest about what it is rather than a timer that quietly hides how
-      // stale the view is.
-      store.loadLogs();
-
-      // `scan` covers trigger/pause/stop; `bot` covers the heartbeat, which
-      // is rendered on the same tab.
-      const scan = events.changes('scan');
-      const bot = events.changes('bot');
-      effect(() => {
-        scan();
-        bot();
-        store.loadScan();
-      });
-    },
   }),
 );

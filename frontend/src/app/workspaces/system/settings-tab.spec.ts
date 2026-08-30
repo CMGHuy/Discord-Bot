@@ -41,6 +41,8 @@ function seed(): { fixture: ComponentFixture<SettingsTab>; backend: HttpTestingC
       SystemStore,
     ],
   });
+  const store = TestBed.inject(SystemStore);
+  store.loadSettings();
   const fixture = TestBed.createComponent(SettingsTab);
   const backend = TestBed.inject(HttpTestingController);
   return { fixture, backend };
@@ -58,7 +60,6 @@ describe('SettingsTab states', () => {
   it('shows the error state on a first-load failure', async () => {
     const { fixture, backend } = seed();
     fixture.detectChanges();
-    flushOtherFetches(backend);
     backend
       .expectOne('/api/v1/system/settings')
       .flush({ error: { code: 'unavailable', message: 'nope' } }, { status: 503, statusText: 'x' });
@@ -72,7 +73,6 @@ describe('SettingsTab states', () => {
   it('shows the schema with no skeleton once settings has loaded', async () => {
     const { fixture, backend } = seed();
     fixture.detectChanges();
-    flushOtherFetches(backend);
     backend.expectOne('/api/v1/system/settings').flush(payload());
     await fixture.whenStable();
     fixture.detectChanges();

@@ -77,7 +77,7 @@ export const routes: Routes = [
   {
     path: 'system',
     canMatch: [authGuard],
-    loadComponent: () => import('./workspaces/system/system').then((m) => m.System),
+    loadChildren: () => import('./workspaces/system/system.routes').then((m) => m.systemRoutes),
   },
   {
     path: 'versions',

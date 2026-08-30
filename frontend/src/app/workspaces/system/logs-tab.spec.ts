@@ -43,6 +43,8 @@ function seed(): { fixture: ComponentFixture<LogsTab>; backend: HttpTestingContr
       SystemStore,
     ],
   });
+  const store = TestBed.inject(SystemStore);
+  store.loadLogs();
   const fixture = TestBed.createComponent(LogsTab);
   const backend = TestBed.inject(HttpTestingController);
   return { fixture, backend };
@@ -60,7 +62,6 @@ describe('LogsTab states', () => {
   it('shows the error state on a first-load failure', async () => {
     const { fixture, backend } = seed();
     fixture.detectChanges();
-    flushOtherFetches(backend);
     backend
       .expectOne((r) => r.url === '/api/v1/system/logs')
       .flush({ error: { code: 'unavailable', message: 'nope' } }, { status: 503, statusText: 'x' });
@@ -74,7 +75,6 @@ describe('LogsTab states', () => {
   it('shows the empty state, not a spinner, for an empty log file', async () => {
     const { fixture, backend } = seed();
     fixture.detectChanges();
-    flushOtherFetches(backend);
     backend
       .expectOne((r) => r.url === '/api/v1/system/logs')
       .flush(payload({ content: '' }));
@@ -89,7 +89,6 @@ describe('LogsTab states', () => {
   it('keeps the source picker and refresh button usable while the log is empty', async () => {
     const { fixture, backend } = seed();
     fixture.detectChanges();
-    flushOtherFetches(backend);
     backend
       .expectOne((r) => r.url === '/api/v1/system/logs')
       .flush(payload({ content: '' }));
