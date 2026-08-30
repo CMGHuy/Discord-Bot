@@ -46,8 +46,7 @@ export const routes: Routes = [
   {
     path: 'analytics',
     canMatch: [authGuard],
-    loadComponent: () =>
-      import('./workspaces/analytics/analytics').then((m) => m.Analytics),
+    loadChildren: () => import('./workspaces/analytics/analytics.routes').then((m) => m.analyticsRoutes),
   },
   {
     path: 'calendar',

@@ -171,6 +171,7 @@ describe('AnalyticsStore', () => {
     });
     store = TestBed.inject(AnalyticsStore);
     backend = TestBed.inject(HttpTestingController);
+    store.load();
   });
 
   const tick = () => TestBed.inject(ApplicationRef).tick();
@@ -437,7 +438,7 @@ describe('AnalyticsStore', () => {
     respondPerformance();
 
     events.raise('analytics');
-    tick();
+    store.load();
     respondPerformance({ win_rate: 70 });
 
     expect(store.winRate()).toBe(70);
@@ -507,7 +508,7 @@ describe('AnalyticsStore', () => {
     openTuning();
 
     events.raise('jobs');
-    tick();
+    store.load();
     respondJobs([RUNNING_JOB]);
     respondProposals();
     // NOT strategies: already loaded, and a running grid raises this event
@@ -615,7 +616,7 @@ describe('AnalyticsStore', () => {
     respondPerformance();
 
     events.raise('analytics');
-    tick();
+    store.load();
     backend
       .expectOne('/api/v1/analytics/performance')
       .error(new ProgressEvent('error'), { status: 0 });
@@ -645,7 +646,7 @@ describe('AnalyticsStore', () => {
     expect(store.journalError()).not.toBeNull();
 
     events.raise('analytics');
-    tick();
+    store.load();
     respondPerformance();
 
     expect(store.error()).toBeNull();
