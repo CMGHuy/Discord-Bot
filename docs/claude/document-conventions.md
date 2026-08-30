@@ -180,9 +180,51 @@ whole context window for a single file.
 | Document | Budget | Hard limit |
 |---|---|---|
 | Spec | ~350 lines / 20 KB | 500 lines — a spec is read **whole** |
-| Plan | ~15 tasks / 60 KB | 30 tasks or 120 KB, whichever comes first |
+| Plan **file** | 1000–1500 lines | **1500 lines**, no exceptions |
 
 Over the limit, **split — do not compress.**
+
+### The 1500-line cap is per file, not per plan
+
+**No plan file may exceed 1500 lines.** A plan of any size is legal; a *file*
+over 1500 lines is not. The cap is a line count rather than a task count or a
+byte count because lines are what a `grep -A 120` window, a `sed -n` range and
+a reviewer's scroll are all measured in, and because a task-count budget stops
+predicting anything once tasks carry real test and implementation code — v67's
+Part 2 came in at 4186 lines across 22 tasks, roughly 190 lines each, and no
+task in it was verbose.
+
+Aim for 1000–1500. A trailing file under 1000 is fine and normal — the split
+falls where the task boundaries fall, and **a task is never split across
+files.** Better a 700-line last file than a task whose test code is in one file
+and its implementation in another.
+
+**Splitting a part that is already numbered:** append a letter, not a new
+number. `_2-trading-state.md` becomes `_2a-trading-state-trades.md`,
+`_2b-trading-state-plans.md`, and so on. The letter is a file boundary only —
+the part keeps its identity, its Alembic revision prefix, its task-id prefix
+and its exit criteria. Put the part's `## Parallelisation`, its revision-id
+table and its exit criteria in the `a` file, and give every later file a short
+header pointing back at it rather than repeating them.
+
+Task ids do not change when a file splits, so `/task-brief P2-07` and
+`grep -rn "^### Task P2-07" docs/superpowers/plans/` both keep working without
+anyone knowing which letter a task landed in. That is the property that makes
+lettering cheap: **splitting a file must never change a task's address.**
+
+**When splitting an existing file, verify no task was dropped.** A line-range
+split silently loses whatever falls in a gap between two ranges. The check is
+one command, and it is not optional:
+
+```bash
+for f in docs/superpowers/plans/<base>_*.md; do
+  echo "$(basename $f): $(grep -o '^### Task [A-Z0-9-]*' $f | tr '\n' ' ')"
+done
+```
+
+Read the ids across the files as one sequence. A missing id is a task that no
+longer exists anywhere — and if the pre-split file was untracked, it is not in
+git either.
 
 ### Why splitting, and not writing less
 

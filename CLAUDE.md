@@ -168,10 +168,11 @@ of its own — both rules and why: `docs/claude/working-conventions.md`.
 new spec and plan is numbered at creation, not at close-out**, from one
 repo-wide counter computed from both doc filenames and git log (recomputed
 immediately before the commit that creates the document — concurrent sessions
-race it). Full numbering rules, the header block (`Version:`/`Bump:`/`Edge:`),
-length budgets, and the `implemented/`/`no-lift/` close-out moves:
-`docs/claude/document-conventions.md` (authoring) and `document-lifecycle.md`
-(closing out).
+race it). **No plan file may exceed 1500 lines** — split into more `_N` parts
+(lettered `_2a`/`_2b` when one part needs several), never compress a task.
+Numbering rules, the header block (`Version:`/`Bump:`/`Edge:`), length budgets
+and the `implemented/`/`no-lift/` close-out moves:
+`docs/claude/document-conventions.md` (authoring) and `document-lifecycle.md`.
 
 ## Never delete a branch whose name contains "backup"
 
