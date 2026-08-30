@@ -178,12 +178,15 @@ export const SessionStore = signalStore(
      * or password" above an empty form for an event they did not cause is
      * both wrong and alarming on a tool that shows money.
      */
-    expire(): void {
+    expire(redirectTo?: string): void {
+      const fallback = `${location.pathname}${location.search}`;
+      const requested = redirectTo ?? fallback;
+      const remembered = requested && requested !== '/' ? requested : null;
       patchState(store, {
         status: 'anonymous', username: null,
-        // A rejected login emits the same 401 notification as an expired
-        // session. Preserve its just-written form error instead of clearing
-        // it before Angular has a chance to render it.
+        redirectTo: redirectTo !== undefined
+          ? remembered
+          : store.redirectTo() ?? remembered,
         error: store.status() === 'authenticated' ? null : store.error(),
       });
     },
