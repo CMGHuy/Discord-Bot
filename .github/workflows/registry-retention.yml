@@ -36,7 +36,13 @@ jobs:
       # deploys cannot push the live image out of the retained set inside a
       # single 14-day window.
       - name: Delete image versions older than 14 days
-        uses: snok/container-retention-policy@v3.0.0
+        # Pinned past v3.0.0 on purpose: that version's token-format check only
+        # accepted a classic PAT (ghp_) or OAuth token (gho_) and rejected the
+        # GITHUB_TOKEN this job actually uses, which is a ghs_-prefixed
+        # installation token -- failing every run with "invalid value '***'
+        # for '--token'". v3.1.0 fixed the parsing for GitHub's 2026 token
+        # format migration (snok/container-retention-policy#132, #129).
+        uses: snok/container-retention-policy@v3.1.0
         with:
           account: ${{ github.repository_owner }}
           token: ${{ secrets.GITHUB_TOKEN }}
