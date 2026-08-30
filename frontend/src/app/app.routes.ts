@@ -61,7 +61,7 @@ export const routes: Routes = [
   {
     path: 'watchlist',
     canMatch: [authGuard],
-    loadComponent: () => import('./workspaces/watchlist/watchlist').then((m) => m.Watchlist),
+    loadChildren: () => import('./workspaces/watchlist/watchlist.routes').then((m) => m.watchlistRoutes),
   },
   {
     path: 'watchlist/:symbol',

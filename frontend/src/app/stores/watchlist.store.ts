@@ -1,18 +1,17 @@
-import { computed, effect, inject } from '@angular/core';
+import { computed, inject } from '@angular/core';
 import {
   patchState,
   signalStore,
   withComputed,
-  withHooks,
   withMethods,
   withState,
 } from '@ngrx/signals';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Subject, debounceTime, switchMap } from 'rxjs';
+import { Observable, Subject, debounceTime, switchMap } from 'rxjs';
 
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
-import { EventStream } from '../api/event-stream';
+import { routeRequest } from '../routing/route-request';
 import { Ticker, TickerSuggestion } from '../api/models';
 
 interface WatchlistSlice {
@@ -90,22 +89,12 @@ export const WatchlistStore = signalStore(
     symbols: computed(() => new Set(tickers().map((row) => row.symbol))),
   })),
   withMethods((store, api = inject(ApiClient)) => {
-    const load = (): void => {
-      patchState(store, { loading: true });
-      api.tickers().subscribe({
-        next: ({ tickers }) =>
-          patchState(store, { tickers, loading: false, loaded: true, error: null }),
-        error: (error: ApiError) =>
-          patchState(store, {
-            loading: false,
-            error:
-              error.code === 'unavailable'
-                ? 'The admin is not responding.'
-                : error.message,
-          }),
-      });
-    };
-
+    const resolve = (): Observable<void> => routeRequest(api.tickers(), {
+      start: () => patchState(store, { loading: true }),
+      next: ({ tickers }) => patchState(store, { tickers, loading: false, loaded: true, error: null }),
+      error: (error) => patchState(store, { loading: false, error: error.code === 'unavailable' ? 'The admin is not responding.' : error.message }),
+    });
+    const load = (): void => { resolve().subscribe({ error: () => undefined }); };
     /** One pipeline for every keystroke. `switchMap` cancels the in-flight
      *  request, which is what stops an early response landing after a later
      *  one and showing suggestions for a query the box no longer holds. */
@@ -127,6 +116,7 @@ export const WatchlistStore = signalStore(
       });
 
     return {
+      resolve,
       load,
 
       addTickers(text: string): void {
@@ -195,14 +185,5 @@ export const WatchlistStore = signalStore(
         patchState(store, { suggestions: [] });
       },
     };
-  }),
-  withHooks({
-    onInit(store, events = inject(EventStream)) {
-      const watchlist = events.changes('watchlist');
-      effect(() => {
-        watchlist();
-        store.load();
-      });
-    },
   }),
 );
