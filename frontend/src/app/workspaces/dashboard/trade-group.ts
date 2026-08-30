@@ -6,6 +6,8 @@ import {
   inject,
   input,
   output,
+  signal,
+  untracked,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
@@ -69,6 +71,8 @@ export const OPEN_POSITIONS_CAP = 6;
         [rowKey]="rowKey()"
         [loading]="trades.loading()"
         [emptyState]="emptyState()"
+        [pagination]="trades.pagination()"
+        (pageChange)="page.set($event)"
         (rowActivate)="rowActivate.emit($event)"
         (reorder)="reorder.emit($event)"
       />
@@ -165,7 +169,8 @@ export class TradeGroup {
   readonly rowActivate = output<TradeRow>();
   readonly reorder = output<string[]>();
 
-  protected readonly rows = computed(() => this.trades.rows().slice(0, this.cap()));
+  protected readonly page = signal(1);
+  protected readonly rows = computed(() => this.trades.rows());
 
   /** Counts come from this group's own request, not `rows.length`: the table
    *  is capped, and `pagination().total` is the pre-slice count the
@@ -178,6 +183,11 @@ export class TradeGroup {
   });
 
   constructor() {
+    effect(() => {
+      this.status();
+      this.today();
+      untracked(() => this.page.set(1));
+    });
     // An effect, not a direct read in the constructor body: a required
     // signal input is not guaranteed set yet at that point. `status` and
     // `cap` never actually change after creation -- each instance is
@@ -191,7 +201,7 @@ export class TradeGroup {
         status: this.status(),
         today: this.today() ?? undefined,
         sort: '-opened_at',
-        page: 1,
+        page: this.page(),
         per_page: this.cap(),
       });
     });

@@ -5,6 +5,7 @@ import {
   computed,
   effect,
   inject,
+  signal,
   input,
   viewChild,
 } from '@angular/core';
@@ -12,12 +13,16 @@ import { RouterLink } from '@angular/router';
 
 import { TradeRow } from '../../api/models';
 import { ChartStore } from '../../stores/chart.store';
+import { PreferencesStore } from '../../stores/preferences.store';
 import { TradesStore } from '../../stores/trades.store';
 import { ChartContainer } from '../../ui/chart-container';
 import { TradeChart } from '../../ui/chart/trade-chart';
 import { DataTable } from '../../ui/data-table/data-table';
-import { ColumnDef, RowContext } from '../../ui/data-table/data-table.types';
-import { held, num, pct } from '../../ui/format';
+import { createClientPage } from '../../ui/data-table/client-page';
+import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
+import { elapsedHours, held, num, pct } from '../../ui/format';
+import { CLOCK } from '../../ui/clock';
+import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
 import { Panel } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
@@ -87,12 +92,18 @@ export const TICKER_TRADES_CAP = 25;
       }
 
       <sb-data-table
-        [rows]="trades.rows()"
+        [rows]="tradesPage.visible()"
         [columns]="columns()"
         [visible]="visible"
         [rowKey]="rowKey"
         [loading]="trades.loading() && trades.empty()"
         [emptyState]="emptyState"
+        [sort]="sort()"
+        [pagination]="tradesPage.pageSpec()"
+        [showPerPage]="true"
+        (sortChange)="setSort($event)"
+        (pageChange)="tradesPage.setPage($event)"
+        (perPageChange)="onPerPage($event)"
       />
     </sb-panel>
 
@@ -149,6 +160,15 @@ export class TickerDetail {
   readonly symbol = input.required<string>();
 
   protected readonly trades = inject(TradesStore);
+  private readonly preferences = inject(PreferencesStore);
+  private readonly now = inject(CLOCK);
+  static readonly TABLE_ID = 'ticker-trades';
+  protected readonly sort = signal<SortSpec | null>(null);
+  protected setSort(next: SortSpec): void { this.sort.set(next); }
+  protected readonly perPage = signal(readTablePerPage(this.preferences.values(), TickerDetail.TABLE_ID));
+  protected onPerPage(value: number): void { this.perPage.set(value); this.preferences.update((prefs) => writeTablePerPage(prefs, TickerDetail.TABLE_ID, value)); }
+  protected readonly sortedTrades = computed(() => { const sort = this.sort(); const rows = [...this.trades.rows()]; if (!sort) return rows; const dir = sort.direction === 'asc' ? 1 : -1; return rows.sort((a, b) => { const left=(a as unknown as Record<string, unknown>)[sort.key]; const right=(b as unknown as Record<string, unknown>)[sort.key]; if(left == null) return 1; if(right == null) return -1; return left < right ? -dir : left > right ? dir : 0; }); });
+  protected readonly tradesPage = createClientPage(() => this.sortedTrades(), () => this.perPage());
   protected readonly chart = inject(ChartStore);
 
   protected readonly rowKey = (row: TradeRow) => row.id;
@@ -174,7 +194,7 @@ export class TickerDetail {
     { key: 'entry', header: 'Entry', value: (row) => num(row.entry), numeric: true },
     { key: 'now', header: 'Now', value: (row) => num(row.current_price), numeric: true },
     { key: 'pnl_pct', header: 'P&L %', numeric: true, cell: this.pnlCell() },
-    { key: 'held', header: 'Held', value: (row) => held(row.held_hours), numeric: true },
+    { key: 'held', header: 'Held', value: (row) => held(row.closed_at ? row.held_hours : elapsedHours(row.opened_at, this.now())), numeric: true, sortable: true },
   ]);
 
   /** From the rows on screen, because there is no ticker summary endpoint

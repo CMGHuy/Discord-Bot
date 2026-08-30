@@ -10,6 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
+import { CLOCK } from '../../ui/clock';
 
 import { DashboardScope, TradeRow } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
@@ -816,6 +817,7 @@ import { TradeGroup } from './trade-group';
   `,
 })
 export class Dashboard {
+  private readonly now = inject(CLOCK);
   private readonly router = inject(Router);
   protected readonly store = inject(DashboardStore);
   /** For the currency symbol alone. `ConnectionStore` is root-provided and
@@ -990,7 +992,7 @@ export class Dashboard {
       opened_at: this.openedCell(),
       closed_at: this.closedCell(),
     };
-    return tradeColumns().map((column) =>
+    return tradeColumns(this.now).map((column) =>
       cells[column.key] ? { ...column, cell: cells[column.key] } : column,
     );
   });

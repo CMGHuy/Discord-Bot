@@ -16,34 +16,19 @@ export interface ClientPage<T> {
  *  is, so slicing what's already in hand is simpler and needs no backend
  *  change. `rows` is a function (not a plain array) so this stays correct
  *  when the underlying store re-fetches and the array identity changes. */
-export function createClientPage<T>(rows: () => readonly T[], perPage = 25): ClientPage<T> {
+export function createClientPage<T>(
+  rows: () => readonly T[],
+  perPage: number | (() => number) = 25,
+): ClientPage<T> {
+  const size = typeof perPage === 'function' ? perPage : () => perPage;
   const requestedPage = signal(1);
-
-  const totalPages = computed(() => Math.max(1, Math.ceil(rows().length / perPage)));
-
-  // Clamp on read rather than in a separate effect: a `setPage` call can
-  // race a rows() shrink from either direction, and clamping wherever the
-  // value is actually consumed is the one place that can't be out of date.
-  // Exposed AS `page` (rather than the raw requested value) so a caller
-  // reading `page()` right after a shrink sees the same clamped number the
-  // table is actually showing, not a stale request that no longer exists.
+  const effective = computed(() => (size() > 0 ? size() : Math.max(1, rows().length)));
+  const totalPages = computed(() => Math.max(1, Math.ceil(rows().length / effective())));
   const page = computed(() => Math.min(requestedPage(), totalPages()));
-
   const visible = computed(() => {
-    const start = (page() - 1) * perPage;
-    return rows().slice(start, start + perPage);
+    const start = (page() - 1) * effective();
+    return rows().slice(start, start + effective());
   });
-
-  const pageSpec = computed<PageSpec>(() => ({
-    total: rows().length,
-    page: page(),
-    perPage,
-  }));
-
-  return {
-    page,
-    visible,
-    pageSpec,
-    setPage: (n: number) => requestedPage.set(Math.max(1, n)),
-  };
+  const pageSpec = computed<PageSpec>(() => ({ total: rows().length, page: page(), perPage: size() }));
+  return { page, visible, pageSpec, setPage: (n: number) => requestedPage.set(Math.max(1, n)) };
 }
