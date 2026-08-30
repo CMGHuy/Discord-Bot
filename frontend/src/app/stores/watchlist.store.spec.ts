@@ -233,15 +233,15 @@ describe('WatchlistStore earnings-date follow-up', () => {
       ],
     });
     store = TestBed.inject(WatchlistStore);
+    store.load();
     backend = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => vi.useRealTimers());
 
   const tick = () => TestBed.inject(ApplicationRef).tick();
-  // Constructing the store already triggers one load via onInit's effect
-  // (watchlist.store.ts:237-244) -- calling store.load() again here would be
-  // a SECOND request, not the first, which is why boot() only ticks.
+  // The fixture starts one explicit local load, matching the route-owned resolver
+  // lifecycle; boot only settles that request.
   const boot = () => {
     tick();
     backend.expectOne('/api/v1/watchlist/tickers').flush(TICKERS); // MSFT has none
