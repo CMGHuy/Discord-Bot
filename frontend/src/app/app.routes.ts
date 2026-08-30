@@ -77,7 +77,7 @@ export const routes: Routes = [
   {
     path: 'risk',
     canMatch: [authGuard],
-    loadComponent: () => import('./workspaces/risk/risk').then((m) => m.Risk),
+    loadChildren: () => import('./workspaces/risk/risk.routes').then((m) => m.riskRoutes),
   },
   {
     path: 'system',
