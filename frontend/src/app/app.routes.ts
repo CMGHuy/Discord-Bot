@@ -55,8 +55,7 @@ export const routes: Routes = [
   {
     path: 'calendar',
     canMatch: [authGuard],
-    loadComponent: () =>
-      import('./workspaces/calendar/calendar').then((m) => m.Calendar),
+    loadChildren: () => import('./workspaces/calendar/calendar.routes').then((m) => m.calendarRoutes),
   },
   {
     path: 'watchlist',

@@ -26,7 +26,6 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   host: { class: 'register-presentation' },
   // Provided on the component: created on entry, destroyed on exit, so the
   // workspace cannot hold a stale month while you are looking elsewhere.
-  providers: [CalendarStore],
   template: `
     <sb-section-head heading="Calendar">
       <!-- Kept unconditional (unlike Dashboard/Trades): "By weekday (all
