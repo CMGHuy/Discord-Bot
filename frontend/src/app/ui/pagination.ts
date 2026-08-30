@@ -29,7 +29,12 @@ import { ALL_PER_PAGE, PER_PAGE_OPTIONS } from './table-prefs';
     @if (announce()) { <span class="sr-only" role="status" aria-live="polite">{{ announcement() }}</span> }
   `,
   styles: `
-    .per-page { display: flex; align-items: center; gap: var(--space-6); }
+    /* padding matches .pager's exactly (both var(--space-10)) so the two
+       rows -- and the table content below them, whose th/td cells use the
+       same --space-10 horizontal inset -- share one left edge. Without it
+       this row sits flush at 0 while everything else in the section is
+       inset by --space-10, reading as misaligned. */
+    .per-page { display: flex; align-items: center; gap: var(--space-6); padding: var(--space-10); }
     .per-page .label { font-size: var(--text-chip); color: var(--text-secondary); }
     .per-page select, .jump { background: var(--surface-raised); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); font: inherit; }
     .per-page select { font-size: var(--text-chip); padding: 2px var(--space-4); }

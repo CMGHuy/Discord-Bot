@@ -11,7 +11,7 @@ import {
   signal,
 } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventStream } from '../api/event-stream';
 import {
@@ -19,7 +19,7 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
-import { WatchlistStore, parseSymbols } from './watchlist.store';
+import { EARNINGS_REFRESH_DELAY_MS, WatchlistStore, parseSymbols } from './watchlist.store';
 
 /* NG51 — the watchlist.
  *
@@ -203,5 +203,107 @@ describe('WatchlistStore', () => {
 
     backend.verify();
     expect(store.suggestions()).toEqual([]);
+  });
+});
+
+// --- earnings-date follow-up fetch -----------------------------------------
+//
+// swingbot/admin/api_v1/watchlist.py's _next_earnings is cache-only: a
+// ticker not yet cached comes back next_earnings_date: null and is warmed on
+// a background thread the response does not wait for. Without a follow-up,
+// "no date" is permanent until someone reloads the page by hand.
+
+describe('WatchlistStore earnings-date follow-up', () => {
+  let store: InstanceType<typeof WatchlistStore>;
+  let backend: HttpTestingController;
+  let events: FakeEventStream;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    events = new FakeEventStream();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        { provide: EventStream, useValue: events },
+        WatchlistStore,
+      ],
+    });
+    store = TestBed.inject(WatchlistStore);
+    backend = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  const tick = () => TestBed.inject(ApplicationRef).tick();
+  // Constructing the store already triggers one load via onInit's effect
+  // (watchlist.store.ts:237-244) -- calling store.load() again here would be
+  // a SECOND request, not the first, which is why boot() only ticks.
+  const boot = () => {
+    tick();
+    backend.expectOne('/api/v1/watchlist/tickers').flush(TICKERS); // MSFT has none
+  };
+
+  it('re-fetches once when a row is missing its earnings date', () => {
+    boot();
+
+    vi.advanceTimersByTime(EARNINGS_REFRESH_DELAY_MS);
+    tick();
+    backend.expectOne('/api/v1/watchlist/tickers').flush({
+      tickers: [
+        TICKERS.tickers[0],
+        { ...TICKERS.tickers[1], next_earnings_date: '2026-09-11',
+          next_earnings_datetime: '2026-09-11T20:00:00+00:00' },
+      ],
+    });
+
+    expect(store.tickers()[1].next_earnings_date).toBe('2026-09-11');
+  });
+
+  it('does not re-fetch when every row already has a date', () => {
+    tick();
+    backend.expectOne('/api/v1/watchlist/tickers').flush({
+      tickers: [TICKERS.tickers[0]], // AAPL only -- has a date
+    });
+
+    vi.advanceTimersByTime(EARNINGS_REFRESH_DELAY_MS);
+    tick();
+    backend.verify(); // no second request pending
+  });
+
+  it('cancels a pending follow-up rather than stacking a second one', () => {
+    // A remove (or the watchlist SSE event) reloading while the delayed
+    // re-fetch is still pending must not leave two in-flight requests that
+    // can land out of order.
+    boot();
+
+    vi.advanceTimersByTime(EARNINGS_REFRESH_DELAY_MS / 2);
+    store.load(); // supersedes the pending follow-up
+    tick();
+    backend.expectOne('/api/v1/watchlist/tickers').flush(TICKERS);
+
+    vi.advanceTimersByTime(EARNINGS_REFRESH_DELAY_MS / 2); // the cancelled one's original deadline
+    tick();
+    backend.verify(); // nothing fired yet -- the timer restarted at the second load
+
+    vi.advanceTimersByTime(EARNINGS_REFRESH_DELAY_MS / 2);
+    tick();
+    backend.expectOne('/api/v1/watchlist/tickers').flush(TICKERS); // exactly one follow-up
+  });
+
+  it('leaves the dash on screen when the follow-up itself fails', () => {
+    boot();
+
+    vi.advanceTimersByTime(EARNINGS_REFRESH_DELAY_MS);
+    tick();
+    backend
+      .expectOne('/api/v1/watchlist/tickers')
+      .error(new ProgressEvent('error'), { status: 0 });
+
+    expect(store.tickers()[1].next_earnings_date).toBeNull();
+    expect(store.error()).toBeNull(); // best-effort: no error surface for this
   });
 });

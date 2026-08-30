@@ -139,6 +139,29 @@ describe('PaginationComponent per-page selector', () => {
   });
 });
 
+describe('PaginationComponent per-page alignment', () => {
+  // .per-page (the "Rows" selector) had no horizontal padding while .pager
+  // (the range/prev/next row) and every table's th/td cells all use
+  // var(--space-10) -- so the selector sat flush at the section edge while
+  // everything else was inset, reading as misaligned.
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  it('insets the per-page row by the same amount as the pager row', () => {
+    const f = TestBed.createComponent(PaginationComponent);
+    f.componentRef.setInput('pagination', { page: 1, perPage: 25, total: 100 });
+    f.componentRef.setInput('showPerPage', true);
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+
+    const perPagePadding = getComputedStyle(el.querySelector('.per-page')!).paddingLeft;
+    const pagerPadding = getComputedStyle(el.querySelector('.pager')!).paddingLeft;
+    expect(perPagePadding).toBe(pagerPadding);
+    expect(perPagePadding).not.toBe('0px');
+  });
+});
+
 describe('PaginationComponent per-page reflects the active page size', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
