@@ -108,6 +108,11 @@ fields entirely (not just masked); import applies any recognized field it's
 handed, sensitive or not (pasting a real credential back in is the whole
 point of import), skipping only keys the schema doesn't recognize at all.
 
+## Route data readiness
+
+Every authenticated SPA workspace is lazy-loaded with a route-scoped resolver. The resolver waits only for the data visible on arrival, so the first rendered workspace has either fresh content or its established inline Retry state; supporting tables and optional chart panels continue independently. A route change is cancellable, and a non-auth request failure still activates the destination while an expired session returns to login with the requested URL preserved.
+
+If resolution takes more than one second, the shell keeps its sidebar and topbar visible while a non-interactive workspace overlay names the loading destination. Relevant live events and successful domain mutations coalesce before re-running the active resolver. Draft settings and trade notes never get overwritten by these refreshes: they surface a data-changed notice and reload only after an explicit user action.
 ## Admin UI
 
 The admin UI's look is driven by one design-token layer, not scattered
