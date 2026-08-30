@@ -62,8 +62,7 @@ export const routes: Routes = [
   {
     path: 'watchlist/:symbol',
     canMatch: [authGuard],
-    loadComponent: () =>
-      import('./workspaces/watchlist/ticker-detail').then((m) => m.TickerDetail),
+    loadChildren: () => import('./workspaces/watchlist/ticker-detail.routes').then((m) => m.tickerDetailRoutes),
   },
   // SR5: the workspace was `/universe` until 2026-08-13. The `:symbol` form
   // is why these are explicit rather than left to the `**` route below —
