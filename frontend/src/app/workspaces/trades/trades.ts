@@ -89,7 +89,6 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
   // wrapper) because :host is the ancestor the register's three variables
   // need to reach.
   host: { class: 'register-instrument' },
-  providers: [TradesStore],
   imports: [
     Async,
     ControlRow,

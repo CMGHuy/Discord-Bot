@@ -35,7 +35,7 @@ export const routes: Routes = [
   {
     path: 'trades',
     canMatch: [authGuard],
-    loadComponent: () => import('./workspaces/trades/trades').then((m) => m.Trades),
+    loadChildren: () => import('./workspaces/trades/trades.routes').then((m) => m.tradesRoutes),
   },
   {
     // Before nothing and after nothing in particular -- Angular matches in

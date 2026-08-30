@@ -1,16 +1,16 @@
-import { computed, effect, inject } from '@angular/core';
+import { computed, inject } from '@angular/core';
 import {
   patchState,
   signalStore,
   withComputed,
-  withHooks,
   withMethods,
   withState,
 } from '@ngrx/signals';
 
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
-import { EventStream } from '../api/event-stream';
+import { Observable } from 'rxjs';
+import { routeRequest } from '../routing/route-request';
 import { Collection, TradeQuery, TradeRow } from '../api/models';
 import { PageSpec, SortSpec } from '../ui/data-table/data-table.types';
 
@@ -133,6 +133,13 @@ export const TradesStore = signalStore(
       patchState(store, { query, queryReady: true });
     },
 
+    resolve(): Observable<void> {
+      return routeRequest(api.trades(store.query()), {
+        start: () => patchState(store, { loading: true }),
+        next: (data) => patchState(store, { data, loading: false, error: null }),
+        error: (error) => patchState(store, { loading: false, error: error.code === 'unavailable' ? 'The admin is not responding.' : error.message }),
+      });
+    },
     load(): void {
       const request = ++latestRequest;
       patchState(store, { loading: true });
@@ -212,23 +219,5 @@ export const TradesStore = signalStore(
      *  trade log, and the button says so. */
     exportUrl: (): string => api.tradesExportUrl(),
     };
-  }),
-  withHooks({
-    onInit(store, events = inject(EventStream)) {
-      const trades = events.changes('trades');
-      effect(() => {
-        // Three dependencies, one loader. Reading the counter is the
-        // subscription; reading the query makes a navigation refetch. The
-        // first run IS the initial load, so the load path and the refetch
-        // path cannot drift apart.
-        trades();
-        store.query();
-        // Skip the placeholder query nobody asked for. `queryReady` flips
-        // (and this effect re-runs) the moment a real `setQuery` lands --
-        // see the field's own comment for why the ordering otherwise races.
-        if (!store.queryReady()) return;
-        store.load();
-      });
-    },
   }),
 );
