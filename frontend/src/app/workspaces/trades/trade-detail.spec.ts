@@ -19,6 +19,8 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../../api/interceptors';
+import { ChartStore } from '../../stores/chart.store';
+import { TradeDetailStore } from '../../stores/trade-detail.store';
 import { TradeDetail } from './trade-detail';
 
 /* SR49 — the rendering half.
@@ -124,6 +126,8 @@ describe('TradeDetail — the fields that rendered nowhere', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        TradeDetailStore,
+        ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
       ],
     });
@@ -277,6 +281,8 @@ describe('TradeDetail — partial position panel (v58)', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        TradeDetailStore,
+        ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
       ],
     });
@@ -338,6 +344,8 @@ describe('TradeDetail states', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        TradeDetailStore,
+        ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
       ],
     });

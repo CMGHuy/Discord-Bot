@@ -106,7 +106,6 @@ function sortValue(row: Ticker, key: string): string | number | null {
   // wrapper) because :host is the ancestor the register's three variables
   // need to reach.
   host: { class: 'register-instrument' },
-  providers: [WatchlistStore],
   template: `
     <sb-section-head heading="Watchlist">
       <!-- One wrapper, not two separate actions projections -- otherwise

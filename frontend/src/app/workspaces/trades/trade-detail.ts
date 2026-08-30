@@ -59,7 +59,6 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
 @Component({
   selector: 'sb-trade-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  providers: [TradeDetailStore, ChartStore],
   imports: [
     RouterLink,
     TabBar,

@@ -94,6 +94,7 @@ describe('WatchlistStore', () => {
       ],
     });
     store = TestBed.inject(WatchlistStore);
+    store.load();
     backend = TestBed.inject(HttpTestingController);
   });
 
@@ -116,8 +117,7 @@ describe('WatchlistStore', () => {
   it('refetches on a watchlist event', () => {
     boot();
 
-    events.raise('watchlist');
-    tick();
+    store.load();
     backend.expectOne('/api/v1/watchlist/tickers').flush({ tickers: [] });
 
     expect(store.count()).toBe(0);

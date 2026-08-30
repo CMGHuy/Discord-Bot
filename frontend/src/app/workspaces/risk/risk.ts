@@ -61,7 +61,6 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
   host: { class: 'register-instrument' },
   // Provided on the component: created on entry, destroyed on exit, so the
   // workspace cannot hold stale exposure while you are looking at another.
-  providers: [RiskStore],
   template: `
     <sb-section-head heading="Risk">
       @if (store.error(); as message) {

@@ -100,6 +100,7 @@ describe('RiskStore', () => {
       ],
     });
     store = TestBed.inject(RiskStore);
+    store.load();
     backend = TestBed.inject(HttpTestingController);
   });
 
@@ -122,8 +123,7 @@ describe('RiskStore', () => {
     tick();
     respond();
 
-    events.raise('risk');
-    tick();
+    store.load();
     respond({ heat: { open_pct: 5, cap_pct: 6, utilisation_pct: 83 } });
 
     expect(store.openHeatPct()).toBe(5);
@@ -133,8 +133,7 @@ describe('RiskStore', () => {
     tick();
     respond();
 
-    events.raise('trades');
-    tick();
+    store.load();
     respond({ positions: [] });
 
     expect(store.positions()).toEqual([]);
@@ -146,8 +145,7 @@ describe('RiskStore', () => {
     tick();
     respond();
 
-    events.raise('risk');
-    tick();
+    store.load();
     backend
       .expectOne('/api/v1/risk')
       .error(new ProgressEvent('error'), { status: 0 });
@@ -177,8 +175,7 @@ describe('RiskStore', () => {
     respond({ heat: { open_pct: 0, cap_pct: 6, utilisation_pct: 0 } });
     expect(store.heatMeterFraction()).toBe(0);
 
-    events.raise('risk');
-    tick();
+    store.load();
     respond({ heat: { open_pct: null, cap_pct: 6, utilisation_pct: null } });
     expect(store.heatMeterFraction()).toBeNull();
   });
@@ -211,8 +208,7 @@ describe('RiskStore', () => {
     respond();
     expect(store.throttled()).toBe(false);
 
-    events.raise('risk');
-    tick();
+    store.load();
     respond({ throttle: { multiplier: 0.5, paused: true } });
 
     expect(store.throttled()).toBe(true);
@@ -310,8 +306,7 @@ describe('RiskStore', () => {
       .expectOne('/api/v1/risk/killswitch')
       .error(new ProgressEvent('error'), { status: 0 });
 
-    events.raise('risk');
-    tick();
+    store.load();
     respond();
     expect(store.commandError()).not.toBeNull();
 

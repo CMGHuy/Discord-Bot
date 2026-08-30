@@ -146,8 +146,11 @@
       <sb-profile-menu (signedOut)="logout()" />
     </header>
 
-    <main class="workspace">
-      <router-outlet />
+    <main class="workspace" [class.route-pending]="routeLoading.visible()" [attr.aria-busy]="routeLoading.visible() ? 'true' : null">
+      <div class="workspace-content" [attr.inert]="routeLoading.visible() ? '' : null"><router-outlet /></div>
+      @if (routeLoading.visible()) {
+        <div class="route-loading-overlay" role="status" aria-live="polite"><span class="route-loading-mark" aria-hidden="true"></span><span>{{ routeLoading.label() }}</span></div>
+      }
     </main>
   </div>
 

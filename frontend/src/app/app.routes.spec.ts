@@ -1,11 +1,12 @@
 import { provideLocationMocks } from '@angular/common/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { Router, provideRouter, withComponentInputBinding } from '@angular/router';
+import { Router, Routes, provideRouter, withComponentInputBinding } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { routes } from './app.routes';
+import { RESOLVER_ROUTE_DATA } from './routing/route-metadata';
 import { authGuard } from './shell/auth.guard';
 import { SessionStore } from './stores/session.store';
 import { installMatchMediaPolyfill } from './testing/match-media-polyfill';
@@ -80,12 +81,51 @@ describe('routing, authenticated', () => {
     expect(route).toBeDefined();
     expect(route?.canMatch).toEqual([authGuard]);
 
-    // The lazy chunk must actually resolve to the component, not just exist.
-    const loaded = await route!.loadComponent!();
-    expect(loaded).toBeDefined();
+    // The lazy route must expose its component through its child config.
+    const children = await route!.loadChildren!() as Routes;
+    expect(children[0]?.loadComponent).toBeTypeOf('function');
+    expect(await children[0]!.loadComponent!()).toBeDefined();
   });
 });
 
+
+describe('route data readiness contract', () => {
+  const expected = [
+    'dashboard', 'trades', 'trades/:id', 'analytics', 'calendar', 'watchlist',
+    'watchlist/:symbol', 'risk', 'system', 'versions',
+  ] as const;
+
+  it('keeps every authenticated workspace lazy, scoped, and resolver-backed', async () => {
+    for (const path of expected) {
+      const topLevel = routes.find((route) => route.path === path);
+      expect(topLevel?.canMatch).toEqual([authGuard]);
+      expect(topLevel?.loadChildren).toBeTypeOf('function');
+
+      const children = await topLevel!.loadChildren!() as Routes;
+      const child = children[0]!;
+      expect(child.providers).toBeTruthy();
+      expect(child.runGuardsAndResolvers).toBe('always');
+      expect(child.resolve?.['ready']).toBeTypeOf('function');
+      expect(child.data?.[RESOLVER_ROUTE_DATA]?.loadingLabel).toBeTruthy();
+    }
+  });
+
+  it('refreshes Analytics and System only for their active tabs', async () => {
+    const analytics = (await routes.find((route) => route.path === 'analytics')!.loadChildren!() as Routes)[0]!;
+    const system = (await routes.find((route) => route.path === 'system')!.loadChildren!() as Routes)[0]!;
+    const analyticsRefresh = analytics.data![RESOLVER_ROUTE_DATA].refreshOn;
+    const systemRefresh = system.data![RESOLVER_ROUTE_DATA].refreshOn;
+    const route = (tab: string) => ({ queryParamMap: { get: () => tab } }) as never;
+
+    expect(analyticsRefresh('analytics', route('performance'))).toBe(true);
+    expect(analyticsRefresh('jobs', route('performance'))).toBe(false);
+    expect(analyticsRefresh('jobs', route('tuning'))).toBe(true);
+    expect(systemRefresh('settings', route('settings'))).toBe(true);
+    expect(systemRefresh('bot', route('settings'))).toBe(false);
+    expect(systemRefresh('bot', route('scan'))).toBe(true);
+    expect(systemRefresh('settings', route('logs'))).toBe(false);
+  });
+});
 describe('routing, unauthenticated', () => {
   beforeEach(() => configure(false));
 

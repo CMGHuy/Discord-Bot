@@ -139,7 +139,9 @@ describe('SystemStore', () => {
 
   /** The three requests the store issues on creation, in one call. */
   const boot = (settings: Partial<Settings> = {}) => {
-    tick();
+    store.resolveSettings().subscribe();
+    store.resolveLogs().subscribe();
+    store.resolveScan().subscribe();
     backend.expectOne('/api/v1/system/settings').flush({ ...SETTINGS, ...settings });
     // SR57 sends the line count too, so match on the path rather than on a
     // literal query string that now has two parameters in it.
@@ -153,6 +155,16 @@ describe('SystemStore', () => {
   };
 
   /* -- the schema-driven form -------------------------------------------- */
+
+  it('resolves only the selected tab', () => {
+    store.resolveTab('logs').subscribe();
+
+    backend.expectOne((request) => request.url === '/api/v1/system/logs').flush({
+      source: 'bot', lines: 500, path: '/app/logs/bot.log', content: 'started',
+    });
+    backend.expectNone('/api/v1/system/settings');
+    backend.expectNone('/api/v1/system/scan');
+  });
 
   it('holds the schema and derives no field list of its own', () => {
     boot();
@@ -180,7 +192,9 @@ describe('SystemStore', () => {
     ].join('\n');
 
     const bootWithLog = (content = LOG, lines = 500) => {
-      tick();
+      store.resolveSettings().subscribe();
+      store.resolveLogs().subscribe();
+      store.resolveScan().subscribe();
       backend.expectOne('/api/v1/system/settings').flush(SETTINGS);
       // SR57 sends the line count too, so match on the path rather than on a
     // literal query string that now has two parameters in it.
@@ -588,7 +602,9 @@ describe('SystemStore', () => {
     boot();
 
     events.raise('settings');
-    tick();
+    store.resolveSettings().subscribe();
+    store.resolveLogs().subscribe();
+    store.resolveScan().subscribe();
     backend.expectOne('/api/v1/system/settings').flush(SETTINGS);
 
     expect(store.settingsStale()).toBe(false);
@@ -601,8 +617,7 @@ describe('SystemStore', () => {
     boot();
     store.edit(store.fields()[0], '2.0');
 
-    events.raise('settings');
-    tick();
+    store.applySettingsEvent();
 
     backend.verify();
     expect(store.settingsStale()).toBe(true);
@@ -612,8 +627,7 @@ describe('SystemStore', () => {
   it('discards the draft only when asked to', () => {
     boot();
     store.edit(store.fields()[0], '2.0');
-    events.raise('settings');
-    tick();
+    store.applySettingsEvent();
 
     store.discardDraftAndReload();
     backend.expectOne('/api/v1/system/settings').flush(SETTINGS);
@@ -687,11 +701,10 @@ describe('SystemStore', () => {
     expect(store.scanMessage()).toContain('paused');
   });
 
-  it('refetches the scan status on a bot event', () => {
+  it('resolves the scan tab without fetching another tab', () => {
     boot();
 
-    events.raise('bot');
-    tick();
+    store.resolveTab('scan').subscribe();
     backend.expectOne('/api/v1/system/scan').flush({ ...SCAN, bot_alive: false });
 
     expect(store.botAlive()).toBe(false);

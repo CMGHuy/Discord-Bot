@@ -171,6 +171,14 @@ describe('SessionStore', () => {
     expect(store.error()).toBeNull();
   });
 
+  it('preserves an explicit resolver URL after an interceptor expiry', async () => {
+    await boot(true, 'admin');
+    store.expire();
+    store.expire('/analytics?tab=tuning');
+    store.expire();
+
+    expect(store.takeRedirect()).toBe('/analytics?tab=tuning');
+  });
   /* -- logout ---------------------------------------------------------- */
 
   it('reloads the page after logging out', async () => {

@@ -101,6 +101,12 @@ describe('EventStream', () => {
 
   /* -- events ---------------------------------------------------------- */
 
+  it('emits every raised event name alongside its counter update', () => {
+    const raised: string[] = [];
+    stream.raised.subscribe((name) => raised.push(name));
+    FakeEventSource.latest().emit('trades');
+    expect(raised).toEqual(['trades']);
+  });
   it('bumps the counter for the event that arrived', () => {
     const trades = stream.changes('trades');
     const account = stream.changes('account');

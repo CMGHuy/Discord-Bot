@@ -1,9 +1,8 @@
-import { computed, effect, inject } from '@angular/core';
+import { computed, inject } from '@angular/core';
 import {
   patchState,
   signalStore,
   withComputed,
-  withHooks,
   withMethods,
   withState,
 } from '@ngrx/signals';
@@ -11,6 +10,8 @@ import {
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
 import { EventStream } from '../api/event-stream';
+import { Observable, of } from 'rxjs';
+import { routeRequest } from '../routing/route-request';
 import { AnalyticsStrategies, JournalEntry, TradeDetail } from '../api/models';
 import { StrategyRow } from './analytics.store';
 
@@ -458,7 +459,7 @@ export const TradeDetailStore = signalStore(
   })),
   withMethods((store, api = inject(ApiClient)) => ({
     /** Setting the id is what triggers the load. */
-    setId(id: string): void {
+    setId(id: string, loadNow = true): void {
       if (id === store.id()) return;
       // Clearing `data` is right here and wrong on a refetch: this is a
       // different trade, and showing the previous one's numbers under the new
@@ -475,6 +476,7 @@ export const TradeDetailStore = signalStore(
         noteError: null,
         noteUnjournaled: false,
       });
+    if (loadNow) this.load();
     },
 
     /** Record a keystroke. Does not save -- the component debounces and then
@@ -531,6 +533,15 @@ export const TradeDetailStore = signalStore(
       });
     },
 
+    resolve(): Observable<void> {
+      const id = store.id();
+      if (!id) return of(undefined);
+      return routeRequest(api.trade(id), {
+        start: () => patchState(store, { loading: true }),
+        next: (data) => patchState(store, { data, loading: false, error: null }),
+        error: (error) => patchState(store, { loading: false, error: error.code === 'unavailable' ? 'The admin is not responding.' : error.message }),
+      });
+    },
     load(): void {
       const id = store.id();
       if (!id) return;
@@ -569,16 +580,4 @@ export const TradeDetailStore = signalStore(
       });
     },
   })),
-  withHooks({
-    onInit(store, events = inject(EventStream)) {
-      const trades = events.changes('trades');
-      const journal = events.changes('journal');
-      effect(() => {
-        trades();
-        journal();
-        store.id();
-        store.load();
-      });
-    },
-  }),
 );

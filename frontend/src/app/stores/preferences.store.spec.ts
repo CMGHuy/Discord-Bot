@@ -44,6 +44,17 @@ describe('PreferencesStore', () => {
     backend.expectOne(ENDPOINT).flush({ preferences });
   };
 
+  it('shares one request between imperative and resolver preference loading', () => {
+    store.load();
+    const resolved: void[] = [];
+    store.resolve().subscribe((value) => resolved.push(value));
+
+    const request = backend.expectOne(ENDPOINT);
+    request.flush({ preferences: { tables: { trades: ['ticker'] } } });
+
+    expect(store.isLoaded()).toBe(true);
+    expect(resolved).toEqual([undefined]);
+  });
   it('reads preferences once', () => {
     loadWith({ tables: { trades: ['ticker'] } });
 

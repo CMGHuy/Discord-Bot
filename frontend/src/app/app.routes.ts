@@ -30,44 +30,38 @@ export const routes: Routes = [
   {
     path: 'dashboard',
     canMatch: [authGuard],
-    loadComponent: () => import('./workspaces/dashboard/dashboard').then((m) => m.Dashboard),
+    loadChildren: () => import('./workspaces/dashboard/dashboard.routes').then((m) => m.dashboardRoutes),
   },
   {
     path: 'trades',
     canMatch: [authGuard],
-    loadComponent: () => import('./workspaces/trades/trades').then((m) => m.Trades),
+    loadChildren: () => import('./workspaces/trades/trades.routes').then((m) => m.tradesRoutes),
   },
   {
-    // Before nothing and after nothing in particular -- Angular matches in
-    // order, but 'trades/:id' cannot shadow 'trades' since the latter has no
-    // parameter. Kept adjacent so the pair reads as one workspace.
+    // Trade Detail has its own route-scoped store and resolver.
     path: 'trades/:id',
     canMatch: [authGuard],
-    loadComponent: () =>
-      import('./workspaces/trades/trade-detail').then((m) => m.TradeDetail),
+    loadChildren: () => import('./workspaces/trades/trade-detail.routes').then((m) => m.tradeDetailRoutes),
   },
   {
     path: 'analytics',
     canMatch: [authGuard],
-    loadComponent: () =>
-      import('./workspaces/analytics/analytics').then((m) => m.Analytics),
+    loadChildren: () => import('./workspaces/analytics/analytics.routes').then((m) => m.analyticsRoutes),
   },
   {
     path: 'calendar',
     canMatch: [authGuard],
-    loadComponent: () =>
-      import('./workspaces/calendar/calendar').then((m) => m.Calendar),
+    loadChildren: () => import('./workspaces/calendar/calendar.routes').then((m) => m.calendarRoutes),
   },
   {
     path: 'watchlist',
     canMatch: [authGuard],
-    loadComponent: () => import('./workspaces/watchlist/watchlist').then((m) => m.Watchlist),
+    loadChildren: () => import('./workspaces/watchlist/watchlist.routes').then((m) => m.watchlistRoutes),
   },
   {
     path: 'watchlist/:symbol',
     canMatch: [authGuard],
-    loadComponent: () =>
-      import('./workspaces/watchlist/ticker-detail').then((m) => m.TickerDetail),
+    loadChildren: () => import('./workspaces/watchlist/ticker-detail.routes').then((m) => m.tickerDetailRoutes),
   },
   // SR5: the workspace was `/universe` until 2026-08-13. The `:symbol` form
   // is why these are explicit rather than left to the `**` route below —
@@ -77,17 +71,17 @@ export const routes: Routes = [
   {
     path: 'risk',
     canMatch: [authGuard],
-    loadComponent: () => import('./workspaces/risk/risk').then((m) => m.Risk),
+    loadChildren: () => import('./workspaces/risk/risk.routes').then((m) => m.riskRoutes),
   },
   {
     path: 'system',
     canMatch: [authGuard],
-    loadComponent: () => import('./workspaces/system/system').then((m) => m.System),
+    loadChildren: () => import('./workspaces/system/system.routes').then((m) => m.systemRoutes),
   },
   {
     path: 'versions',
     canMatch: [authGuard],
-    loadComponent: () => import('./workspaces/versions/versions').then((m) => m.Versions),
+    loadChildren: () => import('./workspaces/versions/versions.routes').then((m) => m.versionsRoutes),
   },
   {
     path: 'ui',

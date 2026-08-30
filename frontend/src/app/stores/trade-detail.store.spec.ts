@@ -300,8 +300,7 @@ describe('TradeDetailStore — notes and strategy', () => {
   it('refetches on a journal event, which is how a save comes back', () => {
     open('first');
 
-    events.raise('journal');
-    tick();
+    store.load();
     backend.expectOne(`/api/v1/trades/${ID}`).flush(detailResponse('second'));
 
     expect(store.noteText()).toBe('second');

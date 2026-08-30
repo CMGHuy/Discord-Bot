@@ -8,13 +8,14 @@ import {
 } from '@angular/core';
 import { APP_BASE_HREF } from '@angular/common';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { provideRouter, withComponentInputBinding } from '@angular/router';
+import { provideRouter, withComponentInputBinding, withRouterConfig } from '@angular/router';
 import { provideServiceWorker } from '@angular/service-worker';
 
 import {
   authInterceptor,
   errorInterceptor,
   loadingInterceptor,
+  routeRefreshInterceptor,
 } from './api/interceptors';
 import { routes } from './app.routes';
 import { PwaUpdateService } from './pwa/pwa-update.service';
@@ -47,7 +48,7 @@ export const appConfig: ApplicationConfig = {
     // withComponentInputBinding: :id and :symbol arrive as input() signals
     // rather than through ActivatedRoute, which keeps a detail component
     // testable without standing up a router.
-    provideRouter(routes, withComponentInputBinding()),
+    provideRouter(routes, withComponentInputBinding(), withRouterConfig({ onSameUrlNavigation: 'reload' })),
     // In an SPA a route change moves nothing on its own: focus stays on the
     // nav link just activated and the new page is never announced. This
     // moves it to the new workspace's <h1> once it has actually rendered.
@@ -65,7 +66,7 @@ export const appConfig: ApplicationConfig = {
     // Swapping auth and error would silently break 401 detection: auth would
     // be matching `status === 401` against an ApiError that no longer is one.
     provideHttpClient(
-      withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+      withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor, routeRefreshInterceptor]),
     ),
     // Answer "who am I" BEFORE the app bootstraps. Angular waits on the
     // returned promise, so App never renders in the 'unknown' state -- which

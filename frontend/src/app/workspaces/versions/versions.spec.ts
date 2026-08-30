@@ -14,6 +14,7 @@ import {
 } from '../../api/interceptors';
 import { VersionHistory } from '../../api/models';
 import { Versions } from './versions';
+import { VersionsStore } from '../../stores/versions.store';
 
 /* The Versions page's one structural guarantee: an open-ended component
  * count costs vertical space, never horizontal. Chips wrap and lanes stack
@@ -67,9 +68,11 @@ function seed(payload: VersionHistory): ComponentFixture<Versions> {
       provideZonelessChangeDetection(),
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
+      VersionsStore,
     ],
   });
   const fixture = TestBed.createComponent(Versions);
+  TestBed.inject(VersionsStore).load();
   TestBed.inject(HttpTestingController).expectOne('/api/v1/versions').flush(payload);
   return fixture;
 }
@@ -81,9 +84,11 @@ function seedUnflushed(): { fixture: ComponentFixture<Versions>; backend: HttpTe
       provideZonelessChangeDetection(),
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
+      VersionsStore,
     ],
   });
   const fixture = TestBed.createComponent(Versions);
+  TestBed.inject(VersionsStore).load();
   const backend = TestBed.inject(HttpTestingController);
   return { fixture, backend };
 }

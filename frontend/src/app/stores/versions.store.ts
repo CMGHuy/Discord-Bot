@@ -3,13 +3,14 @@ import {
   patchState,
   signalStore,
   withComputed,
-  withHooks,
   withMethods,
   withState,
 } from '@ngrx/signals';
 
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
+import { Observable } from 'rxjs';
+import { routeRequest } from '../routing/route-request';
 import { Release, VersionFilter, VersionHistory } from '../api/models';
 import { PageSpec } from '../ui/data-table/data-table.types';
 
@@ -278,48 +279,21 @@ export const VersionsStore = signalStore(
      *  duration. Drives the caveat above rather than hiding it. */
     dense: computed(() => lanes().some((lane) => lane.segments.length > stripWidth() / 8)),
   })),
-  withMethods((store, api = inject(ApiClient)) => ({
-    load(): void {
-      patchState(store, { loading: true });
-      api.versionHistory().subscribe({
-        next: (data) => patchState(store, { data, loading: false, error: null }),
-        error: (error: ApiError) =>
-          patchState(store, {
-            loading: false,
-            error:
-              error.code === 'unavailable'
-                ? 'The admin is not responding — the version history is unavailable.'
-                : error.message,
-          }),
-      });
-    },
-
-    setPage(n: number): void {
-      patchState(store, { page: Math.max(1, n) });
-    },
-
-    /** Measured by the component. The floor is a PIXEL rule, so the geometry
-     *  cannot be computed without knowing how wide the strip actually is. */
-    setStripWidth(px: number): void {
-      patchState(store, { stripWidth: Math.max(1, Math.round(px)) });
-    },
-
-    /** Selecting the same chip twice clears — the chip IS the toggle, which
-     *  is why there is no separate "clear filter" control. Always returns to
-     *  page 1: staying on page 3 of a filter that now has one page shows an
-     *  empty list that looks like "no results". */
-    toggleFilter(component: string, version: string): void {
-      const active = store.filter();
-      const same = active?.component === component && active?.version === version;
-      patchState(store, {
-        filter: same ? null : { component, version },
-        page: 1,
-      });
-    },
-  })),
-  withHooks({
-    onInit(store) {
-      store.load();
-    },
+  withMethods((store, api = inject(ApiClient)) => {
+    const resolve = (): Observable<void> => routeRequest(api.versionHistory(), {
+      start: () => patchState(store, { loading: true }),
+      next: (data) => patchState(store, { data, loading: false, error: null }),
+      error: (error) => patchState(store, { loading: false, error: error.code === 'unavailable' ? 'The admin is not responding — the version history is unavailable.' : error.message }),
+    });
+    return {
+      resolve,
+      load(): void { resolve().subscribe({ error: () => undefined }); },
+      setPage(n: number): void { patchState(store, { page: Math.max(1, n) }); },
+      setStripWidth(px: number): void { patchState(store, { stripWidth: Math.max(1, Math.round(px)) }); },
+      toggleFilter(component: string, version: string): void {
+        const active = store.filter(); const same = active?.component === component && active?.version === version;
+        patchState(store, { filter: same ? null : { component, version }, page: 1 });
+      },
+    };
   }),
 );

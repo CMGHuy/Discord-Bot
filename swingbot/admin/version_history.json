@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-30 10:42:37 UTC",
+  "generated_at": "2026-08-30 18:16:51 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.10.0",
+    "ui": "1.11.0",
     "bot": "1.5.0"
   },
   "releases": [
@@ -888,6 +888,19 @@
       "subject": "release(ui): 1.10.0 -- table pagination overhaul",
       "versions": {
         "ui": "1.10.0",
+        "bot": "1.5.0"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-08-30",
+      "last_seen": "2026-08-30",
+      "commit": "38c077c6",
+      "subject": "release(ui): 1.11.0 -- route-resolved data loading",
+      "versions": {
+        "ui": "1.11.0",
         "bot": "1.5.0"
       },
       "changed": [

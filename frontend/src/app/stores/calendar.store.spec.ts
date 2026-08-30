@@ -82,6 +82,7 @@ describe('CalendarStore', () => {
       ],
     });
     store = TestBed.inject(CalendarStore);
+    store.load();
     backend = TestBed.inject(HttpTestingController);
   });
 
@@ -212,8 +213,7 @@ describe('CalendarStore', () => {
     tick();
     respond();
 
-    events.raise('trades');
-    tick();
+    store.load();
     respond({ totals: { ...RESPONSE.totals, trade_count: 9 } });
 
     expect(store.totals()?.trade_count).toBe(9);

@@ -245,8 +245,7 @@ describe('TradesStore', () => {
     tick();
     respond();
 
-    events.raise('trades');
-    tick();
+    store.load();
 
     const request = expectRequest();
     expect(request.request.params.get('page')).toBe('3');
@@ -299,8 +298,7 @@ describe('TradesStore', () => {
     tick();
     respond();
 
-    events.raise('trades');
-    tick();
+    store.load();
     expectRequest().error(new ProgressEvent('error'), { status: 0 });
 
     expect(store.rows()).toHaveLength(1);
@@ -313,8 +311,7 @@ describe('TradesStore', () => {
     expectRequest().error(new ProgressEvent('error'), { status: 0 });
     expect(store.error()).not.toBeNull();
 
-    events.raise('trades');
-    tick();
+    store.load();
     respond();
 
     expect(store.error()).toBeNull();

@@ -56,7 +56,6 @@ export const TICKER_TRADES_CAP = 25;
   selector: 'sb-ticker-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink, Panel, DataTable, ChartContainer, RowLink, SectionHead, TradeChart],
-  providers: [TradesStore, ChartStore],
   template: `
     <!-- The breadcrumb sits above the header rather than inside it: it
          reads first, before the title, and sb-section-head has no slot

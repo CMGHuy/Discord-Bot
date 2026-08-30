@@ -41,7 +41,6 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 @Component({
   selector: 'sb-versions',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  providers: [VersionsStore],
   imports: [Button, ControlRow, PaginationComponent, SectionHead, Async],
   // v54 D1: this workspace is a lane strip plus a change stream -- both
   // dense, repeating rows, more per screen -- so it defaults to the

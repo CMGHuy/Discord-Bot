@@ -89,7 +89,6 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
   // wrapper) because :host is the ancestor the register's three variables
   // need to reach.
   host: { class: 'register-instrument' },
-  providers: [TradesStore],
   imports: [
     Async,
     ControlRow,
@@ -742,7 +741,7 @@ export class Trades {
         today:
           this.today() === undefined ? undefined : this.today() === '1',
       };
-      this.store.setQuery(query);
+      this.store.setQuery(query, false);
     });
   }
 

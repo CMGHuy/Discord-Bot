@@ -1,16 +1,16 @@
-import { computed, effect, inject, untracked } from '@angular/core';
+import { computed, inject } from '@angular/core';
 import {
   patchState,
   signalStore,
   withComputed,
-  withHooks,
   withMethods,
   withState,
 } from '@ngrx/signals';
 
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
-import { EventStream } from '../api/event-stream';
+import { Observable } from 'rxjs';
+import { routeRequest } from '../routing/route-request';
 import {
   CalendarDay,
   CalendarTotals,
@@ -124,6 +124,15 @@ export const CalendarStore = signalStore(
         });
     };
 
+    const resolve = (): Observable<void> => routeRequest(api.calendarPnl({
+      month: store.month(),
+      strategy: store.strategy() || undefined,
+      horizon: store.horizon() || undefined,
+    }), {
+      start: () => patchState(store, { loading: true }),
+      next: (data) => patchState(store, { data, loading: false, error: null }),
+      error: (error) => patchState(store, { loading: false, error: error.code === 'unavailable' ? 'The admin is not responding -- these figures may be stale.' : error.message }),
+    });
     const load = (): void => {
       patchState(store, { loading: true });
       api
@@ -148,6 +157,7 @@ export const CalendarStore = signalStore(
     };
 
     return {
+      resolve,
       load,
 
       setMonth(month: string): void {
@@ -206,22 +216,5 @@ export const CalendarStore = signalStore(
         return Math.max(-1, Math.min(1, value / scale));
       },
     };
-  }),
-  withHooks({
-    onInit(store, events = inject(EventStream)) {
-      // Reading the counter inside the effect IS the subscription, and the
-      // first run is the initial load -- so load and refetch are one path.
-      //
-      // `load()` is called through `untracked` because it READS month,
-      // strategy and horizon. Without it those reads register as
-      // dependencies of this effect, and every setStrategy/setMonth issues
-      // two requests: the explicit `load()` in the method, plus the effect
-      // re-running because the state it happened to read has changed.
-      const trades = events.changes('trades');
-      effect(() => {
-        trades();
-        untracked(() => store.load());
-      });
-    },
   }),
 );

@@ -45,6 +45,7 @@ function seed(payload: VersionHistory): void {
   });
   const http = TestBed.inject(HttpTestingController);
   store = TestBed.inject(VersionsStore);
+  store.load();
   http.expectOne('/api/v1/versions').flush(payload);
 }
 
@@ -235,6 +236,7 @@ describe('VersionsStore', () => {
     });
     const http = TestBed.inject(HttpTestingController);
     store = TestBed.inject(VersionsStore);
+  store.load();
     http.expectOne('/api/v1/versions').flush(
       { error: { code: 'unavailable', message: 'down' } },
       { status: 503, statusText: 'Service Unavailable' },

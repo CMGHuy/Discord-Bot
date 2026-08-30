@@ -18,6 +18,7 @@ import {
   AnalyticsPlans,
   AnalyticsStrategies,
 } from '../../api/models';
+import { AnalyticsStore } from '../../stores/analytics.store';
 import { ConnectionStore } from '../../stores/connection.store';
 import { Analytics } from './analytics';
 
@@ -71,8 +72,10 @@ function seed(): { fixture: ComponentFixture<Analytics>; backend: HttpTestingCon
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
       { provide: ConnectionStore, useValue: connectionStub },
+      AnalyticsStore,
     ],
   });
+  TestBed.inject(AnalyticsStore).load();
   const fixture = TestBed.createComponent(Analytics);
   const backend = TestBed.inject(HttpTestingController);
   return { fixture, backend };
@@ -177,6 +180,7 @@ describe('Analytics — strategies tab', () => {
   it('shows the measured-zero empty state when no strategy has a closed trade', async () => {
     const { fixture, backend } = seed();
     fixture.componentRef.setInput('tab', 'strategies');
+    TestBed.inject(AnalyticsStore).setTab('strategies');
     fixture.detectChanges();
     backend.expectOne('/api/v1/analytics/strategies').flush(strategiesPayload({ strategies: [] }));
     await fixture.whenStable();
@@ -191,6 +195,7 @@ describe('Analytics — plans tab', () => {
   it('shows the measured-zero empty state when no plan has ever posted', async () => {
     const { fixture, backend } = seed();
     fixture.componentRef.setInput('tab', 'plans');
+    TestBed.inject(AnalyticsStore).setTab('plans');
     fixture.detectChanges();
     backend
       .expectOne('/api/v1/analytics/plans')

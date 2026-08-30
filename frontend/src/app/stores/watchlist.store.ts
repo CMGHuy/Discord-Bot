@@ -1,18 +1,17 @@
-import { computed, effect, inject } from '@angular/core';
+import { computed, inject } from '@angular/core';
 import {
   patchState,
   signalStore,
   withComputed,
-  withHooks,
   withMethods,
   withState,
 } from '@ngrx/signals';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Subject, debounceTime, switchMap, timer } from 'rxjs';
+import { Observable, Subject, debounceTime, switchMap, timer } from 'rxjs';
 
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
-import { EventStream } from '../api/event-stream';
+import { routeRequest } from '../routing/route-request';
 import { Ticker, TickerSuggestion } from '../api/models';
 
 interface WatchlistSlice {
@@ -34,13 +33,8 @@ interface WatchlistSlice {
   suggestions: TickerSuggestion[];
 }
 
-/** How long to wait before re-fetching when a row is missing its earnings
- *  date, matched to `_next_earnings`'s own doc comment
- *  (`swingbot/admin/api_v1/watchlist.py`): the endpoint is cache-only and
- *  never blocks on Yahoo, so a ticker not yet cached comes back `null` and
- *  is warmed on a background thread. Without this, "no date" is permanent
- *  until the user manually reloads the page — the server-side warm-up
- *  finishes, but nothing on screen ever asks again. */
+/** The watchlist endpoint warms missing earnings dates asynchronously. One
+ * delayed, cancellable follow-up exposes that warmed cache without polling. */
 export const EARNINGS_REFRESH_DELAY_MS = 8000;
 
 /** Split a typed or pasted blob into candidate symbols.
@@ -99,51 +93,23 @@ export const WatchlistStore = signalStore(
     symbols: computed(() => new Set(tickers().map((row) => row.symbol))),
   })),
   withMethods((store, api = inject(ApiClient)) => {
-    /** One trigger, `switchMap`'d, so a second load (an add, a remove, the
-     *  `watchlist` SSE event) while the delayed re-fetch is still pending
-     *  cancels it rather than stacking a second one behind it — same
-     *  discipline as the `queries` pipeline below, and for the same reason:
-     *  two in-flight follow-ups can land out of order and the earlier one
-     *  would win. */
     const earningsRefresh = new Subject<void>();
-    earningsRefresh
-      .pipe(
-        switchMap(() => timer(EARNINGS_REFRESH_DELAY_MS).pipe(switchMap(() => api.tickers()))),
-        takeUntilDestroyed(),
-      )
-      .subscribe({
-        next: ({ tickers }) => patchState(store, { tickers }),
-        // Best-effort: a failed follow-up leaves the dash on screen, which
-        // is exactly what the user already saw before this existed.
-        error: () => undefined,
-      });
-
-    const load = (): void => {
-      patchState(store, { loading: true });
-      api.tickers().subscribe({
-        next: ({ tickers }) => {
-          patchState(store, { tickers, loading: false, loaded: true, error: null });
-          // The admin's watchlist endpoint is cache-only for earnings dates
-          // (swingbot/admin/api_v1/watchlist.py's _next_earnings): a ticker
-          // not yet cached comes back with next_earnings_date: null and is
-          // warmed on a background thread that this response does not wait
-          // for. One delayed re-fetch — not a poll — picks up what the
-          // warm-up filled in, without the user reloading the page by hand.
-          if (tickers.some((t) => !t.next_earnings_date)) {
-            earningsRefresh.next();
-          }
-        },
-        error: (error: ApiError) =>
-          patchState(store, {
-            loading: false,
-            error:
-              error.code === 'unavailable'
-                ? 'The admin is not responding.'
-                : error.message,
-          }),
-      });
-    };
-
+    earningsRefresh.pipe(
+      switchMap(() => timer(EARNINGS_REFRESH_DELAY_MS).pipe(switchMap(() => api.tickers()))),
+      takeUntilDestroyed(),
+    ).subscribe({
+      next: ({ tickers }) => patchState(store, { tickers }),
+      error: () => undefined,
+    });
+    const resolve = (): Observable<void> => routeRequest(api.tickers(), {
+      start: () => patchState(store, { loading: true }),
+      next: ({ tickers }) => {
+        patchState(store, { tickers, loading: false, loaded: true, error: null });
+        if (tickers.some((ticker) => !ticker.next_earnings_date)) earningsRefresh.next();
+      },
+      error: (error) => patchState(store, { loading: false, error: error.code === 'unavailable' ? 'The admin is not responding.' : error.message }),
+    });
+    const load = (): void => { resolve().subscribe({ error: () => undefined }); };
     /** One pipeline for every keystroke. `switchMap` cancels the in-flight
      *  request, which is what stops an early response landing after a later
      *  one and showing suggestions for a query the box no longer holds. */
@@ -165,6 +131,7 @@ export const WatchlistStore = signalStore(
       });
 
     return {
+      resolve,
       load,
 
       addTickers(text: string): void {
@@ -233,14 +200,5 @@ export const WatchlistStore = signalStore(
         patchState(store, { suggestions: [] });
       },
     };
-  }),
-  withHooks({
-    onInit(store, events = inject(EventStream)) {
-      const watchlist = events.changes('watchlist');
-      effect(() => {
-        watchlist();
-        store.load();
-      });
-    },
   }),
 );

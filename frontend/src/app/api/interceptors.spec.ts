@@ -5,11 +5,12 @@ import {
 } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiClient } from './api-client';
 import { ApiError } from './api-error';
-import { authInterceptor, errorInterceptor, loadingInterceptor } from './interceptors';
+import { authInterceptor, errorInterceptor, loadingInterceptor, routeRefreshInterceptor } from './interceptors';
+import { RouteRefreshService } from '../routing/route-refresh.service';
 import { LoadingService } from './loading.service';
 import { UnauthorizedService } from './unauthorized.service';
 
@@ -31,9 +32,10 @@ describe('http interceptors', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(
-          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor, routeRefreshInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: RouteRefreshService, useValue: { requestMutationRefresh: () => undefined } },
       ],
     });
     http = TestBed.inject(HttpClient);
@@ -181,6 +183,14 @@ describe('http interceptors', () => {
     expect(loading.inFlight()).toBe(0);
   });
 
+  it('requests a route refresh after a successful mutation', () => {
+    const refresh = TestBed.inject(RouteRefreshService);
+    const requestMutationRefresh = vi.spyOn(refresh, 'requestMutationRefresh');
+    http.post('/api/v1/trades', {}).subscribe();
+    backend.expectOne('/api/v1/trades').flush({});
+    expect(requestMutationRefresh).toHaveBeenCalledOnce();
+  });
+
   it('never counts below zero', () => {
     const loading = TestBed.inject(LoadingService);
     loading.finished();
@@ -204,9 +214,10 @@ describe('ApiClient', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(
-          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor, routeRefreshInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: RouteRefreshService, useValue: { requestMutationRefresh: () => undefined } },
       ],
     });
     api = TestBed.inject(ApiClient);

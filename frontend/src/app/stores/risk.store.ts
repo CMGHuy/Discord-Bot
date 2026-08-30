@@ -1,16 +1,17 @@
-import { computed, effect, inject } from '@angular/core';
+import { computed, inject } from '@angular/core';
 import {
   patchState,
   signalStore,
   withComputed,
-  withHooks,
   withMethods,
   withState,
 } from '@ngrx/signals';
 
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
-import { EventStream } from '../api/event-stream';
+import { Observable } from 'rxjs';
+
+import { routeRequest } from '../routing/route-request';
 import { Killswitch, Risk, RiskPosition, SectorHeat } from '../api/models';
 
 interface RiskSlice {
@@ -146,68 +147,26 @@ export const RiskStore = signalStore(
     scanLatestS: computed(() => data()?.scan_health?.latest_s ?? null),
     scanSlowdown: computed(() => data()?.scan_health?.slowdown ?? false),
   })),
-  withMethods((store, api = inject(ApiClient)) => ({
-    load(): void {
-      patchState(store, { loading: true });
-      api.risk().subscribe({
-        next: (data) => patchState(store, { data, loading: false, error: null }),
-        error: (error: ApiError) =>
-          patchState(store, {
-            loading: false,
-            // `data` is deliberately untouched: stale exposure beside a
-            // warning beats an error panel where the numbers were.
-            error:
-              error.code === 'unavailable'
-                ? 'The admin is not responding — these figures may be stale.'
-                : error.message,
-          }),
-      });
-    },
-
-    toggleKillswitch(on: boolean): void {
-      patchState(store, { toggling: true, commandError: null });
-      api.setKillswitch(on).subscribe({
-        next: ({ killswitch }) => {
-          const data = store.data();
-          patchState(store, {
-            toggling: false,
-            // Applied straight away rather than waiting for the `risk`
-            // event, which comes from a file watcher and therefore a poll
-            // interval later. `data` may still be null if the very first
-            // load has not landed; the refetch will fill it in.
-            data: data ? { ...data, killswitch } : data,
-          });
-        },
-        error: (error: ApiError) =>
-          patchState(store, {
-            toggling: false,
-            commandError:
-              error.code === 'unavailable'
-                ? `The admin is not responding — the killswitch is NOT ${
-                    on ? 'engaged' : 'released'
-                  }.`
-                : error.message,
-          }),
-      });
-    },
-
-    dismissCommandError(): void {
-      patchState(store, { commandError: null });
-    },
-  })),
-  withHooks({
-    onInit(store, events = inject(EventStream)) {
-      // Reading the counters inside the effect is the subscription, and the
-      // first run is the initial load -- so load and refetch are one path.
-      // `risk` covers the killswitch file and the throttle; `trades` covers
-      // exposure, which moves whenever a position opens or closes.
-      const risk = events.changes('risk');
-      const trades = events.changes('trades');
-      effect(() => {
-        risk();
-        trades();
-        store.load();
-      });
-    },
+  withMethods((store, api = inject(ApiClient)) => {
+    const resolve = (): Observable<void> => routeRequest(api.risk(), {
+      start: () => patchState(store, { loading: true }),
+      next: (data) => patchState(store, { data, loading: false, error: null }),
+      error: (error) => patchState(store, {
+        loading: false,
+        error: error.code === 'unavailable' ? 'The admin is not responding — these figures may be stale.' : error.message,
+      }),
+    });
+    return {
+      resolve,
+      load(): void { resolve().subscribe({ error: () => undefined }); },
+      toggleKillswitch(on: boolean): void {
+        patchState(store, { toggling: true, commandError: null });
+        api.setKillswitch(on).subscribe({
+          next: ({ killswitch }) => { const data = store.data(); patchState(store, { toggling: false, data: data ? { ...data, killswitch } : data }); },
+          error: (error: ApiError) => patchState(store, { toggling: false, commandError: error.code === 'unavailable' ? `The admin is not responding — the killswitch is NOT ${on ? 'engaged' : 'released'}.` : error.message }),
+        });
+      },
+      dismissCommandError(): void { patchState(store, { commandError: null }); },
+    };
   }),
 );

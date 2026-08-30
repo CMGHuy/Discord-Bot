@@ -275,3 +275,11 @@
    that has nothing to sit against any more. */
 .shell.railed:not(.overlay) .version { align-items: center; }
 .shell.railed:not(.overlay) .version .num { margin-left: 0; }
+
+.workspace { position: relative; }
+.workspace-content { min-width: 0; transition: opacity var(--transition); }
+.route-pending .workspace-content { opacity: 0.32; pointer-events: none; user-select: none; }
+.route-loading-overlay { position: absolute; inset: 0; z-index: 10; display: grid; place-content: center; justify-items: center; gap: var(--space-10); color: var(--text-secondary); background: color-mix(in srgb, var(--surface) 58%, transparent); backdrop-filter: blur(1px); }
+.route-loading-mark { width: 24px; height: 24px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: route-spin 700ms linear infinite; }
+@keyframes route-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .route-loading-mark { animation: none; } }

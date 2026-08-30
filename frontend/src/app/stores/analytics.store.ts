@@ -1,16 +1,16 @@
-import { computed, effect, inject, untracked } from '@angular/core';
+import { computed, inject } from '@angular/core';
 import {
   patchState,
   signalStore,
   withComputed,
-  withHooks,
   withMethods,
   withState,
 } from '@ngrx/signals';
 
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
-import { EventStream } from '../api/event-stream';
+import { routeRequest } from '../routing/route-request';
+import { Observable } from 'rxjs';
 import {
   AnalyticsCalibration,
   AnalyticsDerived,
@@ -1015,6 +1015,68 @@ export const AnalyticsStore = signalStore(
       if (store.strategies() === null) loadStrategies();
     };
 
+    const resolvePerformance = (): Observable<void> => routeRequest(
+      api.analyticsPerformance({ from: store.rangeFrom(), to: store.rangeTo() }), {
+        start: () => {
+          patchState(store, { loading: true });
+          api.analyticsJournal().subscribe({
+            next: (journal) => patchState(store, { journal, journalError: null }),
+            error: (error: ApiError) => patchState(store, { journalError: error.code === 'unavailable' ? 'The admin is not responding.' : error.message }),
+          });
+          api.analyticsSnapshot().subscribe({
+            next: (snapshot) => patchState(store, { snapshot, snapshotError: null }),
+            error: (error: ApiError) => patchState(store, { snapshotError: error.code === 'unavailable' ? 'The admin is not responding.' : error.message }),
+          });
+        },
+        next: (performance) => patchState(store, { performance, loading: false, error: null }),
+        error: fail,
+      },
+    );
+
+    const resolveStrategies = (): Observable<void> => routeRequest(api.analyticsStrategies(), {
+      start: () => patchState(store, { loading: true }),
+      next: (strategies) => patchState(store, { strategies, loading: false, error: null }),
+      error: fail,
+    });
+
+    const resolveCalibration = (): Observable<void> => routeRequest(api.analyticsCalibration(), {
+      start: () => patchState(store, { loading: true }),
+      next: (calibration) => patchState(store, { calibration, loading: false, error: null }),
+      error: fail,
+    });
+
+    const resolvePlans = (): Observable<void> => routeRequest(api.analyticsPlans(), {
+      start: () => patchState(store, { loading: true }),
+      next: (plans) => patchState(store, { plans, loading: false, error: null }),
+      error: fail,
+    });
+
+    const resolveTuning = (): Observable<void> => routeRequest(api.jobs(), {
+      start: () => {
+        patchState(store, { loading: true });
+        loadProposals();
+        if (store.strategies() === null) loadStrategies();
+      },
+      next: (list) => {
+        const jobs = (list.jobs ?? []) as JobSummary[];
+        patchState(store, { jobs, loading: false, error: null });
+        const tracked = trackedJob(jobs);
+        if (tracked) loadJob(tracked.id);
+        else patchState(store, { job: null });
+      },
+      error: fail,
+    });
+
+    const resolveTab = (tab: AnalyticsTab): Observable<void> => {
+      patchState(store, { tab });
+      return ({
+        performance: resolvePerformance,
+        strategies: resolveStrategies,
+        calibration: resolveCalibration,
+        tuning: resolveTuning,
+        plans: resolvePlans,
+      })[tab]();
+    };
     const load = (): void => {
       switch (store.tab()) {
         case 'performance':
@@ -1032,8 +1094,9 @@ export const AnalyticsStore = signalStore(
 
     return {
       /** The one way the tab arrives, and it comes from the URL. */
-      setTab(tab: AnalyticsTab): void {
+      setTab(tab: AnalyticsTab, loadNow = true): void {
         patchState(store, { tab });
+        if (loadNow) load();
       },
 
       /** Which dimension the Breakdowns table groups by. Local state, not a
@@ -1067,6 +1130,7 @@ export const AnalyticsStore = signalStore(
         loadPerformance();
       },
 
+      resolveTab,
       load,
       loadTuning,
 
@@ -1150,28 +1214,4 @@ export const AnalyticsStore = signalStore(
     };
   }),
 
-  withHooks({
-    onInit(store, events = inject(EventStream)) {
-      const analytics = events.changes('analytics');
-      const jobs = events.changes('jobs');
-
-      effect(() => {
-        // Reading `tab` makes a tab switch a fetch; reading the counter is
-        // the event subscription. Which counter is read depends on the tab,
-        // so an `analytics` event never disturbs a running job's log and a
-        // `jobs` event never refetches the calibration tables.
-        const tab = store.tab();
-        if (tab === 'tuning') jobs();
-        else analytics();
-
-        // `untracked`, and this is not belt-and-braces: `loadTuning` reads
-        // `strategies` to decide whether the launcher's option list is
-        // already in hand. Tracked, that read would make the reply to its
-        // own request re-trigger this effect, and every visit to the Tuning
-        // tab would fetch the jobs list twice. The two dependencies this
-        // effect is allowed to have are both above.
-        untracked(() => store.load());
-      });
-    },
-  }),
 );

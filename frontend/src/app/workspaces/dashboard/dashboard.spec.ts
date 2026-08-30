@@ -17,6 +17,7 @@ import { Dashboard as DashboardData } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { Dashboard } from './dashboard';
+import { DashboardStore } from '../../stores/dashboard.store';
 
 /** Dashboard reads only currency() from ConnectionStore and
  *  values()/isLoaded()/update() from PreferencesStore -- stubbed rather than
@@ -67,11 +68,13 @@ function seed(): { fixture: ComponentFixture<Dashboard>; backend: HttpTestingCon
       provideRouter([]),
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
+      DashboardStore,
       { provide: ConnectionStore, useValue: connectionStub },
       { provide: PreferencesStore, useValue: preferencesStub },
     ],
   });
   const fixture = TestBed.createComponent(Dashboard);
+  TestBed.inject(DashboardStore).load();
   const backend = TestBed.inject(HttpTestingController);
   return { fixture, backend };
 }

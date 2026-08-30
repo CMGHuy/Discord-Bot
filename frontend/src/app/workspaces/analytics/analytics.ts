@@ -120,7 +120,6 @@ interface ProposalView extends ProposalRow {
   // Provided here rather than in root, matching Dashboard and Trades: the store
   // is created on entry and destroyed on exit, so this workspace never holds
   // stale analytics while you are looking at another one.
-  providers: [AnalyticsStore],
   imports: [
     TabBar,
     Panel,
@@ -1664,7 +1663,7 @@ export class Analytics {
   constructor() {
     // The one place the URL becomes store state, and the only thing that
     // decides which payload is fetched.
-    effect(() => this.store.setTab(this.activeTab()));
+    effect(() => this.store.setTab(this.activeTab(), false));
   }
 
   protected goToTab(tab: string): void {

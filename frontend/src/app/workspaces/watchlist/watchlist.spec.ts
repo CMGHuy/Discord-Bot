@@ -16,6 +16,7 @@ import {
 import { Ticker } from '../../api/models';
 import { SortSpec } from '../../ui/data-table/data-table.types';
 import { compareTickers, isWithinCurrentWeek, Watchlist } from './watchlist';
+import { WatchlistStore } from '../../stores/watchlist.store';
 
 function ticker(overrides: Partial<Ticker>): Ticker {
   return {
@@ -112,9 +113,11 @@ function seed(): { fixture: ComponentFixture<Watchlist>; backend: HttpTestingCon
       provideRouter([]),
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
+      WatchlistStore,
     ],
   });
   const fixture = TestBed.createComponent(Watchlist);
+  TestBed.inject(WatchlistStore).load();
   const backend = TestBed.inject(HttpTestingController);
   return { fixture, backend };
 }
