@@ -92,6 +92,7 @@ describe('DashboardStore', () => {
       ],
     });
     store = TestBed.inject(DashboardStore);
+    store.load();
     backend = TestBed.inject(HttpTestingController);
   });
 
@@ -113,8 +114,7 @@ describe('DashboardStore', () => {
     tick();
     respond();
 
-    events.raise('account');
-    tick();
+    store.load();
     respond({ account_balance: 12_000 });
 
     expect(store.balance()).toBe(12_000);
@@ -125,8 +125,7 @@ describe('DashboardStore', () => {
     tick();
     respond();
 
-    events.raise('trades');
-    tick();
+    store.load();
     respond({ open_pnl_pct: -3 });
 
     expect(store.openPnlPct()).toBe(-3);
@@ -146,8 +145,7 @@ describe('DashboardStore', () => {
     tick();
     respond();
 
-    events.raise('account');
-    tick();
+    store.load();
     backend
       .expectOne((req) => req.url === '/api/v1/dashboard')
       .error(new ProgressEvent('error'), { status: 0 });
@@ -166,8 +164,7 @@ describe('DashboardStore', () => {
       .error(new ProgressEvent('error'), { status: 0 });
     expect(store.error()).not.toBeNull();
 
-    events.raise('account');
-    tick();
+    store.load();
     respond();
 
     expect(store.error()).toBeNull();
