@@ -15,6 +15,7 @@ import {
 } from '../../api/interceptors';
 import { Risk as RiskData } from '../../api/models';
 import { Risk } from './risk';
+import { RiskStore } from '../../stores/risk.store';
 
 function payload(overrides: Partial<RiskData> = {}): RiskData {
   return {
@@ -37,9 +38,11 @@ function seed(): { fixture: ComponentFixture<Risk>; backend: HttpTestingControll
       provideRouter([]),
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
+      RiskStore,
     ],
   });
   const fixture = TestBed.createComponent(Risk);
+  TestBed.inject(RiskStore).load();
   const backend = TestBed.inject(HttpTestingController);
   return { fixture, backend };
 }

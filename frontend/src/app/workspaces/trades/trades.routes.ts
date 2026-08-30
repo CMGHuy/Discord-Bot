@@ -12,4 +12,4 @@ const queryFor = (route: ActivatedRouteSnapshot): TradeQuery => ({
   status: route.queryParamMap.get('status') ?? undefined,
   ticker: route.queryParamMap.get('ticker') ?? undefined,
 });
-export const tradesRoutes: Routes = [{ path: '', providers: [TradesStore], runGuardsAndResolvers: 'always', data: routeData('Trades', onEvents('trades')), resolve: { ready: resolveRoute((route) => { const store = inject(TradesStore); store.setQuery(queryFor(route)); return store.resolve(); }) }, loadComponent: () => import('./trades').then((m) => m.Trades) }];
+export const tradesRoutes: Routes = [{ path: '', providers: [TradesStore], runGuardsAndResolvers: 'always', data: routeData('Trades', onEvents('trades')), resolve: { ready: resolveRoute((route) => { const store = inject(TradesStore); store.setQuery(queryFor(route), false); return store.resolve(); }) }, loadComponent: () => import('./trades').then((m) => m.Trades) }];

@@ -15,6 +15,7 @@ import {
 import { CalendarTrade, PnlCalendar } from '../../api/models';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { Calendar } from './calendar';
+import { CalendarStore } from '../../stores/calendar.store';
 
 const RESPONSE: PnlCalendar = {
   month: '2026-08',
@@ -58,9 +59,11 @@ export function seed(payload: PnlCalendar = RESPONSE): ComponentFixture<Calendar
         withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor]),
       ),
       provideHttpClientTesting(),
+      CalendarStore,
     ],
   });
   const fixture = TestBed.createComponent(Calendar);
+  TestBed.inject(CalendarStore).load();
   fixture.detectChanges();
 
   const backend = TestBed.inject(HttpTestingController);
@@ -309,9 +312,11 @@ function seedUnflushed(): { fixture: ComponentFixture<Calendar>; backend: HttpTe
       provideZonelessChangeDetection(),
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
+      CalendarStore,
     ],
   });
   const fixture = TestBed.createComponent(Calendar);
+  TestBed.inject(CalendarStore).load();
   const backend = TestBed.inject(HttpTestingController);
   return { fixture, backend };
 }

@@ -741,7 +741,7 @@ export class Trades {
         today:
           this.today() === undefined ? undefined : this.today() === '1',
       };
-      this.store.setQuery(query);
+      this.store.setQuery(query, false);
     });
   }
 

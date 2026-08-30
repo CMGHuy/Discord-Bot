@@ -129,8 +129,9 @@ export const TradesStore = signalStore(
   withMethods((store, api = inject(ApiClient)) => {
     let latestRequest = 0;
     return {
-    setQuery(query: TradeQuery): void {
+    setQuery(query: TradeQuery, loadNow = true): void {
       patchState(store, { query, queryReady: true });
+      if (loadNow) this.load();
     },
 
     resolve(): Observable<void> {
