@@ -1,7 +1,7 @@
 import { provideLocationMocks } from '@angular/common/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { Router, provideRouter, withComponentInputBinding } from '@angular/router';
+import { Router, Routes, provideRouter, withComponentInputBinding } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -80,9 +80,10 @@ describe('routing, authenticated', () => {
     expect(route).toBeDefined();
     expect(route?.canMatch).toEqual([authGuard]);
 
-    // The lazy chunk must actually resolve to the component, not just exist.
-    const loaded = await route!.loadComponent!();
-    expect(loaded).toBeDefined();
+    // The lazy route must expose its component through its child config.
+    const children = await route!.loadChildren!() as Routes;
+    expect(children[0]?.loadComponent).toBeTypeOf('function');
+    expect(await children[0]!.loadComponent!()).toBeDefined();
   });
 });
 
