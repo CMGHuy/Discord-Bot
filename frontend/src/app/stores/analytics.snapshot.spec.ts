@@ -156,6 +156,7 @@ describe('AnalyticsStore — the snapshot', () => {
     });
     store = TestBed.inject(AnalyticsStore);
     backend = TestBed.inject(HttpTestingController);
+    store.load();
   });
 
   /** The Performance tab loads on init; settle all THREE of its requests.
@@ -304,6 +305,7 @@ describe('AnalyticsStore — the tuning grid', () => {
 
   /** Open Tuning and settle every request it makes. */
   function openTuning(grid: object = GRID) {
+    store.load();
     const tick = () => TestBed.inject(ApplicationRef).tick();
     tick();
     backend.expectOne('/api/v1/analytics/performance').flush(PERFORMANCE);
