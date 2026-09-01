@@ -74,7 +74,6 @@ function seed(): { fixture: ComponentFixture<Dashboard>; backend: HttpTestingCon
     ],
   });
   const fixture = TestBed.createComponent(Dashboard);
-  TestBed.inject(DashboardStore).load();
   const backend = TestBed.inject(HttpTestingController);
   return { fixture, backend };
 }
