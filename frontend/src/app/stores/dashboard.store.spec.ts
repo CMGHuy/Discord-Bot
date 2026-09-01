@@ -114,7 +114,8 @@ describe('DashboardStore', () => {
     tick();
     respond();
 
-    store.load();
+    events.raise('account');
+    tick();
     respond({ account_balance: 12_000 });
 
     expect(store.balance()).toBe(12_000);
@@ -125,7 +126,8 @@ describe('DashboardStore', () => {
     tick();
     respond();
 
-    store.load();
+    events.raise('trades');
+    tick();
     respond({ open_pnl_pct: -3 });
 
     expect(store.openPnlPct()).toBe(-3);
