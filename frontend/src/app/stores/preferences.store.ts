@@ -14,7 +14,7 @@ import { Preferences } from '../api/models';
 export const WRITE_DEBOUNCE_MS = 750;
 
 interface PreferencesSlice {
-  values: Preferences;
+  data: Preferences;
   loaded: boolean;
 }
 
@@ -32,7 +32,7 @@ interface PreferencesSlice {
  */
 export const PreferencesStore = signalStore(
   { providedIn: 'root' },
-  withState<PreferencesSlice>({ values: {}, loaded: false }),
+  withState<PreferencesSlice>({ data: {}, loaded: false }),
   withMethods((store, api = inject(ApiClient)) => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let inFlight: Observable<void> | null = null;
@@ -49,7 +49,7 @@ export const PreferencesStore = signalStore(
       if (timer !== null) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
-        api.savePreferences(store.values()).subscribe({
+        api.savePreferences(store.data()).subscribe({
           // Silent on failure, deliberately. Losing a column preference is
           // not worth a toast over the workspace someone is reading, and
           // the local state stays correct for this session either way.
@@ -63,7 +63,7 @@ export const PreferencesStore = signalStore(
       if (inFlight) return inFlight;
       inFlight = api.preferences().pipe(
         tap({
-          next: ({ preferences }) => patchState(store, { values: preferences ?? {}, loaded: true }),
+          next: ({ preferences }) => patchState(store, { data: preferences ?? {}, loaded: true }),
           error: () => patchState(store, { loaded: true }),
         }),
         catchError(() => of(undefined)),
@@ -85,7 +85,7 @@ export const PreferencesStore = signalStore(
        *  tested without a store, and a method per key would be a second place
        *  to keep the key names correct. */
       values(): Preferences {
-        return store.values();
+        return store.data();
       },
 
       /** Whether the server's preferences have arrived.
@@ -105,7 +105,7 @@ export const PreferencesStore = signalStore(
        *  invent a key spelling — the updaters own the key format, and this
        *  only owns when the result is persisted. */
       update(mutate: (prefs: Preferences) => Preferences): void {
-        patchState(store, (state) => ({ values: mutate(state.values) }));
+        patchState(store, (state) => ({ data: mutate(state.data) }));
         scheduleWrite();
       },
 
@@ -115,14 +115,14 @@ export const PreferencesStore = signalStore(
        *  touched and a table with every column hidden are different states,
        *  and conflating them would make the second unrepresentable. */
       columns(tableId: string): string[] | null {
-        return store.values().tables?.[tableId] ?? null;
+        return store.data().tables?.[tableId] ?? null;
       },
 
       setColumns(tableId: string, columns: string[]): void {
         patchState(store, (state) => ({
-          values: {
-            ...state.values,
-            tables: { ...state.values.tables, [tableId]: columns },
+          data: {
+            ...state.data,
+            tables: { ...state.data.tables, [tableId]: columns },
           },
         }));
         scheduleWrite();
@@ -131,9 +131,9 @@ export const PreferencesStore = signalStore(
       /** Forget a table's preference and fall back to its default. */
       resetColumns(tableId: string): void {
         patchState(store, (state) => {
-          const tables = { ...state.values.tables };
+          const tables = { ...state.data.tables };
           delete tables[tableId];
-          return { values: { ...state.values, tables } };
+          return { data: { ...state.data, tables } };
         });
         scheduleWrite();
       },
@@ -143,7 +143,7 @@ export const PreferencesStore = signalStore(
         if (timer === null) return;
         clearTimeout(timer);
         timer = null;
-        api.savePreferences(store.values()).subscribe({ error: () => undefined });
+        api.savePreferences(store.data()).subscribe({ error: () => undefined });
       },
     };
   }),
