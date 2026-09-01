@@ -225,12 +225,10 @@ export const DashboardStore = signalStore(
     onInit(store, events = inject(EventStream)) {
       const account = events.changes('account');
       const trades = events.changes('trades');
-      let initialized = false;
       effect(() => {
         account();
         trades();
-        if (initialized) store['load']();
-        initialized = true;
+        store['load']();
       });
     },
   }),

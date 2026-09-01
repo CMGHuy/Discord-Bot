@@ -92,7 +92,6 @@ describe('DashboardStore', () => {
       ],
     });
     store = TestBed.inject(DashboardStore);
-    store.load();
     backend = TestBed.inject(HttpTestingController);
   });
 
