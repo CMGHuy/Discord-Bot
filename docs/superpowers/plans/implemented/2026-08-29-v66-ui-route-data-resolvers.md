@@ -18,21 +18,29 @@ Edge: none (integrity)
 
 ## Progress
 
-- [ ] R1 Resolver request contract and preference readiness
-- [ ] R2 Resolver authentication cancellation and return URL
-- [ ] R3 Delayed route-progress state
-- [ ] R4 In-shell loading overlay
-- [ ] R5 Debounced live-event and mutation refresh coordinator
-- [ ] R6 Dashboard resolver pilot
-- [ ] R7 Trades list resolver and secondary trade lists
-- [ ] R8 Trade Detail resolver, chart continuation, and note draft safety
-- [ ] R9 Analytics selected-tab resolver
-- [ ] R10 Calendar resolver
-- [ ] R11 Watchlist and Ticker Detail resolvers
-- [ ] R12 Risk resolver
-- [ ] R13 System selected-tab resolver and settings draft safety
-- [ ] R14 Versions resolver and all-route contract gate
-- [ ] R15 Full-suite verification and UI release
+**Closed 2026-09-01: all 15 tasks landed and merged to `main`** on branch
+`75b1ebb..f1b498c`, merge commit `e2902f8` (with one post-merge fixup,
+`7b98031`, tightening a Watchlist fixture — no behavior change). Released as
+`ui 1.11.0` (commits `38c077c`/`91aebf2`; the plan's `Bump:` line projected
+`1.10.0`, drift from unrelated UI work landing between authoring and
+execution). Re-verified directly on `main` at close-out, not just trusted:
+`cd frontend && npm test` — 88 files / 1769 tests passed, 0 failed.
+
+- [x] R1 Resolver request contract and preference readiness
+- [x] R2 Resolver authentication cancellation and return URL
+- [x] R3 Delayed route-progress state
+- [x] R4 In-shell loading overlay
+- [x] R5 Debounced live-event and mutation refresh coordinator
+- [x] R6 Dashboard resolver pilot
+- [x] R7 Trades list resolver and secondary trade lists
+- [x] R8 Trade Detail resolver, chart continuation, and note draft safety
+- [x] R9 Analytics selected-tab resolver
+- [x] R10 Calendar resolver
+- [x] R11 Watchlist and Ticker Detail resolvers
+- [x] R12 Risk resolver
+- [x] R13 System selected-tab resolver and settings draft safety
+- [x] R14 Versions resolver and all-route contract gate
+- [x] R15 Full-suite verification and UI release
 
 ## Global Constraints
 
