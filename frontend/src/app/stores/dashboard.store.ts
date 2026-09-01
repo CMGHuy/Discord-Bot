@@ -1,14 +1,16 @@
-import { computed, inject } from '@angular/core';
+import { computed, effect, inject } from '@angular/core';
 import {
   patchState,
   signalStore,
   withComputed,
+  withHooks,
   withMethods,
   withState,
 } from '@ngrx/signals';
 
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
+import { EventStream } from '../api/event-stream';
 import { Observable } from 'rxjs';
 
 import { routeRequest } from '../routing/route-request';
@@ -218,5 +220,18 @@ export const DashboardStore = signalStore(
         resolve().subscribe({ error: () => undefined });
       },
     };
+  }),
+  withHooks({
+    onInit(store, events = inject(EventStream)) {
+      const account = events.changes('account');
+      const trades = events.changes('trades');
+      let initialized = false;
+      effect(() => {
+        account();
+        trades();
+        if (initialized) store['load']();
+        initialized = true;
+      });
+    },
   }),
 );

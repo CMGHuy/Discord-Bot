@@ -9,7 +9,7 @@ export const dashboardRoutes: Routes = [{
   path: '',
   providers: [DashboardStore],
   runGuardsAndResolvers: 'always',
-  data: routeData('Dashboard', onEvents('account', 'trades')),
+  data: routeData('Dashboard', onEvents()),
   resolve: { ready: resolveRoute(() => inject(DashboardStore).resolve()) },
   loadComponent: () => import('./dashboard').then((m) => m.Dashboard),
 }];
