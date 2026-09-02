@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-02 12:59:53 UTC",
+  "generated_at": "2026-09-02 13:18:55 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.11.0",
-    "bot": "1.5.1"
+    "bot": "1.5.2"
   },
   "releases": [
     {
@@ -915,6 +915,19 @@
       "versions": {
         "ui": "1.11.0",
         "bot": "1.5.1"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "commit": "6730b43f",
+      "subject": "release(bot): 1.5.2 -- fix config_watcher crashing on every tick",
+      "versions": {
+        "ui": "1.11.0",
+        "bot": "1.5.2"
       },
       "changed": [
         "bot"
