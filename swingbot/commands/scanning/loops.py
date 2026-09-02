@@ -313,16 +313,16 @@ async def config_watcher():
                             log.warning("Could not post config-change notice to Discord: %s", _e)
 
     # --- Admin UI manual-close notification queue ---
-    if os.path.exists(_MANUAL_CLOSE_QUEUE):
+    if os.path.exists(runstate._MANUAL_CLOSE_QUEUE):
         try:
-            with open(_MANUAL_CLOSE_QUEUE, "r") as _qf:
+            with open(runstate._MANUAL_CLOSE_QUEUE, "r") as _qf:
                 _queued = json.load(_qf)
         except Exception as _qe:
             log.warning("Could not read manual_close_notify queue: %s", _qe)
             _queued = []
         if _queued:
             try:
-                os.remove(_MANUAL_CLOSE_QUEUE)
+                os.remove(runstate._MANUAL_CLOSE_QUEUE)
             except OSError:
                 pass
             from swingbot.core.scanning.embeds import notify_closed_trades
@@ -333,9 +333,9 @@ async def config_watcher():
                 log.warning("Failed to post manual-close notifications: %s", _ne)
 
     # --- Admin UI "Run !check now" trigger ---
-    if os.path.exists(_TRIGGER_FILE):
+    if os.path.exists(runstate._TRIGGER_FILE):
         try:
-            os.remove(_TRIGGER_FILE)
+            os.remove(runstate._TRIGGER_FILE)
         except OSError:
             pass  # already removed by a parallel tick or a concurrent process
         else:
