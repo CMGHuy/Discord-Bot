@@ -15,6 +15,7 @@ from swingbot.core.infra.silent_channel import silence
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.marketdata.watchlist import load_watchlist
 from . import alerts, presence, recap, runstate
+from .alerts import _send_alerts
 
 trade_log = scan_engine.trade_log
 _ready_announcement_sent = False

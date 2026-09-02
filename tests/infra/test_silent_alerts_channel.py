@@ -27,6 +27,7 @@ from swingbot.commands.scanning import loops as loops_mod
 from swingbot.commands.scanning import runstate
 from swingbot.commands.scanning import presence
 from swingbot.core.infra.silent_channel import SilentChannel, silence
+from swingbot.core.scanning import engine as scan_engine
 
 
 class FakeChannel:
@@ -153,3 +154,51 @@ def test_the_scan_tick_wraps_the_channel_it_resolves(monkeypatch):
     asyncio.run(loops_mod._session_scan_tick())
 
     assert isinstance(captured["channel"], SilentChannel)
+
+
+def test_the_scan_tick_actually_delivers_a_built_alert(monkeypatch):
+    """Production incident (2026-08-28 -> 2026-09-02, five trading days with
+    zero new alerts): the v61 refactor that moved _session_scan_tick into
+    loops.py never carried an import of _send_alerts along with it. `from .
+    import alerts` (the submodule) IS imported at module scope, but the local
+    `alerts = await scan_engine.run_scan(...)` variable inside this function
+    shadows that import, so even `alerts._send_alerts(...)` would have failed
+    -- every tick that reached this point raised NameError, was swallowed by
+    session_scan()'s outer try/except, and silently dropped the alert.
+
+    Unlike test_the_scan_tick_wraps_the_channel_it_resolves above (which
+    stops at the is_scan_paused() early return, before this line ever runs),
+    this test drives the tick all the way through a scan that finds a
+    scenario and asserts the alert actually reaches the channel."""
+    raw = FakeChannel("alerts")
+    monkeypatch.setattr(config, "DISCORD_CHANNEL_TRADES_ID", "123", raising=False)
+    monkeypatch.setattr(config, "DISCORD_CHANNEL_TRADES_SIMPLE_ID", "", raising=False)
+    monkeypatch.setattr(config, "DISCORD_CHANNEL_FIREHOSE_ID", "", raising=False)
+    monkeypatch.setattr(config, "MAX_ALERTS_PER_SCAN", 10, raising=False)
+    monkeypatch.setattr(loops_mod, "bot",
+                        types.SimpleNamespace(get_channel=lambda _id: raw), raising=False)
+    monkeypatch.setattr(runstate, "is_scan_paused", lambda: False, raising=False)
+    monkeypatch.setattr(loops_mod, "in_session", lambda: True, raising=False)
+    monkeypatch.setattr(runstate, "_write_heartbeat", lambda: None, raising=False)
+
+    async def _noop(*args, **kwargs):
+        pass
+
+    monkeypatch.setattr(presence, "_check_session_transition", _noop, raising=False)
+    monkeypatch.setattr(presence, "_refresh_presence", _noop, raising=False)
+    monkeypatch.setattr(presence, "_post_healthcheck", _noop, raising=False)
+    monkeypatch.setattr(loops_mod, "_refresh_snapshot_safely", lambda: None, raising=False)
+
+    built_alert = (types.SimpleNamespace(title="AAPL setup", footer=None), None, None, "SIMPLE-TEXT")
+
+    async def fake_run_scan(**kwargs):
+        return [built_alert]
+
+    monkeypatch.setattr(scan_engine, "run_scan", fake_run_scan, raising=False)
+
+    asyncio.run(loops_mod._session_scan_tick())
+
+    assert len(raw.sent) == 1, (
+        "the scenario the scan found must reach _send_alerts and get posted, "
+        "not die to a NameError on '_send_alerts'"
+    )
