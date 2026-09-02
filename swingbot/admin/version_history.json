@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-30 18:16:51 UTC",
+  "generated_at": "2026-09-02 12:59:53 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.11.0",
-    "bot": "1.5.0"
+    "bot": "1.5.1"
   },
   "releases": [
     {
@@ -905,6 +905,19 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "commit": "9138601d",
+      "subject": "release(bot): 1.5.1 -- fix session_scan crashing on every tick's alert send",
+      "versions": {
+        "ui": "1.11.0",
+        "bot": "1.5.1"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
