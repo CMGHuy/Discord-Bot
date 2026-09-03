@@ -13,7 +13,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from swingbot import config
-from swingbot.core.market.session import is_regular_session, session_date
+from swingbot.core.market.session import (is_quiet_hours, is_regular_session,
+                                          session_date)
 from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
                                        chandelier_stop, pending_expired,
                                        pending_invalidated, record_transition,
@@ -145,8 +146,18 @@ class PlanManager:
         return datetime.now(timezone.utc).isoformat()
 
     def poll(self, now=None) -> list[PlanEvent]:
-        if config.INTRADAY_RTH_ONLY and not is_regular_session(now):
-            return []
+        # Three-way gate (v70). INTRADAY_RTH_ONLY=false is the documented
+        # pre-v64 escape hatch -- full _step() every tick, round the clock,
+        # and no quiet-hours gate either: the quiet window only ever applies
+        # ON TOP OF the RTH gate, never independently of it.
+        if config.INTRADAY_RTH_ONLY:
+            if is_quiet_hours(now):
+                return []
+            regular = is_regular_session(now)
+            if not regular and not config.EXTENDED_HOURS_EXIT_CHECK:
+                return []
+        else:
+            regular = True
         # `self.store` (and `self.trade_log`) can be long-lived instances --
         # the module singleton `_MANAGER` below keeps both for the
         # process's whole life -- so reload each from disk first. Otherwise
@@ -172,12 +183,20 @@ class PlanManager:
             # current on-disk store instead of serializing a stale snapshot.
             self.store.reload()
             try:
-                new_events = self._step(plan, price, now)
+                new_events = (self._step(plan, price, now) if regular
+                              else self._step_extended(plan, price, now))
             except Exception:
                 log.warning("poll: step failed for plan %s", plan.plan_id,
                             exc_info=True)
                 continue
-            self._last_seen[plan.plan_id] = (session_date(now), price)
+            if regular:
+                # Regular-hours prints only. _last_seen feeds _continuous(),
+                # which lets a stop breach fill AT the stop rather than at
+                # the observed price -- claiming we watched the tape cross.
+                # An extended-hours print is exactly what we did not watch:
+                # letting one in here would fill the next session's gap-down
+                # at a price that never traded. (v70; see the plan's finding 2.)
+                self._last_seen[plan.plan_id] = (session_date(now), price)
             for event in new_events:
                 self._on_event(plan, event)
             events.extend(new_events)

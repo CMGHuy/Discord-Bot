@@ -258,3 +258,81 @@ def test_cross_status_collision_does_not_occur(tmp_path):
     events = mgr._step_extended(plan, 105.0, AFTER_HOURS)
     assert [e.transition for e in events] == ["closed"]
     assert store.get("p1").status == PlanStatus.CLOSED
+
+
+def test_two_after_hours_polls_close_the_plan(tmp_path):
+    store, mgr = _env(tmp_path, [94.0, 93.5])
+    assert mgr.poll(now=AFTER_HOURS) == []
+    events = mgr.poll(now=AFTER_HOURS)
+    assert [e.transition for e in events] == ["closed"]
+    assert events[0].detail["exit_price"] == 93.5
+    assert store.get("p1").status == PlanStatus.CLOSED
+
+
+def test_premarket_polls_close_the_plan_too(tmp_path):
+    store, mgr = _env(tmp_path, [94.0, 93.5])
+    assert mgr.poll(now=PREMARKET) == []
+    assert [e.transition for e in mgr.poll(now=PREMARKET)] == ["closed"]
+
+
+def test_quiet_hours_are_fully_dark(tmp_path):
+    store, mgr = _env(tmp_path, [94.0, 93.5, 93.0, 92.5])
+    for _ in range(4):
+        assert mgr.poll(now=QUIET) == []
+    assert store.get("p1").status == PlanStatus.ACTIVE
+
+
+def test_the_whole_weekend_is_fully_dark(tmp_path):
+    store, mgr = _env(tmp_path, [94.0, 93.5])
+    assert mgr.poll(now=SATURDAY) == []
+    assert mgr.poll(now=SATURDAY) == []
+    assert store.get("p1").status == PlanStatus.ACTIVE
+
+
+def test_the_flag_off_reproduces_the_pre_v70_two_way_gate(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "EXTENDED_HOURS_EXIT_CHECK", False)
+    store, mgr = _env(tmp_path, [94.0, 93.5, 93.0])
+    for _ in range(3):
+        assert mgr.poll(now=AFTER_HOURS) == []
+    assert store.get("p1").status == PlanStatus.ACTIVE
+
+
+def test_rth_only_off_still_runs_the_full_machine_round_the_clock(tmp_path, monkeypatch):
+    """The pre-v64 escape hatch is untouched: with INTRADAY_RTH_ONLY off an
+    overnight tick takes the FULL _step branch -- one tick, no debounce --
+    and the quiet window never applies."""
+    monkeypatch.setattr(config, "INTRADAY_RTH_ONLY", False)
+    store, mgr = _env(tmp_path, [94.0])
+    assert [e.transition for e in mgr.poll(now=QUIET)] == ["closed"]
+
+
+def test_regular_hours_still_arm_break_even(tmp_path):
+    store, mgr = _env(tmp_path, [105.0])
+    assert [e.transition for e in mgr.poll(now=RTH)] == ["be_moved"]
+    assert store.get("p1").working_stop == 100.0
+
+
+def test_an_extended_hours_tick_never_makes_the_next_rth_fill_continuous(tmp_path):
+    """poll() records _last_seen on the REGULAR branch only. Otherwise an
+    08:30 print above the stop would tell the 09:30 poll it had watched the
+    tape cross, and v64's poll_stop_fill would fill the gap-down AT the stop
+    -- a better price than anything that ever printed."""
+    store, mgr = _env(tmp_path, [99.0, 94.0])
+    assert mgr.poll(now=PREMARKET) == []          # above the stop: no candidate
+    assert "p1" not in mgr._last_seen
+    events = mgr.poll(now=RTH)
+    assert [e.transition for e in events] == ["closed"]
+    assert events[0].detail["exit_price"] == 94.0    # the gap price, not 95.00
+
+
+def test_a_price_failure_on_one_plan_does_not_stop_the_others(tmp_path):
+    """poll()'s existing per-plan isolation still holds on the new branch."""
+    feed = FakePriceFeed()
+    feed.set_series("MSFT", [94.0, 93.5])
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_active())                                  # AAPL: no ticks queued
+    store.add(_active(plan_id="p2", ticker="MSFT"))
+    mgr = PlanManager(store, feed.get_price)
+    assert mgr.poll(now=AFTER_HOURS) == []
+    events = mgr.poll(now=AFTER_HOURS)
+    assert [(e.plan_id, e.transition) for e in events] == [("p2", "closed")]
