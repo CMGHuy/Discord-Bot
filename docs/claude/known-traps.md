@@ -171,3 +171,41 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
 ## `PlanManager.check_bar()` is unwired — do not "fix" it
 
 `check_bar` / `_check_bar_active` / `_check_bar_partial` model overnight gap fills and are tested, but production never calls them. The live bot exits exclusively through `poll()`. Keep the path inert: wiring it would create a second authority for `plans.json`. Change `_step_active` / `_step_partial` for live exits; mirror bar checks only to keep their tests honest.
+
+## There are two live exit paths, and the extended-hours one is narrow
+
+Since v70, `PlanManager.poll()` routes a tick three ways:
+
+| Clock (with `INTRADAY_RTH_ONLY` on) | Path | What it may do |
+|---|---|---|
+| Quiet window (`QUIET_HOURS_START_ET`–`QUIET_HOURS_END_ET` ET, all weekend) | none | nothing at all |
+| Mon–Fri 09:30–16:00 ET | `_step()` | the whole state machine |
+| Everything else | `_step_extended()` | close a finished plan, nothing else |
+
+`_step_extended` deliberately implements **only** terminal exits: a confirmed
+stop/break-even-stop breach, an ACTIVE plan's `tp1` when there is no `tp2`
+left, a PARTIAL runner's floor/trail stop or `tp2`. It arms no break-even
+stop, banks no TP1 partial, moves no chandelier trail, fills no PENDING
+trigger, and emits no pyramid suggestion — every one of those would act on a
+thin premarket print, which is the bug (`v64`'s "Divergence B") the RTH gate
+exists to prevent.
+
+**The trap:** an exit rule added only to `_step_active`/`_step_partial` is
+inert for the ~17.5 hours a day and the whole weekend that the extended
+branch covers, and one added only to `_step_extended` never runs during the
+session. Decide which it is, and say so in the code. If a new rule is
+genuinely terminal, mirror it into `_extended_candidate_active` /
+`_extended_candidate_partial`; if it manages a still-open position, it
+belongs in `_step*` only.
+
+Two more properties worth knowing before editing this path:
+
+- **The debounce map (`_eh_breach_streak`) is in-memory and keyed by breach
+  kind.** A restart empties it, so the first extended tick after a restart
+  always needs a fresh confirming tick. A reverting print pops the entry
+  outright rather than decrementing it.
+- **`poll()` records `_last_seen` on the regular branch only.** That map
+  feeds `_continuous()`, which lets a stop fill *at the stop* instead of at
+  the observed price. An extended-hours print is precisely the case where
+  nobody watched the tape cross, so admitting one there would fill the next
+  session's gap-down at a price that never traded.
