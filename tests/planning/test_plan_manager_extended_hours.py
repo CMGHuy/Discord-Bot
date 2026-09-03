@@ -336,3 +336,48 @@ def test_a_price_failure_on_one_plan_does_not_stop_the_others(tmp_path):
     assert mgr.poll(now=AFTER_HOURS) == []
     events = mgr.poll(now=AFTER_HOURS)
     assert [(e.plan_id, e.transition) for e in events] == [("p2", "closed")]
+
+
+class _RecordingLog:
+    """Minimal TradeLog stand-in: PlanManager._on_event only ever calls
+    reload() and close_plan_trade() on a terminal close."""
+
+    def __init__(self):
+        self.closed = []
+
+    def reload(self):
+        pass
+
+    def close_plan_trade(self, plan_id, leg, status):
+        self.closed.append((plan_id, leg, status))
+
+
+def test_a_terminal_target_close_reaches_the_trade_log_as_a_win(tmp_path):
+    feed = FakePriceFeed()
+    feed.set_series("AAPL", [110.5, 111.0])
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_active(tp2=None))
+    trade_log = _RecordingLog()
+    mgr = PlanManager(store, feed.get_price, trade_log=trade_log)
+
+    assert mgr.poll(now=AFTER_HOURS) == []
+    assert [e.transition for e in mgr.poll(now=AFTER_HOURS)] == ["closed"]
+
+    plan_id, leg, status = trade_log.closed[0]
+    assert (plan_id, status) == ("p1", "win")
+    assert leg["fraction"] == 1.0
+    assert leg["exit_price"] == 111.0
+    assert leg["r"] == pytest.approx((111.0 - 100.0) / 5.0)
+
+
+def test_a_terminal_stop_close_still_reaches_the_trade_log_as_a_loss(tmp_path):
+    feed = FakePriceFeed()
+    feed.set_series("AAPL", [94.0, 93.5])
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_active())
+    trade_log = _RecordingLog()
+    mgr = PlanManager(store, feed.get_price, trade_log=trade_log)
+
+    assert mgr.poll(now=AFTER_HOURS) == []
+    assert [e.transition for e in mgr.poll(now=AFTER_HOURS)] == ["closed"]
+    assert trade_log.closed[0][2] == "loss"

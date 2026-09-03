@@ -123,9 +123,9 @@ def test_partial_position_line_falls_back_to_runner_floor_when_no_working_stop()
 
 def test_close_reasons_have_distinct_copy():
     titles = {r: _embed("closed", {"reason": r, "exit_price": 100.0}).title
-              for r in ("loss", "scratch", "tp1_runner_be", "tp1_runner_tp2",
-                        "tp1_runner_trail")}
-    assert len(set(titles.values())) == 5
+              for r in ("loss", "scratch", "win", "tp1_runner_be",
+                        "tp1_runner_tp2", "tp1_runner_trail")}
+    assert len(set(titles.values())) == 6
 
 
 def test_every_plan_event_uses_a_shared_ramp_colour():
@@ -138,3 +138,12 @@ def test_good_bad_and_neutral_plan_events_use_their_semantic_ramp_endpoints():
     assert PLAN_EVENT_STYLES["loss"][1].value == tokens.ACCENT_RAMP[1]
     assert PLAN_EVENT_STYLES["filled"][1].value == tokens.ACCENT_RAMP[3]
     assert PLAN_EVENT_STYLES["tp1_runner_tp2"][0].startswith("🟢")
+
+
+def test_a_terminal_target_close_reads_as_a_win():
+    """v70: an ACTIVE plan with no tp2 closes with reason 'win'. Without a
+    style row it would post the neutral 'Plan closed' fallback."""
+    e = _embed("closed", {"reason": "win", "exit_price": 111.0})
+    assert "Win" in e.title and "🟢" in e.title
+    assert any("111" in (f.value or "") for f in e.fields)
+    assert PLAN_EVENT_STYLES["win"][1].value == tokens.ACCENT_RAMP[5]

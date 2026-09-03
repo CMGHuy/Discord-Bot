@@ -225,7 +225,10 @@ class PlanManager:
                 self.trade_log.append_leg_by_plan(plan.plan_id, event.detail)
             elif event.transition == "closed":
                 reason = event.detail["reason"]
-                status = ("win" if reason.startswith("tp1_")
+                # "win" is v70's terminal-target reason: an ACTIVE plan with
+                # no tp2 whose tp1 was confirmed outside regular hours closes
+                # the whole position at its last remaining target.
+                status = ("win" if reason == "win" or reason.startswith("tp1_")
                           else "loss" if reason == "loss" else "closed")
                 leg = event.detail.get("leg")
                 if leg is None:

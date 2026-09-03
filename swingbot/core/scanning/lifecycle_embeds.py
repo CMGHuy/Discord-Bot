@@ -294,6 +294,7 @@ PLAN_EVENT_STYLES = {
     "tp1_partial":           ("💰 TP1 banked — {ticker}", _GOOD),
     "loss":                  ("🔴 Stopped out — {ticker}", _BAD),
     "scratch":               ("⚪ Scratched at break-even — {ticker}", _NEUTRAL),
+    "win":                   ("🟢 Win — target hit — {ticker}", _GOOD),
     "tp1_runner_be":         ("🟢 Win — runner closed at its floor — {ticker}", _GOOD),
     "tp1_runner_tp2":        ("🟢 Win — runner hit TP2 — {ticker}", _GOOD),
     "tp1_runner_trail":      ("🟢 Win — trail locked profit — {ticker}", _GOOD),
