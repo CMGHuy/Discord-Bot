@@ -532,6 +532,26 @@ FIELDS: list[Field] = [
           "Manage plans only during regular US trading hours", type="checkbox", default="true",
           help="The 60s plan manager ticks only Mon-Fri 09:30-16:00 America/New_York. "
                "Set false only to reproduce pre-v64 24/7 behaviour."),
+    Field("EXTENDED_HOURS_EXIT_CHECK", "EXTENDED_HOURS_EXIT_CHECK", "Plan Engine v2",
+          "Close on stop/target hits during premarket and after-hours", type="checkbox",
+          default="true",
+          help="Outside regular hours but outside the quiet window below, check open plans "
+               "for a confirmed stop-loss or final-target hit and close immediately -- no "
+               "break-even arming, TP1 partial-banking or trailing-stop updates outside "
+               "regular hours, only a terminal close. Set false to reproduce pre-v70 "
+               "behaviour (fully dark outside 09:30-16:00 ET)."),
+    Field("QUIET_HOURS_START_ET", "QUIET_HOURS_START_ET", "Plan Engine v2",
+          "Quiet hours start (ET, 24h)", type="number", default="23", min=0, max=23, step=1,
+          help="No plan monitoring at all from this hour (America/New_York) through "
+               "QUIET_HOURS_END_ET, and none at all on Saturday/Sunday."),
+    Field("QUIET_HOURS_END_ET", "QUIET_HOURS_END_ET", "Plan Engine v2",
+          "Quiet hours end (ET, 24h)", type="number", default="8", min=0, max=23, step=1,
+          help="Extended-hours exit checks resume at this hour (America/New_York)."),
+    Field("EXTENDED_HOURS_DEBOUNCE_TICKS", "EXTENDED_HOURS_DEBOUNCE_TICKS", "Plan Engine v2",
+          "Extended-hours confirmation ticks", type="number", default="2", min=1, max=5, step=1,
+          help="Consecutive 60s extended-hours polls that must confirm a stop/target breach "
+               "before closing -- guards against a single thin premarket/after-hours print "
+               "(see v64's Divergence B) triggering a close a liquid market never would have."),
 
     # --- Data sources (optional external market-data APIs) ---
     Field("FMP_API_KEY", "FMP_API_KEY", "Data Sources", "Financial Modeling Prep API key",
