@@ -426,13 +426,17 @@ class PlanManager:
 
         Mirrors _step_active's stop and TP1 comparisons exactly -- including
         _active_stop's session guard -- but returns a callable instead of
-        acting, so the debounce lives in one place rather than per branch."""
+        acting, so the debounce lives in one place rather than per branch.
+
+        Returns status-aware kind strings ("active_stop"/"tp1") to prevent
+        cross-status collision: a leftover ACTIVE-stop streak cannot be
+        completed by an unrelated PARTIAL-stop breach on the same plan_id."""
         is_bull = plan.direction == "bullish"
         stop, is_be_stop = self._active_stop(plan, now)
         hit_stop = price <= stop if is_bull else price >= stop
         if hit_stop:
             reason = "scratch" if is_be_stop else "loss"
-            return ("stop", lambda: self._close_extended(plan, price, reason))
+            return ("active_stop", lambda: self._close_extended(plan, price, reason))
         if plan.tp2 is not None:
             # TP1 with a second leg still to run is a PARTIAL transition,
             # not a finish -- and banking a partial is regular-hours work.
@@ -446,7 +450,11 @@ class PlanManager:
         """(kind, close) for a PARTIAL plan whose runner has finished, else
         None. Mirrors _step_partial's stop and TP2 comparisons, including
         v64's runner_floor_session guard; the pyramid suggestion and the
-        chandelier ratchet are deliberately absent."""
+        chandelier ratchet are deliberately absent.
+
+        Returns status-aware kind strings ("partial_stop"/"tp2") to prevent
+        cross-status collision: a leftover ACTIVE-stop streak cannot be
+        completed by an unrelated PARTIAL-stop breach on the same plan_id."""
         if plan.runner_floor_session == session_date(now):
             return None
         is_bull = plan.direction == "bullish"
@@ -459,7 +467,7 @@ class PlanManager:
         if hit_stop:
             reason = ("tp1_runner_be" if stop == runner_floor(entry, plan.tp1)
                       else "tp1_runner_trail")
-            return ("stop",
+            return ("partial_stop",
                     lambda: self._close_runner(plan, price, reason, risk, sign))
         if plan.tp2 is not None:
             hit_tp2 = price >= plan.tp2 if is_bull else price <= plan.tp2

@@ -68,7 +68,7 @@ def test_a_reverting_tick_clears_the_streak_entirely(tmp_path):
     store, mgr = _env(tmp_path)
     plan = store.get("p1")
     assert mgr._step_extended(plan, 94.0, AFTER_HOURS) == []
-    assert mgr._eh_breach_streak["p1"] == ("stop", 1)
+    assert mgr._eh_breach_streak["p1"] == ("active_stop", 1)
     assert mgr._step_extended(plan, 99.0, AFTER_HOURS) == []   # back above the stop
     assert "p1" not in mgr._eh_breach_streak                   # popped, not decremented
     assert mgr._step_extended(plan, 94.0, AFTER_HOURS) == []   # counting starts over
@@ -208,3 +208,53 @@ def test_the_debounce_count_is_read_from_config(tmp_path, monkeypatch):
     plan = store.get("p1")
     events = mgr._step_extended(plan, 94.0, AFTER_HOURS)
     assert [e.transition for e in events] == ["closed"]
+
+
+def test_cross_status_collision_does_not_occur(tmp_path):
+    """A leftover ACTIVE-stop streak must NOT be completed by an unrelated
+    PARTIAL-stop breach on the same plan_id. Regression test for critical
+    bug: status-aware kind strings prevent the streak from carrying over
+    across plan transitions.
+
+    Sequence: (1) Evening, ACTIVE: 1 tick of active_stop below threshold
+    (2) Next day RTH: plan transitions ACTIVE -> PARTIAL via TP1 hit
+    (3) Evening, PARTIAL: 1 tick of partial_stop at runner floor
+
+    Without the fix, step (3) would see the leftover streak from (1),
+    bump it to 2, and close immediately. With the fix, the active_stop
+    streak from (1) is invisible to the partial_stop breach in (3)."""
+    feed = FakePriceFeed()
+    feed.set_series("AAPL", [110.5, 105.5])
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_active())
+    mgr = PlanManager(store, feed.get_price)
+
+    # Step 1: Evening, ACTIVE plan: 1 tick of stop breach, not yet confirming
+    plan = store.get("p1")
+    assert mgr._step_extended(plan, 94.0, AFTER_HOURS) == []
+    assert mgr._eh_breach_streak["p1"] == ("active_stop", 1)
+    assert store.get("p1").status == PlanStatus.ACTIVE
+
+    # Step 2: Next day, regular hours: transition ACTIVE -> PARTIAL via TP1 hit
+    # The manager instance is kept; _eh_breach_streak is NOT reset.
+    events = mgr.poll(now=RTH)
+    assert [e.transition for e in events] == ["tp1_partial"]
+    plan = store.get("p1")
+    assert plan.status == PlanStatus.PARTIAL
+    # Streak from ACTIVE-stop is still in memory (no revert popped it, no confirm closed it)
+    assert mgr._eh_breach_streak["p1"] == ("active_stop", 1)
+
+    # Step 3: Evening, PARTIAL plan: 1 tick of runner-floor breach (partial_stop)
+    # This MUST NOT inherit or complete the active_stop streak from step 1.
+    # Setting runner_floor_session to an earlier date to satisfy the guard.
+    plan.runner_floor_session = "2026-08-26"
+    store.update(plan)
+    assert mgr._step_extended(plan, 105.5, AFTER_HOURS) == []
+    # The partial_stop breach started a NEW streak (streak=1), not continuing the active_stop one
+    assert mgr._eh_breach_streak["p1"] == ("partial_stop", 1)
+    assert store.get("p1").status == PlanStatus.PARTIAL
+
+    # One more confirming tick: should close because partial_stop now has 2 ticks
+    events = mgr._step_extended(plan, 105.0, AFTER_HOURS)
+    assert [e.transition for e in events] == ["closed"]
+    assert store.get("p1").status == PlanStatus.CLOSED
