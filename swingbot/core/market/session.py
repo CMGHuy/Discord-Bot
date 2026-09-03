@@ -4,6 +4,8 @@ from __future__ import annotations
 import datetime as dt
 from zoneinfo import ZoneInfo
 
+from swingbot import config
+
 US_MARKET_TZ = ZoneInfo("America/New_York")
 
 # The open is inclusive and the close is exclusive.
@@ -26,6 +28,28 @@ def is_regular_session(now: dt.datetime | None = None) -> bool:
     if et.weekday() >= 5:
         return False
     return RTH_OPEN <= et.time() < RTH_CLOSE
+
+
+def is_quiet_hours(now: dt.datetime | None = None) -> bool:
+    """Return whether ``now`` falls in the overnight window the v70
+    extended-hours exit check never runs in: ``config.QUIET_HOURS_START_ET``
+    through ``config.QUIET_HOURS_END_ET`` ET, plus every hour of Saturday
+    and Sunday -- a market that is fully shut all weekend.
+
+    The bounds are read from ``config`` rather than passed in, the same way
+    ``plan_manager`` already reads ``config.INTRADAY_RTH_ONLY`` directly.
+    The window always runs START -> midnight -> END, so a START earlier than
+    END (e.g. 8 and 23) means "quiet all day" and switches plan monitoring
+    off entirely. That is the honest reading of an inverted window, not a
+    bug to special-case.
+    """
+    et = now_et(now)
+    if et.weekday() >= 5:
+        return True
+    start = dt.time(config.QUIET_HOURS_START_ET, 0)
+    end = dt.time(config.QUIET_HOURS_END_ET, 0)
+    t = et.time()
+    return t >= start or t < end
 
 
 def session_date(now: dt.datetime | None = None) -> str:
