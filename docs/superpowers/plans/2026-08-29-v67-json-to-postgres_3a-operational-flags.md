@@ -889,6 +889,23 @@ alerts it never logs. The heartbeat records nothing — it is a liveness signal
 *about* the bot. Killing the scan loop because the liveness dot could not be
 updated inverts the whole point of the dot.
 
+**v71 addition.** `data/bot_heartbeat.json` gained three fields recording tick
+*outcome* (see `docs/superpowers/specs/2026-09-04-v71-silent-failure-hardening-design.md`).
+They do not all belong in `bot_heartbeat`, whose shape is `(key, ts)`:
+
+| JSON field | Destination | Why |
+|---|---|---|
+| `last_success` | `bot_heartbeat` row, `key='last_success'` | It is a timestamp; the table is already keyed for exactly this |
+| `consecutive_failures` | `runtime_flags` | An integer, not a timestamp |
+| `alert_active` | `runtime_flags` | A boolean, not a timestamp |
+
+Both tables are in this part under revision `p3_001`, so this needs **no new
+Alembic revision and no schema widening**.
+
+Pre-existing gap, not introduced by v71: this table also does not carry the
+`session_active` / `scan_paused` booleans today's JSON has. Decide where those
+land while doing this migration.
+
 - [ ] **Step 1: Write the failing tests**
 
 Create `tests/commands/test_heartbeat_db.py`:
