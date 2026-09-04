@@ -608,8 +608,9 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
     if level_rows:
         calibration_lines.append("**📐 Calibration**")
         for r in level_rows:
+            wr = f"{r['win_rate']:.0f}%" if r["win_rate"] is not None else "n/a"
             calibration_lines.append(
-                f"• Level {r['level']} at {r['win_rate']:.0f}% WR (n={r['n']})."
+                f"• Level {r['level']} at {wr} WR (n={r['n']})."
             )
     try:
         decay_lines = edge_decay_report(all_trades)
