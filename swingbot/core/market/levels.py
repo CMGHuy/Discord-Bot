@@ -642,7 +642,8 @@ def atr_floor_pct(df, current_price: float, h: dict) -> float:
 
 def build_scenarios(current_price: float, supports: list, resistances: list, min_reward_pct: float,
                      atr_floor: float = 0.0, min_stop_distance_pct: float = 0.0,
-                     max_stop_distance_pct: float = 0.0, min_risk_reward: float = 0.0) -> list:
+                     max_stop_distance_pct: float = 0.0, min_risk_reward: float = 0.0,
+                     block_bullish: bool = False) -> list:
     """
     Builds both possible scenarios (bullish toward resistance, bearish
     toward support), each only included if it clears EVERY one of these
@@ -651,6 +652,9 @@ def build_scenarios(current_price: float, supports: list, resistances: list, min
       - stop at least `min_stop_distance_pct` away (not too tight)
       - stop no further than `max_stop_distance_pct` away, if set (not too wide)
       - reward:risk to target 1 at least `min_risk_reward`, if set
+      - the bullish direction is not vetoed by the caller (v68's dead-cat-
+        bounce check, which needs the frame and so is computed at the call
+        site rather than here -- this function stays free of DataFrames)
     A scenario failing ANY of these is simply not built -- these are the
     thresholds the person configured, and they're respected exactly as
     set, with no soft "shown anyway" fallback. Either, both, or neither
@@ -671,7 +675,8 @@ def build_scenarios(current_price: float, supports: list, resistances: list, min
     """
     scenarios = []
 
-    def _check_constraints(dist1, stop_dist, entry, stop_price, target_price) -> dict:
+    def _check_constraints(dist1, stop_dist, entry, stop_price, target_price,
+                           direction) -> dict:
         risk = abs(entry - stop_price)
         reward = abs(target_price - entry)
         rr = reward / risk if risk > 0 else 0.0
@@ -680,6 +685,9 @@ def build_scenarios(current_price: float, supports: list, resistances: list, min
             "min_stop_distance": stop_dist >= min_stop_distance_pct,
             "max_stop_distance": max_stop_distance_pct <= 0 or stop_dist <= max_stop_distance_pct,
             "min_risk_reward": min_risk_reward <= 0 or rr >= min_risk_reward,
+            # True means "passed", matching every key above -- a scenario that
+            # fails this is never built, so a built one always reads True.
+            "not_dead_cat_bounce": not (block_bullish and direction == "bullish"),
         }
 
     if resistances and supports and current_price:
@@ -693,7 +701,7 @@ def build_scenarios(current_price: float, supports: list, resistances: list, min
         # trade's STOP, and mutated the Level the admin chart reads back.
         stop_price, stop_sources = supports[0].price, list(supports[0].sources)
         stop_dist = abs(current_price - stop_price) / current_price * 100
-        constraints = _check_constraints(dist1, stop_dist, current_price, stop_price, t1.price)
+        constraints = _check_constraints(dist1, stop_dist, current_price, stop_price, t1.price, "bullish")
         if all(constraints.values()):
             target2_price = target2_dist = target2_sources = None
             if len(resistances) > 1:
@@ -722,7 +730,7 @@ def build_scenarios(current_price: float, supports: list, resistances: list, min
         dist1 = (current_price - t1.price) / current_price * 100
         stop_price, stop_sources = resistances[0].price, list(resistances[0].sources)
         stop_dist = abs(stop_price - current_price) / current_price * 100
-        constraints = _check_constraints(dist1, stop_dist, current_price, stop_price, t1.price)
+        constraints = _check_constraints(dist1, stop_dist, current_price, stop_price, t1.price, "bearish")
         if all(constraints.values()):
             target2_price = target2_dist = target2_sources = None
             if len(supports) > 1:
