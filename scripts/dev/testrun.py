@@ -93,10 +93,15 @@ def should_escalate() -> tuple[bool, str]:
 def undefined_names(paths: list[str] | None = None) -> list[str]:
     """Return pyflakes findings for undefined names only."""
     if paths is None:
-        listed = subprocess.run(
-            ["git", "ls-files", "--", "*.py"], cwd=REPO,
-            capture_output=True, text=True, timeout=15,
-        )
+        try:
+            listed = subprocess.run(
+                ["git", "ls-files", "--", "*.py"], cwd=REPO,
+                capture_output=True, text=True, timeout=15,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise RuntimeError(
+                "git ls-files failed; undefined-name gate unavailable"
+            ) from exc
         if listed.returncode != 0:
             raise RuntimeError("git ls-files failed; undefined-name gate unavailable")
         paths = listed.stdout.splitlines()

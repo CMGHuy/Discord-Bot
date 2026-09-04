@@ -46,6 +46,7 @@ def test_narrow_profiles_skip_undefined_name_gate(monkeypatch, profile):
     import testrun
 
     called = []
+    monkeypatch.setattr(testrun, "should_escalate", lambda: (False, ""))
     monkeypatch.setattr(testrun, "undefined_names", lambda: called.append(True) or [])
     monkeypatch.setattr(testrun, "run", lambda args: ({"passed": 1}, [], 0.1, 0))
 
@@ -82,6 +83,17 @@ def test_git_listing_failure_fails_closed(monkeypatch, capsys):
 
     monkeypatch.setattr(sys, "argv", ["testrun.py", "full"])
     monkeypatch.setattr(testrun, "undefined_names", lambda: (_ for _ in ()).throw(RuntimeError("git ls-files failed; undefined-name gate unavailable")))
+    monkeypatch.setattr(testrun, "run", lambda args: pytest.fail("pytest must not run"))
+
+    assert testrun.main() == 1
+    assert "gate unavailable" in capsys.readouterr().out
+
+
+def test_git_listing_exception_fails_closed(monkeypatch, capsys):
+    import testrun
+
+    monkeypatch.setattr(sys, "argv", ["testrun.py", "full"])
+    monkeypatch.setattr(testrun.subprocess, "run", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("git unavailable")))
     monkeypatch.setattr(testrun, "run", lambda args: pytest.fail("pytest must not run"))
 
     assert testrun.main() == 1
