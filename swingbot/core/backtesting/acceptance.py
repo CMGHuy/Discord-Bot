@@ -372,6 +372,7 @@ class AcceptanceResult:
     clauses: tuple
     strata: list
     split: dict
+    seed: int = 42          # recorded so a results doc is reproducible
     version: int = VERSION
 
     def clause(self, name: str) -> ClauseResult:
@@ -542,4 +543,81 @@ def evaluate(baseline, component, *, stage: str,
     return AcceptanceResult(stage=stage, verdict=verdict, clauses=clauses,
                             strata=stratum_table(baseline, component),
                             split={k: len(v) if isinstance(v, list) else v
-                                   for k, v in split.items()})
+                                   for k, v in split.items()},
+                            seed=seed)
+
+
+def render_json(result: AcceptanceResult) -> dict:
+    return {
+        "acceptance_version": result.version,
+        "stage": result.stage,
+        "verdict": result.verdict,
+        "seed": result.seed,
+        "clauses": [{"name": c.name, "verdict": c.verdict, "detail": c.detail,
+                     "value": c.value, "threshold": c.threshold}
+                    for c in result.clauses],
+        "strata": [{**r, "stratum": list(r["stratum"])} for r in result.strata],
+        "split": result.split,
+    }
+
+
+def _fmt_pct(value) -> str:
+    """Win rates, in percent."""
+    return "n/a" if value is None else f"{value:.2f}"
+
+
+def _fmt_r(value) -> str:
+    """R-multiples need more places than a percentage: the deltas that
+    matter here are third-decimal (v68's was -0.0097R), and rounding one to
+    two places prints an honest number as 0.01 or -0.01."""
+    return "n/a" if value is None else f"{value:+.4f}"
+
+
+def render_markdown(result: AcceptanceResult, *, title: str, window: str,
+                    notes: str | None = None) -> str:
+    """The results-doc body. Rendered from the same object the gate
+    returned, so the table and the verdict cannot drift apart."""
+    lines = [
+        f"# {title} — {result.stage.upper()}",
+        "",
+        f"Procedure: **acceptance v{result.version}** "
+        f"(`swingbot/core/backtesting/acceptance.py`), "
+        f"bootstrap seed {result.seed}.",
+        f"**Window:** {window}",
+        "",
+        "## Clauses",
+        "",
+        "| Clause | Verdict | Detail |",
+        "|---|---|---|",
+    ]
+    for c in result.clauses:
+        lines.append(f"| `{c.name}` | **{c.verdict}** | {c.detail} |")
+    lines += [
+        "",
+        f"**Overall: {result.verdict}**",
+        "",
+        "## Population split",
+        "",
+        f"- removed: {result.split['removed']}",
+        f"- changed: {result.split['changed']}",
+        f"- unchanged: {result.split['unchanged']}",
+        f"- added: {result.split['added']}",
+        f"- subset feature: {result.split['is_subset']}",
+        "",
+        "## Per stratum",
+        "",
+        "| Strategy | Horizon | Base N | Comp N | Base WR | Comp WR | "
+        "Base ExpR | Comp ExpR |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for row in result.strata:
+        strategy, horizon = row["stratum"]
+        lines.append(
+            f"| {strategy} | {horizon} | {row['baseline_n']} | "
+            f"{row['component_n']} | {_fmt_pct(row['baseline_win_rate'])} | "
+            f"{_fmt_pct(row['component_win_rate'])} | "
+            f"{_fmt_r(row['baseline_expectancy_r'])} | "
+            f"{_fmt_r(row['component_expectancy_r'])} |")
+    if notes:
+        lines += ["", "## Notes", "", notes]
+    return "\n".join(lines) + "\n"
