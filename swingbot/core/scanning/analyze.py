@@ -6,6 +6,11 @@ identity while analysis consumes them for trade state and monitoring.
 """
 import logging
 import os
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .scan_run import ScanProgress
+
 from dataclasses import dataclass, field
 
 from swingbot import config

@@ -2,6 +2,11 @@
 import logging
 import multiprocessing
 import time
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .scan_run import ScanProgress
+
 from collections import OrderedDict
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait as _futures_wait
 
