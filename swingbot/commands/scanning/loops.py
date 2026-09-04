@@ -38,6 +38,9 @@ async def session_scan():
     except Exception:
         log.exception("session_scan tick failed -- will retry on the next scheduled tick "
                        "(every %d min) instead of stopping the loop entirely", config.SCAN_INTERVAL_MINUTES)
+        runstate.record_tick_failure()
+    else:
+        runstate.record_tick_success()
 
 
 def _refresh_snapshot_safely() -> None:

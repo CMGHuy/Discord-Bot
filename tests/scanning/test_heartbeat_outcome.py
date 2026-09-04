@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 from swingbot.commands.scanning import runstate
@@ -54,3 +55,33 @@ def test_missing_file_reads_as_unknown(tmp_path, monkeypatch):
     _use_tmp_heartbeat(tmp_path, monkeypatch)
     assert runstate.last_success_iso() is None
     assert runstate.get_alert_active() is False
+
+
+def test_tick_that_raises_is_recorded_as_failure(tmp_path, monkeypatch):
+    from swingbot.commands.scanning import loops
+
+    _use_tmp_heartbeat(tmp_path, monkeypatch)
+
+    async def _boom():
+        raise RuntimeError("tick exploded")
+
+    monkeypatch.setattr(loops, "_session_scan_tick", _boom)
+    asyncio.run(loops.session_scan.coro())
+
+    assert runstate.last_success_iso() is None
+    assert runstate._read_heartbeat()["consecutive_failures"] == 1
+
+
+def test_tick_that_returns_is_recorded_as_success(tmp_path, monkeypatch):
+    from swingbot.commands.scanning import loops
+
+    _use_tmp_heartbeat(tmp_path, monkeypatch)
+
+    async def _ok():
+        return None
+
+    monkeypatch.setattr(loops, "_session_scan_tick", _ok)
+    asyncio.run(loops.session_scan.coro())
+
+    assert runstate.last_success_iso() is not None
+    assert runstate._read_heartbeat()["consecutive_failures"] == 0
