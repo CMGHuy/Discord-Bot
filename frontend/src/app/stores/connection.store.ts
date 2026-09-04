@@ -20,6 +20,8 @@ export type ConnectionState = 'connecting' | 'live' | 'degraded' | 'dead';
 interface ConnectionStateSlice {
   botAlive: boolean | null;
   botLastSeen: string | null;
+  /** Null when the bot has never completed a tick -- distinct from false. */
+  botHealthy: boolean | null;
   /** True when the most recent poll for bot liveness failed. */
   unreachable: boolean;
   /**
@@ -51,6 +53,7 @@ export const ConnectionStore = signalStore(
   withState<ConnectionStateSlice>({
     botAlive: null,
     botLastSeen: null,
+    botHealthy: null,
     unreachable: false,
     health: null,
   }),
@@ -106,6 +109,7 @@ export const ConnectionStore = signalStore(
         next: (scan) =>
           patchState(store, {
             botAlive: scan.bot_alive,
+            botHealthy: scan.bot_healthy,
             botLastSeen: scan.bot_last_seen,
             unreachable: false,
           }),
