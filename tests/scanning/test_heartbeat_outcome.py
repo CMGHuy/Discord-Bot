@@ -85,3 +85,76 @@ def test_tick_that_returns_is_recorded_as_success(tmp_path, monkeypatch):
 
     assert runstate.last_success_iso() is not None
     assert runstate._read_heartbeat()["consecutive_failures"] == 0
+
+
+class _FakeChannel:
+    def __init__(self):
+        self.sent = []
+
+    async def send(self, content=None, **kw):
+        self.sent.append(content)
+
+
+def test_escalates_once_at_the_threshold_then_stays_quiet(tmp_path, monkeypatch):
+    from swingbot.commands.scanning import loops
+
+    _use_tmp_heartbeat(tmp_path, monkeypatch)
+    channel = _FakeChannel()
+    monkeypatch.setattr(loops, "_ops_channel", lambda: channel)
+    monkeypatch.setattr(loops.config, "HEALTH_ALERT_AFTER_FAILURES", 3)
+
+    async def _boom():
+        raise RuntimeError("tick exploded")
+
+    monkeypatch.setattr(loops, "_session_scan_tick", _boom)
+
+    for _ in range(5):
+        asyncio.run(loops.session_scan.coro())
+
+    assert len(channel.sent) == 1, "one alert per outage, not one per tick"
+    assert "3" in channel.sent[0]
+    assert "RuntimeError" in channel.sent[0]
+
+
+def test_recovery_posts_exactly_one_notice(tmp_path, monkeypatch):
+    from swingbot.commands.scanning import loops
+
+    _use_tmp_heartbeat(tmp_path, monkeypatch)
+    channel = _FakeChannel()
+    monkeypatch.setattr(loops, "_ops_channel", lambda: channel)
+    monkeypatch.setattr(loops.config, "HEALTH_ALERT_AFTER_FAILURES", 2)
+
+    async def _boom():
+        raise RuntimeError("tick exploded")
+
+    async def _ok():
+        return None
+
+    monkeypatch.setattr(loops, "_session_scan_tick", _boom)
+    asyncio.run(loops.session_scan.coro())
+    asyncio.run(loops.session_scan.coro())
+    assert len(channel.sent) == 1
+
+    monkeypatch.setattr(loops, "_session_scan_tick", _ok)
+    asyncio.run(loops.session_scan.coro())
+    asyncio.run(loops.session_scan.coro())
+
+    assert len(channel.sent) == 2
+    assert "recover" in channel.sent[1].lower()
+
+
+def test_below_threshold_posts_nothing(tmp_path, monkeypatch):
+    from swingbot.commands.scanning import loops
+
+    _use_tmp_heartbeat(tmp_path, monkeypatch)
+    channel = _FakeChannel()
+    monkeypatch.setattr(loops, "_ops_channel", lambda: channel)
+    monkeypatch.setattr(loops.config, "HEALTH_ALERT_AFTER_FAILURES", 3)
+
+    async def _boom():
+        raise RuntimeError("tick exploded")
+
+    monkeypatch.setattr(loops, "_session_scan_tick", _boom)
+    asyncio.run(loops.session_scan.coro())
+
+    assert channel.sent == []

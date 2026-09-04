@@ -20,6 +20,44 @@ from .alerts import _send_alerts
 trade_log = scan_engine.trade_log
 _ready_announcement_sent = False
 
+
+def _ops_channel():
+    """Where health notices go. Falls back to the alerts channel when no
+    dedicated ops channel is configured -- a safety net that needs
+    configuring before it works is one that will not be armed when it
+    matters. Deliberately NOT wrapped in silence(): this must notify."""
+    chan_id = config.DISCORD_CHANNEL_OPS_ID or config.DISCORD_CHANNEL_TRADES_ID
+    if not chan_id:
+        return None
+    return bot.get_channel(int(chan_id))
+
+
+async def _maybe_escalate_health(failures: int, exc: Exception) -> None:
+    """One alert per outage, once the failure streak crosses the threshold."""
+    if failures < int(config.HEALTH_ALERT_AFTER_FAILURES):
+        return
+    if runstate.get_alert_active():
+        return
+    channel = _ops_channel()
+    if channel is None:
+        return
+    last = runstate.last_success_iso() or "never"
+    await channel.send(
+        f"🚨 **Bot health alert** — the scan tick has failed {failures} time(s) in a row.\n"
+        f"• Last successful tick: {last}\n"
+        f"• Latest error: `{type(exc).__name__}: {exc}`\n"
+        f"No alerts are being produced until this clears."
+    )
+    runstate.set_alert_active(True)
+
+
+async def _post_health_recovered() -> None:
+    channel = _ops_channel()
+    if channel is None:
+        return
+    await channel.send("✅ **Bot health recovered** — the scan tick completed successfully again.")
+
+
 @tasks.loop(minutes=config.SCAN_INTERVAL_MINUTES)
 async def session_scan():
     # The entire tick's real work is wrapped in a try/except (see below) so
@@ -35,12 +73,20 @@ async def session_scan():
     # every SCAN_INTERVAL_MINUTES no matter what happened on the last one.
     try:
         await _session_scan_tick()
-    except Exception:
+    except Exception as exc:
         log.exception("session_scan tick failed -- will retry on the next scheduled tick "
                        "(every %d min) instead of stopping the loop entirely", config.SCAN_INTERVAL_MINUTES)
-        runstate.record_tick_failure()
+        failures = runstate.record_tick_failure()
+        try:
+            await _maybe_escalate_health(failures, exc)
+        except Exception:
+            log.exception("session_scan: health escalation itself failed")
     else:
-        runstate.record_tick_success()
+        if runstate.record_tick_success():
+            try:
+                await _post_health_recovered()
+            except Exception:
+                log.exception("session_scan: health recovery notice failed")
 
 
 def _refresh_snapshot_safely() -> None:
