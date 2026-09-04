@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-03 21:22:51 UTC",
+  "generated_at": "2026-09-04 11:16:42 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.11.0",
-    "bot": "1.6.0"
+    "bot": "1.6.1"
   },
   "releases": [
     {
@@ -941,6 +941,19 @@
       "versions": {
         "ui": "1.11.0",
         "bot": "1.6.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-04",
+      "last_seen": "2026-09-04",
+      "commit": "c61d3309",
+      "subject": "release(bot): 1.6.1 -- dead-cat-bounce veto (inert, VALIDATION failed)",
+      "versions": {
+        "ui": "1.11.0",
+        "bot": "1.6.1"
       },
       "changed": [
         "bot"

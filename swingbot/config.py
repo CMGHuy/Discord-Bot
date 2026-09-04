@@ -837,6 +837,30 @@ FIELDS: list[Field] = [
                "the strategy or it does nothing. Structure-derived stops (Fibonacci, Elliott "
                "Wave, Support/Resistance) are never scaled. R:R is preserved -- the same "
                "distance feeds stop and target. Off until the E33 walk-forward folds judge it."),
+
+    # --- Chart patterns ---
+    Field("DEAD_CAT_BOUNCE_VETO", "DEAD_CAT_BOUNCE_VETO", "Chart patterns",
+          "Veto bullish setups in a dead cat bounce",
+          type="checkbox", default="false",
+          help="Blocks a bullish confluence scenario when price sits in a weak "
+               "bounce after a hard decline. Ships OFF: it is a pre-registered "
+               "measurement (v68), not a demonstrated edge, and flips on only "
+               "if its one VALIDATION shot passes."),
+    Field("DCB_DECLINE_PCT", "DCB_DECLINE_PCT", "Chart patterns", "Minimum decline (%)",
+          type="float", default="20", min=5, max=60, step=1,
+          help="How far price must have fallen from its recent peak for the "
+               "drop to count. One of three grid dimensions in v68's TRAIN "
+               "run; the other four parameters are fixed in code on purpose."),
+    Field("DCB_GAP_REQUIRED", "DCB_GAP_REQUIRED", "Chart patterns", "Require a breakaway gap",
+          type="checkbox", default="false",
+          help="When on, the decline must include a bar that opened at least "
+               "5% below the prior close. More faithful to the classic "
+               "pattern, and a much narrower filter."),
+    Field("DCB_VOLUME_RATIO", "DCB_VOLUME_RATIO", "Chart patterns",
+          "Maximum bounce/decline volume ratio",
+          type="float", default="0", min=0, max=3, step=0.1,
+          help="When above 0, the bounce must be quieter than the decline by "
+               "this ratio -- a conviction test. 0 turns the arm off."),
 ]
 
 _CASTERS = {

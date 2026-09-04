@@ -60,6 +60,10 @@ data/v34_*.json
 # scripts and summary .txt dumps under the same prefix -- all equally
 # unwanted under a bind-mounted data/.
 data/v35_*
+# v68's dead-cat-bounce veto TRAIN/VALIDATION population dumps
+# (data/v68_train_dcb.json, data/v68_validation_dcb.json), re-derivable via
+# scripts/backtest/measure_dcb_veto.py. Same glob shape and reason as v33/v34.
+data/v68_*.json
 
 # ==========================================================================
 # Test/build byproducts

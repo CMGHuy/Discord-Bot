@@ -1,8 +1,14 @@
 # v68 — Dead-cat-bounce veto on the confluence scan
 
 **Version:** ui 1.10.0 · bot 1.5.0
-**Bump:** bot patch (1.5.0 → 1.5.1)
-**Edge:** expectancy
+**Bump:** bot patch (1.5.0 → 1.5.1) — actual close-out bump is bot 1.6.0 →
+1.6.1: a `main`-sync merge onto this branch (bringing in other plans' work,
+predating D1) moved bot past 1.5.0 before this component's own code landed.
+The bump TYPE prediction (patch, inert default-off code) held
+**Edge:** expectancy — measured: none. VALIDATION FAILed (2 of 4 gates; ExpR
+delta -0.0097R, opposite sign from TRAIN's +0.0104R) — see
+`docs/superpowers/results/2026-08-30-v68-dcb-veto-validation.md`. Ships
+merged and default-off, not as a demonstrated edge.
 
 Introduce chart-pattern geometry to the bot for the first time, as a **veto**
 on the confluence scan rather than as another confluence voter: block a bullish

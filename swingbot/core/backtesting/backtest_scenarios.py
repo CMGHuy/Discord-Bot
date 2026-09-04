@@ -13,6 +13,7 @@ import numpy as np
 from swingbot import config
 
 from swingbot.core.market import levels
+from swingbot.core.market.chart_patterns import dead_cat_bounce
 from swingbot.core.planning.plan_engine import build_confluence_plan, primary_strategy_for, simulate_exit
 from swingbot.core.market.strategy_types import HORIZONS, MIN_BARS
 
@@ -66,13 +67,20 @@ def levels_asof(ticker: str, df, bar_index: int, horizon_key: str, cache: dict):
     return result
 
 
-def replay_scenarios(ticker: str, df, horizon_key: str, *, gates: dict) -> list:
+def replay_scenarios(ticker: str, df, horizon_key: str, *, gates: dict,
+                     dcb_params: dict | None = None) -> list:
     """(signal_index, TradePlanV2) for every bar where the confluence scan
     WOULD have emitted a plan, under `gates`, with a per-direction cooldown.
 
     No lookahead: every computation below is scoped to `window = df.iloc[:i+1]`
     (or `levels_asof`, which enforces the same slice internally) -- never
     `df.iloc[-1]` or any index beyond `i`.
+
+    `dcb_params`: v68's dead-cat-bounce veto params. Taken directly rather
+    than read from config -- the TRAIN grid runs twelve different parameter
+    sets in one process, and a config read would make them a global the
+    workers fight over. `None` is the baseline arm and must not pay for the
+    detector at all.
     """
     h = HORIZONS[horizon_key]
     warmup = MIN_BARS[horizon_key]
@@ -97,12 +105,19 @@ def replay_scenarios(ticker: str, df, horizon_key: str, *, gates: dict) -> list:
                                    h.get("sr_target_min_pct", 0) * 0.15)
         effective_max_stop = max(gates["max_stop_distance_pct"],
                                  h.get("max_risk_pct", 0))
+        # v68. `window` is the harness's no-lookahead slice -- the same frame
+        # the live scan hands to veto_bullish_for. dcb_params=None is the
+        # baseline arm and must not pay for the detector at all.
+        block_bullish = False
+        if dcb_params is not None:
+            block_bullish = bool(dead_cat_bounce(window, dcb_params)["detected"])
         scenarios = levels.build_scenarios(
             price, supports, resistances, effective_min_reward,
             atr_floor=floor_pct,
             min_stop_distance_pct=gates["min_stop_distance_pct"],
             max_stop_distance_pct=effective_max_stop,
-            min_risk_reward=gates["min_risk_reward"])
+            min_risk_reward=gates["min_risk_reward"],
+            block_bullish=block_bullish)
 
         for sc in scenarios:
             n_confl, families = levels.count_confirming_strategies(
@@ -162,10 +177,11 @@ def _replay_ticker(args) -> dict:
     RESULT rather than being inferred from completion order, which is what
     makes the pooled path order-independent.
     """
-    ticker, df, horizons, start, end, gates, scale_out = args
+    ticker, df, horizons, start, end, gates, scale_out, dcb_params = args
     out = {hk: [] for hk in horizons}
     for hk in horizons:
-        for i, plan in replay_scenarios(ticker, df, hk, gates=gates):
+        for i, plan in replay_scenarios(ticker, df, hk, gates=gates,
+                                        dcb_params=dcb_params):
             signal_date = str(df.index[i].date())
             if start and signal_date < start:
                 continue
@@ -185,7 +201,8 @@ def _resolve_replay_workers(workers: int | None) -> int:
 
 
 def run_scenario_backtest(frames: dict, start, end, *, gates,
-                          scale_out=True, horizons=None, workers=None) -> dict:
+                          scale_out=True, horizons=None, workers=None,
+                          dcb_params: dict | None = None) -> dict:
     """frames: {ticker: OHLCV df}. start/end (ISO or None) restrict SIGNAL
     dates -- the exit walk may run past `end`, same convention as
     run_backtest_daterange.
@@ -205,7 +222,7 @@ def run_scenario_backtest(frames: dict, start, end, *, gates,
     results_by_hz: dict = {hk: [] for hk in horizons}
 
     tasks = [
-        (ticker, df, horizons, start, end, gates, scale_out)
+        (ticker, df, horizons, start, end, gates, scale_out, dcb_params)
         for ticker, df in frames.items()
     ]
 
