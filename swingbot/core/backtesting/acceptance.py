@@ -167,3 +167,100 @@ def stratum_table(baseline, component) -> list:
             "component_expectancy_r": expectancy_r(ct),
         })
     return rows
+
+
+#: Pre-registered. 10k resamples resolves a one-sided p at the 0.05 bar with
+#: room to spare; tests override it downward for speed, never a real run.
+BOOTSTRAP_RESAMPLES = 10_000
+ALPHA = 0.05
+
+
+@dataclass(frozen=True)
+class BootstrapResult:
+    point: float | None
+    lo: float | None
+    hi: float | None
+    p_greater_than_zero: float | None
+    n_resamples: int
+    seed: int
+
+
+def delta_standardised_win_rate(baseline, component) -> float | None:
+    """ΔWR in percentage points, holding the BASELINE's stratum mix fixed.
+
+    Standardising to the baseline (not the component, not the pool) is the
+    choice that makes the number mean 'what this feature did to the book we
+    already have'.
+    """
+    weights = stratum_weights(baseline)
+    b = standardised_win_rate(baseline, weights)
+    c = standardised_win_rate(component, weights)
+    if b is None or c is None:
+        return None
+    return c - b
+
+
+def delta_expectancy_r(baseline, component) -> float | None:
+    b, c = expectancy_r(baseline), expectancy_r(component)
+    if b is None or c is None:
+        return None
+    return c - b
+
+
+def _group_by_ticker(trades) -> dict:
+    out = defaultdict(list)
+    for t in trades:
+        out[t.ticker].append(t)
+    return out
+
+
+def cluster_bootstrap(baseline, component, statistic, *,
+                      n_resamples: int = BOOTSTRAP_RESAMPLES,
+                      seed: int = 42) -> np.ndarray:
+    """Resample TICKERS with replacement, recomputing `statistic` on each
+    draw. Both arms are resampled with the SAME ticker draw, so the pairing
+    between arms survives -- resampling them independently would break the
+    very comparison being measured.
+
+    Draws where the statistic is undefined (an arm with no decided trade)
+    are dropped, not zero-filled: a missing statistic is missing data, and
+    zero is a specific, wrong claim about it.
+    """
+    b_by, c_by = _group_by_ticker(baseline), _group_by_ticker(component)
+    tickers = sorted(set(b_by) | set(c_by))
+    if not tickers:
+        return np.array([])
+    rng = np.random.default_rng(seed)
+    picks = rng.integers(0, len(tickers), size=(n_resamples, len(tickers)))
+    out = []
+    for row in picks:
+        b_draw, c_draw = [], []
+        for j in row:
+            name = tickers[j]
+            b_draw.extend(b_by.get(name, ()))
+            c_draw.extend(c_by.get(name, ()))
+        value = statistic(b_draw, c_draw)
+        if value is not None:
+            out.append(value)
+    return np.asarray(out, dtype=float)
+
+
+def bootstrap_delta(baseline, component, statistic, *,
+                    n_resamples: int = BOOTSTRAP_RESAMPLES,
+                    seed: int = 42) -> BootstrapResult:
+    """Point estimate on the real data, interval and one-sided p from the
+    ticker-cluster bootstrap.
+
+    `p_greater_than_zero` is the share of draws at or below zero -- the
+    bootstrap reading of 'could this delta have been no improvement at
+    all'.
+    """
+    point = statistic(baseline, component)
+    draws = cluster_bootstrap(baseline, component, statistic,
+                              n_resamples=n_resamples, seed=seed)
+    if point is None or draws.size == 0:
+        return BootstrapResult(point, None, None, None, n_resamples, seed)
+    lo, hi = (float(np.percentile(draws, 100 * ALPHA / 2)),
+              float(np.percentile(draws, 100 * (1 - ALPHA / 2))))
+    p = float(np.mean(draws <= 0.0))
+    return BootstrapResult(float(point), lo, hi, p, n_resamples, seed)
