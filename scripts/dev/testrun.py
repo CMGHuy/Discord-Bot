@@ -98,7 +98,7 @@ def undefined_names(paths: list[str] | None = None) -> list[str]:
             capture_output=True, text=True, timeout=15,
         )
         if listed.returncode != 0:
-            return []
+            raise RuntimeError("git ls-files failed; undefined-name gate unavailable")
         paths = listed.stdout.splitlines()
 
     result = subprocess.run(
@@ -185,7 +185,11 @@ def main() -> int:
             profile = "full"
 
     if profile == "full":
-        findings = undefined_names()
+        try:
+            findings = undefined_names()
+        except RuntimeError as exc:
+            print(f"VERDICT: FAIL  {exc}")
+            return 1
         if findings:
             print(f"VERDICT: FAIL  {len(findings)} undefined name(s) -- this is the class that caused two production outages")
             for finding in findings[:10]:

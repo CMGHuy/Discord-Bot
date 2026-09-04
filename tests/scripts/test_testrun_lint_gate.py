@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "scripts" / "dev"))
@@ -31,3 +32,57 @@ def test_the_repo_itself_has_no_undefined_names():
     import testrun
 
     assert testrun.undefined_names() == []
+
+
+def run_main(monkeypatch, profile, target=None):
+    import testrun
+
+    monkeypatch.setattr(sys, "argv", ["testrun.py", profile] + ([target] if target else []))
+    return testrun.main()
+
+
+@pytest.mark.parametrize("profile", ["file", "lf", "fast"])
+def test_narrow_profiles_skip_undefined_name_gate(monkeypatch, profile):
+    import testrun
+
+    called = []
+    monkeypatch.setattr(testrun, "undefined_names", lambda: called.append(True) or [])
+    monkeypatch.setattr(testrun, "run", lambda args: ({"passed": 1}, [], 0.1, 0))
+
+    assert run_main(monkeypatch, profile, "tests/scripts/test_testrun_lint_gate.py" if profile == "file" else None) == 0
+    assert called == []
+
+
+def test_full_gate_runs_before_pytest(monkeypatch, capsys):
+    import testrun
+
+    monkeypatch.setattr(sys, "argv", ["testrun.py", "full"])
+    monkeypatch.setattr(testrun, "undefined_names", lambda: ["swingbot/x.py:2: undefined name 'x'"])
+    monkeypatch.setattr(testrun, "run", lambda args: pytest.fail("pytest must not run"))
+
+    assert testrun.main() == 1
+    assert "undefined name(s)" in capsys.readouterr().out
+
+
+def test_escalated_fast_runs_full_gate(monkeypatch):
+    import testrun
+
+    monkeypatch.setattr(sys, "argv", ["testrun.py", "fast"])
+    monkeypatch.setattr(testrun, "should_escalate", lambda: (True, "probe touched"))
+    calls = []
+    monkeypatch.setattr(testrun, "undefined_names", lambda: calls.append(True) or [])
+    monkeypatch.setattr(testrun, "run", lambda args: ({"passed": 1}, [], 0.1, 0))
+
+    assert testrun.main() == 0
+    assert calls == [True]
+
+
+def test_git_listing_failure_fails_closed(monkeypatch, capsys):
+    import testrun
+
+    monkeypatch.setattr(sys, "argv", ["testrun.py", "full"])
+    monkeypatch.setattr(testrun, "undefined_names", lambda: (_ for _ in ()).throw(RuntimeError("git ls-files failed; undefined-name gate unavailable")))
+    monkeypatch.setattr(testrun, "run", lambda args: pytest.fail("pytest must not run"))
+
+    assert testrun.main() == 1
+    assert "gate unavailable" in capsys.readouterr().out
