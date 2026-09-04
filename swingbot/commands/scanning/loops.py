@@ -42,43 +42,20 @@ async def _maybe_escalate_health(failures: int, exc: Exception) -> None:
     if channel is None:
         return
     last = runstate.last_success_iso() or "never"
-    await _deliver_health_notice(channel, True,
+    await channel.send(
         f"🚨 **Bot health alert** — the scan tick has failed {failures} time(s) in a row.\n"
         f"• Last successful tick: {last}\n"
         f"• Latest error: `{type(exc).__name__}: {exc}`\n"
         f"No alerts are being produced until this clears."
     )
+    runstate.set_alert_active(True)
 
 
 async def _post_health_recovered() -> None:
     channel = _ops_channel()
     if channel is None:
         return
-    await _deliver_health_notice(
-        channel, False,
-        "✅ **Bot health recovered** — the scan tick completed successfully again.",
-    )
-
-
-async def _deliver_health_notice(channel, active_after: bool, content: str) -> None:
-    """Persist a delivery claim, then send; restore it when sending fails.
-
-    State first means a failed heartbeat write cannot be followed by a send
-    that the next tick knows nothing about. Restoring the prior state makes a
-    failed Discord attempt retryable while a successful attempt stays claimed.
-    """
-    active_before = runstate.get_alert_active()
-    runstate.set_alert_active(active_after)
-    try:
-        await channel.send(content)
-    except Exception:
-        try:
-            runstate.set_alert_active(active_before)
-        except Exception:
-            log.exception(
-                "health notice send failed and its alert-state rollback also failed"
-            )
-        raise
+    await channel.send("✅ **Bot health recovered** — the scan tick completed successfully again.")
 
 
 @tasks.loop(minutes=config.SCAN_INTERVAL_MINUTES)

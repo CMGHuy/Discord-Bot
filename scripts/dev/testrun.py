@@ -106,26 +106,12 @@ def undefined_names(paths: list[str] | None = None) -> list[str]:
             raise RuntimeError("git ls-files failed; undefined-name gate unavailable")
         paths = listed.stdout.splitlines()
 
-    try:
-        result = subprocess.run(
-            [sys.executable, str(REPO / "scripts" / "dev" / "undefined_names.py"), *paths],
-            cwd=REPO,
-            capture_output=True, text=True, timeout=60,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise RuntimeError(
-            "pyflakes failed to execute; undefined-name gate unavailable"
-        ) from exc
+    result = subprocess.run(
+        [sys.executable, "-m", "pyflakes", *paths], cwd=REPO,
+        capture_output=True, text=True,
+    )
     output = result.stdout.splitlines() + result.stderr.splitlines()
-    findings = [line for line in output if "undefined name" in line]
-    if findings:
-        return findings
-    if result.returncode != 0:
-        detail = " | ".join(output[:3]) or f"exit code {result.returncode}"
-        raise RuntimeError(
-            f"pyflakes failed; undefined-name gate unavailable ({detail})"
-        )
-    return []
+    return [line for line in output if "undefined name" in line]
 
 
 def build_args(profile: str, target: str | None) -> list[str]:

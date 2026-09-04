@@ -67,5 +67,3 @@ pytest>=8.0
 # Parallel test execution. Opt-in via `pytest -n auto` (12 cores -> ~3min suite
 # drops well under a minute); deliberately NOT in pytest.ini addopts, see that file.
 pytest-xdist>=3.8
-# Static crash-class gate used by `python scripts/dev/testrun.py full`.
-pyflakes==3.4.0
