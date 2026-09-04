@@ -15,24 +15,85 @@ _PAUSE_FILE = os.path.join(config.DATA_DIR, "scan_paused.flag")
 _HEARTBEAT_FILE = os.path.join(config.DATA_DIR, "bot_heartbeat.json")
 
 
-def _write_heartbeat() -> None:
+def _read_heartbeat() -> dict:
+    """Current heartbeat state, or {} when absent or unreadable.
+
+    Absent is "unknown", never "failing" -- an upgraded admin container reads
+    files written by a bot that has not restarted yet.
     """
-    Stamps a small JSON file that the admin UI reads to show a blinking
-    green/red bot-liveness dot on the Dashboard. Written on every
-    session_scan tick (including off-hours / paused ticks) so the dot
-    goes red only when the bot process itself stops responding, not just
-    because it's outside the trading session window.
-    """
+    try:
+        with open(_HEARTBEAT_FILE) as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _update_heartbeat(fields: dict) -> None:
+    """Merge `fields` into the heartbeat file, preserving everything else."""
+    state = _read_heartbeat()
+    state.update(fields)
     try:
         os.makedirs(config.DATA_DIR, exist_ok=True)
         with open(_HEARTBEAT_FILE, "w") as fh:
-            json.dump({
-                "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
-                "session_active": in_session(),
-                "scan_paused": is_scan_paused(),
-            }, fh)
+            json.dump(state, fh)
     except Exception:
         pass
+
+
+def _write_heartbeat() -> None:
+    """
+    Stamps a small JSON file that the admin UI reads to show a blinking
+    bot-liveness dot on the Dashboard. Written on every session_scan tick
+    (including off-hours / paused ticks) so the dot goes dark only when the
+    bot process itself stops responding, not just because it's outside the
+    trading session window.
+
+    This is LIVENESS ONLY, and it is written before the tick does any work --
+    so on its own it cannot distinguish "working" from "crashing every tick",
+    which is exactly how a five-day alert blackout went unnoticed. Tick
+    OUTCOME is record_tick_success() / record_tick_failure() below.
+    """
+    _update_heartbeat({
+        "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "session_active": in_session(),
+        "scan_paused": is_scan_paused(),
+    })
+
+
+def record_tick_success() -> bool:
+    """Mark the tick as completed. Returns True iff this clears an active
+    alert -- i.e. the caller should post a recovery notice."""
+    was_alerting = bool(_read_heartbeat().get("alert_active"))
+    _update_heartbeat({
+        "last_success": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "consecutive_failures": 0,
+        "alert_active": False,
+    })
+    return was_alerting
+
+
+def record_tick_failure() -> int:
+    """Mark the tick as failed. Returns the new consecutive-failure count.
+
+    Persisted rather than held in memory so a crash-looping container that
+    restarts does not reset its own outage counter.
+    """
+    failures = int(_read_heartbeat().get("consecutive_failures") or 0) + 1
+    _update_heartbeat({"consecutive_failures": failures})
+    return failures
+
+
+def get_alert_active() -> bool:
+    return bool(_read_heartbeat().get("alert_active"))
+
+
+def set_alert_active(active: bool) -> None:
+    _update_heartbeat({"alert_active": bool(active)})
+
+
+def last_success_iso() -> str | None:
+    return _read_heartbeat().get("last_success")
 
 
 def is_scan_paused() -> bool:
