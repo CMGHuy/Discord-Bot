@@ -113,6 +113,11 @@ FIELDS: list[Field] = [
           help="Channel where the end-of-session retrospective is posted on weekdays. Leave blank to post to the closed-trades channel instead."),
     Field("DISCORD_CHANNEL_FIREHOSE_ID", "DISCORD_CHANNEL_FIREHOSE_ID", "Discord Connection", "Firehose channel ID",
           help="Channel for alerts below top confidence level (5). Empty = everything goes to the main alerts channel (no change)."),
+    Field("DISCORD_CHANNEL_OPS_ID", "DISCORD_CHANNEL_OPS_ID", "Discord Connection", "Ops/health channel ID",
+          help="Where bot-health alerts are posted when the scan tick keeps failing. "
+               "Empty = falls back to the alerts channel, so the safety net is armed "
+               "without any configuration. Set this to keep health notices out of the "
+               "alert stream. Unlike the alerts channel, health notices are NOT silent."),
 
     # --- Scanning & session ---
     Field("SESSION_START_HOUR", "SESSION_START_HOUR", "Scanning & Session", "Session start hour",
@@ -130,6 +135,12 @@ FIELDS: list[Field] = [
     Field("LOG_LEVEL", "LOG_LEVEL", "Scanning & Session", "Log level",
           type="select", default="INFO", options=["DEBUG", "INFO", "WARNING", "ERROR"],
           help="DEBUG shows every signal/strategy combo evaluated; INFO shows per-scan progress and trade decisions."),
+    Field("HEALTH_ALERT_AFTER_FAILURES", "HEALTH_ALERT_AFTER_FAILURES", "Scanning & Session",
+          "Health alert after N failed ticks",
+          type="number", default="3", min=1, max=100, step=1,
+          help="Consecutive failed scan ticks before a health alert is posted to Discord. "
+               "At the default 5-minute interval, 3 is about 15 minutes. One alert per "
+               "outage, plus one when it recovers."),
 
     # --- Trade filters & risk ---
     Field("MIN_REWARD_PCT", "MIN_REWARD_PCT", "Trade Filters & Risk", "Min reward %",
