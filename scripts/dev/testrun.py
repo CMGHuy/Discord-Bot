@@ -90,6 +90,25 @@ def should_escalate() -> tuple[bool, str]:
     return False, ""
 
 
+def undefined_names(paths: list[str] | None = None) -> list[str]:
+    """Return pyflakes findings for undefined names only."""
+    if paths is None:
+        listed = subprocess.run(
+            ["git", "ls-files", "--", "*.py"], cwd=REPO,
+            capture_output=True, text=True, timeout=15,
+        )
+        if listed.returncode != 0:
+            return []
+        paths = listed.stdout.splitlines()
+
+    result = subprocess.run(
+        [sys.executable, "-m", "pyflakes", *paths], cwd=REPO,
+        capture_output=True, text=True,
+    )
+    output = result.stdout.splitlines() + result.stderr.splitlines()
+    return [line for line in output if "undefined name" in line]
+
+
 def build_args(profile: str, target: str | None) -> list[str]:
     if profile == "fast":
         return BASE + ["-m", "not slow", "tests/"]
@@ -164,6 +183,14 @@ def main() -> int:
         if escalate:
             print(f"NOTE: {why} -> escalating to full tier")
             profile = "full"
+
+    if profile == "full":
+        findings = undefined_names()
+        if findings:
+            print(f"VERDICT: FAIL  {len(findings)} undefined name(s) -- this is the class that caused two production outages")
+            for finding in findings[:10]:
+                print(f"  {finding}")
+            return 1
 
     counts, failed, elapsed, rc = run(build_args(profile, args.target))
 
