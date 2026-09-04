@@ -666,41 +666,32 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
     # ── Part 8: Weekly risk report (Sundays only) ──────────────────────────
     with _section("weekly risk", failed_sections):
         if today.weekday() == 6:
-            try:
-                from swingbot.commands.growth import weekly_risk_report
-                week_stats = _collect_weekly_risk_stats(all_trades, today)
-                messages.append(weekly_risk_report(week_stats))
-            except Exception:
-                log.exception("build_daily_retrospective: weekly risk report failed, skipping")
+            from swingbot.commands.growth import weekly_risk_report
+            week_stats = _collect_weekly_risk_stats(all_trades, today)
+            messages.append(weekly_risk_report(week_stats))
 
     # ── Part 9: RS rotation report (Sundays only, Task E81) ────────────────
     with _section("rs rotation", failed_sections):
         if today.weekday() == 6:
-            try:
-                from swingbot.commands.growth import rs_rotation_report
-                from swingbot.core.edge.factors import load_rs_cache
-                from swingbot.core.marketdata.universe import sector_map
-                rels = load_rs_cache().get("rels") or {}
-                if rels:
-                    sectors = sector_map(getattr(app_config, "SCAN_UNIVERSE", "watchlist"))
-                    messages.append(rs_rotation_report(rels, sectors))
-            except Exception:
-                log.exception("build_daily_retrospective: RS rotation report failed, skipping")
+            from swingbot.commands.growth import rs_rotation_report
+            from swingbot.core.edge.factors import load_rs_cache
+            from swingbot.core.marketdata.universe import sector_map
+            rels = load_rs_cache().get("rels") or {}
+            if rels:
+                sectors = sector_map(getattr(app_config, "SCAN_UNIVERSE", "watchlist"))
+                messages.append(rs_rotation_report(rels, sectors))
 
     # ── Part 10: Scan health alarm (Task E82) ──────────────────────────────
     with _section("scan health", failed_sections):
-        try:
-            from swingbot.core.scanning.engine import recent_telemetry, scan_slowdown
-            if scan_slowdown():
-                rows = recent_telemetry(2)
-                duration = f"{rows[-1]['duration_s']:.1f}s" if rows else "a scan"
-                messages.append(
-                    f"⚠️ **Scan health**: the latest scan took {duration} -- more than 2x the "
-                    "median of the prior 20. Check for network slowness, a growing universe, "
-                    "or cache issues."
-                )
-        except Exception:
-            log.exception("build_daily_retrospective: scan health alarm failed, skipping")
+        from swingbot.core.scanning.engine import recent_telemetry, scan_slowdown
+        if scan_slowdown():
+            rows = recent_telemetry(2)
+            duration = f"{rows[-1]['duration_s']:.1f}s" if rows else "a scan"
+            messages.append(
+                f"⚠️ **Scan health**: the latest scan took {duration} -- more than 2x the "
+                "median of the prior 20. Check for network slowness, a growing universe, "
+                "or cache issues."
+            )
 
     if failed_sections:
         messages.append(

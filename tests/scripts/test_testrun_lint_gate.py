@@ -98,3 +98,25 @@ def test_git_listing_exception_fails_closed(monkeypatch, capsys):
 
     assert testrun.main() == 1
     assert "gate unavailable" in capsys.readouterr().out
+
+
+def test_pyflakes_process_failure_fails_closed_before_pytest(monkeypatch, capsys):
+    import testrun
+
+    def _run(cmd, **kwargs):
+        if cmd[:2] == ["git", "ls-files"]:
+            return testrun.subprocess.CompletedProcess(
+                cmd, 0, stdout="swingbot/example.py\n", stderr=""
+            )
+        return testrun.subprocess.CompletedProcess(
+            cmd, 1, stdout="", stderr="pyflakes could not start"
+        )
+
+    monkeypatch.setattr(sys, "argv", ["testrun.py", "full"])
+    monkeypatch.setattr(testrun.subprocess, "run", _run)
+    monkeypatch.setattr(testrun, "run", lambda args: pytest.fail("pytest must not run"))
+
+    assert testrun.main() == 1
+    output = capsys.readouterr().out
+    assert "gate unavailable" in output
+    assert "pyflakes could not start" in output

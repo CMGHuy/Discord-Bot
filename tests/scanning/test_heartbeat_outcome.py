@@ -1,6 +1,8 @@
 import asyncio
 import json
 
+import pytest
+
 from swingbot.commands.scanning import runstate
 
 
@@ -34,7 +36,7 @@ def test_success_after_an_alert_reports_recovery(tmp_path, monkeypatch):
     assert runstate.get_alert_active() is True
 
     assert runstate.record_tick_success() is True
-    assert runstate.get_alert_active() is False
+    assert runstate.get_alert_active() is True
 
 
 def test_liveness_write_preserves_outcome_fields(tmp_path, monkeypatch):
@@ -158,3 +160,93 @@ def test_below_threshold_posts_nothing(tmp_path, monkeypatch):
     asyncio.run(loops.session_scan.coro())
 
     assert channel.sent == []
+
+
+class _RecoveryFailsOnceChannel(_FakeChannel):
+    def __init__(self):
+        super().__init__()
+        self.recovery_attempts = 0
+
+    async def send(self, content=None, **kw):
+        if "recover" in content.lower():
+            self.recovery_attempts += 1
+            if self.recovery_attempts == 1:
+                raise RuntimeError("Discord unavailable")
+        self.sent.append(content)
+
+
+def test_failed_recovery_send_remains_retryable(tmp_path, monkeypatch):
+    from swingbot.commands.scanning import loops
+
+    _use_tmp_heartbeat(tmp_path, monkeypatch)
+    channel = _RecoveryFailsOnceChannel()
+    monkeypatch.setattr(loops, "_ops_channel", lambda: channel)
+    monkeypatch.setattr(loops.config, "HEALTH_ALERT_AFTER_FAILURES", 1)
+
+    async def _boom():
+        raise RuntimeError("tick exploded")
+
+    async def _ok():
+        return None
+
+    monkeypatch.setattr(loops, "_session_scan_tick", _boom)
+    asyncio.run(loops.session_scan.coro())
+    monkeypatch.setattr(loops, "_session_scan_tick", _ok)
+    asyncio.run(loops.session_scan.coro())
+    assert runstate.get_alert_active() is True
+
+    asyncio.run(loops.session_scan.coro())
+
+    assert channel.recovery_attempts == 2
+    assert sum("health alert" in item.lower() for item in channel.sent) == 1
+    assert sum("recover" in item.lower() for item in channel.sent) == 1
+    assert runstate.get_alert_active() is False
+
+
+def test_outage_persistence_failure_is_logged_and_does_not_duplicate_send(
+    tmp_path, monkeypatch, caplog
+):
+    from swingbot.commands.scanning import loops
+
+    _use_tmp_heartbeat(tmp_path, monkeypatch)
+    channel = _FakeChannel()
+    monkeypatch.setattr(loops, "_ops_channel", lambda: channel)
+    monkeypatch.setattr(loops.config, "HEALTH_ALERT_AFTER_FAILURES", 1)
+
+    async def _boom():
+        raise RuntimeError("tick exploded")
+
+    monkeypatch.setattr(loops, "_session_scan_tick", _boom)
+    real_set_alert_active = runstate.set_alert_active
+    attempts = 0
+
+    def _fail_first_write(active):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError("disk full")
+        real_set_alert_active(active)
+
+    monkeypatch.setattr(runstate, "set_alert_active", _fail_first_write)
+
+    with caplog.at_level("ERROR"):
+        asyncio.run(loops.session_scan.coro())
+        asyncio.run(loops.session_scan.coro())
+        asyncio.run(loops.session_scan.coro())
+
+    assert any("health escalation itself failed" in record.message
+               and record.exc_info for record in caplog.records)
+    assert sum("health alert" in item.lower() for item in channel.sent) == 1
+    assert runstate.get_alert_active() is True
+
+
+def test_heartbeat_write_failure_is_not_reported_as_success(tmp_path, monkeypatch):
+    _use_tmp_heartbeat(tmp_path, monkeypatch)
+
+    def _fail_write(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(runstate, "atomic_write_json", _fail_write)
+
+    with pytest.raises(OSError, match="disk full"):
+        runstate.record_tick_failure()

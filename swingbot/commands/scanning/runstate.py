@@ -4,6 +4,7 @@ import os
 
 from swingbot import config
 from swingbot.bot_core import in_session
+from swingbot.core.infra.jsonio import atomic_write_json
 
 
 _TRIGGER_FILE         = os.path.join(config.DATA_DIR, "trigger_check.flag")
@@ -30,15 +31,15 @@ def _read_heartbeat() -> dict:
 
 
 def _update_heartbeat(fields: dict) -> None:
-    """Merge `fields` into the heartbeat file, preserving everything else."""
+    """Merge `fields` into the heartbeat file, preserving everything else.
+
+    Persistence failures propagate. Health-alert delivery decisions depend on
+    this state, so pretending a failed write succeeded can either lose a
+    notice or deliver the same notice repeatedly.
+    """
     state = _read_heartbeat()
     state.update(fields)
-    try:
-        os.makedirs(config.DATA_DIR, exist_ok=True)
-        with open(_HEARTBEAT_FILE, "w") as fh:
-            json.dump(state, fh)
-    except Exception:
-        pass
+    atomic_write_json(_HEARTBEAT_FILE, state)
 
 
 def _write_heartbeat() -> None:
@@ -62,13 +63,16 @@ def _write_heartbeat() -> None:
 
 
 def record_tick_success() -> bool:
-    """Mark the tick as completed. Returns True iff this clears an active
-    alert -- i.e. the caller should post a recovery notice."""
+    """Mark the tick as completed; return whether recovery is still owed.
+
+    The alert marker remains active until the recovery delivery helper has
+    safely claimed the send. Clearing it here made a failed Discord send
+    unretryable on the next successful tick.
+    """
     was_alerting = bool(_read_heartbeat().get("alert_active"))
     _update_heartbeat({
         "last_success": dt.datetime.now(dt.timezone.utc).isoformat(),
         "consecutive_failures": 0,
-        "alert_active": False,
     })
     return was_alerting
 
