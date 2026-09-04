@@ -16,7 +16,10 @@ Docker image this module ships in.
 """
 from __future__ import annotations
 
+from collections import Counter, defaultdict
 from dataclasses import dataclass
+
+import numpy as np
 
 VERSION = 2   # acceptance-procedure version, recorded in every results doc
 
@@ -81,3 +84,86 @@ def arm_trade_from_backtest(trade, *, ticker: str, strategy: str,
                     r_multiple=trade.r_multiple,
                     planned_rr=planned_rr(trade.entry, trade.stop_loss,
                                           trade.take_profit))
+
+
+#: Outcomes that count toward the win-rate denominator.
+DECIDED = ("win", "loss")
+#: Outcomes that count as a closed trade for expectancy.
+CLOSED = ("win", "loss", "scratch", "timeout")
+
+
+def win_rate(trades) -> float | None:
+    """Percent, over decided trades only. None when nothing was decided."""
+    decided = [t for t in trades if t.outcome in DECIDED]
+    if not decided:
+        return None
+    return 100.0 * sum(1 for t in decided if t.outcome == "win") / len(decided)
+
+
+def expectancy_r(trades) -> float | None:
+    """Mean R over all CLOSED trades -- scratches and timeouts drag it down,
+    which is the point: they are capital that was committed and returned
+    nothing."""
+    rs = [t.r_multiple for t in trades
+          if t.outcome in CLOSED and t.r_multiple is not None]
+    if not rs:
+        return None
+    return float(np.mean(rs))
+
+
+def _by_stratum(trades) -> dict:
+    out = defaultdict(list)
+    for t in trades:
+        out[t.stratum].append(t)
+    return out
+
+
+def stratum_weights(trades) -> dict:
+    """Share of DECIDED trades in each (strategy, horizon) stratum."""
+    counts = Counter(t.stratum for t in trades if t.outcome in DECIDED)
+    total = sum(counts.values())
+    if not total:
+        return {}
+    return {k: v / total for k, v in counts.items()}
+
+
+def standardised_win_rate(trades, weights: dict) -> float | None:
+    """The win rate this arm would show if its stratum mix matched
+    `weights` -- i.e. holding composition fixed so only within-stratum
+    skill can move the number.
+
+    Strata the arm has no decided trade in are dropped and the remaining
+    weights renormalised, rather than imputed: an arm that emptied a
+    stratum has no win rate there to standardise, and inventing one would
+    reward exactly the mix shift this function exists to neutralise.
+    """
+    grouped = _by_stratum(trades)
+    total = 0.0
+    weight_sum = 0.0
+    for stratum, weight in weights.items():
+        wr = win_rate(grouped.get(stratum, []))
+        if wr is None:
+            continue
+        total += weight * wr
+        weight_sum += weight
+    if not weight_sum:
+        return None
+    return total / weight_sum
+
+
+def stratum_table(baseline, component) -> list:
+    """One row per stratum present in EITHER arm, sorted for stable output."""
+    b, c = _by_stratum(baseline), _by_stratum(component)
+    rows = []
+    for stratum in sorted(set(b) | set(c)):
+        bt, ct = b.get(stratum, []), c.get(stratum, [])
+        rows.append({
+            "stratum": stratum,
+            "baseline_n": sum(1 for t in bt if t.outcome in DECIDED),
+            "component_n": sum(1 for t in ct if t.outcome in DECIDED),
+            "baseline_win_rate": win_rate(bt),
+            "component_win_rate": win_rate(ct),
+            "baseline_expectancy_r": expectancy_r(bt),
+            "component_expectancy_r": expectancy_r(ct),
+        })
+    return rows
