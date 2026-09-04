@@ -41,7 +41,7 @@ or timeouts produces `n > 0` with `win_rate is None`. The v70 extended-hours and
 manual-close work is what started generating those trades routinely.
 
 Blast radius is disproportionate: one unformattable line aborts the **entire**
-retrospective — all seven parts — not just the calibration section.
+retrospective — all ten parts — not just the calibration section.
 
 ### B — The same defect, copy-pasted, not yet fired
 
@@ -126,12 +126,23 @@ every other consumer of that row.
 
 ### Part 2 — Isolate each retrospective section
 
-`build_daily_retrospective` composes seven independent parts. Part 6 already
-wraps `edge_decay_report` in its own `try/except` (`retrospective.py:614-618`) —
-**the pattern exists and simply was not applied consistently.**
+`build_daily_retrospective` composes **ten** independent parts
+(`retrospective.py:448-672`). The guard pattern already exists there twice —
+around `get_daily_summary()` (`479-488`) and around `edge_decay_report`
+(`614-618`), both `try/except` + `log.exception` + skip — **it simply was not
+applied consistently.**
 
 Extend it so each part is composed under its own guard: a part that raises logs
 with `log.exception` and contributes nothing, and the remaining parts still post.
+
+Implemented as a small `_section(name, failures)` **context manager** wrapping
+each part in place, not by extracting the parts into functions. The parts share
+roughly fifteen locals computed in the partition block above them
+(`closed_today`, `win_rate`, `avg_r`, `still_open`, …); a `with` block keeps
+them in scope, whereas extraction would mean threading all of them through ten
+new signatures — a far larger diff and a real regression risk for a P0 fix.
+Most parts build a local list and append once at the end, so a mid-part failure
+contributes nothing rather than half a section.
 A `⚠️ One section of this report failed to build` line is appended when any part
 was dropped, so a degraded report is visibly degraded rather than quietly short.
 
@@ -161,16 +172,33 @@ goes in `session_scan` immediately after `await _session_scan_tick()` returns
 normally (`loops.py:36-41`), and the failure increment goes in its `except`.
 One place, and it means exactly "the tick completed without raising".
 
-**Admin health** (`admin/app.py`) keeps `bot_alive` as process liveness and adds
-`bot_healthy` (derived from `last_success` age), `bot_last_success` and
-`bot_consecutive_failures`. The dashboard renders three states:
+**Admin health** (`admin/app.py:312 scan_status_payload()`) keeps `bot_alive` as
+process liveness and adds `bot_healthy` (derived from `last_success` age),
+`bot_last_success` and `bot_consecutive_failures`.
 
-- **green** — process alive, ticks succeeding
-- **amber** — process alive, ticks failing (`bot_alive && !bot_healthy`)
-- **red** — process gone
+**The indicator must not introduce green or red.** `shell/connection-status.ts`
+carries an explicit, reasoned colour rule from NG52's colour review —
+*"Greyscale and amber, never green or red: connection state is not money. Green
+here made 'the stream is up' and 'this position is in profit' the same colour in
+the same chrome, and red made a fallback to polling look like a loss."* The same
+component also establishes how two severities of the same caution are told
+apart: *"the colour carries the state, the animation only ever carried the
+liveliness"*, with `.dot.degraded` and `.dot.dead` both `var(--warn)` and the
+**label** distinguishing them.
 
-Amber is the state that did not exist and that would have surfaced the blackout
-on day one.
+So this follows the existing vocabulary rather than adding a traffic light. The
+component already renders `bot offline` (amber) when `botAlive() === false`; it
+gains a `botHealthy` input and renders a second amber label:
+
+| Condition | Label |
+|---|---|
+| `botAlive() === false` | `bot offline` (unchanged) |
+| `botAlive() && botHealthy() === false` | `bot failing` |
+| otherwise | nothing (unchanged) |
+
+Both amber, both `null`-tolerant in the same three-valued way `botAlive` already
+is. "Bot failing" is the state that did not exist and that would have surfaced
+the blackout on day one.
 
 **Escalation.** After `HEALTH_ALERT_AFTER_FAILURES` consecutive failures
 (default 3 ≈ 15 min at the 5-minute interval), post **once** — `alert_active`
@@ -268,10 +296,15 @@ testing the bug.
 5. **Escalation.** N failures post exactly one message; further failures post
    none; recovery posts exactly one; `DISCORD_CHANNEL_OPS_ID` unset routes to
    the trades channel.
-6. **Admin health states.** Fresh deploy with no `last_success` → not amber;
-   stale `last_success` with fresh mtime → amber; stale mtime → red.
-7. **Frontend.** The dashboard's three-state indicator, via
-   `cd frontend && npm test`.
+6. **Admin health payload.** Fresh deploy with no `last_success` →
+   `bot_healthy` is not `False` (unknown, not yet failing); stale
+   `last_success` with fresh heartbeat mtime → `bot_alive` true,
+   `bot_healthy` false; stale mtime → `bot_alive` false.
+7. **Frontend.** `connection-status.spec` — `botHealthy === false` with
+   `botAlive === true` renders `bot failing`; `botAlive === false` still
+   renders `bot offline` and not both; `null` renders neither. Assert the
+   label text, **not** a colour, and assert no green/red class is
+   introduced. Run via `cd frontend && npm test`.
 8. **Gate.** A fixture module with an undefined name fails the pyflakes pass.
 
 ## Parallelisation
