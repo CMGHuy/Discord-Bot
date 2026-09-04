@@ -115,3 +115,27 @@ def _volume_ratio(decline: pd.DataFrame, bounce: pd.DataFrame) -> float | None:
     if not down or pd.isna(down) or pd.isna(up):
         return None
     return up / down
+
+
+def params_from_config() -> dict:
+    """The live scan's params, built in ONE place.
+
+    Both the live call site and the replay harness route through this, so the
+    two cannot drift into disagreeing about what the veto is -- the same
+    single-source discipline entry_filters.py enforces for entry logic.
+
+    The four fixed values are carried through from DEFAULT_DCB_PARAMS and are
+    deliberately not configurable.
+    """
+    from swingbot import config
+
+    ratio = float(getattr(config, "DCB_VOLUME_RATIO", 0) or 0)
+    return {
+        **DEFAULT_DCB_PARAMS,
+        "decline_pct": float(getattr(config, "DCB_DECLINE_PCT",
+                                     DEFAULT_DCB_PARAMS["decline_pct"])),
+        "gap_required": bool(getattr(config, "DCB_GAP_REQUIRED", False)),
+        # .env spells "off" as 0; the detector spells it as None. Translate
+        # here rather than teaching the detector about config's conventions.
+        "volume_ratio": ratio if ratio > 0 else None,
+    }
