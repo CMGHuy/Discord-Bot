@@ -890,7 +890,7 @@ alerts it never logs. The heartbeat records nothing — it is a liveness signal
 updated inverts the whole point of the dot.
 
 **v71 addition.** `data/bot_heartbeat.json` gained three fields recording tick
-*outcome* (see `docs/superpowers/specs/2026-09-04-v71-silent-failure-hardening-design.md`).
+*outcome* (see `docs/superpowers/specs/implemented/2026-09-04-v71-silent-failure-hardening-design.md`).
 They do not all belong in `bot_heartbeat`, whose shape is `(key, ts)`:
 
 | JSON field | Destination | Why |
