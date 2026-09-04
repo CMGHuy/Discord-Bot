@@ -10,6 +10,7 @@
     "allow": [
       "Bash(python -m pytest:*)",
       "Bash(python -m py_compile:*)",
+      "Bash(python scripts/dev/testrun.py:*)",
       "Bash(python scripts/backtest/run_backtest_range.py:*)",
       "Bash(python scripts/backtest/tune_strategy.py:*)",
       "Bash(python scripts/backtest/tune_exit_v2.py:*)",
@@ -35,6 +36,7 @@
       "Bash(git worktree list)",
       "Bash(git branch --list:*)",
       "Bash(git rev-parse:*)",
+      "Bash(git rev-list:*)",
       "Bash(git stash list)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
