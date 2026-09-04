@@ -21,6 +21,7 @@ from swingbot.core.market import levels, trendlines, opex
 from swingbot.core.market.mtf import adjacent_aligned, macro_aligned
 from swingbot.core.market.reversal import evaluate_reversal, reversals_for_ticker
 from swingbot.core.market.events import earnings_within_window
+from swingbot.core.market.chart_patterns import dead_cat_bounce, params_from_config
 from swingbot.core.market.explain import build_explanation
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS
 from swingbot.core.marketdata import universe
@@ -37,6 +38,28 @@ from .engine import state, trade_log
 
 
 log = logging.getLogger("swing-bot.scan_engine")
+
+
+def veto_bullish_for(df) -> bool:
+    """Should bullish scenarios be blocked for this frame? (v68)
+
+    A named function rather than an inline expression, for two reasons: the
+    test above can monkeypatch the detector through it, and the short-circuit
+    when the flag is off is visible in one place rather than implied.
+
+    Never raises. A detector fault degrades to "no veto" -- the pattern check
+    is an accelerator, and losing a whole ticker's scan to a malformed frame
+    would be a far worse failure than missing one block.
+    """
+    if not getattr(config, "DEAD_CAT_BOUNCE_VETO", False):
+        return False
+    try:
+        return bool(dead_cat_bounce(df, params_from_config())["detected"])
+    except Exception:
+        log.debug("dead-cat-bounce check failed; not vetoing", exc_info=True)
+        return False
+
+
 @dataclass
 class ScanItem:
     result: object
@@ -619,7 +642,8 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
         scenarios = levels.build_scenarios(current_price, supports, resistances, effective_min_reward,
                                             atr_floor=floor_pct, min_stop_distance_pct=hard_filters["min_stop_distance_pct"],
                                             max_stop_distance_pct=effective_max_stop,
-                                            min_risk_reward=hard_filters["min_risk_reward_ratio"])
+                                            min_risk_reward=hard_filters["min_risk_reward_ratio"],
+                                            block_bullish=veto_bullish_for(df))
         stats["checked"] += 1
         # Depends only on df/horizon_key, not scenario.direction -- hoisted
         # above the scenario loop (v56) so a horizon with both a bullish and
