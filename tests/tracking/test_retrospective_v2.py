@@ -78,3 +78,25 @@ def test_retrospective_survives_a_level_with_only_manual_closes(tmp_path, monkey
     assert "Level 3" in joined
     assert "n/a" in joined          # rendered, not dropped and not "0%"
     assert "0% WR" not in joined    # None must never render as zero
+
+
+def test_one_failing_section_does_not_lose_the_whole_report(tmp_path, monkeypatch, caplog):
+    """A raise inside one part must cost that part only. Before isolation,
+    it aborted all ten parts and the report never posted."""
+    from swingbot.core.tracking import retrospective as retro
+
+    monkeypatch.setattr(retro, "_HISTORY_PATH", str(tmp_path / "history.json"))
+
+    def _boom(*a, **kw):
+        raise RuntimeError("calibration exploded")
+
+    monkeypatch.setattr(retro.calibration, "level_calibration", _boom)
+    trades = [_manual_close("AAPL", 3, "2026-09-03T18:00:00+00:00")]
+
+    with caplog.at_level("ERROR"):
+        messages = retro.build_daily_retrospective(trades, today=dt.date(2026, 9, 3))
+
+    joined = "\n".join(messages)
+    assert "Daily Retrospective" in joined          # Part 1 still posted
+    assert "calibration" in joined.lower()          # the degraded notice names it
+    assert any("calibration" in r.message for r in caplog.records)
