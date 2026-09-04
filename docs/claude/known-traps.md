@@ -209,3 +209,16 @@ Two more properties worth knowing before editing this path:
   the observed price. An extended-hours print is precisely the case where
   nobody watched the tape cross, so admitting one there would fill the next
   session's gap-down at a price that never traded.
+
+## The dead-cat-bounce veto is invisible to `run_backtest_range.py`
+
+It lives on the confluence path (`build_scenarios`), which the strategy
+backtest never reaches. Measuring it needs `backtest_scenarios.py` — the same
+split that made v34's `RS_GATE` need its own instrument
+(`measure_rs_gate_effect.py`) and that made `DATA_DRIVEN_STOPS_ENABLED`
+unmeasurable by construction. v68 built its own instrument
+(`scripts/backtest/measure_dcb_veto.py`) for the same reason; it FAILed
+VALIDATION (see `docs/claude/backtest-methodology.md`'s closed-pre-registration
+table) and ships default-off, but the invisibility trap outlives that
+particular result — any future confluence-path-only gate needs its own
+purpose-built measurement script, never `run_backtest_range.py`.
