@@ -107,9 +107,7 @@ loosen a gate" caveat: `docs/claude/edge-priorities.md`.
   `python scripts/dev/testrun.py file tests/test_foo.py` (~7s) or `... fast`
   (~27s). It prints a one-line verdict instead of ~1150 progress lines.
   Dispatch the `test-runner` subagent for a full run so none of it reaches
-  this context. **A plan runs the full suite once, as its own final
-  verification task — never per-task, never again after a clean merge.** Full
-  cadence and the one exception: `docs/claude/document-conventions.md`.
+  this context. When a *plan* schedules its runs: "Naming specs and plans".
 - Hand wide/exploratory searches to the `Explore` agent so raw grep output
   never lands in this context.
 
@@ -168,8 +166,10 @@ of its own — both rules and why: `docs/claude/working-conventions.md`.
 creation, not close-out**, from one repo-wide counter over both doc filenames
 and git log, recomputed immediately before the commit (sessions race it).
 **No plan file may exceed 1500 lines** — split into more `_N` parts (lettered
-`_2a`/`_2b`), never compress a task. Numbering, the `Version:`/`Bump:`/`Edge:`
-header, budgets, close-out: `document-conventions.md`, `document-lifecycle.md`.
+`_2a`/`_2b`), never compress a task. **A plan runs the full suite once, as its
+own final verification task — never per-task, never again after a clean
+merge.** Numbering, the `Version:`/`Bump:`/`Edge:` header, budgets, close-out,
+full verification cadence: `document-conventions.md`, `document-lifecycle.md`.
 
 **Specs and plans are written and committed on `main`** — no branch, no
 worktree; branch only to *implement* one. Why: `document-lifecycle.md`.

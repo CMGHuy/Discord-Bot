@@ -127,6 +127,14 @@ parts — lettered `_2a`/`_2b` when one part needs several files — and never
 compress a task or split one across files. After any split, list
 `^### Task` ids across the resulting files and confirm the sequence has no gap.
 
+A plan runs the full test suite ONCE, as its own final verification task —
+never per-task, and never again after a clean merge. The per-task check is the
+narrow one: `python scripts/dev/testrun.py file tests/<the one file that task
+touched>.py` (~7s), or `npm test -- --include <the one spec>` for `frontend/`.
+Writing "run the full suite" into every task costs 40–260s per task for
+information the narrow run already gave. Full cadence and the one exception:
+`docs/claude/document-conventions.md`.
+
 Write new specs and plans directly on `main` and commit them there as soon as
 they are finished: no feature branch, no worktree, no approval gate for the
 commit. Branch or create a worktree only when implementing a plan. A plan on an
