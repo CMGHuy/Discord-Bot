@@ -45,7 +45,7 @@ async def _maybe_escalate_health(failures: int, exc: Exception) -> None:
     await channel.send(
         f"🚨 **Bot health alert** — the scan tick has failed {failures} time(s) in a row.\n"
         f"• Last successful tick: {last}\n"
-        f"• Latest error: `{type(exc).__name__}: {exc}`\n"
+        f"• Latest error: `{type(exc).__name__}: {str(exc)[:400]}`\n"
         f"No alerts are being produced until this clears."
     )
     runstate.set_alert_active(True)

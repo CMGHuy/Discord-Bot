@@ -100,3 +100,30 @@ def test_one_failing_section_does_not_lose_the_whole_report(tmp_path, monkeypatc
     assert "Daily Retrospective" in joined          # Part 1 still posted
     assert "calibration" in joined.lower()          # the degraded notice names it
     assert any("calibration" in r.message for r in caplog.records)
+
+
+def test_weekly_risk_report_failure_still_triggers_degraded_notice(tmp_path, monkeypatch, caplog):
+    """Part 8 (weekly risk report) has its own finer-grained inner
+    try/except that logs and swallows the exception. Before this fix, that
+    inner handler never told the outer _section() wrapper anything failed,
+    so the degraded-report notice never fired for a Sunday whose weekly
+    risk report throws."""
+    import swingbot.commands.growth as growth
+    from swingbot.core.tracking import retrospective as retro
+
+    monkeypatch.setattr(retro, "_HISTORY_PATH", str(tmp_path / "history.json"))
+
+    def _boom(*a, **kw):
+        raise RuntimeError("weekly risk report exploded")
+
+    monkeypatch.setattr(growth, "weekly_risk_report", _boom)
+    trades = [_manual_close("AAPL", 3, "2026-09-03T18:00:00+00:00")]
+
+    with caplog.at_level("ERROR"):
+        # 2026-09-06 is a Sunday (weekday() == 6), so Part 8 runs.
+        messages = retro.build_daily_retrospective(trades, today=dt.date(2026, 9, 6))
+
+    joined = "\n".join(messages)
+    assert "Daily Retrospective" in joined          # Part 1 still posted
+    assert "weekly risk" in joined.lower()          # the degraded notice names it
+    assert any("weekly risk" in r.message for r in caplog.records)

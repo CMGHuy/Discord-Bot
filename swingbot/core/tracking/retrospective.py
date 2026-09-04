@@ -672,6 +672,7 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
                 messages.append(weekly_risk_report(week_stats))
             except Exception:
                 log.exception("build_daily_retrospective: weekly risk report failed, skipping")
+                failed_sections.append("weekly risk")
 
     # ── Part 9: RS rotation report (Sundays only, Task E81) ────────────────
     with _section("rs rotation", failed_sections):
@@ -686,6 +687,7 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
                     messages.append(rs_rotation_report(rels, sectors))
             except Exception:
                 log.exception("build_daily_retrospective: RS rotation report failed, skipping")
+                failed_sections.append("rs rotation")
 
     # ── Part 10: Scan health alarm (Task E82) ──────────────────────────────
     with _section("scan health", failed_sections):
@@ -701,6 +703,7 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
                 )
         except Exception:
             log.exception("build_daily_retrospective: scan health alarm failed, skipping")
+            failed_sections.append("scan health")
 
     if failed_sections:
         messages.append(
