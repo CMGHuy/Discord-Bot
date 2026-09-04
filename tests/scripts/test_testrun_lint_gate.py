@@ -34,6 +34,37 @@ def test_the_repo_itself_has_no_undefined_names():
     assert testrun.undefined_names() == []
 
 
+def test_undefined_names_raises_on_syntax_error(tmp_path):
+    """A syntax error goes to pyflakes' stderr, not stdout -- without the
+    stderr check this silently returns [] (falsely clean)."""
+    import testrun
+
+    broken = tmp_path / "broken_syntax.py"
+    broken.write_text("def broken(:\n    pass\n")
+
+    with pytest.raises(RuntimeError):
+        testrun.undefined_names([str(broken)])
+
+
+def test_undefined_names_ignores_unused_import_only(tmp_path):
+    """An unused-import-only finding exits 1 with an empty stderr -- the
+    common case a naive returncode-only fix would have broken."""
+    import testrun
+
+    unused = tmp_path / "unused_import.py"
+    unused.write_text("import os\n")
+
+    assert testrun.undefined_names([str(unused)]) == []
+
+
+def test_undefined_names_empty_paths_returns_immediately():
+    """Zero paths must short-circuit rather than invoke pyflakes with no
+    arguments, which reads from stdin and blocks."""
+    import testrun
+
+    assert testrun.undefined_names([]) == []
+
+
 def run_main(monkeypatch, profile, target=None):
     import testrun
 
