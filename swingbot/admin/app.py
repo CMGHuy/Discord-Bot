@@ -345,6 +345,9 @@ def scan_status_payload() -> dict:
     bot_last_seen = None
     bot_session_active = None
     bot_scan_paused = None
+    bot_healthy = None
+    bot_last_success = None
+    bot_consecutive_failures = 0
     if os.path.exists(heartbeat_file):
         try:
             age_seconds = datetime.now(timezone.utc).timestamp() - os.path.getmtime(heartbeat_file)
@@ -357,6 +360,17 @@ def scan_status_payload() -> dict:
                 hb = json.load(hf)
                 bot_session_active = hb.get("session_active")
                 bot_scan_paused = hb.get("scan_paused")
+                bot_last_success = hb.get("last_success")
+                bot_consecutive_failures = int(hb.get("consecutive_failures") or 0)
+                if bot_last_success:
+                    try:
+                        success_age = (
+                            datetime.now(timezone.utc)
+                            - datetime.fromisoformat(bot_last_success)
+                        ).total_seconds()
+                        bot_healthy = success_age < threshold
+                    except ValueError:
+                        bot_healthy = None
         except (OSError, json.JSONDecodeError):
             pass
 
@@ -367,6 +381,9 @@ def scan_status_payload() -> dict:
         "bot_last_seen": bot_last_seen,
         "bot_session_active": bot_session_active,
         "bot_scan_paused": bot_scan_paused,
+        "bot_healthy": bot_healthy,
+        "bot_last_success": bot_last_success,
+        "bot_consecutive_failures": bot_consecutive_failures,
     }
 
 

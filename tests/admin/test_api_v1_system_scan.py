@@ -97,6 +97,9 @@ def test_scan_status_shape(logged_in, scan_files):
         "running": bool, "bot_alive": bool, "bot_last_seen": NULLABLE_STR,
         "bot_session_active": (bool, type(None)),
         "bot_scan_paused": (bool, type(None)),
+        "bot_healthy": (bool, type(None)),
+        "bot_last_success": NULLABLE_STR,
+        "bot_consecutive_failures": int,
     })
 
 
@@ -253,3 +256,64 @@ def test_a_failed_restart_is_503_with_the_reason(logged_in, monkeypatch):
 
 def test_restart_requires_auth(client):
     assert_error(client.post("/api/v1/system/bot/restart"), "auth", 401)
+
+
+# --- tick health -------------------------------------------------------
+
+import json
+from datetime import datetime, timedelta, timezone
+
+
+def _write_heartbeat_file(tmp_path, **fields):
+    path = os.path.join(str(tmp_path), "bot_heartbeat.json")
+    with open(path, "w") as fh:
+        json.dump(fields, fh)
+    return path
+
+
+def test_recent_success_is_healthy(tmp_path, monkeypatch):
+    from swingbot.admin import app as admin_app
+
+    monkeypatch.setattr(admin_app.config, "DATA_DIR", str(tmp_path))
+    now = datetime.now(timezone.utc)
+    _write_heartbeat_file(tmp_path, timestamp=now.isoformat(),
+                          last_success=now.isoformat(), consecutive_failures=0)
+
+    payload = admin_app.scan_status_payload()
+
+    assert payload["bot_alive"] is True
+    assert payload["bot_healthy"] is True
+    assert payload["bot_consecutive_failures"] == 0
+
+
+def test_fresh_heartbeat_with_stale_success_is_alive_but_unhealthy(tmp_path, monkeypatch):
+    """The exact blackout shape: the process is looping and stamping
+    liveness, but no tick has completed for hours."""
+    from swingbot.admin import app as admin_app
+
+    monkeypatch.setattr(admin_app.config, "DATA_DIR", str(tmp_path))
+    now = datetime.now(timezone.utc)
+    _write_heartbeat_file(tmp_path, timestamp=now.isoformat(),
+                          last_success=(now - timedelta(hours=6)).isoformat(),
+                          consecutive_failures=72)
+
+    payload = admin_app.scan_status_payload()
+
+    assert payload["bot_alive"] is True
+    assert payload["bot_healthy"] is False
+    assert payload["bot_consecutive_failures"] == 72
+
+
+def test_never_reported_success_is_unknown_not_failing(tmp_path, monkeypatch):
+    """A bot that has not restarted since the upgrade has no last_success.
+    That is unknown, and must not render as failing."""
+    from swingbot.admin import app as admin_app
+
+    monkeypatch.setattr(admin_app.config, "DATA_DIR", str(tmp_path))
+    now = datetime.now(timezone.utc)
+    _write_heartbeat_file(tmp_path, timestamp=now.isoformat())
+
+    payload = admin_app.scan_status_payload()
+
+    assert payload["bot_healthy"] is None
+    assert payload["bot_last_success"] is None
