@@ -345,3 +345,201 @@ def project_target_n(*, observed_n: int, observed_days: int,
     if observed_days <= 0:
         return 0
     return int(round(observed_n * target_days / observed_days))
+
+
+#: PRE-REGISTERED gate constants. Changing one is a new pre-registration,
+#: not a tuning step -- see docs/claude/backtest-methodology.md.
+NON_INFERIORITY_R = -0.01      # clause 2: how much ExpR may slip, at 95%
+GEOMETRY_MAX_DROP_PCT = 2.0    # clause 3: max fall in median RR / mean win R
+VOLUME_MAX_CUT_PCT = 25.0      # clause 4: max cut in accepted alerts
+
+STAGES = ("walkforward", "validation")
+
+
+@dataclass(frozen=True)
+class ClauseResult:
+    name: str
+    verdict: str          # PASS | FAIL | SKIPPED
+    detail: str
+    value: float | None = None
+    threshold: float | None = None
+
+
+@dataclass(frozen=True)
+class AcceptanceResult:
+    stage: str
+    verdict: str
+    clauses: tuple
+    strata: list
+    split: dict
+    version: int = VERSION
+
+    def clause(self, name: str) -> ClauseResult:
+        for c in self.clauses:
+            if c.name == name:
+                return c
+        raise KeyError(name)
+
+
+def median_planned_rr(trades) -> float | None:
+    vals = [t.planned_rr for t in trades if t.planned_rr is not None]
+    return float(np.median(vals)) if vals else None
+
+
+def mean_win_r(trades) -> float | None:
+    vals = [t.r_multiple for t in trades
+            if t.outcome == "win" and t.r_multiple is not None]
+    return float(np.mean(vals)) if vals else None
+
+
+def population_split(baseline, component) -> dict:
+    """Partition the baseline against the component by pairing key.
+
+    `is_subset` is True only when the component removes trades and changes
+    no surviving outcome -- the shape a filter/veto has, and the only shape
+    clause 6's mechanism question is meaningful for.
+    """
+    b_by = {t.key: t for t in baseline}
+    c_by = {t.key: t for t in component}
+    removed = [t for k, t in b_by.items() if k not in c_by]
+    added = [t for k, t in c_by.items() if k not in b_by]
+    changed, unchanged = [], []
+    for k, bt in b_by.items():
+        ct = c_by.get(k)
+        if ct is None:
+            continue
+        (changed if ct.outcome != bt.outcome else unchanged).append((bt, ct))
+    return {"removed": removed, "added": added, "changed": changed,
+            "unchanged": unchanged,
+            "is_subset": not added and not changed and bool(removed)}
+
+
+def _clause_win_rate(baseline, component, n_resamples, seed) -> ClauseResult:
+    res = bootstrap_delta(baseline, component, delta_standardised_win_rate,
+                          n_resamples=n_resamples, seed=seed)
+    if res.point is None or res.p_greater_than_zero is None:
+        return ClauseResult("win_rate", "FAIL",
+                            "no decided trades in one arm", None, 0.0)
+    ok = res.point > 0.0 and res.p_greater_than_zero < ALPHA
+    return ClauseResult(
+        "win_rate", "PASS" if ok else "FAIL",
+        f"standardised dWR {res.point:+.2f}pp [{res.lo:+.2f},{res.hi:+.2f}] "
+        f"p={res.p_greater_than_zero:.4f}", res.point, 0.0)
+
+
+def _clause_profit_floor(baseline, component, n_resamples, seed) -> ClauseResult:
+    res = bootstrap_delta(baseline, component, delta_expectancy_r,
+                          n_resamples=n_resamples, seed=seed)
+    if res.point is None or res.lo is None:
+        return ClauseResult("profit_floor", "FAIL",
+                            "no closed trades in one arm", None,
+                            NON_INFERIORITY_R)
+    ok = res.lo > NON_INFERIORITY_R
+    return ClauseResult(
+        "profit_floor", "PASS" if ok else "FAIL",
+        f"dExpR {res.point:+.4f}R, lower bound {res.lo:+.4f}R vs floor "
+        f"{NON_INFERIORITY_R:+.4f}R", res.lo, NON_INFERIORITY_R)
+
+
+def _pct_drop(before: float | None, after: float | None) -> float | None:
+    if before in (None, 0) or after is None:
+        return None
+    return 100.0 * (before - after) / abs(before)
+
+
+def _clause_geometry(baseline, component) -> ClauseResult:
+    rr_drop = _pct_drop(median_planned_rr(baseline), median_planned_rr(component))
+    win_drop = _pct_drop(mean_win_r(baseline), mean_win_r(component))
+    drops = [d for d in (rr_drop, win_drop) if d is not None]
+    if not drops:
+        return ClauseResult("geometry", "SKIPPED",
+                            "no planned RR or win R on either arm", None,
+                            GEOMETRY_MAX_DROP_PCT)
+    worst = max(drops)
+    ok = worst <= GEOMETRY_MAX_DROP_PCT
+    return ClauseResult(
+        "geometry", "PASS" if ok else "FAIL",
+        f"median planned RR drop {rr_drop if rr_drop is None else f'{rr_drop:+.2f}%'}, "
+        f"mean win R drop {win_drop if win_drop is None else f'{win_drop:+.2f}%'} "
+        f"vs max {GEOMETRY_MAX_DROP_PCT:.1f}%", worst, GEOMETRY_MAX_DROP_PCT)
+
+
+def _clause_volume(baseline, component) -> ClauseResult:
+    if not baseline:
+        return ClauseResult("volume", "FAIL", "empty baseline arm", None,
+                            VOLUME_MAX_CUT_PCT)
+    cut = 100.0 * (len(baseline) - len(component)) / len(baseline)
+    ok = cut <= VOLUME_MAX_CUT_PCT
+    return ClauseResult(
+        "volume", "PASS" if ok else "FAIL",
+        f"alert cut {cut:+.2f}% vs max {VOLUME_MAX_CUT_PCT:.1f}% "
+        f"({len(baseline)} -> {len(component)})", cut, VOLUME_MAX_CUT_PCT)
+
+
+def _clause_permutation(stage: str, permutation_p: float | None) -> ClauseResult:
+    if stage != "validation":
+        return ClauseResult("permutation", "SKIPPED",
+                            f"not required at stage '{stage}'", None, ALPHA)
+    if permutation_p is None:
+        return ClauseResult(
+            "permutation", "FAIL",
+            "no permutation p supplied -- run permutation_test.py and pass "
+            "its result; a validation verdict without a null distribution "
+            "is not a verdict", None, ALPHA)
+    ok = permutation_p < ALPHA
+    return ClauseResult("permutation", "PASS" if ok else "FAIL",
+                        f"permutation p={permutation_p:.4f} vs alpha {ALPHA}",
+                        permutation_p, ALPHA)
+
+
+def _clause_mechanism(split: dict) -> ClauseResult:
+    """Are the trades this feature removed actually the bad ones?
+
+    Clause 1 can pass on a lucky pooled shift. This asks the mechanism
+    question directly, and it is what makes a passing result explainable
+    rather than merely significant.
+    """
+    if not split["is_subset"]:
+        return ClauseResult("mechanism", "SKIPPED",
+                            "not a subset feature -- no removed population "
+                            "to interrogate", None, None)
+    removed = split["removed"]
+    retained = [ct for _, ct in split["unchanged"]]
+    r_wr, k_wr = win_rate(removed), win_rate(retained)
+    r_exp = expectancy_r(removed)
+    if r_wr is None or k_wr is None or r_exp is None:
+        return ClauseResult("mechanism", "FAIL",
+                            "removed or retained population has no decided "
+                            "trades to compare", None, None)
+    ok = r_wr < k_wr and r_exp <= 0.0
+    return ClauseResult(
+        "mechanism", "PASS" if ok else "FAIL",
+        f"removed WR {r_wr:.2f}% vs retained {k_wr:.2f}%, removed ExpR "
+        f"{r_exp:+.4f}R (must be <= 0)", r_wr, k_wr)
+
+
+def evaluate(baseline, component, *, stage: str,
+             permutation_p: float | None = None,
+             n_resamples: int = BOOTSTRAP_RESAMPLES,
+             seed: int = 42) -> AcceptanceResult:
+    """The gate. Every applicable clause must PASS.
+
+    A SKIPPED clause never blocks a PASS, but it is always reported -- a
+    skip is a fact about the measurement, not an absence of one.
+    """
+    if stage not in STAGES:
+        raise ValueError(f"stage must be one of {STAGES}, got {stage!r}")
+    split = population_split(baseline, component)
+    clauses = (
+        _clause_win_rate(baseline, component, n_resamples, seed),
+        _clause_profit_floor(baseline, component, n_resamples, seed),
+        _clause_geometry(baseline, component),
+        _clause_volume(baseline, component),
+        _clause_permutation(stage, permutation_p),
+        _clause_mechanism(split),
+    )
+    verdict = "FAIL" if any(c.verdict == "FAIL" for c in clauses) else "PASS"
+    return AcceptanceResult(stage=stage, verdict=verdict, clauses=clauses,
+                            strata=stratum_table(baseline, component),
+                            split={k: len(v) if isinstance(v, list) else v
+                                   for k, v in split.items()})
