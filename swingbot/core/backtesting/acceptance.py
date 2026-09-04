@@ -264,3 +264,84 @@ def bootstrap_delta(baseline, component, statistic, *,
               float(np.percentile(draws, 100 * (1 - ALPHA / 2))))
     p = float(np.mean(draws <= 0.0))
     return BootstrapResult(float(point), lo, hi, p, n_resamples, seed)
+
+
+MDE_POWER = 0.80
+
+#: Standard normal quantiles, hardcoded because scipy is NOT in
+#: requirements.txt and this module ships in the Docker image.
+#: z(1-0.05) = 1.6449 (one-sided alpha), z(0.80) = 0.8416 (power).
+_Z_ALPHA_ONE_SIDED = {0.05: 1.6449, 0.01: 2.3263, 0.10: 1.2816}
+_Z_POWER = {0.80: 0.8416, 0.90: 1.2816, 0.95: 1.6449}
+
+
+def intracluster_correlation(trades) -> float:
+    """ICC of the win indicator, grouped by ticker, by the one-way ANOVA
+    estimator. Clamped to [0, 1] -- a negative estimate is sampling noise
+    around zero, and letting it through would shrink the design effect
+    below 1 and overstate power, the exact error this exists to prevent.
+    """
+    grouped = _group_by_ticker([t for t in trades if t.outcome in DECIDED])
+    groups = [[1.0 if t.outcome == "win" else 0.0 for t in g]
+              for g in grouped.values() if g]
+    k = len(groups)
+    n_total = sum(len(g) for g in groups)
+    if k < 2 or n_total <= k:
+        return 0.0
+    grand = float(np.mean([v for g in groups for v in g]))
+    ms_between = sum(len(g) * (float(np.mean(g)) - grand) ** 2
+                     for g in groups) / (k - 1)
+    ms_within = sum((v - float(np.mean(g))) ** 2
+                    for g in groups for v in g) / (n_total - k)
+    # Mean cluster size, ANOVA-corrected for unequal sizes.
+    m0 = (n_total - sum(len(g) ** 2 for g in groups) / n_total) / (k - 1)
+    if m0 <= 0 or (ms_between + (m0 - 1) * ms_within) == 0:
+        return 0.0
+    icc = (ms_between - ms_within) / (ms_between + (m0 - 1) * ms_within)
+    return float(min(1.0, max(0.0, icc)))
+
+
+def design_effect(trades) -> float:
+    """DEFF = 1 + (mean cluster size - 1) * ICC. The factor by which
+    clustering inflates the variance over the independent-sample formula.
+    """
+    decided = [t for t in trades if t.outcome in DECIDED]
+    grouped = _group_by_ticker(decided)
+    if not grouped:
+        return 1.0
+    mean_size = len(decided) / len(grouped)
+    return 1.0 + (mean_size - 1.0) * intracluster_correlation(decided)
+
+
+def mde_win_rate(population, *, target_n: int, power: float = MDE_POWER,
+                 alpha: float = ALPHA) -> float | None:
+    """Smallest ΔWR, in percentage points, detectable at `power` with a
+    one-sided test at `alpha`, given `target_n` decided trades per arm and
+    the clustering `population` exhibits.
+
+    A TRAIN effect smaller than this is not a small edge -- it is an
+    unanswerable question, and firing a one-shot budget at it wastes the
+    shot whatever the answer comes back as.
+    """
+    decided = [t for t in population if t.outcome in DECIDED]
+    if not decided or target_n <= 0:
+        return None
+    p = win_rate(decided) / 100.0
+    z_a = _Z_ALPHA_ONE_SIDED.get(alpha)
+    z_b = _Z_POWER.get(power)
+    if z_a is None or z_b is None:
+        raise ValueError(f"no tabulated z for alpha={alpha}, power={power}")
+    n_eff = target_n / design_effect(decided)
+    if n_eff <= 0:
+        return None
+    return 100.0 * (z_a + z_b) * float(np.sqrt(2.0 * p * (1.0 - p) / n_eff))
+
+
+def project_target_n(*, observed_n: int, observed_days: int,
+                     target_days: int) -> int:
+    """Project achievable N by window length, from a window we are allowed
+    to look at. Reading a count out of 2024-25 to size a run is still
+    contact with the validation window."""
+    if observed_days <= 0:
+        return 0
+    return int(round(observed_n * target_days / observed_days))
