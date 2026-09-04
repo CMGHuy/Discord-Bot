@@ -140,3 +140,22 @@ def test_retrospective_lessons_block_present_when_journaled(tmp_path, monkeypatc
     with _patch("swingbot.core.backtesting.registry.load_registry", return_value=[]):
         messages = build_daily_retrospective(trades, today=_dt.date(2026, 3, 10))
     assert any("Clean capture" in m for m in messages)
+
+
+def _manual_closed(closed_at, level):
+    """Closed inside the digest window but with no win/loss verdict."""
+    return {"status": "closed", "closed_at": closed_at, "direction": "bullish",
+            "entry": 100.0, "stop_loss": 95.0, "exit_price": 101.0,
+            "realized_pnl_amount": 10.0, "confidence_level": level}
+
+
+def test_weekly_digest_survives_a_level_with_only_manual_closes():
+    closed = [_manual_closed("2026-03-04T10:00:00+00:00", 3)]
+    entries = [_entry("aaa", 0.2, "2026-03-04T10:00:00+00:00", [])]
+
+    messages = weekly_digest(entries, closed, TODAY)
+
+    joined = "\n".join(messages)
+    assert "Lv3" in joined
+    assert "n/a" in joined
+    assert "Lv3: 0%" not in joined

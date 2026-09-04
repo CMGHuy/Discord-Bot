@@ -88,9 +88,11 @@ def weekly_digest(entries: list[dict], closed: list[dict], today: dt.date) -> li
     level_rows = [r for r in calibration.level_calibration(week_closed) if r["n"] > 0]
     if level_rows:
         lines.append("")
-        lines.append("**Confidence-level calibration:** " + " · ".join(
-            f"Lv{r['level']}: {r['win_rate']:.0f}% (n={r['n']})" for r in level_rows
-        ))
+        parts = []
+        for r in level_rows:
+            wr = f"{r['win_rate']:.0f}%" if r["win_rate"] is not None else "n/a"
+            parts.append(f"Lv{r['level']}: {wr} (n={r['n']})")
+        lines.append("**Confidence-level calibration:** " + " · ".join(parts))
 
     lines.append("")
     lines.append("**Where the R came from:**")
