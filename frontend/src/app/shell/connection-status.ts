@@ -29,6 +29,8 @@ import { ConnectionState } from '../stores/connection.store';
       <span class="label">{{ label() }}</span>
       @if (botAlive() === false) {
         <span class="bot">bot offline</span>
+      } @else if (botHealthy() === false) {
+        <span class="bot bot-failing">bot failing</span>
       }
     </div>
   `,
@@ -84,6 +86,9 @@ export class ConnectionStatus {
   readonly state = input.required<ConnectionState>();
   /** Null until the bot has ever reported -- distinct from "offline". */
   readonly botAlive = input<boolean | null>(null);
+  /** Null until the bot has ever completed a tick -- distinct from "failing".
+   *  True/false only once the admin has a last_success to compare against. */
+  readonly botHealthy = input<boolean | null>(null);
   /** Whether the US market is open. Three-valued for the same reason
    *  `ConnectionStore.marketActive` is: `null` means "not asked yet", and
    *  stilling the dot on a fact we do not have yet would be guessing. */
