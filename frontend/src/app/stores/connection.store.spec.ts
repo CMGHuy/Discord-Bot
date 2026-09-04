@@ -76,6 +76,9 @@ const SCAN = {
   running: false,
   bot_alive: true,
   bot_last_seen: '2026-08-14T09:00:00Z',
+  bot_healthy: true,
+  bot_last_success: '2026-08-14T09:00:00Z',
+  bot_consecutive_failures: 0,
 };
 
 describe('ConnectionStore', () => {
@@ -164,5 +167,26 @@ describe('ConnectionStore', () => {
     respond({ ...HEALTH, versions: { ...HEALTH.versions, ui: '1.2.1' } });
 
     expect(store.versions()?.ui).toBe('1.2.1');
+  });
+
+  it('carries bot_healthy through from scan status', () => {
+    tick();
+    backend.expectOne('/api/v1/health').flush(HEALTH);
+    backend
+      .expectOne('/api/v1/system/scan')
+      .flush({ ...SCAN, bot_alive: true, bot_healthy: false });
+
+    expect(store.botAlive()).toBe(true);
+    expect(store.botHealthy()).toBe(false);
+  });
+
+  it('leaves bot health null when the bot has never completed a tick', () => {
+    tick();
+    backend.expectOne('/api/v1/health').flush(HEALTH);
+    backend
+      .expectOne('/api/v1/system/scan')
+      .flush({ ...SCAN, bot_alive: true, bot_healthy: null });
+
+    expect(store.botHealthy()).toBeNull();
   });
 });

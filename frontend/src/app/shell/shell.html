@@ -141,6 +141,7 @@
       <sb-connection-status
         [state]="connection.state()"
         [botAlive]="connection.botAlive()"
+        [botHealthy]="connection.botHealthy()"
         [marketActive]="connection.marketActive()"
       />
       <sb-profile-menu (signedOut)="logout()" />

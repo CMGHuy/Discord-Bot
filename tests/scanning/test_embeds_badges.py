@@ -151,3 +151,15 @@ def test_banked_leg_pct_and_amount_falls_back_to_trigger_price(monkeypatch):
     p = _plan(entry_price=None, trigger_price=100.0, stop_loss=95.0, direction="bullish")
     pct, _ = embeds.banked_leg_pct_and_amount(p, 105.0, 0.5)
     assert pct == 5.0
+
+
+def test_badge_stats_with_null_win_rate_does_not_raise():
+    """badge_stats exists but carries no computable win rate -- the current
+    guard only checks that the dict is present, so it formats None."""
+    from swingbot.core.scanning import analyze
+
+    stats = {"n": 4, "win_rate": None}
+    rendered = analyze._format_badge_stats(stats)
+
+    assert "N=4" in rendered
+    assert "n/a" in rendered

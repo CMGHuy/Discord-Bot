@@ -90,6 +90,60 @@ def should_escalate() -> tuple[bool, str]:
     return False, ""
 
 
+def undefined_names(paths: list[str] | None = None) -> list[str]:
+    """pyflakes 'undefined name' findings over tracked Python.
+
+    Undefined names only -- not unused imports. This is the class that took
+    production down twice (the missing _send_alerts import, the missing
+    _MANUAL_CLOSE_QUEUE reference): a NameError that py_compile cannot see,
+    that no test covered, and that ran for five days behind a broad
+    try/except. Everything else pyflakes reports is style, and gating style
+    here would mean either a cleanup first or a blanket suppression.
+    """
+    if paths is None:
+        try:
+            listed = subprocess.run(
+                ["git", "ls-files", "--", "*.py"], cwd=REPO,
+                capture_output=True, text=True, timeout=15,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise RuntimeError(
+                "git ls-files failed; undefined-name gate unavailable"
+            ) from exc
+        if listed.returncode != 0:
+            raise RuntimeError("git ls-files failed; undefined-name gate unavailable")
+        paths = listed.stdout.splitlines()
+
+    if not paths:
+        return []
+
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pyflakes", *paths], cwd=REPO,
+            capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError(
+            "pyflakes failed to run; undefined-name gate unavailable"
+        ) from exc
+
+    # pyflakes writes ordinary findings (undefined names, unused imports) to
+    # stdout, and reserves stderr for problems that mean it could NOT check
+    # a file at all -- a syntax error, an unreadable file, or (if pyflakes
+    # itself is missing/broken) Python's own "No module named pyflakes".
+    # Filtering stdout for "undefined name" alone would silently pass in
+    # every one of those cases (each still exits 1, same as an ordinary
+    # unused-import finding -- returncode alone cannot tell them apart in a
+    # repo that always has some unused-import debt). A non-empty stderr is
+    # the one reliable signal something went wrong.
+    if result.stderr:
+        raise RuntimeError(
+            "pyflakes could not check every file; undefined-name gate "
+            f"unavailable: {result.stderr.splitlines()[0]}"
+        )
+    return [line for line in result.stdout.splitlines() if "undefined name" in line]
+
+
 def build_args(profile: str, target: str | None) -> list[str]:
     if profile == "fast":
         return BASE + ["-m", "not slow", "tests/"]
@@ -164,6 +218,18 @@ def main() -> int:
         if escalate:
             print(f"NOTE: {why} -> escalating to full tier")
             profile = "full"
+
+    if profile == "full":
+        try:
+            findings = undefined_names()
+        except RuntimeError as exc:
+            print(f"VERDICT: FAIL  {exc}")
+            return 1
+        if findings:
+            print(f"VERDICT: FAIL  {len(findings)} undefined name(s) -- this is the class that caused two production outages")
+            for finding in findings[:10]:
+                print(f"  {finding}")
+            return 1
 
     counts, failed, elapsed, rc = run(build_args(profile, args.target))
 

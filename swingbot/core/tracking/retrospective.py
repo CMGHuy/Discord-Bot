@@ -16,6 +16,7 @@ Designed to be channel-agnostic: build_daily_retrospective() returns a list
 of plain strings; the caller posts them wherever it wants
 (DISCORD_CHANNEL_RETROSPECTIVE_ID, DISCORD_CHANNEL_TRADES_HISTORY_ID, etc.).
 """
+import contextlib
 import datetime as dt
 import json
 import logging
@@ -375,6 +376,26 @@ def _strategy_label(trade: dict) -> str:
 # Main builder
 # ---------------------------------------------------------------------------
 
+@contextlib.contextmanager
+def _section(name: str, failures: list[str]):
+    """Isolate one part of the retrospective.
+
+    A part that raises contributes nothing and is named in `failures`; the
+    remaining parts still post. Generalises the guards that already existed
+    around get_daily_summary() and edge_decay_report().
+
+    A context manager rather than an extracted function per part: the parts
+    read ~15 locals computed in the partition block above them, and a `with`
+    block keeps those in scope where extraction would have to thread them all
+    through new signatures.
+    """
+    try:
+        yield
+    except Exception:
+        log.exception("build_daily_retrospective: %s section failed, skipping", name)
+        failures.append(name)
+
+
 def build_daily_retrospective(all_trades: list, today: dt.date | None = None) -> list[str]:
     """
     Returns a list of strings to post to Discord in order.
@@ -444,231 +465,252 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
         worst_trade = None
 
     messages: list[str] = []
+    failed_sections: list[str] = []
 
     # ── Part 1: Header + at-a-glance ─────────────────────────────────────
-    wr_emoji  = "🟢" if (win_rate or 0) >= 60 else ("🟡" if (win_rate or 0) >= 40 else "🔴")
-    pnl_emoji = "📈" if (avg_pnl or 0) >= 0 else "📉"
+    with _section("header", failed_sections):
+        wr_emoji  = "🟢" if (win_rate or 0) >= 60 else ("🟡" if (win_rate or 0) >= 40 else "🔴")
+        pnl_emoji = "📈" if (avg_pnl or 0) >= 0 else "📉"
 
-    header = (
-        f"## 📊 Daily Retrospective — {date_label}\n"
-        f"─────────────────────────────\n"
-        f"**Trades opened today:** {len(opened_today)}\n"
-        f"**Trades closed today:** {n_closed}  "
-        f"({n_wins} WIN · {n_losses} LOSS{(' · ' + str(len(manual)) + ' manual') if manual else ''})\n"
-    )
-    if win_rate is not None:
-        header += f"**Day win rate:** {wr_emoji} {win_rate}%\n"
-    if avg_pnl is not None:
-        header += f"**Avg P&L per trade:** {pnl_emoji} {tokens.fmt_pct(avg_pnl)}\n"
-    if total_pnl is not None:
-        header += f"**Sum P&L (paper):** {tokens.fmt_pct(total_pnl)}\n"
-    if avg_r is not None:
-        header += f"**Avg R-multiple:** {tokens.fmt_r(avg_r)}\n"
-    if gross_win > 0 or gross_loss > 0:
-        pf_str = "∞" if profit_factor is None and gross_win > 0 else (f"{profit_factor:.2f}" if profit_factor is not None else "—")
-        header += f"**Profit factor (today):** {pf_str}\n"
-    if best_trade is not None:
-        header += f"**Best trade:** {best_trade['ticker']} {tokens.fmt_pct(_pnl_pct(best_trade))}\n"
-    if worst_trade is not None and worst_trade is not best_trade:
-        header += f"**Worst trade:** {worst_trade['ticker']} {tokens.fmt_pct(_pnl_pct(worst_trade))}\n"
+        header = (
+            f"## 📊 Daily Retrospective — {date_label}\n"
+            f"─────────────────────────────\n"
+            f"**Trades opened today:** {len(opened_today)}\n"
+            f"**Trades closed today:** {n_closed}  "
+            f"({n_wins} WIN · {n_losses} LOSS{(' · ' + str(len(manual)) + ' manual') if manual else ''})\n"
+        )
+        if win_rate is not None:
+            header += f"**Day win rate:** {wr_emoji} {win_rate}%\n"
+        if avg_pnl is not None:
+            header += f"**Avg P&L per trade:** {pnl_emoji} {tokens.fmt_pct(avg_pnl)}\n"
+        if total_pnl is not None:
+            header += f"**Sum P&L (paper):** {tokens.fmt_pct(total_pnl)}\n"
+        if avg_r is not None:
+            header += f"**Avg R-multiple:** {tokens.fmt_r(avg_r)}\n"
+        if gross_win > 0 or gross_loss > 0:
+            pf_str = "∞" if profit_factor is None and gross_win > 0 else (f"{profit_factor:.2f}" if profit_factor is not None else "—")
+            header += f"**Profit factor (today):** {pf_str}\n"
+        if best_trade is not None:
+            header += f"**Best trade:** {best_trade['ticker']} {tokens.fmt_pct(_pnl_pct(best_trade))}\n"
+        if worst_trade is not None and worst_trade is not best_trade:
+            header += f"**Worst trade:** {worst_trade['ticker']} {tokens.fmt_pct(_pnl_pct(worst_trade))}\n"
 
-    # Real-currency stats -- only meaningful for "today" (get_daily_summary()
-    # always answers relative to the actual current Berlin day, so a !recap
-    # for a past date can't reuse it without misleadingly mixing dates).
-    if is_today:
-        try:
-            daily = account_module.get_daily_summary()
-            if daily.get("pnl_today") is not None:
-                header += f"**Net $ P&L today:** {daily['pnl_today']:+.2f}\n"
-            if daily.get("balance") is not None:
-                pct = daily.get("pct_change_today")
-                pct_str = f" ({pct:+.2f}% today)" if pct is not None else ""
-                header += f"**Account balance:** {daily['balance']:,.2f}{pct_str}\n"
-        except Exception:
-            log.exception("build_daily_retrospective: get_daily_summary() failed, skipping currency stats")
+        # Real-currency stats -- only meaningful for "today" (get_daily_summary()
+        # always answers relative to the actual current Berlin day, so a !recap
+        # for a past date can't reuse it without misleadingly mixing dates).
+        if is_today:
+            try:
+                daily = account_module.get_daily_summary()
+                if daily.get("pnl_today") is not None:
+                    header += f"**Net $ P&L today:** {daily['pnl_today']:+.2f}\n"
+                if daily.get("balance") is not None:
+                    pct = daily.get("pct_change_today")
+                    pct_str = f" ({pct:+.2f}% today)" if pct is not None else ""
+                    header += f"**Account balance:** {daily['balance']:,.2f}{pct_str}\n"
+            except Exception:
+                log.exception("build_daily_retrospective: get_daily_summary() failed, skipping currency stats")
 
-    if still_open:
-        header += f"**Still open:** {len(still_open)} trade(s)\n"
+        if still_open:
+            header += f"**Still open:** {len(still_open)} trade(s)\n"
 
-    runner_line = summarize_runner_outcomes(closed_today)
-    if runner_line is not None:
-        header += f"**{runner_line}**\n"
-    badge_line = summarize_badge_split(closed_today)
-    if badge_line is not None:
-        header += f"**Badge split:** {badge_line}\n"
+        runner_line = summarize_runner_outcomes(closed_today)
+        if runner_line is not None:
+            header += f"**{runner_line}**\n"
+        badge_line = summarize_badge_split(closed_today)
+        if badge_line is not None:
+            header += f"**Badge split:** {badge_line}\n"
 
-    if n_closed == 0 and not opened_today:
-        header += "\n_No trading activity today._"
-    messages.append(header)
+        if n_closed == 0 and not opened_today:
+            header += "\n_No trading activity today._"
+        messages.append(header)
 
     # ── Part 2: Closed-today trade table ─────────────────────────────────
-    # Same base columns as the "Still open" table below (Ticker/Dir/Strategy/
-    # Conf/Entry/SL/TP) plus the close-specific ones (Exit/P&L%/Amt/R/Days/
-    # Result), so the two tables read as one consistent format. Built via
-    # _emit_table() so a busy day's long trade list can never get cut
-    # mid-code-block (see that function's docstring for why that used to
-    # break the table's styling into two different-looking halves).
-    if closed_today:
-        closed_header = (
-            f"{'Ticker':<7} {'Dir':<5} {'Strategy':<16} {'Conf':<4} "
-            f"{'Entry':>8} {'SL':>8} {'TP':>8} {'Exit':>8} {'P&L%':>7} {'Amt':>9} {'R':>5} {'Days':>4} {'Result':<8}"
-        )
-        closed_sep = "─" * len(closed_header)
-        closed_rows = []
-        for t in sorted(closed_today, key=lambda x: x.get("closed_at", "")):
-            pnl  = _pnl_pct(t)
-            r    = _r_multiple(t)
-            days = _days_held(t)
-            amt  = t.get("realized_pnl_amount")
-            strategy = _strategy_label(t)[:15]
-            direction = f"{tokens.direction_glyph(t['direction'])} {'Long' if t['direction'] == 'bullish' else 'Short'}"
-            result = _result_label(t)
-            closed_rows.append(
-                f"{t['ticker']:<7} {direction:<5} {strategy:<16} Lv{t.get('confidence_level','-'):<2} "
-                f"{tokens.fmt_price(t.get('entry')):>8} {tokens.fmt_price(t.get('stop_loss')):>8} {tokens.fmt_price(t.get('take_profit')):>8} "
-                f"{tokens.fmt_price(t.get('exit_price')):>8} "
-                f"{tokens.fmt_pct(pnl):>7} "
-                f"{(f'{amt:+.2f}' if amt is not None else '—'):>9} "
-                f"{tokens.fmt_r(r):>5} "
-                f"{(str(days) if days is not None else '—'):>4} "
-                f"{result:<8}"
+    with _section("closed trades", failed_sections):
+        # Same base columns as the "Still open" table below (Ticker/Dir/Strategy/
+        # Conf/Entry/SL/TP) plus the close-specific ones (Exit/P&L%/Amt/R/Days/
+        # Result), so the two tables read as one consistent format. Built via
+        # _emit_table() so a busy day's long trade list can never get cut
+        # mid-code-block (see that function's docstring for why that used to
+        # break the table's styling into two different-looking halves).
+        if closed_today:
+            closed_header = (
+                f"{'Ticker':<7} {'Dir':<5} {'Strategy':<16} {'Conf':<4} "
+                f"{'Entry':>8} {'SL':>8} {'TP':>8} {'Exit':>8} {'P&L%':>7} {'Amt':>9} {'R':>5} {'Days':>4} {'Result':<8}"
             )
-        messages.extend(_emit_table("Closed today:", closed_header, closed_sep, closed_rows))
+            closed_sep = "─" * len(closed_header)
+            closed_rows = []
+            for t in sorted(closed_today, key=lambda x: x.get("closed_at", "")):
+                pnl  = _pnl_pct(t)
+                r    = _r_multiple(t)
+                days = _days_held(t)
+                amt  = t.get("realized_pnl_amount")
+                strategy = _strategy_label(t)[:15]
+                direction = f"{tokens.direction_glyph(t['direction'])} {'Long' if t['direction'] == 'bullish' else 'Short'}"
+                result = _result_label(t)
+                closed_rows.append(
+                    f"{t['ticker']:<7} {direction:<5} {strategy:<16} Lv{t.get('confidence_level','-'):<2} "
+                    f"{tokens.fmt_price(t.get('entry')):>8} {tokens.fmt_price(t.get('stop_loss')):>8} {tokens.fmt_price(t.get('take_profit')):>8} "
+                    f"{tokens.fmt_price(t.get('exit_price')):>8} "
+                    f"{tokens.fmt_pct(pnl):>7} "
+                    f"{(f'{amt:+.2f}' if amt is not None else '—'):>9} "
+                    f"{tokens.fmt_r(r):>5} "
+                    f"{(str(days) if days is not None else '—'):>4} "
+                    f"{result:<8}"
+                )
+            messages.extend(_emit_table("Closed today:", closed_header, closed_sep, closed_rows))
 
     # ── Part 3: Still-open positions ─────────────────────────────────────
-    if still_open:
-        open_header = (
-            f"{'Ticker':<7} {'Dir':<5} {'Strategy':<16} {'Conf':<4} {'Opened':<17} {'Entry':>7} {'SL':>7} {'TP':>7}"
-        )
-        open_sep = "─" * len(open_header)
-        open_rows = []
-        for t in still_open:
-            direction = f"{tokens.direction_glyph(t['direction'])} {'Long' if t['direction'] == 'bullish' else 'Short'}"
-            opened_str = _berlin_hm(t.get("opened_at", ""))
-            opened_date = _berlin_date(t.get("opened_at", ""))
-            # See date_label above for why not "%-d %b" (glibc-only, breaks on Windows).
-            date_pfx = f"{opened_date.day} {opened_date.strftime('%b')}" if opened_date else "?"
-            open_rows.append(
-                f"{t['ticker']:<7} {direction:<5} {_strategy_label(t)[:15]:<16} Lv{t.get('confidence_level','-'):<2} "
-                f"{date_pfx + ' ' + opened_str:<17} "
-                f"{tokens.fmt_price(t.get('entry')):>7} {tokens.fmt_price(t.get('stop_loss')):>7} {tokens.fmt_price(t.get('take_profit')):>7}"
+    with _section("open positions", failed_sections):
+        if still_open:
+            open_header = (
+                f"{'Ticker':<7} {'Dir':<5} {'Strategy':<16} {'Conf':<4} {'Opened':<17} {'Entry':>7} {'SL':>7} {'TP':>7}"
             )
-        messages.extend(_emit_table("Still open (all active positions):", open_header, open_sep, open_rows))
+            open_sep = "─" * len(open_header)
+            open_rows = []
+            for t in still_open:
+                direction = f"{tokens.direction_glyph(t['direction'])} {'Long' if t['direction'] == 'bullish' else 'Short'}"
+                opened_str = _berlin_hm(t.get("opened_at", ""))
+                opened_date = _berlin_date(t.get("opened_at", ""))
+                # See date_label above for why not "%-d %b" (glibc-only, breaks on Windows).
+                date_pfx = f"{opened_date.day} {opened_date.strftime('%b')}" if opened_date else "?"
+                open_rows.append(
+                    f"{t['ticker']:<7} {direction:<5} {_strategy_label(t)[:15]:<16} Lv{t.get('confidence_level','-'):<2} "
+                    f"{date_pfx + ' ' + opened_str:<17} "
+                    f"{tokens.fmt_price(t.get('entry')):>7} {tokens.fmt_price(t.get('stop_loss')):>7} {tokens.fmt_price(t.get('take_profit')):>7}"
+                )
+            messages.extend(_emit_table("Still open (all active positions):", open_header, open_sep, open_rows))
 
     # ── Part 4: Breakdown tables ──────────────────────────────────────────
-    if closed_today:
-        breakdown_msg = _build_breakdown(closed_today)
-        if breakdown_msg:
-            messages.append(breakdown_msg)
+    with _section("breakdowns", failed_sections):
+        if closed_today:
+            breakdown_msg = _build_breakdown(closed_today)
+            if breakdown_msg:
+                messages.append(breakdown_msg)
 
     # ── Part 5: Lessons learned + tuning suggestions ──────────────────────
-    # Loads the day-by-day memory file so repeating issues escalate ("2nd
-    # day in a row" -> "3rd day in a row") instead of restating the exact
-    # same sentence every day, and so a suggestion stops repeating once the
-    # config it referenced actually gets changed. See _escalate() below.
-    history = _load_history()
-    lessons, suggestions, issues_today = _analyse(closed_today, opened_today, still_open, today, history)
-    if lessons or suggestions:
-        insight_lines = ["**🔍 Lessons Learned Today & Improvements for Tomorrow**"]
-        if lessons:
-            insight_lines.append("\n**📝 What happened today:**")
-            for l in lessons:
-                insight_lines.append(f"• {l}")
-        if suggestions:
-            insight_lines.append("\n**🔧 What to improve for tomorrow (feeds back into the algorithm's settings):**")
-            for s in suggestions:
-                insight_lines.append(f"→ {s}")
-        messages.append("\n".join(insight_lines))
+    with _section("lessons", failed_sections):
+        # Loads the day-by-day memory file so repeating issues escalate ("2nd
+        # day in a row" -> "3rd day in a row") instead of restating the exact
+        # same sentence every day, and so a suggestion stops repeating once the
+        # config it referenced actually gets changed. See _escalate() below.
+        history = _load_history()
+        lessons, suggestions, issues_today = _analyse(closed_today, opened_today, still_open, today, history)
+        if lessons or suggestions:
+            insight_lines = ["**🔍 Lessons Learned Today & Improvements for Tomorrow**"]
+            if lessons:
+                insight_lines.append("\n**📝 What happened today:**")
+                for l in lessons:
+                    insight_lines.append(f"• {l}")
+            if suggestions:
+                insight_lines.append("\n**🔧 What to improve for tomorrow (feeds back into the algorithm's settings):**")
+                for s in suggestions:
+                    insight_lines.append(f"→ {s}")
+            messages.append("\n".join(insight_lines))
 
-    # Only remember an actual "today" run -- a !recap for a past date is a
-    # re-render, not a new trading day, and shouldn't overwrite/duplicate
-    # that day's real memory entry.
-    if is_today:
-        today_entry = {
-            "date": today.isoformat(),
-            "closed_count": n_closed,
-            "win_rate": win_rate,
-            "issues": issues_today,
-            "config_snapshot": _live_config_snapshot(),
-        }
-        history = [h for h in history if h.get("date") != today.isoformat()]
-        history.append(today_entry)
-        _save_history(history)
+        # Only remember an actual "today" run -- a !recap for a past date is a
+        # re-render, not a new trading day, and shouldn't overwrite/duplicate
+        # that day's real memory entry.
+        if is_today:
+            today_entry = {
+                "date": today.isoformat(),
+                "closed_count": n_closed,
+                "win_rate": win_rate,
+                "issues": issues_today,
+                "config_snapshot": _live_config_snapshot(),
+            }
+            history = [h for h in history if h.get("date") != today.isoformat()]
+            history.append(today_entry)
+            _save_history(history)
 
     # ── Part 6: Calibration + edge decay (analytics core) ─────────────────
-    # v32 Task 11: level_calibration() (1-5 confidence level) replaces
-    # tier_calibration() (A/B/C tier) and has no pass/fail "ok" verdict --
-    # tier's expected-band came from quality.py's own pre-v32 design; there
-    # is no equivalent measured expected-win-rate-per-level in this
-    # codebase, so there is nothing to flag as "outside its design band"
-    # anymore (see calibration.py's own docstring). Reports the numbers
-    # for every level with real trades today instead of a failure list.
-    calibration_lines = []
-    level_rows = [r for r in calibration.level_calibration(closed_today) if r["n"] > 0]
-    if level_rows:
-        calibration_lines.append("**📐 Calibration**")
-        for r in level_rows:
-            calibration_lines.append(
-                f"• Level {r['level']} at {r['win_rate']:.0f}% WR (n={r['n']})."
-            )
-    try:
-        decay_lines = edge_decay_report(all_trades)
-    except Exception:
-        log.exception("build_daily_retrospective: edge_decay_report failed, skipping")
-        decay_lines = []
-    if decay_lines:
-        calibration_lines.append("**📉 Edge decay**")
-        calibration_lines.extend(decay_lines)
-    if calibration_lines:
-        messages.append("\n".join(calibration_lines))
+    with _section("calibration", failed_sections):
+        # v32 Task 11: level_calibration() (1-5 confidence level) replaces
+        # tier_calibration() (A/B/C tier) and has no pass/fail "ok" verdict --
+        # tier's expected-band came from quality.py's own pre-v32 design; there
+        # is no equivalent measured expected-win-rate-per-level in this
+        # codebase, so there is nothing to flag as "outside its design band"
+        # anymore (see calibration.py's own docstring). Reports the numbers
+        # for every level with real trades today instead of a failure list.
+        calibration_lines = []
+        level_rows = [r for r in calibration.level_calibration(closed_today) if r["n"] > 0]
+        if level_rows:
+            calibration_lines.append("**📐 Calibration**")
+            for r in level_rows:
+                wr = f"{r['win_rate']:.0f}%" if r["win_rate"] is not None else "n/a"
+                calibration_lines.append(
+                    f"• Level {r['level']} at {wr} WR (n={r['n']})."
+                )
+        try:
+            decay_lines = edge_decay_report(all_trades)
+        except Exception:
+            log.exception("build_daily_retrospective: edge_decay_report failed, skipping")
+            decay_lines = []
+        if decay_lines:
+            calibration_lines.append("**📉 Edge decay**")
+            calibration_lines.extend(decay_lines)
+        if calibration_lines:
+            messages.append("\n".join(calibration_lines))
 
     # ── Part 7: Journal lessons for today's closed trades ─────────────────
-    if closed_today:
-        store = JournalStore()
-        lesson_lines = ["**📓 Trade lessons**"]
-        for t in closed_today:
-            entry = store.get(t.get("id"))
-            if entry and entry.get("auto_lesson"):
-                lesson_lines.append(f"• {t['ticker']}: {entry['auto_lesson']}")
-        if len(lesson_lines) > 1:
-            messages.append("\n".join(lesson_lines))
+    with _section("journal", failed_sections):
+        if closed_today:
+            store = JournalStore()
+            lesson_lines = ["**📓 Trade lessons**"]
+            for t in closed_today:
+                entry = store.get(t.get("id"))
+                if entry and entry.get("auto_lesson"):
+                    lesson_lines.append(f"• {t['ticker']}: {entry['auto_lesson']}")
+            if len(lesson_lines) > 1:
+                messages.append("\n".join(lesson_lines))
 
     # ── Part 8: Weekly risk report (Sundays only) ──────────────────────────
-    if today.weekday() == 6:
-        try:
-            from swingbot.commands.growth import weekly_risk_report
-            week_stats = _collect_weekly_risk_stats(all_trades, today)
-            messages.append(weekly_risk_report(week_stats))
-        except Exception:
-            log.exception("build_daily_retrospective: weekly risk report failed, skipping")
+    with _section("weekly risk", failed_sections):
+        if today.weekday() == 6:
+            try:
+                from swingbot.commands.growth import weekly_risk_report
+                week_stats = _collect_weekly_risk_stats(all_trades, today)
+                messages.append(weekly_risk_report(week_stats))
+            except Exception:
+                log.exception("build_daily_retrospective: weekly risk report failed, skipping")
+                failed_sections.append("weekly risk")
 
     # ── Part 9: RS rotation report (Sundays only, Task E81) ────────────────
-    if today.weekday() == 6:
-        try:
-            from swingbot.commands.growth import rs_rotation_report
-            from swingbot.core.edge.factors import load_rs_cache
-            from swingbot.core.marketdata.universe import sector_map
-            rels = load_rs_cache().get("rels") or {}
-            if rels:
-                sectors = sector_map(getattr(app_config, "SCAN_UNIVERSE", "watchlist"))
-                messages.append(rs_rotation_report(rels, sectors))
-        except Exception:
-            log.exception("build_daily_retrospective: RS rotation report failed, skipping")
+    with _section("rs rotation", failed_sections):
+        if today.weekday() == 6:
+            try:
+                from swingbot.commands.growth import rs_rotation_report
+                from swingbot.core.edge.factors import load_rs_cache
+                from swingbot.core.marketdata.universe import sector_map
+                rels = load_rs_cache().get("rels") or {}
+                if rels:
+                    sectors = sector_map(getattr(app_config, "SCAN_UNIVERSE", "watchlist"))
+                    messages.append(rs_rotation_report(rels, sectors))
+            except Exception:
+                log.exception("build_daily_retrospective: RS rotation report failed, skipping")
+                failed_sections.append("rs rotation")
 
     # ── Part 10: Scan health alarm (Task E82) ──────────────────────────────
-    try:
-        from swingbot.core.scanning.engine import recent_telemetry, scan_slowdown
-        if scan_slowdown():
-            rows = recent_telemetry(2)
-            duration = f"{rows[-1]['duration_s']:.1f}s" if rows else "a scan"
-            messages.append(
-                f"⚠️ **Scan health**: the latest scan took {duration} -- more than 2x the "
-                "median of the prior 20. Check for network slowness, a growing universe, "
-                "or cache issues."
-            )
-    except Exception:
-        log.exception("build_daily_retrospective: scan health alarm failed, skipping")
+    with _section("scan health", failed_sections):
+        try:
+            from swingbot.core.scanning.engine import recent_telemetry, scan_slowdown
+            if scan_slowdown():
+                rows = recent_telemetry(2)
+                duration = f"{rows[-1]['duration_s']:.1f}s" if rows else "a scan"
+                messages.append(
+                    f"⚠️ **Scan health**: the latest scan took {duration} -- more than 2x the "
+                    "median of the prior 20. Check for network slowness, a growing universe, "
+                    "or cache issues."
+                )
+        except Exception:
+            log.exception("build_daily_retrospective: scan health alarm failed, skipping")
+            failed_sections.append("scan health")
 
+    if failed_sections:
+        messages.append(
+            "⚠️ _Some sections of this report failed to build and were skipped: "
+            + ", ".join(failed_sections)
+            + ". See the bot log for the traceback._"
+        )
     return messages
 
 

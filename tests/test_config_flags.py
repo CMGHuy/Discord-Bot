@@ -73,3 +73,17 @@ def test_v70_extended_hours_fields_exist_with_documented_defaults():
     assert isinstance(config.EXTENDED_HOURS_DEBOUNCE_TICKS, int)
 
     assert by_key["EXTENDED_HOURS_EXIT_CHECK"].section == "Plan Engine v2"
+
+
+def test_health_config_fields_exist_with_documented_defaults():
+    from swingbot import config
+
+    assert config.HEALTH_ALERT_AFTER_FAILURES == 3
+    assert hasattr(config, "DISCORD_CHANNEL_OPS_ID")
+
+    # FIELDS (config.py:95) is the single source of truth for every
+    # .env-driven setting; a field missing from it is invisible to the
+    # admin UI and to SIGHUP hot-reload.
+    keys = {f.key for f in config.FIELDS}
+    assert "DISCORD_CHANNEL_OPS_ID" in keys
+    assert "HEALTH_ALERT_AFTER_FAILURES" in keys

@@ -706,6 +706,10 @@ export interface ScanStatus {
   running: boolean;
   bot_alive: boolean;
   bot_last_seen: string | null;
+  /** Null when the bot has never completed a tick -- unknown, not failing. */
+  bot_healthy: boolean | null;
+  bot_last_success: string | null;
+  bot_consecutive_failures: number;
   /** Null when the bot has never reported -- distinct from false. */
   bot_session_active: boolean | null;
   bot_scan_paused: boolean | null;

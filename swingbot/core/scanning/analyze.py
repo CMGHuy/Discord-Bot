@@ -6,6 +6,11 @@ identity while analysis consumes them for trade state and monitoring.
 """
 import logging
 import os
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .scan_run import ScanProgress
+
 from dataclasses import dataclass, field
 
 from swingbot import config
@@ -209,8 +214,7 @@ def build_decision_context(item: "ScanItem", dfs: dict, spy_df) -> dict:
             "components": components,
             "follow_score": None,   # no follow-score producer in this codebase yet
             "badge": plan.badge,
-            "badge_stats": (f"N={plan.badge_stats['n']} · {plan.badge_stats['win_rate']:.1f}% OOS"
-                            if getattr(plan, "badge_stats", None) else ""),
+            "badge_stats": _format_badge_stats(getattr(plan, "badge_stats", None)),
             "advisor": None,        # no advisory-annotation producer in this codebase
         }
     except Exception:
@@ -402,6 +406,18 @@ def _apply_sector_rs(item: "ScanItem", ticker: str, sector_of_ticker: dict,
         if sector_pctile is not None and item.rs_percentile is not None
         else item.rs_percentile
     )
+
+
+def _format_badge_stats(stats: dict | None) -> str:
+    """The badge's out-of-sample record, or "" when there is no record.
+
+    win_rate is None whenever the registry entry has no computable rate;
+    formatting it directly is the defect this exists to prevent.
+    """
+    if not stats:
+        return ""
+    wr = f"{stats['win_rate']:.1f}% OOS" if stats.get("win_rate") is not None else "n/a OOS"
+    return f"N={stats['n']} · {wr}"
 
 
 def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
