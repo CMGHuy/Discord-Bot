@@ -247,7 +247,8 @@ Of 121 `config.FIELDS`, each field is assigned exactly one class. **The
 classification is a deliverable, declared in code** — not inferred by a reader,
 and not left implicit.
 
-**Class 1 — searchable** (~45). Decision knobs a daily-bar replay can observe:
+**Class 1 — searchable** (35, enumerated exactly in the plan's Task A2).
+Decision knobs a daily-bar replay can observe:
 `MIN_TARGET_CONFLUENCE_COUNT`, `CONFLUENCE_DEVIATION_PCT`, `MIN_REWARD_PCT`,
 `MIN_STOP_DISTANCE_PCT`, `MAX_STOP_LOSS_PCT`, `MIN_ALERT_CONFIDENCE_LEVEL`,
 `DEDUP_TOLERANCE_PCT`, `HTF_CONFLUENCE_ENABLED`, `MTF_ADJACENT_GATE`,
