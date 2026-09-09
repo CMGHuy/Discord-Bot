@@ -12,13 +12,22 @@ Stages:
                effect below the MDE means the shot is REFUSED and the
                budget stays unspent -- an unanswerable question wastes a
                shot whatever the answer looks like.
-  walkforward  Score on fold-test years 2021/2022/2023. Free and
-               repeatable. Clauses 1-4 and 6; no permutation required.
+  walkforward  Fold-consistency check on fold-test years 2021/2022/2023.
+               Free and repeatable: a plain per-fold point estimate of
+               delta_standardised_win_rate, no bootstrap, no permutation --
+               gate_win_rate alone decides (>=2 of 3 folds improving, no
+               fold degrading past the ceiling). It does not run any of
+               evaluate()'s six clauses (no geometry/volume/profit-floor
+               check at this stage).
   validation   2024-01-01..2025-12-31. ONE shot, ever. All six clauses; a
                missing permutation p is a FAIL, not a skip.
 
-Arms come from a JSON file the component's own measurement script wrote:
-  {"baseline": [ArmTrade...], "component": [ArmTrade...]}
+Arms come from a JSON file the component's own measurement script wrote.
+  --stage mde / validation:
+    {"baseline": [ArmTrade...], "component": [ArmTrade...]}
+  --stage walkforward (three folds, distinct test_year each):
+    {"folds": [{"test_year": "2021", "baseline": [...], "component": [...]},
+               ...]}
 
 Exit code 0 = PASS / RESOLVABLE, 1 = FAIL / REFUSED.
 
@@ -64,6 +73,15 @@ def load_folds(path: Path) -> list:
              "component": to_arm(f["component"])} for f in blob["folds"]]
 
 
+def _folds_are_well_formed(folds: list) -> bool:
+    """gate_win_rate's '>=2 of 3 folds improving' rule is written against a
+    3-fold input. Fail closed rather than silently scoring whatever was
+    given -- 2 folds becomes '2 of 2', a duplicated year hides that a real
+    third year is missing."""
+    years = [f["test_year"] for f in folds]
+    return len(years) == 3 and len(set(years)) == 3
+
+
 def stage_mde(args) -> int:
     baseline, _ = load_arms(args.arms)
     observed = sum(1 for t in baseline if t.outcome in DECIDED)
@@ -94,6 +112,10 @@ def stage_walkforward(args) -> int:
     bootstrap -- consistency across fold-test years is the whole question,
     and gate_win_rate (C2) is the pre-registered rule for it."""
     folds = load_folds(args.arms)
+    if not _folds_are_well_formed(folds):
+        print(f"REFUSED -- gate_win_rate requires exactly 3 folds with distinct "
+              f"test_year values; got {[f['test_year'] for f in folds]}.")
+        return 1
     rows = []
     for f in folds:
         b, c = f["baseline"], f["component"]
@@ -107,7 +129,8 @@ def stage_walkforward(args) -> int:
     print(f"\n{verdict} -- stage 2 walkforward win-rate consistency gate")
     if args.out_json:
         Path(args.out_json).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out_json).write_text(json.dumps({"verdict": verdict, "folds": rows}, indent=1))
+        Path(args.out_json).write_text(
+            json.dumps({"verdict": verdict, "folds": rows}, indent=1), encoding="utf-8")
     if args.out_md:
         lines = [f"# {args.title} — WALKFORWARD", "", f"Window: {args.window}", "",
                  "| fold | dWR (pp) | n |", "|---|---|---|"]
@@ -117,7 +140,7 @@ def stage_walkforward(args) -> int:
             lines.append(f"| {r['test_years']} | {d_str} | {r['n']} |")
         lines += ["", f"**Overall: {verdict}**"]
         Path(args.out_md).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out_md).write_text("\n".join(lines) + "\n")
+        Path(args.out_md).write_text("\n".join(lines) + "\n", encoding="utf-8")
     return 0 if verdict == "PASS" else 1
 
 
@@ -129,7 +152,7 @@ def _write_skeleton(args, stage: str) -> None:
         return
     pending = lambda name, threshold: ClauseResult(name, "PENDING", "not yet run", None, threshold)
     skeleton = AcceptanceResult(
-        stage=stage, verdict="PENDING",
+        stage=stage, verdict="PENDING", seed=args.seed,
         clauses=(
             pending("win_rate", 0.0), pending("profit_floor", NON_INFERIORITY_R),
             pending("geometry", GEOMETRY_MAX_DROP_PCT),
@@ -142,10 +165,11 @@ def _write_skeleton(args, stage: str) -> None:
                                "evaluate() runs; verdict pending.")
     if args.out_md:
         Path(args.out_md).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out_md).write_text(md)
+        Path(args.out_md).write_text(md, encoding="utf-8")
     if args.out_json:
         Path(args.out_json).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out_json).write_text(json.dumps(render_json(skeleton), indent=1))
+        Path(args.out_json).write_text(
+            json.dumps(render_json(skeleton), indent=1), encoding="utf-8")
 
 
 def _run_gate(args, stage: str) -> int:
@@ -159,11 +183,12 @@ def _run_gate(args, stage: str) -> int:
     print(md)
     if args.out_md:
         Path(args.out_md).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out_md).write_text(md)
+        Path(args.out_md).write_text(md, encoding="utf-8")
         print(f"[wrote {args.out_md}]")
     if args.out_json:
         Path(args.out_json).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out_json).write_text(json.dumps(render_json(result), indent=1))
+        Path(args.out_json).write_text(
+            json.dumps(render_json(result), indent=1), encoding="utf-8")
         print(f"[wrote {args.out_json}]")
     return 0 if result.verdict == "PASS" else 1
 
@@ -178,7 +203,11 @@ def main() -> int:
     ap.add_argument("--stage", required=True,
                     choices=("mde", "walkforward", "validation"))
     ap.add_argument("--arms", required=True, type=Path,
-                    help='JSON: {"baseline": [...], "component": [...]}')
+                    help='JSON. --stage mde/validation: '
+                         '{"baseline": [...], "component": [...]}. '
+                         '--stage walkforward: {"folds": [{"test_year": ..., '
+                         '"baseline": [...], "component": [...]}, ...]} '
+                         '(exactly 3, distinct test_year each)')
     ap.add_argument("--title", required=True, help="component name for the doc")
     ap.add_argument("--window", required=True, help="the window, for the record")
     ap.add_argument("--permutation-p", type=float, default=None,

@@ -43,10 +43,11 @@ def test_validation_stage_emits_a_verdict_and_a_results_doc(tmp_path):
             "--out-md", str(out_md), "--out-json", str(out_json))
     assert r.returncode in (0, 1), r.stderr
     assert out_md.exists() and out_json.exists()
-    blob = json.loads(out_json.read_text())
+    blob = json.loads(out_json.read_text(encoding="utf-8"))
     assert blob["verdict"] in ("PASS", "FAIL")
     assert blob["acceptance_version"] == 2
-    assert "win_rate" in out_md.read_text()
+    md_text = out_md.read_text(encoding="utf-8")
+    assert "win_rate" in md_text
 
 
 def test_exit_code_is_one_on_a_failing_component(tmp_path):
@@ -144,10 +145,27 @@ def test_validation_stage_writes_a_pending_skeleton_before_the_verdict_is_known(
         vc._run_gate(
             type("Args", (), {"arms": arms, "title": "t", "window": "w",
                               "permutation_p": 0.01, "resamples": 200,
-                              "seed": 42, "notes": None,
+                              "seed": 7, "notes": None,
                               "out_md": str(out_md), "out_json": None})(),
             "validation")
     assert out_md.exists()
-    text = out_md.read_text()
+    text = out_md.read_text(encoding="utf-8")
     assert "PENDING" in text
     assert "win_rate" in text and "geometry" in text
+    assert "bootstrap seed 7" in text  # the pre-registered skeleton names the
+                                       # ACTUAL --seed, not the dataclass default
+
+
+def test_walkforward_stage_rejects_a_fold_count_other_than_three(tmp_path):
+    """gate_win_rate's '>=2 of 3' rule presumes exactly 3 folds -- 2 folds
+    silently becomes '2 of 2' and a duplicated test_year hides a missing
+    third year. The CLI must refuse rather than silently score whichever
+    folds it was handed."""
+    arms = write_folds(tmp_path, "improving")
+    blob = json.loads(arms.read_text(encoding="utf-8"))
+    blob["folds"] = blob["folds"][:2]          # only 2 of the 3 folds
+    arms.write_text(json.dumps(blob), encoding="utf-8")
+    r = run("--stage", "walkforward", "--arms", str(arms), "--title", "t",
+            "--window", "fold-test 2021-2023")
+    assert r.returncode == 1
+    assert "REFUSED" in r.stdout
