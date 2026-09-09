@@ -83,7 +83,11 @@ export class PlanCell {
    * as backwards (a short's stop "should" be on the far side of entry from
    * target) unless the tooltip says why.
    */
-  readonly trailing = input<boolean>(false);
+  readonly stopKind = input<'risk' | 'trailing' | 'derived_floor'>('risk');
+  readonly targetIsBankedTp1 = input<boolean>(false);
+  readonly floorR = input<number | null>(null);
+  readonly priceR = input<number | null>(null);
+  readonly headroomR = input<number | null>(null);
 
   /* -- v58: the banked TP1 leg, shown in the tooltip once PARTIAL -------- */
 
@@ -118,8 +122,11 @@ export class PlanCell {
     const lead = this.showsTrigger()
       ? `Trigger ${this.fmt(this.trigger())} (not yet filled)`
       : `Entry ${this.fmt(this.entry())}`;
-    const stopWord = this.trailing() ? 'Trailing stop' : 'Stop';
-    let out = `${lead} · Target ${this.fmt(this.target())} · ${stopWord} ${this.fmt(this.stop())}`;
+    const stopWord = { risk: 'Stop', trailing: 'Trailing stop', derived_floor: 'Locked-in floor' }[this.stopKind()];
+    const targetPart = this.targetIsBankedTp1()
+      ? `TP1 banked · floor ${r(this.floorR())} · price ${r(this.priceR())} · headroom ${r(this.headroomR())}`
+      : `Target ${this.fmt(this.target())}`;
+    let out = `${lead} · ${targetPart} · ${stopWord} ${this.fmt(this.stop())}`;
     const fraction = this.bankedFraction();
     const r = this.bankedR();
     const entry = this.bankedEntry();
@@ -140,6 +147,8 @@ export class PlanCell {
     return num(v);
   }
 }
+
+const r = (value: number | null): string => value === null ? '—' : `${value.toFixed(1)}R`;
 
 /** %-gain on an already-banked leg, from the position's ORIGINAL entry to
  *  that leg's own fill price, signed by direction -- the number a trader

@@ -123,6 +123,14 @@ export interface TradeRow {
   progress_band: 'toward_stop' | 'neutral' | 'toward_target' | null;
   blink_seconds: number | null;
   status_label: string;
+  target_is_banked_tp1: boolean;
+  stop_kind: 'risk' | 'trailing' | 'derived_floor';
+  bar_kind: 'progress' | 'approach' | 'trailing' | 'none';
+  floor_r: number | null;
+  price_r: number | null;
+  headroom_r: number | null;
+  distance_to_trigger_r: number | null;
+  bars_to_expiry: number | null;
 }
 
 /** The heavy half of a trade, fetched only for the detail view.
