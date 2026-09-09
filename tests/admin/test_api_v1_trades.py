@@ -966,16 +966,16 @@ def test_partial_plan_with_no_legs_realized_has_null_banked_fields(seed, logged_
 
 
 def test_partial_plan_falls_back_when_the_runner_fields_are_unset(seed, logged_in):
-    """A PARTIAL plan predating tp2/working_stop (or a strategy with no
-    stretch target) still has to show SOMETHING rather than None."""
+    """v73: TP1 is banked; without TP2 the runner has no current target."""
     plan = _plan("11111111-1111-4111-8111-111111111111", status="PARTIAL")
     plan.update({"stop_loss": 95.0, "tp1": 110.0, "tp2": None, "working_stop": None})
     trade = _trade("aaaaaaaaaaaaaaaa", plan_id=plan["plan_id"], status="open")
     seed(plans=[plan], trades=[trade])
 
     row = logged_in.get("/api/v1/trades").get_json()["items"][0]
-    assert row["target"] == 110.0
-    assert row["stop_loss"] == 95.0
+    assert row["target"] is None
+    assert row["target_is_banked_tp1"] is True
+    assert row["stop_loss"] == pytest.approx(107.0)
 
 
 def test_active_plan_is_unaffected_by_the_partial_fields(seed, logged_in):
@@ -988,7 +988,7 @@ def test_active_plan_is_unaffected_by_the_partial_fields(seed, logged_in):
 
     row = logged_in.get("/api/v1/trades").get_json()["items"][0]
     assert row["target"] == 110.0
-    assert row["stop_loss"] == 95.0
+    assert row["stop_loss"] == 101.0
     assert row["banked_fraction"] is None
 
 
