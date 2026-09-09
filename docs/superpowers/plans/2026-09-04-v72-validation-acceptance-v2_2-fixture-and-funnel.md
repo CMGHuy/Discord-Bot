@@ -1096,6 +1096,34 @@ git add scripts/backtest/validate_component.py tests/backtesting/test_validate_c
 git commit -m "fix(v72): wire gate_win_rate into walkforward, pre-register before the run"
 ```
 
+**Follow-up hardening (found reviewing the extension's own output, same
+task, committed separately):** three defects the extension's tests could
+not see, all in `validate_component.py`.
+
+1. **`--stage walkforward` silently scored the wrong fold count.**
+   `gate_win_rate` is pre-registered as ">= 2 of 3 folds improving"; handed
+   two folds it becomes "2 of 2", and a duplicated `test_year` hides that a
+   real third year never ran. Added `_folds_are_well_formed` — exactly 3
+   folds, 3 distinct `test_year` values, else `REFUSED` with exit 1. Fails
+   closed: a malformed input is never a PASS.
+2. **Every results doc was written in the platform default encoding.**
+   `render_markdown` emits `—`, `≥` and `Δ`; on this Windows dev machine
+   `Path.write_text` defaults to cp1252 and raises `UnicodeEncodeError`, so
+   a doc written on the dev box and one written in the Docker image were
+   not the same artefact. All four `write_text` calls (skeleton md/json,
+   verdict md/json, walkforward md/json) now pass `encoding="utf-8"`.
+3. **The pre-registered skeleton named the wrong seed.** `_write_skeleton`
+   built its `AcceptanceResult` without `seed=`, so the skeleton recorded
+   the dataclass default (42) even under `--seed 7` — the pre-registration
+   claimed a bootstrap that was not the one about to run. Now passes
+   `args.seed`, pinned by a test asserting the actual seed appears in the
+   skeleton.
+
+```bash
+git add scripts/backtest/validate_component.py tests/backtesting/test_validate_component_cli.py
+git commit -m "fix(v72): the funnel CLI fails closed, writes utf-8, pre-registers the real seed"
+```
+
 ---
 
 # Phase D — documentation and verification
