@@ -39,6 +39,11 @@ containers from that image. Configuration is schema-driven through
 
 ## Decision standards
 
+Ask as many questions as you need — there is no question budget. One per
+message. When a request is ambiguous, a premise looks wrong, or a call is the
+human partner's, ask instead of assuming. This does not license asking which
+option to take after a finding is established; record the finding instead.
+
 For strategy, trading, or plan prioritization, rank work by pooled expectancy
 (`ExpR`) first and win rate second. State the tradeoff when selecting work over
 a higher-impact alternative. Every new spec or plan needs an `Edge:` header:
