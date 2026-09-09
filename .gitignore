@@ -105,6 +105,9 @@ swingbot/admin/static/app/
 .vscode/
 .claude/settings.local.json
 .claude/worktrees/
+# Scratch output from the Playwright MCP server: browser profile, traces and
+# screenshots from a local session. Machine-specific and can be large.
+.playwright-mcp/
 
 # Local-machine-specific: shells out through WSL to a hardcoded key path.
 # Never committed -- see the file's own header for what it does.
