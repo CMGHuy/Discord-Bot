@@ -1,11 +1,11 @@
 # v77 — The live tape: a two-lane ticker for the admin shell
 
 **Version:** ui 1.12.0 · bot 1.6.2
-**Bump:** ui minor · bot patch — `ui minor` because this hands the operator a
-new permanent surface on every route, which is an observable difference in the
-product rather than a large diff; `bot patch` because the scan's only change is
-to publish a per-ticker last bar it already holds, and no alert, chart, plan or
-sizing decision moves. Numbers are resolved at close-out from the then-current
+**Bump:** ui minor — this hands the operator a new permanent surface on every
+route, which is an observable difference in the product rather than a large
+diff. **The `bot` line does not move at all:** the tape is composed entirely by
+the admin API from data the bot already produces, and no scanning, planning,
+sizing, alerting or charting code is touched. Numbers are resolved at close-out from the then-current
 `VERSION.json`, never predicted here. The `Version:` line is a historical stamp,
 not a target.
 **Edge:** none (integrity) — and labelled honestly. This buys **no** edge. It
@@ -97,31 +97,55 @@ glancing at it habitual.
 
 ## The feed: no new price source
 
-The scan loop already fetches OHLCV for **every** watchlist ticker every
-`SCAN_INTERVAL_MINUTES` (default 5). The last bar is therefore already in hand
-on every pass and is simply not surfaced. Lane B is fed by emitting it on the
-**existing** `scan` SSE topic (`swingbot/admin/events/stream.py`,
-`frontend/src/app/api/event-stream.ts`).
+Every scan already runs `_fetch_live_prices` as its Phase 1b — **one batched
+live-price fetch for the whole watchlist**, 1-day/1-minute bars with
+`prepost=True`, bounded by `LIVE_PRICE_TIMEOUT_SECONDS`. Its own comment states
+the reason it exists: *"a warm daily-bar cache says nothing about today's live
+(incl. pre/post-market) price."* The batched public entry point is
+`marketdata/data.get_current_price_batch(tickers)`, and `get_current_price()`
+caches for `_PRICE_CACHE_TTL_SECONDS = 15`.
 
-This was chosen over a dedicated ~60s quote poller and over a real-time paid
-feed. The poller buys ~5 minutes of freshness in exchange for a new failure
-mode, a new rate-limit surface, and a second price path that can disagree with
-the scan's — two numbers for the same ticker on the same screen is a
-correctness bug, not a freshness improvement. The paid feed buys real time in
-exchange for a secret, a dependency and a bill, for a strip that answers a
-question the operator is not trading on.
+So the tape does not need a new price source, a new poller, or a paid feed. It
+needs an endpoint that composes what already exists.
 
-**The cost is latency, and it must be shown, not hidden.** Up to ~20 minutes:
-5 minutes of scan interval plus yfinance's ~15-minute delay. Lane B therefore
-carries a **pinned** `◷ 14:35` as-of badge in a fixed end-cap outside the
-moving track. This is not cosmetic: a badge that rides the tape scrolls away,
-so the freshness signal would blink in and out and be absent exactly when
-someone glances. A screen that hides how stale its data is has a correctness
-bug.
+**The transport is a refetch, not a push payload.** The SSE layer is a
+`stat()`-based file watcher (`admin/events/watcher.py`) that deliberately
+**never opens a watched file** — the signature is `(mtime_ns, size)`, and the
+docstring names that immunity to torn lines and schema drift as load-bearing.
+Events carry a concern name only; the client refetches through the v1 API. A
+design that "emits the last bar on the `scan` topic" would have to add a parse
+to the watcher, which that module explicitly forbids.
 
-Lane A and Lane B are never merged into one strip, at any width, for the same
-reason — the lanes have different latencies, and one as-of badge cannot sit
-honestly over two different truths.
+Lane B therefore works like every other workspace here:
+
+```
+scan finishes → scan_telemetry.jsonl / scan_snapshots.json move
+              → watcher raises the existing `scan` event
+              → client refetches GET /api/v1/market/tape?symbols=…
+```
+
+**No new data file, no new `_DATA_PATHS` entry, and no v67 coordination.** The
+endpoint composes live: `get_current_price_batch()` for price, the daily store
+for the previous close behind `%chg`, `TradeLog` for open positions,
+`plan_store` for active plans, and the watchlist module's existing
+`_next_earnings` helper for earnings.
+
+The client passes the flagged symbols rather than the server reading the
+preference itself, which keeps the endpoint stateless and makes a toggle take
+effect on the next refetch rather than waiting for a preference round-trip.
+
+**Freshness is bounded by the scan interval, not by a delayed daily bar.** The
+as-of badge shows the timestamp the endpoint composed its answer at. Refetch is
+driven by the `scan` event alone — no independent browser polling loop, so an
+open tab adds no recurring network load beyond one small batch per scan. Lane B
+therefore carries a **pinned** as-of badge in a fixed end-cap outside the moving
+track. This is not cosmetic: a badge that rides the tape scrolls away, so the
+freshness signal would blink in and out and be absent exactly when someone
+glances. A screen that hides how stale its data is has a correctness bug.
+
+Lane A and Lane B are never merged into one strip, at any width — the lanes have
+different latencies, and one as-of badge cannot sit honestly over two different
+truths.
 
 ## The flag
 
@@ -147,10 +171,11 @@ v67 enumerates every data path.
 `ui_preferences` table, one JSON doc per `owner`) — a different and later phase
 than the watchlist one. A list value fits that shape.
 
-**The scan emits all watchlist tickers; Lane B filters client-side.** ~90
-tickers × a few fields per 5 minutes is a few KB, and it keeps the backend
-ignorant of a pure display concern while making a toggle take effect
-immediately rather than at the next scan.
+**The flagged list is the client's, and it travels as a query parameter.** The
+endpoint stays stateless and never reads the preference itself, so a toggle
+takes effect on the very next refetch rather than after a preference
+round-trip — and the server only ever prices the handful of symbols actually
+flagged, not all ~90.
 
 **Empty behaviour is opt-in with no fallback:** nothing flagged means Lane B
 does not render at all. Lane A is unaffected.
@@ -234,29 +259,35 @@ layered read is wanted on every device, not only where it is cheap.
 
 | Need | Existing |
 |---|---|
-| Push transport | `admin/events/stream.py` + `api/event-stream.ts`, `scan` topic |
+| Refetch trigger | `admin/events/stream.py` + `api/event-stream.ts`, `scan` event |
 | Tick colouring | `ui/flash.ts` (`sbFlash`) |
 | Market-hours truth | `connection.marketActive()` (SR58, already in `.topbar`) |
 | In-row controls | `data-table.ts:758` button exemption |
 | Destructive gate | `sb-confirm-dialog` via `ask(row)` |
-| Flag persistence | `ui_preferences` doc + `PreferencesStore` |
+| Flag persistence | `ui_preferences` doc + `PreferencesStore.update()` |
+| Batched live price | `marketdata/data.get_current_price_batch()` |
 | Reduced motion | already global in `tokens.css` |
 
 ## Coordination with v67
 
-v67 (JSON → Postgres) runs long and in parallel. This spec deliberately keeps
-its write inside `ui_preferences`, which v67 migrates at `P3-01` in phase 3, and
-keeps `watchlist.json` untouched, which v67 migrates at `P2-21`/`P2-22` in
-phase 2.
+v67 (JSON → Postgres) runs long and in parallel. **This spec requires no v67
+task changes**, which is a deliberate outcome rather than luck:
 
-**The implementation plan must still add `tape.symbols` to v67's `P3-01`
-task**, so the migration carries the key across rather than dropping it. A
-parallel plan that touches a `data/` JSON file and does not update v67's
-matching task is how the key gets silently lost at cutover.
+- The only thing it persists is `tape.symbols` inside the existing
+  `ui_preferences` doc, which v67 already migrates wholesale at `P3-01`
+  (`p3_003`, `ui_preferences` table, one JSON doc per `owner`). A new key inside
+  a migrated document needs no new task.
+- `data/watchlist.json` is untouched, so v67 phase 2 (`P2-21`/`P2-22`) is
+  unaffected.
+- No new file lands in `data/`, so v67's `_DATA_PATHS` enumeration is unchanged.
+
+If a later revision reintroduces a persisted tape snapshot file, that assumption
+dies and v67 gains a task. Check this section before adding one.
 
 ## What this does not do
 
-- Does not change what the bot scans, plans, sizes, fills or alerts on.
+- Does not change what the bot scans, plans, sizes, fills or alerts on. No
+  file under `swingbot/core/` or `swingbot/commands/` is modified.
 - Does not add a price source, a secret, or a paid dependency.
 - Does not place, modify or close any trade — paper or otherwise.
 - Does not make Lane A configurable. Its symbols are fixed indices; the
