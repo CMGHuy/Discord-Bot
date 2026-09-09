@@ -11,6 +11,7 @@ from swingbot.bot_core import bot
 from swingbot.core.analytics.rank import rank_plans
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core import presentation as ui
+from swingbot.core.presentation.plan_view import plan_view
 from swingbot.core.scanning.embeds import banked_leg_pct_and_amount, signed_money
 from swingbot.commands.views import (
     starred_ids,
@@ -34,31 +35,30 @@ def _partial_tail(plan) -> str:
     the tp1 level on a gap-through), falling back to plan.tp1 for a PARTIAL
     plan with no recorded leg -- the same defensive fallback
     embeds.partial_position_line() uses."""
-    leg = plan.legs_realized[0] if plan.legs_realized else None
+    view = plan_view(plan)
     bits = []
-    if leg:
-        pct, amount = banked_leg_pct_and_amount(plan, leg["exit_price"],
-                                                leg["fraction"])
-        banked = f"banked {ui.fmt_r(leg['r'])}"
+    if view.banked:
+        pct, amount = banked_leg_pct_and_amount(plan, view.banked.exit_price,
+                                                view.banked.fraction)
+        banked = f"banked {ui.fmt_r(view.banked.r)}"
         if pct is not None:
             banked += f"/{ui.fmt_pct(pct)}"
         if amount is not None:
             banked += f"/{signed_money(amount, config.CURRENCY_SYMBOL)}"
-        bits.append(f"{banked} on {leg['fraction']:.0%}")
+        bits.append(f"{banked} on {view.banked.fraction:.0%}")
 
-    runner_entry = leg["exit_price"] if leg else plan.tp1
-    runner = f"runner entry {ui.fmt_price(runner_entry)}"
-    if plan.working_stop is not None:
-        runner += f" SL {ui.fmt_price(plan.working_stop)}"
-    if plan.tp2 is not None:
-        runner += f" TP2 {ui.fmt_price(plan.tp2)}"
-    else:
-        runner += f" TP1 (no TP2) {ui.fmt_price(plan.tp1)}"
+    runner = f"runner entry {ui.fmt_price(view.entry)}"
+    if view.stop is not None:
+        word = "trailing" if view.stop_kind == "trailing" else "floor"
+        runner += f" {word} {ui.fmt_price(view.stop)}"
+    if view.target is not None:
+        runner += f" TP2 {ui.fmt_price(view.target)}"
     bits.append(runner)
     return " · ".join(bits)
 
 
-def _plan_line(plan) -> str:
+def _plan_line(plan, *, price: float | None = None,
+               bars_since_created: int | None = None) -> str:
     from swingbot.core.analytics.rank import follow_score
     import datetime as dt
 
@@ -71,6 +71,12 @@ def _plan_line(plan) -> str:
         tp2_bit = f" TP2 {ui.fmt_price(plan.tp2)}" if plan.tp2 is not None else ""
         tail = (f"entry {ui.fmt_price(plan.trigger_price)} SL {ui.fmt_price(plan.stop_loss)} "
                 f"TP1 {ui.fmt_price(plan.tp1)}{tp2_bit}")
+        if plan.status == "PENDING":
+            view = plan_view(plan, price=price, bars_since_created=bars_since_created)
+            if view.distance_to_trigger_r is not None:
+                tail += f" � {view.distance_to_trigger_r:.1f}R away"
+            if view.bars_to_expiry is not None:
+                tail += f" � {view.bars_to_expiry} bars left"
     return (
         f"{star}{ui.direction_glyph(plan.direction)} {plan.ticker} {direction_word} · "
         f"{plan.status} · follow {score:.0f} · {tail}"
