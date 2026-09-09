@@ -143,7 +143,20 @@ def partial_position_line(plan) -> str:
     """Render a partial runner using the shared plan-view projection."""
     from swingbot.core.presentation.plan_view import plan_view
 
-    view = plan_view(plan)
+    # The lifecycle embed is built while recording a TP1 transition, before
+    # some callers persist the new status. Its event already establishes that
+    # this is a partial runner, so present that one attribute to the pure
+    # projection without recreating any of its price derivation here.
+    if plan.status != "PARTIAL":
+        class PartialEventPlan:
+            status = "PARTIAL"
+
+            def __getattr__(self, name):
+                return getattr(plan, name)
+
+        view = plan_view(PartialEventPlan())
+    else:
+        view = plan_view(plan)
     if view.target is not None:
         return (f"entry {view.entry:.2f} → target {view.target:.2f} "
                 f"/ stop {view.stop:.2f}")
