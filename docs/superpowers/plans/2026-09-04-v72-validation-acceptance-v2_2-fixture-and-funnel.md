@@ -801,6 +801,301 @@ git add scripts/backtest/validate_component.py tests/backtesting/test_validate_c
 git commit -m "feat(v72): validate_component.py -- one funnel CLI, one bar"
 ```
 
+### Task C3 extension: wire `gate_win_rate` into `--stage walkforward`, and pre-register before the run
+
+**Found during C3's task review (this plan still open/unclosed, so the fix
+lands here rather than in a follow-up plan) — human partner decided both
+gaps below should be closed now, not deferred.**
+
+**Gap 1:** the brief's own Interfaces line for C3 said this task "Consumes
+... `gate_win_rate` from C2," but the verbatim Step 3 code never called it
+— `stage_walkforward` just ran the pooled six-clause `evaluate()` once,
+identically to `stage_validation`. D1 (next task) was about to document
+Stage 2 as "`gate_win_rate`: >= 2 of 3 folds improving" when the CLI did
+not actually apply that rule — a component whose win-rate effect does not
+hold across fold-test years (v68's exact failure mode) could exit 0 from
+`--stage walkforward` on a favourable pooled sample.
+
+**Gap 2:** the brief's own description said the CLI "writes the
+results-doc skeleton with the clause set quoted into it before the run, so
+the pre-registration is on disk before the number is known" — never
+implemented; `_run_gate` evaluated first and wrote second.
+
+**Files:**
+- Modify: `scripts/backtest/validate_component.py`
+- Modify: `tests/backtesting/test_validate_component_cli.py` (add walkforward + skeleton tests)
+
+**Interfaces:**
+- Consumes (new): `delta_standardised_win_rate`, `ClauseResult`,
+  `AcceptanceResult` from Phase A (`swingbot.core.backtesting.acceptance`,
+  already imported symbols from A1/A5); `gate_win_rate`,
+  `GATE_MIN_IMPROVING_FOLDS`, `GATE_MAX_WR_DEGRADATION_PP`,
+  `GATE_MIN_N_PER_FOLD` from C2 (`swingbot.core.backtesting.backtest_wf`).
+- Produces: `load_folds(path) -> list[dict]`; a rewritten
+  `stage_walkforward(args) -> int` that no longer routes through
+  `_run_gate`; a new `_write_skeleton(args, stage) -> None` called from
+  `_run_gate` before `evaluate()` runs.
+
+**New `--arms` shape for `--stage walkforward` only** (validation/mde keep
+the existing `{"baseline": [...], "component": [...]}` shape):
+
+```json
+{"folds": [
+  {"test_year": "2021", "baseline": [ArmTrade...], "component": [ArmTrade...]},
+  {"test_year": "2022", "baseline": [...], "component": [...]},
+  {"test_year": "2023", "baseline": [...], "component": [...]}
+]}
+```
+
+**Why `delta_standardised_win_rate` directly, not `evaluate()`, for the
+per-fold number:** Stage 2 is pre-registered as "free and repeatable" —
+the six-clause `evaluate()` runs a 10,000-resample bootstrap per call
+(expensive, and its win_rate clause already needs `ALPHA`-significance,
+which isn't what a fold-consistency check asks). `delta_standardised_win_rate`
+is the same underlying point-estimate `_clause_win_rate` bootstraps around,
+computed directly and deterministically — free, matching what "repeatable
+at zero cost" requires.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# append to tests/backtesting/test_validate_component_cli.py
+def write_folds(tmp_path, deltas_pattern="improving"):
+    """3 folds; `deltas_pattern` controls whether the component's win rate
+    improves (component keeps more wins) or degrades (component keeps more
+    losses) relative to baseline, in each fold."""
+    folds = []
+    for year in ("2021", "2022", "2023"):
+        baseline, component = [], []
+        for t in range(35):
+            for i in range(10):
+                outcome = "win" if i < 4 else "loss"
+                row = {"ticker": f"T{t}", "strategy": "MACD",
+                       "horizon_key": "3m", "entry_date": f"{year}-03-{i + 1:02d}",
+                       "outcome": outcome, "r_multiple": 2.0 if outcome == "win" else -1.0,
+                       "planned_rr": 2.0}
+                baseline.append(row)
+                keep = (outcome == "win") if deltas_pattern == "improving" else (outcome == "loss")
+                if keep or i >= 6:
+                    component.append(row)
+        folds.append({"test_year": year, "baseline": baseline, "component": component})
+    p = tmp_path / "folds.json"
+    p.write_text(json.dumps({"folds": folds}))
+    return p
+
+
+def test_walkforward_stage_passes_when_folds_improve(tmp_path):
+    arms = write_folds(tmp_path, "improving")
+    r = run("--stage", "walkforward", "--arms", str(arms), "--title", "t",
+            "--window", "fold-test 2021-2023")
+    assert r.returncode == 0
+    assert "PASS" in r.stdout
+
+
+def test_walkforward_stage_fails_when_folds_degrade(tmp_path):
+    arms = write_folds(tmp_path, "degrading")
+    r = run("--stage", "walkforward", "--arms", str(arms), "--title", "t",
+            "--window", "fold-test 2021-2023")
+    assert r.returncode == 1
+    assert "FAIL" in r.stdout
+
+
+def test_validation_stage_writes_a_pending_skeleton_before_the_verdict_is_known(tmp_path, monkeypatch):
+    """The skeleton write happens before evaluate() -- assert this by making
+    evaluate() raise, and confirming the skeleton file still landed on disk
+    with a PENDING verdict and the real clause thresholds, even though the
+    run itself never completed."""
+    import scripts.backtest.validate_component as vc
+    arms = write_arms(tmp_path)
+    out_md = tmp_path / "result.md"
+
+    def boom(*a, **k):
+        raise RuntimeError("simulated crash after skeleton, before verdict")
+
+    monkeypatch.setattr(vc, "evaluate", boom)
+    with pytest.raises(RuntimeError):
+        vc._run_gate(
+            type("Args", (), {"arms": arms, "title": "t", "window": "w",
+                              "permutation_p": 0.01, "resamples": 200,
+                              "seed": 42, "notes": None,
+                              "out_md": str(out_md), "out_json": None})(),
+            "validation")
+    assert out_md.exists()
+    text = out_md.read_text()
+    assert "PENDING" in text
+    assert "win_rate" in text and "geometry" in text
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `python -m pytest tests/backtesting/test_validate_component_cli.py -v`
+Expected: FAIL — `walkforward` tests fail because the old pooled
+`stage_walkforward` gives no fold-consistency signal (may spuriously pass
+or fail depending on pooled math, not because it evaluates folds); the
+skeleton test fails with no file written before the simulated crash.
+
+- [ ] **Step 3: Implement**
+
+Add these imports to `scripts/backtest/validate_component.py`, alongside
+the existing ones from `swingbot.core.backtesting.acceptance`:
+
+```python
+from swingbot.core.backtesting.acceptance import (  # noqa: E402
+    ALPHA, BOOTSTRAP_RESAMPLES, GEOMETRY_MAX_DROP_PCT, NON_INFERIORITY_R,
+    VOLUME_MAX_CUT_PCT, ArmTrade, AcceptanceResult, ClauseResult, evaluate,
+    delta_standardised_win_rate, mde_win_rate, project_target_n,
+    render_json, render_markdown, win_rate,
+)
+from swingbot.core.backtesting.backtest_wf import gate_win_rate  # noqa: E402
+```
+
+Add `load_folds`, and replace `stage_walkforward` and `_run_gate`:
+
+```python
+def load_folds(path: Path) -> list:
+    blob = json.loads(Path(path).read_text())
+    to_arm = lambda rows: [ArmTrade(**r) for r in rows]
+    return [{"test_year": f["test_year"], "baseline": to_arm(f["baseline"]),
+             "component": to_arm(f["component"])} for f in blob["folds"]]
+
+
+def stage_walkforward(args) -> int:
+    """Stage 2. Free and repeatable: a plain point-estimate per fold, no
+    bootstrap -- consistency across fold-test years is the whole question,
+    and gate_win_rate (C2) is the pre-registered rule for it."""
+    folds = load_folds(args.arms)
+    rows = []
+    for f in folds:
+        b, c = f["baseline"], f["component"]
+        delta = delta_standardised_win_rate(b, c)
+        n = min(sum(1 for t in b if t.outcome in DECIDED),
+                sum(1 for t in c if t.outcome in DECIDED))
+        rows.append({"test_years": f["test_year"], "delta_win_rate_pp": delta, "n": n})
+        print(f"fold {f['test_year']}: dWR="
+              f"{'n/a' if delta is None else f'{delta:+.2f}pp'} n={n}", flush=True)
+    verdict = gate_win_rate({"folds": rows})
+    print(f"\n{verdict} -- stage 2 walkforward win-rate consistency gate")
+    if args.out_json:
+        Path(args.out_json).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out_json).write_text(json.dumps({"verdict": verdict, "folds": rows}, indent=1))
+    if args.out_md:
+        lines = [f"# {args.title} — WALKFORWARD", "", f"Window: {args.window}", "",
+                 "| fold | dWR (pp) | n |", "|---|---|---|"]
+        for r in rows:
+            d = r["delta_win_rate_pp"]
+            d_str = "n/a" if d is None else f"{d:+.2f}"
+            lines.append(f"| {r['test_years']} | {d_str} | {r['n']} |")
+        lines += ["", f"**Overall: {verdict}**"]
+        Path(args.out_md).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out_md).write_text("\n".join(lines) + "\n")
+    return 0 if verdict == "PASS" else 1
+
+
+def _write_skeleton(args, stage: str) -> None:
+    """Pre-registration: the clause set and its thresholds go on disk
+    before evaluate() runs, so nothing about what counts as a pass can be
+    changed after the number is seen."""
+    if not args.out_md and not args.out_json:
+        return
+    pending = lambda name, threshold: ClauseResult(name, "PENDING", "not yet run", None, threshold)
+    skeleton = AcceptanceResult(
+        stage=stage, verdict="PENDING",
+        clauses=(
+            pending("win_rate", 0.0), pending("profit_floor", NON_INFERIORITY_R),
+            pending("geometry", GEOMETRY_MAX_DROP_PCT),
+            pending("volume", VOLUME_MAX_CUT_PCT), pending("permutation", ALPHA),
+            pending("mechanism", None)),
+        strata=[], split={"removed": 0, "changed": 0, "unchanged": 0,
+                         "added": 0, "is_subset": False})
+    md = render_markdown(skeleton, title=args.title, window=args.window,
+                         notes="PRE-REGISTERED skeleton -- written before "
+                               "evaluate() runs; verdict pending.")
+    if args.out_md:
+        Path(args.out_md).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out_md).write_text(md)
+    if args.out_json:
+        Path(args.out_json).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out_json).write_text(json.dumps(render_json(skeleton), indent=1))
+
+
+def _run_gate(args, stage: str) -> int:
+    baseline, component = load_arms(args.arms)
+    _write_skeleton(args, stage)
+    result = evaluate(baseline, component, stage=stage,
+                      permutation_p=args.permutation_p,
+                      n_resamples=args.resamples, seed=args.seed)
+    md = render_markdown(result, title=args.title, window=args.window,
+                         notes=args.notes)
+    print(md)
+    if args.out_md:
+        Path(args.out_md).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out_md).write_text(md)
+        print(f"[wrote {args.out_md}]")
+    if args.out_json:
+        Path(args.out_json).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out_json).write_text(json.dumps(render_json(result), indent=1))
+        print(f"[wrote {args.out_json}]")
+    return 0 if result.verdict == "PASS" else 1
+```
+
+Also fix the two bugs the task review found in the original verbatim Step 3
+code (both plan-mandated defects, not implementer errors — fix in place):
+
+1. In `stage_mde`, `win_rate(baseline)` is formatted into a print
+   statement BEFORE the `mde is None` check, so an arms file with zero
+   decided trades crashes with `TypeError` instead of printing the
+   intended "no decided trades" refusal. Replace the whole function body
+   with:
+
+```python
+def stage_mde(args) -> int:
+    baseline, _ = load_arms(args.arms)
+    observed = sum(1 for t in baseline if t.outcome in DECIDED)
+    target_n = project_target_n(observed_n=observed,
+                                observed_days=args.observed_days,
+                                target_days=args.target_days)
+    mde = mde_win_rate(baseline, target_n=target_n)
+    wr = win_rate(baseline)
+    print(f"observed decided N : {observed} over {args.observed_days}d")
+    print(f"projected target N : {target_n} over {args.target_days}d")
+    print(f"baseline win rate  : {'n/a' if wr is None else f'{wr:.2f}%'}")
+    if mde is None:
+        print("\nREFUSED -- no decided trades to estimate an MDE from.")
+        return 1
+    print(f"MDE (dWR, 80% power, one-sided 0.05): {mde:.3f}pp")
+    print(f"TRAIN effect claimed               : {args.train_effect_pp:.3f}pp")
+    if args.train_effect_pp < mde:
+        print("\nREFUSED -- the TRAIN effect is below the minimum this "
+              "sample can detect. The VALIDATION budget is NOT spent; "
+              "record this as 'unresolvable, budget intact'.")
+        return 1
+    print("\nRESOLVABLE -- the shot may proceed.")
+    return 0
+```
+
+2. `test_unknown_stage_is_rejected` only asserts `r.returncode != 0`,
+   which any unrelated failure would also satisfy. Strengthen it to
+   `assert "invalid choice" in r.stderr` (argparse's own message) so it
+   actually pins down *why* the exit was non-zero.
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `python -m pytest tests/backtesting/test_validate_component_cli.py -v`
+Expected: PASS, all tests (5 original + 3 new = 8)
+
+Then confirm nothing else regressed:
+
+Run: `python scripts/dev/testrun.py file tests/backtesting/test_acceptance_v68_regression.py`
+Run: `python scripts/dev/testrun.py file tests/backtesting/test_wf_gate_winrate.py`
+Expected: `0 failed` on both.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/backtest/validate_component.py tests/backtesting/test_validate_component_cli.py
+git commit -m "fix(v72): wire gate_win_rate into walkforward, pre-register before the run"
+```
+
 ---
 
 # Phase D — documentation and verification
