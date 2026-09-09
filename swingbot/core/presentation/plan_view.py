@@ -119,6 +119,42 @@ def _active_view(plan, price: float | None) -> PlanView:
                     bar_kind="progress" if bar else "none", bar=bar)
 
 
+def _partial_view(plan, price: float | None) -> PlanView:
+    """Project the remaining runner after its TP1 leg has been banked."""
+    leg = plan.legs_realized[0] if plan.legs_realized else None
+    banked = (BankedLeg(fraction=leg["fraction"], exit_price=leg["exit_price"],
+                        r=leg["r"]) if leg else None)
+    runner_entry = leg["exit_price"] if leg else plan.tp1
+    original_entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+
+    if plan.working_stop is not None:
+        stop, stop_kind = plan.working_stop, "trailing"
+    else:
+        stop, stop_kind = runner_floor(original_entry, plan.tp1), "derived_floor"
+
+    is_bull = plan.direction == "bullish"
+    if plan.tp2 is not None:
+        bar = (_progress_bar(stop, plan.tp2, price, runner_entry, is_bull)
+               if price is not None else None)
+        return PlanView(phase=plan.status, entry=runner_entry, stop=stop,
+                        target=plan.tp2, stop_kind=stop_kind,
+                        bar_kind="progress" if bar else "none", bar=bar,
+                        banked=banked)
+
+    risk = _risk(plan)
+    sign = 1 if is_bull else -1
+    floor_r = price_r = headroom_r = None
+    if risk:
+        floor_r = (stop - original_entry) * sign / risk
+        if price is not None:
+            price_r = (price - original_entry) * sign / risk
+            headroom_r = price_r - floor_r
+    return PlanView(phase=plan.status, entry=runner_entry, stop=stop,
+                    target=None, target_is_banked_tp1=True,
+                    stop_kind=stop_kind, bar_kind="trailing", banked=banked,
+                    floor_r=floor_r, price_r=price_r, headroom_r=headroom_r)
+
+
 def plan_view(plan, *, price: float | None = None, now=None,
               bars_since_created: int | None = None) -> PlanView:
     """Project a plan into display facts without I/O, a clock, or a store."""
@@ -127,6 +163,8 @@ def plan_view(plan, *, price: float | None = None, now=None,
         return _pending_view(plan, price, bars_since_created)
     if plan.status == "ACTIVE":
         return _active_view(plan, price)
+    if plan.status == "PARTIAL":
+        return _partial_view(plan, price)
     return PlanView(
         phase=plan.status,
         entry=plan.entry_price,
