@@ -189,7 +189,7 @@ Not auto-loaded — read the relevant one before starting work in that area.
 |---|---|
 | `architecture.md` | touching `swingbot/core`, `plan_engine` or the scan pipeline — module map, entry-signal single source, NO-LOOKAHEAD rule, badges/registry |
 | `known-traps.md` | touching data caching, `scan_engine`/`scan_embeds`, `embeds.py` — the two OHLCV caches, legacy shims, silent no-ops, and **empty tables that are measured answers, not stubs** |
-| `backtest-methodology.md` | running or interpreting any backtest/grid/validation — TRAIN/VALIDATION windows, acceptance gates, frozen constants, and the table of **closed pre-registrations that must not be re-run** |
+| `backtest-methodology.md` | running or interpreting any backtest/grid/validation — the v72 six-clause acceptance gate and its four-stage funnel, TRAIN/VALIDATION windows, frozen constants, and the table of **closed pre-registrations that must not be re-run** |
 | `edge-priorities.md` | choosing what to work on — pooled numbers, the `Edge:` taxonomy |
 | `document-conventions.md` | writing any spec or plan — `Bump:`/`Edge:` headers, `## Parallelisation`, length budgets (**split, never compress**), verification cadence |
 | `document-lifecycle.md` | closing a plan out — `implemented/`, `no-lift/`, worktree naming and removal |

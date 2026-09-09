@@ -52,6 +52,23 @@ pre-registration rules always override profit motives: never rerun a closed
 pre-registration, shrink sample size to reach a gate, or present a backtest as
 anything stronger than a hypothesis test.
 
+Feature acceptance runs through one gate (`swingbot/core/backtesting/
+acceptance.py`), driven by `python scripts/backtest/validate_component.py
+--stage mde|walkforward|validation`. Within that gate win rate is the
+objective and expectancy a non-inferiority constraint (ranking work is the
+other way round). Six clauses, all applicable ones must pass: mix-standardised
+ΔWR > 0 at one-sided p < 0.05 on a ticker-cluster bootstrap; ΔExpR lower 95%
+bound > −0.01R; median planned RR and mean win R each fall no more than 2%;
+accepted-alert count cut no more than 25%; permutation p < 0.05; and, for a
+subset feature, the removed trades must be the bad ones (removed WR < retained
+WR and removed ExpR ≤ 0). Two free stages stand in front of the one-shot
+VALIDATION budget: an MDE precheck that refuses an unanswerable question with
+the budget intact, and a fold-test consistency gate (≥ 2 of 3 fold years
+improving, none worse than −1.0pp, N ≥ 30 per fold). The absolute
+`win_rate >= 50` floor no longer gates feature acceptance — it survives only
+as a strategy-badge threshold. `Edge: harvest` features are out of scope for
+this funnel and must name the gate they use instead.
+
 Read before acting:
 
 - `docs/claude/architecture.md` before changing `swingbot/core`, plan engine,

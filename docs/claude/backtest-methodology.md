@@ -8,21 +8,71 @@ interpreting any backtest, grid, or validation result.
   component, results recorded as-is, never retuned after — a config that fails
   train never gets a validation shot. Treat the 2024–2025 window as tainted
   for any selection decision.
-- **Acceptance gates:** `win_rate >= 50`, `expectancy_r > 0`, `N >= 30`
-  (train) / `N >= 15` (validation), scratches+timeouts ≤ 50% of closed trades.
-  Win = TP1 touched; win_rate over win+loss only; expectancy over all closed
-  trades; same-bar conservative ordering (stop before target). The win-rate
-  floor was 80 before plan v31 (2026-08-17,
-  `results/2026-08-17-structural-target-train.md`) — that number was
-  calibrated to the fixed per-strategy reward:risk arithmetic v31 deleted
-  (break-even win rate at reward:risk ratio X is `1/(1+X)`; at the old fixed
-  0.30 floor that's 76.9%, which is why 80% was the bar). Every live plan
-  now prices its target against the `MIN_RISK_REWARD_RATIO`/
-  `MAX_RISK_REWARD_RATIO` band below, not a fixed ratio, so break-even
-  moved with it: `1/(1+1.5) = 40%` at the band's floor, `1/(1+2.5) =
-  28.6%` at its cap. 50% is a margin over the 40% floor-case break-even,
-  the same way 80% was a margin over the old 76.9% — **do not restore 80%
-  for any run against the current engine.**
+- **Acceptance gates (v72, `swingbot/core/backtesting/acceptance.py`).** A
+  feature ships on-by-default only if every applicable clause passes.
+  **Win rate is the objective; expectancy is a non-inferiority constraint.**
+
+  | # | Clause | Instrument | Threshold |
+  |---|---|---|---|
+  | 1 | win rate improves | mix-standardised ΔWR, ticker-cluster bootstrap | ΔWR > 0, one-sided p < 0.05 |
+  | 2 | profit preserved | ΔExpR, same bootstrap | lower 95% bound > −0.01R |
+  | 3 | geometry lock | median planned RR and mean win R | neither falls > 2% |
+  | 4 | volume floor | accepted-alert count | cut ≤ 25% |
+  | 5 | not luck | `permutation_test.py`, n = 200 | p < 0.05 on ΔWR |
+  | 6 | mechanism (subset features) | removed vs retained population | removed WR < retained WR **and** removed ExpR ≤ 0 |
+
+  **Clause 3 is load-bearing.** Break-even win rate at reward:risk `X` is
+  `1/(1+X)`, so win rate and expectancy trade one-for-one along the geometry
+  axis and move together only along the discrimination axis. Without clause 3,
+  "win rate up, expectancy flat" is passed trivially by pulling targets nearer.
+
+  **The absolute `win_rate >= 50` floor no longer applies to feature
+  acceptance.** It measured the population, not the feature: v68's component
+  arm failed it at 34.5% while its own baseline sat at 34.9%. The floor
+  survives only as a strategy-badge threshold. `expectancy_r > 0` as an
+  absolute clause is likewise gone — a feature is judged against the baseline
+  it replaces, never against zero. As a *feature-acceptance* sample rule
+  `N >= 15` is superseded by the Stage 0 MDE precheck below; it still applies
+  where it always did, to badge rows.
+
+  **The surviving badge threshold, and its history** (unchanged by v72; it
+  scores a strategy/horizon cell's own population, not a feature's effect):
+  `win_rate >= 50`, `expectancy_r > 0`, `N >= 30` (train) / `N >= 15`
+  (validation), scratches+timeouts ≤ 50% of closed trades. Win = TP1 touched;
+  win_rate over win+loss only; expectancy over all closed trades; same-bar
+  conservative ordering (stop before target). That floor was 80 before plan
+  v31 (2026-08-17, `results/2026-08-17-structural-target-train.md`) — 80 was
+  calibrated to the fixed per-strategy reward:risk arithmetic v31 deleted (at
+  the old fixed 0.30 floor, break-even is 76.9%). Every live plan now prices
+  its target inside the `MIN_RISK_REWARD_RATIO`/`MAX_RISK_REWARD_RATIO` band
+  below, so break-even moved with it: `1/(1+1.5) = 40%` at the band's floor,
+  `1/(1+2.5) = 28.6%` at its cap. 50% is the margin over the 40% floor-case
+  break-even, the way 80% was over 76.9% — **do not restore 80% for any run
+  against the current engine.**
+
+- **The acceptance funnel.** Selection never touches scoring data, and two
+  free gates stand in front of the one-shot budget. Run it with
+  `python scripts/backtest/validate_component.py --stage <stage>`.
+
+  | Stage | Window | Cost | Rule |
+  |---|---|---|---|
+  | 0 `mde` | fold-train | free | TRAIN effect below the minimum detectable effect ⇒ **shot refused, budget intact** |
+  | 1 selection | fold-train only (2018-06..2020 / ..2021 / ..2022) | free | `plateau_report()` mandatory and disqualifying — a spike, not a plateau, does not proceed |
+  | 2 `walkforward` | fold-test 2021 / 2022 / 2023 | free, repeatable | `gate_win_rate`: ≥ 2 of 3 folds improving, no fold worse than −1.0pp, per-fold N ≥ 30 |
+  | 3 `validation` | 2024-01-01..2025-12-31 | **ONE shot, ever** | all six clauses; a missing permutation p is a FAIL, not a skip |
+
+  Stage 2 being free and repeatable is the point: it is where v68 would have
+  died at no cost to its budget. Sample width for stages 2–3 is the full
+  cached universe × all 10 horizons, dispatched to `backtest-runner`.
+
+- **`Edge: harvest` features are OUT OF SCOPE for this funnel, and that is a
+  known gap, not an oversight.** Exits, targets and sizing move geometry by
+  construction, so clause 3 rejects them by design. The honest rule for
+  harvest work is expectancy-primary with a win-rate floor — close to the
+  pre-v72 gate — and it needs its own reasoning about what floor and why.
+  Until that spec exists, a harvest feature must **say in its own
+  pre-registration** that it is not using this funnel and name the gate it
+  is using instead. `Edge: expectancy` and `Edge: volume` are fully covered.
 - Frozen constants: `MIN_RISK_REWARD_RATIO = 1.5` / `MAX_RISK_REWARD_RATIO
   = 2.5` (the band `plan_engine.select_structural_target` picks every
   plan's target inside — replaces the pre-v31 per-strategy fixed
@@ -58,6 +108,12 @@ interpreting any backtest, grid, or validation result.
   the same question with looser thresholds is the exact failure the one-shot
   budget exists to prevent. Reopening one needs a *new* pre-registered
   hypothesis and its own shot, never a re-read of the old table.
+
+**The v72 procedure change does not reopen anything below.** A better
+instrument is not a new hypothesis. Every row in this table stays closed,
+and the features shipped on-by-default under the old gates
+(`RS_GATE`, `AVWAP_LEVELS_ENABLED`, level-lifecycle stops) keep their
+current defaults without a re-run.
 
 ### Closed pre-registrations — do not re-run these
 
