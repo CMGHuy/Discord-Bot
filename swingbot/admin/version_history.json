@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-09-04 11:16:42 UTC",
+  "generated_at": "2026-09-09 19:48:19 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.11.0",
+    "ui": "1.12.0",
     "bot": "1.6.1"
   },
   "releases": [
@@ -957,6 +957,19 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "commit": "a8a58a1e",
+      "subject": "release(ui): 1.12.0 -- Plan-view projection",
+      "versions": {
+        "ui": "1.12.0",
+        "bot": "1.6.1"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]
