@@ -40,6 +40,7 @@ from flask import jsonify, request
 from swingbot.admin import dashboard as dash
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.core.planning.plan_store import PlanStore
+from swingbot.core.presentation.plan_view import plan_view
 
 from . import api_v1, collection, error, parse_collection_params
 from .auth import require_auth
@@ -101,6 +102,16 @@ _OPEN_STATUSES = frozenset({"ACTIVE", "PARTIAL"})
 # `?has_note=1` would test "1" == "True" and quietly match nothing.
 _BOOLEAN_FILTERS = frozenset({"has_note", "today"})
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+class _AttrPlan:
+    """Adapt the API's dict-shaped plan to the pure projection's protocol."""
+
+    def __init__(self, data: dict):
+        self._data = data
+
+    def __getattr__(self, name):
+        return self._data.get(name)
 
 # Closed set, per the collection convention: an unsortable field is a 400.
 SORTABLE = frozenset({
@@ -196,24 +207,10 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
     t = trade or {}
     opened_at = t.get("opened_at")
     closed_at = t.get("closed_at")
-    # A PARTIAL plan has already banked TP1: the position it still carries is
-    # the runner, not the original one, so "the plan" it displays has to be
-    # the runner's own numbers -- working_stop (break-even, then wherever the
-    # chandelier trail has since moved it) and TP2, not the original entry
-    # stop/TP1 that already happened. `or` falls back to the original level
-    # when a PARTIAL plan has no TP2 (most strategies run without one -- see
-    # test_partial_plan_falls_back_when_the_runner_fields_are_unset) or
-    # predates working_stop -- showing the last known level beats showing
-    # nothing. This is also why a PARTIAL row's "stop" can legitimately sit
-    # below entry for a short (it's the runner floor protecting TP1's
-    # profit, not the original risk level) -- see PlanCell's `trailing`
-    # input / trade-detail's `stopLabel()`, which label it "Trailing stop"
-    # rather than leaving it looking like an inverted original stop.
-    is_partial = plan.get("status") == "PARTIAL"
-    legs_realized = plan.get("legs_realized") or []
-    banked_leg = legs_realized[0] if is_partial and legs_realized else None
-    current_stop = (plan.get("working_stop") if is_partial else None) or plan.get("stop_loss")
-    current_target = (plan.get("tp2") if is_partial else None) or plan.get("tp1")
+    # v73 keeps every surface on the same answer for a partial runner. In
+    # particular TP1 is banked history, not a current target, and a missing
+    # working stop falls back to its locked-in runner floor, never risk stop.
+    view = plan_view(_AttrPlan(plan), price=None)
     return {
         "id": plan["plan_id"],
         "origin": "plan",
@@ -229,13 +226,23 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "confidence_level": t.get("confidence_level"),
         "confidence_score": t.get("confidence_score"),
         "quality_score": plan.get("quality_score"),
+        # Execution P&L remains based on the position's original fill. The
+        # projection's runner entry is carried through the banked-leg facts.
         "entry": plan.get("entry_price"),
-        "stop_loss": current_stop,
-        "target": current_target,
+        "stop_loss": view.stop,
+        "target": view.target,
         "target2": plan.get("tp2"),
-        "banked_fraction": banked_leg.get("fraction") if banked_leg else None,
-        "banked_exit_price": banked_leg.get("exit_price") if banked_leg else None,
-        "banked_r": banked_leg.get("r") if banked_leg else None,
+        "target_is_banked_tp1": view.target_is_banked_tp1,
+        "stop_kind": view.stop_kind,
+        "bar_kind": view.bar_kind,
+        "distance_to_trigger_r": view.distance_to_trigger_r,
+        "bars_to_expiry": view.bars_to_expiry,
+        "floor_r": view.floor_r,
+        "price_r": view.price_r,
+        "headroom_r": view.headroom_r,
+        "banked_fraction": view.banked.fraction if view.banked else None,
+        "banked_exit_price": view.banked.exit_price if view.banked else None,
+        "banked_r": view.banked.r if view.banked else None,
         "risk_reward": t.get("risk_reward_ratio"),
         "shares": t.get("shares"),
         "open_shares": _open_shares(t.get("shares"), plan.get("legs_realized") or []),
@@ -298,6 +305,14 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "stop_loss": t.get("stop_loss"),
         "target": t.get("take_profit"),
         "target2": t.get("target2"),
+        "target_is_banked_tp1": False,
+        "stop_kind": "risk",
+        "bar_kind": "none",
+        "distance_to_trigger_r": None,
+        "bars_to_expiry": None,
+        "floor_r": None,
+        "price_r": None,
+        "headroom_r": None,
         "banked_fraction": None,
         "banked_exit_price": None,
         "banked_r": None,
@@ -737,7 +752,8 @@ def _attach_status_fields(rows: list[dict]) -> None:
     second one only runs on data nobody tests with.
     """
     for row in rows:
-        if row["status"] in _TERMINAL or row["status"] == "PENDING":
+        if (row["status"] in _TERMINAL or row["status"] == "PENDING"
+                or row.get("bar_kind") == "trailing"):
             # Nothing has opened, or it is already over: there is no position
             # to place on a bar. The label is the status itself, which is what
             # the cell shows in place of the bar.
