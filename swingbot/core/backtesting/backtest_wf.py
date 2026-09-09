@@ -14,10 +14,15 @@ from swingbot import config
 
 log = logging.getLogger("swing-bot.backtest_wf")
 
+#: Fold train windows start 2018-06-01 because that is where the OHLCV
+#: cache starts (scripts/data/fetch_backtest_data.py: START = "2018-06-01").
+#: They read 2018-01-01 until v72; that edge was always fiction -- the data
+#: was never there -- so this corrects a description, not a behaviour. The
+#: TEST windows are pre-registered and frozen, and are untouched.
 ANCHORED_FOLDS = (
-    ("2018-01-01", "2020-12-31", "2021-01-01", "2021-12-31"),
-    ("2018-01-01", "2021-12-31", "2022-01-01", "2022-12-31"),
-    ("2018-01-01", "2022-12-31", "2023-01-01", "2023-12-31"),
+    ("2018-06-01", "2020-12-31", "2021-01-01", "2021-12-31"),
+    ("2018-06-01", "2021-12-31", "2022-01-01", "2022-12-31"),
+    ("2018-06-01", "2022-12-31", "2023-01-01", "2023-12-31"),
 )
 
 # Pre-registered gate constants -- do not touch without a new pre-registration.
