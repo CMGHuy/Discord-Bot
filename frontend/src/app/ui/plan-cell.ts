@@ -124,7 +124,7 @@ export class PlanCell {
       : `Entry ${this.fmt(this.entry())}`;
     const stopWord = { risk: 'Stop', trailing: 'Trailing stop', derived_floor: 'Locked-in floor' }[this.stopKind()];
     const targetPart = this.targetIsBankedTp1()
-      ? `TP1 banked · floor ${r(this.floorR())} · price ${r(this.priceR())} · headroom ${r(this.headroomR())}`
+      ? `TP1 banked · floor ${formatR(this.floorR())} · price ${formatR(this.priceR())} · headroom ${formatR(this.headroomR())}`
       : `Target ${this.fmt(this.target())}`;
     let out = `${lead} · ${targetPart} · ${stopWord} ${this.fmt(this.stop())}`;
     const fraction = this.bankedFraction();
@@ -148,7 +148,7 @@ export class PlanCell {
   }
 }
 
-const r = (value: number | null): string => value === null ? '—' : `${value.toFixed(1)}R`;
+const formatR = (value: number | null): string => value === null ? '—' : `${value.toFixed(1)}R`;
 
 /** %-gain on an already-banked leg, from the position's ORIGINAL entry to
  *  that leg's own fill price, signed by direction -- the number a trader
