@@ -199,6 +199,33 @@ def gate(result: dict) -> str:
     return "PASS"
 
 
+#: v72 Stage 2. Win-rate flavour of the fold gate -- same shape as gate()'s
+#: expectancy rule, same pre-registered spirit: consistency across folds,
+#: not a flattering average. A fold that degrades past the ceiling fails the
+#: component however well its siblings did.
+GATE_MAX_WR_DEGRADATION_PP = 1.0
+
+
+def gate_win_rate(result: dict) -> str:
+    """The PRE-REGISTERED Stage 2 pass rule, on mix-standardised ΔWR.
+
+    Free and repeatable, unlike the VALIDATION shot behind it -- which is
+    the point: a component that cannot hold its sign across three
+    independent test years never reaches the one-shot budget.
+    """
+    folds = result["folds"]
+    deltas = [f.get("delta_win_rate_pp") for f in folds]
+    if any(d is None for d in deltas):
+        return "FAIL"
+    if any(f["n"] < GATE_MIN_N_PER_FOLD for f in folds):
+        return "FAIL"
+    if sum(d > 0 for d in deltas) < GATE_MIN_IMPROVING_FOLDS:
+        return "FAIL"
+    if any(d < -GATE_MAX_WR_DEGRADATION_PP for d in deltas):
+        return "FAIL"
+    return "PASS"
+
+
 def _early_exit_r(pos: dict, exit_price: float) -> float:
     """R of a position cut short at `exit_price` instead of run to its stop or
     target. Same direction-adjusted formula get_stats/_closed_r use live."""
