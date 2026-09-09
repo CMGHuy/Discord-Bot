@@ -55,6 +55,16 @@ TRADE_ROW = {
     "stop_loss": NULLABLE_NUMBER,
     "target": NULLABLE_NUMBER,
     "target2": NULLABLE_NUMBER,
+    # v73 -- projection provenance and derived display values, carried on
+    # every origin so the SPA never needs a second row shape.
+    "target_is_banked_tp1": bool,
+    "stop_kind": str,
+    "bar_kind": str,
+    "distance_to_trigger_r": NULLABLE_NUMBER,
+    "bars_to_expiry": NULLABLE_NUMBER,
+    "floor_r": NULLABLE_NUMBER,
+    "price_r": NULLABLE_NUMBER,
+    "headroom_r": NULLABLE_NUMBER,
     # v58 -- the TP1 leg's own stats, once a PARTIAL plan has banked one.
     # None until then; a legacy trade never scale-outs so always None.
     "banked_fraction": NULLABLE_NUMBER,
