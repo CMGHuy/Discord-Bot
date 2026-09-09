@@ -3,8 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Spec:** `docs/superpowers/specs/2026-09-04-v72-validation-acceptance-v2-design.md`
-**Version:** ui 1.11.0 · bot 1.6.1
-**Bump:** bot patch (1.6.1 → 1.6.2) — new module and CLI, no observable difference to any alert, chart or screen.
+**Bump:** bot patch — new module and CLI, no observable difference to any alert, chart or screen. Numbers resolved at close-out from VERSION.json.
 **Edge:** none (integrity) — buys no edge; stops edge that is not there from being adopted.
 
 **Goal:** Build a single acceptance module that decides whether a feature ships, replacing nine dialects of per-plan gate logic with one discrimination-first gate that win rate must pass and target geometry cannot fake.

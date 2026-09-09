@@ -811,7 +811,11 @@ Expected: `0 failed`.
 
 - [ ] **Step 4: Bump the version**
 
-Per the spec's header: `bot minor (1.5.0 → 1.6.0)`, `ui patch (1.9.2 → 1.9.3)`.
+Levels per this plan's header: **`bot` minor, `ui` patch**. Read `VERSION.json`
+from disk now and increment each line from what it actually says — never a
+number written in this plan or its spec. Other plans release while this one
+runs, so any figure predicted in advance is already wrong
+(`document-conventions.md`).
 
 The `ui` bump is a patch and not a minor even though the admin gained a
 per-record export and lost the Docker socket: the export is an inspection tool

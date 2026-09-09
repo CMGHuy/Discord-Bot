@@ -68,18 +68,15 @@ if the two disagree, fix `.codex/AGENTS.md`.
 
 ## Prioritise expectancy and win rate
 
-**The bot exists to make money on paper trades, and every plan competes for
-the same finite budget of pre-registered shots.** Rank candidate work by
-expected effect on **pooled expectancy (`ExpR`) first, win rate second**, and
-say so out loud when a plan is chosen over a higher-impact alternative — win
-rate is a constraint (the `>= 50` acceptance gate), not the objective.
+**The bot exists to make money on paper trades, and every plan competes for the
+same finite budget of pre-registered shots.** Rank work by expected effect on
+**pooled expectancy (`ExpR`) first, win rate second**, saying so when a plan
+beats a higher-impact alternative — win rate is a constraint, not the objective.
 
-Every new spec and plan carries an **`Edge:`** header line next to `Bump:`:
-`expectancy` / `harvest` / `volume` / `none (integrity)`. **This governs what
-to work on, never what threshold to accept** — it is not licence to re-run a
-closed pre-registration or shrink `N` to hit a bar. Definitions, current
-pooled numbers (re-derive before leaning on them), and the full "does not
-loosen a gate" caveat: `docs/claude/edge-priorities.md`.
+Every new spec and plan carries an **`Edge:`** header next to `Bump:`:
+`expectancy` / `harvest` / `volume` / `none (integrity)`. **This governs what to
+work on, never what threshold to accept** — never licence to re-run a closed
+pre-registration or shrink `N`. Details: `docs/claude/edge-priorities.md`.
 
 ## Token discipline (read first — this repo has context landmines)
 
@@ -164,11 +161,14 @@ of its own — both rules and why: `docs/claude/working-conventions.md`.
 **`docs/superpowers/{specs,plans}/YYYY-MM-DD-vN-<name>.md` — numbered at
 creation, not close-out**, from one repo-wide counter over both doc filenames
 and git log, recomputed immediately before the commit (sessions race it).
+**Never hard-code a `ui`/`bot` version in a plan** — `Bump:` states the level
+only (`bot patch`, `ui minor`, `none`); numbers resolve at close-out from the
+then-current `VERSION.json`. A predicted number is wrong once another releases.
 **No plan file may exceed 1500 lines** — split into more `_N` parts (lettered
 `_2a`/`_2b`), never compress a task. **A plan runs the full suite once, as its
 own final verification task — never per-task, never again after a clean
-merge.** Numbering, the `Version:`/`Bump:`/`Edge:` header, budgets, close-out,
-full verification cadence: `document-conventions.md`, `document-lifecycle.md`.
+merge.** Numbering, the `Bump:`/`Edge:` header, budgets, close-out, full
+verification cadence: `document-conventions.md`, `document-lifecycle.md`.
 
 **Specs and plans are written and committed on `main`** — no branch, no
 worktree; branch only to *implement* one. Why: `document-lifecycle.md`.

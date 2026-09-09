@@ -1,9 +1,11 @@
 # v74 — Injectable scan parameters: making the decision surface searchable
 
 **Version:** ui 1.11.0 · bot 1.6.1
-**Bump:** bot patch. v72 lands first and takes 1.6.1 → 1.6.2, so this takes
-1.6.2 → 1.6.3. A pure refactor: `ScanParams.from_config()` reproduces today's
-behaviour exactly, and no alert, chart or screen moves.
+**Bump:** bot patch — a pure refactor: `ScanParams.from_config()` reproduces
+today's behaviour exactly, and no alert, chart or screen moves. The number is
+resolved at close-out from the then-current `VERSION.json`, never predicted
+here (`document-conventions.md`). The `Version:` line above is a historical
+stamp of what this was written against, not a target.
 **Edge:** none (integrity) — and deliberately labelled that way. This spec buys
 **no** edge by itself. It is the enabling half: it makes the trade-plan
 decision surface addressable so v75 (search engine) and v76 (selection

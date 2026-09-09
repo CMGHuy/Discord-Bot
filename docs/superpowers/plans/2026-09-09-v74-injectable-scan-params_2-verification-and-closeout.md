@@ -608,7 +608,9 @@ Dispatch the `test-runner` subagent for this so ~1150 progress lines stay out of
 
 - [ ] **Step 3: Bump `VERSION.json`**
 
-`bot` patch only; `ui` untouched. If v72 has landed, `1.6.2 → 1.6.3`; if it has not, `1.6.1 → 1.6.2`. Read the file, do not assume. Set `bot_updated` to the current timestamp in the existing `YYYY-MM-DD HH-MM-SS` format.
+**Read `VERSION.json` and increment from what it actually says.** Do not take a number from this plan, from the spec, from memory, or from an earlier task's note — plans run for days beside other plans, and whichever releases first invalidates any number written in advance. This plan's `Bump:` names the *level* only, deliberately.
+
+`bot` patch: increment the patch component of whatever `bot` currently reads. Leave `ui` untouched. Set `bot_updated` to now in the existing `YYYY-MM-DD HH-MM-SS` format.
 
 The bump is a patch because Task C3 proves no observable difference — per `working-conventions.md` the test is observable difference, not diff size, and this plan touches many files while changing nothing a user can see.
 

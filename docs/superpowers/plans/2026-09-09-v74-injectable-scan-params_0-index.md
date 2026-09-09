@@ -3,8 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Spec:** `docs/superpowers/specs/2026-09-09-v74-injectable-scan-params-design.md`
-**Version:** ui 1.11.0 · bot 1.6.1
-**Bump:** bot patch. v72 lands first and takes 1.6.1 → 1.6.2, so this takes 1.6.2 → 1.6.3. Pure refactor; no alert, chart or screen moves.
+**Bump:** bot patch — pure refactor; `ScanParams.from_config()` reproduces today's behaviour exactly and no alert, chart or screen moves. Numbers resolved at close-out from VERSION.json.
 **Edge:** none (integrity) — the enabling half. Buys no edge itself; makes the decision surface addressable so v75 (search engine) and v76 (selection statistics) can find edge in it.
 
 **Goal:** Make every knob governing a trade-plan decision settable per evaluation, observable by the backtest harness, and safe to vary inside a process pool — so a knob the harness cannot see fails a test instead of silently wasting a pre-registered shot.

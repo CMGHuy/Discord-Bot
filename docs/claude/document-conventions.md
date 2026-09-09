@@ -105,19 +105,42 @@ going forward, never a retroactive renumbering.
 Every new spec and plan carries three lines above its body.
 
 **`Version:`** — `ui X.Y.Z · bot A.B.C`, copied from `VERSION.json` **as of the
-commit that authors the document**. It records which release the document was
-written against, so it is never refreshed afterwards; a doc from July keeps
-July's numbers even while the plan is still active. Documents predating this
-convention (2026-08-08) were left unstamped rather than backfilled with versions
-that would have to be reconstructed from git.
+commit that authors the document**. **Specs only — a plan carries no `Version:`
+line.** It records which release the document was written against, so it is
+never refreshed afterwards; a doc from July keeps July's numbers even while the
+plan is still active. It is a historical stamp and **never a target**: nothing
+at release time should read it. Documents predating this convention
+(2026-08-08) were left unstamped rather than backfilled with versions that would
+have to be reconstructed from git.
 
-**`Bump:`** — the release level the work *implies*: `ui minor (1.2.x → 1.3.0)`,
-`bot patch`, or `none`. A different statement from `Version:` above it —
-`Version:` is what the repo was at, `Bump:` is a prediction about what the work
-will earn when it ships. Take the level from "The three levels" in
-`working-conventions.md`, and argue it from **observable difference, not the size
-of the feature**: a 400-line spec whose whole effect is internal is a patch, and
-a one-flag spec that hands every user a different product is a minor.
+**`Bump:`** — the release **level** the work implies: `ui minor`, `bot patch`,
+or `none`. Take it from "The three levels" in `working-conventions.md`, and
+argue it from **observable difference, not the size of the feature**: a 400-line
+spec whose whole effect is internal is a patch, and a one-flag spec that hands
+every user a different product is a minor.
+
+**Never write the numbers.** `Bump: bot patch (1.6.1 → 1.6.2)` is forbidden in a
+plan: plans run for days beside other plans, and whichever releases first
+invalidates every number the others wrote. v74 was authored against `bot 1.6.1`
+predicting `1.6.2 → 1.6.3`; v73 closed the same day and took `1.6.2`, making
+both figures wrong before a line of v74 was implemented. v69 predicted
+`1.5.0 → 1.6.0` and has been stale since v70.
+
+**The numbers are resolved at close-out**, by the release task, from the
+`VERSION.json` on disk at that moment:
+
+1. Read `VERSION.json` — never a plan header, never memory, never an earlier
+   task's note.
+2. Increment the line named by `Bump:` at the named level; leave the other line
+   untouched.
+3. Set that line's `*_updated` stamp to now, in the existing
+   `YYYY-MM-DD HH-MM-SS` format.
+4. Regenerate the version history (`scripts/dev/build_version_matrix.py`) and
+   commit it **with** the bump. The local gate runs before the bump, so it
+   structurally cannot catch a missed regeneration — this step is the only
+   thing that does.
+
+A release task that hard-codes a target version has not done step 1.
 
 The bump used to be decided at release time, by whoever happened to be
 committing, from a diff they were looking at rather than from the impact the work
