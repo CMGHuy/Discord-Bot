@@ -5,8 +5,7 @@
 > `superpowers:executing-plans` to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-**Version:** ui 1.9.2 · bot 1.5.0
-**Bump:** bot minor (1.5.0 → 1.6.0) · ui patch (1.9.2 → 1.9.3)
+**Bump:** bot minor · ui patch — resolved at close-out from VERSION.json.
 **Edge:** none (integrity)
 
 **Goal:** Replace the `data/*.json` persistence layer with PostgreSQL while

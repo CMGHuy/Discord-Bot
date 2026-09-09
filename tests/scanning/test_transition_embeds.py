@@ -101,19 +101,19 @@ def test_tp1_partial_embed_omits_pct_when_entry_is_unusable(monkeypatch):
     assert banked == "50% @ 110.00 (+2.00R)"
 
 
-def test_partial_position_line_falls_back_to_tp1_when_no_tp2():
+def test_partial_position_line_marks_no_tp2_runner_as_trailing():
     from swingbot.core.scanning.embeds import partial_position_line
-    p = _plan(entry_price=100.0, stop_loss=95.0, tp1=102.0, tp2=None,
+    p = _plan(status="PARTIAL", entry_price=100.0, stop_loss=95.0, tp1=102.0, tp2=None,
               legs_realized=[{"fraction": 0.5, "exit_price": 102.0,
                               "r": 1.4, "reason": "tp1"}],
               working_stop=101.33)
-    assert partial_position_line(p) == ("entry 102.00 → target 102.00 "
-                                        "(tp1, no tp2) / stop 101.33")
+    # v73: TP1 was banked, so a runner with no TP2 has only its trail.
+    assert partial_position_line(p) == "entry 102.00 → trailing stop 101.33"
 
 
 def test_partial_position_line_falls_back_to_runner_floor_when_no_working_stop():
     from swingbot.core.scanning.embeds import partial_position_line
-    p = _plan(entry_price=100.0, stop_loss=95.0, tp1=102.0, tp2=105.0,
+    p = _plan(status="PARTIAL", entry_price=100.0, stop_loss=95.0, tp1=102.0, tp2=105.0,
               legs_realized=[{"fraction": 0.5, "exit_price": 102.0,
                               "r": 1.4, "reason": "tp1"}],
               working_stop=None)

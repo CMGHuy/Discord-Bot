@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** `docs/superpowers/specs/2026-09-04-v73-plan-view-projection-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-09-04-v73-plan-view-projection-design.md`
 **Version:** ui 1.11.0 · bot 1.6.1
 **Bump:** ui minor (1.11.0 → 1.12.0) · bot patch (1.6.1 → 1.6.2) — two components, separately graded.
 **Edge:** none (integrity) — display correctness buys no trading edge.

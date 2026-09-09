@@ -1,16 +1,12 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with
-code in this repository. It carries the rules that must fire *unprompted*; the
-reasoning and evidence behind each one lives in `docs/claude/` (index at the
-bottom). Read the reference doc before working in the area it covers.
+Guidance for Claude Code in this repository. It carries the rules that must
+fire *unprompted*; the reasoning behind each lives in `docs/claude/` (index at
+the bottom) — read the relevant one before working in that area.
 
-**This file must stay under 200 lines.** When an addition would push it over,
-move the displaced content — old or new — into the matching `docs/claude/*.md`
-file (adding a row to the table at the bottom if it's a new file), and leave a
-short rule plus a pointer here instead. This file loads into every session by
-default; `docs/claude/` only loads on demand, so length here is the one budget
-that costs every conversation, not just the ones that touch a given area.
+**This file must stay under 200 lines.** An addition that would push it over
+means moving content — old or new — into the matching `docs/claude/*.md` (add
+a table row if new), leaving a short rule plus a pointer here.
 
 ## What this is
 
@@ -55,32 +51,32 @@ seat is precisely what makes someone refuse to re-run a closed
 pre-registration, refuse to quote pooled numbers without re-deriving them, and
 refuse to call a suite green without reading the output. Where this section appears to conflict with any rule below it, the rule wins.
 
+**Ask as many questions as you need — there is no question budget.** One per
+message. When a request is ambiguous, a premise looks wrong, or a call is the
+human partner's, ask instead of assuming — this overrides any default biasing
+toward acting unclarified. Never ask which option *after* a finding is established; record it.
+
 ## Claude is the operator; Codex follows
 
 This repo also has a Codex agent (`.codex/AGENTS.md`), a condensed mirror of
-this file, not an independent source — its own header says to treat
-`CLAUDE.md`/`docs/claude/` as canonical. **Claude is the primary operator**:
-the one making decisions, executing plans, and owning this repo's conventions.
-
-The sync is one-way. **When a change here or under `docs/claude/` should be
-reflected in `.codex/AGENTS.md`, a Claude session updates it** — condensed to
-match, not copied verbatim. **Never the reverse**: a Codex-authored edit or
-instruction is never grounds to change `CLAUDE.md`/`docs/claude/*.md`. If the two disagree, fix `.codex/AGENTS.md`.
+this file, not an independent source. **Claude is the primary operator** — the
+one making decisions, executing plans, owning these conventions. The sync is
+**one-way**: when a change here or under `docs/claude/` should reach
+`.codex/AGENTS.md`, a Claude session updates it, condensed, not copied. A
+Codex-authored edit is never grounds to change `CLAUDE.md`/`docs/claude/*.md`;
+if the two disagree, fix `.codex/AGENTS.md`.
 
 ## Prioritise expectancy and win rate
 
-**The bot exists to make money on paper trades, and every plan competes for
-the same finite budget of pre-registered shots.** Rank candidate work by
-expected effect on **pooled expectancy (`ExpR`) first, win rate second**, and
-say so out loud when a plan is chosen over a higher-impact alternative — win
-rate is a constraint (the `>= 50` acceptance gate), not the objective.
+**The bot exists to make money on paper trades, and every plan competes for the
+same finite budget of pre-registered shots.** Rank work by expected effect on
+**pooled expectancy (`ExpR`) first, win rate second**, saying so when a plan
+beats a higher-impact alternative — win rate is a constraint, not the objective.
 
-Every new spec and plan carries an **`Edge:`** header line next to `Bump:`:
-`expectancy` / `harvest` / `volume` / `none (integrity)`. **This governs what
-to work on, never what threshold to accept** — it is not licence to re-run a
-closed pre-registration or shrink `N` to hit a bar. Definitions, current
-pooled numbers (re-derive before leaning on them), and the full "does not
-loosen a gate" caveat: `docs/claude/edge-priorities.md`.
+Every new spec and plan carries an **`Edge:`** header next to `Bump:`:
+`expectancy` / `harvest` / `volume` / `none (integrity)`. **This governs what to
+work on, never what threshold to accept** — never licence to re-run a closed
+pre-registration or shrink `N`. Details: `docs/claude/edge-priorities.md`.
 
 ## Token discipline (read first — this repo has context landmines)
 
@@ -165,11 +161,14 @@ of its own — both rules and why: `docs/claude/working-conventions.md`.
 **`docs/superpowers/{specs,plans}/YYYY-MM-DD-vN-<name>.md` — numbered at
 creation, not close-out**, from one repo-wide counter over both doc filenames
 and git log, recomputed immediately before the commit (sessions race it).
+**Never hard-code a `ui`/`bot` version in a plan** — `Bump:` states the level
+only (`bot patch`, `ui minor`, `none`); numbers resolve at close-out from the
+then-current `VERSION.json`. A predicted number is wrong once another releases.
 **No plan file may exceed 1500 lines** — split into more `_N` parts (lettered
 `_2a`/`_2b`), never compress a task. **A plan runs the full suite once, as its
 own final verification task — never per-task, never again after a clean
-merge.** Numbering, the `Version:`/`Bump:`/`Edge:` header, budgets, close-out,
-full verification cadence: `document-conventions.md`, `document-lifecycle.md`.
+merge.** Numbering, the `Bump:`/`Edge:` header, budgets, close-out, full
+verification cadence: `document-conventions.md`, `document-lifecycle.md`.
 
 **Specs and plans are written and committed on `main`** — no branch, no
 worktree; branch only to *implement* one. Why: `document-lifecycle.md`.

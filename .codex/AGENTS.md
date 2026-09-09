@@ -39,6 +39,11 @@ containers from that image. Configuration is schema-driven through
 
 ## Decision standards
 
+Ask as many questions as you need — there is no question budget. One per
+message. When a request is ambiguous, a premise looks wrong, or a call is the
+human partner's, ask instead of assuming. This does not license asking which
+option to take after a finding is established; record the finding instead.
+
 For strategy, trading, or plan prioritization, rank work by pooled expectancy
 (`ExpR`) first and win rate second. State the tradeoff when selecting work over
 a higher-impact alternative. Every new spec or plan needs an `Edge:` header:
@@ -121,6 +126,15 @@ creating or committing the document, as documented in
 `docs/claude/document-conventions.md`. Do not reuse or renumber an already
 committed number. A plan created from an existing spec reuses that spec's
 number. Document numbers and `VERSION.json` release versions are independent.
+
+Never hard-code a `ui`/`bot` version number in a plan, and give a plan no
+`Version:` line at all. `Bump:` states the release level only — `bot patch`,
+`ui minor`, `none`. The actual numbers are resolved by the plan's release task
+at close-out: read `VERSION.json` from disk at that moment, increment the line
+`Bump:` names, leave the other line alone, then regenerate the version history
+with `scripts/dev/build_version_matrix.py` and commit it with the bump. Plans
+run for days beside other plans, so any number predicted in advance is wrong as
+soon as another plan releases first.
 
 No plan file may exceed 1500 lines. Split an over-long plan into more `_N`
 parts — lettered `_2a`/`_2b` when one part needs several files — and never

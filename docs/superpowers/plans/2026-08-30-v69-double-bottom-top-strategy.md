@@ -5,8 +5,7 @@
 > `superpowers:executing-plans` to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-**Version:** ui 1.10.0 · bot 1.5.0
-**Bump:** bot minor (1.5.0 → 1.6.0)
+**Bump:** bot minor — resolved at close-out from VERSION.json.
 **Edge:** volume
 
 **Goal:** Ship a twelfth strategy that enters on a double-bottom or double-top
@@ -1155,11 +1154,12 @@ reason to fix them here, not a licence to leave them stale.
 
 - [ ] **Step 3: Bump and regenerate**
 
-`bot` minor `1.5.0` → `1.6.0` if the strategy shipped: a twelfth source of
-alerts is an observable difference, which is what
-`document-conventions.md` says to argue the bump from. If DB6 found nothing and
-the strategy did not ship, the bump is `none` and this step records that
-instead.
+`bot` **minor** if the strategy shipped: a twelfth source of alerts is an
+observable difference, which is what `document-conventions.md` says to argue
+the bump from. Read `VERSION.json` from disk and increment the minor component
+of whatever `bot` currently reads — never a number written in this plan, which
+was authored months before it will release. If DB6 found nothing and the
+strategy did not ship, the bump is `none` and this step records that instead.
 
 Then the step that gets missed, because the local gate runs *before* the bump
 and structurally cannot catch it:

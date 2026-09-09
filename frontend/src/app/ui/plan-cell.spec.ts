@@ -103,7 +103,7 @@ describe('PlanCell', () => {
     f.componentRef.setInput('entry', 71.64);
     f.componentRef.setInput('target', null);
     f.componentRef.setInput('stop', 69.85);
-    f.componentRef.setInput('trailing', true);
+    f.componentRef.setInput('stopKind', 'trailing');
     f.detectChanges();
     expect(f.nativeElement.querySelector('[title]').getAttribute('title'))
       .toBe('Entry 71.64 · Target — · Trailing stop 69.85');
@@ -125,7 +125,7 @@ describe('PlanCell', () => {
     f.componentRef.setInput('entry', 51.0);
     f.componentRef.setInput('target', 150.0);
     f.componentRef.setInput('stop', 118.67);
-    f.componentRef.setInput('trailing', true);
+    f.componentRef.setInput('stopKind', 'trailing');
     f.componentRef.setInput('bankedFraction', 'bankedFraction' in overrides ? overrides.bankedFraction : 0.5);
     f.componentRef.setInput('bankedR', 'bankedR' in overrides ? overrides.bankedR : 0.85);
     f.componentRef.setInput('bankedPct', 'bankedPct' in overrides ? overrides.bankedPct : 4.1);
@@ -154,10 +154,48 @@ describe('PlanCell', () => {
     f.componentRef.setInput('entry', 178);
     f.componentRef.setInput('target', 195);
     f.componentRef.setInput('stop', 170);
-    f.componentRef.setInput('trailing', true);
+    f.componentRef.setInput('stopKind', 'trailing');
     f.detectChanges();
     expect(f.nativeElement.querySelector('[title]').getAttribute('title'))
       .toBe('Entry 178.00 · Target 195.00 · Trailing stop 170.00');
+  });
+  it('says "Locked-in floor" for a derived floor stop', () => {
+    const f = TestBed.createComponent(PlanCell);
+    f.componentRef.setInput('entry', 121.0);
+    f.componentRef.setInput('target', 140.0);
+    f.componentRef.setInput('stop', 113.33);
+    f.componentRef.setInput('stopKind', 'derived_floor');
+    f.detectChanges();
+    expect(f.nativeElement.querySelector('[title]').getAttribute('title'))
+      .toBe('Entry 121.00 · Target 140.00 · Locked-in floor 113.33');
+  });
+
+  it('reports the trail rather than an absent target when TP1 is banked', () => {
+    const f = TestBed.createComponent(PlanCell);
+    f.componentRef.setInput('entry', 121.0);
+    f.componentRef.setInput('target', null);
+    f.componentRef.setInput('stop', 113.33);
+    f.componentRef.setInput('stopKind', 'trailing');
+    f.componentRef.setInput('targetIsBankedTp1', true);
+    f.componentRef.setInput('floorR', 1.33);
+    f.componentRef.setInput('priceR', 2.5);
+    f.componentRef.setInput('headroomR', 1.17);
+    f.detectChanges();
+    expect(f.nativeElement.querySelector('[title]').getAttribute('title'))
+      .toBe('Entry 121.00 · TP1 banked · floor 1.3R · price 2.5R · headroom 1.2R · Trailing stop 113.33');
+  });
+
+  it('shows an em dash for unavailable trail R values', () => {
+    const f = TestBed.createComponent(PlanCell);
+    f.componentRef.setInput('entry', 121.0);
+    f.componentRef.setInput('target', null);
+    f.componentRef.setInput('stop', 113.33);
+    f.componentRef.setInput('stopKind', 'trailing');
+    f.componentRef.setInput('targetIsBankedTp1', true);
+    f.componentRef.setInput('floorR', 1.33);
+    f.detectChanges();
+    expect(f.nativeElement.querySelector('[title]').getAttribute('title'))
+      .toContain('floor 1.3R · price — · headroom —');
   });
 });
 
