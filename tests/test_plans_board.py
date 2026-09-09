@@ -95,7 +95,7 @@ def test_partial_row_shows_the_banked_leg_not_the_stale_original_levels(monkeypa
     monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
     line = _line_for(_partial(tp2=120.0))
     assert "banked 2.0R/+10.0%/+$500.00 on 50%" in line
-    assert "runner entry 110.00 SL 104.00 TP2 120.00" in line
+    assert "runner entry 110.00 trailing 104.00 TP2 120.00" in line
     # The pre-TP1 tail is gone, not merely appended to.
     assert "entry 100.00" not in line and "SL 95.00" not in line
 
@@ -105,7 +105,8 @@ def test_partial_row_labels_the_tp1_fallback_when_there_is_no_tp2(monkeypatch):
     monkeypatch.setattr(plan_table.account, "compute_position_size",
                         lambda entry, stop: None)
     line = _line_for(_partial(tp2=None))
-    assert "runner entry 110.00 SL 104.00 TP1 (no TP2) 110.00" in line
+    # v73: TP1 is banked history; a no-TP2 runner has a floor/trail, not a target.
+    assert "runner entry 110.00 trailing 104.00" in line
 
 
 def test_partial_row_omits_the_dollar_figure_when_unsized(monkeypatch):
@@ -129,7 +130,7 @@ def test_partial_row_survives_a_plan_with_no_recorded_leg(monkeypatch):
                         lambda entry, stop: None)
     line = _line_for(_partial(legs_realized=[], working_stop=None))
     assert "banked" not in line
-    assert "runner entry 110.00 TP1 (no TP2) 110.00" in line
+    assert "runner entry 110.00 floor 106.67" in line
 
 
 def test_non_partial_rows_keep_the_original_tail():
