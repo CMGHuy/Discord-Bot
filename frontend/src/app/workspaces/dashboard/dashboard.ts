@@ -39,7 +39,7 @@ import {
 } from '../trades/trades.columns';
 import { amount, dateTime, held, money, num, pct, signed } from '../../ui/format';
 import { Magnitude } from '../../ui/magnitude';
-import { ControlRow, Panel } from '../../ui/layout';
+import { ControlRow, Drawer, Panel } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { MetricCard } from '../../ui/metric-card';
@@ -88,7 +88,7 @@ import { TradeGroup } from './trade-group';
   imports: [
     RouterLink, MetricCard, MetricChip, Magnitude, Panel, TradeGroup,
     StatusCell, PlanCell, ConfidenceCell, Async, Button, ChipRow, ControlRow,
-    Flash, PlanLifecycleDiagram, RowLink, SectionHead,
+    Drawer, Flash, PlanLifecycleDiagram, RowLink, SectionHead,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // v54 D1: this workspace answers "how am I doing?" -- hero figures, room
@@ -250,10 +250,22 @@ import { TradeGroup } from './trade-group';
         }
       </nav>
 
-      <!-- SR59. _plans_board.html:22-27, verbatim. The per-status wording
-           from lc_tips rides each card's title attribute: the SPA has no
-           tip-icon component, and adding one would be a design decision
-           rather than a copy task. -->
+      <!-- SR59: the descriptive legend and its diagram used to sit right
+           here, always rendered. Moved into a drawer (below, outside this
+           lifecycle-count block) that the "Lifecycle guide" button on the
+           Open positions panel opens -- this text explains what the cards
+           above ALREADY do, and read on every visit it was the single
+           longest thing on the page above the fold. -->
+    }
+
+    <!-- SR59. _plans_board.html:22-27, verbatim, and the figure that
+         illustrates it -- both moved out of the page body into this
+         on-demand drawer, opened by the "Lifecycle guide" button on the Open
+         positions panel below. The per-status wording from lc_tips still
+         rides each lifecycle card's own title attribute above; there is no
+         tip-icon component, so a hover tip was never this text's only home. -->
+    <sb-drawer [open]="lifecycleInfoOpen()" heading="Plan lifecycle"
+               (closed)="lifecycleInfoOpen.set(false)">
       <p class="section-help">
         A plan moves PENDING → ACTIVE → PARTIAL → CLOSED as price hits its
         entry trigger, TP1, then TP2/stop (or CANCELLED if it expires or
@@ -265,8 +277,7 @@ import { TradeGroup } from './trade-group';
       </p>
       <!-- Centred as a row, the diagram to the left of the terms it uses --
            it is a figure illustrating the paragraph above, not more running
-           copy, and the rest of this page is left-aligned precisely so that
-           distinction reads. -->
+           copy. -->
       <div class="lifecycle-figure">
         <sb-plan-lifecycle-diagram />
         <dl class="lifecycle-legend">
@@ -300,9 +311,13 @@ import { TradeGroup } from './trade-group';
           </div>
         </dl>
       </div>
-    }
+    </sb-drawer>
 
     <sb-panel heading="Open positions" [flush]="true">
+      <button sb-button variant="ghost" type="button" panel-actions
+              (click)="lifecycleInfoOpen.set(true)">
+        Lifecycle guide
+      </button>
       <!-- SR59, the last cosmetic row: dashboard_fragment.html:391's
            shares tooltip. A panel note rather than a per-cell title, per this
            task's Step 2 — and because the per-trade half of it (which sizing
@@ -824,6 +839,11 @@ export class Dashboard {
   /** For the currency symbol alone. `ConnectionStore` is root-provided and
    *  the shell already keeps it fresh, so reading it here costs no request. */
   protected readonly connection = inject(ConnectionStore);
+
+  /** Whether the plan-lifecycle legend/diagram drawer is open — that
+   *  content used to sit on the page body and now lives behind the Open
+   *  positions panel's "Lifecycle guide" button. */
+  protected readonly lifecycleInfoOpen = signal(false);
 
   /** Zero open positions is a RESULT (the scan found nothing qualifying in
    *  this scope), not missing data -- measured-zero, not no-data-yet. */
