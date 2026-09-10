@@ -123,46 +123,38 @@
   --quality-5: var(--pos);
 
   /* -- chart series ------------------------------------------------------
-   * A SEPARATE NAMESPACE from the valence hues above, and deliberately so.
+   * A SEPARATE NAMESPACE from the valence hues above, in meaning AND, since
+   * v80, in value.
    *
    * The valence rule ("a sixth hue is a review defect") governs SEMANTIC
-   * colour: --pos means good, --neg means bad, and those meanings hold on
-   * every surface. A categorical series colour carries no meaning at all --
-   * it is an identifier, telling you which line is AAPL. The two namespaces
-   * must not overlap: a green series in an app where green means gain would
-   * lie to a reader every other screen has trained.
+   * colour: --pos means good, --neg means bad, on every surface. A
+   * categorical series colour carries no meaning at all -- it is an
+   * identifier, telling you which line is AAPL -- so it must not overlap the
+   * valence hues: a green series in an app where green means gain would lie
+   * to a reader every other screen has trained.
    *
-   * So the one binding rule, checked by chart-palette.spec.ts: no member is
-   * within ΔE 10 of --pos or --neg, and adjacent members clear ΔE 15 so they
-   * stay apart at a 1px stroke.
+   * v80 D2: six hues validated against --surface (#131722) with the dataviz
+   * palette validator -- OKLCH L 0.48-0.67, chroma >= 0.10, adjacent CVD
+   * dE >= 8, normal-vision dE >= 15, contrast >= 3:1. Eight hues that avoid
+   * both the gain-green and loss-red families inside that band do not
+   * validate, so a seventh series folds into "Other" at its call site.
+   * Rejected, and recorded so nobody reintroduces them: a pink (10.8 from
+   * --neg) and an olive (12.6 from --pos). They clear a bare dE 10 gate and
+   * still read as loss and gain on a P&L chart.
    *
-   * The first three ARE --accent / --info / --warn's own hex, kept as a
-   * literal rather than `var(--accent)` the way --quality-1..5 above alias
-   * the valence hues. Real browsers DO substitute a nested var() inside a
-   * custom property's own computed value (CSS Custom Properties Level 1:
-   * "computed value: specified value, with variables substituted" -- this is
-   * what --quality-1..5 correctly relies on), so aliasing would be safe in
-   * production. It would not be safe in THIS repo's tests: jsdom's
-   * `getComputedStyle` does not perform that substitution (confirmed
-   * directly -- `getPropertyValue()` on a jsdom-rendered `var(--accent)`
-   * custom property returns the literal text "var(--accent)", not a
-   * resolved colour), and line-chart.ts's seriesColour() reads --chart-*
-   * through exactly that call, under vitest, because an SVG stroke needs a
-   * resolved value. chart-palette.spec.ts's own gate also requires a literal
-   * hex for unrelated reasons (it parses tokens.css as text, not through a
-   * browser). So these three stay literal, and chart-palette.spec.ts pins
-   * them to --accent/--info/--warn's actual values directly, so a retune of
-   * one without the other fails loudly there instead of drifting silently.
-   * The rest are new colours in that family's spirit rather than picked
-   * freely, so the charts still look like they belong to this app. */
-  --chart-1: #7b5cfa;
-  --chart-2: #46c2ff;
-  --chart-3: #ffb43d;
-  --chart-4: #b48cff;
-  --chart-5: #2f7fd4;
-  --chart-6: #d07de0;
-  --chart-7: #7fd8e8;
-  --chart-8: #c9a227;
+   * No longer pinned to --accent/--info/--warn: under direction C the
+   * lavender info fails the chroma floor and amber fails the band.
+   *
+   * Literal hex, never var(): line-chart.ts reads these through
+   * getComputedStyle under vitest, and jsdom does not substitute a nested
+   * var() inside a custom property; chart-palette.spec.ts also parses this
+   * file as text. That spec is the gate. */
+  --chart-1: #4c8dff;
+  --chart-2: #c97a22;
+  --chart-3: #a868e0;
+  --chart-4: #b08c14;
+  --chart-5: #1a9db3;
+  --chart-6: #7076e8;
 
   /* -- type ------------------------------------------------------------
    * Named by role, not by size: the scale is closed (11/12/13/14/16/20/25)

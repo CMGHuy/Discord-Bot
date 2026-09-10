@@ -64,8 +64,6 @@ const REQUIRED = [
   '--chart-4',
   '--chart-5',
   '--chart-6',
-  '--chart-7',
-  '--chart-8',
 
   '--dur-instant',
   '--dur-base',
@@ -99,6 +97,11 @@ describe('design tokens', () => {
     for (const dead of ['--quality-high', '--quality-mid', '--quality-low']) {
       expect(CSS).not.toMatch(new RegExp(`^\\s*${dead}:`, 'm'));
     }
+  });
+
+  it('has dropped --chart-7 and --chart-8 (v80 D2: six series)', () => {
+    expect(CSS).not.toMatch(/^\s*--chart-7:/m);
+    expect(CSS).not.toMatch(/^\s*--chart-8:/m);
   });
 
   it('keeps --transition as an alias so existing call sites still compile', () => {
