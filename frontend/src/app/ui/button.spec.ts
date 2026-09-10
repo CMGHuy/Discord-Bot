@@ -1,6 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { Button, type ButtonVariant } from './button';
 
@@ -39,5 +41,43 @@ describe('Button variants', () => {
   it('keeps the element a native button so disabled and submit still work', () => {
     const el = render('chip');
     expect(el.tagName).toBe('BUTTON');
+  });
+});
+
+const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/button.ts'), 'utf8');
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const rule = (selector: string) =>
+  SOURCE.match(new RegExp(`${esc(selector)}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+
+/* v80 D4. Asserted against the stylesheet text, as tokens.spec.ts does:
+ * jsdom does not resolve var() inside a shorthand, so a computed-style
+ * assertion here would be about jsdom rather than about the button. */
+describe('v80 D4: the button restyle', () => {
+  it('fills primary with the fill blue and its own ink', () => {
+    expect(rule(':host(.primary)')).toContain('background: var(--accent-fill)');
+    expect(rule(':host(.primary)')).toContain('color: var(--on-accent)');
+  });
+
+  it('draws secondary as a hairline, not a raised fill', () => {
+    const r = rule(':host(.secondary)');
+    expect(r).toContain('background: transparent');
+    expect(r).toContain('border-color: var(--border-strong)');
+  });
+
+  it('outlines danger in the loss colour and fills it on hover', () => {
+    expect(rule(':host(.danger)')).toContain('border-color: var(--neg)');
+    expect(rule(':host(.danger:not([disabled]):hover)')).toContain('background: var(--neg)');
+  });
+
+  it('grows both icon variants to a square touch target', () => {
+    const block = SOURCE.match(/@media \(pointer: coarse\), \(max-width: 639px\) \{([\s\S]*?)\n    \}/);
+    expect(block).not.toBeNull();
+    expect(block![1]).toContain(':host(.icon), :host(.danger-icon)');
+    expect(block![1]).toContain('min-width: var(--control-h)');
+    expect(block![1]).toContain('min-height: var(--control-h)');
+  });
+
+  it('marks segment and chip deprecated in favour of sb-segmented', () => {
+    expect(SOURCE).toMatch(/Deprecated \(v80 D4\)[\s\S]*sb-segmented/);
   });
 });
