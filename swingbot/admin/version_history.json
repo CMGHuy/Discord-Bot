@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10 10:13:16 UTC",
+  "generated_at": "2026-09-10 10:28:01 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.13.0",
-    "bot": "1.6.3"
+    "bot": "1.6.4"
   },
   "releases": [
     {
@@ -1001,14 +1001,27 @@
     {
       "date": "2026-09-10",
       "last_seen": "2026-09-10",
-      "commit": "uncommitted",
-      "subject": "working tree",
+      "commit": "bc84c06f",
+      "subject": "release(ui): 1.13.0 -- live tape",
       "versions": {
         "ui": "1.13.0",
         "bot": "1.6.3"
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-09-10",
+      "last_seen": "2026-09-10",
+      "commit": "361ece12",
+      "subject": "release(bot): 1.6.4 -- injectable scan parameters",
+      "versions": {
+        "ui": "1.13.0",
+        "bot": "1.6.4"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
