@@ -69,6 +69,25 @@ def test_entries_for_applies_direction_and_horizon_gates(monkeypatch, uptrend_df
     assert not bull.any() and not bear.any()
 
 
+def test_break_retest_gated_to_short_horizons(monkeypatch, uptrend_df):
+    """v84 R7: Break & Retest fires only at 2m/3m/4m. The 6m cell was the
+    only negative-expectancy horizon on TRAIN (27.8% WR, -0.157R)."""
+    import swingbot.core.market.entry_filters as ef
+    from swingbot.core.market.strategy_types import STRATEGY_GATES
+
+    assert STRATEGY_GATES["Break & Retest"]["horizons"] == ("2m", "3m", "4m")
+
+    fired = pd.Series(True, index=uptrend_df.index)
+    monkeypatch.setitem(ef.ENTRY_FUNCS, "Break & Retest",
+                        lambda df, hk, params=None: (fired.copy(), fired.copy()))
+
+    bull_3m, bear_3m = ef.entries_for("Break & Retest", uptrend_df, "3m")
+    assert bull_3m.all() and bear_3m.all()      # inside the gate, both directions
+
+    bull_6m, bear_6m = ef.entries_for("Break & Retest", uptrend_df, "6m")
+    assert not bull_6m.any() and not bear_6m.any()   # outside -> fully masked
+
+
 def _v_shape_down_then_flat():
     # Peak early (bar 350), decline to bar 470, small bounce at the end.
     # The swing HIGH precedes the swing LOW inside any recent window ->
