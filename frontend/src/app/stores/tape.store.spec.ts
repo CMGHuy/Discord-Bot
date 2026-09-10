@@ -145,14 +145,17 @@ describe('TapeStore', () => {
   });
 
   it('fires exactly one tape request per toggle()', () => {
-    // Regression test: `toggle()` calls `load()` explicitly, but `load()`
-    // also reads `store.symbols()` (via `prefs.values()`) -- and the
-    // `onInit` effect's own call to `load()` made THAT read a tracked
-    // dependency of the effect too, so a real (signal-backed) preference
-    // write re-ran the effect a second time on top of `toggle()`'s own
-    // explicit call. Needs a genuine reactive `PreferencesStore` fake --
-    // every other test's `values: () => (...)` returns a fixed object and
-    // never actually changes, so it could not have caught this.
+    // Regression test: `toggle()` used to call `load()` explicitly, but
+    // `load()` also reads `store.symbols()` (via `prefs.values()`) -- and the
+    // `onInit` effect's own (then-tracked) call to `load()` made THAT read a
+    // tracked dependency of the effect too, so a real (signal-backed)
+    // preference write re-ran the effect a second time on top of `toggle()`'s
+    // own explicit call. `toggle()` no longer calls `load()` at all -- the
+    // effect re-running when `symbols()` changes is the only trigger now --
+    // so this proves that stays a single request. Needs a genuine reactive
+    // `PreferencesStore` fake -- every other test's `values: () => (...)`
+    // returns a fixed object and never actually changes, so it could not have
+    // caught this.
     const prefs = signal<Preferences>({ 'tape.symbols': ['NVDA'] });
     const api = { tape: vi.fn().mockReturnValue(
       of({ as_of: '2026-09-09T14:35:00+00:00', rows: [] })) };
@@ -177,5 +180,78 @@ describe('TapeStore', () => {
     TestBed.inject(ApplicationRef).tick();
 
     expect(api.tape).toHaveBeenCalledTimes(1);
+  });
+
+  it('populates the tape once real preferences resolve, with no scan and no toggle', () => {
+    // Regression test for the bug this fix addresses: `Shell`'s constructor
+    // calls `tape.load()` synchronously, before `PreferencesStore`'s async
+    // `GET /api/v1/preferences` has resolved -- so the first `load()` sees an
+    // empty symbol set and no-ops. The ONLY thing that populates the tape
+    // after that is the `onInit` effect re-running once `symbols()` actually
+    // changes, which requires a TRACKED read of `store.symbols()` inside the
+    // effect (i.e. no `untracked()` wrapping `load()`). This test starts
+    // `PreferencesStore` empty -- exactly like before the GET resolves -- and
+    // then flips it to a real value, with no `scan` event and no `toggle()`
+    // call anywhere.
+    const prefs = signal<Preferences>({});
+    const api = { tape: vi.fn().mockReturnValue(
+      of({ as_of: '2026-09-09T14:35:00+00:00', rows: [] })) };
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: api },
+        { provide: EventStream, useValue: { changes: () => signal(0).asReadonly() } },
+        { provide: PreferencesStore, useValue: {
+            values: () => prefs(),
+            update: (fn: (current: Preferences) => Preferences) => prefs.update(fn),
+            isLoaded: () => false,
+          } },
+      ],
+    });
+
+    const store = TestBed.inject(TapeStore);
+    TestBed.inject(ApplicationRef).tick();
+    // Empty preferences -> `load()`'s empty-symbols branch, no request.
+    expect(api.tape).not.toHaveBeenCalled();
+
+    // Simulate the async preferences GET resolving with real flagged symbols.
+    prefs.set({ 'tape.symbols': ['NVDA'] });
+    TestBed.inject(ApplicationRef).tick();
+
+    expect(api.tape).toHaveBeenCalledTimes(1);
+    expect(api.tape).toHaveBeenCalledWith(['NVDA']);
+  });
+
+  it('does not refetch for an unrelated preference write', () => {
+    // (c): a preference write that leaves `tape.symbols` untouched (e.g. a
+    // column width or sort order) must not move `symbols()`'s value, so
+    // `sameSymbols` must keep the computed's identity stable and the effect
+    // must not re-run.
+    const prefs = signal<Preferences>({ 'tape.symbols': ['NVDA'] });
+    const api = { tape: vi.fn().mockReturnValue(
+      of({ as_of: '2026-09-09T14:35:00+00:00', rows: [] })) };
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: api },
+        { provide: EventStream, useValue: { changes: () => signal(0).asReadonly() } },
+        { provide: PreferencesStore, useValue: {
+            values: () => prefs(),
+            update: (fn: (current: Preferences) => Preferences) => prefs.update(fn),
+            isLoaded: () => true,
+          } },
+      ],
+    });
+
+    TestBed.inject(TapeStore);
+    TestBed.inject(ApplicationRef).tick();
+    api.tape.mockClear(); // drop the onInit effect's own initial-load call
+
+    // A fresh object, same `tape.symbols` value -- the shape of a real
+    // `PreferencesStore.update()` call for an unrelated key.
+    prefs.set({ 'tape.symbols': ['NVDA'], 'shell.sidebar': 'collapsed' });
+    TestBed.inject(ApplicationRef).tick();
+
+    expect(api.tape).not.toHaveBeenCalled();
   });
 });

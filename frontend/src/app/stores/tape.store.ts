@@ -1,4 +1,4 @@
-import { computed, effect, inject, untracked } from '@angular/core';
+import { computed, effect, inject } from '@angular/core';
 import {
   patchState,
   signalStore,
@@ -17,6 +17,18 @@ import { PreferencesStore } from './preferences.store';
 interface TapeSlice {
   rows: TapeRow[];
   asOf: string | null;
+}
+
+/**
+ * Order-sensitive array equality for `string[]`.
+ *
+ * `readTapeSymbols` already normalises order (dedup, trim, uppercase,
+ * insertion order preserved), so two reads that flag the same set of symbols
+ * the same way always come back in the same order -- an order-sensitive
+ * comparison is enough, and cheaper than sorting first.
+ */
+function sameSymbols(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((symbol, i) => symbol === b[i]);
 }
 
 /**
@@ -40,7 +52,13 @@ export const TapeStore = signalStore(
   { providedIn: 'root' },
   withState<TapeSlice>({ rows: [], asOf: null }),
   withComputed((store, prefs = inject(PreferencesStore)) => ({
-    symbols: computed(() => readTapeSymbols(prefs.values())),
+    // `equal: sameSymbols` is what keeps this computed's VALUE stable across
+    // an unrelated preference write (a column width, a sort order): without
+    // it, `readTapeSymbols` returning a fresh array reference on every write
+    // to `prefs.values()` would count as a change to any effect that reads
+    // `symbols()`, including the refetch effect in `withHooks` below -- the
+    // same over-firing bug `untracked()` was once (wrongly) covering for.
+    symbols: computed(() => readTapeSymbols(prefs.values()), { equal: sameSymbols }),
   })),
   withComputed((store) => ({
     visible: computed(() => store.symbols().length > 0),
@@ -80,26 +98,32 @@ export const TapeStore = signalStore(
     return {
       load,
 
-      /** Flag or unflag a ticker, then refetch so the tape reflects it at once. */
+      /** Flag or unflag a ticker.
+       *
+       *  Does not call `load()` itself: `prefs.update()` changes
+       *  `store.symbols()` (once the new symbol set differs, per
+       *  `sameSymbols` above), and the tracked `onInit` effect below re-runs
+       *  and refetches as a result. A second explicit call here would fire
+       *  the request twice for one toggle. */
       toggle(symbol: string): void {
         prefs.update((current) => toggleTapeSymbol(current, symbol));
-        load();
       },
     };
   }),
   withHooks({
     onInit(store, events = inject(EventStream)) {
       const scan = events.changes('scan');
+      // Tracked, deliberately: `load()` reads `store.symbols()` (transitively,
+      // through `prefs.values()`), so this effect re-runs on a genuine `scan`
+      // AND whenever the flagged-symbol set actually changes -- which is
+      // also what makes the tape populate once `PreferencesStore`'s async
+      // preferences GET resolves after the shell's synchronous first
+      // `tape.load()` call found nothing to load. `sameSymbols` on the
+      // `symbols` computed is what stops an unrelated preference write (not
+      // touching `tape.symbols`) from re-triggering this.
       effect(() => {
         scan();
-        // `load()` reads `store.symbols()` (transitively, through
-        // `prefs.values()`) -- an untracked read here keeps this effect's
-        // only dependency `scan`. Without `untracked`, a `toggle()`'s
-        // `prefs.update()` would ALSO re-run this effect (since the last run
-        // read `symbols()` as a side effect of calling `load()`), doubling up
-        // with `toggle()`'s own explicit `load()` call below: two requests
-        // for one click.
-        untracked(() => store.load());
+        store.load();
       });
     },
   }),
