@@ -9,7 +9,7 @@ from swingbot import config
 from swingbot.core.market import levels, opex
 from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION, HORIZONS
 from .plan_types import PlanStatus, TradePlanV2, record_transition
-from . import lifecycle, params, targets
+from . import lifecycle, params as plan_params, targets
 from .lifecycle import apply_level_lifecycle
 from .params import (DEFAULT_EXPIRY_BARS, STRUCTURE_BUFFER_ATR, TP1_FRACTION,
                      TRAIL_ATR_MULT)
@@ -134,7 +134,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         # an explicit caller override or E31's per-strategy MAE figure -- so
         # neither silently replaces the other. Off an opex day stop_mult() is
         # exactly 1.0 and this line is a no-op.
-        applied_stop_mult = stop_mult if stop_mult is not None else params._resolve_stop_mult(strategy)
+        applied_stop_mult = stop_mult if stop_mult is not None else plan_params._resolve_stop_mult(strategy)
         _opex_stop_mult = opex.stop_mult()
         if _opex_stop_mult != 1.0:
             # Guarded rather than composed unconditionally: `None` here is
@@ -165,7 +165,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
 
     entry_type = entry_type_for(strategy, "strategy")
     created_at = df.index[index].date().isoformat()
-    exit_params = params.exit_params_for(strategy)
+    exit_params = plan_params.exit_params_for(strategy)
     tp2 = None
     applied_tp2_r = None
     if exit_params["tp2"]:
@@ -180,7 +180,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         # strategy whose exit params have none -- that on/off table is a
         # frozen TRAIN-grid result, and forcing it would be a different
         # exit model than E33 is set up to judge.
-        resolved_tp2_r = tp2_r if tp2_r is not None else params._resolve_tp2_r(strategy)
+        resolved_tp2_r = tp2_r if tp2_r is not None else plan_params._resolve_tp2_r(strategy)
         if resolved_tp2_r is not None:
             candidate = _tp2_from_r(close, stop, tp1, direction, resolved_tp2_r)
             if candidate is not None:
@@ -199,12 +199,12 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     )
     if entry_type == "market":
         record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
-    params.stamp_badge(plan)
-    params._apply_quality(plan, quality_inputs)
+    plan_params.stamp_badge(plan)
+    plan_params._apply_quality(plan, quality_inputs)
     plan.stop_mult_applied = applied_stop_mult
     plan.tp2_r_applied = applied_tp2_r
     plan.time_stop_days = (time_stop_days if time_stop_days is not None
-                           else params._resolve_time_stop_days(strategy))
+                           else plan_params._resolve_time_stop_days(strategy))
     return plan
 
 
@@ -310,8 +310,8 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
     )
     if entry_type == "market":
         record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
-    params.stamp_badge(plan)
-    params._apply_quality(plan, quality_inputs)
+    plan_params.stamp_badge(plan)
+    plan_params._apply_quality(plan, quality_inputs)
     return plan
 
 
