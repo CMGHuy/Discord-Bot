@@ -6,6 +6,7 @@
 it is a D1 token or a D2 series, it is not confusable with gain or loss, and
 roles drawn together are distinct.
 """
+import ast
 import itertools
 import math
 import re
@@ -57,6 +58,9 @@ COLOUR_CONSTANTS = {
     "SIGNAL_LINE_COLOR": "chart-2",
     "RSI_LINE_COLOR": "chart-5",
     "PATH_COLOR": "text-faint",
+    "DISCLAIMER_COLOR": "warn",
+    "HEATMAP_INK_DARK": "bg",
+    "HEATMAP_INK_LIGHT": "text",
 }
 
 GAIN_LOSS = frozenset({"UP_COLOR", "DOWN_COLOR", "TARGET_COLOR", "STOP_COLOR"})
@@ -127,8 +131,41 @@ def test_every_colour_constant_is_accounted_for():
     """A new colour constant has to join COLOUR_CONSTANTS, which is what puts
     it through the token and gain/loss checks."""
     declared = {name for name in vars(cs)
-                if name.endswith("_COLOR") or name in {"CHART_BG", "CHIP_BG", "CHIP_EDGE"}}
+                if name.endswith("_COLOR") or name.startswith("HEATMAP_INK_")
+                or name in {"CHART_BG", "CHIP_BG", "CHIP_EDGE"}}
     assert declared == set(COLOUR_CONSTANTS)
+
+
+def test_fold_years_are_three_adjacent_series_clear_of_gain_and_loss():
+    assert cs.FOLD_YEAR_COLORS == (cs.THEME["chart-1"], cs.THEME["chart-2"], cs.THEME["chart-3"])
+    for colour in cs.FOLD_YEAR_COLORS:
+        assert delta_e(colour, cs.UP_COLOR) >= 10
+        assert delta_e(colour, cs.DOWN_COLOR) >= 10
+
+
+_HEX = re.compile(r"^#[0-9a-fA-F]{3,8}$")
+
+
+def _colour_literals(path: Path) -> list[str]:
+    import matplotlib.colors as mcolors
+
+    names = set(mcolors.CSS4_COLORS)
+    found = []
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            value = node.value.strip()
+            if _HEX.match(value) or value.lower() in names:
+                found.append(f"{path.name}:{node.lineno}: {value!r}")
+    return found
+
+
+def test_no_colour_literal_outside_chart_style():
+    """Every chart colour goes through THEME, so a colour cannot escape the
+    token and dE checks by being typed straight into a drawing module."""
+    charts = Path(cs.__file__).parent
+    offenders = [hit for path in sorted(charts.glob("*.py")) if path.name != "chart_style.py"
+                 for hit in _colour_literals(path)]
+    assert offenders == []
 
 
 @pytest.mark.parametrize("constant", sorted(set(COLOUR_CONSTANTS) - GAIN_LOSS))

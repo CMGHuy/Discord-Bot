@@ -36,6 +36,7 @@ if os.path.exists(_INTER_TTF):
 # Change a colour in tokens.css and that test names the constant to follow.
 # ---------------------------------------------------------------------------
 THEME = {
+    "bg": "#0c0f16",
     "surface": "#131722",
     "surface-raised": "#1c212d",
     "border": "#2a2e39",
@@ -125,6 +126,20 @@ VOLUME_PROFILE_COLOR = THEME["info"]
 # needs to carry its own disclaimer rather than relying on whatever
 # surrounding message/context it happens to be shared with.
 DISCLAIMER_TEXT = "Not financial advice — for informational purposes only. Trade at your own risk."
+# The fine print's colour on a trade chart: caution amber, which is what the
+# line is. Was a stray #e2b25a typed into trade_chart.py.
+DISCLAIMER_COLOR = THEME["warn"]
+
+# Ink for the strategy heatmap's cell labels (analytics_charts.py): dark on
+# the pale middle of RdYlGn, light on its saturated ends. Were the named
+# colours "black" and "white".
+HEATMAP_INK_DARK = THEME["bg"]
+HEATMAP_INK_LIGHT = THEME["text"]
+
+# One bar colour per walk-forward fold year, 2021/2022/2023
+# (portfolio_charts.py). Three ADJACENT series: adjacency is the pairing D2
+# validated for distinctness.
+FOLD_YEAR_COLORS = (THEME["chart-1"], THEME["chart-2"], THEME["chart-3"])
 
 
 def _label_bbox(color: str, alpha: float = 0.88) -> dict:

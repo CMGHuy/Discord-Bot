@@ -12,9 +12,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from swingbot.core.charts.chart_style import (CHART_BG, DISCLAIMER_TEXT,
-                                              DOWN_COLOR, GRID_COLOR,
-                                              MUTED_TEXT_COLOR, TEXT_COLOR,
-                                              UP_COLOR)
+                                              DOWN_COLOR, FOLD_YEAR_COLORS,
+                                              GRID_COLOR, MUTED_TEXT_COLOR,
+                                              TEXT_COLOR, UP_COLOR)
 
 
 def _save(fig, out_dir: str, name: str) -> str:
@@ -163,7 +163,7 @@ def render_fold_evidence(component_results: list, out_dir: str) -> str:
     fig, ax = plt.subplots(figsize=(max(8, 2.2 * n), 5), facecolor=CHART_BG, dpi=110)
     ax.set_facecolor(CHART_BG)
     width = 0.25
-    year_colors = ("#4dd0e1", "#ba68c8", "#ffa726")   # 2021/2022/2023
+    year_colors = FOLD_YEAR_COLORS   # 2021/2022/2023
     for gi, res in enumerate(component_results):
         for fi, delta in enumerate(res["folds"]):
             ax.bar(gi + (fi - 1) * width, delta, width * 0.9, color=year_colors[fi])

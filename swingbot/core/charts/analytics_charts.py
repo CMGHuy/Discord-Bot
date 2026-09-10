@@ -18,8 +18,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from .chart_style import (
-    CHART_BG, CHIP_BG, DISCLAIMER_TEXT, DOWN_COLOR, GRID_COLOR, MUTED_TEXT_COLOR,
-    SPINE_COLOR, TARGET_COLOR, TEXT_COLOR, UP_COLOR,
+    CHART_BG, CHIP_BG, DISCLAIMER_TEXT, DOWN_COLOR, GRID_COLOR, HEATMAP_INK_DARK,
+    HEATMAP_INK_LIGHT, MUTED_TEXT_COLOR, SPINE_COLOR, TARGET_COLOR, TEXT_COLOR, UP_COLOR,
 )
 
 _FIGSIZE = (10, 5)
@@ -174,7 +174,7 @@ def render_strategy_heatmap(rows: list, out_dir: str, *, value: str = "win_rate"
         val = r[value]
         label = f"{val:.1f}%" if value == "win_rate" else f"{val:+.2f}"
         ax.text(0, i, f"{label}\n(n={r['n']})", ha="center", va="center", fontsize=8,
-               color="black" if abs(norm[i, 0]) < 0.6 else "white", fontweight="bold")
+               color=HEATMAP_INK_DARK if abs(norm[i, 0]) < 0.6 else HEATMAP_INK_LIGHT, fontweight="bold")
 
     ax.set_title(f"Strategy Heatmap — {value.replace('_', ' ')}", color=TEXT_COLOR, fontsize=12, fontweight="bold")
     return _save(fig, out_dir, filename)
