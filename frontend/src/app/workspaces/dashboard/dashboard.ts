@@ -591,9 +591,18 @@ import { TradeGroup } from './trade-group';
        existed -- it is also register-presentation's --register-pad rung, so
        reading the variable changes nothing here and lets this workspace's
        gutter follow its register if that ever changes. */
+    /* The gap itself is now a solid divider bar (a border-top, not a
+       margin) rather than transparent whitespace showing the page's own
+       background through -- requested so the eye reads a physical black
+       line between the Active/Pending/Partial/Closed tables rather than an
+       ambiguous gap. --bg, not a raw hex literal: it is this theme's
+       darkest token (near-black by design -- see tokens.css) and every
+       colour here must come from tokens.css (primitives.spec.ts's
+       hex-literal check). Same thickness the margin used to be. */
     sb-trade-group + sb-trade-group {
       display: block;
-      margin-top: var(--register-pad);
+      margin-top: 0;
+      border-top: var(--register-pad) solid var(--bg);
     }
 
     .footnote {
