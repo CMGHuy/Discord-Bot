@@ -33,9 +33,16 @@ interface WatchlistSlice {
   suggestions: TickerSuggestion[];
 }
 
-/** The watchlist endpoint warms missing earnings dates asynchronously. One
+/** The watchlist endpoint warms missing earnings dates asynchronously. A
  * delayed, cancellable follow-up exposes that warmed cache without polling. */
 export const EARNINGS_REFRESH_DELAY_MS = 8000;
+
+/** Caps the follow-up refresh to a handful of tries rather than firing once:
+ *  a large watchlist's background warm can still be running past the first
+ *  8s delay, and a ticker Yahoo genuinely has no earnings date for must not
+ *  make this poll forever. Five tries (~40s) covers a cold cache without
+ *  turning into an indefinite timer. */
+export const EARNINGS_REFRESH_MAX_ATTEMPTS = 5;
 
 /** Split a typed or pasted blob into candidate symbols.
  *
@@ -94,17 +101,28 @@ export const WatchlistStore = signalStore(
   })),
   withMethods((store, api = inject(ApiClient)) => {
     const earningsRefresh = new Subject<void>();
+    let earningsRefreshAttempts = 0;
     earningsRefresh.pipe(
       switchMap(() => timer(EARNINGS_REFRESH_DELAY_MS).pipe(switchMap(() => api.tickers()))),
       takeUntilDestroyed(),
     ).subscribe({
-      next: ({ tickers }) => patchState(store, { tickers }),
+      next: ({ tickers }) => {
+        patchState(store, { tickers });
+        earningsRefreshAttempts += 1;
+        if (
+          earningsRefreshAttempts < EARNINGS_REFRESH_MAX_ATTEMPTS
+          && tickers.some((ticker) => !ticker.next_earnings_date)
+        ) {
+          earningsRefresh.next();
+        }
+      },
       error: () => undefined,
     });
     const resolve = (): Observable<void> => routeRequest(api.tickers(), {
       start: () => patchState(store, { loading: true }),
       next: ({ tickers }) => {
         patchState(store, { tickers, loading: false, loaded: true, error: null });
+        earningsRefreshAttempts = 0;
         if (tickers.some((ticker) => !ticker.next_earnings_date)) earningsRefresh.next();
       },
       error: (error) => patchState(store, { loading: false, error: error.code === 'unavailable' ? 'The admin is not responding.' : error.message }),

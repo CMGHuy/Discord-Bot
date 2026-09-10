@@ -15,6 +15,7 @@ import datetime as dt
 import logging
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import yfinance as yf
 
@@ -125,17 +126,25 @@ def warm_earnings_cache_background(tickers: list[str]) -> threading.Thread:
     Same shape as `marketdata.backtest_cache.ensure_cached_background` --
     the caller gets an immediate return and the next request (or the next
     poll of the same page) sees the warmed cache instead of paying for it.
-    Sequential within the thread rather than its own pool: this already
-    runs off the request thread, so there is no response latency to
-    protect, and stacking a second pool under a pool the caller may already
-    be running (`_next_earnings`'s `ThreadPoolExecutor`) buys nothing.
+
+    The per-ticker fetches run on a small pool (same `max_workers=min(10, n)`
+    shape as `watchlist.py`'s `_company_names`), not sequentially: a
+    sequential loop over a full watchlist (75+ tickers measured live) took
+    over a minute of live Yahoo round trips, which starved the frontend's
+    one bounded refresh (`EARNINGS_REFRESH_DELAY_MS` in `watchlist.store.ts`)
+    -- the Earnings calendar rendered near-empty until a full manual reload.
+    Everything here already runs off the request thread, so this pool adds
+    no response latency; it only shortens how long the cache stays cold.
     """
     def _run():
-        for ticker in tickers:
-            try:
-                get_next_earnings_datetime(ticker)
-            except Exception:
-                log.debug("background earnings warm-up failed for %s", ticker, exc_info=True)
+        with ThreadPoolExecutor(max_workers=min(10, len(tickers))) as pool:
+            futures = {pool.submit(get_next_earnings_datetime, t): t for t in tickers}
+            for fut in as_completed(futures):
+                ticker = futures[fut]
+                try:
+                    fut.result()
+                except Exception:
+                    log.debug("background earnings warm-up failed for %s", ticker, exc_info=True)
 
     t = threading.Thread(target=_run, name="earnings-cache-warm", daemon=True)
     t.start()
