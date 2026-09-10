@@ -474,9 +474,6 @@ export class Watchlist {
     {
       key: 'tape', header: 'Tape', cell: this.tapeCell(), width: '1%',
       sortable: true,
-      // Sorting on the flag is what makes "what is on the tape right now" one
-      // header click rather than a scan down ~90 rows.
-      value: (row) => (this.tape.symbols().includes(row.symbol) ? 0 : 1),
     },
     { key: 'symbol', header: 'Symbol', cell: this.symbolCell(), sortable: true },
     { key: 'company_name', header: 'Company', value: (row) => text(row.company_name), sortable: true },

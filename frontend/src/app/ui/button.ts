@@ -12,12 +12,13 @@ export type ButtonVariant =
   | 'danger-icon';
 
 /**
- * The five button variants spec 3's inventory names, and no others.
+ * The button variants spec 3's inventory names, and no others (see
+ * `ButtonVariant` above for the current list).
  *
  * Applied to a NATIVE `<button>` through an attribute selector rather than
  * wrapping one in a custom element. A wrapper has to re-implement `disabled`,
  * `type="submit"`, focus, the Enter/Space keys and the accessibility tree, and
- * usually re-implements three of the five. This way the element in the DOM is
+ * usually re-implements most of them. This way the element in the DOM is
  * the button the browser already knows how to operate, and this component only
  * supplies the paint.
  *
