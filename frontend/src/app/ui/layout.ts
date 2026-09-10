@@ -2,9 +2,11 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  afterNextRender,
   effect,
   input,
   output,
+  signal,
   viewChild,
 } from '@angular/core';
 
@@ -27,7 +29,7 @@ import { FocusTrap } from './focus-trap';
     <section class="panel">
       @if (heading(); as text) {
         <header>
-          <h2>{{ text }}</h2>
+          <h2 class="sb-label">{{ text }}</h2>
           <div class="actions"><ng-content select="[panel-actions]" /></div>
         </header>
       }
@@ -51,13 +53,9 @@ import { FocusTrap } from './focus-trap';
       padding: var(--space-10) var(--space-14);
       border-bottom: 1px solid var(--border);
     }
-    h2 {
-      color: var(--text-secondary);
-      font-size: var(--text-micro);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-    }
+    /* Typography is the global .sb-label (v80 D3); only the UA margin is
+       this component's business. */
+    h2 { margin: 0; }
     .actions { display: flex; align-items: center; gap: var(--space-8); }
     .body { padding: var(--space-14); }
     /* Tables draw their own edge-to-edge padding. */
@@ -88,9 +86,11 @@ export interface Tab {
 @Component({
   selector: 'sb-tab-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '(window:resize)': 'measure()' },
   template: `
-    <div class="tabs" role="tablist" (keydown)="onKeydown($event)">
-      @for (tab of tabs(); track tab.id) {
+    <div class="strip" [class.fade-start]="fadeStart()" [class.fade-end]="fadeEnd()">
+      <div #tabList class="tabs" role="tablist" (keydown)="onKeydown($event)" (scroll)="measure()">
+        @for (tab of tabs(); track tab.id) {
         <button
           type="button"
           role="tab"
@@ -102,12 +102,18 @@ export interface Tab {
         >
           {{ tab.label }}
         </button>
-      }
+        }
+      </div>
     </div>
   `,
   styles: `
-    .tabs { display: flex; gap: var(--space-4); border-bottom: 1px solid var(--border); }
+    :host { display: block; }
+    .strip { position: relative; border-bottom: 1px solid var(--border); }
+    .tabs { display: flex; gap: var(--space-4); overflow-x: auto; scrollbar-width: none; }
+    .tabs::-webkit-scrollbar { display: none; }
     .tab {
+      flex: 0 0 auto;
+      min-height: var(--control-h);
       padding: var(--space-8) var(--space-14);
       background: none;
       border: 0;
@@ -116,18 +122,38 @@ export interface Tab {
       font: inherit;
       font-size: var(--text-table);
       font-weight: 600;
+      white-space: nowrap;
       cursor: pointer;
       transition: color var(--transition), border-color var(--transition);
     }
     .tab:hover { color: var(--text); }
     .tab:focus-visible { outline: 1px solid var(--accent); outline-offset: -2px; }
     .active { color: var(--text); border-bottom-color: var(--accent); }
+    .strip::before, .strip::after {
+      content: ''; position: absolute; top: 0; bottom: 0; width: var(--space-20);
+      pointer-events: none; opacity: 0; transition: opacity var(--transition);
+    }
+    .strip::before { left: 0; background: linear-gradient(to right, var(--bg), transparent); }
+    .strip::after { right: 0; background: linear-gradient(to left, var(--bg), transparent); }
+    .fade-start::before, .fade-end::after { opacity: 1; }
   `,
 })
 export class TabBar {
   readonly tabs = input.required<Tab[]>();
   readonly active = input.required<string>();
   readonly activeChange = output<string>();
+  private readonly tabList = viewChild.required<ElementRef<HTMLElement>>('tabList');
+  protected readonly fadeStart = signal(false);
+  protected readonly fadeEnd = signal(false);
+
+  constructor() { afterNextRender(() => this.measure()); }
+
+  protected measure(): void {
+    const el = this.tabList().nativeElement;
+    const overflow = el.scrollWidth - el.clientWidth;
+    this.fadeStart.set(overflow > 1 && el.scrollLeft > 1);
+    this.fadeEnd.set(overflow > 1 && el.scrollLeft < overflow - 1);
+  }
 
   protected onKeydown(event: KeyboardEvent): void {
     const delta = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
@@ -163,8 +189,8 @@ export class TabBar {
  * with itself for free. That was never the bug; mismatched control heights
  * inside one line was.
  *
- * `stacked` collapses the row to a full-width column below `sm` (640px).
- * `scan-tab`'s kill row hand-rolled exactly this; it belongs here instead.
+ * Every row collapses to a full-width column below `sm` (640px); v80 D4 made
+ * that automatic. `stacked` still sets its class and does nothing else.
  */
 @Component({
   selector: 'sb-control-row',
@@ -187,7 +213,7 @@ export class TabBar {
        @media cannot evaluate var() -- the same reason the breakpoints are
        not tokens. breakpoints.spec.ts pins the arithmetic. */
     @media (max-width: 639px) {
-      .stacked { flex-direction: column; align-items: stretch; }
+      .row { flex-direction: column; align-items: stretch; }
     }
   `,
 })
@@ -231,8 +257,8 @@ export class ControlRow {
     .drawer {
       width: min(480px, 100vw);
       max-width: none;
-      height: 100vh;
-      max-height: 100vh;
+      height: 100dvh;
+      max-height: 100dvh;
       margin: 0 0 0 auto;
       padding: 0;
       color: var(--text);
@@ -258,6 +284,8 @@ export class ControlRow {
     }
     h2 { font-size: var(--text-subhead); font-weight: 600; }
     .close {
+      min-width: var(--control-h);
+      min-height: var(--control-h);
       padding: 0 var(--space-6);
       background: none;
       border: 0;
@@ -268,6 +296,9 @@ export class ControlRow {
     }
     .close:hover { color: var(--text); }
     .body { padding: var(--space-14); overflow-y: auto; }
+    @media (max-width: 639px) {
+      .drawer { width: 100vw; }
+    }
   `,
 })
 export class Drawer {
