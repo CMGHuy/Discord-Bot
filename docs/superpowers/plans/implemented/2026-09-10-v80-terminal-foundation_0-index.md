@@ -174,3 +174,22 @@ shell restyle) and Phone screens:
 | Gate 8 (browser walk, chart fixtures) | F26 |
 | Gate 9 (full suites once) | F27 |
 | Release and close-out | F28 |
+
+## Closed
+
+Closed 2026-09-10: F1–F28 done, merged as `merge(v80): terminal foundation`,
+released as ui 1.15.0 and bot 1.7.0. The spec stays at the top level of
+`docs/superpowers/specs/`: Migration and Phone screens are still to be
+specified from its "Follow-on specs" section, so something live still builds
+from it (`docs/claude/document-lifecycle.md`).
+
+F26's browser walk found and fixed two real defects beyond the plan's own
+tasks: `sb-hint`'s popover was clipped to invisibility by every real
+`sb-panel` ancestor's `overflow: hidden` (fixed with `position: fixed` and a
+measured viewport rect); and the gallery itself blew out past a 390px
+viewport because its host `display: grid` had no `grid-template-columns`,
+so the implicit column's `min-width: auto` floored on the widest new row
+(dashboard.ts and risk.ts already guard their own host grids against this).
+F26's login-credential and admin/admin steps needed the human partner's
+input; the desktop (1440px) and phone (390px) walks and the chart-fixture
+palette check ran to completion once unblocked.
