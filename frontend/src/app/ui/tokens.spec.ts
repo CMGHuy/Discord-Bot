@@ -252,3 +252,27 @@ describe('v80 D1: the TradingView Blue palette', () => {
     expect(CSS).toMatch(/^\s*--info-soft:\s*rgba\(179, 157, 219, 0\.14\);/m);
   });
 });
+
+describe('v80 D3: type, shape and touch', () => {
+  it('sets the headline figure to 28px', () => {
+    expect(CSS).toMatch(/^\s*--text-metric:\s*calc\(28px \* var\(--text-scale\)\);/m);
+  });
+
+  it('tightens both radii to 2px', () => {
+    expect(CSS).toMatch(/^\s*--radius:\s*2px;/m);
+    expect(CSS).toMatch(/^\s*--radius-chip:\s*2px;/m);
+  });
+
+  it('defines one row height and one form-control text size', () => {
+    expect(CSS).toMatch(/^\s*--row-h:\s*32px;/m);
+    expect(CSS).toMatch(/^\s*--text-control:\s*calc\(14px \* var\(--text-scale\)\);/m);
+  });
+
+  it('grows controls, rows and control text for touch and narrow screens', () => {
+    const block = CSS.match(/@media \(pointer: coarse\), \(max-width: 639px\)\s*\{([\s\S]*?)\n\}/);
+    expect(block).not.toBeNull();
+    expect(block![1]).toMatch(/--control-h:\s*44px;/);
+    expect(block![1]).toMatch(/--row-h:\s*44px;/);
+    expect(block![1]).toMatch(/--text-control:\s*calc\(16px \* var\(--text-scale\)\);/);
+  });
+});

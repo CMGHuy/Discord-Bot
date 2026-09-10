@@ -167,7 +167,7 @@
   --chart-6: #7076e8;
 
   /* -- type ------------------------------------------------------------
-   * Named by role, not by size: the scale is closed (11/12/13/14/16/20/25)
+   * Named by role, not by size: the scale is closed (11/12/13/14/16/20/28)
    * and a component should be choosing "this is a chip" rather than
    * "this is 10px". A size not on this list is a review defect.
    */
@@ -195,9 +195,10 @@
   --text-chip: calc(12px * var(--text-scale));      /* chip */
   --text-table: calc(13px * var(--text-scale));     /* table body */
   --text-body: calc(14px * var(--text-scale));      /* body */
+  --text-control: calc(14px * var(--text-scale));   /* form-control text; 16px on touch, below */
   --text-subhead: calc(16px * var(--text-scale));   /* subheading */
   --text-title: calc(20px * var(--text-scale));     /* section title */
-  --text-metric: calc(25px * var(--text-scale));    /* primary metric */
+  --text-metric: calc(28px * var(--text-scale));    /* primary metric -- v80 D3, was 25px */
 
   /* -- spacing ---------------------------------------------------------
    * Closed scale, named by value on purpose. An indirection table
@@ -231,6 +232,10 @@
    */
   --control-h: 28px;
 
+  /* v80 D3: one row height for every table row, so a table beside a list
+   * lines up. Grows with --control-h in the touch block below. */
+  --row-h: 32px;
+
   /* Breakpoints are deliberately NOT tokens: @media cannot evaluate var(),
      so each one would have to be repeated as a literal in every query and
      the two copies would drift silently. They live in ui/breakpoints.ts --
@@ -253,8 +258,9 @@
    *   --dur-base     state change, value flash, bar easing
    *   --dur-slow     layout: sidebar, panel reflow, route transition
    */
-  --radius: 4px;
-  --radius-chip: 3px;
+  /* v80 D3: 2px, was 4px / 3px -- a pro terminal's corners, not a card's. */
+  --radius: 2px;
+  --radius-chip: 2px;
 
   --dur-instant: 90ms;
   --dur-base: 160ms;
@@ -265,6 +271,20 @@
   /* Alias, so existing `transition: var(--transition)` call sites keep
    * working. New code names the duration it wants. */
   --transition: var(--dur-base) var(--ease-out);
+}
+
+/* v80 D3 -- touch. A finger needs about 44px; a mouse row of 28px controls
+ * shows more data. `pointer: coarse` catches touch at any width, and 639px
+ * (breakpoints.ts's sm floor, less one) catches a narrow window driven by a
+ * mouse too. Only these three move: gutters stay put, so this is a
+ * hit-target change, not a zoom. 16px control text is also the size below
+ * which mobile browsers zoom into a focused field. */
+@media (pointer: coarse), (max-width: 639px) {
+  :root {
+    --control-h: 44px;
+    --row-h: 44px;
+    --text-control: calc(16px * var(--text-scale));
+  }
 }
 
 /* Breakpoints are 640 / 1024 / 1440 / 1920.

@@ -95,6 +95,31 @@ a:hover {
   line-height: 1.5;
 }
 
+/* v80 D3 -- the one label style. Eleven files hand-built uppercase labels
+ * with four different letter-spacings; this is the single definition every
+ * component uses now and every workspace moves to in Migration. Mono 500:
+ * JetBrains Mono is self-hosted at 400/500/700, and a 600 would be
+ * synthesised. */
+.sb-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* v80 D3 -- the one help-text style. Replaces .section-help, .explain, .help
+ * and .legend as Migration moves their call sites; .section-help stays until
+ * the last one has moved. */
+.sb-help {
+  margin: 0;
+  max-width: 65ch;
+  color: var(--text-secondary);
+  font-size: var(--text-chip);
+  line-height: 1.5;
+}
+
 /* Valence utilities.
  *
  * Global, and they have to be. Three workspaces had each declared their own
