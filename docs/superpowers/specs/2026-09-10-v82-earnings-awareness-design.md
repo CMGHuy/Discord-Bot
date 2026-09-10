@@ -113,16 +113,21 @@ loses its only caller (D3) and is deleted with its test.
 
 ### D2. Trading sessions — `swingbot/core/market/session.py`
 
-- `NYSE_HOLIDAYS: frozenset[dt.date]` — full-day closures through 2027-12-31,
-  following `opex.py:53`'s `_FRIDAY_HOLIDAYS` precedent (static, commented
-  source), not a new dependency. `opex._FRIDAY_HOLIDAYS` is re-derived from it
-  so the two cannot disagree.
-- `is_trading_session(d)`, `next_session(d)`, `sessions_between(a, b) -> int`.
+- `NYSE_HOLIDAYS: frozenset[dt.date]` — full-day closures 2018 through
+  **2030**, matching `opex.LAST_YEAR_COVERED`, following `opex.py:53`'s
+  `_FRIDAY_HOLIDAYS` precedent (static, commented source), not a new
+  dependency. `opex.py` is **not edited**; a test asserts
+  `_FRIDAY_HOLIDAYS` equals this table's 2026+ Fridays, so the two cannot
+  disagree.
+- One class, `SessionCalendar(sessions)`, with two constructors:
+  `nyse_calendar()` (live) and `SessionCalendar.from_bar_index(index)`
+  (the instrument's cached SPY bars, exact for history). `sessions_between`
+  rolls an `asof` date **back** to its session (a Saturday reads as Friday)
+  and a target **forward** (a Saturday report reacts on Monday).
 - A guard test fails once `today` is within 90 days of the table's last
-  covered date — the table runs out loudly, not silently.
-- The **instrument** uses the cached SPY bar index as its calendar (exact for
-  history); the live bot uses `NYSE_HOLIDAYS`. Both satisfy one small
-  `SessionCalendar` protocol, and a test asserts they agree over 2018–2025.
+  covered date — the table runs out loudly, not silently — and a second test
+  asserts the table matches the cached SPY bar index from 2018-06-01 to the
+  cache's end.
 
 ### D3. The label — every surface calls `earnings_label`, none recompute
 
@@ -261,8 +266,14 @@ fold-train, so their order is immaterial to contamination.
 3. **Stage 2 — walk-forward,** selected `K` only, fold-test 2021 / 2022 / 2023:
    `gate_win_rate` — >= 2 of 3 folds improving, no fold worse than
    `GATE_MAX_WR_DEGRADATION_PP = 1.0`, per-fold N >= 30.
-4. **Stage 3 — VALIDATION, one shot,** 2024-01-01..2025-12-31: all six clauses,
-   `permutation_test.py` n = 200; a missing permutation p is a FAIL.
+4. **Stage 3 — VALIDATION, one shot,** 2024-01-01..2025-12-31: all six clauses;
+   a missing permutation p is a FAIL. **The permutation is a calendar shift,
+   not `permutation_test.py`** (that script shifts entries through
+   `run_folds` and cannot see a post-hoc filter): n = 200, seed 42, each
+   permutation draws one shift `s ~ U[20, 200)` sessions and moves every
+   ticker's reaction positions by `s` (mod calendar length); covered rows'
+   distances are recomputed; the statistic is mix-standardised ΔWR; `p` = the
+   share of permuted ΔWR `>=` the real ΔWR.
 
 ### B5. Integrity guards
 
@@ -340,6 +351,55 @@ Two plans from this spec.
 - Instrument: a fixture ticker with hand-placed reports produces the expected
   exposed rows at each K; arms JSON loads through `validate_component.load_arms`.
 - **One full suite run per plan, as its final task** (`document-conventions.md`).
+
+## Planning findings (Plan B, 2026-09-10) — part of the pre-registration
+
+Recorded in the commit that adds the measurement plan
+(`docs/superpowers/plans/2026-09-10-v82-earnings-measurement_0-index.md`),
+before any data was fetched or replayed. Where these differ from the sections
+above, these win.
+
+1. **Stage 3's permutation** is the calendar shift written into B4 above.
+2. **The rename moves into Plan B.** `EARNINGS_BLACKOUT_DAYS` is not just a
+   config field: `ScanParams.earnings_blackout_days` (`scan_params.py:31,76`),
+   `.env.example:410-412`, `wf_components.py:91` and
+   `test_knob_observability.py:13` (whose `EXEMPT` must be `searchable`) all
+   carry it. Plan B's M3 renames it to `EARNINGS_BLACKOUT_SESSIONS` everywhere,
+   moves it to `frozen`, and rewrites `in_earnings_blackout` over B2's rule —
+   unwired, default 0, so no behaviour change. **Plan A keeps only C1 (wiring)
+   and C4.** Plan B's own release is `ui patch` (the Settings field's label and
+   unit change); the spec-level `Bump:` above remains Plan A's.
+3. **Live lookups need past reports too.** `get_next_earnings_datetime`
+   filters to timestamps `>= now`, so on a before-open report's own day it has
+   already dropped that report. `LiveSource` reads a new cached
+   `events.get_earnings_datetimes(ticker)` (recent past and upcoming).
+4. **The exposure arithmetic exists once:**
+   `earnings_calendar.next_reaction_distance(asof_pos, reaction_positions)` and
+   `is_exposed(distance, k)`. The live gate, `sessions_to_reaction` and the
+   instrument all call them.
+5. **Confluence rows are relabelled `confluence:<strategy>`.** `ArmTrade.key` is
+   `(ticker, strategy, horizon, entry_date)` and `stratum` is
+   `(strategy, horizon)`; a confluence plan carries a real strategy name, so
+   without the prefix it could pair with, or pool into, a strategy backtest's
+   row.
+6. **`BacktestTrade.entry_date` is already the signal bar**
+   (`backtest.py:268-270`, `:339`, `:415`).
+7. **Coverage is measured over stock trade rows** (each row is one signal bar
+   for one strategy/horizon); a stock row is covered when its signal session
+   lies inside its ticker's first-to-last known reaction session.
+8. **Stage 1 runs before Stage 0** — the MDE check needs the selected K's
+   train effect. Both read only 2018-06-01..2020-12-31 (945 days observed,
+   730 targeted).
+9. **The VALIDATION lock is enforced in code:** the instrument refuses to
+   replay 2024–25 unless handed a Stage 2 results doc reading
+   `**Overall: PASS**`, and refuses to permute if the SPY calendar changed
+   since that replay.
+10. **Frictions differ by leg** — confluence exits through `simulate_exit`
+    (no frictions), strategies through `run_backtest(frictions=True)`.
+    Mix-standardisation within strata keeps each leg's win rate internal;
+    recorded as a limitation in every results doc.
+11. **`data/backtest_cache/` is untracked**, so a worktree has no SPY bars: the
+    SPY-agreement test skips there and runs on `main` after the merge.
 
 ## Follow-on (recorded, not in scope)
 
