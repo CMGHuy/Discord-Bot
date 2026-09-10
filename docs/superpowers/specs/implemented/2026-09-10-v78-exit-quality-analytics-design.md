@@ -146,11 +146,10 @@ One shared constant, **seeded from the floor this repo already uses** —
 `aggregate.py` and served in payloads as `min_cell_n` so the SPA never
 hard-codes it.
 
-Below the floor a cell keeps its bar in a muted "insufficient sample"
-treatment and **replaces the numeric rate with `n=7`**. Muted rather than
-hidden: the category must stay visible (v63's contract requires every category
-rendered even at n=0), and shape-at-a-glance is worth keeping — what is
-withheld is the *claim*, not the row.
+Below the floor a cell keeps its row but draws no rate bar and **replaces the
+numeric rate with `n=7`**. A muted bar would still encode the unsupported rate
+in its length. The category stays visible (v63's contract requires every
+category rendered even at n=0), while the claim is withheld completely.
 
 `zeroFilledHistogram` is the single choke point for the direction and
 day-of-week charts. The heatmap cells, the group-by table, the by-confidence
