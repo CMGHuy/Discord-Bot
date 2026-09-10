@@ -21,6 +21,11 @@ from swingbot.core.tracking.performance import primary_strategy_label
 
 _DOW_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
+#: Below this many trades in a cell, a rate is noise and must not be quoted.
+#: Seeded from calibration.DRIFT_LIVE_N_FLOOR; it is deliberately local to
+#: avoid a calibration import cycle.  The matching aggregate test pins it.
+MIN_CELL_N = 20
+
 
 def _to_berlin(iso_str: str | None) -> dt.datetime | None:
     if not iso_str:
@@ -55,6 +60,7 @@ class StatRow:
     avg_r: float | None
     profit_factor: float | None
     total_pnl: float
+    total_r: float | None = None
 
 
 def _row_for(key: str, trades: list[dict]) -> StatRow:
@@ -62,10 +68,13 @@ def _row_for(key: str, trades: list[dict]) -> StatRow:
     losses = sum(1 for t in trades if t.get("status") == "loss")
     expectancy = metrics.expectancy_r(trades)
     total_pnl = sum(float(t.get("realized_pnl_amount") or 0.0) for t in trades)
+    rs = metrics.r_multiples(trades)
+    total_r = round(float(sum(rs)), 4) if rs else None
     return StatRow(
         key=key, n=len(trades), wins=wins, losses=losses,
         win_rate=metrics.win_rate(trades), expectancy_r=expectancy, avg_r=expectancy,
         profit_factor=metrics.profit_factor(trades), total_pnl=round(total_pnl, 2),
+        total_r=total_r,
     )
 
 

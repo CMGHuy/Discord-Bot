@@ -201,6 +201,7 @@ describe('AnalyticsStore', () => {
    * The snapshot's own contents are exercised in `analytics.snapshot.spec.ts`.
    */
   const JOURNAL = { digest: ['Two losses, both chased.'], lessons: ['Wait for the retest.'], entries_n: 2 };
+  const EXIT_QUALITY = { exit_reasons: [], hold_by_outcome: {}, efficiency: { bins: [], n: 0, median: null }, mae: { bins: [], n: 0, median: null }, scatter: [], coverage: {}, min_cell_n: 20 };
 
   const respondPerformance = (body: Partial<AnalyticsPerformance> = {}) => {
     backend
@@ -212,6 +213,7 @@ describe('AnalyticsStore', () => {
     // performance response would let a journal read failure empty the KPI
     // cards. Settled here so `backend.verify()` still means "nothing ELSE".
     backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
+    backend.match('/api/v1/analytics/exit-quality').forEach((request) => request.flush(EXIT_QUALITY));
   };
 
   const respondStrategies = (body: Record<string, unknown> = {}) =>
@@ -290,12 +292,12 @@ describe('AnalyticsStore', () => {
     tick();
     backend.expectOne('/api/v1/analytics/calibration').flush({
       deciles: [{ decile: '80-89', n: 12, win_rate: 83.3, expectancy_r: 0.6 }],
-      tiers: [{ tier: 'A', n: 4, win_rate: null, expectancy_r: null, expected_band: '>=80', ok: null }],
+      levels: [{ level: 3, n: 4, win_rate: null, expectancy_r: null }],
       drift: [],
     });
 
     expect(store.deciles()).toHaveLength(1);
-    expect(store.tiers()[0].ok).toBeNull();
+    expect(store.tiers()[0].level).toBe(3);
   });
 
   it('exposes deciles as a fixed-0-100 histogram', () => {

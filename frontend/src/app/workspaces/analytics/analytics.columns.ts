@@ -105,27 +105,26 @@ export const DECILE_COLUMNS: ColumnDef<DecileRow>[] = [
   { key: 'expectancy_r', header: 'ExpR', numeric: true, value: (r) => expectancy(r.expectancy_r) },
 ];
 
-export const TIER_COLUMNS: ColumnDef<TierRow>[] = [
-  { key: 'tier', header: 'Tier' },
+export function TIER_COLUMNS(floor: number): ColumnDef<TierRow>[] { return [
+  { key: 'level', header: 'Confidence level', value: (r) => String(r.level) },
   { key: 'n', header: 'N', numeric: true, value: (r) => count(r.n) },
-  { key: 'win_rate', header: 'Live WR', numeric: true, value: (r) => rate(r.win_rate) },
+  { key: 'win_rate', header: 'Live WR', numeric: true, value: (r) => r.n < floor || r.win_rate === null ? `n=${r.n}` : rate(r.win_rate) },
   { key: 'expectancy_r', header: 'ExpR', numeric: true, value: (r) => expectancy(r.expectancy_r) },
-  { key: 'expected_band', header: 'Design band', value: (r) => r.expected_band },
-  { key: 'ok', header: 'In band' },
-];
+]; }
 
 /* -- breakdowns (SR50) ---------------------------------------------------
  *
  * One column set for all eight dimensions of the snapshot's `by` block. The
  * group's own name is the first column and its header changes with the
  * dimension, which is why it is built rather than declared. */
-export function breakdownColumns(label: string): ColumnDef<BreakdownRow>[] {
+export function breakdownColumns(label: string, floor = 0): ColumnDef<BreakdownRow>[] {
   return [
     { key: 'key', header: label, value: (r) => r.key },
     { key: 'n', header: 'Trades', numeric: true, value: (r) => count(r.n) },
     { key: 'wins', header: 'Wins', numeric: true, value: (r) => count(r.wins) },
     { key: 'losses', header: 'Losses', numeric: true, value: (r) => count(r.losses) },
-    { key: 'win_rate', header: 'Win rate', numeric: true, value: (r) => rate(r.win_rate) },
+    { key: 'win_rate', header: 'Win rate', numeric: true,
+      value: (r) => (r.n ?? 0) < floor || r.win_rate === null ? `n=${r.n ?? 0}` : rate(r.win_rate) },
     {
       key: 'expectancy_r',
       header: 'ExpR',
@@ -146,6 +145,8 @@ export function breakdownColumns(label: string): ColumnDef<BreakdownRow>[] {
       numeric: true,
       value: (r) => (r.total_pnl === null ? ABSENT : r.total_pnl.toFixed(2)),
     },
+    { key: 'total_r', header: 'Total R', numeric: true,
+      value: (r) => r.total_r === null || r.total_r === undefined ? ABSENT : `${r.total_r.toFixed(2)}R` },
   ];
 }
 
