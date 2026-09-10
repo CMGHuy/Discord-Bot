@@ -573,7 +573,7 @@ export const AnalyticsStore = signalStore(
      *  numbers are from 09:15" is a real thing to know. */
     snapshotBuiltAt: computed(() => snapText(snapshot()?.built_at)),
     /** Served by the backend: the SPA never owns the suppression threshold. */
-    minCellN: computed(() => exitQuality()?.min_cell_n ?? Number.MAX_SAFE_INTEGER),
+    minCellN: computed(() => exitQuality()?.min_cell_n ?? 0),
 
     profitFactor: computed(() => snapNumber(snapshot()?.overall?.['profit_factor'])),
     sharpe: computed(() => snapNumber(snapshot()?.overall?.['sharpe'])),
@@ -621,12 +621,12 @@ export const AnalyticsStore = signalStore(
     directionHistogram: computed<HistogramBin[]>(() =>
       zeroFilledHistogram(
         toBreakdownRows((snapshot()?.by?.['direction'] ?? []) as unknown[]),
-        DIRECTION_ORDER, exitQuality()?.min_cell_n ?? Number.MAX_SAFE_INTEGER,
+        DIRECTION_ORDER, exitQuality()?.min_cell_n ?? 0,
       )),
     dowHistogram: computed<HistogramBin[]>(() =>
       zeroFilledHistogram(
         toBreakdownRows((snapshot()?.by?.['dow'] ?? []) as unknown[]),
-        DOW_ORDER.map((day) => [day, day] as const), exitQuality()?.min_cell_n ?? Number.MAX_SAFE_INTEGER,
+        DOW_ORDER.map((day) => [day, day] as const), exitQuality()?.min_cell_n ?? 0,
       )),
     /* -- performance --------------------------------------------------- */
 
@@ -929,9 +929,11 @@ export const AnalyticsStore = signalStore(
                 : error.message,
           }),
       });
-      api.analyticsExitQuality().subscribe({
-        next: (exitQuality) => patchState(store, { exitQuality }),
-      });
+      if (store.exitQuality() === null) {
+        api.analyticsExitQuality().subscribe({
+          next: (exitQuality) => patchState(store, { exitQuality }),
+        });
+      }
     };
 
     const loadStrategies = (): void => {
@@ -1044,9 +1046,11 @@ export const AnalyticsStore = signalStore(
             next: (snapshot) => patchState(store, { snapshot, snapshotError: null }),
             error: (error: ApiError) => patchState(store, { snapshotError: error.code === 'unavailable' ? 'The admin is not responding.' : error.message }),
           });
-          api.analyticsExitQuality().subscribe({
-            next: (exitQuality) => patchState(store, { exitQuality }),
-          });
+          if (store.exitQuality() === null) {
+            api.analyticsExitQuality().subscribe({
+              next: (exitQuality) => patchState(store, { exitQuality }),
+            });
+          }
         },
         next: (performance) => patchState(store, { performance, loading: false, error: null }),
         error: fail,
