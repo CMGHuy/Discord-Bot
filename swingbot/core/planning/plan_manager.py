@@ -207,19 +207,38 @@ class PlanManager:
             return
         try:
             if event.transition == "filled":
-                trade_id = self.trade_log.log_trade(
-                    ticker=plan.ticker, strategy=plan.strategy,
-                    horizon_key=plan.horizon_key, direction=plan.direction,
-                    # v32 Task 11: plan.confidence_level now exists (set at
-                    # plan-build time by _apply_quality), so this stop-entry
-                    # fill can pass the real level instead of a hardcoded
-                    # None -- confidence_label isn't stored on the plan, so
-                    # that half stays None.
-                    confidence_level=plan.confidence_level, confidence_label=None,
-                    entry=plan.entry_price, stop_loss=plan.stop_loss,
-                    take_profit=plan.tp1, target2=plan.tp2,
-                    plan_id=plan.plan_id, badge=plan.badge,
-                    quality_score=plan.quality_score, source=plan.source)
+                # scan_run.py already logged a placeholder trade for this
+                # plan_id the moment the stop_entry setup was first detected
+                # (still PENDING, sized against the trigger price) -- this is
+                # that same trade catching up to the real fill, not a new
+                # position. record_plan_fill() finds it by plan_id and moves
+                # its entry (and resized shares) onto plan.entry_price.
+                # log_trade()-ing a SECOND record here (the old behaviour)
+                # left two open trades sharing one plan_id: close_plan_trade()
+                # only ever finds and closes the first, so the second -- the
+                # one the admin UI's plan/trade join actually shows, since
+                # that join keeps the LAST trade per plan_id -- never closed,
+                # no matter what price did (production incident, 2026-09-10:
+                # QCOM sat "open" well past its armed stop indefinitely).
+                trade_id = self.trade_log.record_plan_fill(
+                    plan.plan_id, plan.entry_price)
+                if trade_id is None:
+                    # No placeholder found -- plan reached the store some
+                    # other way than the normal scan_run.py alert path.
+                    # Log it now so the fill is never silently unrecorded.
+                    trade_id = self.trade_log.log_trade(
+                        ticker=plan.ticker, strategy=plan.strategy,
+                        horizon_key=plan.horizon_key, direction=plan.direction,
+                        # v32 Task 11: plan.confidence_level now exists (set at
+                        # plan-build time by _apply_quality), so this stop-entry
+                        # fill can pass the real level instead of a hardcoded
+                        # None -- confidence_label isn't stored on the plan, so
+                        # that half stays None.
+                        confidence_level=plan.confidence_level, confidence_label=None,
+                        entry=plan.entry_price, stop_loss=plan.stop_loss,
+                        take_profit=plan.tp1, target2=plan.tp2,
+                        plan_id=plan.plan_id, badge=plan.badge,
+                        quality_score=plan.quality_score, source=plan.source)
                 event.detail["trade_id"] = trade_id
             elif event.transition == "tp1_partial":
                 self.trade_log.append_leg_by_plan(plan.plan_id, event.detail)

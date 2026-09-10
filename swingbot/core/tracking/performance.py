@@ -507,6 +507,40 @@ class TradeLog:
             append_leg(t, leg)
             self._save()
 
+    def record_plan_fill(self, plan_id: str, fill_price: float) -> str | None:
+        """Move the placeholder trade a stop_entry plan_v2 got at scan-detection
+        time (see scan_run.py's log_trade() call, fired while the plan is still
+        PENDING and waiting for its trigger) onto its real fill price.
+
+        Re-derives shares/position_value from the fill (not the trigger price
+        scan-detection sized against) -- stop_loss is unchanged by a fill, so
+        this is the same compute_position_size() call log_trade() made, just
+        with the corrected entry. Returns the trade id, or None if no
+        placeholder trade exists for this plan (log_trade may have failed,
+        or trade_log was wired in after the alert was built) -- PlanManager
+        falls back to creating one fresh in that case.
+
+        Deliberately does NOT create a new trade itself: a second log_trade()
+        call here is exactly the bug this method replaces -- two trade
+        records for one plan_id, of which close_plan_trade() only ever
+        finds and closes one, leaving the other open forever."""
+        with _LOCK:
+            t = next((t for t in self._trades
+                      if t.get("plan_id") == plan_id and t["status"] == "open"), None)
+            if t is None:
+                return None
+            t["entry"] = fill_price
+            try:
+                sizing = account_module.compute_position_size(fill_price, t["stop_loss"])
+            except Exception:
+                sizing = None
+            if sizing is not None:
+                t["shares"] = sizing["shares"]
+                t["position_value"] = sizing["position_value"]
+                t["sizing_mode"] = sizing["mode"]
+            self._save()
+            return t["id"]
+
     def close_plan_trade(self, plan_id: str, leg: dict | None, status: str) -> None:
         """Final leg + terminal status for a v2 plan's trade. `leg` is the
         real leg dict for a runner close; the caller (PlanManager._on_event,

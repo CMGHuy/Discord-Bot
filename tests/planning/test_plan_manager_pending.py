@@ -1,8 +1,12 @@
+import json
+
 import pytest
 
+from swingbot import config
 from swingbot.core.planning.plan_engine import PlanStatus
 from swingbot.core.planning.plan_manager import PlanManager
 from swingbot.core.planning.plan_store import PlanStore
+from swingbot.core.tracking.performance import TradeLog
 from tests.fake_feed import FakePriceFeed
 from tests.planning.test_plan_engine_model import _plan
 
@@ -98,3 +102,73 @@ def _rth_gate_off(monkeypatch):
     """Arithmetic tests stay independent of the wall clock."""
     from swingbot import config
     monkeypatch.setattr(config, "INTRADAY_RTH_ONLY", False)
+
+
+def test_fill_updates_the_scan_time_placeholder_not_a_second_trade(tmp_path, monkeypatch):
+    """Production incident, 2026-09-10: scan_run.py logs a placeholder trade
+    for a stop_entry plan the moment it's detected (still PENDING, sized off
+    the trigger price) -- see its log_trade() call right before PlanStore().
+    add(plan_v2). Before this fix, PlanManager's "filled" handler logged a
+    SECOND trade at actual fill instead of updating that placeholder, so two
+    open trades ended up sharing one plan_id. close_plan_trade() only ever
+    finds and closes the first (chronologically earliest) one, leaving the
+    other -- the one the admin UI's plan/trade join actually shows -- open
+    forever, regardless of price. Pin: exactly one trade per plan_id, its
+    entry moved onto the real fill."""
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    (tmp_path / "trades.json").write_text("[]", encoding="utf-8")
+    (tmp_path / "account.json").write_text(json.dumps({
+        "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
+        "sizing_mode": "risk_pct", "balance_history": [],
+    }), encoding="utf-8")
+    trade_log = TradeLog()
+    # The scan-time placeholder: entry = trigger_price, not the eventual fill.
+    trade_log.log_trade(
+        ticker="AAPL", strategy="Fibonacci", horizon_key="4w",
+        direction="bullish", confidence_level=None, confidence_label=None,
+        entry=105.0, stop_loss=95.0, take_profit=110.0, plan_id="p1")
+
+    feed = FakePriceFeed([("AAPL", 106.0)])
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_pending())
+    mgr = PlanManager(store, feed.get_price, trade_log=trade_log)
+
+    events = mgr.poll()
+
+    assert [e.transition for e in events] == ["filled"]
+    open_for_plan = [t for t in trade_log.get_trades(status=None, limit=None)
+                     if t.get("plan_id") == "p1"]
+    assert len(open_for_plan) == 1, (
+        "the fill must update the existing placeholder trade, not add a "
+        "second one for the same plan_id"
+    )
+    assert open_for_plan[0]["entry"] == 106.0
+    assert open_for_plan[0]["status"] == "open"
+
+
+def test_fill_still_logs_a_trade_when_no_placeholder_exists(tmp_path, monkeypatch):
+    """Defensive fallback: a plan can reach PlanStore some way other than
+    scan_run.py's normal alert path (tests, a future manual-add feature) and
+    so have no placeholder trade waiting. The fill must still get logged --
+    not silently dropped -- just via a fresh trade this once."""
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    (tmp_path / "trades.json").write_text("[]", encoding="utf-8")
+    (tmp_path / "account.json").write_text(json.dumps({
+        "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
+        "sizing_mode": "risk_pct", "balance_history": [],
+    }), encoding="utf-8")
+    trade_log = TradeLog()   # no placeholder logged
+
+    feed = FakePriceFeed([("AAPL", 106.0)])
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_pending())
+    mgr = PlanManager(store, feed.get_price, trade_log=trade_log)
+
+    events = mgr.poll()
+
+    assert [e.transition for e in events] == ["filled"]
+    assert events[0].detail.get("trade_id") is not None
+    open_for_plan = [t for t in trade_log.get_trades(status=None, limit=None)
+                     if t.get("plan_id") == "p1"]
+    assert len(open_for_plan) == 1
+    assert open_for_plan[0]["entry"] == 106.0
