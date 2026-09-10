@@ -50,13 +50,14 @@ COUNT_RE = re.compile(r"(\d+) (passed|failed|skipped|xfailed|xpassed|error|error
 # Editing any of these can break a test that only runs in the slow tier, so
 # `fast` transparently upgrades itself to `full` when they are dirty. Tiering
 # is a speed optimisation; it must not become a way to miss a regression.
-# `swingbot/admin/templates/` was here until Release B deleted it. `static/`
-# stays: it is no longer page CSS, but `static/tokens.css` is still the source
-# `core/charts/chart_style.THEME` mirrors, and tests/test_chart_theme.py pins
-# the two together -- so editing it can still break a render-tier test.
+# `swingbot/admin/templates/` was here until Release B deleted it, and
+# `swingbot/admin/static/` until v80 deleted `static/tokens.css`. The palette
+# `core/charts/chart_style.THEME` copies is now the SPA's own
+# `frontend/src/styles/tokens.css`, and tests/charts/test_chart_theme.py (slow
+# tier) reads it -- so a token edit can still break a render-tier test.
 ESCALATE_PREFIXES = (
     "swingbot/core/charts/",
-    "swingbot/admin/static/",
+    "frontend/src/styles/tokens.css",
 )
 
 

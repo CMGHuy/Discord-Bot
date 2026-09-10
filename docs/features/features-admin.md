@@ -116,13 +116,14 @@ If resolution takes more than one second, the shell keeps its sidebar and topbar
 ## Admin UI
 
 The admin UI's look is driven by one design-token layer, not scattered
-per-page CSS: `static/tokens.css` is the single palette/spacing source of
-truth, `swingbot/admin/chart_style.THEME` mirrors those same colors for
-server-rendered PNG charts, and a test keeps the two in sync so they can
-never quietly drift apart. **`tokens.css` survived the Jinja deletion for
-exactly that reason** — it stopped being read by templates and became the
-source the Angular build imports, and deleting it would have left the *bot's*
-Discord chart colours with no single source.
+per-page CSS: `frontend/src/styles/tokens.css` is the single palette, type
+and spacing source (direction C, "TradingView Blue", spec v80). The bot's
+Discord chart PNGs share that palette: `swingbot/core/charts/chart_style.THEME`
+copies the tokens it names, and `tests/charts/test_chart_theme.py` compares
+the two byte for byte, so an admin colour change names the chart constant
+that must follow it. The same test keeps every chart overlay clear of the
+gain and loss colours. The old `swingbot/admin/static/tokens.css` mirror was
+deleted in v80, having outlived the Jinja pages it styled.
 
 Fonts (Inter and JetBrains Mono) are vendored under `static/vendor/` and
 self-hosted — no runtime CDN calls, so the admin UI works fully offline.

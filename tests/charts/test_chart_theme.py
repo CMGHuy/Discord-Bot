@@ -168,6 +168,12 @@ def test_no_colour_literal_outside_chart_style():
     assert offenders == []
 
 
+def test_the_old_admin_palette_mirror_is_gone():
+    """swingbot/admin/static/tokens.css outlived the Jinja pages it styled and
+    survived only as the other side of this file's old sync test."""
+    assert not (REPO / "swingbot" / "admin" / "static" / "tokens.css").exists()
+
+
 @pytest.mark.parametrize("constant", sorted(set(COLOUR_CONSTANTS) - GAIN_LOSS))
 def test_no_colour_reads_as_gain_or_loss(constant):
     colour = getattr(cs, constant)
