@@ -102,6 +102,15 @@ def _parse_grid_value(s: str):
     return s
 
 
+def report_gate(rows: list, qualifying: list) -> dict:
+    """Report whether the acceptance gate selected any grid cell."""
+    gated = bool(qualifying)
+    headline = f"{len(qualifying)}/{len(rows)} configs qualify (WR>=80, ExpR>0, N>=30, excl<=50%)"
+    if not gated:
+        headline += " ***UNGATED***: no config cleared the gate; ranking is the full-grid argmax."
+    return {"gated": gated, "n_qualifying": len(qualifying), "n_rows": len(rows), "headline": headline}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--strategy", required=True)
@@ -154,7 +163,8 @@ def main():
     qualifying = [(p, s) for p, s in rows
                   if s["n_eval"] >= 30 and (s["win_rate"] or 0) >= 80
                   and (s["expectancy_r"] or 0) > 0 and s["excluded_share"] <= 0.5]
-    print(f"\n{len(qualifying)}/{len(rows)} configs qualify (WR>=80, ExpR>0, N>=30, excl<=50%)")
+    gate_report = report_gate(rows, qualifying)
+    print("\n" + gate_report["headline"])
     ranked = sorted(qualifying or rows,
                     key=lambda r: (r[1]["expectancy_r"] or -9), reverse=True)
     print("Top 5:")
@@ -165,6 +175,7 @@ def main():
         best = ranked[0] if ranked else None
         payload = {
             "strategy": strategy,
+            "gate": gate_report,
             "grid": [{"params": p, **s} for p, s in rows],
             "best": ({"params": best[0], **best[1]} if best else None),
         }
