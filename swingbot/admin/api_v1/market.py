@@ -530,22 +530,22 @@ def _tape_symbols(raw: str) -> list[str]:
     return out[:_TAPE_MAX_SYMBOLS]
 
 
-def _tape_change_pct(symbol: str, price) -> float | None:
+def _tape_change_pct(symbol: str, price, frames: dict) -> float | None:
     """Percent move from the previous daily close.
 
-    Uses the same `_ohlcv_frame` accessor the chart endpoint uses, so the tape
-    and the chart can never disagree about which cache a ticker's bars came
-    from. Returns None rather than 0.0 when there is no previous close: "no
-    answer" and "flat" are different facts and the tile renders them
+    `frames` is the `{symbol: DataFrame}` dict `tape()` fetches ONCE, up
+    front, via `get_daily_data_batch` -- a single batched `yf.download()` for
+    every flagged symbol, never a per-symbol call from here. Returns None
+    rather than 0.0 when there is no previous close (or no frame at all):
+    "no answer" and "flat" are different facts and the tile renders them
     differently.
     """
     if price is None:
         return None
+    df = frames.get(symbol)
+    if df is None or len(df) < 2:
+        return None
     try:
-        from swingbot.admin.app import _ohlcv_frame
-        df = _ohlcv_frame(symbol)
-        if df is None or len(df) < 2:
-            return None
         prev = float(df["Close"].iloc[-2])
     except Exception:
         return None
@@ -554,13 +554,18 @@ def _tape_change_pct(symbol: str, price) -> float | None:
     return round((float(price) - prev) / prev * 100.0, 2)
 
 
-def _tape_earnings_days(symbols: list[str]) -> dict:
-    """Whole days until each symbol's next earnings date, where known.
+def _tape_earnings_dates(symbols: list[str]) -> dict:
+    """Each symbol's next earnings DATE (a `datetime.date`), where known.
 
     Reuses the watchlist module's own resolver so the tape and the watchlist
-    table can never disagree about when a ticker reports.
+    table can never disagree about when a ticker reports. Exposes the date
+    itself rather than a pre-computed days-until count: `_tape_context` needs
+    the actual date to test it against the current Monday-Sunday week, the
+    same boundary the frontend's `isWithinCurrentWeek` uses -- a rolling
+    "days until <= 7" window disagrees with that boundary near a week edge
+    (e.g. 6 days out can land in NEXT week).
     """
-    from datetime import date, datetime
+    from datetime import datetime
 
     from swingbot.admin.api_v1.watchlist import _next_earnings
 
@@ -569,25 +574,28 @@ def _tape_earnings_days(symbols: list[str]) -> dict:
         resolved = _next_earnings(symbols) or {}
     except Exception:
         return out
-    today = date.today()
     for symbol, pair in resolved.items():
         iso = pair[0] if isinstance(pair, tuple) else pair
         if not iso:
             continue
         try:
-            out[symbol] = (datetime.fromisoformat(iso).date() - today).days
+            out[symbol] = datetime.fromisoformat(iso).date()
         except ValueError:
             continue
     return out
 
 
 def _tape_context(symbol: str, price, open_trades: dict, open_plans: dict,
-                  earnings: dict) -> tuple[str | None, str | None, int]:
+                  earnings: dict, today=None) -> tuple[str | None, str | None, int]:
     """The one piece of context a tile shows, and its sort rank.
 
     Precedence is deliberate and matches the spec: a position outranks a plan
     because it is money already committed; a plan outranks an earnings date
     because it is actionable now. Exactly one is returned.
+
+    `today` defaults to `date.today()` and exists as a parameter purely so
+    tests can pin the "current week" boundary to a known date instead of
+    depending on the wall clock.
     """
     trade = open_trades.get(symbol)
     if trade is not None:
@@ -619,9 +627,19 @@ def _tape_context(symbol: str, price, open_trades: dict, open_plans: dict,
             return "plan", label, 1
         return "plan", "planned", 1
 
-    days = earnings.get(symbol)
-    if days is not None and 0 <= days <= 7:
-        return "earnings", f"earnings {days}d", 2
+    earnings_date = earnings.get(symbol)
+    if earnings_date is not None:
+        from datetime import date, timedelta
+
+        if today is None:
+            today = date.today()
+        # Monday=0..Sunday=6, so this needs no offset arithmetic (contrast
+        # the frontend's `(now.getDay() + 6) % 7`, whose Sunday=0 DOES).
+        monday = today - timedelta(days=today.weekday())
+        sunday = monday + timedelta(days=6)
+        if monday <= earnings_date <= sunday:
+            days = (earnings_date - today).days
+            return "earnings", f"earnings {days}d", 2
 
     return None, None, 2
 
@@ -659,6 +677,17 @@ def tape():
     except Exception:  # a dead feed degrades to a priceless tape, never a 500
         prices = {}
 
+    # ONE batched fetch for every flagged symbol's change_pct, not one
+    # `_ohlcv_frame` call per row -- `tape()` fires on every `scan` SSE event,
+    # automatically, and a per-symbol uncached 2-year yfinance download in
+    # that loop would share Yahoo's rate limit with the bot's own scanner on
+    # every single scan. A symbol missing from the dict (no usable data came
+    # back for it) just means `_tape_change_pct` returns None for that row.
+    try:
+        frames = market_data.get_daily_data_batch(symbols) or {}
+    except Exception:
+        frames = {}
+
     open_trades: dict = {}
     try:
         for tr in TradeLog().get_trades(status="open", limit=None) or []:
@@ -673,7 +702,7 @@ def tape():
     except Exception:
         pass
 
-    earnings = _tape_earnings_days(symbols)
+    earnings = _tape_earnings_dates(symbols)
 
     rows = []
     for symbol in symbols:
@@ -683,7 +712,7 @@ def tape():
         rows.append({
             "symbol": symbol,
             "price": _num(price),
-            "change_pct": _tape_change_pct(symbol, price),
+            "change_pct": _tape_change_pct(symbol, price, frames),
             "context_kind": kind,
             "context_label": label,
             "sort_rank": rank,
