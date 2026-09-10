@@ -1085,3 +1085,28 @@ export interface CalendarDayTrades {
   date: string;
   trades: CalendarTrade[];
 }
+
+/* -- live tape ---------------------------------------------------------- */
+
+/** One Lane B tile. `price`/`change_pct` are null when the feed had no answer
+ *  for this symbol — a different fact from a flat move, and rendered
+ *  differently, so a flagged name never silently vanishes from the tape. */
+export interface TapeRow {
+  symbol: string;
+  price: number | null;
+  change_pct: number | null;
+  /** Exactly one context, or null. A position outranks a plan, which outranks
+   *  an earnings date — the server resolves the precedence. */
+  context_kind: 'position' | 'plan' | 'earnings' | null;
+  context_label: string | null;
+  /** 0 position, 1 plan, 2 neither. The client sorts on this so the ordering
+   *  rule lives in one place. */
+  sort_rank: number;
+}
+
+export interface TapeResponse {
+  /** ISO-8601 UTC instant the server composed this answer at. Rendered in the
+   *  pinned end-cap; never inside the moving track. */
+  as_of: string;
+  rows: TapeRow[];
+}

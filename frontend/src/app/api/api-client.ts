@@ -1,6 +1,6 @@
 import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, of } from 'rxjs';
 
 import { SKIP_ROUTE_REFRESH } from './interceptors';
 
@@ -39,6 +39,7 @@ import {
   SettingsImportResult,
   SettingsPreview,
   SettingsSaveResult,
+  TapeResponse,
   Ticker,
   TickerAddResult,
   TickerList,
@@ -415,6 +416,15 @@ export class ApiClient {
       `${this.base}/market/chart/${encodeURIComponent(ticker)}`,
       { params: toParams(params) },
     );
+  }
+
+  /** Lane B's rows. Returns an empty response without a request when nothing
+   *  is flagged: the tape is hidden in that state, and an empty round-trip on
+   *  every scan tick would be pure noise. */
+  tape(symbols: string[]): Observable<TapeResponse> {
+    if (!symbols.length) return of({ as_of: new Date().toISOString(), rows: [] });
+    const query = encodeURIComponent(symbols.join(','));
+    return this.http.get<TapeResponse>(`${this.base}/market/tape?symbols=${query}`);
   }
 
   /** One month of daily P&L, plus the all-history context beside it. */
