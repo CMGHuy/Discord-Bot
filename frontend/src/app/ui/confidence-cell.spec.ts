@@ -76,8 +76,8 @@ describe('ConfidenceCell', () => {
     expect(root.getPropertyValue('--quality-4').trim().toLowerCase()).toBe('#9acd32');
   });
 
-  it('leaves info alone for the chart series namespace', () => {
+  it('keeps info off the quality ramp (v80 D1: lavender, not blue)', () => {
     const root = getComputedStyle(document.documentElement);
-    expect(root.getPropertyValue('--info').trim().toLowerCase()).toBe('#46c2ff');
+    expect(root.getPropertyValue('--info').trim().toLowerCase()).toBe('#b39ddb');
   });
 });

@@ -10,9 +10,10 @@
  * maintaining, and this is a single-user private tool. Adding one later means
  * revisiting the spec, not adding a media query.
  *
- * This file is NOT `swingbot/admin/static/tokens.css`. That one still drives
- * the Jinja UI *and* the bot's Discord chart colours. The two coexist until
- * Jinja is deleted, and this is the SPA's only palette.
+ * The bot's Discord chart PNGs share this palette (spec v80 D5):
+ * `swingbot/core/charts/chart_style.py`'s THEME names these tokens and
+ * tests/charts/test_chart_theme.py compares the two byte for byte. Change a
+ * colour here and that test names the chart constant that must follow.
  */
 
 :root {
@@ -39,22 +40,26 @@
    * platform renders direction this way — breaking the convention to satisfy
    * an internal rule would be worse, not more consistent.
    */
-  --bg: #0a0b10;
-  --surface: #10121a;
-  --surface-raised: #171a25;
-  --surface-overlay: #1e2230;
-  --overlay-dim: rgba(10, 11, 16, .72);
-  --border: #232838;
-  --border-strong: #333a4f;
+  /* v80 D1: direction C, "TradingView Blue". The surface ladder steps far
+   * enough apart (0c0f16 -> 131722 -> 1c212d -> 242936) that panels read as
+   * separate objects without a shadow; --surface is TradingView's own chart
+   * pane, so the admin and the Discord charts sit on one ground. */
+  --bg: #0c0f16;
+  --surface: #131722;
+  --surface-raised: #1c212d;
+  --surface-overlay: #242936;
+  --overlay-dim: rgba(12, 15, 22, .72);
+  --border: #2a2e39;
+  --border-strong: #363a45;
 
   /* -- elevation --------------------------------------------------------
    * ONE shadow, and it means one thing: this element is not part of the
    * page flow.
    *
    * Depth in a dark UI is carried by surface LIGHTNESS, not by shadow --
-   * the four surface tokens above already step 0a0b10 -> 10121a -> 171a25
-   * -> 1e2230, which is the ladder. A shadow under a panel on near-black
-   * reads as smudge rather than depth, so L1 and L2 have none and only L3
+   * the four surface tokens above step 0c0f16 -> 131722 -> 1c212d -> 242936,
+   * which is the ladder. A shadow under a panel on near-black reads as
+   * smudge rather than depth, so L1 and L2 have none and only L3
    * (dropdown, popover, tooltip, toast, drawer, dialog) takes this.
    *
    * An `inset` box-shadow is NOT this: it is a border drawn inside the box
@@ -69,40 +74,45 @@
    * (versions.ts faked one with a 9999px spread). */
   --scrim: var(--overlay-dim);
 
-  --text: #e9ebf5;
-  --text-secondary: #9ba3bd;
-  /* v54 Task 42: the ONE deliberate exception to "no existing token changes
-   * value" (see plan's Global Constraints). Measured AA failure at the
-   * original #6d7590 -- 4.14:1 on --surface, 3.80:1 on --surface-raised,
-   * 3.47:1 on --surface-overlay, all below the 4.5:1 gate -- on a token used
-   * at --text-micro (11px) for real, readable labels (nav group headers,
-   * chip captions), not large text and not a rule/divider like
-   * --text-faint below. #878ea4 clears 4.5:1 on all four surfaces (worst
-   * case 4.85:1 on --surface-overlay, verified in contrast.spec.ts) with a
-   * safety margin over the gate; that is a documented, tested, single-token
-   * change with a measured reason, which is the opposite of the silent
-   * breakage the constraint exists to prevent. Recorded in the v54 spec's
-   * Non-goals section. */
-  --text-muted: #878ea4;
+  --text: #d9dce4;
+  --text-secondary: #9ea2ad;
+  /* v80 D1: direction C's first muted grey (#888c97) measured 4.32:1 on
+   * --surface-overlay -- under the 4.5:1 gate contrast.spec.ts enforces on
+   * all four surfaces, for real readable labels at --text-micro (nav group
+   * headers, chip captions, .sb-label). #9195a0 is the smallest lift that
+   * clears it with v54's safety margin: worst case 4.85:1 on
+   * --surface-overlay. v54 Task 42 made the same kind of measured,
+   * single-token change for the previous palette. */
+  --text-muted: #9195a0;
   /* --text-faint is a RULE AND DIVIDER colour (~2.3:1 on --surface) -- never
    * text that must be read. contrast.spec.ts's `no-text-uses-text-faint`
    * assumes this and this comment is what it checks for. */
-  --text-faint: #464d63;
+  --text-faint: #4e5361;
 
   --pos: #17c98e;
   --neg: #ff5470;
   --warn: #ffb43d;
-  --accent: #7b5cfa;
-  --info: #46c2ff;
+  /* v80 D1: the accent is two tokens. --accent is the colour of interactive
+   * TEXT and state -- links, the active tab, the sort arrow, focus -- and
+   * #5593ff clears 4.85:1 on every surface. --accent-fill is the deeper
+   * TradingView blue a filled button paints, with --on-accent on top at
+   * 4.90:1; the text-safe blue is too light to carry white ink. */
+  --accent: #5593ff;
+  --accent-fill: #2962ff;
+  --on-accent: #ffffff;
+  /* v80 D1: info moved off sky blue. Under direction C the accent took the
+   * blue, and two blues would make "neutral" read as "interactive". */
+  --info: #b39ddb;
 
   /* 12% tints, for cell and chip backgrounds, hover states and the chart's
    * risk/reward bands. Literal rgba rather than colour-mix() so the values
-   * survive without a fallback path. */
+   * survive without a fallback path. --accent-soft is 18% of the FILL blue:
+   * the selected-segment ground needs to separate from --surface-raised. */
   --pos-soft: rgba(23, 201, 142, 0.12);
   --neg-soft: rgba(255, 84, 112, 0.12);
   --warn-soft: rgba(255, 180, 61, 0.12);
-  --accent-soft: rgba(123, 92, 250, 0.12);
-  --info-soft: rgba(70, 194, 255, 0.12);
+  --accent-soft: rgba(41, 98, 255, 0.18);
+  --info-soft: rgba(179, 157, 219, 0.14);
 
   /* Quality ramp — confidence Lv1-5 and tier A/B/C.
    *
@@ -117,8 +127,8 @@
   --quality-2: var(--warn);
   --quality-3: var(--text-secondary);
   /* v62 D2: level 4 is ordinal yellow-green, not informational blue.
-   * Keep this literal in lockstep with presentation.tokens.ACCENT_RAMP[4];
-   * --info remains the chart-series colour used by --chart-2. */
+   * Keep this literal in lockstep with presentation.tokens.ACCENT_RAMP[4].
+   * (v80: --info is lavender and no longer doubles as a chart series.) */
   --quality-4: #9acd32;
   --quality-5: var(--pos);
 

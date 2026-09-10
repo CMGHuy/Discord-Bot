@@ -44,6 +44,8 @@ const REQUIRED = [
   '--neg',
   '--warn',
   '--accent',
+  '--accent-fill',
+  '--on-accent',
   '--info',
 
   '--pos-soft',
@@ -212,4 +214,41 @@ describe('no workspace hand-rolls a control row', () => {
       expect(offenders).toEqual([]);
     });
   }
+});
+
+describe('v80 D1: the TradingView Blue palette', () => {
+  const EXPECTED: Record<string, string> = {
+    '--bg': '#0c0f16',
+    '--surface': '#131722',
+    '--surface-raised': '#1c212d',
+    '--surface-overlay': '#242936',
+    '--border': '#2a2e39',
+    '--border-strong': '#363a45',
+    '--text': '#d9dce4',
+    '--text-secondary': '#9ea2ad',
+    '--text-muted': '#9195a0',
+    '--text-faint': '#4e5361',
+    '--accent': '#5593ff',
+    '--accent-fill': '#2962ff',
+    '--on-accent': '#ffffff',
+    '--info': '#b39ddb',
+    '--pos': '#17c98e',
+    '--neg': '#ff5470',
+    '--warn': '#ffb43d',
+  };
+
+  for (const [name, hex] of Object.entries(EXPECTED)) {
+    it(`${name} is ${hex}`, () => {
+      expect(CSS).toMatch(new RegExp(`^\\s*${name}:\\s*${hex};`, 'mi'));
+    });
+  }
+
+  it('dims the overlay from the new ground', () => {
+    expect(CSS).toMatch(/^\s*--overlay-dim:\s*rgba\(12, 15, 22, \.72\);/m);
+  });
+
+  it('tints accent-soft from the fill blue and info-soft from lavender', () => {
+    expect(CSS).toMatch(/^\s*--accent-soft:\s*rgba\(41, 98, 255, 0\.18\);/m);
+    expect(CSS).toMatch(/^\s*--info-soft:\s*rgba\(179, 157, 219, 0\.14\);/m);
+  });
 });
