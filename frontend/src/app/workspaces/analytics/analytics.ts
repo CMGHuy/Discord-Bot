@@ -653,7 +653,7 @@ interface ProposalView extends ProposalRow {
             />
           </sb-panel>
 
-          <sb-panel heading="Tier calibration" [flush]="true">
+          <sb-panel heading="Confidence-level calibration" [flush]="true">
             <!-- SR61. stats.html:19 and :21. Both numbers verified against code
                  before being written down: the A/B/C SCORE bands are
                  quality.py:_tier (>=75, 50-74, <50) and the win-rate bands
@@ -1404,9 +1404,7 @@ export class Analytics {
     attach(CONFIDENCE_COLUMNS, { level: this.levelCell() }),
   );
 
-  protected readonly tierColumns = computed(() =>
-    attach(TIER_COLUMNS, { tier: this.tierCell(), ok: this.bandCell() }),
-  );
+  protected readonly tierColumns = computed(() => TIER_COLUMNS(this.store.minCellN()));
 
   protected readonly driftColumns = computed(() =>
     attach(DRIFT_COLUMNS, { drift_alert: this.decayCell() }),
@@ -1424,7 +1422,7 @@ export class Analytics {
   protected readonly strategyKeys = allKeys(STRATEGY_COLUMNS);
   protected readonly confidenceKeys = allKeys(CONFIDENCE_COLUMNS);
   protected readonly decileKeys = allKeys(DECILE_COLUMNS);
-  protected readonly tierKeys = allKeys(TIER_COLUMNS);
+  protected readonly tierKeys = allKeys(TIER_COLUMNS(0));
   protected readonly driftKeys = allKeys(DRIFT_COLUMNS);
   protected readonly gridKeys = allKeys(GRID_COLUMNS);
   protected readonly pastJobsKeys = allKeys(PAST_JOBS_COLUMNS);
@@ -1435,7 +1433,7 @@ export class Analytics {
   protected readonly confidencePage = createClientPage(() => this.store.byConfidence(), () => this.perPageFor('confidence')());
   protected readonly decileKey = (row: { decile: string }) => row.decile;
   protected readonly decilePage = createClientPage(() => this.store.deciles(), () => this.perPageFor('decile')());
-  protected readonly tierKey = (row: TierRow) => row.tier;
+  protected readonly tierKey = (row: TierRow) => String(row.level);
   protected readonly tierPage = createClientPage(() => this.store.tiers(), () => this.perPageFor('tier')());
   protected readonly driftKey = (row: DriftRow) => row.strategy;
   protected readonly driftPage = createClientPage(() => this.store.drift(), () => this.perPageFor('drift')());
@@ -1547,7 +1545,8 @@ export class Analytics {
   protected heat(strategy: string, horizon: string): number {
     const cell = this.heatIndex().get(`${strategy}|${horizon}`);
     if (!cell || this.heatWithheld(strategy, horizon)) return 0;
-    return Math.max(0, Math.min(1, cell.win_rate / 100));
+    const rate = cell.win_rate;
+    return rate === null ? 0 : Math.max(0, Math.min(1, rate / 100));
   }
 
   protected heatLabel(strategy: string, horizon: string): string {

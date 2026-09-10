@@ -105,14 +105,12 @@ export const DECILE_COLUMNS: ColumnDef<DecileRow>[] = [
   { key: 'expectancy_r', header: 'ExpR', numeric: true, value: (r) => expectancy(r.expectancy_r) },
 ];
 
-export const TIER_COLUMNS: ColumnDef<TierRow>[] = [
-  { key: 'tier', header: 'Tier' },
+export function TIER_COLUMNS(floor: number): ColumnDef<TierRow>[] { return [
+  { key: 'level', header: 'Confidence level', value: (r) => String(r.level) },
   { key: 'n', header: 'N', numeric: true, value: (r) => count(r.n) },
-  { key: 'win_rate', header: 'Live WR', numeric: true, value: (r) => rate(r.win_rate) },
+  { key: 'win_rate', header: 'Live WR', numeric: true, value: (r) => r.n < floor || r.win_rate === null ? `n=${r.n}` : rate(r.win_rate) },
   { key: 'expectancy_r', header: 'ExpR', numeric: true, value: (r) => expectancy(r.expectancy_r) },
-  { key: 'expected_band', header: 'Design band', value: (r) => r.expected_band },
-  { key: 'ok', header: 'In band' },
-];
+]; }
 
 /* -- breakdowns (SR50) ---------------------------------------------------
  *

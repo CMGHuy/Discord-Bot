@@ -92,16 +92,14 @@ export interface DecileRow {
 }
 
 export interface TierRow {
-  tier: string;
+  level: number;
   n: number;
   win_rate: number | null;
   expectancy_r: number | null;
-  expected_band: string;
   /** Three-valued on purpose. `null` means "not enough live data to judge"
    *  (n < 10), which is a completely different statement from `false`
    *  ("judged, and it missed its band"). Rendering them the same way would
    *  turn "we don't know yet" into "it is broken". */
-  ok: boolean | null;
 }
 
 export interface DriftRow {
@@ -574,6 +572,8 @@ export const AnalyticsStore = signalStore(
      *  snapshot up to an hour old and rebuilds on demand past that, so "these
      *  numbers are from 09:15" is a real thing to know. */
     snapshotBuiltAt: computed(() => snapText(snapshot()?.built_at)),
+    /** Served by the backend: the SPA never owns the suppression threshold. */
+    minCellN: computed(() => exitQuality()?.min_cell_n ?? Number.MAX_SAFE_INTEGER),
 
     profitFactor: computed(() => snapNumber(snapshot()?.overall?.['profit_factor'])),
     sharpe: computed(() => snapNumber(snapshot()?.overall?.['sharpe'])),
@@ -1235,4 +1235,3 @@ export const AnalyticsStore = signalStore(
   }),
 
 );
-    minCellN: computed(() => exitQuality()?.min_cell_n ?? Number.MAX_SAFE_INTEGER),
