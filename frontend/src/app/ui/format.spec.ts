@@ -33,31 +33,30 @@ describe('timeInZone', () => {
   });
 });
 
-describe('held', () => {
+describe('held (v80 cell contract: minutes always present)', () => {
   it('renders minutes alone under an hour', () => {
+    expect(held(0.75)).toBe('45m');
     expect(held(0.5)).toBe('30m');
   });
 
-  it('renders hours and minutes under a day', () => {
+  it('keeps zero minutes under a day', () => {
+    expect(held(3)).toBe('3h 0m');
     expect(held(5.2)).toBe('5h 12m');
   });
 
-  it('drops a zero minutes remainder rather than showing "0m"', () => {
-    expect(held(3)).toBe('3h');
-  });
-
-  it('renders days, hours and minutes past a day', () => {
-    expect(held(27.25)).toBe('1d 3h 15m');
-  });
-
-  it('drops zero components past a day too', () => {
-    expect(held(48)).toBe('2d');
-    expect(held(49)).toBe('2d 1h');
-    expect(held(24.25)).toBe('1d 15m');
+  it('keeps zero parts past a day', () => {
+    expect(held(98.25)).toBe('4d 2h 15m');
+    expect(held(96 + 5 / 60)).toBe('4d 0h 5m');
+    expect(held(48)).toBe('2d 0h 0m');
+    expect(held(24.25)).toBe('1d 0h 15m');
   });
 
   it('renders "0m" rather than blank for a duration under a minute', () => {
     expect(held(0)).toBe('0m');
+  });
+
+  it('carries a rounded minute into the hour', () => {
+    expect(held(59.999 / 60)).toBe('1h 0m');
   });
 
   it('renders an em dash for null or undefined', () => {

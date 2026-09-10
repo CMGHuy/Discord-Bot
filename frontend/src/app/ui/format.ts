@@ -64,11 +64,9 @@ export function held(hours: number | null | undefined): string {
   const days = Math.floor(totalMinutes / 1440);
   const hrs = Math.floor((totalMinutes % 1440) / 60);
   const mins = totalMinutes % 60;
-  const parts: string[] = [];
-  if (days) parts.push(`${days}d`);
-  if (hrs) parts.push(`${hrs}h`);
-  if (mins || parts.length === 0) parts.push(`${mins}m`);
-  return parts.join(' ');
+  if (days) return `${days}d ${hrs}h ${mins}m`;
+  if (hrs) return `${hrs}h ${mins}m`;
+  return `${mins}m`;
 }
 
 export function elapsedHours(iso: string | null | undefined, nowMs: number): number | null {
