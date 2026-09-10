@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-09 19:49:04 UTC",
+  "generated_at": "2026-09-10 09:47:50 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.12.0",
-    "bot": "1.6.2"
+    "bot": "1.6.3"
   },
   "releases": [
     {
@@ -980,6 +980,19 @@
       "versions": {
         "ui": "1.12.0",
         "bot": "1.6.2"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-10",
+      "last_seen": "2026-09-10",
+      "commit": "f21756f6",
+      "subject": "release(bot): 1.6.3 -- discrimination-first VALIDATION acceptance gate",
+      "versions": {
+        "ui": "1.12.0",
+        "bot": "1.6.3"
       },
       "changed": [
         "bot"
