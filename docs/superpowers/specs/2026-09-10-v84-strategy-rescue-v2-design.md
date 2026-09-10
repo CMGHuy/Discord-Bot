@@ -32,8 +32,25 @@ This campaign operates strictly inside `docs/claude/backtest-methodology.md`:
 
 - **TRAIN and the fold stages are free and repeatable; VALIDATION is one shot,
   ever, per strategy.** No strategy reaches Stage 3 without clearing Stage 1
-  (plateau, not a spike) and Stage 2 (≥2/3 folds improving, no fold worse than
-  −1.0pp, per-fold N≥30).
+  (plateau, not a spike) and its applicable fold stage.
+- **The fold stage uses two instruments, by design** (added 2026-09-10 during
+  planning, after verifying the tooling). Where a mechanism is a `config.Field`
+  and a genuine two-arm comparison exists — RSI Divergence, MA Ribbon,
+  Support/Resistance, Fibonacci — Stage 2 is the **`gate_win_rate` delta gate**
+  (≥2/3 folds improving, no fold worse than −1.0pp, per-fold N≥30), fed by a
+  purpose-built arms harness. Where no second arm exists — EMA Crossover (the
+  mechanism is unchanged by definition), Break & Retest and VWAP (a
+  `STRATEGY_GATES` constant, not a config Field) — Stage 2 is the
+  **fold-stability rule**: badge clauses hold in ≥2 of 3 fold years at N≥15
+  each, no fold year below −0.05R.
+  **Why:** `gate_win_rate` scores a delta between arms. For a strategy whose
+  mechanism does not change, every fold delta is exactly `0.0`, so the gate
+  fails by construction — EMA Crossover would fail at 61.8% WR. A badge is an
+  absolute threshold on its own population; scoring it with a delta gate is a
+  category error. Conversely the absolute rule never asks whether the *change*
+  helped, so it is not permitted where a real second arm exists.
+  **`wf_run.py` cannot produce Stage 2 input** (pooled `delta_expectancy_r`
+  only, no per-trade rows) — **a `wf_run.py` PASS is not a Stage 2 pass.**
 - **A negative result closes a strategy.** "No configuration cleared the rule"
   is the finished answer, recorded as-is. Nothing in this spec licenses a
   re-run at a looser threshold.
@@ -73,9 +90,10 @@ within ~4pp of the floor with positive expectancy. Each gets one new mechanism
 on an axis no closed pre-registration touched, tested by a small free TRAIN
 grid.
 
-**Tier 3 — wide gaps, `Edge: expectancy`, honestly speculative.** Both have a
-concrete, well-motivated mechanism, but the gap is large enough that failure is
-a live possibility and an acceptable outcome.
+**Tier 3 — wide gaps, `Edge: expectancy`, honestly speculative.** Fibonacci has
+a concrete, well-motivated mechanism, but a 14.6pp gap is large enough that
+failure is a live possibility and an acceptable outcome. (Elliott Wave was the
+other Tier 3 candidate until planning withdrew it — see §4.8.)
 
 ## 4. Per-strategy hypotheses
 
@@ -247,7 +265,47 @@ funds it; the pre-registered rule keeps ExpR > 0 as a hard floor.
 **Pre-registered rule:** TRAIN WR≥50, **ExpR>0**, N≥30, excl≤50% with the 1.0
 candidate added and nothing else changed.
 
-### 4.8 Elliott Wave — Tier 3
+### 4.8 Elliott Wave — WITHDRAWN 2026-09-10, before any measurement
+
+**This hypothesis was invalid and is withdrawn. Do not implement it.** It is
+kept here, struck through rather than deleted, so the error is on the record.
+
+**What planning found:** both halves of the mechanism proposed below **already
+ship**. `entry_filters.elliott_wave_entries:703` already applies
+`w2_min_retrace=0.382` / `w2_max_retrace=0.618` / `w2_max_duration_ratio=0.75`
+plus a wave-0 overlap check (`:719-746`) and a separate `depth_min/max`
+0.30–0.80 band; volume confirmation (`vol_ok = Volume >= vol_avg20 * 0.9`,
+`VOL_OK_MULT` at `:29`) is already ANDed into both series (`:762,765`).
+
+**Why it got past review:** the research pass read only the raw detector
+`indicators.elliott_wave3_entries` and never found
+`entry_filters.elliott_wave_entries`, the adapter that wraps it. The
+symbol-verification pass then confirmed the detector *exists* — which it does —
+without asking whether the proposed mechanism was already implemented. Existence
+is not the same question as absence-of-the-proposed-change.
+
+**Why implementing it would have been a methodology violation:** the proposed
+0.382–**0.786** band is *looser* than the live 0.382–0.618, and these gates
+**are** the round-2 Elliott Wave rescue whose VALIDATION shot is already spent
+(`results/2026-07-rescue-elliott-validation.md`;
+`tests/market/test_rescue_elliott.py:7` already uses the 0.382/0.786 pair).
+Shipping it would have re-run a closed pre-registration at a loosened
+threshold — the exact failure the one-shot budget exists to prevent.
+
+**Also worth carrying forward:** `entry_filters.elliott_wave_entries:708-709`
+hard-returns nothing for every horizon except `4w`, so any future Elliott Wave
+mechanism inherits that volume ceiling regardless of its merits.
+
+**Status: no new hypothesis exists.** Reopening Elliott Wave needs a genuinely
+new mechanism and its own pre-registration. One was deliberately not invented to
+fill this slot — a forced hypothesis is worse than an empty one.
+
+---
+
+<details>
+<summary>Original (withdrawn) §4.8 text, retained for the record</summary>
+
+### ~~4.8 Elliott Wave — Tier 3~~
 
 **Current state:** WEAK (passed TRAIN, FAILED VALIDATION 2026-07-18 at 77.3% vs
 the old 80% floor).
@@ -272,6 +330,8 @@ passing configuration does not qualify.
 **Honest caveat:** wave counting is the most subjective of the eleven
 strategies, by the code's own admission. A clean failure here is a legitimate
 and informative outcome, and the plan should not treat it as a problem to solve.
+
+</details>
 
 ### 4.9 RSI — recommended deprioritise / drop
 
@@ -310,13 +370,19 @@ Run in tier order; within Tier 2, RSI Divergence first (largest N).
 | 4 | RSI Divergence | 2 | new param + filter | 1 if TRAIN grid + Stage 1/2 clear |
 | 5 | MA Ribbon | 2 | new param + filter | 1 if TRAIN grid + Stage 1/2 clear |
 | 6 | Support/Resistance | 2 | new entry filter | 1 if TRAIN grid + Stage 1/2 clear |
-| 7 | Fibonacci | 3 | target candidate | 1 if TRAIN clears |
-| 8 | Elliott Wave | 3 | two structural gates | 1 if TRAIN grid + Stage 1/2 clear |
-| — | RSI | — | — | **none — recommended dropped** |
+| 7 | Fibonacci | 3 | `FIB_TARGET_1_0_EXTENSION` config Field + measurement script | 1 if TRAIN + folds clear |
+| — | Elliott Wave | — | — | **none — WITHDRAWN, mechanism already ships (§4.8)** |
+| — | RSI | — | — | **none — dropped (§4.9)** |
 
-**Maximum VALIDATION budget spend: 8 shots, one per strategy, and only for
-strategies that clear every free stage first.** Realistically fewer: Tier 3 and
-parts of Tier 2 are expected to die on TRAIN, which is the funnel working.
+**Maximum VALIDATION budget spend: 7 shots, one per strategy, and only for
+strategies that clear every free stage first.** Realistically fewer: Fibonacci
+and parts of Tier 2 are expected to die on TRAIN, which is the funnel working.
+
+**A note on the two withdrawals.** Elliott Wave and RSI are excluded for
+opposite reasons: RSI has a mechanism that was measured and failed, Elliott Wave
+has a mechanism that was never needed because it already exists. Neither slot
+was backfilled with an invented hypothesis. Seven real shots beat nine
+manufactured ones.
 
 ## 6. Success criteria
 
