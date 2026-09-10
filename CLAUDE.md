@@ -4,9 +4,7 @@ Guidance for Claude Code in this repository. It carries the rules that must
 fire *unprompted*; the reasoning behind each lives in `docs/claude/` (index at
 the bottom) — read the relevant one before working in that area.
 
-**This file must stay under 200 lines.** An addition that would push it over
-means moving content — old or new — into the matching `docs/claude/*.md` (add
-a table row if new), leaving a short rule plus a pointer here.
+**This file must stay under 200 lines.** An addition that would push it over means moving content — old or new — into the matching `docs/claude/*.md` (add a table row if new), leaving a short rule plus a pointer here.
 
 ## What this is
 
@@ -22,8 +20,7 @@ discord.py, pandas/numpy, yfinance, mplfinance, pytest. JSON persistence under
 **"Production" always means the Hetzner VM** (`167.233.26.185`, `docs/deploy/DEPLOY_HETZNER.md`) — never this dev machine.
 `scripts/ops/ssh-hetzner.sh` connects to it (a command, or bare for an interactive shell); not committed, since it shells through WSL to a key in WSL's own home.
 
-**Any live fix or config change made directly on production must be mirrored
-back into this repo and committed before the task is considered done.** Reasoning and what "mirrored" means: `docs/claude/working-conventions.md`.
+**Any live fix or config change made directly on production must be mirrored back into this repo and committed before the task is considered done.** Reasoning and what "mirrored" means: `docs/claude/working-conventions.md`.
 
 Two entry points: `python bot.py` (the bot) and `python admin_ui.py` (the
 admin — a Flask **API** plus an Angular SPA served from `frontend/`, built by
@@ -55,6 +52,9 @@ refuse to call a suite green without reading the output. Where this section appe
 message. When a request is ambiguous, a premise looks wrong, or a call is the
 human partner's, ask instead of assuming — this overrides any default biasing
 toward acting unclarified. Never ask which option *after* a finding is established; record it.
+That rule is about ambiguity and decisions, not check-ins: once a plan task's
+scope is clear, run it straight through — edits, tests, commits per the plan
+— without pausing to ask permission to continue to the next step or task.
 
 ## Claude is the operator; Codex follows
 
@@ -151,10 +151,10 @@ failure. Baseline, and why counts/timings swing with machine load:
 `docs/claude/testing-cost.md`.
 
 **Long backtest/grid runs take tens of minutes to hours** — chunk per-strategy
-and dispatch to `backtest-runner`. Any script running longer than a couple of
-minutes must print flushed per-unit progress, and a subagent doing
-long-running work keeps its progress file updated before it waits on a sweep
-of its own — both rules and why: `docs/claude/working-conventions.md`.
+and dispatch to `backtest-runner`. Any script or subagent past a couple of
+minutes must print flushed per-unit progress; **past 15 minutes that must
+resolve to a percent figure** in a log deleted on completion — answer "how
+far along" from it. Rules and why: `docs/claude/working-conventions.md`.
 
 ## Naming specs and plans
 
@@ -189,7 +189,7 @@ Not auto-loaded — read the relevant one before starting work in that area.
 |---|---|
 | `architecture.md` | touching `swingbot/core`, `plan_engine` or the scan pipeline — module map, entry-signal single source, NO-LOOKAHEAD rule, badges/registry |
 | `known-traps.md` | touching data caching, `scan_engine`/`scan_embeds`, `embeds.py` — the two OHLCV caches, legacy shims, silent no-ops, and **empty tables that are measured answers, not stubs** |
-| `backtest-methodology.md` | running or interpreting any backtest/grid/validation — TRAIN/VALIDATION windows, acceptance gates, frozen constants, and the table of **closed pre-registrations that must not be re-run** |
+| `backtest-methodology.md` | running or interpreting any backtest/grid/validation — the v72 six-clause acceptance gate and its four-stage funnel, TRAIN/VALIDATION windows, frozen constants, and the table of **closed pre-registrations that must not be re-run** |
 | `edge-priorities.md` | choosing what to work on — pooled numbers, the `Edge:` taxonomy |
 | `document-conventions.md` | writing any spec or plan — `Bump:`/`Edge:` headers, `## Parallelisation`, length budgets (**split, never compress**), verification cadence |
 | `document-lifecycle.md` | closing a plan out — `implemented/`, `no-lift/`, worktree naming and removal |

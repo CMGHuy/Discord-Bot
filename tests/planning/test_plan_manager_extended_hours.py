@@ -43,8 +43,10 @@ def _env(tmp_path, prices=(), plan=None):
 
 
 def _partial_env(tmp_path, tp2=None, floor_session="2026-08-26"):
-    """An ACTIVE plan walked through TP1, with the runner floor stamped to
-    an EARLIER session so v64's same-session guard is satisfied."""
+    """An ACTIVE plan walked through TP1, with the runner floor stamped.
+    Defaults to an earlier session; v64's same-session guard this used to
+    need satisfying is gone (removed 2026-09-10), but callers may still
+    pass floor_session="today" to test same-session behaviour explicitly."""
     feed = FakePriceFeed()
     feed.set_series("AAPL", [110.5])
     store = PlanStore(path=str(tmp_path / "plans.json"))
@@ -170,12 +172,17 @@ def test_a_runner_closes_at_tp2(tmp_path):
     assert events[0].detail["exit_price"] == 119.0
 
 
-def test_the_runner_floor_is_inert_in_its_own_session(tmp_path):
+def test_the_runner_floor_fires_in_its_own_session(tmp_path):
+    """Same-session guard removed 2026-09-10 (see plan_manager.py's
+    _step_partial docstring/comment): a runner-floor breach on the session
+    TP1 fired in now counts toward the debounce like any other session,
+    rather than being permanently inert until the next one."""
     store, mgr = _partial_env(tmp_path, floor_session="2026-08-27")
     plan = store.get("p1")
-    for _ in range(4):
-        assert mgr._step_extended(plan, 100.0, AFTER_HOURS) == []
-    assert store.get("p1").status == PlanStatus.PARTIAL
+    assert mgr._step_extended(plan, 100.0, AFTER_HOURS) == []   # tick 1 of 2: starts the streak
+    events = mgr._step_extended(plan, 100.0, AFTER_HOURS)       # tick 2 of 2: debounce satisfied
+    assert events[0].detail["reason"] == "tp1_runner_be"
+    assert store.get("p1").status == PlanStatus.CLOSED
 
 
 def test_the_trailing_ratchet_never_runs_outside_regular_hours(tmp_path):
@@ -246,7 +253,8 @@ def test_cross_status_collision_does_not_occur(tmp_path):
 
     # Step 3: Evening, PARTIAL plan: 1 tick of runner-floor breach (partial_stop)
     # This MUST NOT inherit or complete the active_stop streak from step 1.
-    # Setting runner_floor_session to an earlier date to satisfy the guard.
+    # runner_floor_session no longer gates anything (removed 2026-09-10);
+    # left set here only because _partial_env-style fixtures still stamp it.
     plan.runner_floor_session = "2026-08-26"
     store.update(plan)
     assert mgr._step_extended(plan, 105.5, AFTER_HOURS) == []

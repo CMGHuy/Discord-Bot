@@ -53,7 +53,18 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   TP1, stop to break-even, runner rides to TP2 with a chandelier ATR trail).
   `swingbot/core/backtesting/backtest.py run_backtest(..., exit_model="v2",
   scale_out=True)` uses the same simulator, so live behavior equals
-  backtested behavior. That is an **invariant this repo maintains, not one the code structure guarantees**: the live path polls a tape every 60s while the simulator walks daily bars, and v64 fixed extended-hours prints, sampled-tick stop fills, and same-session moved stops. Any new live-path exit rule must name the simulator line it matches.
+  backtested behavior. That is an **invariant this repo maintains, not one the code structure guarantees**: the live path polls a tape every 60s while the simulator walks daily bars, and v64 fixed extended-hours prints and sampled-tick stop fills. Any new live-path exit rule must name the simulator line it matches.
+  **Exception, by explicit trader decision (2026-09-10):** the runner's stop
+  and TP2 checks in `_step_partial`/`_extended_candidate_partial` no longer
+  wait for the session after TP1 fires (v64's `runner_floor_session` guard,
+  "same-session moved stops") — they fire the instant price crosses, same
+  session or not. A production runner (NBIS, 2026-09-08) spiked through TP2
+  and back within the TP1 session and had to be closed manually, giving back
+  real gains; the trader chose to accept the resulting live/backtest
+  divergence on this one rule rather than keep eating that cost. The
+  simulator (`plan_engine._scale_out_exit_walk`) was deliberately NOT
+  changed to match — re-measuring its numbers is a backtest re-registration,
+  not a quick edit; see `backtest-methodology.md`.
   v70 then reopened exactly one capability outside those hours: `poll()` gates
   three ways (quiet window → nothing; regular → the full `_step()`; otherwise
   → `_step_extended()`), and the extended branch may only close a plan that

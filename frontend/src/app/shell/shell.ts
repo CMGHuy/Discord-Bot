@@ -15,7 +15,6 @@ import { ConnectionStore } from '../stores/connection.store';
 import { PreferencesStore } from '../stores/preferences.store';
 import { ViewportService } from '../ui/breakpoints';
 import { Button } from '../ui/button';
-import { Select, SelectOption } from '../ui/form-controls';
 import { Icon, IconName } from '../ui/icon';
 import { ProfileMenu } from './profile-menu';
 import { RouteLoadingService } from '../routing/route-loading.service';
@@ -56,7 +55,7 @@ const ZOOM_DEFAULT = 100;
   selector: 'sb-shell',
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive, ConnectionStatus, ToastHost,
-    Button, Icon, ProfileMenu, Select,
+    Button, Icon, ProfileMenu,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',
@@ -166,13 +165,6 @@ export class Shell {
    */
   protected readonly zoom = signal(ZOOM_DEFAULT);
 
-  /** `sb-select`'s options, string-valued -- `SelectOption` has no numeric
-   *  form, and the zoom percent is the value itself, not just a label. */
-  protected readonly zoomOptions: SelectOption[] = ZOOM_CHOICES.map((choice) => ({
-    value: String(choice),
-    label: `${choice}%`,
-  }));
-
   /**
    * Applied to `<html>` rather than to a shell element, so it also reaches
    * anything rendered into a portal outside this component -- dialogs, the
@@ -195,6 +187,15 @@ export class Shell {
   protected setZoom(percent: number): void {
     this.zoom.set(percent);
     this.preferences.update((prefs) => ({ ...prefs, 'shell.zoom': percent }));
+  }
+
+  /** One button, not a field -- SR76. Steps through `ZOOM_CHOICES` in
+   *  order and wraps from the last back to the first, so repeatedly
+   *  clicking cycles the whole set rather than needing a picker. */
+  protected cycleZoom(): void {
+    const index = ZOOM_CHOICES.indexOf(this.zoom() as (typeof ZOOM_CHOICES)[number]);
+    const next = ZOOM_CHOICES[(index + 1) % ZOOM_CHOICES.length];
+    this.setZoom(next);
   }
 
   private readonly applyStoredZoom = effect(() => {

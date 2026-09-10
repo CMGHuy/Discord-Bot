@@ -47,4 +47,24 @@ describe('shell navigation', () => {
     const groups = (f.nativeElement as HTMLElement).querySelectorAll('ul[aria-labelledby]');
     expect(groups.length).toBe(3);
   });
+
+  it('cycles the text-size button through 90/100/110/125 and wraps back to 90', () => {
+    const f = TestBed.createComponent(Shell);
+    f.detectChanges();
+    const button = (f.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.zoom')!;
+    expect(button.textContent?.trim()).toBe('Aa 100%');
+
+    button.click();
+    f.detectChanges();
+    expect(button.textContent?.trim()).toBe('Aa 110%');
+
+    button.click();
+    f.detectChanges();
+    expect(button.textContent?.trim()).toBe('Aa 125%');
+
+    // Wraps past the last choice back to the first, rather than sticking.
+    button.click();
+    f.detectChanges();
+    expect(button.textContent?.trim()).toBe('Aa 90%');
+  });
 });

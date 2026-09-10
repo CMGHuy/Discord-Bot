@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-09-10 10:20:20 UTC",
+  "generated_at": "2026-09-10 10:13:16 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.12.0",
+    "ui": "1.13.0",
     "bot": "1.6.3"
   },
   "releases": [
@@ -988,14 +988,27 @@
     {
       "date": "2026-09-10",
       "last_seen": "2026-09-10",
-      "commit": "e3fd55a9",
-      "subject": "release(bot): 1.6.3 -- injectable scan parameters",
+      "commit": "f21756f6",
+      "subject": "release(bot): 1.6.3 -- discrimination-first VALIDATION acceptance gate",
       "versions": {
         "ui": "1.12.0",
         "bot": "1.6.3"
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-09-10",
+      "last_seen": "2026-09-10",
+      "commit": "uncommitted",
+      "subject": "working tree",
+      "versions": {
+        "ui": "1.13.0",
+        "bot": "1.6.3"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]

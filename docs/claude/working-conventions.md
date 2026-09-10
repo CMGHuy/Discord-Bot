@@ -192,6 +192,17 @@ logs per-unit progress, or add a `print(..., flush=True)` (or `log.info`) per
 completed unit before kicking it off — don't discover this gap hours into an
 unmonitorable run.
 
+**Past 15 minutes of expected runtime, per-unit prints are not enough on
+their own — maintain a percent-complete progress log** alongside them: a
+small plain-text file (scratchpad dir for an ad-hoc script; a subagent's own
+report file — see below — when dispatched via `Agent`) holding a line like
+`37/89 tickers (42%)`, rewritten at each unit of work so the current
+percentage is always the last thing in the file, never a log the reader has
+to total up by hand. Asked "how far along," read that file and answer with
+the percentage it states, not a paraphrase of recent prints. **Delete the log
+once the task finishes** (success or failure) — it exists only to answer that
+one question while the task is live, not as a permanent artifact.
+
 ## Subagents must keep a progress file
 
 **A subagent dispatched for multi-step or long-running work keeps a plain-text
@@ -207,3 +218,9 @@ working" from "silently stalled" for hours.
 
 This binds hardest when the subagent kicks off a background sweep or backtest of
 its own and then waits on it: **update the file before waiting, not only after.**
+
+Past 15 minutes of expected runtime this report must carry a percent-complete
+figure (see "Long-running scripts must report progress" above), and gets
+deleted once the subagent's final report lands — the controller answers a
+mid-run progress question from this file's percentage, never by reading the
+subagent's own transcript.

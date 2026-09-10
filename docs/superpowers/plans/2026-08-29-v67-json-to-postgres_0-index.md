@@ -248,3 +248,33 @@ Three more this plan adds, which the spec implies but does not list:
     downgrade` over the whole graph, `migrate_data.py rollback` for a value
     transform, `edit_field.py restore` for a dropped field, and
     `restore_db.sh` for everything else (Part 9).
+
+## Reconciliation with later plans
+
+v67 was authored 2026-08-29 and sits alongside other plans that land on
+`main` while it is still unexecuted. Every plan or spec that ships after it
+and could plausibly add, move or reshape a JSON field this plan migrates gets
+checked against it here — **as that plan lands or is written**, not deferred
+to v67's own execution. Only a row that changes something earns a part-file
+edit; a row with no change is still recorded, so nobody re-derives the same
+"no, it doesn't touch this" answer twice.
+
+Checked as of 2026-09-10 against every plan/spec numbered after v67 that
+exists at the top level or in `implemented/` (v68–v77):
+
+| Plan | Touches a migrated store? | Verdict |
+|---|---|---|
+| v68 dead-cat-bounce-veto (implemented) | No — a config-gated veto; no new persisted field | No change |
+| v69 double-bottom-top-strategy (open) | No — pure detection code; no config or persistence surface | No change |
+| v70 extended-hours-exit-check (implemented) | References `trades.json`/`plans.json` but its debounce counter is **deliberately in-memory only**, same reasoning `v64` gave `_last_seen` (spec §4.4) | No change |
+| v71 silent-failure-hardening (implemented) | Yes — 3 new `bot_heartbeat.json` fields | **Already routed** — commit `02458054`, `_3a-operational-flags.md` |
+| v72 validation-acceptance-v2 (open) | No — writes only to `tests/backtesting/fixtures/` and `docs/superpowers/results/`; no `data/*.json` touched | No change |
+| v73 plan-view-projection (implemented) | No — spec states "No new stored fields on plans.json — deriving keeps one authority"; verified no write path in either implemented part | No change |
+| v74 injectable-scan-params (open) | Adds `search_class` to `config.py`'s `Field` dataclass (Task A2), but Part 4's `settings` table stores values generically over every `config.FIELDS` entry keyed by `f.key` — a new `Field` attribute needs no DB column | No change |
+| v77 live-tape (open) | Persists only `tape.symbols` inside the **existing** `ui_preferences` doc; P3-01's `ui_preferences` table has no promoted columns beyond `owner`, so the generic `doc JSONB` column absorbs it. Its own spec reasons this through and states "no new file lands in `data/`, so v67's `_DATA_PATHS` enumeration is unchanged" | No change |
+
+**Keep this table current.** A plan authored after 2026-09-10 that adds,
+moves or reshapes a field in a store this plan migrates gets a row here
+(and, where one specific task's design needs to change, an inline "vNN
+addition" callout in that task's part file — see the v71 row's precedent)
+before or alongside its own implementation.

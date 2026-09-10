@@ -369,7 +369,16 @@ class PlanManager:
                 self.store.update(plan)
                 return [PlanEvent(plan.plan_id, "pyramid_add", dict(add))]
 
-        hit_stop = (price <= stop if is_bull else price >= stop) and plan.runner_floor_session != session_date(now)
+        # No same-session guard here (removed 2026-09-10, trader decision):
+        # v64 suppressed both checks for the rest of the session TP1 fired
+        # in, to match a bar-based backtest that can't see intraday
+        # sequencing within the fill bar. Live paid for that parity in real
+        # money -- a runner that spiked through TP2 and back the same
+        # afternoon TP1 hit (NBIS, 2026-09-08) never auto-closed and had to
+        # be closed manually. Both now fire the instant price crosses,
+        # same session or not; `runner_floor_session` is still stamped
+        # (other callers/tests read it) but no longer gates either check.
+        hit_stop = price <= stop if is_bull else price >= stop
         if hit_stop:
             # v39: "tp1_runner_be" now means "closed at the initial post-TP1
             # floor", not literally at entry. The string is unchanged on
@@ -378,7 +387,7 @@ class PlanManager:
                       else "tp1_runner_trail")
             return self._close_runner(plan, price, reason, risk, sign)
 
-        if plan.tp2 is not None and plan.runner_floor_session != session_date(now):
+        if plan.tp2 is not None:
             hit_tp2 = price >= plan.tp2 if is_bull else price <= plan.tp2
             if hit_tp2:
                 return self._close_runner(plan, price, "tp1_runner_tp2", risk, sign)
@@ -470,15 +479,16 @@ class PlanManager:
 
     def _extended_candidate_partial(self, plan: TradePlanV2, price: float, now=None):
         """(kind, close) for a PARTIAL plan whose runner has finished, else
-        None. Mirrors _step_partial's stop and TP2 comparisons, including
-        v64's runner_floor_session guard; the pyramid suggestion and the
-        chandelier ratchet are deliberately absent.
+        None. Mirrors _step_partial's stop and TP2 comparisons; the pyramid
+        suggestion and the chandelier ratchet are deliberately absent.
+
+        No same-session guard (removed 2026-09-10, matching _step_partial --
+        see the comment there): the runner's stop/TP2 fire the instant
+        price crosses, same session as TP1 or not.
 
         Returns status-aware kind strings ("partial_stop"/"tp2") to prevent
         cross-status collision: a leftover ACTIVE-stop streak cannot be
         completed by an unrelated PARTIAL-stop breach on the same plan_id."""
-        if plan.runner_floor_session == session_date(now):
-            return None
         is_bull = plan.direction == "bullish"
         sign = 1 if is_bull else -1
         entry = plan.entry_price
