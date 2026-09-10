@@ -31,6 +31,11 @@ describe('Button variants', () => {
     });
   }
 
+  it('paints danger-icon as icon geometry in the negative colour', () => {
+    const el = render('danger-icon');
+    expect(el.classList).toContain('danger-icon');
+  });
+
   it('keeps the element a native button so disabled and submit still work', () => {
     const el = render('chip');
     expect(el.tagName).toBe('BUTTON');

@@ -213,10 +213,20 @@ only the paint changes here, never the gate.
 
 Continuous slide, so every flagged name is shown regardless of how many are
 flagged or how narrow the viewport is. Seamless loop: the track is rendered
-twice and translated `-50%`, so there is no visible snap-back. Pause on hover,
-which is also what makes a tile clickable. Full stop under
+twice and translated `-50%`, so there is no visible snap-back. Pause on hover
+or keyboard focus, which is also what makes a tile clickable (and, for a
+keyboard/assistive-tech user tabbing into one, stoppable). Full stop under
 `prefers-reduced-motion` — the shell already honours that flag for the sidebar
-transition.
+transition — with the frozen track left horizontally scrollable, so every
+name past the first viewport-width stays reachable rather than being
+permanently cut off.
+
+**This guarantee is Lane B's (and the app shell's) to make, not Lane A's.**
+Lane A is a cross-origin TradingView `<iframe>` ticker-tape widget; its
+internal marquee is third-party content we cannot read out of, control, or
+disable from outside the frame (see `market-lane.ts`'s own class comment). So
+"full stop under `prefers-reduced-motion`" above describes Lane B and the
+shell around it — it is not a claim about what happens inside Lane A's embed.
 
 **Tick colouring reuses existing code.** `frontend/src/app/ui/flash.ts` is a
 directive that flashes an element when its value *actually changed* — never on

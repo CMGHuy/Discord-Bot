@@ -1,0 +1,46 @@
+/* One lane. The viewport clips; the track slides inside it.
+   `min-width: 0` on every flex child is load-bearing — without it the
+   inline-flex track sets the lane's width and the strip escapes its box. */
+.lane { display: flex; align-items: stretch; min-width: 0; max-width: 100%;
+        height: 32px; overflow: hidden;
+        border-bottom: 1px solid var(--border); background: var(--surface); }
+.cap { flex: none; display: flex; align-items: center; gap: var(--space-4);
+       padding: 0 var(--space-8); font-size: var(--text-micro);
+       letter-spacing: .06em; text-transform: uppercase;
+       color: var(--text-muted); border-right: 1px solid var(--border); }
+.cap.end { border-right: none; border-left: 1px solid var(--border); }
+.viewport { flex: 1 1 0%; min-width: 0; overflow: hidden; }
+
+/* Rendered twice and translated -50%, so the loop has no snap-back. */
+.track { display: inline-flex; align-items: center; white-space: nowrap;
+         animation: tape-slide 26s linear infinite; will-change: transform; }
+.viewport:hover .track { animation-play-state: paused; }
+.viewport:focus-within .track { animation-play-state: paused; }
+@keyframes tape-slide { from { transform: translateX(0); }
+                        to   { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) {
+  .track { animation: none; }
+  /* The track freezes at translateX(0); without a scroll affordance every
+     name past the first viewport-width would be permanently unreachable. */
+  .viewport { overflow-x: auto; }
+}
+
+.tile { display: inline-flex; align-items: baseline; gap: var(--space-6);
+        padding: 0 var(--space-14); border-right: 1px solid var(--border);
+        font-size: var(--text-table); text-decoration: none; color: inherit;
+        border-radius: var(--radius-chip); }
+.sym { font-weight: 650; color: var(--text); }
+.px { color: var(--text-secondary); }
+.up { color: var(--pos); } .down { color: var(--neg); }
+.ctx { font-size: var(--text-micro); color: var(--accent); }
+.ctx.muted { color: var(--text-muted); }
+
+.lane, .lane * { min-width: 0; }
+
+/* Below sm both lanes stay, compressed. Spec: the layered read is wanted on
+   every device, not only where it is cheap. */
+@media (max-width: 640px) {
+  .lane { font-size: var(--text-micro); height: 28px; }
+  .tile { padding: 0 var(--space-10); }
+  .px { display: none; }
+}

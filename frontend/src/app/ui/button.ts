@@ -8,21 +8,25 @@ export type ButtonVariant =
   | 'icon'
   | 'chip'
   | 'segment'
-  | 'link';
+  | 'link'
+  | 'danger-icon';
 
 /**
- * The five button variants spec 3's inventory names, and no others.
+ * The button variants spec 3's inventory names, and no others (see
+ * `ButtonVariant` above for the current list).
  *
  * Applied to a NATIVE `<button>` through an attribute selector rather than
  * wrapping one in a custom element. A wrapper has to re-implement `disabled`,
  * `type="submit"`, focus, the Enter/Space keys and the accessibility tree, and
- * usually re-implements three of the five. This way the element in the DOM is
+ * usually re-implements most of them. This way the element in the DOM is
  * the button the browser already knows how to operate, and this component only
  * supplies the paint.
  *
  * `danger` is not merely a red `primary`: it is the variant every irreversible
  * action uses (close, cancel, delete, killswitch), and pairing it with
  * `ConfirmDialog` is what makes those actions hard to trigger by accident.
+ * `danger-icon` is a v77 addition for destructive icon-only controls, and pairs
+ * with `ConfirmDialog` exactly as `danger` does.
  */
 @Component({
   selector: 'button[sb-button]',
@@ -89,6 +93,23 @@ export type ButtonVariant =
       line-height: 1;
     }
     :host(.icon:not([disabled]):hover) { color: var(--text); background: var(--surface-raised); }
+
+    /* A destructive icon control. Not expressible as \`icon\` plus \`danger\`:
+       \`classes\` emits exactly one variant class, deliberately. Geometry is
+       \`icon\`'s; the colour is \`danger\`'s. Every call site must supply an
+       aria-label -- the icon inside is aria-hidden, so without one the
+       control announces nothing at all. */
+    :host(.danger-icon) {
+      padding: var(--space-4);
+      min-width: 0;
+      border-color: transparent;
+      background: transparent;
+      color: var(--neg);
+      line-height: 1;
+    }
+    :host(.danger-icon:not([disabled]):hover) {
+      background: color-mix(in srgb, var(--neg) 14%, transparent);
+    }
 
     /* A filter toggle. Reads as a chip, behaves as a button: versions/ had
        four of these hand-rolled because no variant covered a control that is

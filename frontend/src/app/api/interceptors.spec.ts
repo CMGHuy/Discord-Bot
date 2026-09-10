@@ -264,4 +264,15 @@ describe('ApiClient', () => {
     expect(api.settingsExportUrl()).toBe('/api/v1/system/settings/export');
     backend.verify();
   });
+
+  it('requests the tape with a comma-joined symbol list', () => {
+    api.tape(['NVDA', 'AMD']).subscribe();
+    const request = backend.expectOne('/api/v1/market/tape?symbols=NVDA%2CAMD');
+    expect(request.request.method).toBe('GET');
+  });
+
+  it('does not call the API for an empty symbol list', () => {
+    api.tape([]).subscribe();
+    backend.expectNone((r) => r.url.includes('/market/tape'));
+  });
 });
