@@ -1,8 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { ConfidenceCell } from './confidence-cell';
+
+const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/confidence-cell.ts'), 'utf8');
 
 function render(level: number | null, score: number | null, direction: string | null = null) {
   const f = TestBed.createComponent(ConfidenceCell);
@@ -80,4 +84,11 @@ describe('ConfidenceCell', () => {
     const root = getComputedStyle(document.documentElement);
     expect(root.getPropertyValue('--info').trim().toLowerCase()).toBe('#b39ddb');
   });
+});
+
+describe('ConfidenceCell cell contract (v80 D4)', () => {
+  beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] }));
+  it('is text, never a meter', () => { const el = render(4, 78); expect(el.querySelector('meter, progress, .bar, .meter')).toBeNull(); expect(text(el)).toBe('Lv4 · 78'); });
+  it('sets the level in a self-hosted mono weight', () => expect(SOURCE).toMatch(/\.badge \{ font-weight: 500; \}/));
+  it('prints separator and dash in readable grey', () => { expect(SOURCE).not.toContain('--text-faint'); expect(SOURCE).toMatch(/\.score \{ color: var\(--text-secondary\); \}/); });
 });
