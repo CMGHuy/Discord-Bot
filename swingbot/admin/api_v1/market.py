@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import math
 
-from flask import jsonify
+from flask import jsonify, request
 
 from . import api_v1, error
 from .auth import require_auth
@@ -506,3 +506,176 @@ def chart(ticker: str):
         "currency": get_currency_symbol(ticker, config.CURRENCY_SYMBOL),
     }
     return jsonify(_json_safe(payload))
+
+
+# --- /market/tape ---------------------------------------------------------
+#
+#: Hard ceiling on how many symbols one tape request may price. The tape is a
+#: glanceable strip, not a screener: a request for 200 symbols is a mistake or
+#: an abuse, and either way it should not become a 200-symbol yfinance call.
+_TAPE_MAX_SYMBOLS = 40
+
+
+def _tape_symbols(raw: str) -> list[str]:
+    """`?symbols=nvda,NVDA,amd` -> `["NVDA", "AMD"]`, order preserved.
+
+    Deduplicated because the client's flag list is user-editable and a
+    duplicate would price the same ticker twice and render it twice.
+    """
+    out: list[str] = []
+    for part in (raw or "").split(","):
+        symbol = part.strip().upper()
+        if symbol and symbol not in out:
+            out.append(symbol)
+    return out[:_TAPE_MAX_SYMBOLS]
+
+
+def _tape_change_pct(symbol: str, price) -> float | None:
+    """Percent move from the previous daily close.
+
+    Uses the same `_ohlcv_frame` accessor the chart endpoint uses, so the tape
+    and the chart can never disagree about which cache a ticker's bars came
+    from. Returns None rather than 0.0 when there is no previous close: "no
+    answer" and "flat" are different facts and the tile renders them
+    differently.
+    """
+    if price is None:
+        return None
+    try:
+        from swingbot.admin.app import _ohlcv_frame
+        df = _ohlcv_frame(symbol)
+        if df is None or len(df) < 2:
+            return None
+        prev = float(df["Close"].iloc[-2])
+    except Exception:
+        return None
+    if not prev:
+        return None
+    return round((float(price) - prev) / prev * 100.0, 2)
+
+
+def _tape_earnings_days(symbols: list[str]) -> dict:
+    """Whole days until each symbol's next earnings date, where known.
+
+    Reuses the watchlist module's own resolver so the tape and the watchlist
+    table can never disagree about when a ticker reports.
+    """
+    from datetime import date, datetime
+
+    from swingbot.admin.api_v1.watchlist import _next_earnings
+
+    out: dict = {}
+    try:
+        resolved = _next_earnings(symbols) or {}
+    except Exception:
+        return out
+    today = date.today()
+    for symbol, pair in resolved.items():
+        iso = pair[0] if isinstance(pair, tuple) else pair
+        if not iso:
+            continue
+        try:
+            out[symbol] = (datetime.fromisoformat(iso).date() - today).days
+        except ValueError:
+            continue
+    return out
+
+
+def _tape_context(symbol: str, price, open_trades: dict, open_plans: dict,
+                  earnings: dict) -> tuple[str | None, str | None, int]:
+    """The one piece of context a tile shows, and its sort rank.
+
+    Precedence is deliberate and matches the spec: a position outranks a plan
+    because it is money already committed; a plan outranks an earnings date
+    because it is actionable now. Exactly one is returned.
+    """
+    trade = open_trades.get(symbol)
+    if trade is not None:
+        entry, stop = trade.get("entry"), trade.get("stop_loss")
+        if price is not None and entry is not None and stop is not None:
+            risk = abs(float(entry) - float(stop))
+            if risk > 1e-9:
+                r = (float(price) - float(entry)) / risk
+                return "position", f"{r:+.1f}R", 0
+        return "position", "open", 0
+
+    plan = open_plans.get(symbol)
+    if plan is not None:
+        entry = getattr(plan, "entry", None)
+        if price is not None and entry not in (None, 0):
+            pct = (float(entry) - float(price)) / float(price) * 100.0
+            horizon = getattr(plan, "horizon_key", None) or ""
+            label = f"{horizon} {abs(pct):.1f}% to entry".strip()
+            return "plan", label, 1
+        return "plan", "planned", 1
+
+    days = earnings.get(symbol)
+    if days is not None and 0 <= days <= 7:
+        return "earnings", f"earnings {days}d", 2
+
+    return None, None, 2
+
+
+@api_v1.route("/market/tape", methods=["GET"])
+@require_auth
+def tape():
+    """Lane B of the shell's live tape: flagged watchlist names with context.
+
+    Stateless by design. The flagged list arrives as `?symbols=` rather than
+    being read from `ui_preferences` here, so toggling a flag takes effect on
+    the very next refetch instead of after a preference round-trip, and the
+    server only ever prices what is actually flagged.
+
+    Composed rather than persisted: nothing is written, no new file lands in
+    `data/`, and therefore v67 gains no migration task. The freshness bound is
+    the caller's refetch cadence, which is the `scan` event.
+
+    Imported inside the view, matching `chart()` above -- these pull pandas and
+    the trade log, and the module is imported at app start.
+    """
+    from datetime import datetime, timezone
+
+    from swingbot.core.marketdata import data as market_data
+    from swingbot.core.planning.plan_store import PlanStore
+    from swingbot.core.tracking.performance import TradeLog
+
+    symbols = _tape_symbols(request.args.get("symbols", ""))
+    as_of = datetime.now(timezone.utc).isoformat()
+    if not symbols:
+        return jsonify({"as_of": as_of, "rows": []})
+
+    try:
+        prices = market_data.get_current_price_batch(symbols) or {}
+    except Exception:  # a dead feed degrades to a priceless tape, never a 500
+        prices = {}
+
+    open_trades: dict = {}
+    try:
+        for tr in TradeLog().get_trades(status="open", limit=None) or []:
+            open_trades.setdefault(tr.get("ticker"), tr)
+    except Exception:
+        pass
+
+    open_plans: dict = {}
+    try:
+        for plan in PlanStore().open_plans() or []:
+            open_plans.setdefault(getattr(plan, "ticker", None), plan)
+    except Exception:
+        pass
+
+    earnings = _tape_earnings_days(symbols)
+
+    rows = []
+    for symbol in symbols:
+        price = prices.get(symbol)
+        kind, label, rank = _tape_context(
+            symbol, price, open_trades, open_plans, earnings)
+        rows.append({
+            "symbol": symbol,
+            "price": _num(price),
+            "change_pct": _tape_change_pct(symbol, price),
+            "context_kind": kind,
+            "context_label": label,
+            "sort_rank": rank,
+        })
+    return jsonify({"as_of": as_of, "rows": rows})
