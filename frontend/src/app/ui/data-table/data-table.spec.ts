@@ -541,11 +541,8 @@ describe('DataTable reordering', () => {
   });
 });
 
-// --- SR24: card mode below 640px ------------------------------------------
-// Forced through `cardsAt` rather than by resizing: jsdom does not lay out,
-// so driving this with a real width would assert nothing.
-
-describe('DataTable card mode', () => {
+// --- v80 D4: phone mode below 640px ------------------------------------------
+describe('DataTable phone mode', () => {
   let fixture: ComponentFixture<Host>;
   let host: Host;
 
@@ -559,98 +556,40 @@ describe('DataTable card mode', () => {
   });
 
   const el = () => fixture.nativeElement as HTMLElement;
-  const cards = () => [...el().querySelectorAll('.card')];
+  const wrap = () => el().querySelector('.wrap')!;
 
-  function asCards() {
+  function asPhone() {
     host.cardsAt.set(true);
     fixture.detectChanges();
   }
 
-  it('renders a table by default', () => {
-    expect(el().querySelector('table')).not.toBeNull();
-    expect(cards()).toHaveLength(0);
+  it('is off by default', () => expect(wrap().classList).not.toContain('phone'));
+  it('keeps the table below the breakpoint -- no cards', () => {
+    asPhone(); expect(wrap().classList).toContain('phone'); expect(el().querySelector('table')).not.toBeNull();
+    expect(el().querySelector('.cards, .card')).toBeNull(); expect(el().querySelectorAll('tbody tr.row')).toHaveLength(ROWS.length);
   });
-
-  it('renders one card per row and no table below the breakpoint', () => {
-    asCards();
-    expect(el().querySelector('table')).toBeNull();
-    expect(cards()).toHaveLength(ROWS.length);
+  it('pins the ticker column, header and cells alike', () => {
+    asPhone(); expect([...el().querySelectorAll('thead th.pin')].map((th) => th.textContent!.trim())).toEqual(['Ticker']);
+    expect([...el().querySelectorAll('tbody tr.row')].map((tr) => tr.querySelectorAll('td.pin').length)).toEqual([1, 1, 1]);
   });
-
-  it('heads each card with the identifying columns', () => {
-    asCards();
-    expect(cards()[0].querySelector('.card-head')!.textContent).toContain('AAPL');
+  it('pins the identity column even when another column sits before it', () => {
+    host.visible.set(['held', 'ticker', 'pnl']); asPhone(); expect(el().querySelector('tbody tr.row td.pin')!.textContent).toContain('AAPL');
   });
-
-  it('renders the rest as label/value pairs', () => {
-    asCards();
-    const body = cards()[0].querySelector('.card-body')!;
-    expect([...body.querySelectorAll('dt')].map((d) => d.textContent!.trim()))
-      .toEqual(['P&L %', 'Held']);
+  it('falls back to the first rendered column without identity', () => {
+    host.visible.set(['held', 'pnl']); asPhone(); expect(el().querySelector('thead th.pin')!.textContent!.trim()).toBe('Held');
   });
-
-  it('gives pinned columns their own full-width block', () => {
-    // A 24px icon button is not a phone target.
-    asCards();
-    expect(cards()[0].querySelector('.card-actions')).not.toBeNull();
+  it('offers every sortable visible column, both ways', () => {
+    asPhone(); expect([...el().querySelectorAll('.phone-sort option')].map((o) => o.textContent!.trim())).toEqual(['Unsorted', 'Ticker ↑', 'Ticker ↓', 'P&L % ↑', 'P&L % ↓']);
   });
-
-  it('renders EVERY visible column -- a card drops nothing the table shows', () => {
-    // The card is a rendering MODE, not a reduced view: a phone has to be
-    // able to read the same figures a desktop does, or the density toggle
-    // and the column picker mean nothing there. Headline and body together
-    // are the visible set, exactly, with no key in both and none missing.
-    host.visible.set(['ticker', 'pnl', 'held']);
-    asCards();
-    const card = cards()[0];
-    const headline = [...card.querySelectorAll('.card-head .head-cell')];
-    const labels = [...card.querySelectorAll('.card-body dt')]
-      .map((d) => d.textContent!.trim());
-
-    // 'ticker' heads the card (no label of its own), the rest are labelled.
-    expect(headline).toHaveLength(1);
-    expect(headline[0].textContent).toContain('AAPL');
-    expect(labels).toEqual(['P&L %', 'Held']);
+  it('emits the chosen sort through sortChange', () => {
+    asPhone(); const select = el().querySelector('.phone-sort select') as HTMLSelectElement; select.value = 'ticker:desc'; select.dispatchEvent(new Event('change'));
+    expect(host.lastSort).toEqual({ key: 'ticker', direction: 'desc' });
   });
-
-  it('carries a value for every labelled row, not just the label', () => {
-    // A <dt> with an empty <dd> beside it is the failure that looks like a
-    // working card: the layout is right and the data is gone.
-    host.visible.set(['ticker', 'pnl', 'held']);
-    asCards();
-    const values = [...cards()[0].querySelectorAll('.card-body dd')]
-      .map((d) => d.textContent!.trim());
-    expect(values).toEqual(['4.2', '3d']);
+  it('still activates a row and keeps pagination', () => {
+    host.pagination.set({ page: 1, perPage: 2, total: 9 }); asPhone(); (el().querySelectorAll('tbody tr.row')[1] as HTMLElement).click();
+    expect(host.activated.map((r) => r.ticker)).toEqual(['MSFT']); expect(el().querySelector('sb-pagination')).not.toBeNull();
   });
-
-  it('marks each value .card-value, the hook a dense cell wraps on', () => {
-    // PlanCell and the Dashboard's P&L cell drop their table-only
-    // `white-space: nowrap` under this class -- a card has no horizontal
-    // scroller, so a run that does not wrap is simply off the side.
-    host.visible.set(['ticker', 'pnl', 'held']);
-    asCards();
-    expect(cards()[0].querySelectorAll('.card-body dd.card-value')).toHaveLength(2);
-  });
-
-  it('still activates a row', () => {
-    asCards();
-    (cards()[1] as HTMLElement).click();
-    expect(host.activated.map((r) => r.ticker)).toEqual(['MSFT']);
-  });
-
-  it('keeps pagination working', () => {
-    host.pagination.set({ page: 1, perPage: 2, total: 9 });
-    asCards();
-    expect(el().querySelector('sb-pagination')).not.toBeNull();
-  });
-
-  it('returns to the table above the breakpoint', () => {
-    asCards();
-    host.cardsAt.set(false);
-    fixture.detectChanges();
-    expect(el().querySelector('table')).not.toBeNull();
-    expect(cards()).toHaveLength(0);
-  });
+  it('sets headers in the shared label style', () => expect(el().querySelector('thead th')!.classList).toContain('sb-label'));
 });
 
 describe('DataTable rowClass', () => {
@@ -679,12 +618,11 @@ describe('DataTable rowClass', () => {
     expect(classes).toEqual(['row', 'row blink', 'row']);
   });
 
-  it('applies to cards too, not just table rows', () => {
+  it('applies in phone mode too -- they are the same rows', () => {
     host.cardsAt.set(true);
     host.rowClass.set((row) => (row.ticker === 'MSFT' ? 'blink' : null));
     fixture.detectChanges();
 
-    const cards = [...el().querySelectorAll('.card')];
-    expect(cards.map((c) => c.className)).toEqual(['card', 'card blink', 'card']);
+    expect(bodyRows().map((r) => r.className)).toEqual(['row', 'row blink', 'row']);
   });
 });

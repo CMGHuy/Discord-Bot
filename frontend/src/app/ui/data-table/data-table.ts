@@ -26,6 +26,9 @@ import {
  *  `DataTable.showSpinner`'s own comment for why this exists at all. */
 export const SPINNER_DELAY_MS = 200;
 
+/** Column keys that name a row, in preference order. */
+const PIN_KEYS = ['ticker', 'symbol'];
+
 /**
  * The load-bearing table — spec `2026-08-08-v14-angular-workspaces-design.md`
  * Decision 1. Trades, Analytics/Strategies, Risk and Watchlist all render
@@ -59,69 +62,24 @@ export const SPINNER_DELAY_MS = 200;
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [NgTemplateOutlet, EmptyStateComponent, PaginationComponent],
   template: `
-    <div class="wrap" [attr.aria-busy]="loading()">
+    <div class="wrap" [class.phone]="phone()" [attr.aria-busy]="loading()">
       @if (showSpinner()) {
         <span class="loading-spinner" aria-hidden="true"></span>
       }
       @if (pagination(); as page) {
         <ng-container [ngTemplateOutlet]="pagerTemplate" [ngTemplateOutletContext]="{ $implicit: page, announce: true }" />
-      }      @if (cards()) {
-        <!-- SR24. A rendering MODE of this component, not a second component:
-             same column defs, same sort, same pagination. A separate mobile
-             table drifts from the desktop one within two changes, and then
-             every column added to one is missing from the other. -->
-        <ul class="cards">
-          @for (row of rows(); track rowKey()(row)) {
-            <li class="card" [class]="rowClass()(row)" (click)="activate(row, $event)">
-              <div class="card-head">
-                @for (col of headlineColumns(); track col.key) {
-                  <span class="head-cell">
-                    @if (col.cell; as cellTemplate) {
-                      <ng-container
-                        [ngTemplateOutlet]="cellTemplate"
-                        [ngTemplateOutletContext]="{ $implicit: row }"
-                      />
-                    } @else {
-                      {{ text(col, row) }}
-                    }
-                  </span>
-                }
-              </div>
-
-              <!-- The same label/value grid the expansion uses (SR18), so the
-                   card and the expanded row cannot drift apart. -->
-              <dl class="card-body">
-                @for (col of bodyColumns(); track col.key) {
-                  <div>
-                    <dt>{{ col.header }}</dt>
-                    <dd class="card-value" [class.num]="col.numeric">
-                      @if (col.cell; as cellTemplate) {
-                        <ng-container
-                          [ngTemplateOutlet]="cellTemplate"
-                          [ngTemplateOutletContext]="{ $implicit: row }"
-                        />
-                      } @else {
-                        {{ text(col, row) }}
-                      }
-                    </dd>
-                  </div>
-                }
-              </dl>
-
-              @for (col of pinnedColumns(); track col.key) {
-                @if (col.cell; as cellTemplate) {
-                  <div class="card-actions">
-                    <ng-container
-                      [ngTemplateOutlet]="cellTemplate"
-                      [ngTemplateOutletContext]="{ $implicit: row }"
-                    />
-                  </div>
-                }
-              }
-            </li>
-          }
-        </ul>
-      } @else {
+      }
+      @if (sortOptions().length) {
+        <label class="phone-sort">
+          <span class="sb-label">Sort</span>
+          <select (change)="onPhoneSort($any($event.target).value)">
+            @if (!sortValue()) { <option value="" selected disabled>Unsorted</option> }
+            @for (option of sortOptions(); track option.value) {
+              <option [value]="option.value" [selected]="option.value === sortValue()">{{ option.label }}</option>
+            }
+          </select>
+        </label>
+      }
       <div class="scroller" tabindex="0">
       <table>
         <thead>
@@ -131,8 +89,10 @@ export const SPINNER_DELAY_MS = 200;
             }
             @for (col of renderedColumns(); track col.key) {
               <th
+                class="sb-label"
                 [style.width]="col.width"
                 [class.num]="col.numeric"
+                [class.pin]="col.key === pinKey()"
                 [class.dragging]="dragging() === col.key"
                 [attr.aria-sort]="ariaSort(col)"
                 [attr.draggable]="isPinned(col.key) ? null : 'true'"
@@ -174,7 +134,7 @@ export const SPINNER_DELAY_MS = 200;
                 </td>
               }
               @for (col of renderedColumns(); track col.key) {
-                <td [class.num]="col.numeric">
+                <td [class.num]="col.numeric" [class.pin]="col.key === pinKey()">
                   @if (col.cell; as cellTemplate) {
                     <ng-container
                       [ngTemplateOutlet]="cellTemplate"
@@ -212,7 +172,6 @@ export const SPINNER_DELAY_MS = 200;
         }
       </table>
       </div>
-      }
 
       @if (showEmptyState(); as state) {
         <sb-empty-state [title]="state.title" [hint]="state.hint" />
@@ -228,98 +187,10 @@ export const SPINNER_DELAY_MS = 200;
         (pageChange)="pageChange.emit($event)" (perPageChange)="perPageChange.emit($event)" />
     </ng-template>  `,
   styles: `
-    .cards { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-10); }
-    .card {
-      padding: var(--space-14);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      display: grid;
-      gap: var(--space-10);
-    }
-    .card-head {
-      display: flex;
-      align-items: center;
-      gap: var(--space-10);
-      font-size: var(--text-subhead);
-    }
-    .card-body { margin: 0; display: grid; gap: var(--space-6); }
-    /* align-items: baseline, so a label sits on the first line of a value
-       that wrapped to two rather than floating in the middle of it. */
-    .card-body > div {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: var(--space-10);
-      min-width: 0;
-    }
-    /* The label never shrinks and never wraps -- it is two or three words and
-       it is what makes the value legible. The VALUE is what gives. */
-    .card-body dt {
-      flex: 0 0 auto;
-      color: var(--text-secondary);
-      font-size: var(--text-chip);
-    }
-    /* min-width: 0 is the load-bearing part.
-     *
-     * A flex item's automatic minimum size is its content's min-content
-     * width, so without this a long value pushes the row wider than the card
-     * instead of wrapping inside it. The table has .scroller as its
-     * backstop for exactly this; a CARD has none, so what overflows is not
-     * scrolled to, it is simply off the side of a phone and unreadable --
-     * the whole reason card mode exists is that it does not need one.
-     *
-     * text-align: right so the value column reads down the card the way the
-     * numeric columns do, and overflow-wrap so a long single token (a
-     * strategy name, an id) breaks rather than being the one thing that can
-     * still overflow. */
-    .card-body dd {
-      margin: 0;
-      min-width: 0;
-      flex: 0 1 auto;
-      text-align: right;
-      overflow-wrap: anywhere;
-    }
-    /* -- the wrap contract for rich cells -------------------------------
-     *
-     * A dense cell (PlanCell's .plan, the Dashboard's .pnl-plan) declares
-     * white-space: nowrap for the TABLE, where a price split over two lines
-     * stops reading as one number and .scroller is there when a run does not
-     * fit. In a card neither holds: no column to align to, and no scroller --
-     * body carries overflow-x: hidden, so a run that does not wrap is not
-     * scrolled to, it is CUT OFF. Measured at 375px: the Dashboard's P&L cell
-     * came to 279px inside a 255px box, losing the projected half of the line.
-     *
-     * Custom properties rather than a selector, because no selector can do
-     * this. Emulated encapsulation scopes EVERY compound selector, not just
-     * the last, so ".card-value .pnl-plan" compiles with a content attribute
-     * on BOTH parts -- and the two elements carry different ones (the dd is
-     * this component's, the span is the workspace's), so the rule matches
-     * from neither side. A global rule reaches both but then loses on
-     * specificity to the cell's own scoped ".plan[content-attr]". Custom
-     * properties inherit down the DOM and are indifferent to all of it.
-     *
-     * A cell opts in by reading the fallback form:
-     *     white-space: var(--cell-wrap, nowrap);   // the run itself
-     *     white-space: var(--sep-wrap, pre);       // its separators
-     * Outside a card neither is defined, so the nowrap/pre default applies
-     * and the table is unchanged.
-     *
-     * pre-wrap, not normal, for the separators: their spacing IS the spacing
-     * (PlanCell puts it in the text, not a margin), so collapsing it would run
-     * the numbers together -- while plain "pre" forbids the wrap this exists
-     * to allow. */
-    .card-value {
-      --cell-wrap: normal;
-      --sep-wrap: pre-wrap;
-    }
-    /* Full width, because a 24px icon button is not a phone target. */
-    .card-actions { display: grid; gap: var(--space-6); }
-    .card-actions button { width: 100%; }
     th[draggable='true'] { cursor: grab; }
     th.dragging { opacity: 0.5; }
     th:focus-visible { outline: 1px solid var(--accent); outline-offset: -2px; }
-    .wrap { position: relative; }
+    .wrap { position: relative; container: table / inline-size; }
     /* pointer-events: none alongside the dim: without it a click mid-fetch
        can land on a row that is about to be replaced, which reads as "I
        clicked and nothing happened" -- itself a "frozen" symptom -- rather
@@ -402,16 +273,10 @@ export const SPINNER_DELAY_MS = 200;
        amount" is three times the width of the numbers under it, and letting
        it wrap is most of what the change above buys back. */
     td.num { white-space: nowrap; }
-    th {
-      color: var(--text-secondary);
-      font-size: var(--text-micro);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-    }
     /* Digits line up down the column, so a magnitude is readable without
        reading the number. */
-    .num { text-align: right; font-family: var(--font-mono); }
+    .num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    tbody tr.row > td { height: var(--row-h); }
     .num.sort, th.num .sort { justify-content: flex-end; }
 
     .sort {
@@ -434,7 +299,7 @@ export const SPINNER_DELAY_MS = 200;
     .arrow { display: inline-block; min-width: 0.7em; color: var(--accent); }
 
     .row:hover { background: var(--surface-raised); }
-    tr.filler > td { background: var(--bg); border-bottom: 0; height: calc(1lh + 2 * var(--space-6)); }
+    tr.filler > td { background: var(--bg); border-bottom: 0; height: var(--row-h); }
     tfoot td { border-top: 1px solid var(--border-strong); border-bottom: 0; font-weight: 600; color: var(--text); }
     thead th { position: sticky; top: var(--header-h); z-index: 2; background: var(--surface); }
 
@@ -472,6 +337,18 @@ export const SPINNER_DELAY_MS = 200;
       overflow: hidden;
       clip-path: inset(50%);
       white-space: nowrap;
+    }
+    .phone-sort { display: none; align-items: center; gap: var(--space-8); padding: var(--space-8) var(--space-10); }
+    .phone-sort select { height: var(--control-h); padding: 0 var(--space-8); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); color: var(--text); font: inherit; font-size: var(--text-control); }
+    .phone .phone-sort { display: flex; }
+    .phone .pin { position: sticky; left: 0; z-index: 1; background: var(--surface); }
+    .phone thead th.pin { z-index: 3; }
+    .phone .row:hover .pin { background: var(--surface-raised); }
+    @container table (max-width: 639px) {
+      .phone-sort { display: flex; }
+      .pin { position: sticky; left: 0; z-index: 1; background: var(--surface); }
+      thead th.pin { z-index: 3; }
+      .row:hover .pin { background: var(--surface-raised); }
     }
   `,
 })
@@ -574,28 +451,25 @@ export class DataTable<T> {
    */
   private readonly viewportService = inject(ViewportService);
   readonly cardsAt = input<boolean | null>(null);
-  protected readonly cards = computed(
+  protected readonly phone = computed(
     () => this.cardsAt() ?? this.viewportService.isPhone(),
   );
 
-  /** Ticker and direction: what identifies the row at a glance. Falls back to
-   *  the first two visible columns for a table with neither. */
-  protected readonly headlineColumns = computed(() => {
+  protected readonly pinKey = computed(() => {
     const shown = this.renderedColumns();
-    const preferred = shown.filter((c) => ['ticker', 'direction'].includes(c.key));
-    return preferred.length ? preferred : shown.slice(0, 2);
+    return (shown.find((column) => PIN_KEYS.includes(column.key)) ?? shown[0])?.key ?? null;
   });
-
-  /** Everything else in the visible set, as label/value pairs. */
-  protected readonly bodyColumns = computed(() => {
-    const headline = new Set(this.headlineColumns().map((c) => c.key));
-    return this.renderedColumns().filter((c) => !headline.has(c.key));
+  protected readonly sortOptions = computed(() => this.renderedColumns().filter((column) => column.sortable).flatMap((column) => [
+    { value: `${column.key}:asc`, label: `${column.header} ↑` },
+    { value: `${column.key}:desc`, label: `${column.header} ↓` },
+  ]));
+  protected readonly sortValue = computed(() => {
+    const sort = this.sort(); return sort ? `${sort.key}:${sort.direction}` : '';
   });
-
-  /** Pinned columns become full-width controls under the card body. */
-  protected readonly pinnedColumns = computed(() =>
-    this.columns().filter((c) => this.pinnedSet().has(c.key)),
-  );
+  protected onPhoneSort(value: string): void {
+    const cut = value.lastIndexOf(':'); const key = value.slice(0, cut); const direction = value.slice(cut + 1);
+    if (key && (direction === 'asc' || direction === 'desc')) this.sortChange.emit({ key, direction });
+  }
 
   /** Keys the table pins in place — not draggable, not a drop target. */
   private readonly pinnedSet = computed(() => new Set(this.pinned()));
@@ -680,7 +554,7 @@ export class DataTable<T> {
   );
   protected readonly fillerRows = computed<number[]>(() => {
     const page = this.pagination();
-    if (!page || page.perPage <= 0 || this.cards()) return [];
+    if (!page || page.perPage <= 0) return [];
     const missing = page.perPage - this.rows().length;
     return missing > 0 ? Array.from({ length: missing }, (_, i) => i) : [];
   });
