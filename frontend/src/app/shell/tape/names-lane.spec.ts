@@ -1,3 +1,4 @@
+import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
@@ -8,6 +9,7 @@ describe('NamesLane', () => {
   function setup(rows: unknown[], asOf: string | null = '2026-09-09T14:35:00+00:00') {
     TestBed.configureTestingModule({
       providers: [
+        provideZonelessChangeDetection(),
         provideRouter([]),
         { provide: TapeStore, useValue: {
           rows: () => rows, asOf: () => asOf,
