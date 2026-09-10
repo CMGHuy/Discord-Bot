@@ -43,6 +43,9 @@ Ask as many questions as you need — there is no question budget. One per
 message. When a request is ambiguous, a premise looks wrong, or a call is the
 human partner's, ask instead of assuming. This does not license asking which
 option to take after a finding is established; record the finding instead.
+This is about ambiguity and decisions, not check-ins: once a plan task's scope
+is clear, run it straight through — edits, tests, commits per the plan —
+without pausing to ask permission to continue to the next step or task.
 
 For strategy, trading, or plan prioritization, rank work by pooled expectancy
 (`ExpR`) first and win rate second. State the tradeoff when selecting work over

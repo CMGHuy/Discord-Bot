@@ -4,9 +4,7 @@ Guidance for Claude Code in this repository. It carries the rules that must
 fire *unprompted*; the reasoning behind each lives in `docs/claude/` (index at
 the bottom) — read the relevant one before working in that area.
 
-**This file must stay under 200 lines.** An addition that would push it over
-means moving content — old or new — into the matching `docs/claude/*.md` (add
-a table row if new), leaving a short rule plus a pointer here.
+**This file must stay under 200 lines.** An addition that would push it over means moving content — old or new — into the matching `docs/claude/*.md` (add a table row if new), leaving a short rule plus a pointer here.
 
 ## What this is
 
@@ -22,8 +20,7 @@ discord.py, pandas/numpy, yfinance, mplfinance, pytest. JSON persistence under
 **"Production" always means the Hetzner VM** (`167.233.26.185`, `docs/deploy/DEPLOY_HETZNER.md`) — never this dev machine.
 `scripts/ops/ssh-hetzner.sh` connects to it (a command, or bare for an interactive shell); not committed, since it shells through WSL to a key in WSL's own home.
 
-**Any live fix or config change made directly on production must be mirrored
-back into this repo and committed before the task is considered done.** Reasoning and what "mirrored" means: `docs/claude/working-conventions.md`.
+**Any live fix or config change made directly on production must be mirrored back into this repo and committed before the task is considered done.** Reasoning and what "mirrored" means: `docs/claude/working-conventions.md`.
 
 Two entry points: `python bot.py` (the bot) and `python admin_ui.py` (the
 admin — a Flask **API** plus an Angular SPA served from `frontend/`, built by
@@ -55,6 +52,9 @@ refuse to call a suite green without reading the output. Where this section appe
 message. When a request is ambiguous, a premise looks wrong, or a call is the
 human partner's, ask instead of assuming — this overrides any default biasing
 toward acting unclarified. Never ask which option *after* a finding is established; record it.
+That rule is about ambiguity and decisions, not check-ins: once a plan task's
+scope is clear, run it straight through — edits, tests, commits per the plan
+— without pausing to ask permission to continue to the next step or task.
 
 ## Claude is the operator; Codex follows
 
