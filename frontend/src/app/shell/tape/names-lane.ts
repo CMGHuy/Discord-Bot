@@ -46,7 +46,10 @@ import { ABSENT, num, pct } from '../../ui/format';
                    [attr.tabindex]="pass === 1 ? -1 : null">
                   <span class="sym">{{ row.symbol }}</span>
                   @if (row.price !== null) {
-                    <span class="px">{{ num(row.price) }}</span>
+                    <span class="px" [class.up]="row.change_pct !== null && row.change_pct >= 0"
+                          [class.down]="row.change_pct !== null && row.change_pct < 0">
+                      {{ num(row.price) }}
+                    </span>
                   }
                   @if (row.change_pct !== null) {
                     <span [class.up]="row.change_pct >= 0" [class.down]="row.change_pct < 0">
