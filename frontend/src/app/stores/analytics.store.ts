@@ -932,6 +932,9 @@ export const AnalyticsStore = signalStore(
       if (store.exitQuality() === null) {
         api.analyticsExitQuality().subscribe({
           next: (exitQuality) => patchState(store, { exitQuality }),
+          // The section degrades independently; do not turn an offline API
+          // into an unhandled route-mount error.
+          error: () => {},
         });
       }
     };
@@ -1049,6 +1052,7 @@ export const AnalyticsStore = signalStore(
           if (store.exitQuality() === null) {
             api.analyticsExitQuality().subscribe({
               next: (exitQuality) => patchState(store, { exitQuality }),
+              error: () => {},
             });
           }
         },
