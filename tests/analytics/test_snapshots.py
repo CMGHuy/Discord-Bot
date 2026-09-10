@@ -93,7 +93,7 @@ def test_export_all_writes_expected_files(tmp_path):
     with open(os.path.join(tmp_path, "stats_by_strategy.csv"), newline="") as f:
         header = next(csv.reader(f))
     assert header == ["key", "n", "wins", "losses", "win_rate", "expectancy_r",
-                      "avg_r", "profit_factor", "total_pnl"]
+                      "avg_r", "profit_factor", "total_pnl", "total_r"]
 
 def test_refresh_snapshot_excludes_open_trades_from_all_analytics(tmp_path, monkeypatch):
     snap_path = str(tmp_path / "analytics_snapshot.json")

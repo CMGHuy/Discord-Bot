@@ -17,7 +17,7 @@ from swingbot.core.analytics.aggregate import DIMENSIONS
 from swingbot.core.analytics.journal import JournalStore
 
 STAT_ROW_COLUMNS = ["key", "n", "wins", "losses", "win_rate", "expectancy_r",
-                    "avg_r", "profit_factor", "total_pnl"]
+                    "avg_r", "profit_factor", "total_pnl", "total_r"]
 JOURNAL_COLUMNS = ["trade_id", "ticker", "strategy", "horizon_key", "direction", "tier",
                    "badge", "quality_score", "outcome", "r_realized", "mfe_r", "mae_r",
                    "exit_efficiency", "holding_days", "tags", "auto_lesson", "note",
