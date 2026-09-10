@@ -28,6 +28,7 @@ import {
   Streaks,
   StrategyRow,
   TierRow,
+  rateOrWithheld,
 } from '../../stores/analytics.store';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
@@ -582,7 +583,7 @@ interface ProposalView extends ProposalRow {
                       <tr>
                         <th scope="row">{{ strategy }}</th>
                         @for (horizon of heatmap.horizons; track horizon) {
-                          <td class="num cell" [style.--heat]="heat(strategy, horizon)">
+                          <td class="num cell" [attr.data-heat-cell]="true" [class.thin]="heatWithheld(strategy, horizon)" [style.--heat]="heat(strategy, horizon)">
                             {{ heatLabel(strategy, horizon) }}
                           </td>
                         }
@@ -1277,7 +1278,7 @@ export class Analytics {
       { data: this.store.calibration, loading: this.store.loading, error: this.store.error },
       {
         isEmpty: (data) =>
-          data.deciles.length === 0 && data.tiers.length === 0 && data.drift.length === 0,
+          data.deciles.length === 0 && data.levels.length === 0 && data.drift.length === 0,
       },
     ),
   );
@@ -1539,14 +1540,20 @@ export class Analytics {
    *  different. */
   protected heat(strategy: string, horizon: string): number {
     const cell = this.heatIndex().get(`${strategy}|${horizon}`);
-    if (!cell || cell.win_rate === null) return 0;
+    if (!cell || this.heatWithheld(strategy, horizon)) return 0;
     return Math.max(0, Math.min(1, cell.win_rate / 100));
   }
 
   protected heatLabel(strategy: string, horizon: string): string {
     const cell = this.heatIndex().get(`${strategy}|${horizon}`);
     if (!cell || cell.win_rate === null) return ABSENT;
+    if (this.heatWithheld(strategy, horizon)) return `n=${cell.n ?? 0}`;
     return `${cell.win_rate.toFixed(0)}% (${cell.n ?? 0})`;
+  }
+
+  protected heatWithheld(strategy: string, horizon: string): boolean {
+    const cell = this.heatIndex().get(`${strategy}|${horizon}`);
+    return rateOrWithheld(cell?.n ?? 0, cell?.win_rate, this.store.minCellN()).withheld;
   }
 
   /* -- tuning ----------------------------------------------------------- */

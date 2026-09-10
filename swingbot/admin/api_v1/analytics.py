@@ -270,13 +270,37 @@ def analytics_strategies():
     return jsonify({"strategies": rows, "heatmap": _json_heatmap(_strategy_horizon_heatmap())})
 
 
+@api_v1.route("/analytics/exit-quality", methods=["GET"])
+@require_auth
+def analytics_exit_quality():
+    """All-time exit-quality aggregates; the scatter warrants its own call."""
+    if request.args:
+        raise ApiError("invalid", f"unknown parameter {sorted(request.args)[0]!r}; this route takes none", 400)
+
+    from swingbot.core.analytics import exit_quality as eq
+    from swingbot.core.analytics import metrics as m
+    from swingbot.core.analytics.aggregate import MIN_CELL_N
+    from swingbot.core.analytics.journal import JournalStore
+
+    closed = [t for t in TradeLog().get_trades(status=None, limit=None) or []
+              if t.get("status") in ("win", "loss", "closed")]
+    entries = JournalStore().entries()
+    return jsonify({"exit_reasons": m.exit_reason_split(closed),
+                    "hold_by_outcome": m.hold_by_outcome(closed),
+                    "efficiency": eq.efficiency_histogram(entries),
+                    "mae": eq.mae_histogram(entries),
+                    "scatter": eq.mfe_mae_points(entries),
+                    "coverage": eq.coverage(entries),
+                    "min_cell_n": MIN_CELL_N})
+
+
 @api_v1.route("/analytics/calibration", methods=["GET"])
 @require_auth
 def analytics_calibration():
     calibration = _snapshot().get("calibration", {})
     return jsonify({
         "deciles": calibration.get("deciles", []),
-        "tiers": calibration.get("tiers", []),
+        "levels": calibration.get("levels", []),
         "drift": calibration.get("drift", []),
     })
 

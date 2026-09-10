@@ -13,6 +13,7 @@ import { routeRequest } from '../routing/route-request';
 import { Observable } from 'rxjs';
 import {
   AnalyticsCalibration,
+  AnalyticsExitQuality,
   AnalyticsDerived,
   AnalyticsJournal,
   AnalyticsPerformance,
@@ -308,7 +309,7 @@ export const BREAKDOWN_DIMENSIONS = [
   { value: 'direction', label: 'Direction' },
   { value: 'dow', label: 'Day of week' },
   { value: 'month', label: 'Month' },
-  { value: 'tier', label: 'Tier' },
+  // "tier" was retired from aggregate.DIMENSIONS; it would 400 if selected.
   { value: 'badge', label: 'Badge' },
   { value: 'source', label: 'Source' },
 ] as const;
@@ -357,11 +358,18 @@ const DIRECTION_ORDER: readonly [string, string][] = [
 ];
 const DOW_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
 
-function zeroFilledHistogram(rows: BreakdownRow[], order: readonly (readonly [string, string])[]): HistogramBin[] {
+export function rateOrWithheld(n: number, rate: number | null | undefined, floor: number): { count: number; withheld: boolean } {
+  if (n < floor || rate == null) return { count: 0, withheld: true };
+  return { count: rate, withheld: false };
+}
+
+function zeroFilledHistogram(rows: BreakdownRow[], order: readonly (readonly [string, string])[], floor: number): HistogramBin[] {
   const byKey = new Map(rows.map((row) => [row.key, row]));
   return order.map(([key, label]) => {
     const row = byKey.get(key);
-    return { label: `${label} (n=${row?.n ?? 0})`, count: row?.win_rate ?? 0 };
+    const n = row?.n ?? 0;
+    const value = rateOrWithheld(n, row?.win_rate, floor);
+    return { label: value.withheld ? `${label} (n=${n} — below ${floor}, rate withheld)` : `${label} (n=${n})`, count: value.count };
   });
 }
 /** One histogram bin. */
@@ -484,6 +492,7 @@ interface AnalyticsSlice {
   proposeResult: string | null;
   strategies: AnalyticsStrategies | null;
   calibration: AnalyticsCalibration | null;
+  exitQuality: AnalyticsExitQuality | null;
   plans: AnalyticsPlans | null;
   jobs: JobSummary[];
   /** The job whose progress is on screen — status plus a log tail. */
@@ -544,6 +553,7 @@ export const AnalyticsStore = signalStore(
     proposeResult: null,
     strategies: null,
     calibration: null,
+    exitQuality: null,
     plans: null,
     jobs: [],
     job: null,
@@ -554,7 +564,7 @@ export const AnalyticsStore = signalStore(
     launchError: null,
   }),
 
-  withComputed(({ performance, strategies, calibration, plans, jobs, job, snapshot, breakdown,
+  withComputed(({ performance, strategies, calibration, plans, jobs, job, snapshot, breakdown, exitQuality,
                  journal }) => ({
     /* -- SR50: the snapshot's own figures ------------------------------- */
 
@@ -607,12 +617,12 @@ export const AnalyticsStore = signalStore(
     directionHistogram: computed<HistogramBin[]>(() =>
       zeroFilledHistogram(
         toBreakdownRows((snapshot()?.by?.['direction'] ?? []) as unknown[]),
-        DIRECTION_ORDER,
+        DIRECTION_ORDER, exitQuality()?.min_cell_n ?? Number.MAX_SAFE_INTEGER,
       )),
     dowHistogram: computed<HistogramBin[]>(() =>
       zeroFilledHistogram(
         toBreakdownRows((snapshot()?.by?.['dow'] ?? []) as unknown[]),
-        DOW_ORDER.map((day) => [day, day] as const),
+        DOW_ORDER.map((day) => [day, day] as const), exitQuality()?.min_cell_n ?? Number.MAX_SAFE_INTEGER,
       )),
     /* -- performance --------------------------------------------------- */
 
@@ -809,7 +819,7 @@ export const AnalyticsStore = signalStore(
     /* -- calibration --------------------------------------------------- */
 
     deciles: computed<DecileRow[]>(() => (calibration()?.deciles ?? []) as DecileRow[]),
-    tiers: computed<TierRow[]>(() => (calibration()?.tiers ?? []) as TierRow[]),
+    tiers: computed<TierRow[]>(() => (calibration()?.levels ?? []) as TierRow[]),
     drift: computed<DriftRow[]>(() => (calibration()?.drift ?? []) as DriftRow[]),
 
     /* -- tuning -------------------------------------------------------- */
@@ -914,6 +924,9 @@ export const AnalyticsStore = signalStore(
                 ? 'The admin is not responding.'
                 : error.message,
           }),
+      });
+      api.analyticsExitQuality().subscribe({
+        next: (exitQuality) => patchState(store, { exitQuality }),
       });
     };
 
@@ -1026,6 +1039,9 @@ export const AnalyticsStore = signalStore(
           api.analyticsSnapshot().subscribe({
             next: (snapshot) => patchState(store, { snapshot, snapshotError: null }),
             error: (error: ApiError) => patchState(store, { snapshotError: error.code === 'unavailable' ? 'The admin is not responding.' : error.message }),
+          });
+          api.analyticsExitQuality().subscribe({
+            next: (exitQuality) => patchState(store, { exitQuality }),
           });
         },
         next: (performance) => patchState(store, { performance, loading: false, error: null }),
@@ -1215,3 +1231,4 @@ export const AnalyticsStore = signalStore(
   }),
 
 );
+    minCellN: computed(() => exitQuality()?.min_cell_n ?? Number.MAX_SAFE_INTEGER),
