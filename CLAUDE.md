@@ -151,10 +151,10 @@ failure. Baseline, and why counts/timings swing with machine load:
 `docs/claude/testing-cost.md`.
 
 **Long backtest/grid runs take tens of minutes to hours** — chunk per-strategy
-and dispatch to `backtest-runner`. Any script running longer than a couple of
-minutes must print flushed per-unit progress, and a subagent doing
-long-running work keeps its progress file updated before it waits on a sweep
-of its own — both rules and why: `docs/claude/working-conventions.md`.
+and dispatch to `backtest-runner`. Any script or subagent past a couple of
+minutes must print flushed per-unit progress; **past 15 minutes that must
+resolve to a percent figure** in a log deleted on completion — answer "how
+far along" from it. Rules and why: `docs/claude/working-conventions.md`.
 
 ## Naming specs and plans
 

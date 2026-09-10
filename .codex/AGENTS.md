@@ -110,7 +110,10 @@ Green means zero failures and zero xfails. A changed test count is not itself a
 failure. Use `make check` for syntax validation when applicable. Backtests and
 grids can run for hours; do not launch broad sweeps casually. Ensure long work
 emits flushed progress per meaningful unit, and keep an observable progress
-record for multi-step background work.
+record for multi-step background work. Past 15 minutes of expected runtime,
+that record must resolve to a percent-complete figure (rewritten at each
+unit, not summed by the reader) so a mid-run progress question can be
+answered with a number; delete the log once the task finishes.
 
 Use at most one subagent at a time by default: dispatch it, wait for its result,
 and then decide whether another is needed. Parallel subagents require the human
