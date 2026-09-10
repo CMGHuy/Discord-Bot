@@ -221,3 +221,64 @@ describe('Watchlist tape column', () => {
     expect(remove.getAttribute('aria-label')).toBe('Remove NVDA');
   });
 });
+
+describe('Watchlist tape column sorting', () => {
+  // A second, separately-shaped fixture (two tickers, not one): the point is
+  // to prove the Tape header's click actually REORDERS rows, which needs a
+  // flagged row and an unflagged row to tell apart -- and to start them in
+  // an order the default sort (next_earnings_date, soonest first) would NOT
+  // produce on its own, so a pass here cannot be coincidental.
+  let fixture: ComponentFixture<Watchlist>;
+
+  beforeEach(async () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
+        provideHttpClientTesting(),
+        WatchlistStore,
+        { provide: TapeStore, useValue: { toggle: vi.fn(), symbols: () => ['NVDA'] } },
+      ],
+    });
+    fixture = TestBed.createComponent(Watchlist);
+    TestBed.inject(WatchlistStore).load();
+    fixture.detectChanges();
+    const backend = TestBed.inject(HttpTestingController);
+    backend.expectOne('/api/v1/watchlist/tickers').flush({
+      tickers: [
+        // AAPL's earlier date puts it first under the default sort --
+        // flagged NVDA only leads once the Tape column is actually driving
+        // the order.
+        ticker({ symbol: 'AAPL', next_earnings_date: '2026-09-01' }),
+        ticker({ symbol: 'NVDA', next_earnings_date: '2026-09-10' }),
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+  });
+
+  function rowSymbols(): string[] {
+    return [...fixture.nativeElement.querySelectorAll('tbody tr.row sb-row-link')]
+      .map((el) => (el.textContent ?? '').trim());
+  }
+
+  it('sorts flagged rows first on click, and reverses on a second click', () => {
+    // Sanity check: the default sort really does start AAPL first, so the
+    // reorder below is attributable to the Tape click alone.
+    expect(rowSymbols()).toEqual(['AAPL', 'NVDA']);
+
+    // Same toggle rule DataTable applies to every other sortable column
+    // (data-table.spec.ts: "starts a newly clicked column ascending and
+    // toggles on repeat") -- a fresh column starts ascending.
+    const tapeHeader = fixture.nativeElement.querySelectorAll('thead th .sort')[0] as HTMLButtonElement;
+    tapeHeader.click();
+    fixture.detectChanges();
+    expect(rowSymbols()).toEqual(['NVDA', 'AAPL']);
+
+    tapeHeader.click();
+    fixture.detectChanges();
+    expect(rowSymbols()).toEqual(['AAPL', 'NVDA']);
+  });
+});

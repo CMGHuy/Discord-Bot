@@ -57,11 +57,17 @@ export function isWithinCurrentWeek(isoDate: string | null): boolean {
 /** Ascending by default (soonest first); a ticker with no known date sorts
  *  LAST regardless of direction -- "unknown" is not meaningfully before or
  *  after a real date, and floating it to the top of a descending sort would
- *  read as "most urgent" for the one thing that carries no urgency at all. */
-export function compareTickers(a: Ticker, b: Ticker, sort: SortSpec): number {
+ *  read as "most urgent" for the one thing that carries no urgency at all.
+ *
+ *  `flagged` is the tape's own symbol set (`TapeStore.symbols()`) -- the
+ *  'tape' column's value lives there, not on `Ticker`, so it has to be
+ *  threaded in rather than read off the row like every other column. */
+export function compareTickers(
+  a: Ticker, b: Ticker, sort: SortSpec, flagged: readonly string[] = [],
+): number {
   const dir = sort.direction === 'asc' ? 1 : -1;
-  const av = sortValue(a, sort.key);
-  const bv = sortValue(b, sort.key);
+  const av = sortValue(a, sort.key, flagged);
+  const bv = sortValue(b, sort.key, flagged);
   if (av === null && bv === null) return 0;
   if (av === null) return 1;
   if (bv === null) return -1;
@@ -70,13 +76,16 @@ export function compareTickers(a: Ticker, b: Ticker, sort: SortSpec): number {
   return 0;
 }
 
-function sortValue(row: Ticker, key: string): string | number | null {
+function sortValue(row: Ticker, key: string, flagged: readonly string[]): string | number | null {
   switch (key) {
     case 'symbol': return row.symbol;
     case 'company_name': return row.company_name;
     case 'next_earnings_date': return row.next_earnings_date;
     case 'open_trades': return row.open_trades;
     case 'closed_trades': return row.closed_trades;
+    // Same formula as the tapeCell's own `tape.symbols().includes(...)` and
+    // the tape column's `value` -- flagged (0) sorts ahead of unflagged (1).
+    case 'tape': return flagged.includes(row.symbol) ? 0 : 1;
     default: return null;
   }
 }
@@ -433,7 +442,7 @@ export class Watchlist {
   }
 
   protected readonly sortedRows = computed(() =>
-    [...this.store.tickers()].sort((a, b) => compareTickers(a, b, this.sort())));
+    [...this.store.tickers()].sort((a, b) => compareTickers(a, b, this.sort(), this.tape.symbols())));
 
   protected readonly watchlistPage = createClientPage(() => this.sortedRows(), () => this.perPage());
 
