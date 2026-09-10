@@ -5,17 +5,19 @@ simulator the live scan uses. No lookahead: every computation sees
 df.iloc[:i+1] only."""
 from __future__ import annotations
 
+import dataclasses
 import os
 from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
 
 from swingbot import config
-
 from swingbot.core.market import levels
 from swingbot.core.market.chart_patterns import dead_cat_bounce
 from swingbot.core.planning.plan_engine import build_confluence_plan, primary_strategy_for, simulate_exit
 from swingbot.core.market.strategy_types import HORIZONS, MIN_BARS
+from swingbot.core.scanning.gating import passes_confluence, scenario_gate_inputs
+from swingbot.scan_params import ScanParams
 
 # Levels move slowly; recomputing the full multi-source level map every bar
 # is ~5x the cost for near-identical output. One recompute per 5 bars is the
@@ -67,7 +69,8 @@ def levels_asof(ticker: str, df, bar_index: int, horizon_key: str, cache: dict):
     return result
 
 
-def replay_scenarios(ticker: str, df, horizon_key: str, *, gates: dict,
+def replay_scenarios(ticker: str, df, horizon_key: str, *, params: ScanParams | None = None,
+                     gates: dict | None = None,
                      dcb_params: dict | None = None) -> list:
     """(signal_index, TradePlanV2) for every bar where the confluence scan
     WOULD have emitted a plan, under `gates`, with a per-direction cooldown.
@@ -82,9 +85,21 @@ def replay_scenarios(ticker: str, df, horizon_key: str, *, gates: dict,
     workers fight over. `None` is the baseline arm and must not pay for the
     detector at all.
     """
+    if params is None:
+        params = ScanParams.from_config()
+    legacy_gates = gates is not None
+    if legacy_gates:
+        params = dataclasses.replace(
+            params,
+            min_reward_pct=gates.get("min_reward_pct", params.min_reward_pct),
+            min_stop_distance_pct=gates.get("min_stop_distance_pct", params.min_stop_distance_pct),
+            max_stop_loss_pct=gates.get("max_stop_distance_pct", params.max_stop_loss_pct),
+            min_risk_reward_ratio=gates.get("min_risk_reward", params.min_risk_reward_ratio),
+            min_target_confluence_count=gates.get("min_confluence", params.min_target_confluence_count),
+        )
     h = HORIZONS[horizon_key]
     warmup = MIN_BARS[horizon_key]
-    cooldown = gates.get("cooldown_bars", 5)
+    cooldown = 5
     cache: dict = {}
     out: list = []
     last_accepted: dict = {}   # direction -> bar index
@@ -101,10 +116,7 @@ def replay_scenarios(ticker: str, df, horizon_key: str, *, gates: dict,
         resistances = [lv for lv in all_levels if lv.price > price]
 
         floor_pct = levels.atr_floor_pct(window, price, h)
-        effective_min_reward = max(gates["min_reward_pct"],
-                                   h.get("sr_target_min_pct", 0) * 0.15)
-        effective_max_stop = max(gates["max_stop_distance_pct"],
-                                 h.get("max_risk_pct", 0))
+        gates = scenario_gate_inputs(params, h)
         # v68. `window` is the harness's no-lookahead slice -- the same frame
         # the live scan hands to veto_bullish_for. dcb_params=None is the
         # baseline arm and must not pay for the detector at all.
@@ -112,17 +124,17 @@ def replay_scenarios(ticker: str, df, horizon_key: str, *, gates: dict,
         if dcb_params is not None:
             block_bullish = bool(dead_cat_bounce(window, dcb_params)["detected"])
         scenarios = levels.build_scenarios(
-            price, supports, resistances, effective_min_reward,
+            price, supports, resistances, gates["min_reward_pct"],
             atr_floor=floor_pct,
             min_stop_distance_pct=gates["min_stop_distance_pct"],
-            max_stop_distance_pct=effective_max_stop,
+            max_stop_distance_pct=gates["max_stop_distance_pct"],
             min_risk_reward=gates["min_risk_reward"],
             block_bullish=block_bullish)
 
         for sc in scenarios:
             n_confl, families = levels.count_confirming_strategies(
                 window, h, price, sc.take_profit, tolerance_pct=5.0)
-            if n_confl < gates.get("min_confluence", 1):
+            if not passes_confluence(n_confl, params):
                 continue
             last = last_accepted.get(sc.direction)
             if last is not None and i - last < cooldown:
@@ -130,7 +142,11 @@ def replay_scenarios(ticker: str, df, horizon_key: str, *, gates: dict,
             plan = build_confluence_plan(
                 sc, window, ticker=ticker, horizon_key=horizon_key,
                 primary_strategy=primary_strategy_for(sc),
-                level_map=(supports, resistances))
+                level_map=(supports, resistances),
+                # Legacy callers historically used their dict only for
+                # scenario admission; target construction still read config.
+                # Keep that compatibility while callers migrate to params.
+                params=ScanParams.from_config() if legacy_gates else params)
             if plan is None:
                 continue          # no qualifying target -> no trade, same as live
             last_accepted[sc.direction] = i

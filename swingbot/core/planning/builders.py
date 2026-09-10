@@ -9,7 +9,7 @@ from swingbot import config
 from swingbot.core.market import levels, opex
 from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION, HORIZONS
 from .plan_types import PlanStatus, TradePlanV2, record_transition
-from . import lifecycle, params, targets
+from . import lifecycle, params as plan_params, targets
 from .lifecycle import apply_level_lifecycle
 from .params import (DEFAULT_EXPIRY_BARS, STRUCTURE_BUFFER_ATR, TP1_FRACTION,
                      TRAIL_ATR_MULT)
@@ -18,7 +18,7 @@ from .targets import (_safe_atr_value, _tp2_from_r, atr_target_candidates,
                       select_structural_target, select_tp2,
                       sr_target_candidates)
 def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None,
-             candidate_levels=None):
+             candidate_levels=None, params=None):
     """Default volatility sizing: ATR-multiple stop; target is the nearest
     ATR-ladder candidate (atr_target_candidates) that pays at least
     MIN_RISK_REWARD_RATIO, capped at MAX_RISK_REWARD_RATIO (v31). Returns
@@ -39,6 +39,9 @@ def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None,
     because a per-strategy R:R table survives here -- that table is
     deleted in Task 14).
     """
+    if params is None:
+        from swingbot.scan_params import ScanParams
+        params = ScanParams.from_config()
     h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
     risk_distance = h["atr_stop_multiple"] * atr_val
@@ -51,7 +54,7 @@ def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None,
 
     take_profit = select_structural_target(
         entry, stop_loss, is_bull, candidate_levels or [],
-        config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
+        params.min_risk_reward_ratio, params.max_risk_reward_ratio)
     if take_profit is None:
         return None
     return stop_loss, take_profit
@@ -70,7 +73,7 @@ def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None,
 def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
                         direction, level_map=None, quality_inputs=None,
                         stop_mult=None, tp2_r=None,
-                        time_stop_days=None) -> TradePlanV2 | None:
+                        time_stop_days=None, scan_params=None) -> TradePlanV2 | None:
     """THE constructor for strategy-source plans. Returns None when the
     strategy has no valid structure at this bar (same conditions as the
     backtest reference).
@@ -96,7 +99,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
             return None
         candidates = fib_target_candidates(df, index, h, close)
         result = _fibonacci_plan(close, atr_val, swing_high, swing_low, direction, horizon_key,
-                                 candidate_levels=candidates)
+                                 candidate_levels=candidates, params=scan_params)
         if result is None:
             return None
         stop, tp1 = result
@@ -104,7 +107,8 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         vol_avg20 = df["Volume"].rolling(20).mean()
         ratio = float((df["Volume"] / vol_avg20).iloc[index])
         candidates = sr_target_candidates(df, index, h, close, ratio)
-        result = _sr_plan(close, ratio, direction, horizon_key, candidate_levels=candidates)
+        result = _sr_plan(close, ratio, direction, horizon_key, candidate_levels=candidates,
+                          params=scan_params)
         if result is None:
             return None
         stop, tp1 = result
@@ -114,7 +118,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
             return None
         candidates = elliott_target_candidates(entry_levels[index], direction)
         result = _elliott_plan(close, atr_val, entry_levels[index]["wave2"], direction, horizon_key,
-                               candidate_levels=candidates)
+                               candidate_levels=candidates, params=scan_params)
         if result is None:
             return None
         stop, tp1 = result
@@ -130,7 +134,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         # an explicit caller override or E31's per-strategy MAE figure -- so
         # neither silently replaces the other. Off an opex day stop_mult() is
         # exactly 1.0 and this line is a no-op.
-        applied_stop_mult = stop_mult if stop_mult is not None else params._resolve_stop_mult(strategy)
+        applied_stop_mult = stop_mult if stop_mult is not None else plan_params._resolve_stop_mult(strategy)
         _opex_stop_mult = opex.stop_mult()
         if _opex_stop_mult != 1.0:
             # Guarded rather than composed unconditionally: `None` here is
@@ -140,7 +144,8 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
             applied_stop_mult = (applied_stop_mult or 1.0) * _opex_stop_mult
         candidates = atr_target_candidates(close, atr_val, direction)
         result = _atr_plan(close, atr_val, direction, horizon_key, strategy,
-                           stop_mult=applied_stop_mult, candidate_levels=candidates)
+                           stop_mult=applied_stop_mult, candidate_levels=candidates,
+                           params=scan_params)
         if result is None:
             return None
         stop, tp1 = result
@@ -160,7 +165,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
 
     entry_type = entry_type_for(strategy, "strategy")
     created_at = df.index[index].date().isoformat()
-    exit_params = params.exit_params_for(strategy)
+    exit_params = plan_params.exit_params_for(strategy)
     tp2 = None
     applied_tp2_r = None
     if exit_params["tp2"]:
@@ -175,7 +180,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         # strategy whose exit params have none -- that on/off table is a
         # frozen TRAIN-grid result, and forcing it would be a different
         # exit model than E33 is set up to judge.
-        resolved_tp2_r = tp2_r if tp2_r is not None else params._resolve_tp2_r(strategy)
+        resolved_tp2_r = tp2_r if tp2_r is not None else plan_params._resolve_tp2_r(strategy)
         if resolved_tp2_r is not None:
             candidate = _tp2_from_r(close, stop, tp1, direction, resolved_tp2_r)
             if candidate is not None:
@@ -194,12 +199,12 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     )
     if entry_type == "market":
         record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
-    params.stamp_badge(plan)
-    params._apply_quality(plan, quality_inputs)
+    plan_params.stamp_badge(plan)
+    plan_params._apply_quality(plan, quality_inputs)
     plan.stop_mult_applied = applied_stop_mult
     plan.tp2_r_applied = applied_tp2_r
     plan.time_stop_days = (time_stop_days if time_stop_days is not None
-                           else params._resolve_time_stop_days(strategy))
+                           else plan_params._resolve_time_stop_days(strategy))
     return plan
 
 
@@ -250,7 +255,7 @@ def primary_strategy_for(scenario) -> str:
 
 def build_confluence_plan(scenario, df, *, ticker, horizon_key,
                           primary_strategy, level_map=None,
-                          quality_inputs=None) -> TradePlanV2 | None:
+                          quality_inputs=None, params=None) -> TradePlanV2 | None:
     """THE constructor for confluence-source plans (a levels.build_scenarios
     Scenario). TP1 is a real structural level -- select_structural_target
     picks the nearest candidate that pays at least MIN_RISK_REWARD_RATIO,
@@ -261,6 +266,9 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
     primary_strategy_for). `level_map` is an optional (supports, resistances)
     pair from levels.build_level_map -- when absent, the only honest
     candidate is the scenario's own real target."""
+    if params is None:
+        from swingbot.scan_params import ScanParams
+        params = ScanParams.from_config()
     entry = scenario.entry
     is_bull = scenario.direction == "bullish"
 
@@ -270,7 +278,7 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
         candidates = [scenario.take_profit] if scenario.take_profit is not None else []
 
     tp1 = select_structural_target(entry, scenario.stop_loss, is_bull, candidates,
-                                   config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
+                                   params.min_risk_reward_ratio, params.max_risk_reward_ratio)
     if tp1 is None:
         return None
 
@@ -302,8 +310,8 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
     )
     if entry_type == "market":
         record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
-    params.stamp_badge(plan)
-    params._apply_quality(plan, quality_inputs)
+    plan_params.stamp_badge(plan)
+    plan_params._apply_quality(plan, quality_inputs)
     return plan
 
 
@@ -327,12 +335,15 @@ def entry_type_for(strategy: str, source: str) -> str:
 
 
 def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_key,
-                    candidate_levels=None):
+                    candidate_levels=None, params=None):
     """Structural sizing off the fib swing, risk-capped. Target is the
     nearest real Fibonacci level (fib_target_candidates) that pays at least
     MIN_RISK_REWARD_RATIO, capped at MAX_RISK_REWARD_RATIO (v31) -- see
     select_structural_target. Returns None when no candidate clears the
     floor: no fallback to a fixed fraction of risk."""
+    if params is None:
+        from swingbot.scan_params import ScanParams
+        params = ScanParams.from_config()
     h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
     buffer = STRUCTURE_BUFFER_ATR * atr_val
@@ -347,16 +358,19 @@ def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_ke
 
     take_profit = select_structural_target(
         entry, stop_loss, is_bull, candidate_levels or [],
-        config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
+        params.min_risk_reward_ratio, params.max_risk_reward_ratio)
     if take_profit is None:
         return None
     return stop_loss, take_profit
 
-def _sr_plan(entry, volume_ratio, direction, horizon_key, candidate_levels=None):
+def _sr_plan(entry, volume_ratio, direction, horizon_key, candidate_levels=None, params=None):
     """Fixed-percent stop. Target is the nearest real S/R candidate
     (sr_target_candidates) that pays at least MIN_RISK_REWARD_RATIO, capped
     at MAX_RISK_REWARD_RATIO (v31). Returns None when no candidate clears
     the floor."""
+    if params is None:
+        from swingbot.scan_params import ScanParams
+        params = ScanParams.from_config()
     h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
     stop_pct = h["sr_stop_pct"]
@@ -364,18 +378,21 @@ def _sr_plan(entry, volume_ratio, direction, horizon_key, candidate_levels=None)
 
     take_profit = select_structural_target(
         entry, stop_loss, is_bull, candidate_levels or [],
-        config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
+        params.min_risk_reward_ratio, params.max_risk_reward_ratio)
     if take_profit is None:
         return None
     return stop_loss, take_profit
 
 
 
-def _elliott_plan(entry, atr_val, wave2, direction, horizon_key, candidate_levels=None):
+def _elliott_plan(entry, atr_val, wave2, direction, horizon_key, candidate_levels=None, params=None):
     """Stop beyond wave-2 (buffered, risk-capped). Target is the nearest
     real wave-3 projection (elliott_target_candidates) that pays at least
     MIN_RISK_REWARD_RATIO, capped at MAX_RISK_REWARD_RATIO (v31). Returns
     None when no candidate clears the floor."""
+    if params is None:
+        from swingbot.scan_params import ScanParams
+        params = ScanParams.from_config()
     h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
     buffer = STRUCTURE_BUFFER_ATR * atr_val
@@ -387,7 +404,7 @@ def _elliott_plan(entry, atr_val, wave2, direction, horizon_key, candidate_level
 
     take_profit = select_structural_target(
         entry, stop_loss, is_bull, candidate_levels or [],
-        config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
+        params.min_risk_reward_ratio, params.max_risk_reward_ratio)
     if take_profit is None:
         return None
     return stop_loss, take_profit

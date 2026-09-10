@@ -85,6 +85,10 @@ class Field:
     options: list = field(default_factory=list)   # for type="select" -- plain strings or (value, label) tuples
     sensitive: bool = False        # masked in logs / password input in the UI
     hot_reloadable: bool = True     # see module docstring
+    # v74 search classification. Excluded is the safe default: an omitted
+    # knob is visible in neither search nor results, while a false searchable
+    # knob creates grid cells that differ only by noise.
+    search_class: str = "excluded"
 
     def __post_init__(self):
         # Normalize plain-string options to (value, label) tuples so the
@@ -873,6 +877,52 @@ FIELDS: list[Field] = [
           help="When above 0, the bounce must be quieter than the decline by "
                "this ratio -- a conviction test. 0 turns the arm off."),
 ]
+
+_SEARCH_CLASSES = {
+    "searchable": {
+        "MIN_REWARD_PCT", "MIN_STOP_DISTANCE_PCT", "MAX_STOP_LOSS_PCT",
+        "CONFLUENCE_DEVIATION_PCT", "MIN_TARGET_CONFLUENCE_COUNT",
+        "MIN_ALERT_CONFIDENCE_LEVEL", "UNIFIED_CONFIDENCE",
+        "DEDUP_TOLERANCE_PCT", "RS_GATE", "RS_LEADER_PERCENTILE",
+        "RS_LAGGARD_PERCENTILE", "OPEX_CAUTION_ENABLED",
+        "OPEX_MONTHLY_CONFIDENCE_BUMP", "OPEX_MONTHLY_CONFLUENCE_BUMP",
+        "OPEX_WEEKLY_CONFLUENCE_BUMP", "OPEX_STOP_WIDEN_PCT",
+        "OPEX_SIZE_REDUCTION_PCT", "HTF_CONFLUENCE_ENABLED",
+        "MTF_ADJACENT_GATE", "PLAN_ENGINE_V2", "SCALE_OUT_ENABLED",
+        "UNIVERSE_MIN_DOLLAR_VOL", "UNIVERSE_MIN_PRICE",
+        "EARNINGS_BLACKOUT_DAYS", "REGIME_GATES_ENABLED",
+        "LEVEL_LIFECYCLE_STOPS_ENABLED", "AVWAP_LEVELS_ENABLED",
+        "PYRAMIDING_ENABLED", "VOLUME_PROFILE_NODES_ENABLED",
+        "MAX_ALERTS_PER_SCAN", "DATA_DRIVEN_STOPS_ENABLED",
+        "DEAD_CAT_BOUNCE_VETO", "DCB_DECLINE_PCT", "DCB_GAP_REQUIRED",
+        "DCB_VOLUME_RATIO",
+    },
+    "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO"},
+    "live_only": {
+        "SESSION_START_HOUR", "SESSION_END_HOUR", "SCAN_INTERVAL_MINUTES",
+        "SIGNAL_CONFIRMATION_SCANS", "NEAR_CLOSE_ALERTS_ENABLED",
+        "NEAR_CLOSE_THRESHOLD_PCT", "REVERSAL_ENABLED", "REVERSAL_MIN_HOLD_HOURS",
+        "REVERSAL_COOLDOWN_HOURS", "REVERSAL_MIN_CONF_MARGIN",
+        "REVERSAL_MAX_PER_DAY", "NEAR_TP_TIMEOUT_ENABLED",
+        "NEAR_TP_TIMEOUT_THRESHOLD_PCT", "NEAR_TP_TIMEOUT_MINUTES",
+        "NEAR_TP_STALL_CHECK_MINUTES", "NEAR_TP_STALL_MAX_FLUCTUATION_PCT",
+        "OPEX_NEAR_CLOSE_SUPPRESS_MINUTES", "INTRADAY_MANAGER_V2",
+        "INTRADAY_RTH_ONLY", "EXTENDED_HOURS_EXIT_CHECK",
+        "QUIET_HOURS_START_ET", "QUIET_HOURS_END_ET",
+        "EXTENDED_HOURS_DEBOUNCE_TICKS",
+    },
+    "never": {"SLIPPAGE_BPS", "COMMISSION_PER_TRADE", "COMMISSION_RISK_BASIS"},
+}
+
+for _search_class, _attrs in _SEARCH_CLASSES.items():
+    for _field in FIELDS:
+        if _field.attr in _attrs:
+            _field.search_class = _search_class
+
+
+def searchable_attrs() -> tuple[str, ...]:
+    """Return the decision knobs the v75 search engine may vary."""
+    return tuple(field.attr for field in FIELDS if field.search_class == "searchable")
 
 _CASTERS = {
     "number": lambda v: int(v),

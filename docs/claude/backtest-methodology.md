@@ -99,6 +99,11 @@ interpreting any backtest, grid, or validation result.
   is recovered by re-running it, never by hand-editing the JSON.
 - **No ML in the live path** — numpy/logistic audits live in `scripts/` only,
   never imported by `swingbot/`.
+- **Searchability (v74).** Every `config.Field` has a `search_class`:
+  `searchable`, `frozen`, `live_only`, `never`, or `excluded`.
+  `config.searchable_attrs()` is the sole grid source. The observability test
+  records replay blind spots with reasons; a non-observable knob is evidence
+  about the instrument, never permission to tune by noise.
 - Grid/validation results are written to `docs/superpowers/results/*.md` with
   the full table, the pre-registered selection rule quoted, and an honest
   observations section (failures are recorded, not fixed).

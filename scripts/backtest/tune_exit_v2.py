@@ -23,6 +23,7 @@ TRAIN = ("2020-01-01", "2023-12-31")
 BREAKOUT_CLASS = {"Break & Retest", "Support/Resistance", "EMA Crossover"}
 GRID_TRAIL = [2.0, 2.5, 3.0]
 GRID_TP2 = ["levels", "none"]
+# v31 retired this 80% floor; v76 replaces the selection rule consistently.
 RULE = "WR>=80 and ExpR>0 and N>=30 and excl<=50%; max ExpR wins; else keep defaults"
 
 

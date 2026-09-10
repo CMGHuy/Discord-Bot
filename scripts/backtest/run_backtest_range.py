@@ -6,7 +6,8 @@ pools results per strategy over an entry-date window.
     python scripts/backtest/run_backtest_range.py --validation   # 2024-01-01 .. 2025-12-31 (run ONCE, at the end)
     python scripts/backtest/run_backtest_range.py --from 2022-01-01 --to 2022-12-31 --strategy "RSI"
 
-PASS gate per spec: win_rate >= 80, expectancy_r > 0, N >= 30 (train) / 15
+Legacy reporting gate: win_rate >= 80; the live decision bar is 50 (see
+docs/claude/backtest-methodology.md). expectancy_r > 0, N >= 30 (train) / 15
 (validation), scratches+timeouts <= 50% of closed trades."""
 import argparse
 import json

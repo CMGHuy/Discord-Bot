@@ -21,7 +21,7 @@ _ticker_worker uses) but:
      run loses no completed work.
   4. Aggregates ALL chunk files (existing + new) into pooled + per-horizon
      stats using the same math as backtest_scenarios._aggregate /
-     run_backtest_range.pool+passes (WR>=80, ExpR>0, N>=15, excl<=50%).
+     run_backtest_range.pool+passes (legacy WR>=80, ExpR>0, N>=15, excl<=50%).
 
 `--emit-registry PATH --run-date YYYY-MM-DD` (Task 42) is a SEPARATE,
 near-instant path: it reads the already-committed

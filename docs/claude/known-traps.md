@@ -170,6 +170,16 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
 
 ## `PlanManager.check_bar()` is unwired — do not "fix" it
 
+## Scan parameter and replay gate parity (v74)
+
+`ScanParams` is frozen and picklable so process-pool search cells cannot share
+mutable config state. Historical replay has a horizon-expanded scenario gate;
+the live scan preserves its snapshot plus OPEX and `!check` override path.
+Do not silently unify them: v68 deliberately measured `min_confluence=1` and
+`min_risk_reward=0.0`, unlike the shipped 2 and 1.5, and its fixture inherits
+that population. `tests/backtesting/test_knob_observability.py` documents the
+replay harness blind spots explicitly.
+
 `check_bar` / `_check_bar_active` / `_check_bar_partial` model overnight gap fills and are tested, but production never calls them. The live bot exits exclusively through `poll()`. Keep the path inert: wiring it would create a second authority for `plans.json`. Change `_step_active` / `_step_partial` for live exits; mirror bar checks only to keep their tests honest.
 
 ## There are two live exit paths, and the extended-hours one is narrow

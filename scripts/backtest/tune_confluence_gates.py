@@ -40,6 +40,7 @@ GRID_RR = [0.0, 0.3]
 SAMPLE_EVERY = 3   # deterministic alphabetical stride -- see module docstring
 BASE_GATES = {"min_reward_pct": 3.0, "min_stop_distance_pct": 2.0,
               "max_stop_distance_pct": 7.0, "cooldown_bars": 5}
+# v31 retired this 80% floor; v76 replaces the selection rule consistently.
 RULE = ("per horizon: include iff WR>=80 and ExpR>0 and N>=30 and excl<=50%; "
         "global pair = max pooled ExpR among pairs with >=2 qualifying horizons")
 

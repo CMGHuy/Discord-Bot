@@ -32,6 +32,7 @@ from swingbot.core.planning import account as account_module
 from swingbot.core.planning.account import compute_unrealized_pnl, load_account_config
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.tracking.performance import TradeLog
+from swingbot.scan_params import ScanParams
 
 from . import analyze, dedup, fetch, runstate, telemetry
 from .embeds import (
@@ -101,20 +102,22 @@ def _logged_plan_fields(plan_v2, scenario, level_map, direction: str) -> tuple[l
     return list(dict.fromkeys(sources)), rr
 
 
-def _hard_filters_snapshot() -> dict:
+def _hard_filters_snapshot(params: ScanParams | None = None) -> dict:
     """Capture every per-ticker hard filter before worker threads start."""
+    if params is None:
+        params = ScanParams.from_config()
     return {
-        "min_reward_pct": config.MIN_REWARD_PCT,
-        "max_stop_loss_pct": config.MAX_STOP_LOSS_PCT,
-        "min_stop_distance_pct": config.MIN_STOP_DISTANCE_PCT,
-        "min_risk_reward_ratio": config.MIN_RISK_REWARD_RATIO,
-        "mtf_adjacent_gate": config.MTF_ADJACENT_GATE,
-        "confluence_deviation_pct": config.CONFLUENCE_DEVIATION_PCT,
+        "min_reward_pct": params.min_reward_pct,
+        "max_stop_loss_pct": params.max_stop_loss_pct,
+        "min_stop_distance_pct": params.min_stop_distance_pct,
+        "min_risk_reward_ratio": params.min_risk_reward_ratio,
+        "mtf_adjacent_gate": params.mtf_adjacent_gate,
+        "confluence_deviation_pct": params.confluence_deviation_pct,
     }
 
 
 def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "ScanProgress" = None,
-                    min_confluence: int = None) -> tuple:
+                    min_confluence: int = None, params: ScanParams | None = None) -> tuple:
     """
     All the heavy synchronous work -- network fetches, pandas computation,
     matplotlib chart rendering -- lives here with NO async/await, so it can
@@ -137,6 +140,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         log.info("Config auto-reloaded: %s", ", ".join(
             f"{k}={v[1]!r}" for k, v in changed.items()
         ))
+    if params is None:
+        params = ScanParams.from_config()
 
     tickers = load_watchlist()
     if config.SCAN_UNIVERSE != "watchlist":
@@ -147,11 +152,14 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # ticker per horizon. `None` off an opex day (and whenever the feature is
     # off) leaves both thresholds exactly as configured.
     opex_tier_today = opex.current_tier()
-    effective_min_confluence = config.MIN_TARGET_CONFLUENCE_COUNT if min_confluence is None else min_confluence
+    effective_min_confluence = params.min_target_confluence_count if min_confluence is None else min_confluence
     effective_min_confluence = opex.effective_min_confluence(
         effective_min_confluence, opex_tier_today)
     effective_min_confidence = opex.effective_min_confidence_level(opex_tier_today)
-    hard_filters = _hard_filters_snapshot()
+    # Replay expands two bounds by horizon; live scan's per-ticker helper owns
+    # a separate hard-filter snapshot and OPEX/!check adjustments. Preserve
+    # that established behavior; D2 records the measurement divergence.
+    hard_filters = _hard_filters_snapshot(params)
     log.info("Scan starting: horizon_filter=%s require_confirmation=%s watchlist=%d ticker(s) min_confluence=%d",
               horizon_filter, require_confirmation, len(tickers), effective_min_confluence)
 

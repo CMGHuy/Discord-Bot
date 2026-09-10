@@ -178,7 +178,8 @@ def volume_profile_nodes(df: pd.DataFrame, lookback_days: int = 180,
 
 
 def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
-                              trendline_candidates: list | None = None) -> list:
+                              trendline_candidates: list | None = None,
+                              params=None) -> list:
     """
     Gathers raw (price, source_label) candidates from every method this
     bot knows: EMA fast/slow, rolling VWAP, Fibonacci retracements +
@@ -369,7 +370,11 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
     # The flag check sits OUTSIDE the try so a missing/renamed config
     # Field fails loudly instead of silently turning this source off
     # forever.
-    if config.AVWAP_LEVELS_ENABLED:
+    if params is None:
+        from swingbot.scan_params import ScanParams
+        params = ScanParams.from_config()
+
+    if params.avwap_levels_enabled:
         try:
             from swingbot.core.edge.factors import anchored_vwap, avwap_anchors
             for anchor_idx, anchor_label in avwap_anchors(df):
@@ -394,7 +399,7 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
     # (pooled -0.0002R, improving 1 of 3 folds against a gate needing 2)
     # -- docs/superpowers/results/2026-07-26-edge-folds.md. That is a
     # closed pre-registration, not a pending one.
-    if config.VOLUME_PROFILE_NODES_ENABLED:
+    if params.volume_profile_nodes_enabled:
         try:
             nodes = volume_profile_nodes(df)
             candidates.extend((p, "Volume Profile HVN") for p in nodes["hvn"])
@@ -557,7 +562,8 @@ def simulate_all_strategy_levels(df: pd.DataFrame, h: dict, current_price: float
     return by_family
 
 
-def build_level_map(df: pd.DataFrame, h: dict, current_price: float, candidates: list = None):
+def build_level_map(df: pd.DataFrame, h: dict, current_price: float, candidates: list = None,
+                    params=None):
     """Returns (supports, resistances): Level lists below/above current_price, nearest first.
 
     `candidates`: see count_confirming_strategies()'s docstring -- pass a
@@ -565,7 +571,7 @@ def build_level_map(df: pd.DataFrame, h: dict, current_price: float, candidates:
     recomputing it when the caller already has it for this same
     (df, h, current_price). None (the default) computes it here."""
     if candidates is None:
-        candidates = collect_candidate_levels(df, h, current_price)
+        candidates = collect_candidate_levels(df, h, current_price, params=params)
     clustered = _cluster_levels(candidates)
     supports = sorted([lv for lv in clustered if lv.price < current_price], key=lambda l: -l.price)
     resistances = sorted([lv for lv in clustered if lv.price > current_price], key=lambda l: l.price)
