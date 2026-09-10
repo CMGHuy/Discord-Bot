@@ -24,10 +24,12 @@ describe('v80 D3: the shared text styles', () => {
     expect(r).toContain('color: var(--text-muted)');
   });
 
-  it('.sb-help is chip-sized secondary text capped at a readable measure', () => {
+  it('.sb-help is chip-sized secondary text capped at a readable measure, never past its container', () => {
     const r = rule('sb-help');
     expect(r).toContain('font-size: var(--text-chip)');
     expect(r).toContain('color: var(--text-secondary)');
-    expect(r).toContain('max-width: 65ch');
+    // min(65ch, 100%), not a bare 65ch -- a narrow panel is narrower than 65ch
+    // in pixels, and a bare ch cap doesn't know that (v80 F26 browser walk).
+    expect(r).toContain('max-width: min(65ch, 100%)');
   });
 });
