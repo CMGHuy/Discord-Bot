@@ -595,13 +595,23 @@ def _tape_context(symbol: str, price, open_trades: dict, open_plans: dict,
         if price is not None and entry is not None and stop is not None:
             risk = abs(float(entry) - float(stop))
             if risk > 1e-9:
-                r = (float(price) - float(entry)) / risk
+                # Same sign convention as every other R-multiple in
+                # tracking/performance.py (settle_legs, closed_r_multiple,
+                # etc.): a bearish (short) position profits when price falls
+                # BELOW entry, so its R-multiple must flip sign relative to a
+                # bullish one, or a losing short reads as a winning long.
+                sign = 1 if trade.get("direction") == "bullish" else -1
+                r = (float(price) - float(entry)) * sign / risk
                 return "position", f"{r:+.1f}R", 0
         return "position", "open", 0
 
     plan = open_plans.get(symbol)
     if plan is not None:
-        entry = getattr(plan, "entry", None)
+        # TradePlanV2 (swingbot/core/planning/plan_types.py) names this field
+        # `entry_price`, not `entry` -- `trade` dicts above use the shorter
+        # name, but the plan dataclass does not, and a getattr default would
+        # silently swallow the mismatch and always fall back to "planned".
+        entry = getattr(plan, "entry_price", None)
         if price is not None and entry not in (None, 0):
             pct = (float(entry) - float(price)) / float(price) * 100.0
             horizon = getattr(plan, "horizon_key", None) or ""
