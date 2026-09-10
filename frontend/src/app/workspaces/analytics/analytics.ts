@@ -50,6 +50,7 @@ import { MetricChip } from '../../ui/metric-chip';
 import { PaginationComponent } from '../../ui/pagination';
 import { Sparkline } from '../../ui/sparkline';
 import { ExitQualitySectionComponent } from './sections/exit-quality';
+import { StrategyContributionComponent } from './sections/strategy-contribution';
 import {
   CONFIDENCE_COLUMNS,
   breakdownColumns,
@@ -141,6 +142,7 @@ interface ProposalView extends ProposalRow {
     SectionHead,
     Async,
     ExitQualitySectionComponent,
+    StrategyContributionComponent,
   ],
   template: `
     <sb-section-head heading="Analytics">
@@ -597,6 +599,7 @@ interface ProposalView extends ProposalRow {
               </div>
             </sb-panel>
           }
+          <sb-strategy-contribution [rows]="store.strategyContribution()" />
         </sb-async>
       }
 
@@ -1470,7 +1473,7 @@ export class Analytics {
   }));
 
   protected readonly breakdownColumns = computed(() =>
-    breakdownColumns(this.store.breakdownLabel()),
+    breakdownColumns(this.store.breakdownLabel(), this.store.minCellN()),
   );
   protected readonly breakdownKeys = allKeys(breakdownColumns(''));
   protected readonly breakdownKey = (row: BreakdownRow) => row.key;

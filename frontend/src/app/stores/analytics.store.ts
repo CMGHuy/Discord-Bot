@@ -289,6 +289,7 @@ export interface BreakdownRow {
   avg_r: number | null;
   profit_factor: number | null;
   total_pnl: number | null;
+  total_r: number | null;
 }
 
 
@@ -347,6 +348,7 @@ function toBreakdownRows(raw: unknown[]): BreakdownRow[] {
       avg_r: snapNumber(row['avg_r']),
       profit_factor: snapNumber(row['profit_factor']),
       total_pnl: snapNumber(row['total_pnl']),
+      total_r: snapNumber(row['total_r']),
     }];
   });
 }
@@ -599,6 +601,8 @@ export const AnalyticsStore = signalStore(
           .filter((value): value is number => value !== null),
       ),
     ),
+    strategyContribution: computed(() =>
+      ((snapshot()?.by?.['strategy'] ?? []) as { key: string; n: number; total_r: number | null }[])),
 
     /** The chosen dimension's rows, busiest group first — `stats_by` already
      *  sorts by trade count descending, which is the order every table in this
