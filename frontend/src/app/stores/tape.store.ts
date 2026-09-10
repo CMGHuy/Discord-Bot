@@ -46,6 +46,7 @@ export const TapeStore = signalStore(
     visible: computed(() => store.symbols().length > 0),
   })),
   withMethods((store, api = inject(ApiClient), prefs = inject(PreferencesStore)) => {
+    let latestRequest = 0;
     // A local binding, not `this.load()` from inside the returned object:
     // `toggle` must be able to call it however the store is destructured at
     // the call site, and `this` there is not guaranteed to be the store.
@@ -55,8 +56,14 @@ export const TapeStore = signalStore(
         patchState(store, { rows: [], asOf: null });
         return;
       }
+      // A quick `toggle()` overlapping a `scan`-triggered refetch can have
+      // their HTTP responses resolve out of order. `latestRequest` -- the
+      // same counter `ChartStore` uses -- makes the STALE one a no-op rather
+      // than whichever happens to land last.
+      const request = ++latestRequest;
       api.tape(symbols).subscribe({
         next: (response) => {
+          if (request !== latestRequest) return;
           if (!response || !Array.isArray(response.rows)) return;
           const rows = [...response.rows].sort(
             (a, b) => a.sort_rank - b.sort_rank || a.symbol.localeCompare(b.symbol),
