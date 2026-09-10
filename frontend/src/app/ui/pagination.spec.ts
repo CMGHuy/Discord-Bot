@@ -1,9 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { PageSpec } from './data-table/data-table.types';
 import { PaginationComponent } from './pagination';
+
+const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/pagination.ts'), 'utf8');
 
 /* NG39 — the pager. Every assertion here is really about one thing: the
  * numbers come from `total`, which is the post-filter pre-slice count, and
@@ -92,6 +96,16 @@ describe('PaginationComponent', () => {
 
     expect(range()).toBe('90 rows');
   });
+});
+
+describe('PaginationComponent touch sizing (v80 D4)', () => {
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rule = (selector: string) => SOURCE.match(new RegExp(`${esc(selector)}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+  beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] }));
+  it('sizes pager buttons from --control-h', () => { expect(rule('button')).toContain('min-height: var(--control-h)'); expect(rule('button')).toContain('min-width: var(--control-h)'); });
+  it('sizes page jump and rows select with touch text', () => { const r = rule('.per-page select, .jump'); expect(r).toContain('height: var(--control-h)'); expect(r).toContain('font-size: var(--text-control)'); });
+  it('labels rows in the shared label style', () => { const f = TestBed.createComponent(PaginationComponent); f.componentRef.setInput('pagination', { page: 1, perPage: 25, total: 100 }); f.componentRef.setInput('showPerPage', true); f.detectChanges(); expect((f.nativeElement as HTMLElement).querySelector('.per-page .sb-label')!.textContent!.trim()).toBe('Rows'); });
+  it('never prints readable text in divider grey', () => expect(SOURCE).not.toContain('--text-faint'));
 });
 
 // --- SR15: the per-page selector -----------------------------------------
