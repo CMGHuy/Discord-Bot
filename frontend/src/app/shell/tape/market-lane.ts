@@ -1,6 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 
+const SYMBOLS = [
+  { proName: 'FOREXCOM:SPXUSD', title: 'S&P 500' },
+  { proName: 'FOREXCOM:NSXUSD', title: 'Nasdaq 100' },
+  { proName: 'FOREXCOM:DJI', title: 'Dow Jones' },
+  { proName: 'CBOE:VIX', title: 'VIX' },
+];
+
 /**
  * Lane A — fixed market indices, from TradingView's ticker-tape widget.
  *
@@ -16,13 +23,6 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
  * frame that never paints leaves an empty strip rather than a broken box, and
  * Lane B — a sibling, not a child — is unaffected either way.
  */
-const SYMBOLS = [
-  { proName: 'FOREXCOM:SPXUSD', title: 'S&P 500' },
-  { proName: 'FOREXCOM:NSXUSD', title: 'Nasdaq 100' },
-  { proName: 'FOREXCOM:DJI', title: 'Dow Jones' },
-  { proName: 'CBOE:VIX', title: 'VIX' },
-];
-
 @Component({
   selector: 'sb-market-lane',
   standalone: true,
@@ -40,6 +40,9 @@ const SYMBOLS = [
             width="100%"
             frameborder="0"
             scrolling="no"
+            sandbox="allow-scripts allow-same-origin allow-popups"
+            referrerpolicy="no-referrer"
+            loading="lazy"
             (error)="failed.set(true)"
           ></iframe>
         </div>

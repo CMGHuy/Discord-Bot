@@ -66,7 +66,10 @@ import { ABSENT, num, pct } from '../../ui/format';
           </div>
         </div>
         <!-- Outside .track, deliberately. See the class comment. -->
-        <div class="cap end as-of" [attr.title]="tape.asOf()">◷ {{ asOfTime() }}</div>
+        <div class="cap end as-of" [attr.title]="tape.asOf()"
+             [attr.aria-label]="'Tape data as of ' + asOfTime()">
+          <span aria-hidden="true">◷</span> {{ asOfTime() }}
+        </div>
       </div>
     }
   `,

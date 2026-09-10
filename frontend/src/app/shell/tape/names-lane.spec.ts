@@ -45,4 +45,15 @@ describe('NamesLane', () => {
       .nativeElement as HTMLElement;
     expect(el.textContent).toContain('ZZZZ');
   });
+
+  it('gives the as-of badge an accessible label and hides the glyph', () => {
+    const el = setup([{ symbol: 'NVDA', price: 1, change_pct: 1, context_kind: null, context_label: null, sort_rank: 2 }])
+      .nativeElement as HTMLElement;
+    const badge = el.querySelector('.as-of')!;
+    // Time-zone independent: the label must wrap whatever HH:MM the badge
+    // itself displays, not a hardcoded clock reading.
+    expect(badge.getAttribute('aria-label')).toMatch(/^Tape data as of \d{2}:\d{2}$/);
+    const glyph = badge.querySelector('span[aria-hidden="true"]')!;
+    expect(glyph.textContent).toBe('◷');
+  });
 });
