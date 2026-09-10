@@ -3,6 +3,7 @@ import {
   Component,
   ElementRef,
   computed,
+  effect,
   inject,
   input,
   signal,
@@ -50,7 +51,14 @@ let nextId = 0;
     >
       <span class="glyph" aria-hidden="true">i</span>
     </button>
-    <span class="pop elev-overlay" role="tooltip" [id]="id" [hidden]="!open()">{{ text() }}</span>
+    <span
+      class="pop elev-overlay"
+      role="tooltip"
+      [id]="id"
+      [hidden]="!open()"
+      [style.top.px]="popTop()"
+      [style.left.px]="popLeft()"
+    >{{ text() }}</span>
   `,
   styles: `
     :host { position: relative; display: inline-flex; vertical-align: middle; }
@@ -76,10 +84,13 @@ let nextId = 0;
       font-size: var(--text-micro);
       line-height: 1;
     }
+    /* position: fixed, not absolute -- an sb-panel body clips overflow
+       (layout.ts's .panel { overflow: hidden }), which is everywhere this
+       component gets used, so a panel-relative popover was invisible under
+       its own trigger (v80 F26 browser walk). popTop/popLeft measure the
+       trigger's own viewport rect instead of trusting an ancestor's box. */
     .pop {
-      position: absolute;
-      top: calc(100% + var(--space-4));
-      left: 50%;
+      position: fixed;
       z-index: 20;
       width: max-content;
       max-width: min(280px, 90vw);
@@ -108,7 +119,35 @@ export class Hint {
   protected readonly focused = signal(false);
   protected readonly open = computed(() => this.pinned() || this.hovered() || this.focused());
 
+  protected readonly popTop = signal(0);
+  protected readonly popLeft = signal(0);
+
   private readonly host = inject(ElementRef<HTMLElement>).nativeElement as HTMLElement;
+  private readonly reposition = (): void => {
+    const trigger = this.host.querySelector('.trigger');
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    this.popTop.set(rect.bottom + 4);
+    this.popLeft.set(rect.left + rect.width / 2);
+  };
+
+  constructor() {
+    /** Fixed positioning (see the .pop comment) tracks the trigger's own
+     *  rect, not the flow, so it has to be told explicitly: once on open,
+     *  and on every scroll/resize while open -- a panel body scrolls its
+     *  content (layout.ts's .body { overflow-y: auto }) without moving the
+     *  window, which a plain window-resize listener would miss. */
+    effect((onCleanup) => {
+      if (!this.open()) return;
+      this.reposition();
+      window.addEventListener('scroll', this.reposition, { capture: true, passive: true });
+      window.addEventListener('resize', this.reposition, { passive: true });
+      onCleanup(() => {
+        window.removeEventListener('scroll', this.reposition, true);
+        window.removeEventListener('resize', this.reposition);
+      });
+    });
+  }
 
   protected toggle(): void {
     if (this.pinned()) this.close();
