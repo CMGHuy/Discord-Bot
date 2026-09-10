@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
+import type { AsyncEmptyReason } from './async';
+
 /**
  * What a table shows when it has no rows.
  *
@@ -15,6 +17,9 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="empty">
+      @if (reason(); as why) {
+        <span class="reason sb-label">{{ why === 'measured-zero' ? 'Result: 0' : 'Awaiting data' }}</span>
+      }
       <p class="empty-title">{{ title() }}</p>
       @if (hint(); as hintText) {
         <p class="empty-hint">{{ hintText }}</p>
@@ -22,16 +27,13 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
     </div>
   `,
   styles: `
-    .empty { padding: var(--space-20) var(--space-20); text-align: center; }
-    .empty-title { color: var(--text-secondary); font-size: var(--text-body); }
-    .empty-hint {
-      margin-top: var(--space-6);
-      color: var(--text-muted);
-      font-size: var(--text-table);
-    }
+    .empty { display: grid; justify-items: center; gap: var(--space-6); padding: var(--space-20); border: 1px dashed var(--border-strong); border-radius: var(--radius); text-align: center; }
+    .empty-title { margin: 0; color: var(--text-secondary); font-size: var(--text-body); }
+    .empty-hint { margin: 0; color: var(--text-muted); font-size: var(--text-table); }
   `,
 })
 export class EmptyStateComponent {
   readonly title = input.required<string>();
   readonly hint = input<string | undefined>(undefined);
+  readonly reason = input<AsyncEmptyReason | null>(null);
 }
