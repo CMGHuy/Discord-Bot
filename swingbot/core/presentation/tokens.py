@@ -7,13 +7,15 @@ import discord
 ACCENT_RAMP: dict[int, int] = {
     1: 0xFF5470,
     2: 0xFFB43D,
-    3: 0x9BA3BD,
+    3: 0x9EA2AD,
     4: 0x9ACD32,
     5: 0x17C98E,
 }
 
 #: A setup that failed a configured gate is inert, not a loss.
-ACCENT_BLOCKED: int = 0x9BA3BD
+# Level 3 and blocked are the admin's --text-secondary (v80 D1), so a neutral
+# embed and a neutral admin label are the same grey.
+ACCENT_BLOCKED: int = 0x9EA2AD
 
 _OUTCOME_ACCENTS: dict[str, int] = {
     "win": ACCENT_RAMP[5],
