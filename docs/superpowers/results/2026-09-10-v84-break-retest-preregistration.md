@@ -87,4 +87,42 @@ required 2 of 4). The advantage is not an isolated peak; it degrades smoothly
 as 5m or 4w is added back, which is the signature of a real horizon-decay
 effect rather than a fitted spike.
 
-(Gated TRAIN and fold-stability by Task R8; VALIDATION by Task R9.)
+### Gated TRAIN (Task R8)
+
+75/77 tickers (2 excluded illiquid: GC=F, SI=F). Gate confirmed applied —
+only 2m/3m/4m rows appear.
+
+| N | Win rate | ExpR | excl% | Clears rule 2? |
+|---|---|---|---|---|
+| 105 | 53.3% | +0.308 | 23% | yes |
+
+### Fold stability (Task R8)
+
+| Fold year | N | Win rate | ExpR | Badge clauses hold (N>=15)? |
+|---|---|---|---|---|
+| 2021 | 32 | 56.2% | +0.355 | yes |
+| 2022 | 14 | **14.3%** | **-0.343** | no |
+| 2023 | 36 | 58.3% | +0.425 | yes |
+
+**Verdict: FAIL.** The FOLD-STABILITY RULE has two independent conditions, and
+this fails the second one even though it clears the first:
+
+- Condition A (>=2/3 folds hold badge clauses at N>=15): **satisfied** — 2021
+  and 2023 both qualify, 2/3.
+- Condition B (no fold year with expectancy_r < -0.05, regardless of N):
+  **violated** — 2022 scores -0.343R, a severe single-year blowup the pooled
+  TRAIN number (+0.308 across all four years) and the gated-TRAIN row above
+  both completely mask.
+
+Per the rule's own text, "anything else is FAIL" — the count condition passing
+does not override a fold this far below the degradation floor. This is exactly
+what condition B exists to catch: a setup that looks strong pooled but blew up
+badly in one specific year (2022 — plausibly the rate-hike/bear-market regime,
+though this task does not investigate why).
+
+**CLOSED before VALIDATION.** The gate stays landed: it removes a horizon
+population measured negative on TRAIN (6m at -0.157R), which is worth keeping
+independently of the badge outcome. The VALIDATION budget was **NOT spent**
+and remains available. Reopening this specific badge question needs a
+genuinely new mechanism (e.g. something that addresses the 2022-style failure
+mode directly), not a re-run.
