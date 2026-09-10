@@ -13,6 +13,7 @@ import { Router } from '@angular/router';
 import { Ticker } from '../../api/models';
 import { WatchlistStore } from '../../stores/watchlist.store';
 import { PreferencesStore } from '../../stores/preferences.store';
+import { TapeStore } from '../../stores/tape.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
@@ -22,6 +23,7 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
 import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { date, text } from '../../ui/format';
 import { TextInput } from '../../ui/form-controls';
+import { Icon } from '../../ui/icon';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
@@ -99,7 +101,7 @@ function sortValue(row: Ticker, key: string): string | number | null {
 @Component({
   selector: 'sb-watchlist',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DataTable, Panel, Button, ConfirmDialog, ControlRow, TabBar, TextInput, EarningsCalendar, RowLink, SectionHead, Async],
+  imports: [DataTable, Panel, Button, ConfirmDialog, ControlRow, TabBar, TextInput, EarningsCalendar, RowLink, SectionHead, Async, Icon],
   // v54 D1: the whole point of this workspace (spec v14 Decision 9) is the
   // ticker table -- tight rows, more per screen -- so it defaults to the
   // instrument register. On the host (a static class, not a template
@@ -253,12 +255,34 @@ function sortValue(row: Ticker, key: string): string | number | null {
 
     <!-- cells ----------------------------------------------------------- -->
 
+    <ng-template #tapeCell let-row>
+      <!-- A button, so \`data-table.ts:758\` exempts it from row activation and
+           clicking the flag never navigates to the ticker. -->
+      <button
+        type="button"
+        class="tape-toggle"
+        sb-button
+        variant="ghost"
+        [attr.aria-pressed]="tape.symbols().includes(row.symbol)"
+        [attr.aria-label]="'Show ' + row.symbol + ' in the live tape'"
+        (click)="tape.toggle(row.symbol)"
+      >{{ tape.symbols().includes(row.symbol) ? '◉' : '○' }}</button>
+    </ng-template>
+
     <ng-template #symbolCell let-row>
       <sb-row-link [link]="['/watchlist', row.symbol]">{{ row.symbol }}</sb-row-link>
     </ng-template>
 
     <ng-template #actionsCell let-row>
-      <button sb-button variant="ghost" type="button" (click)="ask(row)">Remove</button>
+      <button
+        sb-button
+        variant="danger-icon"
+        type="button"
+        [attr.aria-label]="'Remove ' + row.symbol"
+        (click)="ask(row)"
+      >
+        <sb-icon name="trash" />
+      </button>
     </ng-template>
     }
 
@@ -348,6 +372,7 @@ export class Watchlist {
   private readonly router = inject(Router);
   protected readonly store = inject(WatchlistStore);
   private readonly preferences = inject(PreferencesStore);
+  protected readonly tape = inject(TapeStore);
   static readonly TABLE_ID = 'watchlist';
   protected readonly perPage = signal(readTablePerPage(this.preferences.values(), Watchlist.TABLE_ID));
   protected onPerPage(value: number): void { this.perPage.set(value); this.preferences.update((prefs) => writeTablePerPage(prefs, Watchlist.TABLE_ID, value)); }
@@ -425,16 +450,25 @@ export class Watchlist {
     hint: 'Add a symbol above and the scanner will start covering it.',
   };
 
+  private readonly tapeCell =
+    viewChild.required<TemplateRef<RowContext<Ticker>>>('tapeCell');
   private readonly symbolCell =
     viewChild.required<TemplateRef<RowContext<Ticker>>>('symbolCell');
   private readonly actionsCell =
     viewChild.required<TemplateRef<RowContext<Ticker>>>('actionsCell');
 
   protected readonly visible = [
-    'symbol', 'company_name', 'next_earnings_date', 'open_trades', 'closed_trades', 'actions',
+    'tape', 'symbol', 'company_name', 'next_earnings_date', 'open_trades', 'closed_trades', 'actions',
   ];
 
   protected readonly columns = computed<ColumnDef<Ticker>[]>(() => [
+    {
+      key: 'tape', header: 'Tape', cell: this.tapeCell(), width: '1%',
+      sortable: true,
+      // Sorting on the flag is what makes "what is on the tape right now" one
+      // header click rather than a scan down ~90 rows.
+      value: (row) => (this.tape.symbols().includes(row.symbol) ? 0 : 1),
+    },
     { key: 'symbol', header: 'Symbol', cell: this.symbolCell(), sortable: true },
     { key: 'company_name', header: 'Company', value: (row) => text(row.company_name), sortable: true },
     {

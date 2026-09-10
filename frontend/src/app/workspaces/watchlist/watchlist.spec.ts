@@ -5,8 +5,8 @@ import {
 } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { provideRouter } from '@angular/router';
-import { describe, expect, it } from 'vitest';
+import { provideRouter, Router } from '@angular/router';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   authInterceptor,
@@ -17,6 +17,7 @@ import { Ticker } from '../../api/models';
 import { SortSpec } from '../../ui/data-table/data-table.types';
 import { compareTickers, isWithinCurrentWeek, Watchlist } from './watchlist';
 import { WatchlistStore } from '../../stores/watchlist.store';
+import { TapeStore } from '../../stores/tape.store';
 
 function ticker(overrides: Partial<Ticker>): Ticker {
   return {
@@ -167,5 +168,56 @@ describe('Watchlist states', () => {
     expect(el.querySelector('input')).toBeTruthy();
     const addButton = [...el.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Add');
     expect(addButton).toBeTruthy();
+  });
+});
+
+describe('Watchlist tape column', () => {
+  let fixture: ComponentFixture<Watchlist>;
+  let tapeStub: { toggle: ReturnType<typeof vi.fn>; symbols: () => string[] };
+  let routerStub: { navigate: ReturnType<typeof vi.spyOn> };
+
+  beforeEach(async () => {
+    TestBed.resetTestingModule();
+    tapeStub = { toggle: vi.fn(), symbols: () => ['NVDA'] };
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        // A real router (not a bare useValue stub) -- sb-row-link's
+        // RouterLink directive resolves ActivatedRoute from it, which a
+        // plain { navigate } object cannot provide.
+        provideRouter([]),
+        provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
+        provideHttpClientTesting(),
+        WatchlistStore,
+        { provide: TapeStore, useValue: tapeStub },
+      ],
+    });
+    routerStub = { navigate: vi.spyOn(TestBed.inject(Router), 'navigate') };
+    fixture = TestBed.createComponent(Watchlist);
+    TestBed.inject(WatchlistStore).load();
+    fixture.detectChanges();
+    const backend = TestBed.inject(HttpTestingController);
+    backend
+      .expectOne('/api/v1/watchlist/tickers')
+      .flush({ tickers: [ticker({ symbol: 'NVDA', next_earnings_date: '2026-09-03' })] });
+    await fixture.whenStable();
+    fixture.detectChanges();
+  });
+
+  it('puts the Tape column first and marks flagged rows', () => {
+    const headers = fixture.nativeElement.querySelectorAll('th');
+    expect(headers[0].textContent.trim()).toBe('Tape');
+  });
+
+  it('toggles the flag without navigating to the ticker', () => {
+    const toggle = fixture.nativeElement.querySelector('button.tape-toggle') as HTMLButtonElement;
+    toggle.click();
+    expect(tapeStub.toggle).toHaveBeenCalledWith('NVDA');
+    expect(routerStub.navigate).not.toHaveBeenCalled();
+  });
+
+  it('labels the remove control for screen readers', () => {
+    const remove = fixture.nativeElement.querySelector('button[variant="danger-icon"]');
+    expect(remove.getAttribute('aria-label')).toBe('Remove NVDA');
   });
 });
