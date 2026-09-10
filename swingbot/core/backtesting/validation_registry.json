@@ -157,12 +157,12 @@
   "source": "strategy",
   "strategy": "Fibonacci",
   "horizon": null,
-  "status": "VALIDATED",
-  "n": 203,
-  "win_rate": 82.3,
-  "expectancy_r": 0.268,
-  "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-18"
+  "status": "WEAK",
+  "n": 246,
+  "win_rate": 35.4,
+  "expectancy_r": 0.232,
+  "window": "2020-01-01..2023-12-31",
+  "run_date": "2026-09-10"
  },
  {
   "source": "strategy",
@@ -190,12 +190,12 @@
   "source": "strategy",
   "strategy": "RSI",
   "horizon": null,
-  "status": "VALIDATED",
-  "n": 30,
-  "win_rate": 100.0,
-  "expectancy_r": 0.304,
-  "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-18"
+  "status": "WEAK",
+  "n": 38,
+  "win_rate": 23.7,
+  "expectancy_r": -0.12,
+  "window": "2020-01-01..2023-12-31",
+  "run_date": "2026-09-10"
  },
  {
   "source": "strategy",
@@ -212,12 +212,12 @@
   "source": "strategy",
   "strategy": "Support/Resistance",
   "horizon": null,
-  "status": "VALIDATED",
-  "n": 186,
-  "win_rate": 87.1,
-  "expectancy_r": 0.326,
-  "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-18"
+  "status": "WEAK",
+  "n": 247,
+  "win_rate": 45.7,
+  "expectancy_r": 0.316,
+  "window": "2020-01-01..2023-12-31",
+  "run_date": "2026-09-10"
  },
  {
   "source": "strategy",
