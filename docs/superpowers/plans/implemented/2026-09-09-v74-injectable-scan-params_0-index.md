@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** `docs/superpowers/specs/2026-09-09-v74-injectable-scan-params-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-09-09-v74-injectable-scan-params-design.md`
 **Bump:** bot patch — pure refactor; `ScanParams.from_config()` reproduces today's behaviour exactly and no alert, chart or screen moves. Numbers resolved at close-out from VERSION.json.
 **Edge:** none (integrity) — the enabling half. Buys no edge itself; makes the decision surface addressable so v75 (search engine) and v76 (selection statistics) can find edge in it.
 
-**Goal:** Make every knob governing a trade-plan decision settable per evaluation, observable by the backtest harness, and safe to vary inside a process pool — so a knob the harness cannot see fails a test instead of silently wasting a pre-registered shot.
+**Closeout:** Complete. C2 records 33 replay blind spots; B4 preserved the documented live/replay gate divergence.\n\n**Goal:** Make every knob governing a trade-plan decision settable per evaluation, observable by the backtest harness, and safe to vary inside a process pool — so a knob the harness cannot see fails a test instead of silently wasting a pre-registered shot.
 
 **Architecture:** One frozen, picklable `ScanParams` dataclass in `swingbot/scan_params.py`, built by `from_config()` at the boundary and varied with `dataclasses.replace()`. It is threaded through the *shared* plan layer (`builders.py`, `levels.py`) that both the live scan and `replay_scenarios` already call, and the *duplicated* gating layer is collapsed into one pure `passes_gates(...)` both paths call, so parity holds structurally rather than by test.
 
