@@ -172,6 +172,12 @@ authorized the exact action.
 
 ## Completion standard
 
+For v74-style parameter searches, use `config.searchable_attrs()` only.
+`ScanParams` is frozen/picklable for process-pool safety; replay blind spots
+must be recorded in the observability test, never hidden by a grid change.
+Live scan and replay gating differ through OPEX and manual-scan behavior, so
+do not unify them without a separate behavior-change decision.
+
 Make focused, isolated changes that preserve module seams and surrounding code
 style. Run proportionate verification and report the actual command/result; do
 not claim a change works without evidence. For edits, finish with the concise
