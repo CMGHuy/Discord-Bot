@@ -13,6 +13,7 @@ import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, PageSpec } from '../../ui/data-table/data-table.types';
 import { DirectionArrow } from '../../ui/direction-arrow';
+import { DonutComponent } from '../../ui/donut';
 import { EmptyStateComponent } from '../../ui/empty-state';
 import { FilterBar, FilterChip, FilterChips } from '../../ui/filter-bar';
 import { Flash } from '../../ui/flash';
@@ -32,6 +33,7 @@ import { PlanLifecycleDiagram } from '../../ui/plan-lifecycle-diagram';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { Sparkline } from '../../ui/sparkline';
+import { ScatterComponent } from '../../ui/scatter';
 import { StatusCell, StatusCellRow } from '../../ui/status-cell';
 import { StatusIndicator } from '../../ui/status-indicator';
 
@@ -67,6 +69,7 @@ interface GalleryRow {
     ControlRow,
     DataTable,
     DirectionArrow,
+    DonutComponent,
     Drawer,
     EmptyStateComponent,
     FilterBar,
@@ -87,6 +90,7 @@ interface GalleryRow {
     SectionHead,
     Select,
     Sparkline,
+    ScatterComponent,
     StatusCell,
     StatusIndicator,
     TabBar,
@@ -300,6 +304,8 @@ interface GalleryRow {
       </sb-control-row>
       <sb-sparkline [points]="sparklinePoints" label="Trend" />
       <sb-histogram [bins]="histogramBins" />
+      <sb-donut [slices]="[{label: 'A', count: 3}, {label: 'B', count: 1}, {label: 'Absent', count: 0}]" />
+      <sb-scatter [points]="[{x: .2, y: 2, tone: 'pos'}, {x: 1, y: .4, tone: 'neg'}]" xLabel="MAE (R)" yLabel="MFE (R)" />
       <sb-line-chart [series]="lineChartSeries" />
       <sb-chart-container [loading]="false" [error]="null" [hasData]="true" [height]="200" caption="AAPL -- daily">
         <sb-trade-chart [data]="null" />
