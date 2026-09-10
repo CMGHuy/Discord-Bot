@@ -1,8 +1,15 @@
 # v69 — Double bottom / double top as a standalone strategy
 
 **Version:** ui 1.10.0 · bot 1.5.0
-**Bump:** bot minor (1.5.0 → 1.6.0)
+**Bump:** none — closed no-lift; strategy code was not merged
 **Edge:** volume
+
+**Closing outcome (2026-09-10):** The 12-cell TRAIN grid produced no
+qualifying configuration. The highest observed N was 18 (below 30), the best
+volume-off win rate was 40%, and volume confirmation left at most two evaluated
+trades. No scope was adopted and the one-shot VALIDATION budget was deliberately
+not spent. The implementation remains on branch
+`2026-08-30-v69-double-bottom-top-strategy`, unmerged from `main`.
 
 Add a twelfth entry to `STRATEGY_FUNCS`: a two-pivot reversal pattern that
 enters on the **neckline break**, not on the second touch. It generates its own

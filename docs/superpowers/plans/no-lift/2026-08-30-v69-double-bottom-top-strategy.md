@@ -5,8 +5,15 @@
 > `superpowers:executing-plans` to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-**Bump:** bot minor — resolved at close-out from VERSION.json.
+**Bump:** none — closed no-lift; strategy code was not merged.
 **Edge:** volume
+
+**Closing outcome (2026-09-10):** DB6's 12-cell TRAIN grid yielded zero
+qualifying configurations. No `STRATEGY_GATES` scope was adopted, DB8
+VALIDATION was deliberately not spent, and DB9 was therefore skipped. The
+implementation is retained only on branch
+`2026-08-30-v69-double-bottom-top-strategy`; it was not merged to `main`.
+See `docs/superpowers/results/2026-08-30-v69-double-pattern-train.md`.
 
 **Goal:** Ship a twelfth strategy that enters on a double-bottom or double-top
 neckline break, and measure whether it earns a scope.
