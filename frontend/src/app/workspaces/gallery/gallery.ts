@@ -13,6 +13,7 @@ import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, PageSpec, RowContext } from '../../ui/data-table/data-table.types';
 import { DirectionArrow } from '../../ui/direction-arrow';
+import { DonutComponent } from '../../ui/donut';
 import { EmptyStateComponent } from '../../ui/empty-state';
 import { Figure, FigureStrip } from '../../ui/figure';
 import { FilterBar, FilterChip, FilterChips } from '../../ui/filter-bar';
@@ -37,6 +38,7 @@ import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { SegmentOption, Segmented } from '../../ui/segmented';
 import { Sparkline } from '../../ui/sparkline';
+import { ScatterComponent } from '../../ui/scatter';
 import { Status } from '../../ui/status';
 import { StatusCell, StatusCellRow } from '../../ui/status-cell';
 import { StatusIndicator } from '../../ui/status-indicator';
@@ -89,6 +91,7 @@ interface ContractRow {
     ControlRow,
     DataTable,
     DirectionArrow,
+    DonutComponent,
     Drawer,
     EmptyStateComponent,
     Figure,
@@ -114,6 +117,7 @@ interface ContractRow {
     SectionHead,
     Segmented,
     Select,
+    ScatterComponent,
     Sparkline,
     Status,
     StatusCell,
@@ -404,6 +408,8 @@ interface ContractRow {
       </sb-control-row>
       <sb-sparkline [points]="sparklinePoints" label="Trend" />
       <sb-histogram [bins]="histogramBins" />
+      <sb-donut [slices]="[{label: 'A', count: 3}, {label: 'B', count: 1}, {label: 'Absent', count: 0}]" />
+      <sb-scatter [points]="[{x: .2, y: 2, tone: 'pos'}, {x: 1, y: .4, tone: 'neg'}]" xLabel="MAE (R)" yLabel="MFE (R)" />
       <sb-line-chart [series]="lineChartSeries" />
       <sb-chart-container [loading]="false" [error]="null" [hasData]="true" [height]="200" caption="AAPL -- daily">
         <sb-trade-chart [data]="null" />

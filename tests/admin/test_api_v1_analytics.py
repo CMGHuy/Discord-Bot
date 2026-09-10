@@ -92,7 +92,11 @@ def test_performance_top_level_shape(seed, logged_in):
 def test_calibration_shape(seed, logged_in):
     seed()
     assert_shape(logged_in.get("/api/v1/analytics/calibration").get_json(),
-                 {"deciles": list, "tiers": list, "drift": list})
+                 {"deciles": list, "levels": list, "drift": list})
+
+
+def test_exit_quality_rejects_unknown_parameters(logged_in):
+    assert logged_in.get("/api/v1/analytics/exit-quality?from=2026-01-01").status_code == 400
 
 
 def test_plans_shape(seed, logged_in):

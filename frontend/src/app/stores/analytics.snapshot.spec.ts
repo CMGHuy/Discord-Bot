@@ -174,6 +174,10 @@ describe('AnalyticsStore — the snapshot', () => {
     backend
       .expectOne('/api/v1/analytics/journal')
       .flush({ digest: [], lessons: [], entries_n: 0 });
+    backend.expectOne('/api/v1/analytics/exit-quality').flush({
+      exit_reasons: [], hold_by_outcome: {}, efficiency: { bins: [], n: 0, median: null },
+      mae: { bins: [], n: 0, median: null }, scatter: [], coverage: {}, min_cell_n: 0,
+    });
   }
 
   it('asks for the snapshot at all — the whole point of this task', () => {
@@ -256,8 +260,8 @@ describe('AnalyticsStore — the snapshot', () => {
         { key: 'Monday', n: 2, wins: 1, losses: 1, win_rate: 50, expectancy_r: 0.1, avg_r: 0.1, profit_factor: 1.1, total_pnl: 20 },
       ],
     } });
-    expect(store.directionHistogram()).toEqual([{ label: 'Long (n=6)', count: 66.7 }, { label: 'Short (n=0)', count: 0 }]);
-    expect(store.dowHistogram().map((bin) => bin.label)).toEqual(['Monday (n=2)', 'Tuesday (n=0)', 'Wednesday (n=5)', 'Thursday (n=0)', 'Friday (n=0)', 'Saturday (n=0)', 'Sunday (n=0)']);
+    expect(store.directionHistogram()).toEqual([{ label: 'Long (n=6)', count: 66.7 }, { label: 'Short (n=0 — below 0, rate withheld)', count: 0 }]);
+    expect(store.dowHistogram().map((bin) => bin.label)).toEqual(['Monday (n=2)', 'Tuesday (n=0 — below 0, rate withheld)', 'Wednesday (n=5)', 'Thursday (n=0 — below 0, rate withheld)', 'Friday (n=0 — below 0, rate withheld)', 'Saturday (n=0 — below 0, rate withheld)', 'Sunday (n=0 — below 0, rate withheld)']);
   });
 });
 

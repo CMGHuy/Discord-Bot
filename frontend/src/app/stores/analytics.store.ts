@@ -13,6 +13,7 @@ import { routeRequest } from '../routing/route-request';
 import { Observable } from 'rxjs';
 import {
   AnalyticsCalibration,
+  AnalyticsExitQuality,
   AnalyticsDerived,
   AnalyticsJournal,
   AnalyticsPerformance,
@@ -91,16 +92,14 @@ export interface DecileRow {
 }
 
 export interface TierRow {
-  tier: string;
+  level: number;
   n: number;
   win_rate: number | null;
   expectancy_r: number | null;
-  expected_band: string;
   /** Three-valued on purpose. `null` means "not enough live data to judge"
    *  (n < 10), which is a completely different statement from `false`
    *  ("judged, and it missed its band"). Rendering them the same way would
    *  turn "we don't know yet" into "it is broken". */
-  ok: boolean | null;
 }
 
 export interface DriftRow {
@@ -288,6 +287,7 @@ export interface BreakdownRow {
   avg_r: number | null;
   profit_factor: number | null;
   total_pnl: number | null;
+  total_r: number | null;
 }
 
 
@@ -308,7 +308,7 @@ export const BREAKDOWN_DIMENSIONS = [
   { value: 'direction', label: 'Direction' },
   { value: 'dow', label: 'Day of week' },
   { value: 'month', label: 'Month' },
-  { value: 'tier', label: 'Tier' },
+  // "tier" was retired from aggregate.DIMENSIONS; it would 400 if selected.
   { value: 'badge', label: 'Badge' },
   { value: 'source', label: 'Source' },
 ] as const;
@@ -346,6 +346,7 @@ function toBreakdownRows(raw: unknown[]): BreakdownRow[] {
       avg_r: snapNumber(row['avg_r']),
       profit_factor: snapNumber(row['profit_factor']),
       total_pnl: snapNumber(row['total_pnl']),
+      total_r: snapNumber(row['total_r']),
     }];
   });
 }
@@ -357,11 +358,18 @@ const DIRECTION_ORDER: readonly [string, string][] = [
 ];
 const DOW_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
 
-function zeroFilledHistogram(rows: BreakdownRow[], order: readonly (readonly [string, string])[]): HistogramBin[] {
+export function rateOrWithheld(n: number, rate: number | null | undefined, floor: number): { count: number; withheld: boolean } {
+  if (n < floor || rate == null) return { count: 0, withheld: true };
+  return { count: rate, withheld: false };
+}
+
+function zeroFilledHistogram(rows: BreakdownRow[], order: readonly (readonly [string, string])[], floor: number): HistogramBin[] {
   const byKey = new Map(rows.map((row) => [row.key, row]));
   return order.map(([key, label]) => {
     const row = byKey.get(key);
-    return { label: `${label} (n=${row?.n ?? 0})`, count: row?.win_rate ?? 0 };
+    const n = row?.n ?? 0;
+    const value = rateOrWithheld(n, row?.win_rate, floor);
+    return { label: value.withheld ? `${label} (n=${n} — below ${floor}, rate withheld)` : `${label} (n=${n})`, count: value.count };
   });
 }
 /** One histogram bin. */
@@ -484,6 +492,7 @@ interface AnalyticsSlice {
   proposeResult: string | null;
   strategies: AnalyticsStrategies | null;
   calibration: AnalyticsCalibration | null;
+  exitQuality: AnalyticsExitQuality | null;
   plans: AnalyticsPlans | null;
   jobs: JobSummary[];
   /** The job whose progress is on screen — status plus a log tail. */
@@ -544,6 +553,7 @@ export const AnalyticsStore = signalStore(
     proposeResult: null,
     strategies: null,
     calibration: null,
+    exitQuality: null,
     plans: null,
     jobs: [],
     job: null,
@@ -554,7 +564,7 @@ export const AnalyticsStore = signalStore(
     launchError: null,
   }),
 
-  withComputed(({ performance, strategies, calibration, plans, jobs, job, snapshot, breakdown,
+  withComputed(({ performance, strategies, calibration, plans, jobs, job, snapshot, breakdown, exitQuality,
                  journal }) => ({
     /* -- SR50: the snapshot's own figures ------------------------------- */
 
@@ -562,6 +572,8 @@ export const AnalyticsStore = signalStore(
      *  snapshot up to an hour old and rebuilds on demand past that, so "these
      *  numbers are from 09:15" is a real thing to know. */
     snapshotBuiltAt: computed(() => snapText(snapshot()?.built_at)),
+    /** Served by the backend: the SPA never owns the suppression threshold. */
+    minCellN: computed(() => exitQuality()?.min_cell_n ?? 0),
 
     profitFactor: computed(() => snapNumber(snapshot()?.overall?.['profit_factor'])),
     sharpe: computed(() => snapNumber(snapshot()?.overall?.['sharpe'])),
@@ -589,6 +601,8 @@ export const AnalyticsStore = signalStore(
           .filter((value): value is number => value !== null),
       ),
     ),
+    strategyContribution: computed(() =>
+      ((snapshot()?.by?.['strategy'] ?? []) as { key: string; n: number; total_r: number | null }[])),
 
     /** The chosen dimension's rows, busiest group first — `stats_by` already
      *  sorts by trade count descending, which is the order every table in this
@@ -607,12 +621,12 @@ export const AnalyticsStore = signalStore(
     directionHistogram: computed<HistogramBin[]>(() =>
       zeroFilledHistogram(
         toBreakdownRows((snapshot()?.by?.['direction'] ?? []) as unknown[]),
-        DIRECTION_ORDER,
+        DIRECTION_ORDER, exitQuality()?.min_cell_n ?? 0,
       )),
     dowHistogram: computed<HistogramBin[]>(() =>
       zeroFilledHistogram(
         toBreakdownRows((snapshot()?.by?.['dow'] ?? []) as unknown[]),
-        DOW_ORDER.map((day) => [day, day] as const),
+        DOW_ORDER.map((day) => [day, day] as const), exitQuality()?.min_cell_n ?? 0,
       )),
     /* -- performance --------------------------------------------------- */
 
@@ -809,7 +823,7 @@ export const AnalyticsStore = signalStore(
     /* -- calibration --------------------------------------------------- */
 
     deciles: computed<DecileRow[]>(() => (calibration()?.deciles ?? []) as DecileRow[]),
-    tiers: computed<TierRow[]>(() => (calibration()?.tiers ?? []) as TierRow[]),
+    tiers: computed<TierRow[]>(() => (calibration()?.levels ?? []) as TierRow[]),
     drift: computed<DriftRow[]>(() => (calibration()?.drift ?? []) as DriftRow[]),
 
     /* -- tuning -------------------------------------------------------- */
@@ -915,6 +929,14 @@ export const AnalyticsStore = signalStore(
                 : error.message,
           }),
       });
+      if (store.exitQuality() === null) {
+        api.analyticsExitQuality().subscribe({
+          next: (exitQuality) => patchState(store, { exitQuality }),
+          // The section degrades independently; do not turn an offline API
+          // into an unhandled route-mount error.
+          error: () => {},
+        });
+      }
     };
 
     const loadStrategies = (): void => {
@@ -1027,6 +1049,12 @@ export const AnalyticsStore = signalStore(
             next: (snapshot) => patchState(store, { snapshot, snapshotError: null }),
             error: (error: ApiError) => patchState(store, { snapshotError: error.code === 'unavailable' ? 'The admin is not responding.' : error.message }),
           });
+          if (store.exitQuality() === null) {
+            api.analyticsExitQuality().subscribe({
+              next: (exitQuality) => patchState(store, { exitQuality }),
+              error: () => {},
+            });
+          }
         },
         next: (performance) => patchState(store, { performance, loading: false, error: null }),
         error: fail,

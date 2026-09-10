@@ -28,6 +28,7 @@ import {
   Streaks,
   StrategyRow,
   TierRow,
+  rateOrWithheld,
 } from '../../stores/analytics.store';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
@@ -48,6 +49,8 @@ import { Histogram, HistogramBin } from '../../ui/histogram';
 import { MetricChip } from '../../ui/metric-chip';
 import { PaginationComponent } from '../../ui/pagination';
 import { Sparkline } from '../../ui/sparkline';
+import { ExitQualitySectionComponent } from './sections/exit-quality';
+import { StrategyContributionComponent } from './sections/strategy-contribution';
 import {
   CONFIDENCE_COLUMNS,
   breakdownColumns,
@@ -138,6 +141,8 @@ interface ProposalView extends ProposalRow {
     PaginationComponent,
     SectionHead,
     Async,
+    ExitQualitySectionComponent,
+    StrategyContributionComponent,
   ],
   template: `
     <sb-section-head heading="Analytics">
@@ -408,6 +413,7 @@ interface ProposalView extends ProposalRow {
             <sb-histogram [bins]="store.dowHistogram()" [max]="100" [referenceLine]="store.winRate()" />
           </sb-panel>
         </div>
+        <sb-exit-quality [data]="store.exitQuality()" />
         </sb-async>
 
         <!-- SR55. NOT a rebuilt Journal page: spec v14 Decision 4 collapsed
@@ -582,7 +588,7 @@ interface ProposalView extends ProposalRow {
                       <tr>
                         <th scope="row">{{ strategy }}</th>
                         @for (horizon of heatmap.horizons; track horizon) {
-                          <td class="num cell" [style.--heat]="heat(strategy, horizon)">
+                          <td class="num cell" [attr.data-heat-cell]="true" [class.thin]="heatWithheld(strategy, horizon)" [style.--heat]="heat(strategy, horizon)">
                             {{ heatLabel(strategy, horizon) }}
                           </td>
                         }
@@ -593,6 +599,7 @@ interface ProposalView extends ProposalRow {
               </div>
             </sb-panel>
           }
+          <sb-strategy-contribution [rows]="store.strategyContribution()" />
         </sb-async>
       }
 
@@ -646,7 +653,7 @@ interface ProposalView extends ProposalRow {
             />
           </sb-panel>
 
-          <sb-panel heading="Tier calibration" [flush]="true">
+          <sb-panel heading="Confidence-level calibration" [flush]="true">
             <!-- SR61. stats.html:19 and :21. Both numbers verified against code
                  before being written down: the A/B/C SCORE bands are
                  quality.py:_tier (>=75, 50-74, <50) and the win-rate bands
@@ -1277,7 +1284,7 @@ export class Analytics {
       { data: this.store.calibration, loading: this.store.loading, error: this.store.error },
       {
         isEmpty: (data) =>
-          data.deciles.length === 0 && data.tiers.length === 0 && data.drift.length === 0,
+          data.deciles.length === 0 && data.levels.length === 0 && data.drift.length === 0,
       },
     ),
   );
@@ -1397,9 +1404,7 @@ export class Analytics {
     attach(CONFIDENCE_COLUMNS, { level: this.levelCell() }),
   );
 
-  protected readonly tierColumns = computed(() =>
-    attach(TIER_COLUMNS, { tier: this.tierCell(), ok: this.bandCell() }),
-  );
+  protected readonly tierColumns = computed(() => TIER_COLUMNS(this.store.minCellN()));
 
   protected readonly driftColumns = computed(() =>
     attach(DRIFT_COLUMNS, { drift_alert: this.decayCell() }),
@@ -1417,7 +1422,7 @@ export class Analytics {
   protected readonly strategyKeys = allKeys(STRATEGY_COLUMNS);
   protected readonly confidenceKeys = allKeys(CONFIDENCE_COLUMNS);
   protected readonly decileKeys = allKeys(DECILE_COLUMNS);
-  protected readonly tierKeys = allKeys(TIER_COLUMNS);
+  protected readonly tierKeys = allKeys(TIER_COLUMNS(0));
   protected readonly driftKeys = allKeys(DRIFT_COLUMNS);
   protected readonly gridKeys = allKeys(GRID_COLUMNS);
   protected readonly pastJobsKeys = allKeys(PAST_JOBS_COLUMNS);
@@ -1428,7 +1433,7 @@ export class Analytics {
   protected readonly confidencePage = createClientPage(() => this.store.byConfidence(), () => this.perPageFor('confidence')());
   protected readonly decileKey = (row: { decile: string }) => row.decile;
   protected readonly decilePage = createClientPage(() => this.store.deciles(), () => this.perPageFor('decile')());
-  protected readonly tierKey = (row: TierRow) => row.tier;
+  protected readonly tierKey = (row: TierRow) => String(row.level);
   protected readonly tierPage = createClientPage(() => this.store.tiers(), () => this.perPageFor('tier')());
   protected readonly driftKey = (row: DriftRow) => row.strategy;
   protected readonly driftPage = createClientPage(() => this.store.drift(), () => this.perPageFor('drift')());
@@ -1466,7 +1471,7 @@ export class Analytics {
   }));
 
   protected readonly breakdownColumns = computed(() =>
-    breakdownColumns(this.store.breakdownLabel()),
+    breakdownColumns(this.store.breakdownLabel(), this.store.minCellN()),
   );
   protected readonly breakdownKeys = allKeys(breakdownColumns(''));
   protected readonly breakdownKey = (row: BreakdownRow) => row.key;
@@ -1539,14 +1544,21 @@ export class Analytics {
    *  different. */
   protected heat(strategy: string, horizon: string): number {
     const cell = this.heatIndex().get(`${strategy}|${horizon}`);
-    if (!cell || cell.win_rate === null) return 0;
-    return Math.max(0, Math.min(1, cell.win_rate / 100));
+    if (!cell || this.heatWithheld(strategy, horizon)) return 0;
+    const rate = cell.win_rate;
+    return rate === null ? 0 : Math.max(0, Math.min(1, rate / 100));
   }
 
   protected heatLabel(strategy: string, horizon: string): string {
     const cell = this.heatIndex().get(`${strategy}|${horizon}`);
     if (!cell || cell.win_rate === null) return ABSENT;
+    if (this.heatWithheld(strategy, horizon)) return `n=${cell.n ?? 0}`;
     return `${cell.win_rate.toFixed(0)}% (${cell.n ?? 0})`;
+  }
+
+  protected heatWithheld(strategy: string, horizon: string): boolean {
+    const cell = this.heatIndex().get(`${strategy}|${horizon}`);
+    return rateOrWithheld(cell?.n ?? 0, cell?.win_rate, this.store.minCellN()).withheld;
   }
 
   /* -- tuning ----------------------------------------------------------- */

@@ -442,8 +442,19 @@ export interface AnalyticsStrategies {
 
 export interface AnalyticsCalibration {
   deciles: unknown[];
-  tiers: unknown[];
+  levels: unknown[];
   drift: unknown[];
+}
+
+/** `GET /analytics/exit-quality`: all-time journal exit diagnostics. */
+export interface AnalyticsExitQuality {
+  exit_reasons: unknown[];
+  hold_by_outcome: unknown;
+  efficiency: { bins: unknown[]; n: number; median: number | null };
+  mae: { bins: unknown[]; n: number; median: number | null };
+  scatter: unknown[];
+  coverage: Record<string, { non_null: number; total: number; pct: number }>;
+  min_cell_n: number;
 }
 
 export interface AnalyticsPlans {

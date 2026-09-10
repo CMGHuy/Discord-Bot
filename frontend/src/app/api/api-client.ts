@@ -6,6 +6,7 @@ import { SKIP_ROUTE_REFRESH } from './interceptors';
 
 import {
   AnalyticsCalibration,
+  AnalyticsExitQuality,
   AnalyticsJournal,
   AnalyticsPerformance,
   AnalyticsPlans,
@@ -208,6 +209,10 @@ export class ApiClient {
 
   analyticsCalibration(): Observable<AnalyticsCalibration> {
     return this.http.get<AnalyticsCalibration>(`${this.base}/analytics/calibration`);
+  }
+
+  analyticsExitQuality(): Observable<AnalyticsExitQuality> {
+    return this.http.get<AnalyticsExitQuality>(`${this.base}/analytics/exit-quality`);
   }
 
   analyticsRegistry(): Observable<AnalyticsRegistry> {
