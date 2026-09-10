@@ -49,6 +49,7 @@ import { Histogram, HistogramBin } from '../../ui/histogram';
 import { MetricChip } from '../../ui/metric-chip';
 import { PaginationComponent } from '../../ui/pagination';
 import { Sparkline } from '../../ui/sparkline';
+import { ExitQualitySectionComponent } from './sections/exit-quality';
 import {
   CONFIDENCE_COLUMNS,
   breakdownColumns,
@@ -139,6 +140,7 @@ interface ProposalView extends ProposalRow {
     PaginationComponent,
     SectionHead,
     Async,
+    ExitQualitySectionComponent,
   ],
   template: `
     <sb-section-head heading="Analytics">
@@ -409,6 +411,7 @@ interface ProposalView extends ProposalRow {
             <sb-histogram [bins]="store.dowHistogram()" [max]="100" [referenceLine]="store.winRate()" />
           </sb-panel>
         </div>
+        <sb-exit-quality [data]="store.exitQuality()" />
         </sb-async>
 
         <!-- SR55. NOT a rebuilt Journal page: spec v14 Decision 4 collapsed
