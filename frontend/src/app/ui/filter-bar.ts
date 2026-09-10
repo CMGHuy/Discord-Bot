@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import { Button } from './button';
-import { ControlRow } from './layout';
 
 /** One choice in a filter chip row. */
 export interface FilterChip {
@@ -25,30 +24,35 @@ export interface FilterChip {
 @Component({
   selector: 'sb-filter-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow],
+  imports: [Button],
   template: `
-    <sb-control-row>
+    <div class="bar">
       <ng-content />
 
       @if (activeCount() > 0) {
-        <span class="active num">{{ activeCount() }} active</span>
-        <button sb-button variant="ghost" type="button" (click)="cleared.emit()">
-          Clear all
-        </button>
+        <span class="summary"><span class="active num">{{ activeCount() }} active@if (shown() !== null && total() !== null) {<span class="of">{{ ' · ' }}{{ shown() }} of {{ total() }}</span>}</span><button sb-button variant="ghost" type="button" (click)="cleared.emit()">Clear all</button></span>
       }
-    </sb-control-row>
+    </div>
   `,
   styles: `
-    :host { display: block; padding: var(--space-10) 0; }
-    .active { margin-left: auto; color: var(--text-secondary); font-size: var(--text-table); }
+    :host { display: block; padding: var(--space-10) 0; container: filter-bar / inline-size; }
+    .bar { display: flex; align-items: flex-end; align-content: flex-start; flex-wrap: wrap; gap: var(--space-10); }
+    .summary { display: inline-flex; align-items: center; gap: var(--space-8); margin-left: auto; }
+    .active { color: var(--text-secondary); font-size: var(--text-table); }
+    .of { color: var(--text-muted); }
+    @container filter-bar (max-width: 639px) { .bar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; } .summary { grid-column: 1 / -1; justify-content: space-between; margin-left: 0; } }
   `,
 })
 export class FilterBar {
   readonly activeCount = input(0);
+  readonly shown = input<number | null>(null);
+  readonly total = input<number | null>(null);
   readonly cleared = output<void>();
 }
 
 /**
+ * Deprecated (v80 D4): use `sb-segmented` for a single-select toggle.
+ *
  * A single-select chip row — Trades' status filter.
  *
  * **Chips, not tabs**, and the distinction is deliberate: tabs over statuses
