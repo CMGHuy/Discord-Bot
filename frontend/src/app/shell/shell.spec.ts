@@ -91,12 +91,19 @@ describe('shell navigation', () => {
     expect(order).toEqual(['header', 'sb-market-lane', 'sb-names-lane', 'main']);
   });
 
-  it('refetches the tape when a scan event arrives', () => {
+  it('loads the tape once on construction', () => {
+    // This only proves the constructor's one-time `this.tape.load()` --
+    // NOT that `Shell` reacts to a `scan` event, which it does not do and
+    // does not need to: `TapeStore` owns that refetch itself
+    // (`withHooks.onInit` in `tape.store.ts`), independent of whether the
+    // shell exists. That behaviour -- a SECOND load caused by nothing but a
+    // `scan` event, with no explicit `load()` call in the test -- is
+    // regression-tested in `tape.store.spec.ts`, where the effect actually
+    // lives. Asserting an `events.emit('scan')` here would be tautological:
+    // `tapeStub.load` is already satisfied by construction before any emit.
     const fixture = TestBed.createComponent(Shell);
     fixture.detectChanges();
-    events.emit('scan');
-    fixture.detectChanges();
-    expect(tapeStub.load).toHaveBeenCalled();
+    expect(tapeStub.load).toHaveBeenCalledTimes(1);
   });
 
   it('shows an accessible, non-interactive overlay inside the pending workspace', () => {

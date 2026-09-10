@@ -1,8 +1,10 @@
+import { ApplicationRef, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Subject, of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ApiClient } from '../api/api-client';
+import { EventStream } from '../api/event-stream';
 import { TapeResponse } from '../api/models';
 import { PreferencesStore } from './preferences.store';
 import { TapeStore } from './tape.store';
@@ -100,5 +102,45 @@ describe('TapeStore', () => {
 
     expect(store.rows().map((r) => r.symbol)).toEqual(['B']);
     expect(store.asOf()).toBe('fresh');
+  });
+
+  it('refetches when a scan event arrives', () => {
+    // The class comment's central claim -- "this store subscribes to the
+    // `scan` event... and refetches" -- gets its own regression here. Every
+    // other test in this file drives `load()` directly and never proves the
+    // `withHooks.onInit` effect reacts to a *second* `scan` beyond the one
+    // it fires on construction, so a real EventStream fake is needed: one
+    // whose `changes('scan')` signal this test can bump itself.
+    const scanCounter = signal(0);
+    const api = { tape: vi.fn().mockReturnValue(
+      of({ as_of: '2026-09-09T14:35:00+00:00', rows: [] })) };
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: api },
+        { provide: EventStream, useValue: { changes: () => scanCounter.asReadonly() } },
+        { provide: PreferencesStore, useValue: {
+            values: () => ({ 'tape.symbols': ['NVDA'] }),
+            update: () => undefined,
+            isLoaded: () => true,
+          } },
+      ],
+    });
+
+    TestBed.inject(TapeStore);
+    TestBed.inject(ApplicationRef).tick();
+    // The onInit effect's first run is the initial load -- same as every
+    // other test in this file implicitly relies on. Zoneless change
+    // detection (needed below, to flush the effect a second time on the
+    // `scan` bump) does not auto-flush the first run either, hence the
+    // explicit `tick()` here too.
+    expect(api.tape).toHaveBeenCalledTimes(1);
+
+    scanCounter.update((n) => n + 1);
+    TestBed.inject(ApplicationRef).tick();
+
+    // The real assertion: a SECOND call, caused by nothing but the `scan`
+    // counter moving -- no `store.load()` call anywhere in this test.
+    expect(api.tape).toHaveBeenCalledTimes(2);
   });
 });
