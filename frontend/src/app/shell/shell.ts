@@ -13,6 +13,7 @@ import { ApiClient } from '../api/api-client';
 import { EventStream } from '../api/event-stream';
 import { ConnectionStore } from '../stores/connection.store';
 import { PreferencesStore } from '../stores/preferences.store';
+import { TapeStore } from '../stores/tape.store';
 import { ViewportService } from '../ui/breakpoints';
 import { Button } from '../ui/button';
 import { Select, SelectOption } from '../ui/form-controls';
@@ -22,6 +23,8 @@ import { RouteLoadingService } from '../routing/route-loading.service';
 import { RouteRefreshService } from '../routing/route-refresh.service';
 import { SessionStore } from '../stores/session.store';
 import { ConnectionStatus } from './connection-status';
+import { MarketLane } from './tape/market-lane';
+import { NamesLane } from './tape/names-lane';
 import { ToastHost } from './toast-host';
 
 interface NavEntry {
@@ -56,7 +59,7 @@ const ZOOM_DEFAULT = 100;
   selector: 'sb-shell',
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive, ConnectionStatus, ToastHost,
-    Button, Icon, ProfileMenu, Select,
+    Button, Icon, ProfileMenu, Select, MarketLane, NamesLane,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',
@@ -71,6 +74,7 @@ export class Shell {
   private readonly viewport = inject(ViewportService);
   protected readonly routeLoading = inject(RouteLoadingService);
   private readonly routeRefresh = inject(RouteRefreshService);
+  private readonly tape = inject(TapeStore);
 
   /**
    * Three groups, because eight flat entries stopped communicating.
@@ -234,6 +238,12 @@ export class Shell {
     // only meaningful once authenticated, and the shell is the thing that
     // exists exactly when that is true.
     this.preferences.load();
+
+    // Populates the tape before the first scan tick. `TapeStore` itself owns
+    // the `scan` refetch (`withHooks` in `tape.store.ts`) -- this is not a
+    // second subscription, just the initial load so Lane B is not empty on
+    // first paint.
+    this.tape.load();
 
     // Reading the counter inside the effect is the subscription. The first
     // run is also the initial load, so the load path and the refetch path

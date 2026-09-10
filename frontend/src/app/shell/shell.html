@@ -147,6 +147,12 @@
       <sb-profile-menu (signedOut)="logout()" />
     </header>
 
+    <!-- Between the topbar and the workspace, inside .main: the sidebar keeps
+         its full height and the tape tracks the content column's width. Both
+         lanes survive at phone width, compressed — spec v77. -->
+    <sb-market-lane />
+    <sb-names-lane />
+
     <main class="workspace" [class.route-pending]="routeLoading.visible()" [attr.aria-busy]="routeLoading.visible() ? 'true' : null">
       <div class="workspace-content" [attr.inert]="routeLoading.visible() ? '' : null"><router-outlet /></div>
       @if (routeLoading.visible()) {

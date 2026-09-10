@@ -1,23 +1,102 @@
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideZonelessChangeDetection, signal } from '@angular/core';
+import {
+  Signal,
+  WritableSignal,
+  provideZonelessChangeDetection,
+  signal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { Subject } from 'rxjs';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { EventStream } from '../api/event-stream';
 import { RouteLoadingService } from '../routing/route-loading.service';
+import { TapeStore } from '../stores/tape.store';
 import { Shell } from './shell';
 
+/** Same fake as `chart.store.spec.ts`/`connection.store.spec.ts` -- a counter
+ *  per event name, bumped by name rather than replayed as an object, matching
+ *  `EventStream.changes()`. `state`/`connect`/`lastSeq`/`raised` are here
+ *  because the shell also wires `ConnectionStore` and `RouteRefreshService`,
+ *  both real and calling straight through to this fake. */
+class FakeEventStream {
+  private readonly counters = new Map<string, WritableSignal<number>>();
+  private readonly raisedSubject = new Subject<string>();
+  readonly raised = this.raisedSubject.asObservable();
+  readonly lastSeq = signal<number | null>(null);
+
+  private counterFor(name: string): WritableSignal<number> {
+    let counter = this.counters.get(name);
+    if (!counter) {
+      counter = signal(0);
+      this.counters.set(name, counter);
+    }
+    return counter;
+  }
+
+  changes(name: string): Signal<number> {
+    return this.counterFor(name).asReadonly();
+  }
+
+  state(): 'connecting' | 'live' | 'degraded' {
+    return 'live';
+  }
+
+  connect(): void {
+    /* no-op */
+  }
+
+  emit(name: string): void {
+    this.counterFor(name).update((n) => n + 1);
+    this.raisedSubject.next(name);
+  }
+}
+
 describe('shell navigation', () => {
+  let events: FakeEventStream;
+  let tapeStub: {
+    load: ReturnType<typeof vi.fn>;
+    visible: WritableSignal<boolean>;
+    rows: WritableSignal<unknown[]>;
+    asOf: WritableSignal<string | null>;
+  };
+
   beforeEach(() => {
+    events = new FakeEventStream();
+    tapeStub = {
+      load: vi.fn(),
+      visible: signal(false),
+      rows: signal([]),
+      asOf: signal(null),
+    };
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
         provideRouter([]),
         provideHttpClient(),
         provideHttpClientTesting(),
+        { provide: EventStream, useValue: events },
+        { provide: TapeStore, useValue: tapeStub },
       ],
     });
+  });
+
+  it('places both lanes between the topbar and the workspace', () => {
+    const fixture = TestBed.createComponent(Shell);
+    fixture.detectChanges();
+    const main = fixture.nativeElement.querySelector('.main') as HTMLElement;
+    const order = Array.from(main.children).map((el) => el.tagName.toLowerCase());
+    expect(order).toEqual(['header', 'sb-market-lane', 'sb-names-lane', 'main']);
+  });
+
+  it('refetches the tape when a scan event arrives', () => {
+    const fixture = TestBed.createComponent(Shell);
+    fixture.detectChanges();
+    events.emit('scan');
+    fixture.detectChanges();
+    expect(tapeStub.load).toHaveBeenCalled();
   });
 
   it('shows an accessible, non-interactive overlay inside the pending workspace', () => {
