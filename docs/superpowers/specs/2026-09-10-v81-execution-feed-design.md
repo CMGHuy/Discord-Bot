@@ -105,7 +105,7 @@ the remainder.
 
 | Trigger | Message |
 |---|---|
-| Alert, stop entry | **PLACE** · `BUY STOP 102.50 · 2,439 sh (risk $10,000)` · `STOP 98.40` · `TP1 LIMIT 106.00 · 1,219 sh (50%)` · `RUNNER 1,220 sh → TP2 110.00 / trail 3.0×ATR — stop moves are pinged here` · `Stop → entry once price reaches 104.20` · `Cancel if: not triggered by the close of ≈ Wed 17 Sep (5 sessions), or price reaches 98.40 first` |
+| Alert, stop entry | **PLACE** · `BUY STOP 102.50 · 2,439 sh (risk $10,000)` · `STOP 98.40` · `TP1 LIMIT 106.00 · 1,219 sh (50%)` · `RUNNER 1,220 sh → TP2 110.00 / trail 3.0×ATR — stop moves are pinged here` · `Stop → entry once price reaches 104.20` · `Cancel if: not triggered by the close of ≈ Thu 17 Sep (5 sessions), or price reaches 98.40 first` |
 | Alert, market entry | **BUY AT MARKET ~102.50**, then the same bracket lines |
 | Alert, heat / cluster / kill switch | **PLACE** with the D1 warning line above the orders |
 | Alert, not logged | **DO NOT PLACE** — unmet requirements or already open, then the levels for reference |
@@ -150,28 +150,40 @@ write plans. Two new fields and one acknowledgement path:
 
 - `TradePlanV2.notified_stop: float | None = None` — the stop last **delivered**.
   `None` reads as `stop_loss` (the ticket delivered it).
-- `TradePlanV2.notified_status: str | None = None` — `None` means untracked
-  (every plan persisted before v81; never resent). When the manager records a
-  CLOSED or CANCELLED transition it sets `"UNSENT"`; the acknowledgement sets
-  the terminal status.
+- `TradePlanV2.pending_notice: dict | None = None` — the latest FILLED, CANCEL
+  or EXIT instruction not yet delivered, stored whole as `{"transition",
+  "detail", "at"}`; `None` when nothing is owed, which includes every plan
+  persisted before v81 (never resent). A later notice replaces an unsent
+  earlier one: an EXIT supersedes an undelivered FILLED. *(Planning finding,
+  2026-09-10: the first draft's `notified_status="UNSENT"` marker could not
+  rebuild a pre-TP1 exit — those closes append nothing to `legs_realized`, so
+  the exit price exists only in the event — and left FILLED with no re-send.)*
 
 **Stop rule.** After `_step()` in a **regular** session, for a plan still ACTIVE
-or PARTIAL whose tick produced no `be_moved`, `tp1_partial` or `closed` event:
-if `|effective_stop(plan) − last_told| ≥ TRAIL_NOTIFY_MIN_R × |entry_price −
+or PARTIAL whose tick produced no stop or notice event:
+if `|resting_stop(plan) − last_told| ≥ TRAIL_NOTIFY_MIN_R × |entry_price −
 stop_loss|`, emit `PlanEvent(plan_id, "stop_moved", {"old", "new", "r_moved",
 "effective": "now" | "next_session"})`. Break-even (1R) and the runner floor
 (above 1R) always clear the threshold, so a failed `be_moved` or `tp1_partial`
-send is re-sent as `stop_moved` on the next tick. `effective_stop`
-(`plan_types.py`) is the stop to leave resting, not today's `_active_stop`.
+send is re-sent as `stop_moved` on the next tick. `resting_stop` (new, in
+`plan_manager.py`) is the stop to leave resting, not today's `_active_stop`. It
+is `effective_stop` except for a PARTIAL row persisted before v39 with no
+`working_stop`, where it returns the runner floor `_step_partial` falls back
+to — `effective_stop` would return the original risk stop there, the display
+bug v73 removed *(planning finding)*. The threshold is clamped to `[0.01, 1]`
+in `plan_manager.trail_notify_min_r()`: Field `min`/`max` bind only the admin
+API (`admin/api_v1/system.py:154`), not `.env` loading *(planning finding)*.
 
-**Terminal sweep.** Each tick, plans with `notified_status == "UNSENT"` whose
-terminal `status_history[-1]["at"]` is within the last 5 calendar days re-emit
-their terminal event, rebuilt from `status_history[-1]["reason"]` and
-`legs_realized`. Older unsent plans log one warning and are marked with their
-terminal status (not resent).
+**Notice sweep.** Each tick, before stepping, every plan whose `pending_notice`
+was queued within the last 5 calendar days re-emits it unchanged; an older one
+logs one warning and is dropped. Re-emitted events never pass through
+`_on_event`. When `trade_monitor` has no open trade — exactly the state after
+the last position closes — it runs the sweep alone (`run_notice_sweep`), so
+that EXIT is re-sent too *(planning finding: `trade_monitor` returns before the
+manager tick when nothing is open, `loops.py:531-533`)*.
 
 **Acknowledgement.** `notify_plan_events` returns the deliveries it completed —
-`(plan_id, "stop", value)` or `(plan_id, "status", value)`. `trade_monitor`
+`Delivery(plan_id, "stop", price)` or `Delivery(plan_id, "notice", transition)`. `trade_monitor`
 (`loops.py:579-584`) passes them to a new module function
 `plan_manager.ack_notified(deliveries)`, which reloads the manager's own store,
 sets the fields and saves — in the same loop, after the send, before the next
@@ -182,14 +194,15 @@ raised (that copy then keeps its notification — the hand-back rule
 
 **Consequences, all intended.** A failed acknowledgement write re-sends — a
 duplicate, never a loss. The first tick after deploy sends one **MOVE STOP** per
-open plan whose `effective_stop` already differs from its `stop_loss` by the
+open plan whose `resting_stop` already differs from its `stop_loss` by the
 threshold: a catch-up for stops that were never pinged. Per-event `try` blocks
 stop one failure from dropping the batch; repeated failures log at most one
 warning per plan per 15 minutes.
 
 **Closed events are stamped in `poll()`**, where `regular` is known
 (`plan_manager.py:186-192`): `detail["session"] = "regular" | "extended"` and
-`detail["notified_stop"] = last_told`. `_close_runner` and `_close_extended` are
+`detail["notified_stop"] = last_told` and `detail["bot_stop"]` (the stop the
+bot held); `tp1_partial` events gain `detail["working_stop"]`. `_close_runner` and `_close_extended` are
 not edited, which keeps the v79 overlap to `poll()`.
 
 `_on_event` ignores `stop_moved`: no trade-log bookkeeping changes.
@@ -201,11 +214,11 @@ not edited, which keeps the v79 overlap to `poll()`.
 | `swingbot/core/presentation/instructions.py` (new, no `discord` import) | `Instruction(verb, ticker, direction, lines, reason)`; `ticket_for(plan, sizing, blocked)`; `instruction_for(plan, event)` — D1-D4 | `plan_view`, `plan_numbers_for_display`, `tokens` |
 | `swingbot/core/scanning/execution_embeds.py` (new) | `render(instruction) -> discord.Embed` via `ui.apply_chrome`; the only Discord-aware piece | `instructions`, `presentation` |
 | `alert_embeds.build_simple_alert` | becomes a wrapper over `ticket_for` + `render` for items with a v2 plan; an item without one (`PLAN_ENGINE_V2` not `on`) keeps today's body unchanged; `scan_run.py:849` unchanged | the two above |
-| `plan_manager.py` | stop rule, terminal sweep, `"UNSENT"` marking, closed-event stamps, `ack_notified` | `effective_stop`, new fields |
+| `plan_manager.py` | stop rule, notice sweep, `pending_notice`, event stamps, `resting_stop`, `Delivery`, `ack_notified`, `run_notice_sweep` | `effective_stop`, `breakeven_trigger`, new fields |
 | `lifecycle_embeds.notify_plan_events` | feed send + silent history copy, per-event `try`, returns deliveries; fills stop posting to `DISCORD_CHANNEL_TRADES_ID` | `execution_embeds`, `silence()` |
 | `loops.trade_monitor` | passes deliveries to `ack_notified` | the two above |
-| `plan_types.TradePlanV2` | `notified_stop`, `notified_status` | — |
-| `config.py` | `Field("TRAIL_NOTIFY_MIN_R", …, "Plan Engine v2", default="0.25")`, hot-reloaded; rejects values outside `(0, 1]` — above 1R a failed break-even send would never be re-sent (D5) | — |
+| `plan_types.py` | `TradePlanV2.notified_stop`, `TradePlanV2.pending_notice`; `breakeven_trigger(plan, entry)`, which `_step_active` and the ticket share | — |
+| `config.py` | `Field("TRAIL_NOTIFY_MIN_R", …, "Plan Engine v2", default="0.25")`, hot-reloaded; clamped to `[0.01, 1]` in `plan_manager.trail_notify_min_r()` — above 1R a failed break-even send would never be re-sent (D5) | — |
 
 `pyramid_add` keeps today's rendering and does not enter the feed
 (`PYRAMIDING_ENABLED=false`); see "Out of scope".
@@ -222,7 +235,7 @@ reads tokens. If v80 renames a token used here, the renderer part rebases.
 
 - **P1** — `TradePlanV2` fields, config Field, load test for an old row.
 - **P2** — `instructions.py` and `tests/presentation/test_instructions.py`.
-- **P3** — `plan_manager.py`: stop rule, sweep, `"UNSENT"`, stamps,
+- **P3** — `plan_manager.py`: stop rule, notice sweep, `pending_notice`, stamps,
   `ack_notified`; tests under `tests/planning/`.
 - **P4** — `execution_embeds.py`, `build_simple_alert` wrapper; the shape tests
   in `tests/scanning/test_simple_alerts.py` rewritten to the ticket.
@@ -234,8 +247,9 @@ reads tokens. If v80 renames a token used here, the renderer part rebases.
 
 ## Parallelisation
 
-- **Group 1 (parallel):** P1, P2 — disjoint files; P2 reads event `detail` keys
-  and existing plan fields named in this spec, no symbol P1 introduces.
+- **Sequential:** P1 before P2 — the ticket reads `breakeven_trigger`, which P1
+  adds to `plan_types.py` *(planning finding: the break-even formula was inline
+  in `_step_active`; one copy, not two)*.
 - **Group 2 (parallel):** P3, P4, P6 — disjoint files. P3 consumes P1's fields;
   P4 and P6 consume P2's `Instruction`; none consumes another's output.
 - **Sequential:** P3 also waits on v79 merging (shared `plan_manager.py`). P5
@@ -259,11 +273,12 @@ risk stop.
 - An unacknowledged stop re-emits next tick; an acknowledged one does not.
 - A new manager on a persisted, current `notified_stop` does not re-ping.
 - The deploy catch-up emits once per moved open plan, then stops after ack.
-- `"UNSENT"` terminal plans are re-emitted until acknowledged; `None` never is;
-  an `"UNSENT"` plan older than 5 days is marked, warned once, not resent.
+- A `pending_notice` is re-emitted until acknowledged; `None` never is; one
+  older than 5 days is dropped with one warning; with no open trade,
+  `trade_monitor` still runs the sweep.
 - Closed events carry `session` and `notified_stop`; extended closes say `extended`.
 - **Parity:** the existing scenarios in `test_plan_manager_partial.py` replay
-  with `notified_stop`/`notified_status` set to arbitrary values and yield
+  with `notified_stop`/`pending_notice` set to arbitrary values and yield
   identical exits, fills, legs and R. `lifecycle.py` has no diff in this plan.
 
 **Routing.** The feed pings and the history copy is silent; an unset or raising
