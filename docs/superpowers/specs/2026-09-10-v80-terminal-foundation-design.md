@@ -3,7 +3,7 @@
 **Version:** ui 1.12.0 · bot 1.6.3
 **Bump:** ui minor, bot minor
 **Edge:** none (integrity)
-**Depends on:** v77 merged to `main` (it adds the `danger-icon` variant to `ui/button.ts`, which D4 redesigns).
+**Depends on:** v77's code merged to `main` (it adds the `danger-icon` variant to `ui/button.ts`, which D4 redesigns). Check: `git merge-base --is-ancestor 24688ff4 main`.
 
 The first of three specs (see "Follow-on specs"). It changes tokens, shared
 components and the Discord chart palette. It changes **no workspace code**:
@@ -107,8 +107,9 @@ adjacent CVD ΔE ≥ 8, normal-vision ΔE ≥ 15, contrast ≥ 3:1):
 
 `#4c8dff` · `#c97a22` · `#a868e0` · `#b08c14` · `#1a9db3` · `#7076e8`
 
-Worst adjacent pair: CVD 11.6, normal 15.9. Every series is ≥ 12.1 normal-vision
-ΔE from `--pos` and ≥ 15.6 from `--neg`.
+Worst adjacent pair: CVD 11.6, normal 15.9. Every series is ≥ 15.6
+normal-vision ΔE from both `--pos` and `--neg`. **Every ΔE in this spec is
+OKLab distance ×100**, the validator's metric.
 
 - **No longer pinned to accent / info / warn.** C's lavender info fails the
   chroma floor and sits 14.9 from the blue accent. Amber fails the lightness
@@ -117,6 +118,11 @@ Worst adjacent pair: CVD 11.6, normal 15.9. Every series is ≥ 12.1 normal-visi
 - **Six, not eight.** Eight hues that avoid both the gain-green and loss-red
   families inside this band do not validate. A seventh series folds into
   "Other" (`ui/line-chart.ts` `SERIES` becomes length 6).
+- **One colour-difference metric for every gate.** `chart-palette.spec.ts`
+  computes CIE76 today, under which the old pink resistance line (`#ec407a`)
+  sits 15.4 from loss and passes, although it reads as a loss (5.9 in OKLab).
+  Both the admin gate and D5's Python gate therefore use OKLab ×100, with the
+  thresholds unchanged.
 - Two candidates were rejected, and the reason is recorded so nobody reintroduces
   them: a pink series (10.8 from loss) and an olive one (12.6 from gain). They
   pass a bare ΔE 10 gate but read as loss and gain on a P&L chart.
@@ -143,6 +149,10 @@ Worst adjacent pair: CVD 11.6, normal 15.9. Every series is ≥ 12.1 normal-visi
 - **Layout responsiveness is per component, via container queries.** A filter
   bar in a narrow drawer stacks exactly as it does on a phone. Touch sizing stays
   global because it follows the pointer, not the box.
+- **Two exceptions, found in planning:** `sb-control-row` and `sb-panel-grid`
+  switch at the 640px **viewport** breakpoint. Both sit inside flex and grid
+  layouts, where declaring an inline-size container removes their intrinsic
+  width and collapses them.
 
 ## D4 — The canonical component set
 
@@ -157,7 +167,7 @@ Migration deletes it.
 | `sb-select`, `sb-text-input`, `sb-checkbox` | Restyle to hairlines, `--text-control` | 44px, 16px text |
 | **`sb-segmented`** *(new)* | One toggle: options with optional counts, `value` / `valueChange`, arrow keys, roving tabindex, `aria-pressed` | Scrolls horizontally, never clips |
 | `sb-filter-chips` | Deprecated in favour of `sb-segmented` | — |
-| `sb-filter-bar` | Restyle; always shows "N filters · X of Y" and Clear when filters are on (existing contract) | Stacks to a 2-column grid below 640px (container) |
+| `sb-filter-bar` | Restyle; shows "N active · X of Y" and Clear when filters are on. `controls.spec.ts` pins the "N active" wording, so it stays. | Stacks to a 2-column grid below 640px (container) |
 
 **Tables**
 
@@ -174,7 +184,7 @@ mockup that departed from them.
 |---|---|---|
 | Direction | **One triangle, nothing else:** ▲ in `--pos` for long, ▼ in `--neg` for short, no "L"/"S" letter. Accessible name "Long (bullish)" / "Short (bearish)". | `sb-direction-arrow`, unchanged |
 | Plan | **One column,** `entry → target / stop`, target in `--pos`, stop in `--neg`. A PENDING row shows the trigger with a dashed underline. Default column sets never split it into separate Entry, Stop and Target columns; the column picker may still offer them. | `sb-plan-cell`, unchanged layout |
-| P&L | **One cell, both figures:** `+4.20% (+9.80 €)`, coloured by sign, flashing when the value changes, money in the account currency via `money()`. `—` when there is nothing to price. | **`sb-pnl-cell`** *(new)*, extracted from the identical templates at `trades.ts:327` and `dashboard.ts:474` |
+| P&L | **One cell, both figures:** `+4.20% (+9.80 €)`, coloured by sign, flashing when the value changes, money in the account currency via `money()`. `—` when there is nothing to price; the percentage alone when the amount is unknown (no position size), never `(—)`. | **`sb-pnl-cell`** *(new)*, extracted from the identical templates at `trades.ts:327` and `dashboard.ts:474` |
 | Confidence | **Text:** `Lv4 · 78`, the level coloured by `--quality-1..5`, the score in `--text-secondary`. No meter. `Lv4` alone when there is no score. | `sb-confidence-cell`, unchanged |
 | Held | **Always includes minutes:** `4d 2h 15m`, `4d 0h 5m`, `3h 0m`, `45m`. Today `held()` omits zero parts ("3h", "4d 15m"). Open rows stay live from `elapsedHours(opened_at, clock)`; the ambient clock ticks every 30s. | `format.ts` `held()` |
 
@@ -186,9 +196,9 @@ mockup that departed from them.
 | **`sb-figure`**, **`sb-figure-strip`** *(new)* | One headline figure (label, value, unit, tone, decimals, one sub-line) in a hairline-divided strip of up to 4 per row | 2 per row below 640px |
 | `sb-metric-card`, `sb-metric-chip` | Deprecated in favour of `sb-figure` | — |
 | `sb-panel` | Restyle: hairline, heading uses `.sb-label` | — |
-| **`sb-panel-grid`** *(new)* | Two track widths only, `narrow` (220px) and `wide` (320px), replacing six hand-picked ones | One column below 640px |
+| **`sb-panel-grid`** *(new)* | Two track widths only, `narrow` (220px) and `wide` (320px), replacing six hand-picked ones | One column below the 640px viewport breakpoint |
 | `sb-tab-bar` | Restyle; scrolls on overflow with an edge fade | 44px tabs |
-| `sb-control-row` | Restyle; `stacked` becomes automatic below 640px (container) | — |
+| `sb-control-row` | Restyle; `stacked` becomes automatic below the 640px viewport breakpoint | — |
 | `sb-drawer` | Restyle; height `100dvh` | Full width |
 | `sb-confirm-dialog` | Restyle | — |
 
@@ -196,7 +206,7 @@ mockup that departed from them.
 
 | Component | Change | Phone / touch |
 |---|---|---|
-| `sb-chip` | Restyle: good / warn / info / neutral as outline or tint, mono caps, 2px | 28px min-height |
+| `sb-chip` | Restyle: good / warn / info / neutral as outline or tint, mono, 2px. Capitals by default through a new `caps` input, which quality chips turn off so `Lv4` never renders as `LV4`. | 28px min-height |
 | **`sb-status`** *(new)* | Trade status whose marker **shape** carries state: pending outline, active filled, partial half-filled, closed muted. Label in text tokens, never colour alone. | — |
 | `sb-confidence-cell`, `sb-quality-chip` | Restyle only; content per "Table cell contracts" | — |
 | `sb-empty-state` | Restyle: dashed hairline box; optional `reason` input ("Result: 0" / "Awaiting data"), matching `sb-async`'s two empties | — |
@@ -225,16 +235,21 @@ register variables; none carries its own spacing.
 target and stop, MACD and signal, RSI, Keltner, volume profile, path) are
 re-derived from the six series under three rules:
 
-1. Roles that can share the price pane get distinct series.
+1. Roles that can share the price pane get distinct colours.
 2. Indicator panes may reuse series.
 3. No overlay sits within ΔE 10 of gain or loss. This moves today's pink
    resistance line (`#ec407a`) out of the loss family.
 
-The plan enumerates the co-occurrence and assigns each role.
+Planning enumerated the co-occurrence: the plan's D5 task carries the role table.
+Six series cannot give every price-pane role its own colour, so Keltner bands
+take `--text-muted` and volume profile takes `--info`. Both are D1 tokens, which
+gate 5 allows. The closest price-pane pair is 10.2 apart, so no role needs a
+dash style to stay distinct.
 
-- **Stray literals move into `chart_style.py`.** Today there is one hex in
-  `portfolio_charts.py`, one hex and one named colour in `trade_chart.py`, and
-  one named colour in `analytics_charts.py`.
+- **Stray literals move into `chart_style.py`:** three hex values in
+  `portfolio_charts.py`, one hex and one named colour in `trade_chart.py`, one
+  named colour in `analytics_charts.py`, and `edgecolors="white"` at
+  `chart_drawing.py:180`.
 - **Delete `swingbot/admin/static/tokens.css`.** The page it styled was deleted
   in Release B; it survives as the other side of a sync test.
   `tests/charts/test_chart_theme.py` reads `frontend/src/styles/tokens.css`
@@ -264,12 +279,14 @@ cell contract. A new component is not done until the gallery shows it.
    - `--radius` and `--radius-chip` are 2px.
 2. **`contrast.spec.ts`:** every text/surface pair ≥ 4.5:1, now including
    `--accent` as text and `--on-accent` on `--accent-fill`; `--text-faint`
-   still documented as non-text.
+   still documented as non-text. `confidence-cell.spec.ts` pins `--info` to
+   `#46c2ff`; it moves to `#b39ddb` with D1.
 3. **`chart-palette.spec.ts`:**
    - six series;
    - the chart-1/2/3 pin test removed;
-   - the OKLCH band and chroma checks ported alongside the existing ΔE
-     checks (≥ 10 from `--pos`/`--neg`, adjacent ≥ 15).
+   - its ΔE switched from CIE76 to OKLab ×100, thresholds unchanged (≥ 10 from
+     `--pos`/`--neg`, adjacent ≥ 15);
+   - the OKLCH band (0.48–0.67) and chroma (≥ 0.10) checks added.
 4. **One spec file per new or changed component** (so plan tasks stay
    file-disjoint), covering:
    - `sb-segmented`: keys, counts, pressed state, no clipping;
@@ -280,13 +297,15 @@ cell contract. A new component is not done until the gallery shows it.
    - `sb-tab-bar` overflow scroll;
    - `sb-section-head` slots;
    - `sb-panel-grid` tracks;
-   - `sb-pnl-cell`: percent and amount together, sign colour, `—` when unpriced;
+   - `sb-chip` `caps` input;
+   - `sb-pnl-cell`: percent and amount together, sign colour, `—` when unpriced,
+     percentage alone when the amount is unknown;
    - `held()` (`format.spec.ts`): minutes always present, including `3h 0m` and `4d 0h 5m`.
 5. **`tests/charts/test_chart_theme.py`:**
    - `THEME` matches the admin tokens;
    - no colour literal in `swingbot/core/charts/` outside `chart_style.py`;
    - every colour constant is a D1 token or a D2 series;
-   - none within ΔE 10 of gain/loss (bar the gain/loss constants themselves).
+   - none within OKLab ΔE 10 of gain/loss (bar the gain/loss constants themselves).
 6. **`tests/presentation/test_tokens.py`:** level 3 and blocked are `#9EA2AD`.
 7. **The existing gates stay green unchanged:** `primitives.spec.ts`, `register.spec.ts`,
    `async-coverage.spec.ts`, `numeric.spec.ts`, `elevation.spec.ts`,
@@ -301,7 +320,9 @@ cell contract. A new component is not done until the gallery shows it.
 ## Follow-on specs (recorded here, specified later)
 
 Each gets its own spec and plan when its turn comes. The decisions below were
-taken in this brainstorm and bind them.
+taken in this brainstorm and bind them. Because both are still to be written
+from this document, **this spec stays at the top level of `specs/` at
+close-out**; only the plan moves to `implemented/`.
 
 **Migration.**
 - **Every workspace moves onto D4.** Trade detail adopts `sb-section-head`; the
@@ -341,27 +362,32 @@ taken in this brainstorm and bind them.
 
 ## Parallelisation
 
-- **Sequential first: tokens (D1–D3 in `tokens.css` and `styles.css`).**
-  Every component consumes them.
-- **Group A (parallel, after tokens), one task per file:**
-  - existing components: `button.ts` (only once v77 has merged), `form-controls.ts`,
-    `chip.ts`, `layout.ts`, `data-table.ts`, `pagination.ts`, `confidence-cell.ts`,
-    `empty-state.ts`, `section-head.ts`, `filter-bar.ts`, `format.ts` (`held()`);
+- **Sequential first, in this order:**
+  1. chart series (D2: the `tokens.css` series block, `line-chart.ts`,
+     `chart-palette.spec.ts`);
+  2. colour tokens (D1), which must come second or the old chart-1/2/3 pin test
+     goes red the moment accent and info change;
+  3. type, shape and touch (D3, `tokens.css` and `styles.css`).
+
+  Every component consumes all three.
+- **Group A (parallel, after the three token tasks), one task per file:**
+  - existing components: `button.ts` (only once v77's code is in `main`),
+    `form-controls.ts`, `chip.ts`, `layout.ts`, `data-table.ts`, `pagination.ts`,
+    `confidence-cell.ts`, `empty-state.ts`, `section-head.ts`, `filter-bar.ts`,
+    `format.ts` (`held()`);
   - new files: `segmented.ts`, `figure.ts`, `panel-grid.ts`, `status.ts`, `hint.ts`,
     `pnl-cell.ts`.
 
   Each task carries its own spec file, which is why gate 4 is per component.
   `controls.spec.ts` is not edited, so it cannot become a shared file.
 - **Group B (parallel with everything frontend):** Discord charts (D5) —
-  `chart_style.py`, the four stray modules, `presentation/tokens.py`, the two
+  `chart_style.py`, the five stray modules, `presentation/tokens.py`, the two
   Python test files, deleting `admin/static/tokens.css`, plus
   `scripts/dev/testrun.py`'s escalation prefix and `docs/features/features-admin.md`.
   No frontend file.
-- **Sequential:**
-  - chart series (`tokens.css` D2 block, `line-chart.ts`, `chart-palette.spec.ts`)
-    after the tokens task, since it edits the same file;
+- **Sequential last:**
   - the gallery after Group A (it consumes every component);
-  - the browser walk and the full-suite task last.
+  - the browser walk, the full-suite task, then release.
 
 ## Risks
 
@@ -370,11 +396,19 @@ taken in this brainstorm and bind them.
   until Migration. Migration is queued directly behind this spec.
 - **Thin margins on the overlay surface.** Muted and accent text sit at 4.85:1;
   `contrast.spec.ts` fails the build if a later tweak crosses 4.5.
-- **More overlay roles than series.** The price pane has more colour roles than
-  six series. Rule 1 in D5 may force some roles to share a series with a
-  distinguishing dash style; the plan decides per role.
+- **Tight overlay separation on the price pane.** The closest pair is 10.2,
+  just over the gate. A new overlay role will likely need a dash style or a pane
+  of its own rather than a seventh colour.
+- **Unit tests cannot see container queries.** Verified in planning (jsdom
+  28.1.0): jsdom ignores rules inside `@container` blocks but keeps the rules
+  after them, and Angular's emulated encapsulation scopes `@container`
+  selectors normally. Unit tests therefore assert phone behaviour through
+  class-based rules; the gate-8 browser walk is the only check of the container
+  queries themselves.
 - **Discord followers see new chart images** the moment the bot deploys.
-- **The v77 merge conflict is not this spec's work, but it gates it.** Merging
-  v77 into `main` conflicts in `frontend/src/app/shell/shell.ts`'s `imports:`
-  line only. Resolve to `Button, Icon, ProfileMenu, MarketLane, NamesLane,`
-  (keep `Select` out; the text-size fix removed it).
+- **v77's release reached `main` without its code.** `main` carries
+  `release(ui): 1.13.0 -- live tape` and v77's plan in `implemented/`, but none
+  of v77's feature commits. Whoever merges v77 hits one conflict, in
+  `frontend/src/app/shell/shell.ts`'s `imports:` line. Resolve it to
+  `Button, Icon, ProfileMenu, MarketLane, NamesLane,`, keeping `Select` out
+  (the text-size fix removed it).
