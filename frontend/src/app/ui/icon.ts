@@ -32,6 +32,7 @@ export const ICON_NAMES = [
   'profile',
   'signout',
   'menu',
+  'trash',
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -63,6 +64,9 @@ const PATHS: Record<IconName, string> = {
   // A door with an arrow leaving it.
   signout: 'M6 2H3v12h3 M9.5 5.5 12 8l-2.5 2.5 M12 8H6',
   menu: 'M2 4h12 M2 8h12 M2 12h12',
+  // A bin: lid, body, and two staves. Stroke-only on the same 16x16 grid at
+  // 1.5 width as the rest of the set, so it reads as one hand with them.
+  trash: 'M2.5 4.5h11 M6 4.5V3h4v1.5 M4 4.5l.8 9h6.4l.8-9 M6.5 7v4 M9.5 7v4',
 };
 
 @Component({

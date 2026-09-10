@@ -50,4 +50,8 @@ describe('Icon', () => {
       expect(ICON_NAMES, `missing icon: ${needed}`).toContain(needed);
     }
   });
+
+  it('renders the trash icon', () => {
+    expect(ICON_NAMES).toContain('trash');
+  });
 });
