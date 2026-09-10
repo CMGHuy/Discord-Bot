@@ -34,6 +34,8 @@ chart image look different (`bot minor`), before any screen is migrated.
 - **Every screen first-class on a phone.**
 - **Discord charts adopt the same palette.**
 - **Three specs:** this Foundation, then Migration, then Phone screens.
+- **Table cells keep today's content conventions** (spec review): see D4's
+  "Table cell contracts".
 
 ## Measured starting point (2026-09-10)
 
@@ -50,6 +52,7 @@ chart image look different (`bot minor`), before any screen is migrated.
 | Phone tables | automatic card mode on every table, with no sort control |
 | Tab bar at 390px | Analytics clips "Tuning" and "Plans" with no way to reach them |
 | Hover-only `title` tooltips | 35 across 19 files |
+| P&L cell | the same `% (amount)` template copied in Trades and Dashboard; Ticker detail shows % only |
 
 Already clean, and kept that way: no raw `<button>` outside `ui/`, one raw
 control (`settings-tab.ts:344`), one computed colour literal (`versions.ts:383`).
@@ -163,6 +166,18 @@ Migration deletes it.
 | `sb-data-table` | Restyle: `.sb-label` headers, mono tabular numbers, `--row-h` rows, accent sort arrow | **Card mode is replaced.** Below 640px (container) it keeps the table, pins the first column, scrolls sideways, and renders its own sort select above the table. `cardsAt` becomes a test hook for the pinned mode. |
 | `sb-pagination` | Restyle | 44px buttons and inputs |
 
+**Table cell contracts.** Binding on every table, from the human partner's spec
+review (2026-09-10). Four of the five are today's conventions, kept against a
+mockup that departed from them.
+
+| Cell | Renders | Component |
+|---|---|---|
+| Direction | **One triangle, nothing else:** ▲ in `--pos` for long, ▼ in `--neg` for short, no "L"/"S" letter. Accessible name "Long (bullish)" / "Short (bearish)". | `sb-direction-arrow`, unchanged |
+| Plan | **One column,** `entry → target / stop`, target in `--pos`, stop in `--neg`. A PENDING row shows the trigger with a dashed underline. Default column sets never split it into separate Entry, Stop and Target columns; the column picker may still offer them. | `sb-plan-cell`, unchanged layout |
+| P&L | **One cell, both figures:** `+4.20% (+9.80 €)`, coloured by sign, flashing when the value changes, money in the account currency via `money()`. `—` when there is nothing to price. | **`sb-pnl-cell`** *(new)*, extracted from the identical templates at `trades.ts:327` and `dashboard.ts:474` |
+| Confidence | **Text:** `Lv4 · 78`, the level coloured by `--quality-1..5`, the score in `--text-secondary`. No meter. `Lv4` alone when there is no score. | `sb-confidence-cell`, unchanged |
+| Held | **Always includes minutes:** `4d 2h 15m`, `4d 0h 5m`, `3h 0m`, `45m`. Today `held()` omits zero parts ("3h", "4d 15m"). Open rows stay live from `elapsedHours(opened_at, clock)`; the ambient clock ticks every 30s. | `format.ts` `held()` |
+
 **Panels, cards and headings**
 
 | Component | Change | Phone / touch |
@@ -183,13 +198,13 @@ Migration deletes it.
 |---|---|---|
 | `sb-chip` | Restyle: good / warn / info / neutral as outline or tint, mono caps, 2px | 28px min-height |
 | **`sb-status`** *(new)* | Trade status whose marker **shape** carries state: pending outline, active filled, partial half-filled, closed muted. Label in text tokens, never colour alone. | — |
-| `sb-confidence-cell`, `sb-quality-chip` | One visual: 5-segment meter in the quality ramp plus an `LV` label | — |
+| `sb-confidence-cell`, `sb-quality-chip` | Restyle only; content per "Table cell contracts" | — |
 | `sb-empty-state` | Restyle: dashed hairline box; optional `reason` input ("Result: 0" / "Awaiting data"), matching `sb-async`'s two empties | — |
 | **`sb-hint`** *(new)* | Info popover that opens on hover, focus **or tap** and closes on Escape or outside tap. Screens adopt it in Phone screens. | Tap target 44px |
 
-Restyle only, via tokens: `sb-status-cell`, `sb-status-indicator`, `sb-plan-cell`,
-direction arrow, `sb-row-link`, column picker, chart chrome (`chart-theme.ts`).
-Every component reads the register variables; none carries its own spacing.
+Restyle only, via tokens: `sb-status-cell`, `sb-status-indicator`, `sb-row-link`,
+column picker, chart chrome (`chart-theme.ts`). Every component reads the
+register variables; none carries its own spacing.
 
 ## D5 — Discord charts
 
@@ -237,8 +252,8 @@ The plan enumerates the co-occurrence and assigns each role.
 ## D6 — The UI gallery is the reference
 
 `workspaces/gallery/gallery.ts` (`/ui`) renders every D4 component in every
-variant and state, in both registers. A new component is not done until the
-gallery shows it.
+variant and state, in both registers, including one table row exercising every
+cell contract. A new component is not done until the gallery shows it.
 
 ## Acceptance gates
 
@@ -264,7 +279,9 @@ gallery shows it.
    - `sb-data-table` below 640px: table not cards, sticky first column, sort select;
    - `sb-tab-bar` overflow scroll;
    - `sb-section-head` slots;
-   - `sb-panel-grid` tracks.
+   - `sb-panel-grid` tracks;
+   - `sb-pnl-cell`: percent and amount together, sign colour, `—` when unpriced;
+   - `held()` (`format.spec.ts`): minutes always present, including `3h 0m` and `4d 0h 5m`.
 5. **`tests/charts/test_chart_theme.py`:**
    - `THEME` matches the admin tokens;
    - no colour literal in `swingbot/core/charts/` outside `chart_style.py`;
@@ -289,6 +306,9 @@ taken in this brainstorm and bind them.
 **Migration.**
 - **Every workspace moves onto D4.** Trade detail adopts `sb-section-head`; the
   four headline treatments become `sb-figure`; the six toggles become `sb-segmented`.
+- **Cell contracts are applied everywhere.** Trades, Dashboard and Ticker detail
+  render P&L through `sb-pnl-cell`, so Ticker detail gains the amount. Default
+  column sets use the single Plan cell.
 - **Deprecated APIs are deleted:** `sb-metric-card`, `sb-metric-chip`,
   `sb-filter-chips`, the `segment`/`chip` variants and the `actions` slot.
   `sb-empty-state`'s `reason` becomes required.
@@ -303,6 +323,7 @@ taken in this brainstorm and bind them.
   - grid minimum widths outside `sb-panel-grid`;
   - off-scale `@media` widths (720, 1000);
   - hand-built empty states;
+  - hand-built P&L templates;
   - detail views with no register.
 
   Each workspace task empties its entries; the last asserts every allowlist is empty.
@@ -325,8 +346,9 @@ taken in this brainstorm and bind them.
 - **Group A (parallel, after tokens), one task per file:**
   - existing components: `button.ts` (only once v77 has merged), `form-controls.ts`,
     `chip.ts`, `layout.ts`, `data-table.ts`, `pagination.ts`, `confidence-cell.ts`,
-    `empty-state.ts`, `section-head.ts`, `filter-bar.ts`;
-  - new files: `segmented.ts`, `figure.ts`, `panel-grid.ts`, `status.ts`, `hint.ts`.
+    `empty-state.ts`, `section-head.ts`, `filter-bar.ts`, `format.ts` (`held()`);
+  - new files: `segmented.ts`, `figure.ts`, `panel-grid.ts`, `status.ts`, `hint.ts`,
+    `pnl-cell.ts`.
 
   Each task carries its own spec file, which is why gate 4 is per component.
   `controls.spec.ts` is not edited, so it cannot become a shared file.
