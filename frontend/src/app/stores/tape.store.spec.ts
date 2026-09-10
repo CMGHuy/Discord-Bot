@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ApiClient } from '../api/api-client';
 import { EventStream } from '../api/event-stream';
-import { TapeResponse } from '../api/models';
+import { Preferences, TapeResponse } from '../api/models';
 import { PreferencesStore } from './preferences.store';
 import { TapeStore } from './tape.store';
 
@@ -142,5 +142,40 @@ describe('TapeStore', () => {
     // The real assertion: a SECOND call, caused by nothing but the `scan`
     // counter moving -- no `store.load()` call anywhere in this test.
     expect(api.tape).toHaveBeenCalledTimes(2);
+  });
+
+  it('fires exactly one tape request per toggle()', () => {
+    // Regression test: `toggle()` calls `load()` explicitly, but `load()`
+    // also reads `store.symbols()` (via `prefs.values()`) -- and the
+    // `onInit` effect's own call to `load()` made THAT read a tracked
+    // dependency of the effect too, so a real (signal-backed) preference
+    // write re-ran the effect a second time on top of `toggle()`'s own
+    // explicit call. Needs a genuine reactive `PreferencesStore` fake --
+    // every other test's `values: () => (...)` returns a fixed object and
+    // never actually changes, so it could not have caught this.
+    const prefs = signal<Preferences>({ 'tape.symbols': ['NVDA'] });
+    const api = { tape: vi.fn().mockReturnValue(
+      of({ as_of: '2026-09-09T14:35:00+00:00', rows: [] })) };
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: api },
+        { provide: EventStream, useValue: { changes: () => signal(0).asReadonly() } },
+        { provide: PreferencesStore, useValue: {
+            values: () => prefs(),
+            update: (fn: (current: Preferences) => Preferences) => prefs.update(fn),
+            isLoaded: () => true,
+          } },
+      ],
+    });
+
+    const store = TestBed.inject(TapeStore);
+    TestBed.inject(ApplicationRef).tick();
+    api.tape.mockClear(); // drop the onInit effect's own initial-load call
+
+    store.toggle('AMD');
+    TestBed.inject(ApplicationRef).tick();
+
+    expect(api.tape).toHaveBeenCalledTimes(1);
   });
 });

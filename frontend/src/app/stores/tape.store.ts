@@ -1,4 +1,4 @@
-import { computed, effect, inject } from '@angular/core';
+import { computed, effect, inject, untracked } from '@angular/core';
 import {
   patchState,
   signalStore,
@@ -92,7 +92,14 @@ export const TapeStore = signalStore(
       const scan = events.changes('scan');
       effect(() => {
         scan();
-        store.load();
+        // `load()` reads `store.symbols()` (transitively, through
+        // `prefs.values()`) -- an untracked read here keeps this effect's
+        // only dependency `scan`. Without `untracked`, a `toggle()`'s
+        // `prefs.update()` would ALSO re-run this effect (since the last run
+        // read `symbols()` as a side effect of calling `load()`), doubling up
+        // with `toggle()`'s own explicit `load()` call below: two requests
+        // for one click.
+        untracked(() => store.load());
       });
     },
   }),
