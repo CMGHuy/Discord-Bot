@@ -251,6 +251,13 @@
    faint text -- colouring both would spend two hues on one boolean. */
 .market-open { color: var(--pos); }
 
+/* SR76: tabular-nums so cycling 90/100/110/125 doesn't jiggle the topbar
+   width as the digit count changes; a fixed min-width for the same reason. */
+.zoom {
+  min-width: 4.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
 
 /* A column, not a row: the rail is 52px wide, so two versions side by side
    cannot fit there however they are spaced. */

@@ -130,13 +130,18 @@
         </span>
       }
 
-      <sb-select
+      <!-- SR76: one button, not a label + dropdown field, since the only
+           thing it ever does is step to the next size. -->
+      <button
+        sb-button
+        variant="ghost"
+        type="button"
         class="zoom"
-        label="Text"
-        [options]="zoomOptions"
-        [value]="zoom().toString()"
-        (valueChange)="setZoom(+$event)"
-      />
+        (click)="cycleZoom()"
+        [attr.aria-label]="'Text size ' + zoom() + '%. Click to change.'"
+      >
+        Aa {{ zoom() }}%
+      </button>
 
       <sb-connection-status
         [state]="connection.state()"
