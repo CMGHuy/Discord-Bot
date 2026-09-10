@@ -574,7 +574,7 @@ interface ContractRow {
     </sb-panel>
   `,
   styles: `
-    :host { display: grid; gap: var(--space-20); padding: var(--space-20); }
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); padding: var(--space-20); }
     h1 { margin: 0; font-size: var(--text-title); font-weight: 600; }
     sb-panel { display: block; }
 
