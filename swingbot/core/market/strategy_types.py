@@ -218,9 +218,11 @@ STRATEGY_GATES: dict[str, dict] = {
     "RSI": {"directions": ("bullish",)},
     # bullish-only: N=259 WR=81.1 ExpR=+0.071 excl=25% (train, PRE-v31 -- stale)
     "MA Ribbon": {"directions": ("bullish",)},
-    # bullish + {4w,6m,7m,8m,9m}: N=139 WR=82.0 ExpR=+0.086 excl=20%
-    # (train, PRE-v31 -- stale; v84 R10 re-derives this to 4w-only)
-    "VWAP": {"directions": ("bullish",), "horizons": ("4w", "6m", "7m", "8m", "9m")},
+    # v84 R11, CURRENT arithmetic (v2 + scale-out): the pre-v31 five-horizon
+    # mask was never re-derived after v31 replaced the fixed reward:risk table.
+    # 4w alone: N=68 WR=52.9 ExpR=+0.335. The dropped horizons were 6m 35.7
+    # (-0.078), 7m 40.0, 8m 38.5, 9m 11.1 (N=9, -0.519).
+    "VWAP": {"directions": ("bullish",), "horizons": ("4w",)},
     # bullish + {2m,3m}: N=273 WR=80.6 ExpR=+0.060 excl=32% (train, PRE-v31 -- stale)
     "Support/Resistance": {"directions": ("bullish",), "horizons": ("2m", "3m")},
     # bullish + {3m,4m,7m,8m,9m}: N=145 WR=83.4 ExpR=+0.094 excl=26% (train, PRE-v31 -- stale)

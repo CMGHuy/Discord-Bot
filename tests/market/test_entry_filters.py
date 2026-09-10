@@ -88,6 +88,27 @@ def test_break_retest_gated_to_short_horizons(monkeypatch, uptrend_df):
     assert not bull_6m.any() and not bear_6m.any()   # outside -> fully masked
 
 
+def test_vwap_gated_to_4w_only(monkeypatch, uptrend_df):
+    """v84 R11: VWAP narrowed to 4w. 6m/7m/8m/9m were all sub-floor under
+    current arithmetic (35.7/40.0/38.5/11.1), 9m at -0.519R."""
+    import swingbot.core.market.entry_filters as ef
+    from swingbot.core.market.strategy_types import STRATEGY_GATES
+
+    assert STRATEGY_GATES["VWAP"]["horizons"] == ("4w",)
+    assert STRATEGY_GATES["VWAP"]["directions"] == ("bullish",)
+
+    fired = pd.Series(True, index=uptrend_df.index)
+    monkeypatch.setitem(ef.ENTRY_FUNCS, "VWAP",
+                        lambda df, hk, params=None: (fired.copy(), fired.copy()))
+
+    bull_4w, bear_4w = ef.entries_for("VWAP", uptrend_df, "4w")
+    assert bull_4w.all()                 # inside the gate
+    assert not bear_4w.any()             # bearish still masked by directions
+
+    bull_9m, bear_9m = ef.entries_for("VWAP", uptrend_df, "9m")
+    assert not bull_9m.any() and not bear_9m.any()
+
+
 def _v_shape_down_then_flat():
     # Peak early (bar 350), decline to bar 470, small bounce at the end.
     # The swing HIGH precedes the swing LOW inside any recent window ->
