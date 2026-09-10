@@ -12,6 +12,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { ApiClient } from '../api/api-client';
 import { EventStream } from '../api/event-stream';
 import { ConnectionStore } from '../stores/connection.store';
+import { MarketIndexStore } from '../stores/market-index.store';
 import { PreferencesStore } from '../stores/preferences.store';
 import { TapeStore } from '../stores/tape.store';
 import { ViewportService } from '../ui/breakpoints';
@@ -74,6 +75,7 @@ export class Shell {
   protected readonly routeLoading = inject(RouteLoadingService);
   private readonly routeRefresh = inject(RouteRefreshService);
   private readonly tape = inject(TapeStore);
+  private readonly marketIndex = inject(MarketIndexStore);
 
   /**
    * Three groups, because eight flat entries stopped communicating.
@@ -245,6 +247,11 @@ export class Shell {
     // second subscription, just the initial load so Lane B is not empty on
     // first paint.
     this.tape.load();
+    // Same reasoning for Lane A (`MarketIndexStore` owns its own `scan`
+    // refetch) -- it now prices real indices through `/market/tape` rather
+    // than rendering a third-party iframe, so it needs the same "don't wait
+    // for the first scan tick" initial load Lane B always has.
+    this.marketIndex.load();
 
     // Reading the counter inside the effect is the subscription. The first
     // run is also the initial load, so the load path and the refetch path

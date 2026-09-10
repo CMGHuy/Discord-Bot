@@ -1,27 +1,30 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 
-const SYMBOLS = [
-  { proName: 'FOREXCOM:SPXUSD', title: 'S&P 500' },
-  { proName: 'FOREXCOM:NSXUSD', title: 'Nasdaq 100' },
-  { proName: 'FOREXCOM:DJI', title: 'Dow Jones' },
-  { proName: 'CBOE:VIX', title: 'VIX' },
-];
+import { MarketIndexStore } from '../../stores/market-index.store';
+import { num, pct } from '../../ui/format';
+
+/** Yahoo symbol -> the label the tile shows. `/market/tape` echoes back the
+ *  literal symbol it was asked to price (see `MarketIndexStore`), which is
+ *  never what a reader wants to see next to a price. */
+const INDEX_LABELS: Record<string, string> = {
+  '^GSPC': 'S&P 500',
+  '^NDX': 'Nasdaq 100',
+  '^DJI': 'Dow Jones',
+  '^VIX': 'VIX',
+};
 
 /**
- * Lane A — fixed market indices, from TradingView's ticker-tape widget.
+ * Lane A — fixed market indices (S&P 500, Nasdaq 100, Dow Jones, VIX).
  *
- * A third party in the shell, accepted deliberately: it is real-time, it costs
- * nothing to maintain, and it carries no swingbot data, which is exactly why
- * the iframe is tolerable here and would not be in Lane B. Its data cannot be
- * read out (cross-origin), which is the whole reason the tape has two lanes.
+ * First-party now: `MarketIndexStore` prices these through the same
+ * `/market/tape` batched-yfinance path Lane B (`NamesLane`) already uses, so
+ * this renders through the identical `tape.css` markup — one scroll speed,
+ * one dark-theme palette shared with the rest of the app, and a VIX reading
+ * this app actually controls, rather than a cross-origin TradingView widget
+ * whose speed, theme and per-symbol availability were all outside our reach.
  *
- * **It must fail to absent, never to a broken box.** Note that an `error`
- * event does NOT fire reliably for a cross-origin iframe, so `failed` is a
- * best-effort escape hatch, not a guarantee. What actually carries the
- * requirement is CSS: the lane is a fixed 32px with `overflow: hidden`, so a
- * frame that never paints leaves an empty strip rather than a broken box, and
- * Lane B — a sibling, not a child — is unaffected either way.
+ * The track is rendered twice and translated -50%, exactly like `NamesLane` —
+ * see that file's class comment for why (the loop has no snap-back).
  */
 @Component({
   selector: 'sb-market-lane',
@@ -29,43 +32,45 @@ const SYMBOLS = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './tape.css',
   template: `
-    @if (!failed()) {
-      <div class="lane" role="region" aria-label="Market tape">
-        <div class="cap">mkt</div>
-        <div class="viewport">
-          <iframe
-            [src]="src()"
-            title="Market index tape"
-            height="32"
-            width="100%"
-            frameborder="0"
-            scrolling="no"
-            sandbox="allow-scripts allow-same-origin allow-popups"
-            referrerpolicy="no-referrer"
-            loading="lazy"
-            (error)="failed.set(true)"
-          ></iframe>
+    <div class="lane" role="region" aria-label="Market tape">
+      <div class="cap">mkt</div>
+      <div class="viewport">
+        <div class="track">
+          @for (pass of [0, 1]; track pass) {
+            @for (row of market.rows(); track row.symbol) {
+              <span class="tile" [attr.aria-hidden]="pass === 1 ? 'true' : null">
+                <span class="sym">{{ label(row.symbol) }}</span>
+                @if (row.price !== null) {
+                  <span class="px" [class.up]="up(row)" [class.down]="down(row)">{{ num(row.price) }}</span>
+                  @if (row.change_pct !== null) {
+                    <span [class.up]="up(row)" [class.down]="down(row)">{{ pct(row.change_pct) }}</span>
+                  }
+                } @else {
+                  <span class="ctx muted">no price</span>
+                }
+              </span>
+            }
+          }
         </div>
-        <div class="cap end">live</div>
       </div>
-    }
+      <div class="cap end">live</div>
+    </div>
   `,
 })
 export class MarketLane {
-  private readonly sanitizer = inject(DomSanitizer);
-  protected readonly failed = signal(false);
-  protected readonly src = computed<SafeResourceUrl>(() => {
-    const config = encodeURIComponent(JSON.stringify({
-      symbols: SYMBOLS,
-      colorTheme: 'dark',
-      isTransparent: true,
-      displayMode: 'adaptive',
-      showSymbolLogo: true,
-      width: '100%',
-      height: 32,
-    }));
-    return this.sanitizer.bypassSecurityTrustResourceUrl(
-      `https://s.tradingview.com/embed-widget/ticker-tape/#${config}`,
-    );
-  });
+  protected readonly market = inject(MarketIndexStore);
+  protected readonly num = num;
+  protected readonly pct = pct;
+
+  protected label(symbol: string): string {
+    return INDEX_LABELS[symbol] ?? symbol;
+  }
+
+  protected up(row: { change_pct: number | null }): boolean {
+    return row.change_pct !== null && row.change_pct >= 0;
+  }
+
+  protected down(row: { change_pct: number | null }): boolean {
+    return row.change_pct !== null && row.change_pct < 0;
+  }
 }
