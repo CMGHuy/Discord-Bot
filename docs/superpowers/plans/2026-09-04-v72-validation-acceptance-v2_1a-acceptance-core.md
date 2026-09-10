@@ -483,7 +483,16 @@ def test_bootstrap_is_deterministic_under_a_fixed_seed():
 
 
 def test_a_different_seed_gives_a_different_draw():
-    b, c = pop(20, 10, 0.4), pop(20, 10, 0.5)
+    # NOTE: `pop()` gives every ticker the identical win fraction, which
+    # makes the delta invariant to which tickers get drawn (see
+    # `hetero_pop`'s docstring below) -- a fixed data bug, not a bootstrap
+    # bug, since a whole-ticker resample of an all-identical population is
+    # provably deterministic regardless of seed. Per-ticker win counts here
+    # vary (and the baseline/component shift is non-uniform across
+    # tickers), so which tickers land in a draw actually changes the
+    # statistic.
+    b = hetero_pop(20, 10, [1, 3, 5, 7, 2, 4, 6, 8, 3, 5])
+    c = hetero_pop(20, 10, [3, 4, 5, 6, 7, 2, 8, 1, 6, 2])
     a = cluster_bootstrap(b, c, delta_standardised_win_rate,
                           n_resamples=200, seed=42)
     d = cluster_bootstrap(b, c, delta_standardised_win_rate,
@@ -531,15 +540,22 @@ def hetero_pop(n_tickers, per_ticker, win_counts, tag=""):
 
 def test_clustering_widens_the_interval_versus_pretending_independence():
     """Identical trade counts and identical pooled win rates -- 4 tickers
-    x 100 trades against 40 tickers x 10. Both arms move +10pp. The
-    4-cluster interval must be WIDER: that is the within-symbol
-    correlation being priced instead of ignored, and it is exactly the
-    inflation that let a 0.0104R effect look meaningful.
+    x 100 trades against 40 tickers x 10, same underlying per-ticker rates
+    just chunked into 4 big clusters versus 40 small ones. The 4-cluster
+    interval must be WIDER: that is the within-symbol correlation being
+    priced instead of ignored, and it is exactly the inflation that let a
+    0.0104R effect look meaningful.
     """
+    # NOTE: the component win counts are a non-uniform shift over the
+    # baseline's ([+10, +20, -10, +40] pp rather than a flat +10pp on every
+    # ticker) -- a UNIFORM per-ticker shift makes the delta invariant to
+    # which tickers a draw lands on (see `hetero_pop`'s docstring), which
+    # collapses both intervals to zero width and hides the very effect this
+    # test exists to show.
     few = hetero_pop(4, 100, [20, 40, 60, 30])
-    few_c = hetero_pop(4, 100, [30, 50, 70, 40])
+    few_c = hetero_pop(4, 100, [30, 60, 50, 70])
     many = hetero_pop(40, 10, [2, 4, 6, 3])
-    many_c = hetero_pop(40, 10, [3, 5, 7, 4])
+    many_c = hetero_pop(40, 10, [3, 6, 5, 7])
     # Same N and same pooled win rate on both sides of the comparison.
     assert len(few) == len(many) == 400
     assert abs(win_rate(few) - win_rate(many)) < 1e-9

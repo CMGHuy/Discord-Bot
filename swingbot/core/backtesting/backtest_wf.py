@@ -14,10 +14,15 @@ from swingbot import config
 
 log = logging.getLogger("swing-bot.backtest_wf")
 
+#: Fold train windows start 2018-06-01 because that is where the OHLCV
+#: cache starts (scripts/data/fetch_backtest_data.py: START = "2018-06-01").
+#: They read 2018-01-01 until v72; that edge was always fiction -- the data
+#: was never there -- so this corrects a description, not a behaviour. The
+#: TEST windows are pre-registered and frozen, and are untouched.
 ANCHORED_FOLDS = (
-    ("2018-01-01", "2020-12-31", "2021-01-01", "2021-12-31"),
-    ("2018-01-01", "2021-12-31", "2022-01-01", "2022-12-31"),
-    ("2018-01-01", "2022-12-31", "2023-01-01", "2023-12-31"),
+    ("2018-06-01", "2020-12-31", "2021-01-01", "2021-12-31"),
+    ("2018-06-01", "2021-12-31", "2022-01-01", "2022-12-31"),
+    ("2018-06-01", "2022-12-31", "2023-01-01", "2023-12-31"),
 )
 
 # Pre-registered gate constants -- do not touch without a new pre-registration.
@@ -190,6 +195,33 @@ def gate(result: dict) -> str:
     if sum(d > 0 for d in deltas) < GATE_MIN_IMPROVING_FOLDS:
         return "FAIL"
     if any(d < -GATE_MAX_DEGRADATION_R for d in deltas):
+        return "FAIL"
+    return "PASS"
+
+
+#: v72 Stage 2. Win-rate flavour of the fold gate -- same shape as gate()'s
+#: expectancy rule, same pre-registered spirit: consistency across folds,
+#: not a flattering average. A fold that degrades past the ceiling fails the
+#: component however well its siblings did.
+GATE_MAX_WR_DEGRADATION_PP = 1.0
+
+
+def gate_win_rate(result: dict) -> str:
+    """The PRE-REGISTERED Stage 2 pass rule, on mix-standardised ΔWR.
+
+    Free and repeatable, unlike the VALIDATION shot behind it -- which is
+    the point: a component that cannot hold its sign across three
+    independent test years never reaches the one-shot budget.
+    """
+    folds = result["folds"]
+    deltas = [f.get("delta_win_rate_pp") for f in folds]
+    if any(d is None for d in deltas):
+        return "FAIL"
+    if any(f["n"] < GATE_MIN_N_PER_FOLD for f in folds):
+        return "FAIL"
+    if sum(d > 0 for d in deltas) < GATE_MIN_IMPROVING_FOLDS:
+        return "FAIL"
+    if any(d < -GATE_MAX_WR_DEGRADATION_PP for d in deltas):
         return "FAIL"
     return "PASS"
 

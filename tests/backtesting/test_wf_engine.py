@@ -15,7 +15,7 @@ def test_folds_are_frozen():
     assert len(ANCHORED_FOLDS) == 3
     for train_start, train_end, test_start, test_end in ANCHORED_FOLDS:
         assert train_end < test_start          # ISO strings compare correctly
-        assert train_start == "2018-01-01"     # anchored, expanding
+        assert train_start == "2018-06-01"     # anchored, expanding -- where the cache starts
     assert ANCHORED_FOLDS[0][2].startswith("2021")
     assert ANCHORED_FOLDS[2][3] == "2023-12-31"
 
@@ -419,3 +419,23 @@ def test_plateau_vs_spike():
     assert spike["is_plateau"] is False
     edge_val = plateau_report("rs_min", [50, 60, 70], [0.11, 0.10, 0.02], 50)
     assert edge_val["is_plateau"] is True      # single neighbor within 0.03
+
+
+def test_anchored_folds_start_where_the_cache_actually_starts():
+    """scripts/data/fetch_backtest_data.py:42 sets START = 2018-06-01.
+    A fold nominally starting 2018-01-01 claims five months of data that
+    have never existed, which silently overstates the first fold's train
+    length."""
+    from swingbot.core.backtesting.backtest_wf import ANCHORED_FOLDS
+    assert all(fold[0] == "2018-06-01" for fold in ANCHORED_FOLDS)
+
+
+def test_anchored_folds_test_windows_are_unchanged():
+    """The correction touches train starts ONLY. The test years are
+    pre-registered and frozen."""
+    from swingbot.core.backtesting.backtest_wf import ANCHORED_FOLDS
+    assert [(f[2], f[3]) for f in ANCHORED_FOLDS] == [
+        ("2021-01-01", "2021-12-31"),
+        ("2022-01-01", "2022-12-31"),
+        ("2023-01-01", "2023-12-31"),
+    ]

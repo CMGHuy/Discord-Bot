@@ -12,9 +12,19 @@ loud when a plan is chosen over a higher-impact alternative.
 
 The two are not the same objective and can move against each other: break-even
 win rate at reward:risk `X` is `1/(1+X)`, so widening targets lowers win rate
-while raising expectancy. **Expectancy is the objective; win rate is a
-constraint** (the `>= 50` acceptance gate). A change that raises win rate while
-lowering `ExpR` is a regression, not a win.
+while raising expectancy. **For ranking work, expectancy is the objective and
+win rate the constraint**: a change that raises win rate while lowering `ExpR`
+is a regression, not a win.
+
+**Inside the v72 acceptance gate the two swap roles, and that is not a
+contradiction.** The gate scores one feature against the baseline it replaces
+on a geometry-locked population (clause 3 forbids the target-pulling that
+trades one for the other), so there win rate is the objective and expectancy a
+non-inferiority floor — the only remaining axis is discrimination, which moves
+both together. Ranking asks *what to build*; the gate asks *did this one thing
+work*. The old absolute `>= 50` acceptance floor is gone from feature
+acceptance and survives only as a strategy-badge threshold
+(`docs/claude/backtest-methodology.md`).
 
 ## The `Edge:` header line
 
