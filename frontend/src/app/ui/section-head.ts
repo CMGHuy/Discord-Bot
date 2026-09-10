@@ -15,11 +15,11 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
   selector: 'sb-section-head',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    @if (level() === 1) {
-      <h1>{{ heading() }}</h1>
-    } @else {
-      <h2>{{ heading() }}</h2>
-    }
+    <div class="title-group">
+      <ng-content select="[back]" />
+      @if (level() === 1) { <h1>{{ heading() }}</h1> } @else { <h2>{{ heading() }}</h2> }
+      <span class="status"><ng-content select="[status]" /></span>
+    </div>
     <div class="actions"><ng-content select="[actions]" /></div>
   `,
   styles: `
@@ -34,8 +34,11 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
        explicitly; without it the browser's default heading margin sits
        inside the flex row as unabsorbed space (flex items don't collapse
        margins the way block layout does), unevenly padding the header. */
-    h1 { margin: 0; font-size: var(--text-title); font-weight: 600; }
-    h2 { margin: 0; font-size: var(--text-subhead); font-weight: 600; }
+    .title-group { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-4) var(--space-10); min-width: 0; }
+    h1 { margin: 0; font-size: var(--text-title); font-weight: 600; overflow-wrap: anywhere; }
+    h2 { margin: 0; font-size: var(--text-subhead); font-weight: 600; overflow-wrap: anywhere; }
+    .status { display: inline-flex; align-items: baseline; gap: var(--space-8); color: var(--text-secondary); font-size: var(--text-chip); }
+    .status:empty { display: none; }
     .actions { display: contents; }
   `,
 })

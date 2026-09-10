@@ -57,12 +57,12 @@ import { ABSENT } from './format';
       font-size: var(--text-table);
       white-space: nowrap;
     }
-    .badge { font-weight: 600; }
+    .badge { font-weight: 500; }
     .score { color: var(--text-secondary); }
     /* Spacing in the text, not a margin -- Angular strips whitespace between
        elements, and textContent is what a screen reader reads out. */
-    .sep { color: var(--text-faint); white-space: pre; }
-    .absent { color: var(--text-faint); }
+    .sep { color: var(--text-muted); white-space: pre; }
+    .absent { color: var(--text-muted); }
 
     .q1 { color: var(--quality-1); }
     .q2 { color: var(--quality-2); }

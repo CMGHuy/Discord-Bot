@@ -8,8 +8,12 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
  * positionally, which is what lets a component pick a band by number instead
  * of string-building a token name — `var(--quality-9)` resolves to nothing and
  * renders invisible text.
+ *
+ * v80 D4 adds `good`, `warn` and `info`: states that are judgements but not
+ * quality levels (a gate passed, a stale feed, a note). They tint rather than
+ * outline, which is what tells them apart from a quality chip in one row.
  */
-export type ChipTone = 'neutral' | 'q1' | 'q2' | 'q3' | 'q4' | 'q5';
+export type ChipTone = 'neutral' | 'good' | 'warn' | 'info' | 'q1' | 'q2' | 'q3' | 'q4' | 'q5';
 
 /**
  * Maps a confidence level (1–5) or a tier (`A`/`B`/`C`) onto the quality ramp
@@ -57,33 +61,52 @@ export function qualityTone(value: number | string | null | undefined): ChipTone
  *
  * Deliberately toneless by default: a horizon is not a judgement and does not
  * earn a colour. Use `qualityTone()` for the two that are judgements.
+ *
+ * Mono caps by default (v80 D4), so a tag reads as a tag and not as a word in
+ * the sentence beside it. `caps` exists for the one chip that must keep its
+ * case: a quality level is named `Lv4`, and `LV4` reads as something else.
  */
 @Component({
   selector: 'sb-chip',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<span class="chip" [class]="tone()">{{ label() }}</span>`,
+  template: `<span class="chip" [class]="tone()" [class.caps]="caps()">{{ label() }}</span>`,
   styles: `
     .chip {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
       padding: 1px var(--space-6);
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-chip);
+      font-family: var(--font-mono);
       font-size: var(--text-chip);
-      font-weight: 600;
-      letter-spacing: 0.04em;
+      font-weight: 500;
       white-space: nowrap;
     }
+    /* The .sb-label spacing, for the same reason: capitals need air. */
+    .caps { text-transform: uppercase; letter-spacing: 0.08em; }
     .neutral { color: var(--text-secondary); }
+    .good { color: var(--pos); background: var(--pos-soft); border-color: transparent; }
+    .warn { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
+    .info { color: var(--info); background: var(--info-soft); border-color: transparent; }
     .q1 { color: var(--quality-1); border-color: color-mix(in srgb, var(--neg) 35%, transparent); }
     .q2 { color: var(--quality-2); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
     .q3 { color: var(--quality-3); }
-    .q4 { color: var(--quality-4); border-color: color-mix(in srgb, var(--info) 35%, transparent); }
+    /* Its own hue, not --info's: info is lavender since v80 D1, and level 4
+       is the ramp's yellow-green. */
+    .q4 { color: var(--quality-4); border-color: color-mix(in srgb, var(--quality-4) 35%, transparent); }
     .q5 { color: var(--quality-5); border-color: color-mix(in srgb, var(--pos) 35%, transparent); }
+
+    /* v80 D4 -- a chip in a phone row is a tap target when it sits inside a
+       button, and a line of text when it does not; 28px serves both. */
+    @media (pointer: coarse), (max-width: 639px) {
+      .chip { min-height: 28px; }
+    }
   `,
 })
 export class Chip {
   readonly label = input.required<string>();
   readonly tone = input<ChipTone>('neutral');
+  readonly caps = input(true);
 }
 
 /**
@@ -94,7 +117,7 @@ export class Chip {
   selector: 'sb-quality-chip',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Chip],
-  template: `<sb-chip [label]="label()" [tone]="tone()" />`,
+  template: `<sb-chip [label]="label()" [tone]="tone()" [caps]="false" />`,
 })
 export class QualityChip {
   /** A confidence level (1–5) or a tier (`A`/`B`/`C`). */

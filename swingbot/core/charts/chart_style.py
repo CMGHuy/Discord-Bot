@@ -23,23 +23,46 @@ if os.path.exists(_INTER_TTF):
     matplotlib.rcParams["font.family"] = "Inter"
 
 # ---------------------------------------------------------------------------
-# Professional dark theme -- a TradingView/Bloomberg-terminal-style palette
-# used for the whole chart (background, grid, candles, and every custom
-# annotation below) instead of mplfinance's default light "yahoo" style, so
-# a chart reads like a serious trading terminal rather than a generic light
-# spreadsheet plot. Every custom text/box color elsewhere in this file is
-# drawn from this same small palette so nothing clashes with a leftover
-# light-theme color.
+# The admin palette, on every Discord chart -- spec v80 D5, direction C
+# ("TradingView Blue").
+#
+# THEME copies, byte for byte, the tokens it names from
+# frontend/src/styles/tokens.css: D1's colours and D2's chart series. Every
+# colour constant below is one of them. tests/charts/test_chart_theme.py reads
+# that file, maps each constant to its token, and holds three rules:
+#   1. roles drawn together are distinct (OKLab dE >= 10);
+#   2. indicator panes may reuse a series;
+#   3. nothing but the gain/loss constants sits within dE 10 of gain or loss.
+# Change a colour in tokens.css and that test names the constant to follow.
 # ---------------------------------------------------------------------------
-CHART_BG = "#0a0a0a"           # figure + every panel's background
-GRID_COLOR = "#1c1c1c"         # gridlines -- subtle, never competes with data
-SPINE_COLOR = "#2a2a2a"        # axis borders
-TEXT_COLOR = "#f0f0f0"         # primary text (titles, axis labels)
-MUTED_TEXT_COLOR = "#666666"   # secondary text (tick labels, fine print)
-UP_COLOR = "#00d26a"           # bullish candle body/wick
-DOWN_COLOR = "#ff4d4d"         # bearish candle body/wick
-CHIP_BG = "#121212"            # background for the small rounded "chip" labels every overlay uses
-CHIP_EDGE = "#2a2a2a"          # neutral chip border when no accent color applies
+THEME = {
+    "bg": "#0c0f16",
+    "surface": "#131722",
+    "surface-raised": "#1c212d",
+    "border": "#2a2e39",
+    "border-strong": "#363a45",
+    "text": "#d9dce4",
+    "text-muted": "#9195a0",
+    "text-faint": "#4e5361",
+    "pos": "#17c98e",
+    "neg": "#ff5470",
+    "warn": "#ffb43d",
+    "info": "#b39ddb",
+    "chart-1": "#4c8dff",
+    "chart-2": "#c97a22",
+    "chart-3": "#a868e0",
+    "chart-5": "#1a9db3",
+}
+
+CHART_BG = THEME["surface"]             # figure + every panel's background: TradingView's chart pane
+GRID_COLOR = THEME["border"]            # gridlines -- subtle, never competes with data
+SPINE_COLOR = THEME["border-strong"]    # axis borders
+TEXT_COLOR = THEME["text"]              # primary text (titles, axis labels)
+MUTED_TEXT_COLOR = THEME["text-muted"]  # tick labels, fine print: 5.97:1 on CHART_BG (#666666 was 3.6:1)
+UP_COLOR = THEME["pos"]                 # bullish candle body/wick
+DOWN_COLOR = THEME["neg"]               # bearish candle body/wick
+CHIP_BG = THEME["surface-raised"]       # background for the small rounded "chip" labels every overlay uses
+CHIP_EDGE = THEME["border-strong"]      # neutral chip border when no accent color applies
 
 # One green and one red across the whole image, per the palette's first rule:
 # green and red mean P&L direction and nothing else. A target IS the profit
@@ -48,49 +71,51 @@ CHIP_EDGE = "#2a2a2a"          # neutral chip border when no accent color applie
 # against #26a69a candles was two greens that meant the same thing. Line
 # weight, dashing and the labelled chip are what separate a level from a
 # candle body, not a third hue.
-ENTRY_COLOR = "#4d9fff"
-STOP_COLOR = "#ff4d4d"
-TARGET_COLOR = "#00d26a"
-TARGET2_COLOR = "#ab47bc"
-CURRENT_PRICE_COLOR = "#ffb020"  # distinct from entry -- entry is a planned limit level, this is where price actually is
-TRENDLINE_SUPPORT_COLOR = "#26c6da"
-TRENDLINE_RESISTANCE_COLOR = "#ec407a"
-AVWAP_COLOR = "#b39ddb"
+ENTRY_COLOR = THEME["chart-1"]
+STOP_COLOR = THEME["neg"]
+TARGET_COLOR = THEME["pos"]
+TARGET2_COLOR = THEME["chart-3"]
+CURRENT_PRICE_COLOR = THEME["warn"]  # distinct from entry -- entry is a planned limit level, this is where price actually is
 
-# Mirror of swingbot/admin/static/tokens.css — the admin UI and the chart
-# PNGs share one palette. tests/test_chart_theme.py asserts these pairs
-# stay equal to the module constants; change BOTH files together.
-THEME = {
-    "bg-1": "#0a0a0a", "border-1": "#1c1c1c", "border-2": "#2a2a2a",
-    "text-1": "#f0f0f0", "text-3": "#666666",
-    "up": "#00d26a", "down": "#ff4d4d", "accent": "#4d9fff",
-    "warn": "#ffb020", "purple": "#ab47bc",
-}
+# Support and resistance take the stop-side and target-side strategy colours
+# below. The two never share a chart: trade_chart.py draws plain trendlines
+# only when no confirming source was passed and the strategy overlays
+# otherwise, so the pairing costs no distinctness and keeps the side meaning
+# (for a long, support is the stop side). Resistance was pink #ec407a, OKLab
+# dE 5.9 from loss: a line that read as a loss on every chart.
+TRENDLINE_SUPPORT_COLOR = THEME["chart-5"]
+TRENDLINE_RESISTANCE_COLOR = THEME["chart-2"]
+AVWAP_COLOR = THEME["info"]
 
 # Fixed accent colors for the confirmed-strategy overlay -- one per
 # SIDE of the scenario (whatever confirmed target 1, whatever confirmed
 # the stop), not per method, so the chart reads as a consistent
 # two-color system no matter which specific method (EMA, VWAP, Fib,
 # FVG, trendline, ...) actually gets picked for a given trade.
-TARGET_STRATEGY_COLOR = "#ff9800"
-STOP_STRATEGY_COLOR = "#29b6f6"
+TARGET_STRATEGY_COLOR = THEME["chart-2"]
+STOP_STRATEGY_COLOR = THEME["chart-5"]
 
-# Indicator-panel accent colors (MACD/Signal/RSI/Keltner Channel) -- picked
-# to stay clearly distinct from the entry/stop/target family above even
-# though both sets of colors now share the same dark background.
-MACD_LINE_COLOR = "#42a5f5"
-SIGNAL_LINE_COLOR = "#ff7043"
-RSI_LINE_COLOR = "#ba68c8"
-KC_COLOR = "#4dd0e1"
+# Indicator-panel accent colors (MACD/Signal/RSI). Indicator panes may reuse
+# series (D5 rule 2); the three also colour the stat chips above the price
+# pane, where they sit >= 13.7 dE from each other, from TP2 and from amber.
+MACD_LINE_COLOR = THEME["chart-1"]
+SIGNAL_LINE_COLOR = THEME["chart-2"]
+RSI_LINE_COLOR = THEME["chart-5"]
+
+# Keltner bands are background context on the price pane, dashed at 55%
+# alpha, so they take the neutral muted grey rather than a hue. Six series
+# cannot give seven price-pane roles each a hue >= 10 dE from every other:
+# chart-1/chart-6 sit 6.8 apart and chart-2/chart-4 6.2.
+KC_COLOR = THEME["text-muted"]
 
 # Volume Profile is drawn on EVERY chart, always -- both as the left-side
 # overlay (see chart_volume_profile._draw_volume_profile_overlay) and,
 # when Volume Profile actually confirmed this scenario's target/stop, as a
-# highlighted level on the price panel itself. It gets its own dedicated,
-# always-distinct color (a warm gold/amber tone, deliberately unlike any
-# strategy or level color) so it reads as "background market structure"
-# context rather than "the reason for this specific target/stop".
-VOLUME_PROFILE_COLOR = "#d4a94c"
+# highlighted level on the price panel itself. It takes info lavender:
+# background market structure is a neutral fact, not a level, and lavender
+# is unlike every strategy or level colour on the pane (>= 10.2 dE, the
+# nearest being the grey Keltner bands).
+VOLUME_PROFILE_COLOR = THEME["info"]
 
 # Printed as fine print along the bottom of every generated trade chart (see
 # trade_chart.py's generate_trade_chart, the single shared save point every
@@ -101,6 +126,20 @@ VOLUME_PROFILE_COLOR = "#d4a94c"
 # needs to carry its own disclaimer rather than relying on whatever
 # surrounding message/context it happens to be shared with.
 DISCLAIMER_TEXT = "Not financial advice — for informational purposes only. Trade at your own risk."
+# The fine print's colour on a trade chart: caution amber, which is what the
+# line is. Was a stray #e2b25a typed into trade_chart.py.
+DISCLAIMER_COLOR = THEME["warn"]
+
+# Ink for the strategy heatmap's cell labels (analytics_charts.py): dark on
+# the pale middle of RdYlGn, light on its saturated ends. Were the named
+# colours "black" and "white".
+HEATMAP_INK_DARK = THEME["bg"]
+HEATMAP_INK_LIGHT = THEME["text"]
+
+# One bar colour per walk-forward fold year, 2021/2022/2023
+# (portfolio_charts.py). Three ADJACENT series: adjacency is the pairing D2
+# validated for distinctness.
+FOLD_YEAR_COLORS = (THEME["chart-1"], THEME["chart-2"], THEME["chart-3"])
 
 
 def _label_bbox(color: str, alpha: float = 0.88) -> dict:
@@ -238,7 +277,7 @@ DEFAULT_TRENDLINE_LOOKBACK_DAYS = 90
 # Neutral color for the shared first leg of each branch arrow (entry ->
 # target 1) -- the move itself isn't "bullish continuation" or "bearish
 # reversal" yet, that split only happens at the second leg.
-PATH_COLOR = "#555555"
+PATH_COLOR = THEME["text-faint"]
 
 # Minimum vertical gap between two adjacent labels, as a fraction of the
 # visible price range -- tuned so labels never visually touch at the

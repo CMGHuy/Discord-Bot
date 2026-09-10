@@ -44,6 +44,8 @@ const REQUIRED = [
   '--neg',
   '--warn',
   '--accent',
+  '--accent-fill',
+  '--on-accent',
   '--info',
 
   '--pos-soft',
@@ -64,8 +66,6 @@ const REQUIRED = [
   '--chart-4',
   '--chart-5',
   '--chart-6',
-  '--chart-7',
-  '--chart-8',
 
   '--dur-instant',
   '--dur-base',
@@ -99,6 +99,11 @@ describe('design tokens', () => {
     for (const dead of ['--quality-high', '--quality-mid', '--quality-low']) {
       expect(CSS).not.toMatch(new RegExp(`^\\s*${dead}:`, 'm'));
     }
+  });
+
+  it('has dropped --chart-7 and --chart-8 (v80 D2: six series)', () => {
+    expect(CSS).not.toMatch(/^\s*--chart-7:/m);
+    expect(CSS).not.toMatch(/^\s*--chart-8:/m);
   });
 
   it('keeps --transition as an alias so existing call sites still compile', () => {
@@ -209,4 +214,65 @@ describe('no workspace hand-rolls a control row', () => {
       expect(offenders).toEqual([]);
     });
   }
+});
+
+describe('v80 D1: the TradingView Blue palette', () => {
+  const EXPECTED: Record<string, string> = {
+    '--bg': '#0c0f16',
+    '--surface': '#131722',
+    '--surface-raised': '#1c212d',
+    '--surface-overlay': '#242936',
+    '--border': '#2a2e39',
+    '--border-strong': '#363a45',
+    '--text': '#d9dce4',
+    '--text-secondary': '#9ea2ad',
+    '--text-muted': '#9195a0',
+    '--text-faint': '#4e5361',
+    '--accent': '#5593ff',
+    '--accent-fill': '#2962ff',
+    '--on-accent': '#ffffff',
+    '--info': '#b39ddb',
+    '--pos': '#17c98e',
+    '--neg': '#ff5470',
+    '--warn': '#ffb43d',
+  };
+
+  for (const [name, hex] of Object.entries(EXPECTED)) {
+    it(`${name} is ${hex}`, () => {
+      expect(CSS).toMatch(new RegExp(`^\\s*${name}:\\s*${hex};`, 'mi'));
+    });
+  }
+
+  it('dims the overlay from the new ground', () => {
+    expect(CSS).toMatch(/^\s*--overlay-dim:\s*rgba\(12, 15, 22, \.72\);/m);
+  });
+
+  it('tints accent-soft from the fill blue and info-soft from lavender', () => {
+    expect(CSS).toMatch(/^\s*--accent-soft:\s*rgba\(41, 98, 255, 0\.18\);/m);
+    expect(CSS).toMatch(/^\s*--info-soft:\s*rgba\(179, 157, 219, 0\.14\);/m);
+  });
+});
+
+describe('v80 D3: type, shape and touch', () => {
+  it('sets the headline figure to 28px', () => {
+    expect(CSS).toMatch(/^\s*--text-metric:\s*calc\(28px \* var\(--text-scale\)\);/m);
+  });
+
+  it('tightens both radii to 2px', () => {
+    expect(CSS).toMatch(/^\s*--radius:\s*2px;/m);
+    expect(CSS).toMatch(/^\s*--radius-chip:\s*2px;/m);
+  });
+
+  it('defines one row height and one form-control text size', () => {
+    expect(CSS).toMatch(/^\s*--row-h:\s*32px;/m);
+    expect(CSS).toMatch(/^\s*--text-control:\s*calc\(14px \* var\(--text-scale\)\);/m);
+  });
+
+  it('grows controls, rows and control text for touch and narrow screens', () => {
+    const block = CSS.match(/@media \(pointer: coarse\), \(max-width: 639px\)\s*\{([\s\S]*?)\n\}/);
+    expect(block).not.toBeNull();
+    expect(block![1]).toMatch(/--control-h:\s*44px;/);
+    expect(block![1]).toMatch(/--row-h:\s*44px;/);
+    expect(block![1]).toMatch(/--text-control:\s*calc\(16px \* var\(--text-scale\)\);/);
+  });
 });

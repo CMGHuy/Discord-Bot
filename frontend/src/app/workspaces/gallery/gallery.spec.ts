@@ -71,4 +71,55 @@ describe('the gallery renders', () => {
     const fixture = TestBed.createComponent(Gallery);
     expect(() => fixture.detectChanges()).not.toThrow();
   });
+
+  it('renders one row per cell-contract case, with minutes in every Held value', () => {
+    const fixture = TestBed.createComponent(Gallery);
+    fixture.detectChanges();
+    const table = (fixture.nativeElement as HTMLElement).querySelector('.cell-contracts')!;
+    const rows = [...table.querySelectorAll('tbody tr.row')];
+    const cell = (row: Element, selector: string) =>
+      row.querySelector(selector)!.textContent!.replace(/\s+/g, ' ').trim();
+
+    expect(rows).toHaveLength(4);
+    expect(rows.map((r) => r.querySelector('td:last-child')!.textContent!.trim()))
+      .toEqual(['4d 2h 15m', '4d 0h 5m', '3h 0m', '45m']);
+    expect(cell(rows[0], 'sb-direction-arrow')).toBe('▲');
+    expect(cell(rows[1], 'sb-direction-arrow')).toBe('▼');
+    expect(cell(rows[0], 'sb-pnl-cell')).toBe('+4.20% (+9.80 €)');
+    expect(cell(rows[2], 'sb-pnl-cell')).toBe('+0.40%');
+    expect(cell(rows[3], 'sb-pnl-cell')).toBe('—');
+    expect(cell(rows[0], 'sb-confidence-cell')).toBe('Lv4 · 78');
+    expect(cell(rows[2], 'sb-confidence-cell')).toBe('Lv5');
+    expect(cell(rows[0], 'sb-plan-cell')).toContain('→');
+  });
+});
+
+describe('the gallery is the v80 D6 reference', () => {
+  it("shows every button variant, including v77's danger-icon", () => {
+    for (const variant of ['primary', 'secondary', 'danger', 'ghost', 'icon', 'danger-icon', 'link', 'chip', 'segment']) {
+      expect(GALLERY).toContain(`'${variant}'`);
+    }
+  });
+
+  it('shows all nine chip tones', () => {
+    for (const tone of ['neutral', 'good', 'warn', 'info', 'q1', 'q2', 'q3', 'q4', 'q5']) {
+      expect(GALLERY).toContain(`'${tone}'`);
+    }
+  });
+
+  it('shows every status shape and both panel-grid tracks', () => {
+    for (const needle of ["'PENDING'", "'ACTIVE'", "'PARTIAL'", "'CLOSED'", 'track="narrow"', 'track="wide"']) {
+      expect(GALLERY).toContain(needle);
+    }
+  });
+
+  it('shows both empty-state reasons', () => {
+    expect(GALLERY).toContain('reason="measured-zero"');
+    expect(GALLERY).toContain('reason="no-data-yet"');
+  });
+
+  it('renders the new components in both registers', () => {
+    expect(GALLERY).toContain("'register-presentation'");
+    expect(GALLERY).toContain("'register-instrument'");
+  });
 });

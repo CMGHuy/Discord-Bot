@@ -9,7 +9,7 @@ import { ALL_PER_PAGE, PER_PAGE_OPTIONS } from './table-prefs';
   template: `
     @if (showPerPage()) {
       <div class="per-page">
-        <label><span class="label">Rows</span><select (change)="onPerPage($any($event.target).value)">
+        <label><span class="sb-label">Rows</span><select (change)="onPerPage($any($event.target).value)">
           @for (option of perPageOptions; track option) {
             <option [value]="option" [selected]="option === pagination().perPage">{{ perPageLabel(option) }}</option>
           }
@@ -35,16 +35,15 @@ import { ALL_PER_PAGE, PER_PAGE_OPTIONS } from './table-prefs';
        this row sits flush at 0 while everything else in the section is
        inset by --space-10, reading as misaligned. */
     .per-page { display: flex; align-items: center; gap: var(--space-6); padding: var(--space-10); }
-    .per-page .label { font-size: var(--text-chip); color: var(--text-secondary); }
-    .per-page select, .jump { background: var(--surface-raised); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); font: inherit; }
-    .per-page select { font-size: var(--text-chip); padding: 2px var(--space-4); }
+    .per-page select, .jump { height: var(--control-h); background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--radius); font: inherit; font-size: var(--text-control); }
+    .per-page select { padding: 0 var(--space-4); }
     .pager { display: flex; align-items: center; gap: var(--space-10); padding: var(--space-10); font-size: var(--text-table); color: var(--text-secondary); }
     .range { margin-right: auto; }
-    .jump { width: 3.5rem; padding: 2px var(--space-4); text-align: right; }
+    .jump { width: 3.5rem; padding: 0 var(--space-4); text-align: right; }
     .of { display: inline-flex; align-items: center; gap: var(--space-4); }
     .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-    button { padding: var(--space-4) var(--space-10); background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font: inherit; cursor: pointer; transition: border-color var(--transition); }
-    button:disabled { color: var(--text-faint); cursor: default; }
+    button { min-height: var(--control-h); min-width: var(--control-h); padding: 0 var(--space-10); background: transparent; border: 1px solid var(--border-strong); border-radius: var(--radius); color: var(--text); font: inherit; cursor: pointer; transition: border-color var(--transition); }
+    button:disabled { opacity: 0.45; cursor: default; }
     button:not(:disabled):hover { border-color: var(--border-strong); }
     button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
   `,

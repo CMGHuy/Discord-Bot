@@ -81,7 +81,7 @@ from swingbot.core.market.trendlines import strongest_trendline_pair
 
 from .chart_style import (
     CHART_BG, CHIP_BG, CURRENT_PRICE_COLOR, DEFAULT_LOOKBACK_DAYS,
-    DEFAULT_TRENDLINE_LOOKBACK_DAYS, DISCLAIMER_TEXT, DOWN_COLOR, ENTRY_COLOR, KC_COLOR,
+    DEFAULT_TRENDLINE_LOOKBACK_DAYS, DISCLAIMER_COLOR, DISCLAIMER_TEXT, DOWN_COLOR, ENTRY_COLOR, KC_COLOR,
     MACD_LINE_COLOR, MIN_LABEL_GAP_FRAC, MUTED_TEXT_COLOR, PRO_STYLE,
     REWARD_BAND_ALPHA, RISK_BAND_ALPHA, RSI_LINE_COLOR, RUNNER_BAND_ALPHA,
     SIGNAL_LINE_COLOR, SPINE_COLOR, STOP_COLOR,
@@ -926,7 +926,7 @@ def generate_trade_chart(
             # lower-right, confirmed-by lower-left).
             ax.text(0.0, 1.012, "v2", transform=ax.transAxes,
                     va="bottom", ha="left", fontsize=8.5, fontweight="bold",
-                    color="white",
+                    color=TEXT_COLOR,
                     bbox=dict(boxstyle="round,pad=0.3", facecolor=CHIP_BG,
                               edgecolor=SPINE_COLOR, linewidth=0.7, alpha=0.94),
                     zorder=8)
@@ -1084,7 +1084,7 @@ def generate_trade_chart(
         # than overlapping the lowest panel's x-axis tick labels.
         fig.text(
             0.5, 0.015, DISCLAIMER_TEXT,
-            ha="center", va="bottom", fontsize=9, color="#e2b25a", fontweight="bold",
+            ha="center", va="bottom", fontsize=9, color=DISCLAIMER_COLOR, fontweight="bold",
         )
 
         os.makedirs(out_dir, exist_ok=True)

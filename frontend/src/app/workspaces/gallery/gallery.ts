@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, TemplateRef, computed, signal, viewChild } from '@angular/core';
 
 import { ChartResponse } from '../../api/models';
 import { Async, AsyncEmptyReason } from '../../ui/async';
-import { Button } from '../../ui/button';
+import { Button, ButtonVariant } from '../../ui/button';
 import { ChartContainer } from '../../ui/chart-container';
 import { TradeChart } from '../../ui/chart/trade-chart';
 import { Chip, ChipTone, QualityChip, qualityTone } from '../../ui/chip';
@@ -11,14 +11,16 @@ import { ColumnPickerComponent } from '../../ui/column-picker';
 import { ConfidenceCell } from '../../ui/confidence-cell';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
-import { ColumnDef, PageSpec } from '../../ui/data-table/data-table.types';
+import { ColumnDef, PageSpec, RowContext } from '../../ui/data-table/data-table.types';
 import { DirectionArrow } from '../../ui/direction-arrow';
 import { DonutComponent } from '../../ui/donut';
 import { EmptyStateComponent } from '../../ui/empty-state';
+import { Figure, FigureStrip } from '../../ui/figure';
 import { FilterBar, FilterChip, FilterChips } from '../../ui/filter-bar';
 import { Flash } from '../../ui/flash';
-import { money, num, pct, rMultiple, signed } from '../../ui/format';
+import { held, money, num, pct, rMultiple, signed } from '../../ui/format';
 import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-controls';
+import { Hint } from '../../ui/hint';
 import { Histogram, HistogramBin } from '../../ui/histogram';
 import { Icon, IconName } from '../../ui/icon';
 import { ControlRow, Drawer, Panel, Tab, TabBar } from '../../ui/layout';
@@ -28,12 +30,16 @@ import { Magnitude } from '../../ui/magnitude';
 import { MetricCard } from '../../ui/metric-card';
 import { MetricChip } from '../../ui/metric-chip';
 import { PaginationComponent } from '../../ui/pagination';
+import { PanelGrid } from '../../ui/panel-grid';
 import { PlanCell } from '../../ui/plan-cell';
 import { PlanLifecycleDiagram } from '../../ui/plan-lifecycle-diagram';
+import { PnlCell } from '../../ui/pnl-cell';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
+import { SegmentOption, Segmented } from '../../ui/segmented';
 import { Sparkline } from '../../ui/sparkline';
 import { ScatterComponent } from '../../ui/scatter';
+import { Status } from '../../ui/status';
 import { StatusCell, StatusCellRow } from '../../ui/status-cell';
 import { StatusIndicator } from '../../ui/status-indicator';
 
@@ -41,6 +47,22 @@ interface GalleryRow {
   id: string;
   ticker: string;
   pnl: number;
+}
+
+/** One row of the v80 D6 cell-contract table. */
+interface ContractRow {
+  id: string;
+  ticker: string;
+  direction: 'bullish' | 'bearish';
+  entry: number | null;
+  target: number;
+  stop: number;
+  trigger: number | null;
+  pnlPct: number | null;
+  pnlAmount: number | null;
+  level: number | null;
+  score: number | null;
+  heldHours: number;
 }
 
 /**
@@ -72,9 +94,12 @@ interface GalleryRow {
     DonutComponent,
     Drawer,
     EmptyStateComponent,
+    Figure,
+    FigureStrip,
     FilterBar,
     FilterChips,
     Flash,
+    Hint,
     Histogram,
     Icon,
     LineChart,
@@ -83,14 +108,18 @@ interface GalleryRow {
     MetricChip,
     Panel,
     PaginationComponent,
+    PanelGrid,
     PlanCell,
     PlanLifecycleDiagram,
+    PnlCell,
     QualityChip,
     RowLink,
     SectionHead,
+    Segmented,
     Select,
-    Sparkline,
     ScatterComponent,
+    Sparkline,
+    Status,
     StatusCell,
     StatusIndicator,
     TabBar,
@@ -108,7 +137,14 @@ interface GalleryRow {
           <button sb-button [variant]="variant" type="button">{{ variant }}</button>
         }
       </sb-control-row>
-      <p class="section-help">Hover any button above to see its hover state.</p>
+      <p class="sb-help">
+        Hover any button above to see its hover state. <code>chip</code> and
+        <code>segment</code> are deprecated (v80 D4): use sb-segmented.
+      </p>
+      <sb-control-row>
+        <button sb-button variant="icon" type="button" aria-label="Menu"><sb-icon name="menu" /></button>
+        <button sb-button variant="danger-icon" type="button" aria-label="Delete"><sb-icon name="trash" /></button>
+      </sb-control-row>
       <sb-control-row>
         <button sb-button variant="primary" type="button" [disabled]="true">disabled</button>
         <button sb-button variant="secondary" type="button" [disabled]="true">disabled</button>
@@ -146,22 +182,65 @@ interface GalleryRow {
       </sb-chip-row>
     </sb-panel>
 
+    <!-- -- segmented (v80 D4) ------------------------------------------------ -->
+    <sb-section-head [heading]="'Segmented'" [level]="2" />
+    <sb-panel>
+      <sb-segmented label="Status" [options]="segmentOptions" [(value)]="segmentValue" />
+      <p class="sb-help">
+        Arrow keys, Home and End move the selection. In a narrow box the
+        options scroll sideways instead of clipping:
+      </p>
+      <div class="narrow-demo">
+        <sb-segmented label="Range" [options]="rangeOptions" [(value)]="rangeValue" />
+      </div>
+    </sb-panel>
+
     <!-- -- composites ------------------------------------------------------ -->
     <sb-section-head [heading]="'Composites'" [level]="2" />
-    <sb-panel heading="sb-section-head, both levels">
+    <sb-panel heading="sb-section-head, both levels, back and status slots">
       <sb-section-head heading="Level 1 heading" [level]="1" />
       <sb-section-head heading="Level 2 heading" [level]="2" />
+      <sb-section-head heading="AAPL" [level]="1">
+        <sb-row-link back [link]="['/ui']">Trades</sb-row-link>
+        <span status class="num">as of 14:02 · 3 open</span>
+      </sb-section-head>
     </sb-panel>
     <sb-panel heading="sb-row-link">
       <sb-row-link [link]="['/ui']">AAPL</sb-row-link>
     </sb-panel>
-    <sb-panel heading="sb-control-row / sb-filter-bar">
-      <sb-filter-bar [activeCount]="1">
-        <sb-filter-chips [chips]="filterChips" [selected]="'open'" />
+    <sb-panel heading="sb-filter-bar -- counts, clear, two columns in a narrow box">
+      <sb-filter-bar [activeCount]="2" [shown]="12" [total]="40">
+        <sb-select label="Strategy" placeholder="Any strategy" [options]="selectOptions" />
+        <sb-text-input label="Ticker" placeholder="AAPL" />
       </sb-filter-bar>
+      <div class="narrow-demo">
+        <sb-filter-bar [activeCount]="1">
+          <sb-select label="Horizon" placeholder="All horizons" [options]="selectOptions" />
+          <sb-checkbox label="Has note" [checked]="true" />
+        </sb-filter-bar>
+      </div>
     </sb-panel>
-    <sb-panel heading="sb-tab-bar">
+    <sb-panel heading="sb-filter-chips (deprecated, v80 D4: use sb-segmented)">
+      <sb-filter-chips [chips]="filterChips" [selected]="'open'" />
+    </sb-panel>
+    <sb-panel heading="sb-tab-bar -- scrolls with an edge fade when the tabs do not fit">
       <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="activeTab.set($event)" />
+      <div class="narrow-demo">
+        <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="activeTab.set($event)" />
+      </div>
+    </sb-panel>
+    <sb-panel heading="sb-status -- the marker's shape carries the state">
+      <sb-control-row>
+        @for (status of statuses; track status) {
+          <sb-status [status]="status" />
+        }
+      </sb-control-row>
+    </sb-panel>
+    <sb-panel heading="sb-hint -- hover, focus or tap; Escape or a tap elsewhere closes">
+      <p class="sb-help">
+        Expectancy
+        <sb-hint text="Average R per closed trade, after costs, pooled across strategies." label="About expectancy" />
+      </p>
     </sb-panel>
     <sb-panel heading="sb-drawer">
       <button sb-button variant="secondary" type="button" (click)="drawerOpen.set(true)">
@@ -271,10 +350,12 @@ interface GalleryRow {
     <!-- -- empty state ------------------------------------------------------ -->
     <sb-section-head [heading]="'Empty state'" [level]="2" />
     <sb-panel>
-      <sb-control-row>
+      <sb-panel-grid track="narrow">
         <sb-empty-state title="No results" />
         <sb-empty-state title="No results" hint="Widen the date range." />
-      </sb-control-row>
+        <sb-empty-state title="No trades closed in range" reason="measured-zero" />
+        <sb-empty-state title="No quotes yet" hint="The feed has not reported." reason="no-data-yet" />
+      </sb-panel-grid>
     </sb-panel>
 
     <!-- -- data cells and status --------------------------------------------- -->
@@ -295,9 +376,32 @@ interface GalleryRow {
       </sb-control-row>
     </sb-panel>
 
-    <!-- -- metrics and charts -------------------------------------------------- -->
+    <!-- -- figures (v80 D4) ------------------------------------------------- -->
+    <sb-section-head [heading]="'Figures'" [level]="2" />
+    <sb-figure-strip>
+      <sb-figure label="Expectancy" [value]="0.21" unit="R" tone="pnl" sub="n = 184 closed" />
+      <sb-figure label="Win rate" [value]="54.2" unit="%" [decimals]="1" />
+      <sb-figure label="Max drawdown" [value]="-6.4" unit="%" [decimals]="1" tone="pnl" />
+      <sb-figure label="Portfolio heat" [value]="82" unit="%" [decimals]="0" tone="caution" />
+      <sb-figure label="Balance" [value]="null" sub="awaiting broker sync" />
+    </sb-figure-strip>
+
+    <!-- -- panel grid (v80 D4) ---------------------------------------------- -->
+    <sb-section-head [heading]="'Panel grid'" [level]="2" />
+    <sb-panel-grid track="narrow">
+      @for (n of [1, 2, 3, 4]; track n) {
+        <sb-panel [heading]="'Narrow track ' + n"><p class="sb-help">220px minimum</p></sb-panel>
+      }
+    </sb-panel-grid>
+    <sb-panel-grid track="wide">
+      @for (n of [1, 2, 3]; track n) {
+        <sb-panel [heading]="'Wide track ' + n"><p class="sb-help">320px minimum</p></sb-panel>
+      }
+    </sb-panel-grid>
+
     <sb-section-head [heading]="'Metrics and charts'" [level]="2" />
     <sb-panel>
+      <p class="sb-help">sb-metric-card and sb-metric-chip are deprecated (v80 D4): use sb-figure.</p>
       <sb-control-row>
         <sb-metric-card label="Expectancy" [value]="0.21" unit="R" [tone]="'pnl'" />
         <sb-metric-chip label="Win rate" [value]="54.2" unit="%" [decimals]="1" />
@@ -374,6 +478,42 @@ interface GalleryRow {
       <sb-pagination [pagination]="pageSpec" />
     </sb-panel>
 
+    <!-- -- v80 D6: both registers, and one row per table cell contract -------
+         The cell templates come first: contractColumns() reads them through
+         viewChild, and the table below must find them resolved. -->
+    <ng-template #directionCell let-row><sb-direction-arrow [direction]="row.direction" /></ng-template>
+    <ng-template #planCell let-row>
+      <sb-plan-cell [entry]="row.entry" [target]="row.target" [stop]="row.stop" [trigger]="row.trigger" />
+    </ng-template>
+    <ng-template #pnlCell let-row><sb-pnl-cell [pct]="row.pnlPct" [amount]="row.pnlAmount" currency="€" /></ng-template>
+    <ng-template #confidenceCell let-row><sb-confidence-cell [level]="row.level" [score]="row.score" /></ng-template>
+
+    <sb-section-head [heading]="'Both registers, and the table cell contracts'" [level]="2" />
+    <p class="sb-help">
+      The same strip and table in each density. The rows follow the cell contracts: direction is
+      one triangle; the plan is one column, entry → target / stop; P&L carries percent and amount;
+      confidence is text; Held always shows minutes.
+    </p>
+    @for (register of registers; track register) {
+      <div class="register-demo" [class]="register">
+        <h3 class="sb-label">{{ register }}</h3>
+        <sb-figure-strip>
+          <sb-figure label="Open P&L" [value]="1.84" unit="%" tone="pnl" />
+          <sb-figure label="Open risk" [value]="2.1" unit="R" />
+          <sb-figure label="Heat" [value]="64" unit="%" [decimals]="0" tone="caution" />
+        </sb-figure-strip>
+        <sb-panel heading="Positions" [flush]="true">
+          <sb-data-table
+            class="cell-contracts"
+            [rows]="contractRows"
+            [columns]="contractColumns()"
+            [visible]="contractVisible"
+            [rowKey]="contractKey"
+          />
+        </sb-panel>
+      </div>
+    }
+
     <!-- -- v54 _5: accessibility and motion ---------------------------------------- -->
     <sb-section-head [heading]="'Accessibility and motion'" [level]="2" />
     <sb-panel heading="[sbFlash] -- motion that means something">
@@ -440,7 +580,7 @@ interface GalleryRow {
     </sb-panel>
   `,
   styles: `
-    :host { display: grid; gap: var(--space-20); padding: var(--space-20); }
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); padding: var(--space-20); }
     h1 { margin: 0; font-size: var(--text-title); font-weight: 600; }
     sb-panel { display: block; }
 
@@ -471,12 +611,18 @@ interface GalleryRow {
       border-bottom: 1px solid var(--border);
     }
     .numerics-demo sb-magnitude { display: inline-block; width: 48px; margin-left: var(--space-8); }
+
+    /* v80 D6 -- a phone-width box, so the container-driven layouts (filter
+       bar, segmented, tab bar) show their narrow behaviour at any window size. */
+    .narrow-demo { max-width: 320px; margin-top: var(--space-10); }
+    .register-demo { display: grid; gap: var(--space-10); }
+    .register-demo h3 { margin: 0; }
   `,
 })
 export class Gallery {
-  protected readonly buttonVariants: (
-    'primary' | 'secondary' | 'danger' | 'ghost' | 'icon' | 'chip' | 'segment' | 'link'
-  )[] = ['primary', 'secondary', 'danger', 'ghost', 'icon', 'chip', 'segment', 'link'];
+  protected readonly buttonVariants: ButtonVariant[] = [
+    'primary', 'secondary', 'danger', 'ghost', 'icon', 'danger-icon', 'link', 'chip', 'segment',
+  ];
 
   protected readonly textInputTypes: ('text' | 'search' | 'number' | 'password' | 'date')[] = [
     'text', 'search', 'number', 'password', 'date',
@@ -487,21 +633,42 @@ export class Gallery {
     { value: 'b', label: 'Option B' },
   ];
 
-  protected readonly chipTones: ChipTone[] = ['neutral', 'q1', 'q2', 'q3', 'q4', 'q5'];
+  protected readonly chipTones: ChipTone[] = ['neutral', 'good', 'warn', 'info', 'q1', 'q2', 'q3', 'q4', 'q5'];
 
   protected readonly filterChips: FilterChip[] = [
     { value: 'open', label: 'Open', count: 3 },
     { value: 'closed', label: 'Closed', count: 12 },
   ];
 
+  /** Seven tabs, so the narrow copy overflows and shows its edge fade. */
   protected readonly tabs: Tab[] = [
-    { id: 'one', label: 'One' },
-    { id: 'two', label: 'Two' },
+    { id: 'plans', label: 'Plans' },
+    { id: 'strategies', label: 'Strategies' },
+    { id: 'exits', label: 'Exits' },
+    { id: 'regimes', label: 'Regimes' },
+    { id: 'calibration', label: 'Calibration' },
+    { id: 'heatmap', label: 'Heatmap' },
+    { id: 'tuning', label: 'Tuning' },
   ];
-  protected readonly activeTab = signal('one');
+  protected readonly activeTab = signal('plans');
 
   protected readonly drawerOpen = signal(false);
   protected readonly confirmOpen = signal(false);
+
+  /* -- v80 D4 / D6 ---------------------------------------------------------- */
+
+  protected readonly segmentOptions: SegmentOption[] = [
+    { value: 'open', label: 'Open', count: 4 },
+    { value: 'partial', label: 'Partial', count: 2 },
+    { value: 'closed', label: 'Closed', count: 31 },
+  ];
+  protected readonly segmentValue = signal('open');
+  protected readonly rangeOptions: SegmentOption[] = ['1D', '1W', '1M', '3M', '6M', 'YTD', '1Y', '2Y', '5Y', 'All']
+    .map((range) => ({ value: range, label: range }));
+  protected readonly rangeValue = signal('1M');
+
+  protected readonly statuses = ['PENDING', 'ACTIVE', 'PARTIAL', 'CLOSED'];
+  protected readonly registers = ['register-presentation', 'register-instrument'];
 
   /* -- v54 _5: accessibility and motion -------------------------------- */
 
@@ -625,7 +792,7 @@ export class Gallery {
 
   protected readonly iconNames: IconName[] = [
     'dashboard', 'trades', 'analytics', 'calendar', 'watchlist', 'risk',
-    'system', 'versions', 'collapse', 'expand', 'profile', 'signout', 'menu',
+    'system', 'versions', 'collapse', 'expand', 'profile', 'signout', 'menu', 'trash',
   ];
 
   protected readonly tableRows: GalleryRow[] = [
@@ -644,4 +811,34 @@ export class Gallery {
   protected readonly pageSpec: PageSpec = { total: 2, page: 1, perPage: 20 };
 
   protected readonly qualityTone = qualityTone;
+
+  /* -- v80 D6: one table row per cell contract --------------------------------
+   * The Held values are the four the contract names: 4d 2h 15m, 4d 0h 5m,
+   * 3h 0m, 45m. MSFT has no amount (its cell drops the bracket); NVDA is a
+   * PENDING plan: trigger underlined, nothing to price, no confidence yet. */
+  private readonly directionCell = viewChild.required<TemplateRef<RowContext<ContractRow>>>('directionCell');
+  private readonly planCell = viewChild.required<TemplateRef<RowContext<ContractRow>>>('planCell');
+  private readonly pnlCell = viewChild.required<TemplateRef<RowContext<ContractRow>>>('pnlCell');
+  private readonly confidenceCell = viewChild.required<TemplateRef<RowContext<ContractRow>>>('confidenceCell');
+
+  protected readonly contractRows: ContractRow[] = [
+    { id: 'c1', ticker: 'AAPL', direction: 'bullish', entry: 178, target: 195, stop: 170, trigger: null,
+      pnlPct: 4.2, pnlAmount: 9.8, level: 4, score: 78, heldHours: 98.25 },
+    { id: 'c2', ticker: 'TSLA', direction: 'bearish', entry: 250, target: 230, stop: 258, trigger: null,
+      pnlPct: -1.35, pnlAmount: -6.1, level: 2, score: 41, heldHours: 96 + 5 / 60 },
+    { id: 'c3', ticker: 'MSFT', direction: 'bullish', entry: 412, target: 440, stop: 401, trigger: null,
+      pnlPct: 0.4, pnlAmount: null, level: 5, score: null, heldHours: 3 },
+    { id: 'c4', ticker: 'NVDA', direction: 'bullish', entry: null, target: 48, stop: 40, trigger: 42.5,
+      pnlPct: null, pnlAmount: null, level: null, score: null, heldHours: 0.75 },
+  ];
+  protected readonly contractVisible = ['ticker', 'direction', 'plan', 'pnl', 'confidence', 'held'];
+  protected readonly contractKey = (row: ContractRow) => row.id;
+  protected readonly contractColumns = computed<ColumnDef<ContractRow>[]>(() => [
+    { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, sortable: true },
+    { key: 'direction', header: 'Dir', cell: this.directionCell() },
+    { key: 'plan', header: 'Plan', cell: this.planCell() },
+    { key: 'pnl', header: 'P&L', cell: this.pnlCell(), numeric: true, sortable: true },
+    { key: 'confidence', header: 'Confidence', cell: this.confidenceCell() },
+    { key: 'held', header: 'Held', value: (row) => held(row.heldHours), numeric: true },
+  ]);
 }

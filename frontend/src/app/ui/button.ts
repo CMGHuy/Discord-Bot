@@ -27,6 +27,9 @@ export type ButtonVariant =
  * `ConfirmDialog` is what makes those actions hard to trigger by accident.
  * `danger-icon` is a v77 addition for destructive icon-only controls, and pairs
  * with `ConfirmDialog` exactly as `danger` does.
+ *
+ * v80 D4 restyles every variant through tokens. `segment` and `chip` are
+ * deprecated in favour of `sb-segmented`; Migration moves their call sites.
  */
 @Component({
   selector: 'button[sb-button]',
@@ -58,19 +61,21 @@ export type ButtonVariant =
     :host([disabled]) { opacity: 0.45; cursor: default; }
 
     /* Blue is interactive-only, which is exactly what a primary button is --
-       the one place the accent is allowed to carry weight. */
-    /* Dark ink on the bright accent, not white: --bg against --accent clears
-       4.4:1, and the same pairing survives an accent change because both
-       sides are tokens. */
-    :host(.primary) { background: var(--accent); color: var(--bg); }
-    :host(.primary:not([disabled]):hover) { background: color-mix(in srgb, var(--accent) 85%, white); }
+       the one place the accent is allowed to carry weight. v80 D1 split the
+       accent: --accent (#5593ff) is the text-safe blue and too light to carry
+       white ink, so a filled button paints --accent-fill (#2962ff) with
+       --on-accent on top, 4.90:1. */
+    :host(.primary) { background: var(--accent-fill); color: var(--on-accent); }
+    :host(.primary:not([disabled]):hover) { background: color-mix(in srgb, var(--accent-fill) 85%, white); }
 
+    /* A hairline on whatever ground it sits on. Panels separate by hairlines
+       now (v80 D3), and a raised fill made every secondary look pressed. */
     :host(.secondary) {
-      background: var(--surface-raised);
+      background: transparent;
       border-color: var(--border-strong);
       color: var(--text);
     }
-    :host(.secondary:not([disabled]):hover) { border-color: var(--text-muted); }
+    :host(.secondary:not([disabled]):hover) { border-color: var(--text-muted); background: var(--surface-raised); }
 
     /* Red here is not P&L -- it is the one sanctioned exception, because an
        irreversible control that does not look dangerous is worse than a
@@ -80,7 +85,9 @@ export type ButtonVariant =
       border-color: var(--neg);
       color: var(--neg);
     }
-    :host(.danger:not([disabled]):hover) { background: color-mix(in srgb, var(--neg) 14%, transparent); }
+    /* Fills on hover (v80 D4): the moment before an irreversible click is the
+       one place this control should shout. --bg ink on --neg clears 6:1. */
+    :host(.danger:not([disabled]):hover) { background: var(--neg); color: var(--bg); }
 
     :host(.ghost) { background: transparent; color: var(--text-secondary); }
     :host(.ghost:not([disabled]):hover) { color: var(--text); background: var(--surface-raised); }
@@ -111,7 +118,10 @@ export type ButtonVariant =
       background: color-mix(in srgb, var(--neg) 14%, transparent);
     }
 
-    /* A filter toggle. Reads as a chip, behaves as a button: versions/ had
+    /* Deprecated (v80 D4): a toggle is sb-segmented now. Kept working until
+       Migration moves the call sites.
+
+       A filter toggle. Reads as a chip, behaves as a button: versions/ had
        four of these hand-rolled because no variant covered a control that is
        a chip in appearance and a toggle in function. \`.on\` is the pressed
        state and pairs with aria-pressed at the call site. */
@@ -132,7 +142,9 @@ export type ButtonVariant =
       color: var(--text);
     }
 
-    /* One cell of a segmented control. The group owns the outer border and
+    /* Deprecated (v80 D4) with chip above, for the same sb-segmented.
+
+       One cell of a segmented control. The group owns the outer border and
        the radius; a segment owns only its divider, so segments sit flush. */
     :host(.segment) {
       border-color: transparent;
@@ -142,7 +154,7 @@ export type ButtonVariant =
       font-weight: 500;
     }
     :host(.segment:not([disabled]):hover) { color: var(--text); }
-    :host(.segment.current) { background: var(--surface-overlay); color: var(--text); }
+    :host(.segment.current) { background: var(--accent-soft); color: var(--text); }
 
     /* A button that must look like a link because it sits in running text.
        Still a button: it performs an action rather than navigating, and an
@@ -156,6 +168,12 @@ export type ButtonVariant =
       font-weight: 500;
     }
     :host(.link:not([disabled]):hover) { text-decoration: underline; }
+
+    /* v80 D4 -- a finger needs a square target. The same condition as the
+       tokens.css touch block, where --control-h is already 44px. */
+    @media (pointer: coarse), (max-width: 639px) {
+      :host(.icon), :host(.danger-icon) { min-width: var(--control-h); min-height: var(--control-h); }
+    }
   `,
 })
 export class Button {

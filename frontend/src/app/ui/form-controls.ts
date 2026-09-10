@@ -25,7 +25,7 @@ export interface SelectOption {
   template: `
     <label class="field">
       @if (label(); as text) {
-        <span class="label">{{ text }}</span>
+        <span class="sb-label">{{ text }}</span>
       }
       <select
         [value]="value()"
@@ -44,25 +44,23 @@ export interface SelectOption {
   `,
   styles: `
     .field { display: inline-flex; flex-direction: column; gap: var(--space-4); }
-    .label {
-      color: var(--text-secondary);
-      font-size: var(--text-micro);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-    }
+    /* v80 D4: a hairline field on the panel's own ground. The caption is the
+       global .sb-label. --text-control is 16px on touch, the size below which
+       a phone zooms into a focused field. */
     select {
       height: var(--control-h);
       padding: 0 var(--space-8);
-      background: var(--surface-raised);
-      border: 1px solid var(--border);
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
       border-radius: var(--radius);
       color: var(--text);
       font: inherit;
-      font-size: var(--text-table);
+      font-size: var(--text-control);
     }
-    select:hover:not(:disabled) { border-color: var(--border-strong); }
+    select:hover:not(:disabled) { border-color: var(--text-muted); }
     select:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
-    select:disabled { color: var(--text-faint); }
+    /* Opacity, not the divider-only grey (contrast.spec.ts). */
+    select:disabled { opacity: 0.45; }
   `,
 })
 export class Select {
@@ -82,7 +80,7 @@ export class Select {
   template: `
     <label class="field">
       @if (label(); as text) {
-        <span class="label">{{ text }}</span>
+        <span class="sb-label">{{ text }}</span>
       }
       <input
         [type]="type()"
@@ -101,25 +99,21 @@ export class Select {
   `,
   styles: `
     .field { display: inline-flex; flex-direction: column; gap: var(--space-4); }
-    .label {
-      color: var(--text-secondary);
-      font-size: var(--text-micro);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-    }
+    /* Same field as sb-select above (v80 D4). */
     input {
       height: var(--control-h);
       padding: 0 var(--space-8);
-      background: var(--surface-raised);
-      border: 1px solid var(--border);
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
       border-radius: var(--radius);
       color: var(--text);
       font: inherit;
-      font-size: var(--text-table);
+      font-size: var(--text-control);
     }
-    input::placeholder { color: var(--text-faint); }
-    input:hover:not(:disabled) { border-color: var(--border-strong); }
+    input::placeholder { color: var(--text-muted); }
+    input:hover:not(:disabled) { border-color: var(--text-muted); }
     input:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+    input:disabled { opacity: 0.45; }
   `,
 })
 export class TextInput {
@@ -168,7 +162,7 @@ export class TextInput {
   template: `
     <label class="field" [class.stacked]="topLabel()">
       @if (topLabel(); as text) {
-        <span class="top-label">{{ text }}</span>
+        <span class="top-label sb-label">{{ text }}</span>
       }
       <span class="box">
         <input
@@ -193,16 +187,11 @@ export class TextInput {
     /* Label above, control below -- the same two bands sb-select and
        sb-text-input have, so a checkbox can share a row with them. */
     .stacked { flex-direction: column; align-items: flex-start; gap: var(--space-4); }
-    .top-label {
-      color: var(--text-secondary);
-      font-size: var(--text-micro);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-    }
+    /* .top-label's typography is the global .sb-label (v80 D3). */
     /* The control band. Height matched to every other control so the row
        aligns on the box, not on the caption's text. */
     .box { display: inline-flex; align-items: center; gap: var(--space-6); height: var(--control-h); }
-    .field:has(input:disabled) { color: var(--text-faint); cursor: default; }
+    .field:has(input:disabled) { opacity: 0.45; cursor: default; }
     input { accent-color: var(--accent); }
   `,
 })

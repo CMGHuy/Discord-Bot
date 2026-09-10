@@ -10,28 +10,39 @@ function token(name: string): string {
   return m[1];
 }
 
-/** sRGB hex -> CIE L*a*b* (D65). Enough for a distance check; this is a gate,
- *  not a colour-management pipeline. */
-function lab(hex: string): [number, number, number] {
-  const to = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+/** sRGB hex -> OKLab: the space the dataviz palette validator measures in
+ *  (spec v80 D2). One metric for every colour gate: under the CIE76 formula
+ *  this spec used before, the old pink resistance line sat 15.4 from --neg and
+ *  passed, though it reads as a loss (5.9 in OKLab). Thresholds are unchanged. */
+function oklab(hex: string): [number, number, number] {
+  const to = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
   const r = to(parseInt(hex.slice(1, 3), 16) / 255);
   const g = to(parseInt(hex.slice(3, 5), 16) / 255);
   const b = to(parseInt(hex.slice(5, 7), 16) / 255);
-  const x = (r * 0.4124 + g * 0.3576 + b * 0.1805) / 0.95047;
-  const y = r * 0.2126 + g * 0.7152 + b * 0.0722;
-  const z = (r * 0.0193 + g * 0.1192 + b * 0.9505) / 1.08883;
-  const f = (t: number) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
-  const [fx, fy, fz] = [f(x), f(y), f(z)];
-  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  ];
 }
 
+/** OKLab distance x100, the validator's scale. */
 function deltaE(a: string, b: string): number {
-  const [l1, a1, b1] = lab(a);
-  const [l2, a2, b2] = lab(b);
-  return Math.hypot(l1 - l2, a1 - a2, b1 - b2);
+  const [l1, a1, b1] = oklab(a);
+  const [l2, a2, b2] = oklab(b);
+  return 100 * Math.hypot(l1 - l2, a1 - a2, b1 - b2);
 }
 
-const SERIES = Array.from({ length: 8 }, (_, i) => `--chart-${i + 1}`);
+/** OKLCH lightness and chroma, for the validator's band and floor. */
+function oklch(hex: string): { l: number; c: number } {
+  const [L, A, B] = oklab(hex);
+  return { l: L, c: Math.hypot(A, B) };
+}
+
+const SERIES = Array.from({ length: 6 }, (_, i) => `--chart-${i + 1}`);
 
 describe('the chart series namespace', () => {
   for (const name of SERIES) {
@@ -54,22 +65,20 @@ describe('the chart series namespace', () => {
     }
   });
 
-  // v54 D5: --chart-1/2/3 are supposed to BE --accent/--info/--warn's own
-  // hex (tokens.css's own comment says so), kept as a second literal rather
-  // than `var(--accent)`. Real browsers DO substitute a nested var() inside
-  // a custom property's own value, so aliasing would be safe in production
-  // -- it is this repo's OWN test path that isn't: line-chart.ts's
-  // seriesColour() reads --chart-* via getComputedStyle().getPropertyValue()
-  // under vitest, and jsdom does not perform that substitution (confirmed
-  // directly), so an aliased value would reach an SVG stroke as the literal
-  // text "var(--accent)". This spec's own token() also requires a literal
-  // hex regardless (it parses tokens.css as text). So these stay literal,
-  // and this is the loud-failure alternative to aliasing: pin the two
-  // copies equal, so a retune of one without the other fails here instead
-  // of drifting.
-  it('chart-1/2/3 stay equal to the accent/info/warn hex they are meant to be', () => {
-    expect(token('--chart-1')).toBe(token('--accent'));
-    expect(token('--chart-2')).toBe(token('--info'));
-    expect(token('--chart-3')).toBe(token('--warn'));
-  });
+  // v80 D2. The band and floor the dataviz validator applies for a dark
+  // surface. A series outside the band is either too dim to find at 1px or
+  // bright enough to read as a highlight; below the chroma floor it reads
+  // as grey. Series are no longer pinned to --accent/--info/--warn: C's
+  // lavender info fails this floor and its amber fails the band.
+  for (const name of SERIES) {
+    it(`${name} sits inside the dark-surface lightness band`, () => {
+      const { l } = oklch(token(name));
+      expect(l).toBeGreaterThanOrEqual(0.48);
+      expect(l).toBeLessThanOrEqual(0.67);
+    });
+
+    it(`${name} clears the chroma floor`, () => {
+      expect(oklch(token(name)).c).toBeGreaterThanOrEqual(0.1);
+    });
+  }
 });

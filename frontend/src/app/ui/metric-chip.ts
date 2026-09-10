@@ -3,6 +3,8 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { MetricTone } from './metric-card';
 
 /**
+ * Deprecated (v80 D4): use `sb-figure` inside an `sb-figure-strip`.
+ *
  * One number with a label, compact. The Dashboard's secondary tier.
  *
  * The same data as `MetricCard` in a fraction of the space — hierarchy comes

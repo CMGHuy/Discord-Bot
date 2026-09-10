@@ -74,7 +74,10 @@ export function seriesPath(
  * resolved value, not a `var()`. `test-setup.ts` injects tokens.css into the
  * test document, so this resolves under vitest too.
  */
-const SERIES = Array.from({ length: 8 }, (_, i) => `--chart-${i + 1}`);
+// Six, not eight (v80 D2). A seventh series wraps back to --chart-1 here;
+// a chart that genuinely needs more should fold the tail into "Other"
+// before it reaches this component.
+const SERIES = Array.from({ length: 6 }, (_, i) => `--chart-${i + 1}`);
 
 function seriesColour(index: number): string {
   return token(SERIES[index % SERIES.length]);

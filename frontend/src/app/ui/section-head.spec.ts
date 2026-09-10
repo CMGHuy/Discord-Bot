@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { TestBed } from '@angular/core/testing';
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -15,6 +17,12 @@ import { SectionHead } from './section-head';
 class Host {
   level: 1 | 2 = 1;
 }
+
+@Component({
+  imports: [SectionHead],
+  template: `<sb-section-head heading="AAPL" [level]="1"><span status>as of 14:02</span><a back href="/trades">Trades</a></sb-section-head>`,
+})
+class SlotHost {}
 
 function render(level: 1 | 2 = 1) {
   const f = TestBed.createComponent(Host);
@@ -40,4 +48,14 @@ describe('SectionHead', () => {
   it('emits exactly one heading element', () => {
     expect(render().querySelectorAll('h1, h2').length).toBe(1);
   });
+});
+
+describe('SectionHead slots (v80 D4)', () => {
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/section-head.ts'), 'utf8');
+  beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] }));
+  function slots(): HTMLElement { const f = TestBed.createComponent(SlotHost); f.detectChanges(); return f.nativeElement as HTMLElement; }
+  it('renders back before title', () => { const el = slots(); expect(el.querySelector('[back]')!.compareDocumentPosition(el.querySelector('h1')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); });
+  it('keeps status in title group', () => { const el = slots(); const group = el.querySelector('h1')!.closest('.title-group'); expect(el.querySelector('[status]')!.closest('.title-group')).toBe(group); });
+  it('keeps actions outside title group', () => expect(render().querySelector('button')!.closest('.title-group')).toBeNull());
+  it('lets long title wrap', () => { expect(SOURCE).toMatch(/h1 \{[^}]*overflow-wrap: anywhere/); expect(SOURCE).toMatch(/h2 \{[^}]*overflow-wrap: anywhere/); });
 });

@@ -5,6 +5,8 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 export type MetricTone = 'plain' | 'pnl' | 'caution';
 
 /**
+ * Deprecated (v80 D4): use `sb-figure` inside an `sb-figure-strip`.
+ *
  * One large number with a label. The Dashboard's primary tier.
  *
  * Hierarchy comes from size rather than from culling (design system

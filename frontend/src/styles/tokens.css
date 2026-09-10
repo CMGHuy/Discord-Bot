@@ -10,9 +10,10 @@
  * maintaining, and this is a single-user private tool. Adding one later means
  * revisiting the spec, not adding a media query.
  *
- * This file is NOT `swingbot/admin/static/tokens.css`. That one still drives
- * the Jinja UI *and* the bot's Discord chart colours. The two coexist until
- * Jinja is deleted, and this is the SPA's only palette.
+ * The bot's Discord chart PNGs share this palette (spec v80 D5):
+ * `swingbot/core/charts/chart_style.py`'s THEME names these tokens and
+ * tests/charts/test_chart_theme.py compares the two byte for byte. Change a
+ * colour here and that test names the chart constant that must follow.
  */
 
 :root {
@@ -39,22 +40,26 @@
    * platform renders direction this way — breaking the convention to satisfy
    * an internal rule would be worse, not more consistent.
    */
-  --bg: #0a0b10;
-  --surface: #10121a;
-  --surface-raised: #171a25;
-  --surface-overlay: #1e2230;
-  --overlay-dim: rgba(10, 11, 16, .72);
-  --border: #232838;
-  --border-strong: #333a4f;
+  /* v80 D1: direction C, "TradingView Blue". The surface ladder steps far
+   * enough apart (0c0f16 -> 131722 -> 1c212d -> 242936) that panels read as
+   * separate objects without a shadow; --surface is TradingView's own chart
+   * pane, so the admin and the Discord charts sit on one ground. */
+  --bg: #0c0f16;
+  --surface: #131722;
+  --surface-raised: #1c212d;
+  --surface-overlay: #242936;
+  --overlay-dim: rgba(12, 15, 22, .72);
+  --border: #2a2e39;
+  --border-strong: #363a45;
 
   /* -- elevation --------------------------------------------------------
    * ONE shadow, and it means one thing: this element is not part of the
    * page flow.
    *
    * Depth in a dark UI is carried by surface LIGHTNESS, not by shadow --
-   * the four surface tokens above already step 0a0b10 -> 10121a -> 171a25
-   * -> 1e2230, which is the ladder. A shadow under a panel on near-black
-   * reads as smudge rather than depth, so L1 and L2 have none and only L3
+   * the four surface tokens above step 0c0f16 -> 131722 -> 1c212d -> 242936,
+   * which is the ladder. A shadow under a panel on near-black reads as
+   * smudge rather than depth, so L1 and L2 have none and only L3
    * (dropdown, popover, tooltip, toast, drawer, dialog) takes this.
    *
    * An `inset` box-shadow is NOT this: it is a border drawn inside the box
@@ -69,40 +74,45 @@
    * (versions.ts faked one with a 9999px spread). */
   --scrim: var(--overlay-dim);
 
-  --text: #e9ebf5;
-  --text-secondary: #9ba3bd;
-  /* v54 Task 42: the ONE deliberate exception to "no existing token changes
-   * value" (see plan's Global Constraints). Measured AA failure at the
-   * original #6d7590 -- 4.14:1 on --surface, 3.80:1 on --surface-raised,
-   * 3.47:1 on --surface-overlay, all below the 4.5:1 gate -- on a token used
-   * at --text-micro (11px) for real, readable labels (nav group headers,
-   * chip captions), not large text and not a rule/divider like
-   * --text-faint below. #878ea4 clears 4.5:1 on all four surfaces (worst
-   * case 4.85:1 on --surface-overlay, verified in contrast.spec.ts) with a
-   * safety margin over the gate; that is a documented, tested, single-token
-   * change with a measured reason, which is the opposite of the silent
-   * breakage the constraint exists to prevent. Recorded in the v54 spec's
-   * Non-goals section. */
-  --text-muted: #878ea4;
+  --text: #d9dce4;
+  --text-secondary: #9ea2ad;
+  /* v80 D1: direction C's first muted grey (#888c97) measured 4.32:1 on
+   * --surface-overlay -- under the 4.5:1 gate contrast.spec.ts enforces on
+   * all four surfaces, for real readable labels at --text-micro (nav group
+   * headers, chip captions, .sb-label). #9195a0 is the smallest lift that
+   * clears it with v54's safety margin: worst case 4.85:1 on
+   * --surface-overlay. v54 Task 42 made the same kind of measured,
+   * single-token change for the previous palette. */
+  --text-muted: #9195a0;
   /* --text-faint is a RULE AND DIVIDER colour (~2.3:1 on --surface) -- never
    * text that must be read. contrast.spec.ts's `no-text-uses-text-faint`
    * assumes this and this comment is what it checks for. */
-  --text-faint: #464d63;
+  --text-faint: #4e5361;
 
   --pos: #17c98e;
   --neg: #ff5470;
   --warn: #ffb43d;
-  --accent: #7b5cfa;
-  --info: #46c2ff;
+  /* v80 D1: the accent is two tokens. --accent is the colour of interactive
+   * TEXT and state -- links, the active tab, the sort arrow, focus -- and
+   * #5593ff clears 4.85:1 on every surface. --accent-fill is the deeper
+   * TradingView blue a filled button paints, with --on-accent on top at
+   * 4.90:1; the text-safe blue is too light to carry white ink. */
+  --accent: #5593ff;
+  --accent-fill: #2962ff;
+  --on-accent: #ffffff;
+  /* v80 D1: info moved off sky blue. Under direction C the accent took the
+   * blue, and two blues would make "neutral" read as "interactive". */
+  --info: #b39ddb;
 
   /* 12% tints, for cell and chip backgrounds, hover states and the chart's
    * risk/reward bands. Literal rgba rather than colour-mix() so the values
-   * survive without a fallback path. */
+   * survive without a fallback path. --accent-soft is 18% of the FILL blue:
+   * the selected-segment ground needs to separate from --surface-raised. */
   --pos-soft: rgba(23, 201, 142, 0.12);
   --neg-soft: rgba(255, 84, 112, 0.12);
   --warn-soft: rgba(255, 180, 61, 0.12);
-  --accent-soft: rgba(123, 92, 250, 0.12);
-  --info-soft: rgba(70, 194, 255, 0.12);
+  --accent-soft: rgba(41, 98, 255, 0.18);
+  --info-soft: rgba(179, 157, 219, 0.14);
 
   /* Quality ramp — confidence Lv1-5 and tier A/B/C.
    *
@@ -117,55 +127,47 @@
   --quality-2: var(--warn);
   --quality-3: var(--text-secondary);
   /* v62 D2: level 4 is ordinal yellow-green, not informational blue.
-   * Keep this literal in lockstep with presentation.tokens.ACCENT_RAMP[4];
-   * --info remains the chart-series colour used by --chart-2. */
+   * Keep this literal in lockstep with presentation.tokens.ACCENT_RAMP[4].
+   * (v80: --info is lavender and no longer doubles as a chart series.) */
   --quality-4: #9acd32;
   --quality-5: var(--pos);
 
   /* -- chart series ------------------------------------------------------
-   * A SEPARATE NAMESPACE from the valence hues above, and deliberately so.
+   * A SEPARATE NAMESPACE from the valence hues above, in meaning AND, since
+   * v80, in value.
    *
    * The valence rule ("a sixth hue is a review defect") governs SEMANTIC
-   * colour: --pos means good, --neg means bad, and those meanings hold on
-   * every surface. A categorical series colour carries no meaning at all --
-   * it is an identifier, telling you which line is AAPL. The two namespaces
-   * must not overlap: a green series in an app where green means gain would
-   * lie to a reader every other screen has trained.
+   * colour: --pos means good, --neg means bad, on every surface. A
+   * categorical series colour carries no meaning at all -- it is an
+   * identifier, telling you which line is AAPL -- so it must not overlap the
+   * valence hues: a green series in an app where green means gain would lie
+   * to a reader every other screen has trained.
    *
-   * So the one binding rule, checked by chart-palette.spec.ts: no member is
-   * within ΔE 10 of --pos or --neg, and adjacent members clear ΔE 15 so they
-   * stay apart at a 1px stroke.
+   * v80 D2: six hues validated against --surface (#131722) with the dataviz
+   * palette validator -- OKLCH L 0.48-0.67, chroma >= 0.10, adjacent CVD
+   * dE >= 8, normal-vision dE >= 15, contrast >= 3:1. Eight hues that avoid
+   * both the gain-green and loss-red families inside that band do not
+   * validate, so a seventh series folds into "Other" at its call site.
+   * Rejected, and recorded so nobody reintroduces them: a pink (10.8 from
+   * --neg) and an olive (12.6 from --pos). They clear a bare dE 10 gate and
+   * still read as loss and gain on a P&L chart.
    *
-   * The first three ARE --accent / --info / --warn's own hex, kept as a
-   * literal rather than `var(--accent)` the way --quality-1..5 above alias
-   * the valence hues. Real browsers DO substitute a nested var() inside a
-   * custom property's own computed value (CSS Custom Properties Level 1:
-   * "computed value: specified value, with variables substituted" -- this is
-   * what --quality-1..5 correctly relies on), so aliasing would be safe in
-   * production. It would not be safe in THIS repo's tests: jsdom's
-   * `getComputedStyle` does not perform that substitution (confirmed
-   * directly -- `getPropertyValue()` on a jsdom-rendered `var(--accent)`
-   * custom property returns the literal text "var(--accent)", not a
-   * resolved colour), and line-chart.ts's seriesColour() reads --chart-*
-   * through exactly that call, under vitest, because an SVG stroke needs a
-   * resolved value. chart-palette.spec.ts's own gate also requires a literal
-   * hex for unrelated reasons (it parses tokens.css as text, not through a
-   * browser). So these three stay literal, and chart-palette.spec.ts pins
-   * them to --accent/--info/--warn's actual values directly, so a retune of
-   * one without the other fails loudly there instead of drifting silently.
-   * The rest are new colours in that family's spirit rather than picked
-   * freely, so the charts still look like they belong to this app. */
-  --chart-1: #7b5cfa;
-  --chart-2: #46c2ff;
-  --chart-3: #ffb43d;
-  --chart-4: #b48cff;
-  --chart-5: #2f7fd4;
-  --chart-6: #d07de0;
-  --chart-7: #7fd8e8;
-  --chart-8: #c9a227;
+   * No longer pinned to --accent/--info/--warn: under direction C the
+   * lavender info fails the chroma floor and amber fails the band.
+   *
+   * Literal hex, never var(): line-chart.ts reads these through
+   * getComputedStyle under vitest, and jsdom does not substitute a nested
+   * var() inside a custom property; chart-palette.spec.ts also parses this
+   * file as text. That spec is the gate. */
+  --chart-1: #4c8dff;
+  --chart-2: #c97a22;
+  --chart-3: #a868e0;
+  --chart-4: #b08c14;
+  --chart-5: #1a9db3;
+  --chart-6: #7076e8;
 
   /* -- type ------------------------------------------------------------
-   * Named by role, not by size: the scale is closed (11/12/13/14/16/20/25)
+   * Named by role, not by size: the scale is closed (11/12/13/14/16/20/28)
    * and a component should be choosing "this is a chip" rather than
    * "this is 10px". A size not on this list is a review defect.
    */
@@ -193,9 +195,10 @@
   --text-chip: calc(12px * var(--text-scale));      /* chip */
   --text-table: calc(13px * var(--text-scale));     /* table body */
   --text-body: calc(14px * var(--text-scale));      /* body */
+  --text-control: calc(14px * var(--text-scale));   /* form-control text; 16px on touch, below */
   --text-subhead: calc(16px * var(--text-scale));   /* subheading */
   --text-title: calc(20px * var(--text-scale));     /* section title */
-  --text-metric: calc(25px * var(--text-scale));    /* primary metric */
+  --text-metric: calc(28px * var(--text-scale));    /* primary metric -- v80 D3, was 25px */
 
   /* -- spacing ---------------------------------------------------------
    * Closed scale, named by value on purpose. An indirection table
@@ -229,6 +232,10 @@
    */
   --control-h: 28px;
 
+  /* v80 D3: one row height for every table row, so a table beside a list
+   * lines up. Grows with --control-h in the touch block below. */
+  --row-h: 32px;
+
   /* Breakpoints are deliberately NOT tokens: @media cannot evaluate var(),
      so each one would have to be repeated as a literal in every query and
      the two copies would drift silently. They live in ui/breakpoints.ts --
@@ -251,8 +258,9 @@
    *   --dur-base     state change, value flash, bar easing
    *   --dur-slow     layout: sidebar, panel reflow, route transition
    */
-  --radius: 4px;
-  --radius-chip: 3px;
+  /* v80 D3: 2px, was 4px / 3px -- a pro terminal's corners, not a card's. */
+  --radius: 2px;
+  --radius-chip: 2px;
 
   --dur-instant: 90ms;
   --dur-base: 160ms;
@@ -263,6 +271,20 @@
   /* Alias, so existing `transition: var(--transition)` call sites keep
    * working. New code names the duration it wants. */
   --transition: var(--dur-base) var(--ease-out);
+}
+
+/* v80 D3 -- touch. A finger needs about 44px; a mouse row of 28px controls
+ * shows more data. `pointer: coarse` catches touch at any width, and 639px
+ * (breakpoints.ts's sm floor, less one) catches a narrow window driven by a
+ * mouse too. Only these three move: gutters stay put, so this is a
+ * hit-target change, not a zoom. 16px control text is also the size below
+ * which mobile browsers zoom into a focused field. */
+@media (pointer: coarse), (max-width: 639px) {
+  :root {
+    --control-h: 44px;
+    --row-h: 44px;
+    --text-control: calc(16px * var(--text-scale));
+  }
 }
 
 /* Breakpoints are 640 / 1024 / 1440 / 1920.

@@ -13,7 +13,7 @@ and must not import a drawing module to do it.
 """
 import pandas as pd
 
-from .chart_style import MIN_LABEL_GAP_FRAC, _label_bbox
+from .chart_style import MIN_LABEL_GAP_FRAC, TEXT_COLOR, _label_bbox
 
 
 def _spread_labels(items: list, ylim: tuple) -> list:
@@ -177,7 +177,7 @@ def _draw_trendline(ax, recent_len: int, window_bars: int, slope: float, interce
     if touch_points:
         xs = [offset + x for x, _price in touch_points]
         ys = [price for _x, price in touch_points]
-        ax.scatter(xs, ys, color=color, s=55, marker="D", zorder=6, edgecolors="white", linewidths=0.8)
+        ax.scatter(xs, ys, color=color, s=55, marker="D", zorder=6, edgecolors=TEXT_COLOR, linewidths=0.8)
     _place_strategy_label(ax, x1, y1, label_x, color, label, occupied=occupied, min_gap=min_gap)
 
 

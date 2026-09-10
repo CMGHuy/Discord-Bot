@@ -29,16 +29,12 @@ import { money, num, pct, rMultiple, share } from './format';
     </span>
   `,
   styles: `
-    /* nowrap is the TABLE rule -- three prices and two separators read as one
-       plan, and a column has a scroller behind it. --cell-wrap is DataTable's
-       card-mode override (see its .card-value block): undefined here, so a
-       table keeps nowrap; set to normal inside a card, where the run has no
-       column to align to and nothing to scroll and would otherwise be cut off
-       at the edge of a phone. */
+    /* Three prices and two separators read as one plan. The table's scroller
+       preserves that run on every viewport, including the pinned phone mode. */
     .plan {
       font-family: var(--font-mono);
       font-size: var(--text-table);
-      white-space: var(--cell-wrap, nowrap);
+      white-space: nowrap;
     }
     .entry  { color: var(--text-secondary); }
     /* A trigger is a price nothing has traded at yet. Dashed underline rather
@@ -55,10 +51,8 @@ import { money, num, pct, rMultiple, share } from './format';
        textContent as '178.00→195.00/170.00' -- which is what a screen reader
        announces and what anything reading the cell as a string gets. In a
        mono font the literal spaces are exactly one cell wide anyway.
-       --sep-wrap is the card-mode counterpart of --cell-wrap above: pre-wrap
-       there, so the run can break at a separator without the spacing
-       collapsing and running the numbers together. */
-    .sep    { color: var(--text-faint); white-space: var(--sep-wrap, pre); }
+       Literal spaces preserve the relationship in the text as well. */
+    .sep    { color: var(--text-faint); white-space: pre; }
   `,
 })
 export class PlanCell {

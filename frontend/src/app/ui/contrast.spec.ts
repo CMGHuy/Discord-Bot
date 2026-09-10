@@ -48,3 +48,20 @@ describe('WCAG AA on every text/surface pair', () => {
     });
   }
 });
+
+/**
+ * v80 D1. The accent is two tokens: --accent is interactive TEXT and state
+ * (links, active tab, sort arrow) and must read on every surface;
+ * --accent-fill is what a filled button paints, carrying --on-accent.
+ */
+describe('accent legibility (v80 D1)', () => {
+  for (const bg of SURFACES) {
+    it(`--accent as text on ${bg} clears 4.5:1`, () => {
+      expect(ratio(token('--accent'), token(bg))).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+
+  it('--on-accent on --accent-fill clears 4.5:1', () => {
+    expect(ratio(token('--on-accent'), token('--accent-fill'))).toBeGreaterThanOrEqual(4.5);
+  });
+});
