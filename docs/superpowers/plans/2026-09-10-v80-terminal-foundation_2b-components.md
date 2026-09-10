@@ -30,10 +30,18 @@ Constraints and the v77 precondition before starting any task here.
 - Produces:
   - No public API change. `cardsAt` keeps its name and type, and now forces
     the pinned phone mode.
-  - New protected members: `phone`, `sortOptions`, `sortValue`, `onPhoneSort`.
+  - New protected members: `phone`, `pinKey`, `sortOptions`, `sortValue`, `onPhoneSort`.
   - The raw `.phone-sort` select emits the existing `sortChange`.
   - `.card`, `.card-head`, `.card-body`, `.card-value` and `.card-actions` are removed.
   - The `--cell-wrap`/`--sep-wrap` hook is no longer set by anything.
+
+**Deviation from D4's "pins the first column", recorded.** v77's Watchlist puts
+a 1%-wide Tape toggle (`◉`/`○`) before Symbol. Pinning the first column there
+pins the toggle and scrolls away the one column that says which row this is.
+Phone mode pins the row's **identity column** instead: the first rendered
+column keyed `ticker` (Trades, Dashboard) or `symbol` (Watchlist), else the
+first rendered column. It is the same identity preference card mode's
+headline already applied to `ticker`, and it needs no workspace edit.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -80,7 +88,7 @@ describe('DataTable phone mode', () => {
     expect(el().querySelectorAll('tbody tr.row')).toHaveLength(ROWS.length);
   });
 
-  it('pins the first rendered column, header and cells alike', () => {
+  it('pins the ticker column, header and cells alike', () => {
     asPhone();
     expect([...el().querySelectorAll('thead th.pin')].map((th) => th.textContent!.trim()))
       .toEqual(['Ticker']);
@@ -89,10 +97,21 @@ describe('DataTable phone mode', () => {
     expect(el().querySelector('tbody tr.row td.pin')!.textContent).toContain('AAPL');
   });
 
-  it('pins whichever column the user moved first', () => {
+  it('pins the identity column even when another column sits before it', () => {
+    // v77's Watchlist puts a narrow Tape toggle before Symbol; pinning the
+    // toggle would scroll away the column that says which row this is.
     host.visible.set(['held', 'ticker', 'pnl']);
     asPhone();
-    expect(el().querySelector('thead th.pin')!.textContent!.trim()).toBe('Held');
+    expect([...el().querySelectorAll('thead th.pin')].map((th) => th.textContent!.trim()))
+      .toEqual(['Ticker']);
+    expect(el().querySelector('tbody tr.row td.pin')!.textContent).toContain('AAPL');
+  });
+
+  it('falls back to the first rendered column when no ticker or symbol is visible', () => {
+    host.visible.set(['held', 'pnl']);
+    asPhone();
+    expect([...el().querySelectorAll('thead th.pin')].map((th) => th.textContent!.trim()))
+      .toEqual(['Held']);
   });
 
   it('makes the pinned column sticky only in phone mode', () => {
@@ -232,7 +251,7 @@ In `frontend/src/app/ui/data-table/data-table.ts`, replace the whole
                 class="sb-label"
                 [style.width]="col.width"
                 [class.num]="col.numeric"
-                [class.pin]="$first"
+                [class.pin]="col.key === pinKey()"
                 [class.dragging]="dragging() === col.key"
                 [attr.aria-sort]="ariaSort(col)"
                 [attr.draggable]="isPinned(col.key) ? null : 'true'"
@@ -274,7 +293,7 @@ In `frontend/src/app/ui/data-table/data-table.ts`, replace the whole
                 </td>
               }
               @for (col of renderedColumns(); track col.key) {
-                <td [class.num]="col.numeric" [class.pin]="$first">
+                <td [class.num]="col.numeric" [class.pin]="col.key === pinKey()">
                   @if (col.cell; as cellTemplate) {
                     <ng-container
                       [ngTemplateOutlet]="cellTemplate"
@@ -413,8 +432,9 @@ with:
     /* -- v80 D4: phone mode -----------------------------------------------
      * Card mode is replaced. A card per row threw away the column alignment
      * that makes a table scannable, and had no sort control at all. Below
-     * 640px the table stays a table: the first rendered column pins so a row
-     * keeps its identity while the rest scroll sideways under .scroller, and
+     * 640px the table stays a table: the identity column (pinKey: ticker or
+     * symbol, else the first) pins so a row keeps its name while the rest
+     * scroll sideways under .scroller, and
      * the sort select appears above it.
      *
      * .phone forces the same layout from the viewport, and from cardsAt in a
@@ -469,6 +489,18 @@ comment through the end of `pinnedColumns` (the `cards`, `headlineColumns`,
     () => this.cardsAt() ?? this.viewportService.isPhone(),
   );
 
+  /**
+   * The column phone mode pins: the row's identity, `ticker` (Trades,
+   * Dashboard) or `symbol` (Watchlist), wherever it sits, else the first
+   * rendered column. Not blindly the first: v77 put Watchlist's 1%-wide
+   * Tape toggle before Symbol, and a pinned toggle would scroll away the one
+   * column that says which row this is.
+   */
+  protected readonly pinKey = computed(() => {
+    const shown = this.renderedColumns();
+    return (shown.find((column) => PIN_KEYS.includes(column.key)) ?? shown[0])?.key ?? null;
+  });
+
   /** Every sortable visible column, both directions, in render order. The
    *  arrows match `arrow()`, so the select and the header say the same thing. */
   protected readonly sortOptions = computed(() =>
@@ -493,6 +525,15 @@ comment through the end of `pinnedColumns` (the `cards`, `headlineColumns`,
     if (!key || (direction !== 'asc' && direction !== 'desc')) return;
     this.sortChange.emit({ key, direction });
   }
+```
+
+Directly after `export const SPINNER_DELAY_MS = 200;`, add:
+
+```ts
+
+/** Column keys that name a row, in preference order. Phone mode pins the
+ *  first visible one; see `DataTable.pinKey`. */
+const PIN_KEYS = ['ticker', 'symbol'];
 ```
 
 In `fillerRows`, replace:
@@ -561,7 +602,7 @@ If `makes the pinned column sticky only in phone mode` fails with an empty
 
 ```bash
 git add frontend/src/app/ui/data-table/data-table.ts frontend/src/app/ui/data-table/data-table.spec.ts frontend/src/app/ui/plan-cell.ts
-git commit -m "feat(v80): data table keeps the table on a phone -- pinned first column, sort select"
+git commit -m "feat(v80): data table keeps the table on a phone -- pinned identity column, sort select"
 ```
 
 ---

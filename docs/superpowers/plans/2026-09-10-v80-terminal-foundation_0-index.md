@@ -100,6 +100,37 @@ through `@angular/build:unit-test`, Python 3.11, matplotlib/mplfinance, pytest.
   - F27 (full suites) after F26.
   - F28 (release and close-out) last.
 
+## v77 live tape coverage
+
+v77 must be in `main` before F1 (the hard precondition above). At planning
+time, `worktree-2026-09-09-v77-live-tape` was 57 commits ahead of `main`, with
+its full-suite task (`72b812e0`) and four follow-up fixes committed. This is
+what it adds, and where v80 covers it:
+
+| v77 surface | v80 coverage |
+|---|---|
+| `ui/button.ts` `danger-icon` variant | F4 restyles it against v77's file, 44×44 on touch; F25 shows it |
+| `ui/icon.ts` `trash` | F25 shows it in the icon row and on the `danger-icon` demo |
+| `shell/tape/tape.css`, `market-lane.ts`, `names-lane.ts` | **Token-only, no edit.** Every colour, size and radius the lanes use is a token F2/F3 changes, and the shell restyle is Migration's. Lane A's TradingView iframe is `isTransparent: true`, so it sits on `--surface` `#131722`, TradingView's own dark pane. F26 walks both lanes. |
+| Watchlist's Tape column (`◉`/`○` ghost toggle) and trash Remove button | F4 sizes both for touch. F8 pins the identity column (`symbol`), not the 1%-wide Tape toggle v77 put first, which "pin the first column" would have pinned. F26 walks Watchlist at 390px. |
+| `ui/tape-prefs.ts`, `stores/tape.store.ts`, `swingbot/admin/api_v1/market.py` | No rendering; nothing to cover |
+| v77's tests: `names-lane.spec`, `shell.spec`, `watchlist.spec`, `tape.store.spec`, `test_api_v1_tape.py` | Checked: none asserts a token value, card-mode markup or `held()` text that v80 changes. F27's full runs include them. |
+
+**v77 findings v80 does not change**, recorded for Migration (which owns the
+shell restyle) and Phone screens:
+- `tape.css` `.cap` is a hand-built uppercase label (`letter-spacing: .06em`),
+  not `.sb-label` (0.08em).
+- `.sym { font-weight: 650 }` is not a self-hosted weight. D3 sets ticker
+  symbols in Mono 700.
+- `@media (max-width: 640px)` is off by one against `breakpoints.ts`, where 640
+  is already `sm` and phone is `max-width: 639px`. A 640px viewport gets the
+  compressed tape.
+- **Ratchet gap:** Migration's bans scan `testing/call-sites.ts`'s
+  `callSites()`, which reads only `.ts` and `.html`. `tape.css` is a `styleUrl`
+  stylesheet and escapes every ban; the ratchet has to read `.css` too.
+- Lane B's tiles are links 28px tall on a phone, under D3's 44px touch target.
+  That is Phone screens' concern.
+
 ## Spec coverage
 
 | Spec item | Task(s) |
@@ -112,7 +143,8 @@ through `@angular/build:unit-test`, Python 3.11, matplotlib/mplfinance, pytest.
 | D4 `sb-select`, `sb-text-input`, `sb-checkbox` | F5 |
 | D4 `sb-chip`, `sb-quality-chip` | F6 |
 | D4 `sb-panel`, `sb-tab-bar`, `sb-control-row`, `sb-drawer` | F7 |
-| D4 `sb-data-table` phone mode, card mode replaced | F8 |
+| D4 `sb-data-table` phone mode, card mode replaced | F8 (pins the identity column: see "v77 live tape coverage") |
+| v77 live tape surfaces (lanes, Tape column, `danger-icon`, `trash`) | F4, F8, F25, F26; see "v77 live tape coverage" |
 | D4 `sb-pagination` | F9 |
 | D4 / cell contracts: `sb-confidence-cell` (text, mono weight) | F10 |
 | D4 `sb-empty-state` reason | F11 |

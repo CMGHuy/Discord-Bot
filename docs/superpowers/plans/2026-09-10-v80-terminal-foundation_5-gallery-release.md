@@ -699,6 +699,11 @@ write down each result:
     - `+4.20% (+9.80 €)`;
     - `Lv4 · 78`;
     - Held reads `4d 2h 15m`, `4d 0h 5m`, `3h 0m`, `45m`.
+11. **v77's live tape**, above the workspace. If Lane B is absent, flag one
+    ticker with the Watchlist Tape toggle first.
+    - Lane A's TradingView strip is transparent on `#131722`, with no lighter box behind it.
+    - Lane B's caps read in muted grey, prices in secondary grey, changes in green or red.
+    - The as-of badge stays put in the end cap while the tiles scroll.
 
 - [ ] **Step 3: Walk `/ui` at 390px**
 
@@ -717,6 +722,12 @@ Resize to 390×844 and check:
      nothing (static rows) but does not error.
 7. Open the drawer: it covers the full width and its bottom edge sits above
    the browser toolbar.
+8. **Open `/watchlist` (v77's Tape column).**
+   - The table keeps its rows.
+   - Symbol stays pinned while the Tape toggle and the other columns scroll.
+   - The sort select offers "Tape ↑/↓" and "Symbol ↑/↓".
+   - The `◉`/`○` toggle and the trash Remove button are 44px targets.
+   - Both lanes stay visible above the workspace, compressed.
 
 - [ ] **Step 4: Render and look at one Discord chart per overlay kind**
 
