@@ -198,6 +198,13 @@ FIELDS: list[Field] = [
           help="How many consecutive bars the fast and mid EMAs must hold "
                "their side of the slow SMA, ending at the crossover bar, "
                "before an entry fires. 1 keeps same-bar firing."),
+    Field("SR_MIN_LEVEL_TOUCHES", "SR_MIN_LEVEL_TOUCHES",
+          "Trade Filters & Risk", "S/R: minimum prior level rejections",
+          type="number", default="0", min=0, max=5, step=1,
+          help="How many times price must have approached the level (within "
+               "half an ATR) and closed back on the wrong side of it before a "
+               "breakout through it counts as a tested ceiling. 0 disables the "
+               "check, treating any rolling-window extreme as a level."),
     Field("MIN_ALERT_CONFIDENCE_LEVEL", "MIN_ALERT_CONFIDENCE_LEVEL", "Trade Filters & Risk", "Min confidence level to alert",
           type="select", default="4", options=["1", "2", "3", "4", "5"],
           help="Only this level and above are shown as alerts (quality over quantity)."),
@@ -908,7 +915,7 @@ _SEARCH_CLASSES = {
         "MAX_ALERTS_PER_SCAN", "DATA_DRIVEN_STOPS_ENABLED",
         "DEAD_CAT_BOUNCE_VETO", "DCB_DECLINE_PCT", "DCB_GAP_REQUIRED",
         "DCB_VOLUME_RATIO", "RSI_DIV_MIN_CONSECUTIVE_TURN",
-        "MA_RIBBON_CONFIRM_BARS",
+        "MA_RIBBON_CONFIRM_BARS", "SR_MIN_LEVEL_TOUCHES",
     },
     "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO"},
     "live_only": {

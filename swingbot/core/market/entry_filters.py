@@ -443,7 +443,12 @@ def ma_ribbon_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["MA Ribbon"] = ma_ribbon_entries
 
 
-DEFAULT_PARAMS["Support/Resistance"] = {"base_atr": 4.0, "close_frac": 0.4, "gap_pct": 3.0}
+DEFAULT_PARAMS["Support/Resistance"] = {"base_atr": 4.0, "close_frac": 0.4,
+                                        "gap_pct": 3.0,
+                                        # v84 rescue: the broken level must
+                                        # have been tested and rejected this
+                                        # many times first. 0 = off.
+                                        "min_level_touches": 0}
 
 
 def support_resistance_entries(df, horizon_key, params=None):
@@ -479,6 +484,28 @@ def support_resistance_entries(df, horizon_key, params=None):
     bearish = (crossed_down & volume_confirmed & base_tight & strong_close_bear & no_gap_bear
                & g["bear_regime"] & g["trend50_bear"]
                & g["atr_floor"] & g["atr_calm"]).fillna(False)
+
+    # --- v84 rescue: level-touch significance, as a PRE-ENTRY gate ---
+    # Adjacency declared: the closed LEVEL_TOUCH_STRENGTH (v36) used touch
+    # count as a post-selection tiebreak between target candidates and
+    # measured net-negative. This is the same signal at a different pipeline
+    # point -- gating which setups fire at all. Different mechanism, and the
+    # results doc says so explicitly.
+    from swingbot import config
+    min_touches = int(params.get("min_level_touches") if params and
+                      "min_level_touches" in params
+                      else getattr(config, "SR_MIN_LEVEL_TOUCHES", None)
+                      or p["min_level_touches"])
+    if min_touches > 0:
+        near = 0.5 * g["atr14"]
+        # approached the level and closed back on the wrong side of it
+        rejected_res = ((high >= resistance - near) & (close < resistance))
+        rejected_sup = ((low <= support + near) & (close > support))
+        touches_res = rejected_res.rolling(lookback).sum().shift(1)
+        touches_sup = rejected_sup.rolling(lookback).sum().shift(1)
+        bullish &= (touches_res >= min_touches).fillna(False)
+        bearish &= (touches_sup >= min_touches).fillna(False)
+
     return bullish, bearish
 
 
