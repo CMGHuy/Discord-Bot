@@ -782,6 +782,10 @@ def _attach_unrealized_pnl(rows: list[dict]) -> None:
     `list_trades`) -- popping here would make the second pass recompute from
     an empty/missing fallback and silently overwrite the first pass's real
     numbers. `_strip_internal_fields` removes both once, at the very end.
+
+    Sets transient `_display_shares` when a row has realized a leg; this is
+    applied to the public `shares` field exactly once by `_strip_internal_fields`
+    to avoid overwriting the original value before all P&L calculations complete.
     """
     for row in rows:
         if row["status"] in _TERMINAL or row["status"] == "PENDING":
@@ -793,15 +797,28 @@ def _attach_unrealized_pnl(rows: list[dict]) -> None:
             row["r_multiple"] = dash.unrealized_r(entry, row.get("_risk_stop"), direction, price)
             row["realized_pnl_amount"] = dash.unrealized_pnl_amount(
                 entry, direction, row.get("shares"), row.get("_legs"), price)
+        # Store the display value in a transient field; apply it exactly once
+        # in _strip_internal_fields after all passes are complete.
         if row.get("open_shares") is not None:
-            row["shares"] = row["open_shares"]
+            row["_display_shares"] = row["open_shares"]
 
 
 def _strip_internal_fields(rows: list[dict]) -> None:
-    """Drop the transient `_legs`/`_risk_stop` keys `_attach_unrealized_pnl`
-    reads -- must run exactly once, after every other row transform, so
-    neither leaks onto the wire and breaks the row's declared shape."""
+    """Drop the transient `_legs`/`_risk_stop`/`_display_shares` keys --
+    must run exactly once, after every other row transform, so neither leaks
+    onto the wire and breaks the row's declared shape.
+
+    Applies `_display_shares` to the public `shares` field for partially-realized
+    rows (v79), showing the true remaining share count instead of the original
+    size. This override happens exactly once here, after all possible passes of
+    `_attach_unrealized_pnl` are complete, so the original `shares` value is
+    preserved for each P&L calculation pass.
+    """
     for row in rows:
+        if "_display_shares" in row:
+            row["shares"] = row.pop("_display_shares")
+        else:
+            row.pop("_display_shares", None)
         row.pop("_legs", None)
         row.pop("_risk_stop", None)
 

@@ -410,6 +410,34 @@ def test_a_partial_row_shows_the_remaining_share_count(seed, logged_in, monkeypa
     assert row["shares"] == row["open_shares"] == 5.0
 
 
+def test_double_pass_pnl_calculation_preserves_correct_realized_amount(seed, logged_in, priced):
+    """Regression: _attach_unrealized_pnl runs twice on the same row objects
+    when sorting by pnl_pct/r_multiple. The shares override must not corrupt
+    the original value before the second pass (v79)."""
+    # Reuse the fixture shape from test_partial_trade_blends_realized_and_unrealized_dollars
+    plan = _plan("11111111-1111-4111-8111-111111111111", status="PARTIAL")
+    plan.update({"entry_price": 100.0, "direction": "bullish", "stop_loss": 90.0,
+                "tp1": 110.0, "tp2": 130.0, "working_stop": 100.0,
+                "legs_realized": [{"fraction": 0.5, "exit_price": 110.0,
+                                    "r": 1.0, "reason": "tp1"}]})
+    trade = _trade("aaaaaaaaaaaaaaaa", plan_id=plan["plan_id"], status="open")
+    trade.update({"entry": 100.0, "direction": "bullish", "shares": 10})
+    seed(plans=[plan], trades=[trade])
+    priced(120.0)
+
+    # Trigger the double-pass branch: sort by pnl_pct (or r_multiple) runs
+    # _attach_unrealized_pnl on the full set, then again on the page slice.
+    # The realized_pnl_amount MUST use the original shares (10) for both passes,
+    # not the reduced shares (5) that should only appear in display.
+    row = logged_in.get("/api/v1/trades?sort=pnl_pct").get_json()["items"][0]
+
+    # Verify the correct calculation: 5 sh * (110-100) + 5 sh * (120-100) = 150.0
+    assert row["realized_pnl_amount"] == 150.0
+    # Verify the display value is correct: shares now shows the remaining count
+    assert row["shares"] == 5.0
+    assert row["open_shares"] == 5.0
+
+
 def test_an_unknown_outcome_is_an_empty_set_not_an_error(seed, logged_in):
     """Unsatisfiable is not malformed. 400 is reserved for the latter."""
     _lifecycle(seed)
