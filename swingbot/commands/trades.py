@@ -13,12 +13,7 @@ from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.bot_core import bot
 from swingbot.core.tracking.risk_metrics import compute_risk_metrics
 from swingbot.core.tracking.performance import closed_pnl_pct
-
-try:
-    from zoneinfo import ZoneInfo as _ZoneInfo
-    _BERLIN_TZ = _ZoneInfo("Europe/Berlin")
-except Exception:
-    _BERLIN_TZ = None
+from swingbot.core.market.session import BERLIN_TZ as _BERLIN_TZ
 
 trade_log = scan_engine.trade_log
 
@@ -456,7 +451,7 @@ def _berlin_date(iso_ts: str):
         return None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    return (dt.astimezone(_BERLIN_TZ) if _BERLIN_TZ else dt).date()
+    return dt.astimezone(_BERLIN_TZ).date()
 
 
 @bot.command(name="summary")
@@ -468,7 +463,7 @@ async def summary_cmd(ctx):
     check-in-anytime) status read without digging through !trades or the
     admin Performance page.
     """
-    today = datetime.now(_BERLIN_TZ).date() if _BERLIN_TZ else datetime.now(timezone.utc).date()
+    today = datetime.now(_BERLIN_TZ).date()
     all_trades = trade_log.get_trades(status="all", limit=None)
 
     opened_today = [t for t in all_trades if _berlin_date(t.get("opened_at")) == today]

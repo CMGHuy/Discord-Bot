@@ -62,12 +62,8 @@ from datetime import datetime, timezone
 from swingbot import config as app_config
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.market import opex
+from swingbot.core.market.session import BERLIN_TZ as _BERLIN_TZ
 
-try:
-    from zoneinfo import ZoneInfo as _ZoneInfo
-    _BERLIN_TZ = _ZoneInfo("Europe/Berlin")
-except Exception:
-    _BERLIN_TZ = None
 
 def _default_config_path() -> str:
     """Resolved fresh on every call (not a module-level constant) -- a
@@ -318,7 +314,7 @@ def _to_berlin(ts_iso: str) -> datetime | None:
         return None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(_BERLIN_TZ) if _BERLIN_TZ else dt
+    return dt.astimezone(_BERLIN_TZ)
 
 
 def get_daily_summary(path: str = None) -> dict:
@@ -360,7 +356,7 @@ def get_daily_summary(path: str = None) -> dict:
             "trades_closed_today": 0,
         }
 
-    now_berlin = datetime.now(_BERLIN_TZ) if _BERLIN_TZ else datetime.now(timezone.utc)
+    now_berlin = datetime.now(_BERLIN_TZ)
     today = now_berlin.date()
 
     before_today = None    # most recent entry strictly before today

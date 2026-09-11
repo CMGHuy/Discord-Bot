@@ -32,13 +32,9 @@ from swingbot.core.planning.account import compute_position_size, load_account_c
 from swingbot.core.marketdata.data import get_current_price, prefetch_prices
 from swingbot.core.tracking.performance import closed_pnl_pct, closed_r_multiple, trade_proximity
 
-from .helpers import _primary_strategy_label
+from swingbot.core.market.session import BERLIN_TZ as _BERLIN_TZ
 
-try:
-    from zoneinfo import ZoneInfo as _ZoneInfo
-    _BERLIN_TZ = _ZoneInfo("Europe/Berlin")
-except Exception:
-    _BERLIN_TZ = None
+from .helpers import _primary_strategy_label
 
 
 CLOSED_TRADE_STATUSES = ("win", "loss", "closed")
@@ -105,12 +101,7 @@ def is_today_berlin(iso_ts: str | None) -> bool:
         dt = datetime.fromisoformat(iso_ts)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        if _BERLIN_TZ:
-            dt = dt.astimezone(_BERLIN_TZ)
-            today = datetime.now(_BERLIN_TZ).date()
-        else:
-            today = datetime.now(timezone.utc).date()
-        return dt.date() == today
+        return dt.astimezone(_BERLIN_TZ).date() == datetime.now(_BERLIN_TZ).date()
     except Exception:
         return False
 

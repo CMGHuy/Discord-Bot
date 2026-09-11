@@ -30,12 +30,7 @@ from swingbot.core.analytics import calibration
 from swingbot.core.analytics.insights import edge_decay_report
 from swingbot.core.analytics.journal import JournalStore
 from swingbot.core.presentation import tokens
-
-try:
-    from zoneinfo import ZoneInfo
-    _BERLIN_TZ = ZoneInfo("Europe/Berlin")
-except Exception:
-    _BERLIN_TZ = None
+from swingbot.core.market.session import BERLIN_TZ as _BERLIN_TZ
 
 log = logging.getLogger("swing-bot.retrospective")
 
@@ -134,11 +129,8 @@ def _to_berlin(iso_str: str) -> dt.datetime | None:
     try:
         d = dt.datetime.fromisoformat(iso_str)
         if d.tzinfo is None:
-            import datetime as _dt
-            d = d.replace(tzinfo=_dt.timezone.utc)
-        if _BERLIN_TZ:
-            d = d.astimezone(_BERLIN_TZ)
-        return d
+            d = d.replace(tzinfo=dt.timezone.utc)
+        return d.astimezone(_BERLIN_TZ)
     except Exception:
         log.warning("retrospective: unparseable timestamp %r for Berlin conversion", iso_str, exc_info=True)
         return None
@@ -403,7 +395,7 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
     Pass `today` to override the date (useful for testing / !recap <date>);
     defaults to today in Europe/Berlin time.
     """
-    now_berlin = dt.datetime.now(_BERLIN_TZ).date() if _BERLIN_TZ else dt.date.today()
+    now_berlin = dt.datetime.now(_BERLIN_TZ).date()
     if today is None:
         today = now_berlin
     is_today = (today == now_berlin)

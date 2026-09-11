@@ -7,6 +7,10 @@ from zoneinfo import ZoneInfo
 from swingbot import config
 
 US_MARKET_TZ = ZoneInfo("America/New_York")
+# The operator's clock: the scan session window, the dashboard's "today", the
+# daily retrospective and the account's day boundary all read it. Defined once
+# so no two surfaces can disagree about when a day starts.
+BERLIN_TZ = ZoneInfo("Europe/Berlin")
 
 # The open is inclusive and the close is exclusive.
 RTH_OPEN = dt.time(9, 30)
