@@ -61,6 +61,7 @@ import { TradingPerformance } from './panels/trading-performance';
 import { RecentActivity } from './panels/recent-activity';
 import { WatchlistPanel } from './panels/watchlist-panel';
 import { MarketMovers } from './panels/market-movers';
+import { ExposureByHorizon } from './panels/exposure-by-horizon';
 
 /**
  * The Dashboard — spec v14 Decision 5's two-tier header plus a capped view of
@@ -95,6 +96,7 @@ import { MarketMovers } from './panels/market-movers';
     StatusCell, PlanCell, ConfidenceCell, Async, Button, ControlRow,
     Drawer, Flash, PlanLifecycleDiagram, RowLink, SectionHead,
     PortfolioValue, TradingPerformance, RecentActivity, WatchlistPanel, MarketMovers,
+    ExposureByHorizon,
   ],
   // TradesStore, not DashboardStore -- that one is provided at the route
   // level (dashboard.routes.ts). This instance is this page's own, for the
@@ -200,6 +202,10 @@ import { MarketMovers } from './panels/market-movers';
         (scopeChange)="store.setScope($event)"
       />
     </div>
+
+    <!-- v85 D31/sheet 1: replaces the mockup's allocation donut, which has
+         no honest occupant on a single-asset-class paper book. -->
+    <sb-exposure-by-horizon />
 
     <!-- SR59. The sizing note (dashboard_fragment.html:81-87) plus the
          share-count snapshot note (below, moved out of the Open positions

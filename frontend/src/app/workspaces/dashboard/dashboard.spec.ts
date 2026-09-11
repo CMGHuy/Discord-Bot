@@ -173,6 +173,12 @@ async function loaded(overrides: Partial<DashboardData> = {}) {
   backend.expectOne('/api/v1/dashboard?mode=today').flush(payload(overrides));
   await fixture.whenStable();
   fixture.detectChanges();
+  // sb-exposure-by-horizon (v85 R4-09) only exists once sb-async reaches its
+  // content branch, i.e. after the flush above -- its own /api/v1/trades
+  // request fires just now, not during the first flushTradeGroups() call.
+  flushTradeGroups(backend);
+  await fixture.whenStable();
+  fixture.detectChanges();
   return fixture;
 }
 
@@ -235,5 +241,30 @@ describe('Dashboard v85 explanatory drawers', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-info="sizing"]')).not.toBeNull();
     expect(el.querySelector('[data-info="prices"]')).not.toBeNull();
+  });
+});
+
+const THIRTY_POINTS = { points: Array.from({ length: 30 }, (_, i) => i) } as never;
+
+describe('Dashboard v85 sheet-1 reconciliation', () => {
+  it('offers only the equity ranges the 30-day series supports', async () => {
+    const fixture = await loaded({ equity_30d: THIRTY_POINTS });
+    const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.equity-range button')]
+      .map((b) => b.textContent!.trim());
+    expect(labels).toEqual(['1W', '1M', 'ALL']);
+  });
+
+  it('does not render a range it cannot draw', async () => {
+    const fixture = await loaded({ equity_30d: THIRTY_POINTS });
+    const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.equity-range button')]
+      .map((b) => b.textContent!.trim());
+    expect(labels).not.toContain('1D');
+  });
+
+  it('shows exposure by horizon where the mockup shows asset allocation', async () => {
+    const fixture = await loaded();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('sb-panel[heading="Exposure by horizon"]')).not.toBeNull();
+    expect(el.textContent).not.toContain('Asset allocation');
   });
 });
