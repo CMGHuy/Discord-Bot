@@ -7,9 +7,18 @@ import pandas as pd
 import yfinance as yf
 
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
+from swingbot.core.infra.retry import with_retry
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
 log = logging.getLogger(__name__)
+
+# Absorbs a transient yfinance failure (rate-limiting, a momentarily empty
+# response) that would otherwise cost this ticker its whole 5-minute scan
+# cycle. Kept short -- this runs inline in the live scan, not a background
+# loop, and stays well inside COLD_FETCH_TIMEOUT_SECONDS/
+# LIVE_PRICE_TIMEOUT_SECONDS even in the worst case.
+FETCH_RETRY_ATTEMPTS = 2
+FETCH_RETRY_BASE_DELAY = 1.5
 
 
 def get_daily_data(ticker: str, period: str = "2y") -> pd.DataFrame:
@@ -26,7 +35,10 @@ def get_daily_data(ticker: str, period: str = "2y") -> pd.DataFrame:
     for candidate in candidate_symbols(ticker):
         tried.append(candidate)
         try:
-            df = yf.download(candidate, period=period, interval="1d", progress=False, auto_adjust=True)
+            df = with_retry(yf.download, candidate, period=period, interval="1d",
+                            progress=False, auto_adjust=True,
+                            attempts=FETCH_RETRY_ATTEMPTS, base_delay=FETCH_RETRY_BASE_DELAY,
+                            label=f"get_daily_data({candidate})")
         except Exception:
             continue
         if df is not None and not df.empty:
@@ -62,10 +74,13 @@ def get_daily_data_batch(tickers: list, period: str = "2y") -> dict:
     if not tickers:
         return {}
     try:
-        raw = yf.download(" ".join(tickers), period=period, interval="1d",
-                          group_by="ticker", auto_adjust=True, progress=False)
+        raw = with_retry(yf.download, " ".join(tickers), period=period, interval="1d",
+                         group_by="ticker", auto_adjust=True, progress=False,
+                         attempts=FETCH_RETRY_ATTEMPTS, base_delay=FETCH_RETRY_BASE_DELAY,
+                         label=f"get_daily_data_batch({len(tickers)} tickers)")
     except Exception as exc:
-        log.error("get_daily_data_batch failed for %d ticker(s): %s", len(tickers), exc)
+        log.error("get_daily_data_batch failed for %d ticker(s) after %d attempt(s): %s",
+                   len(tickers), FETCH_RETRY_ATTEMPTS, exc)
         return {}
     if raw is None or raw.empty:
         return {}
