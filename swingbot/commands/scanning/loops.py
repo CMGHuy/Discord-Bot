@@ -525,13 +525,13 @@ async def trade_monitor():
     plan_store._LOCK) and no-op on a trade/plan a concurrent scan already
     closed, so running alongside a scan is safe, not just tolerated.
 
-    Also skips when there are no open trades, keeping the overhead
-    proportional to actual activity.
+    With no open trade rows the per-ticker loop below has nothing to fetch,
+    but the plan-manager tick still runs: a plan can be open with no open
+    trade row (`!trades clear` / the admin's clear-open delete rows and leave
+    plans ACTIVE), and returning early here left those positions' stops and
+    targets unmonitored until some unrelated trade opened.
     """
     open_trades = trade_log.get_trades(status="open", limit=200)
-    if not open_trades:
-        return
-
     tickers = list({t["ticker"] for t in open_trades})
     all_newly_closed = []
 

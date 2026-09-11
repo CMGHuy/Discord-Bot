@@ -54,7 +54,6 @@ incrementally-updated running total. This means:
     recomputes itself correctly again from base_balance + trades.json --
     there is no drifting running total that can silently lose history.
 """
-import json
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -101,12 +100,12 @@ def _sum_realized_pnl(trades_path: str = None) -> float:
     banked scale-out leg.
     """
     path = trades_path or os.path.join(app_config.DATA_DIR, "trades.json")
-    if not os.path.exists(path):
-        return 0.0
-    try:
-        with open(path, "r") as f:
-            trades = json.load(f)
-    except (json.JSONDecodeError, OSError):
+    # Through jsonio.read_json, not a local open(): the copy that lived here
+    # used the platform default encoding (cp1252 on Windows) and let a
+    # UnicodeDecodeError escape load_account_config, where read_json reads
+    # UTF-8 and logs a corrupt file instead of silently summing zero.
+    trades = read_json(path, [])
+    if not isinstance(trades, list):
         return 0.0
     total = 0.0
     for t in trades:
