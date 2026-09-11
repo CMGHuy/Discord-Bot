@@ -17,6 +17,7 @@ import {
   CalendarDayTrades,
   ChartResponse,
   ClearResult,
+  CloseOpenResult,
   Dashboard,
   DashboardScope,
   Collection,
@@ -131,6 +132,12 @@ export class ApiClient {
 
   deleteTrade(id: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/trades/${encodeURIComponent(id)}`);
+  }
+
+  /** Banks every ACTIVE/PARTIAL position. NOT clearOpenTrades below, which
+   *  deletes the records instead. */
+  closeOpenTrades(): Observable<CloseOpenResult> {
+    return this.http.post<CloseOpenResult>(`${this.base}/trades/close-open`, {});
   }
 
   clearOpenTrades(): Observable<ClearResult> {

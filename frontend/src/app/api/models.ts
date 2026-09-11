@@ -204,6 +204,14 @@ export interface ClearResult {
   removed: number;
 }
 
+/** What POST /trades/close-open reports. `failed` is separate from `closed`
+ *  on purpose: a partial success has to be able to say so. */
+export interface CloseOpenResult {
+  closed: number;
+  failed: number;
+  tickers: string[];
+}
+
 export interface TradeQuery {
   page?: number;
   per_page?: number;

@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from './api-client';
 import { ApiError } from './api-error';
 import { authInterceptor, errorInterceptor, loadingInterceptor, routeRefreshInterceptor } from './interceptors';
+import { CloseOpenResult } from './models';
 import { RouteRefreshService } from '../routing/route-refresh.service';
 import { LoadingService } from './loading.service';
 import { UnauthorizedService } from './unauthorized.service';
@@ -274,5 +275,16 @@ describe('ApiClient', () => {
   it('does not call the API for an empty symbol list', () => {
     api.tape([]).subscribe();
     backend.expectNone((r) => r.url.includes('/market/tape'));
+  });
+
+  it('posts to close-open and returns the summary', () => {
+    let result: CloseOpenResult | undefined;
+    api.closeOpenTrades().subscribe((r) => (result = r));
+
+    const request = backend.expectOne('/api/v1/trades/close-open');
+    expect(request.request.method).toBe('POST');
+    request.flush({ closed: 2, failed: 0, tickers: ['ASTS', 'HOOD'] });
+
+    expect(result).toEqual({ closed: 2, failed: 0, tickers: ['ASTS', 'HOOD'] });
   });
 });
