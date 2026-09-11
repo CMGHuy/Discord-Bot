@@ -952,6 +952,9 @@ class TradeLog:
             For scaled-out (multi-leg) trades, each leg is counted separately.
             A single number summarizing the whole track record's edge per
             realized outcome. None if there are no win/loss outcomes yet.
+          - payoff_ratio: mean winning R over the magnitude of mean losing R,
+            across this SAME expectancy_r r_multiples list -- v85 D9. None
+            without at least one win and one loss.
           - avg_holding_days: average calendar days between opened_at and
             closed_at across every closed POSITION (one value per original trade,
             not per leg). Computed before leg expansion to keep position-accurate.
@@ -1003,9 +1006,18 @@ class TradeLog:
             t["confidence_level"] for t in open_trades if t.get("confidence_level") is not None
         ]
 
+        # Deferred import: swingbot.core.analytics's __init__ pulls in
+        # aggregate.py, which imports primary_strategy_label back from this
+        # module -- a module-level import here is a circular import.
+        from swingbot.core.analytics.metrics import payoff_ratio_from_rs
+
         return {
             "expectancy_r": (sum(r_multiples) / len(r_multiples)) if r_multiples else None,
             "r_multiples_count": len(r_multiples),
+            # The SAME r_multiples list expectancy_r is averaged from, so win
+            # rate and payoff ratio genuinely decompose expectancy rather than
+            # describing two different populations -- v85 D9.
+            "payoff_ratio": payoff_ratio_from_rs(r_multiples),
             "avg_holding_days": (sum(holding_days) / len(holding_days)) if holding_days else None,
             "avg_open_confidence": (sum(open_confidences) / len(open_confidences)) if open_confidences else None,
         }

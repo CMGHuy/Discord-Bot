@@ -61,6 +61,42 @@ def test_extended_stats_uses_leg_aware_closed_r_multiple(tmp_path):
     # rounding: the original rounds the blended sum, but expanded legs average pre-rounded values.
     assert log.get_extended_stats(trades=[trade])["expectancy_r"] == pytest.approx(1.025)
 
+
+def _closed(r_target: float, status: str) -> dict:
+    """A single-leg closed trade whose closed_r_multiple works out to
+    r_target exactly, via the plain entry/stop/exit formula (risk = 5)."""
+    return {
+        "status": status,
+        "direction": "bullish",
+        "entry": 100.0,
+        "stop_loss": 95.0,
+        "exit_price": 100.0 + r_target * 5.0,
+        "legs": [],
+    }
+
+
+def test_extended_stats_reports_payoff_ratio_over_the_same_legs_as_expectancy(tmp_path):
+    log = TradeLog(path=str(tmp_path / "trades.json"))
+    # Two wins at +2R and +4R, two losses at -1R and -1R.
+    # expectancy_r = (2 + 4 - 1 - 1) / 4 = 1.0
+    # payoff_ratio = mean(2, 4) / |mean(-1, -1)| = 3.0
+    trades = [
+        _closed(2.0, "win"),
+        _closed(4.0, "win"),
+        _closed(-1.0, "loss"),
+        _closed(-1.0, "loss"),
+    ]
+
+    stats = log.get_extended_stats(trades=trades)
+    assert stats["expectancy_r"] == pytest.approx(1.0)
+    assert stats["payoff_ratio"] == pytest.approx(3.0)
+
+
+def test_extended_stats_payoff_ratio_is_none_with_no_losses(tmp_path):
+    log = TradeLog(path=str(tmp_path / "trades.json"))
+    assert log.get_extended_stats(trades=[_closed(2.0, "win")])["payoff_ratio"] is None
+
+
 def test_close_plan_trade_journals_and_refreshes_snapshot(tmp_path, monkeypatch):
     log = TradeLog(path=str(tmp_path / "trades.json"))
     log._trades = [{
