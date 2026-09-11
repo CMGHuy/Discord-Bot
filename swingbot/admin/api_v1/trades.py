@@ -302,6 +302,24 @@ def _leg_closed_at(plan: dict, leg: dict, leg_index: int) -> str | None:
     return plan.get("created_at")
 
 
+def _leg_outcome(entry: float | None, exit_price: float | None, is_bull: bool,
+                  r: float | None) -> str:
+    """Win/loss for one leg. The leg's own `r` is authoritative (the plan's
+    Global Constraint: a leg's outcome is the sign of its own r) -- but a
+    leg appended without one (`_check_bar_active`'s stop-out mirror path,
+    plan_manager.py, appends a leg with no `r` key in some shapes) must NOT
+    silently read as a win. Fall back to the sign of the realized move
+    itself, in the same entry/exit/direction convention the rest of this
+    row uses (see `realized_pnl_amount` above); only if even that is
+    unavailable does this default to "win", same as before."""
+    if r is not None:
+        return "win" if r >= 0 else "loss"
+    if entry is not None and exit_price is not None:
+        diff = (exit_price - entry) * (1 if is_bull else -1)
+        return "win" if diff >= 0 else "loss"
+    return "win"
+
+
 def _row_from_leg(plan: dict, trade: dict, leg: dict, leg_index: int, noted: set) -> dict:
     """One row for a single REALIZED leg of a scaled-out plan's position --
     the TP1 leg (leg_index 0) or the runner leg (leg_index 1). Built from
@@ -317,11 +335,12 @@ def _row_from_leg(plan: dict, trade: dict, leg: dict, leg_index: int, noted: set
         if trade.get("shares") is not None else None
     )
     exit_price = leg.get("exit_price")
-    leg_trade = {"entry": entry, "exit_price": exit_price, "direction": plan.get("direction")}
+    leg_r = leg.get("r")
     closed_at = _leg_closed_at(plan, leg, leg_index)
+    leg_trade = {"entry": entry, "exit_price": exit_price, "direction": plan.get("direction")}
     row.update({
         "status": "CLOSED",
-        "outcome": "win" if (leg.get("r") or 0) >= 0 else "loss",
+        "outcome": _leg_outcome(entry, exit_price, is_bull, leg_r),
         "shares": shares,
         "open_shares": None,
         "exit_price": exit_price,
@@ -331,11 +350,21 @@ def _row_from_leg(plan: dict, trade: dict, leg: dict, leg_index: int, noted: set
             else None
         ),
         "pnl_pct": dash.closed_pnl(leg_trade),
-        "r_multiple": dash.closed_r(leg_trade),
+        # The leg's own `r` is the source of truth (the plan's Global
+        # Constraint) -- NOT a recomputation through `dash.closed_r`, which
+        # needs a `stop_loss` this synthetic leg_trade dict doesn't carry
+        # and would silently return None for every scaled-out leg.
+        "r_multiple": leg_r,
         "banked_fraction": None,
         "banked_exit_price": None,
         "banked_r": None,
         "closed_at": closed_at,
+        # The leg's OWN holding period -- from the position's open to this
+        # leg's own close, not the whole position's span (`_row_from_plan`'s
+        # inherited `held_hours` measures the trade's overall opened_at ->
+        # closed_at, and on a still-open PARTIAL that end is "now", which
+        # would make an already-closed leg's row keep growing every refresh).
+        "held_hours": _held_hours(row.get("opened_at"), closed_at),
         "today": _in_today_scope("CLOSED", closed_at),
         "leg_index": leg_index,
     })

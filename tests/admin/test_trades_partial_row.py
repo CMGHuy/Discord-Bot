@@ -109,3 +109,43 @@ def test_a_leg_with_no_stamped_closed_at_falls_back_to_status_history():
     ]
     rows = _expand_plan_row(plan, {"id": "t1", "shares": 10, "status": "win"}, set())
     assert rows[0]["closed_at"] == "2026-09-02T14:00:00+00:00"
+
+
+# --- fix round: r_multiple, outcome-with-missing-r, held_hours -----------
+
+def test_a_leg_rows_r_multiple_is_the_legs_own_r_not_a_recomputation():
+    """dash.closed_r needs a stop_loss the synthetic leg_trade dict never
+    carried, so recomputing through it silently returned None for every
+    scaled-out leg. The leg's own `r` is the source of truth."""
+    plan = closed_scaled_out_plan()
+    trade = {"id": "t1", "shares": 10, "status": "win", "opened_at": "2026-09-01T09:00:00+00:00"}
+    rows = _expand_plan_row(plan, trade, set())
+    assert rows[0]["r_multiple"] == 2.1
+    assert rows[1]["r_multiple"] == 3.0
+
+
+def test_a_leg_with_no_r_falls_back_to_price_sign_not_a_default_win():
+    """A leg appended with no `r` key (the stop-out mirror path) must not
+    read as a win just because `leg.get("r") or 0` folds a missing r to 0."""
+    plan = closed_scaled_out_plan()
+    del plan["legs_realized"][1]["r"]
+    # entry_price is 100.0 (partial_plan fixture), direction bullish --
+    # an exit below entry is a real loss, not a win-by-default.
+    plan["legs_realized"][1]["exit_price"] = 95.0
+    rows = _expand_plan_row(plan, {"id": "t1", "shares": 10, "status": "win"}, set())
+    assert rows[1]["outcome"] == "loss"
+    assert rows[1]["r_multiple"] is None
+
+
+def test_a_leg_rows_held_hours_is_its_own_span_not_the_whole_positions():
+    """held_hours must be measured against the LEG's own closed_at, not
+    inherited from the trade's overall opened_at -> closed_at span -- and
+    must not keep growing against wall-clock `now` for an already-closed
+    leg on a still-open PARTIAL plan."""
+    plan = closed_scaled_out_plan()
+    trade = {"id": "t1", "shares": 10, "status": "win", "opened_at": "2026-09-01T09:00:00+00:00"}
+    rows = _expand_plan_row(plan, trade, set())
+    # leg 0 closed 2026-09-02T14:00 -- 29 hours after open
+    assert rows[0]["held_hours"] == 29.0
+    # leg 1 closed 2026-09-05T15:00 -- 102 hours after open
+    assert rows[1]["held_hours"] == 102.0
