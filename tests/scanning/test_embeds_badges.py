@@ -5,18 +5,16 @@ from swingbot.core.scanning import plan_table
 from tests.planning.test_plan_engine_model import _plan
 
 
-def test_validated_badge_line_carries_registry_numbers():
-    # Numbers from the exit-v2 validation single run (Task 32, 2026-07-18).
+def test_current_weak_badge_line_carries_registry_numbers():
     p = _plan(strategy="Fibonacci")
     stamp_badge(p)
     name, value = badge_field_for(p)
-    assert name.startswith("✅ VALIDATED")
-    assert "N=203" in value and "82.3%" in value and "+0.268" in value
+    assert name.startswith("⚠️ WEAK")
+    assert "N=246" in value and "35.4%" in value
 
 
 def test_weak_plan_renders_caution_text_verbatim():
-    # EMA Crossover: still WEAK after the rescue round (RSI, the previous
-    # exemplar here, was rescued to VALIDATED in Tasks 95-97).
+    # EMA Crossover stays WEAK under the current registry.
     p = _plan(strategy="EMA Crossover")
     stamp_badge(p)
     name, value = badge_field_for(p)

@@ -1,18 +1,15 @@
 from swingbot.core.backtesting.registry import get_badge, load_registry
 
 
-def test_validated_strategy():
-    # Numbers from the exit-v2 validation single run (Task 32, 2026-07-18).
+def test_fibonacci_is_weak_after_the_current_arithmetic_refresh():
     b = get_badge("strategy", "Fibonacci")
-    assert b.status == "VALIDATED"
-    assert b.n == 203 and b.win_rate == 82.3
+    assert b.status == "WEAK"
+    assert b.n == 246 and b.win_rate == 35.4
 
 
-def test_rescued_rsi_validated():
-    # RSI flipped WEAK -> VALIDATED by the Task 95-97 rescue (range-regime
-    # gate, single OOS run 2026-07-18: N=30, WR=100.0, ExpR +0.304).
+def test_rsi_is_weak_after_the_current_arithmetic_refresh():
     b = get_badge("strategy", "RSI")
-    assert b.status == "VALIDATED" and b.win_rate == 100.0 and b.n == 30
+    assert b.status == "WEAK" and b.win_rate == 23.7 and b.n == 38
 
 
 def test_weak_strategy():
@@ -27,12 +24,12 @@ def test_confluence_falls_back_to_strategy_badge():
     # (see primary_strategy_for/build_confluence_plan), so an exact
     # (confluence, Fibonacci, ...) match was ALWAYS missing and used to fall
     # straight through to a hardcoded WEAK/n=0 default -- silently forfeiting
-    # the badge-quality points and the VALIDATED label for every live plan.
+    # the badge-quality points for every live plan.
     # get_badge now falls back to the strategy-source badge for that same
     # strategy name before giving up, since that's real OOS evidence about
     # this plan's primary confirming method.
     b = get_badge("confluence", "Fibonacci", "4w")
-    assert b.status == "VALIDATED" and b.n == 203 and b.win_rate == 82.3
+    assert b.status == "WEAK" and b.n == 246 and b.win_rate == 35.4
 
 
 def test_unknown_defaults_weak():
