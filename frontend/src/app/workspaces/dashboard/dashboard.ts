@@ -37,7 +37,7 @@ import {
   PINNED_COLUMNS,
   tradeColumns,
 } from '../trades/trades.columns';
-import { amount, dateTime, held, money, num, pct, signed } from '../../ui/format';
+import { amount, dateTime, money, pct, signed } from '../../ui/format';
 import { Magnitude } from '../../ui/magnitude';
 import { ControlRow, Drawer, Panel } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';

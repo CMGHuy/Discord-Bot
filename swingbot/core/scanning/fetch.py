@@ -11,9 +11,11 @@ from collections import OrderedDict
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait as _futures_wait
 
 from swingbot import config
+# `get_current_price` is re-exported: scan_run.py calls it as
+# `fetch.get_current_price`, so it is used even though nothing here calls it.
+from swingbot.core.marketdata.data import get_current_price  # noqa: F401
 from swingbot.core.marketdata.data import (
-    get_current_price, get_current_price_batch, get_daily_data,
-    get_daily_data_batch,
+    get_current_price_batch, get_daily_data, get_daily_data_batch,
 )
 from swingbot.core.marketdata import data_refresh, data_store, universe
 
@@ -118,7 +120,7 @@ def _run_bounded(fn, args: tuple, timeout_seconds: float, label: str):
     """
     with ProcessPoolExecutor(max_workers=1, mp_context=_SPAWN_CTX) as pool:
         future = pool.submit(fn, *args)
-        done, not_done = _futures_wait([future], timeout=timeout_seconds)
+        done, _ = _futures_wait([future], timeout=timeout_seconds)
         if future in done:
             try:
                 return future.result()

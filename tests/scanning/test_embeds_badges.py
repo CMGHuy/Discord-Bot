@@ -2,20 +2,23 @@ from swingbot.core.planning.plan_engine import WEAK_CAUTION_TEXT, stamp_badge
 from swingbot.core.scanning.embeds import (badge_field_for, entry_line,
                                            leg_rows, quality_lines)
 from swingbot.core.scanning import plan_table
+from tests.helpers import registry_strategy_row
 from tests.planning.test_plan_engine_model import _plan
 
 
-def test_current_weak_badge_line_carries_registry_numbers():
-    p = _plan(strategy="Fibonacci")
+def test_validated_badge_line_carries_registry_numbers():
+    row = registry_strategy_row("VALIDATED")
+    p = _plan(strategy=row["strategy"])
     stamp_badge(p)
     name, value = badge_field_for(p)
-    assert name.startswith("⚠️ WEAK")
-    assert "N=246" in value and "35.4%" in value
+    assert name.startswith("✅ VALIDATED")
+    assert f"N={row['n']}" in value
+    assert f"{row['win_rate']:.1f}%" in value
+    assert f"{row['expectancy_r']:+.3f}" in value
 
 
 def test_weak_plan_renders_caution_text_verbatim():
-    # EMA Crossover stays WEAK under the current registry.
-    p = _plan(strategy="EMA Crossover")
+    p = _plan(strategy=registry_strategy_row("WEAK")["strategy"])
     stamp_badge(p)
     name, value = badge_field_for(p)
     assert name.startswith("⚠️ WEAK")
@@ -61,7 +64,6 @@ def test_entry_line_market():
 
 
 def test_leg_rows_show_both_legs(monkeypatch):
-    import swingbot.core.scanning.embeds as embeds
     monkeypatch.setattr(plan_table.account, "compute_position_size",
                         lambda entry, stop: {"shares": 100.0,
                                              "position_value": 10_000.0,
@@ -74,7 +76,6 @@ def test_leg_rows_show_both_legs(monkeypatch):
 
 
 def test_leg_rows_no_tp2(monkeypatch):
-    import swingbot.core.scanning.embeds as embeds
     monkeypatch.setattr(plan_table.account, "compute_position_size",
                         lambda entry, stop: {"shares": 100.0,
                                              "position_value": 10_000.0,
@@ -85,7 +86,6 @@ def test_leg_rows_no_tp2(monkeypatch):
 
 
 def test_leg_rows_unsized(monkeypatch):
-    import swingbot.core.scanning.embeds as embeds
     monkeypatch.setattr(plan_table.account, "compute_position_size",
                         lambda entry, stop: None)
     tp1_row, _ = leg_rows(_plan(trigger_price=100.0, stop_loss=99.0,

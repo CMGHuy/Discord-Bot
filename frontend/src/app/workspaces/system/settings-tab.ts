@@ -7,7 +7,7 @@ import { Button } from '../../ui/button';
 import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-controls';
 import { dateTime } from '../../ui/format';
 import { ControlRow, Panel } from '../../ui/layout';
-import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
+import { controlOf, groupByControl } from './settings-grouping';
 
 /**
  * The settings form — rendered from the schema, with no field list anywhere.

@@ -277,15 +277,18 @@ def _stored_trendline_note_lines(fit: dict, label: str) -> list:
     derived from slope/intercept, which are frame-independent) -- only the
     dates need the fit's own `points` (see charts/trendline_fit.py) instead.
     """
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     from swingbot.core.charts.trade_chart import _fmt_note_date
 
     points = fit.get("points") or []
     if len(points) != 2:
         return []
+    # `t` is trendline_fit._epoch(): the bar's naive date read AS UTC. Decode
+    # it as UTC too -- a local-time decode shifts every note one day early on
+    # any host west of Greenwich, while the PNG prints the bar's own date.
     pts = sorted(
-        ((float(p["price"]), datetime.fromtimestamp(int(p["t"]))) for p in points),
+        ((float(p["price"]), datetime.fromtimestamp(int(p["t"]), tz=timezone.utc)) for p in points),
         key=lambda t: t[0],
     )
     lo_price, lo_date = pts[0]

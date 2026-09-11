@@ -3,7 +3,6 @@
 Implementations are split by responsibility; this module intentionally preserves
 the stable legacy import surface for commands, tests, and the scanning facade.
 """
-from . import alert_embeds, lifecycle_embeds, plan_table, requirements, snapshots
 from .alert_embeds import build_embed, build_simple_alert
 from .lifecycle_embeds import (build_closed_trade_embed, build_near_close_embed,
                                build_plan_event_embed, notify_closed_trades,

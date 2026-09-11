@@ -10,12 +10,12 @@ import difflib
 import logging
 import signal
 from logging.handlers import RotatingFileHandler
-from zoneinfo import ZoneInfo
 
 import discord
 from discord.ext import commands
 
 from swingbot import config
+from swingbot.core.market.session import BERLIN_TZ
 
 # Two handlers on the root logger: console (same as before -- `docker
 # compose logs -f bot` keeps working exactly as it did) and a rotating
@@ -39,7 +39,7 @@ _root_logger.addHandler(_file_handler)
 
 log = logging.getLogger("swing-bot")
 
-SESSION_TZ = ZoneInfo("Europe/Berlin")
+SESSION_TZ = BERLIN_TZ
 
 intents = discord.Intents.default()
 intents.message_content = True

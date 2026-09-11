@@ -8,7 +8,6 @@ import {
 } from '@ngrx/signals';
 
 import { ApiClient } from '../api/api-client';
-import { ApiError } from '../api/api-error';
 import { Observable } from 'rxjs';
 import { routeRequest } from '../routing/route-request';
 import { Release, VersionFilter, VersionHistory } from '../api/models';
@@ -210,7 +209,7 @@ export const VersionsStore = signalStore(
         // pair of consecutive segments and the lane never sums to 1. `to`
         // itself is untouched: it still carries the true last-seen instant
         // for the segment's tooltip metadata below.
-        const bounds = runs.map((run, i) => (i + 1 < runs.length ? runs[i + 1].from : tEnd));
+        const bounds = runs.map((_run, i) => (i + 1 < runs.length ? runs[i + 1].from : tEnd));
         const raw = runs.map((run, i) => (bounds[i] - run.from) / span);
         const scale = 1 - absentWidth;
         const widths = applyFloor(

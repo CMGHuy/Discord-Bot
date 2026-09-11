@@ -120,9 +120,7 @@ def test_vectorized_entries_delegates_to_entry_filters(market_df):
 
 
 # tests/test_backtest_engine.py (append)
-import pytest
 from pathlib import Path
-import pandas as pd
 from swingbot.core.backtesting.backtest import run_backtest
 from swingbot.core.planning.plan_engine import TP1_FRACTION
 import swingbot.core.market.entry_filters as ef

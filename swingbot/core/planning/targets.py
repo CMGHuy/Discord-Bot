@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from swingbot import config
-from swingbot.core.market import levels
 from swingbot.core.market.levels import MAX_TARGET2_LEG_MULTIPLE
 from .params import SR_VOLUME_STRENGTH_CEILING
+
+
 def select_structural_target(entry: float, stop_loss: float, is_bull: bool,
                              candidate_levels, min_rr: float,
                              max_rr: float) -> float | None:

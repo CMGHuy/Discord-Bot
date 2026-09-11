@@ -7,10 +7,9 @@ scrolled off a phone. The replacement is the two-line presentation headline.
 from swingbot import config
 from swingbot.core.backtesting.registry import Badge, decay_for
 from swingbot.core.planning import account
-from swingbot.core.planning.account import compute_position_size, load_account_config
-from swingbot.core.planning.plan_engine import WEAK_CAUTION_TEXT, badge_stats_line, runner_floor
+from swingbot.core.planning.plan_engine import WEAK_CAUTION_TEXT, badge_stats_line
 
-from .requirements import _sources_str
+
 def plan_numbers_for_display(plan, legacy: dict) -> dict:
     """THE cutover switch: which numbers do embeds/charts/trade-logging
     show? flag != 'on' or no plan -> legacy scenario numbers (today's

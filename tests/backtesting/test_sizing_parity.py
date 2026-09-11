@@ -36,8 +36,7 @@ import pytest
 
 from swingbot.core.backtesting import backtest
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES
-from swingbot.core.market.indicators import atr, elliott_wave3_entries
-from swingbot.core.market.strategy_types import HORIZONS, MIN_BARS
+from swingbot.core.market.strategy_types import MIN_BARS
 
 from tests.fixtures.legacy_trade_plan_at import legacy_trade_plan_at
 
@@ -59,27 +58,6 @@ def _load_cached(ticker):
         return None
     df = pd.read_csv(path, index_col="Date", parse_dates=True)
     return df if len(df) else None
-
-
-def _precomputed_series(df, strategy, horizon_key):
-    """Mirrors the precomputation run_backtest() does before calling
-    _trade_plan_at for each bar -- same series shape both old and new sides
-    are handed."""
-    atr_series = atr(df, 14)
-    swing_high_series = swing_low_series = None
-    if strategy == "Fibonacci":
-        lookback = HORIZONS[horizon_key]["fib_lookback"]
-        swing_high_series = df["High"].rolling(lookback).max()
-        swing_low_series = df["Low"].rolling(lookback).min()
-    volume_ratio_series = None
-    if strategy == "Support/Resistance":
-        vol_avg20 = df["Volume"].rolling(20).mean()
-        volume_ratio_series = df["Volume"] / vol_avg20
-    entry_levels = None
-    if strategy == "Elliott Wave":
-        threshold_pct = HORIZONS[horizon_key]["max_risk_pct"]
-        _, _, entry_levels = elliott_wave3_entries(df, threshold_pct)
-    return atr_series, swing_high_series, swing_low_series, volume_ratio_series, entry_levels
 
 
 @pytest.fixture(autouse=True)
@@ -123,7 +101,7 @@ def test_sizing_parity(ticker, strategy, horizon_key):
 
     bullish, bearish = backtest._vectorized_entries(df, strategy, horizon_key)
     atr_series, swing_high_series, swing_low_series, volume_ratio_series, entry_levels = (
-        _precomputed_series(df, strategy, horizon_key)
+        backtest._plan_series(df, strategy, horizon_key)
     )
 
     entry_idx = np.where(bullish.values | bearish.values)[0]

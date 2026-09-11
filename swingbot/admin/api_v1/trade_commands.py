@@ -19,7 +19,6 @@ something, and the trade-history channel goes quiet without it.
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import threading

@@ -238,3 +238,64 @@ def test_reversed_close_frees_the_ticker_for_the_inverse(tlog):
     new_id = _log(tlog, direction="bearish", entry=97.5, stop=102.0, target=90.0)
     got = tlog.open_trade_for_ticker("AAPL")
     assert got["id"] == new_id and got["direction"] == "bearish"
+
+
+def test_reversed_close_settles_the_still_open_remainder_as_a_leg(tlog):
+    """Same rule close_trade_manual follows: a PARTIAL position reversed after
+    TP1 must realize the runner remainder at the reversal price as its own
+    leg. Setting exit_price alone left settle_legs pricing only the TP1 leg,
+    so the runner's P&L never reached the account."""
+    tid = _log(tlog, entry=100.0, target=110.0)
+    trade = tlog.get_trade_by_id(tid)
+    trade["legs"].append({"fraction": 0.5, "exit_price": 110.0, "r": 2.0, "reason": "tp1"})
+    tlog._save()
+
+    closed = tlog.close_trade_reversed(tid, 97.5)
+
+    assert closed["exit_price"] == 97.5
+    assert len(closed["legs"]) == 2
+    assert closed["legs"][-1]["fraction"] == pytest.approx(0.5)
+    assert closed["legs"][-1]["exit_price"] == 97.5
+    assert closed["legs"][-1]["reason"] == "reversed"
+
+
+def test_reversing_a_plan_linked_trade_closes_its_plan(tlog):
+    """The trade row is only half a v2 position; plans.json holds the other
+    half, and the plan manager acts on that. Closing only the row left the
+    plan ACTIVE -- still stepped every minute, still able to post a close for
+    a position already reversed -- next to the inverse's new plan."""
+    from swingbot.core.planning.plan_engine import PlanStatus
+    from swingbot.core.planning.plan_store import PlanStore
+    from tests.planning.test_plan_manager_active import _active
+
+    plan = _active()
+    PlanStore().add(plan)
+    tid = tlog.log_trade(
+        ticker=plan.ticker, strategy="RSI", horizon_key="2w", direction="bullish",
+        confidence_level=3, confidence_label="Medium", entry=100.0,
+        stop_loss=95.0, take_profit=110.0, plan_id=plan.plan_id)
+
+    tlog.close_trade_reversed(tid, 97.5)
+
+    stored = PlanStore().get(plan.plan_id)
+    assert stored.status == PlanStatus.CLOSED
+    assert stored.status_history[-1]["reason"] == "reversed"
+
+
+def test_reversing_a_pending_plans_placeholder_trade_cancels_the_plan(tlog):
+    """A stop-entry plan's trade row is logged while the plan is still PENDING.
+    PENDING -> CLOSED is not a legal transition, so the reversal cancels it."""
+    from swingbot.core.planning.plan_engine import PlanStatus
+    from swingbot.core.planning.plan_store import PlanStore
+    from tests.planning.test_plan_engine_model import _plan
+
+    plan = _plan(entry_type="stop_entry")          # PENDING by default
+    PlanStore().add(plan)
+    tid = tlog.log_trade(
+        ticker=plan.ticker, strategy="RSI", horizon_key="2w", direction="bullish",
+        confidence_level=3, confidence_label="Medium", entry=100.0,
+        stop_loss=95.0, take_profit=110.0, plan_id=plan.plan_id)
+
+    tlog.close_trade_reversed(tid, 97.5)
+
+    assert PlanStore().get(plan.plan_id).status == PlanStatus.CANCELLED

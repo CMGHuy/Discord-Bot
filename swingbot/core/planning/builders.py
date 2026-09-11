@@ -5,11 +5,10 @@ import uuid
 
 import numpy as np
 
-from swingbot import config
 from swingbot.core.market import levels, opex
 from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION, HORIZONS
 from .plan_types import PlanStatus, TradePlanV2, record_transition
-from . import lifecycle, params as plan_params, targets
+from . import params as plan_params
 from .lifecycle import apply_level_lifecycle
 from .params import (DEFAULT_EXPIRY_BARS, STRUCTURE_BUFFER_ATR, TP1_FRACTION,
                      TRAIL_ATR_MULT)
@@ -17,6 +16,8 @@ from .targets import (_safe_atr_value, _tp2_from_r, atr_target_candidates,
                       elliott_target_candidates, fib_target_candidates,
                       select_structural_target, select_tp2,
                       sr_target_candidates)
+
+
 def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None,
              candidate_levels=None, params=None):
     """Default volatility sizing: ATR-multiple stop; target is the nearest

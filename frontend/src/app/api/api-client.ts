@@ -41,7 +41,6 @@ import {
   SettingsPreview,
   SettingsSaveResult,
   TapeResponse,
-  Ticker,
   TickerAddResult,
   TickerList,
   TickerRemoveResult,

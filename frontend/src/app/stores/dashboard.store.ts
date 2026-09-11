@@ -9,7 +9,6 @@ import {
 } from '@ngrx/signals';
 
 import { ApiClient } from '../api/api-client';
-import { ApiError } from '../api/api-error';
 import { EventStream } from '../api/event-stream';
 import { Observable } from 'rxjs';
 

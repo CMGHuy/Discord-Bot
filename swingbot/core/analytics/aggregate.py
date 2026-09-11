@@ -9,13 +9,8 @@ import datetime as dt
 from collections import defaultdict
 from dataclasses import dataclass
 
-try:
-    from zoneinfo import ZoneInfo
-    _BERLIN_TZ = ZoneInfo("Europe/Berlin")
-except Exception:
-    _BERLIN_TZ = None
-
 from swingbot.core.analytics import metrics
+from swingbot.core.market.session import BERLIN_TZ as _BERLIN_TZ
 from swingbot.core.tracking.performance import primary_strategy_label
 
 
@@ -36,7 +31,7 @@ def _to_berlin(iso_str: str | None) -> dt.datetime | None:
         return None
     if d.tzinfo is None:
         d = d.replace(tzinfo=dt.timezone.utc)
-    return d.astimezone(_BERLIN_TZ) if _BERLIN_TZ else d
+    return d.astimezone(_BERLIN_TZ)
 
 
 def _dow_key(t: dict) -> str:

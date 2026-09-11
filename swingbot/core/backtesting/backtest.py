@@ -124,6 +124,36 @@ def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
     return entries_for(strategy, df, horizon_key)
 
 
+def _plan_series(df: pd.DataFrame, strategy: str, horizon_key: str):
+    """The per-strategy series `_trade_plan_at` reads, computed once per run.
+
+    Returns (atr, swing_high, swing_low, volume_ratio, elliott_entry_levels);
+    the members a strategy does not use are None. scripts/reports/parity_exits.py
+    and parity_sizing.py call this too, so their reconstructions hand
+    `_trade_plan_at` bit-identical inputs to run_backtest's own loop -- they
+    used to carry copies of this block that could drift from it.
+    """
+    atr_series = atr(df, 14)
+
+    swing_high_series = swing_low_series = None
+    if strategy == "Fibonacci":
+        lookback = HORIZONS[horizon_key]["fib_lookback"]
+        swing_high_series = df["High"].rolling(lookback).max()
+        swing_low_series = df["Low"].rolling(lookback).min()
+
+    volume_ratio_series = None
+    if strategy == "Support/Resistance":
+        vol_avg20 = df["Volume"].rolling(20).mean()
+        volume_ratio_series = df["Volume"] / vol_avg20
+
+    entry_levels = None
+    if strategy == "Elliott Wave":
+        threshold_pct = HORIZONS[horizon_key]["max_risk_pct"]
+        _, _, entry_levels = elliott_wave3_entries(df, threshold_pct)
+
+    return atr_series, swing_high_series, swing_low_series, volume_ratio_series, entry_levels
+
+
 def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_high_series=None, swing_low_series=None, volume_ratio_series=None, entry_levels=None):
     """Sizing lives in plan_engine (single source of truth shared with live
     plans); this wrapper only picks the branch from the precomputed series.
@@ -230,23 +260,8 @@ def run_backtest(
     if ENTRY_SHIFT:
         bullish_entries = pd.Series(np.roll(bullish_entries.values, ENTRY_SHIFT), index=df.index)
         bearish_entries = pd.Series(np.roll(bearish_entries.values, ENTRY_SHIFT), index=df.index)
-    atr_series = atr(df, 14)
-
-    swing_high_series = swing_low_series = None
-    if strategy == "Fibonacci":
-        lookback = HORIZONS[horizon_key]["fib_lookback"]
-        swing_high_series = df["High"].rolling(lookback).max()
-        swing_low_series = df["Low"].rolling(lookback).min()
-
-    volume_ratio_series = None
-    if strategy == "Support/Resistance":
-        vol_avg20 = df["Volume"].rolling(20).mean()
-        volume_ratio_series = df["Volume"] / vol_avg20
-
-    entry_levels = None
-    if strategy == "Elliott Wave":
-        threshold_pct = HORIZONS[horizon_key]["max_risk_pct"]
-        _, _, entry_levels = elliott_wave3_entries(df, threshold_pct)
+    (atr_series, swing_high_series, swing_low_series,
+     volume_ratio_series, entry_levels) = _plan_series(df, strategy, horizon_key)
 
     high = df["High"].values
     low = df["Low"].values

@@ -68,7 +68,6 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from swingbot import config
 from swingbot.core.market.indicators import atr, ema, fibonacci_levels, rolling_vwap, zigzag_pivots
 from swingbot.core.market.volatility import bollinger_bands
 from swingbot.core.market.trendlines import trendline_levels

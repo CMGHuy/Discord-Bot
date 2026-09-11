@@ -130,17 +130,6 @@ DISCLAIMER_TEXT = "Not financial advice — for informational purposes only. Tra
 # line is. Was a stray #e2b25a typed into trade_chart.py.
 DISCLAIMER_COLOR = THEME["warn"]
 
-# Ink for the strategy heatmap's cell labels (analytics_charts.py): dark on
-# the pale middle of RdYlGn, light on its saturated ends. Were the named
-# colours "black" and "white".
-HEATMAP_INK_DARK = THEME["bg"]
-HEATMAP_INK_LIGHT = THEME["text"]
-
-# One bar colour per walk-forward fold year, 2021/2022/2023
-# (portfolio_charts.py). Three ADJACENT series: adjacency is the pairing D2
-# validated for distinctness.
-FOLD_YEAR_COLORS = (THEME["chart-1"], THEME["chart-2"], THEME["chart-3"])
-
 
 def _label_bbox(color: str, alpha: float = 0.88) -> dict:
     """

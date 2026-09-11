@@ -1,20 +1,18 @@
 from swingbot.core.backtesting.registry import get_badge, load_registry
 
-
-def test_fibonacci_is_weak_after_the_current_arithmetic_refresh():
-    b = get_badge("strategy", "Fibonacci")
-    assert b.status == "WEAK"
-    assert b.n == 246 and b.win_rate == 35.4
+from tests.helpers import registry_strategy_row
 
 
-def test_rsi_is_weak_after_the_current_arithmetic_refresh():
-    b = get_badge("strategy", "RSI")
-    assert b.status == "WEAK" and b.win_rate == 23.7 and b.n == 38
+def test_validated_strategy():
+    row = registry_strategy_row("VALIDATED")
+    b = get_badge("strategy", row["strategy"])
+    assert b.status == "VALIDATED"
+    assert b.n == row["n"] and b.win_rate == row["win_rate"]
 
 
 def test_weak_strategy():
-    b = get_badge("strategy", "EMA Crossover")
-    assert b.status == "WEAK"
+    row = registry_strategy_row("WEAK")
+    assert get_badge("strategy", row["strategy"]).status == "WEAK"
 
 
 def test_confluence_falls_back_to_strategy_badge():
@@ -22,14 +20,15 @@ def test_confluence_falls_back_to_strategy_badge():
     # per-primary-strategy confluence rows don't exist yet -- but every live
     # scan-loop plan is attributed source="confluence" + a real strategy name
     # (see primary_strategy_for/build_confluence_plan), so an exact
-    # (confluence, Fibonacci, ...) match was ALWAYS missing and used to fall
+    # (confluence, <strategy>, ...) match was ALWAYS missing and used to fall
     # straight through to a hardcoded WEAK/n=0 default -- silently forfeiting
     # the badge-quality points for every live plan.
     # get_badge now falls back to the strategy-source badge for that same
     # strategy name before giving up, since that's real OOS evidence about
     # this plan's primary confirming method.
-    b = get_badge("confluence", "Fibonacci", "4w")
-    assert b.status == "WEAK" and b.n == 246 and b.win_rate == 35.4
+    row = registry_strategy_row("VALIDATED")
+    b = get_badge("confluence", row["strategy"], "4w")
+    assert b.status == "VALIDATED" and b.n == row["n"] and b.win_rate == row["win_rate"]
 
 
 def test_unknown_defaults_weak():
