@@ -872,7 +872,11 @@ export class Dashboard {
    *  while `CURRENCY_SYMBOL` has defaulted to `€` all along. */
   protected readonly currencyUnit = computed(() => ` ${this.connection.currency()}`);
 
-  protected readonly rowKey = (row: TradeRow) => row.id;
+  /** v79: a scaled-out position arrives from /api/v1/trades as one row per
+   *  realized leg, and every leg carries the same plan id -- so the id alone
+   *  is not unique and the table's trackBy would collapse the two rows into
+   *  one. Same key Trades and the ticker detail use. */
+  protected readonly rowKey = (row: TradeRow) => `${row.id}:${row.leg_index}`;
 
   /** One per lifecycle category shown below -- `sb-trade-group` owns its own
    *  data, but the empty-state copy is naming a plan's absence at a specific
