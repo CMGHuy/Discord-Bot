@@ -343,13 +343,14 @@ class PlanManager:
             # gap up: a real, favorable fill, not clamped to tp1).
             fill = price
             r1 = (fill - entry) * sign / risk if risk > 0 else 0.0
+            at = self._now()
             leg = {"fraction": plan.tp1_fraction, "exit_price": fill,
-                   "r": r1, "reason": "tp1"}
+                   "r": r1, "reason": "tp1", "closed_at": at}
             plan.legs_realized.append(leg)
             plan.working_stop = runner_floor(entry, plan.tp1)   # v39 runner floor
             plan.runner_floor_session = session_date(now)
             record_transition(plan, PlanStatus.PARTIAL, reason="tp1_partial",
-                              at=self._now())
+                              at=at)
             self.store.update(plan)
             return [PlanEvent(plan.plan_id, "tp1_partial", dict(leg))]
 
@@ -431,10 +432,11 @@ class PlanManager:
     def _close_runner(self, plan: TradePlanV2, fill: float, reason: str,
                       risk: float, sign: int) -> list[PlanEvent]:
         r2 = (fill - plan.entry_price) * sign / risk if risk > 0 else 0.0
+        at = self._now()
         leg = {"fraction": 1.0 - plan.tp1_fraction, "exit_price": fill,
-               "r": r2, "reason": reason}
+               "r": r2, "reason": reason, "closed_at": at}
         plan.legs_realized.append(leg)
-        record_transition(plan, PlanStatus.CLOSED, reason=reason, at=self._now())
+        record_transition(plan, PlanStatus.CLOSED, reason=reason, at=at)
         self.store.update(plan)
         return [PlanEvent(plan.plan_id, "closed",
                           {"reason": reason, "exit_price": fill, "leg": leg})]
@@ -586,12 +588,13 @@ class PlanManager:
         if hit_tp1:
             fill = gap_target_fill(bar_open, plan.tp1, plan.direction)
             r1 = (fill - entry) * sign / risk if risk > 0 else 0.0
+            at = self._now()
             leg = {"fraction": plan.tp1_fraction, "exit_price": fill,
-                   "r": r1, "reason": "tp1"}
+                   "r": r1, "reason": "tp1", "closed_at": at}
             plan.legs_realized.append(leg)
             plan.working_stop = runner_floor(entry, plan.tp1)   # v39 runner floor
             record_transition(plan, PlanStatus.PARTIAL, reason="tp1_partial",
-                              at=self._now())
+                              at=at)
             self.store.update(plan)
             return [PlanEvent(plan.plan_id, "tp1_partial", dict(leg))]
         return []

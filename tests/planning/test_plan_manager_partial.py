@@ -192,6 +192,15 @@ def test_legacy_partial_without_a_working_stop_falls_back_to_the_floor(tmp_path)
     assert events[0].detail["reason"] == "tp1_runner_be"
     assert events[0].detail["exit_price"] == pytest.approx(103.0)
 
+
+def test_legs_realized_carry_their_own_close_timestamp(tmp_path):
+    store, mgr = _partial_env(tmp_path, [99.9])   # closes at the runner floor
+    mgr.poll()
+    legs = store.get("p1").legs_realized
+    assert len(legs) == 2
+    assert legs[0].get("closed_at") and legs[1].get("closed_at")
+    assert legs[0]["closed_at"] <= legs[1]["closed_at"]
+
 @pytest.fixture(autouse=True)
 def _rth_gate_off(monkeypatch):
     """Arithmetic tests stay independent of the wall clock."""
