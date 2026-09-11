@@ -131,6 +131,11 @@ export interface TradeRow {
   headroom_r: number | null;
   distance_to_trigger_r: number | null;
   bars_to_expiry: number | null;
+  /** Which row this is out of how many, when a scaled-out position has
+   *  been split into one row per leg (v79). 0/1 for every row that
+   *  isn't split. */
+  leg_index: number;
+  leg_total: number;
 }
 
 /** The heavy half of a trade, fetched only for the detail view.

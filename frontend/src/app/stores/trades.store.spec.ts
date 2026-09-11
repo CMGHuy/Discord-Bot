@@ -99,6 +99,8 @@ const ROW: TradeRow = {
   progress_band: 'toward_target',
   blink_seconds: 1.4,
   status_label: 'Toward target',
+  leg_index: 0,
+  leg_total: 1,
 };
 
 const COLLECTION: Collection<TradeRow> = {
