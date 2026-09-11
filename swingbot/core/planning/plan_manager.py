@@ -182,6 +182,14 @@ class PlanManager:
             # plan. Reload before any _step() write so update() merges with that
             # current on-disk store instead of serializing a stale snapshot.
             self.store.reload()
+            # Step the plan as it is NOW, not the copy open_plans() handed out
+            # before this and every earlier plan's price fetch. The admin UI
+            # closes and cancels plans from its own process; stepping the stale
+            # copy wrote it back over that change and resurrected the plan.
+            plan = self.store.get(plan.plan_id)
+            if plan is None or plan.status not in (
+                    PlanStatus.PENDING, PlanStatus.ACTIVE, PlanStatus.PARTIAL):
+                continue
             try:
                 new_events = (self._step(plan, price, now) if regular
                               else self._step_extended(plan, price, now))
@@ -661,31 +669,3 @@ def run_manager_tick() -> list[PlanEvent]:
                                bar_count_fn=_bars_since, trade_log=TradeLog())
     # Production reads the wall clock; poll's optional clock is test injection.
     return _MANAGER.poll()
-
-
-RECYCLE_PROGRESS_R = 0.3
-
-
-def recycle_candidates(plans: list, prices: dict) -> list:
-    """Positions past their strategy's time stop with <0.3R to show for it.
-    Advice-only: the notice says 'this capital is statistically dead',
-    the operator decides."""
-    import datetime as dt
-    out = []
-    today = dt.date.today()
-    for p in plans:
-        if getattr(p, "status", None) not in ("ACTIVE", "PARTIAL"):
-            continue
-        ts_days = getattr(p, "time_stop_days", None)
-        price = prices.get(p.ticker)
-        if ts_days is None or price is None or not getattr(p, "activated_at", None):
-            continue
-        age = (today - dt.date.fromisoformat(p.activated_at[:10])).days
-        if age <= ts_days:
-            continue
-        sign = 1 if p.direction == "bullish" else -1
-        progress = (price - p.entry_price) * sign / p.risk_per_share
-        if progress < RECYCLE_PROGRESS_R:
-            out.append({"plan_id": p.plan_id, "ticker": p.ticker,
-                        "age_days": age, "progress_r": round(progress, 3)})
-    return out
