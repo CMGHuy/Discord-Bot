@@ -51,7 +51,7 @@ function sameSymbols(a: readonly string[], b: readonly string[]): boolean {
 export const TapeStore = signalStore(
   { providedIn: 'root' },
   withState<TapeSlice>({ rows: [], asOf: null }),
-  withComputed((store, prefs = inject(PreferencesStore)) => ({
+  withComputed((_store, prefs = inject(PreferencesStore)) => ({
     // `equal: sameSymbols` is what keeps this computed's VALUE stable across
     // an unrelated preference write (a column width, a sort order): without
     // it, `readTapeSymbols` returning a fresh array reference on every write
