@@ -258,6 +258,15 @@ describe('v80 D3: type, shape and touch', () => {
     expect(CSS).toMatch(/^\s*--text-metric:\s*calc\(28px \* var\(--text-scale\)\);/m);
   });
 
+  it('offers a hero size above the primary metric size', () => {
+    const style = getComputedStyle(document.documentElement);
+    const hero = style.getPropertyValue('--text-hero').trim();
+    expect(hero).not.toBe('');
+    // Same calc(px * var(--text-scale)) shape as every other size token, so
+    // the zoom control reaches it too.
+    expect(hero).toContain('var(--text-scale)');
+  });
+
   it('tightens both radii to 2px', () => {
     expect(CSS).toMatch(/^\s*--radius:\s*2px;/m);
     expect(CSS).toMatch(/^\s*--radius-chip:\s*2px;/m);
