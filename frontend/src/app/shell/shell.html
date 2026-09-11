@@ -144,26 +144,13 @@
         </span>
       }
 
-      <!-- SR76: one button, not a label + dropdown field, since the only
-           thing it ever does is step to the next size. -->
-      <button
-        sb-button
-        variant="ghost"
-        type="button"
-        class="zoom"
-        (click)="cycleZoom()"
-        [attr.aria-label]="'Text size ' + zoom() + '%. Click to change.'"
-      >
-        Aa {{ zoom() }}%
-      </button>
-
       <sb-connection-status
         [state]="connection.state()"
         [botAlive]="connection.botAlive()"
         [botHealthy]="connection.botHealthy()"
         [marketActive]="connection.marketActive()"
       />
-      <sb-profile-menu (signedOut)="logout()" />
+      <sb-profile-menu [zoom]="zoom()" (zoomCycled)="cycleZoom()" (signedOut)="logout()" />
     </header>
 
     <main class="workspace" [class.route-pending]="routeLoading.visible()" [attr.aria-busy]="routeLoading.visible() ? 'true' : null">

@@ -57,7 +57,9 @@ describe('ProfileMenu', () => {
     const emitted: unknown[] = [];
     fixture.componentInstance.signedOut.subscribe(() => emitted.push(true));
     openMenu();
-    (el.querySelector('[role=menuitem]') as HTMLButtonElement).click();
+    const signOut = Array.from(el.querySelectorAll<HTMLButtonElement>('[role=menuitem]'))
+      .find((b) => b.textContent?.includes('Sign out'))!;
+    signOut.click();
     fixture.detectChanges();
     expect(emitted).toHaveLength(1);
     expect(menu()).toBeNull();
@@ -70,5 +72,26 @@ describe('ProfileMenu', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     fixture.detectChanges();
     expect(document.activeElement).toBe(trigger());
+  });
+
+  it('offers the text-size control inside the menu and emits on click', () => {
+    const f = TestBed.createComponent(ProfileMenu);
+    f.componentRef.setInput('zoom', 110);
+    f.detectChanges();
+
+    const menuEl = f.nativeElement as HTMLElement;
+    // Closed, the control is not in the DOM at all.
+    expect(menuEl.querySelector('.zoom')).toBeNull();
+
+    menuEl.querySelector<HTMLButtonElement>('.avatar')!.click();
+    f.detectChanges();
+
+    const zoom = menuEl.querySelector<HTMLButtonElement>('.zoom')!;
+    expect(zoom.textContent?.trim()).toBe('Aa 110%');
+
+    let cycled = 0;
+    f.componentInstance.zoomCycled.subscribe(() => (cycled += 1));
+    zoom.click();
+    expect(cycled).toBe(1);
   });
 });
