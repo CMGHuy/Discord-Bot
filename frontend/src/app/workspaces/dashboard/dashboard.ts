@@ -20,7 +20,7 @@ import { TapeStore } from '../../stores/tape.store';
 import { TradesStore } from '../../stores/trades.store';
 import { Async, asyncInputs } from '../../ui/async';
 import { Button } from '../../ui/button';
-import { ColumnDef, Density, EmptyState, RowContext } from '../../ui/data-table/data-table.types';
+import { ColumnDef, Density, RowContext } from '../../ui/data-table/data-table.types';
 import { ConfidenceCell } from '../../ui/confidence-cell';
 import { Flash } from '../../ui/flash';
 import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
@@ -45,16 +45,15 @@ import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { PlanLifecycleDiagram } from '../../ui/plan-lifecycle-diagram';
 import {
-  deriveClosedVisible,
-  deriveOpenVisible,
   expectedPnlPct,
   expectedR,
   expectedSlPct,
   liveUnrealizedAmount,
   livePnlPct,
   reconcileReorder,
+  visibleForTab,
 } from './dashboard.helpers';
-import { TradeGroup } from './trade-group';
+import { PositionsTable } from './positions-table';
 import { deriveActivity } from './panels/activity';
 import { PortfolioValue } from './panels/portfolio-value';
 import { TradingPerformance } from './panels/trading-performance';
@@ -92,7 +91,7 @@ import { ExposureByHorizon } from './panels/exposure-by-horizon';
 @Component({
   selector: 'sb-dashboard',
   imports: [
-    Magnitude, Panel, TradeGroup,
+    Magnitude, Panel, PositionsTable,
     StatusCell, PlanCell, ConfidenceCell, Async, Button, ControlRow,
     Drawer, Flash, PlanLifecycleDiagram, RowLink, SectionHead,
     PortfolioValue, TradingPerformance, RecentActivity, WatchlistPanel, MarketMovers,
@@ -101,8 +100,8 @@ import { ExposureByHorizon } from './panels/exposure-by-horizon';
   // TradesStore, not DashboardStore -- that one is provided at the route
   // level (dashboard.routes.ts). This instance is this page's own, for the
   // activity feed's own query (newest-first, every status), separate from
-  // the positions table's four per-status TradesStore instances (each
-  // sb-trade-group provides its own -- see trade-group.ts).
+  // sb-positions-table's own instance (it provides its own -- see
+  // positions-table.ts) and ExposureByHorizon's own (same reason).
   providers: [TradesStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // v54 D1: this workspace answers "how am I doing?" -- hero figures, room
@@ -113,9 +112,9 @@ import { ExposureByHorizon } from './panels/exposure-by-horizon';
   host: { class: 'register-presentation' },
   // Provided here rather than in root: the store is created on entry and
   // destroyed on exit, so a workspace does not hold stale state while you
-  // are looking at another one. Each `sb-trade-group` below provides its own
-  // `TradesStore` instance (see trade-group.ts) -- neither this one nor
-  // those three touch the Trades workspace's own copy.
+  // are looking at another one. `sb-positions-table` below provides its own
+  // `TradesStore` instance (see positions-table.ts) -- neither this one nor
+  // that one touch the Trades workspace's own copy.
   template: `
     <!-- v54: sb-async's own staleAsOf badge (below) now owns the "these
          numbers stopped updating" signal -- a second one here would be a
@@ -294,78 +293,17 @@ import { ExposureByHorizon } from './panels/exposure-by-horizon';
         Lifecycle guide
       </button>
 
-      <!-- Four groups, not one merged list. status=open (ACTIVE-or-PARTIAL)
-           is the only existing alias and it drops PENDING and CLOSED
-           entirely; splitting this way is also what "clear separation for
-           each category" needs, not just what the endpoint happens to
-           support. Each group is its own store instance -- see
-           trade-group.ts -- so a slow or failed fetch for one category never
-           blocks or blanks the other three.
-
-           Active first: it is what "what is happening right now" actually
-           means -- a filled, live position -- with Pending (waiting to fill)
-           and Partial (already de-risked) behind it. Closed goes last: it is
-           the one category that is no longer live. -->
-      <!-- Active/Pending/Partial share openVisible -- the shared picker
-           list with 'closed_at' dropped, since a position that has not
-           closed has nothing to put there. See openVisible/closedVisible
-           below for why each group gets its own derived list rather than
-           the raw visible signal. -->
-      <sb-trade-group
-        status="ACTIVE"
-        heading="Active"
-        explanation="Entry has filled — position is open and being tracked toward TP1/stop."
-        [columns]="columns()"
-        [visible]="openVisible()"
-        [pinned]="pinned"
-        [rowKey]="rowKey"
-        [emptyState]="activeEmptyState"
-        (rowActivate)="open($event)"
-        (reorder)="onReorder($event)"
-      />
-      <sb-trade-group
-        status="PENDING"
-        heading="Pending"
-        explanation="Plan built and posted, but price has not yet reached the entry trigger."
-        [columns]="columns()"
-        [visible]="openVisible()"
-        [pinned]="pinned"
-        [rowKey]="rowKey"
-        [emptyState]="pendingEmptyState"
-        (rowActivate)="open($event)"
-        (reorder)="onReorder($event)"
-      />
-      <sb-trade-group
-        status="PARTIAL"
-        heading="Partial"
-        explanation="TP1 hit — half the position closed, the remainder rides toward TP2 with its stop at break-even."
-        [columns]="columns()"
-        [visible]="openVisible()"
-        [pinned]="pinned"
-        [rowKey]="rowKey"
-        [emptyState]="partialEmptyState"
-        (rowActivate)="open($event)"
-        (reorder)="onReorder($event)"
-      />
-      <!-- Closed last: unlike the three above, it is scope-aware -- Today
-           narrows it to today's closes (mirroring the lifecycle strip's own
-           CLOSED count), All days shows the most recent closes regardless of
-           date. The today input re-binds on every scope toggle rather than
-           only at mount -- see trade-group.ts's own constructor comment.
-
-           closedVisible, not the raw visible list: 'now' (a live price) is
-           meaningless once a position has closed, and 'hold' (the completed
-           hold duration) belongs here and nowhere else. -->
-      <sb-trade-group
-        status="CLOSED"
-        heading="Closed"
-        [explanation]="closedExplanation()"
+      <!-- v85 D11: one table, five lifecycle tabs, replacing the four
+           stacked groups. Only the active tab fetches -- see
+           positions-table.ts's own docstring for why that is strictly less
+           work for the same answer. -->
+      <sb-positions-table
+        [counts]="lifecycleCounts()"
         [today]="closedToday()"
         [columns]="columns()"
-        [visible]="closedVisible()"
+        [visibleFor]="columnsForTab"
         [pinned]="pinned"
         [rowKey]="rowKey"
-        [emptyState]="closedEmptyState()"
         (rowActivate)="open($event)"
         (reorder)="onReorder($event)"
       />
@@ -522,45 +460,6 @@ import { ExposureByHorizon } from './panels/exposure-by-horizon';
     <ng-template #closedCell let-row>{{ fmtDate(row.closed_at) }}</ng-template>
   `,
   styles: `
-    /* The GAP between the Active/Pending/Partial/Closed group cards (each
-       card's own border/background is trade-group.ts's .group rule).
-       Lives HERE rather than in trade-group.ts's own styles: a component's
-       emulated-encapsulation stylesheet can only style its own template's
-       elements, and "the sibling group before this one" is not one of
-       them -- there is no legal selector inside TradeGroup for "the
-       previous instance of myself". The previous attempt tried a
-       :host + :host rule anyway; Angular's compiler accepted it, but its
-       ShadowCSS shim cannot actually translate a repeated :host in one
-       compound selector and silently emitted an invalid selector in its
-       place (an nghost attribute selector joined to a literal, unclosed
-       "-shadowcsshost" token) -- not valid CSS, so the rule never matched
-       in the browser either (confirmed by grepping the built chunk).
-
-       This rule has none of that problem: the sb-trade-group tag here is a
-       plain child element of THIS component's own template, so a plain tag
-       selector needs no :host translation at all. --space-20 is the largest
-       spacing token the scale offers (v18 deliberately removed --space-28 as
-       unused) -- reported as the four tables running together with no
-       separation at all, so real margin plus each one's own card border
-       (rather than a shared hairline that reads as just another row
-       divider) is what actually answers that, not a bigger number.
-       v54: --space-20 was this rule's own literal before the registers
-       existed -- it is also register-presentation's --register-pad rung, so
-       reading the variable changes nothing here and lets this workspace's
-       gutter follow its register if that ever changes. */
-    /* The gap itself is now a solid divider bar (a border-top, not a
-       margin) rather than transparent whitespace showing the page's own
-       background through -- requested so the eye reads a physical black
-       line between the Active/Pending/Partial/Closed tables rather than an
-       ambiguous gap. --bg, not a raw hex literal: it is this theme's
-       darkest token (near-black by design -- see tokens.css) and every
-       colour here must come from tokens.css (primitives.spec.ts's
-       hex-literal check). Same thickness the margin used to be. */
-    sb-trade-group + sb-trade-group {
-      display: block;
-      margin-top: 0;
-      border-top: var(--register-pad) solid var(--bg);
-    }
 
     /* -- SR58: scope toggle ---------------------------------------- */
     /* Groups the stale message and the scope toggle into one actions
@@ -779,46 +678,27 @@ export class Dashboard {
    *  one. Same key Trades and the ticker detail use. */
   protected readonly rowKey = (row: TradeRow) => `${row.id}:${row.leg_index}`;
 
-  /** One per lifecycle category shown below -- `sb-trade-group` owns its own
-   *  data, but the empty-state copy is naming a plan's absence at a specific
-   *  stage, which reads as three different facts and not one. */
-  protected readonly pendingEmptyState: EmptyState = {
-    title: 'No pending plans',
-    hint: 'They appear here once a plan is posted, waiting for its entry trigger.',
-  };
-  protected readonly activeEmptyState: EmptyState = {
-    title: 'No active positions',
-    hint: 'They appear here once a plan’s entry fills.',
-  };
-  protected readonly partialEmptyState: EmptyState = {
-    title: 'No partial positions',
-    hint: 'They appear here once TP1 hits and part of the position closes.',
-  };
-
-  /** The Closed group's `today` input: `true` in Today mode (narrows to
+  /** The Closed tab's `today` input: `true` in Today mode (narrows to
    *  trades closed today, same rule the lifecycle strip's CLOSED count
-   *  already uses), `null` in All days (unfiltered -- most recent closes). */
+   *  already used), `null` in All days (unfiltered -- most recent closes).
+   *  PositionsTable applies this to CLOSED/CANCELLED only. */
   protected readonly closedToday = computed(() =>
     this.store.scope() === 'all' ? null : true,
   );
 
-  /** Copy for the Closed group, scope-aware like `realizedLabel` above --
-   *  wording that says "today" would mislead in All days, and vice versa. */
-  protected readonly closedExplanation = computed(() =>
-    this.store.scope() === 'all'
-      ? 'Fully closed (win, loss, or scratch) — most recent closes.'
-      : 'Fully closed today (win, loss, or scratch).',
+  /** The lifecycle strip's counts, reshaped for the tab labels. The strip
+   *  itself is gone (R4-07) -- these numbers moved onto the tabs. */
+  protected readonly lifecycleCounts = computed(() =>
+    Object.fromEntries(this.store.lifecycle().map((e) => [e.status, e.count])),
   );
-  protected readonly closedEmptyState = computed<EmptyState>(() => ({
-    title: this.store.scope() === 'all' ? 'No closed trades yet' : 'No trades closed today',
-    // Not "TP2 or a stop" -- that names only the PARTIAL exit. A position
-    // closes on hitting ITS target or ITS stop regardless of which lifecycle
-    // stage it was in when that happened: straight from Active (stop before
-    // TP1, or a single-target strategy's only target) just as much as from
-    // Partial (TP2, or the break-even stop after TP1).
-    hint: 'They appear here once a position’s target or stop closes it out '
-      + '— whether that happens straight from Active or after TP1 from Partial.',
-  }));
+
+  /** Bound as a value, not called in the template: the table takes the
+   *  function and applies it per tab.
+   *
+   *  Named `columnsForTab`, not `visibleForTab`: the imported helper is
+   *  already called that, and a class member of the same name reads as a
+   *  recursive call to anyone skimming it. */
+  protected readonly columnsForTab = (tab: string) => visibleForTab(tab, this.visible());
 
   private readonly tickerCell =
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('tickerCell');
@@ -898,14 +778,6 @@ export class Dashboard {
                        next === 'full' ? FULL_COLUMNS : COMPACT_COLUMNS),
     );
   }
-
-  /** See dashboard.helpers.ts -- `deriveClosedVisible`/`deriveOpenVisible`
-   *  for what each group's own column order does and why, `reconcileReorder`
-   *  for how a drag inside one group's table writes back to the shared
-   *  picker list without leaking that group's own additions/omissions into
-   *  the other three. */
-  protected readonly closedVisible = computed(() => deriveClosedVisible(this.visible()));
-  protected readonly openVisible = computed(() => deriveOpenVisible(this.visible()));
 
   protected onReorder(order: string[]): void {
     const merged = reconcileReorder(order, this.visible());
@@ -1009,11 +881,10 @@ export class Dashboard {
   protected fmtDate = dateTime;
 
   /** sb-magnitude's max for the R column. Not an observed max from the
-   *  store: the four groups below (Active/Pending/Partial/Closed) each fetch
-   *  their own page through their own TradeGroup-scoped TradesStore, and all
-   *  four share this one cell template -- there is no single "this table's
-   *  rows" to measure from here. R is already a normalised unit (the risk
-   *  taken, by definition 1R), so a fixed reference scale is the more
+   *  store: sb-positions-table shows one lifecycle tab's rows at a time, and
+   *  this same cell template serves every tab -- there is no single "this
+   *  table's rows" to measure from here. R is already a normalised unit (the
+   *  risk taken, by definition 1R), so a fixed reference scale is the more
    *  honest choice anyway: 3R covers a well-run multi-target scale-out
    *  without every ordinary trade landing near the same width. */
   protected readonly R_MAGNITUDE_MAX = 3;

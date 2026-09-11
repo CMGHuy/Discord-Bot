@@ -194,6 +194,20 @@ describe('Dashboard v85 layout', () => {
     expect(el.querySelector('sb-market-movers')).not.toBeNull();
   });
 
+  it('renders one tabbed positions table, not four stacked groups', async () => {
+    const fixture = await loaded();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelectorAll('sb-positions-table')).toHaveLength(1);
+    expect(el.querySelector('sb-trade-group')).toBeNull();
+  });
+
+  it('feeds the tab counts from the lifecycle payload', async () => {
+    const fixture = await loaded();
+    const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('[role="tab"]')]
+      .map((t) => t.textContent?.replace(/\s+/g, ' ').trim());
+    expect(labels[0]).toMatch(/^Open positions \d+$/);
+  });
+
   it('drops the old metric rows the panels replaced', async () => {
     const fixture = await loaded();
     const el = fixture.nativeElement as HTMLElement;
