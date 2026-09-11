@@ -277,7 +277,91 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         # ranks the whole set at once -- scoring one plan in isolation here
         # would mean loading every other plan per row.
         "follow_score": None,
+        # v79 -- which row this is out of how many, when a scaled-out
+        # position has been split into one row per leg. See
+        # `_expand_plan_row`. 0/1 for a row that hasn't been split.
+        "leg_index": 0,
+        "leg_total": 1,
     }
+
+
+def _leg_closed_at(plan: dict, leg: dict, leg_index: int) -> str | None:
+    """A leg's own close time, falling back to the plan's status_history
+    for data predating v79's per-leg `closed_at` stamp (Task 1). Legs are
+    always appended in the order their transitions happen -- leg 0 is
+    always the TP1 leg (the transition into PARTIAL), any later leg is
+    always the runner's own close (the transition into CLOSED) -- so the
+    positional match is exact, not a guess."""
+    if leg.get("closed_at"):
+        return leg["closed_at"]
+    history = plan.get("status_history") or []
+    wanted_status = "PARTIAL" if leg_index == 0 else "CLOSED"
+    for entry in history:
+        if entry.get("status") == wanted_status:
+            return entry.get("at")
+    return plan.get("created_at")
+
+
+def _row_from_leg(plan: dict, trade: dict, leg: dict, leg_index: int, noted: set) -> dict:
+    """One row for a single REALIZED leg of a scaled-out plan's position --
+    the TP1 leg (leg_index 0) or the runner leg (leg_index 1). Built from
+    _row_from_plan's row (so every other field -- ticker, strategy, badge,
+    quality_score, ... -- stays identical to what the whole-position row
+    already carried) with overrides for what actually happened on just
+    this leg."""
+    row = _row_from_plan(plan, trade, noted)
+    entry = plan.get("entry_price")
+    is_bull = plan.get("direction") == "bullish"
+    shares = (
+        round(trade["shares"] * leg.get("fraction", 0), 4)
+        if trade.get("shares") is not None else None
+    )
+    exit_price = leg.get("exit_price")
+    leg_trade = {"entry": entry, "exit_price": exit_price, "direction": plan.get("direction")}
+    closed_at = _leg_closed_at(plan, leg, leg_index)
+    row.update({
+        "status": "CLOSED",
+        "outcome": "win" if (leg.get("r") or 0) >= 0 else "loss",
+        "shares": shares,
+        "open_shares": None,
+        "exit_price": exit_price,
+        "realized_pnl_amount": (
+            round(shares * (exit_price - entry) * (1 if is_bull else -1), 2)
+            if shares is not None and entry is not None and exit_price is not None
+            else None
+        ),
+        "pnl_pct": dash.closed_pnl(leg_trade),
+        "r_multiple": dash.closed_r(leg_trade),
+        "banked_fraction": None,
+        "banked_exit_price": None,
+        "banked_r": None,
+        "closed_at": closed_at,
+        "today": _in_today_scope("CLOSED", closed_at),
+        "leg_index": leg_index,
+    })
+    return row
+
+
+def _expand_plan_row(plan: dict, trade: dict | None, noted: set) -> list[dict]:
+    """Split a scaled-out plan's position into one row per realized leg,
+    plus (if the runner is still open) one more row for the remainder --
+    v79's leg-accurate Trades table. A plan that never scaled out returns
+    exactly the one row _row_from_plan already built, unchanged."""
+    legs = plan.get("legs_realized") or []
+    if not legs:
+        return [_row_from_plan(plan, trade, noted)]
+
+    t = trade or {}
+    still_open = plan.get("status") != "CLOSED"
+    total = len(legs) + (1 if still_open else 0)
+    rows = [_row_from_leg(plan, t, leg, i, noted) for i, leg in enumerate(legs)]
+    if still_open:
+        remainder = _row_from_plan(plan, trade, noted)
+        remainder["leg_index"] = len(legs)
+        rows.append(remainder)
+    for row in rows:
+        row["leg_total"] = total
+    return rows
 
 
 def _row_from_trade(t: dict, noted: set) -> dict:
@@ -346,6 +430,9 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "created_at": t.get("opened_at"),
         "trigger_price": None,
         "follow_score": None,
+        # v79 -- a legacy trade never scales out, so it is never split.
+        "leg_index": 0,
+        "leg_total": 1,
     }
 
 
@@ -435,7 +522,9 @@ def build_rows() -> list[dict]:
         if pid:
             by_plan_id[pid] = t
 
-    rows = [_row_from_plan(p, by_plan_id.get(p.get("plan_id")), noted) for p in plans]
+    rows = []
+    for p in plans:
+        rows.extend(_expand_plan_row(p, by_plan_id.get(p.get("plan_id")), noted))
     _attach_follow_scores(rows, plans)
 
     # Anything no plan claimed. Structural: a trade cannot be emitted twice
