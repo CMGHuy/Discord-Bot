@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-09-10 16:59:59 UTC",
+  "generated_at": "2026-09-11 09:54:03 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.15.0",
+    "ui": "1.15.1",
     "bot": "1.7.0"
   },
   "releases": [
@@ -1062,6 +1062,19 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-09-11",
+      "last_seen": "2026-09-11",
+      "commit": "590dca1c",
+      "subject": "release(ui): 1.15.1 -- earnings blackout setting counts trading sessions",
+      "versions": {
+        "ui": "1.15.1",
+        "bot": "1.7.0"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]
