@@ -179,9 +179,10 @@ def _tp2_from_r(entry: float, stop: float, tp1: float, direction: str,
 def fib_target_candidates(df, index, h, entry) -> list[float]:
     """The Fibonacci strategy's OWN levels on the target side: the swing
     high/low that anchors the retracement, the 0.236/0.382/0.5/0.618/0.786
-    retracements themselves, and the 1.272/1.618 extensions of the same
-    swing. NOT the unified multi-method level map -- a Fibonacci plan
-    targets Fibonacci structure (plan v31).
+    retracements themselves, and the 1.272/1.618 extensions of the same swing
+    (plus the 1.0 extension when `FIB_TARGET_1_0_EXTENSION` is on). NOT the
+    unified multi-method level map -- a Fibonacci plan targets Fibonacci
+    structure (plan v31).
 
     `df` is sliced to `index` BEFORE computing the swing -- the same trap
     `_lifecycle_levels` documents above: `df` here runs to the end of
@@ -193,13 +194,15 @@ def fib_target_candidates(df, index, h, entry) -> list[float]:
     of `entry` (extensions in both directions), and select_structural_target
     is what picks the trade-direction side.
     """
+    from swingbot import config
     from swingbot.core.market import indicators
     hist = df.iloc[:index + 1]
     fib = indicators.fibonacci_levels(hist, h["fib_lookback"])
     swing_high, swing_low = fib["swing_high"], fib["swing_low"]
     diff = swing_high - swing_low
     candidates = [swing_high, swing_low] + list(fib["levels"].values())
-    for ratio in (1.272, 1.618):
+    ratios = (1.0, 1.272, 1.618) if config.FIB_TARGET_1_0_EXTENSION else (1.272, 1.618)
+    for ratio in ratios:
         candidates.append(swing_high + ratio * diff)
         candidates.append(swing_low - ratio * diff)
     return candidates

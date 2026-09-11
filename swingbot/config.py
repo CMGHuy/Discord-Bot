@@ -205,6 +205,14 @@ FIELDS: list[Field] = [
                "half an ATR) and closed back on the wrong side of it before a "
                "breakout through it counts as a tested ceiling. 0 disables the "
                "check, treating any rolling-window extreme as a level."),
+    Field("FIB_TARGET_1_0_EXTENSION", "FIB_TARGET_1_0_EXTENSION", "Trade Filters & Risk",
+          "Fibonacci 1.0 extension as a target candidate",
+          type="checkbox", default="false",
+          help="Adds the 1.0 (measured-move) extension of the anchoring swing to the "
+               "Fibonacci strategy's target candidates, filling the gap between the swing "
+               "high/low and the 1.272 extension. Ships OFF: it is a pre-registered "
+               "measurement (v84), not a demonstrated edge, and flips on only if its one "
+               "VALIDATION shot passes."),
     Field("MIN_ALERT_CONFIDENCE_LEVEL", "MIN_ALERT_CONFIDENCE_LEVEL", "Trade Filters & Risk", "Min confidence level to alert",
           type="select", default="4", options=["1", "2", "3", "4", "5"],
           help="Only this level and above are shown as alerts (quality over quantity)."),
@@ -916,6 +924,7 @@ _SEARCH_CLASSES = {
         "DEAD_CAT_BOUNCE_VETO", "DCB_DECLINE_PCT", "DCB_GAP_REQUIRED",
         "DCB_VOLUME_RATIO", "RSI_DIV_MIN_CONSECUTIVE_TURN",
         "MA_RIBBON_CONFIRM_BARS", "SR_MIN_LEVEL_TOUCHES",
+        "FIB_TARGET_1_0_EXTENSION",
     },
     "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO"},
     "live_only": {
