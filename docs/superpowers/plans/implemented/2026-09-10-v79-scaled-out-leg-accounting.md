@@ -2,7 +2,25 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** `docs/superpowers/specs/2026-09-10-v79-scaled-out-leg-accounting-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-09-10-v79-scaled-out-leg-accounting-design.md`
+
+## Progress
+
+All 6 tasks complete. Implemented and merged on `worktree-v79-scaled-out-leg-accounting`
+(`5eb24fa5`, 2026-09-11), Task 6's full-suite + `npm test` fixes included in that
+same branch (`d0e63bbc`, `deff4b1b`, `a29d68c6`, `d90ebcca`). Boxes below were
+never ticked during execution; verdict derived from the branch's commits and
+the clean merge, not from the checkboxes -- see `document-lifecycle.md`.
+
+A separate, never-merged worktree (`codex/v79-continuation`, forked from an
+early point on this same branch) independently re-derived the Task 6 fixes
+but left them uncommitted and buggy (its `expand_trade_legs` price-sign
+fallback failed its own new tests). Discarded as redundant on close-out; the
+merged branch's version of these fixes is correct and is what shipped.
+
+`Bump: bot patch, ui patch` (spec header) resolved at close-out: `ui`
+1.15.1 -> 1.15.2, `bot` 1.7.1 -> 1.7.2 (`81ee007b`, `8ba70b10`) -- the merge
+itself predated this close-out commit and shipped without the bump.
 
 **Goal:** Make a scaled-out (TP1 + runner) position's two legs count and
 display as two separate outcomes everywhere the app lists or counts trades,
