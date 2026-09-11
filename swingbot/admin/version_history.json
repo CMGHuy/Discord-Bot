@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10 16:59:59 UTC",
+  "generated_at": "2026-09-11 15:00:43 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.15.0",
-    "bot": "1.7.0"
+    "bot": "1.7.1"
   },
   "releases": [
     {
@@ -1059,6 +1059,19 @@
       "versions": {
         "ui": "1.15.0",
         "bot": "1.7.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-11",
+      "last_seen": "2026-09-11",
+      "commit": "d6d71697",
+      "subject": "release(bot): 1.7.1 -- narrow Break & Retest and VWAP horizon gates",
+      "versions": {
+        "ui": "1.15.0",
+        "bot": "1.7.1"
       },
       "changed": [
         "bot"
