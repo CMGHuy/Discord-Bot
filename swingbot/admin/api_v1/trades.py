@@ -285,13 +285,22 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
     }
 
 
-def _leg_closed_at(plan: dict, leg: dict, leg_index: int) -> str | None:
+def _leg_closed_at(plan: dict, trade: dict | None, leg: dict,
+                   leg_index: int) -> str | None:
     """A leg's own close time, falling back to the plan's status_history
     for data predating v79's per-leg `closed_at` stamp (Task 1). Legs are
-    always appended in the order their transitions happen -- leg 0 is
-    always the TP1 leg (the transition into PARTIAL), any later leg is
-    always the runner's own close (the transition into CLOSED) -- so the
-    positional match is exact, not a guess."""
+    normally appended in the order their transitions happen -- leg 0 the
+    TP1 leg (the transition into PARTIAL), any later leg the runner's own
+    close (the transition into CLOSED) -- so the positional match holds
+    for every shape written by the plan manager, but it is still a match
+    on ordering rather than on an identifier the leg carries.
+
+    When no history entry matches either, fall back to when the POSITION
+    reached its terminal state (`_terminal_at`) before the plan's own
+    `created_at`. `created_at` predates every fill, so a row stamped with
+    it is scored against the wrong day: `_in_today_scope` would drop a
+    leg that closed today out of the Dashboard's Today/CLOSED scope.
+    It stays only as the true last resort, for a row with no other date."""
     if leg.get("closed_at"):
         return leg["closed_at"]
     history = plan.get("status_history") or []
@@ -299,7 +308,7 @@ def _leg_closed_at(plan: dict, leg: dict, leg_index: int) -> str | None:
     for entry in history:
         if entry.get("status") == wanted_status:
             return entry.get("at")
-    return plan.get("created_at")
+    return _terminal_at(plan, trade) or plan.get("created_at")
 
 
 def _leg_outcome(entry: float | None, exit_price: float | None, is_bull: bool,
@@ -336,7 +345,7 @@ def _row_from_leg(plan: dict, trade: dict, leg: dict, leg_index: int, noted: set
     )
     exit_price = leg.get("exit_price")
     leg_r = leg.get("r")
-    closed_at = _leg_closed_at(plan, leg, leg_index)
+    closed_at = _leg_closed_at(plan, trade, leg, leg_index)
     leg_trade = {"entry": entry, "exit_price": exit_price, "direction": plan.get("direction")}
     row.update({
         "status": "CLOSED",

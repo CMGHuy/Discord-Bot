@@ -137,6 +137,33 @@ def test_a_leg_with_no_r_falls_back_to_price_sign_not_a_default_win():
     assert rows[1]["r_multiple"] is None
 
 
+def test_a_leg_with_neither_closed_at_nor_a_history_entry_uses_the_trades_close():
+    """Last resort for a leg's close time must be when the position actually
+    reached its terminal state (`_terminal_at`), never the plan's CREATION
+    time -- `created_at` predates every fill, so a row stamped with it is
+    scored against the wrong day and silently drops out of the Dashboard's
+    Today/CLOSED scope."""
+    plan = closed_scaled_out_plan()
+    del plan["legs_realized"][0]["closed_at"]
+    plan["status_history"] = []  # nothing to match positionally
+    trade = {"id": "t1", "shares": 10, "status": "win",
+             "opened_at": "2026-09-01T09:00:00+00:00",
+             "closed_at": "2026-09-05T15:00:00+00:00"}
+    rows = _expand_plan_row(plan, trade, set())
+    assert rows[0]["closed_at"] == "2026-09-05T15:00:00+00:00"
+    assert rows[0]["closed_at"] != plan["created_at"]
+
+
+def test_a_leg_falls_all_the_way_back_to_created_at_only_when_nothing_else_exists():
+    """With no leg stamp, no history and no trade close, `created_at` is
+    still the only date the row has."""
+    plan = closed_scaled_out_plan()
+    del plan["legs_realized"][0]["closed_at"]
+    plan["status_history"] = []
+    rows = _expand_plan_row(plan, {"id": "t1", "shares": 10, "status": "win"}, set())
+    assert rows[0]["closed_at"] == "2026-09-01"
+
+
 def test_a_leg_rows_held_hours_is_its_own_span_not_the_whole_positions():
     """held_hours must be measured against the LEG's own closed_at, not
     inherited from the trade's overall opened_at -> closed_at span -- and
