@@ -117,10 +117,22 @@
         <sb-names-lane />
       </div>
       <div class="spacer"></div>
-      <span class="clock">
-        <sb-icon name="clock" />
-        {{ now() }}
-      </span>
+      <!-- Sheet 2's form: dot, word, clock, read together as one group.
+           The dot answers only "is the event stream connected" (D30) -- it
+           must never be read as "these numbers are current"; that claim
+           belongs to each panel's own sb-freshness. -->
+      <div class="status-cluster">
+        <sb-connection-status
+          [state]="connection.state()"
+          [botAlive]="connection.botAlive()"
+          [botHealthy]="connection.botHealthy()"
+          [marketActive]="connection.marketActive()"
+        />
+        <span class="clock">
+          <sb-icon name="clock" />
+          {{ now() }}
+        </span>
+      </div>
       <!-- SR58. Beside the connection status because it answers the same
            question from the other side: "these prices have not moved" is a
            failure during the session and correct behaviour outside it.
@@ -138,12 +150,6 @@
         </span>
       }
 
-      <sb-connection-status
-        [state]="connection.state()"
-        [botAlive]="connection.botAlive()"
-        [botHealthy]="connection.botHealthy()"
-        [marketActive]="connection.marketActive()"
-      />
       <sb-profile-menu [zoom]="zoom()" (zoomCycled)="cycleZoom()" (signedOut)="logout()" />
     </header>
 

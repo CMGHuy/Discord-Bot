@@ -270,6 +270,14 @@
 
 /* -- SR58: market session, zoom, version footer ---------------------- */
 
+/* Sheet 2's form: dot, word and clock read as one cluster, tighter than
+   the wider gap the topbar uses between its other children. */
+.status-cluster {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
 .clock {
   display: inline-flex;
   align-items: center;

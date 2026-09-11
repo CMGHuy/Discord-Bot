@@ -50,4 +50,30 @@ describe('ConnectionStatus', () => {
     expect(failing).toBeTruthy();
     expect(failing!.classList.contains('bot')).toBe(true);
   });
+
+  it('labels the dot Live when the stream is connected', () => {
+    fixture.componentRef.setInput('state', 'live');
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.state')!.textContent!.trim()).toBe('Live');
+  });
+
+  it('says what is live, not that the data is fresh', () => {
+    fixture.componentRef.setInput('state', 'live');
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const title = el.querySelector('.status')!.getAttribute('title');
+    expect(title).toContain('event stream');
+    expect(title).not.toContain('up to date');
+  });
+
+  it('names the disconnected state in words, not by colour alone', () => {
+    // D30's four-state ConnectionState has no plain boolean "connected" --
+    // 'dead' is the state that actually means disconnected; 'degraded' is
+    // a soft fallback (still connected, polling instead of streaming).
+    fixture.componentRef.setInput('state', 'dead');
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.state')!.textContent!.trim()).toBe('Offline');
+  });
 });
