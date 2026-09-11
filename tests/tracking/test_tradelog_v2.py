@@ -140,6 +140,28 @@ def test_get_extended_stats_counts_each_leg_as_its_own_outcome(tmp_path):
     assert stats["total"] == 2 and stats["wins"] == 1 and stats["losses"] == 1
 
 
+def test_get_extended_stats_avg_holding_days_position_accurate_not_leg_doubled(tmp_path):
+    # Scaled-out trade with 2 legs should contribute ONE duration value to avg_holding_days,
+    # not TWO (one per leg). Without the fix, both legs would share the same closed_at/opened_at
+    # and silently double the position's weight in the average.
+    trade = {
+        "status": "win", "shares": 10, "entry": 100.0, "direction": "bullish",
+        "stop_loss": 95.0, "exit_price": 118.0, "confidence_level": None,
+        "opened_at": "2026-09-01T09:30:00+00:00",
+        "closed_at": "2026-09-05T16:00:00+00:00",  # 4 days 6.5 hours
+        "legs": [
+            {"fraction": 0.5, "exit_price": 110.0, "r": 2.0, "reason": "tp1"},
+            {"fraction": 0.5, "exit_price": 118.0, "r": 3.6, "reason": "tp1_runner_tp2"},
+        ],
+    }
+    log = TradeLog(path=str(tmp_path / "trades.json"))
+    stats = log.get_extended_stats(trades=[trade])
+    # The position was open for 4 days + 6.5 hours = ~4.27 days
+    # avg_holding_days should be ~4.27, not ~8.54 (which would result from each leg contributing ~4.27)
+    # This verifies that holding_days is position-accurate, not leg-doubled
+    assert stats["avg_holding_days"] == pytest.approx(4.270833333333333)
+
+
 @pytest.fixture(autouse=True)
 def _rth_gate_off(monkeypatch):
     from swingbot import config

@@ -849,15 +849,15 @@ class TradeLog:
         Additional performance metrics beyond get_stats()'s win/loss counts,
         for the admin dashboard's stat cards:
 
-          - expectancy_r: average realized R-multiple across trades that
-            actually hit their stop or target (status win/loss) -- R =
-            (exit - entry) / (entry - stop_loss), sign-adjusted for
-            direction, i.e. how many "risk units" this trade made or lost.
+          - expectancy_r: average realized R-multiple across individual trade
+            legs that actually hit their stop or target (status win/loss) -- R =
+            (exit - entry) / (entry - stop_loss), sign-adjusted for direction.
+            For scaled-out (multi-leg) trades, each leg is counted separately.
             A single number summarizing the whole track record's edge per
-            trade, the standard way trading systems are compared. None if
-            there are no win/loss trades yet.
+            realized outcome. None if there are no win/loss outcomes yet.
           - avg_holding_days: average calendar days between opened_at and
-            closed_at across every closed trade (win/loss/manually-closed).
+            closed_at across every closed POSITION (one value per original trade,
+            not per leg). Computed before leg expansion to keep position-accurate.
           - avg_open_confidence: average confidence_level (1-5) across
             currently OPEN trades -- a quick read on how strong the setups
             sitting in the book right now are, independent of past results.
@@ -871,17 +871,13 @@ class TradeLog:
         trades = base if confidence_level is None else [
             t for t in base if t["confidence_level"] == confidence_level
         ]
-        trades = [row for t in trades for row in expand_trade_legs(t)]
-        closed = [t for t in trades if t["status"] in ("win", "loss", "closed")]
-        open_trades = [t for t in trades if t["status"] == "open"]
 
-        r_multiples = [
-            r for t in closed if t["status"] in ("win", "loss")
-            if (r := closed_r_multiple(t)) is not None
-        ]
-
+        # Compute holding_days from PRE-expansion trades (one value per original position)
+        # before expanding legs, so scaled-out trades don't double-count their duration.
         holding_days = []
-        for t in closed:
+        for t in trades:
+            if t["status"] not in ("win", "loss", "closed"):
+                continue
             if not t.get("closed_at") or not t.get("opened_at"):
                 continue
             try:
@@ -890,6 +886,16 @@ class TradeLog:
                 holding_days.append((closed_dt - opened).total_seconds() / 86400.0)
             except (ValueError, TypeError):
                 continue
+
+        # Expand legs for r_multiples and open-trade confidence (each leg is its own outcome)
+        trades = [row for t in trades for row in expand_trade_legs(t)]
+        closed = [t for t in trades if t["status"] in ("win", "loss", "closed")]
+        open_trades = [t for t in trades if t["status"] == "open"]
+
+        r_multiples = [
+            r for t in closed if t["status"] in ("win", "loss")
+            if (r := closed_r_multiple(t)) is not None
+        ]
 
         open_confidences = [
             t["confidence_level"] for t in open_trades if t.get("confidence_level") is not None
