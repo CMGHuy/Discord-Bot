@@ -59,6 +59,10 @@ class ScanParams:
     slippage_bps: float
     commission_per_trade: float
     commission_risk_basis: str
+    rsi_div_min_consecutive_turn: int
+    ma_ribbon_confirm_bars: int
+    sr_min_level_touches: int
+    fib_target_1_0_extension: bool
 
     @classmethod
     def from_config(cls) -> "ScanParams":
@@ -104,4 +108,8 @@ class ScanParams:
             slippage_bps=config.SLIPPAGE_BPS,
             commission_per_trade=config.COMMISSION_PER_TRADE,
             commission_risk_basis=config.COMMISSION_RISK_BASIS,
+            rsi_div_min_consecutive_turn=config.RSI_DIV_MIN_CONSECUTIVE_TURN,
+            ma_ribbon_confirm_bars=config.MA_RIBBON_CONFIRM_BARS,
+            sr_min_level_touches=config.SR_MIN_LEVEL_TOUCHES,
+            fib_target_1_0_extension=config.FIB_TARGET_1_0_EXTENSION,
         )
