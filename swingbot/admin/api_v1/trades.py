@@ -788,12 +788,13 @@ def _attach_unrealized_pnl(rows: list[dict]) -> None:
             continue
         price = row.get("current_price")
         entry, direction = row.get("entry"), row.get("direction")
-        if price is None or entry is None:
-            continue
-        row["pnl_pct"] = dash.unrealized_pnl(entry, direction, price)
-        row["r_multiple"] = dash.unrealized_r(entry, row.get("_risk_stop"), direction, price)
-        row["realized_pnl_amount"] = dash.unrealized_pnl_amount(
-            entry, direction, row.get("shares"), row.get("_legs"), price)
+        if price is not None and entry is not None:
+            row["pnl_pct"] = dash.unrealized_pnl(entry, direction, price)
+            row["r_multiple"] = dash.unrealized_r(entry, row.get("_risk_stop"), direction, price)
+            row["realized_pnl_amount"] = dash.unrealized_pnl_amount(
+                entry, direction, row.get("shares"), row.get("_legs"), price)
+        if row.get("open_shares") is not None:
+            row["shares"] = row["open_shares"]
 
 
 def _strip_internal_fields(rows: list[dict]) -> None:

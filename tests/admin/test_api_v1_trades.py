@@ -342,7 +342,7 @@ def test_open_shares_is_the_full_size_before_any_leg_realizes(seed, logged_in):
     assert row["open_shares"] == 10
 
 
-def test_open_shares_is_reduced_by_a_realized_tp1_leg(seed, logged_in):
+def test_open_shares_is_reduced_by_a_realized_tp1_leg(seed, logged_in, monkeypatch):
     """The reported bug: a PARTIAL position's live % is unaffected (it is
     priced off one share), but its live DOLLAR figure must reflect that only
     the remaining fraction is still exposed to further price movement."""
@@ -354,9 +354,13 @@ def test_open_shares_is_reduced_by_a_realized_tp1_leg(seed, logged_in):
     trade["shares"] = 10
     seed(plans=[plan], trades=[trade])
 
+    # Stub out price fetch to prevent network calls
+    monkeypatch.setattr("swingbot.admin.api_v1.trades._attach_current_prices", lambda rows: None)
+
     row = logged_in.get("/api/v1/trades").get_json()["items"][0]
-    assert row["shares"] == 10          # the original size, unchanged
     assert row["open_shares"] == 5.0    # half realized -- half remains
+    # v79: shares now shows the remaining size for partially-realized positions
+    assert row["shares"] == row["open_shares"] == 5.0
 
 
 def test_open_shares_is_null_for_a_plan_with_no_fill_yet(seed, logged_in):
@@ -384,6 +388,26 @@ def test_open_shares_is_null_for_a_closed_row(seed, logged_in):
 
     row = logged_in.get("/api/v1/trades").get_json()["items"][0]
     assert row["open_shares"] is None
+
+
+def test_a_partial_row_shows_the_remaining_share_count(seed, logged_in, monkeypatch):
+    """The Shares column must show what's still exposed to price movement,
+    not the original size at open -- v79."""
+    pid = "44444444-4444-4444-8444-444444444444"
+    plan = _plan(pid, status="PARTIAL")
+    plan["legs_realized"] = [{"fraction": 0.5, "exit_price": 110.0,
+                              "r": 1.0, "reason": "tp1", "closed_at": "2026-08-02T10:00:00+00:00"}]
+    seed(plans=[plan], trades=[_trade("ffffffffffffffff", plan_id=pid)])
+
+    # No live price fetch needed for this assertion; disable it so the test
+    # doesn't hit the network -- follow this file's existing pattern for
+    # stubbing get_current_price if one exists elsewhere in this file or in
+    # tests/admin/conftest.py, otherwise monkeypatch
+    # `swingbot.admin.api_v1.trades._attach_current_prices` to a no-op.
+    monkeypatch.setattr("swingbot.admin.api_v1.trades._attach_current_prices", lambda rows: None)
+
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+    assert row["shares"] == row["open_shares"] == 5.0
 
 
 def test_an_unknown_outcome_is_an_empty_set_not_an_error(seed, logged_in):
