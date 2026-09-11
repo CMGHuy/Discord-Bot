@@ -242,4 +242,17 @@ describe('shell navigation', () => {
     expect(foot).not.toBeNull();
     expect(foot?.parentElement?.classList.contains('sidebar')).toBe(true);
   });
+
+  it('drops the subtitle and the clock before it lets the bar overflow', () => {
+    const f = TestBed.createComponent(Shell);
+    f.detectChanges();
+    const rules = [...document.styleSheets]
+      .flatMap((sheet) => { try { return [...sheet.cssRules]; } catch { return []; } })
+      .map((rule) => rule.cssText)
+      .join('\n');
+    // Both must be hidden under a max-width query -- the order in the spec is
+    // subtitle first, then clock, so the subtitle's breakpoint is the wider one.
+    expect(rules).toMatch(/max-width:\s*900px[\s\S]*\.page-subtitle[\s\S]*display:\s*none/);
+    expect(rules).toMatch(/max-width:\s*720px[\s\S]*\.clock[\s\S]*display:\s*none/);
+  });
 });

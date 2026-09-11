@@ -332,3 +332,17 @@
 .route-loading-mark { width: 24px; height: 24px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: route-spin 700ms linear infinite; }
 @keyframes route-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .route-loading-mark { animation: none; } }
+
+/* The drop order, widest trigger first -- spec v85 "Responsive behaviour".
+   Everything here is a removal: the bar never wraps to a second row, because
+   a two-row bar changes the height of every page's content area. The title
+   itself already truncates with an ellipsis (R1-05) and the tape already
+   scrolls (R1-06), so below 720px the bar degrades to
+   mark - title - scrolling tape - status, with nothing overflowing. */
+@media (max-width: 900px) {
+  .page-subtitle { display: none; }
+}
+@media (max-width: 720px) {
+  .clock { display: none; }
+  .topbar { gap: var(--space-10); }
+}
