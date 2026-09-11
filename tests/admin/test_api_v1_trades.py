@@ -70,6 +70,10 @@ TRADE_ROW = {
     "banked_fraction": NULLABLE_NUMBER,
     "banked_exit_price": NULLABLE_NUMBER,
     "banked_r": NULLABLE_NUMBER,
+    # v79 -- which row this is out of how many, when a scaled-out position
+    # has been split into one row per leg. 0/1 for every row that isn't.
+    "leg_index": int,
+    "leg_total": int,
     "risk_reward": NULLABLE_NUMBER,
     "shares": NULLABLE_NUMBER,
     # The share count still exposed to price movement -- `shares` is the
@@ -203,6 +207,23 @@ def test_a_filled_plan_appears_exactly_once(seed, logged_in):
     body = logged_in.get("/api/v1/trades").get_json()
     assert body["total"] == 1, "the plan and its linked trade are ONE position"
     assert body["items"][0]["id"] == pid, "the plan id is the identity, not the trade id"
+
+
+def test_status_filter_returns_the_closed_leg_and_the_open_remainder_separately(
+    seed, logged_in, monkeypatch,
+):
+    monkeypatch.setattr("swingbot.admin.api_v1.trades._attach_current_prices", lambda rows: None)
+    pid = "55555555-5555-4555-8555-555555555555"
+    plan = _plan(pid, status="PARTIAL")
+    plan["legs_realized"] = [{"fraction": 0.5, "exit_price": 110.0, "r": 1.0,
+                              "reason": "tp1", "closed_at": "2026-08-02T10:00:00+00:00"}]
+    seed(plans=[plan], trades=[_trade("gggggggggggggggg", plan_id=pid)])
+
+    closed = logged_in.get("/api/v1/trades?status=CLOSED").get_json()
+    partial = logged_in.get("/api/v1/trades?status=PARTIAL").get_json()
+    assert closed["total"] == 1 and closed["items"][0]["id"] == pid
+    assert partial["total"] == 1 and partial["items"][0]["id"] == pid
+    assert closed["items"][0]["shares"] == 5.0
 
 
 def test_a_filled_plan_is_enriched_by_its_trade_row(seed, logged_in):
@@ -342,7 +363,7 @@ def test_open_shares_is_the_full_size_before_any_leg_realizes(seed, logged_in):
     assert row["open_shares"] == 10
 
 
-def test_open_shares_is_reduced_by_a_realized_tp1_leg(seed, logged_in):
+def test_open_shares_is_reduced_by_a_realized_tp1_leg(seed, logged_in, monkeypatch):
     """The reported bug: a PARTIAL position's live % is unaffected (it is
     priced off one share), but its live DOLLAR figure must reflect that only
     the remaining fraction is still exposed to further price movement."""
@@ -354,9 +375,16 @@ def test_open_shares_is_reduced_by_a_realized_tp1_leg(seed, logged_in):
     trade["shares"] = 10
     seed(plans=[plan], trades=[trade])
 
-    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
-    assert row["shares"] == 10          # the original size, unchanged
+    # Stub out price fetch to prevent network calls
+    monkeypatch.setattr("swingbot.admin.api_v1.trades._attach_current_prices", lambda rows: None)
+
+    # v79: this plan now expands to two rows -- the realized TP1 leg and the
+    # still-open runner remainder. This assertion is about the runner.
+    items = logged_in.get("/api/v1/trades").get_json()["items"]
+    row = next(r for r in items if r["status"] == "PARTIAL")
     assert row["open_shares"] == 5.0    # half realized -- half remains
+    # v79: shares now shows the remaining size for partially-realized positions
+    assert row["shares"] == row["open_shares"] == 5.0
 
 
 def test_open_shares_is_null_for_a_plan_with_no_fill_yet(seed, logged_in):
@@ -384,6 +412,61 @@ def test_open_shares_is_null_for_a_closed_row(seed, logged_in):
 
     row = logged_in.get("/api/v1/trades").get_json()["items"][0]
     assert row["open_shares"] is None
+
+
+def test_a_partial_row_shows_the_remaining_share_count(seed, logged_in, monkeypatch):
+    """The Shares column must show what's still exposed to price movement,
+    not the original size at open -- v79."""
+    pid = "44444444-4444-4444-8444-444444444444"
+    plan = _plan(pid, status="PARTIAL")
+    plan["legs_realized"] = [{"fraction": 0.5, "exit_price": 110.0,
+                              "r": 1.0, "reason": "tp1", "closed_at": "2026-08-02T10:00:00+00:00"}]
+    seed(plans=[plan], trades=[_trade("ffffffffffffffff", plan_id=pid)])
+
+    # No live price fetch needed for this assertion; disable it so the test
+    # doesn't hit the network -- follow this file's existing pattern for
+    # stubbing get_current_price if one exists elsewhere in this file or in
+    # tests/admin/conftest.py, otherwise monkeypatch
+    # `swingbot.admin.api_v1.trades._attach_current_prices` to a no-op.
+    monkeypatch.setattr("swingbot.admin.api_v1.trades._attach_current_prices", lambda rows: None)
+
+    # v79: this plan expands to a realized TP1-leg row plus the open runner
+    # remainder -- this assertion is about the runner.
+    items = logged_in.get("/api/v1/trades").get_json()["items"]
+    row = next(r for r in items if r["status"] == "PARTIAL")
+    assert row["shares"] == row["open_shares"] == 5.0
+
+
+def test_double_pass_pnl_calculation_preserves_correct_realized_amount(seed, logged_in, priced):
+    """Regression: _attach_unrealized_pnl runs twice on the same row objects
+    when sorting by pnl_pct/r_multiple. The shares override must not corrupt
+    the original value before the second pass (v79)."""
+    # Reuse the fixture shape from test_partial_trade_blends_realized_and_unrealized_dollars
+    plan = _plan("11111111-1111-4111-8111-111111111111", status="PARTIAL")
+    plan.update({"entry_price": 100.0, "direction": "bullish", "stop_loss": 90.0,
+                "tp1": 110.0, "tp2": 130.0, "working_stop": 100.0,
+                "legs_realized": [{"fraction": 0.5, "exit_price": 110.0,
+                                    "r": 1.0, "reason": "tp1"}]})
+    trade = _trade("aaaaaaaaaaaaaaaa", plan_id=plan["plan_id"], status="open")
+    trade.update({"entry": 100.0, "direction": "bullish", "shares": 10})
+    seed(plans=[plan], trades=[trade])
+    priced(120.0)
+
+    # Trigger the double-pass branch: sort by pnl_pct (or r_multiple) runs
+    # _attach_unrealized_pnl on the full set, then again on the page slice.
+    # The realized_pnl_amount MUST use the original shares (10) for both passes,
+    # not the reduced shares (5) that should only appear in display.
+    # v79: this plan expands to a realized TP1-leg row plus the open runner
+    # remainder -- the blended realized+unrealized figure under test is the
+    # runner's.
+    items = logged_in.get("/api/v1/trades?sort=pnl_pct").get_json()["items"]
+    row = next(r for r in items if r["status"] == "PARTIAL")
+
+    # Verify the correct calculation: 5 sh * (110-100) + 5 sh * (120-100) = 150.0
+    assert row["realized_pnl_amount"] == 150.0
+    # Verify the display value is correct: shares now shows the remaining count
+    assert row["shares"] == 5.0
+    assert row["open_shares"] == 5.0
 
 
 def test_an_unknown_outcome_is_an_empty_set_not_an_error(seed, logged_in):
@@ -951,7 +1034,10 @@ def test_partial_plan_shows_the_runner_target_and_stop(seed, logged_in):
     trade = _trade("aaaaaaaaaaaaaaaa", plan_id=plan["plan_id"], status="open")
     seed(plans=[plan], trades=[trade])
 
-    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+    # v79: this plan expands to a realized TP1-leg row plus the open runner
+    # remainder -- these assertions are about the runner.
+    items = logged_in.get("/api/v1/trades").get_json()["items"]
+    row = next(r for r in items if r["status"] == "PARTIAL")
     assert row["target"] == 130.0      # tp2, not tp1
     assert row["stop_loss"] == 101.0   # working_stop, not the original stop
     assert row["target2"] == 130.0

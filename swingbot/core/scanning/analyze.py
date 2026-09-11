@@ -729,8 +729,16 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             # docstring, Step 4) uses this plus the scenario's own
             # reward:risk to answer "does this payoff/win-rate combo
             # actually make money", not just "does it look clean".
+            #
+            # `expand=False` (v79): ONE outcome per position, not one per
+            # scaled-out leg. score_confidence's expectancy factor pays every
+            # counted win this scenario's full reward:risk, and a TP1 leg
+            # banks roughly 1R -- counting legs here would overstate the
+            # empirical edge and silently re-tier live alerts. v79 changed
+            # what the dashboards count; it must not change what the bot
+            # posts. See TradeLog.get_stats' docstring.
             base_level_preview = max(1, min(5, target_confluence[0]))
-            base_level_stats = trade_log.get_stats(base_level_preview)
+            base_level_stats = trade_log.get_stats(base_level_preview, expand=False)
             track_record = (base_level_stats["win_rate"], base_level_stats["closed"])
 
             # htf_result computed once above the scenario loop (v56) --
