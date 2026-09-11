@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Build and score the pre-registered v82 earnings-blackout exposure table."""
-import argparse, dataclasses, json, sys
+import argparse, dataclasses, json, os, sys
 from concurrent.futures import ProcessPoolExecutor
 from datetime import date
 from pathlib import Path
@@ -97,7 +97,7 @@ def cmd_permute(args):
 def main(argv=None):
     parser=argparse.ArgumentParser(); sub=parser.add_subparsers(dest="command",required=True)
     def common(p):p.add_argument("--cache-dir",default=str(CACHE_DIR));p.add_argument("--csv-dir",default=str(EARNINGS_CSV_DIR));p.add_argument("--out-root",default=str(OUT_ROOT))
-    p=sub.add_parser("replay");common(p);p.add_argument("--run",choices=RUNS,required=True);p.add_argument("--tickers");p.add_argument("--horizons");p.add_argument("--strategies");p.add_argument("--workers",type=int,default=1);p.add_argument("--stage2-doc")
+    p=sub.add_parser("replay");common(p);p.add_argument("--run",choices=RUNS,required=True);p.add_argument("--tickers");p.add_argument("--horizons");p.add_argument("--strategies");p.add_argument("--workers",type=int,default=max(1, os.cpu_count() or 1));p.add_argument("--stage2-doc")
     p=sub.add_parser("coverage");common(p);p.add_argument("--run",choices=RUNS,required=True);p.add_argument("--window",required=True)
     p=sub.add_parser("select");common(p);p.add_argument("--out-md");p.add_argument("--out-json")
     p=sub.add_parser("arms");common(p);p.add_argument("--stage",choices=("mde","walkforward","validation"),required=True);p.add_argument("--k",type=int,choices=eb.GRID,required=True);p.add_argument("--out",required=True)
