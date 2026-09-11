@@ -177,11 +177,22 @@ extracts one.
   fallback only on failure)
 - **R15** Shared arms harness (`measure_strategy_arm.py`) — **blocks every
   Tier 2/3 fold stage**; build it first
-- **R16–R19** RSI Divergence — `min_consecutive_rsi_turn`, grid, folds, VALIDATION
-- **R20–R23** MA Ribbon — `confirm_bars`, grid, folds, VALIDATION
+- **R16–R19** RSI Divergence — `min_consecutive_rsi_turn`, grid, folds, VALIDATION.
+  **Real allocation:** R16/R17 ran; R17 REJECTED-ON-TRAIN (0/3 qualify) so
+  R18/R19 did not run (gated). Closed WEAK, VALIDATION unspent.
+- **R20–R23** MA Ribbon — `confirm_bars`, grid, folds, VALIDATION.
+  **Real allocation:** R20/R21 ran; R21 0/2 qualify so R22/R23 did not run
+  (gated). Closed WEAK, VALIDATION unspent.
 - **R24–R27** Support/Resistance — level-touch significance filter, grid, folds,
-  VALIDATION
-- **R28–R30** Tier 2 wrap
+  VALIDATION. **Real allocation:** R24/R25 ran; R25 0/3 qualify so R26/R27
+  did not run (gated). Closed WEAK, VALIDATION unspent.
+- **R28–R30** Tier 2 wrap — 0/3 rescued, 0/7 VALIDATION shots spent so far
+  (combined with Tier 1's 0/3). **Handoff for R42/R43:** RSI Divergence, MA
+  Ribbon and Support/Resistance all remain `WEAK` — each closed at its free
+  TRAIN grid stage, never reached Stage 2 or VALIDATION; per-strategy
+  failure stage and metric are in
+  `docs/superpowers/results/2026-09-10-v84-tier2-summary.md`, sourced from
+  each strategy's own `*-train.md` doc.
 - **R31–R35** Fibonacci — 1.0 extension behind `FIB_TARGET_1_0_EXTENSION`,
   measurement script, TRAIN, folds, VALIDATION
 - **R36** Elliott Wave — records the withdrawn hypothesis; **no tasks, no shot**
