@@ -30,37 +30,51 @@ export const routes: Routes = [
   {
     path: 'dashboard',
     canMatch: [authGuard],
+    title: 'Dashboard',
+    data: { subtitle: "What's happening right now" },
     loadChildren: () => import('./workspaces/dashboard/dashboard.routes').then((m) => m.dashboardRoutes),
   },
   {
     path: 'trades',
     canMatch: [authGuard],
+    title: 'Trades',
+    data: { subtitle: 'Every plan, filled or not' },
     loadChildren: () => import('./workspaces/trades/trades.routes').then((m) => m.tradesRoutes),
   },
   {
     // Trade Detail has its own route-scoped store and resolver.
     path: 'trades/:id',
     canMatch: [authGuard],
+    title: 'Trade detail',
+    data: { subtitle: 'One position, end to end' },
     loadChildren: () => import('./workspaces/trades/trade-detail.routes').then((m) => m.tradeDetailRoutes),
   },
   {
     path: 'analytics',
     canMatch: [authGuard],
+    title: 'Analytics',
+    data: { subtitle: 'What already happened, measured' },
     loadChildren: () => import('./workspaces/analytics/analytics.routes').then((m) => m.analyticsRoutes),
   },
   {
     path: 'calendar',
     canMatch: [authGuard],
+    title: 'Calendar',
+    data: { subtitle: 'P&L by day' },
     loadChildren: () => import('./workspaces/calendar/calendar.routes').then((m) => m.calendarRoutes),
   },
   {
     path: 'watchlist',
     canMatch: [authGuard],
+    title: 'Watchlist',
+    data: { subtitle: 'The symbols being scanned' },
     loadChildren: () => import('./workspaces/watchlist/watchlist.routes').then((m) => m.watchlistRoutes),
   },
   {
     path: 'watchlist/:symbol',
     canMatch: [authGuard],
+    title: 'Ticker detail',
+    data: { subtitle: 'One symbol, in depth' },
     loadChildren: () => import('./workspaces/watchlist/ticker-detail.routes').then((m) => m.tickerDetailRoutes),
   },
   // SR5: the workspace was `/universe` until 2026-08-13. The `:symbol` form
@@ -71,22 +85,29 @@ export const routes: Routes = [
   {
     path: 'risk',
     canMatch: [authGuard],
+    title: 'Risk',
+    data: { subtitle: 'Exposure, caps and the killswitch' },
     loadChildren: () => import('./workspaces/risk/risk.routes').then((m) => m.riskRoutes),
   },
   {
     path: 'system',
     canMatch: [authGuard],
+    title: 'System',
+    data: { subtitle: 'What the bot itself is doing' },
     loadChildren: () => import('./workspaces/system/system.routes').then((m) => m.systemRoutes),
   },
   {
     path: 'versions',
     canMatch: [authGuard],
+    title: 'Versions',
+    data: { subtitle: "What's deployed, and when it changed" },
     loadChildren: () => import('./workspaces/versions/versions.routes').then((m) => m.versionsRoutes),
   },
   {
     path: 'ui',
     canMatch: [authGuard],
     title: 'UI gallery',
+    data: { subtitle: 'Every primitive, in one place' },
     loadComponent: () => import('./workspaces/gallery/gallery').then((m) => m.Gallery),
   },
   // A typo'd URL lands on the Dashboard rather than a blank outlet. There is

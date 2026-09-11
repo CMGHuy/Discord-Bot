@@ -8,7 +8,12 @@ import {
 } from '@angular/core';
 import { APP_BASE_HREF } from '@angular/common';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { provideRouter, withComponentInputBinding, withRouterConfig } from '@angular/router';
+import {
+  TitleStrategy,
+  provideRouter,
+  withComponentInputBinding,
+  withRouterConfig,
+} from '@angular/router';
 import { provideServiceWorker } from '@angular/service-worker';
 
 import {
@@ -19,6 +24,7 @@ import {
 } from './api/interceptors';
 import { routes } from './app.routes';
 import { PwaUpdateService } from './pwa/pwa-update.service';
+import { SubtitleTitleStrategy } from './routing/route-title.service';
 import { provideRouteFocus } from './shell/route-focus';
 import { SessionStore } from './stores/session.store';
 
@@ -49,6 +55,9 @@ export const appConfig: ApplicationConfig = {
     // rather than through ActivatedRoute, which keeps a detail component
     // testable without standing up a router.
     provideRouter(routes, withComponentInputBinding(), withRouterConfig({ onSameUrlNavigation: 'reload' })),
+    // v85 D4: publishes the active route's title/subtitle as signals for the
+    // shell's top bar, replacing Angular's default Title-only strategy.
+    { provide: TitleStrategy, useClass: SubtitleTitleStrategy },
     // In an SPA a route change moves nothing on its own: focus stays on the
     // nav link just activated and the new page is never announced. This
     // moves it to the new workspace's <h1> once it has actually rendered.
