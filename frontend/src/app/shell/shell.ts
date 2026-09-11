@@ -21,6 +21,7 @@ import { Icon, IconName } from '../ui/icon';
 import { ProfileMenu } from './profile-menu';
 import { RouteLoadingService } from '../routing/route-loading.service';
 import { RouteRefreshService } from '../routing/route-refresh.service';
+import { RouteTitleService } from '../routing/route-title.service';
 import { SessionStore } from '../stores/session.store';
 import { ConnectionStatus } from './connection-status';
 import { MarketLane } from './tape/market-lane';
@@ -74,6 +75,7 @@ export class Shell {
   private readonly viewport = inject(ViewportService);
   protected readonly routeLoading = inject(RouteLoadingService);
   private readonly routeRefresh = inject(RouteRefreshService);
+  protected readonly titles = inject(RouteTitleService);
   private readonly tape = inject(TapeStore);
   private readonly marketIndex = inject(MarketIndexStore);
 

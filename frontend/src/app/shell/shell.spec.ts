@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventStream } from '../api/event-stream';
 import { RouteLoadingService } from '../routing/route-loading.service';
+import { RouteTitleService } from '../routing/route-title.service';
 import { TapeStore } from '../stores/tape.store';
 import { Shell } from './shell';
 
@@ -152,5 +153,23 @@ describe('shell navigation', () => {
     button.click();
     f.detectChanges();
     expect(button.textContent?.trim()).toBe('Aa 90%');
+  });
+
+  it('renders the route title and subtitle in the top bar', () => {
+    const titles = TestBed.inject(RouteTitleService);
+    titles.set('Dashboard', "What's happening right now");
+    const f = TestBed.createComponent(Shell);
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    expect(el.querySelector('.topbar .page-title')?.textContent?.trim()).toBe('Dashboard');
+    expect(el.querySelector('.topbar .page-subtitle')?.textContent?.trim())
+      .toBe("What's happening right now");
+  });
+
+  it('renders no subtitle element at all when the route has none', () => {
+    TestBed.inject(RouteTitleService).set('Bare', null);
+    const f = TestBed.createComponent(Shell);
+    f.detectChanges();
+    expect((f.nativeElement as HTMLElement).querySelector('.page-subtitle')).toBeNull();
   });
 });

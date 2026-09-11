@@ -106,6 +106,12 @@
 
   <div class="main">
     <header class="topbar">
+      <div class="topbar-lead">
+        <h1 class="page-title">{{ titles.title() }}</h1>
+        @if (titles.subtitle(); as subtitle) {
+          <p class="page-subtitle">{{ subtitle }}</p>
+        }
+      </div>
       <!-- Engaged killswitch is shell-level and unmissable: it means the bot
            has stopped taking positions, which is true no matter which
            workspace happens to be open. -->

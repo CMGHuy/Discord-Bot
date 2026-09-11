@@ -204,6 +204,23 @@
   flex: 1;
 }
 
+.topbar-lead { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.page-title {
+  margin: 0;
+  font-size: var(--text-title);
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.page-subtitle {
+  margin: 0;
+  font-size: var(--text-chip);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
 .killswitch {
   padding: var(--space-4) var(--space-8);
   border: 1px solid var(--neg);
