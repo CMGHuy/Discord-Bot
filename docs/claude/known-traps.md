@@ -76,6 +76,21 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   and `<module>.<name>` across `swingbot/`, `tests/` and `scripts/`. The known
   re-export blocks now carry `# noqa: F401` and a comment saying so — leave
   them.
+- **`get_current_price()` serves a stale cached price by default — trading
+  code must pass `allow_stale=False`.** The last-known-good fallback keeps a
+  dashboard from blanking on one failed quote, and returns a price of any
+  age. Anything that acts on the answer (the plan manager's `_price_fn`,
+  `trade_monitor`, reversal and manual-close fills) passes
+  `allow_stale=False` and skips on None: a repeated cached print counts as a
+  fresh confirming tick for `EXTENDED_HOURS_DEBOUNCE_TICKS` (2) and fills at a
+  price that stopped being current an unknown time ago (fixed 2026-09-11).
+- **A trade row and its v2 plan close together, or the plan manager keeps
+  managing a position that no longer exists.** `PlanManager.poll()` re-reads
+  each plan after its price fetch (the admin closes plans from another
+  process), `trade_monitor` ticks the manager even with no open trade rows,
+  and `close_trade_reversed` closes the linked plan. A new path that closes
+  a plan-linked trade row outside the manager must do the same
+  (`performance._close_linked_plan_safely`).
 - **Function names that don't exist** (plans and briefs guess wrong at these
   constantly — verify before use): there is no `market_events.days_to_earnings`
   (use `events.get_next_earnings_date` / `earnings_within_window`), no
