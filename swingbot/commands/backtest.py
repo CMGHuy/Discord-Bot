@@ -12,7 +12,7 @@ instead of an interactive command.
 import asyncio
 
 from swingbot.core.backtesting.backtest import (
-    run_backtest, run_backtest_daterange, run_full_backtest,
+    ALL_STRATEGIES, run_backtest, run_backtest_daterange, run_full_backtest,
 )
 from swingbot.bot_core import bot
 from swingbot.core import presentation as ui
@@ -35,34 +35,6 @@ STRATEGY_MAP = {
     "rsidiv": "RSI Divergence", "divergence": "RSI Divergence", "rsidivergence": "RSI Divergence",
     "volprofile": "Volume Profile", "hvn": "Volume Profile", "vp": "Volume Profile",
 }
-
-ALL_STRATEGIES = (
-    "EMA Crossover", "VWAP", "Fibonacci", "Support/Resistance", "RSI",
-    "MACD", "Elliott Wave", "MA Ribbon", "Break & Retest", "RSI Divergence", "Volume Profile",
-)
-
-STRATEGY_ALIASES_HELP = (
-    "ema, vwap, fib, sr, rsi, macd, elliott, "
-    "ribbon/maribbon, bnr/retest, rsidiv/divergence, volprofile/hvn, all"
-)
-
-
-def _parse_date_args(args: list) -> tuple:
-    """
-    Scan args for from:YYYY-MM-DD and to:YYYY-MM-DD tokens.
-    Returns (date_from, date_to, remaining_args).
-    """
-    date_from = date_to = None
-    remaining = []
-    for a in args:
-        al = a.lower()
-        if al.startswith("from:"):
-            date_from = a[5:]
-        elif al.startswith("to:"):
-            date_to = a[3:]
-        else:
-            remaining.append(a)
-    return date_from, date_to, remaining
 
 
 def _run_backtest_combo(ticker, df, horizon, strategy_norm, date_from=None, date_to=None):

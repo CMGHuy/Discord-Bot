@@ -21,7 +21,7 @@ from swingbot.core.scanning import engine as scan_engine
 from swingbot.core.marketdata.data import get_daily_data, get_currency_symbol
 from swingbot import config
 from swingbot.core.market.strategy import HORIZONS
-from swingbot.commands.backtest import STRATEGY_MAP
+from swingbot.commands.backtest import _parse_backtest_args
 
 trade_log = scan_engine.trade_log
 
@@ -48,23 +48,7 @@ def _parse_plans_args(args: tuple):
     Defaults to last 90 days if no dates given.
     """
     import datetime as dt
-    horizon = "all"
-    strategy_norm = "all"
-    date_from = date_to = None
-    valid_horizons = {"all", *HORIZONS.keys()}
-
-    for token in args:
-        tl = token.lower().replace(" ", "").replace("_", "")
-        if tl in valid_horizons:
-            horizon = tl
-        elif tl in STRATEGY_MAP:
-            strategy_norm = STRATEGY_MAP[tl]
-        elif tl == "all":
-            strategy_norm = "all"
-        elif tl.startswith("from:"):
-            date_from = token[5:]
-        elif tl.startswith("to:"):
-            date_to = token[3:]
+    horizon, strategy_norm, date_from, date_to, _list_setups = _parse_backtest_args(args)
 
     # Default: last 90 days
     if not date_from and not date_to:
@@ -179,10 +163,9 @@ def _deduplicate_setups(setups: list) -> list:
 def _build_summary_stats(setups: list) -> str:
     """Build a compact stats table across all setups."""
     # Per-strategy aggregates (across all horizons)
-    from collections import defaultdict
     stats: dict = defaultdict(lambda: {"wins": 0, "losses": 0, "total_r": 0.0, "timeouts": 0})
 
-    for strat, horiz, trade, cur in setups:
+    for strat, _horiz, trade, _cur in setups:
         s = stats[strat]
         if trade.outcome == "win":
             s["wins"] += 1
