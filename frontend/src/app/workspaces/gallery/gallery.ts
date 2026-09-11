@@ -10,6 +10,7 @@ import { ChipRow } from '../../ui/chip-row';
 import { ColumnPickerComponent } from '../../ui/column-picker';
 import { ConfidenceCell } from '../../ui/confidence-cell';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
+import { ControlBar } from '../../ui/control-bar';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, PageSpec, RowContext } from '../../ui/data-table/data-table.types';
 import { DirectionArrow } from '../../ui/direction-arrow';
@@ -20,6 +21,8 @@ import { FilterBar, FilterChip, FilterChips } from '../../ui/filter-bar';
 import { Flash } from '../../ui/flash';
 import { held, money, num, pct, rMultiple, signed } from '../../ui/format';
 import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-controls';
+import { Freshness } from '../../ui/freshness';
+import { Gauge } from '../../ui/gauge';
 import { Hint } from '../../ui/hint';
 import { Histogram, HistogramBin } from '../../ui/histogram';
 import { Icon, IconName } from '../../ui/icon';
@@ -27,6 +30,7 @@ import { ControlRow, Drawer, Panel, Tab, TabBar } from '../../ui/layout';
 import { LineChartSeries } from '../../ui/line-chart';
 import { LineChart } from '../../ui/line-chart';
 import { Magnitude } from '../../ui/magnitude';
+import { Matrix } from '../../ui/matrix';
 import { MetricCard } from '../../ui/metric-card';
 import { MetricChip } from '../../ui/metric-chip';
 import { PaginationComponent } from '../../ui/pagination';
@@ -39,9 +43,11 @@ import { SectionHead } from '../../ui/section-head';
 import { SegmentOption, Segmented } from '../../ui/segmented';
 import { Sparkline } from '../../ui/sparkline';
 import { ScatterComponent } from '../../ui/scatter';
+import { StatTile } from '../../ui/stat-tile';
 import { Status } from '../../ui/status';
 import { StatusCell, StatusCellRow } from '../../ui/status-cell';
 import { StatusIndicator } from '../../ui/status-indicator';
+import { Timeline, TimelineItem } from '../../ui/timeline';
 
 interface GalleryRow {
   id: string;
@@ -88,6 +94,7 @@ interface ContractRow {
     ColumnPickerComponent,
     ConfidenceCell,
     ConfirmDialog,
+    ControlBar,
     ControlRow,
     DataTable,
     DirectionArrow,
@@ -99,11 +106,14 @@ interface ContractRow {
     FilterBar,
     FilterChips,
     Flash,
+    Freshness,
+    Gauge,
     Hint,
     Histogram,
     Icon,
     LineChart,
     Magnitude,
+    Matrix,
     MetricCard,
     MetricChip,
     Panel,
@@ -119,11 +129,13 @@ interface ContractRow {
     Select,
     ScatterComponent,
     Sparkline,
+    StatTile,
     Status,
     StatusCell,
     StatusIndicator,
     TabBar,
     TextInput,
+    Timeline,
     TradeChart,
   ],
   template: `
@@ -414,6 +426,25 @@ interface ContractRow {
       <sb-chart-container [loading]="false" [error]="null" [hasData]="true" [height]="200" caption="AAPL -- daily">
         <sb-trade-chart [data]="null" />
       </sb-chart-container>
+    </sb-panel>
+
+    <!-- -- v85 shared primitives (R2-01..R2-06) --------------------------------- -->
+    <sb-section-head [heading]="'v85 primitives'" [level]="2" />
+    <sb-panel>
+      <sb-control-row>
+        <sb-stat-tile label="Win rate" [value]="'68%'" [sample]="412" />
+        <sb-stat-tile label="Payoff ratio" [value]="'1.80'" [sample]="7" tone="pos" />
+        <sb-stat-tile label="Expectancy" [value]="null" />
+      </sb-control-row>
+      <sb-gauge label="Heat utilisation" [value]="62" caption="cap 100%" />
+      <sb-gauge label="Heat utilisation (over limit)" [value]="130" />
+      <sb-matrix [labels]="matrixLabels" [values]="matrixValues" [clusters]="[['AAPL', 'MSFT']]" />
+      <sb-timeline [items]="timelineItems" />
+      <sb-freshness [at]="'2026-09-11T14:29:30Z'" [now]="null" />
+      <sb-control-bar [activeCount]="2">
+        <button filters sb-button variant="ghost" type="button">Open</button>
+        <sb-select scope label="Range" placeholder="YTD" [options]="selectOptions" />
+      </sb-control-bar>
     </sb-panel>
 
     <!-- -- charts -- one shared chrome (v54 D5) -------------------------------- -->
@@ -733,6 +764,20 @@ export class Gallery {
         { date: '2026-04-01', value: 0.6 },
       ],
     },
+  ];
+
+  /** v85 R2-05 -- sb-timeline demo rows. */
+  protected readonly timelineItems: TimelineItem[] = [
+    { id: 'ui-2.14.0', title: 'v2.14.0', meta: 'UI · 22 Apr 2024', current: true },
+    { id: 'ui-2.13.1', title: 'v2.13.1', meta: 'UI · 10 Apr 2024', current: false },
+  ];
+
+  /** v85 R2-04 -- sb-matrix demo. */
+  protected readonly matrixLabels = ['AAPL', 'MSFT', 'XOM'];
+  protected readonly matrixValues: (number | null)[][] = [
+    [1, 0.68, 0.12],
+    [0.68, 1, null],
+    [0.12, null, 1],
   ];
 
   /** v54 D5 -- Task 37's chrome-comparison section: the same eight-point

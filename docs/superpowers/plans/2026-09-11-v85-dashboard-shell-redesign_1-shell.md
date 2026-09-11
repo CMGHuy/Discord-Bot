@@ -964,10 +964,15 @@ git commit -m "feat(shell): move the killswitch alert to a full-width strip"
 group labels are D1, and two existing tests assert them.
 
 This task also restyles the sidebar `.mark` block — the avatar, the `swingbot`
-wordmark and the `paper` tag — to the mockup's treatment. **The name stays
-`swingbot` and the tag stays `paper`** (D3). The mockup's "Bomeo Capital"
-branding is the reference's own identity, not this product's, and the `paper`
-tag is a standing statement that this bot never places real orders.
+wordmark and the `paper` tag. **Correction (recorded during implementation):**
+this paragraph previously claimed the name stays `swingbot`/`paper` under D3,
+which directly contradicted D3 as written in the design spec ("Branding is
+adopted... The PWA manifest and document titles follow the same name") and
+R1-14's own test asserting a `Bomeo` wordmark. Asked the human partner to
+resolve the contradiction rather than picking a side silently: the spec's D3
+is authoritative — the wordmark, tagline and manifest name change to the
+mockup's "Bomeo Capital" branding. R1-14 owns that change; this task
+restyles only the `.mark` block's layout/spacing, not its text.
 
 - [ ] **Step 1: Write the failing test**
 

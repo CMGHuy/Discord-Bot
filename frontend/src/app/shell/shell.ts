@@ -17,10 +17,12 @@ import { PreferencesStore } from '../stores/preferences.store';
 import { TapeStore } from '../stores/tape.store';
 import { ViewportService } from '../ui/breakpoints';
 import { Button } from '../ui/button';
+import { CLOCK } from '../ui/clock';
 import { Icon, IconName } from '../ui/icon';
 import { ProfileMenu } from './profile-menu';
 import { RouteLoadingService } from '../routing/route-loading.service';
 import { RouteRefreshService } from '../routing/route-refresh.service';
+import { RouteTitleService } from '../routing/route-title.service';
 import { SessionStore } from '../stores/session.store';
 import { ConnectionStatus } from './connection-status';
 import { MarketLane } from './tape/market-lane';
@@ -74,8 +76,28 @@ export class Shell {
   private readonly viewport = inject(ViewportService);
   protected readonly routeLoading = inject(RouteLoadingService);
   private readonly routeRefresh = inject(RouteRefreshService);
+  protected readonly titles = inject(RouteTitleService);
   private readonly tape = inject(TapeStore);
   private readonly marketIndex = inject(MarketIndexStore);
+  private readonly clock = inject(CLOCK);
+
+  /** `Thu, Sep 11, 2026 16:58` -- one string, so the bar cannot render a date
+   *  and a time from two different reads of the clock. Locale pinned to
+   *  `en-US` rather than left to the host's default -- the same build
+   *  otherwise renders "11 Sept 2026" on a machine set to en-GB, and a
+   *  monitoring surface should not reformat itself by viewer. 24-hour and
+   *  zero-padded via hourCycle: 4:58 next to a 16:58 market close reads as
+   *  an error. */
+  protected readonly now = computed(() => {
+    const at = new Date(this.clock());
+    const date = at.toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+    });
+    const time = at.toLocaleTimeString('en-US', {
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    });
+    return `${date} ${time}`;
+  });
 
   /**
    * Three groups, because eight flat entries stopped communicating.

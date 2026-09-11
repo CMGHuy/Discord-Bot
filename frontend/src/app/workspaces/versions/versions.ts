@@ -49,7 +49,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
   // need to reach.
   host: { class: 'register-instrument' },
   template: `
-    <sb-section-head heading="Versions">
+    <sb-section-head>
       @if (store.stale()) {
         <!-- The frozen file is behind VERSION.json. Saying so is the whole
              point: a timeline silently missing the newest release looks

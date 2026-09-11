@@ -199,6 +199,7 @@
   --text-subhead: calc(16px * var(--text-scale));   /* subheading */
   --text-title: calc(20px * var(--text-scale));     /* section title */
   --text-metric: calc(28px * var(--text-scale));    /* primary metric -- v80 D3, was 25px */
+  --text-hero: calc(44px * var(--text-scale));      /* v85: portfolio figure */
 
   /* -- spacing ---------------------------------------------------------
    * Closed scale, named by value on purpose. An indirection table

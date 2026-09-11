@@ -10,6 +10,10 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
  * a panel inside a workspace needs an h2 under the workspace's h1 and only
  * the caller knows which it is -- an inferred level would silently produce
  * two h1s on one page.
+ *
+ * `heading` is optional (R1-11): eight workspaces now use this purely for
+ * its actions/status band, since the top bar renders the page title and an
+ * empty `<h1>` would be a worse accessibility surface than no heading at all.
  */
 @Component({
   selector: 'sb-section-head',
@@ -17,7 +21,9 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
   template: `
     <div class="title-group">
       <ng-content select="[back]" />
-      @if (level() === 1) { <h1>{{ heading() }}</h1> } @else { <h2>{{ heading() }}</h2> }
+      @if (heading(); as h) {
+        @if (level() === 1) { <h1>{{ h }}</h1> } @else { <h2>{{ h }}</h2> }
+      }
       <span class="status"><ng-content select="[status]" /></span>
     </div>
     <div class="actions"><ng-content select="[actions]" /></div>
@@ -43,6 +49,6 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
   `,
 })
 export class SectionHead {
-  readonly heading = input.required<string>();
+  readonly heading = input<string | null>(null);
   readonly level = input<1 | 2>(1);
 }

@@ -204,6 +204,14 @@ export interface ClearResult {
   removed: number;
 }
 
+/** What POST /trades/close-open reports. `failed` is separate from `closed`
+ *  on purpose: a partial success has to be able to say so. */
+export interface CloseOpenResult {
+  closed: number;
+  failed: number;
+  tickers: string[];
+}
+
 export interface TradeQuery {
   page?: number;
   per_page?: number;
@@ -257,6 +265,7 @@ export interface Dashboard {
   avg_confidence: number | null;
   win_rate: number | null;
   expectancy_r: number | null;
+  payoff_ratio: number | null;
   equity_30d: EquitySeries;
   position_premium: Record<string, unknown>;
   /** SR53 — the five plan-lifecycle counts, keyed by status. Loosely typed

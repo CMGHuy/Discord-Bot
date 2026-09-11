@@ -16,8 +16,14 @@ import {
 import { Dashboard as DashboardData, TradeRow } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
+import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { Dashboard } from './dashboard';
 import { DashboardStore } from '../../stores/dashboard.store';
+import { ToastService } from '../../shell/toast.service';
+
+// v85: the explanatory drawers are real <dialog> elements (sb-drawer); jsdom
+// has no showModal()/close(). See the polyfill for why <dialog> stays.
+installDialogPolyfill();
 
 /** Dashboard reads only currency() from ConnectionStore and
  *  values()/isLoaded()/update() from PreferencesStore -- stubbed rather than
@@ -148,5 +154,208 @@ describe('Dashboard states', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.textContent).toContain('No open positions');
     expect(el.querySelector('.skeleton')).toBeNull();
+  });
+
+  it('renders no in-page heading, because the top bar owns the title', () => {
+    const { fixture } = seed();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.textContent).not.toContain('Dashboard');
+  });
+});
+
+/** sb-async only projects its content (the panels, the positions table) in
+ *  its success branch -- loading shows a skeleton instead -- so every test
+ *  here has to seed and flush a real payload before it can find any of them. */
+async function loaded(overrides: Partial<DashboardData> = {}) {
+  const { fixture, backend } = seed();
+  fixture.detectChanges();
+  flushTradeGroups(backend);
+  backend.expectOne('/api/v1/dashboard?mode=today').flush(payload(overrides));
+  await fixture.whenStable();
+  fixture.detectChanges();
+  // sb-exposure-by-horizon (v85 R4-09) only exists once sb-async reaches its
+  // content branch, i.e. after the flush above -- its own /api/v1/trades
+  // request fires just now, not during the first flushTradeGroups() call.
+  flushTradeGroups(backend);
+  await fixture.whenStable();
+  fixture.detectChanges();
+  return fixture;
+}
+
+describe('Dashboard v85 layout', () => {
+  it('lays the page out as the five panels plus the positions table', async () => {
+    const fixture = await loaded();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('sb-portfolio-value')).not.toBeNull();
+    expect(el.querySelector('sb-trading-performance')).not.toBeNull();
+    expect(el.querySelector('sb-recent-activity')).not.toBeNull();
+    expect(el.querySelector('sb-watchlist-panel')).not.toBeNull();
+    expect(el.querySelector('sb-market-movers')).not.toBeNull();
+  });
+
+  it('renders one tabbed positions table, not four stacked groups', async () => {
+    const fixture = await loaded();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelectorAll('sb-positions-table')).toHaveLength(1);
+    expect(el.querySelector('sb-trade-group')).toBeNull();
+  });
+
+  it('feeds the tab counts from the lifecycle payload', async () => {
+    const fixture = await loaded();
+    const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('[role="tab"]')]
+      .map((t) => t.textContent?.replace(/\s+/g, ' ').trim());
+    expect(labels[0]).toMatch(/^Open positions \d+$/);
+  });
+
+  it('drops the old metric rows the panels replaced', async () => {
+    const fixture = await loaded();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.primary')).toBeNull();
+    expect(el.querySelector('sb-chip-row.chips')).toBeNull();
+    expect(el.querySelector('.lifecycle')).toBeNull();
+  });
+
+  it('has no Risk & Exposure or Account Info panel', async () => {
+    const fixture = await loaded();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).not.toContain('Risk & Exposure');
+    expect(text).not.toContain('Account Info');
+  });
+
+  it('routes the panel scope control back into the store', async () => {
+    const fixture = await loaded();
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('[data-scope="all"]')!.click();
+    fixture.detectChanges();
+    expect(TestBed.inject(DashboardStore).scope()).toBe('all');
+  });
+});
+
+describe('Dashboard v85 explanatory drawers', () => {
+  it('keeps the qualifying-trades explainer reachable but off the page face', () => {
+    // The [data-info="qualifying"] trigger sits in sb-section-head, outside
+    // sb-async, so it renders even before the dashboard payload arrives.
+    const { fixture } = seed();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // Not in the page body any more…
+    expect(el.querySelector('.explainer')).toBeNull();
+
+    // …but one click away, and still the same rule, stated in full.
+    el.querySelector<HTMLButtonElement>('[data-info="qualifying"]')!.click();
+    fixture.detectChanges();
+    expect(el.textContent).toContain('Only trades that meet');
+    expect(el.textContent).toContain('are logged here as paper trades');
+  });
+
+  it('keeps the sizing note and the footnote reachable too', async () => {
+    const fixture = await loaded();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-info="sizing"]')).not.toBeNull();
+    expect(el.querySelector('[data-info="prices"]')).not.toBeNull();
+  });
+});
+
+const THIRTY_POINTS = { points: Array.from({ length: 30 }, (_, i) => i) } as never;
+
+describe('Dashboard v85 sheet-1 reconciliation', () => {
+  it('offers only the equity ranges the 30-day series supports', async () => {
+    const fixture = await loaded({ equity_30d: THIRTY_POINTS });
+    const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.equity-range button')]
+      .map((b) => b.textContent!.trim());
+    expect(labels).toEqual(['1W', '1M', 'ALL']);
+  });
+
+  it('does not render a range it cannot draw', async () => {
+    const fixture = await loaded({ equity_30d: THIRTY_POINTS });
+    const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.equity-range button')]
+      .map((b) => b.textContent!.trim());
+    expect(labels).not.toContain('1D');
+  });
+
+  it('shows exposure by horizon where the mockup shows asset allocation', async () => {
+    const fixture = await loaded();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('sb-panel[heading="Exposure by horizon"]')).not.toBeNull();
+    expect(el.textContent).not.toContain('Asset allocation');
+  });
+});
+
+describe('Dashboard v85 close-all', () => {
+  // ConfirmDialog exposes no [role="dialog"]/[data-confirm] of its own --
+  // every existing consumer (controls.spec.ts) reads the native `dialog`
+  // element and its `.open` property, and picks the confirm button by
+  // position (the last button inside sb-confirm-dialog). Matched here rather
+  // than inventing a second selection convention.
+  const dialogText = (el: HTMLElement) => el.querySelector('sb-confirm-dialog dialog')!.textContent!;
+  const isDialogOpen = (el: HTMLElement) =>
+    el.querySelector<HTMLDialogElement>('sb-confirm-dialog dialog')!.open;
+  const clickConfirm = (el: HTMLElement) =>
+    [...el.querySelectorAll<HTMLButtonElement>('sb-confirm-dialog button')].at(-1)!.click();
+
+  it('asks before closing, and says what closing means', async () => {
+    const fixture = await loaded({ lifecycle: { ACTIVE: 2, PARTIAL: 1 } as never });
+    const backend = TestBed.inject(HttpTestingController);
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-action="close-all"]')!.click();
+    fixture.detectChanges();
+
+    expect(isDialogOpen(el)).toBe(true);
+    expect(dialogText(el)).toContain('realis');   // realise/realised
+    expect(dialogText(el)).not.toContain('delete');
+    // Nothing has been sent yet.
+    backend.expectNone((r) => r.url === '/api/v1/trades/close-open');
+  });
+
+  it('posts once confirmed and refetches the page', async () => {
+    const fixture = await loaded({ lifecycle: { ACTIVE: 2, PARTIAL: 1 } as never });
+    const backend = TestBed.inject(HttpTestingController);
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('[data-action="close-all"]')!.click();
+    fixture.detectChanges();
+    clickConfirm(el);
+
+    const req = backend.expectOne((r) => r.url === '/api/v1/trades/close-open');
+    expect(req.request.method).toBe('POST');
+    req.flush({ closed: 2, failed: 0, tickers: ['ASTS', 'HOOD'] });
+    backend.expectOne('/api/v1/dashboard?mode=today').flush(payload());
+  });
+
+  it('reports a partial failure rather than claiming success', async () => {
+    const fixture = await loaded({ lifecycle: { ACTIVE: 2, PARTIAL: 1 } as never });
+    const backend = TestBed.inject(HttpTestingController);
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('[data-action="close-all"]')!.click();
+    fixture.detectChanges();
+    clickConfirm(el);
+
+    backend.expectOne((r) => r.url === '/api/v1/trades/close-open')
+      .flush({ closed: 1, failed: 1, tickers: ['ASTS'] });
+    backend.expectOne('/api/v1/dashboard?mode=today').flush(payload());
+
+    const toast = TestBed.inject(ToastService);
+    expect(toast.toasts().at(-1)?.message).toContain('1 failed');
+  });
+
+  it('offers nothing to close when the book is empty', async () => {
+    // Default payload's lifecycle is {} -- zero ACTIVE/PARTIAL. A confirm
+    // dialog for a no-op is a question with one answer.
+    const fixture = await loaded();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector<HTMLButtonElement>('[data-action="close-all"]')!.disabled).toBe(true);
+  });
+
+  it('puts no destructive bulk operations on this panel -- D14', async () => {
+    // clear-open and clear-history DELETE records. They stay where they live
+    // today; one click from a close-the-book action is how the wrong one
+    // gets pressed.
+    const fixture = await loaded();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).not.toContain('Clear open');
+    expect(text).not.toContain('Clear history');
   });
 });

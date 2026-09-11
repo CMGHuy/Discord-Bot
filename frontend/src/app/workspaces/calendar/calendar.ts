@@ -27,7 +27,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   // Provided on the component: created on entry, destroyed on exit, so the
   // workspace cannot hold a stale month while you are looking elsewhere.
   template: `
-    <sb-section-head heading="Calendar">
+    <sb-section-head>
       <!-- Kept unconditional (unlike Dashboard/Trades): "By weekday (all
            history)" below stays outside the sb-async wrap -- it answers a
            different, all-time question that a THIS MONTH empty state must

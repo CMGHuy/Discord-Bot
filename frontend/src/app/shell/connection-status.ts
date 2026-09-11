@@ -26,7 +26,7 @@ import { ConnectionState } from '../stores/connection.store';
   template: `
     <div class="status" [class]="state()" [title]="hint()">
       <span class="dot" [class]="state()" [class.resting]="resting()"></span>
-      <span class="label">{{ label() }}</span>
+      <span class="state">{{ label() }}</span>
       @if (botAlive() === false) {
         <span class="bot">bot offline</span>
       } @else if (botHealthy() === false) {
@@ -35,12 +35,14 @@ import { ConnectionState } from '../stores/connection.store';
     </div>
   `,
   styles: `
+    /* Sheet 2's form: "Live" reads as a word next to the dot, not a shouted
+       label -- no text-transform here, unlike the rest of the status
+       cluster's chip-style copy. */
     .status {
       display: flex;
       align-items: center;
       gap: var(--space-6);
       font-size: var(--text-micro);
-      text-transform: uppercase;
       letter-spacing: 0.08em;
       color: var(--text-muted);
     }
@@ -99,20 +101,22 @@ export class ConnectionStatus {
   protected readonly resting = computed(() => this.marketActive() === false);
 
   protected readonly label = computed(
-    () => ({ connecting: 'connecting', live: 'live', degraded: 'polling', dead: 'offline' })[this.state()],
+    () => ({ connecting: 'Connecting', live: 'Live', degraded: 'Polling', dead: 'Offline' })[this.state()],
   );
 
+  /** Always names the event stream, never the freshness of the data (D30) --
+   *  that claim belongs to each panel's own `sb-freshness`. */
   protected readonly hint = computed(() => {
     if (this.state() === 'live' && this.resting()) {
       // Says why the dot went still, so a stopped pulse cannot be mistaken
       // for a stream that quietly died.
-      return 'Connected. The market is closed, so no changes are expected.';
+      return 'Event stream connected. The market is closed, so no changes are expected.';
     }
     return {
       connecting: 'Opening the event stream…',
-      live: 'Receiving changes as they happen.',
+      live: 'Connected to the event stream — receiving changes as they happen.',
       degraded: 'Event stream unavailable — refreshing every 5 seconds instead.',
-      dead: 'Not receiving updates. The admin may be down.',
+      dead: 'Event stream disconnected — panels show their own data age.',
     }[this.state()];
   });
 }

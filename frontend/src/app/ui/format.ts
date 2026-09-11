@@ -10,7 +10,7 @@
 export const ABSENT = '—';
 
 export function num(value: number | null | undefined, decimals = 2): string {
-  return value === null || value === undefined ? ABSENT : value.toFixed(decimals);
+  return value === null || value === undefined ? ABSENT : grouped(value, decimals);
 }
 
 /** Percentages carry an explicit sign, so a gain and a loss are told apart
@@ -32,6 +32,17 @@ export function share(value: number | null | undefined, decimals = 0): string {
   return `${value.toFixed(decimals)}%`;
 }
 
+/** Grouped thousands, fixed decimals, locale pinned to en-US -- like the
+ *  clock in the top bar, left to the viewer's own locale this renders
+ *  differently machine to machine (comma/period swapped, different grouping)
+ *  for a value that must read the same everywhere. */
+function grouped(value: number, decimals: number): string {
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
 /** A realised P&L amount, signed like `pct` -- it is the same gain/loss the
  *  percentage names, just in currency rather than relative terms, so the two
  *  read the same way at a glance. `unit` comes from
@@ -39,7 +50,9 @@ export function share(value: number | null | undefined, decimals = 0): string {
  *  on why. */
 export function money(value: number | null | undefined, unit: string, decimals = 2): string {
   if (value === null || value === undefined) return ABSENT;
-  return `${value > 0 ? '+' : ''}${value.toFixed(decimals)} ${unit}`;
+  // toLocaleString already prints its own minus for a negative value; an
+  // explicit sign is only needed for the positive case.
+  return `${value > 0 ? '+' : ''}${grouped(value, decimals)} ${unit}`;
 }
 
 /** An unsigned currency magnitude: a cap, an exposure, a risk amount -- not
@@ -49,7 +62,7 @@ export function money(value: number | null | undefined, unit: string, decimals =
  *  never a literal -- see `money`'s own note. */
 export function amount(value: number | null | undefined, unit: string, decimals = 2): string {
   if (value === null || value === undefined) return ABSENT;
-  return `${value.toFixed(decimals)} ${unit}`;
+  return `${grouped(value, decimals)} ${unit}`;
 }
 
 export function rMultiple(value: number | null | undefined): string {

@@ -40,7 +40,8 @@ describe('routing, authenticated', () => {
   it('sends / to the dashboard', async () => {
     const harness = await RouterTestingHarness.create('/');
     expect(TestBed.inject(Router).url).toBe('/dashboard');
-    expect(harness.routeNativeElement?.textContent).toContain('Dashboard');
+    // R1-11: the top bar owns the title now, not the workspace's own markup.
+    expect(harness.routeNativeElement).not.toBeNull();
   });
 
   it('sends an unknown path to the dashboard', async () => {
@@ -58,8 +59,13 @@ describe('routing, authenticated', () => {
     ['/risk', 'Risk'],
     ['/system', 'System'],
   ])('mounts %s', async (path, heading) => {
+    // R1-11: the top bar owns the title now -- no workspace renders its own
+    // heading, so this asserts the route mounts and its declared title
+    // matches, rather than scanning rendered text for a heading that no
+    // longer exists in the workspace's own markup.
     const harness = await RouterTestingHarness.create(path);
-    expect(harness.routeNativeElement?.textContent).toContain(heading);
+    expect(harness.routeNativeElement).not.toBeNull();
+    expect(routes.find((r) => r.path === path.slice(1))?.title).toBe(heading);
   });
 
   it('binds a route parameter as an input signal', async () => {

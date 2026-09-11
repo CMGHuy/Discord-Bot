@@ -145,7 +145,7 @@ interface ProposalView extends ProposalRow {
     StrategyContributionComponent,
   ],
   template: `
-    <sb-section-head heading="Analytics">
+    <sb-section-head>
       <!-- Only for Tuning: the other four tabs each carry their own
            sb-async now, which already turns this same store.error() into
            either a first-load error panel or a demoted stale badge scoped

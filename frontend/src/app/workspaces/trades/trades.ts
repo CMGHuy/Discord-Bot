@@ -111,7 +111,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
     SectionHead,
   ],
   template: `
-    <sb-section-head heading="Trades">
+    <sb-section-head>
       <sb-control-row actions class="head-actions">
         <!-- A plain anchor, not a fetch: the browser gets a Save dialog and
              the server's filename, both of which an XHR throws away.
