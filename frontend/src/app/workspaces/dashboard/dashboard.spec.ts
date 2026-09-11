@@ -149,4 +149,11 @@ describe('Dashboard states', () => {
     expect(el.textContent).toContain('No open positions');
     expect(el.querySelector('.skeleton')).toBeNull();
   });
+
+  it('renders no in-page heading, because the top bar owns the title', () => {
+    const { fixture } = seed();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.textContent).not.toContain('Dashboard');
+  });
 });

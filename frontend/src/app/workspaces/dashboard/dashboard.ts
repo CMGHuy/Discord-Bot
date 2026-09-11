@@ -108,7 +108,7 @@ import { TradeGroup } from './trade-group';
          duplicate, not a backstop, so store.error() no longer binds here
          directly (it also skipped the v13 refetch mapping asyncInputs
          provides, which this raw binding never applied). -->
-    <sb-section-head heading="Dashboard">
+    <sb-section-head>
       <!-- SR58. The Jinja dashboard's three date scopes. A server parameter,
            not a client filter: the realised figures below are computed from
            the scoped set, and a client-side scope over an all-time payload

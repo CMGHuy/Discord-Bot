@@ -62,7 +62,7 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
   // Provided on the component: created on entry, destroyed on exit, so the
   // workspace cannot hold stale exposure while you are looking at another.
   template: `
-    <sb-section-head heading="Risk">
+    <sb-section-head>
       @if (store.error(); as message) {
         <!-- Kept unconditional, unlike Dashboard/Trades: the killswitch and
              scan-health panels below stay outside the sb-async wrap (see
