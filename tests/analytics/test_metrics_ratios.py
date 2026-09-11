@@ -125,3 +125,37 @@ def test_trade_return_pct_mirrors_risk_metrics():
     bear = {"entry": 100.0, "exit_price": 96.0, "direction": "bearish"}
     assert trade_return_pct(bull) == pytest.approx(_trade_return_pct(bull))
     assert trade_return_pct(bear) == pytest.approx(_trade_return_pct(bear))
+
+
+from swingbot.core.analytics.metrics import payoff_ratio_from_rs
+
+
+def test_payoff_ratio_is_mean_win_over_mean_loss():
+    # wins mean 2.0, losses mean -1.0 -> 2.0
+    assert payoff_ratio_from_rs([3.0, 1.0, -1.0, -1.0]) == 2.0
+
+
+def test_payoff_ratio_uses_means_not_sums():
+    # One big winner and two small losers: mean win 4.0, mean loss -1.0.
+    # A sum-based ratio would give 4.0/2.0 = 2.0; the mean-based answer is 4.0.
+    assert payoff_ratio_from_rs([4.0, -1.0, -1.0]) == 4.0
+
+
+def test_payoff_ratio_is_none_without_losers():
+    # Mathematically infinite, reported as None -- same choice profit_factor
+    # already makes, and for the same reason: "no losses yet" is a different
+    # message from a huge finite number.
+    assert payoff_ratio_from_rs([1.0, 2.0]) is None
+
+
+def test_payoff_ratio_is_none_without_winners():
+    assert payoff_ratio_from_rs([-1.0, -2.0]) is None
+
+
+def test_payoff_ratio_is_none_when_empty():
+    assert payoff_ratio_from_rs([]) is None
+
+
+def test_payoff_ratio_ignores_breakeven_legs():
+    # A scratch is neither a win nor a loss and must not drag either mean.
+    assert payoff_ratio_from_rs([2.0, 0.0, -1.0]) == 2.0

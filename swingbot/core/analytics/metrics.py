@@ -248,6 +248,43 @@ def profit_factor(closed: list[dict]) -> float | None:
     return gross_win / gross_loss
 
 
+def payoff_ratio_from_rs(rs: list[float]) -> float | None:
+    """Mean winning R divided by the magnitude of mean losing R -- "when this
+    wins, how much bigger is the win than a typical loss".
+
+    Takes R-multiples rather than trades so a caller that already expanded
+    legs (performance.get_extended_stats) passes the SAME list it computed
+    expectancy_r from. That matters: win rate and payoff ratio together
+    decompose expectancy, and a decomposition whose parts were measured over
+    different populations is not one.
+
+    Breakeven legs (r == 0) are neither win nor loss and are excluded from
+    both means -- counted as wins they would deflate the numerator, counted
+    as losses they would deflate the denominator, and they are honestly
+    neither.
+
+    None when either side is empty: with no losers the ratio is infinite, and
+    reporting None instead keeps every consumer's formatting simple and says
+    "not enough outcomes yet" rather than a misleadingly large number. Same
+    choice profit_factor makes above.
+    """
+    wins = [r for r in rs if r > 0]
+    losses = [r for r in rs if r < 0]
+    if not wins or not losses:
+        return None
+    mean_win = sum(wins) / len(wins)
+    mean_loss = abs(sum(losses) / len(losses))
+    if mean_loss == 0:
+        return None
+    return mean_win / mean_loss
+
+
+def payoff_ratio(closed: list[dict]) -> float | None:
+    """payoff_ratio_from_rs over every computable R in `closed`. The entry
+    point for callers holding trade dicts rather than a prepared R list."""
+    return payoff_ratio_from_rs(r_multiples(closed))
+
+
 def streaks(closed: list[dict]) -> dict:
     """Current/best/worst consecutive win or loss run, over win/loss trades
     only, ordered by `closed_at`. Any other status (scratch/timeout/manual
