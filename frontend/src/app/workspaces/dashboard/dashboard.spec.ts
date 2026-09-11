@@ -19,6 +19,7 @@ import { PreferencesStore } from '../../stores/preferences.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { Dashboard } from './dashboard';
 import { DashboardStore } from '../../stores/dashboard.store';
+import { ToastService } from '../../shell/toast.service';
 
 // v85: the explanatory drawers are real <dialog> elements (sb-drawer); jsdom
 // has no showModal()/close(). See the polyfill for why <dialog> stays.
@@ -280,5 +281,81 @@ describe('Dashboard v85 sheet-1 reconciliation', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('sb-panel[heading="Exposure by horizon"]')).not.toBeNull();
     expect(el.textContent).not.toContain('Asset allocation');
+  });
+});
+
+describe('Dashboard v85 close-all', () => {
+  // ConfirmDialog exposes no [role="dialog"]/[data-confirm] of its own --
+  // every existing consumer (controls.spec.ts) reads the native `dialog`
+  // element and its `.open` property, and picks the confirm button by
+  // position (the last button inside sb-confirm-dialog). Matched here rather
+  // than inventing a second selection convention.
+  const dialogText = (el: HTMLElement) => el.querySelector('sb-confirm-dialog dialog')!.textContent!;
+  const isDialogOpen = (el: HTMLElement) =>
+    el.querySelector<HTMLDialogElement>('sb-confirm-dialog dialog')!.open;
+  const clickConfirm = (el: HTMLElement) =>
+    [...el.querySelectorAll<HTMLButtonElement>('sb-confirm-dialog button')].at(-1)!.click();
+
+  it('asks before closing, and says what closing means', async () => {
+    const fixture = await loaded({ lifecycle: { ACTIVE: 2, PARTIAL: 1 } as never });
+    const backend = TestBed.inject(HttpTestingController);
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-action="close-all"]')!.click();
+    fixture.detectChanges();
+
+    expect(isDialogOpen(el)).toBe(true);
+    expect(dialogText(el)).toContain('realis');   // realise/realised
+    expect(dialogText(el)).not.toContain('delete');
+    // Nothing has been sent yet.
+    backend.expectNone((r) => r.url === '/api/v1/trades/close-open');
+  });
+
+  it('posts once confirmed and refetches the page', async () => {
+    const fixture = await loaded({ lifecycle: { ACTIVE: 2, PARTIAL: 1 } as never });
+    const backend = TestBed.inject(HttpTestingController);
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('[data-action="close-all"]')!.click();
+    fixture.detectChanges();
+    clickConfirm(el);
+
+    const req = backend.expectOne((r) => r.url === '/api/v1/trades/close-open');
+    expect(req.request.method).toBe('POST');
+    req.flush({ closed: 2, failed: 0, tickers: ['ASTS', 'HOOD'] });
+    backend.expectOne('/api/v1/dashboard?mode=today').flush(payload());
+  });
+
+  it('reports a partial failure rather than claiming success', async () => {
+    const fixture = await loaded({ lifecycle: { ACTIVE: 2, PARTIAL: 1 } as never });
+    const backend = TestBed.inject(HttpTestingController);
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('[data-action="close-all"]')!.click();
+    fixture.detectChanges();
+    clickConfirm(el);
+
+    backend.expectOne((r) => r.url === '/api/v1/trades/close-open')
+      .flush({ closed: 1, failed: 1, tickers: ['ASTS'] });
+    backend.expectOne('/api/v1/dashboard?mode=today').flush(payload());
+
+    const toast = TestBed.inject(ToastService);
+    expect(toast.toasts().at(-1)?.message).toContain('1 failed');
+  });
+
+  it('offers nothing to close when the book is empty', async () => {
+    // Default payload's lifecycle is {} -- zero ACTIVE/PARTIAL. A confirm
+    // dialog for a no-op is a question with one answer.
+    const fixture = await loaded();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector<HTMLButtonElement>('[data-action="close-all"]')!.disabled).toBe(true);
+  });
+
+  it('puts no destructive bulk operations on this panel -- D14', async () => {
+    // clear-open and clear-history DELETE records. They stay where they live
+    // today; one click from a close-the-book action is how the wrong one
+    // gets pressed.
+    const fixture = await loaded();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).not.toContain('Clear open');
+    expect(text).not.toContain('Clear history');
   });
 });

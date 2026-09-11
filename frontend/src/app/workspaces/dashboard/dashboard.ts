@@ -13,6 +13,8 @@ import { Router } from '@angular/router';
 import { CLOCK } from '../../ui/clock';
 
 import { DashboardScope, TradeRow } from '../../api/models';
+import { ApiClient } from '../../api/api-client';
+import { ToastService } from '../../shell/toast.service';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { DashboardStore } from '../../stores/dashboard.store';
@@ -41,6 +43,7 @@ import {
 import { amount, dateTime, money, pct, signed } from '../../ui/format';
 import { Magnitude } from '../../ui/magnitude';
 import { ControlRow, Drawer, Panel } from '../../ui/layout';
+import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { PlanLifecycleDiagram } from '../../ui/plan-lifecycle-diagram';
@@ -92,7 +95,7 @@ import { ExposureByHorizon } from './panels/exposure-by-horizon';
 @Component({
   selector: 'sb-dashboard',
   imports: [
-    Magnitude, Panel, PositionsTable, RowActions,
+    Magnitude, Panel, PositionsTable, RowActions, ConfirmDialog,
     StatusCell, PlanCell, ConfidenceCell, Async, Button, ControlRow,
     Drawer, Flash, PlanLifecycleDiagram, RowLink, SectionHead,
     PortfolioValue, TradingPerformance, RecentActivity, WatchlistPanel, MarketMovers,
@@ -307,8 +310,29 @@ import { ExposureByHorizon } from './panels/exposure-by-horizon';
         [rowKey]="rowKey"
         (rowActivate)="open($event)"
         (reorder)="onReorder($event)"
-      />
+      >
+        <!-- v85 D13/D14: replaces the mockup's "+ New Trade" -- there is no
+             create-trade endpoint, the bot authors plans, the admin never
+             does. Deliberately not clear-open (below the fold, DELETES
+             records) -- see closeAllConsequence for the wording that keeps
+             the two apart. -->
+        <button sb-button variant="secondary" type="button" table-actions
+                data-action="close-all"
+                [disabled]="!openCount()"
+                (click)="confirmCloseAll.set(true)">
+          Close all open/partial
+        </button>
+      </sb-positions-table>
     </sb-panel>
+
+    <sb-confirm-dialog
+      [open]="confirmCloseAll()"
+      title="Close all open positions?"
+      [consequence]="closeAllConsequence()"
+      confirmLabel="Close all"
+      (confirmed)="closeAll()"
+      (cancelled)="confirmCloseAll.set(false)"
+    />
 
     <div class="bottom-row">
       <sb-recent-activity [events]="activity()" />
@@ -632,6 +656,8 @@ import { ExposureByHorizon } from './panels/exposure-by-horizon';
 export class Dashboard {
   private readonly now = inject(CLOCK);
   private readonly router = inject(Router);
+  private readonly api = inject(ApiClient);
+  private readonly toast = inject(ToastService);
   protected readonly store = inject(DashboardStore);
   /** For the currency symbol alone. `ConnectionStore` is root-provided and
    *  the shell already keeps it fresh, so reading it here costs no request. */
@@ -703,6 +729,42 @@ export class Dashboard {
    *  already called that, and a class member of the same name reads as a
    *  recursive call to anyone skimming it. */
   protected readonly columnsForTab = (tab: string) => visibleForTab(tab, this.visible());
+
+  /* -- v85 D13/D14: close all open/partial ----------------------------- */
+
+  protected readonly confirmCloseAll = signal(false);
+
+  /** ACTIVE + PARTIAL only — a PENDING plan never filled, so there is nothing
+   *  to close and cancelling is the different act that applies to it. */
+  protected readonly openCount = computed(() => {
+    const counts = this.lifecycleCounts();
+    return (counts['ACTIVE'] ?? 0) + (counts['PARTIAL'] ?? 0);
+  });
+
+  /** Names what the action does, in the words that distinguish it from
+   *  clear-open next door: this REALISES profit or loss, that one deletes
+   *  records and realises nothing. */
+  protected readonly closeAllConsequence = computed(() =>
+    `This closes ${this.openCount()} position(s) at their current price and `
+    + 'realises the profit or loss. Pending plans are not affected. '
+    + 'This cannot be undone.',
+  );
+
+  protected closeAll(): void {
+    this.confirmCloseAll.set(false);
+    this.api.closeOpenTrades().subscribe({
+      next: (result) => {
+        this.toast.show(
+          result.failed
+            ? `Closed ${result.closed}, ${result.failed} failed — check the log.`
+            : `Closed ${result.closed} position${result.closed === 1 ? '' : 's'}.`,
+          result.failed ? 'warn' : 'info',
+        );
+        this.store.load();
+      },
+      error: () => this.toast.show('Could not close positions.', 'error'),
+    });
+  }
 
   private readonly tickerCell =
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('tickerCell');
