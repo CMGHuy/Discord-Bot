@@ -1084,7 +1084,7 @@ class TradeLog:
         if ticker:
             try:
                 from swingbot.core.marketdata.data import get_current_price
-                price = get_current_price(ticker)
+                price = get_current_price(ticker, allow_stale=False)
             except Exception:
                 price = None
 

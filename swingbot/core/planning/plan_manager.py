@@ -638,7 +638,9 @@ _MANAGER: PlanManager | None = None
 
 def _price_fn(ticker):                      # module-level so tests can patch it
     from swingbot.core.marketdata.data import get_current_price
-    return get_current_price(ticker)
+    # Never a stale cached print: a repeat of one would pass for a fresh
+    # confirming tick in _step_extended's debounce.
+    return get_current_price(ticker, allow_stale=False)
 
 
 def _live_atr(ticker):

@@ -565,7 +565,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 # live-quote call the scan already uses for SL/TP checks. Only
                 # runs when a flip is otherwise approved, so it costs one quote
                 # on a genuinely rare path, not one per scanned ticker.
-                live_price = fetch.get_current_price(result.ticker)
+                live_price = fetch.get_current_price(result.ticker, allow_stale=False)
                 if live_price and live_price > 0:
                     closed = trade_log.close_trade_reversed(existing_trade["id"], live_price)
                     if closed is not None:

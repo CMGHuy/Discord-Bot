@@ -1,5 +1,4 @@
 """Fetches daily OHLC data for a ticker."""
-import json
 import logging
 import os
 import time
@@ -7,6 +6,7 @@ import time
 import pandas as pd
 import yfinance as yf
 
+from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
 log = logging.getLogger(__name__)
@@ -159,26 +159,22 @@ def _ticker_meta_cache_path() -> str:
 
 
 def _load_ticker_meta_cache():
-    path = _ticker_meta_cache_path()
-    if not os.path.exists(path):
-        return
-    try:
-        with open(path, "r") as f:
-            data = json.load(f)
+    # jsonio, like every other data/ file: UTF-8 regardless of platform, and a
+    # corrupt file is logged rather than silently starting empty.
+    data = read_json(_ticker_meta_cache_path(), {})
+    if isinstance(data, dict):
         _currency_cache.update(data.get("currency_symbols", {}))
         _company_name_cache.update(data.get("company_names", {}))
-    except Exception:
-        log.debug("Could not load ticker_meta_cache.json -- starting with an empty cache.", exc_info=True)
 
 
 def _save_ticker_meta_cache():
-    path = _ticker_meta_cache_path()
+    # Atomic: the admin's Watchlist page and the bot both write this file, and
+    # a plain truncate-then-write left a reader a torn document mid-write.
     try:
-        with open(path, "w") as f:
-            json.dump({
-                "currency_symbols": _currency_cache,
-                "company_names": _company_name_cache,
-            }, f, indent=2, sort_keys=True)
+        atomic_write_json(_ticker_meta_cache_path(), {
+            "currency_symbols": _currency_cache,
+            "company_names": _company_name_cache,
+        })
     except Exception:
         log.debug("Could not save ticker_meta_cache.json", exc_info=True)
 
@@ -289,7 +285,8 @@ def _fast_info_price(fi) -> float | None:
     return None
 
 
-def get_current_price(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS) -> float | None:
+def get_current_price(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS,
+                      *, allow_stale: bool = True) -> float | None:
     """
     Returns the latest traded price for `ticker`, including premarket and
     aftermarket sessions.
@@ -300,6 +297,14 @@ def get_current_price(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS) 
     network timeout, symbol not found in history endpoint).
 
     Cached in-memory per ticker for `ttl_seconds` (default 15s).
+
+    When every fetch fails, the last known price is returned however old it
+    is -- right for a dashboard, wrong for anything that trades on the
+    answer. Trading callers (the plan manager, the SL/TP monitor, reversal and
+    manual-close fills) pass `allow_stale=False` and get None instead: a
+    repeated cached print would otherwise count as a fresh confirming tick
+    for the extended-hours debounce and fill a close at a price that stopped
+    being current an unknown time ago.
     """
     ticker_key = ticker.upper().strip()
     cached = _price_cache.get(ticker_key)
@@ -333,32 +338,33 @@ def get_current_price(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS) 
         except Exception:
             continue
 
-    # Serve last known-good price on transient failure rather than blanking the UI
-    if cached:
+    # Serve last known-good price on transient failure rather than blanking
+    # the UI -- to display callers only (see the docstring).
+    if cached and allow_stale:
         return cached[0]
     return None
 
 
-def is_us_market_active() -> bool:
+def is_us_market_active(now=None) -> bool:
     """
     Returns True when any US equity market session is currently open:
       Pre-market:  4:00 AM – 9:30 AM  ET
       Regular:     9:30 AM – 4:00 PM  ET
       After-hours: 4:00 PM – 8:00 PM  ET
     Returns False on weekends and between 8 PM and 4 AM ET.
-    Uses a simple DST approximation (months 3–11 = EDT, otherwise EST).
+
+    Reads the real America/New_York clock. It used to guess the offset from
+    the month (Mar-Nov = EDT), which is an hour wrong for the weeks between
+    1 March and DST's second-Sunday start, and after its first-Sunday-of-
+    November end. `now` (aware) is for tests.
     """
     from datetime import datetime, timezone
-    now_utc = datetime.now(timezone.utc)
-    if now_utc.weekday() >= 5:          # Saturday or Sunday
+    from swingbot.core.market.session import US_MARKET_TZ
+    now_et = (now or datetime.now(timezone.utc)).astimezone(US_MARKET_TZ)
+    if now_et.weekday() >= 5:           # Saturday or Sunday, in New York
         return False
-    # Approximate ET offset: Mar–Nov = UTC-4 (EDT), Dec–Feb = UTC-5 (EST)
-    et_offset = -4 if 3 <= now_utc.month <= 11 else -5
-    et_hour = (now_utc.hour + et_offset) % 24
-    et_min  = now_utc.minute
-    et_t    = et_hour * 60 + et_min     # minutes since midnight ET
-    # Active window: 4:00 AM (t=240) through 8:00 PM (t=1200)
-    return 4 * 60 <= et_t < 20 * 60
+    minutes = now_et.hour * 60 + now_et.minute
+    return 4 * 60 <= minutes < 20 * 60
 
 
 def prefetch_prices(tickers: list[str], max_workers: int = 10) -> None:

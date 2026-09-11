@@ -537,7 +537,7 @@ async def trade_monitor():
 
     for ticker in tickers:
         try:
-            live = await asyncio.to_thread(get_current_price, ticker)
+            live = await asyncio.to_thread(get_current_price, ticker, allow_stale=False)
         except Exception as exc:
             log.debug("trade_monitor: price fetch failed for %s: %s", ticker, exc)
             continue
