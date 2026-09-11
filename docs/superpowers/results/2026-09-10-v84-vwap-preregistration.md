@@ -50,4 +50,41 @@ Pooled: N=119, Win% 44.5, ExpR +0.161. FAIL (win rate). Confirms the
 hypothesis exactly: the four dropped horizons (6m/7m/8m/9m, N=14/15/13/9) are
 each individually sub-floor, with 9m badly negative.
 
-(Narrowed TRAIN and fold stability by Task R12; VALIDATION by Task R13.)
+### Task R12: narrowed TRAIN + fold stability
+
+Narrowed gate (bullish + `{4w}`, landed R11) confirmed applied — only the `4w`
+row appears in every run below; no other horizon leaked through.
+
+**Rule 1 — narrowed TRAIN:**
+
+| N | Win rate | ExpR | excl% | Clears rule 1 (WR>=50, ExpR>0, N>=30, excl<=50%)? |
+|---|---|---|---|---|
+| 68 | 52.9% | +0.335 | 31% | yes |
+
+(Identical to the Task R10 4w-alone row above, as expected — narrowing the
+gate to 4w-only does not change the 4w population itself.)
+
+**Rule 2 — fold stability** (FOLD-STABILITY RULE: >=2/3 fold years hold badge
+clauses — WR>=50, ExpR>0, N>=15 — each, AND no fold year with
+expectancy_r < -0.05):
+
+| Fold year | N | Win rate | ExpR | Badge clauses hold (N>=15, WR>=50, ExpR>0)? |
+|---|---|---|---|---|
+| 2021 | 24 | 41.7% | +0.137 | no — WR<50 |
+| 2022 | 5 | 40.0% | +0.099 | no — N<15 (and WR<50) |
+| 2023 | 24 | 62.5% | +0.474 | yes |
+
+- Condition A (>=2/3 folds hold badge clauses at N>=15): **violated** — only
+  1 of 3 (2023) qualifies.
+- Condition B (no fold year with expectancy_r < -0.05): satisfied — the worst
+  fold (2022) is +0.099, nowhere near a blowup; this is a thin-sample problem
+  (N=5 in 2022, N=24 in 2021 with WR below floor), not a directional collapse.
+
+**Fold-stability verdict: FAIL** (condition A alone is sufficient to fail the
+conjunctive rule). Per the pre-registered rule, rule 2 failing means:
+**skip R13 (VALIDATION not spent), proceed to R14 (slope-persistence
+fallback).** The pooled TRAIN strength at 4w (N=68, WR 52.9%, ExpR +0.335) does
+not hold up year-by-year — 2021 and 2022 are individually sub-floor (2022 on a
+thin N=5 sample), only 2023 clears on its own. This is the same class of
+failure as EMA Crossover's N-floor closure and Break & Retest's 2022 blowup:
+pooled strength that per-year sampling does not support.
