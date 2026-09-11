@@ -88,3 +88,60 @@ not hold up year-by-year — 2021 and 2022 are individually sub-floor (2022 on a
 thin N=5 sample), only 2023 clears on its own. This is the same class of
 failure as EMA Crossover's N-floor closure and Break & Retest's 2022 blowup:
 pooled strength that per-year sampling does not support.
+
+### Task R14: slope-persistence fallback gate
+
+Added `DEFAULT_PARAMS["VWAP"]["min_vwap_slope_atr"]` (default `None`, gate
+off — byte-identical to shipped behavior unless set), and a slope-persistence
+filter in `vwap_entries` (`swingbot/core/market/entry_filters.py`) requiring
+VWAP's own 8-bar rise (in ATR units) to clear a threshold before a reclaim
+counts, in addition to the existing direction-only 3-bar check. TDD (commit
+`20ffc201`): 29/29 tests green, reviewed clean.
+
+**TRAIN grid** (`--grid min_vwap_slope_atr=0.15,0.25,0.35`, on the already-4w-narrowed
+gate from R11):
+
+| `min_vwap_slope_atr` | N | Win rate | ExpR | excl% | Clears WR>=50, ExpR>0, N>=30, excl<=50%? |
+|---|---|---|---|---|---|
+| 0.15 | 55 | 54.5% | +0.363 | 29% | yes |
+| 0.25 | 51 | 58.8% | +0.449 | 29% | yes |
+| 0.35 | 45 | 57.8% | +0.411 | 32% | yes |
+
+**Trap note:** `tune_strategy.py` prints its own gate verdict using a
+hardcoded `WR>=80` floor (`scripts/backtest/tune_strategy.py`'s
+`report_gate`/`qualifying` filter — the script exposes no `--pass-wr` flag at
+all, unlike `run_backtest_range.py`). Its raw run printed "0/3 configs
+qualify (WR>=80, ...)" — that verdict is stale-threshold noise and was
+**not used**. All three rows above clear the correct, pre-registered
+WR>=50 bar; scored by hand from the printed per-config N/WR/ExpR/excl%.
+
+**Plateau verdict: PASS** — 3 of 3 grid points clear (stronger than the
+required 2 of 3); not a spike.
+
+**Winning config: `min_vwap_slope_atr=0.25`** — both the value used in R14's
+own TDD tests and the grid's best performer (highest WR and ExpR of the
+three).
+
+**Fold stability on the winning config** (0.25, measured via a scratch runner
+that reuses `run_backtest_range.py`'s own pooling/date-window/STRATEGY_GATES
+logic directly, since neither shipped CLI script supports a custom param
+override on a custom date range simultaneously — not a new/parallel scoring
+implementation):
+
+| Fold year | N | Win rate | ExpR | Badge clauses hold (N>=15, WR>=50, ExpR>0)? |
+|---|---|---|---|---|
+| 2021 | 17 | 35.3% | +0.007 | no — WR<50 |
+| 2022 | 5 | 40.0% | +0.116 | no — N<15 (and WR<50) |
+| 2023 | 20 | 70.0% | +0.619 | yes |
+
+- Condition A (>=2/3 folds hold at N>=15): **violated** — only 1 of 3 (2023).
+- Condition B (no fold ExpR < -0.05): satisfied — worst is 2021 at +0.007, no
+  blowup; same thin-sample signature as R12, not a directional collapse.
+
+**Fold-stability verdict: FAIL.**
+
+**CLOSED.** Neither the 4w re-gate (R12) nor the slope-persistence fallback
+(R14) cleared its free stages. VWAP stays `WEAK`; its VALIDATION budget was
+never spent and remains available. Reopening needs a genuinely new
+mechanism. The `min_vwap_slope_atr` gate itself ships inert (default `None`)
+— it is dead code pending a future mechanism, not a live behavior change.
