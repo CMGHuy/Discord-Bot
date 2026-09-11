@@ -235,14 +235,15 @@
   white-space: nowrap;
 }
 
-.killswitch {
-  padding: var(--space-4) var(--space-8);
-  border: 1px solid var(--neg);
-  border-radius: var(--radius-chip);
+.killswitch-strip {
+  padding: var(--space-6) var(--space-14);
+  background: var(--neg-soft);
+  border-bottom: 1px solid var(--neg);
   color: var(--neg);
-  font-size: var(--text-micro);
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  font-size: var(--text-chip);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-align: center;
 }
 
 .workspace {

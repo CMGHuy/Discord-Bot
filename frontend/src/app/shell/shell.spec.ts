@@ -110,6 +110,25 @@ describe('shell navigation', () => {
     expect(text).toContain('16:58');
   });
 
+  it('renders the killswitch as a full-width strip below the bar, only when engaged', () => {
+    const f = TestBed.createComponent(Shell);
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    expect(el.querySelector('.killswitch-strip')).toBeNull();
+
+    // killswitchOn is a protected signal set from the risk endpoint; drive it
+    // the way the component does rather than reaching into the instance.
+    (f.componentInstance as unknown as { killswitchOn: WritableSignal<boolean> })
+      .killswitchOn.set(true);
+    f.detectChanges();
+
+    const strip = el.querySelector('.killswitch-strip')!;
+    expect(strip.getAttribute('role')).toBe('alert');
+    expect(strip.textContent).toContain('KILLSWITCH ENGAGED');
+    expect(strip.parentElement?.classList.contains('main')).toBe(true);
+    expect(strip.previousElementSibling?.tagName.toLowerCase()).toBe('header');
+  });
+
   it('loads the tape once on construction', () => {
     // This only proves the constructor's one-time `this.tape.load()` --
     // NOT that `Shell` reacts to a `scan` event, which it does not do and

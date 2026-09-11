@@ -116,12 +116,6 @@
         <sb-market-lane />
         <sb-names-lane />
       </div>
-      <!-- Engaged killswitch is shell-level and unmissable: it means the bot
-           has stopped taking positions, which is true no matter which
-           workspace happens to be open. -->
-      @if (killswitchOn()) {
-        <span class="killswitch" role="alert">KILLSWITCH ENGAGED</span>
-      }
       <div class="spacer"></div>
       <span class="clock">
         <sb-icon name="clock" />
@@ -152,6 +146,16 @@
       />
       <sb-profile-menu [zoom]="zoom()" (zoomCycled)="cycleZoom()" (signedOut)="logout()" />
     </header>
+
+    <!-- Engaged killswitch is shell-level and unmissable: it means the bot
+         has stopped taking positions, which is true no matter which
+         workspace happens to be open. Its own strip, not squeezed into the
+         bar, because the bar is now full: competing for width with the tape
+         is how an alert ends up truncated, and this is the one message on
+         the page that must never be. -->
+    @if (killswitchOn()) {
+      <div class="killswitch-strip" role="alert">KILLSWITCH ENGAGED</div>
+    }
 
     <main class="workspace" [class.route-pending]="routeLoading.visible()" [attr.aria-busy]="routeLoading.visible() ? 'true' : null">
       <div class="workspace-content" [attr.inert]="routeLoading.visible() ? '' : null"><router-outlet /></div>
