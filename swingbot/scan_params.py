@@ -28,7 +28,7 @@ class ScanParams:
     unified_confidence: bool
     dedup_tolerance_pct: float
     max_alerts_per_scan: int
-    earnings_blackout_days: int
+    earnings_blackout_sessions: int
     rs_gate: bool
     rs_leader_percentile: float
     rs_laggard_percentile: float
@@ -73,7 +73,7 @@ class ScanParams:
             unified_confidence=config.UNIFIED_CONFIDENCE,
             dedup_tolerance_pct=config.DEDUP_TOLERANCE_PCT,
             max_alerts_per_scan=config.MAX_ALERTS_PER_SCAN,
-            earnings_blackout_days=config.EARNINGS_BLACKOUT_DAYS,
+            earnings_blackout_sessions=config.EARNINGS_BLACKOUT_SESSIONS,
             rs_gate=config.RS_GATE,
             rs_leader_percentile=config.RS_LEADER_PERCENTILE,
             rs_laggard_percentile=config.RS_LAGGARD_PERCENTILE,
