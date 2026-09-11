@@ -186,6 +186,12 @@ FIELDS: list[Field] = [
                "Bands, Donchian Channel, floor pivots, trendlines, Fair Value Gaps -- 10 total) land within "
                "'Confluence deviation %' of the target/stop price. 1 disables this filter (any single "
                "confirming strategy is enough). Can also be overridden per-run with `!check <horizon> <min_strategies>`."),
+    Field("RSI_DIV_MIN_CONSECUTIVE_TURN", "RSI_DIV_MIN_CONSECUTIVE_TURN",
+          "Trade Filters & Risk", "RSI Divergence: consecutive RSI turn bars",
+          type="number", default="1", min=1, max=6, step=1,
+          help="How many consecutive bars RSI must move in the trade direction "
+               "before a hidden-divergence reclaim counts as confirmed. 1 keeps "
+               "the original single-uptick behaviour."),
     Field("MIN_ALERT_CONFIDENCE_LEVEL", "MIN_ALERT_CONFIDENCE_LEVEL", "Trade Filters & Risk", "Min confidence level to alert",
           type="select", default="4", options=["1", "2", "3", "4", "5"],
           help="Only this level and above are shown as alerts (quality over quantity)."),
@@ -895,7 +901,7 @@ _SEARCH_CLASSES = {
         "PYRAMIDING_ENABLED", "VOLUME_PROFILE_NODES_ENABLED",
         "MAX_ALERTS_PER_SCAN", "DATA_DRIVEN_STOPS_ENABLED",
         "DEAD_CAT_BOUNCE_VETO", "DCB_DECLINE_PCT", "DCB_GAP_REQUIRED",
-        "DCB_VOLUME_RATIO",
+        "DCB_VOLUME_RATIO", "RSI_DIV_MIN_CONSECUTIVE_TURN",
     },
     "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO"},
     "live_only": {

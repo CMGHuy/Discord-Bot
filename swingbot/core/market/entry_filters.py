@@ -585,7 +585,11 @@ DEFAULT_PARAMS["RSI Divergence"] = {"rsi_reclaim": 45,
                                     # rescue gate (Task 98) -- off until the
                                     # train grid (Task 99) adopts winners
                                     "min_volume_ratio": None,
-                                    "min_reclaim_strength": None}
+                                    "min_reclaim_strength": None,
+                                    # v84 rescue: RSI must move in the trade
+                                    # direction for N consecutive bars, not
+                                    # the single uptick below. 1 = off.
+                                    "min_consecutive_rsi_turn": 1}
 
 
 def rsi_divergence_entries(df, horizon_key, params=None):
@@ -604,8 +608,19 @@ def rsi_divergence_entries(df, horizon_key, params=None):
     price_lh = close < close.rolling(lb).max().shift(lb)
     rsi_hh = rsi14 > rsi14.rolling(lb).max().shift(lb)
 
-    turn_bull = (rsi14 > reclaim) & (rsi14 > rsi14.shift(1))
-    turn_bear = (rsi14 < (100 - reclaim)) & (rsi14 < rsi14.shift(1))
+    from swingbot import config
+    min_turn = int(params.get("min_consecutive_rsi_turn") if params and
+                   "min_consecutive_rsi_turn" in params
+                   else getattr(config, "RSI_DIV_MIN_CONSECUTIVE_TURN", None)
+                   or p["min_consecutive_rsi_turn"])
+    min_turn = max(1, min_turn)
+    rising = rsi14 > rsi14.shift(1)
+    falling = rsi14 < rsi14.shift(1)
+    if min_turn > 1:
+        rising = (rising.rolling(min_turn).sum() == min_turn)
+        falling = (falling.rolling(min_turn).sum() == min_turn)
+    turn_bull = (rsi14 > reclaim) & rising.fillna(False)
+    turn_bear = (rsi14 < (100 - reclaim)) & falling.fillna(False)
 
     bullish = (price_hl & rsi_ll & turn_bull & rsi14.between(28, 52)
                & g["bull_regime"] & g["trend50_bull"]
