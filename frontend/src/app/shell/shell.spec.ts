@@ -15,6 +15,7 @@ import { EventStream } from '../api/event-stream';
 import { RouteLoadingService } from '../routing/route-loading.service';
 import { RouteTitleService } from '../routing/route-title.service';
 import { TapeStore } from '../stores/tape.store';
+import { CLOCK } from '../ui/clock';
 import { Shell } from './shell';
 
 /** Same fake as `chart.store.spec.ts`/`connection.store.spec.ts` -- a counter
@@ -96,6 +97,17 @@ describe('shell navigation', () => {
     const header = el.querySelector('header.topbar') as HTMLElement;
     expect(header.querySelector('sb-market-lane')).not.toBeNull();
     expect(header.querySelector('sb-names-lane')).not.toBeNull();
+  });
+
+  it('shows the date and time from the ambient clock', () => {
+    // A fixed instant, so the assertion is not a function of when the suite runs.
+    const fixed = new Date('2026-09-11T16:58:00').getTime();
+    TestBed.overrideProvider(CLOCK, { useValue: signal(fixed) });
+    const f = TestBed.createComponent(Shell);
+    f.detectChanges();
+    const text = (f.nativeElement as HTMLElement).querySelector('.clock')?.textContent ?? '';
+    expect(text).toContain('Sep 11, 2026');
+    expect(text).toContain('16:58');
   });
 
   it('loads the tape once on construction', () => {

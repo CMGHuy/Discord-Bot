@@ -123,6 +123,10 @@
         <span class="killswitch" role="alert">KILLSWITCH ENGAGED</span>
       }
       <div class="spacer"></div>
+      <span class="clock">
+        <sb-icon name="clock" />
+        {{ now() }}
+      </span>
       <!-- SR58. Beside the connection status because it answers the same
            question from the other side: "these prices have not moved" is a
            failure during the session and correct behaviour outside it.

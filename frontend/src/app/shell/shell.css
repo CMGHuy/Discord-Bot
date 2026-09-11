@@ -269,6 +269,16 @@
 
 /* -- SR58: market session, zoom, version footer ---------------------- */
 
+.clock {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-secondary);
+  font-size: var(--text-chip);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .market {
   padding: 0 var(--space-6);
   border-radius: var(--radius-sm);
