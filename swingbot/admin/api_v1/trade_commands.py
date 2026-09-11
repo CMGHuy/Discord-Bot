@@ -99,6 +99,29 @@ def _trade_row(trade_id: str):
 
 # --- close ---------------------------------------------------------------
 
+def _close_plan(store: PlanStore, plan) -> None:
+    """Close one ACTIVE/PARTIAL plan: settle its linked legacy trade, record
+    the transition, and queue the bot's notification.
+
+    Extracted from close_trade so the bulk endpoint runs exactly this and
+    cannot drift from the single-position path. The caller checks status.
+    """
+    tl = TradeLog()
+    linked = _linked_trade(tl, plan.plan_id)
+    if linked and linked.get("status") == _OPEN_LEGACY:
+        # Through TradeLog's own locked mutator: the admin and the bot are
+        # separate processes over one trades.json, so an unlocked
+        # read-modify-write here could race the scan loop.
+        tl.close_trade_manual(linked["id"], reason="manual (plan close, admin UI)")
+    # `at` is passed explicitly -- record_transition defaults it to None, and
+    # the lifecycle strip's "today" counts read status_history[-1]["at"].
+    record_transition(plan, PlanStatus.CLOSED, reason="manual",
+                      at=datetime.now(timezone.utc).isoformat())
+    store.update(plan)
+    _queue_notify({"kind": "plan_transition", "plan_id": plan.plan_id,
+                   "ticker": plan.ticker, "status": plan.status})
+
+
 @api_v1.route("/trades/<trade_id>/close", methods=["POST"])
 @require_auth
 def close_trade(trade_id: str):
@@ -113,21 +136,7 @@ def close_trade(trade_id: str):
                 f"Only ACTIVE or PARTIAL plans can be closed; this one is {plan.status}.",
                 422,
             )
-        tl = TradeLog()
-        linked = _linked_trade(tl, trade_id)
-        if linked and linked.get("status") == _OPEN_LEGACY:
-            # Through TradeLog's own locked mutator: the admin and the bot are
-            # separate processes over one trades.json, so an unlocked
-            # read-modify-write here could race the scan loop.
-            tl.close_trade_manual(linked["id"], reason="manual (plan close, admin UI)")
-        # `at` is passed explicitly. record_transition defaults it to None,
-        # and the lifecycle strip's "today" counts read status_history[-1]["at"]
-        # -- an implicit None makes this close invisible to today's count.
-        record_transition(plan, PlanStatus.CLOSED, reason="manual",
-                          at=datetime.now(timezone.utc).isoformat())
-        store.update(plan)
-        _queue_notify({"kind": "plan_transition", "plan_id": plan.plan_id,
-                       "ticker": plan.ticker, "status": plan.status})
+        _close_plan(store, plan)
         return _plan_row(trade_id)
 
     tl = TradeLog()

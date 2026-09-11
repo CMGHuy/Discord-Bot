@@ -84,6 +84,17 @@ def test_close_an_active_plan(seed, logged_in, notify_queue):
     assert notify_queue(), "the bot learns about a manual close via the queue file"
 
 
+def test_closing_a_plan_queues_a_notify_record_for_that_plan(seed, logged_in, notify_queue):
+    """The bot is a separate process; this file is how it learns. A close that
+    skips it silently stops the Discord trade-history channel."""
+    seed(plans=[_plan(_PLAN_ID, status="ACTIVE")],
+         trades=[_trade(_TRADE_ID, plan_id=_PLAN_ID)])
+
+    logged_in.post(f"/api/v1/trades/{_PLAN_ID}/close")
+
+    assert any(r.get("plan_id") == _PLAN_ID for r in notify_queue())
+
+
 def test_close_a_pending_plan_is_rejected(seed, logged_in):
     """Only ACTIVE/PARTIAL close. A PENDING plan never filled, so there is
     nothing to close -- it cancels instead."""
