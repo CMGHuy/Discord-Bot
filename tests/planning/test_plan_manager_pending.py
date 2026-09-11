@@ -172,3 +172,87 @@ def test_fill_still_logs_a_trade_when_no_placeholder_exists(tmp_path, monkeypatc
                      if t.get("plan_id") == "p1"]
     assert len(open_for_plan) == 1
     assert open_for_plan[0]["entry"] == 106.0
+
+
+def test_expiry_discards_the_placeholder_trade(tmp_path, monkeypatch):
+    """Production incident, 2026-09-11: PlanManager._on_event had no handler
+    for cancelled_expired/cancelled_invalidated, so a PENDING plan's
+    scan-time placeholder trade (see the fill-handler tests above) sat
+    "open" forever once the plan itself was cancelled -- 10 stuck trades
+    found via a dashboard chip/table mismatch (open_trades count vs. the
+    Open positions panel, which reads plan status). A cancelled plan never
+    filled, so the placeholder is deleted, not closed -- there is no real
+    fill/exit to record."""
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    (tmp_path / "trades.json").write_text("[]", encoding="utf-8")
+    (tmp_path / "account.json").write_text(json.dumps({
+        "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
+        "sizing_mode": "risk_pct", "balance_history": [],
+    }), encoding="utf-8")
+    trade_log = TradeLog()
+    trade_log.log_trade(
+        ticker="AAPL", strategy="Fibonacci", horizon_key="4w",
+        direction="bullish", confidence_level=None, confidence_label=None,
+        entry=105.0, stop_loss=95.0, take_profit=110.0, plan_id="p1")
+
+    feed = FakePriceFeed([("AAPL", 100.0)])       # never reaches trigger
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_pending(expiry_bars=5))
+    mgr = PlanManager(store, feed.get_price, bar_count_fn=lambda t, created: 6,
+                      trade_log=trade_log)
+
+    events = mgr.poll()
+
+    assert [e.transition for e in events] == ["cancelled_expired"]
+    remaining = [t for t in trade_log.get_trades(status=None, limit=None)
+                if t.get("plan_id") == "p1"]
+    assert remaining == []
+
+
+def test_invalidation_discards_the_placeholder_trade(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    (tmp_path / "trades.json").write_text("[]", encoding="utf-8")
+    (tmp_path / "account.json").write_text(json.dumps({
+        "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
+        "sizing_mode": "risk_pct", "balance_history": [],
+    }), encoding="utf-8")
+    trade_log = TradeLog()
+    trade_log.log_trade(
+        ticker="AAPL", strategy="Fibonacci", horizon_key="4w",
+        direction="bullish", confidence_level=None, confidence_label=None,
+        entry=105.0, stop_loss=95.0, take_profit=110.0, plan_id="p1")
+
+    feed = FakePriceFeed([("AAPL", 94.0)])        # below stop 95, trigger never hit
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_pending())
+    mgr = PlanManager(store, feed.get_price, trade_log=trade_log)
+
+    events = mgr.poll()
+
+    assert [e.transition for e in events] == ["cancelled_invalidated"]
+    remaining = [t for t in trade_log.get_trades(status=None, limit=None)
+                if t.get("plan_id") == "p1"]
+    assert remaining == []
+
+
+def test_cancellation_with_no_placeholder_is_a_safe_no_op(tmp_path, monkeypatch):
+    """Defensive fallback mirroring test_fill_still_logs_a_trade_when_no_placeholder_exists:
+    a plan can reach PlanStore with no placeholder trade waiting. Cancelling
+    it must not raise just because there is nothing to discard."""
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    (tmp_path / "trades.json").write_text("[]", encoding="utf-8")
+    (tmp_path / "account.json").write_text(json.dumps({
+        "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
+        "sizing_mode": "risk_pct", "balance_history": [],
+    }), encoding="utf-8")
+    trade_log = TradeLog()   # no placeholder logged
+
+    feed = FakePriceFeed([("AAPL", 94.0)])
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_pending())
+    mgr = PlanManager(store, feed.get_price, trade_log=trade_log)
+
+    events = mgr.poll()
+
+    assert [e.transition for e in events] == ["cancelled_invalidated"]
+    assert trade_log.get_trades(status=None, limit=None) == []

@@ -541,6 +541,26 @@ class TradeLog:
             self._save()
             return t["id"]
 
+    def discard_plan_placeholder(self, plan_id: str) -> bool:
+        """Remove the still-open placeholder trade a PENDING plan_v2 got at
+        scan-detection time (see scan_run.py's log_trade() call), for a plan
+        that was cancelled before it ever filled.
+
+        Deletes rather than closes: the placeholder was sized against the
+        trigger price for a position that never actually opened, so it has
+        no real fill, exit or P&L to record -- marking it "closed" would
+        invent a trade that never happened and double up win/loss/expectancy
+        stats. Returns False if no open placeholder exists for this plan
+        (already handled, or trade_log was wired in after the alert)."""
+        with _LOCK:
+            t = next((t for t in self._trades
+                      if t.get("plan_id") == plan_id and t["status"] == "open"), None)
+            if t is None:
+                return False
+            self._trades.remove(t)
+            self._save()
+        return True
+
     def close_plan_trade(self, plan_id: str, leg: dict | None, status: str) -> None:
         """Final leg + terminal status for a v2 plan's trade. `leg` is the
         real leg dict for a runner close; the caller (PlanManager._on_event,

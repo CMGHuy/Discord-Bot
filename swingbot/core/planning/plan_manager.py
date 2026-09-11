@@ -242,6 +242,15 @@ class PlanManager:
                 event.detail["trade_id"] = trade_id
             elif event.transition == "tp1_partial":
                 self.trade_log.append_leg_by_plan(plan.plan_id, event.detail)
+            elif event.transition in ("cancelled_expired", "cancelled_invalidated"):
+                # A PENDING plan never filled -- scan_run.py's placeholder
+                # trade for it (still open, sized against the trigger price)
+                # has no real position behind it. Left unhandled, it sat
+                # "open" in the dashboard/risk numbers forever: production
+                # incident, 2026-09-11 (INTU, META among 10 stuck trades
+                # found via a dashboard mismatch -- the other 8 were the
+                # separate double-logging bug 5d72c1ab already fixed).
+                self.trade_log.discard_plan_placeholder(plan.plan_id)
             elif event.transition == "closed":
                 reason = event.detail["reason"]
                 # "win" is v70's terminal-target reason: an ACTIVE plan with
