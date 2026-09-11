@@ -176,9 +176,9 @@ route.
 cluster blocks), `sb-timeline` (release rail). All other mockup charts are
 compositions of the existing primitives from finding 11.
 
-**D26 — New state goes through existing stores.** Watchlist tags ride inside
-the existing watchlist structure, per-page control-bar preferences ride in
-`PreferencesStore`, deploy markers append to the existing events path. **No new
+**D26 — New state goes through existing stores.** Watchlist tags and per-page
+control-bar preferences ride in `PreferencesStore`, deploy markers append to the
+existing events path. **No new
 top-level JSON file**, so v67's JSON→Postgres migration inventory does not grow
 and nothing written here needs migrating twice.
 
@@ -258,8 +258,11 @@ the sparkline beside it. Relative strength from `data/universe/rs_cache.json`
 is deliberately *not* used for this column.
 
 **D35 — Groups are tags, and they are view-only.** Symbols carry user-defined
-tags stored inside the existing watchlist structure (D26); the chip row filters
-the view by tag, and "+" creates one. **The scanner continues to scan every
+tags stored in `PreferencesStore` (D26) — **not** in `data/watchlist.json`.
+That file is read by the bot on every scan, and a tag is a pure view concern the
+trading process must never parse; widening it for something only the UI reads is
+the coupling this plan exists to avoid. The chip row filters the view by tag,
+and "+" creates one. **The scanner continues to scan every
 symbol** — a tag never gates what the bot trades, which keeps this inside a UI
 release and keeps the no-trading-change rule true.
 

@@ -4,7 +4,7 @@ Header block, global constraints, parallelisation and exit criteria live in
 `2026-09-11-v85-dashboard-shell-redesign_0-index.md`.
 
 **Part 4 is a strict chain.** Every task builds on the previous one's component,
-and R4-06 additionally consumes R2-05's endpoint. One at a time.
+and R5-06 additionally consumes R3-05's endpoint. One at a time.
 
 This part replaces four stacked `sb-trade-group` instances with one tabbed
 table. The win is not only visual: today all four groups fetch on every visit,
@@ -18,7 +18,7 @@ outside the Dashboard is affected.
 
 # Phase 1 — The table
 
-### Task R4-01: The tabbed positions table
+### Task R5-01: The tabbed positions table
 
 **Files:**
 - Create: `frontend/src/app/workspaces/dashboard/positions-table.ts`
@@ -35,7 +35,7 @@ outside the Dashboard is affected.
   outputs `rowActivate`, `reorder`;
   and exported `POSITION_TABS`, `OPEN_POSITIONS_CAP`.
 
-  R4-02 supplies `visibleFor`, R4-04 mounts it, R4-05/R4-06 add its actions.
+  R5-02 supplies `visibleFor`, R5-04 mounts it, R5-05/R5-06 add its actions.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -229,7 +229,7 @@ export class PositionsTable {
   readonly counts = input<Record<string, number>>({});
   readonly today = input<boolean | null>(null);
   readonly columns = input.required<ColumnDef<TradeRow>[]>();
-  /** Per-tab column order — see R4-02. Takes the tab id so each status can
+  /** Per-tab column order — see R5-02. Takes the tab id so each status can
    *  show the columns that mean something for it. */
   readonly visibleFor = input.required<(tab: string) => string[]>();
   readonly pinned = input<string[]>([]);
@@ -302,7 +302,7 @@ git commit -m "feat(dashboard): add the tabbed positions table"
 
 ---
 
-### Task R4-02: Per-tab column sets
+### Task R5-02: Per-tab column sets
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/dashboard/dashboard.helpers.ts`
@@ -312,7 +312,7 @@ git commit -m "feat(dashboard): add the tabbed positions table"
 - Consumes: `deriveOpenVisible`, `deriveClosedVisible`, already in this file.
 - Produces: `deriveCancelledVisible(visible: string[]): string[]`, and
   `visibleForTab(tab: string, visible: string[]): string[]` — the function
-  R4-01's `visibleFor` input is bound to.
+  R5-01's `visibleFor` input is bound to.
 
 **Cancelled needs its own set.** A plan that never filled has no entry fill, no
 P&L and no R — those three columns would be an em dash on every row. What it
@@ -407,14 +407,14 @@ git commit -m "feat(dashboard): per-tab column sets, including cancelled"
 
 ---
 
-### Task R4-03: Preferences survive a tab change
+### Task R5-03: Preferences survive a tab change
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/dashboard/positions-table.spec.ts`
 - Modify: `frontend/src/app/workspaces/dashboard/positions-table.ts` (only if the test exposes a gap)
 
 **Interfaces:**
-- Consumes: R4-02's `visibleForTab`; `reconcileReorder` in
+- Consumes: R5-02's `visibleForTab`; `reconcileReorder` in
   `dashboard.helpers.ts`.
 - Produces: no new symbol — this task is the guard that D12's promise holds.
 
@@ -459,8 +459,8 @@ it('asks for the right column set per tab from one shared picker list', () => {
 cd frontend && npx ng test --include src/app/workspaces/dashboard/positions-table.spec.ts
 ```
 
-If R4-01 was built correctly these may PASS immediately. That is a legitimate
-outcome for a guard test — the point is to pin the behaviour before R4-04 wires
+If R5-01 was built correctly these may PASS immediately. That is a legitimate
+outcome for a guard test — the point is to pin the behaviour before R5-04 wires
 in the real preference plumbing, not to force a change. If either fails, fix
 the component, not the test.
 
@@ -491,7 +491,7 @@ git commit -m "test(dashboard): pin column preferences across tab changes"
 
 # Phase 2 — Wiring and actions
 
-### Task R4-04: Mount the table and retire TradeGroup
+### Task R5-04: Mount the table and retire TradeGroup
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/dashboard/dashboard.ts`
@@ -501,9 +501,9 @@ git commit -m "test(dashboard): pin column preferences across tab changes"
 - Modify: `frontend/src/app/stores/trades.store.spec.ts` (drops a `TradeGroup` reference)
 
 **Interfaces:**
-- Consumes: `PositionsTable` (R4-01), `visibleForTab` (R4-02),
+- Consumes: `PositionsTable` (R5-01), `visibleForTab` (R5-02),
   `DashboardStore.lifecycle()`.
-- Produces: the mounted table. R4-05/R4-06 project actions into its
+- Produces: the mounted table. R5-05/R5-06 project actions into its
   `[table-actions]` slot.
 
 **Port `trade-group.spec.ts`'s tests before deleting it.** Any behaviour it
@@ -573,7 +573,7 @@ Add to the class:
 
 ```ts
   /** The lifecycle strip's counts, reshaped for the tab labels. The strip
-   *  itself is gone (R3-07) — these numbers moved onto the tabs. */
+   *  itself is gone (R4-07) — these numbers moved onto the tabs. */
   protected readonly lifecycleCounts = computed(() =>
     Object.fromEntries(this.store.lifecycle().map((e) => [e.status, e.count])),
   );
@@ -612,7 +612,7 @@ git commit -m "feat(dashboard): replace the four trade groups with the tabbed ta
 
 ---
 
-### Task R4-05: Row actions
+### Task R5-05: Row actions
 
 **Files:**
 - Create: `frontend/src/app/workspaces/dashboard/row-actions.ts`
@@ -821,14 +821,14 @@ git commit -m "feat(dashboard): add per-row close, cancel and note actions"
 
 ---
 
-### Task R4-06: Close all open/partial
+### Task R5-06: Close all open/partial
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/dashboard/dashboard.ts`
 - Test: `frontend/src/app/workspaces/dashboard/dashboard.spec.ts`
 
 **Interfaces:**
-- Consumes: `ApiClient.closeOpenTrades()` and `CloseOpenResult` (R2-06);
+- Consumes: `ApiClient.closeOpenTrades()` and `CloseOpenResult` (R3-06);
   `ui/confirm-dialog.ts`.
 - Produces: the panel's one action button. No new exported symbol.
 
@@ -973,3 +973,72 @@ git add frontend/src/app/workspaces/dashboard/dashboard.ts \
         frontend/src/app/workspaces/dashboard/dashboard.spec.ts
 git commit -m "feat(dashboard): add a guarded close-all for open positions"
 ```
+
+---
+
+# Phase 3 — Wave 1 verification and release
+
+### Task R5-07: Wave 1 — full suite, screenshots, release
+
+**Files:**
+- Modify: `VERSION.json`
+- Modify: `CHANGELOG.md` (or the changelog this repo keeps)
+
+**Interfaces:**
+- Consumes: every task in Parts 1–5.
+- Produces: a released `ui` minor version. Waves 2 and 3 branch from it.
+
+**This is the only full-suite run in wave 1.** Not once per task, not again
+after a clean merge.
+
+- [ ] **Step 1: Run the frontend suite**
+
+```bash
+cd frontend && npx ng test
+```
+
+Expected: PASS, except `workspace-consistency.spec.ts`, which is deliberately
+red until R12-08. Record which rules it still reports — that list is wave 2 and
+3's worklist, and it must be *shorter* than the one R2-07 recorded.
+
+- [ ] **Step 2: Run the backend suite**
+
+```bash
+python scripts/dev/testrun.py full
+```
+
+Expected: `0 failed` and `0 xfailed`. A changed pass count is not a failure.
+Dispatch the `test-runner` subagent so the ~1150 progress lines stay out of
+this context.
+
+- [ ] **Step 3: Screenshot every workspace at both widths**
+
+With `npm start` running, screenshot all ten routes at 1440px and 390px.
+Confirm: no in-page heading anywhere, no horizontal page scroll, the killswitch
+strip renders full width when engaged, and the brand mark reads in both rail
+states.
+
+- [ ] **Step 4: Bump the version**
+
+Read `VERSION.json` **now** — do not trust any number written in this plan or
+predicted earlier. Bump the `ui` line one minor; leave `bot` alone (wave 1
+adds one metric and one endpoint, both already covered by the last bot patch).
+
+- [ ] **Step 5: Commit and tag the release**
+
+```bash
+git add VERSION.json CHANGELOG.md
+git commit -m "release(ui): <resolved version> -- shell, primitives and Dashboard redesign"
+```
+
+- [ ] **Step 6: Merge, after confirming no concurrent session is mid-merge**
+
+Check for other live sessions on this tree before merging (`git worktree list`,
+and the session cursor). If another session is active on a shared branch,
+**stop and ask** rather than merging.
+
+- [ ] **Step 7: Record the wave in the progress ledger**
+
+Append to `.superpowers/sdd/progress.md`: tasks completed, the full-suite
+figures, the screenshot review outcome, and the remaining
+`workspace-consistency` worklist.

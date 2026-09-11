@@ -3,19 +3,19 @@
 Header block, global constraints, parallelisation and exit criteria live in
 `2026-09-11-v85-dashboard-shell-redesign_0-index.md`.
 
-R3-01, R3-02, R3-05 and R3-06 are **Group B** — one new file each, safe to run
-in parallel. R3-03 → R3-04 is one strand inside that group. R3-07 and R3-08
+R4-01, R4-02, R4-05 and R4-06 are **Group B** — one new file each, safe to run
+in parallel. R4-03 → R4-04 is one strand inside that group. R4-07 and R4-08
 are sequential after all of them: both edit `dashboard.ts`.
 
 Every panel in this part is a presentational component: inputs in, no store
-injection, no fetching. The page (R3-07) wires them to `DashboardStore`. That
+injection, no fetching. The page (R4-07) wires them to `DashboardStore`. That
 is what lets each one be tested with plain values and rendered in `/ui`.
 
 ---
 
 # Phase 1 — Panels
 
-### Task R3-01: Portfolio Value panel
+### Task R4-01: Portfolio Value panel
 
 **Files:**
 - Create: `frontend/src/app/workspaces/dashboard/panels/portfolio-value.ts`
@@ -26,7 +26,7 @@ is what lets each one be tested with plain values and rendered in `/ui`.
 - Produces: `<sb-portfolio-value>` with inputs
   `balance: number | null`, `changePct: number | null`,
   `points: readonly number[]`, `currency: string`.
-  R3-07 binds these to `DashboardStore.balance/openPnlPct/equityPoints` and
+  R4-07 binds these to `DashboardStore.balance/openPnlPct/equityPoints` and
   `ConnectionStore.currency`.
 
 **No range tabs and no intraday chart** — D8. The only series that exists is
@@ -181,14 +181,14 @@ git commit -m "feat(dashboard): add the portfolio value panel"
 
 ---
 
-### Task R3-02: Trading Performance panel
+### Task R4-02: Trading Performance panel
 
 **Files:**
 - Create: `frontend/src/app/workspaces/dashboard/panels/trading-performance.ts`
 - Create: `frontend/src/app/workspaces/dashboard/panels/trading-performance.spec.ts`
 
 **Interfaces:**
-- Consumes: `DashboardStore.payoffRatio` (R2-03) via its input; `sb-panel`,
+- Consumes: `DashboardStore.payoffRatio` (R3-03) via its input; `sb-panel`,
   `sb-metric-card`.
 - Produces: `<sb-trading-performance>` with inputs `openPnlPct`, `winRate`,
   `expectancyR`, `avgConfidence`, `realizedAmount`, `realizedLabel`,
@@ -366,7 +366,7 @@ git commit -m "feat(dashboard): add the trading performance panel"
 
 ---
 
-### Task R3-03: Recent Activity derivation
+### Task R4-03: Recent Activity derivation
 
 **Files:**
 - Create: `frontend/src/app/workspaces/dashboard/panels/activity.ts`
@@ -378,7 +378,7 @@ git commit -m "feat(dashboard): add the trading performance panel"
   - `interface ActivityEvent { kind: 'opened' | 'closed' | 'cancelled'; at: string; ticker: string; detail: string; id: string }`
   - `deriveActivity(rows: readonly TradeRow[], limit?: number): ActivityEvent[]`
 
-  R3-04 renders these.
+  R4-04 renders these.
 
 **Three kinds, not four — D15 resolved.** `TradeRow` has `banked_fraction`,
 `banked_exit_price` and `banked_r` but **no `banked_at`**. Its only timestamps
@@ -543,14 +543,14 @@ git commit -m "feat(dashboard): derive an activity feed from trade timestamps"
 
 ---
 
-### Task R3-04: Recent Activity panel
+### Task R4-04: Recent Activity panel
 
 **Files:**
 - Create: `frontend/src/app/workspaces/dashboard/panels/recent-activity.ts`
 - Create: `frontend/src/app/workspaces/dashboard/panels/recent-activity.spec.ts`
 
 **Interfaces:**
-- Consumes: `ActivityEvent` from R3-03; the `'opened'`/`'closed'` icons from
+- Consumes: `ActivityEvent` from R4-03; the `'opened'`/`'closed'` icons from
   R1-03; `dateTime` from `ui/format`.
 - Produces: `<sb-recent-activity>` with input `events: readonly ActivityEvent[]`.
 
@@ -673,7 +673,7 @@ git commit -m "feat(dashboard): add the recent activity panel"
 
 ---
 
-### Task R3-05: Watchlist panel
+### Task R4-05: Watchlist panel
 
 **Files:**
 - Create: `frontend/src/app/workspaces/dashboard/panels/watchlist-panel.ts`
@@ -682,7 +682,7 @@ git commit -m "feat(dashboard): add the recent activity panel"
 **Interfaces:**
 - Consumes: `TapeRow` from `api/models`.
 - Produces: `<sb-watchlist-panel>` with input `rows: readonly TapeRow[]` and
-  `limit: number`. R3-07 binds it to `TapeStore.rows`.
+  `limit: number`. R4-07 binds it to `TapeStore.rows`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -813,7 +813,7 @@ git commit -m "feat(dashboard): add the watchlist panel"
 
 ---
 
-### Task R3-06: Market Movers panel
+### Task R4-06: Market Movers panel
 
 **Files:**
 - Create: `frontend/src/app/workspaces/dashboard/panels/market-movers.ts`
@@ -967,16 +967,16 @@ git commit -m "feat(dashboard): add the market movers panel"
 
 # Phase 2 — The page
 
-### Task R3-07: Assemble the Dashboard page
+### Task R4-07: Assemble the Dashboard page
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/dashboard/dashboard.ts` (template and styles)
 - Test: `frontend/src/app/workspaces/dashboard/dashboard.spec.ts`
 
 **Interfaces:**
-- Consumes: all five panels (R3-01 … R3-06), `DashboardStore`, `TapeStore`,
+- Consumes: all five panels (R4-01 … R4-06), `DashboardStore`, `TapeStore`,
   `ConnectionStore`.
-- Produces: the page layout. R3-08 and Part 4 edit this same file afterwards.
+- Produces: the page layout. R4-08 and Part 4 edit this same file afterwards.
 
 **What comes out:** the `.primary` metric-card row, the `.chips` chip row, the
 `realized-count` line, and the `lifecycle` nav strip — every one of them is
@@ -1151,7 +1151,7 @@ git commit -m "feat(dashboard): compose the page from the v85 panels"
 
 ---
 
-### Task R3-08: Move the explanatory copy behind affordances
+### Task R4-08: Move the explanatory copy behind affordances
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/dashboard/dashboard.ts`
@@ -1264,4 +1264,102 @@ that catches "moved behind an affordance" quietly becoming "deleted".
 git add frontend/src/app/workspaces/dashboard/dashboard.ts \
         frontend/src/app/workspaces/dashboard/dashboard.spec.ts
 git commit -m "refactor(dashboard): move explanatory copy behind info drawers"
+```
+
+---
+
+### Task R4-09: Reconcile the Dashboard against mockup sheet 1
+
+**Files:**
+- Modify: `frontend/src/app/workspaces/dashboard/dashboard.ts`
+- Modify: `frontend/src/app/workspaces/dashboard/trading-performance.ts`
+- Test: `frontend/src/app/workspaces/dashboard/dashboard.spec.ts`
+
+**Interfaces:**
+- Consumes: the assembled page from R4-07.
+- Produces: nothing new.
+
+**Why this task exists.** R4-01…R4-08 were written against
+`images/Mock up.png`. `images/Dashboard Trades Watchlist Risk.png` (sheet 1)
+arrived later and shows the Dashboard again, in more detail. Spec D31 says the
+Dashboard is **diffed and amended, not rewritten** — this task is that diff.
+
+**Two divergences are already known; find the rest by looking.**
+
+1. **The equity curve gains a range toggle** — sheet 1 shows
+   `1D · 1W · 1M · YTD · 1Y · ALL`. Finding 7 constrains it: the payload is
+   `equity_30d`, thirty **daily** points. `1D` has no intraday series behind
+   it and `1Y`/`ALL` have no history behind them. Render only the ranges the
+   data supports (`1W`, `1M`, and `ALL` meaning all thirty points) and omit the
+   rest. **Do not render a disabled `1D` button** — an affordance that exists
+   but never works is worse than its absence.
+2. **The allocation donut has no honest occupant.** This book is one asset
+   class with no cash line. Its slot takes **exposure by horizon** instead: a
+   donut over open risk grouped by the plan's horizon, which is the real
+   composition question this book has.
+
+- [ ] **Step 1: Capture the current state**
+
+With `npm start` running, screenshot `/dashboard` at 1440px. Open sheet 1
+beside it and write the divergence list into the commit message you will use in
+step 6. Anything not in the two known items above needs a judgement: is it a
+real difference, or the same design drawn at a different zoom?
+
+- [ ] **Step 2: Write the failing tests**
+
+Add to `frontend/src/app/workspaces/dashboard/dashboard.spec.ts`:
+
+```typescript
+it('offers only the equity ranges the 30-day series supports', () => {
+  const labels = Array.from(
+    (render().nativeElement as HTMLElement).querySelectorAll('.equity-range button'),
+  ).map((b) => b.textContent!.trim());
+  expect(labels).toEqual(['1W', '1M', 'ALL']);
+});
+
+it('does not render a range it cannot draw', () => {
+  const labels = Array.from(
+    (render().nativeElement as HTMLElement).querySelectorAll('.equity-range button'),
+  ).map((b) => b.textContent!.trim());
+  expect(labels).not.toContain('1D');
+});
+
+it('shows exposure by horizon where the mockup shows asset allocation', () => {
+  const el = render().nativeElement as HTMLElement;
+  expect(el.querySelector('sb-panel[heading="Exposure by horizon"]')).not.toBeNull();
+  expect(el.textContent).not.toContain('Asset allocation');
+});
+```
+
+- [ ] **Step 3: Run them to make sure they fail**
+
+```bash
+cd frontend && npx ng test --include src/app/workspaces/dashboard/dashboard.spec.ts
+```
+
+Expected: FAIL on the three new assertions.
+
+- [ ] **Step 4: Make the changes**
+
+Add the three-button `sb-segmented` range control above the equity curve,
+slicing `equity_30d` to the last 5 / 21 / all points. Replace the allocation
+slot with an `sb-donut` over open risk grouped by horizon, computed from the
+positions already on the payload — no new endpoint.
+
+- [ ] **Step 5: Run the spec and confirm it passes**
+
+```bash
+cd frontend && npx ng test --include src/app/workspaces/dashboard/dashboard.spec.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add frontend/src/app/workspaces/dashboard
+git commit -m "feat(dashboard): reconcile against mockup sheet 1 (v85 D31)
+
+Equity range toggle limited to the ranges the 30-day series supports;
+allocation slot carries exposure by horizon, which this book actually has."
 ```

@@ -6,9 +6,9 @@ Header block, global constraints, parallelisation and exit criteria live in
 Two independent strands — run them in parallel only as whole strands, never
 task-interleaved:
 
-- **Payoff ratio:** R2-01 → R2-02 → R2-03 (`core/analytics/metrics.py`,
+- **Payoff ratio:** R3-01 → R3-02 → R3-03 (`core/analytics/metrics.py`,
   `core/tracking/performance.py`, `admin/api_v1/dashboard.py`)
-- **Bulk close:** R2-04 → R2-05 → R2-06 (`admin/api_v1/trade_commands.py`,
+- **Bulk close:** R3-04 → R3-05 → R3-06 (`admin/api_v1/trade_commands.py`,
   `frontend/src/app/api/`)
 
 They share no file and no symbol.
@@ -17,7 +17,7 @@ They share no file and no symbol.
 
 # Phase 1 — Payoff ratio
 
-### Task R2-01: The payoff-ratio computation
+### Task R3-01: The payoff-ratio computation
 
 **Files:**
 - Modify: `swingbot/core/analytics/metrics.py` (beside `profit_factor`, line ~234)
@@ -29,7 +29,7 @@ They share no file and no symbol.
   - `payoff_ratio_from_rs(rs: list[float]) -> float | None`
   - `payoff_ratio(closed: list[dict]) -> float | None`
 
-  R2-02 calls the first with its own leg-expanded list.
+  R3-02 calls the first with its own leg-expanded list.
 
 **Why two entry points.** `performance.get_extended_stats` already has the
 leg-expanded R list in hand, and recomputing it from dicts there would risk the
@@ -144,16 +144,16 @@ git commit -m "feat(analytics): add payoff ratio beside profit factor"
 
 ---
 
-### Task R2-02: Expose payoff ratio from get_extended_stats
+### Task R3-02: Expose payoff ratio from get_extended_stats
 
 **Files:**
 - Modify: `swingbot/core/tracking/performance.py:921-988` (`get_extended_stats`)
 - Test: `tests/analytics/test_metrics_legged_trades.py`
 
 **Interfaces:**
-- Consumes: `payoff_ratio_from_rs` from R2-01.
+- Consumes: `payoff_ratio_from_rs` from R3-01.
 - Produces: a `"payoff_ratio"` key in `get_extended_stats`'s returned dict,
-  consumed by R2-03.
+  consumed by R3-03.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -232,7 +232,7 @@ git commit -m "feat(tracking): report payoff ratio from get_extended_stats"
 
 ---
 
-### Task R2-03: Payoff ratio on the dashboard payload and in the client
+### Task R3-03: Payoff ratio on the dashboard payload and in the client
 
 **Files:**
 - Modify: `swingbot/admin/api_v1/dashboard.py:197-230`
@@ -242,10 +242,10 @@ git commit -m "feat(tracking): report payoff ratio from get_extended_stats"
 - Test: `frontend/src/app/stores/dashboard.store.spec.ts`
 
 **Interfaces:**
-- Consumes: `get_extended_stats()["payoff_ratio"]` from R2-02.
+- Consumes: `get_extended_stats()["payoff_ratio"]` from R3-02.
 - Produces:
   - payload key `payoff_ratio: number | null`
-  - `DashboardStore.payoffRatio: Signal<number | null>`, consumed by R3-02.
+  - `DashboardStore.payoffRatio: Signal<number | null>`, consumed by R4-02.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -334,7 +334,7 @@ git commit -m "feat(dashboard): serve payoff ratio and bind it in the client"
 
 # Phase 2 — Bulk close
 
-### Task R2-04: Extract the single-position close
+### Task R3-04: Extract the single-position close
 
 **Files:**
 - Modify: `swingbot/admin/api_v1/trade_commands.py:103-142` (`close_trade`)
@@ -345,7 +345,7 @@ git commit -m "feat(dashboard): serve payoff ratio and bind it in the client"
   `_queue_notify`, `record_transition`, `PlanStatus`, `PlanStore`, `TradeLog` —
   all already in this module.
 - Produces: `_close_plan(store: PlanStore, plan) -> None`, called by both
-  `close_trade` (R2-04) and `close_open` (R2-05).
+  `close_trade` (R3-04) and `close_open` (R3-05).
 
 **This task must not change any behaviour.** It is a pure extraction so the
 bulk endpoint cannot drift from the single one. The existing trade-command
@@ -433,14 +433,14 @@ git commit -m "refactor(api): extract _close_plan so bulk and single close share
 
 ---
 
-### Task R2-05: The bulk-close endpoint
+### Task R3-05: The bulk-close endpoint
 
 **Files:**
 - Modify: `swingbot/admin/api_v1/trade_commands.py` (new route beside the bulk clears, line ~205)
 - Test: `tests/admin/test_api_v1_trade_commands.py`
 
 **Interfaces:**
-- Consumes: `_close_plan` from R2-04.
+- Consumes: `_close_plan` from R3-04.
 - Produces: `POST /api/v1/trades/close-open` returning
   `{"closed": int, "failed": int, "tickers": list[str]}`.
 
@@ -577,7 +577,7 @@ git commit -m "feat(api): add POST /trades/close-open to bank every open positio
 
 ---
 
-### Task R2-06: Client binding for bulk close
+### Task R3-06: Client binding for bulk close
 
 **Files:**
 - Modify: `frontend/src/app/api/api-client.ts:137-143`
@@ -585,10 +585,10 @@ git commit -m "feat(api): add POST /trades/close-open to bank every open positio
 - Test: `frontend/src/app/api/api-client.spec.ts`
 
 **Interfaces:**
-- Consumes: the endpoint from R2-05.
+- Consumes: the endpoint from R3-05.
 - Produces: `ApiClient.closeOpenTrades(): Observable<CloseOpenResult>` and
   `interface CloseOpenResult { closed: number; failed: number; tickers: string[] }`,
-  consumed by R4-06.
+  consumed by R5-06.
 
 - [ ] **Step 1: Write the failing test**
 

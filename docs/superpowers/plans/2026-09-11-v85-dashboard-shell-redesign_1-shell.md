@@ -88,7 +88,7 @@ cause and move on — there is nothing to commit.
 **Interfaces:**
 - Consumes: nothing.
 - Produces: `--text-hero`, a display size above `--text-metric`, consumed by
-  R3-01's Portfolio Value figure.
+  R4-01's Portfolio Value figure.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -154,7 +154,7 @@ git commit -m "feat(ui): add --text-hero for the portfolio figure"
 **Interfaces:**
 - Consumes: nothing.
 - Produces: four new `IconName` values — `'clock'`, `'more'`, `'opened'`,
-  `'closed'` — consumed by R1-07 (clock), R4-05 (row menu) and R3-04 (activity
+  `'closed'` — consumed by R1-07 (clock), R5-05 (row menu) and R4-04 (activity
   feed).
 
 - [ ] **Step 1: Write the failing test**
@@ -1217,4 +1217,198 @@ than pushing anything off the end.
 ```bash
 git add frontend/src/app/shell/shell.css frontend/src/app/shell/shell.spec.ts
 git commit -m "feat(shell): define the top bar's responsive drop order"
+```
+
+---
+
+# Phase 4 — Sheet 2 reconciliation
+
+Two tasks added when the second mockup sheet arrived. Both are amendments to
+the shell this part has already built, not rebuilds of it.
+
+### Task R1-13: The status cluster reads "Live · clock", sheet 2's form
+
+**Files:**
+- Modify: `frontend/src/app/shell/connection-status.ts`
+- Modify: `frontend/src/app/shell/shell.html`
+- Modify: `frontend/src/app/shell/shell.css`
+- Test: `frontend/src/app/shell/connection-status.spec.ts`
+
+**Interfaces:**
+- Consumes: the merged top bar from R1-05/R1-06, the clock from R1-07.
+- Produces: nothing new. Presentation and copy only.
+
+**What is actually different.** Sheet 1 shows a "MARKETS LIVE" pill. Sheet 2
+shows a small dot labelled "Live" immediately before the clock. The market lane
+already renders named index labels with value and signed change
+(`INDEX_LABELS` in `shell/tape/market-lane.ts`), so the tape itself needs
+nothing. The change is the status cluster: dot, word, clock, in that order, as
+one group.
+
+**The dot means one thing** — spec D30. It reports that the event stream is
+connected. It must never be read as "these numbers are current"; that claim
+belongs to each panel's own `sb-freshness` (R2-06).
+
+- [ ] **Step 1: Write the failing test**
+
+Add to `frontend/src/app/shell/connection-status.spec.ts`:
+
+```typescript
+it('labels the dot Live when the stream is connected', () => {
+  const el = render({ connected: true });
+  expect(el.querySelector('.state')!.textContent!.trim()).toBe('Live');
+});
+
+it('says what is live, not that the data is fresh', () => {
+  const el = render({ connected: true });
+  expect(el.getAttribute('title')).toContain('event stream');
+  expect(el.getAttribute('title')).not.toContain('up to date');
+});
+
+it('names the disconnected state in words, not by colour alone', () => {
+  const el = render({ connected: false });
+  expect(el.querySelector('.state')!.textContent!.trim()).toBe('Offline');
+});
+```
+
+If `render` does not exist in that spec, write it to match the existing
+helpers there rather than inventing a second style.
+
+- [ ] **Step 2: Run it to make sure it fails**
+
+```bash
+cd frontend && npx ng test --include src/app/shell/connection-status.spec.ts
+```
+
+Expected: FAIL on the three new assertions.
+
+- [ ] **Step 3: Make the change**
+
+In `connection-status.ts`, render the dot followed by a `.state` word, and set
+the host `title` to `Event stream connected` / `Event stream disconnected —
+panels show their own data age`. In `shell.html`, place the component
+immediately before the clock inside the status cluster. In `shell.css`, group
+the two with `display: flex; align-items: center; gap: var(--gap);`.
+
+- [ ] **Step 4: Run the spec and confirm it passes**
+
+```bash
+cd frontend && npx ng test --include src/app/shell/connection-status.spec.ts
+cd frontend && npx ng test --include src/app/shell/shell.spec.ts
+```
+
+Expected: both PASS.
+
+- [ ] **Step 5: Screenshot the bar**
+
+With `npm start` running, screenshot `/dashboard` at 1440px and 390px. Confirm
+the cluster reads dot → Live → clock, and that at 390px the clock drops before
+the dot does (R1-12's drop order).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add frontend/src/app/shell/connection-status.ts frontend/src/app/shell/connection-status.spec.ts frontend/src/app/shell/shell.html frontend/src/app/shell/shell.css
+git commit -m "feat(shell): status cluster reads Live then clock (v85 D2)"
+```
+
+---
+
+### Task R1-14: The brand mark, wordmark and rail tagline
+
+**Files:**
+- Modify: `frontend/src/app/ui/icon.ts`
+- Modify: `frontend/src/app/shell/shell.html`
+- Modify: `frontend/src/app/shell/shell.css`
+- Modify: `frontend/public/manifest.webmanifest`
+- Test: `frontend/src/app/shell/shell.spec.ts`
+
+**Interfaces:**
+- Consumes: the icon registry from R1-03.
+- Produces: icon name `brand` in `ui/icon.ts`, available to any component.
+
+**Do not ship `images/logo.png`** — spec D3 and finding 16. It is a
+photorealistic brushed-metal serif monogram on a white ground: it cannot take
+the accent colour, will not read at 24px on `--bg`, and has no collapsed-rail
+form. The mark is authored as a path on the existing 16×16 grid at 1.5 stroke
+width, like every other icon in the registry, and inherits `currentColor`.
+
+- [ ] **Step 1: Write the failing test**
+
+Add to `frontend/src/app/shell/shell.spec.ts`:
+
+```typescript
+it('renders the brand mark beside the wordmark', () => {
+  const el = render();
+  expect(el.querySelector('.brand sb-icon')).not.toBeNull();
+  expect(el.querySelector('.brand')!.textContent).toContain('Bomeo');
+});
+
+it('renders the two-tone wordmark as two spans, not one coloured string', () => {
+  expect(render().querySelectorAll('.brand .word span').length).toBe(2);
+});
+
+it('renders the rail tagline', () => {
+  expect(render().querySelector('.rail-tagline')!.textContent)
+    .toContain('Trade smarter. Build further.');
+});
+
+it('keeps the mark and drops the words when the rail is collapsed', () => {
+  const el = render({ collapsed: true });
+  expect(el.querySelector('.brand sb-icon')).not.toBeNull();
+  expect(el.querySelector('.brand .word')).toBeNull();
+});
+```
+
+Use the spec's existing `render` helper and its existing way of driving the
+collapsed rail; do not add a second mechanism.
+
+- [ ] **Step 2: Run it to make sure it fails**
+
+```bash
+cd frontend && npx ng test --include src/app/shell/shell.spec.ts
+```
+
+Expected: FAIL on the four new assertions.
+
+- [ ] **Step 3: Add the icon**
+
+In `ui/icon.ts`, add a `brand` entry to the registry alongside the existing
+ones, authored on the same 16×16 viewBox at `stroke-width="1.5"` with
+`stroke="currentColor"` and `fill="none"`. Keep it to two or three path
+commands — at 24px, detail is noise.
+
+- [ ] **Step 4: Render the wordmark and tagline**
+
+In `shell.html`, the brand block is the mark, then
+`<span class="word"><span>Bomeo</span><span>Capital</span></span>`; the second
+span takes `--accent`. Below the nav list, add
+`<p class="rail-tagline">Trade smarter. Build further.</p>`. In `shell.css`,
+hide `.word` and `.rail-tagline` in the collapsed-rail state — the mark stays.
+
+- [ ] **Step 5: Update the manifest**
+
+In `frontend/public/manifest.webmanifest`, set `name` and `short_name` to match
+the wordmark. Leave the icons as they are; replacing them is not this task.
+
+- [ ] **Step 6: Run the spec and confirm it passes**
+
+```bash
+cd frontend && npx ng test --include src/app/shell/shell.spec.ts
+cd frontend && npx ng test --include src/app/ui/icon.spec.ts
+```
+
+Expected: both PASS.
+
+- [ ] **Step 7: Screenshot both rail states**
+
+Screenshot `/dashboard` at 1440px with the rail expanded and collapsed.
+Confirm the mark reads at rail size, the two-tone wordmark is legible, and the
+tagline sits above the version block rather than displacing it.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add frontend/src/app/ui/icon.ts frontend/src/app/shell/shell.html frontend/src/app/shell/shell.css frontend/src/app/shell/shell.spec.ts frontend/public/manifest.webmanifest
+git commit -m "feat(shell): brand mark, two-tone wordmark and rail tagline (v85 D3)"
 ```
