@@ -567,6 +567,14 @@ FIELDS: list[Field] = [
           help="Consecutive 60s extended-hours polls that must confirm a stop/target breach "
                "before closing -- guards against a single thin premarket/after-hours print "
                "(see v64's Divergence B) triggering a close a liquid market never would have."),
+    Field("TRAIL_NOTIFY_MIN_R", "TRAIL_NOTIFY_MIN_R", "Plan Engine v2",
+          "Stop-move ping threshold (R)", type="float", default="0.25",
+          min=0.01, max=1.0, step=0.05,
+          help="The execution feed (simple-alerts channel) sends MOVE STOP once a plan's "
+               "resting stop has moved at least this many R -- of the plan's initial risk -- "
+               "from the stop last delivered. Values outside 0.01-1 are clamped: break-even "
+               "is a 1R move, so a threshold above 1 would stop a failed break-even ping "
+               "from ever being re-sent."),
 
     # --- Data sources (optional external market-data APIs) ---
     Field("FMP_API_KEY", "FMP_API_KEY", "Data Sources", "Financial Modeling Prep API key",

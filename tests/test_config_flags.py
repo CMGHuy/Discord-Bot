@@ -87,3 +87,16 @@ def test_health_config_fields_exist_with_documented_defaults():
     keys = {f.key for f in config.FIELDS}
     assert "DISCORD_CHANNEL_OPS_ID" in keys
     assert "HEALTH_ALERT_AFTER_FAILURES" in keys
+
+
+def test_v81_trail_notify_min_r_field_exists_with_documented_default():
+    """v81: the execution feed pings MOVE STOP once the resting stop has moved
+    this many R from the stop last delivered."""
+    by_key = {f.key: f for f in config.FIELDS}
+    field = by_key["TRAIL_NOTIFY_MIN_R"]
+
+    assert field.default == "0.25"
+    assert field.type == "float"
+    assert (field.min, field.max) == (0.01, 1.0)
+    assert field.section == "Plan Engine v2"
+    assert isinstance(config.TRAIL_NOTIFY_MIN_R, float)
