@@ -18,19 +18,12 @@ partial fills, or gaps beyond what the daily bar shows.
 import os
 import secrets
 import string
-from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from threading import Lock
 
 # Full alphanumeric charset (62 chars: 0-9, a-z, A-Z) trade ids are drawn
 # from -- see log_trade() below.
 _TRADE_ID_ALPHABET = string.ascii_letters + string.digits
-
-try:
-    from zoneinfo import ZoneInfo as _ZoneInfo
-    _BERLIN_TZ = _ZoneInfo("Europe/Berlin")
-except Exception:
-    _BERLIN_TZ = None
 
 from swingbot import config
 from swingbot.core.planning import account as account_module
@@ -623,8 +616,11 @@ class TradeLog:
         except Exception:
             # Account bookkeeping must never prevent the trade itself from
             # closing -- worst case the account balance simply doesn't
-            # reflect this one trade yet.
-            pass
+            # reflect this one trade yet. Logged, though: a silent miss here
+            # leaves the balance wrong with nothing to say why.
+            import logging
+            logging.getLogger("swing-bot.performance").warning(
+                "account settlement failed for trade %s", t.get("id"), exc_info=True)
 
     def update_open_trades(self, ticker: str, df, live_price: float | None = None) -> list:
         """
@@ -1104,8 +1100,8 @@ class TradeLog:
 
     def delete_trade(self, trade_id: str) -> bool:
         """Remove a single trade record by id. Returns True if something was deleted."""
-        before = len(self._trades)
         with _LOCK:
+            before = len(self._trades)
             self._trades = [t for t in self._trades if t["id"] != trade_id]
             deleted = len(self._trades) != before
             if deleted:
@@ -1385,213 +1381,3 @@ class TradeLog:
         if newly_closed:
             _refresh_snapshot_safely()
         return newly_closed
-
-    def get_detailed_stats(self) -> dict:
-        """
-        Performance breakdowns by ticker, strategy, and day-of-week (Berlin time).
-        Only win/loss trades (SL or TP actually hit) are included.
-        """
-        self.refresh()
-        closed = [t for t in self._trades if t["status"] in ("win", "loss")]
-
-        # closed_pnl_pct (module-level, above) rather than a plain
-        # (exit_price - entry) calc: a scaled-out (v2 two-leg) win trade's
-        # exit_price is only the runner leg's own exit, so pricing a %
-        # off it alone silently dropped the TP1 leg's contribution to
-        # these avg_pnl breakdowns.
-        _pnl_pct = closed_pnl_pct
-
-        def _closed_dow(t):
-            _DOW = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-            try:
-                dt = datetime.fromisoformat(t.get("closed_at", ""))
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                if _BERLIN_TZ:
-                    dt = dt.astimezone(_BERLIN_TZ)
-                return _DOW[dt.weekday()]
-            except Exception:
-                return None
-
-        def _build(grouped):
-            rows = []
-            for key, trades in grouped.items():
-                wins = [t for t in trades if t["status"] == "win"]
-                pnls = [p for t in trades if (p := _pnl_pct(t)) is not None]
-                rows.append({
-                    "key": key,
-                    "total": len(trades),
-                    "wins": len(wins),
-                    "losses": len(trades) - len(wins),
-                    "win_rate": round(len(wins) / len(trades) * 100) if trades else None,
-                    "avg_pnl": round(sum(pnls) / len(pnls), 2) if pnls else None,
-                })
-            return rows
-
-        by_ticker = defaultdict(list)
-        by_strategy = defaultdict(list)
-        by_dow_raw = defaultdict(list)
-        _DOW_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-
-        for t in closed:
-            by_ticker[t["ticker"]].append(t)
-            # See primary_strategy_label's docstring: t["strategy"] itself is
-            # a fixed placeholder on every trade the live engine logs, so
-            # grouping by it directly would put every closed trade in one
-            # bucket instead of breaking down by what actually confirmed it.
-            by_strategy[primary_strategy_label(t)].append(t)
-            dow = _closed_dow(t)
-            if dow:
-                by_dow_raw[dow].append(t)
-
-        ticker_rows = sorted(_build(by_ticker), key=lambda r: r["total"], reverse=True)
-        strategy_rows = sorted(_build(by_strategy), key=lambda r: r["total"], reverse=True)
-        dow_rows = sorted(_build(by_dow_raw), key=lambda r: _DOW_ORDER.index(r["key"]))
-
-        total_wins = len([t for t in closed if t["status"] == "win"])
-        all_pnls = [p for t in closed if (p := _pnl_pct(t)) is not None]
-        return {
-            "total_closed": len(closed),
-            "total_wins": total_wins,
-            "total_losses": len(closed) - total_wins,
-            "overall_win_rate": round(total_wins / len(closed) * 100) if closed else None,
-            "overall_avg_pnl": round(sum(all_pnls) / len(all_pnls), 2) if all_pnls else None,
-            "by_ticker": ticker_rows,
-            "by_strategy": strategy_rows,
-            "by_dow": dow_rows,
-        }
-
-    def get_chart_data(self) -> dict:
-        """
-        Returns per-trade data for the JS-rendered performance analytics page.
-
-        Includes:
-          - trades: list of closed trades with pnl_pct, holding_days, opened_at, etc.
-          - spy_cum: {date_str: cumulative_%_return} from first trade's open date,
-                     for benchmark overlay. Empty dict if yfinance is unavailable.
-        """
-        self.refresh()
-        closed = sorted(
-            [t for t in self._trades if t["status"] in ("win", "loss")],
-            key=lambda t: t.get("closed_at") or "",
-        )
-
-        trades_out = []
-        for t in closed:
-            try:
-                entry = float(t.get("entry") or 0)
-            except (TypeError, ValueError):
-                entry = 0.0
-            try:
-                exit_p = float(t.get("exit_price") or 0)
-            except (TypeError, ValueError):
-                exit_p = 0.0
-
-            # closed_pnl_pct (module-level, above), not a plain (exit_price -
-            # entry) calc: a scaled-out (v2 two-leg) win trade's exit_price
-            # is only the runner leg's own exit, so pricing a % off it alone
-            # silently dropped the TP1 leg's contribution -- which then fed
-            # a wrong r_multiple below too (pnl_pct / risk_pct).
-            pnl_pct = closed_pnl_pct(t)
-
-            opened_at = t.get("opened_at") or ""
-            closed_at = t.get("closed_at") or ""
-            holding_days = None
-            try:
-                if opened_at and closed_at:
-                    oa = datetime.fromisoformat(opened_at)
-                    ca = datetime.fromisoformat(closed_at)
-                    holding_days = round((ca - oa).total_seconds() / 86400, 2)
-            except Exception:
-                pass
-
-            # R-multiple = actual P&L / originally-planned risk (entry -> stop
-            # loss), so a "+2.4R" win reads as "2.4x what I was risking" --
-            # comparable across trades with very different stop distances,
-            # unlike raw pnl_pct alone.
-            try:
-                stop_loss = float(t.get("stop_loss") or 0)
-            except (TypeError, ValueError):
-                stop_loss = 0.0
-            r_multiple = None
-            if entry > 0 and stop_loss > 0 and pnl_pct is not None:
-                risk_pct = abs(entry - stop_loss) / entry * 100
-                if risk_pct > 0:
-                    r_multiple = round(pnl_pct / risk_pct, 3)
-
-            trades_out.append({
-                "id":           t.get("id"),
-                "ticker":       t.get("ticker", ""),
-                "direction":    t.get("direction", ""),
-                "horizon_key":  t.get("horizon_key") or "",
-                "entry":        entry,
-                "exit_price":   exit_p,
-                "stop_loss":    stop_loss or None,
-                "pnl_pct":      pnl_pct,
-                "r_multiple":   r_multiple,
-                "status":       t.get("status", ""),
-                "opened_at":    opened_at,
-                "closed_at":    closed_at,
-                "holding_days": holding_days,
-                # The REAL confirming method (see primary_strategy_label), not
-                # the raw t["strategy"] field -- which is the same hardcoded
-                # "S/R Confluence" default on every trade the live engine
-                # logs and would otherwise make every row here look identical.
-                "strategy":     primary_strategy_label(t),
-                # Bug fix: this used to read t.get("confidence"), a key that
-                # doesn't exist on a trade record (the real field is
-                # "confidence_level") -- every trade silently fell back to 0
-                # and showed as "Lv0" everywhere on this page.
-                "confidence":   int(t.get("confidence_level") or 0),
-                # Position-size snapshot (see account.py) and this trade's
-                # real currency effect on the account -- None for anything
-                # closed before this feature existed, or that never got a
-                # valid sizing snapshot at open time.
-                "shares":               t.get("shares"),
-                "position_value":       t.get("position_value"),
-                "sizing_mode":          t.get("sizing_mode"),
-                "realized_pnl_amount":  t.get("realized_pnl_amount"),
-                "account_balance_after": t.get("account_balance_after"),
-            })
-
-        # SPY benchmark: cumulative % return from the first trade's open date.
-        # Silently skipped if yfinance is unavailable or there are no trades.
-        spy_cum: dict = {}
-        if trades_out:
-            try:
-                import yfinance as yf  # already in requirements.txt
-                start_date = min(
-                    t["opened_at"][:10] for t in trades_out if t["opened_at"]
-                )
-                spy_df = yf.download(
-                    "SPY", start=start_date, progress=False, auto_adjust=True
-                )
-                if spy_df is not None and not spy_df.empty:
-                    closes = spy_df["Close"].dropna()
-                    base = float(closes.iloc[0])
-                    if base > 0:
-                        spy_cum = {
-                            str(idx.date()): round((float(val) - base) / base * 100, 3)
-                            for idx, val in closes.items()
-                        }
-            except Exception:
-                pass
-
-        # Real account balance over time -- the currency-based counterpart
-        # to the %-based equity curve above, built from the actual
-        # settlements applied by _settle_account_balance() (plus any manual
-        # `!account balance` overrides), not re-derived from trades_out --
-        # it's the account's own ground truth, including anything that
-        # happened outside the trade log (a manual override, a trade closed
-        # before this feature existed and so never settled anything).
-        account_cfg = account_module.load_account_config()
-
-        return {
-            "trades":  trades_out,
-            "spy_cum": spy_cum,
-            "account_balance": account_cfg.get("balance"),
-            "balance_history": account_cfg.get("balance_history", []),
-            "sizing_mode": account_cfg.get("sizing_mode"),
-            "position_pct": account_cfg.get("position_pct"),
-            "risk_pct": account_cfg.get("risk_pct"),
-        }

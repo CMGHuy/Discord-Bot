@@ -362,10 +362,10 @@ def scan_duration_sparkline(durations: list, *, width: int = 220, height: int = 
 
 # _primary_strategy_label is now defined once, in core/performance.py (as
 # primary_strategy_label), and imported above under this same historical
-# name -- the admin Performance page (get_chart_data / get_detailed_stats)
-# needed the exact same "real confirming method, not the fixed placeholder
-# t['strategy']" logic this dashboard helper already had, so it moved to
-# the shared core layer instead of being duplicated a second time there.
+# name -- the old admin Performance page needed the exact same "real
+# confirming method, not the fixed placeholder t['strategy']" logic this
+# dashboard helper already had, so it moved to the shared core layer instead
+# of being duplicated a second time there.
 
 # ---------------------------------------------------------------------------
 # Version tracking (sidebar)
