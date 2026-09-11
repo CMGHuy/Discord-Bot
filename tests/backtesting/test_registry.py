@@ -22,7 +22,7 @@ def test_confluence_falls_back_to_strategy_badge():
     # (see primary_strategy_for/build_confluence_plan), so an exact
     # (confluence, <strategy>, ...) match was ALWAYS missing and used to fall
     # straight through to a hardcoded WEAK/n=0 default -- silently forfeiting
-    # the badge-quality points and the VALIDATED label for every live plan.
+    # the badge-quality points for every live plan.
     # get_badge now falls back to the strategy-source badge for that same
     # strategy name before giving up, since that's real OOS evidence about
     # this plan's primary confirming method.

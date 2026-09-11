@@ -31,13 +31,15 @@ def test_stop_inside_gap_noise_is_fragile():
 
 def test_earnings_blackout_window():
     from swingbot.core.edge.gates import in_earnings_blackout
-    assert in_earnings_blackout("NVDA", days=3, days_to_earnings_fn=lambda s: 2) is True
-    assert in_earnings_blackout("NVDA", days=3, days_to_earnings_fn=lambda s: 5) is False
-    assert in_earnings_blackout("NVDA", days=3, days_to_earnings_fn=lambda s: None) is False
-    assert in_earnings_blackout("NVDA", days=0, days_to_earnings_fn=lambda s: 1) is False  # off
+    at = lambda distance: lambda symbol, now: distance
+    assert in_earnings_blackout("NVDA", sessions=3, sessions_to_reaction_fn=at(1)) is True
+    assert in_earnings_blackout("NVDA", sessions=3, sessions_to_reaction_fn=at(3)) is True
+    assert in_earnings_blackout("NVDA", sessions=3, sessions_to_reaction_fn=at(4)) is False
+    assert in_earnings_blackout("NVDA", sessions=3, sessions_to_reaction_fn=at(0)) is False
+    assert in_earnings_blackout("NVDA", sessions=0, sessions_to_reaction_fn=at(1)) is False
 
 
 def test_earnings_blackout_etf_exempt():
     from swingbot.core.edge.gates import in_earnings_blackout
     # default source is ETF-exempt (E14 returns None) -> never blacked out
-    assert in_earnings_blackout("SPY", days=5) is False
+    assert in_earnings_blackout("SPY", sessions=5) is False

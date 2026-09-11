@@ -280,7 +280,12 @@ def ema_cross_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["EMA Crossover"] = ema_cross_entries
 
 
-DEFAULT_PARAMS["VWAP"] = {"ext_pct": 1.5, "hold_bars_2w": 3, "hold_bars_other": 2}
+DEFAULT_PARAMS["VWAP"] = {
+    "ext_pct": 1.5, "hold_bars_2w": 3, "hold_bars_other": 2,
+    # v84 R14 fallback. None = gate off (the shipped default until its own
+    # TRAIN + fold check passes). Units: VWAP's 8-bar rise per ATR.
+    "min_vwap_slope_atr": None,
+}
 
 
 def vwap_entries(df, horizon_key, params=None):
@@ -300,6 +305,12 @@ def vwap_entries(df, horizon_key, params=None):
 
     vwap_up = vwap > vwap.shift(3)
     vwap_down = vwap < vwap.shift(3)
+    slope_min = p.get("min_vwap_slope_atr")
+    if slope_min is not None:
+        atr14 = g["atr14"]
+        slope = (vwap - vwap.shift(8)) / atr14.replace(0, np.nan)
+        vwap_up = vwap_up & (slope >= slope_min)
+        vwap_down = vwap_down & (slope <= -slope_min)
     ext = (close - vwap).abs() / vwap.replace(0, np.nan) * 100
     not_extended = ext <= p["ext_pct"]       # reclaim near value, don't chase
     rsi14 = g["rsi14"]
@@ -363,6 +374,9 @@ DEFAULT_PARAMS["MA Ribbon"] = {
     "ext_pct": 8.0,
     "min_width_pctile": None,
     "require_expanding": False,
+    # v84 rescue: fast/mid must sit on the correct side of slow for N
+    # consecutive bars ending at the crossover. 1 = off (same-bar firing).
+    "confirm_bars": 1,
 }
 
 
@@ -392,6 +406,22 @@ def ma_ribbon_entries(df, horizon_key, params=None):
                & g["bear_regime"] & g["trend50_bear"]
                & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
 
+    # --- v84 rescue: temporal persistence of the alignment ---
+    # Distinct axis from the closed width grid below: width measures how far
+    # apart the ribbon is right now; this measures how long the ordering has
+    # held. Targets whipsaw false-starts, not narrow ribbons.
+    from swingbot import config
+    confirm = int(params.get("confirm_bars") if params and "confirm_bars" in params
+                  else getattr(config, "MA_RIBBON_CONFIRM_BARS", None)
+                  or p["confirm_bars"])
+    if confirm > 1:
+        above_slow = (fast > slow_sma) & (mid > slow_sma)
+        below_slow = (fast < slow_sma) & (mid < slow_sma)
+        held_up = (above_slow.rolling(confirm).sum() == confirm).fillna(False)
+        held_dn = (below_slow.rolling(confirm).sum() == confirm).fillna(False)
+        bullish &= held_up
+        bearish &= held_dn
+
     # --- rescue gate (Task 101): only trade an EXPANDING ribbon ---
     min_wp = p.get("min_width_pctile")
     req_exp = p.get("require_expanding")
@@ -413,7 +443,12 @@ def ma_ribbon_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["MA Ribbon"] = ma_ribbon_entries
 
 
-DEFAULT_PARAMS["Support/Resistance"] = {"base_atr": 4.0, "close_frac": 0.4, "gap_pct": 3.0}
+DEFAULT_PARAMS["Support/Resistance"] = {"base_atr": 4.0, "close_frac": 0.4,
+                                        "gap_pct": 3.0,
+                                        # v84 rescue: the broken level must
+                                        # have been tested and rejected this
+                                        # many times first. 0 = off.
+                                        "min_level_touches": 0}
 
 
 def support_resistance_entries(df, horizon_key, params=None):
@@ -449,6 +484,28 @@ def support_resistance_entries(df, horizon_key, params=None):
     bearish = (crossed_down & volume_confirmed & base_tight & strong_close_bear & no_gap_bear
                & g["bear_regime"] & g["trend50_bear"]
                & g["atr_floor"] & g["atr_calm"]).fillna(False)
+
+    # --- v84 rescue: level-touch significance, as a PRE-ENTRY gate ---
+    # Adjacency declared: the closed LEVEL_TOUCH_STRENGTH (v36) used touch
+    # count as a post-selection tiebreak between target candidates and
+    # measured net-negative. This is the same signal at a different pipeline
+    # point -- gating which setups fire at all. Different mechanism, and the
+    # results doc says so explicitly.
+    from swingbot import config
+    min_touches = int(params.get("min_level_touches") if params and
+                      "min_level_touches" in params
+                      else getattr(config, "SR_MIN_LEVEL_TOUCHES", None)
+                      or p["min_level_touches"])
+    if min_touches > 0:
+        near = 0.5 * g["atr14"]
+        # approached the level and closed back on the wrong side of it
+        rejected_res = ((high >= resistance - near) & (close < resistance))
+        rejected_sup = ((low <= support + near) & (close > support))
+        touches_res = rejected_res.rolling(lookback).sum().shift(1)
+        touches_sup = rejected_sup.rolling(lookback).sum().shift(1)
+        bullish &= (touches_res >= min_touches).fillna(False)
+        bearish &= (touches_sup >= min_touches).fillna(False)
+
     return bullish, bearish
 
 
@@ -574,7 +631,11 @@ DEFAULT_PARAMS["RSI Divergence"] = {"rsi_reclaim": 45,
                                     # rescue gate (Task 98) -- off until the
                                     # train grid (Task 99) adopts winners
                                     "min_volume_ratio": None,
-                                    "min_reclaim_strength": None}
+                                    "min_reclaim_strength": None,
+                                    # v84 rescue: RSI must move in the trade
+                                    # direction for N consecutive bars, not
+                                    # the single uptick below. 1 = off.
+                                    "min_consecutive_rsi_turn": 1}
 
 
 def rsi_divergence_entries(df, horizon_key, params=None):
@@ -593,8 +654,19 @@ def rsi_divergence_entries(df, horizon_key, params=None):
     price_lh = close < close.rolling(lb).max().shift(lb)
     rsi_hh = rsi14 > rsi14.rolling(lb).max().shift(lb)
 
-    turn_bull = (rsi14 > reclaim) & (rsi14 > rsi14.shift(1))
-    turn_bear = (rsi14 < (100 - reclaim)) & (rsi14 < rsi14.shift(1))
+    from swingbot import config
+    min_turn = int(params.get("min_consecutive_rsi_turn") if params and
+                   "min_consecutive_rsi_turn" in params
+                   else getattr(config, "RSI_DIV_MIN_CONSECUTIVE_TURN", None)
+                   or p["min_consecutive_rsi_turn"])
+    min_turn = max(1, min_turn)
+    rising = rsi14 > rsi14.shift(1)
+    falling = rsi14 < rsi14.shift(1)
+    if min_turn > 1:
+        rising = (rising.rolling(min_turn).sum() == min_turn)
+        falling = (falling.rolling(min_turn).sum() == min_turn)
+    turn_bull = (rsi14 > reclaim) & rising.fillna(False)
+    turn_bear = (rsi14 < (100 - reclaim)) & falling.fillna(False)
 
     bullish = (price_hl & rsi_ll & turn_bull & rsi14.between(28, 52)
                & g["bull_regime"] & g["trend50_bull"]

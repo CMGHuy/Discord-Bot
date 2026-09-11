@@ -3,8 +3,6 @@
 always flag-gated and fold-validated before it can touch live behavior."""
 from __future__ import annotations
 
-import datetime as dt
-
 import numpy as np
 import pandas as pd
 
@@ -29,19 +27,16 @@ def stop_beyond_gap_noise(stop_distance_pct: float, gap_p90_pct: float,
     return stop_distance_pct >= cushion * gap_p90_pct
 
 
-def _default_days_to_earnings(symbol: str):
-    from swingbot.core.market import events
-    next_date = events.get_next_earnings_date(symbol)
-    if next_date is None:
-        return None
-    return (next_date - dt.date.today()).days
+def _live_sessions_to_reaction(symbol: str, now) -> int | None:
+    from swingbot.core.market import earnings_calendar
+    from swingbot.core.market.session import now_et
+    return earnings_calendar.sessions_to_reaction(symbol, now_et(now).date(), source=earnings_calendar.LiveSource())
 
 
-def in_earnings_blackout(symbol: str, now=None, days: int | None = None,
-                         days_to_earnings_fn=None) -> bool:
-    window = days if days is not None else getattr(config, "EARNINGS_BLACKOUT_DAYS", 0)
+def in_earnings_blackout(symbol: str, now=None, sessions: int | None = None,
+                         sessions_to_reaction_fn=None) -> bool:
+    from swingbot.core.market.earnings_calendar import is_exposed
+    window = sessions if sessions is not None else getattr(config, "EARNINGS_BLACKOUT_SESSIONS", 0)
     if window <= 0:
         return False
-    fn = days_to_earnings_fn or _default_days_to_earnings
-    dte = fn(symbol)
-    return dte is not None and 0 <= dte < window
+    return is_exposed((sessions_to_reaction_fn or _live_sessions_to_reaction)(symbol, now), window)

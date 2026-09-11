@@ -277,7 +277,129 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         # ranks the whole set at once -- scoring one plan in isolation here
         # would mean loading every other plan per row.
         "follow_score": None,
+        # v79 -- which row this is out of how many, when a scaled-out
+        # position has been split into one row per leg. See
+        # `_expand_plan_row`. 0/1 for a row that hasn't been split.
+        "leg_index": 0,
+        "leg_total": 1,
     }
+
+
+def _leg_closed_at(plan: dict, trade: dict | None, leg: dict,
+                   leg_index: int) -> str | None:
+    """A leg's own close time, falling back to the plan's status_history
+    for data predating v79's per-leg `closed_at` stamp (Task 1). Legs are
+    normally appended in the order their transitions happen -- leg 0 the
+    TP1 leg (the transition into PARTIAL), any later leg the runner's own
+    close (the transition into CLOSED) -- so the positional match holds
+    for every shape written by the plan manager, but it is still a match
+    on ordering rather than on an identifier the leg carries.
+
+    When no history entry matches either, fall back to when the POSITION
+    reached its terminal state (`_terminal_at`) before the plan's own
+    `created_at`. `created_at` predates every fill, so a row stamped with
+    it is scored against the wrong day: `_in_today_scope` would drop a
+    leg that closed today out of the Dashboard's Today/CLOSED scope.
+    It stays only as the true last resort, for a row with no other date."""
+    if leg.get("closed_at"):
+        return leg["closed_at"]
+    history = plan.get("status_history") or []
+    wanted_status = "PARTIAL" if leg_index == 0 else "CLOSED"
+    for entry in history:
+        if entry.get("status") == wanted_status:
+            return entry.get("at")
+    return _terminal_at(plan, trade) or plan.get("created_at")
+
+
+def _leg_outcome(entry: float | None, exit_price: float | None, is_bull: bool,
+                  r: float | None) -> str:
+    """Win/loss for one leg. The leg's own `r` is authoritative (the plan's
+    Global Constraint: a leg's outcome is the sign of its own r) -- but a
+    leg appended without one (`_check_bar_active`'s stop-out mirror path,
+    plan_manager.py, appends a leg with no `r` key in some shapes) must NOT
+    silently read as a win. Fall back to the sign of the realized move
+    itself, in the same entry/exit/direction convention the rest of this
+    row uses (see `realized_pnl_amount` above); only if even that is
+    unavailable does this default to "win", same as before."""
+    if r is not None:
+        return "win" if r >= 0 else "loss"
+    if entry is not None and exit_price is not None:
+        diff = (exit_price - entry) * (1 if is_bull else -1)
+        return "win" if diff >= 0 else "loss"
+    return "win"
+
+
+def _row_from_leg(plan: dict, trade: dict, leg: dict, leg_index: int, noted: set) -> dict:
+    """One row for a single REALIZED leg of a scaled-out plan's position --
+    the TP1 leg (leg_index 0) or the runner leg (leg_index 1). Built from
+    _row_from_plan's row (so every other field -- ticker, strategy, badge,
+    quality_score, ... -- stays identical to what the whole-position row
+    already carried) with overrides for what actually happened on just
+    this leg."""
+    row = _row_from_plan(plan, trade, noted)
+    entry = plan.get("entry_price")
+    is_bull = plan.get("direction") == "bullish"
+    shares = (
+        round(trade["shares"] * leg.get("fraction", 0), 4)
+        if trade.get("shares") is not None else None
+    )
+    exit_price = leg.get("exit_price")
+    leg_r = leg.get("r")
+    closed_at = _leg_closed_at(plan, trade, leg, leg_index)
+    leg_trade = {"entry": entry, "exit_price": exit_price, "direction": plan.get("direction")}
+    row.update({
+        "status": "CLOSED",
+        "outcome": _leg_outcome(entry, exit_price, is_bull, leg_r),
+        "shares": shares,
+        "open_shares": None,
+        "exit_price": exit_price,
+        "realized_pnl_amount": (
+            round(shares * (exit_price - entry) * (1 if is_bull else -1), 2)
+            if shares is not None and entry is not None and exit_price is not None
+            else None
+        ),
+        "pnl_pct": dash.closed_pnl(leg_trade),
+        # The leg's own `r` is the source of truth (the plan's Global
+        # Constraint) -- NOT a recomputation through `dash.closed_r`, which
+        # needs a `stop_loss` this synthetic leg_trade dict doesn't carry
+        # and would silently return None for every scaled-out leg.
+        "r_multiple": leg_r,
+        "banked_fraction": None,
+        "banked_exit_price": None,
+        "banked_r": None,
+        "closed_at": closed_at,
+        # The leg's OWN holding period -- from the position's open to this
+        # leg's own close, not the whole position's span (`_row_from_plan`'s
+        # inherited `held_hours` measures the trade's overall opened_at ->
+        # closed_at, and on a still-open PARTIAL that end is "now", which
+        # would make an already-closed leg's row keep growing every refresh).
+        "held_hours": _held_hours(row.get("opened_at"), closed_at),
+        "today": _in_today_scope("CLOSED", closed_at),
+        "leg_index": leg_index,
+    })
+    return row
+
+
+def _expand_plan_row(plan: dict, trade: dict | None, noted: set) -> list[dict]:
+    """Split a scaled-out plan's position into one row per realized leg,
+    plus (if the runner is still open) one more row for the remainder --
+    v79's leg-accurate Trades table. A plan that never scaled out returns
+    exactly the one row _row_from_plan already built, unchanged."""
+    legs = plan.get("legs_realized") or []
+    if not legs:
+        return [_row_from_plan(plan, trade, noted)]
+
+    t = trade or {}
+    still_open = plan.get("status") != "CLOSED"
+    total = len(legs) + (1 if still_open else 0)
+    rows = [_row_from_leg(plan, t, leg, i, noted) for i, leg in enumerate(legs)]
+    if still_open:
+        remainder = _row_from_plan(plan, trade, noted)
+        remainder["leg_index"] = len(legs)
+        rows.append(remainder)
+    for row in rows:
+        row["leg_total"] = total
+    return rows
 
 
 def _row_from_trade(t: dict, noted: set) -> dict:
@@ -346,6 +468,9 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "created_at": t.get("opened_at"),
         "trigger_price": None,
         "follow_score": None,
+        # v79 -- a legacy trade never scales out, so it is never split.
+        "leg_index": 0,
+        "leg_total": 1,
     }
 
 
@@ -435,7 +560,9 @@ def build_rows() -> list[dict]:
         if pid:
             by_plan_id[pid] = t
 
-    rows = [_row_from_plan(p, by_plan_id.get(p.get("plan_id")), noted) for p in plans]
+    rows = []
+    for p in plans:
+        rows.extend(_expand_plan_row(p, by_plan_id.get(p.get("plan_id")), noted))
     _attach_follow_scores(rows, plans)
 
     # Anything no plan claimed. Structural: a trade cannot be emitted twice
@@ -782,25 +909,43 @@ def _attach_unrealized_pnl(rows: list[dict]) -> None:
     `list_trades`) -- popping here would make the second pass recompute from
     an empty/missing fallback and silently overwrite the first pass's real
     numbers. `_strip_internal_fields` removes both once, at the very end.
+
+    Sets transient `_display_shares` when a row has realized a leg; this is
+    applied to the public `shares` field exactly once by `_strip_internal_fields`
+    to avoid overwriting the original value before all P&L calculations complete.
     """
     for row in rows:
         if row["status"] in _TERMINAL or row["status"] == "PENDING":
             continue
         price = row.get("current_price")
         entry, direction = row.get("entry"), row.get("direction")
-        if price is None or entry is None:
-            continue
-        row["pnl_pct"] = dash.unrealized_pnl(entry, direction, price)
-        row["r_multiple"] = dash.unrealized_r(entry, row.get("_risk_stop"), direction, price)
-        row["realized_pnl_amount"] = dash.unrealized_pnl_amount(
-            entry, direction, row.get("shares"), row.get("_legs"), price)
+        if price is not None and entry is not None:
+            row["pnl_pct"] = dash.unrealized_pnl(entry, direction, price)
+            row["r_multiple"] = dash.unrealized_r(entry, row.get("_risk_stop"), direction, price)
+            row["realized_pnl_amount"] = dash.unrealized_pnl_amount(
+                entry, direction, row.get("shares"), row.get("_legs"), price)
+        # Store the display value in a transient field; apply it exactly once
+        # in _strip_internal_fields after all passes are complete.
+        if row.get("open_shares") is not None:
+            row["_display_shares"] = row["open_shares"]
 
 
 def _strip_internal_fields(rows: list[dict]) -> None:
-    """Drop the transient `_legs`/`_risk_stop` keys `_attach_unrealized_pnl`
-    reads -- must run exactly once, after every other row transform, so
-    neither leaks onto the wire and breaks the row's declared shape."""
+    """Drop the transient `_legs`/`_risk_stop`/`_display_shares` keys --
+    must run exactly once, after every other row transform, so neither leaks
+    onto the wire and breaks the row's declared shape.
+
+    Applies `_display_shares` to the public `shares` field for partially-realized
+    rows (v79), showing the true remaining share count instead of the original
+    size. This override happens exactly once here, after all possible passes of
+    `_attach_unrealized_pnl` are complete, so the original `shares` value is
+    preserved for each P&L calculation pass.
+    """
     for row in rows:
+        if "_display_shares" in row:
+            row["shares"] = row.pop("_display_shares")
+        else:
+            row.pop("_display_shares", None)
         row.pop("_legs", None)
         row.pop("_risk_stop", None)
 

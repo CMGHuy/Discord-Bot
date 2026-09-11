@@ -517,7 +517,7 @@ export class Trades {
   protected readonly defaultColumns = computed(() =>
     this.density() === 'full' ? FULL_COLUMNS : COMPACT_COLUMNS,
   );
-  protected readonly rowKey = (row: TradeRow) => row.id;
+  protected readonly rowKey = (row: TradeRow) => `${row.id}:${row.leg_index}`;
 
   protected readonly directionOptions = [
     { value: 'bullish', label: 'Long' },

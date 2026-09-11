@@ -28,7 +28,7 @@ class ScanParams:
     unified_confidence: bool
     dedup_tolerance_pct: float
     max_alerts_per_scan: int
-    earnings_blackout_days: int
+    earnings_blackout_sessions: int
     rs_gate: bool
     rs_leader_percentile: float
     rs_laggard_percentile: float
@@ -59,6 +59,10 @@ class ScanParams:
     slippage_bps: float
     commission_per_trade: float
     commission_risk_basis: str
+    rsi_div_min_consecutive_turn: int
+    ma_ribbon_confirm_bars: int
+    sr_min_level_touches: int
+    fib_target_1_0_extension: bool
 
     @classmethod
     def from_config(cls) -> "ScanParams":
@@ -73,7 +77,7 @@ class ScanParams:
             unified_confidence=config.UNIFIED_CONFIDENCE,
             dedup_tolerance_pct=config.DEDUP_TOLERANCE_PCT,
             max_alerts_per_scan=config.MAX_ALERTS_PER_SCAN,
-            earnings_blackout_days=config.EARNINGS_BLACKOUT_DAYS,
+            earnings_blackout_sessions=config.EARNINGS_BLACKOUT_SESSIONS,
             rs_gate=config.RS_GATE,
             rs_leader_percentile=config.RS_LEADER_PERCENTILE,
             rs_laggard_percentile=config.RS_LAGGARD_PERCENTILE,
@@ -104,4 +108,8 @@ class ScanParams:
             slippage_bps=config.SLIPPAGE_BPS,
             commission_per_trade=config.COMMISSION_PER_TRADE,
             commission_risk_basis=config.COMMISSION_RISK_BASIS,
+            rsi_div_min_consecutive_turn=config.RSI_DIV_MIN_CONSECUTIVE_TURN,
+            ma_ribbon_confirm_bars=config.MA_RIBBON_CONFIRM_BARS,
+            sr_min_level_touches=config.SR_MIN_LEVEL_TOUCHES,
+            fib_target_1_0_extension=config.FIB_TARGET_1_0_EXTENSION,
         )

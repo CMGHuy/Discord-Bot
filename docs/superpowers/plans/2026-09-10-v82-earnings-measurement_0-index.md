@@ -123,13 +123,13 @@ that change a task here:
 
 ## Progress
 
-- [ ] M1 — session calendar
-- [ ] M2 — earnings calendar
-- [ ] M3 — rename, frozen class, gate rewrite
-- [ ] M4 — measurement arithmetic
-- [ ] M5 — earnings-date fetch
-- [ ] M6 — instrument script
-- [ ] M7 — full suite, merge, release (ui patch)
+- [x] M1 — session calendar
+- [x] M2 — earnings calendar
+- [x] M3 — rename, frozen class, gate rewrite
+- [x] M4 — measurement arithmetic
+- [x] M5 — earnings-date fetch
+- [x] M6 — instrument script
+- [x] M7 — full suite, merge, release (ui patch)
 - [ ] M8 — earnings data and dry run
 - [ ] M9 — Run 1 (2018-06..2023-12)
 - [ ] M10 — Stage 1 selection

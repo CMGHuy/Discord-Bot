@@ -122,3 +122,5 @@ scripts/ops/ssh-hetzner.sh
 # header of the v49-v52 plans/specs it informed). Not this repo's code,
 # never committed.
 Vibe-Trading-main/
+# v82 earnings-blackout exposure tables (large, regenerable)
+data/v82/
