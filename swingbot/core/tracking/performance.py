@@ -58,6 +58,32 @@ def _journal_close_safely(trade: dict) -> None:
             "journal hook failed for trade %s", trade.get("id"), exc_info=True)
 
 
+def _close_linked_plan_safely(plan_id: str, reason: str) -> None:
+    """Close the v2 plan behind a trade row that was closed OUTSIDE the plan
+    manager (today: a reversal). The row is only half the position; left
+    alone, the plan stays open in plans.json and the manager keeps stepping
+    it. A PENDING plan (placeholder trade still awaiting its trigger) can only
+    cancel; ACTIVE/PARTIAL close. Lazy imports like the hooks around it, and,
+    like them, it must never break the trade close it follows."""
+    try:
+        from swingbot.core.planning.plan_engine import PlanStatus, record_transition
+        from swingbot.core.planning.plan_store import PlanStore
+        store = PlanStore()
+        plan = store.get(plan_id)
+        terminal = {PlanStatus.PENDING: PlanStatus.CANCELLED,
+                    PlanStatus.ACTIVE: PlanStatus.CLOSED,
+                    PlanStatus.PARTIAL: PlanStatus.CLOSED}.get(getattr(plan, "status", None))
+        if terminal is None:
+            return
+        record_transition(plan, terminal, reason=reason,
+                          at=datetime.now(timezone.utc).isoformat())
+        store.update(plan)
+    except Exception:
+        import logging
+        logging.getLogger("swing-bot.performance").warning(
+            "could not close plan %s after its trade closed", plan_id, exc_info=True)
+
+
 def _refresh_snapshot_safely() -> None:
     try:
         from swingbot.core.analytics.snapshots import refresh_snapshot
@@ -921,6 +947,12 @@ class TradeLog:
         wins+losses only, and a reversal is neither. The reason keeps them
         filterable.
 
+        A plan-linked (v2) trade is realized the way close_trade_manual
+        realizes one: any runner remainder left after TP1 becomes its own leg
+        at `exit_price`, so settle_legs prices the whole position. Its plan is
+        then closed too (see _close_linked_plan_safely), or the plan manager
+        would keep managing a position that no longer exists.
+
         Returns the closed record, or None if the trade was not open (a
         parallel tick may have closed it first).
         """
@@ -928,8 +960,8 @@ class TradeLog:
         with _LOCK:
             for t in self._trades:
                 if t["id"] == trade_id and t["status"] == "open":
+                    _apply_exit_price(t, exit_price, reason="reversed")
                     t["status"] = "closed"
-                    t["exit_price"] = exit_price
                     t["closed_at"] = datetime.now(timezone.utc).isoformat()
                     t["close_reason"] = "reversed"
                     self._settle_account_balance(t)
@@ -937,6 +969,8 @@ class TradeLog:
                     self._save()
                     break
         if closed is not None:
+            if closed.get("plan_id"):
+                _close_linked_plan_safely(closed["plan_id"], reason="reversed")
             _journal_close_safely(closed)
             _refresh_snapshot_safely()
         return closed
