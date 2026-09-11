@@ -139,11 +139,11 @@
    it disappears on the collapsed rail where 52px has no room for it and the
    icons already group visually by their gaps. */
 .nav-group-label {
-  padding: var(--space-8) var(--space-10) var(--space-4);
-  color: var(--text-muted);
+  margin: var(--space-14) 0 var(--space-4) var(--space-10);
+  color: var(--text-faint);
   font-size: var(--text-micro);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
 }
 .railed .nav-group-label { display: none; }
 
@@ -158,10 +158,12 @@
   display: flex;
   align-items: center;
   gap: var(--space-10);
-  padding: var(--space-6) var(--space-8);
-  border-radius: var(--radius);
+  padding: var(--space-8) var(--space-10);
+  border-left: 2px solid transparent;
+  border-radius: 0 var(--radius) var(--radius) 0;
   color: var(--text-secondary);
   font-size: var(--text-body);
+  text-decoration: none;
   transition: color var(--transition), background var(--transition);
 }
 
@@ -170,18 +172,16 @@
    this only has to say "do not shrink". */
 .nav a sb-icon { flex: none; }
 
-.nav a:hover {
-  color: var(--text);
-  text-decoration: none;
-  background: var(--surface-raised);
-}
+.nav a:hover { background: var(--surface-raised); color: var(--text); }
 
-/* Selection is interactive state, so it is allowed blue -- but as the text
-   colour and a rule, not a filled blue block, which would read as data. */
+/* An accent rail plus a background tint plus weight -- three cues, not
+   colour alone, so the active entry survives a monochrome or low-vision
+   reading. */
 .nav a.active {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
   color: var(--text);
-  background: var(--surface-raised);
-  box-shadow: inset 2px 0 0 var(--accent);
+  font-weight: 600;
 }
 
 
