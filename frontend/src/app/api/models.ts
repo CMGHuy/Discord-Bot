@@ -257,6 +257,7 @@ export interface Dashboard {
   avg_confidence: number | null;
   win_rate: number | null;
   expectancy_r: number | null;
+  payoff_ratio: number | null;
   equity_30d: EquitySeries;
   position_premium: Record<string, unknown>;
   /** SR53 — the five plan-lifecycle counts, keyed by status. Loosely typed

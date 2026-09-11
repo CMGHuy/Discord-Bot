@@ -109,6 +109,7 @@ export const DashboardStore = signalStore(
     avgConfidence: computed(() => data()?.avg_confidence ?? null),
     winRate: computed(() => data()?.win_rate ?? null),
     expectancyR: computed(() => data()?.expectancy_r ?? null),
+    payoffRatio: computed(() => data()?.payoff_ratio ?? null),
     equity30d: computed(() => data()?.equity_30d ?? null),
 
     /** The 30 balance points, as numbers the `Sparkline` can draw.

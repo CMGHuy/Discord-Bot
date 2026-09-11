@@ -12,7 +12,7 @@ chips. This endpoint returns exactly those nine:
 
     primary   account_balance · open_pnl_pct · risk_used_pct
     chips     open_trades · avg_confidence · win_rate · expectancy_r ·
-              equity_30d · position_premium
+              payoff_ratio · equity_30d · position_premium
 
 The six that moved to Analytics -- wins, losses, avg realised P&L, best
 trade, worst trade, avg holding period -- are deliberately NOT here. They
@@ -207,6 +207,9 @@ def dashboard():
         ),
         "win_rate": stats.get("win_rate"),
         "expectancy_r": stats.get("expectancy_r"),
+        # v85 D9. Beside expectancy deliberately: win rate and payoff ratio
+        # decompose it, so the three travel together.
+        "payoff_ratio": stats.get("payoff_ratio"),
         "equity_30d": _equity_30d(),
         "position_premium": dash.build_sizing_note(account_cfg),
         "lifecycle": _lifecycle_counts(mode),
