@@ -374,6 +374,9 @@ DEFAULT_PARAMS["MA Ribbon"] = {
     "ext_pct": 8.0,
     "min_width_pctile": None,
     "require_expanding": False,
+    # v84 rescue: fast/mid must sit on the correct side of slow for N
+    # consecutive bars ending at the crossover. 1 = off (same-bar firing).
+    "confirm_bars": 1,
 }
 
 
@@ -402,6 +405,22 @@ def ma_ribbon_entries(df, horizon_key, params=None):
     bearish = (crossed_down & slow_falling & not_ext_bear & (m["macd"] < 0)
                & g["bear_regime"] & g["trend50_bear"]
                & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+
+    # --- v84 rescue: temporal persistence of the alignment ---
+    # Distinct axis from the closed width grid below: width measures how far
+    # apart the ribbon is right now; this measures how long the ordering has
+    # held. Targets whipsaw false-starts, not narrow ribbons.
+    from swingbot import config
+    confirm = int(params.get("confirm_bars") if params and "confirm_bars" in params
+                  else getattr(config, "MA_RIBBON_CONFIRM_BARS", None)
+                  or p["confirm_bars"])
+    if confirm > 1:
+        above_slow = (fast > slow_sma) & (mid > slow_sma)
+        below_slow = (fast < slow_sma) & (mid < slow_sma)
+        held_up = (above_slow.rolling(confirm).sum() == confirm).fillna(False)
+        held_dn = (below_slow.rolling(confirm).sum() == confirm).fillna(False)
+        bullish &= held_up
+        bearish &= held_dn
 
     # --- rescue gate (Task 101): only trade an EXPANDING ribbon ---
     min_wp = p.get("min_width_pctile")
