@@ -50,8 +50,24 @@ These were verified in the code, not assumed. They constrain the design.
 5. **`TradeGroup` is used only by the Dashboard** (`dashboard.ts`, its own
    spec, and `trades.store.spec.ts`). Rebuilding the positions table as tabs
    does not reach the Trades workspace.
-6. **Row actions are already backed.** `closeTrade`, `cancelTrade`,
-   `deleteTrade`, `setTradeNote` all exist in `api-client.ts:121-149`.
+6. **Row actions are already backed — except delete.** `closeTrade`,
+   `cancelTrade`, `deleteTrade`, `setTradeNote` all exist in
+   `api-client.ts:121-149`. But `delete_trade` in `admin/api_v1/trade_commands.py`
+   **refuses plan-backed rows** with a 422 ("Plans cannot be deleted; cancel a
+   PENDING plan or close an active one") — deletion is for legacy trade records
+   only, and essentially every Dashboard row is plan-backed. Resolved in D13.
+8. **Every manual state change must notify the bot.** `close_trade` and
+   `cancel_trade` each append to `data/manual_close_notify.json` via
+   `_queue_notify`. The bot is a separate process and that file is the only way
+   it learns a human closed something; without it the Discord trade-history
+   channel goes quiet. Any bulk action inherits this obligation per position.
+9. **Closing needs no new pricing logic.** A plan-backed close is
+   `record_transition(plan, PlanStatus.CLOSED, reason="manual", at=…)` plus
+   `TradeLog.close_trade_manual()` on the linked legacy row. The current price
+   is resolved inside `close_trade_manual`.
+10. **Frontend tests are vitest** via `@angular/build:unit-test`. One spec runs
+    as `npx ng test --include <path>` from `frontend/` — verified, ~55s, exit 0.
+    `scripts/dev/testrun.py` is pytest only and does not run them.
 7. **Portfolio history is 30 daily points, not intraday.** `equity_30d` on the
    dashboard payload. The mockup's 09:00–17:00 curve has no backing series.
 
@@ -157,8 +173,16 @@ the tabbed rebuild. No capability regression; `dashboard.helpers.ts`'s
 now selecting per active tab rather than per rendered group.
 
 **D13 — Row actions and one bulk action.** The row `…` menu offers Close
-position, Cancel plan, Add/edit note, and Delete trade. Delete is destructive
-and gets a confirm dialog naming the trade (`ui/confirm-dialog.ts` exists).
+position, Cancel plan, and Add/edit note. **Delete is not offered**: Finding 6
+shows the backend refuses it for plan-backed rows by design, and a menu item
+that 422s on nearly every row it appears on is worse than no menu item.
+Legacy-row deletion stays reachable where it already lives. Adding
+`PlanStore.delete()` was rejected — a plan's CANCELLED/CLOSED states are the
+record of how it ended, which is the history this bot exists to keep.
+
+Each action's precondition mirrors the endpoint's: Close on ACTIVE/PARTIAL
+only, Cancel on PENDING only. An action that does not apply to a row is absent
+from that row's menu rather than present-and-failing.
 
 The mockup's "+ New Trade" is replaced by **Close all open/partial** — closing
 every ACTIVE and PARTIAL position at its current price, realising profit or
@@ -177,10 +201,14 @@ Putting a delete-the-book action one click from a close-the-book action is how
 the wrong one gets pressed.
 
 **D15 — Recent Activity is derived, not logged.** Position opened, position
-closed, and plan cancelled, from timestamps already on the trade rows. TP1-hit
-events are included **only if** a partial-exit timestamp actually exists on the
-row; if implementation finds none, they are dropped rather than dated by
-inference. No "system scan found N opportunities", no "price alert", no
+closed, and plan cancelled, from timestamps already on the trade rows.
+
+**TP1-hit events are dropped — resolved, not deferred.** `TradeRow` carries
+`banked_fraction`, `banked_exit_price` and `banked_r` but **no `banked_at`**;
+its only timestamps are `opened_at` and `closed_at`. A TP1 line would therefore
+have to be dated by inference, which this decision forbade in advance. Adding
+`banked_at` to the payload is a legitimate future change and is not in this
+plan's scope. No "system scan found N opportunities", no "price alert", no
 "strategy updated" — there is no backend event log and price alerts are not a
 concept this bot has.
 
@@ -193,13 +221,22 @@ concept this bot has.
   report — a client-side loop over N single-close calls leaves the book half
   closed when a connection drops, with nothing that says which half.
 
+  It reuses `close_trade`'s existing machinery per position rather than
+  reimplementing it (Finding 9), and **appends to the manual-close notify queue
+  for each position it closes** (Finding 8). A bulk close that skips the queue
+  closes the book silently as far as the bot and Discord are concerned.
+  One position failing must not abort the rest: the summary reports closed and
+  failed counts separately.
+
 **D17 — The bottom row is Recent Activity + Market Movers + Watchlist.**
 Watchlist (symbol / price / 1D %) is directly backed by tape data already
 fetched. Market Movers' Top Gainers and Top Losers are derivable by sorting
-that same data. **Most Active needs volume**; if the tape payload does not
-carry it, that sub-tab is dropped rather than filled with a proxy. This is the
-one open data question in the spec and it is answered by reading
-`tape.store.ts`'s payload during implementation, not by guessing now.
+that same data on `change_pct`.
+
+**Most Active is dropped — resolved, not deferred.** `TapeRow` is
+`{ symbol, price, change_pct, context_kind, context_label, sort_rank }`. There
+is no volume on it, and there is no other client-side source for one, so the
+sub-tab has no honest filling. Market Movers ships with two tabs, not three.
 
 **D18 — Explanatory copy moves behind affordances, and none of it is lost.**
 The "What appears here" qualifying-trades explainer, the share-count snapshot
