@@ -10,7 +10,7 @@
 export const ABSENT = '—';
 
 export function num(value: number | null | undefined, decimals = 2): string {
-  return value === null || value === undefined ? ABSENT : value.toFixed(decimals);
+  return value === null || value === undefined ? ABSENT : grouped(value, decimals);
 }
 
 /** Percentages carry an explicit sign, so a gain and a loss are told apart
