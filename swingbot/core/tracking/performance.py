@@ -812,21 +812,39 @@ class TradeLog:
             _refresh_snapshot_safely()
         return newly_closed
 
-    def get_stats(self, confidence_level: int = None, trades: list | None = None) -> dict:
+    def get_stats(self, confidence_level: int = None, trades: list | None = None,
+                  *, expand: bool = True) -> dict:
         """
         `trades`, if given, overrides the base trade set the stats are
         computed over (e.g. the dashboard's "Today" mode passing in just
         today's opened/closed trades instead of the whole history). Defaults
         to every trade on record, same as before this parameter existed.
+
+        `expand` (v79) decides whether a scaled-out position counts as its
+        own legs or as one blended outcome. The default -- each realized leg
+        is its own win/loss -- is what every REPORTING surface wants: that is
+        what actually happened. `expand=False` restores the pre-v79 one
+        outcome per position, and exists for exactly one consumer:
+        `analyze.py`'s `track_record`, feeding `score_confidence`'s
+        expectancy factor. That formula pays every counted win the scenario's
+        full reward:risk, and a TP1 leg banks roughly 1R -- so counting legs
+        there would overstate the empirical edge and silently re-tier live
+        alerts. Anything that only DISPLAYS or ranks results should keep the
+        default.
         """
         self.refresh()
         base = self._trades if trades is None else trades
         trades = base if confidence_level is None else [
             t for t in base if t["confidence_level"] == confidence_level
         ]
-        trades = [row for t in trades for row in expand_trade_legs(t)]
-        # "closed" = manually closed from admin UI (no SL/TP hit recorded);
-        # counted as closed for total/win-rate denominator but not as win or loss.
+        if expand:
+            trades = [row for t in trades for row in expand_trade_legs(t)]
+        # "closed" = manually closed from admin UI (no SL/TP hit recorded).
+        # It counts toward the total/win-rate denominator. Its own status is
+        # neither win nor loss, so a manual close with NO legs contributes no
+        # win and no loss -- but once expanded (the default), a scaled-out
+        # manual close's realized legs DO each count as a win or a loss, on
+        # the sign of their own r, like any other leg.
         closed = [t for t in trades if t["status"] in ("win", "loss", "closed")]
         wins = [t for t in closed if t["status"] == "win"]
         open_trades = [t for t in trades if t["status"] == "open"]
@@ -844,7 +862,8 @@ class TradeLog:
     def get_stats_by_confidence(self) -> dict:
         return {level: self.get_stats(level) for level in range(1, 6)}
 
-    def get_extended_stats(self, confidence_level: int = None, trades: list | None = None) -> dict:
+    def get_extended_stats(self, confidence_level: int = None, trades: list | None = None,
+                           *, expand: bool = True) -> dict:
         """
         Additional performance metrics beyond get_stats()'s win/loss counts,
         for the admin dashboard's stat cards:
@@ -865,6 +884,10 @@ class TradeLog:
         Manually-closed trades (status == "closed", no stop/target hit)
         count toward avg_holding_days but not expectancy_r -- there's no
         real R to compute without a stop or target actually being reached.
+
+        `expand` mirrors `get_stats`'s: the default counts each realized leg
+        as its own R, `expand=False` restores the pre-v79 single blended R
+        per position. See `get_stats` for who is allowed to pass False.
         """
         self.refresh()
         base = self._trades if trades is None else trades
@@ -888,7 +911,8 @@ class TradeLog:
                 continue
 
         # Expand legs for r_multiples and open-trade confidence (each leg is its own outcome)
-        trades = [row for t in trades for row in expand_trade_legs(t)]
+        if expand:
+            trades = [row for t in trades for row in expand_trade_legs(t)]
         closed = [t for t in trades if t["status"] in ("win", "loss", "closed")]
         open_trades = [t for t in trades if t["status"] == "open"]
 

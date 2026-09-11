@@ -140,6 +140,61 @@ def test_get_extended_stats_counts_each_leg_as_its_own_outcome(tmp_path):
     assert stats["total"] == 2 and stats["wins"] == 1 and stats["losses"] == 1
 
 
+def _scaled_out_win_then_loss_trade() -> dict:
+    """One scaled-out position: a +2R TP1 leg and a -0.5R runner leg, whose
+    blended whole-position outcome is a single `win`. The fixture the
+    expand/no-expand contrast is measured on."""
+    return {
+        "status": "win", "shares": 10, "entry": 100.0, "direction": "bullish",
+        "stop_loss": 95.0, "exit_price": 118.0, "confidence_level": 3,
+        "legs": [
+            {"fraction": 0.5, "exit_price": 110.0, "r": 2.0, "reason": "tp1"},
+            {"fraction": 0.5, "exit_price": 90.0, "r": -0.5, "reason": "manual"},
+        ],
+    }
+
+
+def test_get_stats_expand_false_keeps_the_pre_v79_blended_outcome(tmp_path):
+    """`expand=False` is what live confidence scoring reads (analyze.py's
+    `track_record`). It must see exactly what it saw before v79: ONE closed
+    outcome per position, at the blended 100% win rate -- not two legs at
+    50%. The confidence formula pays every counted win the scenario's full
+    reward:risk, which a ~1R TP1 leg does not earn."""
+    log = TradeLog(path=str(tmp_path / "trades.json"))
+    trade = _scaled_out_win_then_loss_trade()
+
+    unexpanded = log.get_stats(trades=[trade], expand=False)
+    assert unexpanded["total"] == 1
+    assert unexpanded["closed"] == 1
+    assert unexpanded["wins"] == 1
+    assert unexpanded["losses"] == 0
+    assert unexpanded["win_rate"] == 100.0
+
+    # ...while the default (dashboards, stat cards) still gets v79's legs.
+    expanded = log.get_stats(trades=[trade])
+    assert (expanded["total"], expanded["wins"], expanded["losses"]) == (2, 1, 1)
+    assert expanded["win_rate"] == 50.0
+
+
+def test_get_stats_expand_false_honours_the_confidence_filter(tmp_path):
+    """The live call site passes a base level positionally; `expand=False`
+    must not disturb that filter."""
+    log = TradeLog(path=str(tmp_path / "trades.json"))
+    trade = _scaled_out_win_then_loss_trade()
+
+    assert log.get_stats(3, trades=[trade], expand=False)["closed"] == 1
+    assert log.get_stats(4, trades=[trade], expand=False)["closed"] == 0
+
+
+def test_get_extended_stats_expand_false_uses_the_blended_r(tmp_path):
+    """Unexpanded, expectancy is the position's own fraction-weighted R
+    (0.5*2.0 + 0.5*-0.5 = 0.75), one value -- not one per leg."""
+    log = TradeLog(path=str(tmp_path / "trades.json"))
+    stats = log.get_extended_stats(trades=[_scaled_out_win_then_loss_trade()], expand=False)
+    assert stats["r_multiples_count"] == 1
+    assert stats["expectancy_r"] == pytest.approx(0.75)
+
+
 def test_get_extended_stats_avg_holding_days_position_accurate_not_leg_doubled(tmp_path):
     # Scaled-out trade with 2 legs should contribute ONE duration value to avg_holding_days,
     # not TWO (one per leg). Without the fix, both legs would share the same closed_at/opened_at
