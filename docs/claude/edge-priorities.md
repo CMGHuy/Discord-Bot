@@ -54,6 +54,19 @@ The confluence scan is the largest population in the book and the only negative
 one. **Re-derive these before leaning on them; do not quote them as current
 without checking.**
 
+**These rows were last true 2026-07** and are now known-stale: the `VALIDATED`
+row's N=814 population still includes Fibonacci/RSI/Support-Resistance trades,
+all three of which dropped to `WEAK` on 2026-09-10
+(`results/2026-09-10-legacy-badge-refresh-train.md`) before this campaign began.
+Plan v84 (strategy rescue v2) then spent its own measurement budget against the
+remaining `WEAK` population and **rescued none of the seven strategies it
+tried** — registry badge state is unchanged by v84 itself, and stands at **2
+`VALIDATED` (MACD, Volume Profile), 9 `WEAK`** both before and after this
+campaign (`docs/claude/backtest-methodology.md`'s closed-pre-registrations
+table has the seven per-strategy rows). Do not re-derive the pooled table
+above from `2026-07-pooled-validation.md`'s membership list without first
+excluding the three demoted strategies.
+
 ## What this rule does not do
 
 **It does not loosen a single acceptance gate.** It governs *what to work on*,
