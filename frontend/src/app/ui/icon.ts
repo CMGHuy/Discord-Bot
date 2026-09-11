@@ -33,6 +33,10 @@ export const ICON_NAMES = [
   'signout',
   'menu',
   'trash',
+  'clock',
+  'more',
+  'opened',
+  'closed',
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -67,6 +71,14 @@ const PATHS: Record<IconName, string> = {
   // A bin: lid, body, and two staves. Stroke-only on the same 16x16 grid at
   // 1.5 width as the rest of the set, so it reads as one hand with them.
   trash: 'M2.5 4.5h11 M6 4.5V3h4v1.5 M4 4.5l.8 9h6.4l.8-9 M6.5 7v4 M9.5 7v4',
+  // A dial with two hands: the wall clock in the top bar.
+  clock: 'M8 14.5A6.5 6.5 0 1 0 8 1.5a6.5 6.5 0 0 0 0 13z M8 4.5V8l2.5 1.5',
+  // Three dots: the row overflow menu.
+  more: 'M3.5 8h.01 M8 8h.01 M12.5 8h.01',
+  // An arrow leaving a baseline: a position opening.
+  opened: 'M2 13.5h12 M8 11V3 M5 6l3-3 3 3',
+  // An arrow arriving at a baseline: a position closing.
+  closed: 'M2 13.5h12 M8 3v8 M5 8l3 3 3-3',
 };
 
 @Component({

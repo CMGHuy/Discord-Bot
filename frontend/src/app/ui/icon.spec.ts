@@ -54,4 +54,10 @@ describe('Icon', () => {
   it('renders the trash icon', () => {
     expect(ICON_NAMES).toContain('trash');
   });
+
+  it('carries the icons the v85 chrome and feed need', () => {
+    for (const name of ['clock', 'more', 'opened', 'closed'] as const) {
+      expect(ICON_NAMES).toContain(name);
+    }
+  });
 });
