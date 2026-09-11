@@ -157,3 +157,52 @@ describe('Dashboard states', () => {
     expect(el.textContent).not.toContain('Dashboard');
   });
 });
+
+/** sb-async only projects its content (the panels, the positions table) in
+ *  its success branch -- loading shows a skeleton instead -- so every test
+ *  here has to seed and flush a real payload before it can find any of them. */
+async function loaded(overrides: Partial<DashboardData> = {}) {
+  const { fixture, backend } = seed();
+  fixture.detectChanges();
+  flushTradeGroups(backend);
+  backend.expectOne('/api/v1/dashboard?mode=today').flush(payload(overrides));
+  await fixture.whenStable();
+  fixture.detectChanges();
+  return fixture;
+}
+
+describe('Dashboard v85 layout', () => {
+  it('lays the page out as the five panels plus the positions table', async () => {
+    const fixture = await loaded();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('sb-portfolio-value')).not.toBeNull();
+    expect(el.querySelector('sb-trading-performance')).not.toBeNull();
+    expect(el.querySelector('sb-recent-activity')).not.toBeNull();
+    expect(el.querySelector('sb-watchlist-panel')).not.toBeNull();
+    expect(el.querySelector('sb-market-movers')).not.toBeNull();
+  });
+
+  it('drops the old metric rows the panels replaced', async () => {
+    const fixture = await loaded();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.primary')).toBeNull();
+    expect(el.querySelector('sb-chip-row.chips')).toBeNull();
+    expect(el.querySelector('.lifecycle')).toBeNull();
+  });
+
+  it('has no Risk & Exposure or Account Info panel', async () => {
+    const fixture = await loaded();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).not.toContain('Risk & Exposure');
+    expect(text).not.toContain('Account Info');
+  });
+
+  it('routes the panel scope control back into the store', async () => {
+    const fixture = await loaded();
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('[data-scope="all"]')!.click();
+    fixture.detectChanges();
+    expect(TestBed.inject(DashboardStore).scope()).toBe('all');
+  });
+});

@@ -1,10 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
+import { DashboardScope } from '../../../api/models';
 import { Button } from '../../../ui/button';
 import { ControlRow, Panel } from '../../../ui/layout';
 import { MetricCard } from '../../../ui/metric-card';
 
-export type DashboardScopeMode = 'today' | 'all';
+/** `DashboardScope` also has a third value, 'active', that this toggle never
+ *  sets and never renders as pressed -- reusing the store's real type rather
+ *  than a narrower local one so `[scope]="store.scope()"` needs no cast. */
+export type DashboardScopeMode = DashboardScope;
 
 /**
  * The eight figures — v85 D9.

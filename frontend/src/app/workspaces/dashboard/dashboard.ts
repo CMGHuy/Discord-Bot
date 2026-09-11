@@ -9,16 +9,17 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { CLOCK } from '../../ui/clock';
 
 import { DashboardScope, TradeRow } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { DashboardStore } from '../../stores/dashboard.store';
+import { TapeStore } from '../../stores/tape.store';
+import { TradesStore } from '../../stores/trades.store';
 import { Async, asyncInputs } from '../../ui/async';
 import { Button } from '../../ui/button';
-import { ChipRow } from '../../ui/chip-row';
 import { ColumnDef, Density, EmptyState, RowContext } from '../../ui/data-table/data-table.types';
 import { ConfidenceCell } from '../../ui/confidence-cell';
 import { Flash } from '../../ui/flash';
@@ -42,8 +43,6 @@ import { Magnitude } from '../../ui/magnitude';
 import { ControlRow, Drawer, Panel } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
-import { MetricCard } from '../../ui/metric-card';
-import { MetricChip } from '../../ui/metric-chip';
 import { PlanLifecycleDiagram } from '../../ui/plan-lifecycle-diagram';
 import {
   deriveClosedVisible,
@@ -56,6 +55,12 @@ import {
   reconcileReorder,
 } from './dashboard.helpers';
 import { TradeGroup } from './trade-group';
+import { deriveActivity } from './panels/activity';
+import { PortfolioValue } from './panels/portfolio-value';
+import { TradingPerformance } from './panels/trading-performance';
+import { RecentActivity } from './panels/recent-activity';
+import { WatchlistPanel } from './panels/watchlist-panel';
+import { MarketMovers } from './panels/market-movers';
 
 /**
  * The Dashboard — spec v14 Decision 5's two-tier header plus a capped view of
@@ -86,10 +91,17 @@ import { TradeGroup } from './trade-group';
 @Component({
   selector: 'sb-dashboard',
   imports: [
-    RouterLink, MetricCard, MetricChip, Magnitude, Panel, TradeGroup,
-    StatusCell, PlanCell, ConfidenceCell, Async, Button, ChipRow, ControlRow,
+    Magnitude, Panel, TradeGroup,
+    StatusCell, PlanCell, ConfidenceCell, Async, Button, ControlRow,
     Drawer, Flash, PlanLifecycleDiagram, RowLink, SectionHead,
+    PortfolioValue, TradingPerformance, RecentActivity, WatchlistPanel, MarketMovers,
   ],
+  // TradesStore, not DashboardStore -- that one is provided at the route
+  // level (dashboard.routes.ts). This instance is this page's own, for the
+  // activity feed's own query (newest-first, every status), separate from
+  // the positions table's four per-status TradesStore instances (each
+  // sb-trade-group provides its own -- see trade-group.ts).
+  providers: [TradesStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // v54 D1: this workspace answers "how am I doing?" -- hero figures, room
   // to breathe -- so it defaults to the presentation register. Set on the
@@ -141,9 +153,6 @@ import { TradeGroup } from './trade-group';
       background scan only ever posts and logs fully-qualifying setups.
     </p>
 
-    <!-- v54: rows=3 cols=5, measured against the .primary row of five
-         metric cards (skeletonRows/skeletonCols verified at Slow 3G --
-         Task 21 G6). -->
     <sb-async
       [loading]="async().loading"
       [error]="async().error"
@@ -157,105 +166,36 @@ import { TradeGroup } from './trade-group';
       [announce]="announce()"
       (retry)="store.load()"
     >
-    <!-- SR58 / reorg: Realised today, Account balance, Open P&L, Risk used
-         and Realised average all read together as one row -- Realised is
-         scoped by the toggle above and the other three are always all-open,
-         but they are all "the account right now" and splitting them into two
-         rows only used to say "these five cards were added at different
-         times", not anything about the numbers themselves. -->
-    <div class="primary">
-      <sb-metric-card
-        [label]="realizedLabel()"
-        [value]="store.realizedAmount()"
-        tone="pnl"
-        [unit]="currencyUnit()"
+    <!-- v85: the five metric cards, the chip row, the realised-count line
+         and the lifecycle nav strip are replaced by the panels below (D9). -->
+    <div class="top-row">
+      <sb-portfolio-value
+        [balance]="store.balance()"
+        [changePct]="store.equityChangePct()"
+        [points]="store.equityPoints()"
+        [currency]="connection.currency()"
       />
-      <sb-metric-card
-        label="Account balance"
-        [value]="store.balance()"
-        [unit]="currencyUnit()"
-      />
-      <sb-metric-card
-        label="Open P&L"
-        [value]="store.openPnlPct()"
-        tone="pnl"
-        unit="%"
-      />
-      <sb-metric-card
-        label="Risk used"
-        [value]="store.riskUsedPct()"
-        [tone]="riskTone()"
-        unit="%"
-        [sub]="riskSub()"
-      />
-      <sb-metric-card
-        label="Realised, average"
-        [value]="store.realizedPct()"
-        tone="pnl"
-        unit="%"
+      <sb-trading-performance
+        [openPnlPct]="store.openPnlPct()"
+        [winRate]="store.winRate()"
+        [expectancyR]="store.expectancyR()"
+        [avgConfidence]="store.avgConfidence()"
+        [realizedAmount]="store.realizedAmount()"
+        [realizedLabel]="realizedLabel()"
+        [openTrades]="store.openTrades()"
+        [riskUsedPct]="store.riskUsedPct()"
+        [riskCapPct]="store.riskCapPct()"
+        [payoffRatio]="store.payoffRatio()"
+        [currency]="connection.currency()"
+        [scope]="store.scope()"
+        (scopeChange)="store.setScope($event)"
       />
     </div>
-    <span class="realized-count">
-      {{ store.realizedCount() }} closed{{ closedQualifier() }} ·
-      {{ store.realizedWins() }}W / {{ store.realizedLosses() }}L
-    </span>
-
-    <sb-chip-row class="chips">
-      <sb-metric-chip label="Open trades" [value]="store.openTrades()" [decimals]="0" />
-      <!-- Confidence is a QUALITY judgement, not money, so it stays plain:
-           green and red mean P&L direction on this screen and nothing else. -->
-      <sb-metric-chip label="Avg confidence" [value]="store.avgConfidence()" [decimals]="1" />
-      <sb-metric-chip label="Win rate" [value]="store.winRate()" unit="%" [decimals]="1" />
-      <!-- Expectancy is money per unit of risk, which is P&L direction, so it
-           is one of the few figures here allowed the green/red pair. -->
-      <sb-metric-chip label="Expectancy" [value]="store.expectancyR()" tone="pnl" unit="R" />
-      <sb-metric-chip
-        label="Position premium"
-        [value]="store.positionPremium()"
-        [unit]="premiumUnit()"
-        [decimals]="0"
-      />
-    </sb-chip-row>
 
     <!-- SR59. The chip carries the number and the "max" qualifier; this is
          the reasoning behind it, from dashboard_fragment.html:81-87. -->
     @if (premiumExplanation(); as explanation) {
       <p class="section-help">{{ explanation }}</p>
-    }
-
-    <!-- SR53. The lifecycle strip: five counts, each a link into Trades
-         filtered to that status. The Jinja dashboard had exactly this and the
-         SPA had the chips it navigated to with no numbers on them.
-
-         The click-through also carries the page's OWN date scope now: in
-         Today, the today param narrows Trades to rows that either opened
-         today or are still open regardless of age -- see todayParam's
-         docstring. In All days it is omitted, so the click-through stays
-         all-time. Only the destination narrows this way; the counts on the
-         chips themselves stay exactly as they always were (see the note
-         below). -->
-    @if (store.lifecycle().length) {
-      <nav class="lifecycle" aria-label="Plans by lifecycle status">
-        @for (entry of store.lifecycle(); track entry.status) {
-          <a
-            class="lc"
-            routerLink="/trades"
-            [queryParams]="{ status: entry.status, outcome: null, today: todayParam() }"
-            [attr.title]="lifecycleTip(entry.status)"
-          >
-            <span class="lc-count num">{{ entry.count }}</span>
-            {{ ' ' }}
-            <span class="lc-label">{{ entry.status }}</span>
-          </a>
-        }
-      </nav>
-
-      <!-- SR59: the descriptive legend and its diagram used to sit right
-           here, always rendered. Moved into a drawer (below, outside this
-           lifecycle-count block) that the "Lifecycle guide" button on the
-           Open positions panel opens -- this text explains what the cards
-           above ALREADY do, and read on every visit it was the single
-           longest thing on the page above the fold. -->
     }
 
     <!-- SR59. _plans_board.html:22-27, verbatim, and the figure that
@@ -414,6 +354,12 @@ import { TradeGroup } from './trade-group';
         (reorder)="onReorder($event)"
       />
     </sb-panel>
+
+    <div class="bottom-row">
+      <sb-recent-activity [events]="activity()" />
+      <sb-market-movers [rows]="tape.rows()" />
+      <sb-watchlist-panel [rows]="tape.rows()" />
+    </div>
 
     <!-- SR59. dashboard_fragment.html:443-445, with ONE claim deliberately
          changed rather than copied: that line said "live prices refresh
@@ -617,16 +563,6 @@ import { TradeGroup } from './trade-group';
     /* Groups the stale message and the scope toggle into one actions
        projection -- as two separate ones they would land at opposite
        ends of sb-section-head's space-between instead of clustered. */
-    /* :host's own grid gap (below) already separates this from .primary
-       above it -- no margin of its own needed, just the right alignment. */
-    .realized-count {
-      display: block;
-      text-align: right;
-      color: var(--text-faint);
-      font-size: var(--text-chip);
-      font-variant-numeric: tabular-nums;
-    }
-
     /* minmax(0, 1fr), not the implicit auto track. An auto column is floored
        at its widest child's min-content, so one un-shrinkable panel stretched
        the workspace past the viewport and took the page sideways with it.
@@ -640,66 +576,20 @@ import { TradeGroup } from './trade-group';
        register instead of a hardcoded token. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
 
-    /* Flexbox, not a fixed grid track count, across all three rows below
-       (.primary, .chips, .lifecycle): equal width was never the actual
-       requirement, filling the row was -- a label long enough to need more
-       room should get it rather than every card being squeezed to the same
-       fraction. flex: 1 1 auto sizes each card to its own content first
-       (so a short "Lv4" card and a long "Position premium" one are allowed
-       to differ) and then grows every card by an equal SHARE of whatever
-       width is left, which is what actually fills the row edge to edge.
-       align-items: stretch (flex's own default, stated explicitly here
-       because it is the point) is what makes every card in the row match
-       the row's tallest one -- MetricCard/MetricChip's own host fills that
-       stretched height with their visible border/background box; see their
-       own height: 100% rule for why that isn't automatic. No max-width cap
-       any more: the row fills whatever width the page column has, matching
-       the Open positions tables below, which never had one. */
-    .primary {
-      display: flex;
-      align-items: stretch;
-      gap: var(--space-14);
+    /* v85: two columns at desktop, stacking below the same 900px the top bar
+       uses for its own first drop -- one breakpoint vocabulary per page. */
+    .top-row {
+      display: grid;
+      grid-template-columns: minmax(0, 3fr) minmax(0, 4fr);
+      gap: var(--register-pad);
     }
-    .primary > sb-metric-card { flex: 1 1 auto; min-width: 140px; }
-
-    /* Overrides sb-chip-row's own align-items: center -- stretch is what
-       makes every card in the row match its tallest sibling. The type
-       selector plus this class gives it enough specificity to beat the
-       primitive's own :host rule. */
-    sb-chip-row.chips { align-items: stretch; }
-    sb-chip-row.chips > sb-metric-chip { flex: 1 1 auto; min-width: 150px; }
-
-    /* SR53. One row, lifecycle order, sized to the count rather than the
-       label -- the number is what is being read. */
-    .lifecycle {
-      display: flex;
-      align-items: stretch;
-      flex-wrap: wrap;
-      gap: var(--space-8);
+    .bottom-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: var(--register-pad);
     }
-    /* One line -- "1 PENDING" -- not the count stacked over the label.
-       Baseline-aligned like a MetricChip's own label/value pair, just
-       count-first: this is a count of plans, not a labelled figure the
-       label should lead. */
-    .lc {
-      flex: 1 1 auto;
-      min-width: 100px;
-      display: flex;
-      align-items: baseline;
-      gap: var(--space-6);
-      padding: var(--space-8) var(--space-10);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      text-decoration: none;
-    }
-    .lc:hover { border-color: var(--border-strong); }
-    .lc-count { color: var(--text); font-size: var(--text-subhead); font-weight: 600; }
-    .lc-label {
-      color: var(--text-secondary);
-      font-size: var(--text-micro);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
+    @media (max-width: 900px) {
+      .top-row { grid-template-columns: minmax(0, 1fr); }
     }
 
     /* margin: 0 auto centres the ROW (diagram + legend together) in the
@@ -835,7 +725,6 @@ import { TradeGroup } from './trade-group';
     .pnl-plan .sl { color: var(--neg); }
 
     @media (max-width: 720px) {
-      .primary { flex-direction: column; }
       .lifecycle-figure { flex-direction: column; align-items: center; }
       sb-plan-lifecycle-diagram, .lifecycle-legend { max-width: 100%; }
     }
@@ -848,6 +737,23 @@ export class Dashboard {
   /** For the currency symbol alone. `ConnectionStore` is root-provided and
    *  the shell already keeps it fresh, so reading it here costs no request. */
   protected readonly connection = inject(ConnectionStore);
+  /** Root-provided and already loaded by the shell (the top bar's own tape
+   *  lanes) -- this page only reads `rows()`, it never calls `load()`. */
+  protected readonly tape = inject(TapeStore);
+  /** This page's own instance, and NOT the positions table's: that one holds
+   *  whichever single tab is selected, which is the wrong population for a
+   *  feed that must span opens and closes at once. Provided on this component
+   *  (see `providers`), so it is created on entry and destroyed on exit. */
+  private readonly recent = inject(TradesStore);
+
+  protected readonly activity = computed(() => deriveActivity(this.recent.rows()));
+
+  constructor() {
+    // Every status, newest first. ACTIVITY_WINDOW rows in, at most six events
+    // out (deriveActivity's own cap) -- a row can yield two events, so the
+    // fetch has to be wider than the feed.
+    this.recent.setQuery({ sort: '-opened_at', page: 1, per_page: 20 });
+  }
 
   /** Whether the plan-lifecycle legend/diagram drawer is open — that
    *  content used to sit on the page body and now lives behind the Open
@@ -866,11 +772,6 @@ export class Dashboard {
   protected readonly announce = computed(() =>
     this.store.empty() ? null : `${this.store.openTrades()} open trades`,
   );
-
-  /** The suffix a money card renders after its number — a leading space, then
-   *  the account's symbol. Three cards had `" USD"` written into the template
-   *  while `CURRENCY_SYMBOL` has defaulted to `€` all along. */
-  protected readonly currencyUnit = computed(() => ` ${this.connection.currency()}`);
 
   /** v79: a scaled-out position arrives from /api/v1/trades as one row per
    *  realized leg, and every leg carries the same plan id -- so the id alone
@@ -1031,16 +932,7 @@ export class Dashboard {
     );
   });
 
-  /** Amber once exposure is most of the cap. Amber means caution, which is
-   *  what "nearly out of risk budget" is -- it is not a loss, so it must
-   *  not be red. */
   /* -- SR59: the copy ------------------------------------------------- */
-
-  /** The Jinja page appended "· closed today" only in the today/active
-   *  modes, because in All days the count is not today's. Same rule here. */
-  protected readonly closedQualifier = computed(() =>
-    this.store.scope() === 'all' ? '' : ' today',
-  );
 
   /**
    * The premium chip's reasoning, from `dashboard_fragment.html:81-87`.
@@ -1085,35 +977,13 @@ export class Dashboard {
     return typeof riskPct === 'number' ? `Sizing based on ${riskPct}% risk` : null;
   });
 
-  /** `_plans_board.html`'s `lc_tips`, verbatim. */
-  private readonly lifecycleTips: Record<string, string> = {
-    PENDING:
-      'Plan built and posted, but price has not yet reached the entry trigger. '
-      + 'Cancelled automatically if it expires or the setup is invalidated first.',
-    ACTIVE:
-      'Entry has filled — position is open and being tracked toward TP1/stop.',
-    PARTIAL:
-      'TP1 hit: half the position was closed for a partial win, the remainder '
-      + 'rides toward TP2 with its stop moved to break-even.',
-    CLOSED:
-      'Fully closed today (win, loss, or scratch) — see Trade History for the '
-      + 'full log.',
-    CANCELLED:
-      'Cancelled today, before ever filling — either it expired waiting for '
-      + 'entry, or the setup was invalidated.',
-  };
-
-  protected lifecycleTip(status: string): string | null {
-    return this.lifecycleTips[status] ?? null;
-  }
-
   /* -- SR58: the date scope ------------------------------------------- */
 
   /** The Jinja dashboard had three; `active` ("Today + open") and `today`
    *  are merged into this one Today button. The server already computed the
-   *  realised figures identically for both, and Today's definition now
-   *  folds in "or still open, however old" on its own (see `todayParam`),
-   *  so a separate "+ open" choice had nothing left to distinguish. */
+   *  realised figures identically for both, and Today's definition folds in
+   *  "or still open, however old" on its own, so a separate "+ open" choice
+   *  had nothing left to distinguish. */
   protected readonly scopes: { mode: DashboardScope; label: string }[] = [
     { mode: 'today', label: 'Today' },
     { mode: 'all', label: 'All days' },
@@ -1123,32 +993,6 @@ export class Dashboard {
    *  today's when the toggle is on All days. */
   protected readonly realizedLabel = computed(() =>
     this.store.scope() === 'all' ? 'Realised, all days' : 'Realised today',
-  );
-
-  /** The lifecycle strip's click-through date filter, mirroring this same
-   *  `=== 'all'` split -- `null` drops the query param entirely (an empty
-   *  string would land in the URL as `today=`), so All days keeps sending
-   *  what "click a card" always meant: status only, no date. */
-  protected readonly todayParam = computed(() =>
-    this.store.scope() === 'all' ? null : '1',
-  );
-
-  protected readonly riskTone = computed(() =>
-    (this.store.riskUtilisation() ?? 0) >= 0.8 ? 'caution' : 'plain',
-  );
-
-  protected readonly riskSub = computed(() => {
-    const cap = this.store.riskCapPct();
-    return cap === null ? null : `of ${cap.toFixed(1)}% cap`;
-  });
-
-  /** In risk-% sizing there is no single premium -- position value varies per
-   *  trade with the stop distance, up to the max-position cap -- so the chip
-   *  says "max" rather than presenting a ceiling as a typical cost. */
-  protected readonly premiumUnit = computed(() =>
-    this.store.positionPremiumIsCap()
-      ? `${this.currencyUnit()} max`
-      : this.currencyUnit(),
   );
 
   // v54 Task 28 dropped the unit from both columns on the grounds that the
