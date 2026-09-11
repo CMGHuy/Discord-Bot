@@ -305,6 +305,60 @@ def closed_r_multiple(t: dict) -> float | None:
     return round(realized / risk, 2)
 
 
+def expand_trade_legs(trade: dict) -> list[dict]:
+    """Split a scaled-out trade into one synthetic row per realized leg,
+    plus (if the position is still open) one more for the unrealized
+    remainder. A trade with no legs returns `[trade]` unchanged -- this is
+    what makes the function a safe drop-in wherever this file already
+    walks a trade list.
+
+    Each returned row carries no `legs` key of its own, so
+    `closed_pnl_pct`/`closed_r_multiple` fall through to their plain
+    single-exit formula when called on it -- the correct behaviour for one
+    already-realized leg, not the fraction-weighted blend those two
+    functions use for a still-nested multi-leg trade.
+    """
+    legs = trade.get("legs") or []
+    if not legs:
+        return [trade]
+
+    shares = trade.get("shares")
+    entry = trade.get("entry")
+    direction = trade.get("direction")
+    stop_loss = trade.get("stop_loss")
+    rows = []
+    for leg in legs:
+        leg_shares = (
+            round(shares * leg.get("fraction", 0), 4) if shares is not None else None
+        )
+        rows.append({
+            **trade,
+            "legs": None,
+            "shares": leg_shares,
+            "exit_price": leg.get("exit_price"),
+            "closed_at": leg.get("closed_at") or trade.get("closed_at"),
+            "status": "win" if (leg.get("r") or 0) >= 0 else "loss",
+            "entry": entry,
+            "direction": direction,
+            "stop_loss": stop_loss,
+        })
+
+    if trade.get("status") == "open":
+        realized_fraction = sum(leg.get("fraction", 0) for leg in legs)
+        remaining_fraction = max(0.0, 1.0 - realized_fraction)
+        rows.append({
+            **trade,
+            "legs": None,
+            "shares": (
+                round(shares * remaining_fraction, 4) if shares is not None else None
+            ),
+            "exit_price": None,
+            "status": "open",
+        })
+
+    return rows
+
+
 def _apply_exit_price(t: dict, price: float, reason: str) -> None:
     """Records `price` as `t`'s exit, realizing whatever fraction of the
     position is still open as one more leg on top of any TP1 already
@@ -770,6 +824,7 @@ class TradeLog:
         trades = base if confidence_level is None else [
             t for t in base if t["confidence_level"] == confidence_level
         ]
+        trades = [row for t in trades for row in expand_trade_legs(t)]
         # "closed" = manually closed from admin UI (no SL/TP hit recorded);
         # counted as closed for total/win-rate denominator but not as win or loss.
         closed = [t for t in trades if t["status"] in ("win", "loss", "closed")]
@@ -816,6 +871,7 @@ class TradeLog:
         trades = base if confidence_level is None else [
             t for t in base if t["confidence_level"] == confidence_level
         ]
+        trades = [row for t in trades for row in expand_trade_legs(t)]
         closed = [t for t in trades if t["status"] in ("win", "loss", "closed")]
         open_trades = [t for t in trades if t["status"] == "open"]
 
