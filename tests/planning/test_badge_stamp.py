@@ -1,25 +1,25 @@
 from swingbot.core.planning.plan_engine import badge_stats_line, stamp_badge
 from swingbot.core.backtesting.registry import get_badge
 
+from tests.helpers import registry_strategy_row
 from tests.planning.test_plan_engine_model import _plan
 
 
 def test_stamp_validated():
-    # Numbers from the exit-v2 validation single run (Task 32, 2026-07-18).
-    p = _plan(strategy="Fibonacci")
+    row = registry_strategy_row("VALIDATED")
+    p = _plan(strategy=row["strategy"])
     stamp_badge(p)
     assert p.badge == "VALIDATED"
-    assert p.badge_stats["win_rate"] == 82.3
+    assert p.badge_stats["win_rate"] == row["win_rate"]
 
 
 def test_stamp_weak():
-    # EMA Crossover stayed WEAK through the rescue round (RSI, the previous
-    # exemplar, was rescued to VALIDATED in Tasks 95-97).
-    p = _plan(strategy="EMA Crossover")
+    p = _plan(strategy=registry_strategy_row("WEAK")["strategy"])
     stamp_badge(p)
     assert p.badge == "WEAK"
 
 
 def test_stats_line():
-    line = badge_stats_line(get_badge("strategy", "Fibonacci"))
-    assert "N=203" in line and "82.3%" in line
+    row = registry_strategy_row("VALIDATED")
+    line = badge_stats_line(get_badge("strategy", row["strategy"]))
+    assert f"N={row['n']}" in line and f"{row['win_rate']:.1f}%" in line
