@@ -60,4 +60,8 @@ describe('Icon', () => {
       expect(ICON_NAMES).toContain(name);
     }
   });
+
+  it('renders the brand icon (R1-14)', () => {
+    expect(ICON_NAMES).toContain('brand');
+  });
 });

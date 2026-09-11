@@ -255,4 +255,39 @@ describe('shell navigation', () => {
     expect(rules).toMatch(/max-width:\s*900px[\s\S]*\.page-subtitle[\s\S]*display:\s*none/);
     expect(rules).toMatch(/max-width:\s*720px[\s\S]*\.clock[\s\S]*display:\s*none/);
   });
+
+  it('renders the brand mark beside the wordmark', () => {
+    const f = TestBed.createComponent(Shell);
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    expect(el.querySelector('.brand sb-icon')).not.toBeNull();
+    expect(el.querySelector('.brand')!.textContent).toContain('Bomeo');
+  });
+
+  it('renders the two-tone wordmark as two spans, not one coloured string', () => {
+    const f = TestBed.createComponent(Shell);
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    expect(el.querySelectorAll('.brand .word span').length).toBe(2);
+  });
+
+  it('renders the rail tagline', () => {
+    const f = TestBed.createComponent(Shell);
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    expect(el.querySelector('.rail-tagline')!.textContent)
+      .toContain('Trade smarter. Build further.');
+  });
+
+  it('keeps the mark and drops the words when the rail is collapsed', () => {
+    const f = TestBed.createComponent(Shell);
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    // Drives the real toggle rather than reaching into the instance --
+    // the same mechanism a user actually has.
+    el.querySelector<HTMLButtonElement>('.collapse')!.click();
+    f.detectChanges();
+    expect(el.querySelector('.brand sb-icon')).not.toBeNull();
+    expect(el.querySelector('.brand .word')).toBeNull();
+  });
 });

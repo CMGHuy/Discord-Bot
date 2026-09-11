@@ -37,6 +37,7 @@ export const ICON_NAMES = [
   'more',
   'opened',
   'closed',
+  'brand',
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -79,6 +80,9 @@ const PATHS: Record<IconName, string> = {
   opened: 'M2 13.5h12 M8 11V3 M5 6l3-3 3 3',
   // An arrow arriving at a baseline: a position closing.
   closed: 'M2 13.5h12 M8 3v8 M5 8l3 3 3-3',
+  // A diamond: the sidebar brand mark, replacing the raster logo (D3,
+  // finding 16) with a shape that inherits currentColor and holds at 24px.
+  brand: 'M8 1.5 14 8 8 14.5 1.5 8z',
 };
 
 @Component({

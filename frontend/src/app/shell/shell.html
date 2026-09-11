@@ -10,17 +10,17 @@
 
   <nav class="sidebar" [attr.aria-hidden]="overlay() && !overlayOpen() ? 'true' : null">
     <div class="mark">
-      <img
-        class="avatar"
-        src="bot-profile.png"
-        srcset="bot-profile.png 1x, bot-profile@2x.png 2x"
-        alt=""
-        width="22"
-        height="22"
-      />
-      <!-- Collapsed, the mark is the avatar alone: a name clipped to three
-           letters reads as a rendering fault rather than as a choice. -->
-      <span class="name">swingbot</span>
+      <!-- Collapsed, the mark is the icon alone: a name clipped to three
+           letters reads as a rendering fault rather than as a choice. D3 --
+           an inline path, not images/logo.png (finding 16): the raster mark
+           cannot take the accent colour, does not read at 24px on --bg, and
+           has no collapsed-rail form. -->
+      <span class="brand">
+        <sb-icon name="brand" />
+        @if (!railed()) {
+          <span class="word"><span>Bomeo</span><span>Capital</span></span>
+        }
+      </span>
       <span class="tag">paper</span>
     </div>
 
@@ -52,6 +52,8 @@
          render, and loses the bottom anchor entirely when whichever child
          carries it is the one that does not. -->
     <div class="sidebar-foot">
+      <p class="rail-tagline">Trade smarter. Build further.</p>
+
       <!-- Not shown on the phone overlay: there it would sit under a sheet
            that a navigation is about to dismiss. -->
       @if (!overlay()) {

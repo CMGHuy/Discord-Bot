@@ -41,10 +41,12 @@
 }
 
 /* On the rail: icons only, centred, labels hidden but still in the DOM so
-   the accessible name survives. */
+   the accessible name survives. The wordmark's `.word` is not listed here --
+   it is removed structurally (shell.html's `@if (!railed())`), not clipped,
+   because collapsed is also asserted by its absence from the DOM. */
 .shell.railed:not(.overlay) .sidebar .label,
-.shell.railed:not(.overlay) .mark .name,
-.shell.railed:not(.overlay) .mark .tag {
+.shell.railed:not(.overlay) .mark .tag,
+.shell.railed:not(.overlay) .rail-tagline {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -55,7 +57,7 @@
 .shell.railed:not(.overlay) .sidebar { padding-inline: var(--space-10); }
 .shell.railed:not(.overlay) .nav a { justify-content: center; }
 
-.mark .avatar { border-radius: 50%; display: block; flex: none; }
+.brand sb-icon { flex: none; }
 
 /* The bottom of the sidebar. This box owns the bottom anchor so its children
    do not have to -- see the note in shell.html. */
@@ -109,11 +111,30 @@
   gap: var(--space-6);
 }
 
-.mark .name {
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+/* Two spans, not one coloured string: `Capital` takes the accent so the
+   product name and the mockup's own two-tone treatment both survive in one
+   element, rather than a single span with an inline colour run. */
+.brand .word {
   font-family: var(--font-mono);
   font-size: var(--text-subhead);
   font-weight: 700;
   letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.brand .word span:last-child { color: var(--accent); }
+
+.rail-tagline {
+  margin: 0 0 var(--space-10);
+  color: var(--text-faint);
+  font-size: var(--text-micro);
+  line-height: 1.4;
 }
 
 .mark .tag {
