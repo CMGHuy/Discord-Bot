@@ -54,6 +54,7 @@ import {
   visibleForTab,
 } from './dashboard.helpers';
 import { PositionsTable } from './positions-table';
+import { RowActions } from './row-actions';
 import { deriveActivity } from './panels/activity';
 import { PortfolioValue } from './panels/portfolio-value';
 import { TradingPerformance } from './panels/trading-performance';
@@ -91,7 +92,7 @@ import { ExposureByHorizon } from './panels/exposure-by-horizon';
 @Component({
   selector: 'sb-dashboard',
   imports: [
-    Magnitude, Panel, PositionsTable,
+    Magnitude, Panel, PositionsTable, RowActions,
     StatusCell, PlanCell, ConfidenceCell, Async, Button, ControlRow,
     Drawer, Flash, PlanLifecycleDiagram, RowLink, SectionHead,
     PortfolioValue, TradingPerformance, RecentActivity, WatchlistPanel, MarketMovers,
@@ -458,6 +459,9 @@ import { ExposureByHorizon } from './panels/exposure-by-horizon';
          em dash regardless of what the row actually held. -->
     <ng-template #openedCell let-row>{{ fmtDate(row.opened_at) }}</ng-template>
     <ng-template #closedCell let-row>{{ fmtDate(row.closed_at) }}</ng-template>
+    <ng-template #actionsCell let-row>
+      <sb-row-actions [row]="row" (done)="store.load()" />
+    </ng-template>
   `,
   styles: `
 
@@ -716,6 +720,8 @@ export class Dashboard {
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('openedCell');
   private readonly closedCell =
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('closedCell');
+  private readonly actionsCell =
+    viewChild.required<TemplateRef<RowContext<TradeRow>>>('actionsCell');
   private readonly preferences = inject(PreferencesStore);
 
   protected readonly tableId = DASHBOARD_TABLE_ID;
@@ -798,6 +804,7 @@ export class Dashboard {
       confidence_level: this.confidenceCell(),
       opened_at: this.openedCell(),
       closed_at: this.closedCell(),
+      actions: this.actionsCell(),
     };
     return tradeColumns(this.now).map((column) =>
       cells[column.key] ? { ...column, cell: cells[column.key] } : column,
