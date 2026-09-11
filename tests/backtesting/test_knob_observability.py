@@ -10,7 +10,6 @@ from swingbot.scan_params import ScanParams
 from .test_v74_fixture import load_v74_fixture
 
 EXEMPT = {
-    "EARNINGS_BLACKOUT_DAYS": "Needs earnings-calendar data, while this committed fixture contains only OHLCV bars.",
     "UNIVERSE_MIN_DOLLAR_VOL": "Universe construction precedes replay; the committed fixture already defines the universe.",
     "UNIVERSE_MIN_PRICE": "Universe construction precedes replay; the committed fixture already defines the universe.",
     "MAX_ALERTS_PER_SCAN": "This cap belongs to scan-run alert delivery and replay_scenarios does not execute that path.",

@@ -51,8 +51,27 @@ def clean_cache():
     uses "AAPL", so without this the second test to run would see the
     first test's cached result instead of exercising its own fake ticker."""
     events._earnings_datetime_cache.clear()
+    events._earnings_datetimes_cache.clear()
     yield
     events._earnings_datetime_cache.clear()
+    events._earnings_datetimes_cache.clear()
+
+
+def test_get_earnings_datetimes_keeps_past_and_future_sorted(monkeypatch):
+    tz = dt.timezone(dt.timedelta(hours=-4))
+    past, future = dt.datetime(2026, 7, 30, 16, tzinfo=tz), dt.datetime(2026, 10, 29, 16, tzinfo=tz)
+    monkeypatch.setattr(events.yf, "Ticker", lambda symbol: _FakeTicker(_frame(future, past)))
+    assert events.get_earnings_datetimes("AAPL") == [past, future]
+
+
+def test_get_earnings_datetimes_is_cached(monkeypatch):
+    calls, tz = [], dt.timezone(dt.timedelta(hours=-4))
+    def fake(symbol):
+        calls.append(symbol)
+        return _FakeTicker(_frame(dt.datetime(2026, 10, 29, 16, tzinfo=tz)))
+    monkeypatch.setattr(events.yf, "Ticker", fake)
+    events.get_earnings_datetimes("AAPL"); events.get_earnings_datetimes("AAPL")
+    assert calls == ["AAPL"]
 
 
 @pytest.fixture(autouse=True)

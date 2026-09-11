@@ -658,13 +658,10 @@ FIELDS: list[Field] = [
           options=["watchlist", "sp500", "sp500_top150", "etfs", "sp500+etfs"],
           help="What the scanner covers. The watchlist is ALWAYS included on top of any "
                "universe. Flip beyond watchlist only after the E77 rollout checklist."),
-    Field("EARNINGS_BLACKOUT_DAYS", "EARNINGS_BLACKOUT_DAYS", "Universe & Scanning",
-          "Earnings blackout window (days)",
-          type="number", default="0", min=0, max=10, step=1,
-          help="New entries are blocked when the ticker's next earnings date is within this "
-               "many days (0 = off). ETFs are always exempt (they don't report earnings). "
-               "Gate is defined in swingbot/core/edge/gates.py:in_earnings_blackout but not "
-               "yet wired into the scan/alert path -- flag-gated filter candidate for E33."),
+    Field("EARNINGS_BLACKOUT_SESSIONS", "EARNINGS_BLACKOUT_SESSIONS", "Universe & Scanning",
+          "Earnings blackout (sessions before the reaction)", type="number", default="0", min=0, max=5, step=1,
+          help="Blocks a setup when the next earnings reaction is 1 to this many trading sessions away (0 = off). "
+               "ETFs never block. Pre-registered by spec v82; stays 0 unless VALIDATION passes."),
     Field("SCAN_WORKERS", "SCAN_WORKERS", "Universe & Scanning", "Scan thread-pool size",
           type="number", default="1", min=1, max=16, step=1,
           help="Thread-pool size for per-ticker scanning. Was 4, changed to 1 (v56): "
@@ -890,14 +887,14 @@ _SEARCH_CLASSES = {
         "OPEX_SIZE_REDUCTION_PCT", "HTF_CONFLUENCE_ENABLED",
         "MTF_ADJACENT_GATE", "PLAN_ENGINE_V2", "SCALE_OUT_ENABLED",
         "UNIVERSE_MIN_DOLLAR_VOL", "UNIVERSE_MIN_PRICE",
-        "EARNINGS_BLACKOUT_DAYS", "REGIME_GATES_ENABLED",
+        "REGIME_GATES_ENABLED",
         "LEVEL_LIFECYCLE_STOPS_ENABLED", "AVWAP_LEVELS_ENABLED",
         "PYRAMIDING_ENABLED", "VOLUME_PROFILE_NODES_ENABLED",
         "MAX_ALERTS_PER_SCAN", "DATA_DRIVEN_STOPS_ENABLED",
         "DEAD_CAT_BOUNCE_VETO", "DCB_DECLINE_PCT", "DCB_GAP_REQUIRED",
         "DCB_VOLUME_RATIO",
     },
-    "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO"},
+    "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO", "EARNINGS_BLACKOUT_SESSIONS"},
     "live_only": {
         "SESSION_START_HOUR", "SESSION_END_HOUR", "SCAN_INTERVAL_MINUTES",
         "SIGNAL_CONFIRMATION_SCANS", "NEAR_CLOSE_ALERTS_ENABLED",

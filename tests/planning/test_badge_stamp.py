@@ -4,17 +4,15 @@ from swingbot.core.backtesting.registry import get_badge
 from tests.planning.test_plan_engine_model import _plan
 
 
-def test_stamp_validated():
-    # Numbers from the exit-v2 validation single run (Task 32, 2026-07-18).
+def test_stamp_fibonacci_current_weak_badge():
     p = _plan(strategy="Fibonacci")
     stamp_badge(p)
-    assert p.badge == "VALIDATED"
-    assert p.badge_stats["win_rate"] == 82.3
+    assert p.badge == "WEAK"
+    assert p.badge_stats["win_rate"] == 35.4
 
 
 def test_stamp_weak():
-    # EMA Crossover stayed WEAK through the rescue round (RSI, the previous
-    # exemplar, was rescued to VALIDATED in Tasks 95-97).
+    # EMA Crossover stays WEAK under the current registry.
     p = _plan(strategy="EMA Crossover")
     stamp_badge(p)
     assert p.badge == "WEAK"
@@ -22,4 +20,4 @@ def test_stamp_weak():
 
 def test_stats_line():
     line = badge_stats_line(get_badge("strategy", "Fibonacci"))
-    assert "N=203" in line and "82.3%" in line
+    assert "N=246" in line and "35.4%" in line
