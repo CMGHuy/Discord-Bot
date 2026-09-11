@@ -305,18 +305,54 @@ def closed_r_multiple(t: dict) -> float | None:
     return round(realized / risk, 2)
 
 
+def _leg_status(leg: dict, entry: float | None, direction: str | None) -> str:
+    """Win/loss for one realized leg.
+
+    The leg's own `r` is authoritative (the plan's Global Constraint: a
+    leg's outcome is the sign of its own r, so a real `r == 0` -- scratched
+    at breakeven -- is a win). But a leg appended WITHOUT an `r`
+    (`_check_bar_active`'s stop-out mirror path in plan_manager.py writes
+    some legs that shape) must not silently read as a win just because a
+    missing value folds to 0: fall back to the sign of the realized move
+    itself, direction-adjusted. Only when even that is unavailable does
+    this default to "win".
+
+    Deliberately duplicated from the admin API's `_leg_outcome`
+    (`swingbot/admin/api_v1/trades.py`) rather than shared: the dependency
+    runs admin -> core, and importing the other way would invert it.
+    """
+    r = leg.get("r")
+    if r is not None:
+        return "win" if r >= 0 else "loss"
+    exit_price = leg.get("exit_price")
+    if entry is not None and exit_price is not None:
+        diff = (exit_price - entry) * (1 if direction == "bullish" else -1)
+        return "win" if diff >= 0 else "loss"
+    return "win"
+
+
 def expand_trade_legs(trade: dict) -> list[dict]:
     """Split a scaled-out trade into one synthetic row per realized leg,
     plus (if the position is still open) one more for the unrealized
-    remainder. A trade with no legs returns `[trade]` unchanged -- this is
-    what makes the function a safe drop-in wherever this file already
-    walks a trade list.
+    remainder. A trade with no legs returns `[trade]` unchanged.
 
     Each returned row carries no `legs` key of its own, so
     `closed_pnl_pct`/`closed_r_multiple` fall through to their plain
     single-exit formula when called on it -- the correct behaviour for one
     already-realized leg, not the fraction-weighted blend those two
     functions use for a still-nested multi-leg trade.
+
+    NOT a blanket drop-in: only some of a returned row's fields are
+    leg-accurate. Leg-accurate are `status`, `shares`, `exit_price`,
+    `closed_at`, and anything derived through
+    `closed_pnl_pct`/`closed_r_multiple` (which read only
+    entry/exit_price/stop_loss/direction, all correctly leg-scoped here).
+    NOT leg-accurate is every money/position-size field inherited
+    unchanged from the original trade -- `position_value`,
+    `realized_pnl_amount` and friends still describe the WHOLE position,
+    so summing them across a scaled-out trade's rows double-counts. Use
+    this only where outcomes, counts and R-multiples are what is being
+    walked.
     """
     legs = trade.get("legs") or []
     if not legs:
@@ -337,7 +373,7 @@ def expand_trade_legs(trade: dict) -> list[dict]:
             "shares": leg_shares,
             "exit_price": leg.get("exit_price"),
             "closed_at": leg.get("closed_at") or trade.get("closed_at"),
-            "status": "win" if (leg.get("r") or 0) >= 0 else "loss",
+            "status": _leg_status(leg, entry, direction),
             "entry": entry,
             "direction": direction,
             "stop_loss": stop_loss,

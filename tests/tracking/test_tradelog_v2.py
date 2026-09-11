@@ -140,6 +140,47 @@ def test_get_extended_stats_counts_each_leg_as_its_own_outcome(tmp_path):
     assert stats["total"] == 2 and stats["wins"] == 1 and stats["losses"] == 1
 
 
+def test_expand_trade_legs_falls_back_to_the_price_sign_when_a_leg_has_no_r():
+    """A leg appended without an `r` (plan_manager's stop-out mirror path
+    writes some legs that shape) must NOT read as a win just because a
+    missing r folds to 0. Same rule the admin API's `_leg_outcome` already
+    applies: the sign of the realized move, direction-adjusted."""
+    trade = {
+        "status": "loss", "shares": 10, "entry": 100.0, "direction": "bullish",
+        "stop_loss": 95.0, "exit_price": 95.0,
+        "legs": [
+            {"fraction": 0.5, "exit_price": 110.0, "r": None, "reason": "tp1"},
+            {"fraction": 0.5, "exit_price": 95.0, "reason": "stop"},
+        ],
+    }
+    assert [r["status"] for r in expand_trade_legs(trade)] == ["win", "loss"]
+
+
+def test_expand_trade_legs_price_sign_fallback_is_direction_adjusted():
+    """On a bearish position an exit BELOW entry is the win."""
+    trade = {
+        "status": "win", "shares": 10, "entry": 100.0, "direction": "bearish",
+        "stop_loss": 105.0, "exit_price": 90.0,
+        "legs": [
+            {"fraction": 0.5, "exit_price": 90.0, "reason": "tp1"},
+            {"fraction": 0.5, "exit_price": 104.0, "reason": "stop"},
+        ],
+    }
+    assert [r["status"] for r in expand_trade_legs(trade)] == ["win", "loss"]
+
+
+def test_expand_trade_legs_keeps_a_zero_r_leg_a_win():
+    """A leg that really did record r == 0 (scratched at breakeven) stays a
+    win -- the plan's Global Constraint is `r >= 0`. Only a MISSING r falls
+    through to the price-sign rule."""
+    trade = {
+        "status": "win", "shares": 10, "entry": 100.0, "direction": "bullish",
+        "stop_loss": 95.0, "exit_price": 100.0,
+        "legs": [{"fraction": 1.0, "exit_price": 100.0, "r": 0.0, "reason": "be"}],
+    }
+    assert [r["status"] for r in expand_trade_legs(trade)] == ["win"]
+
+
 def _scaled_out_win_then_loss_trade() -> dict:
     """One scaled-out position: a +2R TP1 leg and a -0.5R runner leg, whose
     blended whole-position outcome is a single `win`. The fixture the
