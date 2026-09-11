@@ -57,6 +57,26 @@ export function deriveOpenVisible(base: readonly string[]): string[] {
   return base.filter((key) => key !== 'closed_at').filter(DASHBOARD_OMITS_DIRECTION);
 }
 
+/** Columns a CANCELLED plan can actually fill.
+ *
+ *  `now`, `pnl_pct`, `r_multiple` and `hold` all describe an execution, and a
+ *  plan that never filled has none — they would render an em dash on every
+ *  row, which is a column's worth of width spent saying "not applicable".
+ *  `closed_at` survives and reads as when it was cancelled. */
+export function deriveCancelledVisible(visible: string[]): string[] {
+  const dead = new Set(['now', 'pnl_pct', 'r_multiple', 'hold']);
+  return visible.filter((column) => !dead.has(column));
+}
+
+/** The column set for one lifecycle tab — v85 D11/D12. Order comes from the
+ *  user's own picker list, so a reorder applies inside every tab rather than
+ *  each tab keeping a private arrangement. */
+export function visibleForTab(tab: string, visible: string[]): string[] {
+  if (tab === 'CLOSED') return deriveClosedVisible(visible);
+  if (tab === 'CANCELLED') return deriveCancelledVisible(visible);
+  return deriveOpenVisible(visible);
+}
+
 /**
  * Reconstitutes the shared picker list from one group's rendered order.
  *

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  deriveCancelledVisible,
   deriveClosedVisible,
   deriveOpenVisible,
   expectedPnlPct,
@@ -9,6 +10,7 @@ import {
   liveUnrealizedAmount,
   livePnlPct,
   reconcileReorder,
+  visibleForTab,
 } from './dashboard.helpers';
 
 describe('deriveClosedVisible', () => {
@@ -276,5 +278,40 @@ describe('liveUnrealizedAmount', () => {
     expect(
       liveUnrealizedAmount({ entry: 100, current_price: null, open_shares: 10, direction: 'bullish' }),
     ).toBeNull();
+  });
+});
+
+const ALL = ['ticker', 'status', 'confidence_level', 'entry', 'now', 'plan',
+             'pnl_pct', 'r_multiple', 'hold', 'opened_at', 'closed_at'];
+
+describe('deriveCancelledVisible', () => {
+  it('drops the columns a never-filled plan cannot fill', () => {
+    const cancelled = deriveCancelledVisible(ALL);
+    for (const dead of ['now', 'pnl_pct', 'r_multiple', 'hold']) {
+      expect(cancelled).not.toContain(dead);
+    }
+  });
+
+  it('keeps what a cancelled plan does have', () => {
+    const cancelled = deriveCancelledVisible(ALL);
+    for (const kept of ['ticker', 'status', 'plan', 'closed_at']) {
+      expect(cancelled).toContain(kept);
+    }
+  });
+});
+
+describe('visibleForTab', () => {
+  it('routes each tab to its own column set', () => {
+    expect(visibleForTab('ACTIVE', ALL)).toEqual(deriveOpenVisible(ALL));
+    expect(visibleForTab('PENDING', ALL)).toEqual(deriveOpenVisible(ALL));
+    expect(visibleForTab('PARTIAL', ALL)).toEqual(deriveOpenVisible(ALL));
+    expect(visibleForTab('CLOSED', ALL)).toEqual(deriveClosedVisible(ALL));
+    expect(visibleForTab('CANCELLED', ALL)).toEqual(deriveCancelledVisible(ALL));
+  });
+
+  it('preserves the user’s column ORDER inside each set', () => {
+    const reordered = ['status', 'ticker', ...ALL.filter((c) => !['status', 'ticker'].includes(c))];
+    const out = visibleForTab('ACTIVE', reordered);
+    expect(out.indexOf('status')).toBeLessThan(out.indexOf('ticker'));
   });
 });
