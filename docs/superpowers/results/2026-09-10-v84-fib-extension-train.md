@@ -38,6 +38,30 @@ far.
 Flag-off reproduces the pre-registered baseline exactly (N=246, WR=35.4%,
 ExpR=+0.232), confirming the measurement is apples-to-apples.
 
+### Per-horizon table (Step 3)
+
+| Horizon | N off | WR off | ExpR off | N on | WR on | ExpR on |
+|---|---|---|---|---|---|---|
+| 2w | 43 | 37.2% | +0.213 | 43 | 37.2% | +0.213 |
+| 2m | 33 | 33.3% | +0.101 | 33 | 33.3% | +0.101 |
+| 3m | 29 | 41.4% | +0.447 | 29 | 41.4% | +0.447 |
+| 4w | 63 | 30.2% | +0.280 | 63 | 30.2% | +0.277 |
+| 4m | 20 | 35.0% | +0.039 | 20 | 35.0% | +0.039 |
+| 5m | 16 | 37.5% | +0.267 | **15** | **40.0%** | **+0.319** |
+| 6m | 15 | 40.0% | +0.266 | 15 | 40.0% | +0.266 |
+| 7m | 10 | 30.0% | -0.013 | 10 | 30.0% | -0.013 |
+| 8m | 8 | 37.5% | +0.057 | 8 | 37.5% | +0.057 |
+| 9m | 9 | 44.4% | +0.342 | 9 | 44.4% | +0.342 |
+
+Nine of ten horizons are byte-identical between flag-off and flag-on. The
+entire pooled delta (246->245 N, the WR/ExpR shift) is concentrated in **5m
+alone** (N 16->15, WR 37.5%->40.0%, ExpR +0.267->+0.319), plus a
+sub-rounding ExpR wobble at 4w (+0.280 vs +0.277, same N). This confirms the
+override is genuinely live (a silently-inert flag would show ten identical
+rows, not nine identical and one changed) and pins down exactly how narrow
+the geometric effect is: across the whole TRAIN population, the 1.0
+extension became the nearest-qualifying candidate for exactly one trade.
+
 ## Observation
 
 The 1.0 extension candidate had almost no effect on this population: N moved
