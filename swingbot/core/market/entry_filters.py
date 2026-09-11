@@ -280,7 +280,12 @@ def ema_cross_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["EMA Crossover"] = ema_cross_entries
 
 
-DEFAULT_PARAMS["VWAP"] = {"ext_pct": 1.5, "hold_bars_2w": 3, "hold_bars_other": 2}
+DEFAULT_PARAMS["VWAP"] = {
+    "ext_pct": 1.5, "hold_bars_2w": 3, "hold_bars_other": 2,
+    # v84 R14 fallback. None = gate off (the shipped default until its own
+    # TRAIN + fold check passes). Units: VWAP's 8-bar rise per ATR.
+    "min_vwap_slope_atr": None,
+}
 
 
 def vwap_entries(df, horizon_key, params=None):
@@ -300,6 +305,12 @@ def vwap_entries(df, horizon_key, params=None):
 
     vwap_up = vwap > vwap.shift(3)
     vwap_down = vwap < vwap.shift(3)
+    slope_min = p.get("min_vwap_slope_atr")
+    if slope_min is not None:
+        atr14 = g["atr14"]
+        slope = (vwap - vwap.shift(8)) / atr14.replace(0, np.nan)
+        vwap_up = vwap_up & (slope >= slope_min)
+        vwap_down = vwap_down & (slope <= -slope_min)
     ext = (close - vwap).abs() / vwap.replace(0, np.nan) * 100
     not_extended = ext <= p["ext_pct"]       # reclaim near value, don't chase
     rsi14 = g["rsi14"]

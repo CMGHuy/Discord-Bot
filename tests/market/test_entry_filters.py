@@ -176,6 +176,51 @@ def test_vwap_entries_flat_market_produces_nothing(flat_df):
     assert not bull.any() and not bear.any()   # atr_floor gate blocks dead tape
 
 
+def _make_vwap_reclaim_df(n, daily_drift_pct, amp_pct=3.0, period=20,
+                          spread_pct=2.0, start_price=100.0):
+    """v84 R14: `make_trend_df`'s smooth monotonic close never produces a
+    VWAP reclaim -- once the rolling-VWAP window fills, close - vwap is
+    positive for the rest of the series (it never dips back to/below vwap),
+    so `held_bull` in `vwap_entries` is always all-False regardless of drift
+    (verified: both 0.005%/day and 0.30%/day drift via plain `make_trend_df`
+    yield zero bullish entries with the gate on OR off -- not a useful test).
+    A small oscillation riding the trend restores genuine dip-then-reclaim
+    events so the slope gate has something real to bite on."""
+    t = np.arange(n)
+    trend = start_price * (1 + daily_drift_pct / 100) ** t
+    osc = 1 + (amp_pct / 100) * np.sin(2 * np.pi * t / period)
+    return make_ohlcv(trend * osc, spread_pct=spread_pct)
+
+
+def test_vwap_slope_persistence_gate_suppresses_flat_vwap():
+    """v84 R14 fallback: a reclaim while VWAP itself is flat is filtered.
+    Current vwap_up is a magnitude-free 3-bar direction check, so a
+    barely-rising VWAP passes it."""
+    from swingbot.core.market.entry_filters import vwap_entries
+
+    flat = _make_vwap_reclaim_df(400, +0.005)   # near-flat drift: VWAP slope ~ 0
+    on, _ = vwap_entries(flat, "4w", params={"min_vwap_slope_atr": 0.25})
+    off, _ = vwap_entries(flat, "4w", params={"min_vwap_slope_atr": None})
+    assert off.sum() >= on.sum()
+    assert on.sum() < off.sum()           # the gate must actually bite here
+
+    strong = _make_vwap_reclaim_df(400, +0.10)  # steep trend: VWAP clearly rising
+    s_on, _ = vwap_entries(strong, "4w", params={"min_vwap_slope_atr": 0.25})
+    s_off, _ = vwap_entries(strong, "4w", params={"min_vwap_slope_atr": None})
+    assert s_off.sum() > 0                # sanity: the strong case fires at all
+    assert s_on.sum() == s_off.sum()      # unaffected where VWAP genuinely trends
+
+
+def test_vwap_slope_gate_off_is_byte_identical():
+    from swingbot.core.market.entry_filters import vwap_entries
+    from tests.conftest import make_trend_df
+
+    df = make_trend_df(300, +0.2)
+    a, b = vwap_entries(df, "4w")
+    c, d = vwap_entries(df, "4w", params={"min_vwap_slope_atr": None})
+    assert (a == c).all() and (b == d).all()
+
+
 GATED_BY_MA50.extend(["MACD", "MA Ribbon"])
 
 
