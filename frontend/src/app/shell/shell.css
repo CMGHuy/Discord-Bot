@@ -200,6 +200,20 @@
   border-bottom: 1px solid var(--border);
 }
 
+/* The tape takes the slack and is the only thing allowed to scroll: a
+   min-width of 0 on a flex child is what lets it shrink below its content
+   instead of pushing the status cluster off the end of the bar. */
+.topbar-tape {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.topbar-tape::-webkit-scrollbar { display: none; }
+
 .spacer {
   flex: 1;
 }

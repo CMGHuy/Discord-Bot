@@ -84,12 +84,18 @@ describe('shell navigation', () => {
     });
   });
 
-  it('places both lanes between the topbar and the workspace', () => {
+  it('carries both lanes inside the top bar row, not beneath it', () => {
     const fixture = TestBed.createComponent(Shell);
     fixture.detectChanges();
-    const main = fixture.nativeElement.querySelector('.main') as HTMLElement;
-    const order = Array.from(main.children).map((el) => el.tagName.toLowerCase());
-    expect(order).toEqual(['header', 'sb-market-lane', 'sb-names-lane', 'main']);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const main = el.querySelector('.main') as HTMLElement;
+    expect(Array.from(main.children).map((c) => c.tagName.toLowerCase()))
+      .toEqual(['header', 'main']);
+
+    const header = el.querySelector('header.topbar') as HTMLElement;
+    expect(header.querySelector('sb-market-lane')).not.toBeNull();
+    expect(header.querySelector('sb-names-lane')).not.toBeNull();
   });
 
   it('loads the tape once on construction', () => {
