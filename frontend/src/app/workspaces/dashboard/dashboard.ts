@@ -121,6 +121,11 @@ import { MarketMovers } from './panels/market-movers';
          directly (it also skipped the v13 refetch mapping asyncInputs
          provides, which this raw binding never applied). -->
     <sb-section-head>
+      <!-- v85: the qualifying-trades rule moves into a drawer (below) --
+           same words, one click away instead of always on the page face. -->
+      <button sb-button variant="ghost" type="button" actions data-info="qualifying"
+              aria-label="What appears here"
+              (click)="infoOpen.set('qualifying')">?</button>
       <!-- SR58. The Jinja dashboard's three date scopes. A server parameter,
            not a client filter: the realised figures below are computed from
            the scoped set, and a client-side scope over an all-time payload
@@ -142,16 +147,20 @@ import { MarketMovers } from './panels/market-movers';
 
     <!-- SR59. Copied from dashboard.html:60-68, not paraphrased: it states
          a specific rule about what does and does not reach this screen, and a
-         looser wording would describe a looser rule. -->
-    <p class="explainer">
-      <strong>What appears here:</strong>
-      Only trades that meet <em>every</em> configured requirement (min reward,
-      stop distance, risk:reward, min strategies confirmed, min confidence) are
-      logged here as paper trades. Trade plans shown by <code>!check</code> that
-      don't clear all requirements appear in Discord but are <strong>not</strong>
-      logged — they're marked in bold red in the Discord embed. The automatic
-      background scan only ever posts and logs fully-qualifying setups.
-    </p>
+         looser wording would describe a looser rule. Moved off the page face
+         into a drawer (v85 D18) -- same words, verbatim, one click away. -->
+    <sb-drawer [open]="infoOpen() === 'qualifying'" heading="What appears here"
+               (closed)="infoOpen.set(null)">
+      <p class="section-help">
+        <strong>What appears here:</strong>
+        Only trades that meet <em>every</em> configured requirement (min reward,
+        stop distance, risk:reward, min strategies confirmed, min confidence) are
+        logged here as paper trades. Trade plans shown by <code>!check</code> that
+        don't clear all requirements appear in Discord but are <strong>not</strong>
+        logged — they're marked in bold red in the Discord embed. The automatic
+        background scan only ever posts and logs fully-qualifying setups.
+      </p>
+    </sb-drawer>
 
     <sb-async
       [loading]="async().loading"
@@ -192,11 +201,22 @@ import { MarketMovers } from './panels/market-movers';
       />
     </div>
 
-    <!-- SR59. The chip carries the number and the "max" qualifier; this is
-         the reasoning behind it, from dashboard_fragment.html:81-87. -->
-    @if (premiumExplanation(); as explanation) {
-      <p class="section-help">{{ explanation }}</p>
-    }
+    <!-- SR59. The sizing note (dashboard_fragment.html:81-87) plus the
+         share-count snapshot note (below, moved out of the Open positions
+         panel body) -- both explain how the numbers on this page were
+         sized/counted, so one drawer, one trigger (v85 D18). -->
+    <sb-drawer [open]="infoOpen() === 'sizing'" heading="Sizing"
+               (closed)="infoOpen.set(null)">
+      @if (premiumExplanation(); as explanation) {
+        <p class="section-help">{{ explanation }}</p>
+      }
+      <p class="section-help">
+        Share counts are snapshotted when a position opens. A trade logged
+        before that snapshot existed shows an estimate instead, and a position
+        opened under a different sizing mode will not match the premium note
+        above.
+      </p>
+    </sb-drawer>
 
     <!-- SR59. _plans_board.html:22-27, verbatim, and the figure that
          illustrates it -- both moved out of the page body into this
@@ -254,29 +274,19 @@ import { MarketMovers } from './panels/market-movers';
     </sb-drawer>
 
     <sb-panel heading="Open positions" [flush]="true">
+      <!-- SR59, the last cosmetic row: dashboard_fragment.html:391's shares
+           tooltip. Moved into the shared "Sizing" drawer above (v85 D18) --
+           the per-trade half of it (which sizing mode a position was opened
+           under, and whether that still matches today's setting) reads from
+           sizing_mode, which lives on the detail payload and belongs on the
+           detail view. -->
+      <button sb-button variant="ghost" type="button" panel-actions data-info="sizing"
+              aria-label="Sizing note"
+              (click)="infoOpen.set('sizing')">?</button>
       <button sb-button variant="ghost" type="button" panel-actions
               (click)="lifecycleInfoOpen.set(true)">
         Lifecycle guide
       </button>
-      <!-- SR59, the last cosmetic row: dashboard_fragment.html:391's
-           shares tooltip. A panel note rather than a per-cell title, per this
-           task's Step 2 — and because the per-trade half of it (which sizing
-           mode a position was opened under, and whether that still matches
-           today's setting) reads from sizing_mode, which lives on the
-           detail payload and belongs on the detail view.
-
-           Padded explicitly: the panel is flush (the tables below need
-           edge-to-edge rows), which zeroes the body's own padding, so
-           without this the text would sit flush against the panel's left
-           edge while the "Open positions" heading above keeps the header's
-           padding — two pieces of text in one panel with different left
-           edges. The panel-note class below restores just that one inset. -->
-      <p class="section-help panel-note">
-        Share counts are snapshotted when a position opens. A trade logged
-        before that snapshot existed shows an estimate instead, and a position
-        opened under a different sizing mode will not match the premium note
-        above.
-      </p>
 
       <!-- Four groups, not one merged list. status=open (ACTIVE-or-PARTIAL)
            is the only existing alias and it drops PENDING and CLOSED
@@ -361,6 +371,11 @@ import { MarketMovers } from './panels/market-movers';
       <sb-watchlist-panel [rows]="tape.rows()" />
     </div>
 
+    <!-- v85 D18: the footnote moves into a drawer, off the page face. -->
+    <button sb-button variant="ghost" type="button" data-info="prices"
+            aria-label="About prices and sizing"
+            (click)="infoOpen.set('prices')">?</button>
+
     <!-- SR59. dashboard_fragment.html:443-445, with ONE claim deliberately
          changed rather than copied: that line said "live prices refresh
          approximately every 15 seconds", which was true of the Jinja page's
@@ -368,13 +383,16 @@ import { MarketMovers } from './panels/market-movers';
          admin/app.py and admin/pages.py -- both Jinja. This SPA refreshes
          on server events, so copying the sentence would have stated a stale
          threshold, which the task's Step 3 calls worse than no copy. -->
-    <p class="footnote">
-      Prices and P&L update when the bot reports a change, not on a timer.
-      @if (riskSizingNote(); as note) {
-        · {{ note }}
-      }
-      · <code>!account</code> to change
-    </p>
+    <sb-drawer [open]="infoOpen() === 'prices'" heading="About prices"
+               (closed)="infoOpen.set(null)">
+      <p class="section-help">
+        Prices and P&L update when the bot reports a change, not on a timer.
+        @if (riskSizingNote(); as note) {
+          · {{ note }}
+        }
+        · <code>!account</code> to change
+      </p>
+    </sb-drawer>
     </sb-async>
 
     <ng-template #statusCell let-row>
@@ -498,19 +516,6 @@ import { MarketMovers } from './panels/market-movers';
     <ng-template #closedCell let-row>{{ fmtDate(row.closed_at) }}</ng-template>
   `,
   styles: `
-    /* -- SR59: explanatory copy ----------------------------------- */
-    .explainer {
-      margin-bottom: var(--space-10);
-      padding: var(--space-8) var(--space-10);
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--accent);
-      border-radius: var(--radius-sm);
-      color: var(--text-secondary);
-      font-size: var(--text-chip);
-      line-height: 1.5;
-    }
-    .explainer code { font-family: var(--font-mono); }
-
     /* The GAP between the Active/Pending/Partial/Closed group cards (each
        card's own border/background is trade-group.ts's .group rule).
        Lives HERE rather than in trade-group.ts's own styles: a component's
@@ -550,14 +555,6 @@ import { MarketMovers } from './panels/market-movers';
       margin-top: 0;
       border-top: var(--register-pad) solid var(--bg);
     }
-
-    .footnote {
-      margin-top: var(--space-8);
-      color: var(--text-faint);
-      font-size: var(--text-chip);
-      text-align: right;
-    }
-    .footnote code { font-family: var(--font-mono); }
 
     /* -- SR58: scope toggle ---------------------------------------- */
     /* Groups the stale message and the scope toggle into one actions
@@ -670,13 +667,6 @@ import { MarketMovers } from './panels/market-movers';
       font-size: var(--text-table);
     }
 
-    /* Restores the header's left inset for text sitting directly in the
-       flush panel body -- see the template comment above .panel-note's one
-       use. Top spacing too, so it doesn't crowd the panel's header rule. */
-    .panel-note {
-      padding: var(--space-10) var(--space-14) 0;
-    }
-
     .all-link {
       color: var(--accent);
       font-size: var(--text-table);
@@ -759,6 +749,10 @@ export class Dashboard {
    *  content used to sit on the page body and now lives behind the Open
    *  positions panel's "Lifecycle guide" button. */
   protected readonly lifecycleInfoOpen = signal(false);
+
+  /** The other three explanatory drawers (v85 D18) -- one signal, since only
+   *  one can be open at a time, rather than a boolean per drawer. */
+  protected readonly infoOpen = signal<null | 'qualifying' | 'sizing' | 'prices'>(null);
 
   /** Zero open positions is a RESULT (the scan found nothing qualifying in
    *  this scope), not missing data -- measured-zero, not no-data-yet. */

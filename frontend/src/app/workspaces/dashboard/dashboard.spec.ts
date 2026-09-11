@@ -16,8 +16,13 @@ import {
 import { Dashboard as DashboardData, TradeRow } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
+import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { Dashboard } from './dashboard';
 import { DashboardStore } from '../../stores/dashboard.store';
+
+// v85: the explanatory drawers are real <dialog> elements (sb-drawer); jsdom
+// has no showModal()/close(). See the polyfill for why <dialog> stays.
+installDialogPolyfill();
 
 /** Dashboard reads only currency() from ConnectionStore and
  *  values()/isLoaded()/update() from PreferencesStore -- stubbed rather than
@@ -204,5 +209,31 @@ describe('Dashboard v85 layout', () => {
     el.querySelector<HTMLButtonElement>('[data-scope="all"]')!.click();
     fixture.detectChanges();
     expect(TestBed.inject(DashboardStore).scope()).toBe('all');
+  });
+});
+
+describe('Dashboard v85 explanatory drawers', () => {
+  it('keeps the qualifying-trades explainer reachable but off the page face', () => {
+    // The [data-info="qualifying"] trigger sits in sb-section-head, outside
+    // sb-async, so it renders even before the dashboard payload arrives.
+    const { fixture } = seed();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // Not in the page body any more…
+    expect(el.querySelector('.explainer')).toBeNull();
+
+    // …but one click away, and still the same rule, stated in full.
+    el.querySelector<HTMLButtonElement>('[data-info="qualifying"]')!.click();
+    fixture.detectChanges();
+    expect(el.textContent).toContain('Only trades that meet');
+    expect(el.textContent).toContain('are logged here as paper trades');
+  });
+
+  it('keeps the sizing note and the footnote reachable too', async () => {
+    const fixture = await loaded();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-info="sizing"]')).not.toBeNull();
+    expect(el.querySelector('[data-info="prices"]')).not.toBeNull();
   });
 });
