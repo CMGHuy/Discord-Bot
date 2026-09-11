@@ -12,7 +12,6 @@ import itertools
 import json
 import sys
 import warnings
-from collections import defaultdict
 from pathlib import Path
 
 warnings.filterwarnings("ignore")

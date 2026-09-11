@@ -1,11 +1,8 @@
 """Scan orchestration and async notification delivery."""
 import asyncio
-import json as _json
 import logging
 import math
-import os
 import time
-from collections import defaultdict
 from datetime import datetime, timezone
 
 from swingbot import config

@@ -14,7 +14,7 @@ from swingbot.core.marketdata.data import get_current_price
 from swingbot.core.infra.silent_channel import silence
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.marketdata.watchlist import load_watchlist
-from . import alerts, presence, recap, runstate
+from . import presence, recap, runstate
 from .alerts import _send_alerts
 
 trade_log = scan_engine.trade_log
@@ -628,11 +628,7 @@ async def daily_recap():
     Guards against duplicate posts within the same calendar day.
     """
     global _recap_fired_date
-    try:
-        from zoneinfo import ZoneInfo as _ZI
-        now = dt.datetime.now(_ZI("Europe/Berlin"))
-    except Exception:
-        now = dt.datetime.utcnow()
+    now = dt.datetime.now(SESSION_TZ)
 
     # Mon-Fri (0-4): normal end-of-session retrospective. Sunday (6): the
     # retrospective still fires -- its Parts 1-7 (trade tables, lessons)
@@ -674,11 +670,7 @@ async def weekend_deep_scan_task():
     its own loop rather than a branch inside daily_recap so a slow/failing
     deep scan can never affect the weekday/Sunday retrospective's own timing."""
     global _weekend_scan_fired_date
-    try:
-        from zoneinfo import ZoneInfo as _ZI
-        now = dt.datetime.now(_ZI("Europe/Berlin"))
-    except Exception:
-        now = dt.datetime.utcnow()
+    now = dt.datetime.now(SESSION_TZ)
 
     if now.weekday() != 5:   # Saturday only
         return

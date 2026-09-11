@@ -2,7 +2,6 @@
 import inspect
 
 import numpy as np
-import pytest
 
 from swingbot.core.backtesting import backtest_scenarios
 from tests.helpers import make_ohlcv

@@ -136,12 +136,6 @@ MAX_TRENDLINES_PER_SIDE = 2
 # both drop to ~0.02s at this cap, same trendlines found).
 MAX_PIVOT_SCAN_BARS = 1500
 
-# How many display bars to use for the chart coordinate system.  Mirrors
-# DEFAULT_TRENDLINE_LOOKBACK_DAYS in trade_chart.py -- the fit itself
-# uses ALL available history, but coordinates returned to the chart are
-# expressed relative to this display window so the chart need not expand.
-DEFAULT_DISPLAY_BARS = 90
-
 
 # ── Volume-confirmed pivot scanner ────────────────────────────────────────────
 

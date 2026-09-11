@@ -39,7 +39,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 import numpy as np  # noqa: E402
 
-from swingbot import config  # noqa: E402
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest  # noqa: E402
 from swingbot.core.backtesting.backtest_wf import (ANCHORED_FOLDS, GATE_MAX_DEGRADATION_R,  # noqa: E402
                                        GATE_MIN_IMPROVING_FOLDS,

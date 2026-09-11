@@ -587,7 +587,7 @@ def main():
         "density = trades opened on the same calendar date across the whole",
         "universe, including itself. A PROXY for alert count -- not every alert",
         "becomes a trade.",
-        f"buckets: " + ", ".join(
+        "buckets: " + ", ".join(
             f"{n}={lo}" if lo == hi else (f"{n}={lo}+" if hi >= 10_000 else f"{n}={lo}-{hi}")
             for n, lo, hi in DENSITY_BUCKETS),
         f"exits: v2 + {'scale-out' if args.scale_out else 'single-leg'}; "

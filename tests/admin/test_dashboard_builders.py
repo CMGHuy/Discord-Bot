@@ -20,17 +20,6 @@ from swingbot.admin import dashboard as dash
 
 
 # ---------------------------------------------------------------------------
-# Mode handling
-# ---------------------------------------------------------------------------
-@pytest.mark.parametrize("value,expected", [
-    ("active", "active"), ("today", "today"), ("all", "all"),
-    ("", "active"), (None, "active"), ("garbage", "active"), ("ALL", "active"),
-])
-def test_normalize_mode_clamps_to_a_known_mode(value, expected):
-    assert dash.normalize_mode(value) == expected
-
-
-# ---------------------------------------------------------------------------
 # Duration formatting
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize("seconds,label", [
@@ -97,12 +86,6 @@ def test_scoped_closed_trades_excludes_open_positions():
         [_closed("a", "2026-01-01T00:00:00+00:00"),
          {"id": "b", "status": "open", "ticker": "AAA"}], "all")
     assert [r["id"] for r in rows] == ["a"]
-
-
-def test_scoped_trades_returns_none_for_all_mode():
-    """None is the signal TradeLog.get_stats() reads as 'use every trade', so
-    'all' mode never materialises a redundant copy of the list."""
-    assert dash.scoped_trades([_closed("a", "2026-01-01T00:00:00+00:00")], "all") is None
 
 
 # ---------------------------------------------------------------------------

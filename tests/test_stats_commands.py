@@ -8,7 +8,7 @@ import pytest
 
 from swingbot.commands.stats import _fake_item_from_plan, stats_embed, top_plans
 from swingbot.core.planning.plan_engine import TradePlanV2
-from swingbot.core.scanning import embeds as embeds_mod, snapshots
+from swingbot.core.scanning import snapshots
 from swingbot.core.scanning.embeds import build_embed
 from swingbot.core import presentation as ui
 
@@ -307,8 +307,8 @@ def test_no_direct_chart_render_calls_outside_to_thread():
     command and the scan loop's own message sends for that whole window.
 
     Deliberately whitelists specific matplotlib chart-renderer names
-    (generate_trade_chart, render_equity_curve, render_r_histogram,
-    render_calibration, render_strategy_heatmap) rather than a blanket
+    (generate_trade_chart, render_equity_curve, render_calibration) rather
+    than a blanket
     'render_\\w+(' pattern -- the broader pattern false-positives against
     plans.py's render_board() and views.py's self.render_fn(), which are
     plain Python text/embed builders with no matplotlib involvement and no
@@ -317,7 +317,7 @@ def test_no_direct_chart_render_calls_outside_to_thread():
     import swingbot.commands.plans as plans_mod
     import swingbot.commands.views as views_mod
 
-    pattern = re.compile(r"(generate_trade_chart\(|render_(equity_curve|r_histogram|calibration|strategy_heatmap)\()")
+    pattern = re.compile(r"(generate_trade_chart\(|render_(equity_curve|calibration)\()")
     for mod in (stats_mod, plans_mod, views_mod):
         import inspect
         for lineno, line in enumerate(inspect.getsource(mod).splitlines(), start=1):

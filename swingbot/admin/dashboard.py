@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 # `load_account_config` is re-exported: api_v1/dashboard.py reaches it as
 # `dash.load_account_config`, so it is used even though nothing in this file
 # calls it.
-from swingbot.core.planning.account import compute_position_size, load_account_config
+from swingbot.core.planning.account import compute_position_size, load_account_config  # noqa: F401
 from swingbot.core.marketdata.data import get_current_price, prefetch_prices
 from swingbot.core.tracking.performance import closed_pnl_pct, closed_r_multiple, trade_proximity
 
@@ -41,23 +41,7 @@ except Exception:
     _BERLIN_TZ = None
 
 
-DASHBOARD_MODES = ("active", "today", "all")
 CLOSED_TRADE_STATUSES = ("win", "loss", "closed")
-
-# Rows Trade History renders server-side for its FIRST paint. Later pages come
-# from /api/trade-history, so this is a first-paint size, not a cap on how much
-# history is reachable.
-CLOSED_TRADES_FIRST_PAGE = 25
-
-# Allowed page sizes, mirroring the table's own selector. 0 means "All".
-# Clamped server-side: the page size decides how much work a request does, so
-# it is never taken on trust from the query string.
-ALLOWED_PER_PAGE = (10, 25, 50, 0)
-
-
-def normalize_mode(value) -> str:
-    """Coerce anything (query string, None, junk) to a valid dashboard mode."""
-    return value if value in DASHBOARD_MODES else "active"
 
 
 # ---------------------------------------------------------------------------
@@ -317,36 +301,6 @@ def scoped_closed_trades(all_raw, mode: str) -> list:
     if mode in ("today", "active"):
         rows = [t for t in rows if is_today_berlin(t.get("closed_at"))]
     return rows
-
-
-def scoped_trades(all_raw, mode: str):
-    """Trades the mode's stat cards summarize.
-
-    Returns None for "all" -- TradeLog.get_stats()/get_extended_stats() treat
-    None as "use the full trade set", so this avoids materialising a copy.
-
-      * "active" (default): today's new trades PLUS every still-open position
-        regardless of which day it was opened -- "what needs attention now".
-        The only mode that mixes days: an old open swing from last week still
-        shows (it is still live risk), but closed-trade stats only count
-        today's closes.
-      * "today": strictly today's Europe/Berlin activity -- opened today or
-        closed today. An old open trade is NOT shown even though it is open.
-      * "all": every trade, no date filtering.
-    """
-    if mode == "today":
-        return [
-            t for t in all_raw
-            if is_today_berlin(t.get("opened_at")) or is_today_berlin(t.get("closed_at"))
-        ]
-    if mode == "active":
-        return [
-            t for t in all_raw
-            if t["status"] == "open"
-            or is_today_berlin(t.get("opened_at"))
-            or is_today_berlin(t.get("closed_at"))
-        ]
-    return None
 
 
 # ---------------------------------------------------------------------------

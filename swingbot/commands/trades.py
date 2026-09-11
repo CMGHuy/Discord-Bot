@@ -245,7 +245,7 @@ def _build_trade_detail_embed(match: dict) -> discord.Embed:
     if match.get("risk_reward_ratio"):
         embed.add_field(name="Reward:Risk", value=f"{match['risk_reward_ratio']}:1", inline=True)
     else:
-        embed.add_field(name="​", value="​", inline=True)   # keeps the 3-column grid even
+        embed.add_field(name="\u200b", value="\u200b", inline=True)   # keeps the 3-column grid even
 
     reward_pct = abs(match["take_profit"] - match["entry"]) / match["entry"] * 100 if match["entry"] else 0.0
     embed.add_field(name="Entry", value=ui.fmt_price(match["entry"], cur), inline=True)
@@ -499,13 +499,13 @@ async def summary_cmd(ctx):
     if manual_today:
         embed.add_field(name="Manually closed", value=f"🔒 {len(manual_today)}", inline=True)
     else:
-        embed.add_field(name="​", value="​", inline=True)   # keeps the 3-column grid even
+        embed.add_field(name="\u200b", value="\u200b", inline=True)   # keeps the 3-column grid even
 
     pnl_emoji = "🟢" if (avg_pnl_pct or 0) > 0 else "🔴" if (avg_pnl_pct or 0) < 0 else "⚪"
     net_emoji = "🟢" if (net_amount or 0) > 0 else "🔴" if (net_amount or 0) < 0 else "⚪"
     embed.add_field(name="📊 Avg realized P&L", value=f"{pnl_emoji} {ui.fmt_pct(avg_pnl_pct)}" if avg_pnl_pct is not None else "n/a", inline=True)
     embed.add_field(name="💰 Net gain/loss", value=f"{net_emoji} {net_amount:+.2f}" if net_amount is not None else "n/a", inline=True)
-    embed.add_field(name="​", value="​", inline=True)
+    embed.add_field(name="\u200b", value="\u200b", inline=True)
 
     embed.add_field(name="🏦 Account balance", value=ui.fmt_price(acct["balance"]) if acct["balance"] is not None else "n/a", inline=True)
     bal_change = acct.get("pct_change_today")
@@ -515,7 +515,7 @@ async def summary_cmd(ctx):
         value=f"{bal_emoji} {ui.fmt_pct(bal_change)}" if bal_change is not None else "no change yet today",
         inline=True,
     )
-    embed.add_field(name="​", value="​", inline=True)
+    embed.add_field(name="\u200b", value="\u200b", inline=True)
 
     if closed_today:
         lines = []
@@ -544,7 +544,7 @@ async def summary_cmd(ctx):
         embed.add_field(name="Opened trades today", value=f"```{text}```", inline=False)
 
     if not opened_today and not closed_today:
-        embed.add_field(name="​", value="No trades opened or closed yet today.", inline=False)
+        embed.add_field(name="\u200b", value="No trades opened or closed yet today.", inline=False)
 
     ui.apply_chrome(embed, accent=ui.accent_for_outcome(outcome))
     await ctx.send(embed=embed)

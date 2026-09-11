@@ -55,8 +55,8 @@ def resolve_outcome(trade: dict) -> str:
     if legs:
         candidates.append(legs[-1].get("reason", ""))
     candidates.append((trade.get("close_reason") or ""))
-    for reason in candidates:
-        reason = reason.lower()
+    for raw in candidates:
+        reason = raw.lower()
         if "scratch" in reason:
             return "scratch"
         if "timeout" in reason:

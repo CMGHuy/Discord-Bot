@@ -19,7 +19,10 @@ from .loops import (
     weekend_deep_scan_task,
 )
 from .recap import weekend_deep_scan
-from .runstate import _HEARTBEAT_FILE, _MANUAL_CLOSE_QUEUE, _PAUSE_FILE, _TRIGGER_FILE, is_scan_paused, set_scan_paused
+from .runstate import is_scan_paused, set_scan_paused
+# Re-exported for tests/admin/test_api_v1_system_scan.py, which patches the
+# flag paths on this package rather than on runstate.
+from .runstate import _HEARTBEAT_FILE, _PAUSE_FILE, _TRIGGER_FILE  # noqa: F401
 
 __all__ = [
     "is_scan_paused", "set_scan_paused",

@@ -7,29 +7,8 @@ backtests, the live plan manager — builds and prices it here.
 """
 from __future__ import annotations
 
-import dataclasses
-import logging
-import uuid
-from dataclasses import dataclass, field
-
-import numpy as np
-
-from swingbot import config
-from swingbot.core.market import levels
-from swingbot.core.market import opex
-from swingbot.core.market.levels import MAX_TARGET2_LEG_MULTIPLE
-from swingbot.core.backtesting.registry import Badge, decay_note, get_badge
-from swingbot.core.market.strategy_types import (
-    BREAKEVEN_TRIGGER_FRACTION,
-    HORIZONS,
-)
 from .plan_types import (PlanStatus, TradePlanV2, effective_stop, plan_to_dict,
                          plan_from_dict, record_transition)
-from . import params
-from . import targets
-from . import lifecycle
-from . import exit_sim
-from . import builders
 from .builders import (STRATEGY_ENTRY_TYPE, WEAK_CAUTION_TEXT, _atr_plan,
                        _fibonacci_plan, _sr_plan, _elliott_plan,
                        build_strategy_plan, scenario_is_breakout,

@@ -26,7 +26,7 @@ from swingbot.core.edge import factors as rs_factors
 from swingbot.core.market import levels
 from swingbot.core.market.strategy_types import HORIZONS
 from swingbot.core.planning import quality
-from swingbot.core.scanning.confidence import honesty_cap, level_for_score
+from swingbot.core.scanning.confidence import level_for_score
 from swingbot.core.scanning.factors import FACTORS, FactorContext, run_factors
 from swingbot.core.scanning.regime import get_htf_bias
 

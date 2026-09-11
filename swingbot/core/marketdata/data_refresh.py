@@ -20,8 +20,6 @@ import logging
 import os
 import time
 
-import pandas as pd
-
 from swingbot import config
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.marketdata.adjustments import merge_adjusted
