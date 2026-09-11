@@ -6,7 +6,7 @@ import { provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TradesStore } from '../../stores/trades.store';
-import { PositionsTable } from './positions-table';
+import { PositionsTable, POSITION_TABS } from './positions-table';
 
 describe('positions table', () => {
   let setQuery: ReturnType<typeof vi.fn>;
@@ -39,6 +39,16 @@ describe('positions table', () => {
     for (const [k, v] of Object.entries(inputs)) f.componentRef.setInput(k, v);
     f.detectChanges();
     return f;
+  }
+
+  /** Clicks the tab strip button for `id`, by its fixed POSITION_TABS index --
+   *  the rendered label carries a live count too, so an id lookup is more
+   *  robust than matching on label text. */
+  function clickTab(f: ReturnType<typeof mount>, id: string): void {
+    const index = POSITION_TABS.findIndex((t) => t.id === id);
+    (f.nativeElement as HTMLElement)
+      .querySelectorAll<HTMLButtonElement>('[role="tab"]')[index].click();
+    f.detectChanges();
   }
 
   it('offers the five lifecycle tabs, in lifecycle order', () => {
@@ -85,5 +95,30 @@ describe('positions table', () => {
       .querySelectorAll<HTMLButtonElement>('[role="tab"]')[2].click();
     f.detectChanges();
     expect(setQuery.mock.calls.at(-1)![0]).toMatchObject({ page: 1 });
+  });
+
+  it('keeps a column reorder when the tab changes and changes back', () => {
+    const f = mount();
+    const reordered: string[][] = [];
+    f.componentInstance.reorder.subscribe((order: string[]) => reordered.push(order));
+
+    // A drag inside the ACTIVE tab emits the reconciled picker list upward.
+    f.componentInstance.reorder.emit(['status', 'ticker', 'plan']);
+    f.detectChanges();
+
+    // Switch away and back; the table must ask for the same order it was given.
+    clickTab(f, 'PENDING');
+    clickTab(f, 'ACTIVE');
+    expect(reordered.at(-1)).toEqual(['status', 'ticker', 'plan']);
+  });
+
+  it('asks for the right column set per tab from one shared picker list', () => {
+    const seen: string[] = [];
+    const f = mount({ visibleFor: (tab: string) => { seen.push(tab); return ['ticker']; } });
+    clickTab(f, 'CLOSED');
+    clickTab(f, 'CANCELLED');
+    expect(seen).toContain('ACTIVE');
+    expect(seen).toContain('CLOSED');
+    expect(seen).toContain('CANCELLED');
   });
 });
