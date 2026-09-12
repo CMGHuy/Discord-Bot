@@ -202,3 +202,110 @@ def test_benchmark_block_is_present_even_when_yfinance_is_unavailable(seed, logg
 
 def test_range_requires_auth_like_every_other_analytics_route(client):
     assert client.get("/api/v1/analytics/performance?from=2024-01-01").status_code == 401
+
+
+# --- R9-01: GET /analytics/equity-curve --------------------------------
+
+def _closed_r(trade_id, *, closed_at, r, strategy="RSI"):
+    """A closed trade whose `core.analytics.metrics.r_multiple()` evaluates
+    to exactly `r`, built through `_closed()`'s fixed entry=100/
+    stop_loss=95 (risk=5): exit = 100 + r*5.
+
+    `r=None` builds a zero-risk trade (stop_loss forced equal to entry) --
+    the one case `r_multiple()` itself treats as unmeasurable and returns
+    None for, rather than a trade missing some field outright. That is the
+    real "null, not zero" case this endpoint has to skip.
+    """
+    entry = 100.0
+    if r is None:
+        t = _closed(trade_id, opened=closed_at, closed_at=closed_at,
+                     entry=entry, exit_price=entry, strategy=strategy)
+        t["stop_loss"] = entry
+        return t
+    exit_price = entry + r * (entry - entry * 0.95)
+    return _closed(trade_id, opened=closed_at, closed_at=closed_at,
+                   entry=entry, exit_price=exit_price, strategy=strategy)
+
+
+def _curve(client, query=""):
+    return client.get("/api/v1/analytics/equity-curve" + query).get_json()
+
+
+def test_the_curve_accumulates_r_in_close_order(seed, logged_in):
+    seed(trades=[
+        _closed_r("a" * 16, closed_at="2026-04-03T16:00:00+00:00", r=2.0),
+        _closed_r("b" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0),
+    ])
+    pts = _curve(logged_in)["points"]
+    assert [p["cum_r"] for p in pts] == [1.0, 3.0]
+
+
+def test_drawdown_is_measured_from_the_running_peak(seed, logged_in):
+    seed(trades=[
+        _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=3.0),
+        _closed_r("b" * 16, closed_at="2026-04-02T16:00:00+00:00", r=-1.0),
+    ])
+    pts = _curve(logged_in)["points"]
+    assert pts[0]["drawdown_r"] == 0.0
+    assert pts[1]["drawdown_r"] == 1.0
+
+
+def test_drawdown_is_never_negative(seed, logged_in):
+    seed(trades=[
+        _closed_r(chr(ord("a") + i) * 16,
+                  closed_at=f"2026-04-0{i + 1}T16:00:00+00:00", r=1.0)
+        for i in range(4)
+    ])
+    pts = _curve(logged_in)["points"]
+    assert all(p["drawdown_r"] >= 0 for p in pts)
+
+
+def test_the_sample_size_is_reported_beside_the_curve(seed, logged_in):
+    seed(trades=[_closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0)])
+    assert _curve(logged_in)["n"] == 1
+
+
+def test_an_empty_book_returns_no_points_rather_than_a_flat_line(seed, logged_in):
+    seed(trades=[])
+    body = _curve(logged_in)
+    assert body["points"] == []
+    assert body["n"] == 0
+    assert body["as_of"] is None
+
+
+def test_a_trade_without_an_r_multiple_is_skipped_not_counted_as_zero(seed, logged_in):
+    seed(trades=[
+        _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0),
+        _closed_r("b" * 16, closed_at="2026-04-02T16:00:00+00:00", r=None),
+    ])
+    body = _curve(logged_in)
+    assert body["n"] == 1
+    assert [p["cum_r"] for p in body["points"]] == [1.0]
+
+
+def test_the_strategy_filter_narrows_the_curve(seed, logged_in):
+    seed(trades=[
+        _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0, strategy="RSI"),
+        _closed_r("b" * 16, closed_at="2026-04-02T16:00:00+00:00", r=5.0, strategy="Fib"),
+    ])
+    body = _curve(logged_in, "?strategy=RSI")
+    assert body["n"] == 1
+
+
+def test_equity_curve_requires_auth_like_every_other_analytics_route(client):
+    assert client.get("/api/v1/analytics/equity-curve").status_code == 401
+
+
+def test_equity_curve_range_narrows_like_performance_does(seed, logged_in):
+    seed(trades=[
+        _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0),
+        _closed_r("b" * 16, closed_at="2026-07-01T16:00:00+00:00", r=5.0),
+    ])
+    body = _curve(logged_in, "?from=2026-04-01&to=2026-04-30")
+    assert body["n"] == 1
+    assert body["points"][0]["cum_r"] == 1.0
+
+
+def test_equity_curve_unknown_parameter_is_rejected(logged_in):
+    assert_error(logged_in.get("/api/v1/analytics/equity-curve?strat=RSI"),
+                 "invalid", 400)

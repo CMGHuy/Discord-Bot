@@ -172,6 +172,76 @@ def analytics_performance():
     })
 
 
+@api_v1.route("/analytics/equity-curve", methods=["GET"])
+@require_auth
+def analytics_equity_curve():
+    """One point per closed trade, ordered by close date, cumulative in R,
+    with a non-negative drawdown-from-running-peak series alongside it --
+    the Equity | Drawdown toggle on the Analytics Performance tab reads
+    both from this one fetch (spec v14 R9-01, consumed by R9-04).
+
+    Ordered by close date, NOT by calendar day: a day with no closes is not
+    a flat day on an R curve, it is a day with no observation, and
+    interpolating one would invent a data point that never happened. The
+    x-axis is the sequence of trades, dated.
+
+    Every R comes from `metrics.r_multiple()` -- the one shared
+    R-multiple computation (see its docstring); this route does not
+    re-derive it. A trade `r_multiple()` cannot compute (missing prices,
+    zero risk, an unrecognised direction) is skipped entirely: not counted
+    in `n`, and not folded into the running total as a 0.0 contribution,
+    which would misrepresent an unmeasured trade as a breakeven one.
+
+    Accepts the same `strategy`/`from`/`to` vocabulary as `/performance`,
+    scoped on `closed_at` via the same `in_date_range` -- do not add a
+    second loader. `strategy` filters on `primary_strategy_label(t)`, the
+    real per-trade label (see its docstring), not the raw `strategy`
+    field: every trade the live confluence engine produces carries the
+    same hardcoded raw string, so filtering on it directly would silently
+    match everything or nothing rather than actually narrowing anything.
+    """
+    unknown = set(request.args) - {"strategy", "from", "to"}
+    if unknown:
+        raise ApiError("invalid",
+                        f"unknown parameter {sorted(unknown)[0]!r}; "
+                        "allowed: ['strategy', 'from', 'to']", 400)
+
+    from swingbot.core.analytics import metrics as m
+    from swingbot.core.tracking.performance import primary_strategy_label
+
+    start, end = _iso_day("from"), _iso_day("to")
+    strategy = (request.args.get("strategy") or "").strip()
+
+    tl = TradeLog()
+    all_raw = tl.get_trades(status=None, limit=None) or []
+    closed = [t for t in all_raw if t.get("status") in ("win", "loss", "closed")]
+    scoped = m.in_date_range(closed, start=start, end=end)
+    if strategy:
+        scoped = [t for t in scoped if primary_strategy_label(t) == strategy]
+
+    ordered = sorted(scoped, key=lambda t: t.get("closed_at") or "")
+    points = []
+    cum_r = 0.0
+    peak = 0.0
+    for t in ordered:
+        r = m.r_multiple(t)
+        if r is None:
+            continue
+        cum_r += r
+        peak = max(peak, cum_r)
+        points.append({
+            "date": (t.get("closed_at") or "")[:10],
+            "cum_r": round(cum_r, 4),
+            "drawdown_r": round(peak - cum_r, 4),
+        })
+
+    return jsonify({
+        "points": points,
+        "n": len(points),
+        "as_of": points[-1]["date"] if points else None,
+    })
+
+
 @api_v1.route("/analytics/journal", methods=["GET"])
 @require_auth
 def analytics_journal():
