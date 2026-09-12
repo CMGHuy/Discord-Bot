@@ -575,6 +575,105 @@ describe('Analytics — performance tab — strategy/horizon aggregates (v85 D40
   });
 });
 
+/* -- v85 R9-06 -- the Breakdowns band, and the other four tabs -- */
+
+/** Renders the Performance tab with enough real data that every one of the
+ *  ten displaced panels' own inner conditions are true (a non-empty
+ *  histogram/streaks/journal entry), not just that its sb-async isn't in
+ *  the empty state -- some of the ten (R-multiple all-time, Streaks) are
+ *  wrapped in their OWN `@if` around the whole panel, unchanged by the
+ *  move, and would be absent entirely on a thinner fixture. */
+async function renderBreakdowns(): Promise<{ el: HTMLElement; fixture: ComponentFixture<Analytics> }> {
+  const { fixture, backend } = seed();
+  fixture.detectChanges();
+  const n = 20;
+  backend.expectOne('/api/v1/analytics/journal').flush({ digest: ['Two losses, both chased.'], lessons: [], entries_n: 1 });
+  backend.expectOne('/api/v1/analytics/snapshot').flush(snapshotPayload({
+    overall: {
+      n, profit_factor: 1.5,
+      streaks: { current: 2, current_kind: 'win', best_win_streak: 4, worst_loss_streak: 3 },
+    },
+    r_multiples: Array.from({ length: n }, (_, i) => (i % 2 === 0 ? 1 : -0.5)),
+  }));
+  backend.expectOne('/api/v1/analytics/performance').flush(performancePayload({
+    totals: { total: n, open: 0, closed: n },
+  }));
+  backend.expectOne('/api/v1/risk').flush(riskPayload());
+  backend
+    .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
+    .flush({ points: [], n: 0, as_of: null });
+  backend
+    .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'strategy')
+    .flush({ rows: [], as_of: null });
+  backend
+    .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'horizon')
+    .flush({ rows: [], as_of: null });
+  await fixture.whenStable();
+  fixture.detectChanges();
+  return { el: fixture.nativeElement as HTMLElement, fixture };
+}
+
+function bandHeadings(el: HTMLElement): string[] {
+  return [...el.querySelectorAll('.breakdowns h2.sb-label')].map((h) => h.textContent!.trim());
+}
+
+function band(el: HTMLElement): HTMLDetailsElement {
+  return el.querySelector('.breakdowns') as HTMLDetailsElement;
+}
+
+function bandToggle(el: HTMLElement): HTMLElement {
+  return el.querySelector('.breakdowns summary') as HTMLElement;
+}
+
+function tabLabels(el: HTMLElement): string[] {
+  return [...el.querySelectorAll('sb-tab-bar [role="tab"], sb-tab-bar button')]
+    .map((b) => b.textContent!.trim())
+    .filter((label) => label !== '');
+}
+
+describe('Analytics — performance tab — Breakdowns band (v85 D41, R9-06)', () => {
+  it('keeps every displaced panel reachable in the Breakdowns band', async () => {
+    const { el } = await renderBreakdowns();
+    const headings = bandHeadings(el);
+    for (const h of [
+      'Return distribution', 'R-multiple distribution (selected range)',
+      'R-multiple distribution (all-time)', 'By holding period', 'By month',
+      'By planned R:R', 'By direction', 'By day of week', 'Streaks', 'Journal',
+      'By confidence level',
+    ]) {
+      expect(headings).toContain(h);
+    }
+  });
+
+  it('collapses the band by default so the first screen is the summary', async () => {
+    const { el } = await renderBreakdowns();
+    expect(band(el).getAttribute('open')).toBeNull();
+  });
+
+  it('remembers that the band was opened', async () => {
+    const { el, fixture } = await renderBreakdowns();
+    // jsdom does not reliably synthesize a real <summary> click into a
+    // native `toggle` event the way a browser does -- set the DOM property
+    // and dispatch the event `(toggle)` actually binds to, same as a real
+    // click on <summary> would.
+    const details = band(el);
+    details.open = true;
+    details.dispatchEvent(new Event('toggle'));
+    fixture.detectChanges();
+    expect(prefs()['analyticsBreakdownsOpen']).toBe(true);
+  });
+
+  it('leaves the other four tabs in place', async () => {
+    const { el } = await renderBreakdowns();
+    expect(tabLabels(el)).toEqual(['Performance', 'Strategies', 'Calibration', 'Tuning', 'Plans']);
+  });
+
+  it('renders no in-page heading anywhere on the page', async () => {
+    const { el } = await renderBreakdowns();
+    expect(el.querySelector('h1')).toBeNull();
+  });
+});
+
 describe('Analytics — strategies tab', () => {
   it('shows the measured-zero empty state when no strategy has a closed trade', async () => {
     const { fixture, backend } = seed();

@@ -1101,6 +1101,10 @@ export interface Preferences {
    *  better per shot" is the question this app's edge priorities rank
    *  first (CLAUDE.md), and a fresh session should open on that answer. */
   analyticsMeasure?: 'exp_r' | 'total_r';
+  /** v85 D41 (R9-06) -- whether the Performance tab's Breakdowns band is
+   *  expanded. Collapsed (absent/false) by default: the first screen is
+   *  the KPI row and equity curve, not the histograms below it. */
+  analyticsBreakdownsOpen?: boolean;
   /** SR12 onward: flat dotted keys, so a new preference is a new key rather
    *  than a schema migration. Values are whatever that key stores, and every
    *  reader validates — see `ui/table-prefs.ts` for why that tolerance is
