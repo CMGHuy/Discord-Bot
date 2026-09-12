@@ -242,6 +242,92 @@ def analytics_equity_curve():
     })
 
 
+@api_v1.route("/analytics/by-dimension", methods=["GET"])
+@require_auth
+def analytics_by_dimension():
+    """One row per strategy or per horizon, carrying BOTH ExpR and total R
+    (spec v14 D40) -- the Analytics Performance tab's strategy table and
+    horizon bar list share this one endpoint and toggle client-side between
+    the two measures. Consumed by R9-05.
+
+    `total_r` is a true sum of `metrics.r_multiple()` over the group, never
+    `exp_r * n`: a trade with no computable R is skipped from both the mean
+    and `n`, but it was never going to contribute to the sum either, and a
+    client deriving one from the other would print a number nobody actually
+    computed once such a trade exists in the group.
+
+    `badge` (the strategy's registry validation verdict, via the same
+    `get_badge("strategy", ...)` pooled lookup `core.planning.params` already
+    uses to stamp a live plan) is attached only for `dim=strategy` --
+    horizons carry no registry verdict of their own, and a horizon row would
+    otherwise carry an always-empty column.
+
+    `dim=horizon` groups by the real `HORIZONS` vocabulary only: a trade
+    whose `horizon_key` isn't one of the ten real horizons is dropped from
+    this view rather than inventing a row for a key nothing else recognizes.
+    Horizon rows are ordered by horizon progression (2w..9m); strategy rows
+    alphabetically, for a stable render.
+    """
+    unknown = set(request.args) - {"dim"}
+    if unknown:
+        raise ApiError("invalid", f"unknown parameter {sorted(unknown)[0]!r}; allowed: ['dim']", 400)
+
+    dim = (request.args.get("dim") or "").strip()
+    if dim not in ("strategy", "horizon"):
+        raise ApiError("invalid", f"dim must be 'strategy' or 'horizon', got {dim!r}", 400)
+
+    from swingbot.core.analytics import metrics as m
+    from swingbot.core.analytics.risk_metrics import max_drawdown_r
+    from swingbot.core.backtesting.registry import get_badge
+    from swingbot.core.market.strategy_types import HORIZONS
+    from swingbot.core.tracking.performance import primary_strategy_label
+
+    closed = [t for t in TradeLog().get_trades(status=None, limit=None) or []
+              if t.get("status") in ("win", "loss", "closed")]
+
+    if dim == "strategy":
+        def key_of(t):
+            return primary_strategy_label(t)
+    else:
+        def key_of(t):
+            hz = t.get("horizon_key")
+            return hz if hz in HORIZONS else None
+
+    groups: dict[str, list[dict]] = {}
+    for t in closed:
+        key = key_of(t)
+        if key is None:
+            continue
+        groups.setdefault(key, []).append(t)
+
+    if dim == "horizon":
+        horizon_order = {h: i for i, h in enumerate(HORIZONS)}
+        keys = sorted(groups, key=lambda k: horizon_order.get(k, len(horizon_order)))
+    else:
+        keys = sorted(groups)
+
+    rows = []
+    for key in keys:
+        trades = groups[key]
+        ordered = sorted(trades, key=lambda t: t.get("closed_at") or "")
+        rs = [r for t in ordered if (r := m.r_multiple(t)) is not None]
+        row = {
+            "key": key,
+            "exp_r": m.expectancy_r(trades),
+            "total_r": (sum(rs) if rs else None),
+            "win_rate": m.win_rate(trades),
+            "profit_factor": m.profit_factor(trades),
+            "max_drawdown_r": max_drawdown_r(rs),
+            "n": len(rs),
+        }
+        if dim == "strategy":
+            row["badge"] = get_badge("strategy", key).status
+        rows.append(row)
+
+    all_closed_at = [t["closed_at"][:10] for t in closed if t.get("closed_at")]
+    return jsonify({"rows": rows, "as_of": max(all_closed_at) if all_closed_at else None})
+
+
 @api_v1.route("/analytics/journal", methods=["GET"])
 @require_auth
 def analytics_journal():
