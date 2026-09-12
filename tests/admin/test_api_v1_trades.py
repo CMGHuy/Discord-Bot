@@ -1165,3 +1165,69 @@ def test_no_internal_bookkeeping_fields_leak_onto_the_wire(seed, logged_in, pric
 
     body = logged_in.get("/api/v1/trades").get_json()
     assert_collection(body, TRADE_ROW)
+
+
+# --- range filters: opened_from / opened_to --------------------------------
+
+
+def test_opened_from_is_inclusive(seed, logged_in):
+    t1 = _trade("aaaaaaaaaaaaaaaa", plan_id=None, ticker="AAPL", status="open")
+    t2 = _trade("bbbbbbbbbbbbbbbb", plan_id=None, ticker="MSFT", status="open")
+    t1["opened_at"] = "2026-04-01T14:00:00Z"
+    t2["opened_at"] = "2026-03-31T14:00:00Z"
+    seed(trades=[t1, t2])
+    body = logged_in.get("/api/v1/trades?opened_from=2026-04-01").get_json()
+    assert [r["ticker"] for r in body["items"]] == ["AAPL"]
+
+
+def test_opened_to_is_inclusive(seed, logged_in):
+    t1 = _trade("aaaaaaaaaaaaaaaa", plan_id=None, ticker="AAPL", status="open")
+    t2 = _trade("bbbbbbbbbbbbbbbb", plan_id=None, ticker="MSFT", status="open")
+    t1["opened_at"] = "2026-04-28T23:30:00Z"
+    t2["opened_at"] = "2026-04-29T00:30:00Z"
+    seed(trades=[t1, t2])
+    body = logged_in.get("/api/v1/trades?opened_to=2026-04-28").get_json()
+    assert [r["ticker"] for r in body["items"]] == ["AAPL"]
+
+
+def test_range_narrows_the_total_not_just_the_page(seed, logged_in):
+    trades = []
+    for i in range(1, 21):
+        t = _trade(f"t{i:016d}", plan_id=None, ticker=f"T{i}", status="open")
+        t["opened_at"] = f"2026-04-{i:02d}T14:00:00Z"
+        trades.append(t)
+    seed(trades=trades)
+    body = logged_in.get("/api/v1/trades?opened_from=2026-04-05&opened_to=2026-04-09").get_json()
+    assert body["total"] == 5
+
+
+def test_an_inverted_range_matches_nothing_rather_than_erroring(seed, logged_in):
+    t = _trade("aaaaaaaaaaaaaaaa", plan_id=None, ticker="AAPL", status="open")
+    t["opened_at"] = "2026-04-10T14:00:00Z"
+    seed(trades=[t])
+    resp = logged_in.get("/api/v1/trades?opened_from=2026-04-20&opened_to=2026-04-10")
+    assert resp.status_code == 200
+    assert resp.get_json()["total"] == 0
+
+
+def test_a_malformed_date_is_a_bad_request(seed, logged_in):
+    t = _trade("aaaaaaaaaaaaaaaa", plan_id=None, ticker="AAPL", status="open")
+    seed(trades=[t])
+    assert logged_in.get("/api/v1/trades?opened_from=last-tuesday").status_code == 400
+
+
+def test_an_open_ended_range_works_from_either_side(seed, logged_in):
+    t1 = _trade("aaaaaaaaaaaaaaaa", plan_id=None, ticker="AAPL", status="open")
+    t2 = _trade("bbbbbbbbbbbbbbbb", plan_id=None, ticker="MSFT", status="open")
+    t1["opened_at"] = "2026-04-01T14:00:00Z"
+    t2["opened_at"] = "2026-05-01T14:00:00Z"
+    seed(trades=[t1, t2])
+    assert logged_in.get("/api/v1/trades?opened_from=2026-04-15").get_json()["total"] == 1
+    assert logged_in.get("/api/v1/trades?opened_to=2026-04-15").get_json()["total"] == 1
+
+
+def test_a_row_with_no_opened_at_is_excluded_by_any_range(seed, logged_in):
+    t = _trade("aaaaaaaaaaaaaaaa", plan_id=None, ticker="AAPL", status="open")
+    t["opened_at"] = None
+    seed(trades=[t])
+    assert logged_in.get("/api/v1/trades?opened_from=2026-01-01").get_json()["total"] == 0

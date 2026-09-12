@@ -79,6 +79,17 @@ const RESPONSE: Risk = {
   throttle: { multiplier: 1, paused: false },
   killswitch: { on: false, reason: null, at: null },
   scan_health: { durations_s: [12, 14], latest_s: 14, slowdown: false },
+  metrics: {
+    var_95: { value: 0.031, n: 118 },
+    expected_shortfall_95: { value: 0.047, n: 118 },
+    annualised_vol: { value: 0.148, n: 118 },
+    beta_spy: { value: 1.12, n: 118 },
+    sharpe_r: { value: 0.96, n: 782 },
+    max_drawdown_r: { value: 8.4, n: 782 },
+    as_of: '2026-09-10',
+    benchmark_symbol: 'SPY',
+  },
+  correlation: { labels: ['AAPL', 'MSFT'], values: [[1, 0.5], [0.5, 1]] },
 };
 
 describe('RiskStore', () => {

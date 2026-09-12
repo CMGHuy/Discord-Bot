@@ -33,7 +33,7 @@ and a second would drift from it silently.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from flask import jsonify, request
 
@@ -42,7 +42,7 @@ from swingbot.core.tracking.performance import TradeLog
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.presentation.plan_view import plan_view
 
-from . import api_v1, collection, error, parse_collection_params
+from . import api_v1, collection, error, parse_collection_params, ApiError
 from .auth import require_auth
 
 # Legacy v1 trades carry their own status vocabulary. They have no PENDING,
@@ -70,7 +70,9 @@ FILTERS = frozenset({"status", "outcome", "ticker", "strategy", "horizon", "tier
                      "badge", "confidence",
                      # The Dashboard lifecycle strip's "today" scope -- see
                      # `_row_from_plan`'s `today` field.
-                     "today"})
+                     "today",
+                     # v85 R6-01: date range filters on opened_at
+                     "opened_from", "opened_to"})
 
 # Query-parameter name -> row key, where the two differ. `confidence` reads
 # better in a URL than `confidence_level` and is what the chip row calls it;
@@ -102,6 +104,39 @@ _OPEN_STATUSES = frozenset({"ACTIVE", "PARTIAL"})
 # `?has_note=1` would test "1" == "True" and quietly match nothing.
 _BOOLEAN_FILTERS = frozenset({"has_note", "today"})
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+# Range filters on date fields (as opposed to equality filters).
+_RANGE_FILTERS = {"opened_from", "opened_to"}
+
+
+def _as_date(value: str) -> date:
+    """Parse a YYYY-MM-DD filter bound, or raise ApiError.
+
+    A malformed bound is a malformed request -- unlike an unknown *value* for
+    status or outcome, which the collection convention answers with an empty
+    set. "last-tuesday" is not a request for no trades; it is a mistake.
+    """
+    try:
+        return date.fromisoformat(value.strip())
+    except ValueError:
+        raise ApiError("invalid", f"Not a YYYY-MM-DD date: {value!r}", 400)
+
+
+def _row_opened_date(row: dict) -> date | None:
+    """Extract opened_at as a date object, or None.
+
+    A row with missing or malformed opened_at is treated as having no date,
+    which causes it to be excluded from any range filter rather than kept:
+    it cannot be shown to satisfy the range, and silently keeping it would
+    make the count disagree with the rows.
+    """
+    raw = row.get("opened_at")
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(str(raw).replace("Z", "+00:00")).date()
+    except ValueError:
+        return None
 
 
 class _AttrPlan:
@@ -796,6 +831,14 @@ def list_trades():
             field = _FILTER_KEYS.get(key, key)
             rows = [r for r in rows
                     if str(r.get(field) or "").strip().lower() == want]
+        elif key in _RANGE_FILTERS:
+            bound = _as_date(str(value))
+            if key == "opened_from":
+                rows = [r for r in rows
+                        if (d := _row_opened_date(r)) is not None and d >= bound]
+            else:
+                rows = [r for r in rows
+                        if (d := _row_opened_date(r)) is not None and d <= bound]
         else:
             field = _FILTER_KEYS.get(key, key)
             rows = [r for r in rows if str(r.get(field) or "") == str(value)]

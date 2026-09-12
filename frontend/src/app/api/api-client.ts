@@ -108,9 +108,18 @@ export class ApiClient {
 
   /* -- trades ---------------------------------------------------------- */
 
+  /** `openedFrom`/`openedTo` are handled here rather than by `toParams`: the
+   *  wire names (`opened_from`/`opened_to`, R6-01) don't match the store's
+   *  own camelCase field names, and `toParams` sends a key as-is. Same
+   *  pattern as `analyticsPerformance`'s `from`/`to` below -- an omitted or
+   *  null bound is left off the URL rather than sent empty. */
   trades(query: TradeQuery = {}): Observable<Collection<TradeRow>> {
+    const { openedFrom, openedTo, ...rest } = query;
+    let params = toParams(rest);
+    if (openedFrom) params = params.set('opened_from', openedFrom);
+    if (openedTo) params = params.set('opened_to', openedTo);
     return this.http.get<Collection<TradeRow>>(`${this.base}/trades`, {
-      params: toParams(query),
+      params,
     });
   }
 

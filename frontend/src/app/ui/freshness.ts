@@ -48,7 +48,15 @@ export class Freshness {
 
   protected readonly clock = computed(() => {
     const d = this.parsed();
-    return d === null ? null : d.toISOString().slice(11, 19);
+    if (d === null) return null;
+    const raw = this.at();
+    // A date-only ISO string ("2026-09-10", what a daily-bar `as_of` is --
+    // there is no time-of-day to report) parses to UTC midnight. Slicing
+    // out hh:mm:ss from that would print a bogus "00:00:00" regardless of
+    // how fresh the underlying bar actually is. Print the date itself
+    // instead of a fabricated time.
+    if (raw !== null && /^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    return d.toISOString().slice(11, 19);
   });
 
   protected readonly stale = computed(() => {

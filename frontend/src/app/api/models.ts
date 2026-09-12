@@ -239,6 +239,13 @@ export interface TradeQuery {
    *  five statuses the same way the strip's own counts do -- not just
    *  CLOSED/CANCELLED. Tri-state like `has_note`: absent means unfiltered. */
   today?: boolean;
+  /** v85 D32. The opened-at range -- inclusive on both ends, `YYYY-MM-DD`,
+   *  camelCase here because this is the store's own query slice; `ApiClient`
+   *  maps the pair to `opened_from`/`opened_to` on the wire. A `null` bound
+   *  drops that parameter entirely rather than sending it empty, the same
+   *  convention every other filter in this interface follows. */
+  openedFrom?: string | null;
+  openedTo?: string | null;
 }
 
 export const TRADE_SORTABLE = [
@@ -538,6 +545,17 @@ export interface Proposal {
 
 /* -- watchlist ----------------------------------------------------------- */
 
+/** The Watchlist's Signal column (v85 D34) -- the bot's own opinion, read off
+ *  the live plan set rather than derived from price. `score`/`horizon`/
+ *  `strategy` are null together with `state: 'none'` -- there is no partial
+ *  signal, only "the scanner has an opinion" or "it does not". */
+export interface TickerSignal {
+  state: 'none' | 'pending' | 'active';
+  score: number | null;
+  horizon: string | null;
+  strategy: string | null;
+}
+
 export interface Ticker {
   symbol: string;
   company_name: string | null;
@@ -552,6 +570,24 @@ export interface Ticker {
    *  any local time (e.g. Europe/Berlin) from one consistent source. Never
    *  confirmed by the company for a future date; treat as an estimate. */
   next_earnings_datetime: string | null;
+  /** v85 D33 -- batched market data (`swingbot/admin/watchlist_rows.py`,
+   *  `build_market_rows`). `price` prefers a live intraday quote over the
+   *  last close, when the US market is open; all fields are null together
+   *  when the cache has nothing for this symbol yet. */
+  price: number | null;
+  /** The date of the bar `price`/the change columns/`spark` were computed
+   *  from -- NOT when the request was served. A page reading "as of now"
+   *  over Friday's close on a Sunday is the failure this field guards
+   *  against, and a symbol whose `as_of` lags the rest of the table is
+   *  flagged rather than shown silently beside fresher rows. */
+  as_of: string | null;
+  change_1d_pct: number | null;
+  change_1w_pct: number | null;
+  change_1m_pct: number | null;
+  /** Up to 30 daily closes, oldest first. Empty (never a single flat point)
+   *  when there is no history to draw. */
+  spark: number[];
+  signal: TickerSignal;
 }
 
 /** `GET /watchlist/tickers`. A plain list, NOT a `Collection` — the watchlist
@@ -636,6 +672,39 @@ export interface KillswitchResult {
   killswitch: Killswitch;
 }
 
+/** One institutional metric (v85 D37) — `value` is `null`, never `0`, when
+ *  `risk_metrics.py` can't justify a number; `n` is always the sample size
+ *  actually attempted, which is what lets the tile say "N=3" instead of
+ *  rendering a bare dash with no way to tell why. */
+export interface RiskMetric {
+  value: number | null;
+  n: number;
+}
+
+export interface RiskMetrics {
+  var_95: RiskMetric;
+  expected_shortfall_95: RiskMetric;
+  annualised_vol: RiskMetric;
+  beta_spy: RiskMetric;
+  sharpe_r: RiskMetric;
+  max_drawdown_r: RiskMetric;
+  as_of: string | null;
+  /** The ticker `beta_spy` was actually computed against --
+   *  `config.MARKET_REGIME_TICKER`, which an operator can change away from
+   *  "SPY". The payload key stays `beta_spy` (a rename is a bigger, riskier
+   *  change); this is what lets the tile label stay honest instead of
+   *  hardcoding "SPY". */
+  benchmark_symbol: string;
+}
+
+/** Pairwise Pearson correlation of daily returns (v85 D38). `values[i][j]`
+ *  is `null`, never `0`, for a pair with too little overlap to correlate —
+ *  zero correlation is a finding, no data is not. */
+export interface Correlation {
+  labels: string[];
+  values: (number | null)[][];
+}
+
 export interface Risk {
   heat: RiskHeat;
   positions: RiskPosition[];
@@ -644,6 +713,8 @@ export interface Risk {
   throttle: Throttle;
   killswitch: Killswitch;
   scan_health: ScanHealth;
+  metrics: RiskMetrics;
+  correlation: Correlation;
 }
 
 /* -- system ------------------------------------------------------------- */
@@ -984,6 +1055,12 @@ export interface Preferences {
    *  preferences. SR12's per-density keys are flat and dotted
    *  (`tables.trades.compact.columns`) and live alongside it. */
   tables?: Record<string, string[]>;
+  /** Symbol -> tag names, for the watchlist's view-only grouping/labeling
+   *  (v85 R7-03, spec D35). `data/watchlist.json` is read by the bot on every
+   *  scan; a tag is a pure UI concern that must never reach it, so it lives
+   *  here instead -- one flat key, since there is no per-table axis to it.
+   *  Read/written via `ui/watchlist-prefs.ts`, consumed by R7-05. */
+  watchlistTags?: Record<string, string[]>;
   /** SR12 onward: flat dotted keys, so a new preference is a new key rather
    *  than a schema migration. Values are whatever that key stores, and every
    *  reader validates — see `ui/table-prefs.ts` for why that tolerance is

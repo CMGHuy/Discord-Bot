@@ -178,6 +178,25 @@ describe('AnalyticsStore — the snapshot', () => {
       exit_reasons: [], hold_by_outcome: {}, efficiency: { bins: [], n: 0, median: null },
       mae: { bins: [], n: 0, median: null }, scatter: [], coverage: {}, min_cell_n: 0,
     });
+    // v85 D39 (R9-03): the KPI row's Sharpe (R)/Max drawdown (R) tiles read
+    // riskMetrics off this same /risk GET, fetched once like exit-quality.
+    backend.match('/api/v1/risk').forEach((request) => request.flush({
+      heat: { open_pct: 0, cap_pct: 6, utilisation_pct: 0 },
+      positions: [], sector_heat: [], clusters: [],
+      throttle: { multiplier: 1, paused: false },
+      killswitch: { on: false, reason: null, at: null },
+      scan_health: { durations_s: [], latest_s: null, slowdown: false },
+      metrics: {
+        var_95: { value: null, n: 0 },
+        expected_shortfall_95: { value: null, n: 0 },
+        annualised_vol: { value: null, n: 0 },
+        beta_spy: { value: null, n: 0 },
+        sharpe_r: { value: 0.96, n: 42 },
+        max_drawdown_r: { value: 3.2, n: 42 },
+        as_of: null,
+      },
+      correlation: { labels: [], values: [] },
+    }));
   }
 
   it('asks for the snapshot at all — the whole point of this task', () => {

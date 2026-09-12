@@ -16,6 +16,7 @@ specs never decided to drop them, so they are projected too and pinned here.
 """
 import json
 
+import pandas as pd
 import pytest
 
 from tests.admin.api_v1_contract import (NULLABLE_NUMBER, NULLABLE_STR,
@@ -46,11 +47,16 @@ def killswitch_file(admin_app, tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def no_network(monkeypatch):
-    """Cluster detection fetches daily history per open ticker. That is
-    parity with the Jinja page, not something these tests are about, and a
-    suite that needs yfinance reachable fails for unrelated reasons."""
+    """Cluster detection fetches daily history per open ticker, and (v85
+    D37/D38) so does the risk-metric/correlation block, via the batched
+    sibling. That is parity with the Jinja page, not something these tests
+    are about, and a suite that needs yfinance reachable fails for
+    unrelated reasons. `open_book` below overrides the batch call with its
+    own synthetic bars where a test needs real numbers out of it."""
     monkeypatch.setattr("swingbot.core.marketdata.data.get_daily_data",
                         lambda *a, **k: None, raising=False)
+    monkeypatch.setattr("swingbot.core.marketdata.data.get_daily_data_batch",
+                        lambda *a, **k: {}, raising=False)
 
 
 def _open_trade(trade_id, ticker="AAPL", entry=100.0, stop=95.0, shares=10):
@@ -62,6 +68,66 @@ def _open_trade(trade_id, ticker="AAPL", entry=100.0, stop=95.0, shares=10):
     }
 
 
+def _closed_trade(trade_id, ticker="AAPL", win=True):
+    """A closed trade with a real, computable r_multiple -- see
+    `metrics.r_multiple`. Alternates win/loss so a Sharpe/max-drawdown
+    fixture is never a flat line of identical R."""
+    return {
+        "id": trade_id, "ticker": ticker, "status": "closed",
+        "strategy": "VWAP", "horizon": "1m", "direction": "bullish",
+        "entry": 100.0, "stop_loss": 95.0,
+        "exit_price": 110.0 if win else 90.0,
+        "opened_at": "2026-01-01T00:00:00+00:00",
+        "closed_at": "2026-01-02T00:00:00+00:00",
+    }
+
+
+@pytest.fixture
+def open_book(client, tmp_path, monkeypatch):
+    """Seeds `trades.json` with open positions (v85 D37/D38's book) and,
+    optionally, a run of closed trades for the trade-sample metrics --
+    then hands `get_daily_data_batch` synthetic daily bars for every open
+    ticker plus the configured benchmark, so `/api/v1/risk`'s metric and
+    correlation blocks compute real numbers instead of the `no_network`
+    default of "nothing came back".
+
+    Logs in through the same `client` a test also requests -- fixtures are
+    cached per test, so the two names resolve to one already-authenticated
+    session.
+    """
+    client.post("/api/v1/session", json=_LOGIN)
+
+    def _make(tickers: list[str], bars: int = 120, closed_trades: int = 0) -> None:
+        trades = [
+            _open_trade(f"o{i:015d}", ticker) for i, ticker in enumerate(tickers)
+        ]
+        trades += [
+            _closed_trade(f"c{i:015d}", tickers[0] if tickers else "AAPL", win=(i % 2 == 0))
+            for i in range(closed_trades)
+        ]
+        (tmp_path / "trades.json").write_text(json.dumps(trades), encoding="utf-8")
+
+        # A gently oscillating close series -- flat would make every
+        # variance-based metric (vol, VaR, beta, correlation) None by
+        # construction, which would prove nothing about the "has real data"
+        # path these tests exist to cover.
+        closes = [100.0 + (i % 7) - 3 for i in range(bars)]
+        frame = pd.DataFrame(
+            {"Close": closes}, index=pd.bdate_range("2026-01-01", periods=bars)
+        )
+        fake_bars = {ticker: frame.copy() for ticker in tickers}
+        fake_bars["SPY"] = frame.copy()
+        monkeypatch.setattr(
+            "swingbot.core.marketdata.data.get_daily_data_batch",
+            lambda symbols, *a, fake_bars=fake_bars, **k: {
+                s: fake_bars[s] for s in symbols if s in fake_bars
+            },
+            raising=False,
+        )
+
+    return _make
+
+
 def test_requires_auth(client):
     assert_error(client.get("/api/v1/risk"), "auth", 401)
 
@@ -71,7 +137,7 @@ def test_risk_shape(logged_in, killswitch_file):
     assert_shape(body, {
         "heat": dict, "positions": list, "sector_heat": list,
         "clusters": list, "throttle": dict, "killswitch": dict,
-        "scan_health": dict,
+        "scan_health": dict, "metrics": dict, "correlation": dict,
     })
     assert_shape(body["heat"], {
         "open_pct": NULLABLE_NUMBER, "cap_pct": NULLABLE_NUMBER,
@@ -86,6 +152,25 @@ def test_risk_shape(logged_in, killswitch_file):
     assert_shape(body["scan_health"], {
         "durations_s": list, "latest_s": NULLABLE_NUMBER, "slowdown": bool,
     }, where="scan_health")
+    # v85 D37: every metric is a {value, n} pair, never a bare number.
+    metric_keys = ("var_95", "expected_shortfall_95", "annualised_vol",
+                   "beta_spy", "sharpe_r", "max_drawdown_r")
+    assert_shape(body["metrics"], {
+        **{key: dict for key in metric_keys},
+        "as_of": NULLABLE_STR,
+        # I4: the tile label must name the ACTUAL configured benchmark, not
+        # a hardcoded "SPY" -- carried on the payload so the frontend can
+        # render it instead of assuming.
+        "benchmark_symbol": str,
+    }, where="metrics")
+    for key in metric_keys:
+        assert_shape(body["metrics"][key], {
+            "value": NULLABLE_NUMBER, "n": int,
+        }, where=f"metrics.{key}")
+    # v85 D38.
+    assert_shape(body["correlation"], {
+        "labels": list, "values": list,
+    }, where="correlation")
 
 
 def test_heat_carries_the_cap_it_is_measured_against(logged_in, killswitch_file):
@@ -150,6 +235,203 @@ def test_utilisation_is_not_clamped_at_100(logged_in, killswitch_file, tmp_path)
     heat = logged_in.get("/api/v1/risk").get_json()["heat"]
     assert heat["open_pct"] == pytest.approx(20.0)
     assert heat["utilisation_pct"] > 100
+
+
+# -- v85 D37/D38 -- the institutional risk metric set and the correlation
+# matrix, both served from GET /risk (R8-03). --
+
+def test_every_metric_carries_its_own_sample_size(client, open_book):
+    open_book(["AAPL", "MSFT"])
+    metrics = client.get("/api/v1/risk").get_json()["metrics"]
+    for key in ("var_95", "expected_shortfall_95", "annualised_vol",
+                "beta_spy", "sharpe_r", "max_drawdown_r"):
+        assert set(metrics[key]) == {"value", "n"}
+
+
+def test_a_metric_that_cannot_be_computed_is_null_not_zero(client, open_book):
+    open_book(["AAPL"], bars=3)
+    metrics = client.get("/api/v1/risk").get_json()["metrics"]
+    assert metrics["var_95"]["value"] is None
+    assert metrics["var_95"]["n"] is not None
+
+
+def test_distributional_and_trade_metrics_report_different_samples(client, open_book):
+    open_book(["AAPL", "MSFT"], bars=120, closed_trades=40)
+    metrics = client.get("/api/v1/risk").get_json()["metrics"]
+    assert metrics["var_95"]["n"] != metrics["sharpe_r"]["n"]
+
+
+def test_an_empty_book_returns_metrics_of_nulls_rather_than_omitting_them(client, open_book):
+    open_book([])
+    metrics = client.get("/api/v1/risk").get_json()["metrics"]
+    assert metrics["var_95"]["value"] is None
+    assert metrics["beta_spy"]["value"] is None
+
+
+def test_the_correlation_labels_match_the_open_positions(client, open_book):
+    open_book(["AAPL", "MSFT"])
+    corr = client.get("/api/v1/risk").get_json()["correlation"]
+    assert corr["labels"] == ["AAPL", "MSFT"]
+    assert len(corr["values"]) == 2
+
+
+def test_json_is_parseable_with_a_flat_price_position_in_the_book(
+        logged_in, killswitch_file, tmp_path, monkeypatch):
+    """C1: a zero-variance leg (a halted ticker, a stale cache entry) makes
+    the correlation step's `.corr()` return NaN. Flask has no custom JSON
+    provider registered anywhere in this repo, so its `DefaultJSONProvider`
+    would emit the literal token `NaN` for an unguarded NaN float -- not
+    valid JSON per spec, and a strict browser JSON.parse() rejects the whole
+    response, blanking the page (killswitch included). The response must
+    stay free of that literal token even with a flat-price ticker in the
+    open book.
+
+    NOTE: `json.loads()` does NOT catch this -- Python's json module accepts
+    bare `NaN`/`Infinity`/`-Infinity` tokens by design (`parse_constant`
+    defaults to `float`), so `json.loads(response.data)` would pass whether
+    or not the NaN-in-correlation-matrix bug is present. The raw bytes must
+    be checked directly instead.
+    """
+    (tmp_path / "trades.json").write_text(json.dumps([
+        _open_trade("a" * 16, "FLAT"), _open_trade("b" * 16, "AAPL"),
+    ]), encoding="utf-8")
+
+    bars = 40
+    flat = pd.DataFrame(
+        {"Close": [100.0] * bars}, index=pd.bdate_range("2026-01-01", periods=bars),
+    )
+    moving = pd.DataFrame(
+        {"Close": [100.0 + (i % 7) - 3 for i in range(bars)]},
+        index=pd.bdate_range("2026-01-01", periods=bars),
+    )
+    fake_bars = {"FLAT": flat, "AAPL": moving, "SPY": moving}
+    monkeypatch.setattr(
+        "swingbot.core.marketdata.data.get_daily_data_batch",
+        lambda symbols, *a, **k: {s: fake_bars[s] for s in symbols if s in fake_bars},
+        raising=False,
+    )
+
+    response = logged_in.get("/api/v1/risk")
+    assert response.status_code == 200
+    assert b"NaN" not in response.data, (
+        "a literal NaN token in the raw response is invalid JSON -- "
+        "json.loads() would NOT catch this, it accepts bare NaN by design"
+    )
+    body = json.loads(response.data)
+    assert body["correlation"]["labels"] == ["AAPL", "FLAT"]
+    assert isinstance(body["killswitch"]["on"], bool)
+
+
+def test_a_market_data_failure_degrades_the_metrics_not_the_page(
+        client, open_book, monkeypatch):
+    """I2: the market-data section (bars fetch through the correlation
+    matrix) is wrapped in its own try/except so a hiccup anywhere in it
+    degrades to null market-data metrics rather than 500ing the page the
+    killswitch lives on. The patch target is `swingbot.core.marketdata.data`,
+    the ORIGIN module `get_daily_data_batch` is imported from -- `risk.py`
+    imports it with a function-local `from ... import`, which binds a local
+    name, not a module attribute, so patching
+    `swingbot.admin.api_v1.risk.get_daily_data_batch` does not exist to
+    patch. Same target the `no_network` fixture above already uses.
+
+    `sharpe_r`/`max_drawdown_r` are trade-log-derived with NO dependency on
+    price data (they come from `TradeLog`, fetched safely before this
+    section), so a market-data failure must NOT blank them -- only the
+    metrics that actually need bars (VaR, ES, annualised vol, beta) go
+    null. The correlation matrix's `labels` are just the open-position
+    ticker list -- also trade-log-derived, no price data needed -- so those
+    survive too; only the `values` matrix (which needs bars) empties out.
+    """
+    open_book(["AAPL"], closed_trades=10)
+
+    def _boom(*a, **k):
+        raise RuntimeError("no network")
+
+    monkeypatch.setattr(
+        "swingbot.core.marketdata.data.get_daily_data_batch", _boom, raising=False,
+    )
+
+    response = client.get("/api/v1/risk")
+    assert response.status_code == 200
+    body = response.get_json()
+    metrics = body["metrics"]
+
+    # Market-data-dependent metrics: null.
+    assert metrics["var_95"]["value"] is None
+    assert metrics["expected_shortfall_95"]["value"] is None
+    assert metrics["annualised_vol"]["value"] is None
+    assert metrics["beta_spy"]["value"] is None
+
+    # Trade-log-derived metrics: real numbers, unaffected by the outage.
+    assert metrics["sharpe_r"]["value"] is not None
+    assert metrics["sharpe_r"]["n"] > 0
+    assert metrics["max_drawdown_r"]["value"] is not None
+    assert metrics["max_drawdown_r"]["n"] > 0
+
+    # Correlation labels are trade-log-derived (the open ticker list); only
+    # the price-derived values matrix is empty.
+    assert body["correlation"]["labels"] == ["AAPL"]
+    assert body["correlation"]["values"] == []
+
+    assert body["heat"] is not None
+
+
+def test_a_malformed_closed_trade_degrades_only_the_trade_derived_metrics(
+        client, open_book, tmp_path):
+    """Round 3: `r_series = trade_metrics.r_multiples(closed)` and the
+    `sharpe_r`/`max_drawdown_r` computation run entirely OUTSIDE the
+    market-data try/except (that separation was round 2's fix, for the
+    opposite failure domain) -- and were therefore, until this fix,
+    completely unguarded. A malformed closed-trade record (here, a
+    string-typed `entry`) raises a `TypeError` deep inside
+    `metrics.r_multiple()`'s `abs(entry - stop)`, which must degrade only
+    `sharpe_r`/`max_drawdown_r` to null, not 500 the whole endpoint --
+    including the killswitch control block, which has nothing to do with
+    the trade log. This is the structural mirror of
+    `test_a_market_data_failure_degrades_the_metrics_not_the_page` above,
+    for the trade-log failure domain instead of the market-data one.
+    """
+    open_book(["AAPL"], closed_trades=5)
+
+    trades = json.loads((tmp_path / "trades.json").read_text(encoding="utf-8"))
+    trades.append({
+        "id": "m" * 16, "ticker": "AAPL", "status": "closed",
+        "strategy": "VWAP", "horizon": "1m", "direction": "bullish",
+        "entry": "not-a-number", "stop_loss": 95.0, "exit_price": 110.0,
+        "opened_at": "2026-01-01T00:00:00+00:00",
+        "closed_at": "2026-01-02T00:00:00+00:00",
+    })
+    (tmp_path / "trades.json").write_text(json.dumps(trades), encoding="utf-8")
+
+    response = client.get("/api/v1/risk")
+    assert response.status_code == 200
+    body = response.get_json()
+    metrics = body["metrics"]
+
+    # Trade-log-derived metrics: degraded to null by the malformed record.
+    assert metrics["sharpe_r"]["value"] is None
+    assert metrics["sharpe_r"]["n"] == 0
+    assert metrics["max_drawdown_r"]["value"] is None
+    assert metrics["max_drawdown_r"]["n"] == 0
+
+    # Market-data-derived metrics: unaffected -- this is a trade-log
+    # failure, not a market-data one, and the two guards are independent.
+    assert metrics["var_95"]["value"] is not None
+    assert metrics["beta_spy"]["value"] is not None
+
+    # Everything else on the payload still renders, unblanked -- including
+    # the killswitch block this whole endpoint exists to keep alive.
+    assert "on" in body["killswitch"]
+    assert body["heat"] is not None
+    assert body["correlation"]["labels"] == ["AAPL"]
+
+
+def test_beta_tile_carries_the_actual_configured_benchmark(client, open_book):
+    """I4: the payload must name the real benchmark so the frontend can
+    label the tile correctly instead of assuming "SPY"."""
+    open_book(["AAPL"])
+    metrics = client.get("/api/v1/risk").get_json()["metrics"]
+    assert metrics["benchmark_symbol"] == "SPY"
 
 
 def test_killswitch_roundtrip(logged_in, killswitch_file):

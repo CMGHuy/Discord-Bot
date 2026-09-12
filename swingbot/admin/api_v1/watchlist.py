@@ -132,6 +132,7 @@ def _next_earnings(tickers: list[str]) -> dict[str, tuple[str | None, str | None
 def list_tickers():
     from swingbot.core.tracking.performance import TradeLog
     from swingbot.core.marketdata.watchlist import load_watchlist
+    from swingbot.admin.watchlist_rows import build_market_rows, build_signals
 
     tickers = list(load_watchlist(_watchlist_path()))
     counts = {t: {"open": 0, "closed": 0} for t in tickers}
@@ -143,11 +144,17 @@ def list_tickers():
 
     names = _company_names(tickers)
     earnings = _next_earnings(tickers)
+    # Both batched once for the whole watchlist -- never per-row, the same
+    # rule build_market_rows/build_signals themselves are built around.
+    market = build_market_rows(tickers)
+    signals = build_signals(tickers)
     return jsonify({"tickers": [
         {"symbol": t, "company_name": names.get(t),
          "open_trades": counts[t]["open"], "closed_trades": counts[t]["closed"],
          "next_earnings_date": earnings.get(t, (None, None))[0],
-         "next_earnings_datetime": earnings.get(t, (None, None))[1]}
+         "next_earnings_datetime": earnings.get(t, (None, None))[1],
+         **market.get(t, {}),
+         "signal": signals.get(t)}
         for t in tickers
     ]})
 

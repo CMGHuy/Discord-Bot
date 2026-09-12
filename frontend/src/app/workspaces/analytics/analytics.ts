@@ -32,7 +32,7 @@ import {
 } from '../../stores/analytics.store';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
-import { asyncInputs, Async } from '../../ui/async';
+import { asyncInputs, Async, AsyncInputs } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { Chip, QualityChip, qualityTone } from '../../ui/chip';
 import { ChipRow } from '../../ui/chip-row';
@@ -42,13 +42,14 @@ import { ColumnDef } from '../../ui/data-table/data-table.types';
 import { createClientPage } from '../../ui/data-table/client-page';
 import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
 import { Select, TextInput } from '../../ui/form-controls';
-import { ABSENT, dateTime } from '../../ui/format';
+import { ABSENT, dateTime, signed } from '../../ui/format';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
 import { SectionHead } from '../../ui/section-head';
 import { Histogram, HistogramBin } from '../../ui/histogram';
 import { MetricChip } from '../../ui/metric-chip';
 import { PaginationComponent } from '../../ui/pagination';
 import { Sparkline } from '../../ui/sparkline';
+import { StatTile } from '../../ui/stat-tile';
 import { ExitQualitySectionComponent } from './sections/exit-quality';
 import { StrategyContributionComponent } from './sections/strategy-contribution';
 import {
@@ -143,6 +144,7 @@ interface ProposalView extends ProposalRow {
     Async,
     ExitQualitySectionComponent,
     StrategyContributionComponent,
+    StatTile,
   ],
   template: `
     <sb-section-head>
@@ -163,6 +165,44 @@ interface ProposalView extends ProposalRow {
     @switch (activeTab()) {
       <!-- -- performance ---------------------------------------------- -->
       @case ('performance') {
+        <h2 class="section">Snapshot</h2>
+
+        <!-- v85 D39 (R9-03) fix round 1. The KPI row used to sit inside the
+             sb-async below (gated on performanceAsync alone), but five of
+             its six tiles -- Total R, R per month, Sharpe (R), Max drawdown
+             (R), Profit factor -- read snapshot()/riskMetrics(), not
+             performance(); only Win rate does. sb-async's error branch
+             replaces its ENTIRE projected content, so a /performance-only
+             failure was blanking all six tiles, including the five that had
+             nothing to do with it -- the exact "one fetch's failure blanks
+             another fetch's valid data" bug SR50/SR55 already guard against
+             for the panels below. This row gets its own sb-async, gated on
+             kpiAsync (see its doc comment on the class): a combined
+             AsyncInputs that only raises an error banner when BOTH
+             performance and snapshot have failed. Each tile already renders
+             its own em dash when its own source is null (sb-stat-tile), so
+             a single failed fetch degrades only the tiles it actually
+             backs; risk failures degrade the same way already (silently,
+             like exitQuality -- see the store's own comment), independent
+             of both. -->
+        <sb-async
+          [loading]="kpiAsync().loading"
+          [error]="kpiAsync().error"
+          [empty]="kpiAsync().empty"
+          [staleAsOf]="kpiAsync().staleAsOf"
+          emptyReason="measured-zero"
+          emptyTitle="No closed trades in this range"
+          [skeletonRows]="1"
+          [skeletonCols]="6"
+          (retry)="store.load()"
+        >
+          <div class="kpi-row">
+            @for (tile of kpiTiles(); track tile.label) {
+              <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample" />
+            }
+          </div>
+        </sb-async>
+
         <sb-async
           [loading]="performanceAsync().loading"
           [error]="performanceAsync().error"
@@ -186,7 +226,6 @@ interface ProposalView extends ProposalRow {
             }
           }
 
-          <h2 class="section">Snapshot</h2>
           <!-- v54 D1: this is the summary strip -- "how am I doing?", hero
                figures -- so it overrides the workspace's instrument default
                back to presentation. Both Snapshot panels-divs get the class
@@ -1036,6 +1075,15 @@ interface ProposalView extends ProposalRow {
       .panels { grid-template-columns: 1fr; }
     }
 
+    /* The six-tile KPI row (v85 D39) -- same auto-fit tile grid as the Risk
+       workspace's own institutional-metrics row (.metric-grid there). */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: var(--space-14);
+      margin-bottom: var(--space-14);
+    }
+
     /* Overrides sb-chip-row's own flex-wrap default with a grid -- the
        type selector plus this class gives it enough specificity to beat
        the primitive's own :host rule. */
@@ -1249,6 +1297,34 @@ export class Analytics {
     ),
   );
 
+  /**
+   * v85 D39 (R9-03) fix round 1 -- the KPI row's own gate, combining the two
+   * fetches its six tiles actually depend on (`performanceAsync` for Win
+   * rate; `snapshotAsync` for Total R, R per month, Profit factor -- Sharpe
+   * (R)/Max drawdown (R) come from `riskMetrics()`, which degrades silently
+   * with no error state of its own, same as `exitQuality`).
+   *
+   * `error` only fires when BOTH have failed: either one alone still leaves
+   * real data for the tiles it backs, and blanking those over an unrelated
+   * fetch's failure is the exact bug this fix exists to remove. `loading`
+   * doesn't need the same guard -- both sources share the one `store.loading`
+   * flag, so they are never out of step with each other. `staleAsOf` takes
+   * whichever source has one (a background refresh failing on data already
+   * on screen is worth flagging even if only one side of the row is stale).
+   * `empty` is always false: a KPI row has no meaningful "measured zero" of
+   * its own distinct from its tiles' individual em dashes.
+   */
+  protected readonly kpiAsync = computed<AsyncInputs>(() => {
+    const perf = this.performanceAsync();
+    const snap = this.snapshotAsync();
+    return {
+      loading: perf.loading && snap.loading,
+      error: perf.error && snap.error ? perf.error : null,
+      empty: false,
+      staleAsOf: perf.staleAsOf ?? snap.staleAsOf,
+    };
+  });
+
   protected readonly journalAsync = computed(() =>
     asyncInputs(
       { data: this.store.journal, loading: this.store.loading, error: this.store.journalError },
@@ -1292,6 +1368,51 @@ export class Analytics {
   protected fmtCount(value: number | null): string {
     return value === null ? ABSENT : String(value);
   }
+
+  /** An R total (Total R, R per month) -- signed, since both can go
+   *  negative, three decimals for the same reason `fmtExpectancy` uses
+   *  three: a fraction of a risk unit rounds to the same number at two. */
+  private fmtTotalR(value: number | null): string {
+    return value === null ? ABSENT : `${signed(value, 3)}R`;
+  }
+
+  /** Sharpe (R) -- unsigned formatting, matching the Risk workspace's own
+   *  `fmtRatio` for the identical figure (v85 D37/D39): a plain ratio, no
+   *  unit. Not `fmtTotalR`'s signed style -- that one exists to tell a
+   *  P&L gain from a loss without the colour; a Sharpe ratio is not one. */
+  private fmtSharpeR(value: number | null): string {
+    return value === null ? ABSENT : value.toFixed(2);
+  }
+
+  /** Max drawdown (R) -- matches the Risk workspace's own `fmtDrawdownR`
+   *  (v85 D37/D39): the server always reports this positive (a cost of the
+   *  track record), so no sign is added here either. */
+  private fmtMaxDrawdownR(value: number | null): string {
+    return value === null ? ABSENT : `${value.toFixed(2)}R`;
+  }
+
+  /** Profit factor -- matches `analytics.columns.ts`'s own
+   *  `profit_factor` column formatter: two decimals, no unit, ABSENT
+   *  (never 0) when there is no losing amount to divide by. */
+  private fmtProfitFactor(value: number | null): string {
+    return value === null ? ABSENT : value.toFixed(2);
+  }
+
+  /**
+   * The six-tile KPI row (v85 D39) -- Total R, R per month, Sharpe (R),
+   * Max drawdown (R), Win rate, Profit factor, in that exact order. Each
+   * carries the sample it was actually computed from, never a shared/global
+   * one (see the store's own comments on where each of the six -- and each
+   * one's `n` -- actually comes from).
+   */
+  protected readonly kpiTiles = computed(() => [
+    { label: 'Total R', value: this.fmtTotalR(this.store.totalR()), sample: this.store.totalRSample() },
+    { label: 'R per month', value: this.fmtTotalR(this.store.rPerMonth()), sample: this.store.totalRSample() },
+    { label: 'Sharpe (R)', value: this.fmtSharpeR(this.store.sharpeR()), sample: this.store.sharpeRSample() },
+    { label: 'Max drawdown (R)', value: this.fmtMaxDrawdownR(this.store.maxDrawdownR()), sample: this.store.maxDrawdownRSample() },
+    { label: 'Win rate', value: this.fmtRate(this.store.winRate()), sample: this.store.totals().closed },
+    { label: 'Profit factor', value: this.fmtProfitFactor(this.store.profitFactor()), sample: this.store.profitFactorSample() },
+  ]);
 
   /* -- SR61: the column glossary --------------------------------------- */
 

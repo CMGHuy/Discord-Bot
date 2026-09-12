@@ -16,17 +16,23 @@ import { PreferencesStore } from '../../stores/preferences.store';
 import { TapeStore } from '../../stores/tape.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
+import { Chip } from '../../ui/chip';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
+import { ControlBar } from '../../ui/control-bar';
 import { DataTable } from '../../ui/data-table/data-table';
 import { createClientPage } from '../../ui/data-table/client-page';
+import { FilterChip, FilterChips } from '../../ui/filter-bar';
+import { Freshness } from '../../ui/freshness';
 import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
 import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
-import { date, text } from '../../ui/format';
-import { TextInput } from '../../ui/form-controls';
+import { date, num, pct, text } from '../../ui/format';
+import { Select, TextInput } from '../../ui/form-controls';
 import { Icon } from '../../ui/icon';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
+import { Sparkline } from '../../ui/sparkline';
+import { readWatchlistTags, writeWatchlistTags } from '../../ui/watchlist-prefs';
 import { EarningsCalendar } from './earnings-calendar';
 
 const TABS: Tab[] = [
@@ -110,7 +116,7 @@ function sortValue(row: Ticker, key: string, flagged: readonly string[]): string
 @Component({
   selector: 'sb-watchlist',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DataTable, Panel, Button, ConfirmDialog, ControlRow, TabBar, TextInput, EarningsCalendar, RowLink, SectionHead, Async, Icon],
+  imports: [DataTable, Panel, Button, Chip, ConfirmDialog, ControlBar, ControlRow, FilterChips, Freshness, Select, TabBar, TextInput, EarningsCalendar, RowLink, SectionHead, Async, Icon, Sparkline],
   // v54 D1: the whole point of this workspace (spec v14 Decision 9) is the
   // ticker table -- tight rows, more per screen -- so it defaults to the
   // instrument register. On the host (a static class, not a template
@@ -213,6 +219,61 @@ function sortValue(row: Ticker, key: string, flagged: readonly string[]): string
       <p class="error" role="alert">{{ message }}</p>
     }
 
+    <!-- v85 D35/R7-05: tag chips filter the view (never the scanner -- no
+         request changes, symbols and their scan cadence are untouched);
+         search narrows by symbol; add-tag and the table's own freshness
+         marker are scope, not filters, same slot split trades.ts uses. -->
+    <sb-control-bar>
+      <sb-filter-chips
+        filters
+        [chips]="tagChips()"
+        [selected]="tagFilter()"
+        label="Tag"
+        (selectedChange)="onTagChip($event)"
+      />
+      <sb-text-input
+        filters
+        type="search"
+        ariaLabel="Filter the watchlist by symbol"
+        placeholder="Filter by symbol"
+        [value]="symbolQuery()"
+        (valueChange)="symbolQuery.set($event)"
+      />
+      <button
+        scope
+        type="button"
+        class="add-tag"
+        sb-button
+        variant="ghost"
+        (click)="addingTag.set(!addingTag())"
+      >
+        + Tag
+      </button>
+      <sb-freshness scope [at]="maxAsOf()" />
+    </sb-control-bar>
+
+    @if (addingTag()) {
+      <sb-control-row class="tag-form">
+        <sb-select
+          label="Symbol"
+          placeholder="Choose a symbol"
+          [value]="newTagSymbol()"
+          (valueChange)="newTagSymbol.set($event)"
+          [options]="symbolOptions()"
+        />
+        <sb-text-input
+          label="Tag"
+          placeholder="e.g. Tech"
+          [value]="newTagValue()"
+          (valueChange)="newTagValue.set($event)"
+          (keydown.enter)="addTag()"
+        />
+        <button sb-button variant="primary" type="button" [disabled]="!canAddTag()" (click)="addTag()">
+          Add
+        </button>
+      </sb-control-row>
+    }
+
     <sb-async
       [loading]="async().loading"
       [error]="async().error"
@@ -280,6 +341,46 @@ function sortValue(row: Ticker, key: string, flagged: readonly string[]): string
 
     <ng-template #symbolCell let-row>
       <sb-row-link [link]="['/watchlist', row.symbol]">{{ row.symbol }}</sb-row-link>
+    </ng-template>
+
+    <!-- v85 D33/R7-04: the price and the bar date it was computed from, in
+         one cell -- the two travel together (the docstring on Ticker.as_of
+         is what a lagging cache actually threatens: the PRICE, not some
+         separate figure), so pairing them here is what lets the row's
+         .lagging tint read as "this price is stale" rather than an
+         unexplained row colour. -->
+    <ng-template #priceCell let-row>
+      <span class="price">{{ num(row.price) }}</span>
+      <span class="as-of">{{ text(row.as_of) }}</span>
+    </ng-template>
+
+    <ng-template #sparkCell let-row>
+      @if (row.spark?.length) {
+        <sb-sparkline [points]="row.spark" [label]="row.symbol + ' price, last 30 bars'" />
+      }
+    </ng-template>
+
+    <!-- The bot's own verdict (v85 D34). Every state carries a WORD, not
+         just a tone, per the repo-wide "never colour alone" rule --
+         "No setup"/"In position" read the same on a screenshot with the
+         colour desaturated. -->
+    <ng-template #signalCell let-row>
+      <span class="signal">
+        @switch (row.signal.state) {
+          @case ('active') {
+            <span class="signal-state">In position</span>
+            @if (row.signal.strategy) { <sb-chip [label]="row.signal.strategy" tone="good" /> }
+          }
+          @case ('pending') {
+            <span class="signal-score">{{ row.signal.score }}</span>
+            @if (row.signal.horizon) { <sb-chip [label]="row.signal.horizon" /> }
+            @if (row.signal.strategy) { <sb-chip [label]="row.signal.strategy" tone="info" /> }
+          }
+          @default {
+            No setup
+          }
+        }
+      </span>
     </ng-template>
 
     <ng-template #actionsCell let-row>
@@ -370,6 +471,16 @@ function sortValue(row: Ticker, key: string, flagged: readonly string[]): string
 
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
+    /* Price + the bar date it came from, stacked -- the .as-of caption is
+       what makes a lagging row's tint (data-table.ts's .lagging rule)
+       legible rather than mysterious: it names the date that is behind. */
+    .price { display: block; font-variant-numeric: tabular-nums; }
+    .as-of { display: block; color: var(--text-faint); font-size: var(--register-label); }
+
+    .signal { display: inline-flex; align-items: center; gap: var(--space-6); }
+    .signal-state { font-weight: 600; }
+    .signal-score { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
     /* The Watchlist panel is flush (the table needs edge-to-edge rows),
        which zeroes the body's own padding -- restores just the left/right
        inset so this note lines up with the panel heading above it, same
@@ -383,6 +494,10 @@ export class Watchlist {
   private readonly preferences = inject(PreferencesStore);
   protected readonly tape = inject(TapeStore);
   static readonly TABLE_ID = 'watchlist';
+  // Bound so the cell templates above can call them -- a template resolves
+  // `{{ foo(...) }}` against the component instance, never a module import.
+  protected readonly num = num;
+  protected readonly text = text;
   protected readonly perPage = signal(readTablePerPage(this.preferences.values(), Watchlist.TABLE_ID));
   protected onPerPage(value: number): void { this.perPage.set(value); this.preferences.update((prefs) => writeTablePerPage(prefs, Watchlist.TABLE_ID, value)); }
 
@@ -427,6 +542,35 @@ export class Watchlist {
   /** The row awaiting confirmation, or null. */
   protected readonly pending = signal<Ticker | null>(null);
 
+  /** The + Tag mini-form (spec D35): closed by default, one symbol and one
+   *  tag name at a time. */
+  protected readonly addingTag = signal(false);
+  protected readonly newTagSymbol = signal('');
+  protected readonly newTagValue = signal('');
+  protected readonly canAddTag = computed(() => this.newTagSymbol() !== '' && this.newTagValue().trim() !== '');
+
+  protected readonly symbolOptions = computed(() =>
+    [...this.store.tickers()]
+      .map((row) => ({ value: row.symbol, label: row.symbol }))
+      .sort((a, b) => a.value.localeCompare(b.value)),
+  );
+
+  /** Appends one tag to one symbol's list, skipping a duplicate rather than
+   *  storing it twice. Written through `PreferencesStore` (spec D35) --
+   *  never `data/watchlist.json`, which the bot itself reads on every scan. */
+  protected addTag(): void {
+    if (!this.canAddTag()) return;
+    const symbol = this.newTagSymbol();
+    const tag = this.newTagValue().trim();
+    this.preferences.update((prefs) => {
+      const tags = readWatchlistTags(prefs);
+      const existing = tags[symbol] ?? [];
+      if (existing.includes(tag)) return prefs;
+      return writeWatchlistTags(prefs, { ...tags, [symbol]: [...existing, tag] });
+    });
+    this.newTagValue.set('');
+  }
+
   /** Client-side: the whole watchlist loads in one plain-list response
    *  (data-table.ts's PageSpec convention -- Watchlist is one of the three
    *  unpaginated call sites), so sorting is a local re-order of what is
@@ -444,13 +588,80 @@ export class Watchlist {
   protected readonly sortedRows = computed(() =>
     [...this.store.tickers()].sort((a, b) => compareTickers(a, b, this.sort(), this.tape.symbols())));
 
-  protected readonly watchlistPage = createClientPage(() => this.sortedRows(), () => this.perPage());
+  /** Symbol -> tag names (spec D35, R7-03's reader). View-only: nothing here
+   *  writes `data/watchlist.json` or touches what the scanner covers. */
+  protected readonly watchlistTags = computed(() => readWatchlistTags(this.preferences.values()));
+
+  /** One chip per tag in use, sorted -- "All" is `sb-filter-chips`' own
+   *  leading chip, not one of these. */
+  protected readonly tagChips = computed<FilterChip[]>(() => {
+    const inUse = new Set<string>();
+    for (const tags of Object.values(this.watchlistTags())) {
+      for (const tag of tags) inUse.add(tag);
+    }
+    return [...inUse].sort().map((tag) => ({ value: tag, label: tag }));
+  });
+
+  protected readonly tagFilter = signal<string | null>(null);
+  protected onTagChip(value: string | null): void {
+    this.tagFilter.set(value);
+  }
+
+  protected readonly symbolQuery = signal('');
+
+  /** The tag filter and the symbol search are both a view narrowing over
+   *  the already-fetched watchlist, same as the tag chip's own rule (spec
+   *  D35): neither changes `store.tickers()`, so the scanner keeps covering
+   *  every symbol regardless of what is on screen right now. */
+  protected readonly filteredRows = computed(() => {
+    let list = this.sortedRows();
+    const tag = this.tagFilter();
+    if (tag !== null) {
+      const tags = this.watchlistTags();
+      list = list.filter((row) => (tags[row.symbol] ?? []).includes(tag));
+    }
+    const query = this.symbolQuery().trim().toUpperCase();
+    if (query) list = list.filter((row) => row.symbol.toUpperCase().includes(query));
+    return list;
+  });
+
+  protected readonly watchlistPage = createClientPage(() => this.filteredRows(), () => this.perPage());
+
+  /** The most recent `as_of` across the WHOLE watchlist -- the reference
+   *  `isLagging` compares every row against. `sortedRows`, not
+   *  `watchlistPage.visible()`: the brief's own reason `.lagging` exists is
+   *  "a symbol the cache did not refresh must not sit silently beside
+   *  eighty that did", and with the default 25-per-page (`table-prefs.ts`'s
+   *  `DEFAULT_PER_PAGE`) a watchlist that size is several pages -- scoping
+   *  the comparison to one rendered page would miss exactly the case this
+   *  exists to catch: a stale row whose whole page happens to share its
+   *  (also-stale) date, or whose true-freshest sibling sits on a different
+   *  page entirely. String comparison is exact for `YYYY-MM-DD`. */
+  protected readonly maxAsOf = computed<string | null>(() => {
+    const dates = this.sortedRows()
+      .map((row) => row.as_of)
+      .filter((value): value is string => value !== null);
+    return dates.length ? dates.reduce((a, b) => (a > b ? a : b)) : null;
+  });
+
+  /** A symbol the market-data cache did not refresh must be flagged, not
+   *  left to sit silently beside eighty fresher rows (spec D33/R7-04). A row
+   *  with no bar at all (`as_of: null`) is lagging by the same rule -- it is
+   *  certainly not the freshest thing on screen. */
+  private isLagging(row: Ticker): boolean {
+    const max = this.maxAsOf();
+    return max !== null && row.as_of !== max;
+  }
 
   /** Bound (not a method call in the template) so DataTable's identity
    *  check on the input doesn't see a new function every change-detection
    *  pass -- an arrow field, same pattern as `rowKey` below. */
-  protected readonly rowClassFn = (row: Ticker): string | null =>
-    isWithinCurrentWeek(row.next_earnings_date) ? 'blink' : null;
+  protected readonly rowClassFn = (row: Ticker): string | null => {
+    const classes: string[] = [];
+    if (isWithinCurrentWeek(row.next_earnings_date)) classes.push('blink');
+    if (this.isLagging(row)) classes.push('lagging');
+    return classes.length ? classes.join(' ') : null;
+  };
 
   protected readonly rowKey = (row: Ticker) => row.symbol;
 
@@ -463,11 +674,18 @@ export class Watchlist {
     viewChild.required<TemplateRef<RowContext<Ticker>>>('tapeCell');
   private readonly symbolCell =
     viewChild.required<TemplateRef<RowContext<Ticker>>>('symbolCell');
+  private readonly priceCell =
+    viewChild.required<TemplateRef<RowContext<Ticker>>>('priceCell');
+  private readonly sparkCell =
+    viewChild.required<TemplateRef<RowContext<Ticker>>>('sparkCell');
+  private readonly signalCell =
+    viewChild.required<TemplateRef<RowContext<Ticker>>>('signalCell');
   private readonly actionsCell =
     viewChild.required<TemplateRef<RowContext<Ticker>>>('actionsCell');
 
   protected readonly visible = [
-    'tape', 'symbol', 'company_name', 'next_earnings_date', 'open_trades', 'closed_trades', 'actions',
+    'tape', 'symbol', 'company_name', 'price', 'change_1d_pct', 'change_1w_pct', 'change_1m_pct',
+    'spark', 'signal', 'next_earnings_date', 'open_trades', 'closed_trades', 'actions',
   ];
 
   protected readonly columns = computed<ColumnDef<Ticker>[]>(() => [
@@ -477,6 +695,12 @@ export class Watchlist {
     },
     { key: 'symbol', header: 'Symbol', cell: this.symbolCell(), sortable: true },
     { key: 'company_name', header: 'Company', value: (row) => text(row.company_name), sortable: true },
+    { key: 'price', header: 'Price', cell: this.priceCell(), numeric: true },
+    { key: 'change_1d_pct', header: '1D%', value: (row) => pct(row.change_1d_pct), numeric: true },
+    { key: 'change_1w_pct', header: '1W%', value: (row) => pct(row.change_1w_pct), numeric: true },
+    { key: 'change_1m_pct', header: '1M%', value: (row) => pct(row.change_1m_pct), numeric: true },
+    { key: 'spark', header: '30d', cell: this.sparkCell(), width: '90px' },
+    { key: 'signal', header: 'Signal', cell: this.signalCell() },
     {
       key: 'next_earnings_date', header: 'Next earnings', sortable: true,
       value: (row) => (row.next_earnings_date ? date(row.next_earnings_date) : null),

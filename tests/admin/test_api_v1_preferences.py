@@ -108,3 +108,41 @@ def test_a_rejected_write_leaves_the_previous_value(client, auth):
     client.put(ENDPOINT, headers=auth, json={"preferences": "nonsense"})
 
     assert client.get(ENDPOINT, headers=auth).get_json()["preferences"] == {"keep": True}
+
+
+# --- watchlist tags (v85 R7-03) ------------------------------------------
+#
+# Tags are a pure UI/view concern (spec D35): `data/watchlist.json` is read
+# by the bot on every scan, and a tag must never reach it. The blob this
+# endpoint serves is deliberately opaque (see `get_preferences`'s docstring
+# above) -- there is no per-key schema to extend, so `watchlistTags` already
+# round-trips through the existing GET/PUT pair with zero server changes.
+# These tests prove that, rather than adding a schema that doesn't exist.
+
+def test_watchlist_tags_round_trip_through_preferences(client, auth):
+    client.put(ENDPOINT, headers=auth, json={"preferences": {"watchlistTags": {"AAPL": ["Tech"]}}})
+
+    response = client.get(ENDPOINT, headers=auth)
+    assert response.get_json()["preferences"]["watchlistTags"] == {"AAPL": ["Tech"]}
+
+
+def test_watchlist_tags_do_not_reach_the_watchlist_file(client, auth):
+    """`swingbot.core.marketdata.watchlist.DEFAULT_PATH` is computed from
+    `config.DATA_DIR` at IMPORT time, and `swingbot.core.marketdata.watchlist`
+    is deliberately absent from this module's `conftest.py`'s
+    `_RELOAD_MODULES` list -- so it does NOT track this test's per-test
+    `DATA_DIR` monkeypatch (`tests/admin/test_api_v1_watchlist.py`'s module
+    docstring documents this exact trap). That makes `DEFAULT_PATH` the
+    bot's real, frozen load path rather than an isolated per-test one --
+    which is precisely the file D35 says a tag must never reach, so it is
+    the file this test has to check, not a fresh tmp_path stand-in. Reading
+    it (never writing) is safe regardless of what it is bound to."""
+    from swingbot.core.marketdata import watchlist as watchlist_module
+
+    path = watchlist_module.DEFAULT_PATH
+    before = open(path, encoding="utf-8").read() if os.path.exists(path) else None
+
+    client.put(ENDPOINT, headers=auth, json={"preferences": {"watchlistTags": {"AAPL": ["Tech"]}}})
+
+    after = open(path, encoding="utf-8").read() if os.path.exists(path) else None
+    assert before == after

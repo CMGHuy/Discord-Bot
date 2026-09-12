@@ -39,11 +39,11 @@ _DERIVED_KEYS = {
 
 
 def _closed(trade_id, *, opened, closed_at, entry, exit_price, status="win",
-            strategy="RSI"):
+            strategy="RSI", horizon_key="1m"):
     """A closed trade with only the fields the derived figures actually read."""
     return {
         "id": trade_id, "plan_id": None, "ticker": "AAPL", "strategy": strategy,
-        "horizon_key": "1m", "direction": "bullish", "confidence_level": 4,
+        "horizon_key": horizon_key, "direction": "bullish", "confidence_level": 4,
         "confidence_label": "High", "confidence_score": 81.0,
         "entry": entry, "stop_loss": entry * 0.95, "take_profit": entry * 1.1,
         "target2": None, "risk_reward_ratio": 1.8, "tier": "A",
@@ -202,3 +202,235 @@ def test_benchmark_block_is_present_even_when_yfinance_is_unavailable(seed, logg
 
 def test_range_requires_auth_like_every_other_analytics_route(client):
     assert client.get("/api/v1/analytics/performance?from=2024-01-01").status_code == 401
+
+
+# --- R9-01: GET /analytics/equity-curve --------------------------------
+
+def _closed_r(trade_id, *, closed_at, r, strategy="RSI", horizon="1m"):
+    """A closed trade whose `core.analytics.metrics.r_multiple()` evaluates
+    to exactly `r`, built through `_closed()`'s fixed entry=100/
+    stop_loss=95 (risk=5): exit = 100 + r*5.
+
+    `r=None` builds a zero-risk trade (stop_loss forced equal to entry) --
+    the one case `r_multiple()` itself treats as unmeasurable and returns
+    None for, rather than a trade missing some field outright. That is the
+    real "null, not zero" case this endpoint has to skip.
+    """
+    entry = 100.0
+    if r is None:
+        t = _closed(trade_id, opened=closed_at, closed_at=closed_at,
+                     entry=entry, exit_price=entry, strategy=strategy,
+                     horizon_key=horizon)
+        t["stop_loss"] = entry
+        return t
+    exit_price = entry + r * (entry - entry * 0.95)
+    return _closed(trade_id, opened=closed_at, closed_at=closed_at,
+                   entry=entry, exit_price=exit_price, strategy=strategy,
+                   horizon_key=horizon)
+
+
+def _curve(client, query=""):
+    return client.get("/api/v1/analytics/equity-curve" + query).get_json()
+
+
+def test_the_curve_accumulates_r_in_close_order(seed, logged_in):
+    seed(trades=[
+        _closed_r("a" * 16, closed_at="2026-04-03T16:00:00+00:00", r=2.0),
+        _closed_r("b" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0),
+    ])
+    pts = _curve(logged_in)["points"]
+    assert [p["cum_r"] for p in pts] == [1.0, 3.0]
+
+
+def test_drawdown_is_measured_from_the_running_peak(seed, logged_in):
+    seed(trades=[
+        _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=3.0),
+        _closed_r("b" * 16, closed_at="2026-04-02T16:00:00+00:00", r=-1.0),
+    ])
+    pts = _curve(logged_in)["points"]
+    assert pts[0]["drawdown_r"] == 0.0
+    assert pts[1]["drawdown_r"] == 1.0
+
+
+def test_drawdown_is_never_negative(seed, logged_in):
+    seed(trades=[
+        _closed_r(chr(ord("a") + i) * 16,
+                  closed_at=f"2026-04-0{i + 1}T16:00:00+00:00", r=1.0)
+        for i in range(4)
+    ])
+    pts = _curve(logged_in)["points"]
+    assert all(p["drawdown_r"] >= 0 for p in pts)
+
+
+def test_the_sample_size_is_reported_beside_the_curve(seed, logged_in):
+    seed(trades=[_closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0)])
+    assert _curve(logged_in)["n"] == 1
+
+
+def test_an_empty_book_returns_no_points_rather_than_a_flat_line(seed, logged_in):
+    seed(trades=[])
+    body = _curve(logged_in)
+    assert body["points"] == []
+    assert body["n"] == 0
+    assert body["as_of"] is None
+
+
+def test_a_trade_without_an_r_multiple_is_skipped_not_counted_as_zero(seed, logged_in):
+    seed(trades=[
+        _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0),
+        _closed_r("b" * 16, closed_at="2026-04-02T16:00:00+00:00", r=None),
+    ])
+    body = _curve(logged_in)
+    assert body["n"] == 1
+    assert [p["cum_r"] for p in body["points"]] == [1.0]
+
+
+def test_the_strategy_filter_narrows_the_curve(seed, logged_in):
+    seed(trades=[
+        _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0, strategy="RSI"),
+        _closed_r("b" * 16, closed_at="2026-04-02T16:00:00+00:00", r=5.0, strategy="Fib"),
+    ])
+    body = _curve(logged_in, "?strategy=RSI")
+    assert body["n"] == 1
+
+
+def test_equity_curve_requires_auth_like_every_other_analytics_route(client):
+    assert client.get("/api/v1/analytics/equity-curve").status_code == 401
+
+
+def test_equity_curve_range_narrows_like_performance_does(seed, logged_in):
+    seed(trades=[
+        _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0),
+        _closed_r("b" * 16, closed_at="2026-07-01T16:00:00+00:00", r=5.0),
+    ])
+    body = _curve(logged_in, "?from=2026-04-01&to=2026-04-30")
+    assert body["n"] == 1
+    assert body["points"][0]["cum_r"] == 1.0
+
+
+def test_equity_curve_unknown_parameter_is_rejected(logged_in):
+    assert_error(logged_in.get("/api/v1/analytics/equity-curve?strat=RSI"),
+                 "invalid", 400)
+
+
+# --- R9-02: GET /analytics/by-dimension --------------------------------
+
+@pytest.fixture
+def registry(tmp_path):
+    """Seeds a test-isolated registry: writes a fixture JSON to `tmp_path`
+    (never the real committed `validation_registry.json`) and loads it
+    through `load_registry(path)`, which bypasses the module's own `_PATH`
+    entirely -- the same mechanism `tests/backtesting/test_registry_decay.py`
+    already uses. `reload_registry()` on teardown clears the module-global
+    `_CACHE` so this fixture never leaks its rows into a later test.
+    """
+    from swingbot.core.backtesting import registry as reg
+
+    def _registry(badges: dict[str, str]):
+        rows = [
+            {"source": "strategy", "strategy": strategy, "horizon": None,
+             "status": status, "n": 10, "win_rate": 50.0, "expectancy_r": 0.1}
+            for strategy, status in badges.items()
+        ]
+        path = tmp_path / "by_dimension_registry.json"
+        path.write_text(json.dumps(rows), encoding="utf-8")
+        reg.load_registry(path)
+
+    yield _registry
+    reg.reload_registry()
+
+
+def _by_dim(client, dim, query=""):
+    return client.get(f"/api/v1/analytics/by-dimension?dim={dim}" + query).get_json()
+
+
+def test_strategy_rows_carry_both_measures(seed, logged_in):
+    seed(trades=[
+        _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0),
+        _closed_r("b" * 16, closed_at="2026-04-02T16:00:00+00:00", r=-1.0),
+        _closed_r("c" * 16, closed_at="2026-04-03T16:00:00+00:00", r=2.0),
+    ])
+    row = _by_dim(logged_in, "strategy")["rows"][0]
+    assert row["exp_r"] == pytest.approx(2.0 / 3)
+    assert row["total_r"] == pytest.approx(2.0)
+    assert row["n"] == 3
+
+
+def test_strategy_rows_carry_the_registry_badge(seed, logged_in, registry):
+    registry({"RSI": "WEAK"})
+    seed(trades=[_closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0)])
+    row = _by_dim(logged_in, "strategy")["rows"][0]
+    assert row["badge"] == "WEAK"
+
+
+def test_horizon_rows_carry_no_badge_field(seed, logged_in):
+    seed(trades=[_closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00",
+                           r=1.0, horizon="4w")])
+    row = _by_dim(logged_in, "horizon")["rows"][0]
+    assert "badge" not in row
+
+
+def test_horizon_rows_use_the_real_horizon_vocabulary(seed, logged_in):
+    from swingbot.core.market.strategy_types import HORIZONS
+
+    horizons = list(HORIZONS)[:3]
+    seed(trades=[
+        _closed_r(chr(ord("a") + i) * 16,
+                  closed_at=f"2026-04-0{i + 1}T16:00:00+00:00", r=1.0, horizon=h)
+        for i, h in enumerate(horizons)
+    ])
+    keys = [r["key"] for r in _by_dim(logged_in, "horizon")["rows"]]
+    assert set(keys) <= set(HORIZONS)
+
+
+def test_as_of_ignores_a_trade_dropped_for_an_unrecognized_horizon(seed, logged_in):
+    """A trade with a legacy/unrecognized horizon_key never becomes a row
+    under dim=horizon (test_horizon_rows_use_the_real_horizon_vocabulary),
+    so it must not be allowed to set `as_of` either -- otherwise the
+    freshness stamp would claim the shown rows are more current than any
+    of them actually are."""
+    seed(trades=[
+        _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0, horizon="4w"),
+        # Closes two months later but under a horizon that isn't real
+        # HORIZONS vocabulary -- dropped from grouping entirely.
+        _closed_r("b" * 16, closed_at="2026-06-01T16:00:00+00:00", r=1.0, horizon="6w"),
+    ])
+    body = _by_dim(logged_in, "horizon")
+    assert {r["key"] for r in body["rows"]} == {"4w"}
+    assert body["as_of"] == "2026-04-01"
+
+
+def test_total_r_is_not_expectancy_times_n_when_some_trades_lack_an_r(seed, logged_in):
+    seed(trades=[
+        _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=2.0),
+        _closed_r("b" * 16, closed_at="2026-04-02T16:00:00+00:00", r=None),
+    ])
+    row = _by_dim(logged_in, "strategy")["rows"][0]
+    assert row["n"] == 1
+    assert row["total_r"] == pytest.approx(2.0)
+
+
+def test_profit_factor_is_null_when_there_are_no_losers(seed, logged_in):
+    seed(trades=[_closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0)])
+    row = _by_dim(logged_in, "strategy")["rows"][0]
+    assert row["profit_factor"] is None
+
+
+def test_an_unknown_dimension_is_a_bad_request(seed, logged_in):
+    seed(trades=[])
+    assert_error(logged_in.get("/api/v1/analytics/by-dimension?dim=phase-of-moon"),
+                 "invalid", 400)
+
+
+def test_a_dimension_with_no_trades_returns_no_rows_not_a_row_of_zeroes(seed, logged_in):
+    seed(trades=[])
+    assert _by_dim(logged_in, "strategy")["rows"] == []
+
+
+def test_by_dimension_requires_auth_like_every_other_analytics_route(client):
+    assert client.get("/api/v1/analytics/by-dimension?dim=strategy").status_code == 401
+
+
+def test_by_dimension_unknown_parameter_is_rejected(logged_in):
+    assert_error(logged_in.get("/api/v1/analytics/by-dimension?dim=strategy&strat=RSI"),
+                 "invalid", 400)
