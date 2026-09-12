@@ -61,8 +61,13 @@ export const TICKER_TRADES_CAP = 25;
          reads first, before the title, and sb-section-head has no slot
          that lands content on that side of the heading -- only
          heading:string and a right-aligned [actions]. -->
+    <!-- v85 D4/R7-06: no in-page heading -- the route title/subtitle
+         mechanism (R1-04) already names this page "Ticker detail"; the
+         symbol itself stays visible in the chart caption, the trades panel
+         heading and the table's own ticker column, so nothing is lost by
+         dropping the h1 sb-section-head used to render here. -->
     <a class="back" routerLink="/watchlist">← Watchlist</a>
-    <sb-section-head [heading]="symbol()">
+    <sb-section-head>
       <span actions class="counts">
         {{ openCount() }} open · {{ closedCount() }} closed
       </span>
@@ -132,14 +137,7 @@ export const TICKER_TRADES_CAP = 25;
 
     .back { color: var(--text-secondary); font-size: var(--text-table); text-decoration: none; }
     .back:hover { color: var(--text); }
-    /* font-family is the one thing sb-section-head's own h1 rule leaves to
-       inherit -- setting it on the host reaches the internal h1 through
-       normal CSS inheritance, which crosses the encapsulation boundary
-       even though selectors cannot. */
-    sb-section-head { font-family: var(--font-mono); }
-    /* Resets the mono inherited from the host above -- only the ticker
-       heading wants it; the count badge stays the app's default sans. */
-    .counts { color: var(--text-secondary); font-size: var(--text-table); font-family: var(--font-sans); }
+    .counts { color: var(--text-secondary); font-size: var(--text-table); }
 
     .all-link { color: var(--accent); font-size: var(--text-table); text-decoration: none; }
     .all-link:hover { text-decoration: underline; }
