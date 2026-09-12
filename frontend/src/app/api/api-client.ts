@@ -5,6 +5,7 @@ import { Observable, of } from 'rxjs';
 import { SKIP_ROUTE_REFRESH } from './interceptors';
 
 import {
+  AnalyticsByDimension,
   AnalyticsCalibration,
   AnalyticsEquityCurve,
   AnalyticsExitQuality,
@@ -226,6 +227,15 @@ export class ApiClient {
     if (scope?.strategy) params = params.set('strategy', scope.strategy);
     return this.http.get<AnalyticsEquityCurve>(
       `${this.base}/analytics/equity-curve`, { params });
+  }
+
+  /** v85 D40 (R9-02) — one row per strategy or per horizon, carrying BOTH
+   *  ExpR and total R; the Performance tab's strategy table and horizon
+   *  bars share this one endpoint and toggle client-side (R9-05). */
+  analyticsByDimension(dim: 'strategy' | 'horizon'): Observable<AnalyticsByDimension> {
+    const params = new HttpParams().set('dim', dim);
+    return this.http.get<AnalyticsByDimension>(
+      `${this.base}/analytics/by-dimension`, { params });
   }
 
   /** SR55 — the trailing-week digest and recurring lessons. */

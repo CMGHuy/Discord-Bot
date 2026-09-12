@@ -185,6 +185,14 @@ describe('AnalyticsStore — the snapshot', () => {
     backend
       .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
       .flush({ points: [], n: 0, as_of: null });
+    // v85 D40 (R9-02/R9-05): fetched alongside performance too, also never
+    // guarded to "once".
+    backend
+      .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'strategy')
+      .flush({ rows: [], as_of: null });
+    backend
+      .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'horizon')
+      .flush({ rows: [], as_of: null });
     backend.match('/api/v1/risk').forEach((request) => request.flush({
       heat: { open_pct: 0, cap_pct: 6, utilisation_pct: 0 },
       positions: [], sector_heat: [], clusters: [],

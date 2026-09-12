@@ -14,6 +14,7 @@ import {
   loadingInterceptor,
 } from '../../api/interceptors';
 import {
+  AnalyticsByDimensionRow,
   AnalyticsPerformance,
   AnalyticsPlans,
   AnalyticsSnapshot,
@@ -21,6 +22,7 @@ import {
 } from '../../api/models';
 import { AnalyticsStore } from '../../stores/analytics.store';
 import { ConnectionStore } from '../../stores/connection.store';
+import { PreferencesStore } from '../../stores/preferences.store';
 import { Analytics } from './analytics';
 
 const connectionStub = { currency: signal('$') };
@@ -446,6 +448,130 @@ describe('Analytics — performance tab — equity curve (v85 D39, R9-04)', () =
   it('marks the curve panel with its own data age', async () => {
     const { el } = await renderEquity([{ date: '2026-09-10', cum_r: 1, drawdown_r: 0 }]);
     expect(el.querySelector('.equity sb-freshness')).not.toBeNull();
+  });
+});
+
+/* -- v85 R9-05 -- strategy table and horizon bars, with the measure toggle -- */
+
+/** Renders the Performance tab with journal/snapshot/performance/risk/
+ *  equity-curve settled minimally (none of R9-05's own tests read them)
+ *  and both `/by-dimension` fetches flushed with `rows`/`horizons`. */
+async function renderAgg(overrides: {
+  rows?: AnalyticsByDimensionRow[]; horizons?: AnalyticsByDimensionRow[];
+} = {}): Promise<{ el: HTMLElement; fixture: ComponentFixture<Analytics> }> {
+  const { fixture, backend } = seed();
+  fixture.detectChanges();
+  backend.expectOne('/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
+  backend.expectOne('/api/v1/analytics/snapshot').flush(snapshotPayload());
+  backend.expectOne('/api/v1/analytics/performance').flush(performancePayload());
+  backend.expectOne('/api/v1/risk').flush(riskPayload());
+  backend
+    .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
+    .flush({ points: [], n: 0, as_of: null });
+  backend
+    .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'strategy')
+    .flush({ rows: overrides.rows ?? [], as_of: null });
+  backend
+    .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'horizon')
+    .flush({ rows: overrides.horizons ?? [], as_of: null });
+  await fixture.whenStable();
+  fixture.detectChanges();
+  return { el: fixture.nativeElement as HTMLElement, fixture };
+}
+
+function rowKeys(el: HTMLElement): string[] {
+  // DataTable pads a short page with blank filler rows up to perPage (see
+  // Risk's own exposure table) -- filter those out rather than assert
+  // against an implementation detail unrelated to this test.
+  return [...el.querySelectorAll('tbody tr')]
+    .map((tr) => tr.querySelector('td')!.textContent!.split(' — ')[0].trim())
+    .filter((key) => key !== '');
+}
+
+function firstRow(el: HTMLElement): HTMLElement {
+  return el.querySelector('tbody tr') as HTMLElement;
+}
+
+function measureToggle(el: HTMLElement, label: string): HTMLButtonElement {
+  const found = [...el.querySelectorAll<HTMLButtonElement>('.measure-toggle .segment')]
+    .find((b) => b.textContent?.trim().startsWith(label));
+  if (!found) throw new Error(`no measure toggle labelled ${label}`);
+  return found;
+}
+
+function bar(el: HTMLElement, key: string): HTMLElement {
+  const found = [...el.querySelectorAll<HTMLElement>('.horizon-row')]
+    .find((r) => r.querySelector('.horizon-key')?.textContent?.trim() === key);
+  if (!found) throw new Error(`no horizon bar for ${key}`);
+  return found;
+}
+
+function prefs(): Record<string, unknown> {
+  return TestBed.inject(PreferencesStore).values();
+}
+
+describe('Analytics — performance tab — strategy/horizon aggregates (v85 D40, R9-05)', () => {
+  it('sorts the strategy table by the active measure', async () => {
+    const { el, fixture } = await renderAgg({
+      rows: [
+        { key: 'A', exp_r: 0.1, total_r: 90, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 900 },
+        { key: 'B', exp_r: 0.5, total_r: 20, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 40 },
+      ],
+    });
+    expect(rowKeys(el)).toEqual(['B', 'A']);
+
+    measureToggle(el, 'Total R').click();
+    fixture.detectChanges();
+    expect(rowKeys(el)).toEqual(['A', 'B']);
+  });
+
+  it('renders the registry badge as a rail beside each strategy', async () => {
+    const { el } = await renderAgg({
+      rows: [{ key: 'RSI', exp_r: 0.2, total_r: 10, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 238, badge: 'WEAK' }],
+    });
+    const row = firstRow(el);
+    expect(row.classList).toContain('badge-weak');
+    expect(row.textContent).toContain('WEAK');
+  });
+
+  it('de-emphasises a strategy row computed from a thin sample', async () => {
+    const { el } = await renderAgg({
+      rows: [{ key: 'New', exp_r: 0.9, total_r: 6, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 7 }],
+    });
+    expect(firstRow(el).classList).toContain('thin');
+  });
+
+  it('renders the horizon bars diverging around zero', async () => {
+    const { el } = await renderAgg({
+      horizons: [{ key: '2w', exp_r: -0.2, total_r: -8, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 40 }],
+    });
+    expect(bar(el, '2w').classList).toContain('neg');
+  });
+
+  it('labels each horizon bar with its sample size', async () => {
+    const { el } = await renderAgg({
+      horizons: [{ key: '2w', exp_r: 0.2, total_r: 8, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 40 }],
+    });
+    expect(bar(el, '2w').textContent).toContain('40');
+  });
+
+  it('drives both panels from one toggle', async () => {
+    const { el, fixture } = await renderAgg({
+      rows: [{ key: 'A', exp_r: 0.1, total_r: 90, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 900 }],
+      horizons: [{ key: '2w', exp_r: 0.1, total_r: 90, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 900 }],
+    });
+    measureToggle(el, 'Total R').click();
+    fixture.detectChanges();
+    expect(bar(el, '2w').textContent).toContain('90');
+  });
+
+  it('remembers the chosen measure as a preference', async () => {
+    const { el, fixture } = await renderAgg({
+      rows: [{ key: 'A', exp_r: 0.1, total_r: 90, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 900 }],
+    });
+    measureToggle(el, 'Total R').click();
+    fixture.detectChanges();
+    expect(prefs()['analyticsMeasure']).toBe('total_r');
   });
 });
 

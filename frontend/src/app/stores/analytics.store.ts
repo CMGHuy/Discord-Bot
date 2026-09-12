@@ -12,6 +12,8 @@ import { ApiError } from '../api/api-error';
 import { routeRequest } from '../routing/route-request';
 import { Observable } from 'rxjs';
 import {
+  AnalyticsByDimension,
+  AnalyticsByDimensionRow,
   AnalyticsCalibration,
   AnalyticsEquityCurve,
   AnalyticsExitQuality,
@@ -563,6 +565,13 @@ interface AnalyticsSlice {
    *  D39: "not a second series"). Component-facing, but held here so it
    *  survives a tab switch away from and back to Performance. */
   equityCurveView: 'equity' | 'drawdown';
+  /** v85 D40 (R9-02/R9-05). Both fetched together, unguarded, on every
+   *  Performance load -- the strategy table and horizon bars share one
+   *  toggle, so both panels' data has to already be on hand before either
+   *  renders. `[]`, not null: an empty book is a measured-empty list, not
+   *  "not yet fetched" (see the strategy table's own empty state). */
+  strategyAgg: AnalyticsByDimensionRow[];
+  horizonAgg: AnalyticsByDimensionRow[];
   plans: AnalyticsPlans | null;
   jobs: JobSummary[];
   /** The job whose progress is on screen — status plus a log tail. */
@@ -628,6 +637,8 @@ export const AnalyticsStore = signalStore(
     equityCurve: null,
     equityCurveStrategy: null,
     equityCurveView: 'equity',
+    strategyAgg: [],
+    horizonAgg: [],
     plans: null,
     jobs: [],
     job: null,
@@ -1110,6 +1121,7 @@ export const AnalyticsStore = signalStore(
         });
       }
       loadEquityCurve();
+      loadByDimension();
     };
 
     /** v85 D39 (R9-01/R9-04). Re-fetched by `loadPerformance` on every range
@@ -1123,6 +1135,21 @@ export const AnalyticsStore = signalStore(
         next: (equityCurve) => patchState(store, { equityCurve }),
         // Degrades to its own empty state; not a reason to warn about the
         // rest of the Performance tab.
+        error: () => {},
+      });
+    };
+
+    /** v85 D40 (R9-02/R9-05). `/analytics/by-dimension` takes no from/to --
+     *  every closed trade, always -- so unlike `loadEquityCurve` this is
+     *  wasteful but harmless to re-fire on a range change; simpler than a
+     *  second guard for data neither panel's own toggle needs range-scoped. */
+    const loadByDimension = (): void => {
+      api.analyticsByDimension('strategy').subscribe({
+        next: ({ rows }) => patchState(store, { strategyAgg: rows }),
+        error: () => {},
+      });
+      api.analyticsByDimension('horizon').subscribe({
+        next: ({ rows }) => patchState(store, { horizonAgg: rows }),
         error: () => {},
       });
     };
@@ -1251,6 +1278,7 @@ export const AnalyticsStore = signalStore(
             });
           }
           loadEquityCurve();
+          loadByDimension();
         },
         next: (performance) => patchState(store, { performance, loading: false, error: null }),
         error: fail,
