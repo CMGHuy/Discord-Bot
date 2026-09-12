@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-09-12 10:57:58 UTC",
+  "generated_at": "2026-09-12 21:23:46 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.17.0",
-    "bot": "1.7.3"
+    "ui": "1.18.0",
+    "bot": "1.7.4"
   },
   "releases": [
     {
@@ -1139,6 +1139,20 @@
       "versions": {
         "ui": "1.17.0",
         "bot": "1.7.3"
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-12",
+      "last_seen": "2026-09-12",
+      "commit": "71eb99e3",
+      "subject": "release(ui,bot): 1.18.0 / 1.7.4 -- Analytics, Calendar, System and Versions redesign",
+      "versions": {
+        "ui": "1.18.0",
+        "bot": "1.7.4"
       },
       "changed": [
         "ui",
