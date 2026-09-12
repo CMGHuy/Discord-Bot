@@ -1085,6 +1085,20 @@ export interface Release {
   /** Components whose value differs from the previous release. Derived by the
    *  generator, never here — see the note in `build_version_matrix.py`. */
   changed: string[];
+  /** Provenance is nullable where the deployed container has no Git range. */
+  provenance?: {
+    commit_range: string | null;
+    commits: number | null;
+    spec: string | null;
+    changelog: string[];
+  };
+  telemetry?: {
+    uptime_pct: number | null;
+    error_rate: number | null;
+    median_scan_sec: number | null;
+    n_days: number | null;
+    source: 'marker' | 'backfill';
+  };
 }
 
 export interface VersionHistory {

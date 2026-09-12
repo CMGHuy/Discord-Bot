@@ -188,6 +188,14 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
                 }
               </sb-control-row>
               <p class="subject">{{ release.subject }}</p>
+              @if (release.telemetry; as telemetry) {
+                <div class="release-meta">
+                  <span>Telemetry: {{ telemetry.source === 'marker' ? 'measured' : 'inferred' }}</span>
+                  <span>Scans: {{ telemetry.median_scan_sec === null ? 'unknown' : telemetry.median_scan_sec + 's median' }}</span>
+                  <span>Days: {{ telemetry.n_days === null ? 'unknown' : telemetry.n_days }}</span>
+                  @if (release.provenance?.commit_range; as range) { <span>Range: {{ range }}</span> }
+                </div>
+              }
             </div>
           </li>
         }
@@ -237,6 +245,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .chip strong { color: var(--text); font-weight: 600; }
     .chip.on { color: var(--accent); }
     .chip.quiet { color: var(--text-faint); cursor: default; }
+    .release-meta { display: flex; flex-wrap: wrap; gap: var(--space-8); color: var(--text-faint); font-size: var(--text-micro); }
 
     .strip { display: flex; flex-direction: column; gap: var(--space-6);
               position: relative; overflow: hidden; }

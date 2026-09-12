@@ -94,6 +94,16 @@ function seedUnflushed(): { fixture: ComponentFixture<Versions>; backend: HttpTe
 }
 
 describe('Versions', () => {
+  it('labels release telemetry as measured or inferred rather than presenting it as an unqualified fact', async () => {
+    const fixture = seed({ ...PAIRED, releases: [{ ...PAIRED.releases[0], telemetry: {
+      uptime_pct: null, error_rate: null, median_scan_sec: 42, n_days: 3, source: 'marker',
+    } }] });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).querySelector('.release-meta')!.textContent!;
+    expect(text).toContain('measured');
+    expect(text).toContain('42s median');
+  });
   it('does not widen when components are added', async () => {
     const fixture = seed(SIX);
     // A narrow host is the real test: the page must fit the container it is
