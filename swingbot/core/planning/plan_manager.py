@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from typing import NamedTuple
 
 from swingbot import config
 from swingbot.core.market.session import (is_quiet_hours, is_regular_session,
@@ -99,6 +100,14 @@ def stop_move_event(plan, today_session: str, min_r: float) -> PlanEvent | None:
                  and plan.be_armed_session == today_session else "now")
     return PlanEvent(plan.plan_id, "stop_moved",
                      {"old": old, "new": new, "r_moved": r_moved, "effective": effective})
+
+
+class Delivery(NamedTuple):
+    """One execution-feed message that reached a notifying channel."""
+
+    plan_id: str
+    kind: str       # "stop" | "notice"
+    value: object   # delivered stop price, or delivered notice transition
 
 
 # Below this the suggested add is too small to be worth acting on -- a
@@ -748,20 +757,55 @@ def _bars_since(ticker, created_at):
         if df.index.tz is None else int((df.index > created_at).sum())
 
 
-def run_manager_tick() -> list[PlanEvent]:
-    """One synchronous manager tick -- the trade_monitor loop calls this via
-    asyncio.to_thread. Flag off = pure no-op (no store instantiation, no
-    file creation)."""
+def _manager() -> PlanManager:
+    """The process-wide PlanManager, built on first use."""
     global _MANAGER
-    from swingbot import config
-    if not config.INTRADAY_MANAGER_V2:
-        return []
     if _MANAGER is None:
         from swingbot.core.tracking.performance import TradeLog
         _MANAGER = PlanManager(PlanStore(), _price_fn, atr_fn=_live_atr,
                                bar_count_fn=_bars_since, trade_log=TradeLog())
+    return _MANAGER
+
+
+def run_manager_tick() -> list[PlanEvent]:
+    """One synchronous manager tick -- the trade_monitor loop calls this via
+    asyncio.to_thread. Flag off = pure no-op (no store instantiation, no
+    file creation)."""
+    from swingbot import config
+    if not config.INTRADAY_MANAGER_V2:
+        return []
     # Production reads the wall clock; poll's optional clock is test injection.
-    return _MANAGER.poll()
+    return _manager().poll()
+
+
+def run_notice_sweep() -> list[PlanEvent]:
+    """Re-send notices while no open position exists; this fetches no prices."""
+    from swingbot import config
+    if not config.INTRADAY_MANAGER_V2:
+        return []
+    return _manager().resend_notices()
+
+
+def ack_notified(deliveries) -> None:
+    """Record execution-feed deliveries through the manager-owned plan store."""
+    if not deliveries:
+        return
+    store = _MANAGER.store if _MANAGER is not None else PlanStore()
+    store.reload()
+    for delivery in deliveries:
+        plan = store.get(delivery.plan_id)
+        if plan is None:
+            continue
+        if delivery.kind == "stop":
+            plan.notified_stop = float(delivery.value)
+        elif delivery.kind == "notice":
+            notice = plan.pending_notice
+            if not notice or notice.get("transition") != delivery.value:
+                continue
+            plan.pending_notice = None
+        else:
+            continue
+        store.update(plan)
 
 
 RECYCLE_PROGRESS_R = 0.3
