@@ -108,3 +108,32 @@ def test_a_rejected_write_leaves_the_previous_value(client, auth):
     client.put(ENDPOINT, headers=auth, json={"preferences": "nonsense"})
 
     assert client.get(ENDPOINT, headers=auth).get_json()["preferences"] == {"keep": True}
+
+
+# --- watchlist tags (v85 R7-03) ------------------------------------------
+#
+# Tags are a pure UI/view concern (spec D35): `data/watchlist.json` is read
+# by the bot on every scan, and a tag must never reach it. The blob this
+# endpoint serves is deliberately opaque (see `get_preferences`'s docstring
+# above) -- there is no per-key schema to extend, so `watchlistTags` already
+# round-trips through the existing GET/PUT pair with zero server changes.
+# These tests prove that, rather than adding a schema that doesn't exist.
+
+def test_watchlist_tags_round_trip_through_preferences(client, auth):
+    client.put(ENDPOINT, headers=auth, json={"preferences": {"watchlistTags": {"AAPL": ["Tech"]}}})
+
+    response = client.get(ENDPOINT, headers=auth)
+    assert response.get_json()["preferences"]["watchlistTags"] == {"AAPL": ["Tech"]}
+
+
+def test_watchlist_tags_do_not_reach_the_watchlist_file(client, auth, tmp_path):
+    """`config.DATA_DIR` is monkeypatched to `tmp_path` for this test (see
+    `conftest.py`), so `tmp_path / "watchlist.json"` is where the bot's file
+    would land if anything about this endpoint touched it."""
+    watchlist_path = tmp_path / "watchlist.json"
+    before = watchlist_path.read_text() if watchlist_path.exists() else None
+
+    client.put(ENDPOINT, headers=auth, json={"preferences": {"watchlistTags": {"AAPL": ["Tech"]}}})
+
+    after = watchlist_path.read_text() if watchlist_path.exists() else None
+    assert before == after

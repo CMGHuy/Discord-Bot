@@ -991,6 +991,12 @@ export interface Preferences {
    *  preferences. SR12's per-density keys are flat and dotted
    *  (`tables.trades.compact.columns`) and live alongside it. */
   tables?: Record<string, string[]>;
+  /** Symbol -> tag names, for the watchlist's view-only grouping/labeling
+   *  (v85 R7-03, spec D35). `data/watchlist.json` is read by the bot on every
+   *  scan; a tag is a pure UI concern that must never reach it, so it lives
+   *  here instead -- one flat key, since there is no per-table axis to it.
+   *  Read/written via `ui/watchlist-prefs.ts`, consumed by R7-05. */
+  watchlistTags?: Record<string, string[]>;
   /** SR12 onward: flat dotted keys, so a new preference is a new key rather
    *  than a schema migration. Values are whatever that key stores, and every
    *  reader validates — see `ui/table-prefs.ts` for why that tolerance is
