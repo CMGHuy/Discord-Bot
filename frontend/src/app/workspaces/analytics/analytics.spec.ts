@@ -295,6 +295,76 @@ describe('Analytics — performance tab — KPI row (v85 D39)', () => {
     const el = await renderKpis();
     expect(kpiLabels(el)).toContain('Sharpe (R)');
   });
+
+  // Fix round 1: five of the six tiles read snapshot()/riskMetrics(), not
+  // performance() -- only Win rate does. The row used to sit inside the
+  // sb-async gated on performanceAsync alone, so a /performance-only
+  // failure blanked all six, including the five that had nothing to do
+  // with it. These two tests pin the row's own combined gate (kpiAsync).
+  it('a /performance-only failure leaves the snapshot/risk-backed tiles rendering real data', async () => {
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+
+    backend.expectOne('/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
+    backend.expectOne('/api/v1/analytics/snapshot').flush(snapshotPayload({
+      overall: { n: 100, profit_factor: 1.8 },
+      equity_curve: {
+        points: [
+          { date: '2026-01-01', balance: 10_000, pnl: 0 },
+          { date: '2026-07-01', balance: 11_000, pnl: 1_000 },
+        ],
+        skipped_n: 0,
+      },
+      r_multiples: Array.from({ length: 100 }, (_, i) => (i % 2 === 0 ? 1 : -0.5)),
+    }));
+    backend.expectOne('/api/v1/risk').flush(riskPayload({
+      sharpe_r: { value: 1.2, n: 100 },
+      max_drawdown_r: { value: 3.4, n: 100 },
+    }));
+    backend
+      .expectOne('/api/v1/analytics/performance')
+      .flush({ error: { code: 'internal', message: 'performance down' } }, { status: 500, statusText: 'x' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    // The row itself must not be replaced by an error banner over a fetch
+    // it does not (mostly) depend on.
+    expect(el.querySelector('.kpi-row')).toBeTruthy();
+    expect(kpiTile(el, 'Total R').querySelector('.value')!.textContent!.trim()).not.toBe('—');
+    expect(kpiTile(el, 'Sharpe (R)').querySelector('.value')!.textContent!.trim()).not.toBe('—');
+    expect(kpiTile(el, 'Max drawdown (R)').querySelector('.value')!.textContent!.trim()).not.toBe('—');
+    expect(kpiTile(el, 'Profit factor').querySelector('.value')!.textContent!.trim()).not.toBe('—');
+    // Win rate genuinely depends on the fetch that failed, so it degrades.
+    expect(kpiTile(el, 'Win rate').querySelector('.value')!.textContent!.trim()).toBe('—');
+  });
+
+  it('a /snapshot-only failure leaves Win rate (a /performance figure) rendering real data', async () => {
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+
+    backend.expectOne('/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
+    backend
+      .expectOne('/api/v1/analytics/snapshot')
+      .flush({ error: { code: 'internal', message: 'snapshot down' } }, { status: 500, statusText: 'x' });
+    backend.expectOne('/api/v1/analytics/performance').flush(performancePayload({
+      totals: { total: 100, open: 0, closed: 100 },
+      win_rate: 55,
+    }));
+    backend.expectOne('/api/v1/risk').flush(riskPayload({
+      sharpe_r: { value: 1.2, n: 100 },
+      max_drawdown_r: { value: 3.4, n: 100 },
+    }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.kpi-row')).toBeTruthy();
+    expect(kpiTile(el, 'Win rate').querySelector('.value')!.textContent!.trim()).not.toBe('—');
+    // Total R and Profit factor genuinely depend on the fetch that failed.
+    expect(kpiTile(el, 'Total R').querySelector('.value')!.textContent!.trim()).toBe('—');
+    expect(kpiTile(el, 'Profit factor').querySelector('.value')!.textContent!.trim()).toBe('—');
+  });
 });
 
 describe('Analytics — strategies tab', () => {

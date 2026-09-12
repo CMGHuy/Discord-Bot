@@ -32,7 +32,7 @@ import {
 } from '../../stores/analytics.store';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
-import { asyncInputs, Async } from '../../ui/async';
+import { asyncInputs, Async, AsyncInputs } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { Chip, QualityChip, qualityTone } from '../../ui/chip';
 import { ChipRow } from '../../ui/chip-row';
@@ -165,6 +165,44 @@ interface ProposalView extends ProposalRow {
     @switch (activeTab()) {
       <!-- -- performance ---------------------------------------------- -->
       @case ('performance') {
+        <h2 class="section">Snapshot</h2>
+
+        <!-- v85 D39 (R9-03) fix round 1. The KPI row used to sit inside the
+             sb-async below (gated on performanceAsync alone), but five of
+             its six tiles -- Total R, R per month, Sharpe (R), Max drawdown
+             (R), Profit factor -- read snapshot()/riskMetrics(), not
+             performance(); only Win rate does. sb-async's error branch
+             replaces its ENTIRE projected content, so a /performance-only
+             failure was blanking all six tiles, including the five that had
+             nothing to do with it -- the exact "one fetch's failure blanks
+             another fetch's valid data" bug SR50/SR55 already guard against
+             for the panels below. This row gets its own sb-async, gated on
+             kpiAsync (see its doc comment on the class): a combined
+             AsyncInputs that only raises an error banner when BOTH
+             performance and snapshot have failed. Each tile already renders
+             its own em dash when its own source is null (sb-stat-tile), so
+             a single failed fetch degrades only the tiles it actually
+             backs; risk failures degrade the same way already (silently,
+             like exitQuality -- see the store's own comment), independent
+             of both. -->
+        <sb-async
+          [loading]="kpiAsync().loading"
+          [error]="kpiAsync().error"
+          [empty]="kpiAsync().empty"
+          [staleAsOf]="kpiAsync().staleAsOf"
+          emptyReason="measured-zero"
+          emptyTitle="No closed trades in this range"
+          [skeletonRows]="1"
+          [skeletonCols]="6"
+          (retry)="store.load()"
+        >
+          <div class="kpi-row">
+            @for (tile of kpiTiles(); track tile.label) {
+              <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample" />
+            }
+          </div>
+        </sb-async>
+
         <sb-async
           [loading]="performanceAsync().loading"
           [error]="performanceAsync().error"
@@ -187,23 +225,6 @@ interface ProposalView extends ProposalRow {
               </p>
             }
           }
-
-          <h2 class="section">Snapshot</h2>
-          <!-- v85 D39 (R9-03): the six-tile KPI row -- Total R, R per month,
-               Sharpe (R), Max drawdown (R), Win rate, Profit factor -- added
-               ABOVE the Record/Overall/Risk-adjusted panels below, which stay
-               exactly where they are (R9-06 is what later moves them into a
-               collapsible band; not this task). All-time, like those panels
-               -- see the store's own comment on why this row never reads the
-               range control. Each tile carries its own real sample N and
-               de-emphasises below MIN_SAMPLE_N via sb-stat-tile's own
-               established convention (wave 1/2, freshest precedent: the Risk
-               workspace's six sb-stat-tiles). -->
-          <div class="kpi-row">
-            @for (tile of kpiTiles(); track tile.label) {
-              <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample" />
-            }
-          </div>
 
           <!-- v54 D1: this is the summary strip -- "how am I doing?", hero
                figures -- so it overrides the workspace's instrument default
@@ -1275,6 +1296,34 @@ export class Analytics {
       { isEmpty: () => this.store.totals().total === 0 },
     ),
   );
+
+  /**
+   * v85 D39 (R9-03) fix round 1 -- the KPI row's own gate, combining the two
+   * fetches its six tiles actually depend on (`performanceAsync` for Win
+   * rate; `snapshotAsync` for Total R, R per month, Profit factor -- Sharpe
+   * (R)/Max drawdown (R) come from `riskMetrics()`, which degrades silently
+   * with no error state of its own, same as `exitQuality`).
+   *
+   * `error` only fires when BOTH have failed: either one alone still leaves
+   * real data for the tiles it backs, and blanking those over an unrelated
+   * fetch's failure is the exact bug this fix exists to remove. `loading`
+   * doesn't need the same guard -- both sources share the one `store.loading`
+   * flag, so they are never out of step with each other. `staleAsOf` takes
+   * whichever source has one (a background refresh failing on data already
+   * on screen is worth flagging even if only one side of the row is stale).
+   * `empty` is always false: a KPI row has no meaningful "measured zero" of
+   * its own distinct from its tiles' individual em dashes.
+   */
+  protected readonly kpiAsync = computed<AsyncInputs>(() => {
+    const perf = this.performanceAsync();
+    const snap = this.snapshotAsync();
+    return {
+      loading: perf.loading && snap.loading,
+      error: perf.error && snap.error ? perf.error : null,
+      empty: false,
+      staleAsOf: perf.staleAsOf ?? snap.staleAsOf,
+    };
+  });
 
   protected readonly journalAsync = computed(() =>
     asyncInputs(

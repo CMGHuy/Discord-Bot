@@ -696,13 +696,7 @@ export const AnalyticsStore = signalStore(
       };
     }),
 
-    rMultipleBins: computed<Bin[]>(() =>
-      binRMultiples(
-        ((snapshot()?.r_multiples ?? []) as unknown[])
-          .map(snapNumber)
-          .filter((value): value is number => value !== null),
-      ),
-    ),
+    rMultipleBins: computed<Bin[]>(() => binRMultiples(rMultiplesOf(snapshot()))),
     strategyContribution: computed(() =>
       ((snapshot()?.by?.['strategy'] ?? []) as { key: string; n: number; total_r: number | null }[])),
 
