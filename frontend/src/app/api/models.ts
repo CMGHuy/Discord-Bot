@@ -239,6 +239,13 @@ export interface TradeQuery {
    *  five statuses the same way the strip's own counts do -- not just
    *  CLOSED/CANCELLED. Tri-state like `has_note`: absent means unfiltered. */
   today?: boolean;
+  /** v85 D32. The opened-at range -- inclusive on both ends, `YYYY-MM-DD`,
+   *  camelCase here because this is the store's own query slice; `ApiClient`
+   *  maps the pair to `opened_from`/`opened_to` on the wire. A `null` bound
+   *  drops that parameter entirely rather than sending it empty, the same
+   *  convention every other filter in this interface follows. */
+  openedFrom?: string | null;
+  openedTo?: string | null;
 }
 
 export const TRADE_SORTABLE = [

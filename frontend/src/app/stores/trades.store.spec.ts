@@ -304,6 +304,46 @@ describe('TradesStore', () => {
     expect(store.activeFilterCount()).toBe(0);
   });
 
+  /* -- v85 D32: the opened-at range ------------------------------------ */
+
+  it('sends the range to the API when both bounds are set', () => {
+    store.setQuery({
+      page: 1,
+      per_page: 25,
+      openedFrom: '2026-04-01',
+      openedTo: '2026-04-28',
+    });
+    tick();
+
+    const params = expectRequest().request.params;
+    expect(params.get('opened_from')).toBe('2026-04-01');
+    expect(params.get('opened_to')).toBe('2026-04-28');
+  });
+
+  it('omits a bound that is null rather than sending an empty parameter', () => {
+    store.setQuery({
+      page: 1,
+      per_page: 25,
+      openedFrom: '2026-04-01',
+      openedTo: null,
+    });
+    tick();
+
+    const params = expectRequest().request.params;
+    expect(params.get('opened_from')).toBe('2026-04-01');
+    expect(params.has('opened_to')).toBe(false);
+  });
+
+  it('counts the range as one active filter, not two', () => {
+    store.setQuery({
+      page: 1,
+      per_page: 25,
+      openedFrom: '2026-04-01',
+      openedTo: '2026-04-28',
+    });
+    expect(store.activeFilterCount()).toBe(1);
+  });
+
   it('keeps the rows on screen when a refetch fails', () => {
     store.setQuery({ page: 1, per_page: 25 });
     tick();

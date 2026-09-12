@@ -118,12 +118,20 @@ export const TradesStore = signalStore(
 
     /** How many filters are on, for the filter bar's count. Paging and
      *  sorting are not filters — they do not hide anything, so counting them
-     *  would report a filtered list that is not filtered. */
+     *  would report a filtered list that is not filtered.
+     *
+     *  `openedFrom`/`openedTo` are pulled out and counted as at most ONE
+     *  filter, not up to two: they are one control on screen (a single
+     *  date-range picker, v85 D32), and reporting "2" for it would make
+     *  Clear's count disagree with what is actually on screen. */
     activeFilterCount: computed(() => {
-      const { page, per_page, sort, ...filters } = query();
-      return Object.values(filters).filter(
-        (value) => value !== undefined && value !== null && value !== '',
-      ).length;
+      const { page, per_page, sort, openedFrom, openedTo, ...filters } = query();
+      const rangeActive = openedFrom != null || openedTo != null ? 1 : 0;
+      return (
+        Object.values(filters).filter(
+          (value) => value !== undefined && value !== null && value !== '',
+        ).length + rangeActive
+      );
     }),
   })),
   withMethods((store, api = inject(ApiClient)) => {
