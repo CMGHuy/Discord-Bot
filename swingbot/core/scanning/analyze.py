@@ -84,12 +84,26 @@ class ScanItem:
     rs_combined: float | None = None  # rs_score(rs_percentile, sector_rs_percentile) -- 70/30 ticker/sector blend; falls back to rs_percentile alone when sector_rs_percentile is unavailable (v34 Task 5)
     breadth: float | None = None      # % of scanned universe above its own 50-EMA at scan time; None on a too-small universe (Task E28)
     intraday: bool | None = None      # 1h close vs today's VWAP on this plan's side; None = no reading = neutral, never blocks (Task E29)
+    # v81: the paper-trade decision mirrored by the order ticket.
+    paper_logged: bool = False
+    not_logged_reason: str | None = None
 
     @property
     def all_requirements_met(self) -> bool:
         """True if every requirement was checked and passed. True (not False) when there's nothing to check,
         so older/lightweight ScanItems built without requirements don't get treated as failing by default."""
         return all(r.passed for r in self.requirements) if self.requirements else True
+
+
+def paper_trade_decision(item: ScanItem, already_open: bool) -> tuple[bool, str | None]:
+    """Whether this item is logged, and the ticket's explanation when not."""
+    if already_open:
+        return False, "already open"
+    unmet = [f"{requirement.label}: {requirement.detail}"
+             for requirement in item.requirements if not requirement.passed]
+    if unmet:
+        return False, "unmet: " + "; ".join(unmet)
+    return True, None
 
 
 # Points-per-component ceiling for the decision chart's quality box (E66),

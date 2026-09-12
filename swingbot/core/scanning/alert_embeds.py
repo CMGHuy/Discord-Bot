@@ -14,6 +14,7 @@ from swingbot.core import presentation as ui
 from .snapshots import _snapshot_and_diff
 from .requirements import _sources_str
 from .plan_table import (_v2_plan, plan_numbers_for_display, leg_rows)
+from .execution_embeds import build_ticket_embed
 
 
 log = logging.getLogger("swing-bot.scan_engine")
@@ -222,6 +223,14 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
 
 
 def build_simple_alert(item) -> discord.Embed:
+    """Build the execution-feed ticket for a live v2 plan, else the legacy mirror."""
+    plan_v2 = _v2_plan(item)
+    if plan_v2 is not None and config.PLAN_ENGINE_V2 == "on":
+        return build_ticket_embed(item, plan_v2)
+    return _legacy_simple_alert(item)
+
+
+def _legacy_simple_alert(item) -> discord.Embed:
     """The DISCORD_CHANNEL_TRADES_SIMPLE_ID mirror of a full alert: the same
     signal stripped to the fields needed to act on it -- ticker, direction,
     confidence level + score, horizon, setup, entry, TP1, TP2, SL. No chart is

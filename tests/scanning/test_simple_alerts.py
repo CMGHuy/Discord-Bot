@@ -25,10 +25,16 @@ from swingbot.commands import scanning as scanning_mod
 from swingbot.commands.scanning import _send_alerts
 from swingbot.commands.scanning import alerts
 from swingbot.core.scanning import embeds as embeds_mod
+from swingbot.core.scanning import execution_embeds
 from swingbot.core.scanning.embeds import build_simple_alert
 from swingbot.core.presentation import tokens
 
 from tests.scanning.test_embeds_v3 import make_item, make_plan_v2
+
+
+@pytest.fixture
+def unsized(monkeypatch):
+    monkeypatch.setattr(execution_embeds, "_sizing_snapshot", lambda entry, plan: None)
 
 
 # --------------------------------------------------------------------------
@@ -109,15 +115,16 @@ def test_simple_alert_omits_tp2_when_there_is_no_second_target(monkeypatch):
     assert "TP1 **110.00**" in embed.description and "SL **95.00**" in embed.description
 
 
-def test_simple_alert_shows_trail_when_v2_plan_has_no_hard_tp2(monkeypatch):
+def test_simple_alert_shows_trail_when_v2_plan_has_no_hard_tp2(monkeypatch, unsized):
     """A v2 scale-out plan's runner is managed to a trailing stop instead of
     a fixed second target -- TP2 must say so, not silently vanish, matching
     the full embed's own leg_rows() convention ('TP2 105.00 / trail')."""
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     item = make_item(plan_v2=make_plan_v2())
     item.plan_v2.tp2 = None
+    item.paper_logged = True
     embed = build_simple_alert(item)
-    assert "TP2 **trail**" in embed.description
+    assert "RUNNER 50% → trail 2×ATR" in embed.description
 
 
 def test_simple_alert_carries_no_chart_or_image_reference():
@@ -129,8 +136,7 @@ def test_simple_alert_carries_no_chart_or_image_reference():
 
 
 @pytest.mark.parametrize("flag,expected_entry,expected_tp1,expected_tp2", [
-    ("off", "100.00", "110.00", "115.00"),   # legacy scenario numbers
-    ("on", "100.00", "110.00", "120.00"),    # v2 plan numbers (tp2=120.0)
+    ("off", "100.00", "110.00", "115.00"),
 ])
 def test_simple_alert_prices_follow_the_same_cutover_as_the_full_embed(
         monkeypatch, flag, expected_entry, expected_tp1, expected_tp2):
@@ -151,6 +157,27 @@ def test_simple_alert_prices_follow_the_same_cutover_as_the_full_embed(
     assert f"Entry **{expected_entry}**" in embed.description
     assert f"TP1 **{expected_tp1}**" in embed.description
     assert f"TP2 **{expected_tp2}**" in embed.description
+
+
+def test_v2_ticket_quotes_the_plans_own_levels(monkeypatch, unsized):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = make_item(plan_v2=make_plan_v2())
+    item.paper_logged = True
+    text = build_simple_alert(item).description
+    assert "**BUY AT MARKET ~100.00 · size n/a**" in text
+    assert "SELL STOP 95.00" in text
+    assert "TP1 SELL LIMIT 110.00 · 50%" in text
+    assert "TP2 120.00" in text
+    assert "115.00" not in text
+
+
+def test_unlogged_v2_alert_says_do_not_place(monkeypatch, unsized):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = make_item(plan_v2=make_plan_v2())
+    item.not_logged_reason = "already open"
+    embed = build_simple_alert(item)
+    assert embed.title.endswith("— DO NOT PLACE")
+    assert "**DO NOT PLACE — already open**" in embed.description
 
 
 # --------------------------------------------------------------------------
