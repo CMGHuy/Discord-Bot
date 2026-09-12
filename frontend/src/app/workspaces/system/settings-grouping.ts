@@ -1,4 +1,4 @@
-import { SettingField } from '../../api/models';
+import { SettingField, SettingSection } from '../../api/models';
 
 /**
  * Which control a field gets, and how a section's fields are grouped by it.
@@ -45,4 +45,23 @@ export function groupByControl(fields: SettingField[]): FieldGroup[] {
     kind,
     fields: fields.filter((field) => controlOf(field) === kind),
   })).filter((group) => group.fields.length > 0);
+}
+
+export interface SettingsCategory {
+  id: string;
+  label: string;
+  keys: string[];
+}
+
+/** The server's schema sections are the authoritative settings taxonomy.
+ * Flattening their keys for the rail keeps an added config field in exactly
+ * one navigable category without mirroring config.py on the client. */
+export function settingsCategories(sections: SettingSection[]): SettingsCategory[] {
+  return sections
+    .filter((section) => section.fields.length > 0)
+    .map((section) => ({
+      id: section.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+      label: section.name,
+      keys: section.fields.map((field) => field.key),
+    }));
 }

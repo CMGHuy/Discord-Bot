@@ -7,7 +7,7 @@ import { Button } from '../../ui/button';
 import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-controls';
 import { dateTime } from '../../ui/format';
 import { ControlRow, Panel } from '../../ui/layout';
-import { controlOf, groupByControl } from './settings-grouping';
+import { controlOf, groupByControl, settingsCategories } from './settings-grouping';
 
 /**
  * The settings form — rendered from the schema, with no field list anywhere.
@@ -90,7 +90,18 @@ import { controlOf, groupByControl } from './settings-grouping';
       </p>
     }
 
-    @for (section of store.visibleSections(); track section.name) {
+    <div class="settings-layout">
+    <nav class="category-rail" aria-label="Settings categories">
+      @for (category of categories(); track category.id) {
+        <button sb-button variant="ghost" type="button"
+                [class.active]="activeCategory() === category.id"
+                (click)="activeCategory.set(category.id)">
+          {{ category.label }} <span>{{ category.keys.length }}</span>
+        </button>
+      }
+    </nav>
+    <div class="category-content">
+    @for (section of categorySections(); track section.name) {
       <sb-panel [heading]="section.name">
         <!-- SR63. settings.html:115. -->
         <span class="field-count">{{ fieldCount(section.fields.length) }}</span>
@@ -193,6 +204,8 @@ import { controlOf, groupByControl } from './settings-grouping';
         }
       </sb-panel>
     }
+    </div>
+    </div>
 
     <!-- the save bar --------------------------------------------------- -->
 
@@ -527,6 +540,12 @@ import { controlOf, groupByControl } from './settings-grouping';
     }
     .count { color: var(--text-secondary); font-size: var(--text-table); }
     .bar-actions { margin-left: auto; }
+    .settings-layout { display: grid; grid-template-columns: minmax(10rem, 0.24fr) minmax(0, 1fr); gap: var(--space-14); }
+    .category-rail { display: grid; align-content: start; gap: var(--space-4); }
+    .category-rail button { justify-content: space-between; text-align: left; }
+    .category-rail button.active { background: var(--surface-raised); color: var(--text); }
+    .category-rail span { color: var(--text-faint); font-family: var(--font-mono); }
+    @media (max-width: 700px) { .settings-layout { grid-template-columns: minmax(0, 1fr); } .category-rail { grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; } }
 
     .stale-form {
       padding: var(--space-8) var(--space-14);
@@ -600,6 +619,15 @@ export class SettingsTab {
   protected readonly exportUrl = this.store.exportUrl();
 
   protected readonly importText = signal('');
+  protected readonly activeCategory = signal<string | null>(null);
+  protected readonly categories = computed(() => settingsCategories(this.store.visibleSections()));
+  protected readonly categorySections = computed(() => {
+    const categories = this.categories();
+    const active = this.activeCategory() ?? categories[0]?.id ?? null;
+    return this.store.visibleSections().filter((section) =>
+      categories.find((category) => category.id === active)?.label === section.name,
+    );
+  });
 
   protected readonly fmtDateTime = dateTime;
 

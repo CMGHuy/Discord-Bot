@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { SettingField } from '../../api/models';
-import { controlOf, groupByControl } from './settings-grouping';
+import { controlOf, groupByControl, settingsCategories } from './settings-grouping';
 
 function field(key: string, type: string): SettingField {
   return { key, label: key, type, value: '', default: '', help: '',
@@ -41,5 +41,23 @@ describe('groupByControl', () => {
 
   it('returns nothing for an empty section', () => {
     expect(groupByControl([])).toEqual([]);
+  });
+});
+
+describe('settingsCategories', () => {
+  const sections = [
+    { name: 'General', icon: '', description: '', fields: [field('A', 'string')] },
+    { name: 'Risk Controls', icon: '', description: '', fields: [field('B', 'number'), field('C', 'checkbox')] },
+  ];
+
+  it('places every schema key exactly once in its server-defined section', () => {
+    const categories = settingsCategories(sections);
+    expect(categories.flatMap((category) => category.keys)).toEqual(['A', 'B', 'C']);
+    expect(new Set(categories.flatMap((category) => category.keys)).size).toBe(3);
+  });
+
+  it('retains the schema order and omits sections with no fields', () => {
+    expect(settingsCategories([...sections, { name: 'Empty', icon: '', description: '', fields: [] }])
+      .map((category) => category.id)).toEqual(['general', 'risk-controls']);
   });
 });
