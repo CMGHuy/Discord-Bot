@@ -42,13 +42,14 @@ import { ColumnDef } from '../../ui/data-table/data-table.types';
 import { createClientPage } from '../../ui/data-table/client-page';
 import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
 import { Select, TextInput } from '../../ui/form-controls';
-import { ABSENT, dateTime } from '../../ui/format';
+import { ABSENT, dateTime, signed } from '../../ui/format';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
 import { SectionHead } from '../../ui/section-head';
 import { Histogram, HistogramBin } from '../../ui/histogram';
 import { MetricChip } from '../../ui/metric-chip';
 import { PaginationComponent } from '../../ui/pagination';
 import { Sparkline } from '../../ui/sparkline';
+import { StatTile } from '../../ui/stat-tile';
 import { ExitQualitySectionComponent } from './sections/exit-quality';
 import { StrategyContributionComponent } from './sections/strategy-contribution';
 import {
@@ -143,6 +144,7 @@ interface ProposalView extends ProposalRow {
     Async,
     ExitQualitySectionComponent,
     StrategyContributionComponent,
+    StatTile,
   ],
   template: `
     <sb-section-head>
@@ -187,6 +189,22 @@ interface ProposalView extends ProposalRow {
           }
 
           <h2 class="section">Snapshot</h2>
+          <!-- v85 D39 (R9-03): the six-tile KPI row -- Total R, R per month,
+               Sharpe (R), Max drawdown (R), Win rate, Profit factor -- added
+               ABOVE the Record/Overall/Risk-adjusted panels below, which stay
+               exactly where they are (R9-06 is what later moves them into a
+               collapsible band; not this task). All-time, like those panels
+               -- see the store's own comment on why this row never reads the
+               range control. Each tile carries its own real sample N and
+               de-emphasises below MIN_SAMPLE_N via sb-stat-tile's own
+               established convention (wave 1/2, freshest precedent: the Risk
+               workspace's six sb-stat-tiles). -->
+          <div class="kpi-row">
+            @for (tile of kpiTiles(); track tile.label) {
+              <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample" />
+            }
+          </div>
+
           <!-- v54 D1: this is the summary strip -- "how am I doing?", hero
                figures -- so it overrides the workspace's instrument default
                back to presentation. Both Snapshot panels-divs get the class
@@ -1036,6 +1054,15 @@ interface ProposalView extends ProposalRow {
       .panels { grid-template-columns: 1fr; }
     }
 
+    /* The six-tile KPI row (v85 D39) -- same auto-fit tile grid as the Risk
+       workspace's own institutional-metrics row (.metric-grid there). */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: var(--space-14);
+      margin-bottom: var(--space-14);
+    }
+
     /* Overrides sb-chip-row's own flex-wrap default with a grid -- the
        type selector plus this class gives it enough specificity to beat
        the primitive's own :host rule. */
@@ -1292,6 +1319,51 @@ export class Analytics {
   protected fmtCount(value: number | null): string {
     return value === null ? ABSENT : String(value);
   }
+
+  /** An R total (Total R, R per month) -- signed, since both can go
+   *  negative, three decimals for the same reason `fmtExpectancy` uses
+   *  three: a fraction of a risk unit rounds to the same number at two. */
+  private fmtTotalR(value: number | null): string {
+    return value === null ? ABSENT : `${signed(value, 3)}R`;
+  }
+
+  /** Sharpe (R) -- unsigned formatting, matching the Risk workspace's own
+   *  `fmtRatio` for the identical figure (v85 D37/D39): a plain ratio, no
+   *  unit. Not `fmtTotalR`'s signed style -- that one exists to tell a
+   *  P&L gain from a loss without the colour; a Sharpe ratio is not one. */
+  private fmtSharpeR(value: number | null): string {
+    return value === null ? ABSENT : value.toFixed(2);
+  }
+
+  /** Max drawdown (R) -- matches the Risk workspace's own `fmtDrawdownR`
+   *  (v85 D37/D39): the server always reports this positive (a cost of the
+   *  track record), so no sign is added here either. */
+  private fmtMaxDrawdownR(value: number | null): string {
+    return value === null ? ABSENT : `${value.toFixed(2)}R`;
+  }
+
+  /** Profit factor -- matches `analytics.columns.ts`'s own
+   *  `profit_factor` column formatter: two decimals, no unit, ABSENT
+   *  (never 0) when there is no losing amount to divide by. */
+  private fmtProfitFactor(value: number | null): string {
+    return value === null ? ABSENT : value.toFixed(2);
+  }
+
+  /**
+   * The six-tile KPI row (v85 D39) -- Total R, R per month, Sharpe (R),
+   * Max drawdown (R), Win rate, Profit factor, in that exact order. Each
+   * carries the sample it was actually computed from, never a shared/global
+   * one (see the store's own comments on where each of the six -- and each
+   * one's `n` -- actually comes from).
+   */
+  protected readonly kpiTiles = computed(() => [
+    { label: 'Total R', value: this.fmtTotalR(this.store.totalR()), sample: this.store.totalRSample() },
+    { label: 'R per month', value: this.fmtTotalR(this.store.rPerMonth()), sample: this.store.totalRSample() },
+    { label: 'Sharpe (R)', value: this.fmtSharpeR(this.store.sharpeR()), sample: this.store.sharpeRSample() },
+    { label: 'Max drawdown (R)', value: this.fmtMaxDrawdownR(this.store.maxDrawdownR()), sample: this.store.maxDrawdownRSample() },
+    { label: 'Win rate', value: this.fmtRate(this.store.winRate()), sample: this.store.totals().closed },
+    { label: 'Profit factor', value: this.fmtProfitFactor(this.store.profitFactor()), sample: this.store.profitFactorSample() },
+  ]);
 
   /* -- SR61: the column glossary --------------------------------------- */
 

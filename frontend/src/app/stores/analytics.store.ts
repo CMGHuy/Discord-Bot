@@ -20,6 +20,7 @@ import {
   AnalyticsPlans,
   AnalyticsSnapshot,
   AnalyticsStrategies,
+  RiskMetrics,
 } from '../api/models';
 import { HistogramBin } from '../ui/histogram';
 
@@ -327,6 +328,35 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** Every computable R-multiple off a snapshot's raw `r_multiples` list,
+ *  all-time -- shared by the KPI row's Total R and R-per-month tiles so
+ *  the two never silently drift apart on which trades they summed. */
+function rMultiplesOf(snapshot: AnalyticsSnapshot | null): number[] {
+  return ((snapshot?.r_multiples ?? []) as unknown[])
+    .map(snapNumber)
+    .filter((value): value is number => value !== null);
+}
+
+/** How long the book has been trading, in months -- earliest to latest date
+ *  on the snapshot's own all-time (dollar) equity curve. Floored at one
+ *  day, mirroring `metrics.span_years`'s own floor, so a book only hours
+ *  old cannot divide by (near) zero. Null under two points: a single point
+ *  has no elapsed span to report. */
+function elapsedMonthsOf(snapshot: AnalyticsSnapshot | null): number | null {
+  const raw = (snapshot?.equity_curve?.points ?? []) as unknown[];
+  const dates = raw.flatMap((point) => {
+    if (!isPlainRecord(point)) return [];
+    const date = snapText(point['date']);
+    return date === null ? [] : [date];
+  });
+  if (dates.length < 2) return null;
+  const first = new Date(dates[0]).getTime();
+  const last = new Date(dates[dates.length - 1]).getTime();
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return null;
+  const days = Math.max((last - first) / 86_400_000, 1);
+  return days / 30.4368;
+}
+
 /** `{date, balance}` / `{date, dd_pct}` points, flattened to one shape. A point
  *  missing either half is dropped: a gap in a series is not a zero, and
  *  drawing it as one invents a crash that never happened. */
@@ -493,6 +523,18 @@ interface AnalyticsSlice {
   strategies: AnalyticsStrategies | null;
   calibration: AnalyticsCalibration | null;
   exitQuality: AnalyticsExitQuality | null;
+  /**
+   * The institutional risk metrics block (v85 D37, `GET /risk`), read
+   * ONLY for its `sharpe_r`/`max_drawdown_r` — the R-multiple-based figures
+   * the KPI row's "Sharpe (R)"/"Max drawdown (R)" tiles show (v85 D39).
+   * Fetched once, like `exitQuality`, rather than on every `analytics`
+   * event: the Risk workspace already owns keeping this fresh for its own
+   * page, and this tab only borrows two fields off it, not the whole
+   * exposure/killswitch resource. A failed fetch is swallowed exactly like
+   * `exitQuality`'s -- these two tiles degrade to their own em dashes
+   * rather than an unrelated fetch failure warning about the whole tab.
+   */
+  riskMetrics: RiskMetrics | null;
   plans: AnalyticsPlans | null;
   jobs: JobSummary[];
   /** The job whose progress is on screen — status plus a log tail. */
@@ -554,6 +596,7 @@ export const AnalyticsStore = signalStore(
     strategies: null,
     calibration: null,
     exitQuality: null,
+    riskMetrics: null,
     plans: null,
     jobs: [],
     job: null,
@@ -565,7 +608,7 @@ export const AnalyticsStore = signalStore(
   }),
 
   withComputed(({ performance, strategies, calibration, plans, jobs, job, snapshot, breakdown, exitQuality,
-                 journal }) => ({
+                 journal, riskMetrics }) => ({
     /* -- SR50: the snapshot's own figures ------------------------------- */
 
     /** When the blob was assembled. Worth showing: the server serves a
@@ -576,10 +619,69 @@ export const AnalyticsStore = signalStore(
     minCellN: computed(() => exitQuality()?.min_cell_n ?? 0),
 
     profitFactor: computed(() => snapNumber(snapshot()?.overall?.['profit_factor'])),
+    /** The exact population `profitFactor` was computed over -- `overall.n`
+     *  and `overall.profit_factor` are two fields of the same `build_snapshot`
+     *  call, read from the same `closed` list (snapshots.py). */
+    profitFactorSample: computed(() => snapNumber(snapshot()?.overall?.['n'])),
     sharpe: computed(() => snapNumber(snapshot()?.overall?.['sharpe'])),
     sortino: computed(() => snapNumber(snapshot()?.overall?.['sortino'])),
     maxDrawdownPct: computed(() => snapNumber(snapshot()?.overall?.['max_drawdown_pct'])),
     totalPnl: computed(() => snapNumber(snapshot()?.overall?.['total_pnl'])),
+
+    /* -- KPI row (v85 D39) ----------------------------------------------
+     *
+     * All six tiles are deliberately ALL-TIME, matching the Record/Overall/
+     * Risk-adjusted panels the row sits above (see this file's own SR54
+     * comment on `winRate`/`expectancyR`: "the top-level win_rate and
+     * expectancy_r stay all-time... existing clients read them as the
+     * account's overall record"). None of the six reads `rangeFrom`/
+     * `rangeTo` or the `derived` block -- that would make this row silently
+     * disagree with the panels directly beneath it the moment a user set a
+     * date filter, the "screen hides how stale its data is" class of bug
+     * this repo treats as a correctness bug, not a nice-to-have.
+     *
+     * "Sharpe (R)"/"Max drawdown (R)" reuse `/risk`'s own R-multiple-based
+     * computation (`rm.sharpe_of`/`rm.max_drawdown_r`, already the Risk
+     * workspace's own tiles) rather than deriving a Sharpe ratio here --
+     * this store has the raw `r_multiples` list (via the snapshot) but
+     * inventing a second Sharpe formula from it would violate "one
+     * definition per stat" the same way a duplicated backend formula would.
+     */
+
+    /** Sum of every computable R-multiple, all-time -- the exact same list
+     *  `overall.expectancy_r` was averaged from (`metrics.r_multiples` and
+     *  `metrics.expectancy_r` both walk the same `closed` list in
+     *  `build_snapshot`). A plain total, not a second statistical formula.
+     *  Null (not 0) with no computable R at all: an empty book has no total
+     *  to report. */
+    totalR: computed(() => {
+      const rs = rMultiplesOf(snapshot());
+      return rs.length ? rs.reduce((sum, r) => sum + r, 0) : null;
+    }),
+    /** The exact sample the total above was summed from. */
+    totalRSample: computed(() => rMultiplesOf(snapshot()).length),
+
+    /** Total R accumulated per month of the book's own history -- NOT the
+     *  same figure as `derived.trades_per_month` (a trade *count* rate,
+     *  range-scoped); this is an R *total* rate, all-time, over
+     *  `elapsedMonthsOf` -- the earliest to latest date on the all-time
+     *  (dollar) equity curve served alongside `r_multiples` in the same
+     *  snapshot. Null when either half is unavailable, never a division
+     *  against a null/zero span. */
+    rPerMonth: computed(() => {
+      const rs = rMultiplesOf(snapshot());
+      const months = elapsedMonthsOf(snapshot());
+      if (!rs.length || months === null) return null;
+      return rs.reduce((sum, r) => sum + r, 0) / months;
+    }),
+
+    /** Sharpe/max-drawdown over R-multiples, and each one's own sample --
+     *  `/risk`'s `sharpe_r.n`/`max_drawdown_r.n`, the closed-trade R-series
+     *  count, never a page-wide count borrowed from somewhere else. */
+    sharpeR: computed(() => riskMetrics()?.sharpe_r.value ?? null),
+    sharpeRSample: computed(() => riskMetrics()?.sharpe_r.n ?? null),
+    maxDrawdownR: computed(() => riskMetrics()?.max_drawdown_r.value ?? null),
+    maxDrawdownRSample: computed(() => riskMetrics()?.max_drawdown_r.n ?? null),
 
     /** Current run, and the best and worst ever. Never rendered even by the
      *  Jinja page, which computed them and dropped them on the floor. */
@@ -937,6 +1039,17 @@ export const AnalyticsStore = signalStore(
           error: () => {},
         });
       }
+      // v85 D39 (R9-03): fetched once, like exitQuality above -- the KPI
+      // row's Sharpe (R)/Max drawdown (R) tiles need only two fields off
+      // this, not the Risk workspace's whole exposure/killswitch resource,
+      // and a failed fetch degrades those two tiles to an em dash rather
+      // than warning about the rest of the Performance tab.
+      if (store.riskMetrics() === null) {
+        api.risk().subscribe({
+          next: (risk) => patchState(store, { riskMetrics: risk.metrics }),
+          error: () => {},
+        });
+      }
     };
 
     const loadStrategies = (): void => {
@@ -1052,6 +1165,13 @@ export const AnalyticsStore = signalStore(
           if (store.exitQuality() === null) {
             api.analyticsExitQuality().subscribe({
               next: (exitQuality) => patchState(store, { exitQuality }),
+              error: () => {},
+            });
+          }
+          // v85 D39 (R9-03) -- see loadPerformance's identical guard above.
+          if (store.riskMetrics() === null) {
+            api.risk().subscribe({
+              next: (risk) => patchState(store, { riskMetrics: risk.metrics }),
               error: () => {},
             });
           }

@@ -16,6 +16,7 @@ import {
 import {
   AnalyticsPerformance,
   AnalyticsPlans,
+  AnalyticsSnapshot,
   AnalyticsStrategies,
 } from '../../api/models';
 import { AnalyticsStore } from '../../stores/analytics.store';
@@ -63,6 +64,44 @@ function plansPayload(overrides: Partial<AnalyticsPlans> = {}): AnalyticsPlans {
   };
 }
 
+function snapshotPayload(overrides: Partial<AnalyticsSnapshot> = {}): AnalyticsSnapshot {
+  return {
+    built_at: null,
+    overall: {},
+    equity_curve: null,
+    drawdown: [],
+    rolling_wr: [],
+    by: {},
+    calibration: {},
+    r_multiples: [],
+    ...overrides,
+  };
+}
+
+function riskPayload(metricsOverrides: Record<string, unknown> = {}) {
+  return {
+    heat: {},
+    positions: [],
+    sector_heat: [],
+    clusters: [],
+    throttle: {},
+    killswitch: {},
+    scan_health: {},
+    metrics: {
+      var_95: { value: null, n: 0 },
+      expected_shortfall_95: { value: null, n: 0 },
+      annualised_vol: { value: null, n: 0 },
+      beta_spy: { value: null, n: 0 },
+      sharpe_r: { value: 1.2, n: 100 },
+      max_drawdown_r: { value: 3.4, n: 100 },
+      as_of: null,
+      benchmark_symbol: 'SPY',
+      ...metricsOverrides,
+    },
+    correlation: { labels: [], values: [] },
+  };
+}
+
 function seed(): { fixture: ComponentFixture<Analytics>; backend: HttpTestingController } {
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
@@ -87,16 +126,64 @@ function seed(): { fixture: ComponentFixture<Analytics>; backend: HttpTestingCon
  *  pending requests it does not care about. */
 function flushJournalAndSnapshot(backend: HttpTestingController): void {
   backend.expectOne('/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
-  backend.expectOne('/api/v1/analytics/snapshot').flush({
-    built_at: null,
-    overall: {},
-    equity_curve: null,
-    drawdown: [],
-    rolling_wr: [],
-    by: {},
-    calibration: {},
-    r_multiples: [],
-  });
+  backend.expectOne('/api/v1/analytics/snapshot').flush(snapshotPayload());
+}
+
+/** Renders the Performance tab with all four of its fetches
+ * (performance/journal/snapshot/risk) landed, every population that backs a
+ * KPI tile set to the SAME `n` unless `profitFactor` is overridden -- so a
+ * test can assert every tile independently without caring which of the four
+ * responses it actually reads from (see analytics.store.ts's own comments on
+ * where each of the six figures comes from). */
+async function renderKpis(
+  overrides: { n?: number; profitFactor?: number | null } = {},
+): Promise<HTMLElement> {
+  const { fixture, backend } = seed();
+  fixture.detectChanges();
+
+  const n = overrides.n ?? 782;
+  const profitFactor = overrides.profitFactor === undefined ? 1.8 : overrides.profitFactor;
+
+  backend.expectOne('/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
+  backend.expectOne('/api/v1/analytics/snapshot').flush(snapshotPayload({
+    overall: { n, profit_factor: profitFactor },
+    equity_curve: {
+      points: [
+        { date: '2026-01-01', balance: 10_000, pnl: 0 },
+        { date: '2026-07-01', balance: 11_000, pnl: 1_000 },
+      ],
+      skipped_n: 0,
+    },
+    r_multiples: Array.from({ length: n }, (_, i) => (i % 2 === 0 ? 1 : -0.5)),
+  }));
+  backend.expectOne('/api/v1/analytics/performance').flush(performancePayload({
+    totals: { total: n, open: 0, closed: n },
+    win_rate: 55,
+  }));
+  backend.expectOne('/api/v1/risk').flush(riskPayload({
+    sharpe_r: { value: 1.2, n },
+    max_drawdown_r: { value: 3.4, n },
+  }));
+
+  await fixture.whenStable();
+  fixture.detectChanges();
+  return fixture.nativeElement as HTMLElement;
+}
+
+function kpiTiles(el: HTMLElement): HTMLElement[] {
+  return Array.from(el.querySelectorAll<HTMLElement>('.kpi-row .tile'));
+}
+
+function kpiLabels(el: HTMLElement): string[] {
+  return kpiTiles(el).map((tile) => tile.querySelector('.label')!.textContent!.trim());
+}
+
+function kpiTile(el: HTMLElement, label: string): HTMLElement {
+  const tile = kpiTiles(el).find(
+    (t) => t.querySelector('.label')!.textContent!.trim() === label,
+  );
+  if (!tile) throw new Error(`no KPI tile labelled ${label}`);
+  return tile;
 }
 
 describe('Analytics — performance tab', () => {
@@ -173,6 +260,40 @@ describe('Analytics — performance tab', () => {
 
     const el = fixture.nativeElement as HTMLElement;
     expect(el.textContent).toContain('No journal entries yet');
+  });
+});
+
+describe('Analytics — performance tab — KPI row (v85 D39)', () => {
+  it('renders the six KPI tiles in the specified order', async () => {
+    const el = await renderKpis();
+    expect(kpiLabels(el)).toEqual([
+      'Total R', 'R per month', 'Sharpe (R)', 'Max drawdown (R)',
+      'Win rate', 'Profit factor',
+    ]);
+  });
+
+  it('gives every KPI the sample it was computed from', async () => {
+    const el = await renderKpis({ n: 782 });
+    const tiles = kpiTiles(el);
+    expect(tiles.length).toBe(6);
+    expect(tiles.every((t) => t.querySelector('.sample')!.textContent!.includes('782'))).toBe(true);
+  });
+
+  it('de-emphasises every KPI when the book is thin', async () => {
+    const el = await renderKpis({ n: 12 });
+    const tiles = kpiTiles(el);
+    expect(tiles.length).toBe(6);
+    expect(tiles.every((t) => t.classList.contains('thin'))).toBe(true);
+  });
+
+  it('renders a null profit factor as no-value rather than zero', async () => {
+    const el = await renderKpis({ profitFactor: null });
+    expect(kpiTile(el, 'Profit factor').querySelector('.value')!.textContent!.trim()).toBe('—');
+  });
+
+  it('labels Sharpe as an R measure', async () => {
+    const el = await renderKpis();
+    expect(kpiLabels(el)).toContain('Sharpe (R)');
   });
 });
 
