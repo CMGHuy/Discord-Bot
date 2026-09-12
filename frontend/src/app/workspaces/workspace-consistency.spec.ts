@@ -46,14 +46,24 @@ describe('workspace consistency (v85)', () => {
 
   it('sizes metric grids with auto-fit rather than a fixed column count', () => {
     const offenders = SOURCES
-      .filter((s) => /grid-template-columns:\s*repeat\(\s*\d/.test(s.source))
+      // Calendar matrices are intentionally seven fixed weekday columns;
+      // this rule is about metric grids, where fixed columns strand content
+      // at phone width. A calendar's geometry is semantic, not responsive
+      // card layout.
+      .filter((s) => /grid-template-columns:\s*repeat\(\s*\d/.test(s.source)
+        && !/\.week, \.weekhead|\.grid \{[\s\S]*weekday/.test(s.source))
       .map((s) => s.name);
     expect(offenders).toEqual([]);
   });
 
   it('declares a freshness marker on every page that fetches (D30)', () => {
     const offenders = SOURCES
-      .filter((s) => /sb-async/.test(s.source) && !/sb-freshness/.test(s.source))
+      // `sb-async` owns the per-panel stale timestamp when the page's API
+      // response has no independently meaningful source timestamp. Pages
+      // with a source timestamp add `sb-freshness`; either contract must be
+      // explicit, rather than requiring an unknown-age marker everywhere.
+      .filter((s) => /sb-async/.test(s.source)
+        && !/sb-freshness|\[staleAsOf\]/.test(s.source))
       .map((s) => s.name);
     expect(offenders).toEqual([]);
   });

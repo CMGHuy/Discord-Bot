@@ -79,7 +79,7 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
       <a class="back" routerLink="/trades">← Trades</a>
 
       @if (store.trade(); as trade) {
-        <h1>
+        <div class="trade-title" role="heading" aria-level="2">
           <span class="ticker">{{ trade.ticker }}</span>
           <sb-status-indicator
             [status]="trade.status"
@@ -88,7 +88,7 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
             [stop]="trade.stop_loss"
             [target]="trade.target"
           />
-        </h1>
+        </div>
         <div class="tags">
           <!-- The id a Discord command (!trade ID) or the API needs to name
                this exact trade -- previously only visible in the Trades
@@ -113,13 +113,13 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
           }
         </div>
       } @else if (store.error(); as message) {
-        <h1>{{ message }}</h1>
+        <p class="trade-title" role="status">{{ message }}</p>
       } @else {
         <!-- Not "skeleton": G1's coverage gate (async-coverage.spec.ts)
              bans that literal class name anywhere in a file that uses
              sb-async, once one is added below for the tab content. This
              title-only loading word is not the sb-async skeleton itself. -->
-        <h1 class="loading-title">Loading…</h1>
+        <p class="trade-title loading-title" role="status">Loading…</p>
       }
     </header>
 
@@ -714,7 +714,8 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
       text-decoration: underline;
     }
 
-    h1 {
+    .trade-title {
+      margin: 0;
       display: flex;
       align-items: center;
       gap: var(--space-10);
