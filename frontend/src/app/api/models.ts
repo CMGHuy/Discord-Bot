@@ -672,6 +672,33 @@ export interface KillswitchResult {
   killswitch: Killswitch;
 }
 
+/** One institutional metric (v85 D37) — `value` is `null`, never `0`, when
+ *  `risk_metrics.py` can't justify a number; `n` is always the sample size
+ *  actually attempted, which is what lets the tile say "N=3" instead of
+ *  rendering a bare dash with no way to tell why. */
+export interface RiskMetric {
+  value: number | null;
+  n: number;
+}
+
+export interface RiskMetrics {
+  var_95: RiskMetric;
+  expected_shortfall_95: RiskMetric;
+  annualised_vol: RiskMetric;
+  beta_spy: RiskMetric;
+  sharpe_r: RiskMetric;
+  max_drawdown_r: RiskMetric;
+  as_of: string | null;
+}
+
+/** Pairwise Pearson correlation of daily returns (v85 D38). `values[i][j]`
+ *  is `null`, never `0`, for a pair with too little overlap to correlate —
+ *  zero correlation is a finding, no data is not. */
+export interface Correlation {
+  labels: string[];
+  values: (number | null)[][];
+}
+
 export interface Risk {
   heat: RiskHeat;
   positions: RiskPosition[];
@@ -680,6 +707,8 @@ export interface Risk {
   throttle: Throttle;
   killswitch: Killswitch;
   scan_health: ScanHealth;
+  metrics: RiskMetrics;
+  correlation: Correlation;
 }
 
 /* -- system ------------------------------------------------------------- */

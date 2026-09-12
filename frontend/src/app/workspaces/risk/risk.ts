@@ -18,11 +18,12 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { createClientPage } from '../../ui/data-table/client-page';
 import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { Flash } from '../../ui/flash';
-import { dateTime, num, text } from '../../ui/format';
+import { dateTime, num, share, text } from '../../ui/format';
 import { Panel } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { Sparkline } from '../../ui/sparkline';
+import { StatTile } from '../../ui/stat-tile';
 import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
 
 /**
@@ -51,7 +52,7 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
 @Component({
   selector: 'sb-risk',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Panel, RowLink, SectionHead, Sparkline],
+  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Panel, RowLink, SectionHead, Sparkline, StatTile],
   // v54 D1: exposure-by-position is a table and the rest of this workspace
   // (heat, sectors, clusters, scan health) is the same operational reading
   // that table's numbers roll up into -- tight rows, more per screen -- so
@@ -214,6 +215,20 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
         }
         @if (!store.paused() && !store.throttled() && !store.empty()) {
           <span class="state">Sizing unthrottled</span>
+        }
+      </div>
+    </sb-panel>
+
+    <!-- institutional risk metrics (v85 D37) ------------------------------
+         Six sb-stat-tiles over R8-01's computations, each carrying the
+         sample it was actually computed from -- distributional metrics
+         (VaR, ES, vol, beta) share one N off the daily-return series;
+         Sharpe and max drawdown carry the closed-trade count instead, which
+         is why the two families' N routinely differ. -->
+    <sb-panel heading="Risk metrics">
+      <div class="metric-grid">
+        @for (tile of metricTiles(); track tile.label) {
+          <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample" />
         }
       </div>
     </sb-panel>
@@ -407,6 +422,13 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
     }
     .state.warn { border-color: var(--warn); }
 
+    /* -- risk metrics -- */
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: var(--register-pad);
+    }
+
     /* -- the two side-by-side panels -- */
     .split {
       display: grid;
@@ -524,6 +546,39 @@ export class Risk {
     { key: 'stop_loss', header: 'Stop', value: (row) => num(row.stop_loss), numeric: true, sortable: true },
     { key: 'risk_pct', header: 'Risk %', numeric: true, cell: this.riskCell(), sortable: true, footer: (rows) => num(rows.reduce((sum, row) => sum + (row.risk_pct ?? 0), 0)) },
   ]);
+
+  /** A risk_metrics.py fraction (0.031) as a magnitude, not a movement --
+   *  `share()`, not `pct()`: VaR/ES/vol are always-positive loss figures,
+   *  and `pct()`'s leading "+" would read as a gain. */
+  private fmtRiskPct(value: number | null): string {
+    return share(value === null ? null : value * 100, 2);
+  }
+
+  /** Beta and Sharpe are already plain ratios -- no unit to add. */
+  private fmtRatio(value: number | null): string {
+    return num(value, 2);
+  }
+
+  private fmtDrawdownR(value: number | null): string {
+    return value === null ? '—' : `${num(value, 2)}R`;
+  }
+
+  /** Six tiles over R8-01's metrics, each carrying the sample it was
+   *  actually computed from (spec D23/D37) -- `sample` is the metric's own
+   *  `n`, not a page-wide count, which is what lets the distributional and
+   *  trade-sample families disagree honestly. */
+  protected readonly metricTiles = computed(() => {
+    const m = this.store.metrics();
+    if (!m) return [];
+    return [
+      { label: 'VaR 95%', value: this.fmtRiskPct(m.var_95.value), sample: m.var_95.n },
+      { label: 'Expected shortfall', value: this.fmtRiskPct(m.expected_shortfall_95.value), sample: m.expected_shortfall_95.n },
+      { label: 'Annualised vol', value: this.fmtRiskPct(m.annualised_vol.value), sample: m.annualised_vol.n },
+      { label: 'Beta vs SPY', value: this.fmtRatio(m.beta_spy.value), sample: m.beta_spy.n },
+      { label: 'Sharpe (R)', value: this.fmtRatio(m.sharpe_r.value), sample: m.sharpe_r.n },
+      { label: 'Max drawdown (R)', value: this.fmtDrawdownR(m.max_drawdown_r.value), sample: m.max_drawdown_r.n },
+    ];
+  });
 
   protected readonly heatClass = computed(() => (this.store.heatNearCap() ? 'warn' : ''));
 

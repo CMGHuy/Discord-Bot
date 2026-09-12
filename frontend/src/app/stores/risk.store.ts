@@ -12,7 +12,7 @@ import { ApiError } from '../api/api-error';
 import { Observable } from 'rxjs';
 
 import { routeRequest } from '../routing/route-request';
-import { Killswitch, Risk, RiskPosition, SectorHeat } from '../api/models';
+import { Correlation, Killswitch, Risk, RiskMetrics, RiskPosition, SectorHeat } from '../api/models';
 
 interface RiskSlice {
   data: Risk | null;
@@ -146,6 +146,11 @@ export const RiskStore = signalStore(
     ),
     scanLatestS: computed(() => data()?.scan_health?.latest_s ?? null),
     scanSlowdown: computed(() => data()?.scan_health?.slowdown ?? false),
+
+    /* -- institutional risk metrics and correlation (v85 D37/D38) -------- */
+
+    metrics: computed<RiskMetrics | null>(() => data()?.metrics ?? null),
+    correlation: computed<Correlation | null>(() => data()?.correlation ?? null),
   })),
   withMethods((store, api = inject(ApiClient)) => {
     const resolve = (): Observable<void> => routeRequest(api.risk(), {
