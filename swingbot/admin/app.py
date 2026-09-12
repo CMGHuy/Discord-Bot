@@ -48,12 +48,11 @@ from swingbot import config
 from swingbot.core.scanning.engine import is_scan_running
 # `docker_sdk` is re-exported: api_v1/system.py imports it from here rather
 # than from helpers, so it is used even though nothing in this file calls it.
-from .helpers import docker_sdk, _load_or_create_secret_key
+from .helpers import docker_sdk, _load_or_create_secret_key  # noqa: F401
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
-TRIGGER_FILE        = os.path.join(config.DATA_DIR, "trigger_check.flag")
-MANUAL_CLOSE_QUEUE  = os.path.join(config.DATA_DIR, "manual_close_notify.json")
+TRIGGER_FILE = os.path.join(config.DATA_DIR, "trigger_check.flag")
 PAUSE_FILE = os.path.join(config.DATA_DIR, "scan_paused.flag")
 
 # Section headings for the Settings screen, keyed by the section name in
@@ -389,7 +388,7 @@ def scan_status_payload() -> dict:
 
 def main():
     host = os.getenv("ADMIN_HOST", "0.0.0.0")
-    port = int(os.getenv("ADMIN_PORT", 1234))
+    port = int(os.getenv("ADMIN_PORT", "1234"))
     app.run(host=host, port=port, debug=False)
 
 

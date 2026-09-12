@@ -1,7 +1,6 @@
 """
 Small, self-contained drawing/geometry helpers shared by trade_chart.py's
-generate_trade_chart() -- label placement, the two-part branch arrows,
-diagonal trendline rendering, and the two price-level helpers (floor
+generate_trade_chart() -- label placement, diagonal trendline rendering, and the two price-level helpers (floor
 pivots, Fibonacci anchor bars) the window-expansion logic needs. Split
 out of trade_chart.py because these are generic building blocks with no
 dependency on the rest of that module's much larger chart-assembly logic.
@@ -94,56 +93,6 @@ def _place_strategy_label(ax, x_actual, y_actual, label_x, color, text, va="cent
     else:
         ax.text(x_actual, y_actual, f" {text}", color=color, fontsize=8, fontweight="bold",
                 va=va, ha="left", zorder=6, bbox=_label_bbox(color))
-
-
-def _draw_arrow_leg(ax, x, y_from, y_to, color, label):
-    """Draws one smooth curved arrow from y_from to y_to at column x,
-    with a rotated label at the midpoint.
-
-    The arc3 connectionstyle gives a gentle rightward bow so multiple
-    overlapping legs remain visually distinguishable and the path reads
-    as a flowing price movement rather than a rigid ruler line.
-    """
-    going_up = y_to > y_from
-    # Curve slightly toward the right so upward and downward moves look distinct
-    rad = 0.25 if going_up else -0.25
-    ax.annotate(
-        "", xy=(x, y_to), xytext=(x, y_from),
-        arrowprops=dict(
-            arrowstyle="-|>",
-            color=color,
-            lw=2.4,
-            alpha=0.90,
-            shrinkA=3,
-            shrinkB=3,
-            connectionstyle=f"arc3,rad={rad}",
-        ),
-        zorder=6,
-    )
-    mid_y = (y_from + y_to) / 2
-    ax.text(
-        x + 0.3, mid_y, f" {label}", color=color, fontsize=8, fontweight="bold",
-        va="center", ha="left", rotation=90, zorder=6,
-    )
-
-
-def _draw_two_part_branch(ax, x_entry, x_leg2, entry, target1, outcome_price, path_color, outcome_color, outcome_label):
-    """
-    Draws one full branch of the scenario as two connected arrow legs,
-    both starting from the entry point:
-      - Part 1 (x_entry): entry -> target 1 -- the move to the next
-        support/resistance level. Drawn in the neutral path color since
-        this leg is common to every branch.
-      - Part 2 (x_leg2): target 1 -> outcome_price -- what happens once
-        price gets there (continues to target 2, or reverses to the
-        stop), drawn in that branch's own color with its label.
-    A short horizontal connector at target 1's height ties the two legs
-    together visually so the branch reads as one continuous path from
-    entry through the key level to the outcome, not two floating arrows.
-    """
-    _draw_arrow_leg(ax, x_entry, entry, target1, path_color, "to level")
-    ax.plot([x_entry, x_leg2], [target1, target1], color=path_color, linewidth=1.4, alpha=0.6, zorder=5)
-    _draw_arrow_leg(ax, x_leg2, target1, outcome_price, outcome_color, outcome_label)
 
 
 def _draw_trendline(ax, recent_len: int, window_bars: int, slope: float, intercept: float, color: str, label: str,

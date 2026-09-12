@@ -168,7 +168,7 @@ def run_folds(overrides: dict, folds=ANCHORED_FOLDS, tickers=None,
     else:
         run = run_fn
     fold_rows = []
-    for train_start, train_end, test_start, test_end in folds:
+    for _train_start, _train_end, test_start, test_end in folds:
         base = run(test_start, test_end, {})
         comp = run(test_start, test_end, dict(overrides))
         delta = None

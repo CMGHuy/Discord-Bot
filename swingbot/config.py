@@ -186,6 +186,33 @@ FIELDS: list[Field] = [
                "Bands, Donchian Channel, floor pivots, trendlines, Fair Value Gaps -- 10 total) land within "
                "'Confluence deviation %' of the target/stop price. 1 disables this filter (any single "
                "confirming strategy is enough). Can also be overridden per-run with `!check <horizon> <min_strategies>`."),
+    Field("RSI_DIV_MIN_CONSECUTIVE_TURN", "RSI_DIV_MIN_CONSECUTIVE_TURN",
+          "Trade Filters & Risk", "RSI Divergence: consecutive RSI turn bars",
+          type="number", default="1", min=1, max=6, step=1,
+          help="How many consecutive bars RSI must move in the trade direction "
+               "before a hidden-divergence reclaim counts as confirmed. 1 keeps "
+               "the original single-uptick behaviour."),
+    Field("MA_RIBBON_CONFIRM_BARS", "MA_RIBBON_CONFIRM_BARS",
+          "Trade Filters & Risk", "MA Ribbon: alignment confirmation bars",
+          type="number", default="1", min=1, max=6, step=1,
+          help="How many consecutive bars the fast and mid EMAs must hold "
+               "their side of the slow SMA, ending at the crossover bar, "
+               "before an entry fires. 1 keeps same-bar firing."),
+    Field("SR_MIN_LEVEL_TOUCHES", "SR_MIN_LEVEL_TOUCHES",
+          "Trade Filters & Risk", "S/R: minimum prior level rejections",
+          type="number", default="0", min=0, max=5, step=1,
+          help="How many times price must have approached the level (within "
+               "half an ATR) and closed back on the wrong side of it before a "
+               "breakout through it counts as a tested ceiling. 0 disables the "
+               "check, treating any rolling-window extreme as a level."),
+    Field("FIB_TARGET_1_0_EXTENSION", "FIB_TARGET_1_0_EXTENSION", "Trade Filters & Risk",
+          "Fibonacci 1.0 extension as a target candidate",
+          type="checkbox", default="false",
+          help="Adds the 1.0 (measured-move) extension of the anchoring swing to the "
+               "Fibonacci strategy's target candidates, filling the gap between the swing "
+               "high/low and the 1.272 extension. Ships OFF: it is a pre-registered "
+               "measurement (v84), not a demonstrated edge, and flips on only if its one "
+               "VALIDATION shot passes."),
     Field("MIN_ALERT_CONFIDENCE_LEVEL", "MIN_ALERT_CONFIDENCE_LEVEL", "Trade Filters & Risk", "Min confidence level to alert",
           type="select", default="4", options=["1", "2", "3", "4", "5"],
           help="Only this level and above are shown as alerts (quality over quantity)."),
@@ -666,13 +693,10 @@ FIELDS: list[Field] = [
           options=["watchlist", "sp500", "sp500_top150", "etfs", "sp500+etfs"],
           help="What the scanner covers. The watchlist is ALWAYS included on top of any "
                "universe. Flip beyond watchlist only after the E77 rollout checklist."),
-    Field("EARNINGS_BLACKOUT_DAYS", "EARNINGS_BLACKOUT_DAYS", "Universe & Scanning",
-          "Earnings blackout window (days)",
-          type="number", default="0", min=0, max=10, step=1,
-          help="New entries are blocked when the ticker's next earnings date is within this "
-               "many days (0 = off). ETFs are always exempt (they don't report earnings). "
-               "Gate is defined in swingbot/core/edge/gates.py:in_earnings_blackout but not "
-               "yet wired into the scan/alert path -- flag-gated filter candidate for E33."),
+    Field("EARNINGS_BLACKOUT_SESSIONS", "EARNINGS_BLACKOUT_SESSIONS", "Universe & Scanning",
+          "Earnings blackout (sessions before the reaction)", type="number", default="0", min=0, max=5, step=1,
+          help="Blocks a setup when the next earnings reaction is 1 to this many trading sessions away (0 = off). "
+               "ETFs never block. Pre-registered by spec v82; stays 0 unless VALIDATION passes."),
     Field("SCAN_WORKERS", "SCAN_WORKERS", "Universe & Scanning", "Scan thread-pool size",
           type="number", default="1", min=1, max=16, step=1,
           help="Thread-pool size for per-ticker scanning. Was 4, changed to 1 (v56): "
@@ -898,14 +922,16 @@ _SEARCH_CLASSES = {
         "OPEX_SIZE_REDUCTION_PCT", "HTF_CONFLUENCE_ENABLED",
         "MTF_ADJACENT_GATE", "PLAN_ENGINE_V2", "SCALE_OUT_ENABLED",
         "UNIVERSE_MIN_DOLLAR_VOL", "UNIVERSE_MIN_PRICE",
-        "EARNINGS_BLACKOUT_DAYS", "REGIME_GATES_ENABLED",
+        "REGIME_GATES_ENABLED",
         "LEVEL_LIFECYCLE_STOPS_ENABLED", "AVWAP_LEVELS_ENABLED",
         "PYRAMIDING_ENABLED", "VOLUME_PROFILE_NODES_ENABLED",
         "MAX_ALERTS_PER_SCAN", "DATA_DRIVEN_STOPS_ENABLED",
         "DEAD_CAT_BOUNCE_VETO", "DCB_DECLINE_PCT", "DCB_GAP_REQUIRED",
-        "DCB_VOLUME_RATIO",
+        "DCB_VOLUME_RATIO", "RSI_DIV_MIN_CONSECUTIVE_TURN",
+        "MA_RIBBON_CONFIRM_BARS", "SR_MIN_LEVEL_TOUCHES",
+        "FIB_TARGET_1_0_EXTENSION",
     },
-    "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO"},
+    "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO", "EARNINGS_BLACKOUT_SESSIONS"},
     "live_only": {
         "SESSION_START_HOUR", "SESSION_END_HOUR", "SCAN_INTERVAL_MINUTES",
         "SIGNAL_CONFIRMATION_SCANS", "NEAR_CLOSE_ALERTS_ENABLED",

@@ -10,7 +10,6 @@ from swingbot.scan_params import ScanParams
 from .test_v74_fixture import load_v74_fixture
 
 EXEMPT = {
-    "EARNINGS_BLACKOUT_DAYS": "Needs earnings-calendar data, while this committed fixture contains only OHLCV bars.",
     "UNIVERSE_MIN_DOLLAR_VOL": "Universe construction precedes replay; the committed fixture already defines the universe.",
     "UNIVERSE_MIN_PRICE": "Universe construction precedes replay; the committed fixture already defines the universe.",
     "MAX_ALERTS_PER_SCAN": "This cap belongs to scan-run alert delivery and replay_scenarios does not execute that path.",
@@ -43,6 +42,10 @@ EXEMPT = {
     "DCB_DECLINE_PCT": "The veto is measured through its dedicated DCB harness; baseline replay does not enable a DCB arm.",
     "DCB_GAP_REQUIRED": "The veto is measured through its dedicated DCB harness; baseline replay does not enable a DCB arm.",
     "DCB_VOLUME_RATIO": "The veto is measured through its dedicated DCB harness; baseline replay does not enable a DCB arm.",
+    "RSI_DIV_MIN_CONSECUTIVE_TURN": "RSI Divergence's rescue gate is read directly from the config global inside entry_filters.py, not threaded through ScanParams; replay's confluence path never passes params into that per-strategy read.",
+    "MA_RIBBON_CONFIRM_BARS": "MA Ribbon's rescue gate is read directly from the config global inside entry_filters.py, not threaded through ScanParams; replay's confluence path never passes params into that per-strategy read.",
+    "SR_MIN_LEVEL_TOUCHES": "Support/Resistance's rescue gate is read directly from the config global inside entry_filters.py, not threaded through ScanParams; replay's confluence path never passes params into that per-strategy read.",
+    "FIB_TARGET_1_0_EXTENSION": "Fibonacci's target-candidate flag is read directly from the config global inside targets.py, not threaded through ScanParams; replay's confluence path never passes params into that per-strategy read.",
 }
 PERTURB = {bool: lambda value: not value, int: lambda value: max(1, value + 1),
            float: lambda value: value * 1.75 + 0.5}

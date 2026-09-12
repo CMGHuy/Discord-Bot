@@ -4,7 +4,6 @@ import pytest
 
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.planning.plan_engine import TradePlanV2, PlanStatus, simulate_exit
-from swingbot.core.market.strategy_types import HORIZONS
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 CACHE_DIR = ROOT / "data" / "backtest_cache"

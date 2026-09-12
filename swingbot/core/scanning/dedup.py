@@ -67,7 +67,7 @@ def dedup_sector_items(items: list) -> list:
         sec = getattr(it, "sector", None)
         (by_sector.setdefault(sec, []) if sec else passthrough).append(it)
     out = list(passthrough)
-    for sec, group in by_sector.items():
+    for group in by_sector.values():
         group.sort(key=lambda i: getattr(i, "follow_score", 0) or 0, reverse=True)
         best = group[0]
         best.also_qualifying = [_item_ticker(g) for g in group[1:]]

@@ -41,10 +41,12 @@
 }
 
 /* On the rail: icons only, centred, labels hidden but still in the DOM so
-   the accessible name survives. */
+   the accessible name survives. The wordmark's `.word` is not listed here --
+   it is removed structurally (shell.html's `@if (!railed())`), not clipped,
+   because collapsed is also asserted by its absence from the DOM. */
 .shell.railed:not(.overlay) .sidebar .label,
-.shell.railed:not(.overlay) .mark .name,
-.shell.railed:not(.overlay) .mark .tag {
+.shell.railed:not(.overlay) .mark .tag,
+.shell.railed:not(.overlay) .rail-tagline {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -55,7 +57,7 @@
 .shell.railed:not(.overlay) .sidebar { padding-inline: var(--space-10); }
 .shell.railed:not(.overlay) .nav a { justify-content: center; }
 
-.mark .avatar { border-radius: 50%; display: block; flex: none; }
+.brand sb-icon { flex: none; }
 
 /* The bottom of the sidebar. This box owns the bottom anchor so its children
    do not have to -- see the note in shell.html. */
@@ -109,11 +111,30 @@
   gap: var(--space-6);
 }
 
-.mark .name {
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+/* Two spans, not one coloured string: `Capital` takes the accent so the
+   product name and the mockup's own two-tone treatment both survive in one
+   element, rather than a single span with an inline colour run. */
+.brand .word {
   font-family: var(--font-mono);
   font-size: var(--text-subhead);
   font-weight: 700;
   letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.brand .word span:last-child { color: var(--accent); }
+
+.rail-tagline {
+  margin: 0 0 var(--space-10);
+  color: var(--text-faint);
+  font-size: var(--text-micro);
+  line-height: 1.4;
 }
 
 .mark .tag {
@@ -139,11 +160,11 @@
    it disappears on the collapsed rail where 52px has no room for it and the
    icons already group visually by their gaps. */
 .nav-group-label {
-  padding: var(--space-8) var(--space-10) var(--space-4);
-  color: var(--text-muted);
+  margin: var(--space-14) 0 var(--space-4) var(--space-10);
+  color: var(--text-faint);
   font-size: var(--text-micro);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
 }
 .railed .nav-group-label { display: none; }
 
@@ -158,10 +179,12 @@
   display: flex;
   align-items: center;
   gap: var(--space-10);
-  padding: var(--space-6) var(--space-8);
-  border-radius: var(--radius);
+  padding: var(--space-8) var(--space-10);
+  border-left: 2px solid transparent;
+  border-radius: 0 var(--radius) var(--radius) 0;
   color: var(--text-secondary);
   font-size: var(--text-body);
+  text-decoration: none;
   transition: color var(--transition), background var(--transition);
 }
 
@@ -170,18 +193,16 @@
    this only has to say "do not shrink". */
 .nav a sb-icon { flex: none; }
 
-.nav a:hover {
-  color: var(--text);
-  text-decoration: none;
-  background: var(--surface-raised);
-}
+.nav a:hover { background: var(--surface-raised); color: var(--text); }
 
-/* Selection is interactive state, so it is allowed blue -- but as the text
-   colour and a rule, not a filled blue block, which would read as data. */
+/* An accent rail plus a background tint plus weight -- three cues, not
+   colour alone, so the active entry survives a monochrome or low-vision
+   reading. */
 .nav a.active {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
   color: var(--text);
-  background: var(--surface-raised);
-  box-shadow: inset 2px 0 0 var(--accent);
+  font-weight: 600;
 }
 
 
@@ -200,18 +221,50 @@
   border-bottom: 1px solid var(--border);
 }
 
+/* The tape takes the slack and is the only thing allowed to scroll: a
+   min-width of 0 on a flex child is what lets it shrink below its content
+   instead of pushing the status cluster off the end of the bar. */
+.topbar-tape {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.topbar-tape::-webkit-scrollbar { display: none; }
+
 .spacer {
   flex: 1;
 }
 
-.killswitch {
-  padding: var(--space-4) var(--space-8);
-  border: 1px solid var(--neg);
-  border-radius: var(--radius-chip);
+.topbar-lead { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.page-title {
+  margin: 0;
+  font-size: var(--text-title);
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.page-subtitle {
+  margin: 0;
+  font-size: var(--text-chip);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.killswitch-strip {
+  padding: var(--space-6) var(--space-14);
+  background: var(--neg-soft);
+  border-bottom: 1px solid var(--neg);
   color: var(--neg);
-  font-size: var(--text-micro);
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  font-size: var(--text-chip);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-align: center;
 }
 
 .workspace {
@@ -237,6 +290,24 @@
 }
 
 /* -- SR58: market session, zoom, version footer ---------------------- */
+
+/* Sheet 2's form: dot, word and clock read as one cluster, tighter than
+   the wider gap the topbar uses between its other children. */
+.status-cluster {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.clock {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-secondary);
+  font-size: var(--text-chip);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 
 .market {
   padding: 0 var(--space-6);
@@ -290,3 +361,17 @@
 .route-loading-mark { width: 24px; height: 24px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: route-spin 700ms linear infinite; }
 @keyframes route-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .route-loading-mark { animation: none; } }
+
+/* The drop order, widest trigger first -- spec v85 "Responsive behaviour".
+   Everything here is a removal: the bar never wraps to a second row, because
+   a two-row bar changes the height of every page's content area. The title
+   itself already truncates with an ellipsis (R1-05) and the tape already
+   scrolls (R1-06), so below 720px the bar degrades to
+   mark - title - scrolling tape - status, with nothing overflowing. */
+@media (max-width: 900px) {
+  .page-subtitle { display: none; }
+}
+@media (max-width: 720px) {
+  .clock { display: none; }
+  .topbar { gap: var(--space-10); }
+}

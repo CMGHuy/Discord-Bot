@@ -3,7 +3,6 @@ import os
 import matplotlib
 matplotlib.use("Agg")
 
-import numpy as np
 import pytest
 
 from tests.conftest import assert_rendered, make_trend_df
@@ -56,7 +55,6 @@ def test_avwap_overlay_renders(tmp_path, daily_df):
 
 
 def test_rs_strip_renders(tmp_path, daily_df):
-    import pandas as pd
     from swingbot.core.charts.decision_chart import render_decision_chart
     rel = (daily_df["Close"].pct_change(63) - 0.01).dropna()
     ctx = {"rs": {"rel_series": rel, "percentile": 78.0}}

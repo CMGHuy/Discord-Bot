@@ -90,21 +90,6 @@ STRATEGY_FUNCS = {
     "Volume Profile":   volume_profile_signal,
 }
 
-STRATEGY_SHORT_NAMES = {
-    "EMA Crossover":    "EMA",
-    "VWAP":             "VWAP",
-    "Fibonacci":        "Fib",
-    "Support/Resistance": "S/R",
-    "RSI":              "RSI",
-    "MACD":             "MACD",
-    "Elliott Wave":     "Elliott",
-    "MA Ribbon":        "MARib",
-    "Break & Retest":   "B&R",
-    "RSI Divergence":   "RSI Div",
-    "Volume Profile":   "VolProf",
-}
-
-
 def evaluate_all(ticker: str, df: pd.DataFrame) -> list[SignalResult]:
     """Run all strategies across all horizons for which we have enough data."""
     results = []
@@ -113,7 +98,7 @@ def evaluate_all(ticker: str, df: pd.DataFrame) -> list[SignalResult]:
     for horizon_key in HORIZONS:
         if bars_available < MIN_BARS[horizon_key]:
             continue
-        for strategy_name, func in STRATEGY_FUNCS.items():
+        for func in STRATEGY_FUNCS.values():
             try:
                 results.append(func(ticker, df, horizon_key))
             except Exception:

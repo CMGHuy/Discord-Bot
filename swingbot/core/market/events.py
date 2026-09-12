@@ -36,6 +36,7 @@ log = logging.getLogger("swing-bot.events")
 # marketdata/data.py, just a much longer TTL.
 _EARNINGS_DATETIME_CACHE_TTL_SECONDS = 6 * 60 * 60
 _earnings_datetime_cache: dict[str, tuple[dt.datetime | None, float]] = {}
+_earnings_datetimes_cache: dict[str, tuple[list[dt.datetime], float]] = {}
 
 #: Distinguishes "checked Yahoo, confirmed nothing" (a real cached `None`)
 #: from "never checked, or the entry expired" -- callers that must not
@@ -170,6 +171,32 @@ def _fetch_next_earnings_datetime(ticker: str) -> dt.datetime | None:
             return min(upcoming).to_pydatetime()
 
     return None
+
+
+def get_earnings_datetimes(ticker: str) -> list[dt.datetime]:
+    """Return Yahoo's recent and upcoming earnings timestamps, ascending.
+
+    Unlike the display-only singular lookup, this preserves a before-open
+    report on its own date so calendar consumers can correctly see today.
+    """
+    if is_etf(ticker):
+        return []
+    key, now_monotonic = ticker.upper().strip(), time.monotonic()
+    cached = _earnings_datetimes_cache.get(key)
+    if cached and now_monotonic - cached[1] < _EARNINGS_DATETIME_CACHE_TTL_SECONDS:
+        return list(cached[0])
+    result: list[dt.datetime] = []
+    for candidate in candidate_symbols(ticker):
+        try:
+            frame = yf.Ticker(candidate).get_earnings_dates(limit=8)
+        except Exception as exc:
+            log.debug("Earnings-dates fetch failed for %s: %s", candidate, exc)
+            continue
+        if frame is not None and not frame.empty:
+            result = sorted(ts.to_pydatetime() for ts in frame.index)
+            break
+    _earnings_datetimes_cache[key] = (result, now_monotonic)
+    return list(result)
 
 
 def earnings_within_window(ticker: str, max_holding_days: int):

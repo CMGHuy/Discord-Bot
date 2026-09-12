@@ -213,8 +213,15 @@ class JobManager:
                 # the full argv tail after the interpreter itself.
                 argv = [sys.executable, *args]
 
-            logfile = open(log_path, "w", encoding="utf-8")
-            proc = subprocess.Popen(argv, stdout=logfile, stderr=subprocess.STDOUT)
+            # Deliberately not a `with`: the child writes to this handle for
+            # its whole life, and _watch() closes it once proc.wait() returns.
+            # Only a failed launch has nobody left to close it.
+            logfile = open(log_path, "w", encoding="utf-8")  # noqa: SIM115
+            try:
+                proc = subprocess.Popen(argv, stdout=logfile, stderr=subprocess.STDOUT)
+            except BaseException:
+                logfile.close()
+                raise
 
             jobs[job_id] = {
                 "id": job_id, "kind": kind, "args": args, "state": "running",

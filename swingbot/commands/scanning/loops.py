@@ -14,7 +14,7 @@ from swingbot.core.marketdata.data import get_current_price
 from swingbot.core.infra.silent_channel import silence
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.marketdata.watchlist import load_watchlist
-from . import alerts, presence, recap, runstate
+from . import presence, recap, runstate
 from .alerts import _send_alerts
 
 trade_log = scan_engine.trade_log
@@ -554,20 +554,19 @@ async def trade_monitor():
     plan_store._LOCK) and no-op on a trade/plan a concurrent scan already
     closed, so running alongside a scan is safe, not just tolerated.
 
-    Also skips when there are no open trades, keeping the overhead
-    proportional to actual activity.
+    With no open trade rows the per-ticker loop below has nothing to fetch,
+    but the plan-manager tick still runs: a plan can be open with no open
+    trade row (`!trades clear` / the admin's clear-open delete rows and leave
+    plans ACTIVE), and returning early here left those positions' stops and
+    targets unmonitored until some unrelated trade opened.
     """
     open_trades = trade_log.get_trades(status="open", limit=200)
-    if not open_trades:
-        await _resend_plan_notices()
-        return
-
     tickers = list({t["ticker"] for t in open_trades})
     all_newly_closed = []
 
     for ticker in tickers:
         try:
-            live = await asyncio.to_thread(get_current_price, ticker)
+            live = await asyncio.to_thread(get_current_price, ticker, allow_stale=False)
         except Exception as exc:
             log.debug("trade_monitor: price fetch failed for %s: %s", ticker, exc)
             continue
@@ -654,11 +653,7 @@ async def daily_recap():
     Guards against duplicate posts within the same calendar day.
     """
     global _recap_fired_date
-    try:
-        from zoneinfo import ZoneInfo as _ZI
-        now = dt.datetime.now(_ZI("Europe/Berlin"))
-    except Exception:
-        now = dt.datetime.utcnow()
+    now = dt.datetime.now(SESSION_TZ)
 
     # Mon-Fri (0-4): normal end-of-session retrospective. Sunday (6): the
     # retrospective still fires -- its Parts 1-7 (trade tables, lessons)
@@ -700,11 +695,7 @@ async def weekend_deep_scan_task():
     its own loop rather than a branch inside daily_recap so a slow/failing
     deep scan can never affect the weekday/Sunday retrospective's own timing."""
     global _weekend_scan_fired_date
-    try:
-        from zoneinfo import ZoneInfo as _ZI
-        now = dt.datetime.now(_ZI("Europe/Berlin"))
-    except Exception:
-        now = dt.datetime.utcnow()
+    now = dt.datetime.now(SESSION_TZ)
 
     if now.weekday() != 5:   # Saturday only
         return

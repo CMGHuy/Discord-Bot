@@ -4,6 +4,7 @@ import {
   ElementRef,
   computed,
   inject,
+  input,
   output,
   signal,
 } from '@angular/core';
@@ -55,6 +56,13 @@ import { Icon } from '../ui/icon';
     @if (open()) {
       <div class="menu elev-overlay" role="menu">
         <span class="who">{{ username() || 'Signed in' }}</span>
+        <button sb-button variant="ghost" type="button" role="menuitem"
+                class="zoom"
+                [attr.aria-label]="'Text size ' + zoom() + '%. Click to change.'"
+                (click)="zoomCycled.emit()">
+          <sb-icon name="expand" />
+          <span>Aa {{ zoom() }}%</span>
+        </button>
         <button sb-button variant="ghost" type="button" role="menuitem" (click)="signOut()">
           <sb-icon name="signout" />
           <span>Sign out</span>
@@ -107,6 +115,8 @@ export class ProfileMenu {
 
   readonly username = signal<string | null>(null);
   readonly signedOut = output<void>();
+  readonly zoom = input<number>(100);
+  readonly zoomCycled = output<void>();
 
   protected readonly open = signal(false);
 

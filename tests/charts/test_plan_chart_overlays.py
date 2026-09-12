@@ -186,7 +186,6 @@ def test_active_plan_has_no_trail_and_still_renders(tmp_path):
         real_close(fig)
 
 
-import pandas as pd
 
 
 def test_markers_render_without_error(tmp_path):

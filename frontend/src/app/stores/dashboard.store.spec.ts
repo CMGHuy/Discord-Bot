@@ -68,6 +68,7 @@ const RESPONSE: Dashboard = {
   avg_confidence: 4.2,
   win_rate: 55,
   expectancy_r: 0.3,
+  payoff_ratio: 1.8,
   equity_30d: { points: [], change_pct: 2 },
   position_premium: {},
   default_expiry_bars: 5,
@@ -184,6 +185,18 @@ describe('DashboardStore', () => {
     respond({ risk_used_pct: 8, risk_cap_pct: 10 });
 
     expect(store.riskUtilisation()).toBeCloseTo(0.8);
+  });
+
+  it('exposes payoff ratio', () => {
+    tick();
+    respond({ payoff_ratio: 2.5 });
+    expect(store.payoffRatio()).toBe(2.5);
+  });
+
+  it('keeps a null payoff ratio distinct from zero', () => {
+    tick();
+    respond({ payoff_ratio: null });
+    expect(store.payoffRatio()).toBeNull();
   });
 
   it('reports unknown utilisation as null, not zero', () => {

@@ -1,14 +1,11 @@
 """Primary scan alert embed renderers."""
-import json
 import logging
 from datetime import datetime, timezone
 
 import discord
 
-from swingbot import config
 from swingbot.core.analytics.rank import follow_breakdown, follow_score
 from swingbot.core.market import opex
-from swingbot.core.market.strategy import HORIZONS
 from swingbot.core import presentation as ui
 
 from .snapshots import _snapshot_and_diff
@@ -18,6 +15,8 @@ from .execution_embeds import build_ticket_embed
 
 
 log = logging.getLogger("swing-bot.scan_engine")
+
+
 def build_embed(item, explanation, perf_stats, open_positions_warning, chart_filename,
                 htf_info: dict = None, layout: str = "detailed") -> discord.Embed:
     """

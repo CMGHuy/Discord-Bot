@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { held, signed, timeInZone } from './format';
+import { amount, held, money, signed, timeInZone } from './format';
 
 /* No prior spec file existed for format.ts; timeInZone is new (Watchlist
  * Earnings calendar) and carries real cross-timezone/DST behaviour worth
@@ -87,5 +87,33 @@ describe('signed', () => {
 
   it('honours a decimals override', () => {
     expect(signed(1.5, 1)).toBe('+1.5');
+  });
+});
+
+describe('amount (v85: the hero balance figure needs grouped thousands)', () => {
+  it('groups thousands so a six-figure balance is legible', () => {
+    expect(amount(997480.01, '€')).toBe('997,480.01 €');
+  });
+
+  it('carries no sign -- it names a level, not a movement', () => {
+    expect(amount(-5, '€')).toBe('-5.00 €');
+  });
+
+  it('renders absence as the em dash, not as zero', () => {
+    expect(amount(null, '€')).toBe('—');
+  });
+});
+
+describe('money', () => {
+  it('groups thousands and signs a gain', () => {
+    expect(money(12345.6, '€')).toBe('+12,345.60 €');
+  });
+
+  it('signs a loss with its native minus, not a doubled one', () => {
+    expect(money(-1234.5, '€')).toBe('-1,234.50 €');
+  });
+
+  it('renders absence as the em dash, not as zero', () => {
+    expect(money(null, '€')).toBe('—');
   });
 });

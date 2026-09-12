@@ -197,25 +197,45 @@ BREAKEVEN_TRIGGER_FRACTION = 0.5
 # A missing key means both directions, all horizons. entry_filters.entries_for
 # applies the mask, so backtest and live signals both respect it.
 #
-# EMA Crossover and Elliott Wave could not be gated to a passing train config
-# (best reachable subset: EMA Crossover bullish+4w only reaches N=28 < 30;
-# Elliott Wave only fires on 4w and bullish-only there is WR=74.1 ExpR=-0.001)
-# -- left ungated and documented as FAILING in the results doc.
+# EMA Crossover and Elliott Wave are left ungated deliberately. The pre-v31
+# numbers that justified this (EMA Crossover bullish+4w reaching only N=28;
+# Elliott Wave firing only on 4w at WR=74.1 ExpR=-0.001) were measured against
+# the fixed per-strategy reward:risk table plan v31 deleted -- see v84
+# (docs/superpowers/specs/2026-09-10-v84-strategy-rescue-v2-design.md). Under
+# current arithmetic EMA Crossover's pooled TRAIN scores WR 61.8% ExpR +0.494
+# ungated (N=55), but its per-fold-year stability check failed (1 of 3 years
+# clears N>=15) -- CLOSED, stays WEAK, not gated here either
+# (results/2026-09-10-v84-ema-crossover-preregistration.md). Elliott Wave's
+# proposed v84 rescue was withdrawn -- both retracement-depth validation and
+# volume confirmation already ship (spec 4.8).
+# NOTE: every WR/ExpR figure in the per-key comments below is likewise pre-v31
+# and stale. Only the "Break & Retest" entry was derived under current
+# arithmetic.
 STRATEGY_GATES: dict[str, dict] = {
-    # bullish-only: N=286 WR=81.8 ExpR=+0.106 excl=27% (train)
+    # bullish-only: N=286 WR=81.8 ExpR=+0.106 excl=27% (train, PRE-v31 -- stale)
     "Fibonacci": {"directions": ("bullish",)},
-    # bullish-only: N=608 WR=85.2 ExpR=+0.140 excl=28% (train)
+    # bullish-only: N=608 WR=85.2 ExpR=+0.140 excl=28% (train, PRE-v31 -- stale)
     "RSI": {"directions": ("bullish",)},
-    # bullish-only: N=259 WR=81.1 ExpR=+0.071 excl=25% (train)
+    # bullish-only: N=259 WR=81.1 ExpR=+0.071 excl=25% (train, PRE-v31 -- stale)
     "MA Ribbon": {"directions": ("bullish",)},
-    # bullish + {4w,6m,7m,8m,9m}: N=139 WR=82.0 ExpR=+0.086 excl=20% (train)
-    "VWAP": {"directions": ("bullish",), "horizons": ("4w", "6m", "7m", "8m", "9m")},
-    # bullish + {2m,3m}: N=273 WR=80.6 ExpR=+0.060 excl=32% (train)
+    # v84 R11, CURRENT arithmetic (v2 + scale-out): the pre-v31 five-horizon
+    # mask was never re-derived after v31 replaced the fixed reward:risk table.
+    # 4w alone: N=68 WR=52.9 ExpR=+0.335. The dropped horizons were 6m 35.7
+    # (-0.078), 7m 40.0, 8m 38.5, 9m 11.1 (N=9, -0.519).
+    "VWAP": {"directions": ("bullish",), "horizons": ("4w",)},
+    # bullish + {2m,3m}: N=273 WR=80.6 ExpR=+0.060 excl=32% (train, PRE-v31 -- stale)
     "Support/Resistance": {"directions": ("bullish",), "horizons": ("2m", "3m")},
-    # bullish + {3m,4m,7m,8m,9m}: N=145 WR=83.4 ExpR=+0.094 excl=26% (train)
+    # bullish + {3m,4m,7m,8m,9m}: N=145 WR=83.4 ExpR=+0.094 excl=26% (train, PRE-v31 -- stale)
     "MACD": {"directions": ("bullish",), "horizons": ("3m", "4m", "7m", "8m", "9m")},
-    # bullish + {7m}: N=73 WR=82.2 ExpR=+0.106 excl=30% (train)
+    # bullish + {7m}: N=73 WR=82.2 ExpR=+0.106 excl=30% (train, PRE-v31 -- stale)
     "Volume Profile": {"directions": ("bullish",), "horizons": ("7m",)},
+    # v84 R7, CURRENT arithmetic (v2 + scale-out): the pooled TRAIN row fails
+    # (WR 48.0 N=298) but splits bimodally by horizon -- 2m/3m/4m clear the
+    # floor (53.1/57.1/51.4) while 6m is the only negative-ExpR cell
+    # (27.8, -0.157). Gated subset: N=105 WR=53.3 ExpR=+0.31, plateau-verified
+    # against 4 neighbouring horizon subsets (all 4 also clear WR>=50, N>=30).
+    # Both directions kept -- only the horizon axis was pre-registered.
+    "Break & Retest": {"horizons": ("2m", "3m", "4m")},
 }
 
 # Minimum bars of history required for each horizon's slowest calculation

@@ -36,6 +36,7 @@ DASHBOARD = {
     "avg_confidence": NULLABLE_NUMBER,
     "win_rate": NULLABLE_NUMBER,
     "expectancy_r": NULLABLE_NUMBER,
+    "payoff_ratio": NULLABLE_NUMBER,
     "equity_30d": dict,
     "position_premium": dict,
     # SR53. The five plan-lifecycle counts the Jinja dashboard's strip showed.
@@ -191,6 +192,20 @@ def test_works_on_an_empty_store(seed, logged_in):
     body = logged_in.get("/api/v1/dashboard").get_json()
     assert body["open_trades"] == 0
     assert body["win_rate"] is None or isinstance(body["win_rate"], (int, float))
+
+
+def test_dashboard_reports_payoff_ratio(seed, logged_in):
+    seed()
+    body = logged_in.get("/api/v1/dashboard").get_json()
+    assert "payoff_ratio" in body
+
+
+def test_dashboard_payoff_ratio_is_null_not_zero_without_outcomes(seed, logged_in):
+    # An empty book has no winners and no losers. null means "not enough
+    # outcomes"; 0.0 would claim wins are worth nothing against losses.
+    seed()
+    body = logged_in.get("/api/v1/dashboard").get_json()
+    assert body["payoff_ratio"] is None
 
 
 def test_equity_sparkline_is_numbers_not_svg(seed, logged_in):

@@ -42,7 +42,7 @@ import { ColumnDef } from '../../ui/data-table/data-table.types';
 import { createClientPage } from '../../ui/data-table/client-page';
 import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
 import { Select, TextInput } from '../../ui/form-controls';
-import { ABSENT, date, dateTime } from '../../ui/format';
+import { ABSENT, dateTime } from '../../ui/format';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
 import { SectionHead } from '../../ui/section-head';
 import { Histogram, HistogramBin } from '../../ui/histogram';
@@ -145,7 +145,7 @@ interface ProposalView extends ProposalRow {
     StrategyContributionComponent,
   ],
   template: `
-    <sb-section-head heading="Analytics">
+    <sb-section-head>
       <!-- Only for Tuning: the other four tabs each carry their own
            sb-async now, which already turns this same store.error() into
            either a first-load error panel or a demoted stale badge scoped
@@ -951,22 +951,6 @@ interface ProposalView extends ProposalRow {
       <sb-quality-chip [value]="row.level" [label]="'Lv' + row.level" />
     </ng-template>
 
-    <ng-template #tierCell let-row>
-      <sb-quality-chip [value]="row.tier" [label]="row.tier" />
-    </ng-template>
-
-    <ng-template #bandCell let-row>
-      @if (row.ok === null) {
-        <!-- Three-valued, and this is the third: "not enough live data to
-             judge" is not the same claim as "judged and missing its band". -->
-        <span class="muted" title="Fewer than 10 closed trades — not judged yet">—</span>
-      } @else if (row.ok) {
-        <span>In band</span>
-      } @else {
-        <sb-chip label="Off band" tone="q2" />
-      }
-    </ng-template>
-
     <ng-template #decayCell let-row>
       @if (row.drift_alert) {
         <sb-chip label="DECAY" tone="q2" />
@@ -1385,8 +1369,6 @@ export class Analytics {
   private readonly rollingCell = viewChild.required<TemplateRef<unknown>>('rollingCell');
   private readonly badgeCell = viewChild.required<TemplateRef<unknown>>('badgeCell');
   private readonly levelCell = viewChild.required<TemplateRef<unknown>>('levelCell');
-  private readonly tierCell = viewChild.required<TemplateRef<unknown>>('tierCell');
-  private readonly bandCell = viewChild.required<TemplateRef<unknown>>('bandCell');
   private readonly decayCell = viewChild.required<TemplateRef<unknown>>('decayCell');
   private readonly gridPassesCell = viewChild.required<TemplateRef<unknown>>('gridPassesCell');
   private readonly gridProposeCell = viewChild.required<TemplateRef<unknown>>('gridProposeCell');

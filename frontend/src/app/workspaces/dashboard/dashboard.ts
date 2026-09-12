@@ -9,17 +9,20 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { CLOCK } from '../../ui/clock';
 
 import { DashboardScope, TradeRow } from '../../api/models';
+import { ApiClient } from '../../api/api-client';
+import { ToastService } from '../../shell/toast.service';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { DashboardStore } from '../../stores/dashboard.store';
+import { TapeStore } from '../../stores/tape.store';
+import { TradesStore } from '../../stores/trades.store';
 import { Async, asyncInputs } from '../../ui/async';
 import { Button } from '../../ui/button';
-import { ChipRow } from '../../ui/chip-row';
-import { ColumnDef, Density, EmptyState, RowContext } from '../../ui/data-table/data-table.types';
+import { ColumnDef, Density, RowContext } from '../../ui/data-table/data-table.types';
 import { ConfidenceCell } from '../../ui/confidence-cell';
 import { Flash } from '../../ui/flash';
 import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
@@ -37,25 +40,31 @@ import {
   PINNED_COLUMNS,
   tradeColumns,
 } from '../trades/trades.columns';
-import { amount, dateTime, held, money, num, pct, signed } from '../../ui/format';
+import { amount, dateTime, money, pct, signed } from '../../ui/format';
 import { Magnitude } from '../../ui/magnitude';
 import { ControlRow, Drawer, Panel } from '../../ui/layout';
+import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
-import { MetricCard } from '../../ui/metric-card';
-import { MetricChip } from '../../ui/metric-chip';
 import { PlanLifecycleDiagram } from '../../ui/plan-lifecycle-diagram';
 import {
-  deriveClosedVisible,
-  deriveOpenVisible,
   expectedPnlPct,
   expectedR,
   expectedSlPct,
   liveUnrealizedAmount,
   livePnlPct,
   reconcileReorder,
+  visibleForTab,
 } from './dashboard.helpers';
-import { TradeGroup } from './trade-group';
+import { PositionsTable } from './positions-table';
+import { RowActions } from './row-actions';
+import { deriveActivity } from './panels/activity';
+import { PortfolioValue } from './panels/portfolio-value';
+import { TradingPerformance } from './panels/trading-performance';
+import { RecentActivity } from './panels/recent-activity';
+import { WatchlistPanel } from './panels/watchlist-panel';
+import { MarketMovers } from './panels/market-movers';
+import { ExposureByHorizon } from './panels/exposure-by-horizon';
 
 /**
  * The Dashboard — spec v14 Decision 5's two-tier header plus a capped view of
@@ -86,10 +95,18 @@ import { TradeGroup } from './trade-group';
 @Component({
   selector: 'sb-dashboard',
   imports: [
-    RouterLink, MetricCard, MetricChip, Magnitude, Panel, TradeGroup,
-    StatusCell, PlanCell, ConfidenceCell, Async, Button, ChipRow, ControlRow,
+    Magnitude, Panel, PositionsTable, RowActions, ConfirmDialog,
+    StatusCell, PlanCell, ConfidenceCell, Async, Button, ControlRow,
     Drawer, Flash, PlanLifecycleDiagram, RowLink, SectionHead,
+    PortfolioValue, TradingPerformance, RecentActivity, WatchlistPanel, MarketMovers,
+    ExposureByHorizon,
   ],
+  // TradesStore, not DashboardStore -- that one is provided at the route
+  // level (dashboard.routes.ts). This instance is this page's own, for the
+  // activity feed's own query (newest-first, every status), separate from
+  // sb-positions-table's own instance (it provides its own -- see
+  // positions-table.ts) and ExposureByHorizon's own (same reason).
+  providers: [TradesStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // v54 D1: this workspace answers "how am I doing?" -- hero figures, room
   // to breathe -- so it defaults to the presentation register. Set on the
@@ -99,16 +116,21 @@ import { TradeGroup } from './trade-group';
   host: { class: 'register-presentation' },
   // Provided here rather than in root: the store is created on entry and
   // destroyed on exit, so a workspace does not hold stale state while you
-  // are looking at another one. Each `sb-trade-group` below provides its own
-  // `TradesStore` instance (see trade-group.ts) -- neither this one nor
-  // those three touch the Trades workspace's own copy.
+  // are looking at another one. `sb-positions-table` below provides its own
+  // `TradesStore` instance (see positions-table.ts) -- neither this one nor
+  // that one touch the Trades workspace's own copy.
   template: `
     <!-- v54: sb-async's own staleAsOf badge (below) now owns the "these
          numbers stopped updating" signal -- a second one here would be a
          duplicate, not a backstop, so store.error() no longer binds here
          directly (it also skipped the v13 refetch mapping asyncInputs
          provides, which this raw binding never applied). -->
-    <sb-section-head heading="Dashboard">
+    <sb-section-head>
+      <!-- v85: the qualifying-trades rule moves into a drawer (below) --
+           same words, one click away instead of always on the page face. -->
+      <button sb-button variant="ghost" type="button" actions data-info="qualifying"
+              aria-label="What appears here"
+              (click)="infoOpen.set('qualifying')">?</button>
       <!-- SR58. The Jinja dashboard's three date scopes. A server parameter,
            not a client filter: the realised figures below are computed from
            the scoped set, and a client-side scope over an all-time payload
@@ -130,20 +152,21 @@ import { TradeGroup } from './trade-group';
 
     <!-- SR59. Copied from dashboard.html:60-68, not paraphrased: it states
          a specific rule about what does and does not reach this screen, and a
-         looser wording would describe a looser rule. -->
-    <p class="explainer">
-      <strong>What appears here:</strong>
-      Only trades that meet <em>every</em> configured requirement (min reward,
-      stop distance, risk:reward, min strategies confirmed, min confidence) are
-      logged here as paper trades. Trade plans shown by <code>!check</code> that
-      don't clear all requirements appear in Discord but are <strong>not</strong>
-      logged — they're marked in bold red in the Discord embed. The automatic
-      background scan only ever posts and logs fully-qualifying setups.
-    </p>
+         looser wording would describe a looser rule. Moved off the page face
+         into a drawer (v85 D18) -- same words, verbatim, one click away. -->
+    <sb-drawer [open]="infoOpen() === 'qualifying'" heading="What appears here"
+               (closed)="infoOpen.set(null)">
+      <p class="section-help">
+        <strong>What appears here:</strong>
+        Only trades that meet <em>every</em> configured requirement (min reward,
+        stop distance, risk:reward, min strategies confirmed, min confidence) are
+        logged here as paper trades. Trade plans shown by <code>!check</code> that
+        don't clear all requirements appear in Discord but are <strong>not</strong>
+        logged — they're marked in bold red in the Discord embed. The automatic
+        background scan only ever posts and logs fully-qualifying setups.
+      </p>
+    </sb-drawer>
 
-    <!-- v54: rows=3 cols=5, measured against the .primary row of five
-         metric cards (skeletonRows/skeletonCols verified at Slow 3G --
-         Task 21 G6). -->
     <sb-async
       [loading]="async().loading"
       [error]="async().error"
@@ -157,106 +180,52 @@ import { TradeGroup } from './trade-group';
       [announce]="announce()"
       (retry)="store.load()"
     >
-    <!-- SR58 / reorg: Realised today, Account balance, Open P&L, Risk used
-         and Realised average all read together as one row -- Realised is
-         scoped by the toggle above and the other three are always all-open,
-         but they are all "the account right now" and splitting them into two
-         rows only used to say "these five cards were added at different
-         times", not anything about the numbers themselves. -->
-    <div class="primary">
-      <sb-metric-card
-        [label]="realizedLabel()"
-        [value]="store.realizedAmount()"
-        tone="pnl"
-        [unit]="currencyUnit()"
+    <!-- v85: the five metric cards, the chip row, the realised-count line
+         and the lifecycle nav strip are replaced by the panels below (D9). -->
+    <div class="top-row">
+      <sb-portfolio-value
+        [balance]="store.balance()"
+        [changePct]="store.equityChangePct()"
+        [points]="store.equityPoints()"
+        [currency]="connection.currency()"
       />
-      <sb-metric-card
-        label="Account balance"
-        [value]="store.balance()"
-        [unit]="currencyUnit()"
-      />
-      <sb-metric-card
-        label="Open P&L"
-        [value]="store.openPnlPct()"
-        tone="pnl"
-        unit="%"
-      />
-      <sb-metric-card
-        label="Risk used"
-        [value]="store.riskUsedPct()"
-        [tone]="riskTone()"
-        unit="%"
-        [sub]="riskSub()"
-      />
-      <sb-metric-card
-        label="Realised, average"
-        [value]="store.realizedPct()"
-        tone="pnl"
-        unit="%"
+      <sb-trading-performance
+        [openPnlPct]="store.openPnlPct()"
+        [winRate]="store.winRate()"
+        [expectancyR]="store.expectancyR()"
+        [avgConfidence]="store.avgConfidence()"
+        [realizedAmount]="store.realizedAmount()"
+        [realizedLabel]="realizedLabel()"
+        [openTrades]="store.openTrades()"
+        [riskUsedPct]="store.riskUsedPct()"
+        [riskCapPct]="store.riskCapPct()"
+        [payoffRatio]="store.payoffRatio()"
+        [currency]="connection.currency()"
+        [scope]="store.scope()"
+        (scopeChange)="store.setScope($event)"
       />
     </div>
-    <span class="realized-count">
-      {{ store.realizedCount() }} closed{{ closedQualifier() }} ·
-      {{ store.realizedWins() }}W / {{ store.realizedLosses() }}L
-    </span>
 
-    <sb-chip-row class="chips">
-      <sb-metric-chip label="Open trades" [value]="store.openTrades()" [decimals]="0" />
-      <!-- Confidence is a QUALITY judgement, not money, so it stays plain:
-           green and red mean P&L direction on this screen and nothing else. -->
-      <sb-metric-chip label="Avg confidence" [value]="store.avgConfidence()" [decimals]="1" />
-      <sb-metric-chip label="Win rate" [value]="store.winRate()" unit="%" [decimals]="1" />
-      <!-- Expectancy is money per unit of risk, which is P&L direction, so it
-           is one of the few figures here allowed the green/red pair. -->
-      <sb-metric-chip label="Expectancy" [value]="store.expectancyR()" tone="pnl" unit="R" />
-      <sb-metric-chip
-        label="Position premium"
-        [value]="store.positionPremium()"
-        [unit]="premiumUnit()"
-        [decimals]="0"
-      />
-    </sb-chip-row>
+    <!-- v85 D31/sheet 1: replaces the mockup's allocation donut, which has
+         no honest occupant on a single-asset-class paper book. -->
+    <sb-exposure-by-horizon />
 
-    <!-- SR59. The chip carries the number and the "max" qualifier; this is
-         the reasoning behind it, from dashboard_fragment.html:81-87. -->
-    @if (premiumExplanation(); as explanation) {
-      <p class="section-help">{{ explanation }}</p>
-    }
-
-    <!-- SR53. The lifecycle strip: five counts, each a link into Trades
-         filtered to that status. The Jinja dashboard had exactly this and the
-         SPA had the chips it navigated to with no numbers on them.
-
-         The click-through also carries the page's OWN date scope now: in
-         Today, the today param narrows Trades to rows that either opened
-         today or are still open regardless of age -- see todayParam's
-         docstring. In All days it is omitted, so the click-through stays
-         all-time. Only the destination narrows this way; the counts on the
-         chips themselves stay exactly as they always were (see the note
-         below). -->
-    @if (store.lifecycle().length) {
-      <nav class="lifecycle" aria-label="Plans by lifecycle status">
-        @for (entry of store.lifecycle(); track entry.status) {
-          <a
-            class="lc"
-            routerLink="/trades"
-            [queryParams]="{ status: entry.status, outcome: null, today: todayParam() }"
-            [attr.title]="lifecycleTip(entry.status)"
-          >
-            <span class="lc-count num">{{ entry.count }}</span>
-            {{ ' ' }}
-            <span class="lc-label">{{ entry.status }}</span>
-          </a>
-        }
-      </nav>
-
-      <!-- SR59: the descriptive legend and its diagram used to sit right
-           here, always rendered. Moved into a drawer (below, outside this
-           lifecycle-count block) that the "Lifecycle guide" button on the
-           Open positions panel opens -- this text explains what the cards
-           above ALREADY do, and read on every visit it was the single
-           longest thing on the page above the fold. -->
-    }
+    <!-- SR59. The sizing note (dashboard_fragment.html:81-87) plus the
+         share-count snapshot note (below, moved out of the Open positions
+         panel body) -- both explain how the numbers on this page were
+         sized/counted, so one drawer, one trigger (v85 D18). -->
+    <sb-drawer [open]="infoOpen() === 'sizing'" heading="Sizing"
+               (closed)="infoOpen.set(null)">
+      @if (premiumExplanation(); as explanation) {
+        <p class="section-help">{{ explanation }}</p>
+      }
+      <p class="section-help">
+        Share counts are snapshotted when a position opens. A trade logged
+        before that snapshot existed shows an estimate instead, and a position
+        opened under a different sizing mode will not match the premium note
+        above.
+      </p>
+    </sb-drawer>
 
     <!-- SR59. _plans_board.html:22-27, verbatim, and the figure that
          illustrates it -- both moved out of the page body into this
@@ -314,106 +283,67 @@ import { TradeGroup } from './trade-group';
     </sb-drawer>
 
     <sb-panel heading="Open positions" [flush]="true">
+      <!-- SR59, the last cosmetic row: dashboard_fragment.html:391's shares
+           tooltip. Moved into the shared "Sizing" drawer above (v85 D18) --
+           the per-trade half of it (which sizing mode a position was opened
+           under, and whether that still matches today's setting) reads from
+           sizing_mode, which lives on the detail payload and belongs on the
+           detail view. -->
+      <button sb-button variant="ghost" type="button" panel-actions data-info="sizing"
+              aria-label="Sizing note"
+              (click)="infoOpen.set('sizing')">?</button>
       <button sb-button variant="ghost" type="button" panel-actions
               (click)="lifecycleInfoOpen.set(true)">
         Lifecycle guide
       </button>
-      <!-- SR59, the last cosmetic row: dashboard_fragment.html:391's
-           shares tooltip. A panel note rather than a per-cell title, per this
-           task's Step 2 — and because the per-trade half of it (which sizing
-           mode a position was opened under, and whether that still matches
-           today's setting) reads from sizing_mode, which lives on the
-           detail payload and belongs on the detail view.
 
-           Padded explicitly: the panel is flush (the tables below need
-           edge-to-edge rows), which zeroes the body's own padding, so
-           without this the text would sit flush against the panel's left
-           edge while the "Open positions" heading above keeps the header's
-           padding — two pieces of text in one panel with different left
-           edges. The panel-note class below restores just that one inset. -->
-      <p class="section-help panel-note">
-        Share counts are snapshotted when a position opens. A trade logged
-        before that snapshot existed shows an estimate instead, and a position
-        opened under a different sizing mode will not match the premium note
-        above.
-      </p>
-
-      <!-- Four groups, not one merged list. status=open (ACTIVE-or-PARTIAL)
-           is the only existing alias and it drops PENDING and CLOSED
-           entirely; splitting this way is also what "clear separation for
-           each category" needs, not just what the endpoint happens to
-           support. Each group is its own store instance -- see
-           trade-group.ts -- so a slow or failed fetch for one category never
-           blocks or blanks the other three.
-
-           Active first: it is what "what is happening right now" actually
-           means -- a filled, live position -- with Pending (waiting to fill)
-           and Partial (already de-risked) behind it. Closed goes last: it is
-           the one category that is no longer live. -->
-      <!-- Active/Pending/Partial share openVisible -- the shared picker
-           list with 'closed_at' dropped, since a position that has not
-           closed has nothing to put there. See openVisible/closedVisible
-           below for why each group gets its own derived list rather than
-           the raw visible signal. -->
-      <sb-trade-group
-        status="ACTIVE"
-        heading="Active"
-        explanation="Entry has filled — position is open and being tracked toward TP1/stop."
-        [columns]="columns()"
-        [visible]="openVisible()"
-        [pinned]="pinned"
-        [rowKey]="rowKey"
-        [emptyState]="activeEmptyState"
-        (rowActivate)="open($event)"
-        (reorder)="onReorder($event)"
-      />
-      <sb-trade-group
-        status="PENDING"
-        heading="Pending"
-        explanation="Plan built and posted, but price has not yet reached the entry trigger."
-        [columns]="columns()"
-        [visible]="openVisible()"
-        [pinned]="pinned"
-        [rowKey]="rowKey"
-        [emptyState]="pendingEmptyState"
-        (rowActivate)="open($event)"
-        (reorder)="onReorder($event)"
-      />
-      <sb-trade-group
-        status="PARTIAL"
-        heading="Partial"
-        explanation="TP1 hit — half the position closed, the remainder rides toward TP2 with its stop at break-even."
-        [columns]="columns()"
-        [visible]="openVisible()"
-        [pinned]="pinned"
-        [rowKey]="rowKey"
-        [emptyState]="partialEmptyState"
-        (rowActivate)="open($event)"
-        (reorder)="onReorder($event)"
-      />
-      <!-- Closed last: unlike the three above, it is scope-aware -- Today
-           narrows it to today's closes (mirroring the lifecycle strip's own
-           CLOSED count), All days shows the most recent closes regardless of
-           date. The today input re-binds on every scope toggle rather than
-           only at mount -- see trade-group.ts's own constructor comment.
-
-           closedVisible, not the raw visible list: 'now' (a live price) is
-           meaningless once a position has closed, and 'hold' (the completed
-           hold duration) belongs here and nowhere else. -->
-      <sb-trade-group
-        status="CLOSED"
-        heading="Closed"
-        [explanation]="closedExplanation()"
+      <!-- v85 D11: one table, five lifecycle tabs, replacing the four
+           stacked groups. Only the active tab fetches -- see
+           positions-table.ts's own docstring for why that is strictly less
+           work for the same answer. -->
+      <sb-positions-table
+        [counts]="lifecycleCounts()"
         [today]="closedToday()"
         [columns]="columns()"
-        [visible]="closedVisible()"
+        [visibleFor]="columnsForTab"
         [pinned]="pinned"
         [rowKey]="rowKey"
-        [emptyState]="closedEmptyState()"
         (rowActivate)="open($event)"
         (reorder)="onReorder($event)"
-      />
+      >
+        <!-- v85 D13/D14: replaces the mockup's "+ New Trade" -- there is no
+             create-trade endpoint, the bot authors plans, the admin never
+             does. Deliberately not clear-open (below the fold, DELETES
+             records) -- see closeAllConsequence for the wording that keeps
+             the two apart. -->
+        <button sb-button variant="secondary" type="button" table-actions
+                data-action="close-all"
+                [disabled]="!openCount()"
+                (click)="confirmCloseAll.set(true)">
+          Close all open/partial
+        </button>
+      </sb-positions-table>
     </sb-panel>
+
+    <sb-confirm-dialog
+      [open]="confirmCloseAll()"
+      title="Close all open positions?"
+      [consequence]="closeAllConsequence()"
+      confirmLabel="Close all"
+      (confirmed)="closeAll()"
+      (cancelled)="confirmCloseAll.set(false)"
+    />
+
+    <div class="bottom-row">
+      <sb-recent-activity [events]="activity()" />
+      <sb-market-movers [rows]="tape.rows()" />
+      <sb-watchlist-panel [rows]="tape.rows()" />
+    </div>
+
+    <!-- v85 D18: the footnote moves into a drawer, off the page face. -->
+    <button sb-button variant="ghost" type="button" data-info="prices"
+            aria-label="About prices and sizing"
+            (click)="infoOpen.set('prices')">?</button>
 
     <!-- SR59. dashboard_fragment.html:443-445, with ONE claim deliberately
          changed rather than copied: that line said "live prices refresh
@@ -422,13 +352,16 @@ import { TradeGroup } from './trade-group';
          admin/app.py and admin/pages.py -- both Jinja. This SPA refreshes
          on server events, so copying the sentence would have stated a stale
          threshold, which the task's Step 3 calls worse than no copy. -->
-    <p class="footnote">
-      Prices and P&L update when the bot reports a change, not on a timer.
-      @if (riskSizingNote(); as note) {
-        · {{ note }}
-      }
-      · <code>!account</code> to change
-    </p>
+    <sb-drawer [open]="infoOpen() === 'prices'" heading="About prices"
+               (closed)="infoOpen.set(null)">
+      <p class="section-help">
+        Prices and P&L update when the bot reports a change, not on a timer.
+        @if (riskSizingNote(); as note) {
+          · {{ note }}
+        }
+        · <code>!account</code> to change
+      </p>
+    </sb-drawer>
     </sb-async>
 
     <ng-template #statusCell let-row>
@@ -550,83 +483,16 @@ import { TradeGroup } from './trade-group';
          em dash regardless of what the row actually held. -->
     <ng-template #openedCell let-row>{{ fmtDate(row.opened_at) }}</ng-template>
     <ng-template #closedCell let-row>{{ fmtDate(row.closed_at) }}</ng-template>
+    <ng-template #actionsCell let-row>
+      <sb-row-actions [row]="row" (done)="store.load()" />
+    </ng-template>
   `,
   styles: `
-    /* -- SR59: explanatory copy ----------------------------------- */
-    .explainer {
-      margin-bottom: var(--space-10);
-      padding: var(--space-8) var(--space-10);
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--accent);
-      border-radius: var(--radius-sm);
-      color: var(--text-secondary);
-      font-size: var(--text-chip);
-      line-height: 1.5;
-    }
-    .explainer code { font-family: var(--font-mono); }
-
-    /* The GAP between the Active/Pending/Partial/Closed group cards (each
-       card's own border/background is trade-group.ts's .group rule).
-       Lives HERE rather than in trade-group.ts's own styles: a component's
-       emulated-encapsulation stylesheet can only style its own template's
-       elements, and "the sibling group before this one" is not one of
-       them -- there is no legal selector inside TradeGroup for "the
-       previous instance of myself". The previous attempt tried a
-       :host + :host rule anyway; Angular's compiler accepted it, but its
-       ShadowCSS shim cannot actually translate a repeated :host in one
-       compound selector and silently emitted an invalid selector in its
-       place (an nghost attribute selector joined to a literal, unclosed
-       "-shadowcsshost" token) -- not valid CSS, so the rule never matched
-       in the browser either (confirmed by grepping the built chunk).
-
-       This rule has none of that problem: the sb-trade-group tag here is a
-       plain child element of THIS component's own template, so a plain tag
-       selector needs no :host translation at all. --space-20 is the largest
-       spacing token the scale offers (v18 deliberately removed --space-28 as
-       unused) -- reported as the four tables running together with no
-       separation at all, so real margin plus each one's own card border
-       (rather than a shared hairline that reads as just another row
-       divider) is what actually answers that, not a bigger number.
-       v54: --space-20 was this rule's own literal before the registers
-       existed -- it is also register-presentation's --register-pad rung, so
-       reading the variable changes nothing here and lets this workspace's
-       gutter follow its register if that ever changes. */
-    /* The gap itself is now a solid divider bar (a border-top, not a
-       margin) rather than transparent whitespace showing the page's own
-       background through -- requested so the eye reads a physical black
-       line between the Active/Pending/Partial/Closed tables rather than an
-       ambiguous gap. --bg, not a raw hex literal: it is this theme's
-       darkest token (near-black by design -- see tokens.css) and every
-       colour here must come from tokens.css (primitives.spec.ts's
-       hex-literal check). Same thickness the margin used to be. */
-    sb-trade-group + sb-trade-group {
-      display: block;
-      margin-top: 0;
-      border-top: var(--register-pad) solid var(--bg);
-    }
-
-    .footnote {
-      margin-top: var(--space-8);
-      color: var(--text-faint);
-      font-size: var(--text-chip);
-      text-align: right;
-    }
-    .footnote code { font-family: var(--font-mono); }
 
     /* -- SR58: scope toggle ---------------------------------------- */
     /* Groups the stale message and the scope toggle into one actions
        projection -- as two separate ones they would land at opposite
        ends of sb-section-head's space-between instead of clustered. */
-    /* :host's own grid gap (below) already separates this from .primary
-       above it -- no margin of its own needed, just the right alignment. */
-    .realized-count {
-      display: block;
-      text-align: right;
-      color: var(--text-faint);
-      font-size: var(--text-chip);
-      font-variant-numeric: tabular-nums;
-    }
-
     /* minmax(0, 1fr), not the implicit auto track. An auto column is floored
        at its widest child's min-content, so one un-shrinkable panel stretched
        the workspace past the viewport and took the page sideways with it.
@@ -640,66 +506,20 @@ import { TradeGroup } from './trade-group';
        register instead of a hardcoded token. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
 
-    /* Flexbox, not a fixed grid track count, across all three rows below
-       (.primary, .chips, .lifecycle): equal width was never the actual
-       requirement, filling the row was -- a label long enough to need more
-       room should get it rather than every card being squeezed to the same
-       fraction. flex: 1 1 auto sizes each card to its own content first
-       (so a short "Lv4" card and a long "Position premium" one are allowed
-       to differ) and then grows every card by an equal SHARE of whatever
-       width is left, which is what actually fills the row edge to edge.
-       align-items: stretch (flex's own default, stated explicitly here
-       because it is the point) is what makes every card in the row match
-       the row's tallest one -- MetricCard/MetricChip's own host fills that
-       stretched height with their visible border/background box; see their
-       own height: 100% rule for why that isn't automatic. No max-width cap
-       any more: the row fills whatever width the page column has, matching
-       the Open positions tables below, which never had one. */
-    .primary {
-      display: flex;
-      align-items: stretch;
-      gap: var(--space-14);
+    /* v85: two columns at desktop, stacking below the same 900px the top bar
+       uses for its own first drop -- one breakpoint vocabulary per page. */
+    .top-row {
+      display: grid;
+      grid-template-columns: minmax(0, 3fr) minmax(0, 4fr);
+      gap: var(--register-pad);
     }
-    .primary > sb-metric-card { flex: 1 1 auto; min-width: 140px; }
-
-    /* Overrides sb-chip-row's own align-items: center -- stretch is what
-       makes every card in the row match its tallest sibling. The type
-       selector plus this class gives it enough specificity to beat the
-       primitive's own :host rule. */
-    sb-chip-row.chips { align-items: stretch; }
-    sb-chip-row.chips > sb-metric-chip { flex: 1 1 auto; min-width: 150px; }
-
-    /* SR53. One row, lifecycle order, sized to the count rather than the
-       label -- the number is what is being read. */
-    .lifecycle {
-      display: flex;
-      align-items: stretch;
-      flex-wrap: wrap;
-      gap: var(--space-8);
+    .bottom-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: var(--register-pad);
     }
-    /* One line -- "1 PENDING" -- not the count stacked over the label.
-       Baseline-aligned like a MetricChip's own label/value pair, just
-       count-first: this is a count of plans, not a labelled figure the
-       label should lead. */
-    .lc {
-      flex: 1 1 auto;
-      min-width: 100px;
-      display: flex;
-      align-items: baseline;
-      gap: var(--space-6);
-      padding: var(--space-8) var(--space-10);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      text-decoration: none;
-    }
-    .lc:hover { border-color: var(--border-strong); }
-    .lc-count { color: var(--text); font-size: var(--text-subhead); font-weight: 600; }
-    .lc-label {
-      color: var(--text-secondary);
-      font-size: var(--text-micro);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
+    @media (max-width: 900px) {
+      .top-row { grid-template-columns: minmax(0, 1fr); }
     }
 
     /* margin: 0 auto centres the ROW (diagram + legend together) in the
@@ -780,13 +600,6 @@ import { TradeGroup } from './trade-group';
       font-size: var(--text-table);
     }
 
-    /* Restores the header's left inset for text sitting directly in the
-       flush panel body -- see the template comment above .panel-note's one
-       use. Top spacing too, so it doesn't crowd the panel's header rule. */
-    .panel-note {
-      padding: var(--space-10) var(--space-14) 0;
-    }
-
     .all-link {
       color: var(--accent);
       font-size: var(--text-table);
@@ -835,7 +648,6 @@ import { TradeGroup } from './trade-group';
     .pnl-plan .sl { color: var(--neg); }
 
     @media (max-width: 720px) {
-      .primary { flex-direction: column; }
       .lifecycle-figure { flex-direction: column; align-items: center; }
       sb-plan-lifecycle-diagram, .lifecycle-legend { max-width: 100%; }
     }
@@ -844,15 +656,38 @@ import { TradeGroup } from './trade-group';
 export class Dashboard {
   private readonly now = inject(CLOCK);
   private readonly router = inject(Router);
+  private readonly api = inject(ApiClient);
+  private readonly toast = inject(ToastService);
   protected readonly store = inject(DashboardStore);
   /** For the currency symbol alone. `ConnectionStore` is root-provided and
    *  the shell already keeps it fresh, so reading it here costs no request. */
   protected readonly connection = inject(ConnectionStore);
+  /** Root-provided and already loaded by the shell (the top bar's own tape
+   *  lanes) -- this page only reads `rows()`, it never calls `load()`. */
+  protected readonly tape = inject(TapeStore);
+  /** This page's own instance, and NOT the positions table's: that one holds
+   *  whichever single tab is selected, which is the wrong population for a
+   *  feed that must span opens and closes at once. Provided on this component
+   *  (see `providers`), so it is created on entry and destroyed on exit. */
+  private readonly recent = inject(TradesStore);
+
+  protected readonly activity = computed(() => deriveActivity(this.recent.rows()));
+
+  constructor() {
+    // Every status, newest first. ACTIVITY_WINDOW rows in, at most six events
+    // out (deriveActivity's own cap) -- a row can yield two events, so the
+    // fetch has to be wider than the feed.
+    this.recent.setQuery({ sort: '-opened_at', page: 1, per_page: 20 });
+  }
 
   /** Whether the plan-lifecycle legend/diagram drawer is open — that
    *  content used to sit on the page body and now lives behind the Open
    *  positions panel's "Lifecycle guide" button. */
   protected readonly lifecycleInfoOpen = signal(false);
+
+  /** The other three explanatory drawers (v85 D18) -- one signal, since only
+   *  one can be open at a time, rather than a boolean per drawer. */
+  protected readonly infoOpen = signal<null | 'qualifying' | 'sizing' | 'prices'>(null);
 
   /** Zero open positions is a RESULT (the scan found nothing qualifying in
    *  this scope), not missing data -- measured-zero, not no-data-yet. */
@@ -867,53 +702,69 @@ export class Dashboard {
     this.store.empty() ? null : `${this.store.openTrades()} open trades`,
   );
 
-  /** The suffix a money card renders after its number — a leading space, then
-   *  the account's symbol. Three cards had `" USD"` written into the template
-   *  while `CURRENCY_SYMBOL` has defaulted to `€` all along. */
-  protected readonly currencyUnit = computed(() => ` ${this.connection.currency()}`);
+  /** v79: a scaled-out position arrives from /api/v1/trades as one row per
+   *  realized leg, and every leg carries the same plan id -- so the id alone
+   *  is not unique and the table's trackBy would collapse the two rows into
+   *  one. Same key Trades and the ticker detail use. */
+  protected readonly rowKey = (row: TradeRow) => `${row.id}:${row.leg_index}`;
 
-  protected readonly rowKey = (row: TradeRow) => row.id;
-
-  /** One per lifecycle category shown below -- `sb-trade-group` owns its own
-   *  data, but the empty-state copy is naming a plan's absence at a specific
-   *  stage, which reads as three different facts and not one. */
-  protected readonly pendingEmptyState: EmptyState = {
-    title: 'No pending plans',
-    hint: 'They appear here once a plan is posted, waiting for its entry trigger.',
-  };
-  protected readonly activeEmptyState: EmptyState = {
-    title: 'No active positions',
-    hint: 'They appear here once a plan’s entry fills.',
-  };
-  protected readonly partialEmptyState: EmptyState = {
-    title: 'No partial positions',
-    hint: 'They appear here once TP1 hits and part of the position closes.',
-  };
-
-  /** The Closed group's `today` input: `true` in Today mode (narrows to
+  /** The Closed tab's `today` input: `true` in Today mode (narrows to
    *  trades closed today, same rule the lifecycle strip's CLOSED count
-   *  already uses), `null` in All days (unfiltered -- most recent closes). */
+   *  already used), `null` in All days (unfiltered -- most recent closes).
+   *  PositionsTable applies this to CLOSED/CANCELLED only. */
   protected readonly closedToday = computed(() =>
     this.store.scope() === 'all' ? null : true,
   );
 
-  /** Copy for the Closed group, scope-aware like `realizedLabel` above --
-   *  wording that says "today" would mislead in All days, and vice versa. */
-  protected readonly closedExplanation = computed(() =>
-    this.store.scope() === 'all'
-      ? 'Fully closed (win, loss, or scratch) — most recent closes.'
-      : 'Fully closed today (win, loss, or scratch).',
+  /** The lifecycle strip's counts, reshaped for the tab labels. The strip
+   *  itself is gone (R4-07) -- these numbers moved onto the tabs. */
+  protected readonly lifecycleCounts = computed(() =>
+    Object.fromEntries(this.store.lifecycle().map((e) => [e.status, e.count])),
   );
-  protected readonly closedEmptyState = computed<EmptyState>(() => ({
-    title: this.store.scope() === 'all' ? 'No closed trades yet' : 'No trades closed today',
-    // Not "TP2 or a stop" -- that names only the PARTIAL exit. A position
-    // closes on hitting ITS target or ITS stop regardless of which lifecycle
-    // stage it was in when that happened: straight from Active (stop before
-    // TP1, or a single-target strategy's only target) just as much as from
-    // Partial (TP2, or the break-even stop after TP1).
-    hint: 'They appear here once a position’s target or stop closes it out '
-      + '— whether that happens straight from Active or after TP1 from Partial.',
-  }));
+
+  /** Bound as a value, not called in the template: the table takes the
+   *  function and applies it per tab.
+   *
+   *  Named `columnsForTab`, not `visibleForTab`: the imported helper is
+   *  already called that, and a class member of the same name reads as a
+   *  recursive call to anyone skimming it. */
+  protected readonly columnsForTab = (tab: string) => visibleForTab(tab, this.visible());
+
+  /* -- v85 D13/D14: close all open/partial ----------------------------- */
+
+  protected readonly confirmCloseAll = signal(false);
+
+  /** ACTIVE + PARTIAL only — a PENDING plan never filled, so there is nothing
+   *  to close and cancelling is the different act that applies to it. */
+  protected readonly openCount = computed(() => {
+    const counts = this.lifecycleCounts();
+    return (counts['ACTIVE'] ?? 0) + (counts['PARTIAL'] ?? 0);
+  });
+
+  /** Names what the action does, in the words that distinguish it from
+   *  clear-open next door: this REALISES profit or loss, that one deletes
+   *  records and realises nothing. */
+  protected readonly closeAllConsequence = computed(() =>
+    `This closes ${this.openCount()} position(s) at their current price and `
+    + 'realises the profit or loss. Pending plans are not affected. '
+    + 'This cannot be undone.',
+  );
+
+  protected closeAll(): void {
+    this.confirmCloseAll.set(false);
+    this.api.closeOpenTrades().subscribe({
+      next: (result) => {
+        this.toast.show(
+          result.failed
+            ? `Closed ${result.closed}, ${result.failed} failed — check the log.`
+            : `Closed ${result.closed} position${result.closed === 1 ? '' : 's'}.`,
+          result.failed ? 'warn' : 'info',
+        );
+        this.store.load();
+      },
+      error: () => this.toast.show('Could not close positions.', 'error'),
+    });
+  }
 
   private readonly tickerCell =
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('tickerCell');
@@ -931,6 +782,8 @@ export class Dashboard {
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('openedCell');
   private readonly closedCell =
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('closedCell');
+  private readonly actionsCell =
+    viewChild.required<TemplateRef<RowContext<TradeRow>>>('actionsCell');
   private readonly preferences = inject(PreferencesStore);
 
   protected readonly tableId = DASHBOARD_TABLE_ID;
@@ -994,14 +847,6 @@ export class Dashboard {
     );
   }
 
-  /** See dashboard.helpers.ts -- `deriveClosedVisible`/`deriveOpenVisible`
-   *  for what each group's own column order does and why, `reconcileReorder`
-   *  for how a drag inside one group's table writes back to the shared
-   *  picker list without leaking that group's own additions/omissions into
-   *  the other three. */
-  protected readonly closedVisible = computed(() => deriveClosedVisible(this.visible()));
-  protected readonly openVisible = computed(() => deriveOpenVisible(this.visible()));
-
   protected onReorder(order: string[]): void {
     const merged = reconcileReorder(order, this.visible());
     this.visible.set(merged);
@@ -1021,22 +866,14 @@ export class Dashboard {
       confidence_level: this.confidenceCell(),
       opened_at: this.openedCell(),
       closed_at: this.closedCell(),
+      actions: this.actionsCell(),
     };
     return tradeColumns(this.now).map((column) =>
       cells[column.key] ? { ...column, cell: cells[column.key] } : column,
     );
   });
 
-  /** Amber once exposure is most of the cap. Amber means caution, which is
-   *  what "nearly out of risk budget" is -- it is not a loss, so it must
-   *  not be red. */
   /* -- SR59: the copy ------------------------------------------------- */
-
-  /** The Jinja page appended "· closed today" only in the today/active
-   *  modes, because in All days the count is not today's. Same rule here. */
-  protected readonly closedQualifier = computed(() =>
-    this.store.scope() === 'all' ? '' : ' today',
-  );
 
   /**
    * The premium chip's reasoning, from `dashboard_fragment.html:81-87`.
@@ -1081,35 +918,13 @@ export class Dashboard {
     return typeof riskPct === 'number' ? `Sizing based on ${riskPct}% risk` : null;
   });
 
-  /** `_plans_board.html`'s `lc_tips`, verbatim. */
-  private readonly lifecycleTips: Record<string, string> = {
-    PENDING:
-      'Plan built and posted, but price has not yet reached the entry trigger. '
-      + 'Cancelled automatically if it expires or the setup is invalidated first.',
-    ACTIVE:
-      'Entry has filled — position is open and being tracked toward TP1/stop.',
-    PARTIAL:
-      'TP1 hit: half the position was closed for a partial win, the remainder '
-      + 'rides toward TP2 with its stop moved to break-even.',
-    CLOSED:
-      'Fully closed today (win, loss, or scratch) — see Trade History for the '
-      + 'full log.',
-    CANCELLED:
-      'Cancelled today, before ever filling — either it expired waiting for '
-      + 'entry, or the setup was invalidated.',
-  };
-
-  protected lifecycleTip(status: string): string | null {
-    return this.lifecycleTips[status] ?? null;
-  }
-
   /* -- SR58: the date scope ------------------------------------------- */
 
   /** The Jinja dashboard had three; `active` ("Today + open") and `today`
    *  are merged into this one Today button. The server already computed the
-   *  realised figures identically for both, and Today's definition now
-   *  folds in "or still open, however old" on its own (see `todayParam`),
-   *  so a separate "+ open" choice had nothing left to distinguish. */
+   *  realised figures identically for both, and Today's definition folds in
+   *  "or still open, however old" on its own, so a separate "+ open" choice
+   *  had nothing left to distinguish. */
   protected readonly scopes: { mode: DashboardScope; label: string }[] = [
     { mode: 'today', label: 'Today' },
     { mode: 'all', label: 'All days' },
@@ -1119,32 +934,6 @@ export class Dashboard {
    *  today's when the toggle is on All days. */
   protected readonly realizedLabel = computed(() =>
     this.store.scope() === 'all' ? 'Realised, all days' : 'Realised today',
-  );
-
-  /** The lifecycle strip's click-through date filter, mirroring this same
-   *  `=== 'all'` split -- `null` drops the query param entirely (an empty
-   *  string would land in the URL as `today=`), so All days keeps sending
-   *  what "click a card" always meant: status only, no date. */
-  protected readonly todayParam = computed(() =>
-    this.store.scope() === 'all' ? null : '1',
-  );
-
-  protected readonly riskTone = computed(() =>
-    (this.store.riskUtilisation() ?? 0) >= 0.8 ? 'caution' : 'plain',
-  );
-
-  protected readonly riskSub = computed(() => {
-    const cap = this.store.riskCapPct();
-    return cap === null ? null : `of ${cap.toFixed(1)}% cap`;
-  });
-
-  /** In risk-% sizing there is no single premium -- position value varies per
-   *  trade with the stop distance, up to the max-position cap -- so the chip
-   *  says "max" rather than presenting a ceiling as a typical cost. */
-  protected readonly premiumUnit = computed(() =>
-    this.store.positionPremiumIsCap()
-      ? `${this.currencyUnit()} max`
-      : this.currencyUnit(),
   );
 
   // v54 Task 28 dropped the unit from both columns on the grounds that the
@@ -1161,11 +950,10 @@ export class Dashboard {
   protected fmtDate = dateTime;
 
   /** sb-magnitude's max for the R column. Not an observed max from the
-   *  store: the four groups below (Active/Pending/Partial/Closed) each fetch
-   *  their own page through their own TradeGroup-scoped TradesStore, and all
-   *  four share this one cell template -- there is no single "this table's
-   *  rows" to measure from here. R is already a normalised unit (the risk
-   *  taken, by definition 1R), so a fixed reference scale is the more
+   *  store: sb-positions-table shows one lifecycle tab's rows at a time, and
+   *  this same cell template serves every tab -- there is no single "this
+   *  table's rows" to measure from here. R is already a normalised unit (the
+   *  risk taken, by definition 1R), so a fixed reference scale is the more
    *  honest choice anyway: 3R covers a well-run multi-target scale-out
    *  without every ordinary trade landing near the same width. */
   protected readonly R_MAGNITUDE_MAX = 3;

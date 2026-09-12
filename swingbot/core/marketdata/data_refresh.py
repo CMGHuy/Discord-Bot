@@ -20,10 +20,9 @@ import logging
 import os
 import time
 
-import pandas as pd
-
 from swingbot import config
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
+from swingbot.core.infra.retry import with_retry
 from swingbot.core.marketdata.adjustments import merge_adjusted
 from swingbot.core.marketdata.data_store import (
     DATA_DIR,
@@ -47,8 +46,8 @@ REFRESH_HOURS = {
 }
 DEFAULT_REFRESH_HOURS = 24.0
 
-# Transient-fault retry (see _with_retry -- provider depth caps are NOT
-# retried; they are a refusal, not a fault).
+# Transient-fault retry (see swingbot.core.infra.retry.with_retry -- provider
+# depth caps are NOT retried; they are a refusal, not a fault).
 RETRY_ATTEMPTS = 3
 RETRY_BASE_DELAY = 2.0
 
@@ -215,32 +214,6 @@ def _merge_save(existing, fresh, symbol: str, timeframe: str,
     return merged, added
 
 
-def _with_retry(fn, *args, attempts: int = None, base_delay: float = None,
-                label: str = ""):
-    """Call fn with exponential backoff. Raises the last error if all
-    attempts fail.
-
-    Only worth doing for TRANSIENT faults -- curl timeouts, rate limiting,
-    a momentarily empty response. A provider depth limit is a refusal, not
-    a fault: it returns the same truncated window every time, so retrying
-    it is pure waste and is deliberately NOT retried here.
-    """
-    attempts = attempts or RETRY_ATTEMPTS
-    base_delay = base_delay if base_delay is not None else RETRY_BASE_DELAY
-    last = None
-    for i in range(attempts):
-        try:
-            return fn(*args)
-        except Exception as exc:
-            last = exc
-            if i < attempts - 1:
-                delay = base_delay * (2 ** i)
-                log.info("retry %s in %.1fs (attempt %d/%d): %s",
-                         label, delay, i + 1, attempts, str(exc)[:120])
-                time.sleep(delay)
-    raise last
-
-
 def refresh_symbol(symbol: str, timeframe: str, base_dir: str = DATA_DIR,
                    force: bool = False, state: dict = None) -> dict:
     """Bring one symbol/timeframe up to date. Returns a result dict with
@@ -262,8 +235,9 @@ def refresh_symbol(symbol: str, timeframe: str, base_dir: str = DATA_DIR,
     # merges, so a forced refresh can only ever ADD bars.
     if have == 0 or force:
         try:
-            df = _with_retry(fetch_interval_data, symbol, tf,
-                             label=f"{symbol}/{tf} full")
+            df = with_retry(fetch_interval_data, symbol, tf,
+                            attempts=RETRY_ATTEMPTS, base_delay=RETRY_BASE_DELAY,
+                            label=f"{symbol}/{tf} full")
         except Exception as exc:
             log.warning("refresh %s/%s failed after retries: %s", symbol, tf, exc)
             return {**out, "status": "failed", "rows": have, "error": str(exc)[:200]}
@@ -274,8 +248,9 @@ def refresh_symbol(symbol: str, timeframe: str, base_dir: str = DATA_DIR,
     # Warm: fetch only what is newer than the last cached bar.
     last = existing.index.max()
     try:
-        fresh = _with_retry(_default_ranged_fetch, symbol, last, tf,
-                            label=f"{symbol}/{tf} incremental")
+        fresh = with_retry(_default_ranged_fetch, symbol, last, tf,
+                           attempts=RETRY_ATTEMPTS, base_delay=RETRY_BASE_DELAY,
+                           label=f"{symbol}/{tf} incremental")
     except Exception as exc:
         log.warning("incremental %s/%s failed after retries: %s", symbol, tf, exc)
         return {**out, "status": "failed", "rows": have, "error": str(exc)[:200]}

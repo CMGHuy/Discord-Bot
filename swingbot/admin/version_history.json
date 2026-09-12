@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-09-10 16:59:59 UTC",
+  "generated_at": "2026-09-11 22:21:02 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.15.0",
-    "bot": "1.7.0"
+    "ui": "1.16.0",
+    "bot": "1.7.2"
   },
   "releases": [
     {
@@ -1062,6 +1062,73 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-09-11",
+      "last_seen": "2026-09-11",
+      "commit": "590dca1c",
+      "subject": "release(ui): 1.15.1 -- earnings blackout setting counts trading sessions",
+      "versions": {
+        "ui": "1.15.1",
+        "bot": "1.7.0"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-09-11",
+      "last_seen": "2026-09-11",
+      "commit": "d6d71697",
+      "subject": "release(bot): 1.7.1 -- narrow Break & Retest and VWAP horizon gates",
+      "versions": {
+        "ui": "1.15.0",
+        "bot": "1.7.1"
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-11",
+      "last_seen": "2026-09-11",
+      "commit": "201e4706",
+      "subject": "Merge branch 'worktree-v84-strategy-rescue'",
+      "versions": {
+        "ui": "1.15.1",
+        "bot": "1.7.1"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-09-11",
+      "last_seen": "2026-09-11",
+      "commit": "81ee007b",
+      "subject": "release(ui,bot): 1.15.2 / 1.7.2 -- scaled-out leg accounting",
+      "versions": {
+        "ui": "1.15.2",
+        "bot": "1.7.2"
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-12",
+      "last_seen": "2026-09-12",
+      "commit": "b23873f2",
+      "subject": "release(ui): 1.16.0 -- shell, primitives and Dashboard redesign",
+      "versions": {
+        "ui": "1.16.0",
+        "bot": "1.7.2"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]

@@ -3,7 +3,7 @@
 **Bump:** bot minor
 **Edge:** expectancy (Tier 1 is `none (integrity)` — see §3)
 **Date:** 2026-09-10
-**Status:** spec, not yet planned
+**Status:** implemented — see plans/implemented/2026-09-10-v84-strategy-rescue_*.md
 
 ## 1. Why this exists
 

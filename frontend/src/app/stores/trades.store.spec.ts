@@ -99,6 +99,8 @@ const ROW: TradeRow = {
   progress_band: 'toward_target',
   blink_seconds: 1.4,
   status_label: 'Toward target',
+  leg_index: 0,
+  leg_total: 1,
 };
 
 const COLLECTION: Collection<TradeRow> = {
@@ -161,9 +163,10 @@ describe('TradesStore', () => {
 
   it('does not load until a query has been set', () => {
     // Regression for the Dashboard bug where each of the three per-status
-    // TradeGroup panels raced an unfiltered request against its own real
-    // one: the store must never fetch on the untouched placeholder query,
-    // only once a real setQuery() has actually landed.
+    // group panels (retired in v85 -- see positions-table.ts) raced an
+    // unfiltered request against its own real one: the store must never
+    // fetch on the untouched placeholder query, only once a real
+    // setQuery() has actually landed.
     tick();
     backend.expectNone((r) => r.url === '/api/v1/trades');
   });

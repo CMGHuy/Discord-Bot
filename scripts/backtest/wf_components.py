@@ -39,7 +39,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 import numpy as np  # noqa: E402
 
-from swingbot import config  # noqa: E402
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest  # noqa: E402
 from swingbot.core.backtesting.backtest_wf import (ANCHORED_FOLDS, GATE_MAX_DEGRADATION_R,  # noqa: E402
                                        GATE_MIN_IMPROVING_FOLDS,
@@ -88,8 +87,8 @@ INERT_COMPONENTS = {
     "PYRAMIDING_ENABLED":
         "E38 lives in the live plan manager; plan_engine.simulate_exit has "
         "no pyramiding concept, so the backtest cannot observe it.",
-    "EARNINGS_BLACKOUT_DAYS":
-        "E18's gate was never wired into the scan or backtest path.",
+    "EARNINGS_BLACKOUT_SESSIONS":
+        "Spec v82 measures this gate with scripts/backtest/measure_earnings_blackout.py; this harness never calls its scan path.",
 }
 
 FULL_START, FULL_END = ANCHORED_FOLDS[0][0], ANCHORED_FOLDS[-1][3]

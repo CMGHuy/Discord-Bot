@@ -21,7 +21,7 @@ from swingbot import config
 # Re-exported under its historical private name: dashboard.py and queries.py
 # import `_primary_strategy_label` from here, so this alias is used even
 # though nothing in this file calls it.
-from swingbot.core.tracking.performance import primary_strategy_label as _primary_strategy_label
+from swingbot.core.tracking.performance import primary_strategy_label as _primary_strategy_label  # noqa: F401
 
 try:
     import docker as docker_sdk
@@ -54,13 +54,6 @@ def _read_env_values() -> dict:
     if not os.path.exists(ENV_PATH):
         return {}
     return {k: v for k, v in dotenv_values(ENV_PATH).items() if v is not None}
-
-
-def _field_display_value(f: config.Field, env_values: dict):
-    raw = env_values.get(f.key, f.default)
-    if f.type == "checkbox":
-        return str(raw).lower() == "true"
-    return raw
 
 
 def _build_env_text(form, existing: dict) -> str:
@@ -300,7 +293,8 @@ def _load_or_create_secret_key() -> str:
     gets healed up to the same permissions the first time it's read."""
     os.makedirs(config.DATA_DIR, exist_ok=True)
     if os.path.exists(SECRET_KEY_PATH):
-        key = open(SECRET_KEY_PATH, "r", encoding="utf-8").read().strip()
+        with open(SECRET_KEY_PATH, "r", encoding="utf-8") as fh:
+            key = fh.read().strip()
         if key:
             try:
                 os.chmod(SECRET_KEY_PATH, 0o600)
@@ -368,10 +362,10 @@ def scan_duration_sparkline(durations: list, *, width: int = 220, height: int = 
 
 # _primary_strategy_label is now defined once, in core/performance.py (as
 # primary_strategy_label), and imported above under this same historical
-# name -- the admin Performance page (get_chart_data / get_detailed_stats)
-# needed the exact same "real confirming method, not the fixed placeholder
-# t['strategy']" logic this dashboard helper already had, so it moved to
-# the shared core layer instead of being duplicated a second time there.
+# name -- the old admin Performance page needed the exact same "real
+# confirming method, not the fixed placeholder t['strategy']" logic this
+# dashboard helper already had, so it moved to the shared core layer instead
+# of being duplicated a second time there.
 
 # ---------------------------------------------------------------------------
 # Version tracking (sidebar)

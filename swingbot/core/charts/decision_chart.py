@@ -69,7 +69,7 @@ def _draw_main_panel(ax, daily_df: pd.DataFrame, plan, avwaps=None, regimes=None
         ax.annotate("⚓", xy=(x0, s.values[0]), color=AVWAP_COLOR, fontsize=9)
         price_labels.append((s.values[-1], AVWAP_COLOR, f"AVWAP {s.values[-1]:.2f}"))
     if price_labels:
-        for price, y, color, text in _spread_labels(price_labels, ax.get_ylim()):
+        for _price, y, color, text in _spread_labels(price_labels, ax.get_ylim()):
             ax.annotate(text, xy=(1.0, y), xycoords=("axes fraction", "data"),
                         fontsize=8, color=color, ha="right", va="center")
     if outcomes and len(outcomes) >= OUTCOME_MIN_SAMPLES:

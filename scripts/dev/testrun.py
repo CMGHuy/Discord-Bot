@@ -120,8 +120,11 @@ def undefined_names(paths: list[str] | None = None) -> list[str]:
 
     try:
         result = subprocess.run(
+            # 180s, not 60: pyflakes over the whole tree measured ~52s on an
+            # idle machine, so under the full suite's -n 4 load it overran 60s
+            # and failed the gate with no finding at all (2026-09-11).
             [sys.executable, "-m", "pyflakes", *paths], cwd=REPO,
-            capture_output=True, text=True, timeout=60,
+            capture_output=True, text=True, timeout=180,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise RuntimeError(

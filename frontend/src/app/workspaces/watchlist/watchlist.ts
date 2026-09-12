@@ -118,7 +118,7 @@ function sortValue(row: Ticker, key: string, flagged: readonly string[]): string
   // need to reach.
   host: { class: 'register-instrument' },
   template: `
-    <sb-section-head heading="Watchlist">
+    <sb-section-head>
       <!-- One wrapper, not two separate actions projections -- otherwise
            .count and .stale land at opposite ends of the space-between
            row instead of clustered beside each other. -->

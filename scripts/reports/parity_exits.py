@@ -34,34 +34,13 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts" / "data"))
 
 from fetch_backtest_data import load_cached, load_watchlist
-from swingbot.core.backtesting.backtest import ALL_STRATEGIES, _trade_plan_at, run_backtest
-from swingbot.core.market.indicators import atr, elliott_wave3_entries
+from swingbot.core.backtesting.backtest import (ALL_STRATEGIES, _plan_series,
+                                               _trade_plan_at, run_backtest)
 from swingbot.core.planning.plan_engine import PlanStatus, TradePlanV2, simulate_exit
 from swingbot.core.market.strategy_types import HORIZONS
 
 TRAIN = ("2020-01-01", "2023-12-31")
 R_TOL = 1e-6  # both sides round(r, 3) from the same unrounded inputs
-
-
-def _series_for(df, strategy, horizon_key):
-    """Same precomputation run_backtest does before its per-signal loop
-    (backtest.py:170-187) -- reused here so _trade_plan_at sees identical
-    unrounded inputs to the legacy walk."""
-    atr_series = atr(df, 14)
-    swing_high_series = swing_low_series = None
-    if strategy == "Fibonacci":
-        lookback = HORIZONS[horizon_key]["fib_lookback"]
-        swing_high_series = df["High"].rolling(lookback).max()
-        swing_low_series = df["Low"].rolling(lookback).min()
-    volume_ratio_series = None
-    if strategy == "Support/Resistance":
-        vol_avg20 = df["Volume"].rolling(20).mean()
-        volume_ratio_series = df["Volume"] / vol_avg20
-    entry_levels = None
-    if strategy == "Elliott Wave":
-        threshold_pct = HORIZONS[horizon_key]["max_risk_pct"]
-        _, _, entry_levels = elliott_wave3_entries(df, threshold_pct)
-    return atr_series, swing_high_series, swing_low_series, volume_ratio_series, entry_levels
 
 
 def _plan_from_unrounded(df, i, t, ticker, strategy, horizon_key, series):
@@ -111,7 +90,7 @@ def main():
                 trades = window_trades(summary, *TRAIN)
                 if not trades:
                     continue
-                series = _series_for(df, strategy, horizon_key)
+                series = _plan_series(df, strategy, horizon_key)
                 combo_key = (strategy, horizon_key)
                 combo_n, combo_m = by_combo.get(combo_key, (0, 0))
                 for t in trades:

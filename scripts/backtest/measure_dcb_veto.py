@@ -52,7 +52,6 @@ sys.path.insert(0, str(ROOT))
 
 from swingbot.core.backtesting.backtest_scenarios import replay_scenarios  # noqa: E402
 from swingbot.core.market.chart_patterns import dead_cat_bounce  # noqa: E402
-from swingbot.core.market.strategy_types import HORIZONS  # noqa: E402
 from swingbot.core.planning.plan_engine import simulate_exit  # noqa: E402
 
 CACHE_DIR = ROOT / "data" / "backtest_cache"

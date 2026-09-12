@@ -9,7 +9,6 @@ import {
 
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
-import { EventStream } from '../api/event-stream';
 import { Observable, of } from 'rxjs';
 import { routeRequest } from '../routing/route-request';
 import { AnalyticsStrategies, JournalEntry, TradeDetail } from '../api/models';

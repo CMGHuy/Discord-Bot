@@ -1,8 +1,8 @@
 """Pure analysis-phase helpers for scanning.
 
 This module only reads frames fetched during the preceding crawl phase.
-The named singleton import is intentional: engine owns their process-wide
-identity while analysis consumes them for trade state and monitoring.
+The named `trade_log` import is intentional: engine owns its process-wide
+identity while analysis consumes it for trade state and monitoring.
 """
 import logging
 import os
@@ -14,20 +14,15 @@ if TYPE_CHECKING:
 from dataclasses import dataclass, field
 
 from swingbot import config
-from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS
 from swingbot.core.edge import correlation as corr_mod
 from swingbot.core.edge import factors as rs_factors
 from swingbot.core.edge import gates as gates_mod
 from swingbot.core.edge import heat as heat_mod
-from swingbot.core.edge import regime2, throttle
-from swingbot.core.edge.rs_gate import rs_verdict
+from swingbot.core.edge import regime2
 from swingbot.core.infra.jsonio import read_json
-from swingbot.core.market import levels, trendlines, opex
+from swingbot.core.market import levels, trendlines
 from swingbot.core.market.mtf import adjacent_aligned, macro_aligned
-from swingbot.core.market.reversal import evaluate_reversal, reversals_for_ticker
-from swingbot.core.market.events import earnings_within_window
 from swingbot.core.market.chart_patterns import dead_cat_bounce, params_from_config
-from swingbot.core.market.explain import build_explanation
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS
 from swingbot.core.marketdata import universe
 from swingbot.core.planning import account as account_module
@@ -39,7 +34,7 @@ from . import runstate
 from .confidence import score_confidence
 from .embeds import _build_requirement_checks
 from .regime import get_htf_bias
-from .engine import state, trade_log
+from .engine import trade_log
 
 
 log = logging.getLogger("swing-bot.scan_engine")
@@ -743,8 +738,16 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             # docstring, Step 4) uses this plus the scenario's own
             # reward:risk to answer "does this payoff/win-rate combo
             # actually make money", not just "does it look clean".
+            #
+            # `expand=False` (v79): ONE outcome per position, not one per
+            # scaled-out leg. score_confidence's expectancy factor pays every
+            # counted win this scenario's full reward:risk, and a TP1 leg
+            # banks roughly 1R -- counting legs here would overstate the
+            # empirical edge and silently re-tier live alerts. v79 changed
+            # what the dashboards count; it must not change what the bot
+            # posts. See TradeLog.get_stats' docstring.
             base_level_preview = max(1, min(5, target_confluence[0]))
-            base_level_stats = trade_log.get_stats(base_level_preview)
+            base_level_stats = trade_log.get_stats(base_level_preview, expand=False)
             track_record = (base_level_stats["win_rate"], base_level_stats["closed"])
 
             # htf_result computed once above the scenario loop (v56) --

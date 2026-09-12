@@ -135,12 +135,16 @@ const WORKSPACES = join(process.cwd(), 'src/app/workspaces');
 
 function workspaceSources(): { name: string; source: string }[] {
   const out: { name: string; source: string }[] = [];
-  for (const dir of readdirSync(WORKSPACES)) {
-    for (const file of readdirSync(join(WORKSPACES, dir))) {
+  // withFileTypes + isDirectory: v85's workspace-consistency.spec.ts lives
+  // directly under workspaces/, not inside a per-workspace subdirectory --
+  // a bare readdirSync(dir) here throws ENOTDIR on it.
+  for (const dir of readdirSync(WORKSPACES, { withFileTypes: true })) {
+    if (!dir.isDirectory()) continue;
+    for (const file of readdirSync(join(WORKSPACES, dir.name))) {
       if (!file.endsWith('.ts') || file.endsWith('.spec.ts')) continue;
       out.push({
-        name: `${dir}/${file}`,
-        source: readFileSync(join(WORKSPACES, dir, file), 'utf8'),
+        name: `${dir.name}/${file}`,
+        source: readFileSync(join(WORKSPACES, dir.name, file), 'utf8'),
       });
     }
   }
@@ -256,6 +260,15 @@ describe('v80 D1: the TradingView Blue palette', () => {
 describe('v80 D3: type, shape and touch', () => {
   it('sets the headline figure to 28px', () => {
     expect(CSS).toMatch(/^\s*--text-metric:\s*calc\(28px \* var\(--text-scale\)\);/m);
+  });
+
+  it('offers a hero size above the primary metric size', () => {
+    const style = getComputedStyle(document.documentElement);
+    const hero = style.getPropertyValue('--text-hero').trim();
+    expect(hero).not.toBe('');
+    // Same calc(px * var(--text-scale)) shape as every other size token, so
+    // the zoom control reaches it too.
+    expect(hero).toContain('var(--text-scale)');
   });
 
   it('tightens both radii to 2px', () => {

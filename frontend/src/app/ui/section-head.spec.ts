@@ -24,6 +24,12 @@ class Host {
 })
 class SlotHost {}
 
+@Component({
+  imports: [SectionHead],
+  template: `<sb-section-head><span actions>Unsaved settings</span></sb-section-head>`,
+})
+class BareHost {}
+
 function render(level: 1 | 2 = 1) {
   const f = TestBed.createComponent(Host);
   f.componentInstance.level = level;
@@ -47,6 +53,16 @@ describe('SectionHead', () => {
 
   it('emits exactly one heading element', () => {
     expect(render().querySelectorAll('h1, h2').length).toBe(1);
+  });
+
+  it('renders no heading element at all when heading is omitted', () => {
+    // R1-11: eight workspaces now project only actions/status, since the top
+    // bar owns the title -- an empty <h1> would be worse than none.
+    const f = TestBed.createComponent(BareHost);
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    expect(el.querySelector('h1, h2')).toBeNull();
+    expect(el.textContent).toContain('Unsaved settings');
   });
 });
 

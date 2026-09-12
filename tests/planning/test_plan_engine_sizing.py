@@ -161,6 +161,31 @@ def test_fibonacci_targets_only_fibonacci_levels(df, atr_series):
     assert any(abs(tp - c) < 1e-6 for c in candidates) or tp == pytest.approx(cap)
 
 
+def test_fib_candidates_1_0_extension_flag(df, atr_series, monkeypatch):
+    """The 1.0 extension fills the gap between swing_high and the 1.272
+    extension. Flag off = byte-identical to today; flag on = exactly two
+    extra prices, one per side."""
+    from swingbot import config
+    hk = "4w"
+    entry, _ = _entry_atr(df, atr_series)
+    h = HORIZONS[hk]
+
+    monkeypatch.setattr(config, "FIB_TARGET_1_0_EXTENSION", False)
+    off = fib_target_candidates(df, I, h, entry)
+
+    monkeypatch.setattr(config, "FIB_TARGET_1_0_EXTENSION", True)
+    on = fib_target_candidates(df, I, h, entry)
+
+    assert len(on) == len(off) + 2
+    lookback = h["fib_lookback"]
+    hist = df.iloc[:I + 1]
+    swing_high = float(hist["High"].iloc[-lookback:].max())
+    swing_low = float(hist["Low"].iloc[-lookback:].min())
+    diff = swing_high - swing_low
+    added = [c for c in on if not any(abs(c - o) < 1e-9 for o in off)]
+    assert sorted(added) == sorted([swing_high + diff, swing_low - diff])
+
+
 @pytest.mark.parametrize("ratio", [0.5, 1.0, 2.5, np.nan])
 def test_sr_parity(df, atr_series, ratio):
     # v31 Task 10: same pattern as Tasks 8-9 -- tp is no longer

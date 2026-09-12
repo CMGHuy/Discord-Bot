@@ -51,7 +51,7 @@ const TAB_IDS = new Set<string>(SYSTEM_TABS);
   // variables need to reach.
   host: { class: 'register-instrument' },
   template: `
-    <sb-section-head heading="System">
+    <sb-section-head>
       @if (store.dirty()) {
         <!-- Visible from every tab: the draft survives switching away, and
              unsaved configuration you have forgotten about is worse than

@@ -84,6 +84,17 @@ def test_close_an_active_plan(seed, logged_in, notify_queue):
     assert notify_queue(), "the bot learns about a manual close via the queue file"
 
 
+def test_closing_a_plan_queues_a_notify_record_for_that_plan(seed, logged_in, notify_queue):
+    """The bot is a separate process; this file is how it learns. A close that
+    skips it silently stops the Discord trade-history channel."""
+    seed(plans=[_plan(_PLAN_ID, status="ACTIVE")],
+         trades=[_trade(_TRADE_ID, plan_id=_PLAN_ID)])
+
+    logged_in.post(f"/api/v1/trades/{_PLAN_ID}/close")
+
+    assert any(r.get("plan_id") == _PLAN_ID for r in notify_queue())
+
+
 def test_close_a_pending_plan_is_rejected(seed, logged_in):
     """Only ACTIVE/PARTIAL close. A PENDING plan never filled, so there is
     nothing to close -- it cancels instead."""
@@ -207,3 +218,75 @@ def test_clear_history_leaves_open_trades(seed, logged_in):
 def test_clear_open_on_an_empty_store_is_not_an_error(seed, logged_in):
     seed()
     assert logged_in.post("/api/v1/trades/clear-open").get_json() == {"removed": 0}
+
+
+# --- close-open (bulk close, NOT clear-open -- see close_open's docstring) --
+
+def test_close_open_closes_active_and_partial(seed, logged_in):
+    active_id = "11111111-1111-4111-8111-111111111111"
+    partial_id = "22222222-2222-4222-8222-222222222222"
+    seed(plans=[
+        _plan(active_id, ticker="AAPL", status="ACTIVE"),
+        _plan(partial_id, ticker="MSFT", status="PARTIAL"),
+    ])
+
+    body = logged_in.post("/api/v1/trades/close-open").get_json()
+
+    assert body["closed"] == 2
+    assert body["failed"] == 0
+    assert sorted(body["tickers"]) == ["AAPL", "MSFT"]
+
+
+def test_close_open_leaves_pending_plans_alone(seed, logged_in):
+    """A plan that never filled cannot be closed -- cancelling is the act that
+    means something for one, and it is a different act."""
+    seed(plans=[_plan(_PLAN_ID, status="PENDING")])
+
+    body = logged_in.post("/api/v1/trades/close-open").get_json()
+
+    assert body["closed"] == 0
+    row = logged_in.get(f"/api/v1/trades/{_PLAN_ID}").get_json()
+    assert row["status"] == "PENDING"
+
+
+def test_close_open_on_an_empty_book_is_a_no_op(seed, logged_in):
+    seed()
+    assert logged_in.post("/api/v1/trades/close-open").get_json() == \
+        {"closed": 0, "failed": 0, "tickers": []}
+
+
+def test_close_open_queues_one_notify_record_per_position(seed, logged_in, notify_queue):
+    seed(plans=[
+        _plan("11111111-1111-4111-8111-111111111111", status="ACTIVE"),
+        _plan("22222222-2222-4222-8222-222222222222", status="ACTIVE"),
+    ])
+
+    logged_in.post("/api/v1/trades/close-open")
+
+    queued = notify_queue()
+    assert len([r for r in queued if r.get("kind") == "plan_transition"]) == 2
+
+
+def test_close_open_reports_failures_without_aborting_the_rest(seed, logged_in, monkeypatch):
+    """One bad position must not strand the others half-closed."""
+    from swingbot.admin.api_v1 import trade_commands
+
+    seed(plans=[
+        _plan("11111111-1111-4111-8111-111111111111", status="ACTIVE"),
+        _plan("22222222-2222-4222-8222-222222222222", status="ACTIVE"),
+    ])
+
+    calls = {"n": 0}
+    real = trade_commands._close_plan
+
+    def flaky(store, plan):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("boom")
+        return real(store, plan)
+
+    monkeypatch.setattr(trade_commands, "_close_plan", flaky)
+
+    body = logged_in.post("/api/v1/trades/close-open").get_json()
+    assert body["closed"] == 1
+    assert body["failed"] == 1

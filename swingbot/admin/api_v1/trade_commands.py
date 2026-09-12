@@ -19,7 +19,6 @@ something, and the trade-history channel goes quiet without it.
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import threading
@@ -100,6 +99,29 @@ def _trade_row(trade_id: str):
 
 # --- close ---------------------------------------------------------------
 
+def _close_plan(store: PlanStore, plan) -> None:
+    """Close one ACTIVE/PARTIAL plan: settle its linked legacy trade, record
+    the transition, and queue the bot's notification.
+
+    Extracted from close_trade so the bulk endpoint runs exactly this and
+    cannot drift from the single-position path. The caller checks status.
+    """
+    tl = TradeLog()
+    linked = _linked_trade(tl, plan.plan_id)
+    if linked and linked.get("status") == _OPEN_LEGACY:
+        # Through TradeLog's own locked mutator: the admin and the bot are
+        # separate processes over one trades.json, so an unlocked
+        # read-modify-write here could race the scan loop.
+        tl.close_trade_manual(linked["id"], reason="manual (plan close, admin UI)")
+    # `at` is passed explicitly -- record_transition defaults it to None, and
+    # the lifecycle strip's "today" counts read status_history[-1]["at"].
+    record_transition(plan, PlanStatus.CLOSED, reason="manual",
+                      at=datetime.now(timezone.utc).isoformat())
+    store.update(plan)
+    _queue_notify({"kind": "plan_transition", "plan_id": plan.plan_id,
+                   "ticker": plan.ticker, "status": plan.status})
+
+
 @api_v1.route("/trades/<trade_id>/close", methods=["POST"])
 @require_auth
 def close_trade(trade_id: str):
@@ -114,21 +136,7 @@ def close_trade(trade_id: str):
                 f"Only ACTIVE or PARTIAL plans can be closed; this one is {plan.status}.",
                 422,
             )
-        tl = TradeLog()
-        linked = _linked_trade(tl, trade_id)
-        if linked and linked.get("status") == _OPEN_LEGACY:
-            # Through TradeLog's own locked mutator: the admin and the bot are
-            # separate processes over one trades.json, so an unlocked
-            # read-modify-write here could race the scan loop.
-            tl.close_trade_manual(linked["id"], reason="manual (plan close, admin UI)")
-        # `at` is passed explicitly. record_transition defaults it to None,
-        # and the lifecycle strip's "today" counts read status_history[-1]["at"]
-        # -- an implicit None makes this close invisible to today's count.
-        record_transition(plan, PlanStatus.CLOSED, reason="manual",
-                          at=datetime.now(timezone.utc).isoformat())
-        store.update(plan)
-        _queue_notify({"kind": "plan_transition", "plan_id": plan.plan_id,
-                       "ticker": plan.ticker, "status": plan.status})
+        _close_plan(store, plan)
         return _plan_row(trade_id)
 
     tl = TradeLog()
@@ -213,6 +221,43 @@ def clear_open():
 @require_auth
 def clear_history():
     return jsonify({"removed": TradeLog().clear_history()})
+
+
+@api_v1.route("/trades/close-open", methods=["POST"])
+@require_auth
+def close_open():
+    """Close every ACTIVE/PARTIAL position at its current price.
+
+    **This is not `/trades/clear-open`.** That one DELETES open trade records
+    and realises nothing; this one banks them. The two live in the same file
+    and read one word apart, so check which you are calling.
+
+    PENDING plans are untouched: one that never filled has nothing to close,
+    and cancelling it is a different act with a different meaning.
+
+    Per position it runs `_close_plan` -- the same path the single-position
+    close uses, including the manual-close notify record the bot reads.
+
+    One failure does not abort the rest: a half-closed book with no report of
+    which half is worse than a partial success that says so.
+    """
+    store = PlanStore()
+    closed, failed, tickers = 0, 0, []
+    # store.all(), not store._plans.values() -- the latter holds raw dicts
+    # (no .status/.ticker/.plan_id), and it is already a fresh list rather
+    # than a live view, so _close_plan's store.update() inside the loop
+    # cannot turn this into a mutate-while-iterating RuntimeError.
+    for plan in store.all():
+        if plan.status not in _CLOSEABLE_PLAN:
+            continue
+        try:
+            _close_plan(store, plan)
+            closed += 1
+            tickers.append(plan.ticker)
+        except Exception:
+            log.exception("bulk close failed for plan %s", plan.plan_id)
+            failed += 1
+    return jsonify({"closed": closed, "failed": failed, "tickers": tickers})
 
 
 # --- journal --------------------------------------------------------------

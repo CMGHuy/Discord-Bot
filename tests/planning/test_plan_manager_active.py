@@ -72,8 +72,14 @@ def test_tp1_touch_banks_partial_and_moves_to_partial(tmp_path):
     assert p.status == PlanStatus.PARTIAL
     assert p.working_stop == pytest.approx(106.66666666666667)   # v39 runner floor:
                                                                  # 100 + (2/3)*(110-100)
-    assert p.legs_realized == [{"fraction": 0.5, "exit_price": 110.5,
-                                "r": d["r"], "reason": "tp1"}]
+    # Verify the leg has the expected fields (closed_at is added by v79 and varies by timestamp)
+    assert len(p.legs_realized) == 1
+    leg = p.legs_realized[0]
+    assert leg["fraction"] == 0.5
+    assert leg["exit_price"] == 110.5
+    assert leg["r"] == d["r"]
+    assert leg["reason"] == "tp1"
+    assert "closed_at" in leg  # v79: timestamp added at realization
 
 @pytest.fixture(autouse=True)
 def _rth_gate_off(monkeypatch):

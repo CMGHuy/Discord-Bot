@@ -293,6 +293,14 @@ class PlanManager:
             # plan. Reload before any _step() write so update() merges with that
             # current on-disk store instead of serializing a stale snapshot.
             self.store.reload()
+            # Step the plan as it is NOW, not the copy open_plans() handed out
+            # before this and every earlier plan's price fetch. The admin UI
+            # closes and cancels plans from its own process; stepping the stale
+            # copy wrote it back over that change and resurrected the plan.
+            plan = self.store.get(plan.plan_id)
+            if plan is None or plan.status not in (
+                    PlanStatus.PENDING, PlanStatus.ACTIVE, PlanStatus.PARTIAL):
+                continue
             try:
                 new_events = (self._step(plan, price, now) if regular
                               else self._step_extended(plan, price, now))
@@ -353,6 +361,15 @@ class PlanManager:
                 event.detail["trade_id"] = trade_id
             elif event.transition == "tp1_partial":
                 self.trade_log.append_leg_by_plan(plan.plan_id, event.detail)
+            elif event.transition in ("cancelled_expired", "cancelled_invalidated"):
+                # A PENDING plan never filled -- scan_run.py's placeholder
+                # trade for it (still open, sized against the trigger price)
+                # has no real position behind it. Left unhandled, it sat
+                # "open" in the dashboard/risk numbers forever: production
+                # incident, 2026-09-11 (INTU, META among 10 stuck trades
+                # found via a dashboard mismatch -- the other 8 were the
+                # separate double-logging bug 5d72c1ab already fixed).
+                self.trade_log.discard_plan_placeholder(plan.plan_id)
             elif event.transition == "closed":
                 reason = event.detail["reason"]
                 # "win" is v70's terminal-target reason: an ACTIVE plan with
@@ -454,13 +471,14 @@ class PlanManager:
             # gap up: a real, favorable fill, not clamped to tp1).
             fill = price
             r1 = (fill - entry) * sign / risk if risk > 0 else 0.0
+            at = self._now()
             leg = {"fraction": plan.tp1_fraction, "exit_price": fill,
-                   "r": r1, "reason": "tp1"}
+                   "r": r1, "reason": "tp1", "closed_at": at}
             plan.legs_realized.append(leg)
             plan.working_stop = runner_floor(entry, plan.tp1)   # v39 runner floor
             plan.runner_floor_session = session_date(now)
             record_transition(plan, PlanStatus.PARTIAL, reason="tp1_partial",
-                              at=self._now())
+                              at=at)
             self.store.update(plan)
             return [PlanEvent(plan.plan_id, "tp1_partial", dict(leg))]
 
@@ -541,10 +559,11 @@ class PlanManager:
     def _close_runner(self, plan: TradePlanV2, fill: float, reason: str,
                       risk: float, sign: int) -> list[PlanEvent]:
         r2 = (fill - plan.entry_price) * sign / risk if risk > 0 else 0.0
+        at = self._now()
         leg = {"fraction": 1.0 - plan.tp1_fraction, "exit_price": fill,
-               "r": r2, "reason": reason}
+               "r": r2, "reason": reason, "closed_at": at}
         plan.legs_realized.append(leg)
-        record_transition(plan, PlanStatus.CLOSED, reason=reason, at=self._now())
+        record_transition(plan, PlanStatus.CLOSED, reason=reason, at=at)
         self.store.update(plan)
         return [PlanEvent(plan.plan_id, "closed",
                           {"reason": reason, "exit_price": fill, "leg": leg})]
@@ -696,12 +715,13 @@ class PlanManager:
         if hit_tp1:
             fill = gap_target_fill(bar_open, plan.tp1, plan.direction)
             r1 = (fill - entry) * sign / risk if risk > 0 else 0.0
+            at = self._now()
             leg = {"fraction": plan.tp1_fraction, "exit_price": fill,
-                   "r": r1, "reason": "tp1"}
+                   "r": r1, "reason": "tp1", "closed_at": at}
             plan.legs_realized.append(leg)
             plan.working_stop = runner_floor(entry, plan.tp1)   # v39 runner floor
             record_transition(plan, PlanStatus.PARTIAL, reason="tp1_partial",
-                              at=self._now())
+                              at=at)
             self.store.update(plan)
             return [PlanEvent(plan.plan_id, "tp1_partial", dict(leg))]
         return []
@@ -740,7 +760,9 @@ _MANAGER: PlanManager | None = None
 
 def _price_fn(ticker):                      # module-level so tests can patch it
     from swingbot.core.marketdata.data import get_current_price
-    return get_current_price(ticker)
+    # Never a stale cached print: a repeat of one would pass for a fresh
+    # confirming tick in _step_extended's debounce.
+    return get_current_price(ticker, allow_stale=False)
 
 
 def _live_atr(ticker):
