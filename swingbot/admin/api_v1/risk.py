@@ -135,19 +135,30 @@ def _risk_metrics_and_correlation() -> tuple[dict, dict]:
     benchmark = getattr(config, "MARKET_REGIME_TICKER", "SPY") or "SPY"
     metric_keys = ("var_95", "expected_shortfall_95", "annualised_vol",
                    "beta_spy", "sharpe_r", "max_drawdown_r")
+
+    # Trade-log-derived, with NO dependency on market/price data at all --
+    # `closed` is already fetched above via its own guard, independent of
+    # anything below. These must survive a market-data outage: an R-multiple
+    # Sharpe/drawdown is real information the trade log already has, and
+    # blanking it because a price fetch failed would discard data that was
+    # never actually at risk from that failure.
+    r_series = trade_metrics.r_multiples(closed)
+    sharpe_r = _metric(rm.sharpe_of(r_series), len(r_series))
+    max_drawdown_r = _metric(rm.max_drawdown_r(r_series), len(r_series))
+
     null_metrics = {key: _metric(None, 0) for key in metric_keys}
+    null_metrics["sharpe_r"] = sharpe_r
+    null_metrics["max_drawdown_r"] = max_drawdown_r
     null_metrics["as_of"] = None
     null_metrics["benchmark_symbol"] = benchmark
-    empty_correlation = {"labels": [], "values": []}
 
-    # Everything below reads market data: fetched bars, per-pair alignment,
-    # correlations. A bad cache entry, a string-typed JSON field on a trade,
-    # or a network hiccup can raise from any of `get_daily_data_batch`,
-    # `portfolio_returns` (`frame["Close"]`), `.align()`/`.strftime()`, or
-    # `correlation_matrix` -- and this whole tuple feeds one endpoint whose
-    # killswitch must keep rendering regardless. One guard around the whole
-    # section degrades to null metrics + an empty correlation matrix rather
-    # than 500ing the page over a single missing bar.
+    # Notional/weights/symbols come entirely from the open-trade rows -- no
+    # price data needed -- but a bad cache entry or a string-typed JSON field
+    # on a trade can still raise (e.g. `abs(entry * shares)` TypeError), so
+    # this stays its own guard, separate from the market-data fetch below.
+    # The correlation matrix's `labels` are just this symbol list, so on a
+    # pure market-data failure (the try below) they can still be reported
+    # even though the `values` matrix cannot.
     try:
         notional: dict[str, float] = {}
         for trade in open_trades:
@@ -163,7 +174,21 @@ def _risk_metrics_and_correlation() -> tuple[dict, dict]:
             if total_notional else {}
         )
         symbols = sorted(weights)
+    except Exception:
+        weights, symbols = {}, []
 
+    empty_correlation = {"labels": symbols, "values": []}
+
+    # Everything below reads market data: fetched bars, per-pair alignment,
+    # correlations. A bad cache entry or a network hiccup can raise from any
+    # of `get_daily_data_batch`, `portfolio_returns` (`frame["Close"]`),
+    # `.align()`/`.strftime()`, or `correlation_matrix` -- and this whole
+    # tuple feeds one endpoint whose killswitch must keep rendering
+    # regardless. One guard around this section degrades to null
+    # market-data metrics (trade-derived ones already seeded above) + an
+    # empty correlation `values` matrix, rather than 500ing the page over a
+    # single missing bar.
+    try:
         bars = get_daily_data_batch(sorted(set(symbols) | {benchmark})) if symbols else {}
 
         returns = rm.portfolio_returns(weights, bars)
@@ -171,8 +196,6 @@ def _risk_metrics_and_correlation() -> tuple[dict, dict]:
         # for a one-symbol "portfolio" that IS the benchmark -- reuses the same
         # pct_change/notional-drop logic rather than a second copy of it.
         benchmark_returns = rm.portfolio_returns({benchmark: 1.0}, bars)
-
-        r_series = trade_metrics.r_multiples(closed)
 
         n_returns = len(returns)
         metrics = {
@@ -183,8 +206,8 @@ def _risk_metrics_and_correlation() -> tuple[dict, dict]:
                 rm.beta_vs(returns, benchmark_returns),
                 len(returns.align(benchmark_returns, join="inner")[0]),
             ),
-            "sharpe_r": _metric(rm.sharpe_of(r_series), len(r_series)),
-            "max_drawdown_r": _metric(rm.max_drawdown_r(r_series), len(r_series)),
+            "sharpe_r": sharpe_r,
+            "max_drawdown_r": max_drawdown_r,
             "as_of": (returns.index[-1].strftime("%Y-%m-%d") if not returns.empty else None),
             # v85 R8 fix (I4): the tile label must name the ACTUAL configured
             # benchmark, not a hardcoded "SPY" -- `beta_spy` keeps its key

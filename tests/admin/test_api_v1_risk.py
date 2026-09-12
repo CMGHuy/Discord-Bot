@@ -281,9 +281,17 @@ def test_json_is_parseable_with_a_flat_price_position_in_the_book(
     the correlation step's `.corr()` return NaN. Flask has no custom JSON
     provider registered anywhere in this repo, so its `DefaultJSONProvider`
     would emit the literal token `NaN` for an unguarded NaN float -- not
-    valid JSON, and the browser's parser rejects the whole response,
-    blanking the page (killswitch included). The response must stay
-    parseable even with a flat-price ticker in the open book."""
+    valid JSON per spec, and a strict browser JSON.parse() rejects the whole
+    response, blanking the page (killswitch included). The response must
+    stay free of that literal token even with a flat-price ticker in the
+    open book.
+
+    NOTE: `json.loads()` does NOT catch this -- Python's json module accepts
+    bare `NaN`/`Infinity`/`-Infinity` tokens by design (`parse_constant`
+    defaults to `float`), so `json.loads(response.data)` would pass whether
+    or not the NaN-in-correlation-matrix bug is present. The raw bytes must
+    be checked directly instead.
+    """
     (tmp_path / "trades.json").write_text(json.dumps([
         _open_trade("a" * 16, "FLAT"), _open_trade("b" * 16, "AAPL"),
     ]), encoding="utf-8")
@@ -305,22 +313,36 @@ def test_json_is_parseable_with_a_flat_price_position_in_the_book(
 
     response = logged_in.get("/api/v1/risk")
     assert response.status_code == 200
-    body = json.loads(response.data)  # would raise on a literal NaN token
+    assert b"NaN" not in response.data, (
+        "a literal NaN token in the raw response is invalid JSON -- "
+        "json.loads() would NOT catch this, it accepts bare NaN by design"
+    )
+    body = json.loads(response.data)
     assert body["correlation"]["labels"] == ["AAPL", "FLAT"]
     assert isinstance(body["killswitch"]["on"], bool)
 
 
-def test_a_market_data_failure_degrades_the_metrics_not_the_page(client, open_book, monkeypatch):
-    """I2: the whole market-data section (bars fetch through the
-    correlation matrix) is one try/except so a hiccup anywhere in it
-    degrades to null metrics rather than 500ing the page the killswitch
-    lives on. The patch target is `swingbot.core.marketdata.data`, the
-    ORIGIN module `get_daily_data_batch` is imported from -- `risk.py`
+def test_a_market_data_failure_degrades_the_metrics_not_the_page(
+        client, open_book, monkeypatch):
+    """I2: the market-data section (bars fetch through the correlation
+    matrix) is wrapped in its own try/except so a hiccup anywhere in it
+    degrades to null market-data metrics rather than 500ing the page the
+    killswitch lives on. The patch target is `swingbot.core.marketdata.data`,
+    the ORIGIN module `get_daily_data_batch` is imported from -- `risk.py`
     imports it with a function-local `from ... import`, which binds a local
     name, not a module attribute, so patching
     `swingbot.admin.api_v1.risk.get_daily_data_batch` does not exist to
-    patch. Same target the `no_network` fixture above already uses."""
-    open_book(["AAPL"])
+    patch. Same target the `no_network` fixture above already uses.
+
+    `sharpe_r`/`max_drawdown_r` are trade-log-derived with NO dependency on
+    price data (they come from `TradeLog`, fetched safely before this
+    section), so a market-data failure must NOT blank them -- only the
+    metrics that actually need bars (VaR, ES, annualised vol, beta) go
+    null. The correlation matrix's `labels` are just the open-position
+    ticker list -- also trade-log-derived, no price data needed -- so those
+    survive too; only the `values` matrix (which needs bars) empties out.
+    """
+    open_book(["AAPL"], closed_trades=10)
 
     def _boom(*a, **k):
         raise RuntimeError("no network")
@@ -332,8 +354,25 @@ def test_a_market_data_failure_degrades_the_metrics_not_the_page(client, open_bo
     response = client.get("/api/v1/risk")
     assert response.status_code == 200
     body = response.get_json()
-    assert body["metrics"]["var_95"]["value"] is None
-    assert body["correlation"] == {"labels": [], "values": []}
+    metrics = body["metrics"]
+
+    # Market-data-dependent metrics: null.
+    assert metrics["var_95"]["value"] is None
+    assert metrics["expected_shortfall_95"]["value"] is None
+    assert metrics["annualised_vol"]["value"] is None
+    assert metrics["beta_spy"]["value"] is None
+
+    # Trade-log-derived metrics: real numbers, unaffected by the outage.
+    assert metrics["sharpe_r"]["value"] is not None
+    assert metrics["sharpe_r"]["n"] > 0
+    assert metrics["max_drawdown_r"]["value"] is not None
+    assert metrics["max_drawdown_r"]["n"] > 0
+
+    # Correlation labels are trade-log-derived (the open ticker list); only
+    # the price-derived values matrix is empty.
+    assert body["correlation"]["labels"] == ["AAPL"]
+    assert body["correlation"]["values"] == []
+
     assert body["heat"] is not None
 
 
