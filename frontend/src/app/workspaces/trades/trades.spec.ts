@@ -3,6 +3,8 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { provideRouter, Router } from '@angular/router';
+import { patchState } from '@ngrx/signals';
+import { unprotected } from '@ngrx/signals/testing';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -66,11 +68,25 @@ const preferencesStub = {
   update: () => undefined,
 };
 
+/** R6-05's own footer tests supply the store's answer directly rather than
+ *  standing up a real HTTP round trip -- `total`/`page`/`perPage` become the
+ *  `TradesStore`'s `data` (what `pagination()` is computed from), and
+ *  `activeFilterCount` becomes that many throwaway query filters (the
+ *  computed counts keys, not their names, so which keys is arbitrary). */
+interface FooterFixture {
+  total: number;
+  page: number;
+  perPage: number;
+  activeFilterCount?: number;
+}
+
 /** Mount Trades directly, with no route matching it. Every route-bound
  *  input (`status`, `outcome`, `direction`, ...) sits at its unset default,
  *  which is what "nothing in the lane is filtered" and "renders the eight
- *  chips" need -- neither reads the URL. */
-function render(): ComponentFixture<Trades> {
+ *  chips" need -- neither reads the URL. Passing `footer` additionally seeds
+ *  the store's pagination for the count-footer tests below; every earlier
+ *  call site here omits it and is unaffected. */
+function render(footer?: FooterFixture): ComponentFixture<Trades> {
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     providers: [
@@ -85,6 +101,22 @@ function render(): ComponentFixture<Trades> {
   });
   const fixture = TestBed.createComponent(Trades);
   fixture.detectChanges();
+  if (footer) {
+    const filterKeys = ['ticker', 'origin', 'strategy', 'horizon', 'tier', 'badge'] as const;
+    const filters: Record<string, string> = {};
+    for (let i = 0; i < (footer.activeFilterCount ?? 0); i++) filters[filterKeys[i]] = 'x';
+
+    patchState(unprotected(TestBed.inject(TradesStore)), {
+      data: {
+        items: footer.total > 0 ? [row({})] : [],
+        total: footer.total,
+        page: footer.page,
+        per_page: footer.perPage,
+      },
+      query: { page: footer.page, per_page: footer.perPage, ...filters },
+    });
+    fixture.detectChanges();
+  }
   return fixture;
 }
 
@@ -197,5 +229,41 @@ describe('Trades — the opened-at range', () => {
       queryParams: { opened_from: null, opened_to: '2026-04-28', page: null },
       queryParamsHandling: 'merge',
     });
+  });
+});
+
+/* -- R6-05 -- the count footer ------------------------------------------- */
+
+/*
+ * The task brief's own sketch queries a bare `.count` -- but `sb-column-picker`
+ * (mounted in the same control bar, unconditionally, above) already owns that
+ * exact class name for its own "12/29" visible-columns badge (see
+ * `column-picker.ts:59` and `column-picker.spec.ts:169`, which already depends
+ * on `.count` meaning that badge). A bare `el.querySelector('.count')` finds
+ * THAT node first, since it renders earlier in the DOM than this footer.
+ * `p.count` disambiguates on tag (the badge is a `<span>`; this footer is a
+ * `<p>`) without touching the shared component. Same kind of brief-vs-reality
+ * departure as the lane-chip tests above, and for the same reason: verified
+ * by reading the actual render tree rather than assumed from the sketch.
+ */
+describe('Trades — the count footer', () => {
+  it('reports the visible slice and the filtered total', () => {
+    const el = render({ total: 142, page: 1, perPage: 12 }).nativeElement as HTMLElement;
+    expect(el.querySelector('p.count')!.textContent).toContain('Showing 1–12 of 142');
+  });
+
+  it('reports the last page without overrunning the total', () => {
+    const el = render({ total: 142, page: 12, perPage: 12 }).nativeElement as HTMLElement;
+    expect(el.querySelector('p.count')!.textContent).toContain('Showing 133–142 of 142');
+  });
+
+  it('distinguishes a filter that matched nothing from an empty log', () => {
+    const el = render({ total: 0, page: 1, perPage: 12, activeFilterCount: 2 }).nativeElement as HTMLElement;
+    expect(el.querySelector('p.count')!.textContent).toContain('No trades match');
+  });
+
+  it('says the log is empty when nothing is filtered and there is nothing', () => {
+    const el = render({ total: 0, page: 1, perPage: 12, activeFilterCount: 0 }).nativeElement as HTMLElement;
+    expect(el.querySelector('p.count')!.textContent).toContain('No trades yet');
   });
 });

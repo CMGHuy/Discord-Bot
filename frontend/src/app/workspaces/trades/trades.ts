@@ -316,6 +316,20 @@ interface LaneChip {
       />
     </sb-async>
 
+    <!-- R6-05: the count footer. Lives outside sb-async on purpose --
+         store.pagination() is set as soon as the first response lands,
+         table or no table, so this still has an answer when async() is
+         showing its own empty state instead of sb-data-table (which happens
+         whenever the page is empty, and is why this can't be reached from
+         inside sb-pagination's own [pagination] binding). Beside, not
+         instead of, that pager's own range span: this is the one that
+         distinguishes a filter that matched nothing from a genuinely empty
+         log, the same measured-zero distinction emptyTitle above already
+         draws. -->
+    @if (countText(); as count) {
+      <p class="count">{{ count }}</p>
+    }
+
     <!-- cells ---------------------------------------------------------- -->
 
     <ng-template #numCell let-row>
@@ -463,6 +477,9 @@ interface LaneChip {
        asked for did not happen". */
     .command-error { color: var(--neg); font-size: var(--text-table); }
 
+    /* R6-05. Same voice as sb-pagination's own .range (muted, --text-table)
+       so the two read as one family, not a mismatched addition. */
+    .count { color: var(--text-secondary); font-size: var(--text-table); margin: var(--space-4) 0; }
 
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
@@ -753,6 +770,32 @@ export class Trades {
   protected readonly announce = computed(() => {
     const page = this.store.pagination();
     return page ? `${page.total} trades` : null;
+  });
+
+  /**
+   * R6-05: "Showing 1–12 of 142" — a measured answer, not a decoration. Null
+   * until the first page has loaded (same guard as `announce` above).
+   *
+   * A `total` of zero is not one state but two, and this repo distinguishes
+   * them everywhere else (see the `emptyTitle` this mirrors, above): a
+   * filter that narrowed the log to nothing is a measured zero, not the same
+   * fact as a log that has never had a trade in it. The upper bound is
+   * clamped to `total` so the last page never claims rows past the end of
+   * the log (page 12 of 12 at 142 total, 12/page reads "133–142", not
+   * "133–144").
+   */
+  protected readonly countText = computed(() => {
+    const page = this.store.pagination();
+    if (!page) return null;
+    const { total, page: current, perPage } = page;
+    if (total === 0) {
+      return this.store.activeFilterCount() > 0
+        ? 'No trades match this filter'
+        : 'No trades yet';
+    }
+    const from = (current - 1) * perPage + 1;
+    const to = Math.min(current * perPage, total);
+    return `Showing ${from}–${to} of ${total}`;
   });
 
   constructor() {
