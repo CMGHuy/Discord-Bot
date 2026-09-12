@@ -254,3 +254,22 @@ describe('Risk gauge, budget and correlation matrix', () => {
     expect(el.querySelector('sb-panel[heading="Killswitch"]')).not.toBeNull();
   });
 });
+
+/* -- v85 R8-06 -- control bar, freshness, and the narrow-width pass -- */
+
+describe('Risk freshness and chrome', () => {
+  it('marks the metrics panel with the bar date they were computed from', async () => {
+    const el = (await render({ metrics: { ...DEFAULT_METRICS, as_of: '2026-09-10' } }))
+      .nativeElement as HTMLElement;
+    expect(el.querySelector('.metrics sb-freshness')).not.toBeNull();
+  });
+
+  it('does not claim the scan-health panel is as fresh as the metrics', async () => {
+    const el = (await render()).nativeElement as HTMLElement;
+    expect(el.querySelectorAll('sb-freshness').length).toBeGreaterThan(1);
+  });
+
+  it('renders no in-page heading', async () => {
+    expect((await render()).nativeElement.querySelector('h1')).toBeNull();
+  });
+});

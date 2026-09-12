@@ -19,6 +19,7 @@ import { createClientPage } from '../../ui/data-table/client-page';
 import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { Flash } from '../../ui/flash';
 import { dateTime, num, share, text } from '../../ui/format';
+import { Freshness } from '../../ui/freshness';
 import { Gauge } from '../../ui/gauge';
 import { Panel } from '../../ui/layout';
 import { Matrix } from '../../ui/matrix';
@@ -54,7 +55,7 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
 @Component({
   selector: 'sb-risk',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Gauge, Matrix, Panel, RowLink, SectionHead, Sparkline, StatTile],
+  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Freshness, Gauge, Matrix, Panel, RowLink, SectionHead, Sparkline, StatTile],
   // v54 D1: exposure-by-position is a table and the rest of this workspace
   // (heat, sectors, clusters, scan health) is the same operational reading
   // that table's numbers roll up into -- tight rows, more per screen -- so
@@ -254,10 +255,16 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
          Sharpe and max drawdown carry the closed-trade count instead, which
          is why the two families' N routinely differ. -->
     <sb-panel heading="Risk metrics">
-      <div class="metric-grid">
-        @for (tile of metricTiles(); track tile.label) {
-          <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample" />
-        }
+      <div class="metrics">
+        <!-- Per panel, not global (D30): the bar date the daily-return
+             series behind these six tiles was computed from -- the killswitch
+             and exposure numbers above are live and carry no such date. -->
+        <sb-freshness [at]="store.metrics()?.as_of ?? null" />
+        <div class="metric-grid">
+          @for (tile of metricTiles(); track tile.label) {
+            <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample" />
+          }
+        </div>
       </div>
     </sb-panel>
     </div>
@@ -301,6 +308,11 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
          readable list of their own. -->
     <div class="split">
       <sb-panel heading="Correlation matrix">
+        <!-- Same reasoning as the metrics panel's own marker: the matrix
+             is computed from the same daily-bar fetch, and shares its date --
+             not the whole page's freshness, which the Killswitch/Exposure
+             panels have no equivalent for. -->
+        <sb-freshness [at]="store.metrics()?.as_of ?? null" />
         <p class="section-help">
           Pairwise correlation of daily returns across open positions.
           Pairs outlined together sit in the same cluster listed beside it.
@@ -491,6 +503,7 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
     .budget-note { margin-top: var(--space-6); font-size: var(--text-micro); }
 
     /* -- risk metrics -- */
+    .metrics { display: grid; gap: var(--space-8); }
     .metric-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
