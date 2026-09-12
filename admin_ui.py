@@ -8,4 +8,6 @@ Listens on ADMIN_HOST:ADMIN_PORT (default 0.0.0.0:1234).
 from swingbot.admin.app import main
 
 if __name__ == "__main__":
+    from swingbot.core.infra.deploy_marker import record_boot
+    record_boot("admin")
     main()

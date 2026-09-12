@@ -50,6 +50,8 @@ from swingbot.commands import stats      # noqa: F401  — !top ranked plans com
 from swingbot.commands import growth     # noqa: F401  — !growth compounding reality dashboard
 
 if __name__ == "__main__":
+    from swingbot.core.infra.deploy_marker import record_boot
+    record_boot("bot")
     config.log_startup_config()
     if not config.TOKEN:
         raise SystemExit("DISCORD_TOKEN is not set. Create a .env file (see README.md).")
