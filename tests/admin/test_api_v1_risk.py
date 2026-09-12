@@ -156,7 +156,12 @@ def test_risk_shape(logged_in, killswitch_file):
     metric_keys = ("var_95", "expected_shortfall_95", "annualised_vol",
                    "beta_spy", "sharpe_r", "max_drawdown_r")
     assert_shape(body["metrics"], {
-        **{key: dict for key in metric_keys}, "as_of": NULLABLE_STR,
+        **{key: dict for key in metric_keys},
+        "as_of": NULLABLE_STR,
+        # I4: the tile label must name the ACTUAL configured benchmark, not
+        # a hardcoded "SPY" -- carried on the payload so the frontend can
+        # render it instead of assuming.
+        "benchmark_symbol": str,
     }, where="metrics")
     for key in metric_keys:
         assert_shape(body["metrics"][key], {
@@ -268,6 +273,76 @@ def test_the_correlation_labels_match_the_open_positions(client, open_book):
     corr = client.get("/api/v1/risk").get_json()["correlation"]
     assert corr["labels"] == ["AAPL", "MSFT"]
     assert len(corr["values"]) == 2
+
+
+def test_json_is_parseable_with_a_flat_price_position_in_the_book(
+        logged_in, killswitch_file, tmp_path, monkeypatch):
+    """C1: a zero-variance leg (a halted ticker, a stale cache entry) makes
+    the correlation step's `.corr()` return NaN. Flask has no custom JSON
+    provider registered anywhere in this repo, so its `DefaultJSONProvider`
+    would emit the literal token `NaN` for an unguarded NaN float -- not
+    valid JSON, and the browser's parser rejects the whole response,
+    blanking the page (killswitch included). The response must stay
+    parseable even with a flat-price ticker in the open book."""
+    (tmp_path / "trades.json").write_text(json.dumps([
+        _open_trade("a" * 16, "FLAT"), _open_trade("b" * 16, "AAPL"),
+    ]), encoding="utf-8")
+
+    bars = 40
+    flat = pd.DataFrame(
+        {"Close": [100.0] * bars}, index=pd.bdate_range("2026-01-01", periods=bars),
+    )
+    moving = pd.DataFrame(
+        {"Close": [100.0 + (i % 7) - 3 for i in range(bars)]},
+        index=pd.bdate_range("2026-01-01", periods=bars),
+    )
+    fake_bars = {"FLAT": flat, "AAPL": moving, "SPY": moving}
+    monkeypatch.setattr(
+        "swingbot.core.marketdata.data.get_daily_data_batch",
+        lambda symbols, *a, **k: {s: fake_bars[s] for s in symbols if s in fake_bars},
+        raising=False,
+    )
+
+    response = logged_in.get("/api/v1/risk")
+    assert response.status_code == 200
+    body = json.loads(response.data)  # would raise on a literal NaN token
+    assert body["correlation"]["labels"] == ["AAPL", "FLAT"]
+    assert isinstance(body["killswitch"]["on"], bool)
+
+
+def test_a_market_data_failure_degrades_the_metrics_not_the_page(client, open_book, monkeypatch):
+    """I2: the whole market-data section (bars fetch through the
+    correlation matrix) is one try/except so a hiccup anywhere in it
+    degrades to null metrics rather than 500ing the page the killswitch
+    lives on. The patch target is `swingbot.core.marketdata.data`, the
+    ORIGIN module `get_daily_data_batch` is imported from -- `risk.py`
+    imports it with a function-local `from ... import`, which binds a local
+    name, not a module attribute, so patching
+    `swingbot.admin.api_v1.risk.get_daily_data_batch` does not exist to
+    patch. Same target the `no_network` fixture above already uses."""
+    open_book(["AAPL"])
+
+    def _boom(*a, **k):
+        raise RuntimeError("no network")
+
+    monkeypatch.setattr(
+        "swingbot.core.marketdata.data.get_daily_data_batch", _boom, raising=False,
+    )
+
+    response = client.get("/api/v1/risk")
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["metrics"]["var_95"]["value"] is None
+    assert body["correlation"] == {"labels": [], "values": []}
+    assert body["heat"] is not None
+
+
+def test_beta_tile_carries_the_actual_configured_benchmark(client, open_book):
+    """I4: the payload must name the real benchmark so the frontend can
+    label the tile correctly instead of assuming "SPY"."""
+    open_book(["AAPL"])
+    metrics = client.get("/api/v1/risk").get_json()["metrics"]
+    assert metrics["benchmark_symbol"] == "SPY"
 
 
 def test_killswitch_roundtrip(logged_in, killswitch_file):

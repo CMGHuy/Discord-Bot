@@ -124,33 +124,6 @@ def _risk_metrics_and_correlation() -> tuple[dict, dict]:
     except Exception:
         open_trades = []
 
-    notional: dict[str, float] = {}
-    for trade in open_trades:
-        ticker = trade.get("ticker")
-        entry = trade.get("entry")
-        shares = trade.get("shares")
-        if not ticker or entry is None or shares is None:
-            continue
-        notional[ticker] = notional.get(ticker, 0.0) + abs(entry * shares)
-    total_notional = sum(notional.values())
-    weights = (
-        {ticker: value / total_notional for ticker, value in notional.items()}
-        if total_notional else {}
-    )
-    symbols = sorted(weights)
-
-    benchmark = getattr(config, "MARKET_REGIME_TICKER", "SPY") or "SPY"
-    try:
-        bars = get_daily_data_batch(sorted(set(symbols) | {benchmark})) if symbols else {}
-    except Exception:
-        bars = {}
-
-    returns = rm.portfolio_returns(weights, bars)
-    # The benchmark's own daily returns, gotten by asking portfolio_returns
-    # for a one-symbol "portfolio" that IS the benchmark -- reuses the same
-    # pct_change/notional-drop logic rather than a second copy of it.
-    benchmark_returns = rm.portfolio_returns({benchmark: 1.0}, bars)
-
     try:
         closed = [
             t for t in TradeLog().get_trades(status=None, limit=None) or []
@@ -158,25 +131,73 @@ def _risk_metrics_and_correlation() -> tuple[dict, dict]:
         ]
     except Exception:
         closed = []
-    r_series = trade_metrics.r_multiples(closed)
 
-    n_returns = len(returns)
-    metrics = {
-        "var_95": _metric(rm.value_at_risk(returns), n_returns),
-        "expected_shortfall_95": _metric(rm.expected_shortfall(returns), n_returns),
-        "annualised_vol": _metric(rm.annualised_vol(returns), n_returns),
-        "beta_spy": _metric(
-            rm.beta_vs(returns, benchmark_returns),
-            len(returns.align(benchmark_returns, join="inner")[0]),
-        ),
-        "sharpe_r": _metric(rm.sharpe_of(r_series), len(r_series)),
-        "max_drawdown_r": _metric(rm.max_drawdown_r(r_series), len(r_series)),
-        "as_of": (returns.index[-1].strftime("%Y-%m-%d") if not returns.empty else None),
-    }
+    benchmark = getattr(config, "MARKET_REGIME_TICKER", "SPY") or "SPY"
+    metric_keys = ("var_95", "expected_shortfall_95", "annualised_vol",
+                   "beta_spy", "sharpe_r", "max_drawdown_r")
+    null_metrics = {key: _metric(None, 0) for key in metric_keys}
+    null_metrics["as_of"] = None
+    null_metrics["benchmark_symbol"] = benchmark
+    empty_correlation = {"labels": [], "values": []}
 
-    labels, values = rm.correlation_matrix(symbols, bars)
-    correlation = {"labels": labels, "values": values}
-    return metrics, correlation
+    # Everything below reads market data: fetched bars, per-pair alignment,
+    # correlations. A bad cache entry, a string-typed JSON field on a trade,
+    # or a network hiccup can raise from any of `get_daily_data_batch`,
+    # `portfolio_returns` (`frame["Close"]`), `.align()`/`.strftime()`, or
+    # `correlation_matrix` -- and this whole tuple feeds one endpoint whose
+    # killswitch must keep rendering regardless. One guard around the whole
+    # section degrades to null metrics + an empty correlation matrix rather
+    # than 500ing the page over a single missing bar.
+    try:
+        notional: dict[str, float] = {}
+        for trade in open_trades:
+            ticker = trade.get("ticker")
+            entry = trade.get("entry")
+            shares = trade.get("shares")
+            if not ticker or entry is None or shares is None:
+                continue
+            notional[ticker] = notional.get(ticker, 0.0) + abs(entry * shares)
+        total_notional = sum(notional.values())
+        weights = (
+            {ticker: value / total_notional for ticker, value in notional.items()}
+            if total_notional else {}
+        )
+        symbols = sorted(weights)
+
+        bars = get_daily_data_batch(sorted(set(symbols) | {benchmark})) if symbols else {}
+
+        returns = rm.portfolio_returns(weights, bars)
+        # The benchmark's own daily returns, gotten by asking portfolio_returns
+        # for a one-symbol "portfolio" that IS the benchmark -- reuses the same
+        # pct_change/notional-drop logic rather than a second copy of it.
+        benchmark_returns = rm.portfolio_returns({benchmark: 1.0}, bars)
+
+        r_series = trade_metrics.r_multiples(closed)
+
+        n_returns = len(returns)
+        metrics = {
+            "var_95": _metric(rm.value_at_risk(returns), n_returns),
+            "expected_shortfall_95": _metric(rm.expected_shortfall(returns), n_returns),
+            "annualised_vol": _metric(rm.annualised_vol(returns), n_returns),
+            "beta_spy": _metric(
+                rm.beta_vs(returns, benchmark_returns),
+                len(returns.align(benchmark_returns, join="inner")[0]),
+            ),
+            "sharpe_r": _metric(rm.sharpe_of(r_series), len(r_series)),
+            "max_drawdown_r": _metric(rm.max_drawdown_r(r_series), len(r_series)),
+            "as_of": (returns.index[-1].strftime("%Y-%m-%d") if not returns.empty else None),
+            # v85 R8 fix (I4): the tile label must name the ACTUAL configured
+            # benchmark, not a hardcoded "SPY" -- `beta_spy` keeps its key
+            # (a bigger rename is a separate decision) but the symbol behind
+            # it now rides along so the frontend can label it correctly.
+            "benchmark_symbol": benchmark,
+        }
+
+        labels, values = rm.correlation_matrix(symbols, bars)
+        correlation = {"labels": labels, "values": values}
+        return metrics, correlation
+    except Exception:
+        return null_metrics, empty_correlation
 
 
 @api_v1.route("/risk", methods=["GET"])
