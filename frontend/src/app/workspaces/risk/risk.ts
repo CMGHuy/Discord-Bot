@@ -235,9 +235,12 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
         />
         @if (riskBudget(); as budget) {
           <div class="risk-budget">
-            <div><span class="label">Cap</span><span class="num">{{ fmt(budget.cap, 1) }}%</span></div>
-            <div><span class="label">Used</span><span class="num">{{ fmt(budget.used, 1) }}%</span></div>
-            <div><span class="label">Remaining</span><span class="num remaining">{{ fmt(budget.remaining, 1) }}%</span></div>
+            <!-- Same precision as the heat figure above (fmt()'s default 2
+                 places) -- 1 place was rounding 0.03% used to a flat "0.0%"
+                 that visually contradicted the figure right above it. -->
+            <div><span class="label">Cap</span><span class="num">{{ fmt(budget.cap) }}%</span></div>
+            <div><span class="label">Used</span><span class="num">{{ fmt(budget.used) }}%</span></div>
+            <div><span class="label">Remaining</span><span class="num remaining">{{ fmt(budget.remaining) }}%</span></div>
             @if (budget.over) {
               <p class="budget-note warn">
                 Usage is over the cap — remaining shown as 0.
