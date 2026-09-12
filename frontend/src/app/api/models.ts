@@ -378,6 +378,21 @@ export interface AnalyticsDerived {
   expectancy_r: number | null;
 }
 
+/** One closed trade, cumulative in R (v85 D39, R9-01). `drawdown_r` is
+ *  peak-to-current, non-negative. Ordered by close date, not calendar day --
+ *  a day with no closes is a missing observation, not a flat one. */
+export interface EquityCurvePoint {
+  date: string;
+  cum_r: number;
+  drawdown_r: number;
+}
+
+export interface AnalyticsEquityCurve {
+  points: EquityCurvePoint[];
+  n: number;
+  as_of: string | null;
+}
+
 export interface AnalyticsPerformance {
   totals: Record<string, unknown>;
   relocated: Record<string, unknown>;

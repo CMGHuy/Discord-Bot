@@ -367,6 +367,88 @@ describe('Analytics — performance tab — KPI row (v85 D39)', () => {
   });
 });
 
+/* -- v85 R9-04 -- equity curve, win/loss donut, control bar, freshness -- */
+
+interface EquityPoint { date: string; cum_r: number; drawdown_r: number; }
+
+/** Renders the Performance tab with journal/snapshot/performance/risk
+ *  settled minimally (none of R9-04's own tests read them) and the equity
+ *  curve flushed with `points`. */
+async function renderEquity(
+  points: EquityPoint[] = [],
+): Promise<{ el: HTMLElement; fixture: ComponentFixture<Analytics>; backend: HttpTestingController }> {
+  const { fixture, backend } = seed();
+  fixture.detectChanges();
+  backend.expectOne('/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
+  backend.expectOne('/api/v1/analytics/snapshot').flush(snapshotPayload());
+  backend.expectOne('/api/v1/analytics/performance').flush(performancePayload());
+  backend.expectOne('/api/v1/risk').flush(riskPayload());
+  backend
+    .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
+    .flush({ points, n: points.length, as_of: points.at(-1)?.date ?? null });
+  await fixture.whenStable();
+  fixture.detectChanges();
+  return { el: fixture.nativeElement as HTMLElement, fixture, backend };
+}
+
+describe('Analytics — performance tab — equity curve (v85 D39, R9-04)', () => {
+  it('draws the equity curve from the endpoint series', async () => {
+    const { el } = await renderEquity([{ date: '2026-04-01', cum_r: 1, drawdown_r: 0 }]);
+    expect(el.querySelector('.equity sb-line-chart')).not.toBeNull();
+  });
+
+  it('switches the same series to drawdown without refetching', async () => {
+    const { el, fixture, backend } = await renderEquity([
+      { date: '2026-04-01', cum_r: 1, drawdown_r: 0.4 },
+    ]);
+
+    const drawdownButton = [...el.querySelectorAll<HTMLButtonElement>('.equity-toggle .segment')]
+      .find((b) => b.textContent?.trim().startsWith('Drawdown'))!;
+    drawdownButton.click();
+    fixture.detectChanges();
+
+    // No second request -- the toggle only swaps which field of the ALREADY
+    // fetched points is plotted (spec D39: "one request, two views").
+    backend.expectNone((req) => req.url === '/api/v1/analytics/equity-curve');
+    expect(drawdownButton.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('renders the win/loss donut with both average R figures', async () => {
+    // AAPL's own win (cum_r 0 -> 1.24) then a loss (1.24 -> 0.55) -- the
+    // avg-R captions are derived from these per-trade deltas, not a
+    // separate payload field (there is none: R9-01's endpoint gives only
+    // the running total).
+    const { el } = await renderEquity([
+      { date: '2026-01-01', cum_r: 1.24, drawdown_r: 0 },
+      { date: '2026-01-02', cum_r: 0.55, drawdown_r: 0.69 },
+    ]);
+    expect(el.querySelector('.winloss')!.textContent).toContain('1.24');
+    expect(el.querySelector('.winloss')!.textContent).toContain('-0.69');
+  });
+
+  it('shows an empty curve as measured-empty rather than a flat line', async () => {
+    // sb-async replaces its whole projected content with the empty state,
+    // so .equity itself is gone too -- same pattern the existing
+    // "measured-zero" test above asserts against the whole page.
+    const { el } = await renderEquity([]);
+    expect(el.querySelector('.equity sb-line-chart')).toBeNull();
+    expect(el.textContent).toContain('No closed trades in this range');
+  });
+
+  it('puts the range and strategy pickers in the control bar', async () => {
+    const { el } = await renderEquity();
+    expect(el.querySelector('sb-control-bar sb-date-range')).not.toBeNull();
+    // sb-select's own template owns the inner <select>; class="strategy" is
+    // a host attribute of the custom element, not forwarded onto it.
+    expect(el.querySelector('sb-control-bar sb-select.strategy')).not.toBeNull();
+  });
+
+  it('marks the curve panel with its own data age', async () => {
+    const { el } = await renderEquity([{ date: '2026-09-10', cum_r: 1, drawdown_r: 0 }]);
+    expect(el.querySelector('.equity sb-freshness')).not.toBeNull();
+  });
+});
+
 describe('Analytics — strategies tab', () => {
   it('shows the measured-zero empty state when no strategy has a closed trade', async () => {
     const { fixture, backend } = seed();

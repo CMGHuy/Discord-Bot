@@ -41,10 +41,16 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
 import { createClientPage } from '../../ui/data-table/client-page';
 import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
+import { ControlBar } from '../../ui/control-bar';
+import { DateRange } from '../../ui/date-range';
+import { DonutComponent } from '../../ui/donut';
 import { Select, TextInput } from '../../ui/form-controls';
-import { ABSENT, dateTime, signed } from '../../ui/format';
+import { ABSENT, dateTime, rMultiple, signed } from '../../ui/format';
+import { Freshness } from '../../ui/freshness';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
+import { LineChart } from '../../ui/line-chart';
 import { SectionHead } from '../../ui/section-head';
+import { Segmented, SegmentOption } from '../../ui/segmented';
 import { Histogram, HistogramBin } from '../../ui/histogram';
 import { MetricChip } from '../../ui/metric-chip';
 import { PaginationComponent } from '../../ui/pagination';
@@ -128,7 +134,10 @@ interface ProposalView extends ProposalRow {
     TabBar,
     Panel,
     ControlRow,
+    ControlBar,
     DataTable,
+    DateRange,
+    DonutComponent,
     MetricChip,
     Histogram,
     Chip,
@@ -139,8 +148,11 @@ interface ProposalView extends ProposalRow {
     TextInput,
     Button,
     ConfirmDialog,
+    Freshness,
+    LineChart,
     PaginationComponent,
     SectionHead,
+    Segmented,
     Async,
     ExitQualitySectionComponent,
     StrategyContributionComponent,
@@ -200,6 +212,71 @@ interface ProposalView extends ProposalRow {
             @for (tile of kpiTiles(); track tile.label) {
               <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample" />
             }
+          </div>
+        </sb-async>
+
+        <!-- v85 D39 (R9-04). Equity | Drawdown share one fetch (R9-01) --
+             the toggle swaps which field of the same points is plotted,
+             never refetches. The range picker re-requests performance,
+             snapshot, journal AND this curve together (one from/to scope);
+             the strategy picker narrows only the curve, which is the one
+             panel the /performance endpoint itself has no strategy
+             parameter for. -->
+        <sb-control-bar>
+          <sb-date-range
+            filters
+            [from]="store.rangeFrom()"
+            [to]="store.rangeTo()"
+            (changed)="onRangeChange($event)"
+          />
+          <sb-select
+            scope
+            class="strategy"
+            placeholder="Any strategy"
+            [value]="store.equityCurveStrategy() ?? ''"
+            (valueChange)="onEquityStrategy($event)"
+            [options]="strategyOptions()"
+          />
+        </sb-control-bar>
+
+        <sb-async
+          [loading]="equityAsync().loading"
+          [error]="equityAsync().error"
+          [empty]="equityAsync().empty"
+          [staleAsOf]="equityAsync().staleAsOf"
+          emptyReason="measured-zero"
+          emptyTitle="No closed trades in this range"
+          [skeletonRows]="3"
+          [skeletonCols]="4"
+          (retry)="store.load()"
+        >
+          <div class="panels register-presentation">
+            <sb-panel heading="Equity">
+              <sb-segmented
+                class="equity-toggle"
+                label="Chart"
+                [options]="equityViewOptions"
+                [value]="store.equityCurveView()"
+                (valueChange)="onEquityView($event)"
+              />
+              <div class="equity">
+                <!-- Per panel, not global (D30): the bar date the equity
+                     curve was computed from -- the KPI row above has no
+                     equivalent single date, only a range. -->
+                <sb-freshness [at]="store.equityCurveAsOf()" />
+                <sb-line-chart [series]="store.activeEquitySeries()" [valueFormat]="fmtR" />
+              </div>
+            </sb-panel>
+
+            <sb-panel heading="Win / loss">
+              <div class="winloss">
+                <sb-donut [slices]="store.winLossSlices()" />
+                <dl>
+                  <div><dt>Avg win</dt><dd class="num pos">{{ fmtR(store.avgWinR()) }}</dd></div>
+                  <div><dt>Avg loss</dt><dd class="num neg">{{ fmtR(store.avgLossR()) }}</dd></div>
+                </dl>
+              </div>
+            </sb-panel>
           </div>
         </sb-async>
 
@@ -1084,6 +1161,16 @@ interface ProposalView extends ProposalRow {
       margin-bottom: var(--space-14);
     }
 
+    /* -- equity curve and win/loss (v85 D39, R9-04) -- */
+    .equity-toggle { margin: var(--space-8) 0; }
+    .equity { min-width: 0; }
+    .winloss { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-14); }
+    .winloss dl { display: grid; gap: var(--space-4); }
+    .winloss div { display: flex; justify-content: space-between; gap: var(--space-10); }
+    .winloss dt { color: var(--text-secondary); }
+    .winloss .pos { color: var(--pos); }
+    .winloss .neg { color: var(--neg); }
+
     /* Overrides sb-chip-row's own flex-wrap default with a grid -- the
        type selector plus this class gives it enough specificity to beat
        the primitive's own :host rule. */
@@ -1324,6 +1411,35 @@ export class Analytics {
       staleAsOf: perf.staleAsOf ?? snap.staleAsOf,
     };
   });
+
+  /** v85 D39 (R9-04). No dedicated error field -- like `exitQuality`/
+   *  `riskMetrics` above, a failed fetch degrades silently (an empty
+   *  panel), never a warning about the rest of the tab. */
+  protected readonly equityAsync = computed<AsyncInputs>(() =>
+    asyncInputs(
+      { data: this.store.equityCurve, loading: this.store.loading, error: () => null },
+      { isEmpty: () => this.store.equityCurveEmpty() },
+    ),
+  );
+
+  protected readonly equityViewOptions: SegmentOption[] = [
+    { value: 'equity', label: 'Equity' },
+    { value: 'drawdown', label: 'Drawdown' },
+  ];
+
+  protected readonly fmtR = rMultiple;
+
+  protected onRangeChange(range: { from: string | null; to: string | null }): void {
+    this.store.setRange(range.from, range.to);
+  }
+
+  protected onEquityStrategy(strategy: string): void {
+    this.store.setEquityCurveStrategy(strategy || null);
+  }
+
+  protected onEquityView(view: string): void {
+    this.store.setEquityCurveView(view === 'drawdown' ? 'drawdown' : 'equity');
+  }
 
   protected readonly journalAsync = computed(() =>
     asyncInputs(

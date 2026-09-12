@@ -6,6 +6,7 @@ import { SKIP_ROUTE_REFRESH } from './interceptors';
 
 import {
   AnalyticsCalibration,
+  AnalyticsEquityCurve,
   AnalyticsExitQuality,
   AnalyticsJournal,
   AnalyticsPerformance,
@@ -211,6 +212,20 @@ export class ApiClient {
     if (range?.to) params = params.set('to', range.to);
     return this.http.get<AnalyticsPerformance>(
       `${this.base}/analytics/performance`, { params });
+  }
+
+  /** v85 D39 (R9-01) — one point per closed trade, cumulative in R, with a
+   *  drawdown-from-peak series alongside it. Same from/to vocabulary as
+   *  `analyticsPerformance`, plus an optional `strategy` scope the
+   *  Performance tab's overall payload does not take. */
+  analyticsEquityCurve(scope?: { from?: string | null; to?: string | null; strategy?: string | null }):
+    Observable<AnalyticsEquityCurve> {
+    let params = new HttpParams();
+    if (scope?.from) params = params.set('from', scope.from);
+    if (scope?.to) params = params.set('to', scope.to);
+    if (scope?.strategy) params = params.set('strategy', scope.strategy);
+    return this.http.get<AnalyticsEquityCurve>(
+      `${this.base}/analytics/equity-curve`, { params });
   }
 
   /** SR55 — the trailing-week digest and recurring lessons. */

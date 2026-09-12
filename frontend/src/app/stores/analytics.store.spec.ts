@@ -224,6 +224,10 @@ describe('AnalyticsStore', () => {
     },
     correlation: { labels: [], values: [] },
   };
+  // v85 D39 (R9-01/R9-04): fetched alongside performance on every load AND
+  // every range change -- unlike exit-quality/risk above, never guarded to
+  // "once", so every respondPerformance() call settles a fresh one.
+  const EQUITY_CURVE = { points: [{ date: '2026-04-01', cum_r: 1, drawdown_r: 0 }], n: 1, as_of: '2026-04-01' };
 
   const respondPerformance = (body: Partial<AnalyticsPerformance> = {}) => {
     backend
@@ -237,6 +241,9 @@ describe('AnalyticsStore', () => {
     backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
     backend.match('/api/v1/analytics/exit-quality').forEach((request) => request.flush(EXIT_QUALITY));
     backend.match('/api/v1/risk').forEach((request) => request.flush(RISK));
+    backend
+      .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
+      .flush(EQUITY_CURVE);
   };
 
   const respondStrategies = (body: Record<string, unknown> = {}) =>
@@ -666,6 +673,10 @@ describe('AnalyticsStore', () => {
     backend
       .expectOne('/api/v1/analytics/journal')
       .error(new ProgressEvent('error'), { status: 0 });
+    // v85 D39's equity curve goes out with them too -- same reason.
+    backend
+      .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
+      .error(new ProgressEvent('error'), { status: 0 });
     expect(store.error()).not.toBeNull();
     expect(store.snapshotError()).not.toBeNull();
     expect(store.journalError()).not.toBeNull();
@@ -751,6 +762,12 @@ describe('AnalyticsStore', () => {
         .flush(PERFORMANCE);
       backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
       backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
+      // v85 D39: the equity curve shares /performance's from/to scope, so it
+      // refetches on every range change too -- same from/to vocabulary, not
+      // a second definition of the range.
+      backend
+        .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
+        .flush(EQUITY_CURVE);
       backend.verify();
     });
 
