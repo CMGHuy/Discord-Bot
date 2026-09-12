@@ -353,6 +353,22 @@ describe('Watchlist recomposed row', () => {
     expect(el[1].classList).toContain('lagging');
   });
 
+  it('flags a row stale against the WHOLE watchlist, not just its own rendered page', () => {
+    // 25 rows sharing one stale as_of -- a full default page
+    // (table-prefs.ts's DEFAULT_PER_PAGE) -- plus one fresher row that lands
+    // on page 2. Every page-1 row must still be flagged: comparing only
+    // against the rendered page would find them all equal (none "the
+    // latest ON THIS PAGE" since they share a date) and miss that page 2
+    // holds the real most-recent bar -- exactly the "eighty rows the cache
+    // didn't refresh sitting quietly beside the ones that did" case the
+    // brief names.
+    const stale = Array.from({ length: 25 }, (_, i) => ({ symbol: `S${i}`, as_of: '2026-09-01' }));
+    const el = rows([...stale, { symbol: 'FRESH', as_of: '2026-09-10' }]);
+
+    expect(el.length).toBe(25); // page 1 renders only the 25 stale rows
+    expect(el.every((row) => row.classList.contains('lagging'))).toBe(true);
+  });
+
   it('renders the signal score with its horizon when a setup is live', () => {
     const row = firstRow({ signal: { state: 'pending', score: 78, horizon: '6w', strategy: 'RSI' } });
     expect(row.querySelector('.signal')!.textContent).toContain('78');

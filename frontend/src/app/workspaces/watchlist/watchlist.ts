@@ -502,13 +502,18 @@ export class Watchlist {
 
   protected readonly watchlistPage = createClientPage(() => this.sortedRows(), () => this.perPage());
 
-  /** The most recent `as_of` among the rows currently on screen -- the
-   *  reference `isLagging` compares every row against. Read off the
-   *  rendered page, not the whole watchlist: "lagging" means "behind the
-   *  rest of what you're looking at right now". String comparison is exact
-   *  for `YYYY-MM-DD`. */
+  /** The most recent `as_of` across the WHOLE watchlist -- the reference
+   *  `isLagging` compares every row against. `sortedRows`, not
+   *  `watchlistPage.visible()`: the brief's own reason `.lagging` exists is
+   *  "a symbol the cache did not refresh must not sit silently beside
+   *  eighty that did", and with the default 25-per-page (`table-prefs.ts`'s
+   *  `DEFAULT_PER_PAGE`) a watchlist that size is several pages -- scoping
+   *  the comparison to one rendered page would miss exactly the case this
+   *  exists to catch: a stale row whose whole page happens to share its
+   *  (also-stale) date, or whose true-freshest sibling sits on a different
+   *  page entirely. String comparison is exact for `YYYY-MM-DD`. */
   protected readonly maxAsOf = computed<string | null>(() => {
-    const dates = this.watchlistPage.visible()
+    const dates = this.sortedRows()
       .map((row) => row.as_of)
       .filter((value): value is string => value !== null);
     return dates.length ? dates.reduce((a, b) => (a > b ? a : b)) : null;
