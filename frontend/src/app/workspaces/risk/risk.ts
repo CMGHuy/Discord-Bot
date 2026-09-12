@@ -658,7 +658,9 @@ export class Risk {
       { label: 'VaR 95%', value: this.fmtRiskPct(m.var_95.value), sample: m.var_95.n },
       { label: 'Expected shortfall', value: this.fmtRiskPct(m.expected_shortfall_95.value), sample: m.expected_shortfall_95.n },
       { label: 'Annualised vol', value: this.fmtRiskPct(m.annualised_vol.value), sample: m.annualised_vol.n },
-      { label: 'Beta vs SPY', value: this.fmtRatio(m.beta_spy.value), sample: m.beta_spy.n },
+      // I4: label the ACTUAL configured benchmark, not a hardcoded "SPY" --
+      // an operator can point config.MARKET_REGIME_TICKER elsewhere.
+      { label: `Beta vs ${m.benchmark_symbol}`, value: this.fmtRatio(m.beta_spy.value), sample: m.beta_spy.n },
       { label: 'Sharpe (R)', value: this.fmtRatio(m.sharpe_r.value), sample: m.sharpe_r.n },
       { label: 'Max drawdown (R)', value: this.fmtDrawdownR(m.max_drawdown_r.value), sample: m.max_drawdown_r.n },
     ];

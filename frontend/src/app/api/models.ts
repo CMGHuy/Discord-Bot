@@ -689,6 +689,12 @@ export interface RiskMetrics {
   sharpe_r: RiskMetric;
   max_drawdown_r: RiskMetric;
   as_of: string | null;
+  /** The ticker `beta_spy` was actually computed against --
+   *  `config.MARKET_REGIME_TICKER`, which an operator can change away from
+   *  "SPY". The payload key stays `beta_spy` (a rename is a bigger, riskier
+   *  change); this is what lets the tile label stay honest instead of
+   *  hardcoding "SPY". */
+  benchmark_symbol: string;
 }
 
 /** Pairwise Pearson correlation of daily returns (v85 D38). `values[i][j]`

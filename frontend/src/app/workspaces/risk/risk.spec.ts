@@ -28,6 +28,7 @@ const DEFAULT_METRICS: RiskMetrics = {
   sharpe_r: { value: 0.96, n: 782 },
   max_drawdown_r: { value: 8.4, n: 782 },
   as_of: '2026-09-10',
+  benchmark_symbol: 'SPY',
 };
 
 function payload(overrides: Partial<RiskData> = {}): RiskData {
@@ -177,6 +178,12 @@ describe('Risk metric tiles', () => {
     expect(tileLabels(fixture)).toContain('Sharpe (R)');
   });
 
+  it('labels the beta tile with the actual configured benchmark, not a hardcoded SPY', async () => {
+    const fixture = await renderWithMetrics({ benchmark_symbol: 'QQQ' });
+    expect(tileLabels(fixture)).toContain('Beta vs QQQ');
+    expect(tileLabels(fixture)).not.toContain('Beta vs SPY');
+  });
+
   it('does not reuse one sample size across both metric families', async () => {
     const fixture = await renderWithMetrics({
       var_95: { value: 0.03, n: 118 }, sharpe_r: { value: 0.9, n: 782 },
@@ -262,6 +269,17 @@ describe('Risk freshness and chrome', () => {
     const el = (await render({ metrics: { ...DEFAULT_METRICS, as_of: '2026-09-10' } }))
       .nativeElement as HTMLElement;
     expect(el.querySelector('.metrics sb-freshness')).not.toBeNull();
+  });
+
+  it('shows the metrics panel marker as a real date, not a bogus midnight time', async () => {
+    // I1: `as_of` is a date-only string ("2026-09-10", a daily bar has no
+    // time-of-day). Rendering it as a full timestamp always read
+    // "as of 00:00:00" regardless of actual freshness.
+    const el = (await render({ metrics: { ...DEFAULT_METRICS, as_of: '2026-09-10' } }))
+      .nativeElement as HTMLElement;
+    const marker = el.querySelector('.metrics sb-freshness .freshness')!;
+    expect(marker.textContent).toContain('as of 2026-09-10');
+    expect(marker.textContent).not.toContain('00:00:00');
   });
 
   it('does not claim the scan-health panel is as fresh as the metrics', async () => {

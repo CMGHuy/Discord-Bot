@@ -87,6 +87,7 @@ const RESPONSE: Risk = {
     sharpe_r: { value: 0.96, n: 782 },
     max_drawdown_r: { value: 8.4, n: 782 },
     as_of: '2026-09-10',
+    benchmark_symbol: 'SPY',
   },
   correlation: { labels: ['AAPL', 'MSFT'], values: [[1, 0.5], [0.5, 1]] },
 };
