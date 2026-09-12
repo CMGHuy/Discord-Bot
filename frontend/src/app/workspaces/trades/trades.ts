@@ -44,6 +44,7 @@ import { ControlRow } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { ConfidenceCell } from '../../ui/confidence-cell';
+import { ControlBar } from '../../ui/control-bar';
 import { DirectionArrow } from '../../ui/direction-arrow';
 import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
 import { StatusCell } from '../../ui/status-cell';
@@ -59,13 +60,23 @@ import {
   COMPACT_COLUMNS,
   FULL_COLUMNS,
   PINNED_COLUMNS,
-  STATUS_CHIPS,
   TRADES_TABLE_ID,
-  chipQuery,
   tradeColumns,
 } from './trades.columns';
 
 type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
+
+/**
+ * One promoted chip in the control bar's status/outcome/direction lane
+ * (v85 D32). `param` says which of the three query keys the chip drives;
+ * `onLaneChip` always writes all three together so switching chips can
+ * never leave a stale value from one of the other two behind.
+ */
+interface LaneChip {
+  value: string;
+  label: string;
+  param: 'status' | 'outcome' | 'direction';
+}
 
 /**
  * The Trades workspace — the entity that Plans, Journal and the dashboard's
@@ -92,6 +103,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
   imports: [
     Async,
     ControlRow,
+    ControlBar,
     DataTable,
     ColumnPickerComponent,
     FilterBar,
@@ -113,18 +125,6 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
   template: `
     <sb-section-head>
       <sb-control-row actions class="head-actions">
-        <!-- A plain anchor, not a fetch: the browser gets a Save dialog and
-             the server's filename, both of which an XHR throws away.
-             The title names what comes out, because it is NOT what is on
-             screen: the export is the whole trade log, unfiltered. Saying so
-             here is the same courtesy the two Clear dialogs already pay. -->
-        <a
-          class="export"
-          [href]="store.exportUrl()"
-          title="Downloads the entire trade log. The filters above do not narrow it."
-          download
-          >Export CSV</a
-        >
         <button sb-button variant="ghost" type="button" (click)="bulk.set('open')">
           Clear open
         </button>
@@ -151,15 +151,6 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
             Full
           </button>
         </div>
-        <sb-column-picker
-          [tableId]="tableId"
-          [density]="density()"
-          [pinned]="pinned"
-          [columns]="allColumns()"
-          [defaults]="defaultColumns()"
-          [visible]="visible()"
-          (visibleChange)="visible.set($event)"
-        />
       </sb-control-row>
     </sb-section-head>
 
@@ -172,12 +163,46 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
       <p class="command-error" role="alert">{{ message }}</p>
     }
 
-    <sb-filter-chips
-      [chips]="statusChips"
-      [selected]="selectedChip()"
-      label="Status"
-      (selectedChange)="onStatusChip($event)"
-    />
+    <!-- v85 D32: the eight controls actually reached for -- status, outcome
+         and direction -- promoted out of the collapsible filter bar below
+         into the shared control bar, one click instead of two. sb-filter-chips
+         (not deprecated sb-segmented: this lane needs the "All" leading chip
+         and the three-key write onLaneChip already provides) still owns the
+         chip markup; only its data and handler changed. The export link and
+         column picker move into the bar's scope slot -- they are the two
+         controls the mockup's own asset-class lane sat beside, not filters. -->
+    <sb-control-bar>
+      <sb-filter-chips
+        filters
+        [chips]="laneChips"
+        [selected]="laneSelected()"
+        label="Status"
+        (selectedChange)="onLaneChip($event)"
+      />
+      <!-- A plain anchor, not a fetch: the browser gets a Save dialog and
+           the server's filename, both of which an XHR throws away.
+           The title names what comes out, because it is NOT what is on
+           screen: the export is the whole trade log, unfiltered. Saying so
+           here is the same courtesy the two Clear dialogs already pay. -->
+      <a
+        scope
+        class="export"
+        [href]="store.exportUrl()"
+        title="Downloads the entire trade log. The filters above do not narrow it."
+        download
+        >Export CSV</a
+      >
+      <sb-column-picker
+        scope
+        [tableId]="tableId"
+        [density]="density()"
+        [pinned]="pinned"
+        [columns]="allColumns()"
+        [defaults]="defaultColumns()"
+        [visible]="visible()"
+        (visibleChange)="visible.set($event)"
+      />
+    </sb-control-bar>
 
     <sb-filter-bar [activeCount]="store.activeFilterCount()" (cleared)="clearFilters()">
       <sb-text-input
@@ -186,13 +211,6 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
         placeholder="AAPL"
         [value]="ticker() ?? ''"
         (valueChange)="navigate({ ticker: $event })"
-      />
-      <sb-select
-        label="Direction"
-        placeholder="Any"
-        [value]="direction() ?? ''"
-        [options]="directionOptions"
-        (valueChange)="navigate({ direction: $event })"
       />
       <sb-select
         label="Origin"
@@ -204,8 +222,9 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
 
       <!-- SR52. The five the parity audit found, in the order they narrow a
            search: what the setup was, then how it was graded, then whether it
-           has been written up. Nine controls is a lot for one bar, which is
-           why the filter bar wraps and reports how many are active. -->
+           has been written up. Eight controls is a lot for one bar (Direction
+           moved to the control bar's chip lane at v85 D32), which is why the
+           filter bar wraps and reports how many are active. -->
       <sb-text-input
         type="search"
         label="Strategy"
@@ -503,7 +522,19 @@ export class Trades {
   // filter, or a reload/shared link would silently drop it.
   readonly today = input<string>();
 
-  protected readonly statusChips = STATUS_CHIPS;
+  /** v85 D32 — the control bar's promoted lane: All, then the eight the
+   *  filter bar's own status/outcome/direction controls used to be reached
+   *  for through two clicks. `value`/`label` are what `sb-filter-chips`
+   *  needs; `param` is read only by `onLaneChip` below. */
+  protected readonly laneChips: LaneChip[] = [
+    { value: 'open', label: 'Open', param: 'status' },
+    { value: 'CLOSED', label: 'Closed', param: 'status' },
+    { value: 'PENDING', label: 'Pending', param: 'status' },
+    { value: 'win', label: 'Win', param: 'outcome' },
+    { value: 'loss', label: 'Loss', param: 'outcome' },
+    { value: 'bullish', label: 'Long', param: 'direction' },
+    { value: 'bearish', label: 'Short', param: 'direction' },
+  ];
   protected readonly tableId = TRADES_TABLE_ID;
   protected readonly pinned = PINNED_COLUMNS;
 
@@ -519,10 +550,6 @@ export class Trades {
   );
   protected readonly rowKey = (row: TradeRow) => `${row.id}:${row.leg_index}`;
 
-  protected readonly directionOptions = [
-    { value: 'bullish', label: 'Long' },
-    { value: 'bearish', label: 'Short' },
-  ];
   protected readonly originOptions = [
     { value: 'plan', label: 'Plan' },
     { value: 'legacy', label: 'Legacy' },
@@ -809,21 +836,29 @@ export class Trades {
     this.router.navigate([], { queryParams, queryParamsHandling: 'merge' });
   }
 
-  /** Whichever of the two parameters is set — only one ever is. */
-  protected readonly selectedChip = computed(
-    () => this.outcome() ?? this.status() ?? null,
+  /** Whichever of the lane's three parameters is set — only one ever is,
+   *  because `onLaneChip` always writes all three together. */
+  protected readonly laneSelected = computed(
+    () => this.outcome() ?? this.status() ?? this.direction() ?? null,
   );
 
   /**
-   * Drive `status` or `outcome` from one chip row.
+   * Drive `status`, `outcome` or `direction` from one control-bar chip.
    *
-   * Both are always written, one to a value and the other to null, so
-   * switching from Win to Cancelled cannot leave `outcome=win` behind in the
-   * URL and silently intersect the two filters — which would show an empty
-   * table for a chip that looks selected.
+   * All three are always written — one to the chip's value, the other two to
+   * null — so switching from Win to Long cannot leave `outcome=win` behind in
+   * the URL and silently intersect two filters, which would show an empty
+   * table for a chip that looks selected. `null` (All) clears all three: it
+   * is the lane's cleared state, not a ninth filter value, and leaves every
+   * other filter (strategy, horizon, ...) untouched.
    */
-  protected onStatusChip(value: string | null): void {
-    this.navigate(chipQuery(value));
+  protected onLaneChip(value: string | null): void {
+    const chip = this.laneChips.find((c) => c.value === value);
+    this.navigate({
+      status: chip?.param === 'status' ? chip.value : null,
+      outcome: chip?.param === 'outcome' ? chip.value : null,
+      direction: chip?.param === 'direction' ? chip.value : null,
+    });
   }
 
   protected onSort(sort: SortSpec): void {
