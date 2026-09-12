@@ -191,6 +191,10 @@ const NOT_CONTROL_ROWS = new Set([
   'lifecycle-figure',
   'chip', // the inside of a bordered chip, not a row of controls
   'scan', // the scan-duration figures beside their sparkline
+  // Risk's heat gauge beside its cap/used/remaining readout (v85 D36) --
+  // same category as 'scan' above: a figure and the numbers explaining it,
+  // not a row of controls to bottom-align.
+  'gauge-budget',
   'command-error', // <p role="alert">: message text with a dismiss affordance
   'triage', // groups the two <label> rows below; owns neither control
   // <label> elements. Converting one to a component host would break the

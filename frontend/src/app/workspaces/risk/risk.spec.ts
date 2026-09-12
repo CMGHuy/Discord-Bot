@@ -185,3 +185,72 @@ describe('Risk metric tiles', () => {
     expect(tileHost(fixture, 'Sharpe (R)').querySelector('.sample')!.textContent).toContain('782');
   });
 });
+
+/* -- v85 R8-05 -- the heat gauge, the risk budget, and the correlation matrix -- */
+
+async function render(overrides: Partial<RiskData> = {}): Promise<ComponentFixture<Risk>> {
+  const { fixture, backend } = seed();
+  fixture.detectChanges();
+  backend.expectOne('/api/v1/risk').flush(payload({
+    // Non-empty by default, or asyncInputs' isEmpty (positions.length === 0)
+    // hides this whole panel set behind the "No open risk" empty state --
+    // correct behaviour, but not what these tests are about.
+    positions: [{
+      trade_id: 't1', ticker: 'AAPL', strategy: 'VWAP',
+      shares: 10, entry: 100, stop_loss: 95, risk_pct: 3,
+    }],
+    ...overrides,
+  }));
+  await fixture.whenStable();
+  fixture.detectChanges();
+  return fixture;
+}
+
+describe('Risk gauge, budget and correlation matrix', () => {
+  it('drives the gauge from heat utilisation', async () => {
+    const el = (await render({ heat: { open_pct: 3.1, cap_pct: 6, utilisation_pct: 52 } }))
+      .nativeElement as HTMLElement;
+    expect(el.querySelector('sb-gauge .readout')!.textContent).toContain('52');
+  });
+
+  it('shows a utilisation past the cap truthfully rather than pinned at 100', async () => {
+    const el = (await render({ heat: { open_pct: 7.8, cap_pct: 6, utilisation_pct: 130 } }))
+      .nativeElement as HTMLElement;
+    expect(el.querySelector('sb-gauge .readout')!.textContent).toContain('130');
+    expect(el.querySelector('sb-gauge .readout')!.textContent).toContain('over limit');
+  });
+
+  it('breaks the risk budget into cap, used and remaining', async () => {
+    const el = (await render({ heat: { open_pct: 3.1, cap_pct: 6, utilisation_pct: 52 } }))
+      .nativeElement as HTMLElement;
+    const budget = el.querySelector('.risk-budget')!;
+    expect(budget.textContent).toContain('6');
+    expect(budget.textContent).toContain('3.1');
+    expect(budget.textContent).toContain('2.9');
+  });
+
+  it('reports no remaining budget rather than a negative one when over the cap', async () => {
+    const el = (await render({ heat: { open_pct: 7.8, cap_pct: 6, utilisation_pct: 130 } }))
+      .nativeElement as HTMLElement;
+    expect(el.querySelector('.risk-budget .remaining')!.textContent).toContain('0');
+    expect(el.querySelector('.risk-budget')!.textContent).toContain('over');
+  });
+
+  it('renders the correlation matrix with the clusters outlined on it', async () => {
+    const el = (await render({
+      correlation: { labels: ['AAPL', 'MSFT'], values: [[1, 0.68], [0.68, 1]] },
+      clusters: [['AAPL', 'MSFT']],
+    })).nativeElement as HTMLElement;
+    expect(el.querySelector('sb-matrix .clustered')).not.toBeNull();
+  });
+
+  it('keeps the cluster list beside the matrix', async () => {
+    const el = (await render({ clusters: [['AAPL', 'MSFT']] })).nativeElement as HTMLElement;
+    expect(el.querySelector('sb-panel[heading="Correlated clusters"]')).not.toBeNull();
+  });
+
+  it('keeps the killswitch panel', async () => {
+    const el = (await render()).nativeElement as HTMLElement;
+    expect(el.querySelector('sb-panel[heading="Killswitch"]')).not.toBeNull();
+  });
+});

@@ -19,7 +19,9 @@ import { createClientPage } from '../../ui/data-table/client-page';
 import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { Flash } from '../../ui/flash';
 import { dateTime, num, share, text } from '../../ui/format';
+import { Gauge } from '../../ui/gauge';
 import { Panel } from '../../ui/layout';
+import { Matrix } from '../../ui/matrix';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { Sparkline } from '../../ui/sparkline';
@@ -52,7 +54,7 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
 @Component({
   selector: 'sb-risk',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Panel, RowLink, SectionHead, Sparkline, StatTile],
+  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Gauge, Matrix, Panel, RowLink, SectionHead, Sparkline, StatTile],
   // v54 D1: exposure-by-position is a table and the rest of this workspace
   // (heat, sectors, clusters, scan health) is the same operational reading
   // that table's numbers roll up into -- tight rows, more per screen -- so
@@ -159,6 +161,7 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
       [announce]="announce()"
       (retry)="store.load()"
     >
+    <div class="split">
     <sb-panel heading="Portfolio heat">
       <div class="heat">
         <span class="heat-figure num" [class]="heatClass()">
@@ -217,6 +220,31 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
           <span class="state">Sizing unthrottled</span>
         }
       </div>
+
+      <!-- The gauge IS heat utilisation, nothing else (spec D36) -- same
+           unclamped store value the figure/bar above already show, read
+           here instead of composed into a new score. The risk budget beside
+           it breaks that one number into cap/used/remaining so "how much
+           room is left" doesn't need mental subtraction. -->
+      <div class="gauge-budget">
+        <sb-gauge
+          [value]="store.heatUtilisationPct()"
+          [max]="100"
+          label="Heat utilisation"
+        />
+        @if (riskBudget(); as budget) {
+          <div class="risk-budget">
+            <div><span class="label">Cap</span><span class="num">{{ fmt(budget.cap, 1) }}%</span></div>
+            <div><span class="label">Used</span><span class="num">{{ fmt(budget.used, 1) }}%</span></div>
+            <div><span class="label">Remaining</span><span class="num remaining">{{ fmt(budget.remaining, 1) }}%</span></div>
+            @if (budget.over) {
+              <p class="budget-note warn">
+                Usage is over the cap — remaining shown as 0.
+              </p>
+            }
+          </div>
+        }
+      </div>
     </sb-panel>
 
     <!-- institutional risk metrics (v85 D37) ------------------------------
@@ -232,6 +260,7 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
         }
       </div>
     </sb-panel>
+    </div>
 
     <!-- exposure -------------------------------------------------------- -->
 
@@ -251,19 +280,41 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
       />
     </sb-panel>
 
+    <sb-panel heading="Sector heat">
+      @if (store.sectorHeat().length) {
+        <dl class="sectors">
+          @for (row of store.sectorHeat(); track row.sector) {
+            <div>
+              <dt>{{ fmtText(row.sector) }}</dt>
+              <dd class="num">{{ fmt(row.heat_pct) }}%</dd>
+            </div>
+          }
+        </dl>
+      } @else {
+        <p class="none">No sector exposure.</p>
+      }
+    </sb-panel>
+
+    <!-- correlation (v85 D38) -- the matrix is new; the existing cluster
+         list is untouched and sits beside it, because the clusters are
+         what actually throttle position size and still deserve a plain,
+         readable list of their own. -->
     <div class="split">
-      <sb-panel heading="Sector heat">
-        @if (store.sectorHeat().length) {
-          <dl class="sectors">
-            @for (row of store.sectorHeat(); track row.sector) {
-              <div>
-                <dt>{{ fmtText(row.sector) }}</dt>
-                <dd class="num">{{ fmt(row.heat_pct) }}%</dd>
-              </div>
-            }
-          </dl>
-        } @else {
-          <p class="none">No sector exposure.</p>
+      <sb-panel heading="Correlation matrix">
+        <p class="section-help">
+          Pairwise correlation of daily returns across open positions.
+          Pairs outlined together sit in the same cluster listed beside it.
+        </p>
+        @if (store.correlation(); as corr) {
+          @if (corr.labels.length) {
+            <sb-matrix
+              [labels]="corr.labels"
+              [values]="corr.values"
+              [clusters]="clusterTickerLists()"
+            />
+          } @else {
+            <p class="none">Not enough open positions to correlate.</p>
+          }
         }
       </sb-panel>
 
@@ -422,6 +473,23 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
     }
     .state.warn { border-color: var(--warn); }
 
+    /* -- gauge and risk budget -- */
+    .gauge-budget {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--register-pad);
+      margin-top: var(--register-pad);
+      padding-top: var(--register-pad);
+      border-top: 1px solid var(--border);
+    }
+    .gauge-budget sb-gauge { flex: 0 0 auto; width: 140px; }
+    .risk-budget { display: grid; gap: 2px; font-size: var(--text-table); }
+    .risk-budget > div { display: flex; justify-content: space-between; gap: var(--space-10); }
+    .risk-budget .label { color: var(--text-secondary); }
+    .risk-budget .remaining { font-weight: 600; }
+    .budget-note { margin-top: var(--space-6); font-size: var(--text-micro); }
+
     /* -- risk metrics -- */
     .metric-grid {
       display: grid;
@@ -579,6 +647,25 @@ export class Risk {
       { label: 'Max drawdown (R)', value: this.fmtDrawdownR(m.max_drawdown_r.value), sample: m.max_drawdown_r.n },
     ];
   });
+
+  /** cap/used/remaining, broken out of the one heat-utilisation number so
+   *  "how much room is left" reads without mental subtraction (v85 D36).
+   *  `remaining` floors at 0 rather than going negative -- a negative
+   *  budget is an arithmetic result, not a readable one; `over` carries the
+   *  same fact in words instead. */
+  protected readonly riskBudget = computed(() => {
+    const cap = this.store.heatCapPct();
+    const used = this.store.openHeatPct();
+    if (cap === null || used === null) return null;
+    return { cap, used, remaining: Math.max(cap - used, 0), over: used > cap };
+  });
+
+  /** `sb-matrix` wants plain ticker lists; the store's own `clusters()` adds
+   *  a 1-based `index` for the list panel beside it, which the matrix has
+   *  no use for. */
+  protected readonly clusterTickerLists = computed(() =>
+    this.store.clusters().map((cluster) => cluster.tickers),
+  );
 
   protected readonly heatClass = computed(() => (this.store.heatNearCap() ? 'warn' : ''));
 
