@@ -111,6 +111,13 @@ def test_payload_shape(logged_in):
     assert isinstance(body["stale"], bool)
     for dead in ("ui_versions", "bot_versions", "pairs", "ranges"):
         assert dead not in body, f"{dead} is a matrix artefact and must be gone"
+    if body["releases"]:
+        row = body["releases"][0]
+        assert row["provenance"] == {"commit_range": None, "commits": None,
+                                     "spec": None, "changelog": []}
+        assert row["telemetry"]["source"] in {"marker", "backfill"}
+        for key in ("uptime_pct", "error_rate", "median_scan_sec", "n_days"):
+            assert key in row["telemetry"]
 
 
 def test_stale_is_true_when_a_component_set_differs(logged_in, monkeypatch):

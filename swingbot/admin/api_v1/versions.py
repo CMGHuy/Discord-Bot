@@ -29,11 +29,49 @@ from typing import Any
 from flask import jsonify
 
 from swingbot.admin import helpers as _helpers
+from swingbot.admin import release_windows
 
 from . import api_v1
 from .auth import require_auth
 
 HISTORY_PATH = os.path.join(os.path.dirname(__file__), "..", "version_history.json")
+
+
+def _provenance(release: dict) -> dict:
+    """Best-effort provenance for a frozen release history row.
+
+    History rows retain a single commit, not a release-tag pair, so a range
+    would be invented. Keep it null until Git can prove one.
+    """
+    return {"commit_range": None, "commits": None, "spec": None, "changelog": []}
+
+
+def _window_for(release: dict, windows: list[dict]) -> dict | None:
+    versions = release.get("versions") or {}
+    # Prefer bot: scan telemetry belongs to that process. UI is the fallback
+    # for an admin-only marker.
+    for component, version_key in (("bot", "bot"), ("admin", "ui")):
+        version = versions.get(version_key)
+        found = next((window for window in windows
+                      if window["component"] == component and window["version"] == version), None)
+        if found:
+            return found
+    return None
+
+
+def _enrich_releases(releases: list[dict]) -> list[dict]:
+    release_windows_rows = release_windows.windows()
+    enriched = []
+    for release in releases:
+        row = dict(release)
+        window = _window_for(row, release_windows_rows)
+        telemetry = release_windows.telemetry_for(window) if window else {
+            "uptime_pct": None, "error_rate": None, "median_scan_sec": None, "n_days": None,
+        }
+        row["provenance"] = _provenance(row)
+        row["telemetry"] = {**telemetry, "source": window["source"] if window else "backfill"}
+        enriched.append(row)
+    return enriched
 
 
 def _load_history() -> dict[str, Any]:
@@ -72,5 +110,5 @@ def get_versions():
         "stale": stale,
         "components": history.get("components", []),
         "current": frozen_current,
-        "releases": history.get("releases", []),
+        "releases": _enrich_releases(history.get("releases", [])),
     })
