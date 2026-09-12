@@ -267,6 +267,14 @@ def analytics_by_dimension():
     this view rather than inventing a row for a key nothing else recognizes.
     Horizon rows are ordered by horizon progression (2w..9m); strategy rows
     alphabetically, for a stable render.
+
+    `as_of` is scoped to the trades that actually survived grouping for
+    THIS `dim`, never the unfiltered closed-trade set. `dim=horizon` drops
+    any trade whose `horizon_key` isn't real HORIZONS vocabulary (see
+    above); if a freshly-closed trade with such a legacy/unrecognized
+    horizon were allowed to set `as_of`, the stamp would claim the rows are
+    more current than the data actually shown -- the same "screen hides how
+    stale its data is" bug class as an empty range rendering as zeroes.
     """
     unknown = set(request.args) - {"dim"}
     if unknown:
@@ -324,8 +332,12 @@ def analytics_by_dimension():
             row["badge"] = get_badge("strategy", key).status
         rows.append(row)
 
-    all_closed_at = [t["closed_at"][:10] for t in closed if t.get("closed_at")]
-    return jsonify({"rows": rows, "as_of": max(all_closed_at) if all_closed_at else None})
+    grouped_closed_at = [
+        t["closed_at"][:10]
+        for trades in groups.values() for t in trades
+        if t.get("closed_at")
+    ]
+    return jsonify({"rows": rows, "as_of": max(grouped_closed_at) if grouped_closed_at else None})
 
 
 @api_v1.route("/analytics/journal", methods=["GET"])

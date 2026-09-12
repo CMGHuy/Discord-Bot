@@ -383,6 +383,23 @@ def test_horizon_rows_use_the_real_horizon_vocabulary(seed, logged_in):
     assert set(keys) <= set(HORIZONS)
 
 
+def test_as_of_ignores_a_trade_dropped_for_an_unrecognized_horizon(seed, logged_in):
+    """A trade with a legacy/unrecognized horizon_key never becomes a row
+    under dim=horizon (test_horizon_rows_use_the_real_horizon_vocabulary),
+    so it must not be allowed to set `as_of` either -- otherwise the
+    freshness stamp would claim the shown rows are more current than any
+    of them actually are."""
+    seed(trades=[
+        _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0, horizon="4w"),
+        # Closes two months later but under a horizon that isn't real
+        # HORIZONS vocabulary -- dropped from grouping entirely.
+        _closed_r("b" * 16, closed_at="2026-06-01T16:00:00+00:00", r=1.0, horizon="6w"),
+    ])
+    body = _by_dim(logged_in, "horizon")
+    assert {r["key"] for r in body["rows"]} == {"4w"}
+    assert body["as_of"] == "2026-04-01"
+
+
 def test_total_r_is_not_expectancy_times_n_when_some_trades_lack_an_r(seed, logged_in):
     seed(trades=[
         _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=2.0),
