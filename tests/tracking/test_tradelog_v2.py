@@ -28,8 +28,10 @@ def test_full_lifecycle_writes_two_leg_win(tmp_path):
     for day in range(27, 31):
         now = dt.datetime(2026, 8, day, 12, 0, tzinfo=US_MARKET_TZ)
         transitions.extend(e.transition for e in mgr.poll(now=now))
-    assert transitions == ["filled", "tp1_partial", "closed"] or \
-           transitions == ["filled", "tp1_partial", "be_moved", "closed"]
+    # v81 retries unacknowledged fills/notices and emits live stop moves;
+    # the lifecycle ordering remains fill -> TP1 -> terminal close.
+    assert transitions[0] == "filled"
+    assert "tp1_partial" in transitions and transitions[-1] == "closed"
 
     log.refresh()
     [t] = [t for t in log.get_trades(limit=10) if t.get("plan_id") == "p1"]
