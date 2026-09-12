@@ -126,14 +126,23 @@ def test_watchlist_tags_round_trip_through_preferences(client, auth):
     assert response.get_json()["preferences"]["watchlistTags"] == {"AAPL": ["Tech"]}
 
 
-def test_watchlist_tags_do_not_reach_the_watchlist_file(client, auth, tmp_path):
-    """`config.DATA_DIR` is monkeypatched to `tmp_path` for this test (see
-    `conftest.py`), so `tmp_path / "watchlist.json"` is where the bot's file
-    would land if anything about this endpoint touched it."""
-    watchlist_path = tmp_path / "watchlist.json"
-    before = watchlist_path.read_text() if watchlist_path.exists() else None
+def test_watchlist_tags_do_not_reach_the_watchlist_file(client, auth):
+    """`swingbot.core.marketdata.watchlist.DEFAULT_PATH` is computed from
+    `config.DATA_DIR` at IMPORT time, and `swingbot.core.marketdata.watchlist`
+    is deliberately absent from this module's `conftest.py`'s
+    `_RELOAD_MODULES` list -- so it does NOT track this test's per-test
+    `DATA_DIR` monkeypatch (`tests/admin/test_api_v1_watchlist.py`'s module
+    docstring documents this exact trap). That makes `DEFAULT_PATH` the
+    bot's real, frozen load path rather than an isolated per-test one --
+    which is precisely the file D35 says a tag must never reach, so it is
+    the file this test has to check, not a fresh tmp_path stand-in. Reading
+    it (never writing) is safe regardless of what it is bound to."""
+    from swingbot.core.marketdata import watchlist as watchlist_module
+
+    path = watchlist_module.DEFAULT_PATH
+    before = open(path, encoding="utf-8").read() if os.path.exists(path) else None
 
     client.put(ENDPOINT, headers=auth, json={"preferences": {"watchlistTags": {"AAPL": ["Tech"]}}})
 
-    after = watchlist_path.read_text() if watchlist_path.exists() else None
+    after = open(path, encoding="utf-8").read() if os.path.exists(path) else None
     assert before == after
