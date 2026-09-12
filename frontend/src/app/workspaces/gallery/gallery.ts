@@ -11,6 +11,7 @@ import { ColumnPickerComponent } from '../../ui/column-picker';
 import { ConfidenceCell } from '../../ui/confidence-cell';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { ControlBar } from '../../ui/control-bar';
+import { DateRange } from '../../ui/date-range';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, PageSpec, RowContext } from '../../ui/data-table/data-table.types';
 import { DirectionArrow } from '../../ui/direction-arrow';
@@ -95,6 +96,7 @@ interface ContractRow {
     ConfidenceCell,
     ConfirmDialog,
     ControlBar,
+    DateRange,
     ControlRow,
     DataTable,
     DirectionArrow,
@@ -445,6 +447,7 @@ interface ContractRow {
         <button filters sb-button variant="ghost" type="button">Open</button>
         <sb-select scope label="Range" placeholder="YTD" [options]="selectOptions" />
       </sb-control-bar>
+      <sb-date-range [from]="'2026-01-01'" [to]="'2026-09-12'" />
     </sb-panel>
 
     <!-- -- charts -- one shared chrome (v54 D5) -------------------------------- -->

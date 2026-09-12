@@ -72,6 +72,20 @@ describe('the gallery renders', () => {
     expect(() => fixture.detectChanges()).not.toThrow();
   });
 
+  it('exhibits every v85 primitive and representative edge states', () => {
+    const fixture = TestBed.createComponent(Gallery);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    for (const selector of ['sb-stat-tile', 'sb-control-bar', 'sb-gauge', 'sb-matrix',
+      'sb-timeline', 'sb-freshness', 'sb-date-range']) {
+      expect(element.querySelector(selector)).not.toBeNull();
+    }
+    expect(element.querySelectorAll('sb-stat-tile .thin').length).toBeGreaterThan(0);
+    expect(element.querySelectorAll('sb-gauge .over').length).toBeGreaterThan(0);
+    expect(element.querySelectorAll('sb-freshness .stale').length).toBeGreaterThan(0);
+    expect(element.querySelectorAll('sb-matrix .missing').length).toBeGreaterThan(0);
+  });
+
   it('renders one row per cell-contract case, with minutes in every Held value', () => {
     const fixture = TestBed.createComponent(Gallery);
     fixture.detectChanges();
