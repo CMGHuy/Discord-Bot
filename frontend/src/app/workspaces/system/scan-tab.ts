@@ -5,6 +5,7 @@ import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { dateTime } from '../../ui/format';
 import { ControlRow, Panel } from '../../ui/layout';
+import { Freshness } from '../../ui/freshness';
 
 /**
  * Scan control and bot restart.
@@ -23,7 +24,7 @@ import { ControlRow, Panel } from '../../ui/layout';
 @Component({
   selector: 'sb-scan-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, ConfirmDialog, ControlRow],
+  imports: [Panel, Button, ConfirmDialog, ControlRow, Freshness],
   template: `
     <sb-panel heading="Scan">
       <div class="states">
@@ -44,6 +45,7 @@ import { ControlRow, Panel } from '../../ui/layout';
       @if (lastSeen(); as seen) {
         <p class="meta">Bot last seen {{ seen }}</p>
       }
+      <sb-freshness [at]="store.scan()?.bot_last_seen ?? null" />
 
       <sb-control-row class="commands">
         <button

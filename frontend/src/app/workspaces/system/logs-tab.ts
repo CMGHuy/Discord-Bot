@@ -21,6 +21,7 @@ import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Checkbox, Select, SelectOption } from '../../ui/form-controls';
 import { ControlRow, Panel } from '../../ui/layout';
+import { Freshness } from '../../ui/freshness';
 
 /**
  * The log tail — bot or admin, with a raw view and a clear action.
@@ -33,7 +34,7 @@ import { ControlRow, Panel } from '../../ui/layout';
 @Component({
   selector: 'sb-logs-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, Checkbox, ConfirmDialog, ControlRow, Select, Async],
+  imports: [Panel, Button, Checkbox, ConfirmDialog, ControlRow, Select, Freshness, Async],
   template: `
     <sb-panel [heading]="store.logs()?.path ?? 'Log'">
       <sb-control-row panel-actions class="actions">
@@ -64,6 +65,9 @@ import { ControlRow, Panel } from '../../ui/layout';
           Clear
         </button>
       </sb-control-row>
+      <!-- Logs have no producer timestamp. “age unknown” is the honest
+           per-panel answer until the API grows one; it is not a false Live. -->
+      <sb-freshness [at]="null" />
 
       @if (store.logsMessage(); as message) {
         <p class="message" role="status">{{ message }}</p>
