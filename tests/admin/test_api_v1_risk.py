@@ -376,6 +376,56 @@ def test_a_market_data_failure_degrades_the_metrics_not_the_page(
     assert body["heat"] is not None
 
 
+def test_a_malformed_closed_trade_degrades_only_the_trade_derived_metrics(
+        client, open_book, tmp_path):
+    """Round 3: `r_series = trade_metrics.r_multiples(closed)` and the
+    `sharpe_r`/`max_drawdown_r` computation run entirely OUTSIDE the
+    market-data try/except (that separation was round 2's fix, for the
+    opposite failure domain) -- and were therefore, until this fix,
+    completely unguarded. A malformed closed-trade record (here, a
+    string-typed `entry`) raises a `TypeError` deep inside
+    `metrics.r_multiple()`'s `abs(entry - stop)`, which must degrade only
+    `sharpe_r`/`max_drawdown_r` to null, not 500 the whole endpoint --
+    including the killswitch control block, which has nothing to do with
+    the trade log. This is the structural mirror of
+    `test_a_market_data_failure_degrades_the_metrics_not_the_page` above,
+    for the trade-log failure domain instead of the market-data one.
+    """
+    open_book(["AAPL"], closed_trades=5)
+
+    trades = json.loads((tmp_path / "trades.json").read_text(encoding="utf-8"))
+    trades.append({
+        "id": "m" * 16, "ticker": "AAPL", "status": "closed",
+        "strategy": "VWAP", "horizon": "1m", "direction": "bullish",
+        "entry": "not-a-number", "stop_loss": 95.0, "exit_price": 110.0,
+        "opened_at": "2026-01-01T00:00:00+00:00",
+        "closed_at": "2026-01-02T00:00:00+00:00",
+    })
+    (tmp_path / "trades.json").write_text(json.dumps(trades), encoding="utf-8")
+
+    response = client.get("/api/v1/risk")
+    assert response.status_code == 200
+    body = response.get_json()
+    metrics = body["metrics"]
+
+    # Trade-log-derived metrics: degraded to null by the malformed record.
+    assert metrics["sharpe_r"]["value"] is None
+    assert metrics["sharpe_r"]["n"] == 0
+    assert metrics["max_drawdown_r"]["value"] is None
+    assert metrics["max_drawdown_r"]["n"] == 0
+
+    # Market-data-derived metrics: unaffected -- this is a trade-log
+    # failure, not a market-data one, and the two guards are independent.
+    assert metrics["var_95"]["value"] is not None
+    assert metrics["beta_spy"]["value"] is not None
+
+    # Everything else on the payload still renders, unblanked -- including
+    # the killswitch block this whole endpoint exists to keep alive.
+    assert "on" in body["killswitch"]
+    assert body["heat"] is not None
+    assert body["correlation"]["labels"] == ["AAPL"]
+
+
 def test_beta_tile_carries_the_actual_configured_benchmark(client, open_book):
     """I4: the payload must name the real benchmark so the frontend can
     label the tile correctly instead of assuming "SPY"."""

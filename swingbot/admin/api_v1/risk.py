@@ -142,7 +142,17 @@ def _risk_metrics_and_correlation() -> tuple[dict, dict]:
     # Sharpe/drawdown is real information the trade log already has, and
     # blanking it because a price fetch failed would discard data that was
     # never actually at risk from that failure.
-    r_series = trade_metrics.r_multiples(closed)
+    #
+    # This is its OWN guard, independent of the market-data try/except below
+    # -- a malformed closed-trade record (e.g. a string-typed `entry`, or a
+    # non-dict/malformed leg) can raise from deep inside `r_multiple()`
+    # (metrics.py), and that must degrade only these two trade-derived
+    # metrics, not 500 the whole endpoint (including the killswitch block,
+    # which has nothing to do with the trade log).
+    try:
+        r_series = trade_metrics.r_multiples(closed)
+    except Exception:
+        r_series = []
     sharpe_r = _metric(rm.sharpe_of(r_series), len(r_series))
     max_drawdown_r = _metric(rm.max_drawdown_r(r_series), len(r_series))
 
