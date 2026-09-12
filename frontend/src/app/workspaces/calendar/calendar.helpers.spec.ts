@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { monthLabel, monthMatrix } from './calendar.helpers';
+import { cellValue, monthLabel, monthMatrix } from './calendar.helpers';
 
 describe('monthMatrix', () => {
   it('lays out Monday-first weeks of seven', () => {
@@ -61,5 +61,22 @@ describe('monthLabel', () => {
   it('renders a human month and year', () => {
     expect(monthLabel('2026-08')).toBe('August 2026');
     expect(monthLabel('2026-01')).toBe('January 2026');
+  });
+});
+
+describe('cellValue', () => {
+  const DAY = { date: '2026-04-24', net_r: 1.2, net_pnl_amount: 480, trade_count: 12, win_rate: 75 };
+
+  it('formats R, currency, count and win-rate with their own semantic tones', () => {
+    expect(cellValue(DAY, 'r')).toEqual({ value: 1.2, text: '+1.20R', tone: 'pos' });
+    expect(cellValue(DAY, 'currency').text).toContain('480');
+    expect(cellValue(DAY, 'trades')).toEqual({ value: 12, text: '12', tone: 'neutral' });
+    expect(cellValue(DAY, 'win_rate')).toEqual({ value: 75, text: '75%', tone: 'neutral' });
+  });
+
+  it('keeps no-trade days empty rather than claiming zero performance', () => {
+    for (const metric of ['r', 'currency', 'trades', 'win_rate'] as const) {
+      expect(cellValue({ ...DAY, trade_count: 0, win_rate: null }, metric).tone).toBe('empty');
+    }
   });
 });

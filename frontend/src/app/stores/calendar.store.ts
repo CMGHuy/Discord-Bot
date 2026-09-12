@@ -19,11 +19,12 @@ import {
   PnlCalendar,
 } from '../api/models';
 import { SelectOption } from '../ui/form-controls';
+import { CalendarCellMetric, cellValue } from '../workspaces/calendar/calendar.helpers';
 
 /** Which figure the grid shows and colours by. Money is the default: the
  *  dollar swing is what the page is for, and R lives one toggle away for
  *  when position size should be factored out. */
-export type CalendarMetric = 'money' | 'r';
+export type CalendarMetric = CalendarCellMetric;
 
 /** `YYYY-MM` for today, in the browser's own calendar. The server defaults
  *  to its month when `?month=` is absent, but sending it explicitly keeps
@@ -63,7 +64,7 @@ export const CalendarStore = signalStore(
     loading: false,
     error: null,
     month: currentMonth(),
-    metric: 'money',
+    metric: 'currency',
     strategy: '',
     horizon: '',
     selectedDay: null,
@@ -94,10 +95,8 @@ export const CalendarStore = signalStore(
      *  month you are looking at rather than to some global constant. 0 when
      *  nothing is computable, and callers must guard against dividing by it. */
     scale: computed(() => {
-      const pick = (day: CalendarDay) =>
-        metric() === 'money' ? day.net_pnl_amount : day.net_r;
       const magnitudes = (data()?.days ?? [])
-        .map((day) => pick(day))
+        .map((day) => cellValue(day, metric()).value)
         .filter((value): value is number => value !== null)
         .map(Math.abs);
       return magnitudes.length ? Math.max(...magnitudes) : 0;
@@ -207,14 +206,14 @@ export const CalendarStore = signalStore(
 
       /** The number a cell shows, under the current metric. */
       valueFor(day: CalendarDay): number | null {
-        return store.metric() === 'money' ? day.net_pnl_amount : day.net_r;
+        return cellValue(day, store.metric()).value;
       },
 
       /** -1..+1. Sign picks the colour, magnitude picks the intensity, and
        *  a day with no computable figure gets exactly 0 so "no data" and
        *  "a genuinely flat day" do not paint the same. */
       signedIntensity(day: CalendarDay): number {
-        const value = store.metric() === 'money' ? day.net_pnl_amount : day.net_r;
+        const value = cellValue(day, store.metric()).value;
         const scale = store.scale();
         if (value === null || scale === 0) return 0;
         return Math.max(-1, Math.min(1, value / scale));

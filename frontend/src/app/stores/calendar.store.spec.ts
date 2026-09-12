@@ -101,11 +101,11 @@ describe('CalendarStore', () => {
     expect(store.strategyOptions().map((o) => o.value)).toEqual(['EMA20', 'VWAP']);
   });
 
-  it('defaults to the money metric, not R', () => {
+  it('defaults to the account-currency metric, not R', () => {
     tick();
     respond();
 
-    expect(store.metric()).toBe('money');
+    expect(store.metric()).toBe('currency');
     expect(store.valueFor(RESPONSE.days[0])).toBe(30);
   });
 

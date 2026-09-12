@@ -11,7 +11,7 @@ import { MetricCard } from '../../ui/metric-card';
 import { Select } from '../../ui/form-controls';
 import { SectionHead } from '../../ui/section-head';
 import { StatTile } from '../../ui/stat-tile';
-import { GridCell, monthLabel, monthMatrix } from './calendar.helpers';
+import { cellValue, GridCell, monthLabel, monthMatrix } from './calendar.helpers';
 
 /** Monday-first, matching `monthMatrix` and the API's weekday breakdown. */
 const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -94,8 +94,8 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       <div class="totals">
         <sb-metric-card
           label="Net this month"
-          [value]="store.metric() === 'r' ? (store.totals()?.net_r ?? null) : (store.totals()?.net_pnl_amount ?? null)"
-          [unit]="store.metric() === 'r' ? 'R' : currency()"
+          [value]="totalValue()"
+          [unit]="totalUnit()"
           [tone]="totalsTone()"
         />
         <sb-metric-card label="Trades" [value]="store.totals()?.trade_count ?? null" [decimals]="0" />
@@ -411,8 +411,10 @@ export class Calendar {
   /** The toggle's two choices. Computed rather than a module constant so
    *  the money side is labelled with the account's currency. */
   protected readonly metrics = computed<{ value: CalendarMetric; label: string }[]>(() => [
-    { value: 'money', label: this.currency() },
+    { value: 'currency', label: this.currency() },
     { value: 'r', label: 'R' },
+    { value: 'trades', label: 'Trades' },
+    { value: 'win_rate', label: 'Win rate' },
   ]);
 
   protected readonly label = computed(() => monthLabel(this.store.month()));
@@ -425,8 +427,7 @@ export class Calendar {
    *  it takes its sign from the value itself. */
   protected readonly totalsTone = computed(() => {
     const totals = this.store.totals();
-    const value =
-      this.store.metric() === 'r' ? totals?.net_r : totals?.net_pnl_amount;
+    const value = this.totalValue();
     if (value === null || value === undefined) return 'plain' as const;
     return 'pnl' as const;
   });
@@ -452,10 +453,7 @@ export class Calendar {
 
   /** The cell's number, formatted for the metric on show. */
   protected display(day: CalendarDay): string {
-    if (this.store.metric() === 'r') return rMultiple(day.net_r);
-    return day.net_pnl_amount === null
-      ? ABSENT
-      : money(day.net_pnl_amount, this.currency(), 0);
+    return cellValue(day, this.store.metric()).text || ABSENT;
   }
 
   /** `"50%"`, or ABSENT at n=0 -- never `"0%"`, which would read as a real
@@ -470,6 +468,26 @@ export class Calendar {
     return weekday.avg_pnl_amount === null
       ? ABSENT
       : money(weekday.avg_pnl_amount, this.currency(), 2);
+  }
+
+  protected totalValue(): number | null {
+    const totals = this.store.totals();
+    if (!totals) return null;
+    switch (this.store.metric()) {
+      case 'r': return totals.net_r;
+      case 'currency': return totals.net_pnl_amount;
+      case 'trades': return totals.trade_count;
+      case 'win_rate': return totals.win_rate;
+    }
+  }
+
+  protected totalUnit(): string {
+    switch (this.store.metric()) {
+      case 'r': return 'R';
+      case 'currency': return this.currency();
+      case 'win_rate': return '%';
+      case 'trades': return '';
+    }
   }
 
   /** "2026-08-05 · -90 €" -- the date is the point, so it leads. */

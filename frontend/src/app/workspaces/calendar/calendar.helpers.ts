@@ -10,6 +10,36 @@
  * one day out.
  */
 
+import { CalendarDay } from '../../api/models';
+
+export type CalendarCellMetric = 'r' | 'currency' | 'trades' | 'win_rate';
+export type CalendarCellTone = 'pos' | 'neg' | 'neutral' | 'empty';
+
+/** The value and presentation intent for one populated calendar cell.
+ * Keeping the four-way branch here lets the template stay a simple display
+ * binding and prevents a busy day from accidentally inheriting a profit tone.
+ */
+export function cellValue(day: CalendarDay, metric: CalendarCellMetric): {
+  value: number | null; text: string; tone: CalendarCellTone;
+} {
+  if (day.trade_count === 0) return { value: null, text: '', tone: 'empty' };
+  if (metric === 'trades') return { value: day.trade_count, text: `${day.trade_count}`, tone: 'neutral' };
+  if (metric === 'win_rate') {
+    if (day.win_rate === null) return { value: null, text: '', tone: 'empty' };
+    return { value: day.win_rate, text: `${day.win_rate.toFixed(0)}%`, tone: 'neutral' };
+  }
+  const value = metric === 'r' ? day.net_r : day.net_pnl_amount;
+  if (value === null) return { value: null, text: '', tone: 'empty' };
+  if (metric === 'r') return {
+    value, text: `${value >= 0 ? '+' : ''}${value.toFixed(2)}R`,
+    tone: value > 0 ? 'pos' : value < 0 ? 'neg' : 'neutral',
+  };
+  return {
+    value, text: `${value >= 0 ? '+' : ''}${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+    tone: value > 0 ? 'pos' : value < 0 ? 'neg' : 'neutral',
+  };
+}
+
 export interface GridCell {
   /** `YYYY-MM-DD`, zero-padded to match the API's day keys byte for byte. */
   date: string;
