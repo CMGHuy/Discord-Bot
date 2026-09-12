@@ -49,6 +49,15 @@ describe('Freshness (v85 D30)', () => {
     expect(el.textContent).toContain('age unknown');
   });
 
+  it('prints a date-only marker as the date, not a bogus midnight time', () => {
+    // Risk's metrics/correlation panels feed a daily-bar `as_of`
+    // ("2026-09-10") that has no time-of-day. Slicing it as a full
+    // timestamp would always read "00:00:00" regardless of real freshness.
+    const el = render({ at: '2026-09-10' });
+    expect(el.textContent).toContain('as of 2026-09-10');
+    expect(el.textContent).not.toContain('00:00:00');
+  });
+
   it('is announced politely rather than interrupting', () => {
     expect(render({}).getAttribute('aria-live')).toBe('polite');
   });
