@@ -1,6 +1,7 @@
 """Discord presentation for trade and plan lifecycle events."""
 import logging
 import os
+import time
 from datetime import datetime
 
 import discord
@@ -339,26 +340,86 @@ def build_plan_event_embed(plan, event) -> discord.Embed:
     return embed
 
 
-async def notify_plan_events(bot, events):
-    """Route fills to the alerts channel, everything else to history --
-    same split notify_closed_trades already uses."""
-    from swingbot.core.planning.plan_store import PlanStore
+_WARN_EVERY_SECONDS = 15 * 60
+_last_warned: dict[str, float] = {}
+
+
+def _warn_throttled(plan_id: str, message: str, *args) -> None:
+    """Avoid a log flood while an undelivered event is retried each minute."""
+    now = time.monotonic()
+    if now - _last_warned.get(plan_id, float("-inf")) < _WARN_EVERY_SECONDS:
+        return
+    _last_warned[plan_id] = now
+    log.warning(message, *args)
+
+
+def _resolve_channel(bot, channel_id):
+    if not channel_id:
+        return None
+    try:
+        return bot.get_channel(int(channel_id))
+    except (TypeError, ValueError):
+        return None
+
+
+def _delivery(plan, event):
+    from swingbot.core.planning.plan_manager import Delivery
+    if event.transition == "stop_moved":
+        return Delivery(plan.plan_id, "stop", event.detail["new"])
+    if event.transition in ("be_moved", "tp1_partial"):
+        return Delivery(plan.plan_id, "stop", event.detail["working_stop"])
+    return Delivery(plan.plan_id, "notice", event.transition)
+
+
+async def notify_plan_events(bot, events) -> list:
+    """Post lifecycle instructions to the execution feed and report delivery.
+
+    The feed notifies, history receives a silent copy. If the feed is absent
+    or fails, the history copy deliberately notifies instead. Non-feed events
+    keep their existing history-only status embed and are never acknowledged.
+    """
     from swingbot.core.infra.silent_channel import silence
+    from swingbot.core.planning.plan_manager import NOTICE_EVENTS, STOP_EVENTS
+    from swingbot.core.planning.plan_store import PlanStore
+    from .execution_embeds import build_instruction_embed
+
     store = PlanStore()
+    feed = _resolve_channel(bot, config.DISCORD_CHANNEL_TRADES_SIMPLE_ID)
+    history = _resolve_channel(bot, config.DISCORD_CHANNEL_TRADES_HISTORY_ID)
+    deliveries = []
     for event in events:
-        plan = store.get(event.plan_id)
-        if plan is None:
-            continue
-        is_fill = event.transition == "filled"
-        channel_id = (config.DISCORD_CHANNEL_TRADES_ID
-                      if is_fill
-                      else config.DISCORD_CHANNEL_TRADES_HISTORY_ID)
-        channel = bot.get_channel(int(channel_id)) if channel_id else None
-        if is_fill:
-            # Alerts channel -> never notifies (silent_channel.py). The
-            # history channel keeps its notification: a closed trade is a
-            # result you want pushed, not something you'll scroll back for.
-            channel = silence(channel)
-        if channel is not None:
-            await channel.send(embed=build_plan_event_embed(plan, event))
+        try:
+            plan = store.get(event.plan_id)
+            if plan is None:
+                continue
+            if event.transition not in STOP_EVENTS | NOTICE_EVENTS:
+                if history is not None:
+                    await history.send(embed=build_plan_event_embed(plan, event))
+                continue
+            embed = build_instruction_embed(plan, event)
+            pinged = False
+            if feed is not None:
+                try:
+                    await feed.send(embed=embed)
+                    pinged = True
+                except Exception as exc:
+                    _warn_throttled(plan.plan_id, "execution feed: %s for plan %s failed "
+                                    "on feed (%s); history will notify instead",
+                                    event.transition, plan.plan_id, exc)
+            if history is not None:
+                try:
+                    await (silence(history) if pinged else history).send(embed=embed)
+                    pinged = True
+                except Exception as exc:
+                    _warn_throttled(plan.plan_id, "execution feed: history copy of %s for "
+                                    "plan %s failed: %s", event.transition, plan.plan_id, exc)
+            if pinged:
+                deliveries.append(_delivery(plan, event))
+            else:
+                _warn_throttled(plan.plan_id, "execution feed: %s for plan %s reached no "
+                                "channel; it will be re-sent", event.transition, plan.plan_id)
+        except Exception as exc:
+            _warn_throttled(event.plan_id, "execution feed: could not post %s for plan %s: %s",
+                            event.transition, event.plan_id, exc)
+    return deliveries
 
