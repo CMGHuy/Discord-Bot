@@ -202,6 +202,28 @@ describe('AnalyticsStore', () => {
    */
   const JOURNAL = { digest: ['Two losses, both chased.'], lessons: ['Wait for the retest.'], entries_n: 2 };
   const EXIT_QUALITY = { exit_reasons: [], hold_by_outcome: {}, efficiency: { bins: [], n: 0, median: null }, mae: { bins: [], n: 0, median: null }, scatter: [], coverage: {}, min_cell_n: 20 };
+  // v85 D39 (R9-03): the KPI row's Sharpe (R)/Max drawdown (R) tiles read
+  // riskMetrics off the same /risk GET-request/whole-payload the Risk
+  // workspace uses -- only metrics is read here, but the response is
+  // shaped like the real endpoint rather than a partial the store would
+  // never actually receive.
+  const RISK = {
+    heat: { open_pct: 0, cap_pct: 6, utilisation_pct: 0 },
+    positions: [], sector_heat: [], clusters: [],
+    throttle: { multiplier: 1, paused: false },
+    killswitch: { on: false, reason: null, at: null },
+    scan_health: { durations_s: [], latest_s: null, slowdown: false },
+    metrics: {
+      var_95: { value: null, n: 0 },
+      expected_shortfall_95: { value: null, n: 0 },
+      annualised_vol: { value: null, n: 0 },
+      beta_spy: { value: null, n: 0 },
+      sharpe_r: { value: 0.96, n: 42 },
+      max_drawdown_r: { value: 3.2, n: 42 },
+      as_of: null,
+    },
+    correlation: { labels: [], values: [] },
+  };
 
   const respondPerformance = (body: Partial<AnalyticsPerformance> = {}) => {
     backend
@@ -214,6 +236,7 @@ describe('AnalyticsStore', () => {
     // cards. Settled here so `backend.verify()` still means "nothing ELSE".
     backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
     backend.match('/api/v1/analytics/exit-quality').forEach((request) => request.flush(EXIT_QUALITY));
+    backend.match('/api/v1/risk').forEach((request) => request.flush(RISK));
   };
 
   const respondStrategies = (body: Record<string, unknown> = {}) =>
