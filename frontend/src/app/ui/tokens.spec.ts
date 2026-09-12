@@ -195,6 +195,9 @@ const NOT_CONTROL_ROWS = new Set([
   // same category as 'scan' above: a figure and the numbers explaining it,
   // not a row of controls to bottom-align.
   'gauge-budget',
+  // Trade Detail's ticker/status title is a semantic heading, not a control
+  // lane. It is the one flex row whose children are data and status only.
+  'trade-title',
   'command-error', // <p role="alert">: message text with a dismiss affordance
   'triage', // groups the two <label> rows below; owns neither control
   // <label> elements. Converting one to a component host would break the

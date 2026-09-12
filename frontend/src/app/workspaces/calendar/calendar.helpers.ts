@@ -11,6 +11,7 @@
  */
 
 import { CalendarDay } from '../../api/models';
+import { num } from '../../ui/format';
 
 export type CalendarCellMetric = 'r' | 'currency' | 'trades' | 'win_rate';
 export type CalendarCellTone = 'pos' | 'neg' | 'neutral' | 'empty';
@@ -35,7 +36,7 @@ export function cellValue(day: CalendarDay, metric: CalendarCellMetric): {
     tone: value > 0 ? 'pos' : value < 0 ? 'neg' : 'neutral',
   };
   return {
-    value, text: `${value >= 0 ? '+' : ''}${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+    value, text: `${value >= 0 ? '+' : ''}${num(value, 0)}`,
     tone: value > 0 ? 'pos' : value < 0 ? 'neg' : 'neutral',
   };
 }

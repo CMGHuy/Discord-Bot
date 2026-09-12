@@ -156,13 +156,13 @@ describe('shell navigation', () => {
     expect(workspace.querySelector('[role="status"]')?.textContent).toContain('Loading Trades');
     expect(workspace.querySelector('.route-loading-overlay')).not.toBeNull();
   });
-  it('groups the eight workspaces into three named groups', () => {
+  it('groups the ten workspaces into three named groups', () => {
     const f = TestBed.createComponent(Shell);
     f.detectChanges();
     const el = f.nativeElement as HTMLElement;
     const labels = [...el.querySelectorAll('.nav-group-label')].map((n) => n.textContent?.trim());
     expect(labels).toEqual(['MONITOR', 'REVIEW', 'SYSTEM']);
-    expect(el.querySelectorAll('.nav a').length).toBe(8);
+    expect(el.querySelectorAll('.nav a').length).toBe(10);
   });
 
   it('keeps each group a real list so the grouping reaches assistive tech', () => {
