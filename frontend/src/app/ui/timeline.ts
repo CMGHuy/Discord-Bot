@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, TemplateRef, input } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 
 export interface TimelineItem {
   /** Stable key — `<component>-<version>`. */
@@ -22,6 +23,7 @@ export interface TimelineItem {
 @Component({
   selector: 'sb-timeline',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [NgTemplateOutlet],
   template: `
     <div class="timeline">
       <ol>
@@ -32,7 +34,13 @@ export interface TimelineItem {
               @if (item.current) { <span class="badge">Current</span> }
             </div>
             <div class="meta">{{ item.meta }}</div>
-            <div class="body"><ng-content select="[body]" /></div>
+            <div class="body">
+              @if (bodyTemplate(); as body) {
+                <ng-container [ngTemplateOutlet]="body" [ngTemplateOutletContext]="{ $implicit: item }" />
+              } @else {
+                <ng-content select="[body]" />
+              }
+            </div>
           </li>
         }
       </ol>
@@ -69,4 +77,6 @@ export interface TimelineItem {
 })
 export class Timeline {
   readonly items = input.required<TimelineItem[]>();
+  /** An item-aware body keeps rich release cards inside the shared rail. */
+  readonly bodyTemplate = input<TemplateRef<{ $implicit: TimelineItem }> | null>(null);
 }

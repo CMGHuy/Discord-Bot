@@ -15,6 +15,8 @@ import { Button } from '../../ui/button';
 import { ControlRow } from '../../ui/layout';
 import { PaginationComponent } from '../../ui/pagination';
 import { SectionHead } from '../../ui/section-head';
+import { StatTile } from '../../ui/stat-tile';
+import { Timeline, TimelineItem } from '../../ui/timeline';
 import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 
 /**
@@ -41,7 +43,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 @Component({
   selector: 'sb-versions',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow, PaginationComponent, SectionHead, Async],
+  imports: [Button, ControlRow, PaginationComponent, SectionHead, Async, StatTile, Timeline],
   // v54 D1: this workspace is a lane strip plus a change stream -- both
   // dense, repeating rows, more per screen -- so it defaults to the
   // instrument register. On the host (a static class, not a template
@@ -168,11 +170,10 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
         <p class="muted muted-reset">No releases carry that version.</p>
       }
 
-      <ul class="stream">
-        @for (release of store.visible(); track release.commit) {
-          <li class="entry">
-            <span class="when">{{ release.date }}</span>
-            <div class="what">
+      <sb-timeline [items]="timelineItems()" [bodyTemplate]="releaseBody">
+        <ng-template #releaseBody let-item>
+          @if (timelineRelease(item); as release) {
+            <div class="release-card">
               <sb-control-row>
                 @for (component of store.components(); track component) {
                   @if (release.versions[component]; as version) {
@@ -188,18 +189,24 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
                 }
               </sb-control-row>
               <p class="subject">{{ release.subject }}</p>
+              <div class="provenance">
+                @if (release.provenance?.commit_range; as range) { <span>Range: {{ range }}</span> }
+                @else { <span>No tagged range</span> }
+                <span>Commits: {{ release.provenance?.commits ?? 'unknown' }}</span>
+                @if (release.provenance?.spec; as spec) { <a [href]="spec">{{ spec.split('/').at(-1) }}</a> }
+              </div>
               @if (release.telemetry; as telemetry) {
-                <div class="release-meta">
-                  <span>Telemetry: {{ telemetry.source === 'marker' ? 'measured' : 'inferred' }}</span>
-                  <span>Scans: {{ telemetry.median_scan_sec === null ? 'unknown' : telemetry.median_scan_sec + 's median' }}</span>
-                  <span>Days: {{ telemetry.n_days === null ? 'unknown' : telemetry.n_days }}</span>
-                  @if (release.provenance?.commit_range; as range) { <span>Range: {{ range }}</span> }
+                <div class="telemetry-cards">
+                  <sb-stat-tile label="Uptime" [value]="telemetry.uptime_pct === null ? '—' : telemetry.uptime_pct.toFixed(2) + '%'" [sample]="telemetry.n_days" />
+                  <sb-stat-tile label="Error rate" [value]="telemetry.error_rate === null ? '—' : (telemetry.error_rate * 100).toFixed(2) + '%'" [sample]="telemetry.n_days" />
+                  <sb-stat-tile label="Median scan" [value]="telemetry.median_scan_sec === null ? '—' : telemetry.median_scan_sec.toFixed(1) + 's'" [sample]="telemetry.n_days" />
                 </div>
-              }
+                <p class="release-meta">Telemetry: {{ telemetry.source === 'marker' ? 'measured' : 'inferred' }}</p>
+              } @else { <p class="release-meta">Telemetry: window unknown</p> }
             </div>
-          </li>
-        }
-      </ul>
+          }
+        </ng-template>
+      </sb-timeline>
 
       <sb-pagination [pagination]="store.pageSpec()" (pageChange)="store.setPage($event)" />
     </sb-async>
@@ -245,7 +252,9 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .chip strong { color: var(--text); font-weight: 600; }
     .chip.on { color: var(--accent); }
     .chip.quiet { color: var(--text-faint); cursor: default; }
-    .release-meta { display: flex; flex-wrap: wrap; gap: var(--space-8); color: var(--text-faint); font-size: var(--text-micro); }
+    .release-meta, .provenance { margin: var(--space-6) 0 0; display: flex; flex-wrap: wrap; gap: var(--space-8); color: var(--text-faint); font-size: var(--text-micro); }
+    .provenance a { color: var(--accent); }
+    .telemetry-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-8); margin-top: var(--space-8); }
 
     .strip { display: flex; flex-direction: column; gap: var(--space-6);
               position: relative; overflow: hidden; }
@@ -332,12 +341,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
        name: this button must look like plain running text. */
     .link { border: 0; font: inherit; text-decoration: underline; }
 
-    .stream { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column;
-              gap: var(--register-pad); }
-    .entry { display: flex; gap: var(--register-pad); align-items: baseline; }
-    .when { flex: none; width: 6rem; font-family: var(--font-mono); font-size: var(--register-label);
-            color: var(--text-faint); }
-    .what { min-width: 0; }
+    .release-card { min-width: 0; }
     .subject { margin: var(--space-4) 0 0; color: var(--text-secondary);
                font-size: var(--text-table); }
   `,
@@ -351,6 +355,17 @@ export class Versions {
   );
 
   protected readonly hovered = signal<{ lane: string; segment: LaneSegment } | null>(null);
+
+  protected readonly timelineItems = computed<TimelineItem[]>(() => this.store.visible().map((release, index) => ({
+    id: release.commit,
+    title: release.date,
+    meta: release.changed.length ? `Changed: ${release.changed.join(', ')}` : 'No component change',
+    current: index === 0,
+  })));
+
+  protected timelineRelease(item: TimelineItem): Release | undefined {
+    return this.store.visible().find((release) => release.commit === item.id);
+  }
 
   /** `Object.entries` for the template's `@for` -- keeps the tooltip's
    *  paired-version rows from needing a pipe or a second computed just to

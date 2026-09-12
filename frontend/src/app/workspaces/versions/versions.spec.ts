@@ -94,15 +94,23 @@ function seedUnflushed(): { fixture: ComponentFixture<Versions>; backend: HttpTe
 }
 
 describe('Versions', () => {
+  it('uses the shared timeline and gives unknown provenance a truthful label', async () => {
+    const fixture = seed(PAIRED);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('sb-timeline')).not.toBeNull();
+    expect(host.textContent).toContain('No tagged range');
+  });
   it('labels release telemetry as measured or inferred rather than presenting it as an unqualified fact', async () => {
     const fixture = seed({ ...PAIRED, releases: [{ ...PAIRED.releases[0], telemetry: {
       uptime_pct: null, error_rate: null, median_scan_sec: 42, n_days: 3, source: 'marker',
     } }] });
     await fixture.whenStable();
     fixture.detectChanges();
-    const text = (fixture.nativeElement as HTMLElement).querySelector('.release-meta')!.textContent!;
-    expect(text).toContain('measured');
-    expect(text).toContain('42s median');
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('.release-meta')!.textContent).toContain('measured');
+    expect(host.querySelector('.telemetry-cards')!.textContent).toContain('42.0s');
   });
   it('does not widen when components are added', async () => {
     const fixture = seed(SIX);
