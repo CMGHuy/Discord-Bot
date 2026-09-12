@@ -21,7 +21,6 @@
           <span class="word"><span>Bomeo</span><span>Capital</span></span>
         }
       </span>
-      <span class="tag">paper</span>
     </div>
 
     @for (group of navGroups; track group.id) {
@@ -52,23 +51,24 @@
          render, and loses the bottom anchor entirely when whichever child
          carries it is the one that does not. -->
     <div class="sidebar-foot">
-      <p class="rail-tagline">Trade smarter. Build further.</p>
-
       <!-- Not shown on the phone overlay: there it would sit under a sheet
            that a navigation is about to dismiss. -->
-      @if (!overlay()) {
-        <button
-          sb-button
-          variant="icon"
-          class="collapse"
-          type="button"
-          [attr.aria-label]="railed() ? 'Expand sidebar' : 'Collapse sidebar'"
-          [attr.aria-pressed]="railed()"
-          (click)="toggleSidebar()"
-        >
-          <sb-icon [name]="railed() ? 'expand' : 'collapse'" />
-        </button>
-      }
+      <div class="tagline-row">
+        <p class="rail-tagline">Trade smarter. Build further.</p>
+        @if (!overlay()) {
+          <button
+            sb-button
+            variant="icon"
+            class="collapse"
+            type="button"
+            [attr.aria-label]="railed() ? 'Expand sidebar' : 'Collapse sidebar'"
+            [attr.aria-pressed]="railed()"
+            (click)="toggleSidebar()"
+          >
+            <sb-icon [name]="railed() ? 'expand' : 'collapse'" />
+          </button>
+        }
+      </div>
 
       <!-- The install's version, where the Jinja sidebar had it. Nothing
            renders until the first answer: a version block that reads 0.0.0

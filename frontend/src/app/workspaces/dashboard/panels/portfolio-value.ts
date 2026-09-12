@@ -1,25 +1,19 @@
-import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import { Panel } from '../../../ui/layout';
-import { SegmentOption, Segmented } from '../../../ui/segmented';
 import { Sparkline } from '../../../ui/sparkline';
 import { amount, pct } from '../../../ui/format';
-
-type EquityRange = 'w' | 'm' | 'all';
 
 /**
  * The account, in one figure — v85 D8.
  *
- * Deliberately NOT the mockup's interactive intraday chart: the only equity
- * series this bot keeps is `equity_30d`, 30 daily points. A 1D/1W/1M/3M/YTD/
- * 1Y/ALL strip over one series would be six controls that cannot answer, so
- * only 1W/1M/ALL render (v85 D31, sheet 1, finding 7) — no disabled 1D button,
- * because an affordance that never works is worse than its absence.
+ * The bot keeps one honest 30-day series, so it is shown directly rather than
+ * pretending a range picker can offer different histories.
  */
 @Component({
   selector: 'sb-portfolio-value',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Sparkline, Segmented],
+  imports: [Panel, Sparkline],
   template: `
     <sb-panel heading="Portfolio value">
       @if (balance() !== null) {
@@ -35,10 +29,7 @@ type EquityRange = 'w' | 'm' | 'all';
       }
 
       @if (points().length) {
-        <div class="equity-range">
-          <sb-segmented [options]="rangeOptions" label="Equity range" [(value)]="range" />
-        </div>
-        <sb-sparkline [points]="slicedPoints()" label="30-day equity" />
+        <sb-sparkline [points]="points()" label="30-day equity" />
       }
     </sb-panel>
   `,
@@ -46,7 +37,7 @@ type EquityRange = 'w' | 'm' | 'all';
     :host { display: block; }
     .figure {
       margin: 0;
-      font-size: var(--text-hero);
+      font-size: var(--text-title);
       font-weight: 600;
       color: var(--text);
       font-variant-numeric: tabular-nums;
@@ -60,7 +51,6 @@ type EquityRange = 'w' | 'm' | 'all';
     }
     .change.pos { color: var(--pos); }
     .change.neg { color: var(--neg); }
-    .equity-range { margin-bottom: var(--space-8); }
   `,
 })
 export class PortfolioValue {
@@ -72,19 +62,4 @@ export class PortfolioValue {
   protected readonly money = computed(() => amount(this.balance(), this.currency()));
   protected fmtPct = pct;
 
-  protected readonly rangeOptions: SegmentOption[] = [
-    { value: 'w', label: '1W' },
-    { value: 'm', label: '1M' },
-    { value: 'all', label: 'ALL' },
-  ];
-  protected readonly range = signal<EquityRange>('all');
-
-  /** Last 5/21/all points -- a trading week and a trading month of the 30
-   *  daily points this book actually keeps, not calendar week/month. */
-  protected readonly slicedPoints = computed<readonly number[]>(() => {
-    const pts = this.points();
-    return this.range() === 'w' ? pts.slice(-5)
-      : this.range() === 'm' ? pts.slice(-21)
-      : pts;
-  });
 }

@@ -12,7 +12,7 @@ import {
 import { Router } from '@angular/router';
 import { CLOCK } from '../../ui/clock';
 
-import { DashboardScope, TradeRow } from '../../api/models';
+import { TradeRow } from '../../api/models';
 import { ApiClient } from '../../api/api-client';
 import { ToastService } from '../../shell/toast.service';
 import { ConnectionStore } from '../../stores/connection.store';
@@ -42,10 +42,10 @@ import {
 } from '../trades/trades.columns';
 import { amount, dateTime, money, pct, signed } from '../../ui/format';
 import { Magnitude } from '../../ui/magnitude';
-import { ControlRow, Drawer, Panel } from '../../ui/layout';
+import { Drawer, Panel } from '../../ui/layout';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
+import { Hint } from '../../ui/hint';
 import { RowLink } from '../../ui/row-link';
-import { SectionHead } from '../../ui/section-head';
 import { PlanLifecycleDiagram } from '../../ui/plan-lifecycle-diagram';
 import {
   expectedPnlPct,
@@ -62,9 +62,7 @@ import { deriveActivity } from './panels/activity';
 import { PortfolioValue } from './panels/portfolio-value';
 import { TradingPerformance } from './panels/trading-performance';
 import { RecentActivity } from './panels/recent-activity';
-import { WatchlistPanel } from './panels/watchlist-panel';
 import { MarketMovers } from './panels/market-movers';
-import { ExposureByHorizon } from './panels/exposure-by-horizon';
 
 /**
  * The Dashboard — spec v14 Decision 5's two-tier header plus a capped view of
@@ -96,16 +94,15 @@ import { ExposureByHorizon } from './panels/exposure-by-horizon';
   selector: 'sb-dashboard',
   imports: [
     Magnitude, Panel, PositionsTable, RowActions, ConfirmDialog,
-    StatusCell, PlanCell, ConfidenceCell, Async, Button, ControlRow,
-    Drawer, Flash, PlanLifecycleDiagram, RowLink, SectionHead,
-    PortfolioValue, TradingPerformance, RecentActivity, WatchlistPanel, MarketMovers,
-    ExposureByHorizon,
+    StatusCell, PlanCell, ConfidenceCell, Async, Button, Drawer, Flash,
+    Hint, PlanLifecycleDiagram, RowLink, PortfolioValue, TradingPerformance,
+    RecentActivity, MarketMovers,
   ],
   // TradesStore, not DashboardStore -- that one is provided at the route
   // level (dashboard.routes.ts). This instance is this page's own, for the
   // activity feed's own query (newest-first, every status), separate from
   // sb-positions-table's own instance (it provides its own -- see
-  // positions-table.ts) and ExposureByHorizon's own (same reason).
+  // positions-table.ts).
   providers: [TradesStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // v54 D1: this workspace answers "how am I doing?" -- hero figures, room
@@ -120,53 +117,6 @@ import { ExposureByHorizon } from './panels/exposure-by-horizon';
   // `TradesStore` instance (see positions-table.ts) -- neither this one nor
   // that one touch the Trades workspace's own copy.
   template: `
-    <!-- v54: sb-async's own staleAsOf badge (below) now owns the "these
-         numbers stopped updating" signal -- a second one here would be a
-         duplicate, not a backstop, so store.error() no longer binds here
-         directly (it also skipped the v13 refetch mapping asyncInputs
-         provides, which this raw binding never applied). -->
-    <sb-section-head>
-      <!-- v85: the qualifying-trades rule moves into a drawer (below) --
-           same words, one click away instead of always on the page face. -->
-      <button sb-button variant="ghost" type="button" actions data-info="qualifying"
-              aria-label="What appears here"
-              (click)="infoOpen.set('qualifying')">?</button>
-      <!-- SR58. The Jinja dashboard's three date scopes. A server parameter,
-           not a client filter: the realised figures below are computed from
-           the scoped set, and a client-side scope over an all-time payload
-           could not narrow them at all. -->
-      <sb-control-row actions class="scope" role="group" aria-label="Date scope">
-        @for (option of scopes; track option.mode) {
-          <button
-            sb-button
-            type="button"
-            [variant]="store.scope() === option.mode ? 'secondary' : 'ghost'"
-            [attr.aria-pressed]="store.scope() === option.mode"
-            (click)="store.setScope(option.mode)"
-          >
-            {{ option.label }}
-          </button>
-        }
-      </sb-control-row>
-    </sb-section-head>
-
-    <!-- SR59. Copied from dashboard.html:60-68, not paraphrased: it states
-         a specific rule about what does and does not reach this screen, and a
-         looser wording would describe a looser rule. Moved off the page face
-         into a drawer (v85 D18) -- same words, verbatim, one click away. -->
-    <sb-drawer [open]="infoOpen() === 'qualifying'" heading="What appears here"
-               (closed)="infoOpen.set(null)">
-      <p class="section-help">
-        <strong>What appears here:</strong>
-        Only trades that meet <em>every</em> configured requirement (min reward,
-        stop distance, risk:reward, min strategies confirmed, min confidence) are
-        logged here as paper trades. Trade plans shown by <code>!check</code> that
-        don't clear all requirements appear in Discord but are <strong>not</strong>
-        logged — they're marked in bold red in the Discord embed. The automatic
-        background scan only ever posts and logs fully-qualifying setups.
-      </p>
-    </sb-drawer>
-
     <sb-async
       [loading]="async().loading"
       [error]="async().error"
@@ -206,10 +156,6 @@ import { ExposureByHorizon } from './panels/exposure-by-horizon';
       />
     </div>
 
-    <!-- v85 D31/sheet 1: replaces the mockup's allocation donut, which has
-         no honest occupant on a single-asset-class paper book. -->
-    <sb-exposure-by-horizon />
-
     <!-- SR59. The sizing note (dashboard_fragment.html:81-87) plus the
          share-count snapshot note (below, moved out of the Open positions
          panel body) -- both explain how the numbers on this page were
@@ -227,61 +173,6 @@ import { ExposureByHorizon } from './panels/exposure-by-horizon';
       </p>
     </sb-drawer>
 
-    <!-- SR59. _plans_board.html:22-27, verbatim, and the figure that
-         illustrates it -- both moved out of the page body into this
-         on-demand drawer, opened by the "Lifecycle guide" button on the Open
-         positions panel below. The per-status wording from lc_tips still
-         rides each lifecycle card's own title attribute above; there is no
-         tip-icon component, so a hover tip was never this text's only home. -->
-    <sb-drawer [open]="lifecycleInfoOpen()" heading="Plan lifecycle"
-               (closed)="lifecycleInfoOpen.set(false)">
-      <p class="section-help">
-        A plan moves PENDING → ACTIVE → PARTIAL → CLOSED as price hits its
-        entry trigger, TP1, then TP2/stop (or CANCELLED if it expires or
-        invalidates before filling). PENDING/ACTIVE/PARTIAL counts are
-        all-time; CLOSED/CANCELLED only count today's — click a card to filter
-        the board below by that status
-        @if (store.scope() !== 'all') { , narrowed in Today mode to what
-          opened today plus anything still open, however old }.
-      </p>
-      <!-- Centred as a row, the diagram to the left of the terms it uses --
-           it is a figure illustrating the paragraph above, not more running
-           copy. -->
-      <div class="lifecycle-figure">
-        <sb-plan-lifecycle-diagram />
-        <dl class="lifecycle-legend">
-          <div>
-            <dt>Fills</dt>
-            <dd>Price crosses the entry trigger and the position opens.</dd>
-          </div>
-          <div>
-            <dt>Expires</dt>
-            <dd>
-              Price never reached the trigger within {{ store.defaultExpiryBars() }} bars
-              of the plan being posted (the default expiry window; an individual
-              plan can be built with a different one).
-            </dd>
-          </div>
-          <div>
-            <dt>Invalidated</dt>
-            <dd>Price moved enough against the setup to invalidate it before triggering.</dd>
-          </div>
-          <div>
-            <dt>TP1 hit</dt>
-            <dd>Price reaches the first target — half the position closes and the stop moves to break-even.</dd>
-          </div>
-          <div>
-            <dt>Stop hit</dt>
-            <dd>Price hits the stop before ever reaching TP1 — the full position closes at a loss.</dd>
-          </div>
-          <div>
-            <dt>TP2 / trail stop</dt>
-            <dd>Price reaches the second target, or the trailing stop (which ratchets up after TP1) is hit — the remainder closes.</dd>
-          </div>
-        </dl>
-      </div>
-    </sb-drawer>
-
     <sb-panel heading="Open positions" [flush]="true">
       <!-- SR59, the last cosmetic row: dashboard_fragment.html:391's shares
            tooltip. Moved into the shared "Sizing" drawer above (v85 D18) --
@@ -292,10 +183,18 @@ import { ExposureByHorizon } from './panels/exposure-by-horizon';
       <button sb-button variant="ghost" type="button" panel-actions data-info="sizing"
               aria-label="Sizing note"
               (click)="infoOpen.set('sizing')">?</button>
-      <button sb-button variant="ghost" type="button" panel-actions
-              (click)="lifecycleInfoOpen.set(true)">
-        Lifecycle guide
-      </button>
+      <sb-hint panel-actions class="lifecycle-hint" [wide]="true" glyph="?"
+               label="Plan lifecycle and qualifying trades">
+        <span class="hint-heading">Plan lifecycle</span>
+        <span class="hint-copy">
+          <strong>What appears here:</strong> Only trades that meet <em>every</em>
+          configured requirement (min reward, stop distance, risk:reward, min
+          strategies confirmed, min confidence) are logged as paper trades.
+          PENDING → ACTIVE → PARTIAL → CLOSED shows a plan from entry through
+          its first and final exits.
+        </span>
+        <sb-plan-lifecycle-diagram />
+      </sb-hint>
 
       <!-- v85 D11: one table, five lifecycle tabs, replacing the four
            stacked groups. Only the active tab fetches -- see
@@ -337,7 +236,6 @@ import { ExposureByHorizon } from './panels/exposure-by-horizon';
     <div class="bottom-row">
       <sb-recent-activity [events]="activity()" />
       <sb-market-movers [rows]="tape.rows()" />
-      <sb-watchlist-panel [rows]="tape.rows()" />
     </div>
 
     <!-- v85 D18: the footnote moves into a drawer, off the page face. -->
@@ -522,75 +420,11 @@ import { ExposureByHorizon } from './panels/exposure-by-horizon';
       .top-row { grid-template-columns: minmax(0, 1fr); }
     }
 
-    /* margin: 0 auto centres the ROW (diagram + legend together) in the
-       page column, which is otherwise left-aligned throughout -- a figure
-       reads as a figure partly by not sharing the running copy's edge.
-       max-width caps it well short of the full-width column so it doesn't
-       stretch into two things floating far apart on a wide screen. */
-    .lifecycle-figure {
-      display: flex;
-      /* stretch, not center: the two children should share the ROW's own
-         height rather than each sitting at its own natural size with a gap
-         above or below whichever one is shorter. The diagram centres its
-         SVG vertically within that stretched height (its own :host), and
-         the legend spreads its six rows across it (align-content below) --
-         between the two, whichever side ends up taller sets the row's
-         height and the other one fills it, rather than looking mismatched. */
-      align-items: stretch;
-      justify-content: center;
-      /* nowrap: the two MUST be one row, not wrap onto two stacked ones --
-         flex-wrap's default single-row-if-it-fits behaviour is not a
-         guarantee, and this was observed wrapping despite fitting the
-         column width. Stacks below 720px instead (media query at the
-         bottom), matching every other row on this page. */
-      flex-wrap: nowrap;
-      /* v54: --space-20 before -- same value as register-presentation's
-         --register-pad rung, so this is a no-op swap that lets the gutter
-         follow the register. */
-      gap: var(--register-pad);
-      /* width: 100% alongside max-width, not max-width alone: this is a
-         GRID item (the Dashboard's own :host) that ALSO happens to be a
-         flex container -- under that combination "auto" resolved to a
-         shrink-to-fit width around the children's shrunk sizes instead of
-         the grid's own stretch default, so the row rendered at ~660px
-         (and centred inside itself) even though the column had 1300px to
-         give it and max-width said 960 was fine. Forcing width: 100% first
-         is what makes max-width actually the cap it looks like on paper. */
-      width: 100%;
-      max-width: 960px;
-      margin: 0 auto;
-    }
-    sb-plan-lifecycle-diagram { flex: 1 1 420px; min-width: 280px; max-width: 620px; }
-    .lifecycle-legend {
-      flex: 1 1 300px;
-      max-width: 340px;
-      margin: 0;
-      display: grid;
-      gap: var(--space-6);
-      /* Spreads the six rows across the full stretched height (see
-         .lifecycle-figure's own comment) instead of clumping them at the
-         top with empty space below -- the grid equivalent of
-         justify-content: space-between. */
-      align-content: space-between;
-    }
-    .lifecycle-legend > div {
-      display: flex;
-      gap: var(--space-8);
-      align-items: baseline;
-    }
-    .lifecycle-legend dt {
-      flex: 0 0 auto;
-      min-width: 96px;
-      color: var(--text);
-      font-weight: 600;
-      font-size: var(--text-chip);
-    }
-    .lifecycle-legend dd {
-      margin: 0;
-      color: var(--text-secondary);
-      font-size: var(--text-chip);
-      line-height: 1.4;
-    }
+    .lifecycle-hint { margin-left: var(--space-4); }
+    .hint-heading, .hint-copy { display: block; }
+    .hint-heading { margin-bottom: var(--space-4); font-weight: 600; }
+    .hint-copy { margin-bottom: var(--space-8); color: var(--text-secondary); }
+    .lifecycle-hint sb-plan-lifecycle-diagram { display: block; min-width: 280px; }
 
     /* The panel is flush so the table can run edge to edge; anything else
        inside it has to bring its own padding. */
@@ -648,8 +482,7 @@ import { ExposureByHorizon } from './panels/exposure-by-horizon';
     .pnl-plan .sl { color: var(--neg); }
 
     @media (max-width: 720px) {
-      .lifecycle-figure { flex-direction: column; align-items: center; }
-      sb-plan-lifecycle-diagram, .lifecycle-legend { max-width: 100%; }
+      .lifecycle-hint sb-plan-lifecycle-diagram { min-width: 0; }
     }
   `,
 })
@@ -680,14 +513,9 @@ export class Dashboard {
     this.recent.setQuery({ sort: '-opened_at', page: 1, per_page: 20 });
   }
 
-  /** Whether the plan-lifecycle legend/diagram drawer is open — that
-   *  content used to sit on the page body and now lives behind the Open
-   *  positions panel's "Lifecycle guide" button. */
-  protected readonly lifecycleInfoOpen = signal(false);
-
-  /** The other three explanatory drawers (v85 D18) -- one signal, since only
+  /** The explanatory drawers (v85 D18) -- one signal, since only
    *  one can be open at a time, rather than a boolean per drawer. */
-  protected readonly infoOpen = signal<null | 'qualifying' | 'sizing' | 'prices'>(null);
+  protected readonly infoOpen = signal<null | 'sizing' | 'prices'>(null);
 
   /** Zero open positions is a RESULT (the scan found nothing qualifying in
    *  this scope), not missing data -- measured-zero, not no-data-yet. */
@@ -917,18 +745,6 @@ export class Dashboard {
     const riskPct = note?.['risk_pct'];
     return typeof riskPct === 'number' ? `Sizing based on ${riskPct}% risk` : null;
   });
-
-  /* -- SR58: the date scope ------------------------------------------- */
-
-  /** The Jinja dashboard had three; `active` ("Today + open") and `today`
-   *  are merged into this one Today button. The server already computed the
-   *  realised figures identically for both, and Today's definition folds in
-   *  "or still open, however old" on its own, so a separate "+ open" choice
-   *  had nothing left to distinguish. */
-  protected readonly scopes: { mode: DashboardScope; label: string }[] = [
-    { mode: 'today', label: 'Today' },
-    { mode: 'all', label: 'All days' },
-  ];
 
   /** Names the window in the card itself, so a figure cannot be read as
    *  today's when the toggle is on All days. */

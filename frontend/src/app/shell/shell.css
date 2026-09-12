@@ -45,7 +45,6 @@
    it is removed structurally (shell.html's `@if (!railed())`), not clipped,
    because collapsed is also asserted by its absence from the DOM. */
 .shell.railed:not(.overlay) .sidebar .label,
-.shell.railed:not(.overlay) .mark .tag,
 .shell.railed:not(.overlay) .rail-tagline {
   position: absolute;
   width: 1px;
@@ -68,9 +67,8 @@
   gap: var(--space-10);
 }
 
-.collapse {
-  align-self: flex-start;
-}
+.tagline-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-8); }
+.shell.railed:not(.overlay) .tagline-row { justify-content: center; }
 
 @media (prefers-reduced-motion: reduce) {
   .shell, .shell.overlay .sidebar { transition: none; }
@@ -131,20 +129,10 @@
 .brand .word span:last-child { color: var(--accent); }
 
 .rail-tagline {
-  margin: 0 0 var(--space-10);
+  margin: 0;
   color: var(--text-faint);
   font-size: var(--text-micro);
   line-height: 1.4;
-}
-
-.mark .tag {
-  padding: 1px var(--space-4);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-chip);
-  color: var(--text-muted);
-  font-size: var(--text-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
 }
 
 .nav {
@@ -221,11 +209,11 @@
   border-bottom: 1px solid var(--border);
 }
 
-/* The tape takes the slack and is the only thing allowed to scroll: a
-   min-width of 0 on a flex child is what lets it shrink below its content
-   instead of pushing the status cluster off the end of the bar. */
+/* Keep the live tape compact so it cannot obscure the current page title.
+   It still scrolls within its allotted space when more symbols arrive. */
 .topbar-tape {
-  flex: 1 1 auto;
+  flex: 0 1 22rem;
+  max-width: 22rem;
   min-width: 0;
   display: flex;
   align-items: center;
@@ -235,11 +223,9 @@
 }
 .topbar-tape::-webkit-scrollbar { display: none; }
 
-.spacer {
-  flex: 1;
-}
+.spacer { flex: 1 1 auto; min-width: 0; }
 
-.topbar-lead { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.topbar-lead { display: flex; flex: 0 1 18rem; flex-direction: column; gap: 2px; min-width: 0; }
 .page-title {
   margin: 0;
   font-size: var(--text-title);
@@ -374,4 +360,6 @@
 @media (max-width: 720px) {
   .clock { display: none; }
   .topbar { gap: var(--space-10); }
+  .topbar-tape { flex-basis: 7rem; max-width: 7rem; }
+  .topbar-lead { flex-basis: 9rem; }
 }

@@ -49,16 +49,21 @@ let nextId = 0;
       [attr.aria-describedby]="id"
       (click)="toggle()"
     >
-      <span class="glyph" aria-hidden="true">i</span>
+      <span class="glyph" aria-hidden="true">{{ glyph() }}</span>
     </button>
     <span
       class="pop elev-overlay"
+      [class.wide]="wide()"
       role="tooltip"
       [id]="id"
       [hidden]="!open()"
       [style.top.px]="popTop()"
       [style.left.px]="popLeft()"
-    >{{ text() }}</span>
+    >@if (text()) {
+      {{ text() }}
+    } @else {
+      <ng-content />
+    }</span>
   `,
   styles: `
     :host { position: relative; display: inline-flex; vertical-align: middle; }
@@ -102,6 +107,7 @@ let nextId = 0;
       text-align: left;
       white-space: normal;
     }
+    .pop.wide { max-width: min(420px, 90vw); }
     /* A fingertip needs 44px around a 14px glyph (v80 D4). */
     @media (pointer: coarse), (max-width: 639px) {
       .trigger { min-width: var(--control-h); min-height: var(--control-h); }
@@ -109,9 +115,14 @@ let nextId = 0;
   `,
 })
 export class Hint {
-  readonly text = input.required<string>();
+  /** Plain-text hints use text; richer explanatory content can be projected. */
+  readonly text = input('');
   /** The trigger's accessible name. Name what it explains: "About expectancy". */
   readonly label = input('More information');
+  /** Default to the familiar information glyph; a nearby question can opt in. */
+  readonly glyph = input('i');
+  /** Use the larger overlay only for a compact, non-interactive diagram. */
+  readonly wide = input(false);
 
   protected readonly id = `sb-hint-${nextId++}`;
   protected readonly pinned = signal(false);

@@ -174,25 +174,20 @@ async function loaded(overrides: Partial<DashboardData> = {}) {
   backend.expectOne('/api/v1/dashboard?mode=today').flush(payload(overrides));
   await fixture.whenStable();
   fixture.detectChanges();
-  // sb-exposure-by-horizon (v85 R4-09) only exists once sb-async reaches its
-  // content branch, i.e. after the flush above -- its own /api/v1/trades
-  // request fires just now, not during the first flushTradeGroups() call.
-  flushTradeGroups(backend);
-  await fixture.whenStable();
-  fixture.detectChanges();
   return fixture;
 }
 
 describe('Dashboard v85 layout', () => {
-  it('lays the page out as the five panels plus the positions table', async () => {
+  it('keeps the dashboard focused on portfolio, performance, activity and movers', async () => {
     const fixture = await loaded();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('sb-portfolio-value')).not.toBeNull();
     expect(el.querySelector('sb-trading-performance')).not.toBeNull();
     expect(el.querySelector('sb-recent-activity')).not.toBeNull();
-    expect(el.querySelector('sb-watchlist-panel')).not.toBeNull();
     expect(el.querySelector('sb-market-movers')).not.toBeNull();
+    expect(el.querySelector('sb-watchlist-panel')).toBeNull();
+    expect(el.querySelector('sb-exposure-by-horizon')).toBeNull();
   });
 
   it('renders one tabbed positions table, not four stacked groups', async () => {
@@ -233,22 +228,17 @@ describe('Dashboard v85 layout', () => {
   });
 });
 
-describe('Dashboard v85 explanatory drawers', () => {
-  it('keeps the qualifying-trades explainer reachable but off the page face', () => {
-    // The [data-info="qualifying"] trigger sits in sb-section-head, outside
-    // sb-async, so it renders even before the dashboard payload arrives.
-    const { fixture } = seed();
-    fixture.detectChanges();
+describe('Dashboard explanatory help', () => {
+  it('moves the qualifying rule and lifecycle chart into Open positions help', async () => {
+    const fixture = await loaded();
     const el = fixture.nativeElement as HTMLElement;
-
-    // Not in the page body any more…
-    expect(el.querySelector('.explainer')).toBeNull();
-
-    // …but one click away, and still the same rule, stated in full.
-    el.querySelector<HTMLButtonElement>('[data-info="qualifying"]')!.click();
+    const hint = el.querySelector<HTMLElement>('sb-hint.lifecycle-hint')!;
+    expect(hint).not.toBeNull();
+    hint.dispatchEvent(new MouseEvent('mouseenter'));
     fixture.detectChanges();
+    expect(el.querySelector<HTMLElement>('sb-hint.lifecycle-hint [role="tooltip"]')!.hidden).toBe(false);
     expect(el.textContent).toContain('Only trades that meet');
-    expect(el.textContent).toContain('are logged here as paper trades');
+    expect(el.querySelector('sb-hint.lifecycle-hint sb-plan-lifecycle-diagram')).not.toBeNull();
   });
 
   it('keeps the sizing note and the footnote reachable too', async () => {
@@ -261,26 +251,14 @@ describe('Dashboard v85 explanatory drawers', () => {
 
 const THIRTY_POINTS = { points: Array.from({ length: 30 }, (_, i) => i) } as never;
 
-describe('Dashboard v85 sheet-1 reconciliation', () => {
-  it('offers only the equity ranges the 30-day series supports', async () => {
+describe('Dashboard portfolio value', () => {
+  it('shows its one honest 30-day series without a range picker', async () => {
     const fixture = await loaded({ equity_30d: THIRTY_POINTS });
-    const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.equity-range button')]
-      .map((b) => b.textContent!.trim());
-    expect(labels).toEqual(['1W', '1M', 'ALL']);
-  });
-
-  it('does not render a range it cannot draw', async () => {
-    const fixture = await loaded({ equity_30d: THIRTY_POINTS });
-    const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.equity-range button')]
-      .map((b) => b.textContent!.trim());
-    expect(labels).not.toContain('1D');
-  });
-
-  it('shows exposure by horizon where the mockup shows asset allocation', async () => {
-    const fixture = await loaded();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('sb-panel[heading="Exposure by horizon"]')).not.toBeNull();
-    expect(el.textContent).not.toContain('Asset allocation');
+    expect(el.querySelector('sb-portfolio-value sb-sparkline')).not.toBeNull();
+    expect(el.textContent).not.toContain('1W');
+    expect(el.textContent).not.toContain('1M');
+    expect(el.textContent).not.toContain('ALL');
   });
 });
 
