@@ -39,36 +39,48 @@ from .auth import require_auth
 HISTORY_PATH = os.path.join(os.path.dirname(__file__), "..", "version_history.json")
 
 
-@lru_cache(maxsize=512)
-def _git(*args: str) -> str | None:
-    """Git is optional in a shipped container; absence is an honest null."""
+@lru_cache(maxsize=1)
+def _history_positions() -> list[str]:
+    """One first-parent walk, cached for the process lifetime.
+
+    `/versions` returns every historical release in one response. Spawning
+    several Git commands per release makes an otherwise static page wait many
+    seconds; a single ordered walk gives the exact range count for this
+    release history (which is generated from that same first-parent line).
+    """
     try:
         return subprocess.check_output(
-            ["git", *args], cwd=_helpers.config._PROJECT_ROOT, text=True,
+            ["git", "rev-list", "--first-parent", "--reverse", "HEAD"],
+            cwd=_helpers.config._PROJECT_ROOT, text=True,
             stderr=subprocess.DEVNULL,
-        ).strip()
+        ).splitlines()
     except (OSError, subprocess.SubprocessError):
-        return None
+        return []
+
+
+@lru_cache(maxsize=1)
+def _position_map() -> dict[str, int]:
+    return {commit: index for index, commit in enumerate(_history_positions())}
 
 
 def _provenance(release: dict, previous: dict | None) -> dict:
     """Derive a verifiable range from consecutive frozen history commits."""
     commit = release.get("commit")
-    if not isinstance(commit, str) or not _git("rev-parse", "--verify", f"{commit}^{{commit}}"):
+    positions = _position_map()
+    if not isinstance(commit, str) or commit not in positions:
         return {"commit_range": None, "commits": None, "spec": None, "changelog": []}
 
     prior = previous.get("commit") if previous else None
-    valid_prior = isinstance(prior, str) and _git("rev-parse", "--verify", f"{prior}^{{commit}}")
+    valid_prior = isinstance(prior, str) and prior in positions and positions[prior] < positions[commit]
     revision = f"{prior}..{commit}" if valid_prior else commit
-    count = _git("rev-list", "--count", revision)
-    files = (_git("diff-tree", "--no-commit-id", "--name-only", "-r", commit) or "").splitlines()
-    specs = [path for path in files if path.startswith("docs/superpowers/specs/") and path.endswith(".md")]
-    changelog = [path for path in files if os.path.basename(path).lower().startswith("changelog")]
+    count = positions[commit] - positions[prior] if valid_prior else 1
     return {
         "commit_range": revision,
-        "commits": int(count) if count and count.isdigit() else None,
-        "spec": specs[0] if specs else None,
-        "changelog": changelog,
+        "commits": count,
+        # A release row has no authoritative spec path in the frozen history.
+        # Leave it unknown rather than guessing from a broad commit range.
+        "spec": None,
+        "changelog": [],
     }
 
 
