@@ -512,6 +512,7 @@ def restart_bot():
 #: anything approaching a megabyte is a client bug or someone using the
 #: admin as a key-value store, and both are better refused than persisted.
 _PREFERENCES_MAX_BYTES = 64 * 1024
+_DEFAULT_MIN_SAMPLE_N = 30
 
 
 def _preferences_path() -> str:
@@ -545,7 +546,12 @@ def get_preferences():
     """
     from swingbot.core.infra.jsonio import read_json
 
-    return jsonify({"preferences": read_json(_preferences_path(), {}) or {}})
+    preferences = read_json(_preferences_path(), {}) or {}
+    # A missing value is an older preferences blob, not an instruction to
+    # remove the statistical guard. Keep the default server-side so every
+    # client receives one truth before it has ever written preferences.
+    preferences.setdefault("minSampleN", _DEFAULT_MIN_SAMPLE_N)
+    return jsonify({"preferences": preferences})
 
 
 @api_v1.route("/system/preferences", methods=["PUT"])
@@ -568,11 +574,17 @@ def put_preferences():
     if not isinstance(preferences, Mapping):
         return error("invalid", "`preferences` must be a JSON object.", 400)
 
+    min_sample = preferences.get("minSampleN", _DEFAULT_MIN_SAMPLE_N)
+    if isinstance(min_sample, bool) or not isinstance(min_sample, int) or min_sample < 1:
+        return error("invalid", "`minSampleN` must be a positive integer.", 400)
+
     encoded = json.dumps(preferences)
     if len(encoded.encode("utf-8")) > _PREFERENCES_MAX_BYTES:
         return error("invalid",
                      f"Preferences must be under {_PREFERENCES_MAX_BYTES} bytes.",
                      400)
 
-    atomic_write_json(_preferences_path(), dict(preferences))
-    return jsonify({"preferences": dict(preferences)})
+    saved = dict(preferences)
+    saved.setdefault("minSampleN", _DEFAULT_MIN_SAMPLE_N)
+    atomic_write_json(_preferences_path(), saved)
+    return jsonify({"preferences": saved})

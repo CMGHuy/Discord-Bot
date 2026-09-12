@@ -34,14 +34,14 @@ def test_requires_auth(client):
     assert_error(client.put(ENDPOINT, json={"preferences": {}}), "auth", 401)
 
 
-def test_absent_preferences_are_an_empty_object(client, auth):
+def test_absent_preferences_supply_the_minimum_sample_default(client, auth):
     """A fresh install has no file. That is a state, not a 404 -- the SPA
     boots into it every first run."""
     response = client.get(ENDPOINT, headers=auth)
 
     assert response.status_code == 200
     assert_shape(response.get_json(), {"preferences": dict})
-    assert response.get_json()["preferences"] == {}
+    assert response.get_json()["preferences"] == {"minSampleN": 30}
 
 
 def test_saved_preferences_are_returned(client, auth, admin_app):
@@ -49,9 +49,9 @@ def test_saved_preferences_are_returned(client, auth, admin_app):
 
     saved = client.put(ENDPOINT, headers=auth, json={"preferences": columns})
     assert saved.status_code == 200
-    assert saved.get_json()["preferences"] == columns
+    assert saved.get_json()["preferences"] == {**columns, "minSampleN": 30}
 
-    assert client.get(ENDPOINT, headers=auth).get_json()["preferences"] == columns
+    assert client.get(ENDPOINT, headers=auth).get_json()["preferences"] == {**columns, "minSampleN": 30}
 
 
 def test_a_put_replaces_rather_than_merges(client, auth):
@@ -60,7 +60,7 @@ def test_a_put_replaces_rather_than_merges(client, auth):
     client.put(ENDPOINT, headers=auth, json={"preferences": {"a": 1, "b": 2}})
     client.put(ENDPOINT, headers=auth, json={"preferences": {"a": 9}})
 
-    assert client.get(ENDPOINT, headers=auth).get_json()["preferences"] == {"a": 9}
+    assert client.get(ENDPOINT, headers=auth).get_json()["preferences"] == {"a": 9, "minSampleN": 30}
 
 
 def test_it_is_written_atomically(client, auth, admin_app):
@@ -68,7 +68,7 @@ def test_it_is_written_atomically(client, auth, admin_app):
     found six that are not, and this is not going to be a seventh."""
     client.put(ENDPOINT, headers=auth, json={"preferences": {"tables": {"x": ["a"]}}})
 
-    assert stored(admin_app) == {"tables": {"x": ["a"]}}
+    assert stored(admin_app) == {"tables": {"x": ["a"]}, "minSampleN": 30}
 
 
 def test_it_does_not_touch_env(client, auth, admin_app):
@@ -107,7 +107,14 @@ def test_a_rejected_write_leaves_the_previous_value(client, auth):
     client.put(ENDPOINT, headers=auth, json={"preferences": {"keep": True}})
     client.put(ENDPOINT, headers=auth, json={"preferences": "nonsense"})
 
-    assert client.get(ENDPOINT, headers=auth).get_json()["preferences"] == {"keep": True}
+    assert client.get(ENDPOINT, headers=auth).get_json()["preferences"] == {"keep": True, "minSampleN": 30}
+
+
+def test_minimum_sample_round_trips_and_rejects_non_positive_values(client, auth):
+    body = client.put(ENDPOINT, headers=auth, json={"preferences": {"minSampleN": 50}}).get_json()
+    assert body["preferences"]["minSampleN"] == 50
+    assert_error(client.put(ENDPOINT, headers=auth, json={"preferences": {"minSampleN": 0}}), "invalid", 400)
+    assert_error(client.put(ENDPOINT, headers=auth, json={"preferences": {"minSampleN": -5}}), "invalid", 400)
 
 
 # --- watchlist tags (v85 R7-03) ------------------------------------------
