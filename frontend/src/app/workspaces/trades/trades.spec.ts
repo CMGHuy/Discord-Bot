@@ -169,3 +169,33 @@ describe('Trades — the promoted status/outcome/direction lane', () => {
     ]);
   });
 });
+
+/* -- v85 D32 -- the opened-at range picker's own translation ------------- */
+
+describe('Trades — the opened-at range', () => {
+  /*
+   * `onDateRange` is not a plain passthrough like the Export CSV link's
+   * `href` binding or the column picker's writes into `PreferencesStore` --
+   * it translates `sb-date-range`'s `{from, to}` into the query's
+   * `opened_from`/`opened_to` keys before handing the patch to `navigate()`.
+   * That mapping is exactly the kind of logic `onLaneChip` above already has
+   * a test for ("sets the status filter when Open is pressed"), so this
+   * follows the same shape: render, spy on `Router.navigate`, dispatch a
+   * real `change` event on the mounted native input, assert the exact patch.
+   */
+  it('translates a date-range change into opened_from/opened_to and navigates', () => {
+    const f = render();
+    const navigateSpy = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+
+    const to = (f.nativeElement as HTMLElement).querySelector(
+      'sb-control-bar sb-date-range input.to',
+    ) as HTMLInputElement;
+    to.value = '2026-04-28';
+    to.dispatchEvent(new Event('change'));
+
+    expect(navigateSpy).toHaveBeenCalledWith([], {
+      queryParams: { opened_from: null, opened_to: '2026-04-28', page: null },
+      queryParamsHandling: 'merge',
+    });
+  });
+});
