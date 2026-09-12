@@ -107,6 +107,41 @@ def sharpe_of(r_multiples: list[float]) -> float | None:
     return float(series.mean() / stdev)
 
 
+def correlation_matrix(
+    symbols: list[str], bars: dict[str, pd.DataFrame]
+) -> tuple[list[str], list[list[float | None]]]:
+    """Pairwise Pearson correlation of daily returns, over each pair's own
+    overlapping index -- not one frame aligned across the whole book, which
+    would let a single short symbol truncate every pair.
+
+    A pair with fewer than `_MIN_BARS` overlapping bars is `None`, not
+    `0.0`: zero correlation is a finding, no data is not."""
+    if not symbols:
+        return [], []
+
+    returns: dict[str, pd.Series] = {}
+    for symbol in symbols:
+        frame = bars.get(symbol)
+        returns[symbol] = (
+            frame["Close"].pct_change().dropna() if frame is not None and not frame.empty
+            else pd.Series(dtype=float)
+        )
+
+    matrix: list[list[float | None]] = []
+    for row_symbol in symbols:
+        row: list[float | None] = []
+        for col_symbol in symbols:
+            if row_symbol == col_symbol:
+                row.append(1.0 if not returns[row_symbol].empty else None)
+                continue
+            aligned_row, aligned_col = returns[row_symbol].align(returns[col_symbol], join="inner")
+            row.append(
+                float(aligned_row.corr(aligned_col)) if len(aligned_row) >= _MIN_BARS else None
+            )
+        matrix.append(row)
+    return symbols, matrix
+
+
 def max_drawdown_r(r_multiples: list[float]) -> float | None:
     """The largest peak-to-trough fall of the cumulative R curve, as a
     positive number."""

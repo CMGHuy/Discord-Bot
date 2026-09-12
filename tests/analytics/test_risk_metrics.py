@@ -106,3 +106,41 @@ class TestPortfolioReturns:
 
     def test_is_empty_for_an_empty_book(self):
         assert rm.portfolio_returns({}, {}).empty
+
+
+class TestCorrelationMatrix:
+    def test_the_diagonal_is_one(self):
+        bars = {"A": _frame([100, 110, 105, 120] * 10), "B": _frame([50, 55, 52, 60] * 10)}
+        _, m = rm.correlation_matrix(["A", "B"], bars)
+        assert m[0][0] == pytest.approx(1.0)
+        assert m[1][1] == pytest.approx(1.0)
+
+    def test_is_symmetric(self):
+        bars = {"A": _frame([100, 110, 105, 120] * 10), "B": _frame([50, 52, 55, 53] * 10)}
+        _, m = rm.correlation_matrix(["A", "B"], bars)
+        assert m[0][1] == pytest.approx(m[1][0])
+
+    def test_two_symbols_that_move_together_correlate_near_one(self):
+        closes = [100, 110, 105, 120] * 10
+        bars = {"A": _frame(closes), "B": _frame([c * 2 for c in closes])}
+        _, m = rm.correlation_matrix(["A", "B"], bars)
+        assert m[0][1] == pytest.approx(1.0, abs=0.01)
+
+    def test_a_pair_with_too_little_overlap_is_none_not_zero(self):
+        bars = {"A": _frame([100, 110, 105, 120] * 10), "B": _frame([50, 55])}
+        _, m = rm.correlation_matrix(["A", "B"], bars)
+        assert m[0][1] is None
+
+    def test_a_symbol_with_no_bars_yields_a_row_of_nones_and_keeps_its_label(self):
+        bars = {"A": _frame([100, 110, 105, 120] * 10)}
+        labels, m = rm.correlation_matrix(["A", "GHOST"], bars)
+        assert labels == ["A", "GHOST"]
+        assert m[1][0] is None
+
+    def test_labels_keep_the_order_they_were_given(self):
+        bars = {"B": _frame([100, 110] * 20), "A": _frame([100, 105] * 20)}
+        labels, _ = rm.correlation_matrix(["B", "A"], bars)
+        assert labels == ["B", "A"]
+
+    def test_an_empty_book_yields_empty_labels_and_matrix(self):
+        assert rm.correlation_matrix([], {}) == ([], [])
