@@ -114,6 +114,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         </sb-panel>
       </div>
 
+      <div class="two-pane">
       <sb-panel [flush]="true">
         <div class="grid" role="grid" [attr.aria-label]="label()">
           <!-- NOT class="week": the grid tests assert every \`.week\` holds
@@ -135,11 +136,14 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                   [class.weekend]="cell.weekend"
                   [class.pos]="intensity(cell) > 0"
                   [class.neg]="intensity(cell) < 0"
+                  [class.selected]="store.selectedDay() === cell.date"
                   [style.--heat]="magnitude(cell)"
                 >
                   <span class="dom">{{ cell.dayOfMonth }}</span>
                   @if (dayFor(cell); as day) {
-                    <button sb-button variant="link" type="button" class="value" (click)="store.selectDay(day.date)">
+                    <button sb-button variant="link" type="button" class="value"
+                            [attr.aria-pressed]="store.selectedDay() === day.date"
+                            (click)="store.selectDay(day.date)">
                       {{ display(day) }}
                       <span class="n">{{ day.trade_count }}</span>
                     </button>
@@ -150,6 +154,31 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
           }
         </div>
       </sb-panel>
+      <aside class="day-pane" aria-live="polite">
+        @if (store.selectedDay(); as date) {
+          <h2>{{ date }}</h2>
+          @if (store.dayLoading()) {
+            <p class="day-loading">Loading day detail…</p>
+          } @else if (store.dayDetail(); as detail) {
+            <div class="day-pane-metrics">
+              <span>Total {{ rLabel(detail.total_r) }}</span>
+              <span>{{ detail.trade_count }} trades</span>
+              <span>{{ detail.winners }} winners · {{ detail.losers }} losers</span>
+              <span>Avg {{ rLabel(detail.avg_trade_r) }}</span>
+              <span>DD {{ rLabel(detail.worst_drawdown_r) }}</span>
+            </div>
+            <section class="contributors"><h3>Contributors</h3>
+              @if (detail.contributors.length) { @for (row of detail.contributors; track $index) { <p>{{ row.ticker }} · {{ rLabel(row.r) }}</p> } }
+              @else { <p>Nothing gained today.</p> }
+            </section>
+            <section class="detractors"><h3>Detractors</h3>
+              @if (detail.detractors.length) { @for (row of detail.detractors; track $index) { <p>{{ row.ticker }} · {{ rLabel(row.r) }}</p> } }
+              @else { <p>Nothing lost money today.</p> }
+            </section>
+          } @else { <p class="day-empty">No closed trades under the current filter.</p> }
+        } @else { <p class="day-empty">Select a day to inspect its trades.</p> }
+      </aside>
+      </div>
     </sb-async>
 
     <!-- All-time, not this-month: deliberately outside the sb-async above
@@ -271,6 +300,12 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     .callout { margin: 0; font-family: var(--font-mono); font-size: var(--text-table); }
 
     .grid { display: grid; }
+    .two-pane { display: grid; grid-template-columns: minmax(0, 1fr) minmax(17rem, 0.38fr); gap: var(--space-14); align-items: start; }
+    .day-pane { min-height: 12rem; padding: var(--space-14); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+    .day-pane h2 { margin: 0 0 var(--space-10); font-size: var(--text-body); }
+    .day-pane h3 { margin: var(--space-12) 0 var(--space-4); color: var(--text-secondary); font-size: var(--text-micro); letter-spacing: 0.08em; text-transform: uppercase; }
+    .day-pane p { margin: var(--space-4) 0; color: var(--text-secondary); font-family: var(--font-mono); font-size: var(--text-table); }
+    .day-pane-metrics { display: grid; gap: var(--space-6); font-family: var(--font-mono); font-size: var(--text-table); }
     .week, .weekhead { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
     .head-cell {
       padding: var(--space-6);
@@ -305,6 +340,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
        for P&L direction, which is exactly what this grid shows. */
     .cell.pos { background: color-mix(in srgb, var(--pos) calc(var(--heat, 0) * 55%), transparent); }
     .cell.neg { background: color-mix(in srgb, var(--neg) calc(var(--heat, 0) * 55%), transparent); }
+    .cell.selected { outline: 2px solid var(--accent); outline-offset: -2px; }
 
     /* align-items/padding/colour/font override the link variant's defaults
        -- a data figure, not a coloured hyperlink; the variant owns the
@@ -354,6 +390,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     .day-leaders { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--space-14); margin-bottom: var(--space-14); }
     .day-leaders h3 { margin: 0 0 var(--space-6); font-size: var(--text-micro); text-transform: uppercase; letter-spacing: 0.08em; }
     .day-leaders p { margin: var(--space-4) 0; color: var(--text-secondary); font-family: var(--font-mono); font-size: var(--text-table); }
+    @media (max-width: 900px) { .two-pane { grid-template-columns: minmax(0, 1fr); } }
   `,
 })
 export class Calendar {

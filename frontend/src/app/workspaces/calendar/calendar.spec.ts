@@ -79,6 +79,15 @@ const el = (fixture: ComponentFixture<Calendar>) =>
   fixture.nativeElement as HTMLElement;
 
 describe('Calendar grid', () => {
+  it('keeps the grid and selected-day pane together, stacking through CSS at phone width', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(el(fixture).querySelector('.two-pane .grid')).not.toBeNull();
+    expect(el(fixture).querySelector('.two-pane .day-pane')).not.toBeNull();
+  });
+
   it('renders full weeks of seven cells', async () => {
     const fixture = seed();
     await fixture.whenStable();
@@ -112,6 +121,18 @@ describe('Calendar grid', () => {
 
     const cell = el(fixture).querySelector('.cell[data-date="2026-08-03"] .value');
     expect(cell?.textContent).toContain('R');
+  });
+
+  it('marks a selected calendar day with an accessible pressed state', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    const cell = el(fixture).querySelector('.cell[data-date="2026-08-03"]')!;
+    (cell.querySelector('button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.store.selectedDay()).toBe('2026-08-03');
+    expect(cell.classList.contains('selected')).toBe(true);
+    expect(cell.querySelector('button')?.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('signs the cell class so colour follows the displayed number', async () => {
