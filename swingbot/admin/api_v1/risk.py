@@ -98,6 +98,87 @@ def _scan_health() -> dict:
     }
 
 
+def _metric(value: float | None, n: int) -> dict:
+    return {"value": value, "n": n}
+
+
+def _risk_metrics_and_correlation() -> tuple[dict, dict]:
+    """The institutional metric set (v85 D37) and the correlation matrix
+    (D38), both over the open book's notional weights and cached daily
+    bars.
+
+    Weight is each ticker's share of total open notional (`entry * shares`
+    summed per ticker) -- the same "how big is this position" figure
+    `_positions` already reports per row, just aggregated. Reads
+    `TradeLog` directly rather than through `state`, matching
+    `_positions`' own precedent of not going through the `!portfolio`
+    collector for this.
+    """
+    from swingbot.core.analytics import metrics as trade_metrics
+    from swingbot.core.analytics import risk_metrics as rm
+    from swingbot.core.marketdata.data import get_daily_data_batch
+    from swingbot.core.tracking.performance import TradeLog
+
+    try:
+        open_trades = TradeLog().get_trades(status="open", limit=None) or []
+    except Exception:
+        open_trades = []
+
+    notional: dict[str, float] = {}
+    for trade in open_trades:
+        ticker = trade.get("ticker")
+        entry = trade.get("entry")
+        shares = trade.get("shares")
+        if not ticker or entry is None or shares is None:
+            continue
+        notional[ticker] = notional.get(ticker, 0.0) + abs(entry * shares)
+    total_notional = sum(notional.values())
+    weights = (
+        {ticker: value / total_notional for ticker, value in notional.items()}
+        if total_notional else {}
+    )
+    symbols = sorted(weights)
+
+    benchmark = getattr(config, "MARKET_REGIME_TICKER", "SPY") or "SPY"
+    try:
+        bars = get_daily_data_batch(sorted(set(symbols) | {benchmark})) if symbols else {}
+    except Exception:
+        bars = {}
+
+    returns = rm.portfolio_returns(weights, bars)
+    # The benchmark's own daily returns, gotten by asking portfolio_returns
+    # for a one-symbol "portfolio" that IS the benchmark -- reuses the same
+    # pct_change/notional-drop logic rather than a second copy of it.
+    benchmark_returns = rm.portfolio_returns({benchmark: 1.0}, bars)
+
+    try:
+        closed = [
+            t for t in TradeLog().get_trades(status=None, limit=None) or []
+            if t.get("status") in ("win", "loss", "closed")
+        ]
+    except Exception:
+        closed = []
+    r_series = trade_metrics.r_multiples(closed)
+
+    n_returns = len(returns)
+    metrics = {
+        "var_95": _metric(rm.value_at_risk(returns), n_returns),
+        "expected_shortfall_95": _metric(rm.expected_shortfall(returns), n_returns),
+        "annualised_vol": _metric(rm.annualised_vol(returns), n_returns),
+        "beta_spy": _metric(
+            rm.beta_vs(returns, benchmark_returns),
+            len(returns.align(benchmark_returns, join="inner")[0]),
+        ),
+        "sharpe_r": _metric(rm.sharpe_of(r_series), len(r_series)),
+        "max_drawdown_r": _metric(rm.max_drawdown_r(r_series), len(r_series)),
+        "as_of": (returns.index[-1].strftime("%Y-%m-%d") if not returns.empty else None),
+    }
+
+    labels, values = rm.correlation_matrix(symbols, bars)
+    correlation = {"labels": labels, "values": values}
+    return metrics, correlation
+
+
 @api_v1.route("/risk", methods=["GET"])
 @require_auth
 def get_risk():
@@ -123,6 +204,7 @@ def get_risk():
     )
 
     throttle_mult = state.get("throttle_mult")
+    metrics, correlation = _risk_metrics_and_correlation()
     return jsonify({
         "heat": {
             "open_pct": open_pct,
@@ -146,6 +228,8 @@ def get_risk():
         },
         "killswitch": _kill_block(state.get("kill") or {}),
         "scan_health": _scan_health(),
+        "metrics": metrics,
+        "correlation": correlation,
     })
 
 
