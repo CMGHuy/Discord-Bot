@@ -173,7 +173,13 @@ def test_day_lists_every_trade_closed_that_day(seed, logged_in):
 def test_day_trade_shape_carries_the_journal_join(seed, logged_in):
     seed(trades=[_trade("a" * 16)], entries=[_entry("a" * 16)])
     body = logged_in.get("/api/v1/calendar/pnl/day?date=2026-08-03").get_json()
-    assert_shape(body, {"date": str, "trades": list})
+    assert_shape(body, {
+        "date": str, "trades": list, "trade_count": int, "winners": int,
+        "losers": int, "total_r": NULLABLE_NUMBER,
+        "total_ccy": NULLABLE_NUMBER, "avg_trade_r": NULLABLE_NUMBER,
+        "worst_drawdown_r": NULLABLE_NUMBER, "contributors": list,
+        "detractors": list,
+    })
     assert_shape(body["trades"][0], {
         "trade_id": str, "ticker": str, "strategy": str,
         "horizon": NULLABLE_STR, "direction": NULLABLE_STR, "day": str,
@@ -185,6 +191,38 @@ def test_day_trade_shape_carries_the_journal_join(seed, logged_in):
     }, where="trades[0]")
     assert body["trades"][0]["tags"] == ["clean-exit"]
     assert body["trades"][0]["auto_lesson"] == "Held to target."
+
+
+def test_day_detail_summarises_its_existing_trade_rows(seed, logged_in):
+    seed(trades=[
+        _trade("a" * 16, pnl=50.0),
+        _trade("b" * 16, closed_at="2026-08-03T21:00:00+00:00", pnl=-25.0,
+               status="loss", exit_price=97.5),
+    ], entries=[
+        _entry("a" * 16, r=2.0),
+        _entry("b" * 16, r=-1.0),
+    ])
+    body = logged_in.get("/api/v1/calendar/pnl/day?date=2026-08-03").get_json()
+    assert body["trade_count"] == 2
+    assert body["winners"] == 1
+    assert body["losers"] == 1
+    assert body["total_r"] == 1.0
+    assert body["avg_trade_r"] == 0.5
+    assert body["worst_drawdown_r"] == 1.0
+    assert body["contributors"] == [{"ticker": "AAPL", "r": 2.0}]
+    assert body["detractors"] == [{"ticker": "AAPL", "r": -1.0}]
+
+
+def test_day_detail_orders_leaders_by_r_magnitude_and_keeps_empty_side(seed, logged_in):
+    trades = [
+        _trade(chr(97 + i) * 16, closed_at=f"2026-08-03T{12 + i:02}:00:00+00:00")
+        for i in range(6)
+    ]
+    entries = [_entry(trade["id"], r=float(i + 1)) for i, trade in enumerate(trades)]
+    seed(trades=trades, entries=entries)
+    body = logged_in.get("/api/v1/calendar/pnl/day?date=2026-08-03").get_json()
+    assert [row["r"] for row in body["contributors"]] == [6.0, 5.0, 4.0, 3.0, 2.0]
+    assert body["detractors"] == []
 
 
 def test_day_survives_a_trade_with_no_journal_entry(seed, logged_in):

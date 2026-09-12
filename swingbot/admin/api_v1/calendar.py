@@ -141,4 +141,44 @@ def calendar_pnl_day():
     if not day_rows:
         raise ApiError("not_found", f"no closed trades on {date}", 404)
 
-    return jsonify({"date": date, "trades": day_rows})
+    # Keep the individual trade rows: the existing drawer uses them for its
+    # journal detail.  The summary alongside them is deliberately computed
+    # from that exact same population, so a strategy/horizon-filtered grid
+    # cannot open a pane that tells a different story about the day.
+    measured = [r["r_multiple"] for r in day_rows if r["r_multiple"] is not None]
+    winners = [r for r in day_rows if r["r_multiple"] is not None and r["r_multiple"] > 0]
+    losers = [r for r in day_rows if r["r_multiple"] is not None and r["r_multiple"] < 0]
+
+    running = 0.0
+    peak = 0.0
+    worst_drawdown = 0.0
+    for value in measured:
+        running += value
+        peak = max(peak, running)
+        worst_drawdown = max(worst_drawdown, peak - running)
+
+    def leaders(rows: list[dict]) -> list[dict]:
+        return [
+            {"ticker": row["ticker"], "r": row["r_multiple"]}
+            for row in sorted(rows, key=lambda row: abs(row["r_multiple"]), reverse=True)[:5]
+        ]
+
+    return jsonify({
+        "date": date,
+        "trades": day_rows,
+        # `trades` remains the established list contract; `trade_count` is
+        # its explicit numeric companion for the day-detail metric tiles.
+        "trade_count": len(day_rows),
+        "winners": len(winners),
+        "losers": len(losers),
+        "total_r": round(sum(measured), 2) if measured else None,
+        "total_ccy": (
+            round(sum(r["pnl_amount"] for r in day_rows if r["pnl_amount"] is not None), 2)
+            if any(r["pnl_amount"] is not None for r in day_rows)
+            else None
+        ),
+        "avg_trade_r": round(sum(measured) / len(measured), 2) if measured else None,
+        "worst_drawdown_r": round(worst_drawdown, 2) if measured else None,
+        "contributors": leaders(winners),
+        "detractors": leaders(losers),
+    })
