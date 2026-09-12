@@ -10,6 +10,7 @@ import { ControlRow, Drawer, Panel } from '../../ui/layout';
 import { MetricCard } from '../../ui/metric-card';
 import { Select } from '../../ui/form-controls';
 import { SectionHead } from '../../ui/section-head';
+import { StatTile } from '../../ui/stat-tile';
 import { GridCell, monthLabel, monthMatrix } from './calendar.helpers';
 
 /** Monday-first, matching `monthMatrix` and the API's weekday breakdown. */
@@ -18,7 +19,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 @Component({
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow, Drawer, MetricCard, Panel, SectionHead, Select, Async],
+  imports: [Button, ControlRow, Drawer, MetricCard, Panel, SectionHead, Select, StatTile, Async],
   // v54 D1: "how am I doing this month?" -- hero totals, room to breathe --
   // so this workspace defaults to the presentation register. On the host
   // (a static class, not a template wrapper) because :host IS the grid
@@ -180,10 +181,33 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     >
       @if (store.dayLoading()) {
         <p class="day-loading">Loading...</p>
-      } @else if ((store.dayTrades() ?? []).length === 0) {
+      } @else if (store.dayDetail() === null) {
         <p class="day-empty">No closed trades on this day under the current filter.</p>
-      } @else {
-        @for (trade of store.dayTrades() ?? []; track trade.trade_id) {
+      } @else if (store.dayDetail()!.trades.length === 0) {
+        <p class="day-empty">No closed trades on this day under the current filter.</p>
+      } @else if (store.dayDetail(); as detail) {
+        <div class="day-summary">
+          <sb-stat-tile label="Total" [value]="rLabel(detail.total_r)" [sample]="detail.trade_count" />
+          <sb-stat-tile label="Winners" [value]="detail.winners.toString()" [sample]="detail.trade_count" tone="pos" />
+          <sb-stat-tile label="Losers" [value]="detail.losers.toString()" [sample]="detail.trade_count" tone="neg" />
+          <sb-stat-tile label="Average trade" [value]="rLabel(detail.avg_trade_r)" [sample]="detail.trade_count" />
+          <sb-stat-tile label="Worst drawdown" [value]="rLabel(detail.worst_drawdown_r)" [sample]="detail.trade_count" tone="neg" />
+        </div>
+        <div class="day-leaders">
+          <section class="contributors">
+            <h3>Contributors</h3>
+            @if (detail.contributors.length) {
+              @for (row of detail.contributors; track $index) { <p>{{ row.ticker }} · {{ rLabel(row.r) }}</p> }
+            } @else { <p>Nothing gained today.</p> }
+          </section>
+          <section class="detractors">
+            <h3>Detractors</h3>
+            @if (detail.detractors.length) {
+              @for (row of detail.detractors; track $index) { <p>{{ row.ticker }} · {{ rLabel(row.r) }}</p> }
+            } @else { <p>Nothing lost money today.</p> }
+          </section>
+        </div>
+        @for (trade of detail.trades; track trade.trade_id) {
           <article class="day-row">
             <header>
               <strong>{{ trade.ticker }}</strong>
@@ -326,6 +350,10 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       font-size: var(--text-micro);
     }
     .day-empty, .day-loading { margin: 0; color: var(--text-secondary); font-size: var(--text-table); }
+    .day-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-8); margin-bottom: var(--space-14); }
+    .day-leaders { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--space-14); margin-bottom: var(--space-14); }
+    .day-leaders h3 { margin: 0 0 var(--space-6); font-size: var(--text-micro); text-transform: uppercase; letter-spacing: 0.08em; }
+    .day-leaders p { margin: var(--space-4) 0; color: var(--text-secondary); font-family: var(--font-mono); font-size: var(--text-table); }
   `,
 })
 export class Calendar {

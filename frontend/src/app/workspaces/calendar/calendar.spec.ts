@@ -240,7 +240,10 @@ describe('Calendar day drawer', () => {
     fixture.componentInstance.store.selectDay('2026-08-03');
     TestBed.inject(HttpTestingController)
       .expectOne((r) => r.url === '/api/v1/calendar/pnl/day')
-      .flush({ date: '2026-08-03', trades });
+      .flush({ date: '2026-08-03', trades, trade_count: trades.length,
+        winners: 0, losers: 0, total_r: null, total_ccy: null,
+        avg_trade_r: null, worst_drawdown_r: null,
+        contributors: [], detractors: [] });
     await fixture.whenStable();
     fixture.detectChanges();
   };

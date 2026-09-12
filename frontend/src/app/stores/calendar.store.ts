@@ -13,8 +13,9 @@ import { Observable } from 'rxjs';
 import { routeRequest } from '../routing/route-request';
 import {
   CalendarDay,
-  CalendarTotals,
+  CalendarDayTrades,
   CalendarTrade,
+  CalendarTotals,
   PnlCalendar,
 } from '../api/models';
 import { SelectOption } from '../ui/form-controls';
@@ -50,6 +51,8 @@ interface CalendarSlice {
   strategy: string;
   horizon: string;
   selectedDay: string | null;
+  dayDetail: CalendarDayTrades | null;
+  /** Kept as the narrow compatibility view for existing consumers. */
   dayTrades: CalendarTrade[] | null;
   dayLoading: boolean;
 }
@@ -64,6 +67,7 @@ export const CalendarStore = signalStore(
     strategy: '',
     horizon: '',
     selectedDay: null,
+    dayDetail: null,
     dayTrades: null,
     dayLoading: false,
   }),
@@ -117,10 +121,10 @@ export const CalendarStore = signalStore(
         })
         .subscribe({
           next: (body) =>
-            patchState(store, { dayTrades: body.trades, dayLoading: false }),
+            patchState(store, { dayDetail: body, dayTrades: body.trades, dayLoading: false }),
           // A 404 means the day holds nothing under this filter. That is an
           // empty drawer, not an error banner over the whole workspace.
-          error: () => patchState(store, { dayTrades: [], dayLoading: false }),
+          error: () => patchState(store, { dayDetail: null, dayTrades: [], dayLoading: false }),
         });
     };
 
@@ -161,7 +165,7 @@ export const CalendarStore = signalStore(
       load,
 
       setMonth(month: string): void {
-        patchState(store, { month, selectedDay: null, dayTrades: null });
+        patchState(store, { month, selectedDay: null, dayDetail: null, dayTrades: null });
         load();
       },
 
@@ -169,7 +173,7 @@ export const CalendarStore = signalStore(
         patchState(store, {
           month: shiftMonth(store.month(), delta),
           selectedDay: null,
-          dayTrades: null,
+          dayDetail: null, dayTrades: null,
         });
         load();
       },
@@ -181,24 +185,24 @@ export const CalendarStore = signalStore(
       },
 
       setStrategy(strategy: string): void {
-        patchState(store, { strategy, selectedDay: null, dayTrades: null });
+        patchState(store, { strategy, selectedDay: null, dayDetail: null, dayTrades: null });
         load();
       },
 
       setHorizon(horizon: string): void {
-        patchState(store, { horizon, selectedDay: null, dayTrades: null });
+        patchState(store, { horizon, selectedDay: null, dayDetail: null, dayTrades: null });
         load();
       },
 
       /** Lazy by design: a month of drawer payloads nobody opens is 20-odd
        *  requests for one the user might make. */
       selectDay(date: string): void {
-        patchState(store, { selectedDay: date, dayTrades: null });
+        patchState(store, { selectedDay: date, dayDetail: null, dayTrades: null });
         fetchDay(date);
       },
 
       closeDay(): void {
-        patchState(store, { selectedDay: null, dayTrades: null });
+        patchState(store, { selectedDay: null, dayDetail: null, dayTrades: null });
       },
 
       /** The number a cell shows, under the current metric. */

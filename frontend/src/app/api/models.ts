@@ -1186,6 +1186,17 @@ export interface PnlCalendar {
 export interface CalendarDayTrades {
   date: string;
   trades: CalendarTrade[];
+  /** Summary fields are composed from exactly the same filtered rows as
+   *  `trades`, so the pane cannot disagree with its drill-down list. */
+  trade_count: number;
+  winners: number;
+  losers: number;
+  total_r: number | null;
+  total_ccy: number | null;
+  avg_trade_r: number | null;
+  worst_drawdown_r: number | null;
+  contributors: Array<{ ticker: string | null; r: number }>;
+  detractors: Array<{ ticker: string | null; r: number }>;
 }
 
 /* -- live tape ---------------------------------------------------------- */
