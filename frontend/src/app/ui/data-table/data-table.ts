@@ -317,6 +317,13 @@ const PIN_KEYS = ['ticker', 'symbol'];
     @media (prefers-reduced-motion: reduce) {
       .blink { animation: none; background: color-mix(in srgb, var(--warn) 10%, transparent); }
     }
+
+    /* A row whose data did not refresh with the rest of the table (Watchlist
+       v85 R7-04) -- a steady tint, not a pulse: this is not urgent like an
+       imminent earnings date, only stale, and the row's own as-of cell
+       already names the date it is behind. */
+    .lagging { background: color-mix(in srgb, var(--warn) 8%, transparent); }
+
     .expansion > td { background: var(--surface); white-space: normal; }
 
     .expander-cell { width: 1px; padding-right: 0; }

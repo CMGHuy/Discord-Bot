@@ -545,6 +545,17 @@ export interface Proposal {
 
 /* -- watchlist ----------------------------------------------------------- */
 
+/** The Watchlist's Signal column (v85 D34) -- the bot's own opinion, read off
+ *  the live plan set rather than derived from price. `score`/`horizon`/
+ *  `strategy` are null together with `state: 'none'` -- there is no partial
+ *  signal, only "the scanner has an opinion" or "it does not". */
+export interface TickerSignal {
+  state: 'none' | 'pending' | 'active';
+  score: number | null;
+  horizon: string | null;
+  strategy: string | null;
+}
+
 export interface Ticker {
   symbol: string;
   company_name: string | null;
@@ -559,6 +570,24 @@ export interface Ticker {
    *  any local time (e.g. Europe/Berlin) from one consistent source. Never
    *  confirmed by the company for a future date; treat as an estimate. */
   next_earnings_datetime: string | null;
+  /** v85 D33 -- batched market data (`swingbot/admin/watchlist_rows.py`,
+   *  `build_market_rows`). `price` prefers a live intraday quote over the
+   *  last close, when the US market is open; all fields are null together
+   *  when the cache has nothing for this symbol yet. */
+  price: number | null;
+  /** The date of the bar `price`/the change columns/`spark` were computed
+   *  from -- NOT when the request was served. A page reading "as of now"
+   *  over Friday's close on a Sunday is the failure this field guards
+   *  against, and a symbol whose `as_of` lags the rest of the table is
+   *  flagged rather than shown silently beside fresher rows. */
+  as_of: string | null;
+  change_1d_pct: number | null;
+  change_1w_pct: number | null;
+  change_1m_pct: number | null;
+  /** Up to 30 daily closes, oldest first. Empty (never a single flat point)
+   *  when there is no history to draw. */
+  spark: number[];
+  signal: TickerSignal;
 }
 
 /** `GET /watchlist/tickers`. A plain list, NOT a `Collection` — the watchlist

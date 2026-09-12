@@ -9,6 +9,9 @@ function ticker(overrides: Partial<Ticker>): Ticker {
   return {
     symbol: 'AAPL', company_name: 'Apple Inc.', open_trades: 0, closed_trades: 0,
     next_earnings_date: null, next_earnings_datetime: null,
+    price: null, as_of: null, change_1d_pct: null, change_1w_pct: null, change_1m_pct: null,
+    spark: [],
+    signal: { state: 'none', score: null, horizon: null, strategy: null },
     ...overrides,
   };
 }
