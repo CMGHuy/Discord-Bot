@@ -81,7 +81,22 @@ def test_list_is_empty_initially(watchlist, logged_in):
     assert logged_in.get("/api/v1/watchlist/tickers").get_json() == {"tickers": []}
 
 
-def test_list_shape(watchlist, logged_in):
+def test_list_shape(watchlist, logged_in, monkeypatch):
+    """R7-01/R7-02 grew this contract with the market columns (price, as_of,
+    the three change fields, spark) and the Signal column (signal). The
+    real builders run here (this pins their actual output shape on the
+    wire, not just presence) -- only their network-touching internals are
+    stubbed, same as `bars` does in test_watchlist_rows.py."""
+    import pandas as pd
+
+    monkeypatch.setattr(
+        "swingbot.admin.watchlist_rows.get_daily_data_batch",
+        lambda tickers, period="6mo": {
+            "AAPL": pd.DataFrame({"Close": [100.0] * 26}),
+        },
+    )
+    monkeypatch.setattr("swingbot.admin.watchlist_rows.is_us_market_active", lambda: False)
+
     watchlist(["AAPL"])
     body = logged_in.get("/api/v1/watchlist/tickers").get_json()
     assert_shape(body["tickers"][0], {
@@ -89,6 +104,13 @@ def test_list_shape(watchlist, logged_in):
         "open_trades": int, "closed_trades": int,
         "next_earnings_date": (str, type(None)),
         "next_earnings_datetime": (str, type(None)),
+        "price": (int, float, type(None)),
+        "as_of": (str, type(None)),
+        "change_1d_pct": (int, float, type(None)),
+        "change_1w_pct": (int, float, type(None)),
+        "change_1m_pct": (int, float, type(None)),
+        "spark": list,
+        "signal": dict,
     }, where="ticker")
 
 
@@ -253,3 +275,61 @@ def test_trade_counts_are_attached(watchlist, logged_in, tmp_path):
     row = logged_in.get("/api/v1/watchlist/tickers").get_json()["tickers"][0]
     assert row["open_trades"] == 1
     assert row["closed_trades"] == 1
+
+
+def test_the_tickers_payload_carries_market_and_signal_fields(watchlist, logged_in, monkeypatch):
+    """R7-02: build_market_rows and build_signals merge onto the existing
+    per-ticker dict. Both are stubbed here -- this endpoint test is about the
+    merge, not either builder's own logic, which test_watchlist_rows.py
+    already covers."""
+    monkeypatch.setattr(
+        "swingbot.admin.watchlist_rows.build_market_rows",
+        lambda tickers: {t: {"price": 1.0, "as_of": "2026-09-11", "change_1d_pct": 0.1,
+                              "change_1w_pct": 0.2, "change_1m_pct": 0.3, "spark": [1.0]}
+                         for t in tickers},
+    )
+    monkeypatch.setattr(
+        "swingbot.admin.watchlist_rows.build_signals",
+        lambda tickers: {t: {"state": "none", "score": None, "horizon": None, "strategy": None}
+                         for t in tickers},
+    )
+    watchlist(["AAPL"])
+    row = logged_in.get("/api/v1/watchlist/tickers").get_json()["tickers"][0]
+    for key in ("price", "as_of", "change_1d_pct", "change_1w_pct",
+                "change_1m_pct", "spark", "signal"):
+        assert key in row
+
+
+def test_existing_fields_are_not_dropped(watchlist, logged_in, monkeypatch):
+    monkeypatch.setattr(
+        "swingbot.admin.watchlist_rows.build_market_rows",
+        lambda tickers: {t: {"price": None, "as_of": None, "change_1d_pct": None,
+                              "change_1w_pct": None, "change_1m_pct": None, "spark": []}
+                         for t in tickers},
+    )
+    monkeypatch.setattr(
+        "swingbot.admin.watchlist_rows.build_signals",
+        lambda tickers: {t: {"state": "none", "score": None, "horizon": None, "strategy": None}
+                         for t in tickers},
+    )
+    watchlist(["AAPL"])
+    row = logged_in.get("/api/v1/watchlist/tickers").get_json()["tickers"][0]
+    for key in ("symbol", "company_name", "open_trades", "closed_trades",
+                "next_earnings_date"):
+        assert key in row
+
+
+def test_market_and_signal_builders_are_each_called_once_not_per_row(watchlist, logged_in, monkeypatch):
+    market_calls, signal_calls = [], []
+    monkeypatch.setattr(
+        "swingbot.admin.watchlist_rows.build_market_rows",
+        lambda tickers: market_calls.append(list(tickers)) or {t: {} for t in tickers},
+    )
+    monkeypatch.setattr(
+        "swingbot.admin.watchlist_rows.build_signals",
+        lambda tickers: signal_calls.append(list(tickers)) or {t: None for t in tickers},
+    )
+    watchlist(["AAPL", "MSFT", "NVDA"])
+    logged_in.get("/api/v1/watchlist/tickers")
+    assert market_calls == [["AAPL", "MSFT", "NVDA"]]
+    assert signal_calls == [["AAPL", "MSFT", "NVDA"]]

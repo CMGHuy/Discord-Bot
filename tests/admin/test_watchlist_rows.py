@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from swingbot.admin.watchlist_rows import build_market_rows
+from swingbot.admin.watchlist_rows import build_market_rows, build_signals
 
 
 def _frame(closes: list[float], start: str = "2026-01-01") -> pd.DataFrame:
@@ -90,4 +90,95 @@ def test_an_empty_watchlist_makes_no_batch_call(bars, monkeypatch):
         lambda tickers, period="2y": called.append(tickers) or {},
     )
     assert build_market_rows([]) == {}
+    assert called == []
+
+
+class _FakePlan:
+    """Carries only the fields build_signals reads off a TradePlanV2."""
+
+    def __init__(self, ticker, status, score, horizon, strategy):
+        self.ticker = ticker
+        self.status = status
+        self.quality_score = score
+        self.horizon_key = horizon
+        self.strategy = strategy
+
+
+@pytest.fixture
+def plans(monkeypatch):
+    """Install a canned plan set, in the wire vocabulary (`score`, `horizon`)
+    build_signals's own tests use -- translated to the TradePlanV2 field
+    names (`quality_score`, `horizon_key`) here, once, rather than in every
+    test. Patches PlanStore where watchlist_rows imported it, the same
+    origin-module trick test_api_v1_analytics.py's FakeStore uses."""
+
+    def _install(records):
+        installed = [_FakePlan(**r) for r in records]
+
+        class FakeStore:
+            def all(self):
+                return installed
+
+        monkeypatch.setattr("swingbot.admin.watchlist_rows.PlanStore", FakeStore)
+
+    return _install
+
+
+def test_a_pending_plan_reads_as_a_waiting_setup(plans):
+    plans([{"ticker": "AAPL", "status": "PENDING", "score": 78, "horizon": "6w",
+            "strategy": "RSI"}])
+    sig = build_signals(["AAPL"])["AAPL"]
+    assert sig["state"] == "pending"
+    assert sig["score"] == 78
+    assert sig["horizon"] == "6w"
+
+
+def test_an_active_plan_reads_as_in_position(plans):
+    plans([{"ticker": "AAPL", "status": "ACTIVE", "score": 78, "horizon": "6w",
+            "strategy": "RSI"}])
+    assert build_signals(["AAPL"])["AAPL"]["state"] == "active"
+
+
+def test_a_symbol_with_no_plan_reads_as_no_setup_not_as_zero(plans):
+    plans([])
+    sig = build_signals(["AAPL"])["AAPL"]
+    assert sig["state"] == "none"
+    assert sig["score"] is None
+
+
+def test_a_closed_plan_does_not_count_as_a_live_setup(plans):
+    plans([{"ticker": "AAPL", "status": "CLOSED", "score": 78, "horizon": "6w",
+            "strategy": "RSI"}])
+    assert build_signals(["AAPL"])["AAPL"]["state"] == "none"
+
+
+def test_the_best_scoring_plan_wins_when_a_symbol_has_several(plans):
+    plans([
+        {"ticker": "AAPL", "status": "PENDING", "score": 61, "horizon": "2w", "strategy": "RSI"},
+        {"ticker": "AAPL", "status": "PENDING", "score": 84, "horizon": "3m", "strategy": "Fib"},
+    ])
+    assert build_signals(["AAPL"])["AAPL"]["score"] == 84
+
+
+def test_an_active_plan_outranks_a_better_scoring_pending_one(plans):
+    plans([
+        {"ticker": "AAPL", "status": "PENDING", "score": 90, "horizon": "2w", "strategy": "RSI"},
+        {"ticker": "AAPL", "status": "ACTIVE", "score": 60, "horizon": "3m", "strategy": "Fib"},
+    ])
+    assert build_signals(["AAPL"])["AAPL"]["state"] == "active"
+
+
+def test_a_plan_for_a_different_ticker_does_not_leak_onto_this_one(plans):
+    plans([{"ticker": "MSFT", "status": "ACTIVE", "score": 90, "horizon": "2w",
+            "strategy": "RSI"}])
+    assert build_signals(["AAPL"])["AAPL"]["state"] == "none"
+
+
+def test_an_empty_ticker_list_makes_no_plan_store_call(monkeypatch):
+    called = []
+    monkeypatch.setattr(
+        "swingbot.admin.watchlist_rows.PlanStore",
+        lambda: called.append("constructed"),
+    )
+    assert build_signals([]) == {}
     assert called == []

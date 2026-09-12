@@ -1,13 +1,21 @@
-"""Market columns for the Watchlist, built from the daily cache in one batch.
+"""Market and signal columns for the Watchlist, built in one batch each.
 
-Spec v85 D33. The rule that shapes this module: **one batch call for the whole
-watchlist, never one call per row.** A ninety-symbol watchlist rendered with a
-per-row fetch is ninety network round trips on every page view, and the cache
-already holds every number this page needs.
+Spec v85 D33 (market) / D34 (signal). The rule that shapes this module: **one
+batch call for the whole watchlist, never one call per row.** A ninety-symbol
+watchlist rendered with a per-row fetch is ninety network round trips on
+every page view, and the cache (D33) / the plan store (D34) already holds
+every number this page needs.
 
 `as_of` is the date of the bar the figures came from, not the time the request
 was served. A page that prints "as of now" over Friday's close on a Sunday is
 the failure this field exists to prevent.
+
+**The Signal column is the bot's own opinion, not a price derivative.** The
+bot does not persist a per-symbol score -- its opinion IS the live plan set.
+A PENDING plan is a setup the scanner found and is waiting to trigger; an
+ACTIVE/PARTIAL plan is one it is already working. `build_signals` does not
+run a scan (minutes of work) -- it reads the plan set PlanStore already holds
+(a dictionary lookup), the same source `/analytics/plans` reads.
 """
 
 from __future__ import annotations
@@ -19,6 +27,13 @@ from swingbot.core.marketdata.data import (
     get_daily_data_batch,
     is_us_market_active,
 )
+from swingbot.core.planning.plan_engine import PlanStatus
+from swingbot.core.planning.plan_store import PlanStore
+
+#: ACTIVE-family beats PENDING regardless of score; within a tier, the
+#: highest quality_score wins. CLOSED/CANCELLED plans are not "live" and are
+#: absent from this map entirely, so they never enter the comparison.
+_TIER = {PlanStatus.PENDING: 0, PlanStatus.ACTIVE: 1, PlanStatus.PARTIAL: 1}
 
 #: Trading-day offsets for the three change columns. 5 and 21 are a week and a
 #: month of *business* days, which is what the cache is indexed by -- calendar
@@ -95,3 +110,46 @@ def build_market_rows(tickers: list[str]) -> dict[str, dict]:
         rows[symbol] = row
 
     return rows
+
+
+def _empty_signal() -> dict:
+    # score is None, never 0 -- 0 would read as "confirmed low-quality setup"
+    # rather than "the scanner has no opinion on this symbol at all".
+    return {"state": "none", "score": None, "horizon": None, "strategy": None}
+
+
+def build_signals(tickers: list[str]) -> dict[str, dict]:
+    """The bot's own verdict for every ticker, keyed by symbol.
+
+    Reads the whole live plan set with one `PlanStore().all()` call, never
+    one per symbol. Per ticker: an ACTIVE-family plan (ACTIVE or PARTIAL)
+    always outranks a PENDING one regardless of score; among same-tier
+    candidates the highest `quality_score` wins. A ticker with only a
+    CLOSED/CANCELLED plan, or no plan at all, reads as `state: "none"`,
+    `score: None`.
+    """
+    if not tickers:
+        return {}
+
+    wanted = set(tickers)
+    best: dict[str, object] = {}
+    for plan in PlanStore().all():
+        if plan.ticker not in wanted or plan.status not in _TIER:
+            continue
+        current = best.get(plan.ticker)
+        if current is None or (
+            (_TIER[plan.status], plan.quality_score)
+            > (_TIER[current.status], current.quality_score)
+        ):
+            best[plan.ticker] = plan
+
+    signals: dict[str, dict] = {t: _empty_signal() for t in tickers}
+    for ticker, plan in best.items():
+        signals[ticker] = {
+            "state": "active" if plan.status in (PlanStatus.ACTIVE, PlanStatus.PARTIAL) else "pending",
+            "score": plan.quality_score,
+            "horizon": plan.horizon_key,
+            "strategy": plan.strategy,
+        }
+
+    return signals
