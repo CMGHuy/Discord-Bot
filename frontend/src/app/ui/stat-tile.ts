@@ -1,4 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+
+import { PreferencesStore } from '../stores/preferences.store';
 
 /**
  * The smallest sample a derived metric may be read from without a warning.
@@ -79,6 +81,7 @@ export type StatTone = 'neutral' | 'pos' | 'neg';
   `,
 })
 export class StatTile {
+  private readonly preferences = inject(PreferencesStore);
   readonly label = input.required<string>();
   readonly value = input.required<string | null>();
   readonly sample = input<number | null>(null);
@@ -87,13 +90,21 @@ export class StatTile {
 
   protected readonly thin = computed(() => {
     const n = this.sample();
-    return n !== null && n < MIN_SAMPLE_N;
+    return n !== null && n < this.minimumSample();
+  });
+
+  private readonly minimumSample = computed(() => {
+    const value = this.preferences.values()['minSampleN'];
+    return typeof value === 'number' && Number.isInteger(value) && value > 0
+      ? value
+      : MIN_SAMPLE_N;
   });
 
   protected readonly sampleTitle = computed(() => {
     const n = this.sample();
     if (n === null) return '';
-    if (n >= MIN_SAMPLE_N) return `${n} closed trades`;
-    return `${n} closed trades — ${MIN_SAMPLE_N - n} more before this figure is worth reading`;
+    const minimum = this.minimumSample();
+    if (n >= minimum) return `${n} closed trades`;
+    return `${n} closed trades — ${minimum - n} more before this figure is worth reading`;
   });
 }

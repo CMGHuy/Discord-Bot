@@ -3,6 +3,9 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { MIN_SAMPLE_N, StatTile } from './stat-tile';
+import { PreferencesStore } from '../stores/preferences.store';
+
+let preferenceValues: Record<string, unknown> = {};
 
 function render(inputs: Record<string, unknown>): HTMLElement {
   const f = TestBed.createComponent(StatTile);
@@ -15,7 +18,11 @@ function render(inputs: Record<string, unknown>): HTMLElement {
 
 describe('StatTile (v85 D23)', () => {
   beforeEach(() => {
-    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    preferenceValues = {};
+    TestBed.configureTestingModule({ providers: [
+      provideZonelessChangeDetection(),
+      { provide: PreferencesStore, useValue: { values: () => preferenceValues } },
+    ] });
   });
 
   it('renders the label and the value', () => {
@@ -61,5 +68,11 @@ describe('StatTile (v85 D23)', () => {
 
   it('carries the tone as a class', () => {
     expect(render({ tone: 'neg' }).classList).toContain('neg');
+  });
+
+  it('uses the saved minimum sample when one is configured', () => {
+    preferenceValues = { minSampleN: 100 };
+    expect(render({ sample: 50 }).classList).toContain('thin');
+    expect(render({ sample: 60 }).querySelector('.sample')!.getAttribute('title')).toContain('40 more');
   });
 });
