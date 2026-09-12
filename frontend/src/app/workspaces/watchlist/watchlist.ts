@@ -18,17 +18,21 @@ import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
+import { ControlBar } from '../../ui/control-bar';
 import { DataTable } from '../../ui/data-table/data-table';
 import { createClientPage } from '../../ui/data-table/client-page';
+import { FilterChip, FilterChips } from '../../ui/filter-bar';
+import { Freshness } from '../../ui/freshness';
 import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
 import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { date, num, pct, text } from '../../ui/format';
-import { TextInput } from '../../ui/form-controls';
+import { Select, TextInput } from '../../ui/form-controls';
 import { Icon } from '../../ui/icon';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { Sparkline } from '../../ui/sparkline';
+import { readWatchlistTags, writeWatchlistTags } from '../../ui/watchlist-prefs';
 import { EarningsCalendar } from './earnings-calendar';
 
 const TABS: Tab[] = [
@@ -112,7 +116,7 @@ function sortValue(row: Ticker, key: string, flagged: readonly string[]): string
 @Component({
   selector: 'sb-watchlist',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DataTable, Panel, Button, Chip, ConfirmDialog, ControlRow, TabBar, TextInput, EarningsCalendar, RowLink, SectionHead, Async, Icon, Sparkline],
+  imports: [DataTable, Panel, Button, Chip, ConfirmDialog, ControlBar, ControlRow, FilterChips, Freshness, Select, TabBar, TextInput, EarningsCalendar, RowLink, SectionHead, Async, Icon, Sparkline],
   // v54 D1: the whole point of this workspace (spec v14 Decision 9) is the
   // ticker table -- tight rows, more per screen -- so it defaults to the
   // instrument register. On the host (a static class, not a template
@@ -213,6 +217,61 @@ function sortValue(row: Ticker, key: string, flagged: readonly string[]): string
 
     @if (store.removeError(); as message) {
       <p class="error" role="alert">{{ message }}</p>
+    }
+
+    <!-- v85 D35/R7-05: tag chips filter the view (never the scanner -- no
+         request changes, symbols and their scan cadence are untouched);
+         search narrows by symbol; add-tag and the table's own freshness
+         marker are scope, not filters, same slot split trades.ts uses. -->
+    <sb-control-bar>
+      <sb-filter-chips
+        filters
+        [chips]="tagChips()"
+        [selected]="tagFilter()"
+        label="Tag"
+        (selectedChange)="onTagChip($event)"
+      />
+      <sb-text-input
+        filters
+        type="search"
+        ariaLabel="Filter the watchlist by symbol"
+        placeholder="Filter by symbol"
+        [value]="symbolQuery()"
+        (valueChange)="symbolQuery.set($event)"
+      />
+      <button
+        scope
+        type="button"
+        class="add-tag"
+        sb-button
+        variant="ghost"
+        (click)="addingTag.set(!addingTag())"
+      >
+        + Tag
+      </button>
+      <sb-freshness scope [at]="maxAsOf()" />
+    </sb-control-bar>
+
+    @if (addingTag()) {
+      <sb-control-row class="tag-form">
+        <sb-select
+          label="Symbol"
+          placeholder="Choose a symbol"
+          [value]="newTagSymbol()"
+          (valueChange)="newTagSymbol.set($event)"
+          [options]="symbolOptions()"
+        />
+        <sb-text-input
+          label="Tag"
+          placeholder="e.g. Tech"
+          [value]="newTagValue()"
+          (valueChange)="newTagValue.set($event)"
+          (keydown.enter)="addTag()"
+        />
+        <button sb-button variant="primary" type="button" [disabled]="!canAddTag()" (click)="addTag()">
+          Add
+        </button>
+      </sb-control-row>
     }
 
     <sb-async
@@ -483,6 +542,35 @@ export class Watchlist {
   /** The row awaiting confirmation, or null. */
   protected readonly pending = signal<Ticker | null>(null);
 
+  /** The + Tag mini-form (spec D35): closed by default, one symbol and one
+   *  tag name at a time. */
+  protected readonly addingTag = signal(false);
+  protected readonly newTagSymbol = signal('');
+  protected readonly newTagValue = signal('');
+  protected readonly canAddTag = computed(() => this.newTagSymbol() !== '' && this.newTagValue().trim() !== '');
+
+  protected readonly symbolOptions = computed(() =>
+    [...this.store.tickers()]
+      .map((row) => ({ value: row.symbol, label: row.symbol }))
+      .sort((a, b) => a.value.localeCompare(b.value)),
+  );
+
+  /** Appends one tag to one symbol's list, skipping a duplicate rather than
+   *  storing it twice. Written through `PreferencesStore` (spec D35) --
+   *  never `data/watchlist.json`, which the bot itself reads on every scan. */
+  protected addTag(): void {
+    if (!this.canAddTag()) return;
+    const symbol = this.newTagSymbol();
+    const tag = this.newTagValue().trim();
+    this.preferences.update((prefs) => {
+      const tags = readWatchlistTags(prefs);
+      const existing = tags[symbol] ?? [];
+      if (existing.includes(tag)) return prefs;
+      return writeWatchlistTags(prefs, { ...tags, [symbol]: [...existing, tag] });
+    });
+    this.newTagValue.set('');
+  }
+
   /** Client-side: the whole watchlist loads in one plain-list response
    *  (data-table.ts's PageSpec convention -- Watchlist is one of the three
    *  unpaginated call sites), so sorting is a local re-order of what is
@@ -500,7 +588,44 @@ export class Watchlist {
   protected readonly sortedRows = computed(() =>
     [...this.store.tickers()].sort((a, b) => compareTickers(a, b, this.sort(), this.tape.symbols())));
 
-  protected readonly watchlistPage = createClientPage(() => this.sortedRows(), () => this.perPage());
+  /** Symbol -> tag names (spec D35, R7-03's reader). View-only: nothing here
+   *  writes `data/watchlist.json` or touches what the scanner covers. */
+  protected readonly watchlistTags = computed(() => readWatchlistTags(this.preferences.values()));
+
+  /** One chip per tag in use, sorted -- "All" is `sb-filter-chips`' own
+   *  leading chip, not one of these. */
+  protected readonly tagChips = computed<FilterChip[]>(() => {
+    const inUse = new Set<string>();
+    for (const tags of Object.values(this.watchlistTags())) {
+      for (const tag of tags) inUse.add(tag);
+    }
+    return [...inUse].sort().map((tag) => ({ value: tag, label: tag }));
+  });
+
+  protected readonly tagFilter = signal<string | null>(null);
+  protected onTagChip(value: string | null): void {
+    this.tagFilter.set(value);
+  }
+
+  protected readonly symbolQuery = signal('');
+
+  /** The tag filter and the symbol search are both a view narrowing over
+   *  the already-fetched watchlist, same as the tag chip's own rule (spec
+   *  D35): neither changes `store.tickers()`, so the scanner keeps covering
+   *  every symbol regardless of what is on screen right now. */
+  protected readonly filteredRows = computed(() => {
+    let list = this.sortedRows();
+    const tag = this.tagFilter();
+    if (tag !== null) {
+      const tags = this.watchlistTags();
+      list = list.filter((row) => (tags[row.symbol] ?? []).includes(tag));
+    }
+    const query = this.symbolQuery().trim().toUpperCase();
+    if (query) list = list.filter((row) => row.symbol.toUpperCase().includes(query));
+    return list;
+  });
+
+  protected readonly watchlistPage = createClientPage(() => this.filteredRows(), () => this.perPage());
 
   /** The most recent `as_of` across the WHOLE watchlist -- the reference
    *  `isLagging` compares every row against. `sortedRows`, not

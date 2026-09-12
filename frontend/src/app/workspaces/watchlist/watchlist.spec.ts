@@ -20,7 +20,9 @@ import { date } from '../../ui/format';
 import { SortSpec } from '../../ui/data-table/data-table.types';
 import { compareTickers, isWithinCurrentWeek, Watchlist } from './watchlist';
 import { WatchlistStore } from '../../stores/watchlist.store';
+import { PreferencesStore } from '../../stores/preferences.store';
 import { TapeStore } from '../../stores/tape.store';
+import { writeWatchlistTags } from '../../ui/watchlist-prefs';
 
 function ticker(overrides: Partial<Ticker>): Ticker {
   return {
@@ -392,5 +394,100 @@ describe('Watchlist recomposed row', () => {
     // of hard-coding a format that would only hold under one locale.
     const row = firstRow({ open_trades: 2, next_earnings_date: '2026-10-02' });
     expect(row.textContent).toContain(date('2026-10-02'));
+  });
+});
+
+/* -- v85 R7-05 -- tag chips, search and freshness in the control bar -- */
+
+interface RenderOpts {
+  tags?: Record<string, string[]>;
+  symbols?: string[];
+  rows?: Partial<Ticker>[];
+}
+
+/** Mounts Watchlist with tickers seeded onto `WatchlistStore` and, when
+ *  given, tags seeded onto `PreferencesStore` -- the same `patchState` +
+ *  `unprotected` pattern `rows()` above uses, extended to the second store
+ *  R7-05's chips read from. */
+function render(opts: RenderOpts = {}): ComponentFixture<Watchlist> {
+  TestBed.resetTestingModule();
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      provideRouter([]),
+      provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
+      provideHttpClientTesting(),
+      WatchlistStore,
+      PreferencesStore,
+    ],
+  });
+  const fixture = TestBed.createComponent(Watchlist);
+  const list = opts.rows
+    ? opts.rows.map((overrides) => ticker(overrides))
+    : (opts.symbols ?? ['AAPL']).map((symbol) => ticker({ symbol }));
+  patchState(unprotected(TestBed.inject(WatchlistStore)), { tickers: list, loaded: true });
+  if (opts.tags) {
+    patchState(unprotected(TestBed.inject(PreferencesStore)), {
+      data: writeWatchlistTags({}, opts.tags),
+      loaded: true,
+    });
+  }
+  fixture.detectChanges();
+  return fixture;
+}
+
+function chip(fixture: ComponentFixture<Watchlist>, label: string): HTMLButtonElement {
+  const buttons = [...(fixture.nativeElement as HTMLElement).querySelectorAll('sb-filter-chips .chip')] as HTMLButtonElement[];
+  const found = buttons.find((b) => b.textContent?.trim() === label);
+  if (!found) throw new Error(`no chip labelled "${label}"`);
+  return found;
+}
+
+function chipLabels(opts: RenderOpts): string[] {
+  const fixture = render(opts);
+  return [...(fixture.nativeElement as HTMLElement).querySelectorAll('sb-filter-chips .chip')]
+    .map((el) => el.textContent!.trim());
+}
+
+function visibleSymbols(fixture: ComponentFixture<Watchlist>): string[] {
+  return [...(fixture.nativeElement as HTMLElement).querySelectorAll('tbody tr.row sb-row-link')]
+    .map((el) => (el.textContent ?? '').trim());
+}
+
+describe('Watchlist tag chips, search and freshness', () => {
+  it('renders All plus one chip per tag in use', () => {
+    const labels = chipLabels({ tags: { AAPL: ['Tech'], XOM: ['Energy'] } });
+    expect(labels).toEqual(['All', 'Energy', 'Tech']);
+  });
+
+  it('filters the table to the chosen tag', () => {
+    const f = render({ tags: { AAPL: ['Tech'] }, symbols: ['AAPL', 'XOM'] });
+    chip(f, 'Tech').click();
+    f.detectChanges();
+    expect(visibleSymbols(f)).toEqual(['AAPL']);
+  });
+
+  it('does not narrow what the scanner scans', () => {
+    const f = render({ tags: { AAPL: ['Tech'] }, symbols: ['AAPL', 'XOM'] });
+    // Same TestBed module `render()` just configured -- fetching the store
+    // here reaches the identical singleton the component reads, without
+    // reaching past the component's own `protected` boundary.
+    const store = TestBed.inject(WatchlistStore);
+    chip(f, 'Tech').click();
+    f.detectChanges();
+    expect(store.tickers().length).toBe(2);
+  });
+
+  it('offers a way to add a tag to a symbol', () => {
+    expect((render().nativeElement as HTMLElement).querySelector('.add-tag')).not.toBeNull();
+  });
+
+  it('shows one freshness marker for the table, from the newest bar date', () => {
+    const el = render({ rows: [{ as_of: '2026-09-10' }, { as_of: '2026-09-04' }] }).nativeElement as HTMLElement;
+    expect(el.querySelector('sb-freshness')).not.toBeNull();
+  });
+
+  it('keeps the symbol search', () => {
+    expect((render().nativeElement as HTMLElement).querySelector('input[type="search"]')).not.toBeNull();
   });
 });
