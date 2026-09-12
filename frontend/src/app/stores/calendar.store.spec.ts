@@ -44,6 +44,7 @@ class FakeEventStream {
 }
 
 const RESPONSE: PnlCalendar = {
+  as_of: '2026-08-10T12:00:00Z',
   month: '2026-08',
   days: [
     { date: '2026-08-03', net_pnl_amount: 30, net_r: 1.2, trade_count: 2, win_rate: 50 },

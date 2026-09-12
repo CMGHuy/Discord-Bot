@@ -91,6 +91,9 @@ def calendar_pnl():
     extremes = pc.best_worst_days(rows)
 
     return jsonify({
+        # A panel-level timestamp is the time this filtered view was composed,
+        # not a claim about the age of any individual close in the month.
+        "as_of": dt.datetime.now(dt.timezone.utc).isoformat(),
         "month": grid["month"],
         "days": grid["days"],
         "totals": grid["totals"],
@@ -164,6 +167,7 @@ def calendar_pnl_day():
         ]
 
     return jsonify({
+        "as_of": dt.datetime.now(dt.timezone.utc).isoformat(),
         "date": date,
         "trades": day_rows,
         # `trades` remains the established list contract; `trade_count` is

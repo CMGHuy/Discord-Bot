@@ -7,6 +7,7 @@ import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { ABSENT, money, rMultiple } from '../../ui/format';
 import { ControlRow, Drawer, Panel } from '../../ui/layout';
+import { Freshness } from '../../ui/freshness';
 import { MetricCard } from '../../ui/metric-card';
 import { Select } from '../../ui/form-controls';
 import { SectionHead } from '../../ui/section-head';
@@ -19,7 +20,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 @Component({
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow, Drawer, MetricCard, Panel, SectionHead, Select, StatTile, Async],
+  imports: [Button, ControlRow, Drawer, MetricCard, Panel, SectionHead, Select, StatTile, Async, Freshness],
   // v54 D1: "how am I doing this month?" -- hero totals, room to breathe --
   // so this workspace defaults to the presentation register. On the host
   // (a static class, not a template wrapper) because :host IS the grid
@@ -116,6 +117,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
       <div class="two-pane">
       <sb-panel [flush]="true">
+        <sb-freshness [at]="store.data()?.as_of ?? null" />
         <div class="grid" role="grid" [attr.aria-label]="label()">
           <!-- NOT class="week": the grid tests assert every \`.week\` holds
                exactly 7 \`.cell\` children, and a header row sharing that class
@@ -155,6 +157,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         </div>
       </sb-panel>
       <aside class="day-pane" aria-live="polite">
+        <sb-freshness [at]="store.dayDetail()?.as_of ?? null" />
         @if (store.selectedDay(); as date) {
           <h2>{{ date }}</h2>
           @if (store.dayLoading()) {

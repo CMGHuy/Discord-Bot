@@ -18,6 +18,7 @@ import { Calendar } from './calendar';
 import { CalendarStore } from '../../stores/calendar.store';
 
 const RESPONSE: PnlCalendar = {
+  as_of: '2026-08-10T12:00:00Z',
   month: '2026-08',
   days: [
     { date: '2026-08-03', net_pnl_amount: 30, net_r: 1.2, trade_count: 2, win_rate: 50 },
@@ -261,7 +262,7 @@ describe('Calendar day drawer', () => {
     fixture.componentInstance.store.selectDay('2026-08-03');
     TestBed.inject(HttpTestingController)
       .expectOne((r) => r.url === '/api/v1/calendar/pnl/day')
-      .flush({ date: '2026-08-03', trades, trade_count: trades.length,
+      .flush({ as_of: '2026-08-10T12:00:00Z', date: '2026-08-03', trades, trade_count: trades.length,
         winners: 0, losers: 0, total_r: null, total_ccy: null,
         avg_trade_r: null, worst_drawdown_r: null,
         contributors: [], detractors: [] });

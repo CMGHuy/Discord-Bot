@@ -69,7 +69,7 @@ def test_response_shape(seed, logged_in):
     seed(trades=[_trade("a" * 16)])
     body = logged_in.get("/api/v1/calendar/pnl?month=2026-08").get_json()
     assert_shape(body, {
-        "month": str, "days": list, "totals": dict, "day_of_week": list,
+        "as_of": str, "month": str, "days": list, "totals": dict, "day_of_week": list,
         "best_day": (dict, type(None)), "worst_day": (dict, type(None)),
         "streak": dict, "filters": dict,
     })
@@ -174,7 +174,7 @@ def test_day_trade_shape_carries_the_journal_join(seed, logged_in):
     seed(trades=[_trade("a" * 16)], entries=[_entry("a" * 16)])
     body = logged_in.get("/api/v1/calendar/pnl/day?date=2026-08-03").get_json()
     assert_shape(body, {
-        "date": str, "trades": list, "trade_count": int, "winners": int,
+        "as_of": str, "date": str, "trades": list, "trade_count": int, "winners": int,
         "losers": int, "total_r": NULLABLE_NUMBER,
         "total_ccy": NULLABLE_NUMBER, "avg_trade_r": NULLABLE_NUMBER,
         "worst_drawdown_r": NULLABLE_NUMBER, "contributors": list,

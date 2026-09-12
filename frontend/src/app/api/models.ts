@@ -1187,6 +1187,8 @@ export interface CalendarTrade {
  *  `worst_day` and `streak` are all of history under the same filter --
  *  a weekday average drawn from one month would be 4-5 observations. */
 export interface PnlCalendar {
+  /** Instant the server composed this filtered calendar response. */
+  as_of: string;
   month: string;
   days: CalendarDay[];
   totals: CalendarTotals;
@@ -1198,6 +1200,8 @@ export interface PnlCalendar {
 }
 
 export interface CalendarDayTrades {
+  /** Instant the server composed this selected-day drill-down. */
+  as_of: string;
   date: string;
   trades: CalendarTrade[];
   /** Summary fields are composed from exactly the same filtered rows as
