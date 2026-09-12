@@ -113,8 +113,9 @@ def test_payload_shape(logged_in):
         assert dead not in body, f"{dead} is a matrix artefact and must be gone"
     if body["releases"]:
         row = body["releases"][0]
-        assert row["provenance"] == {"commit_range": None, "commits": None,
-                                     "spec": None, "changelog": []}
+        assert set(row["provenance"]) == {"commit_range", "commits", "spec", "changelog"}
+        assert row["provenance"]["commit_range"] is None or isinstance(row["provenance"]["commit_range"], str)
+        assert row["provenance"]["commits"] is None or isinstance(row["provenance"]["commits"], int)
         assert row["telemetry"]["source"] in {"marker", "backfill"}
         for key in ("uptime_pct", "error_rate", "median_scan_sec", "n_days"):
             assert key in row["telemetry"]

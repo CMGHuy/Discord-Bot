@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+from functools import lru_cache
 from typing import Any
 
 from flask import jsonify
@@ -37,13 +39,37 @@ from .auth import require_auth
 HISTORY_PATH = os.path.join(os.path.dirname(__file__), "..", "version_history.json")
 
 
-def _provenance(release: dict) -> dict:
-    """Best-effort provenance for a frozen release history row.
+@lru_cache(maxsize=512)
+def _git(*args: str) -> str | None:
+    """Git is optional in a shipped container; absence is an honest null."""
+    try:
+        return subprocess.check_output(
+            ["git", *args], cwd=_helpers.config._PROJECT_ROOT, text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
 
-    History rows retain a single commit, not a release-tag pair, so a range
-    would be invented. Keep it null until Git can prove one.
-    """
-    return {"commit_range": None, "commits": None, "spec": None, "changelog": []}
+
+def _provenance(release: dict, previous: dict | None) -> dict:
+    """Derive a verifiable range from consecutive frozen history commits."""
+    commit = release.get("commit")
+    if not isinstance(commit, str) or not _git("rev-parse", "--verify", f"{commit}^{{commit}}"):
+        return {"commit_range": None, "commits": None, "spec": None, "changelog": []}
+
+    prior = previous.get("commit") if previous else None
+    valid_prior = isinstance(prior, str) and _git("rev-parse", "--verify", f"{prior}^{{commit}}")
+    revision = f"{prior}..{commit}" if valid_prior else commit
+    count = _git("rev-list", "--count", revision)
+    files = (_git("diff-tree", "--no-commit-id", "--name-only", "-r", commit) or "").splitlines()
+    specs = [path for path in files if path.startswith("docs/superpowers/specs/") and path.endswith(".md")]
+    changelog = [path for path in files if os.path.basename(path).lower().startswith("changelog")]
+    return {
+        "commit_range": revision,
+        "commits": int(count) if count and count.isdigit() else None,
+        "spec": specs[0] if specs else None,
+        "changelog": changelog,
+    }
 
 
 def _window_for(release: dict, windows: list[dict]) -> dict | None:
@@ -62,13 +88,13 @@ def _window_for(release: dict, windows: list[dict]) -> dict | None:
 def _enrich_releases(releases: list[dict]) -> list[dict]:
     release_windows_rows = release_windows.windows()
     enriched = []
-    for release in releases:
+    for index, release in enumerate(releases):
         row = dict(release)
         window = _window_for(row, release_windows_rows)
         telemetry = release_windows.telemetry_for(window) if window else {
             "uptime_pct": None, "error_rate": None, "median_scan_sec": None, "n_days": None,
         }
-        row["provenance"] = _provenance(row)
+        row["provenance"] = _provenance(row, releases[index - 1] if index else None)
         row["telemetry"] = {**telemetry, "source": window["source"] if window else "backfill"}
         enriched.append(row)
     return enriched
