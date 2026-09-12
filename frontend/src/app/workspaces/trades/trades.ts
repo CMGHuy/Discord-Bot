@@ -45,6 +45,7 @@ import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { ConfidenceCell } from '../../ui/confidence-cell';
 import { ControlBar } from '../../ui/control-bar';
+import { DateRange } from '../../ui/date-range';
 import { DirectionArrow } from '../../ui/direction-arrow';
 import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
 import { StatusCell } from '../../ui/status-cell';
@@ -105,6 +106,7 @@ interface LaneChip {
     ControlRow,
     ControlBar,
     DataTable,
+    DateRange,
     ColumnPickerComponent,
     FilterBar,
     FilterChips,
@@ -178,6 +180,16 @@ interface LaneChip {
         [selected]="laneSelected()"
         label="Status"
         (selectedChange)="onLaneChip($event)"
+      />
+      <!-- v85 D32: the opened-at range. A scope control, not a filter-bar
+           filter -- it narrows WHEN, not WHAT, the same distinction that
+           already separates this bar's two slots for the export link and
+           column picker beside it. -->
+      <sb-date-range
+        scope
+        [from]="opened_from() ?? null"
+        [to]="opened_to() ?? null"
+        (changed)="onDateRange($event)"
       />
       <!-- A plain anchor, not a fetch: the browser gets a Save dialog and
            the server's filename, both of which an XHR throws away.
@@ -521,6 +533,12 @@ export class Trades {
   // it still has to arrive through the same URL-is-truth path as every other
   // filter, or a reload/shared link would silently drop it.
   readonly today = input<string>();
+  // v85 D32 — the opened-at range. Snake_case, matching the wire/URL name
+  // (`opened_from`/`opened_to`) the same way `has_note` does above; the
+  // store's own `TradeQuery` slice is camelCase (`openedFrom`/`openedTo`),
+  // bridged in the effect below.
+  readonly opened_from = input<string>();
+  readonly opened_to = input<string>();
 
   /** v85 D32 — the control bar's promoted lane: All, then the eight the
    *  filter bar's own status/outcome/direction controls used to be reached
@@ -769,6 +787,8 @@ export class Trades {
           this.has_note() === undefined ? undefined : this.has_note() === '1',
         today:
           this.today() === undefined ? undefined : this.today() === '1',
+        openedFrom: this.opened_from() ?? null,
+        openedTo: this.opened_to() ?? null,
       };
       this.store.setQuery(query, false);
     });
@@ -865,6 +885,13 @@ export class Trades {
     this.navigate({ sort: toSortParam(sort) ?? null });
   }
 
+  /** `sb-date-range`'s `changed` -- routes through `navigate()` like every
+   *  other filter here, never `store.setQuery` directly, so the range
+   *  survives a reload and stays pasteable. */
+  protected onDateRange(range: { from: string | null; to: string | null }): void {
+    this.navigate({ opened_from: range.from, opened_to: range.to });
+  }
+
   protected clearFilters(): void {
     this.navigate({
       status: null,
@@ -882,6 +909,8 @@ export class Trades {
       confidence: null,
       has_note: null,
       today: null,
+      opened_from: null,
+      opened_to: null,
     });
   }
 
