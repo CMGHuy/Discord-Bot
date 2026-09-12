@@ -92,6 +92,17 @@ describe('routing, authenticated', () => {
     expect(children[0]?.loadComponent).toBeTypeOf('function');
     expect(await children[0]!.loadComponent!()).toBeDefined();
   });
+
+  it('exposes Research and Reports as guarded, titled lazy stubs', async () => {
+    for (const path of ['research', 'reports']) {
+      const route = routes.find((item) => item.path === path);
+      expect(route?.canMatch).toEqual([authGuard]);
+      expect(route?.title).toBeTruthy();
+      expect(route?.data?.['subtitle']).toBeTruthy();
+      const children = await route!.loadChildren!() as Routes;
+      expect(children[0].loadComponent).toBeTypeOf('function');
+    }
+  });
 });
 
 

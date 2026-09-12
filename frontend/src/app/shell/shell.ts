@@ -127,6 +127,8 @@ export class Shell {
         { path: '/trades', label: 'Trades', icon: 'trades' },
         { path: '/calendar', label: 'Calendar', icon: 'calendar' },
         { path: '/analytics', label: 'Analytics', icon: 'analytics' },
+        { path: '/research', label: 'Research', icon: 'watchlist' },
+        { path: '/reports', label: 'Reports', icon: 'analytics' },
       ],
     },
     {
