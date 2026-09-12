@@ -46,28 +46,47 @@ def portfolio_returns(
     return combined.sum(axis=1)
 
 
+def _guarded_quantile(returns: pd.Series, level: float) -> float | None:
+    """The `(1 - level)` quantile of daily returns, or `None` if the sample
+    is too short or has no spread to make a quantile meaningful from.
+
+    Shared by `value_at_risk` and `expected_shortfall` so both apply exactly
+    the same zero-variance guard `annualised_vol` uses -- a flat series must
+    read as "insufficient data" on every distributional tile, not just some
+    of them.
+    """
+    if len(returns) < _MIN_BARS:
+        return None
+    daily = returns.std(ddof=1)
+    if math.isnan(daily) or math.isclose(daily, 0.0):
+        return None
+    return float(returns.quantile(1 - level))
+
+
 def value_at_risk(returns: pd.Series, level: float = 0.95) -> float | None:
     """Historical VaR: the `(1 - level)` quantile of daily returns, reported
     as a positive loss figure. Historical, not parametric -- a normal
     assumption on twenty positions of swing equity is a worse lie than a
     thin empirical quantile."""
-    if len(returns) < _MIN_BARS:
+    quantile = _guarded_quantile(returns, level)
+    if quantile is None:
         return None
-    quantile = returns.quantile(1 - level)
-    return -float(quantile)
+    # A non-negative quantile means even the worst days at this level were
+    # flat or up -- floor the reported loss at 0 rather than show a negative
+    # "loss" figure, which is not a sensible quantity to display.
+    return max(-quantile, 0.0)
 
 
 def expected_shortfall(returns: pd.Series, level: float = 0.95) -> float | None:
     """Mean of the returns at or below the VaR quantile, as a positive loss
     figure."""
-    var = value_at_risk(returns, level)
-    if var is None:
+    quantile = _guarded_quantile(returns, level)
+    if quantile is None:
         return None
-    threshold = -var
-    tail = returns[returns <= threshold]
-    if tail.empty:
-        return var
-    return -float(tail.mean())
+    tail = returns[returns <= quantile]
+    tail_mean = float(tail.mean()) if not tail.empty else quantile
+    # Same floor as value_at_risk, and for the same reason.
+    return max(-tail_mean, 0.0)
 
 
 def annualised_vol(returns: pd.Series) -> float | None:
@@ -75,7 +94,7 @@ def annualised_vol(returns: pd.Series) -> float | None:
     if len(returns) < _MIN_BARS:
         return None
     daily = returns.std(ddof=1)
-    if not daily or math.isclose(daily, 0.0):
+    if math.isnan(daily) or math.isclose(daily, 0.0):
         return None
     return float(daily * math.sqrt(_TRADING_DAYS_PER_YEAR))
 
@@ -87,9 +106,11 @@ def beta_vs(returns: pd.Series, benchmark: pd.Series) -> float | None:
     if len(aligned_returns) < _MIN_BARS:
         return None
     variance = aligned_benchmark.var(ddof=1)
-    if not variance or math.isclose(variance, 0.0):
+    if math.isnan(variance) or math.isclose(variance, 0.0):
         return None
     covariance = aligned_returns.cov(aligned_benchmark)
+    if math.isnan(covariance):
+        return None
     return float(covariance / variance)
 
 
@@ -135,9 +156,17 @@ def correlation_matrix(
                 row.append(1.0 if not returns[row_symbol].empty else None)
                 continue
             aligned_row, aligned_col = returns[row_symbol].align(returns[col_symbol], join="inner")
-            row.append(
-                float(aligned_row.corr(aligned_col)) if len(aligned_row) >= _MIN_BARS else None
-            )
+            if len(aligned_row) < _MIN_BARS:
+                row.append(None)
+                continue
+            corr = aligned_row.corr(aligned_col)
+            # A zero-variance leg (a halted ticker, a stale cache entry)
+            # makes .corr() return NaN. `float(nan)` is a valid Python float
+            # but not valid JSON -- Flask's default JSON provider emits the
+            # literal token `NaN`, which the browser's parser rejects
+            # outright, blanking the whole page. `None` degrades honestly:
+            # no correlation is knowable here, not zero.
+            row.append(None if pd.isna(corr) else float(corr))
         matrix.append(row)
     return symbols, matrix
 

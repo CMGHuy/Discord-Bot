@@ -27,6 +27,20 @@ class TestValueAtRisk:
     def test_is_none_for_an_empty_series(self):
         assert rm.value_at_risk(_series([])) is None
 
+    def test_is_none_for_a_flat_series_rather_than_zero(self):
+        """C2: a 20+ bar series with no spread must read as "insufficient
+        data", exactly like `annualised_vol` on the same input -- not as a
+        VaR of 0, which reads as "no risk"."""
+        assert rm.value_at_risk(_series([0.0] * 60)) is None
+
+    def test_floors_a_non_negative_quantile_at_zero(self):
+        """C2: a book where even the worst 5% of days were flat or up has a
+        positive 5th-percentile return -- the reported loss floors at 0
+        rather than showing a negative "loss" figure."""
+        returns = _series([0.01, 0.02, 0.03, 0.04, 0.05] * 20)
+        var = rm.value_at_risk(returns)
+        assert var == 0.0
+
 
 class TestExpectedShortfall:
     def test_is_at_least_as_large_as_var(self):
@@ -35,6 +49,15 @@ class TestExpectedShortfall:
 
     def test_is_none_when_var_is_none(self):
         assert rm.expected_shortfall(_series([0.01])) is None
+
+    def test_is_none_for_a_flat_series_rather_than_zero(self):
+        """C2: same guard as value_at_risk -- a flat series is "insufficient
+        data", not a shortfall of 0."""
+        assert rm.expected_shortfall(_series([0.0] * 60)) is None
+
+    def test_floors_a_non_negative_tail_mean_at_zero(self):
+        returns = _series([0.01, 0.02, 0.03, 0.04, 0.05] * 20)
+        assert rm.expected_shortfall(returns) == 0.0
 
 
 class TestAnnualisedVol:
@@ -125,6 +148,20 @@ class TestCorrelationMatrix:
         bars = {"A": _frame(closes), "B": _frame([c * 2 for c in closes])}
         _, m = rm.correlation_matrix(["A", "B"], bars)
         assert m[0][1] == pytest.approx(1.0, abs=0.01)
+
+    def test_a_zero_variance_pair_is_none_not_nan(self):
+        """C1: a flat-price leg (a halted ticker, a stale cache entry) makes
+        .corr() return NaN. float('nan') survives Python's own float() cast,
+        but Flask's default JSON provider then emits the literal token
+        `NaN` -- invalid JSON that blanks the whole page on the browser
+        side. It must come out as None instead."""
+        bars = {"A": _frame([100.0] * 40), "B": _frame([100, 110, 105, 120] * 10)}
+        _, m = rm.correlation_matrix(["A", "B"], bars)
+        assert m[0][1] is None
+        assert m[1][0] is None
+        for row in m:
+            for value in row:
+                assert value is None or not math.isnan(value)
 
     def test_a_pair_with_too_little_overlap_is_none_not_zero(self):
         bars = {"A": _frame([100, 110, 105, 120] * 10), "B": _frame([50, 55])}
