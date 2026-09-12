@@ -198,6 +198,9 @@ const NOT_CONTROL_ROWS = new Set([
   // Trade Detail's ticker/status title is a semantic heading, not a control
   // lane. It is the one flex row whose children are data and status only.
   'trade-title',
+  // Analytics' win/loss donut beside its avg-win/avg-loss captions (v85
+  // D39) -- same category again: a figure and the numbers explaining it.
+  'winloss',
   'command-error', // <p role="alert">: message text with a dismiss affordance
   'triage', // groups the two <label> rows below; owns neither control
   // <label> elements. Converting one to a component host would break the

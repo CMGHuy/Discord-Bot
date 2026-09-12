@@ -12,6 +12,7 @@ import {
 } from '@angular/core';
 import { Router } from '@angular/router';
 
+import { AnalyticsByDimensionRow } from '../../api/models';
 import {
   ANALYTICS_TABS,
   AnalyticsStore,
@@ -41,15 +42,22 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
 import { createClientPage } from '../../ui/data-table/client-page';
 import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
+import { ControlBar } from '../../ui/control-bar';
+import { DateRange } from '../../ui/date-range';
+import { DonutComponent } from '../../ui/donut';
 import { Select, TextInput } from '../../ui/form-controls';
-import { ABSENT, dateTime, signed } from '../../ui/format';
+import { ABSENT, dateTime, rMultiple, signed } from '../../ui/format';
+import { Freshness } from '../../ui/freshness';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
+import { LineChart } from '../../ui/line-chart';
+import { Magnitude } from '../../ui/magnitude';
 import { SectionHead } from '../../ui/section-head';
+import { Segmented, SegmentOption } from '../../ui/segmented';
 import { Histogram, HistogramBin } from '../../ui/histogram';
 import { MetricChip } from '../../ui/metric-chip';
 import { PaginationComponent } from '../../ui/pagination';
 import { Sparkline } from '../../ui/sparkline';
-import { StatTile } from '../../ui/stat-tile';
+import { MIN_SAMPLE_N, StatTile } from '../../ui/stat-tile';
 import { ExitQualitySectionComponent } from './sections/exit-quality';
 import { StrategyContributionComponent } from './sections/strategy-contribution';
 import {
@@ -62,6 +70,7 @@ import {
   STRATEGY_COLUMNS,
   TIER_COLUMNS,
   allKeys,
+  count,
   expectancy,
   rate,
 } from './analytics.columns';
@@ -128,7 +137,10 @@ interface ProposalView extends ProposalRow {
     TabBar,
     Panel,
     ControlRow,
+    ControlBar,
     DataTable,
+    DateRange,
+    DonutComponent,
     MetricChip,
     Histogram,
     Chip,
@@ -139,8 +151,12 @@ interface ProposalView extends ProposalRow {
     TextInput,
     Button,
     ConfirmDialog,
+    Freshness,
+    LineChart,
+    Magnitude,
     PaginationComponent,
     SectionHead,
+    Segmented,
     Async,
     ExitQualitySectionComponent,
     StrategyContributionComponent,
@@ -200,6 +216,120 @@ interface ProposalView extends ProposalRow {
             @for (tile of kpiTiles(); track tile.label) {
               <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample" />
             }
+          </div>
+        </sb-async>
+
+        <!-- v85 D39 (R9-04). Equity | Drawdown share one fetch (R9-01) --
+             the toggle swaps which field of the same points is plotted,
+             never refetches. The range picker re-requests performance,
+             snapshot, journal AND this curve together (one from/to scope);
+             the strategy picker narrows only the curve, which is the one
+             panel the /performance endpoint itself has no strategy
+             parameter for. -->
+        <sb-control-bar>
+          <sb-date-range
+            filters
+            [from]="store.rangeFrom()"
+            [to]="store.rangeTo()"
+            (changed)="onRangeChange($event)"
+          />
+          <sb-select
+            scope
+            class="strategy"
+            placeholder="Any strategy"
+            [value]="store.equityCurveStrategy() ?? ''"
+            (valueChange)="onEquityStrategy($event)"
+            [options]="strategyOptions()"
+          />
+        </sb-control-bar>
+
+        <sb-async
+          [loading]="equityAsync().loading"
+          [error]="equityAsync().error"
+          [empty]="equityAsync().empty"
+          [staleAsOf]="equityAsync().staleAsOf"
+          emptyReason="measured-zero"
+          emptyTitle="No closed trades in this range"
+          [skeletonRows]="3"
+          [skeletonCols]="4"
+          (retry)="store.load()"
+        >
+          <div class="panels register-presentation">
+            <sb-panel heading="Equity">
+              <sb-segmented
+                class="equity-toggle"
+                label="Chart"
+                [options]="equityViewOptions"
+                [value]="store.equityCurveView()"
+                (valueChange)="onEquityView($event)"
+              />
+              <div class="equity">
+                <!-- Per panel, not global (D30): the bar date the equity
+                     curve was computed from -- the KPI row above has no
+                     equivalent single date, only a range. -->
+                <sb-freshness [at]="store.equityCurveAsOf()" />
+                <sb-line-chart [series]="store.activeEquitySeries()" [valueFormat]="fmtR" />
+              </div>
+            </sb-panel>
+
+            <sb-panel heading="Win / loss">
+              <div class="winloss">
+                <sb-donut [slices]="store.winLossSlices()" />
+                <dl>
+                  <div><dt>Avg win</dt><dd class="num pos">{{ fmtR(store.avgWinR()) }}</dd></div>
+                  <div><dt>Avg loss</dt><dd class="num neg">{{ fmtR(store.avgLossR()) }}</dd></div>
+                </dl>
+              </div>
+            </sb-panel>
+          </div>
+        </sb-async>
+
+        <!-- v85 D40 (R9-02/R9-05). One sb-segmented drives both panels --
+             the strategy table's sort order AND the horizon bars' values
+             read the same measure() signal, so there is exactly one place
+             "ExpR vs total R" gets decided, not two that could disagree. -->
+        <sb-async
+          [loading]="strategyAggAsync().loading"
+          [error]="strategyAggAsync().error"
+          [empty]="strategyAggAsync().empty"
+          [staleAsOf]="strategyAggAsync().staleAsOf"
+          emptyReason="measured-zero"
+          emptyTitle="No closed trades in this range"
+          [skeletonRows]="4"
+          [skeletonCols]="3"
+          (retry)="store.load()"
+        >
+          <sb-segmented
+            class="measure-toggle"
+            label="Measure"
+            [options]="measureViewOptions"
+            [value]="measure()"
+            (valueChange)="setMeasure($event)"
+          />
+          <div class="panels register-presentation">
+            <sb-panel heading="By strategy" [flush]="true">
+              <sb-data-table
+                [rows]="sortedStrategyAgg()"
+                [columns]="strategyAggColumns()"
+                [visible]="strategyAggVisible"
+                [rowKey]="strategyRowKey"
+                [rowClass]="strategyRowClass"
+                [emptyState]="strategyAggEmptyState"
+              />
+            </sb-panel>
+
+            <sb-panel heading="By horizon">
+              <div class="horizon-bars">
+                @for (row of store.horizonAgg(); track row.key) {
+                  <div class="horizon-row" [class.neg]="(measureValue(row) ?? 0) < 0">
+                    <span class="horizon-key">{{ row.key }}</span>
+                    <sb-magnitude [value]="measureValue(row)" [max]="horizonMax()" />
+                    <span class="horizon-value num">{{ fmtMeasure(row) }}</span>
+                    <span class="horizon-n num">N={{ row.n }}</span>
+                  </div>
+                }
+              </div>
+            </sb-panel>
           </div>
         </sb-async>
 
@@ -302,25 +432,6 @@ interface ProposalView extends ProposalRow {
                 />
               </sb-chip-row>
             </sb-panel>
-
-            @if (store.streaks(); as streaks) {
-              <sb-panel heading="Streaks">
-                <dl>
-                  <div>
-                    <dt>Current</dt>
-                    <dd class="num">{{ currentStreak(streaks) }}</dd>
-                  </div>
-                  <div>
-                    <dt>Best win run</dt>
-                    <dd class="num">{{ fmtCount(streaks.bestWin) }}</dd>
-                  </div>
-                  <div>
-                    <dt>Worst loss run</dt>
-                    <dd class="num">{{ fmtCount(streaks.worstLoss) }}</dd>
-                  </div>
-                </dl>
-              </sb-panel>
-            }
           </div>
         </sb-async>
 
@@ -340,7 +451,6 @@ interface ProposalView extends ProposalRow {
           [skeletonCols]="6"
           (retry)="store.load()"
         >
-        <h2 class="section">Distributions</h2>
         <!-- SR54. Everything below is scoped by the range control; the two
              panels above are deliberately all-time, so the heading says which
              is which rather than leaving the reader to guess. -->
@@ -392,66 +502,100 @@ interface ProposalView extends ProposalRow {
           </sb-chip-row>
         </sb-panel>
 
-        <div class="panels">
-          <sb-panel heading="Return distribution">
-            @if (store.returnsHistogram().length) {
-              <sb-histogram [bins]="store.returnsHistogram()" />
-            } @else {
-              <p class="stale">No closed trades to distribute.</p>
-            }
-          </sb-panel>
+        <!-- v85 D41 (R9-06). Ten panels moved here, none deleted -- every
+             binding/computed below is untouched from where it used to sit;
+             only the DOM position (and, for Streaks, its gate) changed. The
+             band is a preference (spec's own convention for state whose only
+             writer is this browser), collapsed by default so the first
+             screen is the KPI row and the equity curve, not thirteen
+             histograms. -->
+        <details
+          class="breakdowns"
+          [open]="breakdownsOpen()"
+          (toggle)="onBreakdownsToggle($any($event.target).open)"
+        >
+          <summary>Breakdowns</summary>
 
-          <sb-panel heading="R-multiple distribution (selected range)">
-            @if (store.rHistogram().length) {
-              <sb-histogram [bins]="store.rHistogram()" />
-            } @else {
-              <p class="stale">No R-multiples — trades need an entry and a stop.</p>
-            }
-          </sb-panel>
-        </div>
+          <div class="panels">
+            <sb-panel heading="Return distribution">
+              @if (store.returnsHistogram().length) {
+                <sb-histogram [bins]="store.returnsHistogram()" />
+              } @else {
+                <p class="stale">No closed trades to distribute.</p>
+              }
+            </sb-panel>
 
-        @if (store.rMultipleBins().length) {
-          <sb-panel heading="R-multiple distribution (all-time)">
-            <!-- Bars, not a pie and not a line: this is a distribution, and
-                 the shape IS the finding -- a healthy edge is a cluster of
-                 small losses with a tail of larger wins. -->
-            <sb-histogram [bins]="store.rMultipleBins()" />
-          </sb-panel>
-        }
+            <sb-panel heading="R-multiple distribution (selected range)">
+              @if (store.rHistogram().length) {
+                <sb-histogram [bins]="store.rHistogram()" />
+              } @else {
+                <p class="stale">No R-multiples — trades need an entry and a stop.</p>
+              }
+            </sb-panel>
+          </div>
 
-        <div class="panels"><sb-panel heading="By holding period">
-            <sb-histogram
-              [bins]="store.holdingPeriodHistogram()"
-              [max]="100"
-              [referenceLine]="store.derived().win_rate"
-            />
-          </sb-panel>
+          @if (store.rMultipleBins().length) {
+            <sb-panel heading="R-multiple distribution (all-time)">
+              <!-- Bars, not a pie and not a line: this is a distribution, and
+                   the shape IS the finding -- a healthy edge is a cluster of
+                   small losses with a tail of larger wins. -->
+              <sb-histogram [bins]="store.rMultipleBins()" />
+            </sb-panel>
+          }
 
-          <sb-panel heading="By month">
-            @if (store.monthHistogram().length) {
-              <sb-histogram [bins]="store.monthHistogram()" />
-            } @else {
-              <p class="stale">No months with closed trades.</p>
-            }
-          </sb-panel>
-        </div>
+          <div class="panels"><sb-panel heading="By holding period">
+              <sb-histogram
+                [bins]="store.holdingPeriodHistogram()"
+                [max]="100"
+                [referenceLine]="store.derived().win_rate"
+              />
+            </sb-panel>
 
+            <sb-panel heading="By month">
+              @if (store.monthHistogram().length) {
+                <sb-histogram [bins]="store.monthHistogram()" />
+              } @else {
+                <p class="stale">No months with closed trades.</p>
+              }
+            </sb-panel>
+          </div>
 
-        <div class="panels">
-          <sb-panel heading="By planned R:R">
-            <sb-histogram [bins]="store.riskRewardHistogram()" [max]="100" [referenceLine]="store.derived().win_rate" />
-          </sb-panel>
-        </div>
+          <div class="panels">
+            <sb-panel heading="By planned R:R">
+              <sb-histogram [bins]="store.riskRewardHistogram()" [max]="100" [referenceLine]="store.derived().win_rate" />
+            </sb-panel>
+          </div>
 
-        <h2 class="section">By segment</h2>
-        <div class="panels">
-          <sb-panel heading="By direction">
-            <sb-histogram [bins]="store.directionHistogram()" [max]="100" [referenceLine]="store.winRate()" />
-          </sb-panel>
-          <sb-panel heading="By day of week">
-            <sb-histogram [bins]="store.dowHistogram()" [max]="100" [referenceLine]="store.winRate()" />
-          </sb-panel>
-        </div>
+          <h2 class="section">By segment</h2>
+          <div class="panels">
+            <sb-panel heading="By direction">
+              <sb-histogram [bins]="store.directionHistogram()" [max]="100" [referenceLine]="store.winRate()" />
+            </sb-panel>
+            <sb-panel heading="By day of week">
+              <sb-histogram [bins]="store.dowHistogram()" [max]="100" [referenceLine]="store.winRate()" />
+            </sb-panel>
+          </div>
+
+          @if (store.streaks(); as streaks) {
+            <sb-panel heading="Streaks">
+              <dl>
+                <div>
+                  <dt>Current</dt>
+                  <dd class="num">{{ currentStreak(streaks) }}</dd>
+                </div>
+                <div>
+                  <dt>Best win run</dt>
+                  <dd class="num">{{ fmtCount(streaks.bestWin) }}</dd>
+                </div>
+                <div>
+                  <dt>Worst loss run</dt>
+                  <dd class="num">{{ fmtCount(streaks.worstLoss) }}</dd>
+                </div>
+              </dl>
+            </sb-panel>
+          }
+        </details>
+
         <sb-exit-quality [data]="store.exitQuality()" />
         </sb-async>
 
@@ -461,41 +605,55 @@ interface ProposalView extends ProposalRow {
              explains them, on the detail view. Its own sb-async: the journal
              lives in its own store/module and a failed read here must not
              touch the tables below. -->
-        <sb-async
-          [loading]="journalAsync().loading"
-          [error]="journalAsync().error"
-          [empty]="journalAsync().empty"
-          [staleAsOf]="journalAsync().staleAsOf"
-          emptyReason="measured-zero"
-          emptyTitle="No journal entries yet"
-          emptyHint="They are written when a trade closes."
-          [skeletonRows]="3"
-          [skeletonCols]="1"
-          (retry)="store.load()"
+        <!-- v85 D41 (R9-06). Its own details, not folded into the
+             Distributions band above: the journal is a genuinely separate
+             fetch (SR55) with its own empty message ("no entries yet" vs
+             "no closed trades"), and merging its gate into performanceAsync
+             would answer the wrong question on a book that has closed
+             trades but no journal entries yet. Shares breakdownsOpen(), so
+             both regions still open and close together. -->
+        <details
+          class="breakdowns"
+          [open]="breakdownsOpen()"
+          (toggle)="onBreakdownsToggle($any($event.target).open)"
         >
-          <sb-panel heading="Journal">
-            <p class="series-note">
-              From {{ store.journalEntryCount() }}
-              {{ store.journalEntryCount() === 1 ? 'entry' : 'entries' }}.
-            </p>
-            @if (store.digest().length) {
-              <h3 class="sub">This week</h3>
-              <ul class="lines">
-                @for (line of store.digest(); track line) {
-                  <li>{{ line }}</li>
-                }
-              </ul>
-            }
-            @if (store.lessons().length) {
-              <h3 class="sub">Recurring lessons</h3>
-              <ul class="lines">
-                @for (lesson of store.lessons(); track lesson) {
-                  <li>{{ lesson }}</li>
-                }
-              </ul>
-            }
-          </sb-panel>
-        </sb-async>
+          <summary>Breakdowns</summary>
+          <sb-async
+            [loading]="journalAsync().loading"
+            [error]="journalAsync().error"
+            [empty]="journalAsync().empty"
+            [staleAsOf]="journalAsync().staleAsOf"
+            emptyReason="measured-zero"
+            emptyTitle="No journal entries yet"
+            emptyHint="They are written when a trade closes."
+            [skeletonRows]="3"
+            [skeletonCols]="1"
+            (retry)="store.load()"
+          >
+            <sb-panel heading="Journal">
+              <p class="series-note">
+                From {{ store.journalEntryCount() }}
+                {{ store.journalEntryCount() === 1 ? 'entry' : 'entries' }}.
+              </p>
+              @if (store.digest().length) {
+                <h3 class="sub">This week</h3>
+                <ul class="lines">
+                  @for (line of store.digest(); track line) {
+                    <li>{{ line }}</li>
+                  }
+                </ul>
+              }
+              @if (store.lessons().length) {
+                <h3 class="sub">Recurring lessons</h3>
+                <ul class="lines">
+                  @for (lesson of store.lessons(); track lesson) {
+                    <li>{{ lesson }}</li>
+                  }
+                </ul>
+              }
+            </sb-panel>
+          </sb-async>
+        </details>
 
         <sb-async
           [loading]="performanceAsync().loading"
@@ -508,17 +666,28 @@ interface ProposalView extends ProposalRow {
           [skeletonCols]="6"
           (retry)="store.load()"
         >
-        <sb-panel heading="By confidence level" [flush]="true">
-          <sb-data-table
-            [rows]="confidencePage.visible()"
-            [columns]="confidenceColumns()"
-            [visible]="confidenceKeys"
-            [rowKey]="confidenceKey"
-            [emptyState]="confidenceEmpty"
-            [pagination]="confidencePage.pageSpec()"
-            (pageChange)="confidencePage.setPage($event)"
-          />
-        </sb-panel>
+        <!-- v85 D41 (R9-06). Same performanceAsync gate as before the move
+             (this panel and "By {dimension}" below already shared it) --
+             only the "By confidence level" table is one of the ten
+             displaced panels, so only it moves inside. -->
+        <details
+          class="breakdowns"
+          [open]="breakdownsOpen()"
+          (toggle)="onBreakdownsToggle($any($event.target).open)"
+        >
+          <summary>Breakdowns</summary>
+          <sb-panel heading="By confidence level" [flush]="true">
+            <sb-data-table
+              [rows]="confidencePage.visible()"
+              [columns]="confidenceColumns()"
+              [visible]="confidenceKeys"
+              [rowKey]="confidenceKey"
+              [emptyState]="confidenceEmpty"
+              [pagination]="confidencePage.pageSpec()"
+              (pageChange)="confidencePage.setPage($event)"
+            />
+          </sb-panel>
+        </details>
 
         <sb-panel [heading]="'By ' + store.breakdownLabel().toLowerCase()" [flush]="true">
           <!-- One table with a dimension picker rather than eight tables. The
@@ -1084,6 +1253,53 @@ interface ProposalView extends ProposalRow {
       margin-bottom: var(--space-14);
     }
 
+    /* -- equity curve and win/loss (v85 D39, R9-04) -- */
+    .equity-toggle { margin: var(--space-8) 0; }
+    .equity { min-width: 0; }
+    .winloss { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-14); }
+    .winloss dl { display: grid; gap: var(--space-4); }
+    .winloss div { display: flex; justify-content: space-between; gap: var(--space-10); }
+    .winloss dt { color: var(--text-secondary); }
+    .winloss .pos { color: var(--pos); }
+    .winloss .neg { color: var(--neg); }
+
+    /* -- strategy table and horizon bars (v85 D40, R9-05) -- */
+    .measure-toggle { margin-bottom: var(--space-10); }
+    /* Badge rail: a left border plus the badge word already in the cell's
+       own text (spec's second-cue rule) -- ::ng-deep reaches DataTable's
+       own <tr>, which this component's scoped styles cannot select
+       otherwise. */
+    :host ::ng-deep tr.badge-validated td:first-child { border-left: 3px solid var(--quality-5); }
+    :host ::ng-deep tr.badge-weak td:first-child { border-left: 3px solid var(--quality-2); }
+    :host ::ng-deep tr.thin { opacity: 0.7; }
+    .horizon-bars { display: grid; gap: var(--space-10); }
+    .horizon-row {
+      display: grid;
+      grid-template-columns: 40px 1fr auto auto;
+      align-items: center;
+      gap: var(--space-8);
+      font-size: var(--text-table);
+    }
+    .horizon-key { color: var(--text-secondary); }
+    .horizon-value { color: var(--pos); }
+    .horizon-row.neg .horizon-value { color: var(--neg); }
+    .horizon-n { color: var(--text-faint); font-size: var(--text-chip); }
+
+    /* -- Breakdowns band (v85 D41, R9-06) -- */
+    .breakdowns { margin: var(--space-14) 0; }
+    .breakdowns summary {
+      cursor: pointer;
+      padding: var(--space-8) 0;
+      color: var(--text-secondary);
+      font-size: var(--text-table);
+      font-weight: 600;
+      list-style: none;
+    }
+    .breakdowns summary::-webkit-details-marker { display: none; }
+    .breakdowns summary::before { content: '▸ '; }
+    .breakdowns[open] summary::before { content: '▾ '; }
+    .breakdowns summary:hover { color: var(--text); }
+
     /* Overrides sb-chip-row's own flex-wrap default with a grid -- the
        type selector plus this class gives it enough specificity to beat
        the primitive's own :host rule. */
@@ -1324,6 +1540,157 @@ export class Analytics {
       staleAsOf: perf.staleAsOf ?? snap.staleAsOf,
     };
   });
+
+  /** v85 D39 (R9-04). No dedicated error field -- like `exitQuality`/
+   *  `riskMetrics` above, a failed fetch degrades silently (an empty
+   *  panel), never a warning about the rest of the tab. */
+  protected readonly equityAsync = computed<AsyncInputs>(() =>
+    asyncInputs(
+      { data: this.store.equityCurve, loading: this.store.loading, error: () => null },
+      { isEmpty: () => this.store.equityCurveEmpty() },
+    ),
+  );
+
+  protected readonly equityViewOptions: SegmentOption[] = [
+    { value: 'equity', label: 'Equity' },
+    { value: 'drawdown', label: 'Drawdown' },
+  ];
+
+  protected readonly fmtR = rMultiple;
+
+  protected onRangeChange(range: { from: string | null; to: string | null }): void {
+    this.store.setRange(range.from, range.to);
+  }
+
+  protected onEquityStrategy(strategy: string): void {
+    this.store.setEquityCurveStrategy(strategy || null);
+  }
+
+  protected onEquityView(view: string): void {
+    this.store.setEquityCurveView(view === 'drawdown' ? 'drawdown' : 'equity');
+  }
+
+  /* -- v85 D40 (R9-05): strategy table and horizon bars, one toggle -----
+   *
+   * The measure is a preference, not component state -- persisted through
+   * PreferencesStore so it survives a reload, same convention as every
+   * other SR12-onward flat key. Read once at construction: this is the one
+   * piece of state whose only writer is this browser (PreferencesStore's
+   * own doc comment), so re-reading it later could only overwrite what the
+   * reader just chose with what they chose a moment earlier. */
+
+  protected readonly measure = signal<'exp_r' | 'total_r'>(
+    this.preferences.values()['analyticsMeasure'] === 'total_r' ? 'total_r' : 'exp_r',
+  );
+
+  protected readonly measureLabel = computed(() => (this.measure() === 'total_r' ? 'Total R' : 'ExpR'));
+
+  protected setMeasure(value: string): void {
+    const measure = value === 'total_r' ? 'total_r' : 'exp_r';
+    this.measure.set(measure);
+    this.preferences.update((prefs) => ({ ...prefs, analyticsMeasure: measure }));
+  }
+
+  protected readonly measureViewOptions: SegmentOption[] = [
+    { value: 'exp_r', label: 'ExpR' },
+    { value: 'total_r', label: 'Total R' },
+  ];
+
+  /** Null-safe: a row with no computable value for the active measure
+   *  sorts last and formats as an em dash, never a false zero. */
+  protected measureValue(row: AnalyticsByDimensionRow): number | null {
+    return this.measure() === 'total_r' ? row.total_r : row.exp_r;
+  }
+
+  protected fmtMeasure(row: AnalyticsByDimensionRow): string {
+    const value = this.measureValue(row);
+    return this.measure() === 'total_r' ? rMultiple(value) : expectancy(value);
+  }
+
+  /** Descending: the strategy the active measure rates best leads. A null
+   *  value sorts to the bottom regardless of direction -- "unmeasured" is
+   *  not meaningfully better or worse than a real number. */
+  protected readonly sortedStrategyAgg = computed(() => {
+    const rows = [...this.store.strategyAgg()];
+    return rows.sort((a, b) => {
+      const av = this.measureValue(a);
+      const bv = this.measureValue(b);
+      if (av === null && bv === null) return 0;
+      if (av === null) return 1;
+      if (bv === null) return -1;
+      return bv - av;
+    });
+  });
+
+  /** Badge rail plus a thin-sample flag (spec's second-cue rule -- colour
+   *  alone never carries state) -- MIN_SAMPLE_N, the same threshold
+   *  sb-stat-tile uses. */
+  protected readonly strategyRowClass = (row: AnalyticsByDimensionRow): string | null => {
+    const classes: string[] = [];
+    if (row.badge) classes.push(`badge-${row.badge.toLowerCase()}`);
+    if (row.n < MIN_SAMPLE_N) classes.push('thin');
+    return classes.length ? classes.join(' ') : null;
+  };
+
+  protected readonly strategyRowKey = (row: AnalyticsByDimensionRow) => row.key;
+
+  protected readonly strategyAggColumns = computed<ColumnDef<AnalyticsByDimensionRow>[]>(() => [
+    {
+      key: 'key', header: 'Strategy',
+      value: (row) => (row.badge ? `${row.key} — ${row.badge}` : row.key),
+    },
+    { key: 'value', header: this.measureLabel(), numeric: true, value: (row) => this.fmtMeasure(row) },
+    { key: 'n', header: 'N', numeric: true, value: (row) => count(row.n) },
+  ]);
+
+  protected readonly strategyAggVisible = ['key', 'value', 'n'];
+
+  protected readonly strategyAggEmptyState = { title: 'No closed trades', hint: 'Nothing to group yet.' };
+
+  /** No dedicated error field: `/by-dimension` degrades silently, same as
+   *  `exitQuality`/`riskMetrics` above -- and `strategyAgg`/`horizonAgg`
+   *  default to `[]` rather than `null`, so "not yet fetched" and "fetched,
+   *  nothing closed" are told apart by `store.loading` instead of
+   *  `asyncInputs`' usual has-data check. */
+  protected readonly strategyAggAsync = computed<AsyncInputs>(() => {
+    const empty = this.store.strategyAgg().length === 0 && this.store.horizonAgg().length === 0;
+    return {
+      loading: this.store.loading() && empty,
+      error: null,
+      empty: !this.store.loading() && empty,
+      staleAsOf: null,
+    };
+  });
+
+  /** The largest magnitude across all horizons for the active measure --
+   *  `sb-magnitude`'s own scale, so no single bar's width depends on
+   *  anything but the whole row set it is being compared against. */
+  protected readonly horizonMax = computed(() => {
+    const values = this.store.horizonAgg()
+      .map((row) => this.measureValue(row))
+      .filter((v): v is number => v !== null)
+      .map(Math.abs);
+    return values.length ? Math.max(...values) : 1;
+  });
+
+  /* -- v85 D41 (R9-06): the Breakdowns band -----------------------------
+   *
+   * Same convention as `measure` above: a preference, not component state,
+   * read once at construction. Collapsed by default so the first screen a
+   * reader sees is the KPI row and the equity curve, not thirteen
+   * histograms below the fold. Every `<details class="breakdowns">` on the
+   * page binds this one signal, so opening any one of them opens all three
+   * at once -- they read as one section split across three independent
+   * fetches, not three unrelated ones that happen to share a label.
+   */
+  protected readonly breakdownsOpen = signal<boolean>(
+    this.preferences.values()['analyticsBreakdownsOpen'] === true,
+  );
+
+  protected onBreakdownsToggle(open: boolean): void {
+    this.breakdownsOpen.set(open);
+    this.preferences.update((prefs) => ({ ...prefs, analyticsBreakdownsOpen: open }));
+  }
 
   protected readonly journalAsync = computed(() =>
     asyncInputs(

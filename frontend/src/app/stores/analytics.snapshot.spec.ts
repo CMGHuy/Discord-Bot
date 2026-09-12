@@ -180,6 +180,19 @@ describe('AnalyticsStore — the snapshot', () => {
     });
     // v85 D39 (R9-03): the KPI row's Sharpe (R)/Max drawdown (R) tiles read
     // riskMetrics off this same /risk GET, fetched once like exit-quality.
+    // v85 D39 (R9-01/R9-04): fetched alongside performance, never guarded
+    // to "once" like exit-quality/risk above.
+    backend
+      .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
+      .flush({ points: [], n: 0, as_of: null });
+    // v85 D40 (R9-02/R9-05): fetched alongside performance too, also never
+    // guarded to "once".
+    backend
+      .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'strategy')
+      .flush({ rows: [], as_of: null });
+    backend
+      .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'horizon')
+      .flush({ rows: [], as_of: null });
     backend.match('/api/v1/risk').forEach((request) => request.flush({
       heat: { open_pct: 0, cap_pct: 6, utilisation_pct: 0 },
       positions: [], sector_heat: [], clusters: [],

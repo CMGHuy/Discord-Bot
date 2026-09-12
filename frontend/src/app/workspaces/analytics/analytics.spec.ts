@@ -14,6 +14,7 @@ import {
   loadingInterceptor,
 } from '../../api/interceptors';
 import {
+  AnalyticsByDimensionRow,
   AnalyticsPerformance,
   AnalyticsPlans,
   AnalyticsSnapshot,
@@ -21,6 +22,7 @@ import {
 } from '../../api/models';
 import { AnalyticsStore } from '../../stores/analytics.store';
 import { ConnectionStore } from '../../stores/connection.store';
+import { PreferencesStore } from '../../stores/preferences.store';
 import { Analytics } from './analytics';
 
 const connectionStub = { currency: signal('$') };
@@ -364,6 +366,311 @@ describe('Analytics — performance tab — KPI row (v85 D39)', () => {
     // Total R and Profit factor genuinely depend on the fetch that failed.
     expect(kpiTile(el, 'Total R').querySelector('.value')!.textContent!.trim()).toBe('—');
     expect(kpiTile(el, 'Profit factor').querySelector('.value')!.textContent!.trim()).toBe('—');
+  });
+});
+
+/* -- v85 R9-04 -- equity curve, win/loss donut, control bar, freshness -- */
+
+interface EquityPoint { date: string; cum_r: number; drawdown_r: number; }
+
+/** Renders the Performance tab with journal/snapshot/performance/risk
+ *  settled minimally (none of R9-04's own tests read them) and the equity
+ *  curve flushed with `points`. */
+async function renderEquity(
+  points: EquityPoint[] = [],
+): Promise<{ el: HTMLElement; fixture: ComponentFixture<Analytics>; backend: HttpTestingController }> {
+  const { fixture, backend } = seed();
+  fixture.detectChanges();
+  backend.expectOne('/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
+  backend.expectOne('/api/v1/analytics/snapshot').flush(snapshotPayload());
+  backend.expectOne('/api/v1/analytics/performance').flush(performancePayload());
+  backend.expectOne('/api/v1/risk').flush(riskPayload());
+  backend
+    .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
+    .flush({ points, n: points.length, as_of: points.at(-1)?.date ?? null });
+  await fixture.whenStable();
+  fixture.detectChanges();
+  return { el: fixture.nativeElement as HTMLElement, fixture, backend };
+}
+
+describe('Analytics — performance tab — equity curve (v85 D39, R9-04)', () => {
+  it('draws the equity curve from the endpoint series', async () => {
+    const { el } = await renderEquity([{ date: '2026-04-01', cum_r: 1, drawdown_r: 0 }]);
+    expect(el.querySelector('.equity sb-line-chart')).not.toBeNull();
+  });
+
+  it('switches the same series to drawdown without refetching', async () => {
+    const { el, fixture, backend } = await renderEquity([
+      { date: '2026-04-01', cum_r: 1, drawdown_r: 0.4 },
+    ]);
+
+    const drawdownButton = [...el.querySelectorAll<HTMLButtonElement>('.equity-toggle .segment')]
+      .find((b) => b.textContent?.trim().startsWith('Drawdown'))!;
+    drawdownButton.click();
+    fixture.detectChanges();
+
+    // No second request -- the toggle only swaps which field of the ALREADY
+    // fetched points is plotted (spec D39: "one request, two views").
+    backend.expectNone((req) => req.url === '/api/v1/analytics/equity-curve');
+    expect(drawdownButton.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('renders the win/loss donut with both average R figures', async () => {
+    // AAPL's own win (cum_r 0 -> 1.24) then a loss (1.24 -> 0.55) -- the
+    // avg-R captions are derived from these per-trade deltas, not a
+    // separate payload field (there is none: R9-01's endpoint gives only
+    // the running total).
+    const { el } = await renderEquity([
+      { date: '2026-01-01', cum_r: 1.24, drawdown_r: 0 },
+      { date: '2026-01-02', cum_r: 0.55, drawdown_r: 0.69 },
+    ]);
+    expect(el.querySelector('.winloss')!.textContent).toContain('1.24');
+    expect(el.querySelector('.winloss')!.textContent).toContain('-0.69');
+  });
+
+  it('shows an empty curve as measured-empty rather than a flat line', async () => {
+    // sb-async replaces its whole projected content with the empty state,
+    // so .equity itself is gone too -- same pattern the existing
+    // "measured-zero" test above asserts against the whole page.
+    const { el } = await renderEquity([]);
+    expect(el.querySelector('.equity sb-line-chart')).toBeNull();
+    expect(el.textContent).toContain('No closed trades in this range');
+  });
+
+  it('puts the range and strategy pickers in the control bar', async () => {
+    const { el } = await renderEquity();
+    expect(el.querySelector('sb-control-bar sb-date-range')).not.toBeNull();
+    // sb-select's own template owns the inner <select>; class="strategy" is
+    // a host attribute of the custom element, not forwarded onto it.
+    expect(el.querySelector('sb-control-bar sb-select.strategy')).not.toBeNull();
+  });
+
+  it('marks the curve panel with its own data age', async () => {
+    const { el } = await renderEquity([{ date: '2026-09-10', cum_r: 1, drawdown_r: 0 }]);
+    expect(el.querySelector('.equity sb-freshness')).not.toBeNull();
+  });
+});
+
+/* -- v85 R9-05 -- strategy table and horizon bars, with the measure toggle -- */
+
+/** Renders the Performance tab with journal/snapshot/performance/risk/
+ *  equity-curve settled minimally (none of R9-05's own tests read them)
+ *  and both `/by-dimension` fetches flushed with `rows`/`horizons`. */
+async function renderAgg(overrides: {
+  rows?: AnalyticsByDimensionRow[]; horizons?: AnalyticsByDimensionRow[];
+} = {}): Promise<{ el: HTMLElement; fixture: ComponentFixture<Analytics> }> {
+  const { fixture, backend } = seed();
+  fixture.detectChanges();
+  backend.expectOne('/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
+  backend.expectOne('/api/v1/analytics/snapshot').flush(snapshotPayload());
+  backend.expectOne('/api/v1/analytics/performance').flush(performancePayload());
+  backend.expectOne('/api/v1/risk').flush(riskPayload());
+  backend
+    .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
+    .flush({ points: [], n: 0, as_of: null });
+  backend
+    .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'strategy')
+    .flush({ rows: overrides.rows ?? [], as_of: null });
+  backend
+    .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'horizon')
+    .flush({ rows: overrides.horizons ?? [], as_of: null });
+  await fixture.whenStable();
+  fixture.detectChanges();
+  return { el: fixture.nativeElement as HTMLElement, fixture };
+}
+
+function rowKeys(el: HTMLElement): string[] {
+  // DataTable pads a short page with blank filler rows up to perPage (see
+  // Risk's own exposure table) -- filter those out rather than assert
+  // against an implementation detail unrelated to this test.
+  return [...el.querySelectorAll('tbody tr')]
+    .map((tr) => tr.querySelector('td')!.textContent!.split(' — ')[0].trim())
+    .filter((key) => key !== '');
+}
+
+function firstRow(el: HTMLElement): HTMLElement {
+  return el.querySelector('tbody tr') as HTMLElement;
+}
+
+function measureToggle(el: HTMLElement, label: string): HTMLButtonElement {
+  const found = [...el.querySelectorAll<HTMLButtonElement>('.measure-toggle .segment')]
+    .find((b) => b.textContent?.trim().startsWith(label));
+  if (!found) throw new Error(`no measure toggle labelled ${label}`);
+  return found;
+}
+
+function bar(el: HTMLElement, key: string): HTMLElement {
+  const found = [...el.querySelectorAll<HTMLElement>('.horizon-row')]
+    .find((r) => r.querySelector('.horizon-key')?.textContent?.trim() === key);
+  if (!found) throw new Error(`no horizon bar for ${key}`);
+  return found;
+}
+
+function prefs(): Record<string, unknown> {
+  return TestBed.inject(PreferencesStore).values();
+}
+
+describe('Analytics — performance tab — strategy/horizon aggregates (v85 D40, R9-05)', () => {
+  it('sorts the strategy table by the active measure', async () => {
+    const { el, fixture } = await renderAgg({
+      rows: [
+        { key: 'A', exp_r: 0.1, total_r: 90, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 900 },
+        { key: 'B', exp_r: 0.5, total_r: 20, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 40 },
+      ],
+    });
+    expect(rowKeys(el)).toEqual(['B', 'A']);
+
+    measureToggle(el, 'Total R').click();
+    fixture.detectChanges();
+    expect(rowKeys(el)).toEqual(['A', 'B']);
+  });
+
+  it('renders the registry badge as a rail beside each strategy', async () => {
+    const { el } = await renderAgg({
+      rows: [{ key: 'RSI', exp_r: 0.2, total_r: 10, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 238, badge: 'WEAK' }],
+    });
+    const row = firstRow(el);
+    expect(row.classList).toContain('badge-weak');
+    expect(row.textContent).toContain('WEAK');
+  });
+
+  it('de-emphasises a strategy row computed from a thin sample', async () => {
+    const { el } = await renderAgg({
+      rows: [{ key: 'New', exp_r: 0.9, total_r: 6, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 7 }],
+    });
+    expect(firstRow(el).classList).toContain('thin');
+  });
+
+  it('renders the horizon bars diverging around zero', async () => {
+    const { el } = await renderAgg({
+      horizons: [{ key: '2w', exp_r: -0.2, total_r: -8, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 40 }],
+    });
+    expect(bar(el, '2w').classList).toContain('neg');
+  });
+
+  it('labels each horizon bar with its sample size', async () => {
+    const { el } = await renderAgg({
+      horizons: [{ key: '2w', exp_r: 0.2, total_r: 8, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 40 }],
+    });
+    expect(bar(el, '2w').textContent).toContain('40');
+  });
+
+  it('drives both panels from one toggle', async () => {
+    const { el, fixture } = await renderAgg({
+      rows: [{ key: 'A', exp_r: 0.1, total_r: 90, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 900 }],
+      horizons: [{ key: '2w', exp_r: 0.1, total_r: 90, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 900 }],
+    });
+    measureToggle(el, 'Total R').click();
+    fixture.detectChanges();
+    expect(bar(el, '2w').textContent).toContain('90');
+  });
+
+  it('remembers the chosen measure as a preference', async () => {
+    const { el, fixture } = await renderAgg({
+      rows: [{ key: 'A', exp_r: 0.1, total_r: 90, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 900 }],
+    });
+    measureToggle(el, 'Total R').click();
+    fixture.detectChanges();
+    expect(prefs()['analyticsMeasure']).toBe('total_r');
+  });
+});
+
+/* -- v85 R9-06 -- the Breakdowns band, and the other four tabs -- */
+
+/** Renders the Performance tab with enough real data that every one of the
+ *  ten displaced panels' own inner conditions are true (a non-empty
+ *  histogram/streaks/journal entry), not just that its sb-async isn't in
+ *  the empty state -- some of the ten (R-multiple all-time, Streaks) are
+ *  wrapped in their OWN `@if` around the whole panel, unchanged by the
+ *  move, and would be absent entirely on a thinner fixture. */
+async function renderBreakdowns(): Promise<{ el: HTMLElement; fixture: ComponentFixture<Analytics> }> {
+  const { fixture, backend } = seed();
+  fixture.detectChanges();
+  const n = 20;
+  backend.expectOne('/api/v1/analytics/journal').flush({ digest: ['Two losses, both chased.'], lessons: [], entries_n: 1 });
+  backend.expectOne('/api/v1/analytics/snapshot').flush(snapshotPayload({
+    overall: {
+      n, profit_factor: 1.5,
+      streaks: { current: 2, current_kind: 'win', best_win_streak: 4, worst_loss_streak: 3 },
+    },
+    r_multiples: Array.from({ length: n }, (_, i) => (i % 2 === 0 ? 1 : -0.5)),
+  }));
+  backend.expectOne('/api/v1/analytics/performance').flush(performancePayload({
+    totals: { total: n, open: 0, closed: n },
+  }));
+  backend.expectOne('/api/v1/risk').flush(riskPayload());
+  backend
+    .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
+    .flush({ points: [], n: 0, as_of: null });
+  backend
+    .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'strategy')
+    .flush({ rows: [], as_of: null });
+  backend
+    .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'horizon')
+    .flush({ rows: [], as_of: null });
+  await fixture.whenStable();
+  fixture.detectChanges();
+  return { el: fixture.nativeElement as HTMLElement, fixture };
+}
+
+function bandHeadings(el: HTMLElement): string[] {
+  return [...el.querySelectorAll('.breakdowns h2.sb-label')].map((h) => h.textContent!.trim());
+}
+
+function band(el: HTMLElement): HTMLDetailsElement {
+  return el.querySelector('.breakdowns') as HTMLDetailsElement;
+}
+
+function bandToggle(el: HTMLElement): HTMLElement {
+  return el.querySelector('.breakdowns summary') as HTMLElement;
+}
+
+function tabLabels(el: HTMLElement): string[] {
+  return [...el.querySelectorAll('sb-tab-bar [role="tab"], sb-tab-bar button')]
+    .map((b) => b.textContent!.trim())
+    .filter((label) => label !== '');
+}
+
+describe('Analytics — performance tab — Breakdowns band (v85 D41, R9-06)', () => {
+  it('keeps every displaced panel reachable in the Breakdowns band', async () => {
+    const { el } = await renderBreakdowns();
+    const headings = bandHeadings(el);
+    for (const h of [
+      'Return distribution', 'R-multiple distribution (selected range)',
+      'R-multiple distribution (all-time)', 'By holding period', 'By month',
+      'By planned R:R', 'By direction', 'By day of week', 'Streaks', 'Journal',
+      'By confidence level',
+    ]) {
+      expect(headings).toContain(h);
+    }
+  });
+
+  it('collapses the band by default so the first screen is the summary', async () => {
+    const { el } = await renderBreakdowns();
+    expect(band(el).getAttribute('open')).toBeNull();
+  });
+
+  it('remembers that the band was opened', async () => {
+    const { el, fixture } = await renderBreakdowns();
+    // jsdom does not reliably synthesize a real <summary> click into a
+    // native `toggle` event the way a browser does -- set the DOM property
+    // and dispatch the event `(toggle)` actually binds to, same as a real
+    // click on <summary> would.
+    const details = band(el);
+    details.open = true;
+    details.dispatchEvent(new Event('toggle'));
+    fixture.detectChanges();
+    expect(prefs()['analyticsBreakdownsOpen']).toBe(true);
+  });
+
+  it('leaves the other four tabs in place', async () => {
+    const { el } = await renderBreakdowns();
+    expect(tabLabels(el)).toEqual(['Performance', 'Strategies', 'Calibration', 'Tuning', 'Plans']);
+  });
+
+  it('renders no in-page heading anywhere on the page', async () => {
+    const { el } = await renderBreakdowns();
+    expect(el.querySelector('h1')).toBeNull();
   });
 });
 

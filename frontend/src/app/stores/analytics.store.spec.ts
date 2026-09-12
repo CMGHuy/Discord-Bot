@@ -224,6 +224,13 @@ describe('AnalyticsStore', () => {
     },
     correlation: { labels: [], values: [] },
   };
+  // v85 D39 (R9-01/R9-04): fetched alongside performance on every load AND
+  // every range change -- unlike exit-quality/risk above, never guarded to
+  // "once", so every respondPerformance() call settles a fresh one.
+  const EQUITY_CURVE = { points: [{ date: '2026-04-01', cum_r: 1, drawdown_r: 0 }], n: 1, as_of: '2026-04-01' };
+  // v85 D40 (R9-02/R9-05): fetched alongside performance too, also never
+  // guarded to "once" -- both dims go out on every respondPerformance().
+  const BY_DIMENSION = { rows: [], as_of: null };
 
   const respondPerformance = (body: Partial<AnalyticsPerformance> = {}) => {
     backend
@@ -237,6 +244,15 @@ describe('AnalyticsStore', () => {
     backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
     backend.match('/api/v1/analytics/exit-quality').forEach((request) => request.flush(EXIT_QUALITY));
     backend.match('/api/v1/risk').forEach((request) => request.flush(RISK));
+    backend
+      .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
+      .flush(EQUITY_CURVE);
+    backend
+      .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'strategy')
+      .flush(BY_DIMENSION);
+    backend
+      .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'horizon')
+      .flush(BY_DIMENSION);
   };
 
   const respondStrategies = (body: Record<string, unknown> = {}) =>
@@ -666,6 +682,17 @@ describe('AnalyticsStore', () => {
     backend
       .expectOne('/api/v1/analytics/journal')
       .error(new ProgressEvent('error'), { status: 0 });
+    // v85 D39's equity curve goes out with them too -- same reason.
+    backend
+      .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
+      .error(new ProgressEvent('error'), { status: 0 });
+    // v85 D40's two by-dimension requests go out with them too -- same reason.
+    backend
+      .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'strategy')
+      .error(new ProgressEvent('error'), { status: 0 });
+    backend
+      .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'horizon')
+      .error(new ProgressEvent('error'), { status: 0 });
     expect(store.error()).not.toBeNull();
     expect(store.snapshotError()).not.toBeNull();
     expect(store.journalError()).not.toBeNull();
@@ -751,6 +778,21 @@ describe('AnalyticsStore', () => {
         .flush(PERFORMANCE);
       backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
       backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
+      // v85 D39: the equity curve shares /performance's from/to scope, so it
+      // refetches on every range change too -- same from/to vocabulary, not
+      // a second definition of the range.
+      backend
+        .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
+        .flush(EQUITY_CURVE);
+      // v85 D40: /by-dimension has no from/to of its own, but loadPerformance
+      // fires it unconditionally regardless -- see loadByDimension's own
+      // "wasteful but harmless" comment.
+      backend
+        .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'strategy')
+        .flush(BY_DIMENSION);
+      backend
+        .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'horizon')
+        .flush(BY_DIMENSION);
       backend.verify();
     });
 

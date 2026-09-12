@@ -12,7 +12,10 @@ import { ApiError } from '../api/api-error';
 import { routeRequest } from '../routing/route-request';
 import { Observable } from 'rxjs';
 import {
+  AnalyticsByDimension,
+  AnalyticsByDimensionRow,
   AnalyticsCalibration,
+  AnalyticsEquityCurve,
   AnalyticsExitQuality,
   AnalyticsDerived,
   AnalyticsJournal,
@@ -22,7 +25,9 @@ import {
   AnalyticsStrategies,
   RiskMetrics,
 } from '../api/models';
+import { DonutSlice } from '../ui/donut';
 import { HistogramBin } from '../ui/histogram';
+import { LineChartSeries } from '../ui/line-chart';
 
 /* -- row shapes ---------------------------------------------------------
  *
@@ -337,6 +342,20 @@ function rMultiplesOf(snapshot: AnalyticsSnapshot | null): number[] {
     .filter((value): value is number => value !== null);
 }
 
+/** Per-trade R, derived from consecutive `cum_r` deltas -- R9-01's endpoint
+ *  gives a running total, not a per-trade figure, and this is the one place
+ *  both the win/loss donut and its avg-R captions (D39, R9-04) read that
+ *  derivation from, so the two cannot drift on how a "win" is decided. */
+function perTradeRs(curve: AnalyticsEquityCurve | null): number[] {
+  const points = curve?.points ?? [];
+  let prev = 0;
+  return points.map((p) => {
+    const r = p.cum_r - prev;
+    prev = p.cum_r;
+    return r;
+  });
+}
+
 /** How long the book has been trading, in months -- earliest to latest date
  *  on the snapshot's own all-time (dollar) equity curve. Floored at one
  *  day, mirroring `metrics.span_years`'s own floor, so a book only hours
@@ -535,6 +554,24 @@ interface AnalyticsSlice {
    * rather than an unrelated fetch failure warning about the whole tab.
    */
   riskMetrics: RiskMetrics | null;
+  /** v85 D39 (R9-01/R9-04). Re-fetched on every range change alongside
+   *  `performance`/`snapshot`/`journal` (same from/to vocabulary, per the
+   *  endpoint's own docstring), and independently on `equityCurveStrategy`
+   *  change -- the Performance tab's own `?from=`/`?to=` scope, but a
+   *  strategy narrowing `/performance` itself does not take. */
+  equityCurve: AnalyticsEquityCurve | null;
+  equityCurveStrategy: string | null;
+  /** Equity vs drawdown -- one fetch, two views of the same points (spec
+   *  D39: "not a second series"). Component-facing, but held here so it
+   *  survives a tab switch away from and back to Performance. */
+  equityCurveView: 'equity' | 'drawdown';
+  /** v85 D40 (R9-02/R9-05). Both fetched together, unguarded, on every
+   *  Performance load -- the strategy table and horizon bars share one
+   *  toggle, so both panels' data has to already be on hand before either
+   *  renders. `[]`, not null: an empty book is a measured-empty list, not
+   *  "not yet fetched" (see the strategy table's own empty state). */
+  strategyAgg: AnalyticsByDimensionRow[];
+  horizonAgg: AnalyticsByDimensionRow[];
   plans: AnalyticsPlans | null;
   jobs: JobSummary[];
   /** The job whose progress is on screen — status plus a log tail. */
@@ -597,6 +634,11 @@ export const AnalyticsStore = signalStore(
     calibration: null,
     exitQuality: null,
     riskMetrics: null,
+    equityCurve: null,
+    equityCurveStrategy: null,
+    equityCurveView: 'equity',
+    strategyAgg: [],
+    horizonAgg: [],
     plans: null,
     jobs: [],
     job: null,
@@ -608,7 +650,7 @@ export const AnalyticsStore = signalStore(
   }),
 
   withComputed(({ performance, strategies, calibration, plans, jobs, job, snapshot, breakdown, exitQuality,
-                 journal, riskMetrics }) => ({
+                 journal, riskMetrics, equityCurve, equityCurveView }) => ({
     /* -- SR50: the snapshot's own figures ------------------------------- */
 
     /** When the blob was assembled. Worth showing: the server serves a
@@ -682,6 +724,40 @@ export const AnalyticsStore = signalStore(
     sharpeRSample: computed(() => riskMetrics()?.sharpe_r.n ?? null),
     maxDrawdownR: computed(() => riskMetrics()?.max_drawdown_r.value ?? null),
     maxDrawdownRSample: computed(() => riskMetrics()?.max_drawdown_r.n ?? null),
+
+    /* -- v85 D39 (R9-04): the equity/drawdown curve and win/loss donut --- */
+
+    equityCurveEmpty: computed(() => (equityCurve()?.points.length ?? 0) === 0),
+    equityCurveAsOf: computed(() => equityCurve()?.as_of ?? null),
+
+    /** One series, its identity swapped by the toggle rather than refetched
+     *  (spec D39: "one request, two views"). */
+    activeEquitySeries: computed<LineChartSeries[]>(() => {
+      const points = equityCurve()?.points ?? [];
+      const drawdown = equityCurveView() === 'drawdown';
+      return [{
+        name: drawdown ? 'Drawdown (R)' : 'Equity (R)',
+        points: points.map((p) => ({ date: p.date, value: drawdown ? p.drawdown_r : p.cum_r })),
+      }];
+    }),
+
+    winLossSlices: computed<DonutSlice[]>(() => {
+      const rs = perTradeRs(equityCurve());
+      return [
+        { label: 'Win', count: rs.filter((r) => r > 0).length, tone: 'pos' },
+        { label: 'Loss', count: rs.filter((r) => r < 0).length, tone: 'neg' },
+      ];
+    }),
+    /** Null (not 0) when there is no win/loss of that sign yet -- an empty
+     *  average is not a zero-R one. */
+    avgWinR: computed(() => {
+      const wins = perTradeRs(equityCurve()).filter((r) => r > 0);
+      return wins.length ? wins.reduce((sum, r) => sum + r, 0) / wins.length : null;
+    }),
+    avgLossR: computed(() => {
+      const losses = perTradeRs(equityCurve()).filter((r) => r < 0);
+      return losses.length ? losses.reduce((sum, r) => sum + r, 0) / losses.length : null;
+    }),
 
     /** Current run, and the best and worst ever. Never rendered even by the
      *  Jinja page, which computed them and dropped them on the floor. */
@@ -1044,6 +1120,38 @@ export const AnalyticsStore = signalStore(
           error: () => {},
         });
       }
+      loadEquityCurve();
+      loadByDimension();
+    };
+
+    /** v85 D39 (R9-01/R9-04). Re-fetched by `loadPerformance` on every range
+     *  change and by `setEquityCurveStrategy` on its own -- same from/to
+     *  vocabulary as `/performance`, plus a strategy scope that route does
+     *  not take, so this cannot fold into `loadPerformance`'s own request. */
+    const loadEquityCurve = (): void => {
+      api.analyticsEquityCurve({
+        from: store.rangeFrom(), to: store.rangeTo(), strategy: store.equityCurveStrategy(),
+      }).subscribe({
+        next: (equityCurve) => patchState(store, { equityCurve }),
+        // Degrades to its own empty state; not a reason to warn about the
+        // rest of the Performance tab.
+        error: () => {},
+      });
+    };
+
+    /** v85 D40 (R9-02/R9-05). `/analytics/by-dimension` takes no from/to --
+     *  every closed trade, always -- so unlike `loadEquityCurve` this is
+     *  wasteful but harmless to re-fire on a range change; simpler than a
+     *  second guard for data neither panel's own toggle needs range-scoped. */
+    const loadByDimension = (): void => {
+      api.analyticsByDimension('strategy').subscribe({
+        next: ({ rows }) => patchState(store, { strategyAgg: rows }),
+        error: () => {},
+      });
+      api.analyticsByDimension('horizon').subscribe({
+        next: ({ rows }) => patchState(store, { horizonAgg: rows }),
+        error: () => {},
+      });
     };
 
     const loadStrategies = (): void => {
@@ -1169,6 +1277,8 @@ export const AnalyticsStore = signalStore(
               error: () => {},
             });
           }
+          loadEquityCurve();
+          loadByDimension();
         },
         next: (performance) => patchState(store, { performance, loading: false, error: null }),
         error: fail,
@@ -1270,6 +1380,20 @@ export const AnalyticsStore = signalStore(
       clearRange(): void {
         patchState(store, { rangeFrom: null, rangeTo: null });
         loadPerformance();
+      },
+
+      /** v85 D39 (R9-04). Re-fetches only the equity curve -- `/performance`
+       *  itself takes no `strategy` param (see `analytics_performance`'s own
+       *  docstring), so this is deliberately narrower than `setRange`. */
+      setEquityCurveStrategy(strategy: string | null): void {
+        patchState(store, { equityCurveStrategy: strategy || null });
+        loadEquityCurve();
+      },
+
+      /** Equity | Drawdown -- swaps which field of the one already-fetched
+       *  series is shown, never refetches (spec D39). */
+      setEquityCurveView(view: 'equity' | 'drawdown'): void {
+        patchState(store, { equityCurveView: view });
       },
 
       resolveTab,

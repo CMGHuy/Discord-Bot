@@ -378,6 +378,41 @@ export interface AnalyticsDerived {
   expectancy_r: number | null;
 }
 
+/** One closed trade, cumulative in R (v85 D39, R9-01). `drawdown_r` is
+ *  peak-to-current, non-negative. Ordered by close date, not calendar day --
+ *  a day with no closes is a missing observation, not a flat one. */
+export interface EquityCurvePoint {
+  date: string;
+  cum_r: number;
+  drawdown_r: number;
+}
+
+export interface AnalyticsEquityCurve {
+  points: EquityCurvePoint[];
+  n: number;
+  as_of: string | null;
+}
+
+/** One strategy or horizon's aggregate (v85 D40, R9-02). `total_r` is a
+ *  true sum, never `exp_r * n` -- a trade `r_multiple()` cannot compute is
+ *  skipped from both, and deriving one from the other would print a number
+ *  nobody actually computed. `badge` is present only for `dim=strategy`. */
+export interface AnalyticsByDimensionRow {
+  key: string;
+  exp_r: number | null;
+  total_r: number | null;
+  win_rate: number | null;
+  profit_factor: number | null;
+  max_drawdown_r: number | null;
+  n: number;
+  badge?: string;
+}
+
+export interface AnalyticsByDimension {
+  rows: AnalyticsByDimensionRow[];
+  as_of: string | null;
+}
+
 export interface AnalyticsPerformance {
   totals: Record<string, unknown>;
   relocated: Record<string, unknown>;
@@ -1061,6 +1096,15 @@ export interface Preferences {
    *  here instead -- one flat key, since there is no per-table axis to it.
    *  Read/written via `ui/watchlist-prefs.ts`, consumed by R7-05. */
   watchlistTags?: Record<string, string[]>;
+  /** v85 D40 (R9-05) -- which measure the Performance tab's strategy table
+   *  and horizon bars are sorted/sized by. ExpR by default: "which is
+   *  better per shot" is the question this app's edge priorities rank
+   *  first (CLAUDE.md), and a fresh session should open on that answer. */
+  analyticsMeasure?: 'exp_r' | 'total_r';
+  /** v85 D41 (R9-06) -- whether the Performance tab's Breakdowns band is
+   *  expanded. Collapsed (absent/false) by default: the first screen is
+   *  the KPI row and equity curve, not the histograms below it. */
+  analyticsBreakdownsOpen?: boolean;
   /** SR12 onward: flat dotted keys, so a new preference is a new key rather
    *  than a schema migration. Values are whatever that key stores, and every
    *  reader validates — see `ui/table-prefs.ts` for why that tolerance is
