@@ -103,18 +103,6 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         <sb-metric-card label="Win rate" [value]="store.totals()?.win_rate ?? null" unit="%" [decimals]="1" />
       </div>
 
-      <div class="callouts">
-        <sb-panel heading="Best day">
-          <p class="callout">{{ extremeLabel(store.bestDay()) }}</p>
-        </sb-panel>
-        <sb-panel heading="Worst day">
-          <p class="callout">{{ extremeLabel(store.worstDay()) }}</p>
-        </sb-panel>
-        <sb-panel heading="Current streak">
-          <p class="callout">{{ streakLabel() }}</p>
-        </sb-panel>
-      </div>
-
       <div class="two-pane">
       <sb-panel [flush]="true">
         <sb-freshness [at]="store.data()?.as_of ?? null" />
@@ -181,6 +169,14 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
           } @else { <p class="day-empty">No closed trades under the current filter.</p> }
         } @else { <p class="day-empty">Select a day to inspect its trades.</p> }
       </aside>
+      </div>
+
+      <div class="month-summary" aria-label="Month summary">
+        <sb-stat-tile label="Month total" [value]="monthTotal()" [sample]="monthDays().length" />
+        <sb-stat-tile label="Winning days" [value]="winningDaysLabel()" [sample]="monthDays().length" tone="pos" />
+        <sb-stat-tile label="Average day" [value]="averageDay()" [sample]="monthDays().length" />
+        <sb-stat-tile label="Best day" [value]="monthExtreme('best')" [sample]="monthDays().length" tone="pos" />
+        <sb-stat-tile label="Worst day" [value]="monthExtreme('worst')" [sample]="monthDays().length" tone="neg" />
       </div>
     </sb-async>
 
@@ -295,12 +291,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     .metric button.active { background: var(--surface-raised); color: var(--text); }
 
     .totals { display: flex; flex-wrap: wrap; gap: var(--space-14); }
-    .callouts {
-      display: grid;
-      gap: var(--space-14);
-      grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-    }
-    .callout { margin: 0; font-family: var(--font-mono); font-size: var(--text-table); }
+    .month-summary { display: grid; gap: var(--space-14); grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 
     .grid { display: grid; }
     .two-pane { display: grid; grid-template-columns: minmax(0, 1fr) minmax(17rem, 0.38fr); gap: var(--space-14); align-items: start; }
@@ -491,6 +482,49 @@ export class Calendar {
       case 'win_rate': return '%';
       case 'trades': return '';
     }
+  }
+
+  /** Closed-trading days only: calendar blanks are not observations. */
+  protected readonly monthDays = computed(() => this.store.days().filter((day) => day.trade_count > 0));
+
+  protected monthTotal(): string {
+    const value = this.totalValue();
+    if (value === null) return ABSENT;
+    if (this.store.metric() === 'r') return rMultiple(value);
+    if (this.store.metric() === 'currency') return money(value, this.currency(), 2);
+    if (this.store.metric() === 'win_rate') return `${value.toFixed(1)}%`;
+    return `${value}`;
+  }
+
+  protected winningDaysLabel(): string {
+    const days = this.monthDays();
+    if (!days.length) return ABSENT;
+    const wins = days.filter((day) => (day.net_r ?? day.net_pnl_amount ?? 0) > 0).length;
+    return `${wins} (${((wins / days.length) * 100).toFixed(0)}%)`;
+  }
+
+  protected averageDay(): string {
+    const values = this.monthDays()
+      .map((day) => cellValue(day, this.store.metric()).value)
+      .filter((value): value is number => value !== null);
+    if (!values.length) return ABSENT;
+    const value = values.reduce((sum, current) => sum + current, 0) / values.length;
+    if (this.store.metric() === 'r') return rMultiple(value);
+    if (this.store.metric() === 'currency') return money(value, this.currency(), 2);
+    if (this.store.metric() === 'win_rate') return `${value.toFixed(1)}%`;
+    return `${value.toFixed(1)}`;
+  }
+
+  protected monthExtreme(which: 'best' | 'worst'): string {
+    const values = this.monthDays()
+      .map((day) => cellValue(day, this.store.metric()).value)
+      .filter((value): value is number => value !== null);
+    if (!values.length) return ABSENT;
+    const value = which === 'best' ? Math.max(...values) : Math.min(...values);
+    if (this.store.metric() === 'r') return rMultiple(value);
+    if (this.store.metric() === 'currency') return money(value, this.currency(), 2);
+    if (this.store.metric() === 'win_rate') return `${value.toFixed(1)}%`;
+    return `${value}`;
   }
 
   /** "2026-08-05 · -90 €" -- the date is the point, so it leads. */

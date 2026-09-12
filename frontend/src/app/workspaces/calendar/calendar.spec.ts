@@ -200,21 +200,25 @@ describe('Calendar summary strip', () => {
     expect(rows[1].textContent).toContain('—');
   });
 
-  it('reports best day, worst day and the current streak', async () => {
+  it('reports the five month-summary figures from the visible trading days', async () => {
     const fixture = seed();
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const callouts = el(fixture).querySelector('.callouts');
-    expect(callouts?.textContent).toContain('2026-08-03');
-    expect(callouts?.textContent).toContain('2026-08-05');
-    expect(callouts?.textContent).toContain('losing');
-    expect(callouts?.textContent).toContain('1');
+    const summary = el(fixture).querySelector('.month-summary');
+    expect(summary?.textContent).toContain('Month total');
+    expect(summary?.textContent).toContain('Winning days');
+    expect(summary?.textContent).toContain('1 (50%)');
+    expect(summary?.textContent).toContain('Average day');
+    expect(summary?.textContent).toContain('Best day');
+    expect(summary?.textContent).toContain('Worst day');
   });
 
-  it('says so plainly when there is no streak at all', async () => {
+  it('does not turn a no-trade month into invented summary values', async () => {
     const fixture = seed({
       ...RESPONSE,
+      days: [],
+      totals: { net_pnl_amount: 0, net_r: 0, trade_count: 0, win_rate: null },
       streak: { direction: null, days: 0 },
       best_day: null,
       worst_day: null,
@@ -222,8 +226,7 @@ describe('Calendar summary strip', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const callouts = el(fixture).querySelector('.callouts');
-    expect(callouts?.textContent).toContain('—');
+    expect(el(fixture).querySelector('.month-summary')).toBeNull();
   });
 
   it('switches the weekday table to R with the metric toggle', async () => {

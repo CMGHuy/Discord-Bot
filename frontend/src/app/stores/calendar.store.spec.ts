@@ -19,8 +19,9 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
-import { PnlCalendar } from '../api/models';
+import { PnlCalendar, Preferences } from '../api/models';
 import { CalendarStore } from './calendar.store';
+import { PreferencesStore } from './preferences.store';
 
 class FakeEventStream {
   private readonly counters = new Map<string, WritableSignal<number>>();
@@ -68,9 +69,11 @@ describe('CalendarStore', () => {
   let store: InstanceType<typeof CalendarStore>;
   let backend: HttpTestingController;
   let events: FakeEventStream;
+  let preferences: WritableSignal<Preferences>;
 
   beforeEach(() => {
     events = new FakeEventStream();
+    preferences = signal<Preferences>({});
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -79,6 +82,10 @@ describe('CalendarStore', () => {
         ),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: events },
+        { provide: PreferencesStore, useValue: {
+          values: () => preferences(),
+          update: (mutate: (current: Preferences) => Preferences) => preferences.set(mutate(preferences())),
+        } },
         CalendarStore,
       ],
     });
@@ -116,6 +123,14 @@ describe('CalendarStore', () => {
 
     store.setMetric('r');
     expect(store.valueFor(RESPONSE.days[0])).toBe(1.2);
+    expect(preferences()['calendarMetric']).toBe('r');
+  });
+
+  it('restores a valid persisted metric when preferences arrive', () => {
+    preferences.set({ calendarMetric: 'win_rate' });
+    tick();
+
+    expect(store.metric()).toBe('win_rate');
   });
 
   it('scales intensity against the largest magnitude in the month', () => {

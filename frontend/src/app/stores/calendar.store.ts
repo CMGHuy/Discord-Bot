@@ -1,8 +1,9 @@
-import { computed, inject } from '@angular/core';
+import { computed, effect, inject } from '@angular/core';
 import {
   patchState,
   signalStore,
   withComputed,
+  withHooks,
   withMethods,
   withState,
 } from '@ngrx/signals';
@@ -20,11 +21,18 @@ import {
 } from '../api/models';
 import { SelectOption } from '../ui/form-controls';
 import { CalendarCellMetric, cellValue } from '../workspaces/calendar/calendar.helpers';
+import { PreferencesStore } from './preferences.store';
 
 /** Which figure the grid shows and colours by. Money is the default: the
  *  dollar swing is what the page is for, and R lives one toggle away for
  *  when position size should be factored out. */
 export type CalendarMetric = CalendarCellMetric;
+
+function preferenceMetric(value: unknown): CalendarMetric {
+  return value === 'r' || value === 'currency' || value === 'trades' || value === 'win_rate'
+    ? value
+    : 'currency';
+}
 
 /** `YYYY-MM` for today, in the browser's own calendar. The server defaults
  *  to its month when `?month=` is absent, but sending it explicitly keeps
@@ -109,7 +117,11 @@ export const CalendarStore = signalStore(
       (data()?.filters.horizons ?? []).map((value) => ({ value, label: value })),
     ),
   })),
-  withMethods((store, api = inject(ApiClient)) => {
+  withComputed((_store, preferences = inject(PreferencesStore)) => ({
+    /** This selector is account state, not a browser-local display whim. */
+    preferredMetric: computed(() => preferenceMetric(preferences.values()['calendarMetric'])),
+  })),
+  withMethods((store, api = inject(ApiClient), preferences = inject(PreferencesStore)) => {
     const fetchDay = (date: string): void => {
       patchState(store, { dayLoading: true });
       api
@@ -181,6 +193,7 @@ export const CalendarStore = signalStore(
        *  carries both units for every day. */
       setMetric(metric: CalendarMetric): void {
         patchState(store, { metric });
+        preferences.update((current) => ({ ...current, calendarMetric: metric }));
       },
 
       setStrategy(strategy: string): void {
@@ -219,5 +232,16 @@ export const CalendarStore = signalStore(
         return Math.max(-1, Math.min(1, value / scale));
       },
     };
+  }),
+  withHooks({
+    onInit(store) {
+      // The preferences resolver may finish after this workspace is created.
+      // Keep the selector reactive so a saved metric is restored rather than
+      // merely written for the next browser session.
+      effect(() => {
+        const metric = store.preferredMetric();
+        if (store.metric() !== metric) patchState(store, { metric });
+      });
+    },
   }),
 );
