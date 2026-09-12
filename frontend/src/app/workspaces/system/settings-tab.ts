@@ -623,6 +623,12 @@ export class SettingsTab {
   protected readonly categories = computed(() => settingsCategories(this.store.visibleSections()));
   protected readonly categorySections = computed(() => {
     const categories = this.categories();
+    // Search is deliberately cross-category: filtering the result through
+    // the selected rail item would make a setting disappear merely because
+    // the reader did not first guess its category.
+    if (this.store.settingsQuery().trim() || this.store.onlyChanged()) {
+      return this.store.visibleSections();
+    }
     const active = this.activeCategory() ?? categories[0]?.id ?? null;
     return this.store.visibleSections().filter((section) =>
       categories.find((category) => category.id === active)?.label === section.name,
