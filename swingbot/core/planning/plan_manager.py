@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from swingbot import config
 from swingbot.core.market.session import (is_quiet_hours, is_regular_session,
@@ -20,6 +20,7 @@ from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
                                        pending_invalidated, record_transition,
                                        runner_floor)
 from swingbot.core.planning.plan_store import PlanStore
+from swingbot.core.planning.plan_types import breakeven_trigger, effective_stop
 
 log = logging.getLogger("swing-bot.plan_manager")
 
@@ -45,6 +46,59 @@ class PlanEvent:
     transition: str      # "filled"|"cancelled_expired"|"cancelled_invalidated"|
                          # "be_moved"|"tp1_partial"|"closed"|"pyramid_add"
     detail: dict = field(default_factory=dict)
+
+
+# v81 execution feed. Stop events tell the reader where to rest the stop and
+# are acknowledged through plan.notified_stop; notice events are queued on
+# plan.pending_notice and re-sent until acknowledged. Neither field is read
+# by any exit path (tests/planning/test_plan_manager_feed.py pins that).
+STOP_EVENTS = frozenset({"be_moved", "tp1_partial", "stop_moved"})
+NOTICE_EVENTS = frozenset({"filled", "cancelled_expired", "cancelled_invalidated", "closed"})
+NOTICE_RESEND_DAYS = 5
+
+
+def trail_notify_min_r() -> float:
+    """config.TRAIL_NOTIFY_MIN_R clamped to its safe range."""
+    return min(1.0, max(0.01, float(config.TRAIL_NOTIFY_MIN_R)))
+
+
+def last_told_stop(plan) -> float:
+    """The stop last delivered to the reader; the ticket delivered stop_loss."""
+    return plan.notified_stop if plan.notified_stop is not None else plan.stop_loss
+
+
+def resting_stop(plan) -> float:
+    """The stop the reader should leave resting, matching the exit check."""
+    if plan.status == PlanStatus.PARTIAL and plan.working_stop is None:
+        return runner_floor(plan.entry_price, plan.tp1)
+    return effective_stop(plan)
+
+
+def _stop_at_close(plan) -> float:
+    """The stop the bot was holding when the plan closed."""
+    if plan.working_stop is not None:
+        return plan.working_stop
+    if plan.legs_realized:
+        return runner_floor(plan.entry_price, plan.tp1)
+    return plan.stop_loss
+
+
+def stop_move_event(plan, today_session: str, min_r: float) -> PlanEvent | None:
+    """Emit stop_moved when the resting stop has changed by at least min_r."""
+    if plan.entry_price is None or plan.status not in (PlanStatus.ACTIVE, PlanStatus.PARTIAL):
+        return None
+    risk = abs(plan.entry_price - plan.stop_loss)
+    if risk <= 0:
+        return None
+    sign = 1 if plan.direction == "bullish" else -1
+    old, new = last_told_stop(plan), resting_stop(plan)
+    r_moved = (new - old) * sign / risk
+    if abs(r_moved) < min_r - 1e-9:
+        return None
+    effective = ("next_session" if plan.status == PlanStatus.ACTIVE
+                 and plan.be_armed_session == today_session else "now")
+    return PlanEvent(plan.plan_id, "stop_moved",
+                     {"old": old, "new": new, "r_moved": r_moved, "effective": effective})
 
 
 # Below this the suggested add is too small to be worth acting on -- a
@@ -145,6 +199,54 @@ class PlanManager:
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
+    def resend_notices(self, *, reload: bool = True) -> list[PlanEvent]:
+        """Re-emit unacknowledged notices, dropping ones older than five days."""
+        if reload:
+            self.store.reload()
+        cutoff = datetime.now(timezone.utc) - timedelta(days=NOTICE_RESEND_DAYS)
+        events: list[PlanEvent] = []
+        for plan in self.store.all():
+            notice = plan.pending_notice
+            if not notice:
+                continue
+            try:
+                queued = datetime.fromisoformat(notice["at"])
+                if queued.tzinfo is None:
+                    queued = queued.replace(tzinfo=timezone.utc)
+            except (KeyError, TypeError, ValueError):
+                queued = None
+            if queued is None or queued < cutoff:
+                log.warning("execution feed: dropping undelivered %s for plan %s (queued %s)",
+                            notice.get("transition"), plan.plan_id, notice.get("at"))
+                plan.pending_notice = None
+                self.store.update(plan)
+                continue
+            events.append(PlanEvent(plan.plan_id, notice["transition"],
+                                    dict(notice["detail"])))
+        return events
+
+    def _feed_bookkeeping(self, plan: TradePlanV2, new_events: list[PlanEvent],
+                          regular: bool, now=None) -> list[PlanEvent]:
+        """Stamp and queue feed events after ordinary lifecycle bookkeeping."""
+        for event in new_events:
+            if event.transition == "tp1_partial":
+                event.detail["working_stop"] = plan.working_stop
+            elif event.transition == "closed":
+                event.detail["session"] = "regular" if regular else "extended"
+                event.detail["notified_stop"] = last_told_stop(plan)
+                event.detail["bot_stop"] = _stop_at_close(plan)
+        notices = [event for event in new_events if event.transition in NOTICE_EVENTS]
+        if notices:
+            latest = notices[-1]
+            plan.pending_notice = {"transition": latest.transition,
+                                   "detail": dict(latest.detail), "at": self._now()}
+            self.store.update(plan)
+        if not regular or any(event.transition in STOP_EVENTS | NOTICE_EVENTS
+                              for event in new_events):
+            return new_events
+        moved = stop_move_event(plan, session_date(now), trail_notify_min_r())
+        return new_events + [moved] if moved is not None else new_events
+
     def poll(self, now=None) -> list[PlanEvent]:
         # Three-way gate (v70). INTRADAY_RTH_ONLY=false is the documented
         # pre-v64 escape hatch -- full _step() every tick, round the clock,
@@ -169,7 +271,7 @@ class PlanManager:
         self.store.reload()
         if self.trade_log is not None:
             self.trade_log.reload()
-        events: list[PlanEvent] = []
+        events: list[PlanEvent] = self.resend_notices(reload=False)
         for plan in self.store.open_plans():
             try:
                 price = float(self.price_fn(plan.ticker))
@@ -199,7 +301,7 @@ class PlanManager:
                 self._last_seen[plan.plan_id] = (session_date(now), price)
             for event in new_events:
                 self._on_event(plan, event)
-            events.extend(new_events)
+            events.extend(self._feed_bookkeeping(plan, new_events, regular, now))
         return events
 
     def _on_event(self, plan: TradePlanV2, event: PlanEvent) -> None:
@@ -353,8 +455,7 @@ class PlanManager:
             self.store.update(plan)
             return [PlanEvent(plan.plan_id, "tp1_partial", dict(leg))]
 
-        target_dist = abs(plan.tp1 - entry)
-        be_trigger = entry + sign * plan.breakeven_trigger_fraction * target_dist
+        be_trigger = breakeven_trigger(plan, entry)
         reached_be = price >= be_trigger if is_bull else price <= be_trigger
         if reached_be and plan.working_stop is None:
             plan.working_stop = entry
