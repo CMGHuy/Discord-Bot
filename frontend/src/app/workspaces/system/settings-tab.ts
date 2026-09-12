@@ -5,6 +5,7 @@ import { SystemStore } from '../../stores/system.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-controls';
+import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { dateTime } from '../../ui/format';
 import { ControlRow, Panel } from '../../ui/layout';
 import { controlOf, groupByControl, settingsCategories } from './settings-grouping';
@@ -25,7 +26,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
 @Component({
   selector: 'sb-settings-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, TextInput, Select, Checkbox, ControlRow, Async],
+  imports: [Panel, Button, TextInput, Select, Checkbox, ControlRow, ConfirmDialog, Async],
   template: `
     @if (store.settingsStale()) {
       <!-- Spec v14 Decision 8: warn, do not silently reload. Another
@@ -209,13 +210,10 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
 
     <!-- the save bar --------------------------------------------------- -->
 
-    <sb-control-row class="bar">
+    @if (store.dirty()) {
+    <sb-control-row class="bar unsaved" role="status">
       <span class="count">
-        @if (store.dirty()) {
-          {{ store.dirtyKeys().length }} changed
-        } @else {
-          No changes
-        }
+        {{ store.dirtyKeys().length }} unsaved change{{ store.dirtyKeys().length === 1 ? '' : 's' }}
       </span>
 
       <sb-control-row class="bar-actions">
@@ -224,7 +222,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
           variant="ghost"
           type="button"
           [disabled]="!store.dirty() || store.saving()"
-          (click)="store.resetDraft()"
+          (click)="confirmDiscard.set(true)"
         >
           Discard
         </button>
@@ -250,6 +248,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
         </button>
       </sb-control-row>
     </sb-control-row>
+    }
 
     @if (store.formError(); as message) {
       <!-- The server validates against the schema this form was built from,
@@ -308,6 +307,15 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
       </p>
     }
     </sb-async>
+
+    <sb-confirm-dialog
+      [open]="confirmDiscard()"
+      title="Discard unsaved settings?"
+      consequence="Every unsaved setting change in this form will be lost."
+      confirmLabel="Discard changes"
+      (confirmed)="discardDraft()"
+      (cancelled)="confirmDiscard.set(false)"
+    />
 
     <!-- audit, export, import ------------------------------------------ -->
 
@@ -619,6 +627,7 @@ export class SettingsTab {
   protected readonly exportUrl = this.store.exportUrl();
 
   protected readonly importText = signal('');
+  protected readonly confirmDiscard = signal(false);
   protected readonly activeCategory = signal<string | null>(null);
   protected readonly categories = computed(() => settingsCategories(this.store.visibleSections()));
   protected readonly categorySections = computed(() => {
@@ -642,6 +651,11 @@ export class SettingsTab {
    *  their own tests rather than methods on a 585-line component. */
   protected readonly groupsOf = groupByControl;
   protected readonly controlOf = controlOf;
+
+  protected discardDraft(): void {
+    this.store.resetDraft();
+    this.confirmDiscard.set(false);
+  }
 
   protected inputTypeOf(field: SettingField): 'text' | 'number' | 'password' {
     if (field.sensitive || field.type === 'password') return 'password';
