@@ -117,17 +117,25 @@ import { MarketMovers } from './panels/market-movers';
   // `TradesStore` instance (see positions-table.ts) -- neither this one nor
   // that one touch the Trades workspace's own copy.
   template: `
+    <!-- Wraps the whole page, but [empty] is hardcoded false here: this
+         fetch's own "zero open positions" is a fact about the Open positions
+         panel below, not about Portfolio Value, Trading Performance, Recent
+         Activity or Market Movers -- those have a real figure to show (even
+         if it's a measured zero) regardless of how many positions are open.
+         Binding this branch's emptiness to open_trades used to blank all four
+         of them the moment the book was empty, which is every weekend and
+         every fresh install -- caught screenshotting the dashboard for v85
+         close-out (R12-08 step 5) with a seeded account and zero trades.
+         Loading/error stay page-wide: one fetch backs every panel here. -->
     <sb-async
       [loading]="async().loading"
       [error]="async().error"
-      [empty]="async().empty"
+      [empty]="false"
       [staleAsOf]="async().staleAsOf"
       emptyReason="measured-zero"
       emptyTitle="No open positions"
-      emptyHint="The scan found no qualifying setups in this scope."
       [skeletonRows]="3"
       [skeletonCols]="5"
-      [announce]="announce()"
       (retry)="store.load()"
     >
     <!-- v85: the five metric cards, the chip row, the realised-count line
@@ -196,6 +204,20 @@ import { MarketMovers } from './panels/market-movers';
         <sb-plan-lifecycle-diagram />
       </sb-hint>
 
+      <!-- This panel's own true empty state -- open_trades is a fact about
+           the positions table specifically, so its "measured zero" belongs
+           scoped here, not on the page-level sb-async above. -->
+      <sb-async
+        [loading]="async().loading"
+        [error]="async().error"
+        [empty]="async().empty"
+        emptyReason="measured-zero"
+        emptyTitle="No open positions"
+        emptyHint="The scan found no qualifying setups in this scope."
+        [skeletonRows]="3"
+        [skeletonCols]="5"
+        [announce]="announce()"
+      >
       <!-- v85 D11: one table, five lifecycle tabs, replacing the four
            stacked groups. Only the active tab fetches -- see
            positions-table.ts's own docstring for why that is strictly less
@@ -222,6 +244,7 @@ import { MarketMovers } from './panels/market-movers';
           Close all open/partial
         </button>
       </sb-positions-table>
+      </sb-async>
     </sb-panel>
 
     <sb-confirm-dialog

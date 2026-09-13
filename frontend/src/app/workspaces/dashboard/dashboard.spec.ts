@@ -156,6 +156,21 @@ describe('Dashboard states', () => {
     expect(el.querySelector('.skeleton')).toBeNull();
   });
 
+  it('keeps portfolio, performance, activity and movers when open_trades is 0', async () => {
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+    flushTradeGroups(backend);
+    backend.expectOne('/api/v1/dashboard?mode=today').flush(payload({ open_trades: 0 }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('sb-portfolio-value')).not.toBeNull();
+    expect(el.querySelector('sb-trading-performance')).not.toBeNull();
+    expect(el.querySelector('sb-recent-activity')).not.toBeNull();
+    expect(el.querySelector('sb-market-movers')).not.toBeNull();
+  });
+
   it('renders no in-page heading, because the top bar owns the title', () => {
     const { fixture } = seed();
     fixture.detectChanges();
