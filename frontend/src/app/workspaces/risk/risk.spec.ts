@@ -121,9 +121,9 @@ async function renderWithMetrics(
   const { fixture, backend } = seed();
   fixture.detectChanges();
   backend.expectOne('/api/v1/risk').flush(payload({
-    // At least one open position, or the empty-book state (D31/asyncInputs'
-    // isEmpty) hides this panel along with heat and exposure -- correct
-    // behaviour, but not what these tiles-in-isolation tests are about.
+    // Risk metrics has its own always-on sb-async now (empty hardcoded
+    // false) -- it no longer needs an open position to render, but keeping
+    // one here is harmless and these tests aren't about that boundary.
     positions: [{
       trade_id: 't1', ticker: 'AAPL', strategy: 'VWAP',
       shares: 10, entry: 100, stop_loss: 95, risk_pct: 3,
@@ -190,6 +190,26 @@ describe('Risk metric tiles', () => {
     });
     expect(tileHost(fixture, 'VaR 95%').querySelector('.sample')!.textContent).toContain('118');
     expect(tileHost(fixture, 'Sharpe (R)').querySelector('.sample')!.textContent).toContain('782');
+  });
+
+  it('still shows the six metrics when the book is flat', async () => {
+    // Regression: these six are computed from the daily-return/closed-trade
+    // series, not from currently open positions, so they used to share the
+    // position-count-gated sb-async below and vanish along with Portfolio
+    // heat/Exposure/Correlation the moment positions.length was 0 --
+    // reported back as "Risk metrics shows nothing".
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+    backend.expectOne('/api/v1/risk').flush(payload({
+      positions: [],
+      metrics: DEFAULT_METRICS,
+    }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(tileLabels(fixture)).toEqual([
+      'VaR 95%', 'Expected shortfall', 'Annualised vol', 'Beta vs SPY',
+      'Sharpe (R)', 'Max drawdown (R)',
+    ]);
   });
 });
 

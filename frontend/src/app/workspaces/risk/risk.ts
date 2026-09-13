@@ -139,16 +139,55 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
       (cancelled)="asking.set(false)"
     />
 
+    <!-- institutional risk metrics (v85 D37) ------------------------------
+         Six sb-stat-tiles over R8-01's computations, each carrying the
+         sample it was actually computed from -- distributional metrics
+         (VaR, ES, vol, beta) share one N off the daily-return series;
+         Sharpe and max drawdown carry the closed-trade count instead, which
+         is why the two families' N routinely differ.
+         Its own sb-async, [empty] hardcoded false, deliberately NOT the one
+         wrapping heat/exposure/correlation below: these six are computed
+         from the daily-return/closed-trade series, not from currently open
+         positions, so "zero open positions right now" is not a reason to
+         hide a trader's own historical risk profile. It used to share the
+         position-count-gated async below, which meant every one of these
+         tiles disappeared the moment the book went flat -- reported back as
+         "Risk metrics shows nothing". -->
+    <sb-async
+      [loading]="async().loading"
+      [error]="async().error"
+      [empty]="false"
+      emptyReason="measured-zero"
+      emptyTitle="No open risk"
+      [skeletonRows]="2"
+      [skeletonCols]="6"
+    >
+    <sb-panel heading="Risk metrics">
+      <div class="metrics">
+        <!-- Per panel, not global (D30): the bar date the daily-return
+             series behind these six tiles was computed from -- the killswitch
+             and exposure numbers above are live and carry no such date. -->
+        <sb-freshness [at]="store.metrics()?.as_of ?? null" />
+        <div class="metric-grid">
+          @for (tile of metricTiles(); track tile.label) {
+            <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample" />
+          }
+        </div>
+      </div>
+    </sb-panel>
+    </sb-async>
+
     <!-- heat, exposure, sector/cluster breakdown --------------------------
-         One sb-async around the three panels that read the fetch's numbers.
-         The killswitch panel above and the scan-health panel below stay
-         outside it deliberately: the killswitch is an operational control
-         that must stay usable at zero open risk (an operator may want to
-         engage it exactly when flat, to stop the bot opening anything new),
-         and scan health answers "is the scanner healthy", a question that
-         has nothing to do with whether risk exposure happens to be zero
-         right now. Both already degrade gracefully via the store's own
-         null-safe defaults while the first fetch is in flight. -->
+         One sb-async around the panels that need a currently open position
+         to mean anything. The killswitch panel above and the scan-health
+         panel below stay outside it deliberately: the killswitch is an
+         operational control that must stay usable at zero open risk (an
+         operator may want to engage it exactly when flat, to stop the bot
+         opening anything new), and scan health answers "is the scanner
+         healthy", a question that has nothing to do with whether risk
+         exposure happens to be zero right now. Both already degrade
+         gracefully via the store's own null-safe defaults while the first
+         fetch is in flight. -->
     <sb-async
       [loading]="async().loading"
       [error]="async().error"
@@ -162,7 +201,6 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
       [announce]="announce()"
       (retry)="store.load()"
     >
-    <div class="split">
     <sb-panel heading="Portfolio heat">
       <div class="heat">
         <span class="heat-figure num" [class]="heatClass()">
@@ -250,27 +288,6 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
         }
       </div>
     </sb-panel>
-
-    <!-- institutional risk metrics (v85 D37) ------------------------------
-         Six sb-stat-tiles over R8-01's computations, each carrying the
-         sample it was actually computed from -- distributional metrics
-         (VaR, ES, vol, beta) share one N off the daily-return series;
-         Sharpe and max drawdown carry the closed-trade count instead, which
-         is why the two families' N routinely differ. -->
-    <sb-panel heading="Risk metrics">
-      <div class="metrics">
-        <!-- Per panel, not global (D30): the bar date the daily-return
-             series behind these six tiles was computed from -- the killswitch
-             and exposure numbers above are live and carry no such date. -->
-        <sb-freshness [at]="store.metrics()?.as_of ?? null" />
-        <div class="metric-grid">
-          @for (tile of metricTiles(); track tile.label) {
-            <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample" />
-          }
-        </div>
-      </div>
-    </sb-panel>
-    </div>
 
     <!-- exposure -------------------------------------------------------- -->
 
