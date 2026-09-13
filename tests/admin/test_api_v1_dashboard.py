@@ -365,6 +365,24 @@ def test_realized_splits_wins_and_losses(seed, logged_in):
     assert realized["amount"] == 30.0
 
 
+def test_win_rate_expectancy_and_payoff_scope_with_mode(seed, logged_in):
+    """Today's one win reads as 100%; add yesterday's loss and, in `all`
+    mode only, that drops to 50% -- get_stats/get_extended_stats were being
+    called with the whole trade history regardless of `mode`, so these three
+    chips silently ignored the Today/All days toggle and always showed
+    all-time figures under whichever label was selected."""
+    seed(trades=[
+        _closed("i" * 16, closed_at=_today_iso(), amount=50.0, status="win"),
+        _closed("j" * 16, closed_at="2026-01-05T15:00:00+00:00", amount=-20.0,
+                status="loss", pct_exit=90.0),
+    ])
+    today = logged_in.get("/api/v1/dashboard?mode=today").get_json()
+    all_days = logged_in.get("/api/v1/dashboard?mode=all").get_json()
+    assert today["win_rate"] == 100.0
+    assert all_days["win_rate"] == 50.0
+    assert today["win_rate"] != all_days["win_rate"]
+
+
 def test_unknown_mode_is_a_400_not_a_silent_fallback(seed, logged_in):
     seed()
     assert_error(logged_in.get("/api/v1/dashboard?mode=last-week"), "invalid", 400)

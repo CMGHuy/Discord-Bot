@@ -181,8 +181,21 @@ def dashboard():
     all_raw = tl.get_trades(status=None, limit=None, sort_by="opened_at") or []
     open_trades = [t for t in all_raw if t.get("status") == "open"]
 
-    stats = tl.get_stats(trades=all_raw)
-    stats.update(tl.get_extended_stats(trades=all_raw))
+    # win_rate/expectancy_r/payoff_ratio must scope with `mode` the same way
+    # `_realized`/`_lifecycle_counts` already do -- get_stats' own `trades`
+    # parameter exists for exactly this ("the dashboard's 'Today' mode
+    # passing in just today's opened/closed trades instead of the whole
+    # history", per its docstring) but nothing here was calling it with a
+    # scoped list, so all three chips silently showed all-time figures
+    # under the "Today" toggle. `active`/`today` mean the same thing
+    # `_realized` already gives them: every still-open trade (it has no
+    # outcome yet to exclude) plus only the trades that closed today.
+    scoped_raw = all_raw if mode == "all" else [
+        t for t in all_raw
+        if t.get("status") == "open" or dash.is_today_berlin(t.get("closed_at"))
+    ]
+    stats = tl.get_stats(trades=scoped_raw)
+    stats.update(tl.get_extended_stats(trades=scoped_raw))
 
     account_cfg = dash.load_account_config()
     views = dash.build_open_trade_views(open_trades, account_cfg)
