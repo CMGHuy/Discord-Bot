@@ -478,7 +478,7 @@ function sortValue(row: Ticker, key: string, flagged: readonly string[]): string
     .as-of { display: block; color: var(--text-faint); font-size: var(--register-label); }
 
     .signal { display: inline-flex; align-items: center; gap: var(--space-6); }
-    .signal-state { font-weight: 600; }
+    .signal-state { font-weight: 600; color: var(--pos); }
     .signal-score { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
     /* The Watchlist panel is flush (the table needs edge-to-edge rows),
@@ -660,6 +660,10 @@ export class Watchlist {
     const classes: string[] = [];
     if (isWithinCurrentWeek(row.next_earnings_date)) classes.push('blink');
     if (this.isLagging(row)) classes.push('lagging');
+    // The Signal cell already says "In position" in words -- this is the
+    // second, scannable cue the "never colour alone" rule asks for, same
+    // background-tint convention as .lagging (data-table.ts).
+    if (row.open_trades > 0) classes.push('has-position');
     return classes.length ? classes.join(' ') : null;
   };
 

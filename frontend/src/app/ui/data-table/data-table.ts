@@ -324,6 +324,12 @@ const PIN_KEYS = ['ticker', 'symbol'];
        already names the date it is behind. */
     .lagging { background: color-mix(in srgb, var(--warn) 8%, transparent); }
 
+    /* A ticker with a currently open position, e.g. the Watchlist's Signal
+       column ("In position" already says so in words -- this is the
+       scannable second cue). Same background-tint convention as .lagging,
+       --pos instead of --warn. */
+    .has-position { background: color-mix(in srgb, var(--pos) 8%, transparent); }
+
     .expansion > td { background: var(--surface); white-space: normal; }
 
     .expander-cell { width: 1px; padding-right: 0; }

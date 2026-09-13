@@ -387,6 +387,13 @@ describe('Watchlist recomposed row', () => {
     expect(row.querySelector('.signal')!.textContent).toContain('In position');
   });
 
+  it('highlights a row with an open position', () => {
+    const held = firstRow({ open_trades: 1 });
+    expect(held.classList).toContain('has-position');
+    const flat = firstRow({ open_trades: 0 });
+    expect(flat.classList).not.toContain('has-position');
+  });
+
   it('keeps the columns this app already had', () => {
     // The next-earnings column formats through the same `date()` the
     // template calls (locale-dependent, e.g. "2 Oct 2026") rather than the
