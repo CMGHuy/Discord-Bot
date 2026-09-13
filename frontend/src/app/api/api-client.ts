@@ -20,6 +20,7 @@ import {
   ChartResponse,
   ClearResult,
   CloseOpenResult,
+  CloseScope,
   Dashboard,
   DashboardScope,
   Collection,
@@ -145,10 +146,12 @@ export class ApiClient {
     return this.http.delete<void>(`${this.base}/trades/${encodeURIComponent(id)}`);
   }
 
-  /** Banks every ACTIVE/PARTIAL position. NOT clearOpenTrades below, which
-   *  deletes the records instead. */
-  closeOpenTrades(): Observable<CloseOpenResult> {
-    return this.http.post<CloseOpenResult>(`${this.base}/trades/close-open`, {});
+  /** Banks every ACTIVE/PARTIAL position (or, with `scope`, just the one).
+   *  NOT clearOpenTrades below, which deletes the records instead. */
+  closeOpenTrades(scope?: CloseScope): Observable<CloseOpenResult> {
+    let params = new HttpParams();
+    if (scope) params = params.set('scope', scope);
+    return this.http.post<CloseOpenResult>(`${this.base}/trades/close-open`, {}, { params });
   }
 
   clearOpenTrades(): Observable<ClearResult> {

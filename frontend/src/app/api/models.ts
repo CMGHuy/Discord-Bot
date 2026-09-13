@@ -212,6 +212,11 @@ export interface CloseOpenResult {
   tickers: string[];
 }
 
+/** `?scope=` on POST /trades/close-open -- which of the two closeable
+ *  statuses (ACTIVE, PARTIAL) a bulk close actually closes. Omitted (the
+ *  default) matches 'open_partial': both. */
+export type CloseScope = 'open' | 'partial' | 'open_partial';
+
 export interface TradeQuery {
   page?: number;
   per_page?: number;

@@ -287,4 +287,11 @@ describe('ApiClient', () => {
 
     expect(result).toEqual({ closed: 2, failed: 0, tickers: ['ASTS', 'HOOD'] });
   });
+
+  it('carries the close-all scope as a query param when one is given', () => {
+    api.closeOpenTrades('partial').subscribe();
+    const request = backend.expectOne('/api/v1/trades/close-open?scope=partial');
+    expect(request.request.method).toBe('POST');
+    request.flush({ closed: 0, failed: 0, tickers: [] });
+  });
 });

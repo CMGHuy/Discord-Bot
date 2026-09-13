@@ -267,6 +267,57 @@ def test_close_open_queues_one_notify_record_per_position(seed, logged_in, notif
     assert len([r for r in queued if r.get("kind") == "plan_transition"]) == 2
 
 
+def test_close_open_scope_open_closes_only_active(seed, logged_in):
+    active_id = "11111111-1111-4111-8111-111111111111"
+    partial_id = "22222222-2222-4222-8222-222222222222"
+    seed(plans=[
+        _plan(active_id, ticker="AAPL", status="ACTIVE"),
+        _plan(partial_id, ticker="MSFT", status="PARTIAL"),
+    ])
+
+    body = logged_in.post("/api/v1/trades/close-open?scope=open").get_json()
+
+    assert body["closed"] == 1
+    assert body["tickers"] == ["AAPL"]
+    row = logged_in.get(f"/api/v1/trades/{partial_id}").get_json()
+    assert row["status"] == "PARTIAL"
+
+
+def test_close_open_scope_partial_closes_only_partial(seed, logged_in):
+    active_id = "11111111-1111-4111-8111-111111111111"
+    partial_id = "22222222-2222-4222-8222-222222222222"
+    seed(plans=[
+        _plan(active_id, ticker="AAPL", status="ACTIVE"),
+        _plan(partial_id, ticker="MSFT", status="PARTIAL"),
+    ])
+
+    body = logged_in.post("/api/v1/trades/close-open?scope=partial").get_json()
+
+    assert body["closed"] == 1
+    assert body["tickers"] == ["MSFT"]
+    row = logged_in.get(f"/api/v1/trades/{active_id}").get_json()
+    assert row["status"] == "ACTIVE"
+
+
+def test_close_open_scope_open_partial_matches_the_default(seed, logged_in):
+    seed(plans=[
+        _plan("11111111-1111-4111-8111-111111111111", ticker="AAPL", status="ACTIVE"),
+        _plan("22222222-2222-4222-8222-222222222222", ticker="MSFT", status="PARTIAL"),
+    ])
+
+    body = logged_in.post("/api/v1/trades/close-open?scope=open_partial").get_json()
+
+    assert body["closed"] == 2
+    assert sorted(body["tickers"]) == ["AAPL", "MSFT"]
+
+
+def test_close_open_unknown_scope_is_a_400_not_a_silent_fallback(seed, logged_in):
+    seed()
+    assert_error(
+        logged_in.post("/api/v1/trades/close-open?scope=everything"), "invalid", 400,
+    )
+
+
 def test_close_open_reports_failures_without_aborting_the_rest(seed, logged_in, monkeypatch):
     """One bad position must not strand the others half-closed."""
     from swingbot.admin.api_v1 import trade_commands

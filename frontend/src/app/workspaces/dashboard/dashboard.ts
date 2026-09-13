@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   TemplateRef,
   computed,
   effect,
@@ -12,7 +13,7 @@ import {
 import { Router } from '@angular/router';
 import { CLOCK } from '../../ui/clock';
 
-import { TradeRow } from '../../api/models';
+import { CloseScope, TradeRow } from '../../api/models';
 import { ApiClient } from '../../api/api-client';
 import { ToastService } from '../../shell/toast.service';
 import { ConnectionStore } from '../../stores/connection.store';
@@ -109,7 +110,14 @@ import { MarketMovers } from './panels/market-movers';
   // host (a static class, not a template wrapper) because :host IS the grid
   // container the register's variables need to reach; a class in the
   // template's own markup would land one level too deep.
-  host: { class: 'register-presentation' },
+  host: {
+    class: 'register-presentation',
+    // Scoped to the close-all menu specifically (closeAllMenuRef, below),
+    // not "outside this whole component" -- this component IS the page, so
+    // almost every click on it would otherwise count as "outside".
+    '(document:click)': 'onDocumentClickForCloseAllMenu($event)',
+    '(document:keydown.escape)': 'closeAllMenuOpen.set(false)',
+  },
   // Provided here rather than in root: the store is created on entry and
   // destroyed on exit, so a workspace does not hold stale state while you
   // are looking at another one. `sb-positions-table` below provides its own
@@ -233,24 +241,52 @@ import { MarketMovers } from './panels/market-movers';
              create-trade endpoint, the bot authors plans, the admin never
              does. Deliberately not clear-open (below the fold, DELETES
              records) -- see closeAllConsequence for the wording that keeps
-             the two apart. -->
-        <button sb-button variant="secondary" type="button" table-actions
-                data-action="close-all"
-                [disabled]="!openCount()"
-                (click)="confirmCloseAll.set(true)">
-          Close all open/partial
-        </button>
+             the two apart.
+
+             A dropdown, not one button: ACTIVE and PARTIAL are different
+             enough states (a scaled-out position vs one untouched since
+             entry) that closing only one of them is a real, distinct
+             action, not a convenience shortcut for the combined one. -->
+        <div class="close-all-menu" table-actions #closeAllMenu>
+          <button sb-button variant="secondary" type="button"
+                  data-action="close-all"
+                  [attr.aria-expanded]="closeAllMenuOpen()"
+                  aria-haspopup="menu"
+                  [disabled]="!openCount()"
+                  (click)="toggleCloseAllMenu($event)">
+            Close all open/partial
+          </button>
+          @if (closeAllMenuOpen()) {
+            <div class="menu elev-overlay" role="menu">
+              <button sb-button variant="ghost" type="button" role="menuitem"
+                      [disabled]="!activeCount()"
+                      (click)="requestCloseAll('open')">
+                Close all open
+              </button>
+              <button sb-button variant="ghost" type="button" role="menuitem"
+                      [disabled]="!partialCount()"
+                      (click)="requestCloseAll('partial')">
+                Close all partial
+              </button>
+              <button sb-button variant="ghost" type="button" role="menuitem"
+                      [disabled]="!openCount()"
+                      (click)="requestCloseAll('open_partial')">
+                Close all open/partial
+              </button>
+            </div>
+          }
+        </div>
       </sb-positions-table>
       </sb-async>
     </sb-panel>
 
     <sb-confirm-dialog
-      [open]="confirmCloseAll()"
-      title="Close all open positions?"
+      [open]="confirmCloseAll() !== null"
+      [title]="closeAllTitle()"
       [consequence]="closeAllConsequence()"
-      confirmLabel="Close all"
+      [confirmLabel]="closeAllConfirmLabel()"
       (confirmed)="closeAll()"
-      (cancelled)="confirmCloseAll.set(false)"
+      (cancelled)="confirmCloseAll.set(null)"
     />
 
     <div class="bottom-row">
@@ -416,6 +452,25 @@ import { MarketMovers } from './panels/market-movers';
       margin-top: var(--space-20);
     }
 
+    /* Same overlay pattern as sb-profile-menu's own dropdown: relative
+       wrapper, absolutely-positioned menu, elev-overlay for the shared
+       surface/shadow treatment. Right-aligned under the trigger rather than
+       left -- this sits inside the table's own right-aligned actions slot,
+       and a left-aligned menu would spill it past the table's right edge. */
+    .close-all-menu { position: relative; display: inline-flex; }
+    .close-all-menu .menu {
+      position: absolute;
+      top: calc(100% + var(--space-6));
+      right: 0;
+      z-index: 20;
+      min-width: 180px;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      padding: var(--space-6);
+    }
+    .close-all-menu .menu button { justify-content: flex-start; }
+
     .lifecycle-hint { margin-left: var(--space-4); }
     .hint-heading, .hint-copy { display: block; }
     .hint-heading { margin-bottom: var(--space-4); font-weight: 600; }
@@ -556,27 +611,78 @@ export class Dashboard {
 
   /* -- v85 D13/D14: close all open/partial ----------------------------- */
 
-  protected readonly confirmCloseAll = signal(false);
+  /** `null` = no confirmation pending; otherwise which scope was picked
+   *  from the dropdown and is now waiting on the confirm dialog. */
+  protected readonly confirmCloseAll = signal<CloseScope | null>(null);
+
+  protected readonly closeAllMenuOpen = signal(false);
+  private readonly closeAllMenuRef =
+    viewChild<ElementRef<HTMLElement>>('closeAllMenu');
 
   /** ACTIVE + PARTIAL only — a PENDING plan never filled, so there is nothing
    *  to close and cancelling is the different act that applies to it. */
-  protected readonly openCount = computed(() => {
-    const counts = this.lifecycleCounts();
-    return (counts['ACTIVE'] ?? 0) + (counts['PARTIAL'] ?? 0);
+  protected readonly activeCount = computed(() => this.lifecycleCounts()['ACTIVE'] ?? 0);
+  protected readonly partialCount = computed(() => this.lifecycleCounts()['PARTIAL'] ?? 0);
+  protected readonly openCount = computed(() => this.activeCount() + this.partialCount());
+
+  protected toggleCloseAllMenu(event: MouseEvent): void {
+    event.stopPropagation();
+    this.closeAllMenuOpen.update((v) => !v);
+  }
+
+  protected onDocumentClickForCloseAllMenu(event: MouseEvent): void {
+    if (!this.closeAllMenuOpen()) return;
+    const wrapper = this.closeAllMenuRef()?.nativeElement;
+    if (wrapper && !wrapper.contains(event.target as Node)) this.closeAllMenuOpen.set(false);
+  }
+
+  protected requestCloseAll(scope: CloseScope): void {
+    this.closeAllMenuOpen.set(false);
+    this.confirmCloseAll.set(scope);
+  }
+
+  /** The count the picked scope actually closes -- "This closes 2
+   *  position(s)" would be wrong (and scarier or safer than the truth in
+   *  either direction) if it always quoted the combined count regardless of
+   *  which of the three menu items was picked. */
+  private readonly closeAllScopeCount = computed(() => {
+    switch (this.confirmCloseAll()) {
+      case 'open': return this.activeCount();
+      case 'partial': return this.partialCount();
+      default: return this.openCount();
+    }
+  });
+
+  protected readonly closeAllTitle = computed(() => {
+    switch (this.confirmCloseAll()) {
+      case 'open': return 'Close all open positions?';
+      case 'partial': return 'Close all partial positions?';
+      default: return 'Close all open/partial positions?';
+    }
+  });
+
+  protected readonly closeAllConfirmLabel = computed(() => {
+    switch (this.confirmCloseAll()) {
+      case 'open': return 'Close open';
+      case 'partial': return 'Close partial';
+      default: return 'Close all';
+    }
   });
 
   /** Names what the action does, in the words that distinguish it from
    *  clear-open next door: this REALISES profit or loss, that one deletes
    *  records and realises nothing. */
   protected readonly closeAllConsequence = computed(() =>
-    `This closes ${this.openCount()} position(s) at their current price and `
+    `This closes ${this.closeAllScopeCount()} position(s) at their current price and `
     + 'realises the profit or loss. Pending plans are not affected. '
     + 'This cannot be undone.',
   );
 
   protected closeAll(): void {
-    this.confirmCloseAll.set(false);
-    this.api.closeOpenTrades().subscribe({
+    const scope = this.confirmCloseAll();
+    this.confirmCloseAll.set(null);
+    if (!scope) return;
+    this.api.closeOpenTrades(scope).subscribe({
       next: (result) => {
         this.toast.show(
           result.failed

@@ -223,6 +223,14 @@ def clear_history():
     return jsonify({"removed": TradeLog().clear_history()})
 
 
+_CLOSE_SCOPES = {
+    "": _CLOSEABLE_PLAN,
+    "open": (PlanStatus.ACTIVE,),
+    "partial": (PlanStatus.PARTIAL,),
+    "open_partial": _CLOSEABLE_PLAN,
+}
+
+
 @api_v1.route("/trades/close-open", methods=["POST"])
 @require_auth
 def close_open():
@@ -235,12 +243,28 @@ def close_open():
     PENDING plans are untouched: one that never filled has nothing to close,
     and cancelling it is a different act with a different meaning.
 
+    `?scope=open|partial|open_partial`, default `open_partial` (the historical,
+    only behaviour before this parameter existed): narrows which of the two
+    closeable statuses this call actually closes, for the dashboard's
+    close-all control offering the three separately. An unrecognised scope is
+    a 400, the same "never silently narrow to the default" rule `_scope` in
+    `dashboard.py` applies to `?mode=`.
+
     Per position it runs `_close_plan` -- the same path the single-position
     close uses, including the manual-close notify record the bot reads.
 
     One failure does not abort the rest: a half-closed book with no report of
     which half is worse than a partial success that says so.
     """
+    scope = (request.args.get("scope") or "").strip().lower()
+    if scope not in _CLOSE_SCOPES:
+        return error(
+            "invalid",
+            f"scope must be one of {', '.join(s for s in _CLOSE_SCOPES if s)}",
+            400,
+        )
+    closeable = _CLOSE_SCOPES[scope]
+
     store = PlanStore()
     closed, failed, tickers = 0, 0, []
     # store.all(), not store._plans.values() -- the latter holds raw dicts
@@ -248,7 +272,7 @@ def close_open():
     # than a live view, so _close_plan's store.update() inside the loop
     # cannot turn this into a mutate-while-iterating RuntimeError.
     for plan in store.all():
-        if plan.status not in _CLOSEABLE_PLAN:
+        if plan.status not in closeable:
             continue
         try:
             _close_plan(store, plan)

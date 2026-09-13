@@ -295,32 +295,70 @@ describe('Dashboard v85 close-all', () => {
   const clickConfirm = (el: HTMLElement) =>
     [...el.querySelectorAll<HTMLButtonElement>('sb-confirm-dialog button')].at(-1)!.click();
 
-  it('asks before closing, and says what closing means', async () => {
+  /** Opens the dropdown and picks one of its three menu items by label
+   *  ("Close all open", "Close all partial", "Close all open/partial"). */
+  function pickCloseAllScope(fixture: ComponentFixture<Dashboard>, label: string): void {
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('[data-action="close-all"]')!.click();
+    fixture.detectChanges();
+    const item = [...el.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+      .find((b) => b.textContent!.trim() === label)!;
+    item.click();
+    fixture.detectChanges();
+  }
+
+  it('opens a menu of three scopes rather than closing everything on one click', async () => {
     const fixture = await loaded({ lifecycle: { ACTIVE: 2, PARTIAL: 1 } as never });
-    const backend = TestBed.inject(HttpTestingController);
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-action="close-all"]')!.click();
     fixture.detectChanges();
 
+    const items = [...el.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+      .map((b) => b.textContent!.trim());
+    expect(items).toEqual(['Close all open', 'Close all partial', 'Close all open/partial']);
+    // Picking a scope is what opens the confirm dialog, not the trigger click.
+    expect(isDialogOpen(el)).toBe(false);
+  });
+
+  it('asks before closing, and says what closing means', async () => {
+    const fixture = await loaded({ lifecycle: { ACTIVE: 2, PARTIAL: 1 } as never });
+    const backend = TestBed.inject(HttpTestingController);
+    const el = fixture.nativeElement as HTMLElement;
+
+    pickCloseAllScope(fixture, 'Close all open/partial');
+
     expect(isDialogOpen(el)).toBe(true);
     expect(dialogText(el)).toContain('realis');   // realise/realised
     expect(dialogText(el)).not.toContain('delete');
     // Nothing has been sent yet.
-    backend.expectNone((r) => r.url === '/api/v1/trades/close-open');
+    backend.expectNone((r) => r.url.startsWith('/api/v1/trades/close-open'));
   });
 
   it('posts once confirmed and refetches the page', async () => {
     const fixture = await loaded({ lifecycle: { ACTIVE: 2, PARTIAL: 1 } as never });
     const backend = TestBed.inject(HttpTestingController);
     const el = fixture.nativeElement as HTMLElement;
-    el.querySelector<HTMLButtonElement>('[data-action="close-all"]')!.click();
-    fixture.detectChanges();
+    pickCloseAllScope(fixture, 'Close all open/partial');
     clickConfirm(el);
 
-    const req = backend.expectOne((r) => r.url === '/api/v1/trades/close-open');
+    const req = backend.expectOne('/api/v1/trades/close-open?scope=open_partial');
     expect(req.request.method).toBe('POST');
     req.flush({ closed: 2, failed: 0, tickers: ['ASTS', 'HOOD'] });
+    backend.expectOne('/api/v1/dashboard?mode=today').flush(payload());
+  });
+
+  it('closes only the picked scope', async () => {
+    const fixture = await loaded({ lifecycle: { ACTIVE: 2, PARTIAL: 1 } as never });
+    const backend = TestBed.inject(HttpTestingController);
+    const el = fixture.nativeElement as HTMLElement;
+
+    pickCloseAllScope(fixture, 'Close all open');
+    expect(dialogText(el)).toContain('Close all open positions?');
+    clickConfirm(el);
+
+    backend.expectOne('/api/v1/trades/close-open?scope=open')
+      .flush({ closed: 2, failed: 0, tickers: ['ASTS', 'HOOD'] });
     backend.expectOne('/api/v1/dashboard?mode=today').flush(payload());
   });
 
@@ -328,11 +366,10 @@ describe('Dashboard v85 close-all', () => {
     const fixture = await loaded({ lifecycle: { ACTIVE: 2, PARTIAL: 1 } as never });
     const backend = TestBed.inject(HttpTestingController);
     const el = fixture.nativeElement as HTMLElement;
-    el.querySelector<HTMLButtonElement>('[data-action="close-all"]')!.click();
-    fixture.detectChanges();
+    pickCloseAllScope(fixture, 'Close all open/partial');
     clickConfirm(el);
 
-    backend.expectOne((r) => r.url === '/api/v1/trades/close-open')
+    backend.expectOne('/api/v1/trades/close-open?scope=open_partial')
       .flush({ closed: 1, failed: 1, tickers: ['ASTS'] });
     backend.expectOne('/api/v1/dashboard?mode=today').flush(payload());
 
