@@ -128,7 +128,7 @@ export class Shell {
         { path: '/calendar', label: 'Calendar', icon: 'calendar' },
         { path: '/analytics', label: 'Analytics', icon: 'analytics' },
         { path: '/research', label: 'Research', icon: 'watchlist' },
-        { path: '/reports', label: 'Reports', icon: 'analytics' },
+        { path: '/reports', label: 'Reports', icon: 'reports' },
       ],
     },
     {

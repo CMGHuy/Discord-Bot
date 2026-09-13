@@ -70,13 +70,15 @@ export type DashboardScopeMode = DashboardScope;
   `,
   styles: `
     :host { display: block; }
-    /* Portfolio Value keeps a fixed-ish column so its figure doesn't reflow
-       with the metric grid's own auto-fit tracks; the grid takes whatever
-       is left. Stacks below 640px -- narrower than that and a shared row
+    /* The metric grid is sized to its own four fixed-ish columns (.grid,
+       below) rather than a flexible track, so .combined's "auto" column
+       gives it exactly that width and no more; Portfolio Value (1fr) takes
+       every pixel left over instead of sitting in a capped column of its
+       own. Stacks below 640px -- narrower than that and a shared row
        squeezes the sparkline into an unreadable sliver. */
     .combined {
       display: grid;
-      grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) auto;
       gap: var(--space-20);
       align-items: start;
     }
@@ -84,12 +86,20 @@ export type DashboardScopeMode = DashboardScope;
     @media (max-width: 640px) {
       .combined { grid-template-columns: minmax(0, 1fr); }
     }
-    /* auto-fit rather than a fixed count: eight cards should reflow to 4×2,
-       2×4 or 1×8 by available width, not by a breakpoint list. */
+    /* A fixed 4 columns, not auto-fit: eight cards read as two even rows of
+       four, never an uneven 5+3 or 6+2 split that auto-fit would produce at
+       an in-between width. minmax with two lengths (not a bare 1fr) keeps
+       this grid's own width computable when the ancestor asks for its
+       content size (.combined's "auto" track above, and -- separately --
+       any container that ends up shrink-to-fit sized), which a 1fr track
+       cannot give under those conditions. */
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      grid-template-columns: repeat(4, minmax(140px, 180px));
       gap: var(--space-14);
+    }
+    @media (max-width: 640px) {
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
   `,
 })

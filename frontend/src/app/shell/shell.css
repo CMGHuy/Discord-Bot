@@ -220,25 +220,26 @@
   border-bottom: 1px solid var(--border);
 }
 
-/* Wider than the title column so more tape symbols show before the
-   overflow-x scroll kicks in; the explicit left margin (rather than
-   growing .topbar's shared gap) keeps this one boundary at 20px without
-   touching the tighter gap on either side of it. It still scrolls within
-   its allotted space when more symbols arrive. */
+/* Grows to fill the whole gap between the title and the status cluster --
+   there is no separate .spacer any more, this element does that job -- and
+   still scrolls within its allotted space when more symbols arrive than
+   fit. The explicit left margin (rather than growing .topbar's shared gap)
+   keeps title->tape at 20px without touching the tighter gap elsewhere on
+   the bar, and the same 20px as the gap between its two lanes means all
+   three boundaries in this bar read the same width. */
 .topbar-tape {
-  flex: 0 1 32rem;
-  max-width: 32rem;
+  flex: 1 1 0%;
   min-width: 0;
-  margin-left: var(--space-20);
+  /* .topbar's own `gap` already puts --space-14 here; this margin makes up
+     the difference to --space-20 rather than stacking on top of it. */
+  margin-left: calc(var(--space-20) - var(--space-14));
   display: flex;
   align-items: center;
-  gap: var(--space-10);
+  gap: var(--space-20);
   overflow-x: auto;
   scrollbar-width: none;
 }
 .topbar-tape::-webkit-scrollbar { display: none; }
-
-.spacer { flex: 1 1 auto; min-width: 0; }
 
 .topbar-lead { display: flex; flex: 0 1 18rem; flex-direction: column; gap: 2px; min-width: 0; }
 .page-title {

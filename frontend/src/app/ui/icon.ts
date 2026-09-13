@@ -38,6 +38,7 @@ export const ICON_NAMES = [
   'opened',
   'closed',
   'brand',
+  'reports',
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -83,6 +84,10 @@ const PATHS: Record<IconName, string> = {
   // A diamond: the sidebar brand mark, replacing the raster logo (D3,
   // finding 16) with a shape that inherits currentColor and holds at 24px.
   brand: 'M8 1.5 14 8 8 14.5 1.5 8z',
+  // A page with a folded corner and ruled text lines: a document, not a
+  // chart -- distinct from `analytics`'s bars so Reports and Analytics
+  // don't share a glyph in the nav.
+  reports: 'M4 1.5h6l2 2v11H4z M10 1.5v2h2 M6 7h4 M6 9.5h4 M6 12h2.5',
 };
 
 @Component({

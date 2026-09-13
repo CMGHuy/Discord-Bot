@@ -32,6 +32,13 @@ import { ABSENT, num, pct } from '../../ui/format';
   imports: [RouterLink, Flash],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './tape.css',
+  // tape.css makes this host a `flex: 1 1 0%` sibling of sb-market-lane so
+  // the two share .topbar-tape's width evenly -- but when there is nothing
+  // flagged, that would still claim half the bar for an empty box. The
+  // inline style (not a class) wins over the shared rule unconditionally,
+  // so market-lane alone gets the full width exactly when this has nothing
+  // to show.
+  host: { '[style.display]': "tape.visible() ? 'flex' : 'none'" },
   template: `
     @if (tape.visible()) {
       <div class="lane" role="region" aria-label="Watchlist tape">

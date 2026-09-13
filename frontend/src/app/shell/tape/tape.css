@@ -1,6 +1,24 @@
-/* One lane. The viewport clips; the track slides inside it.
-   `min-width: 0` on every flex child is load-bearing — without it the
-   inline-flex track sets the lane's width and the strip escapes its box. */
+/* `min-width: 0` on every flex child is load-bearing -- without it the
+   inline-flex track sets the lane's width and the strip escapes its box.
+   That includes the custom element host itself: `sb-market-lane` and
+   `sb-names-lane` are unstyled block elements by default, so without this
+   EACH ONE claims its own full (doubled-track) content width as a flex
+   child of .topbar-tape and shoves the other one out past the visible
+   edge rather than the two sharing the tape's actual width.
+   `:host`, not a `sb-market-lane`/`sb-names-lane` tag selector: this file
+   is each component's own `styleUrl`, and under emulated encapsulation a
+   plain tag selector here compiles against the content-projection
+   attribute, which the host element itself never carries -- it would
+   silently match nothing. `:host` is what Angular rewrites to actually
+   target the host. This file is shared by both components via styleUrl,
+   so the same `:host` rule applies once per component that includes it. */
+:host {
+  display: flex;
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+/* One lane. The viewport clips; the track slides inside it. */
 .lane { display: flex; align-items: stretch; min-width: 0; max-width: 100%;
         height: 32px; overflow: hidden;
         border-bottom: 1px solid var(--border); background: var(--surface); }
