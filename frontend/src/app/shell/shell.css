@@ -40,6 +40,17 @@
   z-index: 20;
 }
 
+/* The button above floats over the page rather than taking a grid column
+   (there is no sidebar column to give it one below sm), so nothing reserves
+   its footprint by default -- it lands directly on top of .page-title,
+   turning "Dashboard" into "Dashbo..." behind the icon. Reserve the same
+   width the button actually draws at (--control-h grows under a coarse
+   pointer) plus its own left offset and a gap, so the title starts clear
+   of it instead of under it. */
+.shell.overlay .topbar {
+  padding-left: calc(var(--space-10) + var(--control-h) + var(--space-10));
+}
+
 /* On the rail: icons only, centred, labels hidden but still in the DOM so
    the accessible name survives. The wordmark's `.word` is not listed here --
    it is removed structurally (shell.html's `@if (!railed())`), not clipped,
