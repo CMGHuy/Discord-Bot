@@ -257,29 +257,6 @@ import { MarketMovers } from './panels/market-movers';
       <sb-recent-activity [events]="activity()" />
       <sb-market-movers [rows]="tape.rows()" />
     </div>
-
-    <!-- v85 D18: the footnote moves into a drawer, off the page face. -->
-    <button sb-button variant="ghost" type="button" data-info="prices"
-            aria-label="About prices and sizing"
-            (click)="infoOpen.set('prices')">?</button>
-
-    <!-- SR59. dashboard_fragment.html:443-445, with ONE claim deliberately
-         changed rather than copied: that line said "live prices refresh
-         approximately every 15 seconds", which was true of the Jinja page's
-         polling timer. DASHBOARD_REFRESH_SECONDS is read only by
-         admin/app.py and admin/pages.py -- both Jinja. This SPA refreshes
-         on server events, so copying the sentence would have stated a stale
-         threshold, which the task's Step 3 calls worse than no copy. -->
-    <sb-drawer [open]="infoOpen() === 'prices'" heading="About prices"
-               (closed)="infoOpen.set(null)">
-      <p class="section-help">
-        Prices and P&L update when the bot reports a change, not on a timer.
-        @if (riskSizingNote(); as note) {
-          · {{ note }}
-        }
-        · <code>!account</code> to change
-      </p>
-    </sb-drawer>
     </sb-async>
 
     <ng-template #statusCell let-row>
@@ -531,9 +508,9 @@ export class Dashboard {
     this.recent.setQuery({ sort: '-opened_at', page: 1, per_page: 20 });
   }
 
-  /** The explanatory drawers (v85 D18) -- one signal, since only
-   *  one can be open at a time, rather than a boolean per drawer. */
-  protected readonly infoOpen = signal<null | 'sizing' | 'prices'>(null);
+  /** The explanatory drawer (v85 D18). A signal rather than a boolean since
+   *  it started covering more than one drawer; kept as-is now there is one. */
+  protected readonly infoOpen = signal<null | 'sizing'>(null);
 
   /** Zero open positions is a RESULT (the scan found nothing qualifying in
    *  this scope), not missing data -- measured-zero, not no-data-yet. */
@@ -754,14 +731,6 @@ export class Dashboard {
     return `Risk % mode — risks ${amount(risk, currency)} (${riskPct}%) if stopped `
       + `out, capped at ${cap}. Varies per trade with stop distance — switch to `
       + '!account sizing account for a fixed premium instead.';
-  });
-
-  /** The risk-% half of the footer note, present only when that is the mode
-   *  actually in use. */
-  protected readonly riskSizingNote = computed<string | null>(() => {
-    const note = this.store.sizingNote();
-    const riskPct = note?.['risk_pct'];
-    return typeof riskPct === 'number' ? `Sizing based on ${riskPct}% risk` : null;
   });
 
   /** Names the window in the card itself, so a figure cannot be read as

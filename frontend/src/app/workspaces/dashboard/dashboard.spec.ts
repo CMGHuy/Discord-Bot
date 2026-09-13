@@ -256,11 +256,17 @@ describe('Dashboard explanatory help', () => {
     expect(el.querySelector('sb-hint.lifecycle-hint sb-plan-lifecycle-diagram')).not.toBeNull();
   });
 
-  it('keeps the sizing note and the footnote reachable too', async () => {
+  it('keeps the sizing note reachable', async () => {
     const fixture = await loaded();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-info="sizing"]')).not.toBeNull();
-    expect(el.querySelector('[data-info="prices"]')).not.toBeNull();
+  });
+
+  it('drops the prices footnote button and its drawer', async () => {
+    const fixture = await loaded();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-info="prices"]')).toBeNull();
+    expect(el.textContent).not.toContain('About prices');
   });
 });
 
