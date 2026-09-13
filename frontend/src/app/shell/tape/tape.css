@@ -27,11 +27,22 @@
        letter-spacing: .06em; text-transform: uppercase;
        color: var(--text-muted); border-right: 1px solid var(--border); }
 .cap.end { border-right: none; border-left: 1px solid var(--border); }
-.viewport { flex: 1 1 0%; min-width: 0; overflow: hidden; }
+/* `.lane`'s own `align-items: stretch` (above) stretches this to the full
+   32px lane height; without its own `display: flex; align-items: center`
+   here, `.track` (an inline-flex child with no block-layout height rules
+   of its own) sat at the TOP of that stretched box by default flow --
+   correct on the left/right, but not vertically centred, so the tile text
+   read with more margin below it than above. */
+.viewport { flex: 1 1 0%; min-width: 0; overflow: hidden;
+            display: flex; align-items: center; }
 
-/* Rendered twice and translated -50%, so the loop has no snap-back. */
+/* Rendered twice and translated -50%, so the loop has no snap-back.
+   animation-duration is set inline per lane (tape-speed.ts), scaled by
+   tile count so every lane scrolls at the same pixels-per-second rate
+   regardless of how many tiles it holds -- see that file's own comment. */
 .track { display: inline-flex; align-items: center; white-space: nowrap;
-         animation: tape-slide 26s linear infinite; will-change: transform; }
+         animation-name: tape-slide; animation-timing-function: linear;
+         animation-iteration-count: infinite; will-change: transform; }
 .viewport:hover .track { animation-play-state: paused; }
 .viewport:focus-within .track { animation-play-state: paused; }
 @keyframes tape-slide { from { transform: translateX(0); }

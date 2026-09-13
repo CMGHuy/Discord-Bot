@@ -66,6 +66,15 @@
 }
 .shell.railed:not(.overlay) .sidebar { padding-inline: var(--space-10); }
 .shell.railed:not(.overlay) .nav a { justify-content: center; }
+/* .nav a centers its icon within its own --space-10 horizontal padding
+   (further up this file); .mark carried no padding of its own, so its icon
+   sat flush against the rail's edge instead of centered the same way --
+   visibly to the left of the nav icons below it. Matching padding plus the
+   same justify-content centers both on the same vertical line. */
+.shell.railed:not(.overlay) .mark {
+  justify-content: center;
+  padding-inline: var(--space-10);
+}
 
 .brand sb-icon { flex: none; }
 

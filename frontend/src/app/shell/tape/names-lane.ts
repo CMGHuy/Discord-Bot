@@ -1,9 +1,13 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import {
+  ChangeDetectionStrategy, Component, ElementRef, afterRenderEffect, computed, inject, signal,
+  viewChild,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { TapeStore } from '../../stores/tape.store';
 import { Flash } from '../../ui/flash';
 import { ABSENT, num, pct } from '../../ui/format';
+import { TAPE_MIN_DURATION_S, tapeDurationSeconds } from './tape-speed';
 
 /**
  * Lane B — flagged watchlist names with swingbot context.
@@ -44,7 +48,7 @@ import { ABSENT, num, pct } from '../../ui/format';
       <div class="lane" role="region" aria-label="Watchlist tape">
         <div class="cap">mine</div>
         <div class="viewport">
-          <div class="track">
+          <div class="track" #track [style.animation-duration.s]="duration()">
             @for (pass of [0, 1]; track pass) {
               @for (row of tape.rows(); track row.symbol) {
                 <a class="tile" [routerLink]="['/watchlist', row.symbol]"
@@ -88,6 +92,23 @@ export class NamesLane {
   protected readonly tape = inject(TapeStore);
   protected readonly num = num;
   protected readonly pct = pct;
+
+  private readonly trackRef = viewChild<ElementRef<HTMLElement>>('track');
+  /** See tape-speed.ts: measured from the track's own rendered width (after
+   *  every render the row data could have changed it) rather than a fixed
+   *  duration, so this lane and MarketLane scroll at the same
+   *  pixels-per-second rate regardless of what their tiles render to. */
+  protected readonly duration = signal(TAPE_MIN_DURATION_S);
+
+  constructor() {
+    afterRenderEffect(() => {
+      // `tape.rows()` is read for its own sake, not its value -- see
+      // market-lane.ts's identical comment for why this has to be here.
+      this.tape.rows();
+      const el = this.trackRef()?.nativeElement;
+      if (el) this.duration.set(tapeDurationSeconds(el.scrollWidth));
+    });
+  }
 
   protected readonly asOfTime = computed(() => {
     const iso = this.tape.asOf();
