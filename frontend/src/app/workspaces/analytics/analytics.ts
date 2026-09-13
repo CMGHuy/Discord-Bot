@@ -501,14 +501,27 @@ interface ProposalView extends ProposalRow {
             }
           </sb-chip-row>
         </sb-panel>
+        </sb-async>
 
-        <!-- v85 D41 (R9-06). Ten panels moved here, none deleted -- every
-             binding/computed below is untouched from where it used to sit;
-             only the DOM position (and, for Streaks, its gate) changed. The
-             band is a preference (spec's own convention for state whose only
-             writer is this browser), collapsed by default so the first
-             screen is the KPI row and the equity curve, not thirteen
-             histograms. -->
+        <!-- v85 D41 (R9-06), combined into ONE disclosure (previously three
+             separate <details class="breakdowns">, each with its own
+             "Breakdowns" toggle stacked on the page -- reported back as
+             confusing duplication). Every binding/computed below is
+             untouched from where it used to sit; only the toggle boundaries
+             changed. The band is a preference (spec's own convention for
+             state whose only writer is this browser), collapsed by default
+             so the first screen is the KPI row and the equity curve, not
+             thirteen histograms.
+
+             The <details>/<summary> toggle itself sits OUTSIDE every
+             sb-async inside it, deliberately -- an early version put the
+             whole element inside performanceAsync's own sb-async, which
+             made the Journal section (its own fetch, its own emptiness,
+             normally reachable even with zero closed trades) disappear
+             along with the histograms the moment performanceAsync went
+             empty. Each of the three pieces below keeps its OWN sb-async,
+             exactly as before the merge; only the outer toggle became one
+             element instead of three. -->
         <details
           class="breakdowns"
           [open]="breakdownsOpen()"
@@ -516,6 +529,16 @@ interface ProposalView extends ProposalRow {
         >
           <summary>Breakdowns</summary>
 
+          <sb-async
+            [loading]="performanceAsync().loading"
+            [error]="performanceAsync().error"
+            [empty]="performanceAsync().empty"
+            [staleAsOf]="performanceAsync().staleAsOf"
+            emptyReason="measured-zero"
+            emptyTitle="No closed trades in this range"
+            [skeletonRows]="6"
+            [skeletonCols]="2"
+          >
           <div class="panels">
             <sb-panel heading="Return distribution">
               @if (store.returnsHistogram().length) {
@@ -534,16 +557,8 @@ interface ProposalView extends ProposalRow {
             </sb-panel>
           </div>
 
-          @if (store.rMultipleBins().length) {
-            <sb-panel heading="R-multiple distribution (all-time)">
-              <!-- Bars, not a pie and not a line: this is a distribution, and
-                   the shape IS the finding -- a healthy edge is a cluster of
-                   small losses with a tail of larger wins. -->
-              <sb-histogram [bins]="store.rMultipleBins()" />
-            </sb-panel>
-          }
-
-          <div class="panels"><sb-panel heading="By holding period">
+          <div class="panels">
+            <sb-panel heading="By holding period">
               <sb-histogram
                 [bins]="store.holdingPeriodHistogram()"
                 [max]="100"
@@ -560,7 +575,19 @@ interface ProposalView extends ProposalRow {
             </sb-panel>
           </div>
 
+          <!-- Both R-multiple-framed, so paired rather than each on its own
+               row -- the all-time one used to stand alone outside .panels
+               entirely, leaving By planned R:R as the one panel with no
+               partner and empty space beside it. -->
           <div class="panels">
+            @if (store.rMultipleBins().length) {
+              <sb-panel heading="R-multiple distribution (all-time)">
+                <!-- Bars, not a pie and not a line: this is a distribution, and
+                     the shape IS the finding -- a healthy edge is a cluster of
+                     small losses with a tail of larger wins. -->
+                <sb-histogram [bins]="store.rMultipleBins()" />
+              </sb-panel>
+            }
             <sb-panel heading="By planned R:R">
               <sb-histogram [bins]="store.riskRewardHistogram()" [max]="100" [referenceLine]="store.derived().win_rate" />
             </sb-panel>
@@ -594,30 +621,18 @@ interface ProposalView extends ProposalRow {
               </dl>
             </sb-panel>
           }
-        </details>
+          </sb-async>
 
-        <sb-exit-quality [data]="store.exitQuality()" />
-        </sb-async>
-
-        <!-- SR55. NOT a rebuilt Journal page: spec v14 Decision 4 collapsed
-             that deliberately. The digest and lessons are analytics and live
-             here; a single trade's excursions live beside the note that
-             explains them, on the detail view. Its own sb-async: the journal
-             lives in its own store/module and a failed read here must not
-             touch the tables below. -->
-        <!-- v85 D41 (R9-06). Its own details, not folded into the
-             Distributions band above: the journal is a genuinely separate
-             fetch (SR55) with its own empty message ("no entries yet" vs
-             "no closed trades"), and merging its gate into performanceAsync
-             would answer the wrong question on a book that has closed
-             trades but no journal entries yet. Shares breakdownsOpen(), so
-             both regions still open and close together. -->
-        <details
-          class="breakdowns"
-          [open]="breakdownsOpen()"
-          (toggle)="onBreakdownsToggle($any($event.target).open)"
-        >
-          <summary>Breakdowns</summary>
+          <!-- SR55. NOT a rebuilt Journal page: spec v14 Decision 4 collapsed
+               that deliberately. The digest and lessons are analytics and live
+               here; a single trade's excursions live beside the note that
+               explains them, on the detail view. Its own sb-async: the journal
+               lives in its own store/module with its own empty message ("no
+               entries yet" vs "no closed trades"), and a failed read here
+               must not touch the tables around it -- nor may performanceAsync's
+               OWN emptiness hide it, which is exactly why this sb-async, and
+               the <details> toggle around it, sit at the same level rather
+               than one nested inside the other. -->
           <sb-async
             [loading]="journalAsync().loading"
             [error]="journalAsync().error"
@@ -653,29 +668,17 @@ interface ProposalView extends ProposalRow {
               }
             </sb-panel>
           </sb-async>
-        </details>
 
-        <sb-async
-          [loading]="performanceAsync().loading"
-          [error]="performanceAsync().error"
-          [empty]="performanceAsync().empty"
-          [staleAsOf]="performanceAsync().staleAsOf"
-          emptyReason="measured-zero"
-          emptyTitle="No closed trades in this range"
-          [skeletonRows]="8"
-          [skeletonCols]="6"
-          (retry)="store.load()"
-        >
-        <!-- v85 D41 (R9-06). Same performanceAsync gate as before the move
-             (this panel and "By {dimension}" below already shared it) --
-             only the "By confidence level" table is one of the ten
-             displaced panels, so only it moves inside. -->
-        <details
-          class="breakdowns"
-          [open]="breakdownsOpen()"
-          (toggle)="onBreakdownsToggle($any($event.target).open)"
-        >
-          <summary>Breakdowns</summary>
+          <sb-async
+            [loading]="performanceAsync().loading"
+            [error]="performanceAsync().error"
+            [empty]="performanceAsync().empty"
+            [staleAsOf]="performanceAsync().staleAsOf"
+            emptyReason="measured-zero"
+            emptyTitle="No closed trades in this range"
+            [skeletonRows]="5"
+            [skeletonCols]="6"
+          >
           <sb-panel heading="By confidence level" [flush]="true">
             <sb-data-table
               [rows]="confidencePage.visible()"
@@ -687,7 +690,10 @@ interface ProposalView extends ProposalRow {
               (pageChange)="confidencePage.setPage($event)"
             />
           </sb-panel>
+          </sb-async>
         </details>
+
+        <sb-exit-quality [data]="store.exitQuality()" />
 
         <sb-panel [heading]="'By ' + store.breakdownLabel().toLowerCase()" [flush]="true">
           <!-- One table with a dimension picker rather than eight tables. The
@@ -712,7 +718,6 @@ interface ProposalView extends ProposalRow {
             (pageChange)="breakdownPage.setPage($event)"
           />
         </sb-panel>
-        </sb-async>
       }
 
       <!-- -- strategies ----------------------------------------------- -->
@@ -1234,9 +1239,14 @@ interface ProposalView extends ProposalRow {
       font-size: var(--text-table);
     }
 
+    /* Two even columns -- the uneven 2fr/1fr split this used to be left one
+       lone panel (Planned R:R) sitting in the wide column with the narrow
+       one empty beside it, which read as leftover dead space rather than a
+       deliberate layout. Stacks to one column below 1000px, same
+       breakpoint the rest of this page already uses. */
     .panels {
       display: grid;
-      grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       gap: var(--space-14);
       align-items: start;
     }
@@ -1287,6 +1297,16 @@ interface ProposalView extends ProposalRow {
 
     /* -- Breakdowns band (v85 D41, R9-06) -- */
     .breakdowns { margin: var(--space-14) 0; }
+    /* Direct children (the histogram .panels rows, Journal, By confidence
+       level, By segment's own h2) have no gap of their own -- <details> is
+       plain block flow, not a flex/grid parent with a shared gap -- so
+       spacing between them depended entirely on incidental margins some
+       happened to carry and others didn't (Journal's own content padding
+       gave it 14px above and below; two adjacent empty sb-async states sat
+       flush with none). One rule, applied uniformly, reads as either
+       "consistent breathing room" or "redundant space" depending which pair
+       you were looking at before this existed. */
+    .breakdowns > * + * { margin-top: var(--space-14); }
     .breakdowns summary {
       cursor: pointer;
       padding: var(--space-8) 0;
@@ -1678,10 +1698,13 @@ export class Analytics {
    * Same convention as `measure` above: a preference, not component state,
    * read once at construction. Collapsed by default so the first screen a
    * reader sees is the KPI row and the equity curve, not thirteen
-   * histograms below the fold. Every `<details class="breakdowns">` on the
-   * page binds this one signal, so opening any one of them opens all three
-   * at once -- they read as one section split across three independent
-   * fetches, not three unrelated ones that happen to share a label.
+   * histograms below the fold. One `<details class="breakdowns">` on the
+   * Performance tab binds this signal -- it used to be three separate
+   * `<details>` sharing it (reading as one toggle for what looked like
+   * three unrelated "Breakdowns" sections stacked on the page), merged into
+   * one element once the histograms, the journal digest (its own nested
+   * sb-async: a genuinely separate fetch) and the confidence-level table
+   * all landed inside it.
    */
   protected readonly breakdownsOpen = signal<boolean>(
     this.preferences.values()['analyticsBreakdownsOpen'] === true,
