@@ -241,7 +241,14 @@
 }
 .topbar-tape::-webkit-scrollbar { display: none; }
 
-.topbar-lead { display: flex; flex: 0 1 18rem; flex-direction: column; gap: 2px; min-width: 0; }
+/* 15rem, not the 18rem this used to reserve: measured against every route's
+   title/subtitle (canvas text measurement, Inter at this column's actual
+   font sizes), the longest subtitle ("Scheduled reports and exports,
+   planned") needs ~227px -- 18rem (288px) left ~60px of dead space before
+   the tape even started, which read as the tape sitting too far right of
+   the title it was supposed to sit right next to. 15rem (240px) keeps a
+   ~13px margin on that longest case without truncating anything. */
+.topbar-lead { display: flex; flex: 0 1 15rem; flex-direction: column; gap: 2px; min-width: 0; }
 .page-title {
   margin: 0;
   font-size: var(--text-title);
@@ -310,19 +317,6 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-
-.market {
-  padding: 0 var(--space-6);
-  border-radius: var(--radius-sm);
-  color: var(--text-faint);
-  font-size: var(--text-micro);
-  letter-spacing: 0.06em;
-  white-space: nowrap;
-}
-
-/* Open is the noteworthy state, so only it takes a colour. Closed stays
-   faint text -- colouring both would spend two hues on one boolean. */
-.market-open { color: var(--pos); }
 
 /* SR76: tabular-nums so cycling 90/100/110/125 doesn't jiggle the topbar
    width as the digit count changes; a fixed min-width for the same reason. */

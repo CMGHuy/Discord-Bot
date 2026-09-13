@@ -401,18 +401,19 @@ import { MarketMovers } from './panels/market-movers';
        register instead of a hardcoded token. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
 
+    /* Both panels below own their OWN top margin, on top of the grid's own
+       --register-pad, rather than the panel above owning a bottom margin --
+       one rule per element that wants extra space above it, so a later
+       reorder doesn't leave a margin attached to the wrong edge. */
     .bottom-row {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: var(--register-pad);
+      margin-top: var(--space-20);
     }
 
-    /* Extra separation from Recent Activity/Market Movers below, on top of
-       the grid's own --register-pad: Open positions is the one panel on
-       this page that can run to many rows, so it needs a clearer break
-       before the two-up row that follows it. */
     .positions-panel {
-      margin-bottom: var(--space-20);
+      margin-top: var(--space-20);
     }
 
     .lifecycle-hint { margin-left: var(--space-4); }

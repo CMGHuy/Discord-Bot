@@ -134,23 +134,6 @@
           {{ now() }}
         </span>
       </div>
-      <!-- SR58. Beside the connection status because it answers the same
-           question from the other side: "these prices have not moved" is a
-           failure during the session and correct behaviour outside it.
-           Nothing renders until the first answer -- an indicator that says
-           CLOSED before it knows is worse than one that says nothing. -->
-      @if (connection.marketActive() !== null) {
-        <span
-          class="market"
-          [class.market-open]="connection.marketActive()"
-          [attr.title]="connection.marketActive()
-            ? 'US market open — prices are live'
-            : 'US market closed — prices are last close'"
-        >
-          {{ connection.marketActive() ? 'MARKET OPEN' : 'MARKET CLOSED' }}
-        </span>
-      }
-
       <sb-profile-menu [zoom]="zoom()" (zoomCycled)="cycleZoom()" (signedOut)="logout()" />
     </header>
 
