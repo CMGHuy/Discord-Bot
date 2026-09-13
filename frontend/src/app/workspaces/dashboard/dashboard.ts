@@ -59,7 +59,6 @@ import {
 import { PositionsTable } from './positions-table';
 import { RowActions } from './row-actions';
 import { deriveActivity } from './panels/activity';
-import { PortfolioValue } from './panels/portfolio-value';
 import { TradingPerformance } from './panels/trading-performance';
 import { RecentActivity } from './panels/recent-activity';
 import { MarketMovers } from './panels/market-movers';
@@ -95,7 +94,7 @@ import { MarketMovers } from './panels/market-movers';
   imports: [
     Magnitude, Panel, PositionsTable, RowActions, ConfirmDialog,
     StatusCell, PlanCell, ConfidenceCell, Async, Button, Drawer, Flash,
-    Hint, PlanLifecycleDiagram, RowLink, PortfolioValue, TradingPerformance,
+    Hint, PlanLifecycleDiagram, RowLink, TradingPerformance,
     RecentActivity, MarketMovers,
   ],
   // TradesStore, not DashboardStore -- that one is provided at the route
@@ -139,30 +138,28 @@ import { MarketMovers } from './panels/market-movers';
       (retry)="store.load()"
     >
     <!-- v85: the five metric cards, the chip row, the realised-count line
-         and the lifecycle nav strip are replaced by the panels below (D9). -->
-    <div class="top-row">
-      <sb-portfolio-value
-        [balance]="store.balance()"
-        [changePct]="store.equityChangePct()"
-        [points]="store.equityPoints()"
-        [currency]="connection.currency()"
-      />
-      <sb-trading-performance
-        [openPnlPct]="store.openPnlPct()"
-        [winRate]="store.winRate()"
-        [expectancyR]="store.expectancyR()"
-        [avgConfidence]="store.avgConfidence()"
-        [realizedAmount]="store.realizedAmount()"
-        [realizedLabel]="realizedLabel()"
-        [openTrades]="store.openTrades()"
-        [riskUsedPct]="store.riskUsedPct()"
-        [riskCapPct]="store.riskCapPct()"
-        [payoffRatio]="store.payoffRatio()"
-        [currency]="connection.currency()"
-        [scope]="store.scope()"
-        (scopeChange)="store.setScope($event)"
-      />
-    </div>
+         and the lifecycle nav strip are replaced by the panel below (D9).
+         Portfolio Value merged into this one panel rather than sitting
+         beside it as its own card -- both describe "how am I doing", and
+         they never disagree, so one heading now covers both. -->
+    <sb-trading-performance
+      [balance]="store.balance()"
+      [changePct]="store.equityChangePct()"
+      [points]="store.equityPoints()"
+      [openPnlPct]="store.openPnlPct()"
+      [winRate]="store.winRate()"
+      [expectancyR]="store.expectancyR()"
+      [avgConfidence]="store.avgConfidence()"
+      [realizedAmount]="store.realizedAmount()"
+      [realizedLabel]="realizedLabel()"
+      [openTrades]="store.openTrades()"
+      [riskUsedPct]="store.riskUsedPct()"
+      [riskCapPct]="store.riskCapPct()"
+      [payoffRatio]="store.payoffRatio()"
+      [currency]="connection.currency()"
+      [scope]="store.scope()"
+      (scopeChange)="store.setScope($event)"
+    />
 
     <!-- SR59. The sizing note (dashboard_fragment.html:81-87) plus the
          share-count snapshot note (below, moved out of the Open positions
@@ -181,7 +178,7 @@ import { MarketMovers } from './panels/market-movers';
       </p>
     </sb-drawer>
 
-    <sb-panel heading="Open positions" [flush]="true">
+    <sb-panel class="positions-panel" heading="Open positions" [flush]="true">
       <!-- SR59, the last cosmetic row: dashboard_fragment.html:391's shares
            tooltip. Moved into the shared "Sizing" drawer above (v85 D18) --
            the per-trade half of it (which sizing mode a position was opened
@@ -427,20 +424,18 @@ import { MarketMovers } from './panels/market-movers';
        register instead of a hardcoded token. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
 
-    /* v85: two columns at desktop, stacking below the same 900px the top bar
-       uses for its own first drop -- one breakpoint vocabulary per page. */
-    .top-row {
-      display: grid;
-      grid-template-columns: minmax(0, 3fr) minmax(0, 4fr);
-      gap: var(--register-pad);
-    }
     .bottom-row {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: var(--register-pad);
     }
-    @media (max-width: 900px) {
-      .top-row { grid-template-columns: minmax(0, 1fr); }
+
+    /* Extra separation from Recent Activity/Market Movers below, on top of
+       the grid's own --register-pad: Open positions is the one panel on
+       this page that can run to many rows, so it needs a clearer break
+       before the two-up row that follows it. */
+    .positions-panel {
+      margin-bottom: var(--space-20);
     }
 
     .lifecycle-hint { margin-left: var(--space-4); }

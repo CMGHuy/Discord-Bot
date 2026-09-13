@@ -220,12 +220,16 @@
   border-bottom: 1px solid var(--border);
 }
 
-/* Keep the live tape compact so it cannot obscure the current page title.
-   It still scrolls within its allotted space when more symbols arrive. */
+/* Wider than the title column so more tape symbols show before the
+   overflow-x scroll kicks in; the explicit left margin (rather than
+   growing .topbar's shared gap) keeps this one boundary at 20px without
+   touching the tighter gap on either side of it. It still scrolls within
+   its allotted space when more symbols arrive. */
 .topbar-tape {
-  flex: 0 1 22rem;
-  max-width: 22rem;
+  flex: 0 1 32rem;
+  max-width: 32rem;
   min-width: 0;
+  margin-left: var(--space-20);
   display: flex;
   align-items: center;
   gap: var(--space-10);

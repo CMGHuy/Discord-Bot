@@ -4,6 +4,7 @@ import { DashboardScope } from '../../../api/models';
 import { Button } from '../../../ui/button';
 import { ControlRow, Panel } from '../../../ui/layout';
 import { MetricCard } from '../../../ui/metric-card';
+import { PortfolioValue } from './portfolio-value';
 
 /** `DashboardScope` also has a third value, 'active', that this toggle never
  *  sets and never renders as pressed -- reusing the store's real type rather
@@ -20,11 +21,15 @@ export type DashboardScopeMode = DashboardScope;
  * The scope control sits in this panel's header (D10) and is page-wide: it
  * also re-scopes the Closed tab below. That was chosen deliberately with the
  * caveat understood — it is not an oversight to "fix" by narrowing it.
+ *
+ * Portfolio Value merged in as this panel's first section rather than a
+ * sibling card: both describe "how am I doing", and two bordered boxes side
+ * by side that never disagree in that context read as one idea sliced in two.
  */
 @Component({
   selector: 'sb-trading-performance',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, MetricCard, ControlRow, Button],
+  imports: [Panel, MetricCard, ControlRow, Button, PortfolioValue],
   template: `
     <sb-panel heading="Trading performance">
       <sb-control-row panel-actions role="group" aria-label="Date scope">
@@ -40,21 +45,45 @@ export type DashboardScopeMode = DashboardScope;
         }
       </sb-control-row>
 
-      <div class="grid">
-        <sb-metric-card label="Open P&L" [value]="openPnlPct()" tone="pnl" unit="%" />
-        <sb-metric-card label="Win rate" [value]="winRate()" unit="%" [decimals]="1" />
-        <sb-metric-card label="Expectancy" [value]="expectancyR()" tone="pnl" unit="R" />
-        <sb-metric-card label="Payoff ratio" [value]="payoffRatio()" [decimals]="2" />
-        <sb-metric-card [label]="realizedLabel()" [value]="realizedAmount()"
-                        tone="pnl" [unit]="currencyUnit()" />
-        <sb-metric-card label="Open trades" [value]="openTrades()" [decimals]="0" />
-        <sb-metric-card label="Avg confidence" [value]="avgConfidence()" [decimals]="1" />
-        <sb-metric-card label="Risk used" [value]="riskUsedPct()" unit="%" [sub]="riskSub()" />
+      <div class="combined">
+        <sb-portfolio-value
+          class="portfolio"
+          [balance]="balance()"
+          [changePct]="changePct()"
+          [points]="points()"
+          [currency]="currency()"
+        />
+
+        <div class="grid">
+          <sb-metric-card label="Open P&L" [value]="openPnlPct()" tone="pnl" unit="%" />
+          <sb-metric-card label="Win rate" [value]="winRate()" unit="%" [decimals]="1" />
+          <sb-metric-card label="Expectancy" [value]="expectancyR()" tone="pnl" unit="R" />
+          <sb-metric-card label="Payoff ratio" [value]="payoffRatio()" [decimals]="2" />
+          <sb-metric-card [label]="realizedLabel()" [value]="realizedAmount()"
+                          tone="pnl" [unit]="currencyUnit()" />
+          <sb-metric-card label="Open trades" [value]="openTrades()" [decimals]="0" />
+          <sb-metric-card label="Avg confidence" [value]="avgConfidence()" [decimals]="1" />
+          <sb-metric-card label="Risk used" [value]="riskUsedPct()" unit="%" [sub]="riskSub()" />
+        </div>
       </div>
     </sb-panel>
   `,
   styles: `
     :host { display: block; }
+    /* Portfolio Value keeps a fixed-ish column so its figure doesn't reflow
+       with the metric grid's own auto-fit tracks; the grid takes whatever
+       is left. Stacks below 640px -- narrower than that and a shared row
+       squeezes the sparkline into an unreadable sliver. */
+    .combined {
+      display: grid;
+      grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+      gap: var(--space-20);
+      align-items: start;
+    }
+    .portfolio { min-width: 0; }
+    @media (max-width: 640px) {
+      .combined { grid-template-columns: minmax(0, 1fr); }
+    }
     /* auto-fit rather than a fixed count: eight cards should reflow to 4×2,
        2×4 or 1×8 by available width, not by a breakpoint list. */
     .grid {
@@ -65,6 +94,9 @@ export type DashboardScopeMode = DashboardScope;
   `,
 })
 export class TradingPerformance {
+  readonly balance = input<number | null>(null);
+  readonly changePct = input<number | null>(null);
+  readonly points = input<readonly number[]>([]);
   readonly openPnlPct = input<number | null>(null);
   readonly winRate = input<number | null>(null);
   readonly expectancyR = input<number | null>(null);

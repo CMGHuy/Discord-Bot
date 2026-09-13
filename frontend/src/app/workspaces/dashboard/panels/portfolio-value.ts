@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { Panel } from '../../../ui/layout';
 import { Sparkline } from '../../../ui/sparkline';
 import { amount, pct } from '../../../ui/format';
 
@@ -9,29 +8,32 @@ import { amount, pct } from '../../../ui/format';
  *
  * The bot keeps one honest 30-day series, so it is shown directly rather than
  * pretending a range picker can offer different histories.
+ *
+ * No panel of its own: it renders as the first section inside
+ * `sb-trading-performance`'s single panel (v85 dashboard revision) rather
+ * than as a sibling card, so the host binds `display: block` and leaves
+ * borders/heading to whichever panel embeds it.
  */
 @Component({
   selector: 'sb-portfolio-value',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Sparkline],
+  imports: [Sparkline],
   template: `
-    <sb-panel heading="Portfolio value">
-      @if (balance() !== null) {
-        <p class="figure">{{ money() }}</p>
-      } @else {
-        <p class="figure muted">—</p>
-      }
+    @if (balance() !== null) {
+      <p class="figure">{{ money() }}</p>
+    } @else {
+      <p class="figure muted">—</p>
+    }
 
-      @if (changePct() !== null) {
-        <p class="change" [class.pos]="changePct()! > 0" [class.neg]="changePct()! < 0">
-          {{ fmtPct(changePct()) }} today
-        </p>
-      }
+    @if (changePct() !== null) {
+      <p class="change" [class.pos]="changePct()! > 0" [class.neg]="changePct()! < 0">
+        {{ fmtPct(changePct()) }} today
+      </p>
+    }
 
-      @if (points().length) {
-        <sb-sparkline [points]="points()" label="30-day equity" />
-      }
-    </sb-panel>
+    @if (points().length) {
+      <sb-sparkline [points]="points()" label="30-day equity" />
+    }
   `,
   styles: `
     :host { display: block; }
