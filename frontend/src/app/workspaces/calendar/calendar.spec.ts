@@ -80,13 +80,24 @@ const el = (fixture: ComponentFixture<Calendar>) =>
   fixture.nativeElement as HTMLElement;
 
 describe('Calendar grid', () => {
-  it('keeps the grid and selected-day pane together, stacking through CSS at phone width', async () => {
+  it('renders the month grid', async () => {
     const fixture = seed();
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(el(fixture).querySelector('.two-pane .grid')).not.toBeNull();
-    expect(el(fixture).querySelector('.two-pane .day-pane')).not.toBeNull();
+    expect(el(fixture).querySelector('.grid')).not.toBeNull();
+  });
+
+  it('drops the day-detail side pane -- the drawer already covers it', async () => {
+    // It used to sit beside the grid and, unselected, only ever said
+    // "Select a day to inspect its trades" -- a permanently half-empty box
+    // duplicating what clicking a day already opens in the drawer.
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(el(fixture).querySelector('.day-pane')).toBeNull();
+    expect(el(fixture).textContent).not.toContain('Select a day to inspect its trades');
   });
 
   it('renders full weeks of seven cells', async () => {
@@ -205,7 +216,9 @@ describe('Calendar summary strip', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const summary = el(fixture).querySelector('.month-summary');
+    // Month-over-month stats share one row (.totals) with the live-month
+    // totals now, rather than a separate .month-summary row of their own.
+    const summary = el(fixture).querySelector('.totals');
     expect(summary?.textContent).toContain('Month total');
     expect(summary?.textContent).toContain('Winning days');
     expect(summary?.textContent).toContain('1 (50%)');
@@ -226,7 +239,7 @@ describe('Calendar summary strip', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(el(fixture).querySelector('.month-summary')).toBeNull();
+    expect(el(fixture).querySelector('.totals')).toBeNull();
   });
 
   it('switches the weekday table to R with the metric toggle', async () => {

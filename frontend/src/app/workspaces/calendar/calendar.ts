@@ -92,6 +92,11 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       [skeletonCols]="7"
       (retry)="store.load()"
     >
+      <!-- One row for every summary figure -- the live-month totals and the
+           month-over-month stats used to split across two separate rows
+           (one above the grid, one below) for no reason tied to what they
+           mean; auto-fit wraps to a second row on its own once width runs
+           out, rather than a hardcoded per-row count. -->
       <div class="totals">
         <sb-metric-card
           label="Net this month"
@@ -101,9 +106,19 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         />
         <sb-metric-card label="Trades" [value]="store.totals()?.trade_count ?? null" [decimals]="0" />
         <sb-metric-card label="Win rate" [value]="store.totals()?.win_rate ?? null" unit="%" [decimals]="1" />
+        <sb-stat-tile label="Month total" [value]="monthTotal()" [sample]="monthDays().length" />
+        <sb-stat-tile label="Winning days" [value]="winningDaysLabel()" [sample]="monthDays().length" tone="pos" />
+        <sb-stat-tile label="Average day" [value]="averageDay()" [sample]="monthDays().length" />
+        <sb-stat-tile label="Best day" [value]="monthExtreme('best')" [sample]="monthDays().length" tone="pos" />
+        <sb-stat-tile label="Worst day" [value]="monthExtreme('worst')" [sample]="monthDays().length" tone="neg" />
       </div>
 
-      <div class="two-pane">
+      <!-- The day-detail pane that used to sit beside this grid duplicated
+           the drawer below word for word (same store signals, same fields)
+           and, unselected, only ever said "Select a day to inspect its
+           trades" -- a permanent half-empty box for what the drawer already
+           covers the moment a day is actually clicked. Removed rather than
+           kept in sync twice. -->
       <sb-panel [flush]="true">
         <sb-freshness [at]="store.data()?.as_of ?? null" />
         <div class="grid" role="grid" [attr.aria-label]="label()">
@@ -144,40 +159,6 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
           }
         </div>
       </sb-panel>
-      <aside class="day-pane" aria-live="polite">
-        <sb-freshness [at]="store.dayDetail()?.as_of ?? null" />
-        @if (store.selectedDay(); as date) {
-          <h2>{{ date }}</h2>
-          @if (store.dayLoading()) {
-            <p class="day-loading">Loading day detail…</p>
-          } @else if (store.dayDetail(); as detail) {
-            <div class="day-pane-metrics">
-              <span>Total {{ rLabel(detail.total_r) }}</span>
-              <span>{{ detail.trade_count }} trades</span>
-              <span>{{ detail.winners }} winners · {{ detail.losers }} losers</span>
-              <span>Avg {{ rLabel(detail.avg_trade_r) }}</span>
-              <span>DD {{ rLabel(detail.worst_drawdown_r) }}</span>
-            </div>
-            <section class="contributors"><h3>Contributors</h3>
-              @if (detail.contributors.length) { @for (row of detail.contributors; track $index) { <p>{{ row.ticker }} · {{ rLabel(row.r) }}</p> } }
-              @else { <p>Nothing gained today.</p> }
-            </section>
-            <section class="detractors"><h3>Detractors</h3>
-              @if (detail.detractors.length) { @for (row of detail.detractors; track $index) { <p>{{ row.ticker }} · {{ rLabel(row.r) }}</p> } }
-              @else { <p>Nothing lost money today.</p> }
-            </section>
-          } @else { <p class="day-empty">No closed trades under the current filter.</p> }
-        } @else { <p class="day-empty">Select a day to inspect its trades.</p> }
-      </aside>
-      </div>
-
-      <div class="month-summary" aria-label="Month summary">
-        <sb-stat-tile label="Month total" [value]="monthTotal()" [sample]="monthDays().length" />
-        <sb-stat-tile label="Winning days" [value]="winningDaysLabel()" [sample]="monthDays().length" tone="pos" />
-        <sb-stat-tile label="Average day" [value]="averageDay()" [sample]="monthDays().length" />
-        <sb-stat-tile label="Best day" [value]="monthExtreme('best')" [sample]="monthDays().length" tone="pos" />
-        <sb-stat-tile label="Worst day" [value]="monthExtreme('worst')" [sample]="monthDays().length" tone="neg" />
-      </div>
     </sb-async>
 
     <!-- All-time, not this-month: deliberately outside the sb-async above
@@ -290,16 +271,12 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     }
     .metric button.active { background: var(--surface-raised); color: var(--text); }
 
-    .totals { display: flex; flex-wrap: wrap; gap: var(--space-14); }
-    .month-summary { display: grid; gap: var(--space-14); grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+    /* One row, same auto-fit-to-140px card language as Dashboard's Trading
+       Performance grid; wraps to a second row on its own once eight cards
+       stop fitting, rather than a hardcoded per-row count. */
+    .totals { display: grid; gap: var(--space-14); grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 
     .grid { display: grid; }
-    .two-pane { display: grid; grid-template-columns: minmax(0, 1fr) minmax(17rem, 0.38fr); gap: var(--space-14); align-items: start; }
-    .day-pane { min-height: 12rem; padding: var(--space-14); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
-    .day-pane h2 { margin: 0 0 var(--space-10); font-size: var(--text-body); }
-    .day-pane h3 { margin: var(--space-12) 0 var(--space-4); color: var(--text-secondary); font-size: var(--text-micro); letter-spacing: 0.08em; text-transform: uppercase; }
-    .day-pane p { margin: var(--space-4) 0; color: var(--text-secondary); font-family: var(--font-mono); font-size: var(--text-table); }
-    .day-pane-metrics { display: grid; gap: var(--space-6); font-family: var(--font-mono); font-size: var(--text-table); }
     .week, .weekhead { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
     .head-cell {
       padding: var(--space-6);
@@ -384,7 +361,6 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     .day-leaders { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--space-14); margin-bottom: var(--space-14); }
     .day-leaders h3 { margin: 0 0 var(--space-6); font-size: var(--text-micro); text-transform: uppercase; letter-spacing: 0.08em; }
     .day-leaders p { margin: var(--space-4) 0; color: var(--text-secondary); font-family: var(--font-mono); font-size: var(--text-table); }
-    @media (max-width: 900px) { .two-pane { grid-template-columns: minmax(0, 1fr); } }
   `,
 })
 export class Calendar {
