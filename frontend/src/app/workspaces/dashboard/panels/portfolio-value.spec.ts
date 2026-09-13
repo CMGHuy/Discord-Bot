@@ -44,32 +44,28 @@ describe('portfolio value panel', () => {
 
   const THIRTY = Array.from({ length: 30 }, (_, i) => i);
 
-  it('offers only the equity ranges the 30-day series supports', () => {
+  it('renders the one 30-day series without a range picker', () => {
     const el = render({ balance: 1, changePct: 0, points: THIRTY, currency: '€' });
-    const labels = [...el.querySelectorAll('.equity-range button')].map((b) => b.textContent!.trim());
-    expect(labels).toEqual(['1W', '1M', 'ALL']);
+    expect(el.querySelector('sb-sparkline')).not.toBeNull();
+    expect(el.querySelector('.equity-range')).toBeNull();
   });
 
-  it('does not render a range it cannot draw', () => {
+  it('renders no equity-range controls', () => {
     const el = render({ balance: 1, changePct: 0, points: THIRTY, currency: '€' });
-    const labels = [...el.querySelectorAll('.equity-range button')].map((b) => b.textContent!.trim());
-    expect(labels).not.toContain('1D');
+    const labels = [...el.querySelectorAll('button')].map((b) => b.textContent!.trim());
+    expect(labels).not.toContain('1W');
+    expect(labels).not.toContain('1M');
+    expect(labels).not.toContain('ALL');
   });
 
-  it('slices the series to the selected range', () => {
+  it('keeps the complete input series for the sparkline', () => {
     const f = TestBed.createComponent(PortfolioValue);
     f.componentRef.setInput('balance', 1);
     f.componentRef.setInput('changePct', 0);
     f.componentRef.setInput('currency', '€');
     f.componentRef.setInput('points', THIRTY);
     f.detectChanges();
-    const el = f.nativeElement as HTMLElement;
-    const sliced = () => (f.componentInstance as unknown as { slicedPoints: () => readonly number[] }).slicedPoints();
-
-    expect(sliced()).toEqual(THIRTY); // ALL is the default
-
-    el.querySelector<HTMLButtonElement>('.equity-range button')!.click(); // 1W, first button
-    f.detectChanges();
-    expect(sliced()).toEqual(THIRTY.slice(-5));
+    expect(f.componentInstance.points()).toBe(THIRTY);
+    expect((f.nativeElement as HTMLElement).querySelector('sb-sparkline')).not.toBeNull();
   });
 });
