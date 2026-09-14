@@ -40,7 +40,19 @@
    animation-duration is set inline per lane (tape-speed.ts), scaled by
    tile count so every lane scrolls at the same pixels-per-second rate
    regardless of how many tiles it holds -- see that file's own comment. */
+/* `flex-shrink: 0` overrides the blanket `.lane, .lane * { min-width: 0; }`
+   rule below (that rule exists for the lane HOSTS, not this element -- see
+   its own comment). Without it, `.track` is a flex item of `.viewport`
+   with min-width:0 and default flex-shrink:1, so the flex algorithm
+   compresses the whole doubled (2x, for the seamless loop) content down to
+   fit inside `.viewport`'s width instead of overflowing it -- every tile's
+   text gets squeezed into roughly half its real space and reads as
+   overlapping garbage. `.viewport{overflow:hidden}` is what's supposed to
+   do the clipping; `.track` itself must stay at its natural content width
+   for that clipping to show whole tiles instead of crushed ones. Production
+   incident, 2026-09-14: the whole tape read as illegible overlapping text. */
 .track { display: inline-flex; align-items: center; white-space: nowrap;
+         flex-shrink: 0;
          animation-name: tape-slide; animation-timing-function: linear;
          animation-iteration-count: infinite; will-change: transform; }
 .viewport:hover .track { animation-play-state: paused; }
