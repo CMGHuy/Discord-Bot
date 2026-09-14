@@ -15,6 +15,8 @@ from datetime import datetime, timezone
 from swingbot import config
 from swingbot.core.market.session import (is_quiet_hours, is_tape_open,
                                           session_date)
+from swingbot.core.risk_limits import (HARD_MAX_PLANNED_LOSS_PCT,
+                                       planned_loss_pct)
 from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
                                        chandelier_stop, pending_expired,
                                        pending_invalidated, record_transition,
@@ -43,7 +45,8 @@ def poll_stop_fill(price: float, stop: float, continuous: bool) -> float:
 class PlanEvent:
     plan_id: str
     transition: str      # "filled"|"cancelled_expired"|"cancelled_invalidated"|
-                         # "be_moved"|"tp1_partial"|"closed"|"pyramid_add"
+                         # "cancelled_risk_cap"|"be_moved"|"tp1_partial"|
+                         # "closed"|"pyramid_add"
     detail: dict = field(default_factory=dict)
 
 
@@ -134,6 +137,7 @@ class PlanManager:
         self.atr_fn = atr_fn                # ticker -> current ATR(14) (Task 66)
         self.trade_log = trade_log          # TradeLog (Task 70)
         self._last_seen: dict[str, tuple[str, float]] = {}
+        self._risk_cap_warned: set[str] = set()
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
@@ -195,6 +199,7 @@ class PlanManager:
             if plan is None or plan.status not in (
                     PlanStatus.PENDING, PlanStatus.ACTIVE, PlanStatus.PARTIAL):
                 continue
+            self._warn_legacy_open_risk(plan)
             try:
                 new_events = self._step(plan, price, now)
             except Exception:
@@ -223,6 +228,25 @@ class PlanManager:
                 self._on_event(plan, event)
             events.extend(new_events)
         return events
+
+    def _warn_legacy_open_risk(self, plan: TradePlanV2) -> None:
+        """Log once for a pre-cap live plan without changing the position.
+
+        Existing positions may have been accepted before the 2% policy. A
+        warning makes them visible to the operator, but silently moving their
+        stop or closing them would be an unapproved trading decision.
+        """
+        if plan.status not in (PlanStatus.ACTIVE, PlanStatus.PARTIAL):
+            return
+        risk_pct = planned_loss_pct(plan.entry_price, plan.stop_loss)
+        if risk_pct <= HARD_MAX_PLANNED_LOSS_PCT or plan.plan_id in self._risk_cap_warned:
+            return
+        self._risk_cap_warned.add(plan.plan_id)
+        log.warning(
+            "risk cap: active plan %s (%s) has a %.2f%% initial stop, above the %.2f%% cap; "
+            "leaving the existing position unchanged",
+            plan.plan_id, plan.ticker, risk_pct, HARD_MAX_PLANNED_LOSS_PCT,
+        )
 
     def _on_event(self, plan: TradePlanV2, event: PlanEvent) -> None:
         if self.trade_log is None:
@@ -264,7 +288,8 @@ class PlanManager:
                 event.detail["trade_id"] = trade_id
             elif event.transition == "tp1_partial":
                 self.trade_log.append_leg_by_plan(plan.plan_id, event.detail)
-            elif event.transition in ("cancelled_expired", "cancelled_invalidated"):
+            elif event.transition in ("cancelled_expired", "cancelled_invalidated",
+                                      "cancelled_risk_cap"):
                 # A PENDING plan never filled -- scan_run.py's placeholder
                 # trade for it (still open, sized against the trigger price)
                 # has no real position behind it. Left unhandled, it sat
@@ -330,6 +355,17 @@ class PlanManager:
         if crossed:
             fill = max(price, plan.trigger_price) if is_bull \
                 else min(price, plan.trigger_price)
+            risk_pct = planned_loss_pct(fill, plan.stop_loss)
+            if risk_pct > HARD_MAX_PLANNED_LOSS_PCT:
+                record_transition(plan, PlanStatus.CANCELLED, reason="risk_cap",
+                                  at=self._now())
+                self.store.update(plan)
+                return [PlanEvent(plan.plan_id, "cancelled_risk_cap", {
+                    "entry_price": fill,
+                    "stop_loss": plan.stop_loss,
+                    "planned_loss_pct": round(risk_pct, 4),
+                    "max_planned_loss_pct": HARD_MAX_PLANNED_LOSS_PCT,
+                })]
             plan.entry_price = fill
             record_transition(plan, PlanStatus.ACTIVE, reason="stop_entry_fill",
                               at=self._now())

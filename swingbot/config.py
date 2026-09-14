@@ -156,9 +156,9 @@ FIELDS: list[Field] = [
           help="Hard filter, enforced exactly as set: dropped entirely if the stop sits closer than this -- "
                "too exposed to ordinary daily noise. No exceptions for a close miss."),
     Field("MAX_STOP_LOSS_PCT", "MAX_STOP_LOSS_PCT", "Trade Filters & Risk", "Max stop-loss %",
-          type="float", default="7.0", min=0, step=0.5,
-          help="Hard filter, enforced exactly as set: dropped entirely if the stop sits further than this from "
-               "entry -- disciplined cut-loss ceiling, keep in the 5-7% range. No exceptions for a close miss."),
+          type="float", default="2.0", min=0, max=2.0, step=0.5,
+          help="Hard filter: a plan may never carry more than 2% price risk from entry to its initial stop. "
+               "A market gap can still execute beyond that stop; realised fills remain reported honestly."),
     Field("MIN_RISK_REWARD_RATIO", "MIN_RISK_REWARD_RATIO", "Trade Filters & Risk", "Min reward:risk ratio",
           type="float", default="1.5", min=0, step=0.1,
           help="Hard filter, enforced exactly as set: dropped entirely unless the reward:risk to target 1 "
