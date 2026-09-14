@@ -10,7 +10,8 @@ import {
 
 import { ApiClient } from '../api/api-client';
 import { EventStream } from '../api/event-stream';
-import { Observable } from 'rxjs';
+import { Observable, Subject, debounceTime } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { routeRequest } from '../routing/route-request';
 import { Dashboard, DashboardScope } from '../api/models';
@@ -225,10 +226,32 @@ export const DashboardStore = signalStore(
     onInit(store, events = inject(EventStream)) {
       const account = events.changes('account');
       const trades = events.changes('trades');
+      // Coalesces the two signal reads (2026-09-14): closing a trade raises
+      // BOTH a `trades` event and an `account` event (the balance moved
+      // too) from the same scan tick. `effect()` re-runs on any dependency
+      // change and reads both every time, so without this the dashboard
+      // reloaded twice for one logical update -- the same
+      // "settle within a short window, then act once" pattern
+      // RouteRefreshService already uses for the identical problem at the
+      // route level.
+      //
+      // The FIRST effect run is exempted from the debounce -- it IS the
+      // initial load (see the comment on `load()`'s call site below), and
+      // there is nothing racing it yet to coalesce against; debouncing it
+      // too would just add 300ms to the dashboard's first paint for no
+      // benefit.
+      const refresh = new Subject<void>();
+      refresh.pipe(debounceTime(300), takeUntilDestroyed()).subscribe(() => store['load']());
+      let first = true;
       effect(() => {
         account();
         trades();
-        store['load']();
+        if (first) {
+          first = false;
+          store['load']();
+        } else {
+          refresh.next();
+        }
       });
     },
   }),

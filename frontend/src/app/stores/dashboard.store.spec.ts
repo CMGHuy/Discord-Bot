@@ -11,7 +11,7 @@ import {
   signal,
 } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventStream } from '../api/event-stream';
 import {
@@ -110,27 +110,80 @@ describe('DashboardStore', () => {
     expect(store.empty()).toBe(false);
   });
 
+  // Vitest's fake timers, not Angular's zone-based fakeAsync/tick: this app
+  // is zoneless (provideZonelessChangeDetection everywhere), and fakeAsync
+  // requires zone.js/testing, which a zoneless app does not load -- it
+  // throws "zone-testing.js is needed" instead of running. debounceTime's
+  // RxJS asyncScheduler uses the global setTimeout, which vi.useFakeTimers
+  // intercepts directly, no zone involved.
   it('refetches on an account event', () => {
-    tick();
-    respond();
+    vi.useFakeTimers();
+    try {
+      tick();
+      respond();
 
-    events.raise('account');
-    tick();
-    respond({ account_balance: 12_000 });
+      events.raise('account');
+      // Post-initial refetches are coalesced (debounceTime(300) -- see
+      // dashboard.store.ts's onInit) so a compound account+trades event
+      // from one scan tick reloads once, not twice. tick() FIRST flushes
+      // the effect (zoneless Angular runs it during change detection, not
+      // synchronously on signal write) so it actually calls refresh.next()
+      // and starts the debounce timer; only THEN is there anything for
+      // advanceTimersByTime to resolve.
+      tick();
+      vi.advanceTimersByTime(300);
+      tick();
+      respond({ account_balance: 12_000 });
 
-    expect(store.balance()).toBe(12_000);
+      expect(store.balance()).toBe(12_000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('refetches on a trades event', () => {
     // Open P&L, open count and risk used all move when a position does.
-    tick();
-    respond();
+    vi.useFakeTimers();
+    try {
+      tick();
+      respond();
 
-    events.raise('trades');
-    tick();
-    respond({ open_pnl_pct: -3 });
+      events.raise('trades');
+      tick();
+      vi.advanceTimersByTime(300);
+      tick();
+      respond({ open_pnl_pct: -3 });
 
-    expect(store.openPnlPct()).toBe(-3);
+      expect(store.openPnlPct()).toBe(-3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('coalesces an account+trades event from the same tick into one refetch', () => {
+    // Regression test (2026-09-14): closing a trade raises BOTH events from
+    // the same scan tick, and effect() re-runs on either one, reading both
+    // every time -- without debouncing, that used to fire store.load()
+    // twice for one logical update. backend.expectOne (not expectMatchOne
+    // and not a manual count) is itself the assertion: it throws if more
+    // than one matching request is pending.
+    vi.useFakeTimers();
+    try {
+      tick();
+      respond();
+
+      events.raise('trades');
+      events.raise('account');
+      tick();
+      vi.advanceTimersByTime(300);
+      tick();
+      respond({ open_pnl_pct: -3, account_balance: 12_000 });
+
+      expect(store.openPnlPct()).toBe(-3);
+      expect(store.balance()).toBe(12_000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('does not refetch on an unrelated event', () => {
