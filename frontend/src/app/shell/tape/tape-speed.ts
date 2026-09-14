@@ -17,9 +17,10 @@
  * legible tiles made the original rate feel faster than intended. Doubled
  * to 7.0px/s (2026-09-14, same day) once the two lanes were combined into
  * one strip, then doubled again to 14.0px/s (2026-09-14, same day) on a
- * further direct request.
+ * further direct request. Increased by 2.5x again so the combined strip
+ * keeps moving at a glance without pausing on a single tile.
  */
-export const TAPE_PIXELS_PER_SECOND = 14.0;
+export const TAPE_PIXELS_PER_SECOND = 35.0;
 
 /** A one-tile lane still needs to move; without a floor, a very narrow
  *  track (a single short symbol) would compute a near-zero duration and

@@ -152,7 +152,7 @@ describe('Dashboard states', () => {
     fixture.detectChanges();
 
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.textContent).toContain('No open positions');
+    expect(el.textContent).toContain('No active positions');
     expect(el.querySelector('.skeleton')).toBeNull();
   });
 

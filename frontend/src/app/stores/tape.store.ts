@@ -17,6 +17,8 @@ import { PreferencesStore } from './preferences.store';
 interface TapeSlice {
   rows: TapeRow[];
   asOf: string | null;
+  loading: boolean;
+  error: string | null;
 }
 
 /**
@@ -50,7 +52,7 @@ function sameSymbols(a: readonly string[], b: readonly string[]): boolean {
  */
 export const TapeStore = signalStore(
   { providedIn: 'root' },
-  withState<TapeSlice>({ rows: [], asOf: null }),
+  withState<TapeSlice>({ rows: [], asOf: null, loading: false, error: null }),
   withComputed((_store, prefs = inject(PreferencesStore)) => ({
     // `equal: sameSymbols` is what keeps this computed's VALUE stable across
     // an unrelated preference write (a column width, a sort order): without
@@ -71,7 +73,7 @@ export const TapeStore = signalStore(
     const load = (): void => {
       const symbols = store.symbols();
       if (!symbols.length) {
-        patchState(store, { rows: [], asOf: null });
+        patchState(store, { rows: [], asOf: null, loading: false, error: null });
         return;
       }
       // A quick `toggle()` overlapping a `scan`-triggered refetch can have
@@ -79,6 +81,7 @@ export const TapeStore = signalStore(
       // same counter `ChartStore` uses -- makes the STALE one a no-op rather
       // than whichever happens to land last.
       const request = ++latestRequest;
+      patchState(store, { loading: true, error: null });
       api.tape(symbols).subscribe({
         next: (response) => {
           if (request !== latestRequest) return;
@@ -86,12 +89,14 @@ export const TapeStore = signalStore(
           const rows = [...response.rows].sort(
             (a, b) => a.sort_rank - b.sort_rank || a.symbol.localeCompare(b.symbol),
           );
-          patchState(store, { rows, asOf: response.as_of ?? null });
+          patchState(store, { rows, asOf: response.as_of ?? null, loading: false, error: null });
         },
         // Deliberately silent, and deliberately non-destructive: see the class
         // comment. A toast over the workspace someone is reading is not worth
         // a ticker strip going one cycle stale.
-        error: () => undefined,
+        error: () => {
+          if (request === latestRequest) patchState(store, { loading: false, error: null });
+        },
       });
     };
 

@@ -9,6 +9,8 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, EmptyState } from '../../ui/data-table/data-table.types';
 import { STATUS_ICON } from '../../ui/icon';
 import { Tab, TabBar } from '../../ui/layout';
+import { Async, asyncInputs } from '../../ui/async';
+import { Freshness } from '../../ui/freshness';
 
 /** The Dashboard keeps every lifecycle tab scannable while still making the
  * full set reachable through the table's pager. */
@@ -53,31 +55,40 @@ const EMPTY_STATES: Record<string, EmptyState> = {
 @Component({
   selector: 'sb-positions-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TabBar, DataTable, RouterLink],
+  imports: [Async, Freshness, TabBar, DataTable, RouterLink],
   providers: [TradesStore],
   template: `
     <sb-tab-bar [tabs]="tabs()" [active]="active()" (activeChange)="choose($event)" />
 
-    <div class="table-head">
-      <a class="all-link" routerLink="/trades" [queryParams]="{ status: active() }">
-        View in Trades →
-      </a>
-      <ng-content select="[table-actions]" />
-    </div>
+    <sb-async [loading]="async().loading" [error]="async().error" [empty]="false"
+              [staleAsOf]="async().staleAsOf"
+              emptyReason="measured-zero" emptyTitle="Open positions"
+              [skeletonRows]="3" [skeletonCols]="5"
+              (retry)="trades.load()">
+      <div class="table-head">
+        <a class="all-link" routerLink="/trades" [queryParams]="{ status: active() }">
+          View in Trades →
+        </a>
+        <!-- The trades collection has no source timestamp. Mark that fact
+             rather than implying the arrival time is market-data freshness. -->
+        <sb-freshness [at]="null" />
+        <ng-content select="[table-actions]" />
+      </div>
 
-    <sb-data-table
-      [rows]="rows()"
-      [columns]="columns()"
-      [visible]="visible()"
-      [pinned]="pinned()"
-      [rowKey]="rowKey()"
-      [emptyState]="emptyState()"
-      [pagination]="trades.pagination()"
-      [fillPage]="false"
-      (rowActivate)="rowActivate.emit($event)"
-      (reorder)="reorder.emit($event)"
-      (pageChange)="goToPage($event)"
-    />
+      <sb-data-table
+        [rows]="rows()"
+        [columns]="columns()"
+        [visible]="visible()"
+        [pinned]="pinned()"
+        [rowKey]="rowKey()"
+        [emptyState]="emptyState()"
+        [pagination]="trades.pagination()"
+        [fillPage]="false"
+        (rowActivate)="rowActivate.emit($event)"
+        (reorder)="reorder.emit($event)"
+        (pageChange)="goToPage($event)"
+      />
+    </sb-async>
   `,
   styles: `
     :host { display: block; }
@@ -115,6 +126,11 @@ export class PositionsTable {
   private readonly page = signal(1);
 
   protected readonly rows = computed(() => this.trades.rows());
+  protected readonly async = computed(() => asyncInputs(
+    { data: () => this.trades.empty() ? null : this.trades.rows(),
+      loading: this.trades.loading, error: this.trades.error },
+    { isEmpty: () => false },
+  ));
   protected readonly visible = computed(() => this.visibleFor()(this.active()));
   protected readonly emptyState = computed(() => EMPTY_STATES[this.active()] ?? null);
 

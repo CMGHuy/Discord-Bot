@@ -124,17 +124,9 @@ import { MarketMovers } from './panels/market-movers';
   // `TradesStore` instance (see positions-table.ts) -- neither this one nor
   // that one touch the Trades workspace's own copy.
   template: `
-    <!-- Wraps the whole page, but [empty] is hardcoded false here: this
-         fetch's own "zero open positions" is a fact about the Open positions
-         panel below, not about Portfolio Value, Trading Performance, Recent
-         Activity or Market Movers -- those have a real figure to show (even
-         if it's a measured zero) regardless of how many positions are open.
-         Binding this branch's emptiness to open_trades used to blank all four
-         of them the moment the book was empty, which is every weekend and
-         every fresh install -- caught screenshotting the dashboard for v85
-         close-out (R12-08 step 5) with a seeded account and zero trades.
-         Loading/error stay page-wide: one fetch backs every panel here. -->
-    <sb-async
+    <!-- Each panel owns its first-load state. A slow dashboard summary must
+         never hide the independently fetched positions table or activity. -->
+    <sb-async class="performance-async"
       [loading]="async().loading"
       [error]="async().error"
       [empty]="false"
@@ -168,6 +160,7 @@ import { MarketMovers } from './panels/market-movers';
       [scope]="store.scope()"
       (scopeChange)="store.setScope($event)"
     />
+    </sb-async>
 
     <sb-panel class="positions-panel" heading="Open positions" [flush]="true">
       <!-- The lifecycle and sizing context share one help trigger. The
@@ -196,20 +189,6 @@ import { MarketMovers } from './panels/market-movers';
         </span>
       </sb-hint>
 
-      <!-- This panel's own true empty state -- open_trades is a fact about
-           the positions table specifically, so its "measured zero" belongs
-           scoped here, not on the page-level sb-async above. -->
-      <sb-async
-        [loading]="async().loading"
-        [error]="async().error"
-        [empty]="async().empty"
-        emptyReason="measured-zero"
-        emptyTitle="No open positions"
-        emptyHint="The scan found no qualifying setups in this scope."
-        [skeletonRows]="3"
-        [skeletonCols]="5"
-        [announce]="announce()"
-      >
       <!-- v85 D11: one table, five lifecycle tabs, replacing the four
            stacked groups. Only the active tab fetches -- see
            positions-table.ts's own docstring for why that is strictly less
@@ -264,7 +243,6 @@ import { MarketMovers } from './panels/market-movers';
           }
         </div>
       </sb-positions-table>
-      </sb-async>
     </sb-panel>
 
     <sb-confirm-dialog
@@ -277,10 +255,19 @@ import { MarketMovers } from './panels/market-movers';
     />
 
     <div class="bottom-row">
-      <sb-recent-activity [events]="activity()" />
-      <sb-market-movers [rows]="tape.rows()" />
+      <sb-async [loading]="activityAsync().loading" [error]="activityAsync().error" [empty]="false"
+                emptyReason="measured-zero" emptyTitle="Recent activity"
+                [skeletonRows]="4" [skeletonCols]="3"
+                (retry)="recent.load()">
+        <sb-recent-activity [events]="activity()" />
+      </sb-async>
+      <sb-async [loading]="tapeAsync().loading" [error]="tapeAsync().error" [empty]="false"
+                emptyReason="measured-zero" emptyTitle="Market movers"
+                [skeletonRows]="4" [skeletonCols]="2"
+                (retry)="tape.load()">
+        <sb-market-movers [rows]="tape.rows()" />
+      </sb-async>
     </div>
-    </sb-async>
 
     <ng-template #statusCell let-row>
       <sb-status-cell [row]="row" />
@@ -531,9 +518,10 @@ import { MarketMovers } from './panels/market-movers';
       /* Option 2: on phones, live positions come before every performance
          detail. The table keeps its pager on every lifecycle tab, but does
          not add blank filler rows below a short first page. */
-      :host ::ng-deep sb-async > .content { display: flex; flex-direction: column; }
-      :host ::ng-deep sb-async > .content > .positions-panel { order: 1; }
-      :host ::ng-deep sb-async > .content > sb-trading-performance { order: 2; }
+      :host { display: flex; flex-direction: column; }
+      .positions-panel { order: 1; }
+      .performance-async { order: 2; }
+      .bottom-row { order: 3; }
       .lifecycle-hint sb-plan-lifecycle-diagram { min-width: 0; }
     }
   `,
@@ -554,9 +542,18 @@ export class Dashboard {
    *  whichever single tab is selected, which is the wrong population for a
    *  feed that must span opens and closes at once. Provided on this component
    *  (see `providers`), so it is created on entry and destroyed on exit. */
-  private readonly recent = inject(TradesStore);
+  protected readonly recent = inject(TradesStore);
 
   protected readonly activity = computed(() => deriveActivity(this.recent.rows()));
+  protected readonly activityAsync = computed(() => asyncInputs(
+    { data: () => this.recent.empty() ? null : this.recent.rows(),
+      loading: this.recent.loading, error: this.recent.error },
+    { isEmpty: () => false },
+  ));
+  protected readonly tapeAsync = computed(() => asyncInputs(
+    { data: () => this.tape.rows(), loading: this.tape.loading, error: this.tape.error },
+    { isEmpty: () => false },
+  ));
 
   constructor() {
     // Every status, newest first. ACTIVITY_WINDOW rows in, at most six events

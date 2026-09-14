@@ -397,16 +397,28 @@ function sortValue(row: Ticker, key: string, flagged: readonly string[]): string
     }
 
     @if (activeTab() === 'earnings') {
-      <sb-panel heading="Earnings">
-        <p class="section-help">
-          Every watchlist ticker's next known earnings date, one cell per
-          day. Only tickers currently on the watchlist appear here, and a
-          newly-added one shows up the next time this page loads — same
-          data as the Watchlist tab's "Next earnings" column, just grouped
-          by date instead of by ticker.
-        </p>
-        <sb-earnings-calendar [tickers]="store.tickers()" />
-      </sb-panel>
+      <sb-async
+        [loading]="async().loading"
+        [error]="async().error"
+        [empty]="async().empty"
+        emptyReason="no-data-yet"
+        emptyTitle="No earnings to display"
+        emptyHint="Add a ticker to start tracking earnings dates."
+        [skeletonRows]="5"
+        [skeletonCols]="7"
+        (retry)="store.load()"
+      >
+        <sb-panel heading="Earnings">
+          <p class="section-help">
+            Every watchlist ticker's next known earnings date, one cell per
+            day. Only tickers currently on the watchlist appear here, and a
+            newly-added one shows up the next time this page loads — same
+            data as the Watchlist tab's "Next earnings" column, just grouped
+            by date instead of by ticker.
+          </p>
+          <sb-earnings-calendar [tickers]="store.tickers()" />
+        </sb-panel>
+      </sb-async>
     }
   `,
   styles: `
