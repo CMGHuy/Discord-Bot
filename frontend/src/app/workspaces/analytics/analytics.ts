@@ -680,14 +680,19 @@ interface ProposalView extends ProposalRow {
             [skeletonCols]="6"
           >
           <sb-panel heading="By confidence level" [flush]="true">
+            <!-- No [pagination] here, deliberately (2026-09-14): there are
+                 exactly 5 rows (Lv1-5), a fixed set that will never grow, so
+                 DataTable's own filler-row padding (data-table.ts's
+                 fillerRows, which pads a short page out to the preference's
+                 25-per-page default) was rendering 20 empty rows below Lv5
+                 for nothing -- there is no second page this table could
+                 ever need to look consistent WITH. -->
             <sb-data-table
               [rows]="confidencePage.visible()"
               [columns]="confidenceColumns()"
               [visible]="confidenceKeys"
               [rowKey]="confidenceKey"
               [emptyState]="confidenceEmpty"
-              [pagination]="confidencePage.pageSpec()"
-              (pageChange)="confidencePage.setPage($event)"
             />
           </sb-panel>
           </sb-async>
@@ -1389,6 +1394,28 @@ interface ProposalView extends ProposalRow {
     dl > div { display: flex; justify-content: space-between; gap: var(--space-10); }
     dt { color: var(--text-secondary); font-size: var(--text-table); }
     dd { color: var(--text); font-size: var(--text-table); }
+    /* A number long enough to wrap a summary row (Overall/Streaks) grows
+       that one row taller than its neighbours -- ellipsis plus a smaller
+       size keeps it on one line instead (2026-09-14), the same fix
+       calendar.ts applies to its own info-panel cards. min-width: 0 is
+       needed on a flex item (dl > div, above) before text-overflow does
+       anything at all. */
+    dd.num {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: var(--text-chip);
+    }
+    /* Reaches inside sb-metric-chip's own encapsulated styles -- this
+       component's scoped styles cannot select .value otherwise (same
+       ::ng-deep reasoning as the DataTable row rules above). */
+    :host ::ng-deep .panels sb-metric-chip .value {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: var(--text-table);
+    }
 
     /* The global .section-help (styles.css) already supplies colour,
        font-size, line-height and margin-bottom -- this only adds the
