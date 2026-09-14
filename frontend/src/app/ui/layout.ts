@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 
 import { FocusTrap } from './focus-trap';
+import { Icon, IconName } from './icon';
 
 /* Spec 3's layout inventory: panel, tab bar, split view, drawer. */
 
@@ -70,6 +71,13 @@ export class Panel {
 export interface Tab {
   id: string;
   label: string;
+  /** Optional -- every existing caller (Trade detail's five tabs,
+   *  Analytics' four) omits this and renders exactly as before. Set only
+   *  by callers that want an icon rendered before the label AND, below
+   *  `sm`, in PLACE of it (the label stays as the tab's accessible name
+   *  via title/aria-label even when hidden visually) -- see
+   *  positions-table.ts's lifecycle tabs. */
+  icon?: IconName;
 }
 
 /**
@@ -86,6 +94,7 @@ export interface Tab {
 @Component({
   selector: 'sb-tab-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Icon],
   host: { '(window:resize)': 'measure()' },
   template: `
     <div class="strip" [class.fade-start]="fadeStart()" [class.fade-end]="fadeEnd()">
@@ -96,11 +105,17 @@ export interface Tab {
           role="tab"
           class="tab"
           [class.active]="tab.id === active()"
+          [class.iconed]="!!tab.icon"
           [attr.aria-selected]="tab.id === active()"
+          [attr.title]="tab.icon ? tab.label : null"
+          [attr.aria-label]="tab.icon ? tab.label : null"
           [tabindex]="tab.id === active() ? 0 : -1"
           (click)="activeChange.emit(tab.id)"
         >
-          {{ tab.label }}
+          @if (tab.icon) {
+            <sb-icon [name]="tab.icon" />
+          }
+          <span class="label">{{ tab.label }}</span>
         </button>
         }
       </div>
@@ -112,6 +127,9 @@ export interface Tab {
     .tabs { display: flex; gap: var(--space-4); overflow-x: auto; scrollbar-width: none; }
     .tabs::-webkit-scrollbar { display: none; }
     .tab {
+      display: flex;
+      align-items: center;
+      gap: var(--space-6);
       flex: 0 0 auto;
       min-height: var(--control-h);
       padding: var(--space-8) var(--space-14);
@@ -129,6 +147,14 @@ export interface Tab {
     .tab:hover { color: var(--text); }
     .tab:focus-visible { outline: 1px solid var(--accent); outline-offset: -2px; }
     .active { color: var(--text); border-bottom-color: var(--accent); }
+    /* Below sm, an iconed tab drops its text and becomes the icon alone --
+       title/aria-label (set above) carry the name a sighted mouse user
+       would otherwise read from the label. A tab with no icon is
+       untouched: text is its only content either way. */
+    @media (max-width: 639px) {
+      .tab.iconed { padding: var(--space-8); gap: 0; }
+      .tab.iconed .label { display: none; }
+    }
     .strip::before, .strip::after {
       content: ''; position: absolute; top: 0; bottom: 0; width: var(--space-20);
       pointer-events: none; opacity: 0; transition: opacity var(--transition);

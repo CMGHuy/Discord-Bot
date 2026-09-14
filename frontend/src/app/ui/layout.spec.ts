@@ -48,6 +48,36 @@ describe('sb-tab-bar overflow (v80 D4)', () => {
     expect(strip.classList).not.toContain('fade-start'); expect(strip.classList).not.toContain('fade-end');
   });
   it('sizes tabs from --control-h, so they are 44px on touch', () => expect(rule('.tab')).toContain('min-height: var(--control-h)'));
+
+  it('renders an icon and keeps the label for a tab that opts in, neither for one that does not', () => {
+    @Component({
+      imports: [TabBar],
+      template: `<sb-tab-bar [tabs]="tabs" [active]="'plans'" />`,
+    })
+    class IconedHost {
+      readonly tabs: Tab[] = [
+        { id: 'plans', label: 'Plans', icon: 'dashboard' },
+        { id: 'strategies', label: 'Strategies' },
+      ];
+    }
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    const f = TestBed.createComponent(IconedHost);
+    f.detectChanges();
+    const tabs = (f.nativeElement as HTMLElement).querySelectorAll('[role="tab"]');
+    expect(tabs[0].querySelector('sb-icon')).not.toBeNull();
+    expect(tabs[0].querySelector('.label')?.textContent).toBe('Plans');
+    expect(tabs[0].getAttribute('aria-label')).toBe('Plans');
+    expect(tabs[1].querySelector('sb-icon')).toBeNull();
+    expect(tabs[1].getAttribute('aria-label')).toBeNull();
+  });
+
+  it('drops the label below sm for an iconed tab only, via CSS', () => {
+    // 639px, not 640: breakpoints.ts's sm floor is 640px and the rule must
+    // apply BELOW it, same convention shell.css's own mobile rules use.
+    const block = SOURCE.match(/@media \(max-width: 639px\) \{([\s\S]*?)\n {4}\}/);
+    expect(block).not.toBeNull();
+    expect(block![1]).toContain('.tab.iconed .label { display: none; }');
+  });
 });
 
 describe('sb-panel (v80 D4)', () => {

@@ -216,7 +216,7 @@ describe('Dashboard v85 layout', () => {
     const fixture = await loaded();
     const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('[role="tab"]')]
       .map((t) => t.textContent?.replace(/\s+/g, ' ').trim());
-    expect(labels[0]).toMatch(/^Open positions \d+$/);
+    expect(labels[0]).toMatch(/^Open \d+$/);
   });
 
   it('drops the old metric rows the panels replaced', async () => {

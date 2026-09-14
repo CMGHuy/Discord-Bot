@@ -7,6 +7,7 @@ import { TradeRow } from '../../api/models';
 import { TradesStore } from '../../stores/trades.store';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, EmptyState } from '../../ui/data-table/data-table.types';
+import { STATUS_ICON } from '../../ui/icon';
 import { Tab, TabBar } from '../../ui/layout';
 
 /** A cap, not a page — the Dashboard answers "what is happening right now" at
@@ -14,13 +15,19 @@ import { Tab, TabBar } from '../../ui/layout';
 export const OPEN_POSITIONS_CAP = 6;
 
 /** Lifecycle order, not size order: this is the order a plan moves through,
- *  and sorting by count would reshuffle the strip every time a trade closed. */
+ *  and sorting by count would reshuffle the strip every time a trade closed.
+ *  icon reuses icon.ts's own STATUS_ICON map -- the same one Recent
+ *  Activity's status glyph reads -- so both panels share one vocabulary
+ *  rather than each inventing its own (2026-09-14: icons were deliberately
+ *  kept OUT of the row-level StatusCell here, but the TAB strip is a
+ *  different surface -- it names a whole group, not one row's status, and
+ *  is exactly what a mobile-width icon-only tab needs to stay legible). */
 export const POSITION_TABS: (Tab & { status: string; scoped: boolean })[] = [
-  { id: 'ACTIVE',    label: 'Open positions', status: 'ACTIVE',    scoped: false },
-  { id: 'PENDING',   label: 'Pending',        status: 'PENDING',   scoped: false },
-  { id: 'PARTIAL',   label: 'Partial',        status: 'PARTIAL',   scoped: false },
-  { id: 'CLOSED',    label: 'Closed',         status: 'CLOSED',    scoped: true  },
-  { id: 'CANCELLED', label: 'Cancelled',      status: 'CANCELLED', scoped: true  },
+  { id: 'ACTIVE',    label: 'Open',      icon: STATUS_ICON['ACTIVE'],    status: 'ACTIVE',    scoped: false },
+  { id: 'PENDING',   label: 'Pending',   icon: STATUS_ICON['PENDING'],   status: 'PENDING',   scoped: false },
+  { id: 'PARTIAL',   label: 'Partial',   icon: STATUS_ICON['PARTIAL'],   status: 'PARTIAL',   scoped: false },
+  { id: 'CLOSED',    label: 'Closed',    icon: STATUS_ICON['CLOSED'],    status: 'CLOSED',    scoped: true  },
+  { id: 'CANCELLED', label: 'Cancelled', icon: STATUS_ICON['CANCELLED'], status: 'CANCELLED', scoped: true  },
 ];
 
 const EMPTY_STATES: Record<string, EmptyState> = {
@@ -112,6 +119,7 @@ export class PositionsTable {
     POSITION_TABS.map((tab) => ({
       id: tab.id,
       label: `${tab.label} ${this.counts()[tab.status] ?? 0}`,
+      icon: tab.icon,
     })),
   );
 

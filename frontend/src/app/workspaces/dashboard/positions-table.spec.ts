@@ -56,7 +56,7 @@ describe('positions table', () => {
     const labels = [...(f.nativeElement as HTMLElement).querySelectorAll('[role="tab"]')]
       .map((t) => t.textContent?.replace(/\s+/g, ' ').trim());
     expect(labels).toEqual([
-      'Open positions 1', 'Pending 0', 'Partial 0', 'Closed 0', 'Cancelled 0',
+      'Open 1', 'Pending 0', 'Partial 0', 'Closed 0', 'Cancelled 0',
     ]);
   });
 
