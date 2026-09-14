@@ -95,6 +95,19 @@ def get_daily_data_batch(tickers: list, period: str = "2y") -> dict:
     return out
 
 
+#: Last known-good price per ticker from a SUCCESSFUL get_current_price_batch
+#: call, regardless of which batch asked for it. Same in-memory
+#: {ticker: (value, fetched_at)} shape as _price_cache, just fed by the
+#: batch path instead of the single-ticker one.
+_last_good_batch_price: dict = {}
+#: How long a ticker's last-good batch price stays eligible as a fallback
+#: on a failed batch. Deliberately longer than a single scan cycle (a few
+#: minutes) so one transient failure never shows "no price" -- a stale-but-
+#: real number for a bit is a smaller lie than blanking every ticker in the
+#: batch, which is what returning {} on failure used to do.
+_LAST_GOOD_BATCH_PRICE_TTL_SECONDS = 15 * 60
+
+
 def get_current_price_batch(tickers: list) -> dict:
     """v55: batched sibling of get_current_price() -- one yf.download() call
     (1-day/1-minute, prepost=True) for many tickers' live price instead of a
@@ -105,17 +118,34 @@ def get_current_price_batch(tickers: list) -> dict:
     absent from the result falls back to today's daily close in the caller --
     same fallback get_current_price()'s own failure case already has. No
     candidate_symbols() aliasing (see get_daily_data_batch).
+
+    Deliberately NOT wrapped in with_retry, unlike get_daily_data_batch
+    right above it (tried 2026-09-14, reverted the same day):
+    test_api_v1_watchlist.py's test_next_earnings_fields_null_and_non_
+    blocking_when_not_yet_cached asserts /api/v1/watchlist/tickers answers
+    in under 1 second even for a not-yet-cached ticker -- "the whole point"
+    of that endpoint's own fix, which this is one call inside. A blocking
+    retry (2 attempts, 1.5s+ backoff) on every transient failure directly
+    breaks that contract. Falls back to each ticker's own last known-good
+    batch price instead: one network call covers the whole batch, so a
+    single transient failure (a timeout, a Yahoo throttle) used to blank
+    EVERY ticker's price for the tick, not just the one that actually
+    failed -- reported as the market/watchlist tape persistently showing
+    "no price" for tickers that plainly have one. The fallback fixes that
+    symptom without adding latency to the success path or blocking the
+    failure path.
     """
     if not tickers:
         return {}
+    now = time.monotonic()
     try:
         raw = yf.download(" ".join(tickers), period="1d", interval="1m",
                           group_by="ticker", prepost=True, progress=False)
     except Exception as exc:
         log.error("get_current_price_batch failed for %d ticker(s): %s", len(tickers), exc)
-        return {}
+        return _stale_batch_fallback(tickers, now)
     if raw is None or raw.empty:
-        return {}
+        return _stale_batch_fallback(tickers, now)
     out: dict = {}
     for ticker in tickers:
         try:
@@ -126,6 +156,24 @@ def get_current_price_batch(tickers: list) -> dict:
             price = float(closes.iloc[-1])
             if price > 0:
                 out[ticker] = price
+                _last_good_batch_price[ticker] = (price, now)
+    # Tickers THIS batch call missed (a partial failure, not the all-or-
+    # nothing case above) still get a stale-fallback chance individually.
+    missing = [t for t in tickers if t not in out]
+    if missing:
+        out.update(_stale_batch_fallback(missing, now))
+    return out
+
+
+def _stale_batch_fallback(tickers: list, now: float) -> dict:
+    """Whichever of `tickers` still has a fresh-enough last-good batch
+    price, else absent -- same contract get_current_price_batch's own
+    empty-dict failure case already had for anything this can't cover."""
+    out: dict = {}
+    for ticker in tickers:
+        cached = _last_good_batch_price.get(ticker)
+        if cached and (now - cached[1]) < _LAST_GOOD_BATCH_PRICE_TTL_SECONDS:
+            out[ticker] = cached[0]
     return out
 
 

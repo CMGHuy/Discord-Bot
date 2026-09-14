@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import pandas as pd
 
+from swingbot import config
+from swingbot.core.marketdata import data_refresh, data_store
 from swingbot.core.marketdata.data import (
     get_current_price_batch,
     get_daily_data_batch,
@@ -68,6 +70,30 @@ def _empty_row() -> dict:
     }
 
 
+def _cached_daily(ticker: str) -> pd.DataFrame | None:
+    """The same market_data/daily/{TICKER}.csv cache scanning/fetch.py's
+    _crawl_latest_data already reads (same is_stale/load_normalized pair,
+    same SCAN_CACHE_MAX_AGE_HOURS freshness bar) -- not reimplemented
+    independently, just read from here too. `market_data_refresh`
+    (commands/scanning.py) already keeps this warm for exactly
+    load_watchlist()'s tickers, so in steady state this function costs no
+    network at all. None means cold (missing, stale, or unreadable); the
+    caller batch-fetches only the tickers this returns None for.
+
+    Added 2026-09-14: build_market_rows used to call get_daily_data_batch
+    for the WHOLE watchlist on every single page view -- a live 6-month
+    download for ~75 tickers, unconditionally, which was the watchlist's
+    reported slow-load cause. Checking the warm cache first turns most
+    page views into zero network calls instead of one large one.
+    """
+    try:
+        if data_refresh.is_stale(ticker, "daily", max_age_hours=config.SCAN_CACHE_MAX_AGE_HOURS):
+            return None
+        return data_store.load_normalized(ticker, "daily")
+    except Exception:
+        return None
+
+
 def build_market_rows(tickers: list[str]) -> dict[str, dict]:
     """Price, changes and a 30-bar sparkline for every ticker, keyed by symbol.
 
@@ -78,7 +104,12 @@ def build_market_rows(tickers: list[str]) -> dict[str, dict]:
     if not tickers:
         return {}
 
-    frames = get_daily_data_batch(list(tickers), period="6mo") or {}
+    cached = {t: _cached_daily(t) for t in tickers}
+    cold = [t for t, df in cached.items() if df is None]
+    # Still one batch call, never one per row -- just for whichever subset
+    # (often none, in steady state) the warm cache didn't already cover.
+    fetched = get_daily_data_batch(cold, period="6mo") if cold else {}
+    frames = {**{t: df for t, df in cached.items() if df is not None}, **fetched}
 
     live: dict[str, float] = {}
     if is_us_market_active():

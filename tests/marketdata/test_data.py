@@ -150,3 +150,48 @@ def test_get_current_price_batch_omits_a_ticker_with_no_price(monkeypatch):
     out = data_mod.get_current_price_batch(["AAA", "MISSING"])
 
     assert set(out) == {"AAA"}
+
+
+def test_get_current_price_batch_falls_back_to_the_last_good_price_on_failure(monkeypatch):
+    """2026-09-14: a transient batch failure used to blank EVERY ticker's
+    price for the tick (return {}), reported as the market/watchlist tape
+    persistently showing "no price" for tickers that plainly have one.
+    Deliberately NOT fixed with with_retry (reverted the same day --
+    test_api_v1_watchlist.py's under-1s contract on this exact call), so
+    this pins the actual fix: a failed batch call falls back to each
+    ticker's own last known-good price from a PRIOR successful call,
+    instead of losing it."""
+    frame = _batch_frame({"ZZFB1": [42.0, 43.5]})
+    monkeypatch.setattr(data_mod.yf, "download", lambda *a, **kw: frame)
+    first = data_mod.get_current_price_batch(["ZZFB1"])
+    assert first == {"ZZFB1": 43.5}
+
+    calls = {"n": 0}
+
+    def failing(*a, **kw):
+        calls["n"] += 1
+        raise RuntimeError("Yahoo throttled")
+    monkeypatch.setattr(data_mod.yf, "download", failing)
+
+    out = data_mod.get_current_price_batch(["ZZFB1"])
+
+    assert out == {"ZZFB1": 43.5}
+    # No retry: this path must not add blocking latency to a failure --
+    # exactly one call, not FETCH_RETRY_ATTEMPTS-worth.
+    assert calls["n"] == 1
+
+
+def test_get_current_price_batch_fallback_expires(monkeypatch):
+    """The fallback is a bridge over a momentary gap, not a permanent
+    stand-in for a ticker Yahoo has stopped answering for."""
+    frame = _batch_frame({"ZZFB2": [10.0]})
+    monkeypatch.setattr(data_mod.yf, "download", lambda *a, **kw: frame)
+    assert data_mod.get_current_price_batch(["ZZFB2"]) == {"ZZFB2": 10.0}
+
+    # Jump the fallback clock past its TTL, as if a long time had passed.
+    future = data_mod.time.monotonic() + data_mod._LAST_GOOD_BATCH_PRICE_TTL_SECONDS + 1
+    monkeypatch.setattr(data_mod.time, "monotonic", lambda: future)
+    monkeypatch.setattr(data_mod.yf, "download",
+                         lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("still down")))
+
+    assert data_mod.get_current_price_batch(["ZZFB2"]) == {}
