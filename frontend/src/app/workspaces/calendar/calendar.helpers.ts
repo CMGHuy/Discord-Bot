@@ -23,7 +23,10 @@ export type CalendarCellTone = 'pos' | 'neg' | 'neutral' | 'empty';
 export function cellValue(day: CalendarDay, metric: CalendarCellMetric): {
   value: number | null; text: string; tone: CalendarCellTone;
 } {
-  if (day.trade_count === 0) return { value: null, text: '', tone: 'empty' };
+  // A day with zero closed trades still reads as "0", not blank -- a blank
+  // cell on a trading day is indistinguishable from a rendering fault,
+  // where "0" is an honest, measured answer (2026-09-14).
+  if (day.trade_count === 0) return { value: 0, text: '0', tone: 'empty' };
   if (metric === 'trades') return { value: day.trade_count, text: `${day.trade_count}`, tone: 'neutral' };
   if (metric === 'win_rate') {
     if (day.win_rate === null) return { value: null, text: '', tone: 'empty' };

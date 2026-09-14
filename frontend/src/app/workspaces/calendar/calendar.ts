@@ -7,7 +7,6 @@ import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { ABSENT, money, rMultiple } from '../../ui/format';
 import { ControlRow, Drawer, Panel } from '../../ui/layout';
-import { Freshness } from '../../ui/freshness';
 import { MetricCard } from '../../ui/metric-card';
 import { Select } from '../../ui/form-controls';
 import { SectionHead } from '../../ui/section-head';
@@ -20,7 +19,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 @Component({
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow, Drawer, MetricCard, Panel, SectionHead, Select, StatTile, Async, Freshness],
+  imports: [Button, ControlRow, Drawer, MetricCard, Panel, SectionHead, Select, StatTile, Async],
   // v54 D1: "how am I doing this month?" -- hero totals, room to breathe --
   // so this workspace defaults to the presentation register. On the host
   // (a static class, not a template wrapper) because :host IS the grid
@@ -119,8 +118,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
            trades" -- a permanent half-empty box for what the drawer already
            covers the moment a day is actually clicked. Removed rather than
            kept in sync twice. -->
-      <sb-panel [flush]="true">
-        <sb-freshness [at]="store.data()?.as_of ?? null" />
+      <sb-panel [flush]="true" class="calendar-panel">
         <div class="grid" role="grid" [attr.aria-label]="label()">
           <!-- NOT class="week": the grid tests assert every \`.week\` holds
                exactly 7 \`.cell\` children, and a header row sharing that class
@@ -145,12 +143,16 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                   [style.--heat]="magnitude(cell)"
                 >
                   <span class="dom">{{ cell.dayOfMonth }}</span>
-                  @if (dayFor(cell); as day) {
+                  <!-- Any in-month trading day is clickable, whether or not
+                       it has a day record -- a day with zero closed trades
+                       shows "0", not a blank cell (2026-09-14); the drawer's
+                       own empty state already reads correctly for it. -->
+                  @if (cell.inMonth && !cell.weekend) {
                     <button sb-button variant="link" type="button" class="value"
-                            [attr.aria-pressed]="store.selectedDay() === day.date"
-                            (click)="store.selectDay(day.date)">
-                      {{ display(day) }}
-                      <span class="n">{{ day.trade_count }}</span>
+                            [attr.aria-pressed]="store.selectedDay() === cell.date"
+                            (click)="store.selectDay(cell.date)">
+                      {{ display(dayFor(cell)) }}
+                      <span class="n">{{ dayFor(cell)?.trade_count ?? 0 }}</span>
                     </button>
                   }
                 </div>
@@ -271,10 +273,51 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     }
     .metric button.active { background: var(--surface-raised); color: var(--text); }
 
-    /* One row, same auto-fit-to-140px card language as Dashboard's Trading
-       Performance grid; wraps to a second row on its own once eight cards
-       stop fitting, rather than a hardcoded per-row count. */
-    .totals { display: grid; gap: var(--space-14); grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+    /* Exactly 4 columns, not auto-fit (2026-09-14): 8 cards at 4-per-row is
+       exactly 2 rows, on request -- auto-fit's own per-viewport column
+       count could just as easily land on 3 rows. Narrower than ~600px
+       drops to 2 columns (4 rows) rather than crushing 4 columns into
+       something unreadably thin; the user asked for "at most 2 rows",
+       which a phone screen cannot honour AND stay legible at the same
+       time -- legibility wins there. */
+    .totals {
+      display: grid;
+      gap: var(--space-14);
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      /* A fixed row height, not auto: every card must read as the SAME
+         height regardless of which one currently has the longer number,
+         so the shared 2-row block reads as one grid, not eight
+         independently-sized boxes that happen to align on their left
+         edge. */
+      grid-auto-rows: 4.5rem;
+    }
+    @media (max-width: 640px) {
+      .totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    /* Reaches inside sb-metric-card/sb-stat-tile's own encapsulated
+       styles -- this component's scoped styles cannot select their
+       internals otherwise (same reasoning as analytics.ts's own
+       ::ng-deep use on DataTable rows). Fixed height above clips a card
+       whose content would otherwise grow past it; shrinking the value
+       text here is what keeps a longer number legible INSIDE that fixed
+       height instead of just clipping it. */
+    :host ::ng-deep .totals sb-metric-card,
+    :host ::ng-deep .totals sb-stat-tile { height: 100%; overflow: hidden; }
+    :host ::ng-deep .totals sb-metric-card .card,
+    :host ::ng-deep .totals sb-stat-tile .tile { height: 100%; box-sizing: border-box; justify-content: center; }
+    :host ::ng-deep .totals sb-metric-card .value,
+    :host ::ng-deep .totals sb-stat-tile .value {
+      font-size: var(--text-table);
+      line-height: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* The calendar table's own panel, not .totals -- on request. A plain
+       class selector on the host tag works regardless of whatever sb-async
+       wraps its projected content in, unlike a sibling combinator would. */
+    sb-panel.calendar-panel { display: block; margin-top: 20px; }
 
     .grid { display: grid; }
     .week, .weekhead { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
@@ -421,8 +464,12 @@ export class Calendar {
     return Math.abs(this.intensity(cell));
   }
 
-  /** The cell's number, formatted for the metric on show. */
-  protected display(day: CalendarDay): string {
+  /** The cell's number, formatted for the metric on show. "0" for a day
+   *  with no day record at all (never reached the API's `days` array), the
+   *  same reading `cellValue` already gives a day record with
+   *  `trade_count: 0` -- both mean "nothing closed here", not "no data". */
+  protected display(day: CalendarDay | null): string {
+    if (!day) return '0';
     return cellValue(day, this.store.metric()).text || ABSENT;
   }
 

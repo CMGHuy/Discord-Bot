@@ -158,7 +158,7 @@ describe('Calendar grid', () => {
     expect(loss?.classList.contains('neg')).toBe(true);
   });
 
-  it('renders weekend and no-trade cells as inert, and differently', async () => {
+  it('renders the weekend as inert but a quiet trading day as a clickable "0"', async () => {
     const fixture = seed();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -171,8 +171,11 @@ describe('Calendar grid', () => {
     expect(quiet?.classList.contains('weekend')).toBe(false);
     expect(quiet?.classList.contains('pos')).toBe(false);
     expect(quiet?.classList.contains('neg')).toBe(false);
-    // A quiet trading day is not clickable either -- there is nothing to open.
-    expect(quiet?.querySelector('button')).toBeNull();
+    // A quiet trading day IS clickable (2026-09-14): "0" beats a blank cell,
+    // and the drawer already reads correctly for a day with nothing in it.
+    const button = quiet?.querySelector('button');
+    expect(button).not.toBeNull();
+    expect(button?.textContent).toContain('0');
   });
 
   it('offers the strategy and horizon vocabularies from the payload', async () => {

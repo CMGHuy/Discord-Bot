@@ -74,9 +74,15 @@ describe('cellValue', () => {
     expect(cellValue(DAY, 'win_rate')).toEqual({ value: 75, text: '75%', tone: 'neutral' });
   });
 
-  it('keeps no-trade days empty rather than claiming zero performance', () => {
+  it('shows "0" for a no-trade day rather than leaving the cell blank (2026-09-14)', () => {
+    // The 'empty' tone is kept (no pos/neg colour for a day with nothing to
+    // colour), but the text is now the honest, measured "0" -- a blank
+    // trading-day cell reads as a rendering fault, not as "nothing to see".
     for (const metric of ['r', 'currency', 'trades', 'win_rate'] as const) {
-      expect(cellValue({ ...DAY, trade_count: 0, win_rate: null }, metric).tone).toBe('empty');
+      const result = cellValue({ ...DAY, trade_count: 0, win_rate: null }, metric);
+      expect(result.tone).toBe('empty');
+      expect(result.text).toBe('0');
+      expect(result.value).toBe(0);
     }
   });
 });
