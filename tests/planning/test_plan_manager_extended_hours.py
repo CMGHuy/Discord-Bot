@@ -13,11 +13,14 @@ from tests.fake_feed import FakePriceFeed
 from tests.planning.test_plan_engine_model import _plan
 from tests.planning.test_plan_manager_active import _active
 
-# 2026-08-27 is a Thursday; 08-29/08-30 are Saturday/Sunday.
-PREMARKET = dt.datetime(2026, 8, 27, 8, 30, tzinfo=US_MARKET_TZ)
+# 2026-08-27 is a Thursday; 08-29/08-30 are Saturday/Sunday. The quiet window
+# is Berlin-anchored (23:00-08:00 Europe/Berlin, +6h from ET in August), so
+# AFTER_HOURS and QUIET are picked to land on the intended side of that
+# window's Berlin-time boundary, not just outside RTH in ET.
+PREMARKET = dt.datetime(2026, 8, 27, 8, 30, tzinfo=US_MARKET_TZ)     # 14:30 Berlin: not quiet
 RTH = dt.datetime(2026, 8, 27, 12, 0, tzinfo=US_MARKET_TZ)
-AFTER_HOURS = dt.datetime(2026, 8, 27, 19, 30, tzinfo=US_MARKET_TZ)
-QUIET = dt.datetime(2026, 8, 27, 2, 0, tzinfo=US_MARKET_TZ)
+AFTER_HOURS = dt.datetime(2026, 8, 27, 16, 30, tzinfo=US_MARKET_TZ)  # 22:30 Berlin: not quiet
+QUIET = dt.datetime(2026, 8, 27, 0, 30, tzinfo=US_MARKET_TZ)         # 06:30 Berlin: quiet
 SATURDAY = dt.datetime(2026, 8, 29, 12, 0, tzinfo=US_MARKET_TZ)
 
 
@@ -28,8 +31,8 @@ def _v70_defaults(monkeypatch):
     monkeypatch.setattr(config, "INTRADAY_RTH_ONLY", True)
     monkeypatch.setattr(config, "EXTENDED_HOURS_EXIT_CHECK", True)
     monkeypatch.setattr(config, "EXTENDED_HOURS_DEBOUNCE_TICKS", 2)
-    monkeypatch.setattr(config, "QUIET_HOURS_START_ET", 23)
-    monkeypatch.setattr(config, "QUIET_HOURS_END_ET", 8)
+    monkeypatch.setattr(config, "QUIET_HOURS_START_BERLIN", 23)
+    monkeypatch.setattr(config, "QUIET_HOURS_END_BERLIN", 8)
 
 
 def _env(tmp_path, prices=(), plan=None):

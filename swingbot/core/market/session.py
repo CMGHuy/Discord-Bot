@@ -29,6 +29,15 @@ def now_et(now: dt.datetime | None = None) -> dt.datetime:
     return now.astimezone(US_MARKET_TZ)
 
 
+def now_berlin(now: dt.datetime | None = None) -> dt.datetime:
+    """Return ``now`` (or the current moment) as an aware Berlin datetime."""
+    if now is None:
+        return dt.datetime.now(BERLIN_TZ)
+    if now.tzinfo is None:
+        return now.replace(tzinfo=BERLIN_TZ)
+    return now.astimezone(BERLIN_TZ)
+
+
 def is_regular_session(now: dt.datetime | None = None) -> bool:
     """Return whether ``now`` falls in Mon-Fri 09:30 <= t < 16:00 ET."""
     et = now_et(now)
@@ -39,9 +48,16 @@ def is_regular_session(now: dt.datetime | None = None) -> bool:
 
 def is_quiet_hours(now: dt.datetime | None = None) -> bool:
     """Return whether ``now`` falls in the overnight window the v70
-    extended-hours exit check never runs in: ``config.QUIET_HOURS_START_ET``
-    through ``config.QUIET_HOURS_END_ET`` ET, plus every hour of Saturday
-    and Sunday -- a market that is fully shut all weekend.
+    extended-hours exit check never runs in: ``config.QUIET_HOURS_START_BERLIN``
+    through ``config.QUIET_HOURS_END_BERLIN`` Berlin time, plus every hour of
+    Saturday and Sunday (also Berlin-local).
+
+    This is the operator's own overnight window, not a market-hours concept
+    -- deliberately Berlin-anchored (unlike ``is_regular_session``, which is
+    genuinely ET because the NYSE calendar is) so it lines up with when the
+    operator is actually awake to catch a stop/target breach. Since the
+    window (23:00-08:00 Berlin by default) sits entirely outside 09:30-16:00
+    ET on both ends, it never overlaps the regular session either way.
 
     The bounds are read from ``config`` rather than passed in, the same way
     ``plan_manager`` already reads ``config.INTRADAY_RTH_ONLY`` directly.
@@ -50,12 +66,12 @@ def is_quiet_hours(now: dt.datetime | None = None) -> bool:
     off entirely. That is the honest reading of an inverted window, not a
     bug to special-case.
     """
-    et = now_et(now)
-    if et.weekday() >= 5:
+    berlin = now_berlin(now)
+    if berlin.weekday() >= 5:
         return True
-    start = dt.time(config.QUIET_HOURS_START_ET, 0)
-    end = dt.time(config.QUIET_HOURS_END_ET, 0)
-    t = et.time()
+    start = dt.time(config.QUIET_HOURS_START_BERLIN, 0)
+    end = dt.time(config.QUIET_HOURS_END_BERLIN, 0)
+    t = berlin.time()
     return t >= start or t < end
 
 

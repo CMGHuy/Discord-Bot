@@ -59,17 +59,18 @@ def test_intraday_rth_only_defaults_on():
 
 def test_v70_extended_hours_fields_exist_with_documented_defaults():
     """v70: the extended-hours exit check ships on, the quiet window is
-    23:00-08:00 ET, and a breach needs two consecutive polls to confirm."""
+    23:00-08:00 Berlin time (the operator's own clock, not the market's),
+    and a breach needs two consecutive polls to confirm."""
     by_key = {f.key: f for f in config.FIELDS}
 
     assert by_key["EXTENDED_HOURS_EXIT_CHECK"].default == "true"
-    assert by_key["QUIET_HOURS_START_ET"].default == "23"
-    assert by_key["QUIET_HOURS_END_ET"].default == "8"
+    assert by_key["QUIET_HOURS_START_BERLIN"].default == "23"
+    assert by_key["QUIET_HOURS_END_BERLIN"].default == "8"
     assert by_key["EXTENDED_HOURS_DEBOUNCE_TICKS"].default == "2"
 
     assert isinstance(config.EXTENDED_HOURS_EXIT_CHECK, bool)
-    assert isinstance(config.QUIET_HOURS_START_ET, int)
-    assert isinstance(config.QUIET_HOURS_END_ET, int)
+    assert isinstance(config.QUIET_HOURS_START_BERLIN, int)
+    assert isinstance(config.QUIET_HOURS_END_BERLIN, int)
     assert isinstance(config.EXTENDED_HOURS_DEBOUNCE_TICKS, int)
 
     assert by_key["EXTENDED_HOURS_EXIT_CHECK"].section == "Plan Engine v2"

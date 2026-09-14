@@ -203,7 +203,7 @@ Since v70, `PlanManager.poll()` routes a tick three ways:
 
 | Clock (with `INTRADAY_RTH_ONLY` on) | Path | What it may do |
 |---|---|---|
-| Quiet window (`QUIET_HOURS_START_ET`–`QUIET_HOURS_END_ET` ET, all weekend) | none | nothing at all |
+| Quiet window (`QUIET_HOURS_START_BERLIN`–`QUIET_HOURS_END_BERLIN` Berlin time, all weekend Berlin-local) | none | nothing at all |
 | Mon–Fri 09:30–16:00 ET | `_step()` | the whole state machine |
 | Everything else | `_step_extended()` | close a finished plan, nothing else |
 

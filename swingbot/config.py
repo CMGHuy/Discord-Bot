@@ -582,13 +582,15 @@ FIELDS: list[Field] = [
                "break-even arming, TP1 partial-banking or trailing-stop updates outside "
                "regular hours, only a terminal close. Set false to reproduce pre-v70 "
                "behaviour (fully dark outside 09:30-16:00 ET)."),
-    Field("QUIET_HOURS_START_ET", "QUIET_HOURS_START_ET", "Plan Engine v2",
-          "Quiet hours start (ET, 24h)", type="number", default="23", min=0, max=23, step=1,
-          help="No plan monitoring at all from this hour (America/New_York) through "
-               "QUIET_HOURS_END_ET, and none at all on Saturday/Sunday."),
-    Field("QUIET_HOURS_END_ET", "QUIET_HOURS_END_ET", "Plan Engine v2",
-          "Quiet hours end (ET, 24h)", type="number", default="8", min=0, max=23, step=1,
-          help="Extended-hours exit checks resume at this hour (America/New_York)."),
+    Field("QUIET_HOURS_START_BERLIN", "QUIET_HOURS_START_BERLIN", "Plan Engine v2",
+          "Quiet hours start (Berlin time, 24h)", type="number", default="23", min=0, max=23, step=1,
+          help="No plan monitoring at all from this hour (Europe/Berlin) through "
+               "QUIET_HOURS_END_BERLIN, and none at all on Saturday/Sunday (also Berlin-local). "
+               "Deliberately the operator's own clock, not the market's -- see "
+               "is_quiet_hours()'s docstring."),
+    Field("QUIET_HOURS_END_BERLIN", "QUIET_HOURS_END_BERLIN", "Plan Engine v2",
+          "Quiet hours end (Berlin time, 24h)", type="number", default="8", min=0, max=23, step=1,
+          help="Extended-hours exit checks resume at this hour (Europe/Berlin)."),
     Field("EXTENDED_HOURS_DEBOUNCE_TICKS", "EXTENDED_HOURS_DEBOUNCE_TICKS", "Plan Engine v2",
           "Extended-hours confirmation ticks", type="number", default="2", min=1, max=5, step=1,
           help="Consecutive 60s extended-hours polls that must confirm a stop/target breach "
@@ -934,7 +936,7 @@ _SEARCH_CLASSES = {
         "NEAR_TP_STALL_CHECK_MINUTES", "NEAR_TP_STALL_MAX_FLUCTUATION_PCT",
         "OPEX_NEAR_CLOSE_SUPPRESS_MINUTES", "INTRADAY_MANAGER_V2",
         "INTRADAY_RTH_ONLY", "EXTENDED_HOURS_EXIT_CHECK",
-        "QUIET_HOURS_START_ET", "QUIET_HOURS_END_ET",
+        "QUIET_HOURS_START_BERLIN", "QUIET_HOURS_END_BERLIN",
         "EXTENDED_HOURS_DEBOUNCE_TICKS",
     },
     "never": {"SLIPPAGE_BPS", "COMMISSION_PER_TRADE", "COMMISSION_RISK_BASIS"},
