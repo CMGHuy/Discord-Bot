@@ -7,6 +7,18 @@ import { DirectionArrow } from '../../../ui/direction-arrow';
 import { dateTime } from '../../../ui/format';
 import { ActivityEvent } from './activity';
 
+/** The word behind each STATUS_ICON glyph — same five statuses, human
+ *  words instead of icon names ('opened' the glyph reads as "Open" the
+ *  status, not literally the word "opened"). */
+const STATUS_LABEL: Record<string, string> = {
+  PENDING: 'Pending',
+  ACTIVE: 'Open',
+  PARTIAL: 'Partial',
+  CLOSED: 'Closed',
+  CANCELLED: 'Cancelled',
+  EXPIRED: 'Cancelled',
+};
+
 /** What just happened, from the trade records themselves — v85 D15. */
 @Component({
   selector: 'sb-recent-activity',
@@ -20,7 +32,8 @@ import { ActivityEvent } from './activity';
         <ul class="feed">
           @for (event of events(); track event.id) {
             <li [class]="'event ' + event.kind">
-              <sb-icon [name]="icon(event)" />
+              <sb-icon [name]="icon(event)" [title]="statusLabel(event)"
+                       [attr.aria-label]="statusLabel(event)" />
               <sb-direction-arrow [direction]="event.direction" />
               <span class="ticker">{{ event.ticker }}</span>
               <span class="detail">{{ event.detail }}</span>
@@ -48,7 +61,7 @@ import { ActivityEvent } from './activity';
        STATUS_ICON), not a kind-coloured up/down arrow. Colour stays out of
        it so this cannot drift back into implying win/loss, which a plan
        simply having opened or closed is not. */
-    sb-icon { color: var(--text-muted); }
+    sb-icon { color: var(--text-muted); cursor: help; }
     .ticker { font-family: var(--font-mono); color: var(--text); font-weight: 600; }
     .detail { color: var(--text-secondary); }
     .at { color: var(--text-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -66,5 +79,11 @@ export class RecentActivity {
    *  reading of "unrecognised state" is still "something is live". */
   protected icon(event: ActivityEvent): IconName {
     return STATUS_ICON[event.status.toUpperCase()] ?? 'opened';
+  }
+
+  /** Matches `icon()`'s own fallback -- an unrecognised status still gets
+   *  a word, not an empty tooltip. */
+  protected statusLabel(event: ActivityEvent): string {
+    return STATUS_LABEL[event.status.toUpperCase()] ?? 'Open';
   }
 }

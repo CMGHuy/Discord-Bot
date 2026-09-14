@@ -69,6 +69,15 @@ describe('recent activity panel', () => {
     );
   });
 
+  it('gives the status icon a tooltip and accessible name', () => {
+    const el = render({ events: [
+      { kind: 'opened', at: '2026-09-11T15:00:00Z', ticker: 'A', direction: null, status: 'PARTIAL', detail: '', id: '1' },
+    ]});
+    const icon = el.querySelector('sb-icon')!;
+    expect(icon.getAttribute('title')).toBe('Partial');
+    expect(icon.getAttribute('aria-label')).toBe('Partial');
+  });
+
   it('says so when there is nothing yet rather than rendering an empty box', () => {
     const el = render({ events: [] });
     expect(el.textContent).toContain('No activity yet');
