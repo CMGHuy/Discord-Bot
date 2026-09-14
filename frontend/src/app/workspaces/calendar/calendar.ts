@@ -297,14 +297,52 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     /* Reaches inside sb-metric-card/sb-stat-tile's own encapsulated
        styles -- this component's scoped styles cannot select their
        internals otherwise (same reasoning as analytics.ts's own
-       ::ng-deep use on DataTable rows). Fixed height above clips a card
-       whose content would otherwise grow past it; shrinking the value
-       text here is what keeps a longer number legible INSIDE that fixed
-       height instead of just clipping it. */
+       ::ng-deep use on DataTable rows).
+
+       No backticks in here: these comments live in a TS template literal.
+       sb-stat-tile's OWN stylesheet never sets a :host display rule, so
+       unstyled it defaults to display:inline -- and an inline box ignores
+       height/overflow for clipping purposes. The first fix here
+       (2026-09-14) set height+overflow on the host WITHOUT first forcing
+       it out of inline, so it silently did nothing: overflowing tile
+       content (three stacked lines -- label, value, the N= sample --
+       taller than the fixed row) spilled out of its cell and read as
+       "Average day"/"Best day" overlapping the row below. sb-metric-card
+       already sets display:block on its own :host, which is why ONLY the
+       stat-tiles (Month total/Winning days/Average day/Best day/Worst
+       day), never the metric-cards, showed this. */
     :host ::ng-deep .totals sb-metric-card,
-    :host ::ng-deep .totals sb-stat-tile { height: 100%; overflow: hidden; }
-    :host ::ng-deep .totals sb-metric-card .card,
-    :host ::ng-deep .totals sb-stat-tile .tile { height: 100%; box-sizing: border-box; justify-content: center; }
+    :host ::ng-deep .totals sb-stat-tile { display: block; height: 100%; overflow: hidden; }
+    :host ::ng-deep .totals sb-metric-card .card {
+      height: 100%; box-sizing: border-box; justify-content: center;
+    }
+    /* The real fix, not just clipping: a wide, short cell has the width to
+       put label/value/sample on ONE row instead of stacking three -- so
+       do that, rather than cram three lines into a box too short for
+       them. .tile's own column layout (stat-tile.ts) is for contexts
+       with real vertical room; this one does not have it, so it borrows
+       the width sb-metric-card's own .card doesn't need instead. */
+    :host ::ng-deep .totals sb-stat-tile .tile {
+      height: 100%;
+      box-sizing: border-box;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: center;
+      gap: var(--space-6);
+    }
+    :host ::ng-deep .totals sb-stat-tile .label {
+      flex: 0 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    :host ::ng-deep .totals sb-stat-tile .value,
+    :host ::ng-deep .totals sb-stat-tile .sample {
+      flex: none;
+      white-space: nowrap;
+    }
     :host ::ng-deep .totals sb-metric-card .value,
     :host ::ng-deep .totals sb-stat-tile .value {
       font-size: var(--text-table);
