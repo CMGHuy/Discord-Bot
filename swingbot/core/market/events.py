@@ -173,7 +173,7 @@ def _fetch_next_earnings_datetime(ticker: str) -> dt.datetime | None:
     return None
 
 
-def get_earnings_datetimes(ticker: str) -> list[dt.datetime]:
+def get_earnings_datetimes(ticker: str, *, refresh: bool = False) -> list[dt.datetime]:
     """Return Yahoo's recent and upcoming earnings timestamps, ascending.
 
     Unlike the display-only singular lookup, this preserves a before-open
@@ -183,7 +183,7 @@ def get_earnings_datetimes(ticker: str) -> list[dt.datetime]:
         return []
     key, now_monotonic = ticker.upper().strip(), time.monotonic()
     cached = _earnings_datetimes_cache.get(key)
-    if cached and now_monotonic - cached[1] < _EARNINGS_DATETIME_CACHE_TTL_SECONDS:
+    if not refresh and cached and now_monotonic - cached[1] < _EARNINGS_DATETIME_CACHE_TTL_SECONDS:
         return list(cached[0])
     result: list[dt.datetime] = []
     for candidate in candidate_symbols(ticker):
@@ -196,6 +196,13 @@ def get_earnings_datetimes(ticker: str) -> list[dt.datetime]:
             result = sorted(ts.to_pydatetime() for ts in frame.index)
             break
     _earnings_datetimes_cache[key] = (result, now_monotonic)
+    # A forced weekly refresh also warms the singular display cache consumed
+    # by the Watchlist API, so the next page response immediately shows the
+    # refreshed upcoming date instead of scheduling a second Yahoo request.
+    if refresh:
+        now = dt.datetime.now(dt.timezone.utc)
+        upcoming = [value for value in result if value >= now]
+        _earnings_datetime_cache[key] = (min(upcoming) if upcoming else None, now_monotonic)
     return list(result)
 
 

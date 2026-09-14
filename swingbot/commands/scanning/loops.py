@@ -601,6 +601,7 @@ async def _trade_monitor_error(exc: Exception):
 
 _recap_fired_date: dt.date | None = None   # process-local fast path; persisted below for restart safety
 _weekend_scan_fired_date: dt.date | None = None
+_earnings_refresh_fired_date: dt.date | None = None
 
 
 def _scheduled_jobs_path() -> str:
@@ -691,6 +692,31 @@ async def weekend_deep_scan_task():
         await recap.weekend_deep_scan()
     except Exception:
         log.exception("weekend_deep_scan_task: deep scan failed")
+
+
+@tasks.loop(minutes=1)
+async def weekly_earnings_refresh():
+    """Refresh the watchlist earnings ledger every Saturday at 03:00 Berlin.
+
+    The persisted scheduler marker makes a restart at 03:01 safe: it cannot
+    produce a second provider sweep or duplicate historical entries.
+    """
+    global _earnings_refresh_fired_date
+    now = dt.datetime.now(SESSION_TZ)
+    if now.weekday() != 5 or now.hour != 3 or now.minute != 0:
+        return
+    today = now.date()
+    if _earnings_refresh_fired_date == today or _scheduled_job_already_fired('weekly_earnings_refresh', today):
+        return
+
+    _earnings_refresh_fired_date = today
+    _mark_scheduled_job_fired('weekly_earnings_refresh', today)
+    try:
+        from swingbot.core.market.earnings_history import refresh_watchlist_earnings
+        snapshot = await asyncio.to_thread(refresh_watchlist_earnings, load_watchlist())
+        log.info("weekly_earnings_refresh: updated %d watchlist earnings entries", len(snapshot["symbols"]))
+    except Exception:
+        log.exception("weekly_earnings_refresh: refresh failed")
 
 @tasks.loop(minutes=config.MARKET_DATA_REFRESH_MINUTES)
 async def market_data_refresh():
@@ -828,6 +854,8 @@ async def on_ready():
         daily_recap.start()
     if not weekend_deep_scan_task.is_running():
         weekend_deep_scan_task.start()
+    if not weekly_earnings_refresh.is_running():
+        weekly_earnings_refresh.start()
     if config.MARKET_DATA_AUTO_REFRESH and not market_data_refresh.is_running():
         market_data_refresh.start()
     await presence._refresh_presence()

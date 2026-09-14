@@ -38,3 +38,30 @@ def test_daily_recap_does_not_refire_after_simulated_restart(monkeypatch, tmp_pa
     assert read_json(str(tmp_path / "scheduled_jobs.json"), {}) == {
         "daily_recap": "2026-08-24"
     }
+
+
+def test_weekly_earnings_refresh_runs_once_at_saturday_3am(monkeypatch, tmp_path):
+    now = dt.datetime(2026, 8, 22, 3, 0)  # Saturday.
+
+    class FixedDateTime:
+        @classmethod
+        def now(cls, tz=None):
+            return now.replace(tzinfo=tz)
+
+    calls = []
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(loops_mod.dt, "datetime", FixedDateTime)
+    monkeypatch.setattr(loops_mod, "load_watchlist", lambda: ["AAPL"])
+    monkeypatch.setattr(loops_mod, "_earnings_refresh_fired_date", None)
+    monkeypatch.setattr(
+        "swingbot.core.market.earnings_history.refresh_watchlist_earnings",
+        lambda symbols: calls.append(symbols) or {"symbols": {"AAPL": {}}},
+    )
+
+    asyncio.run(scanning_mod.weekly_earnings_refresh.coro())
+    asyncio.run(scanning_mod.weekly_earnings_refresh.coro())
+
+    assert calls == [["AAPL"]]
+    assert read_json(str(tmp_path / "scheduled_jobs.json"), {}) == {
+        "weekly_earnings_refresh": "2026-08-22"
+    }

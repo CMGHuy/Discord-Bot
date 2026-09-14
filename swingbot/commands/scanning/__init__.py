@@ -16,6 +16,7 @@ from .loops import (
     on_ready,
     session_scan,
     trade_monitor,
+    weekly_earnings_refresh,
     weekend_deep_scan_task,
 )
 from .recap import weekend_deep_scan
@@ -29,5 +30,5 @@ __all__ = [
     "_ordered_alerts", "digest_payload", "cap_alerts", "route_channel_id",
     "deep_scan_report", "_send_alerts", "check_cmd", "weekend_deep_scan",
     "session_scan", "heartbeat", "config_watcher", "trade_monitor",
-    "daily_recap", "weekend_deep_scan_task", "market_data_refresh", "on_ready",
+    "daily_recap", "weekend_deep_scan_task", "weekly_earnings_refresh", "market_data_refresh", "on_ready",
 ]
