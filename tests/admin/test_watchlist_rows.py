@@ -83,6 +83,20 @@ def test_an_intraday_quote_overrides_the_close_while_the_market_is_open(bars, mo
     assert build_market_rows(["AAPL"])["AAPL"]["price"] == pytest.approx(173.25)
 
 
+def test_as_of_names_today_when_the_price_is_the_live_overlay(bars, monkeypatch):
+    """The price/as_of pair travels together (module docstring): once price
+    is the live intraday quote rather than the cached close, as_of must say
+    so too, or a mid-day tick reads as stamped with a stale prior close."""
+    bars["AAPL"] = _frame([100.0] * 26, start="2026-01-01")  # last close: late Jan
+    monkeypatch.setattr("swingbot.admin.watchlist_rows.is_us_market_active", lambda: True)
+    monkeypatch.setattr(
+        "swingbot.admin.watchlist_rows.get_current_price_batch", lambda t: {"AAPL": 173.25}
+    )
+    monkeypatch.setattr("swingbot.admin.watchlist_rows.session_date", lambda: "2026-09-14")
+    row = build_market_rows(["AAPL"])["AAPL"]
+    assert row["as_of"] == "2026-09-14"
+
+
 def test_an_empty_watchlist_makes_no_batch_call(bars, monkeypatch):
     called = []
     monkeypatch.setattr(

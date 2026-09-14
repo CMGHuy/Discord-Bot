@@ -23,6 +23,7 @@ from __future__ import annotations
 import pandas as pd
 
 from swingbot import config
+from swingbot.core.market.session import session_date
 from swingbot.core.marketdata import data_refresh, data_store
 from swingbot.core.marketdata.data import (
     get_current_price_batch,
@@ -133,8 +134,14 @@ def build_market_rows(tickers: list[str]) -> dict[str, dict]:
             continue
 
         row = _empty_row()
-        row["price"] = round(float(live.get(symbol) or closes.iloc[-1]), 4)
-        row["as_of"] = str(pd.Timestamp(closes.index[-1]).date())
+        live_price = live.get(symbol)
+        has_live = live_price is not None
+        row["price"] = round(float(live_price if has_live else closes.iloc[-1]), 4)
+        # as_of names the bar the PRICE came from (module docstring) -- when
+        # price is the live intraday overlay rather than the cached close,
+        # the bar date must say so too, or a mid-day tick reads as stamped
+        # with yesterday's close (the daily cache often hasn't rolled yet).
+        row["as_of"] = session_date() if has_live else str(pd.Timestamp(closes.index[-1]).date())
         for field, back in _WINDOWS.items():
             row[field] = _pct_change(closes, back)
         row["spark"] = [round(float(v), 4) for v in closes.iloc[-_SPARK_BARS:]]
