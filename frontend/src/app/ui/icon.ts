@@ -37,6 +37,9 @@ export const ICON_NAMES = [
   'more',
   'opened',
   'closed',
+  'pending',
+  'partial',
+  'cancelled',
   'brand',
   'reports',
 ] as const;
@@ -81,6 +84,14 @@ const PATHS: Record<IconName, string> = {
   opened: 'M2 13.5h12 M8 11V3 M5 6l3-3 3 3',
   // An arrow arriving at a baseline: a position closing.
   closed: 'M2 13.5h12 M8 3v8 M5 8l3 3 3-3',
+  // An hourglass: waiting for the entry trigger, nothing has happened yet.
+  pending: 'M4 2h8 M4 14h8 M4.5 2.5 8 8l3.5-5.5 M4.5 13.5 8 8l3.5 5.5',
+  // A ring cut exactly in half: TP1 banked, the runner still live -- the
+  // same halfway reading `sb-status`'s partial marker gives, as a glyph.
+  partial: 'M8 14.5A6.5 6.5 0 1 0 8 1.5a6.5 6.5 0 0 0 0 13z M8 1.5v13',
+  // A plain cross: the universal cancel/void mark, distinct from `closed`'s
+  // arrow so a plan that never filled cannot be misread as one that did.
+  cancelled: 'M4.5 4.5l7 7 M11.5 4.5l-7 7',
   // A diamond: the sidebar brand mark, replacing the raster logo (D3,
   // finding 16) with a shape that inherits currentColor and holds at 24px.
   brand: 'M8 1.5 14 8 8 14.5 1.5 8z',

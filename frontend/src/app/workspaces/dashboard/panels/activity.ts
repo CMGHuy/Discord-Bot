@@ -1,10 +1,16 @@
 import { TradeRow } from '../../../api/models';
+import { num } from '../../../ui/format';
 
 export interface ActivityEvent {
   kind: 'opened' | 'closed' | 'cancelled';
   /** ISO instant. Never synthesised — a row with no timestamp is skipped. */
   at: string;
   ticker: string;
+  /** Long/short, rendered as the same `sb-direction-arrow` triangle the
+   *  Confidence column uses — never baked into `detail` as the word
+   *  "Long"/"Short", so the two stay visually consistent by construction
+   *  rather than by two separate strings agreeing. */
+  direction: string | null;
   detail: string;
   /** Stable across refetches, so the list does not re-animate: one row can
    *  produce two events, so the row id alone would not be unique. */
@@ -36,6 +42,7 @@ export function deriveActivity(
         kind: cancelled ? 'cancelled' : 'closed',
         at: row.closed_at,
         ticker,
+        direction: row.direction ?? null,
         detail: cancelled
           ? 'Plan cancelled before filling'
           : `Closed${row.r_multiple != null ? ` at ${row.r_multiple > 0 ? '+' : ''}${row.r_multiple.toFixed(2)}R` : ''}`,
@@ -48,7 +55,8 @@ export function deriveActivity(
         kind: 'opened',
         at: row.opened_at,
         ticker,
-        detail: `${row.direction === 'bearish' ? 'Short' : 'Long'}${row.entry != null ? ` at ${row.entry}` : ''}`,
+        direction: row.direction ?? null,
+        detail: row.entry != null ? `at ${num(row.entry)}` : '',
         id: `${row.id}:opened`,
       });
     }

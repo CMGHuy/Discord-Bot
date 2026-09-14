@@ -2,15 +2,25 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { Panel } from '../../../ui/layout';
-import { Icon } from '../../../ui/icon';
+import { Icon, IconName } from '../../../ui/icon';
+import { DirectionArrow } from '../../../ui/direction-arrow';
 import { dateTime } from '../../../ui/format';
 import { ActivityEvent } from './activity';
+
+/** One icon per event kind, shared with the Open Positions panel's status
+ *  icons (`status-cell.ts`) so the two panels read as one vocabulary rather
+ *  than each inventing its own. */
+const KIND_ICON: Record<ActivityEvent['kind'], IconName> = {
+  opened: 'opened',
+  closed: 'closed',
+  cancelled: 'cancelled',
+};
 
 /** What just happened, from the trade records themselves — v85 D15. */
 @Component({
   selector: 'sb-recent-activity',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Icon, RouterLink],
+  imports: [Panel, Icon, DirectionArrow, RouterLink],
   template: `
     <sb-panel heading="Recent activity">
       <a panel-actions class="all-link" routerLink="/trades">View all</a>
@@ -19,7 +29,8 @@ import { ActivityEvent } from './activity';
         <ul class="feed">
           @for (event of events(); track event.id) {
             <li [class]="'event ' + event.kind">
-              <sb-icon [name]="event.kind === 'opened' ? 'opened' : 'closed'" />
+              <sb-icon [name]="icon(event)" />
+              <sb-direction-arrow [direction]="event.direction" />
               <span class="ticker">{{ event.ticker }}</span>
               <span class="detail">{{ event.detail }}</span>
               <time class="at" [attr.datetime]="event.at">{{ fmt(event.at) }}</time>
@@ -36,7 +47,7 @@ import { ActivityEvent } from './activity';
     .feed { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-8); }
     .event {
       display: grid;
-      grid-template-columns: auto auto 1fr auto;
+      grid-template-columns: auto auto auto 1fr auto;
       align-items: baseline;
       gap: var(--space-8);
       font-size: var(--text-table);
@@ -57,4 +68,7 @@ import { ActivityEvent } from './activity';
 export class RecentActivity {
   readonly events = input<readonly ActivityEvent[]>([]);
   protected fmt = dateTime;
+  protected icon(event: ActivityEvent): IconName {
+    return KIND_ICON[event.kind];
+  }
 }

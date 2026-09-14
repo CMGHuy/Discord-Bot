@@ -1,6 +1,22 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
+import { Icon, IconName } from './icon';
 import { StatusIndicator } from './status-indicator';
+
+/** One icon per lifecycle status, shared with the Recent Activity panel
+ *  (`recent-activity.ts`'s `KIND_ICON`) so the two panels read as one
+ *  vocabulary. ACTIVE reuses `opened` (a position that IS open) and CLOSED
+ *  reuses `closed` (the arrow-into/out-of-baseline pair already means
+ *  exactly that); EXPIRED reads as `cancelled` -- a plan that never filled
+ *  either way. */
+const STATUS_ICON: Record<string, IconName> = {
+  PENDING: 'pending',
+  ACTIVE: 'opened',
+  PARTIAL: 'partial',
+  CLOSED: 'closed',
+  CANCELLED: 'cancelled',
+  EXPIRED: 'cancelled',
+};
 
 /**
  * Statuses that have no position by nature — nothing has opened, or it is
@@ -47,10 +63,11 @@ export interface StatusCellRow {
 @Component({
   selector: 'sb-status-cell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [StatusIndicator],
+  imports: [Icon, StatusIndicator],
   template: `
     @if (bar(); as b) {
       <span class="cell">
+        <sb-icon [name]="icon()" />
         <span
           class="dot"
           [class]="b.band"
@@ -76,6 +93,7 @@ export interface StatusCellRow {
       </span>
     } @else {
       <span class="cell">
+        <sb-icon [name]="icon()" />
         <sb-status-indicator [status]="row().status" />
         @if (hint(); as h) {
           <span class="hint">{{ h }}</span>
@@ -85,6 +103,8 @@ export interface StatusCellRow {
   `,
   styles: `
     .cell { display: inline-flex; align-items: center; gap: var(--space-6); }
+    /* Same colour-carries-the-kind rule as Recent Activity's icons. */
+    sb-icon { color: var(--text-muted); flex: none; }
 
     .track {
       position: relative;
@@ -169,5 +189,12 @@ export class StatusCell {
    */
   protected readonly hint = computed(() =>
     NO_POSITION_YET.has(this.row().status) ? null : 'no price',
+  );
+
+  /** Falls back to `opened` for any status outside the five known ones,
+   *  rather than rendering nothing -- a row IS a plan, and the closest
+   *  reading of "unrecognised state" is still "something is live". */
+  protected readonly icon = computed<IconName>(() =>
+    STATUS_ICON[this.row().status.toUpperCase()] ?? 'opened',
   );
 }
