@@ -687,7 +687,13 @@ export class Trades {
   protected onPerPage(value: number): void {
     this.perPage.set(value);
     this.preferences.update((prefs) => writeTablePerPage(prefs, TRADES_TABLE_ID, value));
-    this.navigate({ page: null });
+    // `per_page` must land in the URL, not just the local signal/prefs: this
+    // route is server-paginated via a resolver (trades.routes.ts's
+    // queryFor()) that reads `per_page` straight from the query params on
+    // every navigation, `runGuardsAndResolvers: 'always'` included -- so
+    // the very navigate() call below used to stomp this choice back to the
+    // URL-less default on its own next run (2026-09-14 fix).
+    this.navigate({ per_page: value });
   }
 
   protected readonly pending = signal<PendingAction>(null);
