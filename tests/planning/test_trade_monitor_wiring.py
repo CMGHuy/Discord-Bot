@@ -40,7 +40,7 @@ def test_flag_on_polls_open_plans(tmp_path, monkeypatch):
     pm._MANAGER = None
     from swingbot.core.planning.plan_store import PlanStore
     from tests.planning.test_plan_manager_pending import _pending
-    PlanStore().add(_pending())
+    PlanStore().add(_pending(stop_loss=104.0))
     monkeypatch.setattr(pm, "_price_fn", lambda t: 106.0)   # injectable feed
     # Fresh plan: no bars have elapsed, so expiry is not what is under test.
     monkeypatch.setattr(pm, "_bars_since", lambda ticker, created_at: 0)

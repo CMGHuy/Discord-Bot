@@ -14,13 +14,13 @@ def test_full_lifecycle_writes_two_leg_win(tmp_path):
     feed = FakePriceFeed()
     feed.set_series("AAPL", [
         106.0,    # fill (trigger 105)
-        116.0,    # tp1 partial (tp1 110 -> touched; entry 106, stop 95)
+        116.0,    # tp1 partial (tp1 110 -> touched; entry 106, stop 104)
         140.0,    # runner ratchets trail well above entry
         118.0,    # pierces trail -> tp1_runner_trail close
     ])
     store = PlanStore(path=str(tmp_path / "plans.json"))
     log = TradeLog(path=str(tmp_path / "trades.json"))
-    store.add(_pending(tp1=110.0, tp2=None))
+    store.add(_pending(stop_loss=104.0, tp1=110.0, tp2=None))
     mgr = PlanManager(store, feed.get_price, atr_fn=lambda t: 2.0,
                       trade_log=log)
 

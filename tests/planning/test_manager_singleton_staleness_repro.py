@@ -108,7 +108,7 @@ def test_legacy_trade_logged_between_ticks_is_not_erased_from_disk(tmp_path, mon
     # Tick 1: "old" fills -- constructs _MANAGER, and its OWN trade_log logs
     # the resulting trade (trades.json now has exactly this one row).
     PlanStore().add(_pending(plan_id="old", ticker="AAPL", trigger_price=105.0,
-                              tp1=110.0, tp1_fraction=0.5))
+                              stop_loss=104.0, tp1=110.0, tp1_fraction=0.5))
     events = pm.run_manager_tick()
     assert [e.transition for e in events] == ["filled"]
 

@@ -15,7 +15,7 @@ def _pending(**kw):
     # base-dict-then-update (same idiom _plan() itself uses) so an explicit
     # override of any of these defaults doesn't collide as a duplicate kwarg.
     base = dict(entry_type="stop_entry", direction="bullish",
-               trigger_price=105.0, stop_loss=104.0, tp1=110.0, expiry_bars=5)
+               trigger_price=105.0, stop_loss=95.0, tp1=110.0, expiry_bars=5)
     base.update(kw)
     return _plan(**base)
 
@@ -28,7 +28,7 @@ def _mgr(tmp_path, feed, **kw):
 def test_pending_fills_when_price_crosses_trigger(tmp_path):
     feed = FakePriceFeed([("AAPL", 106.0)])
     store, mgr = _mgr(tmp_path, feed)
-    store.add(_pending())
+    store.add(_pending(stop_loss=104.0))
     events = mgr.poll()
     assert [e.transition for e in events] == ["filled"]
     p = store.get("p1")
@@ -50,7 +50,7 @@ def test_pending_over_the_risk_cap_cancels_instead_of_filling(tmp_path):
 
 
 def test_pending_below_trigger_no_event(tmp_path):
-    feed = FakePriceFeed([("AAPL", 104.5)])
+    feed = FakePriceFeed([("AAPL", 104.0)])
     store, mgr = _mgr(tmp_path, feed)
     store.add(_pending())
     assert mgr.poll() == []
@@ -77,7 +77,7 @@ def test_pending_expires_past_expiry_bars(tmp_path):
 
 
 def test_pending_at_exactly_expiry_bars_still_live(tmp_path):
-    feed = FakePriceFeed([("AAPL", 104.5)])
+    feed = FakePriceFeed([("AAPL", 100.0)])
     store = PlanStore(path=str(tmp_path / "plans.json"))
     store.add(_pending(expiry_bars=5))
     mgr = PlanManager(store, feed.get_price, bar_count_fn=lambda t, created: 5)
@@ -85,7 +85,7 @@ def test_pending_at_exactly_expiry_bars_still_live(tmp_path):
 
 
 def test_no_bar_count_fn_means_no_expiry(tmp_path):
-    feed = FakePriceFeed([("AAPL", 104.5)])
+    feed = FakePriceFeed([("AAPL", 100.0)])
     store = PlanStore(path=str(tmp_path / "plans.json"))
     store.add(_pending())
     assert PlanManager(store, feed.get_price).poll() == []
@@ -94,7 +94,7 @@ def test_no_bar_count_fn_means_no_expiry(tmp_path):
 def test_pending_invalidates_when_price_breaks_stop(tmp_path):
     feed = FakePriceFeed([("AAPL", 94.0)])        # below stop 95, trigger never hit
     store, mgr = _mgr(tmp_path, feed)
-    store.add(_pending())
+    store.add(_pending(stop_loss=104.0))
     events = mgr.poll()
     assert [e.transition for e in events] == ["cancelled_invalidated"]
     assert store.get("p1").status == PlanStatus.CANCELLED
@@ -152,11 +152,11 @@ def test_fill_updates_the_scan_time_placeholder_not_a_second_trade(tmp_path, mon
     trade_log.log_trade(
         ticker="AAPL", strategy="Fibonacci", horizon_key="4w",
         direction="bullish", confidence_level=None, confidence_label=None,
-        entry=105.0, stop_loss=95.0, take_profit=110.0, plan_id="p1")
+        entry=105.0, stop_loss=104.0, take_profit=110.0, plan_id="p1")
 
     feed = FakePriceFeed([("AAPL", 106.0)])
     store = PlanStore(path=str(tmp_path / "plans.json"))
-    store.add(_pending())
+    store.add(_pending(stop_loss=104.0))
     mgr = PlanManager(store, feed.get_price, trade_log=trade_log)
 
     events = mgr.poll()
@@ -187,7 +187,7 @@ def test_fill_still_logs_a_trade_when_no_placeholder_exists(tmp_path, monkeypatc
 
     feed = FakePriceFeed([("AAPL", 106.0)])
     store = PlanStore(path=str(tmp_path / "plans.json"))
-    store.add(_pending())
+    store.add(_pending(stop_loss=104.0))
     mgr = PlanManager(store, feed.get_price, trade_log=trade_log)
 
     events = mgr.poll()

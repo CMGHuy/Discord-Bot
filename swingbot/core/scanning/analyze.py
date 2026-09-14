@@ -31,7 +31,6 @@ from swingbot.core.planning.plan_engine import build_confluence_plan, primary_st
 from swingbot.core.planning.quality import atr_percentile as _atr_percentile
 
 from . import runstate
-from swingbot.core.risk_limits import capped_planned_loss_pct
 from .confidence import score_confidence
 from .embeds import _build_requirement_checks
 from .regime import get_htf_bias
@@ -646,10 +645,12 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
         # scaling (performance.py's check_near_tp_timeout) and the
         # confidence/expectancy gate are the other levers actually worth
         # revisiting -- this min-reward floor is close to its practical
-        # floor already. A longer horizon may justify a wider target, never
-        # a wider planned loss from entry to the initial stop.
+        # floor already. The activation guard in PlanManager is the
+        # non-bypassable live execution boundary for planned loss; preserve
+        # the horizon's scenario ceiling here so scan and historical replay
+        # continue to evaluate the same candidates.
         effective_min_reward = max(hard_filters["min_reward_pct"], h.get("sr_target_min_pct", hard_filters["min_reward_pct"]) * 0.15)
-        effective_max_stop = capped_planned_loss_pct(hard_filters["max_stop_loss_pct"])
+        effective_max_stop = max(hard_filters["max_stop_loss_pct"], h.get("max_risk_pct", hard_filters["max_stop_loss_pct"]))
         scenarios = levels.build_scenarios(current_price, supports, resistances, effective_min_reward,
                                             atr_floor=floor_pct, min_stop_distance_pct=hard_filters["min_stop_distance_pct"],
                                             max_stop_distance_pct=effective_max_stop,
