@@ -19,6 +19,13 @@ BERLIN_TZ = ZoneInfo("Europe/Berlin")
 RTH_OPEN = dt.time(9, 30)
 RTH_CLOSE = dt.time(16, 0)
 
+# The full US tape, premarket through after-hours. Wider than RTH, and
+# NOT the same question: RTH asks "is the regular session running", this
+# asks "is there a live tape at all, such that a quote reflects something
+# that actually just traded".
+TAPE_OPEN = dt.time(4, 0)
+TAPE_CLOSE = dt.time(20, 0)
+
 
 def now_et(now: dt.datetime | None = None) -> dt.datetime:
     """Return ``now`` (or the current moment) as an aware ET datetime."""
@@ -44,6 +51,31 @@ def is_regular_session(now: dt.datetime | None = None) -> bool:
     if et.weekday() >= 5:
         return False
     return RTH_OPEN <= et.time() < RTH_CLOSE
+
+
+def is_tape_open(now: dt.datetime | None = None) -> bool:
+    """Return whether a live US tape exists at ``now`` -- Mon-Fri
+    04:00 <= t < 20:00 ET, excluding NYSE full-day closures.
+
+    The question this answers is "would a quote taken right now reflect a
+    trade that actually just happened?", which is NOT the same as
+    `is_regular_session` (narrower: the regular session only) nor the
+    inverse of `is_quiet_hours` (wider, and anchored to the operator's
+    Berlin clock rather than to the market at all).
+
+    It exists because those two are not interchangeable and one caller
+    learned that expensively (2026-09-14): the plan manager's poll window
+    became "not quiet hours", which in Berlin terms starts 08:00 -- 02:00
+    ET, two hours before any tape exists. `get_current_price` uses
+    `prepost=True` and happily returns YESTERDAY's last after-hours print
+    at 02:00 ET, with no way for the caller to tell it apart from a live
+    one. Anything that records "this is what the tape was doing" has to
+    ask this, not the poll window.
+    """
+    et = now_et(now)
+    if et.weekday() >= 5 or et.date() in NYSE_HOLIDAYS:
+        return False
+    return TAPE_OPEN <= et.time() < TAPE_CLOSE
 
 
 def is_quiet_hours(now: dt.datetime | None = None) -> bool:

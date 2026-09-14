@@ -30,6 +30,8 @@ exports/
 market_data/
 data/backtest_cache/
 data/backups/
+# Runtime relative-strength cache, rebuilt from the configured universe.
+data/universe/rs_cache.json
 
 # ==========================================================================
 # TRAIN/VALIDATION scratch dumps -- numbers are reconciled in prose in each

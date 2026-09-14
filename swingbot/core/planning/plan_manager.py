@@ -13,7 +13,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from swingbot import config
-from swingbot.core.market.session import is_quiet_hours, session_date
+from swingbot.core.market.session import (is_quiet_hours, is_tape_open,
+                                          session_date)
 from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
                                        chandelier_stop, pending_expired,
                                        pending_invalidated, record_transition,
@@ -133,48 +134,35 @@ class PlanManager:
         self.atr_fn = atr_fn                # ticker -> current ATR(14) (Task 66)
         self.trade_log = trade_log          # TradeLog (Task 70)
         self._last_seen: dict[str, tuple[str, float]] = {}
-        # v70: plan_id -> (breach kind, consecutive confirming extended-hours
-        # ticks). In-memory only, for the same reason _last_seen is: persisting
-        # it would turn every 60s poll into a disk write where only a
-        # transition writes today. A restart empties it, so the first tick
-        # after a restart always needs a fresh confirmation -- the
-        # conservative direction.
-        self._eh_breach_streak: dict[str, tuple[str, int]] = {}
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
     def poll(self, now=None) -> list[PlanEvent]:
-        # Two-way gate (widened 2026-09-14, on direct request). Through
-        # v70, "regular" meant true NYSE RTH (09:30-16:00 ET) and anything
-        # outside it but outside the quiet window got only a narrow,
-        # debounced _step_extended() -- terminal closes and (2026-09-14,
-        # briefly) pending-entry fills, never break-even arming, TP1
-        # partial-banking, the chandelier ratchet or pyramiding. That
-        # narrowness existed to avoid "Divergence B" (see
+        # One gate, and only one (2026-09-14, on direct request): the
+        # operator's quiet window. Outside it, the FULL state machine runs
+        # on every tick -- break-even arming, TP1 partial-banking, the
+        # chandelier ratchet, pyramiding, entry fills, closes -- with no
+        # narrower extended-hours mode in between.
+        #
+        # Through v70 there WAS such a mode: anything outside true NYSE RTH
+        # got a debounced, terminal-closes-only `_step_extended`, which
+        # existed to avoid "Divergence B" (see
         # docs/superpowers/specs/implemented/2026-09-03-v70-extended-hours-exit-check-design.md
-        # SS1.2): a single thin extended-hours print once armed break-even
+        # SS1.2) -- a single thin extended-hours print once armed break-even
         # permanently or closed a position outright, on a print the
-        # daily-bar backtest never modeled. The operator explicitly asked
-        # for the FULL machine across the whole Berlin-local active window
-        # instead, accepting that risk -- so "regular" now means simply
-        # "not quiet hours", and _step() (the whole state machine, single
-        # tick, no debounce) runs for all of it. _step_extended() and its
-        # debounce streak are consequently unreachable in normal
-        # (INTRADAY_RTH_ONLY on) operation; left in place rather than torn
-        # out in the same change that stopped calling it -- a follow-up
-        # should remove it and its now-purely-direct-call test suite
-        # (tests/planning/test_plan_manager_extended_hours.py) properly.
+        # daily-bar backtest never modeled. The operator was shown that
+        # incident and chose the full machine across the whole Berlin-local
+        # window anyway, so that mode and its debounce are gone rather than
+        # left sitting unreachable.
+        #
+        # What did NOT come with it: the claim that every tick in this
+        # window is a live tape print. See `is_tape_open` below.
         #
         # INTRADAY_RTH_ONLY=false is still the documented pre-v64 escape
-        # hatch -- full _step() every tick, round the clock, no quiet-hours
-        # gate either.
-        if config.INTRADAY_RTH_ONLY:
-            if is_quiet_hours(now):
-                return []
-            regular = True
-        else:
-            regular = True
+        # hatch -- every tick, round the clock, no quiet-hours gate either.
+        if config.INTRADAY_RTH_ONLY and is_quiet_hours(now):
+            return []
         # `self.store` (and `self.trade_log`) can be long-lived instances --
         # the module singleton `_MANAGER` below keeps both for the
         # process's whole life -- so reload each from disk first. Otherwise
@@ -208,19 +196,28 @@ class PlanManager:
                     PlanStatus.PENDING, PlanStatus.ACTIVE, PlanStatus.PARTIAL):
                 continue
             try:
-                new_events = (self._step(plan, price, now) if regular
-                              else self._step_extended(plan, price, now))
+                new_events = self._step(plan, price, now)
             except Exception:
                 log.warning("poll: step failed for plan %s", plan.plan_id,
                             exc_info=True)
                 continue
-            if regular:
-                # Regular-hours prints only. _last_seen feeds _continuous(),
-                # which lets a stop breach fill AT the stop rather than at
-                # the observed price -- claiming we watched the tape cross.
-                # An extended-hours print is exactly what we did not watch:
-                # letting one in here would fill the next session's gap-down
-                # at a price that never traded. (v70; see the plan's finding 2.)
+            if is_tape_open(now):
+                # Prints from a LIVE TAPE only -- not merely "a tick we
+                # took". _last_seen feeds _continuous(), which lets a stop
+                # breach fill AT the stop rather than at the observed
+                # price, on the claim that we watched the tape cross it.
+                #
+                # `is_tape_open`, deliberately, not the poll window: the
+                # window is "not quiet hours", which in Berlin terms opens
+                # at 08:00 -- 02:00 ET, two hours before any tape exists.
+                # get_current_price uses prepost=True and returns
+                # YESTERDAY's last after-hours print at that hour, which
+                # this would otherwise record as today's watched price.
+                # A plan whose stop then gapped through at the 09:30 open
+                # filled AT the stop instead of at the gap -- a better
+                # exit than anything that ever traded, written into the
+                # trade log as realised P&L (found by audit, 2026-09-14,
+                # introduced the same day by widening the poll window).
                 self._last_seen[plan.plan_id] = (session_date(now), price)
             for event in new_events:
                 self._on_event(plan, event)
@@ -475,112 +472,6 @@ class PlanManager:
         return [PlanEvent(plan.plan_id, "closed",
                           {"reason": reason, "exit_price": fill, "leg": leg})]
 
-    # -- extended-hours terminal exits (v70) ---------------------------------
-    #
-    # UNREACHABLE from poll() as of 2026-09-14 (see poll()'s own docstring):
-    # "regular" now means "not quiet hours", so _step() -- not this
-    # narrower, debounced path -- runs across the whole Berlin-local active
-    # window. Kept in place, unchanged, as a still-correct description of a
-    # narrow terminal-exits-only mode, should a future flag ever reintroduce
-    # a distinction between true RTH and the rest of that window; a
-    # follow-up should otherwise remove this and its direct-call tests.
-    #
-    # Original scope: the ONLY outcome this path could produce was a
-    # terminal close of a plan that had unambiguously finished -- no
-    # pending fills, no break-even arming, no TP1 partial while a tp2
-    # remains, no chandelier ratchet.
-
-    def _step_extended(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
-        if plan.status == PlanStatus.ACTIVE:
-            candidate = self._extended_candidate_active(plan, price, now)
-        elif plan.status == PlanStatus.PARTIAL:
-            candidate = self._extended_candidate_partial(plan, price, now)
-        else:
-            candidate = None            # PENDING (and anything else): inert
-        key = plan.plan_id
-        if candidate is None:
-            # Pop, never decrement: one reverting print resets the count
-            # completely rather than leaving a partial streak a later,
-            # unrelated breach could complete early.
-            self._eh_breach_streak.pop(key, None)
-            return []
-        kind, close = candidate
-        seen_kind, streak = self._eh_breach_streak.get(key, (None, 0))
-        streak = streak + 1 if seen_kind == kind else 1
-        if streak < config.EXTENDED_HOURS_DEBOUNCE_TICKS:
-            self._eh_breach_streak[key] = (kind, streak)
-            return []
-        self._eh_breach_streak.pop(key, None)
-        return close()
-
-    def _extended_candidate_active(self, plan: TradePlanV2, price: float, now=None):
-        """(kind, close) for an ACTIVE plan that has finished, else None.
-
-        Mirrors _step_active's stop and TP1 comparisons exactly -- including
-        _active_stop's session guard -- but returns a callable instead of
-        acting, so the debounce lives in one place rather than per branch.
-
-        Returns status-aware kind strings ("active_stop"/"tp1") to prevent
-        cross-status collision: a leftover ACTIVE-stop streak cannot be
-        completed by an unrelated PARTIAL-stop breach on the same plan_id."""
-        is_bull = plan.direction == "bullish"
-        stop, is_be_stop = self._active_stop(plan, now)
-        hit_stop = price <= stop if is_bull else price >= stop
-        if hit_stop:
-            reason = "scratch" if is_be_stop else "loss"
-            return ("active_stop", lambda: self._close_extended(plan, price, reason))
-        if plan.tp2 is not None:
-            # TP1 with a second leg still to run is a PARTIAL transition,
-            # not a finish -- and banking a partial is regular-hours work.
-            return None
-        hit_tp1 = price >= plan.tp1 if is_bull else price <= plan.tp1
-        if hit_tp1:
-            return ("tp1", lambda: self._close_extended(plan, price, "win"))
-        return None
-
-    def _extended_candidate_partial(self, plan: TradePlanV2, price: float, now=None):
-        """(kind, close) for a PARTIAL plan whose runner has finished, else
-        None. Mirrors _step_partial's stop and TP2 comparisons; the pyramid
-        suggestion and the chandelier ratchet are deliberately absent.
-
-        No same-session guard (removed 2026-09-10, matching _step_partial --
-        see the comment there): the runner's stop/TP2 fire the instant
-        price crosses, same session as TP1 or not.
-
-        Returns status-aware kind strings ("partial_stop"/"tp2") to prevent
-        cross-status collision: a leftover ACTIVE-stop streak cannot be
-        completed by an unrelated PARTIAL-stop breach on the same plan_id."""
-        is_bull = plan.direction == "bullish"
-        sign = 1 if is_bull else -1
-        entry = plan.entry_price
-        risk = abs(entry - plan.stop_loss)
-        stop = (plan.working_stop if plan.working_stop is not None
-                else runner_floor(entry, plan.tp1))
-        hit_stop = price <= stop if is_bull else price >= stop
-        if hit_stop:
-            reason = ("tp1_runner_be" if stop == runner_floor(entry, plan.tp1)
-                      else "tp1_runner_trail")
-            return ("partial_stop",
-                    lambda: self._close_runner(plan, price, reason, risk, sign))
-        if plan.tp2 is not None:
-            hit_tp2 = price >= plan.tp2 if is_bull else price <= plan.tp2
-            if hit_tp2:
-                return ("tp2", lambda: self._close_runner(
-                    plan, price, "tp1_runner_tp2", risk, sign))
-        return None
-
-    def _close_extended(self, plan: TradePlanV2, price: float,
-                        reason: str) -> list[PlanEvent]:
-        """Terminal close of a whole (pre-TP1) position at the confirming
-        tick's price. Fills at `price`, never at the nominal level: the same
-        "never record a better fill than what was actually seen" convention
-        performance.py and trade_monitor already use. _on_event synthesizes
-        the fraction=1.0 leg from the plan's own entry/stop."""
-        record_transition(plan, PlanStatus.CLOSED, reason=reason, at=self._now())
-        self.store.update(plan)
-        return [PlanEvent(plan.plan_id, "closed",
-                          {"reason": reason, "exit_price": price})]
-
     # -- overnight/session-open bar check (Task 67) --------------------------
     # UNWIRED: production exits exclusively through poll(); see known-traps.md.
     #
@@ -673,8 +564,9 @@ _MANAGER: PlanManager | None = None
 
 def _price_fn(ticker):                      # module-level so tests can patch it
     from swingbot.core.marketdata.data import get_current_price
-    # Never a stale cached print: a repeat of one would pass for a fresh
-    # confirming tick in _step_extended's debounce.
+    # Never a stale cached print: this feeds live stop/target decisions, and
+    # a repeated cached value would read as a fresh tick confirming a level
+    # the tape may have left minutes ago.
     return get_current_price(ticker, allow_stale=False)
 
 
