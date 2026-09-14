@@ -43,7 +43,7 @@ import {
 } from '../trades/trades.columns';
 import { amount, dateTime, money, pct, signed } from '../../ui/format';
 import { Magnitude } from '../../ui/magnitude';
-import { Drawer, Panel } from '../../ui/layout';
+import { Panel } from '../../ui/layout';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Hint } from '../../ui/hint';
 import { RowLink } from '../../ui/row-link';
@@ -94,7 +94,7 @@ import { MarketMovers } from './panels/market-movers';
   selector: 'sb-dashboard',
   imports: [
     Magnitude, Panel, PositionsTable, RowActions, ConfirmDialog,
-    StatusCell, PlanCell, ConfidenceCell, Async, Button, Drawer, Flash,
+    StatusCell, PlanCell, ConfidenceCell, Async, Button, Flash,
     Hint, PlanLifecycleDiagram, RowLink, TradingPerformance,
     RecentActivity, MarketMovers,
   ],
@@ -169,35 +169,12 @@ import { MarketMovers } from './panels/market-movers';
       (scopeChange)="store.setScope($event)"
     />
 
-    <!-- SR59. The sizing note (dashboard_fragment.html:81-87) plus the
-         share-count snapshot note (below, moved out of the Open positions
-         panel body) -- both explain how the numbers on this page were
-         sized/counted, so one drawer, one trigger (v85 D18). -->
-    <sb-drawer [open]="infoOpen() === 'sizing'" heading="Sizing"
-               (closed)="infoOpen.set(null)">
-      @if (premiumExplanation(); as explanation) {
-        <p class="section-help">{{ explanation }}</p>
-      }
-      <p class="section-help">
-        Share counts are snapshotted when a position opens. A trade logged
-        before that snapshot existed shows an estimate instead, and a position
-        opened under a different sizing mode will not match the premium note
-        above.
-      </p>
-    </sb-drawer>
-
     <sb-panel class="positions-panel" heading="Open positions" [flush]="true">
-      <!-- SR59, the last cosmetic row: dashboard_fragment.html:391's shares
-           tooltip. Moved into the shared "Sizing" drawer above (v85 D18) --
-           the per-trade half of it (which sizing mode a position was opened
-           under, and whether that still matches today's setting) reads from
-           sizing_mode, which lives on the detail payload and belongs on the
-           detail view. -->
-      <button sb-button variant="ghost" type="button" panel-actions data-info="sizing"
-              aria-label="Sizing note"
-              (click)="infoOpen.set('sizing')">?</button>
+      <!-- The lifecycle and sizing context share one help trigger. The
+           per-trade sizing mode belongs on the detail view, where its source
+           data is available. -->
       <sb-hint panel-actions class="lifecycle-hint" [xl]="true" align="left" glyph="?"
-               label="Plan lifecycle and qualifying trades">
+               label="About open positions">
         <span class="hint-heading">Plan lifecycle</span>
         <span class="hint-copy">
           <strong>What appears here:</strong> Only trades that meet <em>every</em>
@@ -207,6 +184,16 @@ import { MarketMovers } from './panels/market-movers';
           its first and final exits.
         </span>
         <sb-plan-lifecycle-diagram />
+        <span class="hint-heading">Sizing</span>
+        @if (premiumExplanation(); as explanation) {
+          <span class="hint-copy">{{ explanation }}</span>
+        }
+        <span class="hint-copy">
+          Share counts are snapshotted when a position opens. A trade logged
+          before that snapshot existed shows an estimate instead, and a position
+          opened under a different sizing mode will not match the premium note
+          above.
+        </span>
       </sb-hint>
 
       <!-- This panel's own true empty state -- open_trades is a fact about
@@ -571,10 +558,6 @@ export class Dashboard {
     // fetch has to be wider than the feed.
     this.recent.setQuery({ sort: '-opened_at', page: 1, per_page: 20 });
   }
-
-  /** The explanatory drawer (v85 D18). A signal rather than a boolean since
-   *  it started covering more than one drawer; kept as-is now there is one. */
-  protected readonly infoOpen = signal<null | 'sizing'>(null);
 
   /** Zero open positions is a RESULT (the scan found nothing qualifying in
    *  this scope), not missing data -- measured-zero, not no-data-yet. */

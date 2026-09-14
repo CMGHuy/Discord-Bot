@@ -244,7 +244,7 @@ describe('Dashboard v85 layout', () => {
 });
 
 describe('Dashboard explanatory help', () => {
-  it('moves the qualifying rule and lifecycle chart into Open positions help', async () => {
+  it('merges the Open positions help into one tooltip', async () => {
     const fixture = await loaded();
     const el = fixture.nativeElement as HTMLElement;
     const hint = el.querySelector<HTMLElement>('sb-hint.lifecycle-hint')!;
@@ -254,12 +254,14 @@ describe('Dashboard explanatory help', () => {
     expect(el.querySelector<HTMLElement>('sb-hint.lifecycle-hint [role="tooltip"]')!.hidden).toBe(false);
     expect(el.textContent).toContain('Only trades that meet');
     expect(el.querySelector('sb-hint.lifecycle-hint sb-plan-lifecycle-diagram')).not.toBeNull();
+    expect(el.textContent).toContain('Share counts are snapshotted');
+    expect(el.querySelectorAll('sb-panel.positions-panel sb-hint')).toHaveLength(1);
   });
 
-  it('keeps the sizing note reachable', async () => {
+  it('does not render a second sizing help trigger', async () => {
     const fixture = await loaded();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-info="sizing"]')).not.toBeNull();
+    expect(el.querySelector('[data-info="sizing"]')).toBeNull();
   });
 
   it('drops the prices footnote button and its drawer', async () => {

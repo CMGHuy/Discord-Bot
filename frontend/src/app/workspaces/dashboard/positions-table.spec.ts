@@ -63,7 +63,7 @@ describe('positions table', () => {
   it('queries only the active tab, not all five', () => {
     mount();
     expect(setQuery).toHaveBeenCalledTimes(1);
-    expect(setQuery.mock.calls[0][0]).toMatchObject({ status: 'ACTIVE' });
+    expect(setQuery.mock.calls[0][0]).toMatchObject({ status: 'ACTIVE', page: 1, per_page: 5 });
   });
 
   it('re-queries with the new status when a tab is chosen', () => {
@@ -74,6 +74,24 @@ describe('positions table', () => {
     f.detectChanges();
     expect(setQuery).toHaveBeenCalledTimes(1);
     expect(setQuery.mock.calls[0][0]).toMatchObject({ status: 'PENDING' });
+  });
+
+  it('uses five rows per page for every lifecycle tab', () => {
+    const f = mount();
+    for (const tab of POSITION_TABS) clickTab(f, tab.id);
+
+    expect(setQuery.mock.calls.map(([query]) => query.per_page)).toEqual(
+      Array(POSITION_TABS.length).fill(5),
+    );
+  });
+
+  it('re-queries the selected tab when its pager changes page', () => {
+    const f = mount();
+    setQuery.mockClear();
+    (f.componentInstance as unknown as { goToPage(page: number): void }).goToPage(2);
+    f.detectChanges();
+
+    expect(setQuery).toHaveBeenCalledWith(expect.objectContaining({ page: 2, per_page: 5 }));
   });
 
   it('passes the Today scope only to the closed and cancelled tabs', () => {

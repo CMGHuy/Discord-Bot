@@ -10,9 +10,9 @@ import { ColumnDef, EmptyState } from '../../ui/data-table/data-table.types';
 import { STATUS_ICON } from '../../ui/icon';
 import { Tab, TabBar } from '../../ui/layout';
 
-/** A cap, not a page — the Dashboard answers "what is happening right now" at
- *  a glance, and a glance does not scroll. Paging lives in Trades. */
-export const OPEN_POSITIONS_CAP = 6;
+/** The Dashboard keeps every lifecycle tab scannable while still making the
+ * full set reachable through the table's pager. */
+export const OPEN_POSITIONS_PER_PAGE = 5;
 
 /** Lifecycle order, not size order: this is the order a plan moves through,
  *  and sorting by count would reshuffle the strip every time a trade closed.
@@ -72,8 +72,10 @@ const EMPTY_STATES: Record<string, EmptyState> = {
       [pinned]="pinned()"
       [rowKey]="rowKey()"
       [emptyState]="emptyState()"
+      [pagination]="trades.pagination()"
       (rowActivate)="rowActivate.emit($event)"
       (reorder)="reorder.emit($event)"
+      (pageChange)="goToPage($event)"
     />
   `,
   styles: `
@@ -102,7 +104,7 @@ export class PositionsTable {
   readonly visibleFor = input.required<(tab: string) => string[]>();
   readonly pinned = input<string[]>([]);
   readonly rowKey = input.required<(row: TradeRow) => string>();
-  readonly cap = input(OPEN_POSITIONS_CAP);
+  readonly perPage = input(OPEN_POSITIONS_PER_PAGE);
 
   readonly rowActivate = output<TradeRow>();
   readonly reorder = output<string[]>();
@@ -129,6 +131,11 @@ export class PositionsTable {
     this.tabChange.emit(id);
   }
 
+  /** The pager belongs to the selected server-side lifecycle query. */
+  protected goToPage(page: number): void {
+    this.page.set(page);
+  }
+
   constructor() {
     // Page resets on tab change: landing on page 3 of a table you just
     // switched to shows a slice of something you have not seen the start of.
@@ -137,7 +144,7 @@ export class PositionsTable {
       untracked(() => this.page.set(1));
     });
 
-    // The one query. Reading `active`/`today`/`cap`/`page` here IS the
+    // The one query. Reading `active`/`today`/`perPage`/`page` here IS the
     // subscription, so a tab change re-queries without a second code path.
     effect(() => {
       const tab = POSITION_TABS.find((t) => t.id === this.active());
@@ -146,7 +153,7 @@ export class PositionsTable {
         today: tab?.scoped ? (this.today() ?? undefined) : undefined,
         sort: '-opened_at',
         page: this.page(),
-        per_page: this.cap(),
+        per_page: this.perPage(),
       });
     });
   }
