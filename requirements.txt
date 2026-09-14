@@ -27,6 +27,23 @@ python-dotenv==1.2.2
 mplfinance==0.12.10b0
 matplotlib==3.11.0
 
+# yfinance's Ticker.get_earnings_dates() -- the ONLY call behind the
+# Watchlist Earnings calendar and its "Next earnings" column
+# (core/market/events.py's _fetch_next_earnings_datetime/
+# get_earnings_datetimes) -- falls back to scraping Yahoo's HTML when its
+# primary API path is unavailable, and that scrape goes through
+# pandas.read_html(), which requires lxml as an optional dependency pandas
+# does not pull in on its own. Without it every call raises
+# ImportError, silently caught by events.py's own except-log.debug, so the
+# calendar and column both rendered permanently empty in production
+# (2026-09-14) with no error anyone would see short of tracing the
+# swallowed exception directly. get_next_earnings_date (the separate,
+# older, .calendar-based lookup the earnings-blackout gate uses) was
+# unaffected -- it never goes through this scrape path, which is exactly
+# why only the Watchlist-facing display broke and the trading-safety gate
+# did not.
+lxml==6.1.3
+
 # Diagonal support/resistance trendlines (swingbot/core/market/trendlines.py),
 # on top of the horizontal levels every other method in levels.py finds.
 # Only needs numpy/pandas at runtime with the extraction/fit methods
