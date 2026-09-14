@@ -300,6 +300,7 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
         [sort]="sort()"
         [pagination]="exposurePage.pageSpec()"
         [showPerPage]="true"
+        [fillPage]="false"
         [emptyState]="emptyState"
         (sortChange)="setSort($event)"
         (pageChange)="exposurePage.setPage($event)"

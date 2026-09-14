@@ -382,6 +382,9 @@ export class DataTable<T> {
   /** `null` means this data is not paginated: render every row, show no
    *  pager. See `PageSpec` for why this is one input rather than three. */
   readonly pagination = input<PageSpec | null>(null);
+  /** Keep short pages at a consistent table height unless a compact panel
+   * should end directly after its last meaningful row. */
+  readonly fillPage = input(true);
   readonly loading = input(false);
   readonly expansion = input<TemplateRef<RowContext<T>> | null>(null);
   readonly emptyState = input<EmptyState | null>(null);
@@ -567,7 +570,7 @@ export class DataTable<T> {
   );
   protected readonly fillerRows = computed<number[]>(() => {
     const page = this.pagination();
-    if (!page || page.perPage <= 0) return [];
+    if (!this.fillPage() || !page || page.perPage <= 0) return [];
     const missing = page.perPage - this.rows().length;
     return missing > 0 ? Array.from({ length: missing }, (_, i) => i) : [];
   });

@@ -498,7 +498,12 @@ export class Watchlist {
   // `{{ foo(...) }}` against the component instance, never a module import.
   protected readonly num = num;
   protected readonly text = text;
-  protected readonly perPage = signal(readTablePerPage(this.preferences.values(), Watchlist.TABLE_ID));
+  /** Watchlist is an at-a-glance index: ten alphabetised symbols leave room
+   * for each row's price and signal detail without making the first page a
+   * scroll. A saved preference continues to win over this initial default. */
+  protected readonly perPage = signal(
+    readTablePerPage(this.preferences.values(), Watchlist.TABLE_ID, 10),
+  );
   protected onPerPage(value: number): void { this.perPage.set(value); this.preferences.update((prefs) => writeTablePerPage(prefs, Watchlist.TABLE_ID, value)); }
 
   /** `store.empty()` means "not loaded yet" (a boolean, not nullable data),

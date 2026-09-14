@@ -56,6 +56,7 @@ const ROWS: Row[] = [
       [rowClass]="rowClass()"
       [sort]="sort()"
       [pagination]="pagination()"
+      [fillPage]="fillPage()"
       [loading]="loading()"
       [expansion]="withExpansion() ? expansionTemplate() : null"
       [emptyState]="emptyState()"
@@ -73,6 +74,7 @@ class Host {
   readonly visible = signal<string[]>(['ticker', 'pnl']);
   readonly sort = signal<SortSpec | null>(null);
   readonly pagination = signal<PageSpec | null>(null);
+  readonly fillPage = signal(true);
   readonly loading = signal(false);
   readonly emptyState = signal<EmptyState | null>(null);
   readonly withExpansion = signal(false);
@@ -230,6 +232,14 @@ describe('DataTable', () => {
 
     expect(el().querySelector('.pager .range')!.textContent).toContain('3 rows');
     expect(el().querySelectorAll('.pager button')).toHaveLength(0);
+  });
+
+  it('can omit filler rows for compact, short tables', () => {
+    host.pagination.set({ total: 3, page: 1, perPage: 10 });
+    host.fillPage.set(false);
+    fixture.detectChanges();
+
+    expect(el().querySelectorAll('tbody tr.filler')).toHaveLength(0);
   });
 
   it('derives the pager from `total`, not from the rows it was handed', () => {

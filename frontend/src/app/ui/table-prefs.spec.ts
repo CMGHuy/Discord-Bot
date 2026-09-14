@@ -102,6 +102,11 @@ describe('readTablePerPage', () => {
     expect(readTablePerPage({}, 'trades')).toBe(25);
   });
 
+  it('uses a table-specific default without replacing a saved preference', () => {
+    expect(readTablePerPage({}, 'watchlist', 10)).toBe(10);
+    expect(readTablePerPage({ 'tables.watchlist.per_page': 50 }, 'watchlist', 10)).toBe(50);
+  });
+
   it('reads a stored value that the UI actually offers', () => {
     expect(readTablePerPage({ 'tables.trades.per_page': 50 }, 'trades')).toBe(50);
   });

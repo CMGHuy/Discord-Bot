@@ -539,7 +539,7 @@ interface ProposalView extends ProposalRow {
             [skeletonRows]="6"
             [skeletonCols]="2"
           >
-          <div class="panels">
+          <div class="chart-grid">
             <sb-panel heading="Return distribution">
               @if (store.returnsHistogram().length) {
                 <sb-histogram [bins]="store.returnsHistogram()" />
@@ -557,7 +557,7 @@ interface ProposalView extends ProposalRow {
             </sb-panel>
           </div>
 
-          <div class="panels">
+          <div class="chart-grid">
             <sb-panel heading="By holding period">
               <sb-histogram
                 [bins]="store.holdingPeriodHistogram()"
@@ -579,7 +579,7 @@ interface ProposalView extends ProposalRow {
                row -- the all-time one used to stand alone outside .panels
                entirely, leaving By planned R:R as the one panel with no
                partner and empty space beside it. -->
-          <div class="panels">
+          <div class="chart-grid">
             @if (store.rMultipleBins().length) {
               <sb-panel heading="R-multiple distribution (all-time)">
                 <!-- Bars, not a pie and not a line: this is a distribution, and
@@ -594,7 +594,7 @@ interface ProposalView extends ProposalRow {
           </div>
 
           <h2 class="section">By segment</h2>
-          <div class="panels">
+          <div class="chart-grid">
             <sb-panel heading="By direction">
               <sb-histogram [bins]="store.directionHistogram()" [max]="100" [referenceLine]="store.winRate()" />
             </sb-panel>
@@ -866,6 +866,7 @@ interface ProposalView extends ProposalRow {
               [emptyState]="decileEmpty"
               [pagination]="decilePage.pageSpec()"
               [showPerPage]="true"
+              [fillPage]="false"
               (pageChange)="decilePage.setPage($event)"
               (perPageChange)="onPerPage('decile', $event)"
             />
@@ -900,6 +901,7 @@ interface ProposalView extends ProposalRow {
               [emptyState]="tierEmpty"
               [pagination]="tierPage.pageSpec()"
               [showPerPage]="true"
+              [fillPage]="false"
               (pageChange)="tierPage.setPage($event)"
               (perPageChange)="onPerPage('tier', $event)"
             />
@@ -929,6 +931,7 @@ interface ProposalView extends ProposalRow {
               [emptyState]="driftEmpty"
               [pagination]="driftPage.pageSpec()"
               [showPerPage]="true"
+              [fillPage]="false"
               (pageChange)="driftPage.setPage($event)"
               (perPageChange)="onPerPage('drift', $event)"
             />
@@ -1124,19 +1127,20 @@ interface ProposalView extends ProposalRow {
                 <sb-metric-chip label="Median days to fill" [value]="store.medianDaysToFill()" [decimals]="1" />
               </sb-chip-row>
             </sb-panel>
+          </div>
 
+          <div class="chart-grid">
             <sb-panel heading="Badge distribution">
               @if (store.badgeChart().length) {
                 <sb-histogram [bins]="store.badgeChart()" [isNegative]="isWeakBadge" />
               }
             </sb-panel>
+            <sb-panel heading="Tier distribution">
+              @if (store.tierChart().length) {
+                <sb-histogram [bins]="store.tierChart()" />
+              }
+            </sb-panel>
           </div>
-
-          <sb-panel heading="Tier distribution">
-            @if (store.tierChart().length) {
-              <sb-histogram [bins]="store.tierChart()" />
-            }
-          </sb-panel>
         </sb-async>
       }
     }
@@ -1255,8 +1259,17 @@ interface ProposalView extends ProposalRow {
       gap: var(--space-14);
       align-items: start;
     }
+    /* Histograms share the same visual grammar, so keep them in their own
+       compact pair grid instead of mixing them with metric and table panels.
+       A missing chart leaves its remaining partner full-width. */
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+      gap: var(--space-14);
+    }
     @media (max-width: 1000px) {
       .panels { grid-template-columns: 1fr; }
+      .chart-grid { grid-template-columns: 1fr; }
     }
 
     /* The six-tile KPI row (v85 D39) -- same auto-fit tile grid as the Risk

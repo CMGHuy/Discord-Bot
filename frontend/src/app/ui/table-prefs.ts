@@ -105,11 +105,15 @@ export function writeTableColumns(
   return { ...prefs, [key(tableId, density, 'columns')]: [...columns] };
 }
 
-export function readTablePerPage(prefs: Preferences, tableId: string): number {
+export function readTablePerPage(
+  prefs: Preferences,
+  tableId: string,
+  defaultPerPage = DEFAULT_PER_PAGE,
+): number {
   const stored = prefs[`tables.${tableId}.per_page`];
   return typeof stored === 'number' && (PER_PAGE_OPTIONS as readonly number[]).includes(stored)
     ? stored
-    : DEFAULT_PER_PAGE;
+    : defaultPerPage;
 }
 
 export function writeTablePerPage(
