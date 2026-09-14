@@ -14,32 +14,26 @@ import {
 } from './dashboard.helpers';
 
 describe('deriveClosedVisible', () => {
-  it('drops "now" and inserts "hold" immediately before "opened_at"', () => {
+  it('drops the live price but keeps the shared Held column', () => {
     const base = ['ticker', 'now', 'plan', 'opened_at', 'closed_at'];
     expect(deriveClosedVisible(base)).toEqual([
-      'ticker', 'plan', 'hold', 'opened_at', 'closed_at',
+      'ticker', 'plan', 'opened_at', 'closed_at',
     ]);
   });
 
-  it('appends "hold" at the end when "opened_at" is itself hidden', () => {
+  it('does not add a synthetic column when "opened_at" is hidden', () => {
     const base = ['ticker', 'plan', 'now'];
-    expect(deriveClosedVisible(base)).toEqual(['ticker', 'plan', 'hold']);
+    expect(deriveClosedVisible(base)).toEqual(['ticker', 'plan']);
   });
 
-  it('does not duplicate "hold" if it is already in the base list', () => {
-    // Can happen after reconcileReorder round-trips a shared list that a
-    // prior derivation already touched.
-    const base = ['ticker', 'hold', 'opened_at'];
-    expect(deriveClosedVisible(base)).toEqual(['ticker', 'hold', 'opened_at']);
-  });
-
-  it('leaves a list with neither "now" nor "opened_at" only gaining "hold"', () => {
-    expect(deriveClosedVisible(['ticker', 'plan'])).toEqual(['ticker', 'plan', 'hold']);
+  it('keeps Held in its normal position', () => {
+    const base = ['ticker', 'held', 'opened_at'];
+    expect(deriveClosedVisible(base)).toEqual(base);
   });
 
   it('drops "direction" -- it folds into the Confidence cell instead', () => {
     const base = ['direction', 'confidence_level', 'opened_at'];
-    expect(deriveClosedVisible(base)).toEqual(['confidence_level', 'hold', 'opened_at']);
+    expect(deriveClosedVisible(base)).toEqual(['confidence_level', 'opened_at']);
   });
 
   it('drops "status" -- every row here is closed, so it would repeat the heading', () => {
@@ -47,13 +41,7 @@ describe('deriveClosedVisible', () => {
     // (dashboard.ts's numCell), not the em-dash it used to be, so a closed
     // row's plan id is exactly as useful as an open one's.
     const base = ['num', 'status', 'ticker', 'pnl_pct', 'opened_at'];
-    expect(deriveClosedVisible(base)).toEqual(['num', 'ticker', 'pnl_pct', 'hold', 'opened_at']);
-  });
-
-  it('drops "held" so it cannot sit beside "hold" at a coarser precision', () => {
-    // 'held' ships in the default column set; both measure the same duration.
-    const base = ['ticker', 'held', 'opened_at'];
-    expect(deriveClosedVisible(base)).toEqual(['ticker', 'hold', 'opened_at']);
+    expect(deriveClosedVisible(base)).toEqual(['num', 'ticker', 'pnl_pct', 'opened_at']);
   });
 });
 
@@ -75,9 +63,8 @@ describe('deriveOpenVisible', () => {
 });
 
 describe('reconcileReorder', () => {
-  it('drops "hold" and restores "now" when the base list carried it', () => {
-    // The Closed group's own rendered order: no 'now', 'hold' inserted.
-    const order = ['num', 'hold', 'opened_at'];
+  it('restores "now" when the Closed group omits it', () => {
+    const order = ['num', 'opened_at'];
     const base = ['num', 'now', 'opened_at'];
     expect(reconcileReorder(order, base)).toEqual(['num', 'opened_at', 'now']);
   });
@@ -96,8 +83,8 @@ describe('reconcileReorder', () => {
     expect(reconcileReorder(order, base)).toEqual(['num', 'ticker']);
   });
 
-  it('leaves an order that already carries both columns untouched (besides dropping hold)', () => {
-    const order = ['num', 'now', 'closed_at', 'hold'];
+  it('leaves an order that already carries both columns untouched', () => {
+    const order = ['num', 'now', 'closed_at'];
     const base = ['num', 'now', 'closed_at'];
     expect(reconcileReorder(order, base)).toEqual(['num', 'now', 'closed_at']);
   });
@@ -108,12 +95,12 @@ describe('reconcileReorder', () => {
     expect(reconcileReorder(order, base)).toEqual(['num', 'ticker', 'direction']);
   });
 
-  it('restores "status" and "held" after a drag inside the Closed table', () => {
+  it('restores "status" after a drag inside the Closed table', () => {
     // Closed drops both (see CLOSED_DROPS). Without this a drag there would
     // delete them from the OTHER three groups' tables too. 'num' is not
     // one of these any more (2026-09-14) -- Closed no longer drops it, so
     // it is already in `order` and needs no restoring.
-    const order = ['num', 'ticker', 'pnl_pct', 'hold'];
+    const order = ['num', 'ticker', 'pnl_pct', 'held'];
     const base = ['num', 'status', 'ticker', 'pnl_pct', 'held'];
     expect(reconcileReorder(order, base)).toEqual([
       'num', 'ticker', 'pnl_pct', 'held', 'status',

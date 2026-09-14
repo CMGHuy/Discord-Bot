@@ -15,16 +15,9 @@ const DASHBOARD_OMITS_DIRECTION = (key: string) => key !== 'direction';
 
 /** Columns the Closed group drops from the shared picker list.
  *
- *  'now' is a live price, which a closed position no longer has. 'hold' is
- *  filtered out here only so the insertion below can place it deliberately
- *  rather than wherever the picker left it.
- *
- *  'held' is dropped because 'hold' replaces it here and they are the same
- *  fact: `held` rounds to the hour because it measures a LIVE position's
- *  ticking age, `heldPrecise` gives day/hour/minute because a finished hold
- *  no longer moves. Showing both would put the same duration in two adjacent
- *  columns at two precisions -- which is exactly what happens if this is
- *  forgotten, since 'held' now ships in the default column set.
+ *  'now' is a live price, which a closed position no longer has. `held`
+ *  stays: it uses the completed position's persisted held_hours, just as it
+ *  does in Trades and the other lifecycle tabs.
  *
  *  'status' is dropped because it says nothing in this table specifically:
  *  every row here is CLOSED by construction -- that is what the group
@@ -36,21 +29,14 @@ const DASHBOARD_OMITS_DIRECTION = (key: string) => key !== 'direction';
  *  a real, useful column again -- including here, where it carries the
  *  most width pressure of any group ('hold' plus 'closed_at' on top of
  *  what the other three show).) */
-const CLOSED_DROPS = new Set(['now', 'hold', 'held', 'status']);
+const CLOSED_DROPS = new Set(['now', 'status']);
 
-/** The Closed group's own column order, derived from the shared picker
- *  list: `CLOSED_DROPS` above is removed, and 'hold' -- the completed hold
- *  duration, day/hour/minute precision (`heldPrecise`) -- is inserted
- *  immediately before 'opened_at'. Falls back to the end of the list if
- *  'opened_at' itself is hidden. */
+/** The Closed group's own column order, derived from the shared picker list,
+ *  with only inapplicable live/status columns removed. */
 export function deriveClosedVisible(base: readonly string[]): string[] {
-  const filtered = base
+  return base
     .filter((key) => !CLOSED_DROPS.has(key))
     .filter(DASHBOARD_OMITS_DIRECTION);
-  const idx = filtered.indexOf('opened_at');
-  return idx === -1
-    ? [...filtered, 'hold']
-    : [...filtered.slice(0, idx), 'hold', ...filtered.slice(idx)];
 }
 
 /** The Active/Pending/Partial groups' own column order: 'closed_at' is
@@ -99,7 +85,7 @@ export function visibleForTab(tab: string, visible: string[]): string[] {
 const RESTORED_KEYS = ['now', 'closed_at', 'direction', 'held', 'status'];
 
 export function reconcileReorder(order: readonly string[], base: readonly string[]): string[] {
-  const merged = order.filter((key) => key !== 'hold');
+  const merged = [...order];
   for (const key of RESTORED_KEYS) {
     if (base.includes(key) && !merged.includes(key)) merged.push(key);
   }
