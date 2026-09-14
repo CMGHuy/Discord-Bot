@@ -197,43 +197,51 @@ replay harness blind spots explicitly.
 
 `check_bar` / `_check_bar_active` / `_check_bar_partial` model overnight gap fills and are tested, but production never calls them. The live bot exits exclusively through `poll()`. Keep the path inert: wiring it would create a second authority for `plans.json`. Change `_step_active` / `_step_partial` for live exits; mirror bar checks only to keep their tests honest.
 
-## There are two live exit paths, and the extended-hours one is narrow
+## The full state machine now runs across the whole Berlin-local active window
 
-Since v70, `PlanManager.poll()` routes a tick three ways:
+Through v70, `PlanManager.poll()` routed a tick three ways: dark in the
+Berlin-local quiet window, the full `_step()` machine only inside true NYSE
+RTH (09:30–16:00 ET), and a narrow, debounced `_step_extended()` (terminal
+exits only — no break-even arming, no TP1 banking, no trailing ratchet, no
+PENDING fills) for everything else. That narrowness existed specifically to
+avoid "Divergence B": a single thin premarket/after-hours print once armed
+break-even permanently or closed a position outright, on a print the
+daily-bar backtest never modeled.
+
+**2026-09-14, on direct request, that boundary is gone.** `poll()` now
+treats "regular" as simply "not quiet hours" — `_step()` (the whole state
+machine, single tick, no debounce) runs for all of it:
 
 | Clock (with `INTRADAY_RTH_ONLY` on) | Path | What it may do |
 |---|---|---|
 | Quiet window (`QUIET_HOURS_START_BERLIN`–`QUIET_HOURS_END_BERLIN` Berlin time, all weekend Berlin-local) | none | nothing at all |
-| Mon–Fri 09:30–16:00 ET | `_step()` | the whole state machine |
-| Everything else | `_step_extended()` | close a finished plan, nothing else |
+| Everything else | `_step()` | the whole state machine — break-even arms, TP1 banks, the trailing ratchet moves, PENDING plans fill, all off any single tick, premarket/after-hours included |
 
-`_step_extended` deliberately implements **only** terminal exits: a confirmed
-stop/break-even-stop breach, an ACTIVE plan's `tp1` when there is no `tp2`
-left, a PARTIAL runner's floor/trail stop or `tp2`. It arms no break-even
-stop, banks no TP1 partial, moves no chandelier trail, fills no PENDING
-trigger, and emits no pyramid suggestion — every one of those would act on a
-thin premarket print, which is the bug (`v64`'s "Divergence B") the RTH gate
-exists to prevent.
+The operator explicitly accepted the Divergence B risk this reopens: a real
+resting-order equivalent will now act on a thin extended-hours print exactly
+like it acts on an RTH one, with no debounce cushion in between.
 
-**The trap:** an exit rule added only to `_step_active`/`_step_partial` is
-inert for the ~17.5 hours a day and the whole weekend that the extended
-branch covers, and one added only to `_step_extended` never runs during the
-session. Decide which it is, and say so in the code. If a new rule is
-genuinely terminal, mirror it into `_extended_candidate_active` /
-`_extended_candidate_partial`; if it manages a still-open position, it
-belongs in `_step*` only.
+**`_step_extended()`, `_extended_candidate_active`/`_extended_candidate_partial`,
+and the debounce map (`_eh_breach_streak`) are consequently unreachable from
+`poll()` in normal (`INTRADAY_RTH_ONLY` on) operation** — nothing calls them.
+Left in place rather than torn out in the same change that stopped calling
+them; `tests/planning/test_plan_manager_extended_hours.py`'s direct
+`_step_extended()`-calling tests still correctly describe what that function
+does, they just no longer describe what `poll()` does. A follow-up should
+remove the function and that half of the test file properly.
 
-Two more properties worth knowing before editing this path:
+**The trap this leaves:** a new exit/entry rule only needs to go in
+`_step_active`/`_step_partial`/`_step_pending` now — there is no second path
+to keep in sync. If you find yourself reaching for
+`_extended_candidate_active`/`_partial` to mirror a rule there, stop: that
+code is dead weight, not a second call site to maintain.
 
-- **The debounce map (`_eh_breach_streak`) is in-memory and keyed by breach
-  kind.** A restart empties it, so the first extended tick after a restart
-  always needs a fresh confirming tick. A reverting print pops the entry
-  outright rather than decrementing it.
-- **`poll()` records `_last_seen` on the regular branch only.** That map
-  feeds `_continuous()`, which lets a stop fill *at the stop* instead of at
-  the observed price. An extended-hours print is precisely the case where
-  nobody watched the tape cross, so admitting one there would fill the next
-  session's gap-down at a price that never traded.
+One more property worth knowing: **`poll()` now records `_last_seen` on
+every non-quiet tick**, premarket/after-hours included (previously "regular
+branch only"). That map feeds `_continuous()`, which lets a stop fill *at
+the stop* instead of at the observed price — an extended-hours print is no
+longer the case where "nobody watched the tape cross"; the operator asked
+for it to be watched.
 
 ## The dead-cat-bounce veto is invisible to `run_backtest_range.py`
 

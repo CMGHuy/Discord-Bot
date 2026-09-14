@@ -1,5 +1,23 @@
 """v70: extended-hours terminal exits. Injected clock, no network, no
-sleeps -- the same style as the rest of tests/planning/test_plan_manager_*."""
+sleeps -- the same style as the rest of tests/planning/test_plan_manager_*.
+
+WIDENED 2026-09-14, on direct request: poll() no longer distinguishes true
+NYSE RTH from the rest of the Berlin-local active window -- "regular" now
+means simply "not quiet hours", and the FULL state machine (_step(),
+single tick, no debounce) runs across all of it, accepting the
+"Divergence B" thin-print risk v70's own spec built _step_extended() to
+avoid (see plan_manager.py's poll() docstring for the full reasoning).
+
+_step_extended() and its debounce streak (_eh_breach_streak) are
+consequently unreachable from poll() in normal (INTRADAY_RTH_ONLY on)
+operation -- nothing in plan_manager.py calls it any more. The direct
+_step_extended()-calling tests below (everything before
+test_after_hours_polls_close_the_plan_immediately) are kept as-is: they
+still correctly describe what that function does, which matters if it is
+ever wired back in, but they are no longer exercising poll()'s actual
+routing. A follow-up should remove the function and this now-vestigial
+half of the file properly, tracked as real repo cleanup rather than done
+inline here."""
 import datetime as dt
 
 import pytest
@@ -271,18 +289,19 @@ def test_cross_status_collision_does_not_occur(tmp_path):
     assert store.get("p1").status == PlanStatus.CLOSED
 
 
-def test_two_after_hours_polls_close_the_plan(tmp_path):
-    store, mgr = _env(tmp_path, [94.0, 93.5])
-    assert mgr.poll(now=AFTER_HOURS) == []
+def test_after_hours_polls_close_the_plan_immediately(tmp_path):
+    """Widened 2026-09-14: the full machine runs single-tick, no debounce,
+    same as RTH -- a stop hit closes on the FIRST after-hours poll now,
+    not the second."""
+    store, mgr = _env(tmp_path, [94.0])
     events = mgr.poll(now=AFTER_HOURS)
     assert [e.transition for e in events] == ["closed"]
-    assert events[0].detail["exit_price"] == 93.5
+    assert events[0].detail["exit_price"] == 94.0
     assert store.get("p1").status == PlanStatus.CLOSED
 
 
 def test_premarket_polls_close_the_plan_too(tmp_path):
-    store, mgr = _env(tmp_path, [94.0, 93.5])
-    assert mgr.poll(now=PREMARKET) == []
+    store, mgr = _env(tmp_path, [94.0])
     assert [e.transition for e in mgr.poll(now=PREMARKET)] == ["closed"]
 
 
@@ -300,12 +319,13 @@ def test_the_whole_weekend_is_fully_dark(tmp_path):
     assert store.get("p1").status == PlanStatus.ACTIVE
 
 
-def test_the_flag_off_reproduces_the_pre_v70_two_way_gate(tmp_path, monkeypatch):
+def test_extended_hours_exit_check_flag_is_now_inert(tmp_path, monkeypatch):
+    """EXTENDED_HOURS_EXIT_CHECK governed the OLD narrow _step_extended()
+    gate; since poll() no longer reaches that function at all (2026-09-14),
+    the flag has nothing left to do -- setting it False changes nothing."""
     monkeypatch.setattr(config, "EXTENDED_HOURS_EXIT_CHECK", False)
-    store, mgr = _env(tmp_path, [94.0, 93.5, 93.0])
-    for _ in range(3):
-        assert mgr.poll(now=AFTER_HOURS) == []
-    assert store.get("p1").status == PlanStatus.ACTIVE
+    store, mgr = _env(tmp_path, [94.0])
+    assert [e.transition for e in mgr.poll(now=AFTER_HOURS)] == ["closed"]
 
 
 def test_rth_only_off_still_runs_the_full_machine_round_the_clock(tmp_path, monkeypatch):
@@ -323,28 +343,57 @@ def test_regular_hours_still_arm_break_even(tmp_path):
     assert store.get("p1").working_stop == 100.0
 
 
-def test_an_extended_hours_tick_never_makes_the_next_rth_fill_continuous(tmp_path):
-    """poll() records _last_seen on the REGULAR branch only. Otherwise an
-    08:30 print above the stop would tell the 09:30 poll it had watched the
-    tape cross, and v64's poll_stop_fill would fill the gap-down AT the stop
-    -- a better price than anything that ever printed."""
+def test_after_hours_now_arms_break_even_too(tmp_path):
+    """Headline of the 2026-09-14 widening: break-even arming was one of
+    the capabilities v70 explicitly kept regular-hours-only (its own
+    spec's Non-goals). It now fires after-hours too, single tick, exactly
+    like RTH -- contrast test_the_break_even_trigger_never_arms_outside_regular_hours
+    above, which still correctly describes _step_extended() directly; it
+    is poll()'s ROUTING to that function that changed, not the function."""
+    store, mgr = _env(tmp_path, [105.0])
+    assert [e.transition for e in mgr.poll(now=AFTER_HOURS)] == ["be_moved"]
+    assert store.get("p1").working_stop == 100.0
+
+
+def test_after_hours_now_banks_tp1_with_a_tp2_still_to_run(tmp_path):
+    """Same headline: TP1 partial-banking while a tp2 remains was the
+    other capability v70 kept regular-hours-only (contrast
+    test_tp1_with_a_tp2_still_to_run_is_inert above, a direct
+    _step_extended() call -- still accurate for that function, just no
+    longer what poll() does). Now fires after-hours, single tick."""
+    store, mgr = _env(tmp_path, [111.0], plan=_active(tp2=120.0))
+    events = mgr.poll(now=AFTER_HOURS)
+    assert [e.transition for e in events] == ["tp1_partial"]
+    plan = store.get("p1")
+    assert plan.status == PlanStatus.PARTIAL
+    assert plan.working_stop is not None
+
+
+def test_a_premarket_print_now_keeps_the_rth_fill_continuous(tmp_path):
+    """Reversed 2026-09-14: poll() records _last_seen on every non-quiet
+    tick now, premarket included, because premarket IS "regular" (the
+    operator asked for the full machine across the whole Berlin-local
+    active window, not just true RTH). An 08:30 print above the stop now
+    DOES tell the 09:30 poll it watched the tape cross, so v64's
+    poll_stop_fill fills AT the stop -- the better, continuous price --
+    not the gap price the old (narrower) extended-hours boundary used to
+    force."""
     store, mgr = _env(tmp_path, [99.0, 94.0])
     assert mgr.poll(now=PREMARKET) == []          # above the stop: no candidate
-    assert "p1" not in mgr._last_seen
+    assert "p1" in mgr._last_seen
     events = mgr.poll(now=RTH)
     assert [e.transition for e in events] == ["closed"]
-    assert events[0].detail["exit_price"] == 94.0    # the gap price, not 95.00
+    assert events[0].detail["exit_price"] == 95.0    # the stop price, watched continuously
 
 
 def test_a_price_failure_on_one_plan_does_not_stop_the_others(tmp_path):
-    """poll()'s existing per-plan isolation still holds on the new branch."""
+    """poll()'s existing per-plan isolation still holds."""
     feed = FakePriceFeed()
-    feed.set_series("MSFT", [94.0, 93.5])
+    feed.set_series("MSFT", [94.0])
     store = PlanStore(path=str(tmp_path / "plans.json"))
     store.add(_active())                                  # AAPL: no ticks queued
     store.add(_active(plan_id="p2", ticker="MSFT"))
     mgr = PlanManager(store, feed.get_price)
-    assert mgr.poll(now=AFTER_HOURS) == []
     events = mgr.poll(now=AFTER_HOURS)
     assert [(e.plan_id, e.transition) for e in events] == [("p2", "closed")]
 
@@ -364,31 +413,35 @@ class _RecordingLog:
 
 
 def test_a_terminal_target_close_reaches_the_trade_log_as_a_win(tmp_path):
+    """No special extended-hours shortcut any more (2026-09-14): a tp1 hit
+    banks a partial exactly like RTH does even with no tp2 -- the OLD
+    _step_extended path used to skip straight to a one-tick "win" close
+    when tp2 was None, which the full machine has no equivalent of. The
+    runner then closes on its own floor like any other runner, and still
+    reaches the trade log as a win (close_plan_trade's reason ->
+    status mapping treats every "tp1_..." reason as a win)."""
     feed = FakePriceFeed()
-    feed.set_series("AAPL", [110.5, 111.0])
+    feed.set_series("AAPL", [111.0, 106.0])
     store = PlanStore(path=str(tmp_path / "plans.json"))
     store.add(_active(tp2=None))
     trade_log = _RecordingLog()
     mgr = PlanManager(store, feed.get_price, trade_log=trade_log)
 
-    assert mgr.poll(now=AFTER_HOURS) == []
-    assert [e.transition for e in mgr.poll(now=AFTER_HOURS)] == ["closed"]
+    assert [e.transition for e in mgr.poll(now=AFTER_HOURS)] == ["tp1_partial"]
+    events = mgr.poll(now=AFTER_HOURS)              # 106.0 <= runner_floor(100, 110) == 106.67
+    assert [e.transition for e in events] == ["closed"]
 
     plan_id, leg, status = trade_log.closed[0]
     assert (plan_id, status) == ("p1", "win")
-    assert leg["fraction"] == 1.0
-    assert leg["exit_price"] == 111.0
-    assert leg["r"] == pytest.approx((111.0 - 100.0) / 5.0)
 
 
 def test_a_terminal_stop_close_still_reaches_the_trade_log_as_a_loss(tmp_path):
     feed = FakePriceFeed()
-    feed.set_series("AAPL", [94.0, 93.5])
+    feed.set_series("AAPL", [94.0])
     store = PlanStore(path=str(tmp_path / "plans.json"))
     store.add(_active())
     trade_log = _RecordingLog()
     mgr = PlanManager(store, feed.get_price, trade_log=trade_log)
 
-    assert mgr.poll(now=AFTER_HOURS) == []
     assert [e.transition for e in mgr.poll(now=AFTER_HOURS)] == ["closed"]
     assert trade_log.closed[0][2] == "loss"

@@ -66,14 +66,18 @@ def test_flag_on_still_expires_a_stale_pending_plan(tmp_path, monkeypatch):
     events = pm.run_manager_tick()
     assert [e.transition for e in events] == ["cancelled_expired"]
 
-def test_run_manager_tick_is_a_no_op_outside_regular_hours(monkeypatch, tmp_path):
+def test_run_manager_tick_is_a_no_op_during_quiet_hours(monkeypatch, tmp_path):
+    """Widened 2026-09-14: poll()'s no-op window is quiet hours only now,
+    not "outside true NYSE RTH" -- plan_manager no longer even imports
+    is_regular_session (see plan_manager.py's poll() docstring and
+    docs/claude/known-traps.md's "full state machine" section)."""
     from swingbot import config
     from swingbot.core.planning import plan_manager
     monkeypatch.setattr(config, "INTRADAY_MANAGER_V2", True)
     monkeypatch.setattr(config, "INTRADAY_RTH_ONLY", True)
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
     monkeypatch.setattr(plan_manager, "_MANAGER", None)
-    monkeypatch.setattr(plan_manager, "is_regular_session", lambda now=None: False)
+    monkeypatch.setattr(plan_manager, "is_quiet_hours", lambda now=None: True)
     assert plan_manager.run_manager_tick() == []
 
 @pytest.fixture(autouse=True)

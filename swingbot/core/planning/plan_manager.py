@@ -13,8 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from swingbot import config
-from swingbot.core.market.session import (is_quiet_hours, is_regular_session,
-                                          session_date)
+from swingbot.core.market.session import is_quiet_hours, session_date
 from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
                                        chandelier_stop, pending_expired,
                                        pending_invalidated, record_transition,
@@ -146,16 +145,34 @@ class PlanManager:
         return datetime.now(timezone.utc).isoformat()
 
     def poll(self, now=None) -> list[PlanEvent]:
-        # Three-way gate (v70). INTRADAY_RTH_ONLY=false is the documented
-        # pre-v64 escape hatch -- full _step() every tick, round the clock,
-        # and no quiet-hours gate either: the quiet window only ever applies
-        # ON TOP OF the RTH gate, never independently of it.
+        # Two-way gate (widened 2026-09-14, on direct request). Through
+        # v70, "regular" meant true NYSE RTH (09:30-16:00 ET) and anything
+        # outside it but outside the quiet window got only a narrow,
+        # debounced _step_extended() -- terminal closes and (2026-09-14,
+        # briefly) pending-entry fills, never break-even arming, TP1
+        # partial-banking, the chandelier ratchet or pyramiding. That
+        # narrowness existed to avoid "Divergence B" (see
+        # docs/superpowers/specs/implemented/2026-09-03-v70-extended-hours-exit-check-design.md
+        # SS1.2): a single thin extended-hours print once armed break-even
+        # permanently or closed a position outright, on a print the
+        # daily-bar backtest never modeled. The operator explicitly asked
+        # for the FULL machine across the whole Berlin-local active window
+        # instead, accepting that risk -- so "regular" now means simply
+        # "not quiet hours", and _step() (the whole state machine, single
+        # tick, no debounce) runs for all of it. _step_extended() and its
+        # debounce streak are consequently unreachable in normal
+        # (INTRADAY_RTH_ONLY on) operation; left in place rather than torn
+        # out in the same change that stopped calling it -- a follow-up
+        # should remove it and its now-purely-direct-call test suite
+        # (tests/planning/test_plan_manager_extended_hours.py) properly.
+        #
+        # INTRADAY_RTH_ONLY=false is still the documented pre-v64 escape
+        # hatch -- full _step() every tick, round the clock, no quiet-hours
+        # gate either.
         if config.INTRADAY_RTH_ONLY:
             if is_quiet_hours(now):
                 return []
-            regular = is_regular_session(now)
-            if not regular and not config.EXTENDED_HOURS_EXIT_CHECK:
-                return []
+            regular = True
         else:
             regular = True
         # `self.store` (and `self.trade_log`) can be long-lived instances --
@@ -458,14 +475,20 @@ class PlanManager:
         return [PlanEvent(plan.plan_id, "closed",
                           {"reason": reason, "exit_price": fill, "leg": leg})]
 
-    # -- extended-hours terminal exits (v70) --------------------------------
+    # -- extended-hours terminal exits (v70) ---------------------------------
     #
-    # Reached only from poll()'s extended-hours branch: RTH gate on, clock
-    # outside 09:30-16:00 ET, outside quiet hours. The ONLY outcome this
-    # path can produce is a terminal close of a plan that has unambiguously
-    # finished -- no pending fills, no break-even arming, no TP1 partial
-    # while a tp2 remains, no chandelier ratchet. Everything else stays
-    # where v64 put it: regular hours only.
+    # UNREACHABLE from poll() as of 2026-09-14 (see poll()'s own docstring):
+    # "regular" now means "not quiet hours", so _step() -- not this
+    # narrower, debounced path -- runs across the whole Berlin-local active
+    # window. Kept in place, unchanged, as a still-correct description of a
+    # narrow terminal-exits-only mode, should a future flag ever reintroduce
+    # a distinction between true RTH and the rest of that window; a
+    # follow-up should otherwise remove this and its direct-call tests.
+    #
+    # Original scope: the ONLY outcome this path could produce was a
+    # terminal close of a plan that had unambiguously finished -- no
+    # pending fills, no break-even arming, no TP1 partial while a tp2
+    # remains, no chandelier ratchet.
 
     def _step_extended(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
         if plan.status == PlanStatus.ACTIVE:
