@@ -42,6 +42,7 @@ export const ICON_NAMES = [
   'cancelled',
   'brand',
   'reports',
+  'research',
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -103,6 +104,11 @@ const PATHS: Record<IconName, string> = {
   // chart -- distinct from `analytics`'s bars so Reports and Analytics
   // don't share a glyph in the nav.
   reports: 'M4 1.5h6l2 2v11H4z M10 1.5v2h2 M6 7h4 M6 9.5h4 M6 12h2.5',
+  // A magnifying glass: looking something up, not watching a live list --
+  // distinct from `watchlist`'s eye, which Research wrongly reused before
+  // (2026-09-14; nav duplicated a glyph across two different sidebar
+  // entries).
+  research: 'M7.2 12A4.8 4.8 0 1 0 7.2 2.4a4.8 4.8 0 0 0 0 9.6z M10.7 10.7l3.3 3.3',
 };
 
 @Component({
