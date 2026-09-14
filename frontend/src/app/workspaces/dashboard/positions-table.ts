@@ -73,6 +73,7 @@ const EMPTY_STATES: Record<string, EmptyState> = {
       [rowKey]="rowKey()"
       [emptyState]="emptyState()"
       [pagination]="trades.pagination()"
+      [fillPage]="false"
       (rowActivate)="rowActivate.emit($event)"
       (reorder)="reorder.emit($event)"
       (pageChange)="goToPage($event)"

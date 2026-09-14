@@ -5,6 +5,7 @@ import { Button } from '../../../ui/button';
 import { ControlRow, Panel } from '../../../ui/layout';
 import { MetricCard } from '../../../ui/metric-card';
 import { PortfolioValue } from './portfolio-value';
+import { amount, pct } from '../../../ui/format';
 
 /** `DashboardScope` also has a third value, 'active', that this toggle never
  *  sets and never renders as pressed -- reusing the store's real type rather
@@ -66,6 +67,17 @@ export type DashboardScopeMode = DashboardScope;
           <sb-metric-card label="Risk used" [value]="riskUsedPct()" unit="%" [sub]="riskSub()" />
         </div>
       </div>
+
+      <!-- On a phone the position book is deliberately first. When the
+           reader reaches performance, this one-line summary preserves the
+           essential account context without placing the desktop chart and
+           eight-card grid ahead of live trades. -->
+      <div class="mobile-summary" aria-label="Portfolio summary">
+        <div><span>Portfolio</span><strong>{{ fmtAmount(balance()) }}</strong></div>
+        <div><span>Today</span><strong [class.pos]="(changePct() ?? 0) > 0" [class.neg]="(changePct() ?? 0) < 0">{{ fmtPct(changePct()) }}</strong></div>
+        <div><span>Open</span><strong>{{ openTrades() }}</strong></div>
+        <div><span>Risk</span><strong>{{ fmtPct(riskUsedPct()) }}</strong></div>
+      </div>
     </sb-panel>
   `,
   styles: `
@@ -83,6 +95,7 @@ export type DashboardScopeMode = DashboardScope;
       align-items: start;
     }
     .portfolio { min-width: 0; }
+    .mobile-summary { display: none; }
     @media (max-width: 640px) {
       .combined { grid-template-columns: minmax(0, 1fr); }
     }
@@ -100,6 +113,17 @@ export type DashboardScopeMode = DashboardScope;
     }
     @media (max-width: 640px) {
       .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .combined { display: none; }
+      .mobile-summary {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--space-8);
+      }
+      .mobile-summary div { display: flex; justify-content: space-between; gap: var(--space-8); padding: var(--space-6) 0; border-bottom: 1px solid var(--border); font-size: var(--text-table); }
+      .mobile-summary span { color: var(--text-secondary); }
+      .mobile-summary strong { font-family: var(--font-mono); }
+      .mobile-summary .pos { color: var(--pos); }
+      .mobile-summary .neg { color: var(--neg); }
     }
   `,
 })
@@ -129,6 +153,8 @@ export class TradingPerformance {
   ];
 
   protected readonly currencyUnit = computed(() => ` ${this.currency()}`);
+  protected fmtAmount = (value: number | null) => amount(value, this.currency());
+  protected fmtPct = pct;
   protected readonly riskSub = computed(() => {
     const cap = this.riskCapPct();
     return cap === null ? null : `of ${cap.toFixed(1)}% cap`;

@@ -528,6 +528,12 @@ import { MarketMovers } from './panels/market-movers';
     .pnl-plan .sl { color: var(--neg); }
 
     @media (max-width: 720px) {
+      /* Option 2: on phones, live positions come before every performance
+         detail. The table keeps its pager on every lifecycle tab, but does
+         not add blank filler rows below a short first page. */
+      :host ::ng-deep sb-async > .content { display: flex; flex-direction: column; }
+      :host ::ng-deep sb-async > .content > .positions-panel { order: 1; }
+      :host ::ng-deep sb-async > .content > sb-trading-performance { order: 2; }
       .lifecycle-hint sb-plan-lifecycle-diagram { min-width: 0; }
     }
   `,
