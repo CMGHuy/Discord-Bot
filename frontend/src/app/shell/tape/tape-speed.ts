@@ -1,28 +1,24 @@
 /**
- * Shared between `sb-market-lane` and `sb-names-lane` so the two scroll at
- * the same pixels-per-second rate rather than the same fixed duration.
+ * Used by `sb-tape` (the combined market/watchlist strip) to size the
+ * track's animation-duration from its own rendered width rather than a
+ * fixed duration -- see `tapeDurationSeconds` below.
  *
  * The track is doubled and translated -50% over one duration (tape.css's
  * `tape-slide` keyframes), so the distance covered per loop is one copy's
- * rendered width -- `trackEl.scrollWidth / 2`. A single fixed duration for
- * every lane -- what this replaced -- made lanes with different tile
- * content visibly different speeds: the market lane's compact
- * symbol/price/change tiles and the watchlist tape's wider symbol/price/
- * change/context tiles do not render to the same width per tile, so even
- * scaling duration by TILE COUNT (tried first, and wrong) still left one
- * lane covering more pixels per second than the other. Measuring the
- * track's own actual width and dividing by a fixed pixels-per-second
- * target is the only way both are the same speed regardless of what their
- * tiles happen to contain.
+ * rendered width -- `trackEl.scrollWidth / 2`. A fixed duration regardless
+ * of content -- what this replaced -- made a short loop and a long one
+ * scroll at visibly different speeds; measuring the track's own actual
+ * width and dividing by a fixed pixels-per-second target is what keeps the
+ * rate constant regardless of how many tiles happen to be flagged.
  *
- * 5.3px/s reproduced the market lane's own historical rate: 26s (the fixed
- * duration this replaced) over its typical ~137px one-loop width with
- * today's four fixed indices, measured live rather than guessed. Slowed to
- * 3.5px/s (2026-09-14) on direct request once the `.track` flex-shrink bug
+ * History: 5.3px/s reproduced the original (pre-merge) market lane's rate.
+ * Slowed to 3.5px/s (2026-09-14) once the `.track` flex-shrink bug
  * (tape.css) that had been crushing tiles into illegibility was fixed --
- * legible tiles made the original rate feel faster than intended.
+ * legible tiles made the original rate feel faster than intended. Doubled
+ * to 7.0px/s (2026-09-14, same day) on direct request once the two lanes
+ * were combined into one strip.
  */
-export const TAPE_PIXELS_PER_SECOND = 3.5;
+export const TAPE_PIXELS_PER_SECOND = 7.0;
 
 /** A one-tile lane still needs to move; without a floor, a very narrow
  *  track (a single short symbol) would compute a near-zero duration and

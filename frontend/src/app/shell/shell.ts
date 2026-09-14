@@ -25,8 +25,7 @@ import { RouteRefreshService } from '../routing/route-refresh.service';
 import { RouteTitleService } from '../routing/route-title.service';
 import { SessionStore } from '../stores/session.store';
 import { ConnectionStatus } from './connection-status';
-import { MarketLane } from './tape/market-lane';
-import { NamesLane } from './tape/names-lane';
+import { Tape } from './tape/tape';
 import { ToastHost } from './toast-host';
 
 interface NavEntry {
@@ -61,7 +60,7 @@ const ZOOM_DEFAULT = 100;
   selector: 'sb-shell',
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive, ConnectionStatus, ToastHost,
-    Button, Icon, ProfileMenu, MarketLane, NamesLane,
+    Button, Icon, ProfileMenu, Tape,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',

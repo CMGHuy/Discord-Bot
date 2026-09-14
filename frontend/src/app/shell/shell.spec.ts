@@ -85,7 +85,7 @@ describe('shell navigation', () => {
     });
   });
 
-  it('carries both lanes inside the top bar row, not beneath it', () => {
+  it('carries the tape inside the top bar row, not beneath it', () => {
     const fixture = TestBed.createComponent(Shell);
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
@@ -95,8 +95,7 @@ describe('shell navigation', () => {
       .toEqual(['header', 'main']);
 
     const header = el.querySelector('header.topbar') as HTMLElement;
-    expect(header.querySelector('sb-market-lane')).not.toBeNull();
-    expect(header.querySelector('sb-names-lane')).not.toBeNull();
+    expect(header.querySelector('sb-tape')).not.toBeNull();
   });
 
   it('shows the date and time from the ambient clock', () => {
@@ -262,6 +261,17 @@ describe('shell navigation', () => {
     const el = f.nativeElement as HTMLElement;
     expect(el.querySelector('.brand sb-icon')).not.toBeNull();
     expect(el.querySelector('.brand')!.textContent).toContain('Bomeo');
+  });
+
+  it('the brand mark links back to the Dashboard', () => {
+    const f = TestBed.createComponent(Shell);
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    const brand = el.querySelector('.brand') as HTMLAnchorElement;
+    expect(brand.tagName).toBe('A');
+    // RouterLink resolves and sets a real `href`, independent of whether the
+    // test's route table (provideRouter([])) actually registers the path.
+    expect(brand.getAttribute('href')).toBe('/dashboard');
   });
 
   it('renders the two-tone wordmark as two spans, not one coloured string', () => {

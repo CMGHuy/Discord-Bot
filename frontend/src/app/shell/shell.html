@@ -15,12 +15,12 @@
            an inline path, not images/logo.png (finding 16): the raster mark
            cannot take the accent colour, does not read at 24px on --bg, and
            has no collapsed-rail form. -->
-      <span class="brand">
+      <a class="brand" routerLink="/dashboard" aria-label="Bomeo Capital — go to the Dashboard">
         <sb-icon name="brand" />
         @if (!railed()) {
           <span class="word"><span>Bomeo</span><span>Capital</span></span>
         }
-      </span>
+      </a>
     </div>
 
     @for (group of navGroups; track group.id) {
@@ -115,8 +115,7 @@
         }
       </div>
       <div class="topbar-tape">
-        <sb-market-lane />
-        <sb-names-lane />
+        <sb-tape />
       </div>
       <!-- Sheet 2's form: dot, word, clock, read together as one group.
            The dot answers only "is the event stream connected" (D30) -- it

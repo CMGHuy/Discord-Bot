@@ -134,6 +134,8 @@
   align-items: center;
   gap: var(--space-6);
   min-width: 0;
+  color: inherit;
+  text-decoration: none;
 }
 
 /* Two spans, not one coloured string: `Capital` takes the accent so the
@@ -232,35 +234,18 @@
 /* Grows to fill the whole gap between the title and the status cluster --
    there is no separate .spacer any more, this element does that job -- and
    still scrolls within its allotted space when more symbols arrive than
-   fit. The explicit left margin (rather than growing .topbar's shared gap)
-   keeps title->tape at 20px without touching the tighter gap elsewhere on
-   the bar, and the same 20px as the gap between its two lanes means all
-   three boundaries in this bar read the same width. */
+   fit. No extra left margin (2026-09-14: dropped along with the two-lane
+   split below) -- .topbar's own `gap` is the whole title->tape distance
+   now, so the tape sits as far left as the title's own edge allows. */
 .topbar-tape {
   flex: 1 1 0%;
   min-width: 0;
-  /* .topbar's own `gap` already puts --space-14 here; this margin makes up
-     the difference to --space-20 rather than stacking on top of it. */
-  margin-left: calc(var(--space-20) - var(--space-14));
   display: flex;
   align-items: center;
   gap: var(--space-20);
   overflow-x: auto;
   scrollbar-width: none;
 }
-
-/* tape.css's shared `:host { flex: 1 1 0%; }` gives both lanes an equal
-   half of .topbar-tape regardless of content -- measured live, 2026-09-14:
-   the market lane's whole doubled loop is ~480px (4 fixed indices) while
-   the watchlist lane routinely needs 2000px+ (every flagged symbol), so an
-   even split wasted half the bar on the market lane and starved the one
-   with actually-variable content. This type selector (not a class) is
-   still on the SHELL side of the encapsulation boundary -- shell.html put
-   these tags there itself, so a plain tag selector here is not scoped away
-   -- and its specificity ((0,1,1), a class-level pseudo plus a type) beats
-   tape.css's bare `:host` ((0,1,0)) without needing `!important`. */
-.topbar-tape sb-market-lane { flex: 0 1 auto; max-width: 360px; }
-.topbar-tape sb-names-lane { flex: 1 1 0%; }
 .topbar-tape::-webkit-scrollbar { display: none; }
 
 /* 15rem, not the 18rem this used to reserve: measured against every route's
