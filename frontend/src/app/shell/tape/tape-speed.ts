@@ -15,11 +15,14 @@
  * target is the only way both are the same speed regardless of what their
  * tiles happen to contain.
  *
- * 5.3px/s reproduces the market lane's own historical rate: 26s (the fixed
+ * 5.3px/s reproduced the market lane's own historical rate: 26s (the fixed
  * duration this replaced) over its typical ~137px one-loop width with
- * today's four fixed indices, measured live rather than guessed.
+ * today's four fixed indices, measured live rather than guessed. Slowed to
+ * 3.5px/s (2026-09-14) on direct request once the `.track` flex-shrink bug
+ * (tape.css) that had been crushing tiles into illegibility was fixed --
+ * legible tiles made the original rate feel faster than intended.
  */
-export const TAPE_PIXELS_PER_SECOND = 5.3;
+export const TAPE_PIXELS_PER_SECOND = 3.5;
 
 /** A one-tile lane still needs to move; without a floor, a very narrow
  *  track (a single short symbol) would compute a near-zero duration and
