@@ -17,6 +17,21 @@ describe('activity derivation', () => {
     expect(events[0]).toMatchObject({ kind: 'opened', ticker: 'ASTS' });
   });
 
+  it('carries the row\'s current status and direction, formats the entry price', () => {
+    const events = deriveActivity([row({ entry: 60.540000915527344 })]);
+    expect(events[0]).toMatchObject({
+      status: 'ACTIVE', direction: 'bullish', detail: 'at 60.54',
+    });
+  });
+
+  it('carries status through a closed event too, not just opened', () => {
+    const events = deriveActivity([
+      row({ status: 'CLOSED', closed_at: '2026-09-11T16:20:00Z' }),
+    ]);
+    const closed = events.find((e) => e.kind === 'closed')!;
+    expect(closed.status).toBe('CLOSED');
+  });
+
   it('emits both opened and closed for a position that has closed', () => {
     const events = deriveActivity([
       row({ status: 'CLOSED', closed_at: '2026-09-11T16:20:00Z' }),

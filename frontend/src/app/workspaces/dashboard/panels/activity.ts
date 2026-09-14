@@ -11,6 +11,12 @@ export interface ActivityEvent {
    *  "Long"/"Short", so the two stay visually consistent by construction
    *  rather than by two separate strings agreeing. */
   direction: string | null;
+  /** The row's CURRENT lifecycle status (PENDING/ACTIVE/PARTIAL/CLOSED/
+   *  CANCELLED), not a property of this historical event -- it picks the
+   *  icon (`icon.ts`'s `STATUS_ICON`), which on request lives in Recent
+   *  Activity rather than the Open Positions table. A row that has since
+   *  moved on shows where it stands now, not what this timestamp was. */
+  status: string;
   detail: string;
   /** Stable across refetches, so the list does not re-animate: one row can
    *  produce two events, so the row id alone would not be unique. */
@@ -43,6 +49,7 @@ export function deriveActivity(
         at: row.closed_at,
         ticker,
         direction: row.direction ?? null,
+        status: row.status ?? '',
         detail: cancelled
           ? 'Plan cancelled before filling'
           : `Closed${row.r_multiple != null ? ` at ${row.r_multiple > 0 ? '+' : ''}${row.r_multiple.toFixed(2)}R` : ''}`,
@@ -56,6 +63,7 @@ export function deriveActivity(
         at: row.opened_at,
         ticker,
         direction: row.direction ?? null,
+        status: row.status ?? '',
         detail: row.entry != null ? `at ${num(row.entry)}` : '',
         id: `${row.id}:opened`,
       });

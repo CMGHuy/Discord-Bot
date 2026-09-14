@@ -2,19 +2,10 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { Panel } from '../../../ui/layout';
-import { Icon, IconName } from '../../../ui/icon';
+import { Icon, IconName, STATUS_ICON } from '../../../ui/icon';
 import { DirectionArrow } from '../../../ui/direction-arrow';
 import { dateTime } from '../../../ui/format';
 import { ActivityEvent } from './activity';
-
-/** One icon per event kind, shared with the Open Positions panel's status
- *  icons (`status-cell.ts`) so the two panels read as one vocabulary rather
- *  than each inventing its own. */
-const KIND_ICON: Record<ActivityEvent['kind'], IconName> = {
-  opened: 'opened',
-  closed: 'closed',
-  cancelled: 'cancelled',
-};
 
 /** What just happened, from the trade records themselves — v85 D15. */
 @Component({
@@ -52,11 +43,12 @@ const KIND_ICON: Record<ActivityEvent['kind'], IconName> = {
       gap: var(--space-8);
       font-size: var(--text-table);
     }
-    /* The icon carries the kind as a shape; colour is the second cue, never
-       the only one. */
-    .event.opened sb-icon { color: var(--accent); }
-    .event.closed sb-icon { color: var(--pos); }
-    .event.cancelled sb-icon { color: var(--text-faint); }
+    /* Neutral on purpose (2026-09-14): the icon's SHAPE is the status now
+       (pending/opened/partial/closed/cancelled -- see icon.ts's
+       STATUS_ICON), not a kind-coloured up/down arrow. Colour stays out of
+       it so this cannot drift back into implying win/loss, which a plan
+       simply having opened or closed is not. */
+    sb-icon { color: var(--text-muted); }
     .ticker { font-family: var(--font-mono); color: var(--text); font-weight: 600; }
     .detail { color: var(--text-secondary); }
     .at { color: var(--text-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -68,7 +60,11 @@ const KIND_ICON: Record<ActivityEvent['kind'], IconName> = {
 export class RecentActivity {
   readonly events = input<readonly ActivityEvent[]>([]);
   protected fmt = dateTime;
+
+  /** Falls back to `opened` for any status outside the five known ones,
+   *  rather than rendering nothing -- a row IS a plan, and the closest
+   *  reading of "unrecognised state" is still "something is live". */
   protected icon(event: ActivityEvent): IconName {
-    return KIND_ICON[event.kind];
+    return STATUS_ICON[event.status.toUpperCase()] ?? 'opened';
   }
 }

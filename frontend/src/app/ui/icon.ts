@@ -80,17 +80,21 @@ const PATHS: Record<IconName, string> = {
   clock: 'M8 14.5A6.5 6.5 0 1 0 8 1.5a6.5 6.5 0 0 0 0 13z M8 4.5V8l2.5 1.5',
   // Three dots: the row overflow menu.
   more: 'M3.5 8h.01 M8 8h.01 M12.5 8h.01',
-  // An arrow leaving a baseline: a position opening.
-  opened: 'M2 13.5h12 M8 11V3 M5 6l3-3 3 3',
-  // An arrow arriving at a baseline: a position closing.
-  closed: 'M2 13.5h12 M8 3v8 M5 8l3 3 3-3',
+  // A ring with a centre mark: a live position, not a direction -- replaced
+  // the earlier up-arrow (2026-09-14) once these became status glyphs
+  // rather than open/close transition arrows.
+  opened: 'M8 13.5A5.5 5.5 0 1 0 8 2.5a5.5 5.5 0 0 0 0 11z M8 8.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z',
+  // A plain square: the same shape `sb-status`'s CLOSED marker already
+  // uses. Replaced the earlier down-arrow (2026-09-14) for the same reason
+  // as `opened` above.
+  closed: 'M3.5 3.5h9v9h-9z',
   // An hourglass: waiting for the entry trigger, nothing has happened yet.
   pending: 'M4 2h8 M4 14h8 M4.5 2.5 8 8l3.5-5.5 M4.5 13.5 8 8l3.5 5.5',
   // A ring cut exactly in half: TP1 banked, the runner still live -- the
   // same halfway reading `sb-status`'s partial marker gives, as a glyph.
   partial: 'M8 14.5A6.5 6.5 0 1 0 8 1.5a6.5 6.5 0 0 0 0 13z M8 1.5v13',
   // A plain cross: the universal cancel/void mark, distinct from `closed`'s
-  // arrow so a plan that never filled cannot be misread as one that did.
+  // square so a plan that never filled cannot be misread as one that did.
   cancelled: 'M4.5 4.5l7 7 M11.5 4.5l-7 7',
   // A diamond: the sidebar brand mark, replacing the raster logo (D3,
   // finding 16) with a shape that inherits currentColor and holds at 24px.
@@ -137,3 +141,17 @@ export class Icon {
    */
   protected readonly path = computed<string | undefined>(() => PATHS[this.name()]);
 }
+
+/** One icon per plan lifecycle status -- lives here, not on any one
+ *  consumer, because Recent Activity is the only place it is used
+ *  (2026-09-14: deliberately kept out of the Open Positions table) but the
+ *  mapping itself is about the icon set, not about that one panel. EXPIRED
+ *  reads as `cancelled` -- a plan that never filled either way. */
+export const STATUS_ICON: Record<string, IconName> = {
+  PENDING: 'pending',
+  ACTIVE: 'opened',
+  PARTIAL: 'partial',
+  CLOSED: 'closed',
+  CANCELLED: 'cancelled',
+  EXPIRED: 'cancelled',
+};
