@@ -42,11 +42,12 @@ describe('deriveClosedVisible', () => {
     expect(deriveClosedVisible(base)).toEqual(['confidence_level', 'hold', 'opened_at']);
   });
 
-  it('drops "num" and "status" -- every row here is closed, and # is empty', () => {
-    // The group heading already says CLOSED, and the Dashboard attaches no
-    // cell to 'num', so both columns spent width saying nothing.
+  it('drops "status" -- every row here is closed, so it would repeat the heading', () => {
+    // 'num' stays: since 2026-09-14 it is a real shortId+link column
+    // (dashboard.ts's numCell), not the em-dash it used to be, so a closed
+    // row's plan id is exactly as useful as an open one's.
     const base = ['num', 'status', 'ticker', 'pnl_pct', 'opened_at'];
-    expect(deriveClosedVisible(base)).toEqual(['ticker', 'pnl_pct', 'hold', 'opened_at']);
+    expect(deriveClosedVisible(base)).toEqual(['num', 'ticker', 'pnl_pct', 'hold', 'opened_at']);
   });
 
   it('drops "held" so it cannot sit beside "hold" at a coarser precision', () => {
@@ -107,13 +108,15 @@ describe('reconcileReorder', () => {
     expect(reconcileReorder(order, base)).toEqual(['num', 'ticker', 'direction']);
   });
 
-  it('restores "num", "status" and "held" after a drag inside the Closed table', () => {
-    // Closed drops all three (see CLOSED_DROPS). Without this a drag there
-    // would delete them from the OTHER three groups' tables too.
-    const order = ['ticker', 'pnl_pct', 'hold'];
+  it('restores "status" and "held" after a drag inside the Closed table', () => {
+    // Closed drops both (see CLOSED_DROPS). Without this a drag there would
+    // delete them from the OTHER three groups' tables too. 'num' is not
+    // one of these any more (2026-09-14) -- Closed no longer drops it, so
+    // it is already in `order` and needs no restoring.
+    const order = ['num', 'ticker', 'pnl_pct', 'hold'];
     const base = ['num', 'status', 'ticker', 'pnl_pct', 'held'];
     expect(reconcileReorder(order, base)).toEqual([
-      'ticker', 'pnl_pct', 'held', 'num', 'status',
+      'num', 'ticker', 'pnl_pct', 'held', 'status',
     ]);
   });
 });

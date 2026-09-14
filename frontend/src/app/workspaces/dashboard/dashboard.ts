@@ -196,7 +196,7 @@ import { MarketMovers } from './panels/market-movers';
       <button sb-button variant="ghost" type="button" panel-actions data-info="sizing"
               aria-label="Sizing note"
               (click)="infoOpen.set('sizing')">?</button>
-      <sb-hint panel-actions class="lifecycle-hint" [wide]="true" glyph="?"
+      <sb-hint panel-actions class="lifecycle-hint" [xl]="true" align="left" glyph="?"
                label="Plan lifecycle and qualifying trades">
         <span class="hint-heading">Plan lifecycle</span>
         <span class="hint-copy">
@@ -327,6 +327,14 @@ import { MarketMovers } from './panels/market-movers';
     </ng-template>
 
     <!-- cells ---------------------------------------------------------- -->
+
+    <!-- row.id IS the plan id (dashboard.py's _row_from_plan sets "id" to
+         plan["plan_id"] directly, not a separate trade id) -- shortId below
+         just trims it to something a 3rem column can hold; the full id is
+         on the detail page this links to, same pattern as trades.ts. -->
+    <ng-template #numCell let-row>
+      <sb-row-link [link]="['/trades', row.id]">{{ shortId(row) }}</sb-row-link>
+    </ng-template>
 
     <!-- A real anchor, not a click handler: row activation is mouse-only by
          the table's design, so this is the keyboard route into a position. -->
@@ -696,6 +704,8 @@ export class Dashboard {
     });
   }
 
+  private readonly numCell =
+    viewChild.required<TemplateRef<RowContext<TradeRow>>>('numCell');
   private readonly tickerCell =
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('tickerCell');
   private readonly pnlCell =
@@ -788,6 +798,7 @@ export class Dashboard {
   /** The shared definitions, with this panel's own cells attached. */
   protected readonly columns = computed<ColumnDef<TradeRow>[]>(() => {
     const cells: Record<string, TemplateRef<RowContext<TradeRow>>> = {
+      num: this.numCell(),
       ticker: this.tickerCell(),
       pnl_pct: this.pnlCell(),
       r_multiple: this.rMultipleCell(),
@@ -858,6 +869,14 @@ export class Dashboard {
   protected fmtSigned = signed;
   protected fmtPct = pct;
   protected fmtDate = dateTime;
+
+  /** row.id IS the plan id; the '#' column is 3rem wide and the full id is
+   *  on the detail page it links to. Same rule trades.ts's own shortId
+   *  uses -- kept in sync there rather than shared, since the two files
+   *  don't otherwise depend on each other. */
+  protected shortId(row: TradeRow): string {
+    return row.id.length > 6 ? row.id.slice(-6) : row.id;
+  }
 
   /** sb-magnitude's max for the R column. Not an observed max from the
    *  store: sb-positions-table shows one lifecycle tab's rows at a time, and

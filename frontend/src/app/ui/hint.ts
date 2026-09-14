@@ -54,6 +54,8 @@ let nextId = 0;
     <span
       class="pop elev-overlay"
       [class.wide]="wide()"
+      [class.xl]="xl()"
+      [class.align-left]="align() === 'left'"
       role="tooltip"
       [id]="id"
       [hidden]="!open()"
@@ -108,6 +110,14 @@ let nextId = 0;
       white-space: normal;
     }
     .pop.wide { max-width: min(420px, 90vw); }
+    /* 50% past .wide, on request (2026-09-14) -- for a hint whose content
+       (a diagram, not a sentence) reads as cramped even at .wide's 420px. */
+    .pop.xl { max-width: min(630px, 90vw); font-size: var(--text-table); }
+    /* Anchors the popover's RIGHT edge to the trigger instead of centring
+       under it, so it opens leftward. "left" (popLeft, above) is set to
+       the trigger's own right edge when this is active -- see the
+       reposition() method below. */
+    .pop.align-left { transform: translateX(-100%); }
     /* A fingertip needs 44px around a 14px glyph (v80 D4). */
     @media (pointer: coarse), (max-width: 639px) {
       .trigger { min-width: var(--control-h); min-height: var(--control-h); }
@@ -123,6 +133,14 @@ export class Hint {
   readonly glyph = input('i');
   /** Use the larger overlay only for a compact, non-interactive diagram. */
   readonly wide = input(false);
+  /** 50% larger again than `wide` -- for content that is cramped even
+   *  there. Takes precedence over `wide` when both are set. */
+  readonly xl = input(false);
+  /** 'center' (default) sits the popover under the trigger's midpoint;
+   *  'left' opens it leftward from the trigger's right edge instead, for a
+   *  trigger sitting close enough to the panel's own right edge that a
+   *  centred popover would run off it. */
+  readonly align = input<'center' | 'left'>('center');
 
   protected readonly id = `sb-hint-${nextId++}`;
   protected readonly pinned = signal(false);
@@ -139,7 +157,11 @@ export class Hint {
     if (!trigger) return;
     const rect = trigger.getBoundingClientRect();
     this.popTop.set(rect.bottom + 4);
-    this.popLeft.set(rect.left + rect.width / 2);
+    // Left-aligned anchors to the trigger's right edge (the .align-left
+    // CSS rule pulls the popover fully leftward from there via
+    // translateX(-100%)); centred anchors to the trigger's midpoint, as
+    // before.
+    this.popLeft.set(this.align() === 'left' ? rect.right : rect.left + rect.width / 2);
   };
 
   constructor() {

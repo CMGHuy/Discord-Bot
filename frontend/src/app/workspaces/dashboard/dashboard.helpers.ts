@@ -26,15 +26,17 @@ const DASHBOARD_OMITS_DIRECTION = (key: string) => key !== 'direction';
  *  columns at two precisions -- which is exactly what happens if this is
  *  forgotten, since 'held' now ships in the default column set.
  *
- *  'num' and 'status' are dropped because neither says anything in this
- *  table. Every row here is CLOSED by construction -- that is what the group
- *  heading means -- so the Status column repeats the heading down all six
- *  rows; and the Dashboard, unlike Trades, attaches no cell to 'num' (see
- *  dashboard.ts's `columns`), so the '#' column rendered an em dash on every
- *  row. Two columns of width spent saying nothing, in the one group that
- *  needs the width most (it carries 'hold' and 'closed_at' on top of what
- *  the other three show). */
-const CLOSED_DROPS = new Set(['now', 'hold', 'held', 'num', 'status']);
+ *  'status' is dropped because it says nothing in this table specifically:
+ *  every row here is CLOSED by construction -- that is what the group
+ *  heading means -- so the column would just repeat the heading down all
+ *  six rows. ('num' used to be dropped for a different reason -- the
+ *  Dashboard attached no cell to it, so the '#' column rendered an em dash
+ *  on every row everywhere, not just here. 2026-09-14: dashboard.ts now
+ *  attaches the same shortId+link cell trades.ts already had, so 'num' is
+ *  a real, useful column again -- including here, where it carries the
+ *  most width pressure of any group ('hold' plus 'closed_at' on top of
+ *  what the other three show).) */
+const CLOSED_DROPS = new Set(['now', 'hold', 'held', 'status']);
 
 /** The Closed group's own column order, derived from the shared picker
  *  list: `CLOSED_DROPS` above is removed, and 'hold' -- the completed hold
@@ -94,7 +96,7 @@ export function visibleForTab(tab: string, visible: string[]): string[] {
  * DIFFERENT group is a rare cross-table edge case, and losing exact position
  * there is a smaller cost than the reinsertion logic needed to preserve it.
  */
-const RESTORED_KEYS = ['now', 'closed_at', 'direction', 'held', 'num', 'status'];
+const RESTORED_KEYS = ['now', 'closed_at', 'direction', 'held', 'status'];
 
 export function reconcileReorder(order: readonly string[], base: readonly string[]): string[] {
   const merged = order.filter((key) => key !== 'hold');
