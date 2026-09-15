@@ -740,6 +740,9 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 quality_score=plan_v2.quality_score if plan_v2 is not None else None,
                 source=plan_v2.source if plan_v2 is not None else None,
                 trendline_fit=trendline_fit,
+                cohort_label=plan_v2.cohort_label if plan_v2 is not None else None,
+                cohort_stats=plan_v2.cohort_stats if plan_v2 is not None else None,
+                risk_features=plan_v2.risk_features if plan_v2 is not None else None,
             )
             log.info("Logged new paper trade %s for %s", trade_id, result.ticker)
             if plan_v2 is not None:

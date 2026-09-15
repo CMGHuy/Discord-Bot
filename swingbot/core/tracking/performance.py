@@ -513,7 +513,8 @@ class TradeLog:
                   stop_sources=None, target2_sources=None, risk_reward_ratio=None,
                   explanation=None, confirmed_by=None, plan_id=None,
                   badge=None, quality_score=None, source=None,
-                  trendline_fit=None) -> str:
+                  trendline_fit=None, cohort_label=None, cohort_stats=None,
+                  risk_features=None) -> str:
         """
         The extra keyword args (confidence_score/breakdown, target/stop
         sources, explanation, confirmed_by) are optional and purely for
@@ -537,6 +538,13 @@ class TradeLog:
             "plan_id": plan_id,     # v2 plan-engine link; None for v1/legacy trades
             "badge": badge,         # "VALIDATED" | "WEAK" | None
             "quality_score": quality_score,
+            # v86: the frozen cohort verdict and risk-feature snapshot the
+            # plan was stamped with at issuance -- copied here so the
+            # closed trade (and later journal.build_entry) carries what the
+            # plan was TOLD at issuance, not a regenerated registry lookup.
+            "cohort_label": cohort_label,
+            "cohort_stats": cohort_stats or {},
+            "risk_features": risk_features or {},
             "source": source,       # "strategy" | "confluence" | None
             "legs": [],             # v2 two-leg realization (Task 63/64/65/66); [] for v1
             "ticker": ticker,
