@@ -108,11 +108,41 @@ coroutines run under `asyncio.run`), JSON persistence through `PlanStore`.
 
 ## Progress
 
-- [ ] F1 — ledger fields, `breakeven_trigger`, `TRAIL_NOTIFY_MIN_R`
-- [ ] F2 — `instructions.py`
-- [ ] F3 — manager feed bookkeeping
-- [ ] F4 — `ack_notified`, `run_notice_sweep`
-- [ ] F5 — ticket renderer and scan wiring
-- [ ] F6 — routing and `trade_monitor`
-- [ ] F7 — surface agreement, v67 note, preview (the human partner reads the preview)
-- [ ] F8 — full suite, release, close-out
+- [x] F1 — ledger fields, `breakeven_trigger`, `TRAIL_NOTIFY_MIN_R`
+- [x] F2 — `instructions.py`
+- [x] F3 — manager feed bookkeeping
+- [x] F4 — `ack_notified`, `run_notice_sweep`
+- [x] F5 — ticket renderer and scan wiring
+- [x] F6 — routing and `trade_monitor`
+- [x] F7 — surface agreement, v67 note, preview (the human partner reads the preview)
+- [x] F8 — full suite, release, close-out
+
+**F8 findings, recorded 2026-09-15:**
+
+1. The merge into `main` (`f8fa6e19`) landed clean (no `CONFLICT` markers) but
+   silently combined this branch's `_feed_bookkeeping(plan, new_events,
+   regular, now)` call with a same-day, unrelated main refactor
+   (`40f74c08`, "simplify poll-window coverage") that deleted the local
+   `regular` variable `poll()` computed it from — an undefined-name bug
+   pyflakes caught in CI, not locally (the pre-merge full run was green
+   because it ran before the merge existed). Fixed in `8c0aeec9`: `regular`
+   is reintroduced as `is_regular_session(now) if config.INTRADAY_RTH_ONLY
+   else True`, matching this branch's original three-way gate — decoupled
+   from `_step()`'s gating, which main's refactor deliberately made
+   RTH-independent. A first attempt (`50e02d8c`'s sibling, since reworked)
+   dropped the `INTRADAY_RTH_ONLY` escape hatch and broke every test that
+   runs with it `False`; both are in `8c0aeec9`'s message.
+2. `alert_embeds.py`'s `build_simple_alert` referenced `config.PLAN_ENGINE_V2`
+   with no `config` import in scope — another merge-time gap, fixed in
+   `50e02d8c`.
+3. `notify_plan_events` only ever logged delivery *failures*; a successful
+   post was silent, so this task's own Step 5 verification (grep prod logs
+   for a `delivered stop_moved` line) had nothing to match. Added the
+   missing success-path log line in `6a87aa9e`.
+4. **Deferred, not cut:** Step 5's post-deploy log check. Deploy (image
+   `sha-6a87aa9e48ec`) landed 2026-09-15 09:09 UTC — pre-market (05:09 ET),
+   well before the 09:30 ET regular-session open `is_regular_session` gates
+   stop-move detection on — so no `stop_moved` catch-up had a chance to
+   fire yet. Both containers came up healthy on the right image; the human
+   partner should re-run the Step 5 grep after 09:30 ET today and compare
+   against the admin Plans page as described there.
