@@ -438,6 +438,8 @@ class PlanManager:
                 # separate double-logging bug 5d72c1ab already fixed).
                 self.trade_log.discard_plan_placeholder(plan.plan_id)
             elif event.transition == "closed":
+                if event.detail.get("_terminal_persisted"):
+                    return
                 reason = event.detail["reason"]
                 # "win" is v70's terminal-target reason: an ACTIVE plan with
                 # no tp2 whose tp1 was confirmed outside regular hours closes
@@ -460,6 +462,19 @@ class PlanManager:
         except Exception:
             log.warning("trade-log hook failed for plan %s", plan.plan_id,
                         exc_info=True)   # bookkeeping must never break the manager
+
+    def _persist_terminal(self, plan: TradePlanV2, leg: dict, status: str) -> bool:
+        """Persist a terminal plan and its linked trade as one DB transaction."""
+        from swingbot.core.db import stages
+        if (self.trade_log is not None and stages.reads_db("plans")
+                and stages.reads_db("trades")):
+            from swingbot.core.db.engine import transaction
+            with transaction() as conn:
+                self.store.update(plan, conn=conn)
+                self.trade_log.close_plan_trade(plan.plan_id, leg, status, conn=conn)
+            return True
+        self.store.update(plan)
+        return False
 
     def _continuous(self, plan: TradePlanV2, stop: float, now=None) -> bool:
         seen = self._last_seen.get(plan.plan_id)
@@ -538,9 +553,13 @@ class PlanManager:
             reason = "scratch" if is_be_stop else "loss"
             fill = poll_stop_fill(price, stop, self._continuous(plan, stop, now))
             record_transition(plan, PlanStatus.CLOSED, reason=reason, at=self._now())
-            self.store.update(plan)
+            leg = {"fraction": 1.0, "exit_price": fill,
+                   "r": (fill - entry) * sign / risk if risk > 0 else 0.0,
+                   "reason": reason}
+            persisted = self._persist_terminal(plan, leg, "loss" if reason == "loss" else "closed")
             return [PlanEvent(plan.plan_id, "closed",
-                              {"reason": reason, "exit_price": fill})]
+                              {"reason": reason, "exit_price": fill, "leg": leg,
+                               "_terminal_persisted": persisted})]
 
         hit_tp1 = price >= plan.tp1 if is_bull else price <= plan.tp1
         if hit_tp1:
@@ -642,9 +661,10 @@ class PlanManager:
                "r": r2, "reason": reason, "closed_at": at}
         plan.legs_realized.append(leg)
         record_transition(plan, PlanStatus.CLOSED, reason=reason, at=at)
-        self.store.update(plan)
+        persisted = self._persist_terminal(plan, leg, "win" if reason.startswith("tp1_") else "closed")
         return [PlanEvent(plan.plan_id, "closed",
-                          {"reason": reason, "exit_price": fill, "leg": leg})]
+                          {"reason": reason, "exit_price": fill, "leg": leg,
+                           "_terminal_persisted": persisted})]
 
     # -- overnight/session-open bar check (Task 67) --------------------------
     # UNWIRED: production exits exclusively through poll(); see known-traps.md.
@@ -685,9 +705,10 @@ class PlanManager:
             leg = {"fraction": 1.0, "exit_price": fill, "r": r, "reason": reason}
             plan.legs_realized.append(leg)
             record_transition(plan, PlanStatus.CLOSED, reason=reason, at=self._now())
-            self.store.update(plan)
+            persisted = self._persist_terminal(plan, leg, "loss" if reason == "loss" else "closed")
             return [PlanEvent(plan.plan_id, "closed",
-                              {"reason": reason, "exit_price": fill})]
+                              {"reason": reason, "exit_price": fill, "leg": leg,
+                               "_terminal_persisted": persisted})]
 
         hit_tp1 = bar_high >= plan.tp1 if is_bull else bar_low <= plan.tp1
         if hit_tp1:
