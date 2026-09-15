@@ -44,7 +44,7 @@ def badge_field_for(plan) -> tuple[str, str] | None:
 COHORT_POOR_TEXT = (
     "⚠️ **Cohort:** {direction} setups in a {regime} regime have closed "
     "**{win_rate:.1f}% WR / {expectancy_r:+.2f}R** (n={n}, frozen {run_date}). "
-    "Reduced size, manual confirmation."
+    "Worth a second look before sizing up."
 )
 COHORT_STRONG_TEXT = (
     "**Cohort:** {direction} setups in a {regime} regime have closed "

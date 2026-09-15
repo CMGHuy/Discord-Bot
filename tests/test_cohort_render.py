@@ -37,6 +37,17 @@ def test_unknown_says_not_enough_data_never_safe():
     assert "safe" not in line.lower()
 
 
+def test_poor_no_longer_gives_directive_sizing_advice():
+    # Final-review Fix 7 (human-approved): the C6 separation report's
+    # pre-registered verdict is still open -- "Reduced size, manual
+    # confirmation." told the reader what position-sizing action to take on
+    # a hypothesis that hasn't been scored yet. Numbers stay; the directive
+    # close is gone.
+    line = cohort_line(_plan("COHORT_POOR"))
+    assert "Reduced size" not in line
+    assert "manual confirmation" not in line
+
+
 def test_a_plan_with_no_cohort_stats_renders_nothing_rather_than_crashing():
     class P:
         cohort_label = "COHORT_POOR"
