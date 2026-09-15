@@ -66,7 +66,7 @@ def cohort_line(plan) -> str | None:
         return None
     fields = {
         "direction": plan.direction,
-        "regime": stats.get("regime2_state") or "unknown",
+        "regime": (stats.get("regime2_state") or "unknown").replace("_", " "),
         "win_rate": stats.get("win_rate", 0.0),
         "expectancy_r": stats.get("expectancy_r", 0.0),
         "n": stats.get("n_live", 0) + stats.get("n_backtest", 0),

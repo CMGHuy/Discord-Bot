@@ -14,7 +14,7 @@ def _plan(label, **stats):
 def test_poor_renders_the_caution_with_its_own_numbers():
     line = cohort_line(_plan("COHORT_POOR"))
     assert "⚠️" in line
-    assert "bear_volatile" in line
+    assert "bear volatile" in line
     assert "41.2" in line
     assert "-0.38" in line
     assert "600" in line          # n_live + n_backtest
