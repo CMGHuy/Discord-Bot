@@ -729,6 +729,8 @@ def test_risk_features_stamped_on_real_plan_via_attach_plan_v2(monkeypatch):
     populating regime2_state, confluence_count, and dist_to_level_atr with
     real, non-None values (not just empty dicts). This tests the integration
     between attach_plan_v2 and risk_features.build()."""
+    from swingbot.core.market.levels import Level
+
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
 
     # Create a realistic test scenario with all required fields
@@ -736,7 +738,7 @@ def test_risk_features_stamped_on_real_plan_via_attach_plan_v2(monkeypatch):
         direction="bullish",
         entry=100.0,
         stop_loss=95.0,
-        take_profit=110.0,  # The structural level for dist_to_level_atr
+        take_profit=110.0,
         target_sources=["EMA21"],
         stop_sources=["Rolling support"],
     )
@@ -752,12 +754,17 @@ def test_risk_features_stamped_on_real_plan_via_attach_plan_v2(monkeypatch):
     # Create test data with proper OHLCV structure
     df = make_ohlcv([100.0] * 60)
 
+    # Create level_map with support/resistance levels. The signal level for a
+    # bullish setup is the support that confirmed it (the floor).
+    support_level = Level(price=95.0, sources=["Rolling support"])
+    resistance_level = Level(price=110.0, sources=["EMA21"])
+    level_map = ([support_level], [resistance_level])
+
     # Call attach_plan_v2 with the regime2_state parameter (v86 Task C4)
-    # level_map=None uses the scenario's take_profit as the sole candidate level
     analyze.attach_plan_v2(
         item, scenario, df,
         ticker="TEST", horizon_key="4w",
-        level_map=None,
+        level_map=level_map,
         regime=SimpleNamespace(trend="bullish"),
         rs_percentile=50.0,
         breadth=60.0,
@@ -779,9 +786,12 @@ def test_risk_features_stamped_on_real_plan_via_attach_plan_v2(monkeypatch):
     assert rf.get("confluence_count") == 2, \
         f"confluence_count should be 2 (from target_confluence[0]), got {rf.get('confluence_count')}"
     assert rf.get("dist_to_level_atr") is not None, \
-        f"dist_to_level_atr should not be None (from scenario.take_profit), got {rf.get('dist_to_level_atr')}"
+        f"dist_to_level_atr should not be None (from signal level), got {rf.get('dist_to_level_atr')}"
     assert isinstance(rf.get("dist_to_level_atr"), (int, float)), \
         f"dist_to_level_atr should be numeric, got {type(rf.get('dist_to_level_atr'))}"
+    # For bullish: entry 100 - support 95 = 5, divided by ATR should give a positive value
+    assert rf.get("dist_to_level_atr") > 0, \
+        f"dist_to_level_atr should be positive (entry extends away from support), got {rf.get('dist_to_level_atr')}"
 
     # Verify other documented fields are also present and populated
     assert rf.get("confidence_level") == 3, "confidence_level should be 3"

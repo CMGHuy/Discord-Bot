@@ -340,13 +340,24 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             # this change exists to stop posting).
             item.plan_v2_rejected = "no_qualifying_target"
             return
+        # Extract the signal/confirmation level (the level that validated
+        # the setup, not the target). For bullish, it's the support that
+        # confirmed the pattern; for bearish, the resistance.
+        signal_level_price = None
+        if level_map:
+            supports, resistances = level_map
+            if scenario.direction == "bullish" and supports:
+                signal_level_price = supports[0].price
+            elif scenario.direction == "bearish" and resistances:
+                signal_level_price = resistances[0].price
+
         plan.risk_features = risk_features.build(
             regime2_state=regime2_state,
             confidence_level=getattr(getattr(item, "conf", None), "level", None),
             htf_bias=getattr(item, "htf_bias", None),
             direction=scenario.direction,
             confluence_count=(item.target_confluence[0] if getattr(item, "target_confluence", None) else None),
-            entry=scenario.entry, level_price=getattr(scenario, "take_profit", None),
+            entry=scenario.entry, level_price=signal_level_price,
             stop_loss=plan.stop_loss,
             atr_val=_safe_atr_value(scenario.entry, _atr_for(df)),
             close=float(df["Close"].iloc[-1]),
