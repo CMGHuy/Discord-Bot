@@ -40,3 +40,9 @@ def test_database_fields_have_the_correct_safety_flags():
     assert fields["POSTGRES_PASSWORD"].hot_reloadable is False
     assert fields["DB_STORES"].sensitive is False
     assert fields["DB_STORES"].hot_reloadable is True
+
+
+def test_transaction_reuses_an_existing_connection(db_conn):
+    with dbengine.transaction(db_conn) as first:
+        with dbengine.transaction(first) as second:
+            assert second is first

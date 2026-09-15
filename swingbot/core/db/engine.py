@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
 
 from sqlalchemy import Engine, create_engine
 
@@ -61,3 +62,17 @@ def reset_engine() -> None:
     if _engine is not None:
         _engine.dispose()
     _engine = None
+
+
+@contextmanager
+def transaction(conn=None):
+    """Yield one transaction for several repository calls.
+
+    An existing connection is passed through, allowing an already-atomic
+    caller to compose without opening a second transaction.
+    """
+    if conn is not None:
+        yield conn
+        return
+    with get_engine().begin() as owned:
+        yield owned
