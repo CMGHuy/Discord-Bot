@@ -28,6 +28,13 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   Discord colour, glyph, number format and embed part: pure `tokens.py`,
   phone-safe `ansi.py`, then whole embed parts in `components.py`. Nothing
   outside it may touch `discord.Color`; its AST guard enforces that boundary.
+- **`swingbot/core/db/`** is the PostgreSQL persistence boundary introduced by
+  v67. Its SQLAlchemy Core repositories split flat store records into promoted
+  columns and a `doc JSONB` payload, then merge them back so callers keep their
+  existing dict contract. Nothing outside this package imports SQLAlchemy.
+  Stores select `json`, `dual`, or `db` through `DB_STORES`; database writes
+  fail fast, unlike `infra/jsonio.py` reads which preserve the bot's
+  file-recovery behavior. Alembic revisions are explicit, part-prefixed ids.
 - **`swingbot/core/edge/`** (edge-engine-v4, current active work area) is
   growth/risk math, mostly pure functions: `sizing.py` (fractional-Kelly, vol
   targeting), `heat.py` (portfolio heat cap), `correlation.py` (cluster
