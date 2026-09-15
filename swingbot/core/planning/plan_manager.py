@@ -193,9 +193,13 @@ def maybe_pyramid(plan, price: float) -> dict | None:
 
 class PlanManager:
     def __init__(self, store: PlanStore, price_fn, bar_count_fn=None,
-                 atr_fn=None, trade_log=None):
+                 atr_fn=None, trade_log=None, price_batch_fn=None):
         self.store = store
         self.price_fn = price_fn            # ticker -> live float
+        # Optional on purpose: the deterministic unit-test feeds only expose
+        # a one-ticker callable.  Production supplies the batch function so
+        # one manager tick does not make one network request per open plan.
+        self.price_batch_fn = price_batch_fn  # [ticker] -> {ticker: live float}
         self.bar_count_fn = bar_count_fn    # (ticker, created_at) -> bars since
         self.atr_fn = atr_fn                # ticker -> current ATR(14) (Task 66)
         self.trade_log = trade_log          # TradeLog (Task 70)
@@ -297,12 +301,27 @@ class PlanManager:
         if self.trade_log is not None:
             self.trade_log.reload()
         events: list[PlanEvent] = self.resend_notices(reload=False)
-        for plan in self.store.open_plans():
+        open_plans = self.store.open_plans()
+        prices: dict[str, float] | None = None
+        if self.price_batch_fn is not None and open_plans:
+            tickers = list(dict.fromkeys(plan.ticker for plan in open_plans))
             try:
-                price = float(self.price_fn(plan.ticker))
+                prices = self.price_batch_fn(tickers) or {}
             except Exception as exc:
-                log.debug("poll: price fetch failed for %s: %s", plan.ticker, exc)
-                continue
+                # No per-plan fallback here: the point of batching is to
+                # bound the tick, and a failed fresh batch must not turn into
+                # stale or serial quote requests that delay every plan.
+                log.debug("poll: batch price fetch failed: %s", exc)
+                prices = {}
+        for plan in open_plans:
+            if prices is not None:
+                price = prices.get(plan.ticker)
+            else:
+                try:
+                    price = float(self.price_fn(plan.ticker))
+                except Exception as exc:
+                    log.debug("poll: price fetch failed for %s: %s", plan.ticker, exc)
+                    continue
             if not price or price <= 0:
                 continue
             # price_fn may block long enough for the scan loop to persist a new
@@ -723,6 +742,18 @@ def _price_fn(ticker):                      # module-level so tests can patch it
     return get_current_price(ticker, allow_stale=False)
 
 
+def _price_batch_fn(tickers):
+    """Fresh-only price map for plan transitions; never fall back to UI data."""
+    from swingbot.core.marketdata.data import get_current_price_batch
+    return get_current_price_batch(tickers, allow_stale=False)
+
+
+# Retain the serial seam for deterministic callers/tests that replace
+# ``_price_fn``.  Supplying the production batch implementation beside a
+# custom feed would bypass that feed and unexpectedly make live requests.
+_DEFAULT_PRICE_FN = _price_fn
+
+
 def _live_atr(ticker):
     from swingbot.core.marketdata.data import get_daily_data
     from swingbot.core.market.indicators import atr
@@ -742,8 +773,10 @@ def _manager() -> PlanManager:
     global _MANAGER
     if _MANAGER is None:
         from swingbot.core.tracking.performance import TradeLog
+        batch_fn = _price_batch_fn if _price_fn is _DEFAULT_PRICE_FN else None
         _MANAGER = PlanManager(PlanStore(), _price_fn, atr_fn=_live_atr,
-                               bar_count_fn=_bars_since, trade_log=TradeLog())
+                               bar_count_fn=_bars_since, trade_log=TradeLog(),
+                               price_batch_fn=batch_fn)
     return _MANAGER
 
 

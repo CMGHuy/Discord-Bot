@@ -42,6 +42,7 @@ def test_flag_on_polls_open_plans(tmp_path, monkeypatch):
     from tests.planning.test_plan_manager_pending import _pending
     PlanStore().add(_pending(stop_loss=104.0))
     monkeypatch.setattr(pm, "_price_fn", lambda t: 106.0)   # injectable feed
+    monkeypatch.setattr(pm, "_price_batch_fn", lambda tickers: {t: 106.0 for t in tickers})
     # Fresh plan: no bars have elapsed, so expiry is not what is under test.
     monkeypatch.setattr(pm, "_bars_since", lambda ticker, created_at: 0)
     events = pm.run_manager_tick()
@@ -61,10 +62,51 @@ def test_flag_on_still_expires_a_stale_pending_plan(tmp_path, monkeypatch):
     from tests.planning.test_plan_manager_pending import _pending
     PlanStore().add(_pending())
     monkeypatch.setattr(pm, "_price_fn", lambda t: 106.0)
+    monkeypatch.setattr(pm, "_price_batch_fn", lambda tickers: {t: 106.0 for t in tickers})
     # Past its 5-bar window: expiry wins even though price crossed the trigger.
     monkeypatch.setattr(pm, "_bars_since", lambda ticker, created_at: 6)
     events = pm.run_manager_tick()
     assert [e.transition for e in events] == ["cancelled_expired"]
+
+
+def test_plan_manager_batches_distinct_open_plan_tickers(tmp_path, monkeypatch):
+    """Production's manager must not re-fetch a quote for every plan."""
+    from swingbot.core.planning.plan_store import PlanStore
+    from tests.planning.test_plan_manager_pending import _pending
+
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    first = _pending(plan_id="batch-a", ticker="AAPL", stop_loss=104.0)
+    second = _pending(plan_id="batch-b", ticker="AAPL", stop_loss=104.0)
+    store.add(first)
+    store.add(second)
+    calls = []
+
+    manager = pm.PlanManager(
+        store,
+        lambda _ticker: (_ for _ in ()).throw(AssertionError("serial fetch")),
+        bar_count_fn=lambda *_args: 0,
+        price_batch_fn=lambda tickers: calls.append(tickers) or {"AAPL": 106.0},
+    )
+    events = manager.poll()
+
+    assert calls == [["AAPL"]]
+    assert [event.transition for event in events] == ["filled", "filled"]
+
+
+def test_custom_single_price_feed_does_not_fall_through_to_live_batch(tmp_path, monkeypatch):
+    """The injectable serial feed remains a complete test/embedded seam."""
+    from swingbot.core.planning.plan_store import PlanStore
+    from tests.planning.test_plan_manager_pending import _pending
+
+    monkeypatch.setattr(config, "INTRADAY_MANAGER_V2", True)
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(pm, "_MANAGER", None)
+    PlanStore().add(_pending(stop_loss=104.0))
+    monkeypatch.setattr(pm, "_price_fn", lambda _ticker: 106.0)
+    monkeypatch.setattr(pm, "_price_batch_fn", lambda _tickers: pytest.fail("live batch seam"))
+    monkeypatch.setattr(pm, "_bars_since", lambda *_args: 0)
+
+    assert [event.transition for event in pm.run_manager_tick()] == ["filled"]
 
 def test_run_manager_tick_is_a_no_op_during_quiet_hours(monkeypatch, tmp_path):
     """Widened 2026-09-14: poll()'s no-op window is quiet hours only now,

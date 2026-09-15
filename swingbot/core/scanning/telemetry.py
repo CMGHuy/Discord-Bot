@@ -9,10 +9,13 @@ TELEMETRY_PATH = os.path.join(config.DATA_DIR, "scan_telemetry.jsonl")
 
 
 def log_scan_telemetry(stats: dict, path: str | None = None) -> None:
-    """Task E82: one JSON line per scan (at, duration_s, tickers, errors,
-    data_skips, signals, alerts, open_heat) appended to scan_telemetry.jsonl
-    -- cheap append-only history for scan_slowdown()'s alarm and the admin
-    risk page's duration sparkline."""
+    """Append one scan row, including optional ``phases_s`` timing details.
+
+    The compact append-only history feeds ``scan_slowdown()`` and the admin
+    scan-health display.  Phase timings are intentionally raw numbers rather
+    than a second derived view so operators can identify whether crawl,
+    pricing, enrichment, analysis, or alert finalisation regressed.
+    """
     import datetime as dt
     row = {"at": dt.datetime.now(dt.timezone.utc).isoformat(), **stats}
     with open(path or TELEMETRY_PATH, "a", encoding="utf-8") as f:

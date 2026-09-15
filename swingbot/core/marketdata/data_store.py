@@ -26,6 +26,8 @@ Yahoo actually has (~30 days) and says so plainly in the result.
 import logging
 import os
 import time
+import threading
+from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
@@ -207,6 +209,65 @@ def load_from_disk(ticker: str, interval: str, base_dir: str = DATA_DIR) -> pd.D
 
 OHLCV_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
 
+# The disk cache is the cross-process authority, but parsing a full-history
+# CSV for every warm scan became a measurable CPU and I/O cost as the
+# watchlist grew.  Keep a bounded process-local copy keyed by the file's
+# identity.  Returning a defensive copy is deliberate: scan enrichment adds
+# columns to frames, and exposing this shared object would let one scan alter
+# the next scan's input.
+_NORMALIZED_FRAME_CACHE_MAX = 256
+_normalized_frame_cache: OrderedDict[tuple[str, tuple[int, int, int]], pd.DataFrame] = OrderedDict()
+_normalized_frame_cache_lock = threading.Lock()
+_normalized_frame_cache_hits = 0
+_normalized_frame_cache_misses = 0
+
+
+def _frame_signature(path: str) -> tuple[int, int, int] | None:
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    return (stat.st_mtime_ns, stat.st_size, stat.st_ctime_ns)
+
+
+def clear_normalized_frame_cache() -> None:
+    """Drop process-local parsed frames; primarily useful for tests/ops."""
+    global _normalized_frame_cache_hits, _normalized_frame_cache_misses
+    with _normalized_frame_cache_lock:
+        _normalized_frame_cache.clear()
+        _normalized_frame_cache_hits = 0
+        _normalized_frame_cache_misses = 0
+
+
+def normalized_frame_cache_stats() -> dict[str, int]:
+    """A cheap snapshot for scan telemetry and operational diagnostics."""
+    with _normalized_frame_cache_lock:
+        return {"entries": len(_normalized_frame_cache),
+                "hits": _normalized_frame_cache_hits,
+                "misses": _normalized_frame_cache_misses}
+
+
+def _cached_normalized_frame(path: str, signature: tuple[int, int, int]) -> pd.DataFrame | None:
+    global _normalized_frame_cache_hits, _normalized_frame_cache_misses
+    key = (os.path.abspath(path), signature)
+    with _normalized_frame_cache_lock:
+        frame = _normalized_frame_cache.get(key)
+        if frame is None:
+            _normalized_frame_cache_misses += 1
+            return None
+        _normalized_frame_cache_hits += 1
+        _normalized_frame_cache.move_to_end(key)
+        return frame.copy(deep=True)
+
+
+def _remember_normalized_frame(path: str, signature: tuple[int, int, int], frame: pd.DataFrame) -> None:
+    key = (os.path.abspath(path), signature)
+    with _normalized_frame_cache_lock:
+        _normalized_frame_cache[key] = frame.copy(deep=True)
+        _normalized_frame_cache.move_to_end(key)
+        while len(_normalized_frame_cache) > _NORMALIZED_FRAME_CACHE_MAX:
+            _normalized_frame_cache.popitem(last=False)
+
 
 def load_normalized(ticker: str, interval: str, base_dir: str = DATA_DIR) -> pd.DataFrame | None:
     """v47: load_from_disk() plus the shape guarantees a live download gives.
@@ -223,6 +284,14 @@ def load_normalized(ticker: str, interval: str, base_dir: str = DATA_DIR) -> pd.
     already treats a missing frame as "no data for this ticker this scan", so a
     corrupt CSV degrades to a cache miss instead of killing the scan.
     """
+    path = cache_path(ticker, interval, base_dir=base_dir)
+    signature = _frame_signature(path)
+    if signature is None:
+        return None
+    cached = _cached_normalized_frame(path, signature)
+    if cached is not None:
+        return cached
+
     try:
         df = load_from_disk(ticker, interval, base_dir=base_dir)
     except Exception as exc:
@@ -249,7 +318,16 @@ def load_normalized(ticker: str, interval: str, base_dir: str = DATA_DIR) -> pd.
         df.index = df.index.tz_localize(None)
     df = df[~df.index.duplicated(keep="last")].sort_index()
 
-    return df if not df.empty else None
+    if df.empty:
+        return None
+
+    # Capture the signature after parsing.  If a refresh atomically replaced
+    # the file while it was read, don't retain a frame under the old identity;
+    # the next caller will read the new file instead.
+    after_read = _frame_signature(path)
+    if after_read == signature:
+        _remember_normalized_frame(path, signature, df)
+    return df.copy(deep=True)
 
 
 def download_and_cache(ticker: str, interval: str = "daily", base_dir: str = DATA_DIR) -> dict:

@@ -71,6 +71,10 @@ def get_daily_data_batch(tickers: list, period: str = "2y") -> dict:
     the tickers' literal symbols; a ticker that needs alias resolution comes
     back absent here and the caller falls back to get_daily_data() for it.
     """
+    tickers = list(dict.fromkeys(
+        str(ticker).upper().strip()
+        for ticker in tickers if ticker is not None and str(ticker).strip()
+    ))
     if not tickers:
         return {}
     try:
@@ -106,9 +110,13 @@ _last_good_batch_price: dict = {}
 #: real number for a bit is a smaller lie than blanking every ticker in the
 #: batch, which is what returning {} on failure used to do.
 _LAST_GOOD_BATCH_PRICE_TTL_SECONDS = 15 * 60
+# Successful batch responses are also a short-lived display cache.  The
+# dashboard refreshes more often than quotes need to be re-downloaded, while
+# trading callers pass allow_stale=False and therefore bypass this cache.
+_BATCH_PRICE_CACHE_TTL_SECONDS = 15
 
 
-def get_current_price_batch(tickers: list) -> dict:
+def get_current_price_batch(tickers: list, *, allow_stale: bool = True) -> dict:
     """v55: batched sibling of get_current_price() -- one yf.download() call
     (1-day/1-minute, prepost=True) for many tickers' live price instead of a
     Ticker().history() + fast_info fallback per ticker (see
@@ -118,6 +126,11 @@ def get_current_price_batch(tickers: list) -> dict:
     absent from the result falls back to today's daily close in the caller --
     same fallback get_current_price()'s own failure case already has. No
     candidate_symbols() aliasing (see get_daily_data_batch).
+
+    ``allow_stale=False`` is for trading decisions.  It suppresses the
+    last-known-good fallback, because an old batch quote must never confirm a
+    stop/target fill or a debounce transition.  Display callers retain the
+    existing resilient default.
 
     Deliberately NOT wrapped in with_retry, unlike get_daily_data_batch
     right above it (tried 2026-09-14, reverted the same day):
@@ -135,17 +148,30 @@ def get_current_price_batch(tickers: list) -> dict:
     symptom without adding latency to the success path or blocking the
     failure path.
     """
+    tickers = list(dict.fromkeys(
+        str(ticker).upper().strip()
+        for ticker in tickers if ticker is not None and str(ticker).strip()
+    ))
     if not tickers:
         return {}
     now = time.monotonic()
+    if allow_stale:
+        current = {
+            ticker: cached[0]
+            for ticker in tickers
+            if (cached := _last_good_batch_price.get(ticker))
+            and now - cached[1] < _BATCH_PRICE_CACHE_TTL_SECONDS
+        }
+        if len(current) == len(tickers):
+            return current
     try:
         raw = yf.download(" ".join(tickers), period="1d", interval="1m",
                           group_by="ticker", prepost=True, progress=False)
     except Exception as exc:
         log.error("get_current_price_batch failed for %d ticker(s): %s", len(tickers), exc)
-        return _stale_batch_fallback(tickers, now)
+        return _stale_batch_fallback(tickers, now) if allow_stale else {}
     if raw is None or raw.empty:
-        return _stale_batch_fallback(tickers, now)
+        return _stale_batch_fallback(tickers, now) if allow_stale else {}
     out: dict = {}
     for ticker in tickers:
         try:
@@ -160,7 +186,7 @@ def get_current_price_batch(tickers: list) -> dict:
     # Tickers THIS batch call missed (a partial failure, not the all-or-
     # nothing case above) still get a stale-fallback chance individually.
     missing = [t for t in tickers if t not in out]
-    if missing:
+    if missing and allow_stale:
         out.update(_stale_batch_fallback(missing, now))
     return out
 
@@ -372,7 +398,10 @@ def get_current_price(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS,
     ticker_key = ticker.upper().strip()
     cached = _price_cache.get(ticker_key)
     now = time.monotonic()
-    if cached and (now - cached[1]) < ttl_seconds:
+    # The cache exists for dashboard/report rendering.  A trading transition
+    # explicitly requesting a fresh quote must never treat that display value
+    # as a new market observation.
+    if allow_stale and cached and (now - cached[1]) < ttl_seconds:
         return cached[0]
 
     for candidate in candidate_symbols(ticker_key):
@@ -432,16 +461,25 @@ def is_us_market_active(now=None) -> bool:
 
 def prefetch_prices(tickers: list[str], max_workers: int = 10) -> None:
     """
-    Warm the price cache for a list of tickers in parallel.
-    Call this before `get_current_price` in a render loop so all fetches
-    happen concurrently instead of sequentially.
+    Warm the single-price display cache with one batched request.
+
+    ``max_workers`` remains accepted for callers using the old interface, but
+    threaded individual yfinance calls are both slower and unsafe with this
+    pinned yfinance version. Consumers that follow by calling
+    ``get_current_price`` now hit ``_price_cache`` rather than downloading
+    every ticker again.
     """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    unique = list({t.upper().strip() for t in tickers if t})
+    del max_workers
+    unique = list(dict.fromkeys(t.upper().strip() for t in tickers if t and t.strip()))
     if not unique:
         return
-    with ThreadPoolExecutor(max_workers=min(max_workers, len(unique))) as pool:
-        futures = [pool.submit(get_current_price, tk) for tk in unique]
-        for fut in as_completed(futures):
-            fut.result()  # discard -- side-effect is populating _price_cache
+    try:
+        prices = get_current_price_batch(unique)
+    except Exception as exc:
+        log.debug("prefetch_prices batch failed: %s", exc)
+        return
+    now = time.monotonic()
+    for ticker, price in prices.items():
+        if price and price > 0:
+            _price_cache[ticker.upper().strip()] = (float(price), now)
 

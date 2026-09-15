@@ -65,6 +65,29 @@ def load_state() -> dict:
     return read_json(STATE_FILE, {}) or {}
 
 
+def prioritise_symbols(symbols, priority_symbols=()) -> list[str]:
+    """Return unique symbols with explicitly important ones first.
+
+    A time-bounded refresh must make useful progress before it reaches its
+    deadline.  Keeping the rest of the watchlist in its existing order avoids
+    changing ordinary warm-cache behaviour; this only changes which cache
+    files are reached first during a backlog.
+    """
+    ordered: dict[str, str] = {}
+    for symbol in symbols:
+        text = str(symbol).strip()
+        if text:
+            ordered.setdefault(text.upper(), text)
+    important = []
+    for symbol in priority_symbols:
+        key = str(symbol).strip().upper()
+        if key in ordered and key not in important:
+            important.append(key)
+    return [ordered[key] for key in important] + [
+        symbol for key, symbol in ordered.items() if key not in important
+    ]
+
+
 def save_state(state: dict) -> None:
     try:
         atomic_write_json(STATE_FILE, state)

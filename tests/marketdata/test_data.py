@@ -68,6 +68,19 @@ def test_get_daily_data_batch_keys_each_ticker_to_its_own_slice(monkeypatch):
     assert out["BBB"]["Close"].iloc[-1] == 201.0
 
 
+def test_get_daily_data_batch_normalises_and_deduplicates_inputs(monkeypatch):
+    requested = []
+
+    def download(symbols, *_args, **_kwargs):
+        requested.append(symbols)
+        return _batch_frame({"AAA": [10.0], "BBB": [20.0]})
+
+    monkeypatch.setattr(data_mod.yf, "download", download)
+
+    data_mod.get_daily_data_batch(["aaa", "AAA", " bbb ", None])
+    assert requested == ["AAA BBB"]
+
+
 def test_get_daily_data_batch_omits_a_ticker_with_no_data(monkeypatch):
     """A batch response only ever contains columns for the tickers Yahoo
     actually recognized -- a delisted/bad symbol is simply absent, not a
@@ -143,6 +156,22 @@ def test_get_current_price_batch_uses_last_close_per_ticker(monkeypatch):
     assert out == {"AAA": 12.5, "BBB": 199.0}
 
 
+def test_get_current_price_batch_normalises_and_deduplicates_inputs(monkeypatch):
+    monkeypatch.setattr(data_mod, "_last_good_batch_price", {})
+    requested = []
+
+    def download(symbols, *_args, **_kwargs):
+        requested.append(symbols)
+        return _batch_frame({"AAA": [10.0], "BBB": [20.0]})
+
+    monkeypatch.setattr(data_mod.yf, "download", download)
+
+    assert data_mod.get_current_price_batch(["aaa", "AAA", " bbb ", "", None]) == {
+        "AAA": 10.0, "BBB": 20.0,
+    }
+    assert requested == ["AAA BBB"]
+
+
 def test_get_current_price_batch_omits_a_ticker_with_no_price(monkeypatch):
     frame = _batch_frame({"AAA": [10.0, 11.0]})
     monkeypatch.setattr(data_mod.yf, "download", lambda *a, **kw: frame)
@@ -172,6 +201,10 @@ def test_get_current_price_batch_falls_back_to_the_last_good_price_on_failure(mo
         calls["n"] += 1
         raise RuntimeError("Yahoo throttled")
     monkeypatch.setattr(data_mod.yf, "download", failing)
+    # Move past the display-cache TTL but remain inside the longer
+    # last-known-good fallback window, so this exercises failure recovery.
+    future = data_mod.time.monotonic() + data_mod._BATCH_PRICE_CACHE_TTL_SECONDS + 1
+    monkeypatch.setattr(data_mod.time, "monotonic", lambda: future)
 
     out = data_mod.get_current_price_batch(["ZZFB1"])
 
@@ -195,3 +228,61 @@ def test_get_current_price_batch_fallback_expires(monkeypatch):
                          lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("still down")))
 
     assert data_mod.get_current_price_batch(["ZZFB2"]) == {}
+
+
+def test_get_current_price_batch_fresh_only_never_uses_last_good_on_failure(monkeypatch):
+    frame = _batch_frame({"FRESH1": [10.0]})
+    monkeypatch.setattr(data_mod.yf, "download", lambda *a, **kw: frame)
+    assert data_mod.get_current_price_batch(["FRESH1"]) == {"FRESH1": 10.0}
+    monkeypatch.setattr(data_mod.yf, "download",
+                        lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("down")))
+    assert data_mod.get_current_price_batch(["FRESH1"], allow_stale=False) == {}
+
+
+def test_get_current_price_batch_reuses_a_short_lived_display_quote(monkeypatch):
+    calls = {"n": 0}
+
+    def download(*_args, **_kwargs):
+        calls["n"] += 1
+        return _batch_frame({"DISPLAY1": [25.0]})
+
+    monkeypatch.setattr(data_mod.yf, "download", download)
+    assert data_mod.get_current_price_batch(["DISPLAY1"]) == {"DISPLAY1": 25.0}
+    assert data_mod.get_current_price_batch(["DISPLAY1"]) == {"DISPLAY1": 25.0}
+    assert calls["n"] == 1
+
+
+def test_prefetch_prices_batches_once_and_warms_the_single_price_cache(monkeypatch):
+    monkeypatch.setattr(data_mod, "_price_cache", {})
+    calls = []
+
+    monkeypatch.setattr(
+        data_mod, "get_current_price_batch",
+        lambda tickers: calls.append(tickers) or {"AAPL": 101.5, "MSFT": 202.5},
+    )
+
+    data_mod.prefetch_prices(["aapl", "MSFT", "AAPL"])
+
+    assert calls == [["AAPL", "MSFT"]]
+    assert data_mod.get_current_price("AAPL") == 101.5
+    assert data_mod.get_current_price("MSFT") == 202.5
+
+
+def test_fresh_only_single_price_never_uses_the_display_cache(monkeypatch):
+    monkeypatch.setattr(
+        data_mod, "_price_cache", {"FRESH-ONLY": (99.0, data_mod.time.monotonic())}
+    )
+
+    class Ticker:
+        def __init__(self, _symbol):
+            pass
+
+        def history(self, **_kwargs):
+            raise RuntimeError("provider unavailable")
+
+        @property
+        def fast_info(self):
+            raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr(data_mod.yf, "Ticker", Ticker)
+    assert data_mod.get_current_price("FRESH-ONLY", allow_stale=False) is None

@@ -63,3 +63,22 @@ def test_unreadable_file_returns_none_rather_than_raising(cache_dir):
         fh.write("this is not a csv\x00\x00")
 
     assert data_store.load_normalized("BAD", "daily", base_dir=cache_dir) is None
+
+
+def test_normalized_frame_cache_returns_a_defensive_copy_and_invalidates(cache_dir):
+    data_store.clear_normalized_frame_cache()
+    original = make_ohlcv([100.0, 101.0, 102.0])
+    data_store.save_to_disk(original, "CACHE", "daily", base_dir=cache_dir)
+
+    first = data_store.load_normalized("CACHE", "daily", base_dir=cache_dir)
+    first["Close"] = 0.0
+    second = data_store.load_normalized("CACHE", "daily", base_dir=cache_dir)
+    assert data_store.normalized_frame_cache_stats()["hits"] == 1
+    pd.testing.assert_series_equal(second["Close"], original["Close"], check_names=False,
+                                  check_freq=False)
+
+    replacement = make_ohlcv([200.0, 201.0, 202.0])
+    data_store.save_to_disk(replacement, "CACHE", "daily", base_dir=cache_dir)
+    refreshed = data_store.load_normalized("CACHE", "daily", base_dir=cache_dir)
+    pd.testing.assert_series_equal(refreshed["Close"], replacement["Close"], check_names=False,
+                                  check_freq=False)

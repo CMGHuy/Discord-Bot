@@ -1,3 +1,5 @@
+import json
+
 import pandas as pd
 import pytest
 
@@ -196,3 +198,34 @@ def test_an_empty_ticker_list_makes_no_plan_store_call(monkeypatch):
     )
     assert build_signals([]) == {}
     assert called == []
+
+
+def test_signal_projection_cache_reuses_a_plans_file_version_and_returns_copies(monkeypatch, tmp_path):
+    """A refresh with unchanged plans must not rebuild the same projection."""
+    from swingbot import config
+    from swingbot.admin import watchlist_rows
+
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    (tmp_path / "plans.json").write_text("[]", encoding="utf-8")
+    watchlist_rows.clear_signal_cache()
+    calls = []
+
+    class FakeStore:
+        def all(self):
+            calls.append("read")
+            return [_FakePlan("AAPL", "ACTIVE", 78, "6w", "RSI")]
+
+    monkeypatch.setattr(watchlist_rows, "PlanStore", FakeStore)
+    first = build_signals(["AAPL"])
+    first["AAPL"]["score"] = 0
+    second = build_signals(["AAPL"])
+
+    assert calls == ["read"]
+    assert second["AAPL"]["score"] == 78
+
+    # A new plans-file version invalidates the projection, even though the
+    # fake store is unchanged; the real bot creates exactly this condition by
+    # atomically replacing plans.json after a lifecycle transition.
+    (tmp_path / "plans.json").write_text(json.dumps([{"new": True}]), encoding="utf-8")
+    build_signals(["AAPL"])
+    assert calls == ["read", "read"]

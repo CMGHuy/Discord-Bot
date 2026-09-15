@@ -34,7 +34,7 @@ def test_trade_monitor_still_checks_sl_tp_while_a_scan_is_running(monkeypatch):
         loops.trade_log, "get_trades",
         lambda status=None, limit=None: [{"ticker": "AAPL", "id": "t1", "status": "open"}],
     )
-    monkeypatch.setattr(loops, "get_current_price", lambda t, **kw: 100.0)
+    monkeypatch.setattr(loops, "get_current_price_batch", lambda tickers, **kw: {"AAPL": 100.0})
 
     def fake_close(ticker, live):
         calls["close"] += 1
@@ -75,8 +75,8 @@ def test_no_open_trades_skips_price_checks_but_still_ticks_the_plan_manager(monk
                         lambda status=None, limit=None: [])
 
     calls = {"tick": 0, "price": 0}
-    monkeypatch.setattr(loops, "get_current_price",
-                        lambda t, **kw: calls.__setitem__("price", calls["price"] + 1) or 100.0)
+    monkeypatch.setattr(loops, "get_current_price_batch",
+                        lambda tickers, **kw: calls.__setitem__("price", calls["price"] + 1) or {})
     monkeypatch.setattr("swingbot.core.planning.plan_manager.run_manager_tick",
                         lambda: calls.__setitem__("tick", calls["tick"] + 1) or [])
 
@@ -92,7 +92,7 @@ def test_trade_monitor_acknowledges_feed_deliveries(monkeypatch):
     monkeypatch.setattr(scan_engine, "is_scan_running", lambda: False)
     monkeypatch.setattr(loops.trade_log, "get_trades", lambda status=None, limit=None: [
         {"ticker": "AAPL", "id": "t1", "status": "open"}])
-    monkeypatch.setattr(loops, "get_current_price", lambda t: 100.0)
+    monkeypatch.setattr(loops, "get_current_price_batch", lambda tickers, **kw: {"AAPL": 100.0})
     monkeypatch.setattr(loops.trade_log, "close_if_live_price_hit", lambda ticker, live: [])
     monkeypatch.setattr(loops.trade_log, "check_near_tp_timeout", lambda ticker, live: [])
     event = PlanEvent("p1", "be_moved", {"working_stop": 100.0})

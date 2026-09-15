@@ -636,6 +636,14 @@ def test_refresh_all_deadline_does_not_abandon_partial_progress(tmp_path, monkey
         assert load_from_disk(symbol, "daily", base_dir=str(tmp_path)) is not None
 
 
+def test_prioritise_symbols_moves_important_tickers_first_without_dropping_any():
+    from swingbot.core.marketdata.data_refresh import prioritise_symbols
+
+    assert prioritise_symbols(
+        ["AAPL", "msft", "AAPL", "NVDA"], ["nvda", "MSFT", "MISSING"]
+    ) == ["NVDA", "msft", "AAPL"]
+
+
 def test_cap_alerts_ranks_by_follow_score():
     from swingbot.commands.scanning import cap_alerts
 
@@ -672,6 +680,14 @@ def test_scan_telemetry_roundtrip_and_slowdown_alarm(tmp_path):
     assert scan_slowdown(path=p) is False
     log_scan_telemetry({"duration_s": 150, "tickers": 150}, path=p)
     assert scan_slowdown(path=p) is True
+
+
+def test_scan_telemetry_retains_phase_breakdown(tmp_path):
+    from swingbot.core.scanning.engine import log_scan_telemetry, recent_telemetry
+    p = str(tmp_path / "t.jsonl")
+    phases = {"crawl": 1.2, "live_prices": 0.4, "analysis": 3.1}
+    log_scan_telemetry({"duration_s": 4.7, "tickers": 10, "phases_s": phases}, path=p)
+    assert recent_telemetry(path=p)[-1]["phases_s"] == phases
 
 
 def test_lru_frames_evicts_least_recent():

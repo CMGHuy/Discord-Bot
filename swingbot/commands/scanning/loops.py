@@ -10,7 +10,7 @@ from swingbot import config
 from swingbot.config import auto_reload_if_changed
 from swingbot.core.scanning import engine as scan_engine
 from swingbot.bot_core import bot, in_session, log, SESSION_TZ, install_reload_signal_handler, on_config_reload
-from swingbot.core.marketdata.data import get_current_price
+from swingbot.core.marketdata.data import get_current_price_batch
 from swingbot.core.infra.silent_channel import silence
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.marketdata.watchlist import load_watchlist
@@ -19,6 +19,26 @@ from .alerts import _send_alerts
 
 trade_log = scan_engine.trade_log
 _ready_announcement_sent = False
+
+
+def _refresh_priority_tickers() -> list[str]:
+    """Tickers whose market data is operationally urgent during a backlog."""
+    tickers: list[str] = []
+    try:
+        from swingbot.core.planning.plan_store import PlanStore
+        tickers.extend(plan.ticker for plan in PlanStore().open_plans())
+    except Exception as exc:
+        log.debug("market_data_refresh: could not read open plans for priority: %s", exc)
+    try:
+        # Construct a short-lived reader so this projection cannot use a
+        # stale scan-engine TradeLog snapshot.
+        from swingbot.core.tracking.performance import TradeLog
+        tickers.extend(trade.get("ticker") for trade in TradeLog().get_trades(
+            status="open", limit=None
+        ))
+    except Exception as exc:
+        log.debug("market_data_refresh: could not read open trades for priority: %s", exc)
+    return [ticker for ticker in tickers if ticker]
 
 
 def _ops_channel():
@@ -554,7 +574,7 @@ async def trade_monitor():
     plan_store._LOCK) and no-op on a trade/plan a concurrent scan already
     closed, so running alongside a scan is safe, not just tolerated.
 
-    With no open trade rows the per-ticker loop below has nothing to fetch,
+    With no open trade rows the batched quote lookup below has nothing to fetch,
     but the plan-manager tick still runs: a plan can be open with no open
     trade row (`!trades clear` / the admin's clear-open delete rows and leave
     plans ACTIVE), and returning early here left those positions' stops and
@@ -564,12 +584,21 @@ async def trade_monitor():
     tickers = list({t["ticker"] for t in open_trades})
     all_newly_closed = []
 
-    for ticker in tickers:
+    # One Yahoo request for the whole open book avoids a serial minute-history
+    # request per ticker.  The batch helper is explicitly fresh-only here:
+    # UI callers may show its last-known-good fallback, but acting on an old
+    # print could falsely close a trade or satisfy an exit transition.
+    if tickers:
         try:
-            live = await asyncio.to_thread(get_current_price, ticker, allow_stale=False)
+            live_prices = await asyncio.to_thread(get_current_price_batch, tickers, allow_stale=False)
         except Exception as exc:
-            log.debug("trade_monitor: price fetch failed for %s: %s", ticker, exc)
-            continue
+            log.debug("trade_monitor: batch price fetch failed: %s", exc)
+            live_prices = {}
+    else:
+        live_prices = {}
+
+    for ticker in tickers:
+        live = live_prices.get(ticker)
         if not live or live <= 0:
             continue
         try:
@@ -779,8 +808,17 @@ async def market_data_refresh():
 
     try:
         from swingbot.core.marketdata.data_refresh import (
-            FAILED_RETRY_HOURS, pending_gaps, refresh_all, summary_line,
+            FAILED_RETRY_HOURS, REFRESH_HOURS, pending_gaps, prioritise_symbols,
+            refresh_all, summary_line, timeframe_name,
         )
+        # Hourly data expires first, and positions/plans need fresh context
+        # before a broad watchlist catch-up.  This only matters when the
+        # deadline is binding; refresh_all still covers every remaining pair
+        # on later ticks.
+        timeframes.sort(key=lambda tf: REFRESH_HOURS.get(
+            timeframe_name(tf), float("inf")
+        ))
+        symbols = prioritise_symbols(symbols, _refresh_priority_tickers())
         result = await asyncio.to_thread(
             refresh_all, symbols, timeframes, sleep_seconds=0.3,
             deadline_seconds=config.MARKET_DATA_REFRESH_BUDGET_SECONDS,

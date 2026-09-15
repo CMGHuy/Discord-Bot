@@ -72,3 +72,29 @@ def test_market_data_refresh_stays_quiet_when_the_budget_is_not_hit(monkeypatch,
         _run(scanning_mod.market_data_refresh.coro())
 
     assert not any("time budget" in r.message for r in caplog.records)
+
+
+def test_market_data_refresh_prioritises_live_tickers_and_short_timeframes(monkeypatch):
+    from swingbot.commands.scanning import loops as loops_mod
+
+    captured = {}
+
+    def fake_refresh_all(symbols, timeframes, **_kwargs):
+        captured["symbols"] = symbols
+        captured["timeframes"] = timeframes
+        return {"summary": {tf: {"full": 0, "incremental": 0, "fresh": 1,
+                                  "failed": 0, "added": 0} for tf in timeframes},
+                "failures": [], "state": {}, "deadline_hit": False}
+
+    monkeypatch.setattr(config, "MARKET_DATA_AUTO_REFRESH", True, raising=False)
+    monkeypatch.setattr(config, "MARKET_DATA_TIMEFRAMES", "monthly,hourly,daily",
+                        raising=False)
+    monkeypatch.setattr(loops_mod, "load_watchlist", lambda: ["AAPL", "MSFT", "NVDA"],
+                        raising=False)
+    monkeypatch.setattr(loops_mod, "_refresh_priority_tickers", lambda: ["NVDA", "MSFT"])
+    monkeypatch.setattr("swingbot.core.marketdata.data_refresh.refresh_all", fake_refresh_all)
+
+    _run(scanning_mod.market_data_refresh.coro())
+
+    assert captured["symbols"] == ["NVDA", "MSFT", "AAPL"]
+    assert captured["timeframes"] == ["hourly", "daily", "monthly"]

@@ -23,7 +23,7 @@ from swingbot.core.market.market_events import get_market_events
 from swingbot.core.market.reversal import evaluate_reversal, reversals_for_ticker
 from swingbot.core.market.strategy import HORIZONS
 from swingbot.core.marketdata.data import get_currency_symbol
-from swingbot.core.marketdata import universe
+from swingbot.core.marketdata import data_store, universe
 from swingbot.core.marketdata.watchlist import load_watchlist
 from swingbot.core.planning import account as account_module
 from swingbot.core.planning.account import compute_unrealized_pnl, load_account_config
@@ -71,10 +71,14 @@ class ScanProgress:
         return round(self.done / self.total * 100) if self.total else 0
 
 
-def get_regime():
+def get_regime(regime_df=None):
+    """Classify the market regime from a supplied/cached benchmark frame."""
     ticker = config.MARKET_REGIME_TICKER
     try:
-        regime_df = fetch.get_daily_data(ticker)
+        if regime_df is None:
+            regime_df = fetch._daily_frame_for(ticker)
+        if regime_df is None:
+            return None
         return get_market_regime(regime_df, ticker)
     except Exception as e:
         log.warning("Could not fetch market regime: %s", e)
@@ -129,6 +133,14 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     default) to just use whatever's currently configured.
     """
     _scan_started = time.monotonic()   # Task E82: feeds log_scan_telemetry's duration_s
+    _phase_started = _scan_started
+    phase_durations: dict[str, float] = {}
+
+    def _finish_phase(name: str) -> None:
+        nonlocal _phase_started
+        now = time.monotonic()
+        phase_durations[name] = round(now - _phase_started, 3)
+        _phase_started = now
 
     # Auto-reload config if .env was changed on disk since last load
     # (e.g. via the admin UI). This works even without Docker socket /
@@ -166,11 +178,13 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # and the module docstring for why this is a separate phase (and why
     # it's sequential, not concurrent).
     fresh_data = fetch._crawl_latest_data(tickers, progress)
+    _finish_phase("crawl")
 
     # Phase 1b: one batched live-price fetch for the whole watchlist (v55),
     # still inside the crawl phase so the ANALYZE phase below stays pure
     # dict lookups -- see _fetch_live_prices and _scan_one's use of it.
     live_prices = fetch._fetch_live_prices(tickers, progress)
+    _finish_phase("live_prices")
 
     # Market breadth (Task E28): % of the just-crawled universe trading above
     # its own 50-EMA, computed once per scan from data already in hand -- no
@@ -197,25 +211,30 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         progress.done = 0
         progress.current_ticker = None
 
-    regime = get_regime()
-    if regime:
-        log.info("Market regime: %s (%s vs 200EMA %+.1f%%)", regime.label, regime.ticker, regime.pct_above_ema)
-
     # Relative-strength factor (Task E25): fetch the benchmark once per scan
     # (same try/except pattern as get_regime() above -- an RS failure must
     # never break the scan) and build the whole universe's relative-return
     # cache once, so every item's rs_percentile below is a cheap lookup
     # against `rs_cache["rels"].values()` instead of a per-ticker refetch.
-    spy_df = None
+    # One benchmark frame powers both the regime classifier and the RS cache.
+    # If the benchmark is already in the crawl, do not even consult the cache
+    # layer; otherwise its normal cache-first resolver supplies it once.
+    spy_df = fresh_data.get(config.MARKET_REGIME_TICKER)
     rs_cache = None
     try:
-        spy_df = fetch._daily_frame_for(config.MARKET_REGIME_TICKER)
+        if spy_df is None:
+            spy_df = fetch._daily_frame_for(config.MARKET_REGIME_TICKER)
         if spy_df is not None:
             rs_cache = rs_factors.refresh_rs_cache(fresh_data, spy_df)
     except Exception as e:
         log.warning("Could not compute relative-strength cache: %s", e)
         spy_df = None
         rs_cache = None
+
+    regime = get_regime(spy_df)
+    if regime:
+        log.info("Market regime: %s (%s vs 200EMA %+.1f%%)",
+                 regime.label, regime.ticker, regime.pct_above_ema)
 
     # Sector-relative RS (v34 Task 5): fetch the distinct sector ETFs this
     # watchlist touches alongside SPY -- first live activation of
@@ -268,6 +287,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         )
 
     account_cfg = load_account_config()
+    _finish_phase("enrichment")
 
     scan_items = []
     all_newly_closed = []
@@ -322,6 +342,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                             hard_filters=hard_filters, opex_tier_today=opex_tier_today),
         tickers,
     )
+    _finish_phase("analysis")
 
     for per_ticker in per_ticker_results:
         if per_ticker is None:
@@ -880,6 +901,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # variable is only assigned when `deduped` is non-empty -- a quiet scan
     # with zero alerts must not NameError here).
     try:
+        _finish_phase("finalize")
         scan_stats = {
             "duration_s": round(time.monotonic() - _scan_started, 1),
             "tickers": len(tickers),
@@ -889,6 +911,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "alerts": len(alerts),
             "open_heat": heat_mod.open_heat(TradeLog().get_trades(status="open", limit=None),
                                             account_cfg.get("balance", 0.0)),
+            "phases_s": phase_durations,
+            "normalized_frame_cache": data_store.normalized_frame_cache_stats(),
         }
         telemetry.log_scan_telemetry(scan_stats)
         if telemetry.scan_slowdown():
@@ -947,21 +971,27 @@ def get_all_unrealized_pnl() -> list:
     open_trades = trade_log.get_trades(status="open", limit=100)
     log.info("Computing unrealized P/L for %d open trade(s)", len(open_trades))
     results = []
-    price_cache = {}
+    # This backs a display/report command, not a fill decision, so the batch
+    # helper's short resilient cache is appropriate.  More importantly, it
+    # turns N serial Yahoo calls into one request for all open positions.
+    tickers = list(dict.fromkeys(
+        trade.get("ticker") for trade in open_trades if trade.get("ticker")
+    ))
+    try:
+        price_cache = fetch.get_current_price_batch(tickers)
+    except Exception as exc:
+        log.warning("get_all_unrealized_pnl: batch price fetch failed: %s", exc)
+        price_cache = {}
     for t in open_trades:
         ticker = t["ticker"]
-        if ticker not in price_cache:
+        if not price_cache.get(ticker):
             # Prefer live price (incl. premarket/aftermarket); fall back to last daily close
-            live = fetch.get_current_price(ticker)
-            if live and live > 0:
-                price_cache[ticker] = live
-            else:
-                try:
-                    df = fetch.get_daily_data(ticker, period="5d")
-                    price_cache[ticker] = float(df["Close"].iloc[-1]) if df is not None and not df.empty else None
-                except Exception as exc:
-                    log.warning("get_all_unrealized_pnl: could not fetch price for %s: %s", ticker, exc)
-                    price_cache[ticker] = None
+            try:
+                df = fetch.get_daily_data(ticker, period="5d")
+                price_cache[ticker] = float(df["Close"].iloc[-1]) if df is not None and not df.empty else None
+            except Exception as exc:
+                log.warning("get_all_unrealized_pnl: could not fetch price for %s: %s", ticker, exc)
+                price_cache[ticker] = None
         current_price = price_cache[ticker]
         if current_price is None:
             continue

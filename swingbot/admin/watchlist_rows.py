@@ -20,6 +20,11 @@ run a scan (minutes of work) -- it reads the plan set PlanStore already holds
 
 from __future__ import annotations
 
+import copy
+import os
+import threading
+from collections import OrderedDict
+
 import pandas as pd
 
 from swingbot import config
@@ -44,6 +49,51 @@ _TIER = {PlanStatus.PENDING: 0, PlanStatus.ACTIVE: 1, PlanStatus.PARTIAL: 1}
 _WINDOWS = {"change_1d_pct": 1, "change_1w_pct": 5, "change_1m_pct": 21}
 
 _SPARK_BARS = 30
+
+# Watchlist refreshes arrive more often than a scan changes its plan set.  The
+# plans file is the cross-process version source: a bot write atomically
+# replaces it, producing a new signature and invalidating this admin-local
+# projection without a second signalling channel.  Keep the cache deliberately
+# small because each value is only a lightweight JSON-ready read model.
+_SIGNAL_CACHE_MAX = 32
+_signal_cache: OrderedDict[tuple[tuple[str, ...], tuple[int, int, int]], dict[str, dict]] = OrderedDict()
+_signal_cache_lock = threading.Lock()
+
+
+def _plans_signature() -> tuple[int, int, int] | None:
+    try:
+        stat = os.stat(os.path.join(config.DATA_DIR, "plans.json"))
+    except OSError:
+        # A missing plans file is inexpensive to read and common on a fresh
+        # install.  More importantly, avoiding a cache here keeps injected
+        # stores in isolated tests and admin tools from sharing a false version.
+        return None
+    return (stat.st_mtime_ns, stat.st_size, stat.st_ctime_ns)
+
+
+def clear_signal_cache() -> None:
+    """Drop cached watchlist plan projections; useful to tests and operators."""
+    with _signal_cache_lock:
+        _signal_cache.clear()
+
+
+def _cached_signals(tickers: tuple[str, ...], signature: tuple[int, int, int]) -> dict[str, dict] | None:
+    key = (tickers, signature)
+    with _signal_cache_lock:
+        result = _signal_cache.get(key)
+        if result is None:
+            return None
+        _signal_cache.move_to_end(key)
+        return copy.deepcopy(result)
+
+
+def _remember_signals(tickers: tuple[str, ...], signature: tuple[int, int, int], result: dict[str, dict]) -> None:
+    key = (tickers, signature)
+    with _signal_cache_lock:
+        _signal_cache[key] = copy.deepcopy(result)
+        _signal_cache.move_to_end(key)
+        while len(_signal_cache) > _SIGNAL_CACHE_MAX:
+            _signal_cache.popitem(last=False)
 
 
 def _pct_change(closes: pd.Series, back: int) -> float | None:
@@ -169,6 +219,13 @@ def build_signals(tickers: list[str]) -> dict[str, dict]:
     if not tickers:
         return {}
 
+    ticker_key = tuple(tickers)
+    signature = _plans_signature()
+    if signature is not None:
+        cached = _cached_signals(ticker_key, signature)
+        if cached is not None:
+            return cached
+
     wanted = set(tickers)
     best: dict[str, object] = {}
     for plan in PlanStore().all():
@@ -190,4 +247,10 @@ def build_signals(tickers: list[str]) -> dict[str, dict]:
             "strategy": plan.strategy,
         }
 
+    if signature is not None:
+        # Re-check after reading: never publish a projection read from an old
+        # file under a newer file version.
+        after_read = _plans_signature()
+        if after_read == signature:
+            _remember_signals(ticker_key, signature, signals)
     return signals
