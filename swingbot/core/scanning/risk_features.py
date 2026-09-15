@@ -37,7 +37,7 @@ def session_bucket(now: dt.datetime) -> str:
 
 
 def build(*, regime2_state, confidence_level, htf_bias, direction,
-          confluence_count, entry, level_price, stop_loss, atr_val, close,
+          confluence_count, entry, stop_loss, atr_val, close,
           rs_percentile, now, days_to_earnings=None) -> dict:
     return {
         "regime2_state": regime2_state,
@@ -46,7 +46,6 @@ def build(*, regime2_state, confidence_level, htf_bias, direction,
         # and "it disagreed" are different facts and must not pool.
         "htf_agree": None if htf_bias is None else bool(htf_bias == direction),
         "confluence_count": confluence_count,
-        "dist_to_level_atr": _ratio(entry - level_price, atr_val) if level_price is not None else None,
         "stop_width_atr": _ratio(entry - stop_loss, atr_val),
         "atr_pct": round(100.0 * float(atr_val) / float(close), 4) if atr_val and close else None,
         "rs_percentile": rs_percentile,

@@ -8,7 +8,7 @@ from swingbot.core.scanning.risk_features import build
 def _kwargs(**over):
     base = dict(
         regime2_state="bear_volatile", confidence_level=2, htf_bias="bullish",
-        direction="bullish", confluence_count=3, entry=100.0, level_price=98.0,
+        direction="bullish", confluence_count=3, entry=100.0,
         stop_loss=96.0, atr_val=2.0, close=100.0, rs_percentile=45.0,
         now=dt.datetime(2026, 9, 14, 15, 45),
     )
@@ -20,7 +20,7 @@ def test_builds_every_documented_feature():
     f = build(**_kwargs())
     assert set(f) == {
         "regime2_state", "confidence_level", "htf_agree", "confluence_count",
-        "dist_to_level_atr", "stop_width_atr", "atr_pct", "rs_percentile",
+        "stop_width_atr", "atr_pct", "rs_percentile",
         "session_bucket", "days_to_earnings",
     }
 
@@ -31,9 +31,9 @@ def test_htf_agree_is_true_only_when_bias_matches_direction():
     assert build(**_kwargs(htf_bias=None))["htf_agree"] is None
 
 
-def test_distances_are_expressed_in_atr():
-    f = build(**_kwargs(entry=100.0, level_price=98.0, stop_loss=96.0, atr_val=2.0))
-    assert f["dist_to_level_atr"] == pytest.approx(1.0)
+def test_stop_width_is_expressed_in_atr():
+    f = build(**_kwargs(entry=100.0, stop_loss=96.0, atr_val=2.0))
+    # stop_width_atr = |entry - stop_loss| / atr = |100 - 96| / 2.0 = 2.0
     assert f["stop_width_atr"] == pytest.approx(2.0)
 
 
@@ -43,7 +43,6 @@ def test_atr_pct_is_atr_over_close():
 
 def test_zero_atr_yields_none_rather_than_a_divide_by_zero():
     f = build(**_kwargs(atr_val=0.0))
-    assert f["dist_to_level_atr"] is None
     assert f["stop_width_atr"] is None
     assert f["atr_pct"] is None
 
