@@ -199,6 +199,12 @@ def build_entry(trade: dict, df) -> dict:
         "mfe_r": mfe_r,
         "mae_r": mae_r,
         "exit_efficiency": exit_efficiency,
+        # v86: copied, not re-derived. The registry may be regenerated after
+        # this trade was stamped; §6's verification must read what the plan
+        # was TOLD at issuance, so the journal freezes it alongside the outcome.
+        "risk_features": trade.get("risk_features") or {},
+        "cohort_label": trade.get("cohort_label"),
+        "cohort_run_date": (trade.get("cohort_stats") or {}).get("run_date"),
         "holding_days": _holding_days(trade),
         "tags": tags_for(trade, m),
         "auto_lesson": _auto_lesson(outcome, mfe_r, mae_r, exit_efficiency, r_realized),
