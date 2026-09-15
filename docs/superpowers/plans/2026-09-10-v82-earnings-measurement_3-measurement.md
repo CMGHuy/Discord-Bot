@@ -31,17 +31,17 @@ Index, Global Constraints and Parallelisation: `2026-09-10-v82-earnings-measurem
 - Consumes: `scripts/data/fetch_earnings_dates.py` (M5), `measure_earnings_blackout.py replay` (M6).
 - Produces: the CSV cache Run 1 reads, and a measured per-ticker replay cost for M9's dispatch.
 
-- [ ] **Step 1: Confirm the OHLCV cache**
+- [x] **Step 1: Confirm the OHLCV cache**
 
 Run: `python -c "from pathlib import Path; print(len(list(Path('data/backtest_cache').glob('*.csv'))))"`
 Expected: the cached ticker count (89 on 2026-09-10). If 0, run `python scripts/data/fetch_backtest_data.py` first.
 
-- [ ] **Step 2: Fetch earnings dates**
+- [x] **Step 2: Fetch earnings dates**
 
 Run: `python scripts/data/fetch_earnings_dates.py`
 Expected: one line per ticker and a closing `written N | skipped 0 | ETF E | no data M`. Exit 1 when `M > 0` is **not** a stop: those tickers stay uncovered, and the coverage floor in M10 decides whether that matters. Re-running with the same arguments only fills gaps.
 
-- [ ] **Step 3: Time one full-width ticker**
+- [x] **Step 3: Time one full-width ticker**
 
 Run, timing it (PowerShell `Measure-Command { ... }` or bash `time`):
 
@@ -51,7 +51,7 @@ python scripts/backtest/measure_earnings_blackout.py replay --run run1 --tickers
 
 Expected: `[1/1] AAPL: N rows` and `complete: N rows`. Record wall-clock seconds `T`. Projected Run 1 wall clock ≈ `T × <cached ticker count> / <worker count>`, where the worker count is the machine's CPU count (the replay's default). Then delete `data/v82-dry/`.
 
-- [ ] **Step 4: Write the data record**
+- [x] **Step 4: Write the data record**
 
 Create `docs/superpowers/results/<run-date>-v82-earnings-data.md`:
 
@@ -73,7 +73,7 @@ window 2018-06-01..2023-12-31, serial: <T> s.
 Projected Run 1: <T> s × <tickers> / <workers> workers ≈ <hours> h.
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/superpowers/results/<run-date>-v82-earnings-data.md
@@ -91,7 +91,7 @@ git commit -m "docs(v82): earnings data coverage and replay cost before Run 1"
 - Consumes: M8's CSVs and cost projection.
 - Produces: the Run 1 exposure table that M10–M12 read.
 
-- [ ] **Step 1: Dispatch `backtest-runner` in the background**
+- [x] **Step 1: Dispatch `backtest-runner` in the background**
 
 Dispatch the `backtest-runner` subagent (`run_in_background`) with exactly this brief:
 
@@ -107,7 +107,7 @@ Dispatch the `backtest-runner` subagent (`run_in_background`) with exactly this 
 
 Expected duration: M8's projection. Answer any "how far along" question from `data/v82/run1/progress.txt`, never from the subagent's transcript.
 
-- [ ] **Step 2: Record the result in the task report**
+- [x] **Step 2: Record the result in the task report**
 
 Copy the `complete:` line and the coverage output into the task report. Coverage exit code 2 here is **not** a stop: M10 applies the floor to the selection window specifically.
 

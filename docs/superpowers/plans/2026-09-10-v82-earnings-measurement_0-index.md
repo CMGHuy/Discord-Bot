@@ -130,8 +130,8 @@ that change a task here:
 - [x] M5 — earnings-date fetch
 - [x] M6 — instrument script
 - [x] M7 — full suite, merge, release (ui patch)
-- [ ] M8 — earnings data and dry run
-- [ ] M9 — Run 1 (2018-06..2023-12)
+- [x] M8 — earnings data and dry run
+- [x] M9 — Run 1 (2018-06..2023-12)
 - [ ] M10 — Stage 1 selection
 - [ ] M11 — Stage 0 MDE
 - [ ] M12 — Stage 2 walk-forward
