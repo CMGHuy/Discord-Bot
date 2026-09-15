@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-09-15 08:18:21 UTC",
+  "generated_at": "2026-09-15 16:32:09 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.18.1",
-    "bot": "1.8.0"
+    "ui": "1.18.2",
+    "bot": "1.9.0"
   },
   "releases": [
     {
@@ -1162,11 +1162,25 @@
     {
       "date": "2026-09-15",
       "last_seen": "2026-09-15",
-      "commit": "uncommitted",
-      "subject": "working tree",
+      "commit": "e1432fe5",
+      "subject": "chore(v81): bump bot minor and ui patch, regenerate version history",
       "versions": {
         "ui": "1.18.1",
         "bot": "1.8.0"
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-15",
+      "last_seen": "2026-09-15",
+      "commit": "uncommitted",
+      "subject": "working tree",
+      "versions": {
+        "ui": "1.18.2",
+        "bot": "1.9.0"
       },
       "changed": [
         "ui",
