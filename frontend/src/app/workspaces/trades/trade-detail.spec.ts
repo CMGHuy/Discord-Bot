@@ -269,6 +269,93 @@ describe('TradeDetail — the fields that rendered nowhere', () => {
   });
 });
 
+describe('TradeDetail — the cohort risk chip (v86 C8)', () => {
+  let backend: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        TradeDetailStore,
+        ChartStore,
+        { provide: EventStream, useValue: new FakeEventStream() },
+      ],
+    });
+    backend = TestBed.inject(HttpTestingController);
+  });
+
+  /** Mounts with a row response carrying the given cohort fields; returns
+   *  the rendered header element for class/text assertions. Unlike `render`
+   *  above (which returns plain text), tone lives on a class, so this needs
+   *  the element itself. */
+  function renderHeader(
+    cohortLabel?: string,
+    cohortStats?: Record<string, unknown>,
+  ): HTMLElement {
+    const fixture = TestBed.createComponent(TradeDetail);
+    fixture.componentRef.setInput('id', ID);
+    fixture.detectChanges();
+    backend.expectOne(`/api/v1/trades/${ID}`).flush({
+      ...tradeResponse(DETAIL),
+      cohort_label: cohortLabel,
+      cohort_stats: cohortStats,
+    });
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('renders a danger-toned chip for COHORT_POOR', () => {
+    const el = renderHeader('COHORT_POOR', {
+      regime2_state: 'bear_volatile', win_rate: 41.2, expectancy_r: -0.38,
+      n_live: 100, n_backtest: 500, run_date: '2026-09-14',
+    });
+    const chip = el.querySelector('.tags > sb-chip .chip');
+    expect(chip).toBeTruthy();
+    expect(chip!.classList).toContain('bad');
+    expect(chip!.textContent).toContain('Poor cohort');
+    // [title] binds to the sb-chip HOST element (Chip has no `title` input
+    // to forward it onto the inner span), not the .chip span itself.
+    const host = el.querySelector('.tags > sb-chip')!;
+    expect(host.getAttribute('title')).toContain('41.2% WR');
+    expect(host.getAttribute('title')).toContain('-0.38R');
+  });
+
+  it('renders a positive-toned chip for COHORT_STRONG', () => {
+    const el = renderHeader('COHORT_STRONG', { win_rate: 71, expectancy_r: 0.6 });
+    const chip = el.querySelector('.tags > sb-chip .chip');
+    expect(chip!.classList).toContain('good');
+    expect(chip!.textContent).toContain('Strong cohort');
+  });
+
+  it('renders a muted chip labelled unknown for COHORT_UNKNOWN', () => {
+    // The API never omits cohort_label (the backend defaults a pre-v86
+    // record to COHORT_UNKNOWN server-side, see test_cohort_api.py) -- this
+    // is the shape a pre-v86 trade actually arrives in over the wire.
+    const el = renderHeader('COHORT_UNKNOWN', {});
+    const chip = el.querySelector('.tags > sb-chip .chip');
+    expect(chip).toBeTruthy();
+    expect(chip!.classList).toContain('muted');
+    expect(chip!.textContent).toContain('Cohort unknown');
+  });
+
+  it('renders no chip when cohort_label is entirely absent from the response', () => {
+    // Defensive: an old cached bundle hitting a pre-C8 backend response
+    // shape must not crash or show a chip for a field that isn't there.
+    const el = renderHeader(undefined, undefined);
+    expect(el.querySelector('.tags > sb-chip')).toBeNull();
+  });
+
+  it('renders no chip at all for COHORT_TYPICAL', () => {
+    const el = renderHeader('COHORT_TYPICAL', {});
+    expect(el.querySelector('.tags > sb-chip')).toBeNull();
+  });
+});
+
 describe('TradeDetail — partial position panel (v58)', () => {
   let backend: HttpTestingController;
 

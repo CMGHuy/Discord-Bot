@@ -47,6 +47,11 @@ TRADE_ROW = {
     "strategy": NULLABLE_STR,
     "horizon": NULLABLE_STR,
     "badge": NULLABLE_STR,
+    # v86 -- the cohort verdict, same treatment as badge but never null: an
+    # absent/pre-v86 record defaults server-side to COHORT_UNKNOWN, and
+    # cohort_stats defaults to {} rather than being omitted.
+    "cohort_label": str,
+    "cohort_stats": dict,
     "tier": NULLABLE_STR,
     "confidence_level": NULLABLE_NUMBER,
     "confidence_score": NULLABLE_NUMBER,

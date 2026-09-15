@@ -22,7 +22,9 @@ describe('Chip (v80 D4)', () => {
     TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
   });
 
-  for (const tone of ['neutral', 'good', 'warn', 'info', 'q1', 'q2', 'q3', 'q4', 'q5'] as ChipTone[]) {
+  for (const tone of [
+    'neutral', 'good', 'warn', 'info', 'bad', 'muted', 'q1', 'q2', 'q3', 'q4', 'q5',
+  ] as ChipTone[]) {
     it(`renders the ${tone} tone as a class`, () => {
       expect(render(tone).classList).toContain(tone);
     });
@@ -51,6 +53,11 @@ describe('Chip (v80 D4)', () => {
     expect(SOURCE).toMatch(/\.good \{[^}]*background: var\(--pos-soft\)/);
     expect(SOURCE).toMatch(/\.warn \{[^}]*background: var\(--warn-soft\)/);
     expect(SOURCE).toMatch(/\.info \{[^}]*background: var\(--info-soft\)/);
+  });
+
+  it('v86: tints bad as good\'s mirror and leaves muted dimmer than neutral', () => {
+    expect(SOURCE).toMatch(/\.bad \{[^}]*color: var\(--neg\)[^}]*background: var\(--neg-soft\)/);
+    expect(SOURCE).toMatch(/\.muted \{ color: var\(--text-muted\); \}/);
   });
 
   it('grows to a 28px minimum on touch and narrow screens', () => {
