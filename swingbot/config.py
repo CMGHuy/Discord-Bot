@@ -910,6 +910,23 @@ FIELDS: list[Field] = [
           type="float", default="0", min=0, max=3, step=0.1,
           help="When above 0, the bounce must be quieter than the decline by "
                "this ratio -- a conviction test. 0 turns the arm off."),
+    # --- Database ---
+    Field("DATABASE_URL", "DATABASE_URL", "Database", "Postgres connection URL",
+          type="password", sensitive=True, hot_reloadable=False,
+          default="postgresql+psycopg://swingbot:swingbot@db:5432/swingbot",
+          help="SQLAlchemy URL for Postgres. It must use the "
+               "postgresql+psycopg:// driver prefix; changing it requires a "
+               "container restart because the connection pool is process-local."),
+    Field("POSTGRES_PASSWORD", "POSTGRES_PASSWORD", "Database", "Postgres password",
+          type="password", sensitive=True, hot_reloadable=False,
+          help="Consumed only when the Postgres container first initializes. "
+               "It must match DATABASE_URL; changing it later requires ALTER ROLE "
+               "or a controlled database rebuild."),
+    Field("DB_STORES", "DB_STORES", "Database", "Per-store migration stages",
+          default="",
+          help="Comma-separated name:stage pairs: json (files only), dual "
+               "(write both/read files), or db (Postgres only). Stores not "
+               "listed remain json. Example: trades:db,plans:dual."),
 ]
 
 _SEARCH_CLASSES = {

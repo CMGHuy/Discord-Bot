@@ -21,6 +21,7 @@ cores measured 60.0s against 40.2s.
 Exit codes: 0 pass, 1 test failure, 2 could not determine the result.
 """
 import argparse
+import os
 import pathlib
 import re
 import subprocess
@@ -31,6 +32,10 @@ REPO = pathlib.Path(__file__).resolve().parent.parent.parent
 LOG = REPO / ".pytest-last-run.log"
 
 WORKERS = "4"
+
+# Kept aligned with tests/db/conftest.py by tests/dev/test_testrun_db_preflight.py.
+# Scripts must not import test modules just to discover this value.
+TEST_DB_URL_DEFAULT = "postgresql+psycopg://swingbot:swingbot@localhost:55432/swingbot_test"
 
 # Neutralise pytest.ini's `addopts = -q`: under -q, pytest 9.1.1 prints no
 # summary counts line at all, and a parser that sees no counts must never
@@ -162,6 +167,25 @@ def build_args(profile: str, target: str | None) -> list[str]:
     sys.exit(f"unknown profile: {profile}")
 
 
+def db_preflight() -> str | None:
+    """Return setup guidance when the optional local test database is offline."""
+    import socket
+    import urllib.parse
+
+    url = os.getenv("TEST_DATABASE_URL", TEST_DB_URL_DEFAULT)
+    parsed = urllib.parse.urlparse(url)
+    host, port = parsed.hostname or "localhost", parsed.port or 5432
+    try:
+        with socket.create_connection((host, port), timeout=1.5):
+            return None
+    except OSError as exc:
+        return (
+            f"WARNING: test database unreachable at {host}:{port} ({exc}).\n"
+            "  Database tests will SKIP, not fail. Start it with:\n"
+            "    docker compose --profile test up -d db-test"
+        )
+
+
 def run(pytest_args: list[str]) -> tuple[dict[str, int], list[str], float, int]:
     """Stream pytest, log everything, emit per-file progress on stderr."""
     cmd = [sys.executable, "-m", "pytest", *pytest_args]
@@ -234,6 +258,10 @@ def main() -> int:
             for finding in findings[:10]:
                 print(f"  {finding}")
             return 1
+
+    warning = db_preflight()
+    if warning:
+        print(warning, file=sys.stderr, flush=True)
 
     counts, failed, elapsed, rc = run(build_args(profile, args.target))
 

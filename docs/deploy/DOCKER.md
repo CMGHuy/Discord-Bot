@@ -207,3 +207,16 @@ docker compose logs -f bot        # follow bot logs
 docker compose logs -f admin      # follow admin UI logs
 docker compose down               # stop everything
 ```
+
+## PostgreSQL persistence
+
+The `db` service is pinned to `postgres:18-alpine` and stores its data in the
+Docker-managed `pgdata` volume. Do not change the major image version against
+an existing volume: take a dump and restore it into the new major instead.
+`docker compose down` preserves the volume; `docker compose down -v` destroys
+it and therefore destroys persisted trading history.
+
+Postgres does not publish port 5432. From the host, inspect it through the
+Compose network with `docker compose exec db psql -U swingbot -d swingbot`.
+Set `POSTGRES_PASSWORD` before the volume is first initialized; changing the
+environment value later does not change the database role's password.

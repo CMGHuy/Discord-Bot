@@ -33,6 +33,49 @@
 # socket mount below), or run `docker compose restart bot`.
 
 services:
+  db:
+    # A pinned major is load-bearing: a PostgreSQL major upgrade changes the
+    # on-disk format and needs an explicit dump/restore, never an incidental
+    # image pull.
+    image: postgres:18-alpine
+    container_name: swing-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: swingbot
+      POSTGRES_DB: swingbot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    volumes:
+      # Docker-managed storage avoids host bind-mount ownership/fsync hazards.
+      - pgdata:/var/lib/postgresql/data
+    # Intentionally unpublished: bot and admin use the internal Compose
+    # network; maintenance uses `docker compose exec db psql ...`.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U swingbot -d swingbot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  db-test:
+    # Disposable host-visible database for tests that need PostgreSQL-specific
+    # behaviour.  The profile keeps it out of normal development/deployment.
+    profiles: ["test"]
+    image: postgres:18-alpine
+    container_name: swing-db-test
+    environment:
+      POSTGRES_USER: swingbot
+      POSTGRES_DB: swingbot_test
+      POSTGRES_PASSWORD: swingbot
+    ports:
+      - "127.0.0.1:55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U swingbot -d swingbot_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   bot:
     # The image is the deployable. CI builds it, pushes it to GHCR, and the
     # server pulls it by digest-pinned tag -- SWING_BOT_IMAGE is exported by
@@ -93,6 +136,9 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy
 
   admin:
     # No 'build:' here -- same image as the bot, so a local `up --build`
@@ -150,6 +196,8 @@ services:
     depends_on:
       bot:
         condition: service_healthy
+      db:
+        condition: service_healthy
 
   cloudflared:
     # Cloudflare Tunnel: gives the admin UI real public hostnames
@@ -193,4 +241,8 @@ services:
     depends_on:
       admin:
         condition: service_healthy
+
+volumes:
+  # Survives `docker compose down`; `down -v` deliberately destroys it.
+  pgdata:
 
