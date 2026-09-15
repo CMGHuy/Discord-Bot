@@ -53,6 +53,16 @@ def db_engine():
     with engine.begin() as connection:
         connection.execute(sa.text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
     METADATA.create_all(engine)
+    from swingbot.core.db.notify import NOTIFY_FUNCTION_SQL, trigger_ddl
+    with engine.begin() as connection:
+        connection.execute(sa.text(NOTIFY_FUNCTION_SQL))
+        for table, channel in (
+            ("trades", "trades"), ("plans", "trades"), ("starred_plans", "trades"),
+            ("account", "account"), ("account_balance_history", "account"),
+            ("journal_entries", "journal"), ("signal_state", "account"),
+            ("watchlist", "watchlist"),
+        ):
+            connection.execute(sa.text(trigger_ddl(table, channel)))
     yield engine
     engine.dispose()
 

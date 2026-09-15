@@ -67,3 +67,58 @@ trades = register(
     ("trade_id", "ticker", "strategy", "horizon", "direction", "status",
      "opened_at", "closed_at", "entry", "stop_loss"),
 )
+
+plans = register(
+    sa.Table(
+        "plans", METADATA,
+        sa.Column("id", sa.BigInteger, primary_key=True),
+        sa.Column("plan_id", sa.Text, nullable=False, unique=True),
+        sa.Column("ticker", sa.Text, nullable=False),
+        sa.Column("strategy", sa.Text, nullable=False),
+        sa.Column("horizon_key", sa.Text, nullable=False),
+        sa.Column("status", sa.Text, nullable=False),
+        sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False),
+        *standard_columns(),
+        sa.Index("plans_status_idx", "status"),
+        sa.Index("plans_ticker_idx", "ticker"),
+        sa.Index("plans_doc_gin", "doc", postgresql_using="gin"),
+    ),
+    ("plan_id", "ticker", "strategy", "horizon_key", "status", "created_at"),
+)
+
+starred_plans = register(sa.Table(
+    "starred_plans", METADATA, sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("plan_id", sa.Text, nullable=False, unique=True), *standard_columns(),
+), ("plan_id",))
+
+account = register(sa.Table(
+    "account", METADATA, sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("key", sa.Text, nullable=False, unique=True), *standard_columns(),
+), ("key",))
+
+account_balance_history = register(sa.Table(
+    "account_balance_history", METADATA, sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("ts", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("balance", sa.Numeric, nullable=False), *standard_columns(),
+    sa.Index("account_balance_history_ts_idx", "ts"),
+), ("ts", "balance"))
+
+journal_entries = register(sa.Table(
+    "journal_entries", METADATA, sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("trade_id", sa.Text, nullable=False, unique=True), sa.Column("strategy", sa.Text),
+    sa.Column("outcome", sa.Text), sa.Column("closed_at", sa.TIMESTAMP(timezone=True)),
+    sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False), *standard_columns(),
+    sa.Index("journal_entries_closed_idx", sa.text("closed_at DESC")),
+    sa.Index("journal_entries_doc_gin", "doc", postgresql_using="gin"),
+), ("trade_id", "strategy", "outcome", "closed_at", "created_at"))
+
+signal_state = register(sa.Table(
+    "signal_state", METADATA, sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("key", sa.Text, nullable=False, unique=True), *standard_columns(),
+), ("key",))
+
+watchlist = register(sa.Table(
+    "watchlist", METADATA, sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("ticker", sa.Text, nullable=False, unique=True),
+    sa.Column("added_at", sa.TIMESTAMP(timezone=True), nullable=False), *standard_columns(),
+), ("ticker", "added_at"))
