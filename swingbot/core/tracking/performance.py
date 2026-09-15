@@ -442,6 +442,17 @@ def _db_record(trade: dict) -> dict:
     return {**rest, "trade_id": trade["id"], "horizon": trade["horizon_key"]}
 
 
+def _json_record(row: dict) -> dict:
+    """Translate a database row back to TradeLog's established JSON shape."""
+    rest = {key: value for key, value in row.items()
+            if key not in ("trade_id", "horizon", "entry", "stop_loss")}
+    result = {**rest, "id": row["trade_id"], "horizon_key": row.get("horizon")}
+    for name in ("entry", "stop_loss"):
+        if row.get(name) is not None:
+            result[name] = float(row[name])
+    return result
+
+
 class TradeLog:
     def __init__(self, path: str = None):
         self.path = path or os.path.join(config.DATA_DIR, "trades.json")
@@ -509,6 +520,14 @@ class TradeLog:
             for row in self._trades:
                 self._db_upsert(row)
 
+    def _all(self) -> list[dict]:
+        """Every trade from the active read backend, in TradeLog's API shape."""
+        from swingbot.core.db import stages
+        if not stages.reads_db("trades"):
+            return self._trades
+        from swingbot.core.db.repositories.trades import trades_repo
+        return [_json_record(row) for row in trades_repo().list_all()]
+
     def _shadow_sizing(self, strategy: str) -> dict | None:
         """What each E6 sizing mode WOULD have sized this trade at, computed
         from inputs available right here (this strategy's own R-multiple
@@ -522,7 +541,7 @@ class TradeLog:
         from swingbot.core.analytics.metrics import r_multiple as _r_multiple
         from swingbot.core.edge import sizing as edge_sizing
 
-        rs = [r for t in self._trades if t.get("strategy") == strategy
+        rs = [r for t in self._all() if t.get("strategy") == strategy
               and (r := _r_multiple(t)) is not None]
         shadow: dict = {}
         kelly_val = None
@@ -657,7 +676,7 @@ class TradeLog:
         plan created. No-op if the plan's trade can't be found (log_trade
         may have failed, or trade_log was wired in after the fill)."""
         with _LOCK:
-            t = next((t for t in self._trades
+            t = next((t for t in self._all()
                       if t.get("plan_id") == plan_id and t["status"] == "open"), None)
             if t is None:
                 return
@@ -682,7 +701,7 @@ class TradeLog:
         records for one plan_id, of which close_plan_trade() only ever
         finds and closes one, leaving the other open forever."""
         with _LOCK:
-            t = next((t for t in self._trades
+            t = next((t for t in self._all()
                       if t.get("plan_id") == plan_id and t["status"] == "open"), None)
             if t is None:
                 return None
@@ -710,7 +729,7 @@ class TradeLog:
         stats. Returns False if no open placeholder exists for this plan
         (already handled, or trade_log was wired in after the alert)."""
         with _LOCK:
-            t = next((t for t in self._trades
+            t = next((t for t in self._all()
                       if t.get("plan_id") == plan_id and t["status"] == "open"), None)
             if t is None:
                 return False
@@ -728,7 +747,7 @@ class TradeLog:
         whatever it's given so settle_legs always has a leg to work from."""
         closed_trade = None
         with _LOCK:
-            t = next((t for t in self._trades
+            t = next((t for t in self._all()
                       if t.get("plan_id") == plan_id and t["status"] == "open"), None)
             if t is None:
                 return
@@ -837,7 +856,7 @@ class TradeLog:
         # close is silently dropped. plan_manager.py is the sole authority
         # on when a plan-linked trade closes -- matches the same guard
         # check_near_tp_timeout() already applies below, for the same reason.
-        open_trades = [t for t in self._trades if t["ticker"] == ticker
+        open_trades = [t for t in self._all() if t["ticker"] == ticker
                        and t["status"] == "open" and not t.get("plan_id")]
         if not open_trades:
             return []
@@ -921,7 +940,7 @@ class TradeLog:
         newly_closed = []
         closed_at = datetime.now(timezone.utc).isoformat()
         with _LOCK:
-            id_to_trade = {t["id"]: t for t in self._trades}
+            id_to_trade = {t["id"]: t for t in self._all()}
             for trade_id, new_status, exit_price in updates:
                 t = id_to_trade.get(trade_id)
                 if t is None or t["status"] != "open":
@@ -960,7 +979,7 @@ class TradeLog:
         default.
         """
         self.refresh()
-        base = self._trades if trades is None else trades
+        base = self._all() if trades is None else trades
         trades = base if confidence_level is None else [
             t for t in base if t["confidence_level"] == confidence_level
         ]
@@ -1020,7 +1039,7 @@ class TradeLog:
         per position. See `get_stats` for who is allowed to pass False.
         """
         self.refresh()
-        base = self._trades if trades is None else trades
+        base = self._all() if trades is None else trades
         trades = base if confidence_level is None else [
             t for t in base if t["confidence_level"] == confidence_level
         ]
@@ -1097,7 +1116,7 @@ class TradeLog:
         admin UI (or any other process that writes trades.json).
         """
         self.refresh()
-        trades = list(self._trades)
+        trades = list(self._all())
         if status and status != "all":
             trades = [t for t in trades if t["status"] == status]
         if ticker:
@@ -1112,7 +1131,7 @@ class TradeLog:
 
     def get_trade_by_id(self, trade_id: str) -> dict | None:
         self.refresh()   # always read fresh — admin UI may have modified the file
-        return next((t for t in self._trades if t["id"] == trade_id), None)
+        return next((t for t in self._all() if t["id"] == trade_id), None)
 
     def open_trade_for_ticker(self, ticker: str) -> dict | None:
         """The open trade on this ticker, if there is one.
@@ -1132,7 +1151,7 @@ class TradeLog:
         """
         self.refresh()
         return next(
-            (t for t in self._trades
+            (t for t in self._all()
              if t["ticker"] == ticker and t["status"] == "open"),
             None,
         )
@@ -1161,7 +1180,7 @@ class TradeLog:
         """
         closed = None
         with _LOCK:
-            for t in self._trades:
+            for t in self._all():
                 if t["id"] == trade_id and t["status"] == "open":
                     _apply_exit_price(t, exit_price, reason="reversed")
                     t["status"] = "closed"
@@ -1186,7 +1205,7 @@ class TradeLog:
         return any(
             t["ticker"] == ticker and t["strategy"] == strategy and t["horizon_key"] == horizon_key
             and t["direction"] == direction and t["status"] == "open"
-            for t in self._trades
+            for t in self._all()
         )
 
     def has_similar_open_trade(self, ticker: str, direction: str, entry: float, stop_loss: float,
@@ -1222,14 +1241,14 @@ class TradeLog:
             t["ticker"] == ticker and t["direction"] == direction and t["status"] == "open"
             and _close(t["entry"], entry) and _close(t["stop_loss"], stop_loss)
             and _close(t["take_profit"], take_profit)
-            for t in self._trades
+            for t in self._all()
         )
 
     def mark_near_close(self, trade_id: str, alerted: bool):
         """Sets/clears the near_close_alerted flag so we warn once per approach,
         not every single check while price lingers near the level."""
         with _LOCK:
-            for t in self._trades:
+            for t in self._all():
                 if t["id"] == trade_id:
                     t["near_close_alerted"] = alerted
                     self._persist(t)
@@ -1250,7 +1269,7 @@ class TradeLog:
         if not fit:
             return False
         with _LOCK:
-            for t in self._trades:
+            for t in self._all():
                 if t["id"] == trade_id:
                     if t.get("trendline_fit"):
                         return False
@@ -1281,7 +1300,7 @@ class TradeLog:
         Returns True if a matching OPEN trade was found and closed.
         """
         with _LOCK:
-            ticker = next((t["ticker"] for t in self._trades
+            ticker = next((t["ticker"] for t in self._all()
                            if t["id"] == trade_id and t["status"] == "open"), None)
         price = None
         if ticker:
@@ -1293,7 +1312,7 @@ class TradeLog:
 
         closed_trade = None
         with _LOCK:
-            for t in self._trades:
+            for t in self._all():
                 if t["id"] == trade_id and t["status"] == "open":
                     if price:
                         _apply_exit_price(t, price, reason="manual")
@@ -1325,7 +1344,7 @@ class TradeLog:
         those are already correct; only the pricing was ever missing.
         """
         with _LOCK:
-            for t in self._trades:
+            for t in self._all():
                 if t["id"] == trade_id:
                     if t["status"] == "open" or t.get("exit_price") is not None:
                         return False
@@ -1394,7 +1413,7 @@ class TradeLog:
         # event and the eventual close_plan_trade both found no open trade and
         # silently did nothing -- the entire scale-out mechanism never reached
         # trades.json or the account for any plan-linked trade.
-        open_trades = [t for t in self._trades
+        open_trades = [t for t in self._all()
                        if t["ticker"] == ticker and t["status"] == "open"
                        and not t.get("plan_id")]
         if not open_trades:
@@ -1426,7 +1445,7 @@ class TradeLog:
         newly_closed = []
         closed_at = datetime.now(timezone.utc).isoformat()
         with _LOCK:
-            id_map = {t["id"]: t for t in self._trades}
+            id_map = {t["id"]: t for t in self._all()}
             for trade_id, new_status, exit_price in updates:
                 t = id_map.get(trade_id)
                 if t is None or t["status"] != "open":
@@ -1489,7 +1508,7 @@ class TradeLog:
             return []
 
         self.refresh()
-        open_trades = [t for t in self._trades
+        open_trades = [t for t in self._all()
                        if t["ticker"] == ticker and t["status"] == "open"]
         if not open_trades:
             return []
@@ -1592,7 +1611,7 @@ class TradeLog:
         newly_closed = []
         now_iso = now.isoformat()
         with _LOCK:
-            id_map = {t["id"]: t for t in self._trades}
+            id_map = {t["id"]: t for t in self._all()}
             for trade_id, action, reason, snapshots in actions:
                 t = id_map.get(trade_id)
                 if t is None or t["status"] != "open":
