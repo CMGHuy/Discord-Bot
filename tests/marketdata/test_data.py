@@ -268,7 +268,7 @@ def test_prefetch_prices_batches_once_and_warms_the_single_price_cache(monkeypat
     assert data_mod.get_current_price("MSFT") == 202.5
 
 
-def test_fresh_only_single_price_never_uses_the_display_cache(monkeypatch):
+def test_fresh_only_single_price_uses_a_fresh_display_cache(monkeypatch):
     monkeypatch.setattr(
         data_mod, "_price_cache", {"FRESH-ONLY": (99.0, data_mod.time.monotonic())}
     )
@@ -285,4 +285,4 @@ def test_fresh_only_single_price_never_uses_the_display_cache(monkeypatch):
             raise RuntimeError("provider unavailable")
 
     monkeypatch.setattr(data_mod.yf, "Ticker", Ticker)
-    assert data_mod.get_current_price("FRESH-ONLY", allow_stale=False) is None
+    assert data_mod.get_current_price("FRESH-ONLY", allow_stale=False) == 99.0

@@ -398,10 +398,11 @@ def get_current_price(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS,
     ticker_key = ticker.upper().strip()
     cached = _price_cache.get(ticker_key)
     now = time.monotonic()
-    # The cache exists for dashboard/report rendering.  A trading transition
-    # explicitly requesting a fresh quote must never treat that display value
-    # as a new market observation.
-    if allow_stale and cached and (now - cached[1]) < ttl_seconds:
+    # A fresh cache entry is a recent market observation for every caller.
+    # ``allow_stale=False`` excludes only the expired last-known-good fallback
+    # below; otherwise a trading transition needlessly refetches a quote that
+    # was observed moments ago.
+    if cached and (now - cached[1]) < ttl_seconds:
         return cached[0]
 
     for candidate in candidate_symbols(ticker_key):
