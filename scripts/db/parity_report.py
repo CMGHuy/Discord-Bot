@@ -38,8 +38,19 @@ def _trades_from_repo_shape(row: dict) -> dict:
     return normalise(result)
 
 
+def _plans_repo():
+    from swingbot.core.db.repositories.plans import PlanRepository
+    return PlanRepository()
+
+
+def _plans_from_repo_shape(row: dict) -> dict:
+    from swingbot.core.db.dual import normalise
+    return normalise(row)
+
+
 STORES: dict[str, StoreSpec] = {
     "trades": StoreSpec("trades.json", "id", _trades_repo, _trades_from_repo_shape),
+    "plans": StoreSpec("plans.json", "plan_id", _plans_repo, _plans_from_repo_shape),
 }
 
 
