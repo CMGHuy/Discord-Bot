@@ -39,9 +39,11 @@ def db_url(db_engine, monkeypatch):
 
 def test_json_stage_writes_only_the_file(data_dir, monkeypatch, db_conn):
     monkeypatch.setattr(config, "DB_STORES", "")
-    _log_one(TradeLog())
+    trade_id = _log_one(TradeLog())
     assert len(_file_trades(data_dir)) == 1
-    assert TradeRepository().count(conn=db_conn) == 0
+    # Other real-DB tests can legitimately have rows in this session; JSON
+    # stage's contract is that this specific write never creates its mirror.
+    assert TradeRepository().get(trade_id, conn=db_conn) is None
 
 
 def test_dual_stage_writes_and_round_trips(data_dir, monkeypatch, db_committed, db_url):
