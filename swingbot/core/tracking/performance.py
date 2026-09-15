@@ -494,13 +494,13 @@ class TradeLog:
     def _save(self):
         atomic_write_json(self.path, self._trades)
 
-    def _db_upsert(self, trade: dict) -> None:
+    def _db_upsert(self, trade: dict, *, conn=None) -> None:
         """Mirror one changed trade when the store is at the dual/db stage."""
         from swingbot.core.db import stages
         if not stages.writes_db("trades"):
             return
         from swingbot.core.db.repositories.trades import trades_repo
-        trades_repo().upsert(_db_record(trade))
+        trades_repo().upsert(_db_record(trade), conn=conn)
 
     def _db_delete(self, trade_id: str) -> None:
         from swingbot.core.db import stages
@@ -514,7 +514,7 @@ class TradeLog:
             from swingbot.core.db.repositories.trades import trades_repo
             trades_repo().clear(status=status)
 
-    def _persist(self, trade: dict | None = None) -> None:
+    def _persist(self, trade: dict | None = None, *, conn=None) -> None:
         """Persist to the configured backend(s), without hiding DB failures."""
         from swingbot.core.db import stages
         if stages.writes_json("trades"):
@@ -522,10 +522,10 @@ class TradeLog:
         if not stages.writes_db("trades"):
             return
         if trade is not None:
-            self._db_upsert(trade)
+            self._db_upsert(trade, conn=conn)
         else:
             for row in self._trades:
-                self._db_upsert(row)
+                self._db_upsert(row, conn=conn)
 
     def _all(self) -> list[dict]:
         """Every trade from the active read backend, in TradeLog's API shape."""
@@ -745,7 +745,7 @@ class TradeLog:
             self._db_delete(t["id"])
         return True
 
-    def close_plan_trade(self, plan_id: str, leg: dict | None, status: str) -> None:
+    def close_plan_trade(self, plan_id: str, leg: dict | None, status: str, *, conn=None) -> None:
         """Final leg + terminal status for a v2 plan's trade. `leg` is the
         real leg dict for a runner close; the caller (PlanManager._on_event,
         which has the TradePlanV2 and so can recompute the r-multiple)
@@ -766,7 +766,7 @@ class TradeLog:
             t["closed_at"] = datetime.now(timezone.utc).isoformat()
             self._settle_account_balance(t)
             closed_trade = dict(t)
-            self._persist(t)
+            self._persist(t, conn=conn)
         _journal_close_safely(closed_trade)
         _refresh_snapshot_safely()
 

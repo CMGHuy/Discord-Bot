@@ -67,7 +67,7 @@ class PlanStore:
         # the scan loop writes to most often.
         atomic_write_json(self.path, list(self._plans.values()))
 
-    def _persist(self, plan_dict: dict | None = None) -> None:
+    def _persist(self, plan_dict: dict | None = None, *, conn=None) -> None:
         """Write through to the backends selected for the plans store."""
         from swingbot.core.db import stages
         if stages.writes_json("plans"):
@@ -77,10 +77,10 @@ class PlanStore:
         from swingbot.core.db.repositories.plans import plans_repo
         repository = plans_repo()
         if plan_dict is not None:
-            repository.upsert(plan_dict)
+            repository.upsert(plan_dict, conn=conn)
         else:
             for record in self._plans.values():
-                repository.upsert(record)
+                repository.upsert(record, conn=conn)
 
     def _all(self) -> dict[str, dict]:
         """Map plan ids to records from the backend selected for reads."""
@@ -103,12 +103,12 @@ class PlanStore:
         d = self._all().get(plan_id)
         return plan_from_dict(d) if d else None
 
-    def update(self, plan: TradePlanV2) -> None:
+    def update(self, plan: TradePlanV2, *, conn=None) -> None:
         with _LOCK:
             if plan.plan_id not in self._all():
                 raise KeyError(plan.plan_id)
             self._plans[plan.plan_id] = plan_to_dict(plan)
-            self._persist(self._plans[plan.plan_id])
+            self._persist(self._plans[plan.plan_id], conn=conn)
 
     def open_plans(self) -> list[TradePlanV2]:
         return [plan_from_dict(d) for d in self._all().values()
