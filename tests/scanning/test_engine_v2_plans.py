@@ -722,3 +722,72 @@ def test_logged_v2_fields_match_the_stored_v2_target():
 
     assert sources == ["EMA50"]
     assert rr == pytest.approx(2.0)
+
+
+def test_risk_features_stamped_on_real_plan_via_attach_plan_v2(monkeypatch):
+    """Verify that attach_plan_v2 actually wires the risk_features fields,
+    populating regime2_state, confluence_count, and dist_to_level_atr with
+    real, non-None values (not just empty dicts). This tests the integration
+    between attach_plan_v2 and risk_features.build()."""
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
+
+    # Create a realistic test scenario with all required fields
+    scenario = SimpleNamespace(
+        direction="bullish",
+        entry=100.0,
+        stop_loss=95.0,
+        take_profit=110.0,  # The structural level for dist_to_level_atr
+        target_sources=["EMA21"],
+        stop_sources=["Rolling support"],
+    )
+
+    # Create a realistic item with the fields that attach_plan_v2 accesses
+    item = SimpleNamespace(
+        plan_v2=None,
+        target_confluence=(2, ["EMA21", "Fib"]),  # confluence_count should be 2
+        conf=SimpleNamespace(level=3),  # confidence_level=3
+        htf_bias="bullish",
+    )
+
+    # Create test data with proper OHLCV structure
+    df = make_ohlcv([100.0] * 60)
+
+    # Call attach_plan_v2 with the regime2_state parameter (v86 Task C4)
+    # level_map=None uses the scenario's take_profit as the sole candidate level
+    analyze.attach_plan_v2(
+        item, scenario, df,
+        ticker="TEST", horizon_key="4w",
+        level_map=None,
+        regime=SimpleNamespace(trend="bullish"),
+        rs_percentile=50.0,
+        breadth=60.0,
+        regime2_state="bull_normal",  # v86: regime label for the creating bar
+    )
+
+    # Verify plan was built
+    assert item.plan_v2 is not None, "plan_v2 should be built"
+
+    # Verify risk_features dict is populated (not empty)
+    rf = item.plan_v2.risk_features
+    assert isinstance(rf, dict), "risk_features should be a dict"
+    assert len(rf) > 0, "risk_features should not be empty"
+
+    # Check the three critical fields that must be wired correctly
+    # (previously these were None due to missing/incorrect attribute paths)
+    assert rf.get("regime2_state") == "bull_normal", \
+        f"regime2_state should be 'bull_normal', got {rf.get('regime2_state')}"
+    assert rf.get("confluence_count") == 2, \
+        f"confluence_count should be 2 (from target_confluence[0]), got {rf.get('confluence_count')}"
+    assert rf.get("dist_to_level_atr") is not None, \
+        f"dist_to_level_atr should not be None (from scenario.take_profit), got {rf.get('dist_to_level_atr')}"
+    assert isinstance(rf.get("dist_to_level_atr"), (int, float)), \
+        f"dist_to_level_atr should be numeric, got {type(rf.get('dist_to_level_atr'))}"
+
+    # Verify other documented fields are also present and populated
+    assert rf.get("confidence_level") == 3, "confidence_level should be 3"
+    assert rf.get("htf_agree") is True, "htf_agree should be True (bullish matches bullish)"
+    assert rf.get("stop_width_atr") is not None, "stop_width_atr should be populated"
+    assert rf.get("atr_pct") is not None, "atr_pct should be populated"
+    assert rf.get("rs_percentile") == 50.0, "rs_percentile should be 50.0"
+    assert rf.get("session_bucket") in ("open", "midday", "close"), "session_bucket should be one of the valid buckets"
+    assert "days_to_earnings" in rf, "days_to_earnings should be in risk_features"

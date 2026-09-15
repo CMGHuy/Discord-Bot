@@ -13,6 +13,7 @@ from swingbot.core.charts.trendline_fit import fit_trendline
 from swingbot.core.edge import correlation as corr_mod
 from swingbot.core.edge import factors as rs_factors
 from swingbot.core.edge import heat as heat_mod
+from swingbot.core.edge import regime2
 from swingbot.core.edge import throttle
 from swingbot.core.edge.rs_gate import rs_verdict
 from swingbot.core.infra.notifier import notify_secondary
@@ -267,6 +268,14 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             config.MARKET_REGIME_TICKER,
         )
 
+    # v86: compute regime_series for risk_features stamping (one per scan, reused for every item)
+    regimes = None
+    if spy_df is not None:
+        try:
+            regimes = regime2.regime_series(spy_df)
+        except Exception:
+            log.debug("regime_series computation failed", exc_info=True)
+
     account_cfg = load_account_config()
 
     scan_items = []
@@ -429,10 +438,13 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 # confirmation gate above, matching the pre-parallelization
                 # timing exactly -- a still-debouncing scenario no longer pays
                 # for plan construction on every scan pass.
-                analyze.attach_plan_v2(item, item.plan, fresh_data.get(item.result.ticker),
+                df_for_item = fresh_data.get(item.result.ticker)
+                regime2_state = analyze._regime_at(regimes, df_for_item.index[-1] if df_for_item is not None and len(df_for_item) > 0 else None)
+                analyze.attach_plan_v2(item, item.plan, df_for_item,
                                 item.result.ticker, item.result.horizon_key,
                                 level_map=item.level_map, regime=regime,
-                                rs_percentile=item.rs_percentile, breadth=item.breadth)
+                                rs_percentile=item.rs_percentile, breadth=item.breadth,
+                                regime2_state=regime2_state)
                 if item.plan_v2 is not None:
                     item.plan_v2.regime_aligned = not (
                         item.htf_info and item.htf_info.get("counter_trend", False)
