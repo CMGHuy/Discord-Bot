@@ -85,6 +85,31 @@ def test_no_open_trades_skips_price_checks_but_still_ticks_the_plan_manager(monk
     assert calls["price"] == 0
     assert calls["tick"] == 1
 
+
+def test_trade_monitor_acknowledges_feed_deliveries(monkeypatch):
+    from swingbot.core.planning.plan_manager import Delivery
+
+    monkeypatch.setattr(scan_engine, "is_scan_running", lambda: False)
+    monkeypatch.setattr(loops.trade_log, "get_trades", lambda status=None, limit=None: [
+        {"ticker": "AAPL", "id": "t1", "status": "open"}])
+    monkeypatch.setattr(loops, "get_current_price", lambda t: 100.0)
+    monkeypatch.setattr(loops.trade_log, "close_if_live_price_hit", lambda ticker, live: [])
+    monkeypatch.setattr(loops.trade_log, "check_near_tp_timeout", lambda ticker, live: [])
+    event = PlanEvent("p1", "be_moved", {"working_stop": 100.0})
+    monkeypatch.setattr("swingbot.core.planning.plan_manager.run_manager_tick", lambda: [event])
+
+    delivered = [Delivery("p1", "stop", 100.0)]
+
+    async def fake_notify(bot, events):
+        assert events == [event]
+        return delivered
+
+    acked = []
+    monkeypatch.setattr("swingbot.core.scanning.embeds.notify_plan_events", fake_notify)
+    monkeypatch.setattr("swingbot.core.planning.plan_manager.ack_notified", acked.append)
+    _run(scanning_mod.trade_monitor.coro())
+    assert acked == [delivered]
+
 def test_unknown_plan_event_transition_does_not_escape_monitor(monkeypatch):
     class Plan:
         plan_id = "p1"

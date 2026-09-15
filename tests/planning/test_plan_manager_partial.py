@@ -48,17 +48,18 @@ def test_runner_closes_at_tp2(tmp_path):
 
 def test_tp2_none_runner_ignores_high_prices(tmp_path):
     store, mgr = _partial_env(tmp_path, [140.0], tp2=None)
-    assert mgr.poll() == []          # no trail (no atr_fn), no tp2 -> still open
+    assert [e.transition for e in mgr.poll()] == ["stop_moved"]
+    assert store.get("p1").status == PlanStatus.PARTIAL  # no trail or tp2 -> still open
 
 
 def test_trail_ratchets_and_closes(tmp_path):
     # ATR faked at 2.0, trail_atr_mult=2.5 -> trail = extreme - 5.0.
     store, mgr = _partial_env(tmp_path, [120.0, 118.0, 114.9],
                               atr_fn=lambda t: 2.0)
-    assert mgr.poll() == []                      # 120: trail -> max(floor, 115)
+    assert [e.transition for e in mgr.poll()] == ["stop_moved"]  # 120: trail -> 115
     assert store.get("p1").working_stop == 115.0
     assert store.get("p1").working_stop > FLOOR  # floor is a start, not a ceiling
-    assert mgr.poll() == []                      # 118: above trail; no ratchet down
+    assert [e.transition for e in mgr.poll()] == ["stop_moved"] # unacknowledged feed retry
     assert store.get("p1").working_stop == 115.0
     events = mgr.poll()                          # 114.9 <= 115 -> trail close
     assert events[0].detail["reason"] == "tp1_runner_trail"
@@ -134,7 +135,7 @@ def test_price_just_above_the_floor_keeps_the_runner_open(tmp_path):
     # The other side of the same boundary: 107.0 clears the floor, so the
     # runner rides on with its stop untouched.
     store, mgr = _partial_env(tmp_path, [107.0])
-    assert mgr.poll() == []
+    assert [e.transition for e in mgr.poll()] == ["stop_moved"]
     assert store.get("p1").status == PlanStatus.PARTIAL
     assert store.get("p1").working_stop == pytest.approx(FLOOR)
 

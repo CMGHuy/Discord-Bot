@@ -35,15 +35,17 @@ def test_arming_stamps_the_session(tmp_path):
 def test_be_stop_does_not_fire_the_session_it_armed(tmp_path):
     store, mgr = _env(tmp_path, [105.0, 99.9])
     mgr.poll(now=DAY1_A)
-    assert mgr.poll(now=DAY1_B) == []
+    assert [event.transition for event in mgr.poll(now=DAY1_B)] == ["stop_moved"]
     assert store.get("p1").status == "ACTIVE"
 
 
 def test_be_stop_fires_the_next_session(tmp_path):
     store, mgr = _env(tmp_path, [105.0, 101.0, 99.9])
-    mgr.poll(now=DAY1_A); assert mgr.poll(now=DAY2_A) == []
+    mgr.poll(now=DAY1_A)
+    assert [event.transition for event in mgr.poll(now=DAY2_A)] == ["stop_moved"]
     event = mgr.poll(now=DAY2_B)[0]
-    assert event.detail == {"reason": "scratch", "exit_price": 100.0}
+    assert event.detail["reason"] == "scratch"
+    assert event.detail["exit_price"] == 100.0
     assert store.get("p1").status == "CLOSED"
 
 
@@ -51,7 +53,8 @@ def test_original_stop_still_governs_the_arming_session(tmp_path):
     store, mgr = _env(tmp_path, [105.0, 94.0])
     mgr.poll(now=DAY1_A)
     event = mgr.poll(now=DAY1_B)[0]
-    assert event.detail == {"reason": "loss", "exit_price": 95.0}
+    assert event.detail["reason"] == "loss"
+    assert event.detail["exit_price"] == 95.0
 
 
 def test_unstamped_legacy_break_even_stop_governs_immediately(tmp_path):

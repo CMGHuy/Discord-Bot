@@ -80,10 +80,28 @@ class TradePlanV2:
     # armed. None marks legacy plans whose persisted record predates v64.
     be_armed_session: str | None = None
     runner_floor_session: str | None = None
+    # v81 execution feed: what the reader has actually been TOLD. Written only
+    # by plan_manager (poll's feed bookkeeping and ack_notified) and read by no
+    # exit path -- tests/planning/test_plan_manager_feed.py pins that.
+    # notified_stop: the stop last delivered; None reads as stop_loss, which
+    # the alert's order ticket delivered. pending_notice: the latest FILLED /
+    # CANCEL / EXIT instruction not yet delivered, as {"transition", "detail",
+    # "at"}; None when nothing is owed, including every plan persisted before
+    # v81, which is therefore never resent.
+    notified_stop: float | None = None
+    pending_notice: dict | None = None
 
 
 def effective_stop(plan: TradePlanV2) -> float:
     return plan.working_stop if plan.working_stop is not None else plan.stop_loss
+
+
+def breakeven_trigger(plan: TradePlanV2, entry: float) -> float:
+    """The price at which break-even arms: breakeven_trigger_fraction of the
+    way from `entry` to tp1. plan_manager._step_active and the v81 order
+    ticket both read this one formula."""
+    sign = 1 if plan.direction == "bullish" else -1
+    return entry + sign * plan.breakeven_trigger_fraction * abs(plan.tp1 - entry)
 
 
 _PLAN_FIELDS = None   # cached field list

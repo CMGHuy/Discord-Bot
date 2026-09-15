@@ -127,7 +127,9 @@ def test_legacy_trade_logged_between_ticks_is_not_erased_from_disk(tmp_path, mon
     # trade this stale instance already knew about, erasing "ZZZ".
     price["v"] = 111.0
     events = pm.run_manager_tick()
-    assert [e.transition for e in events] == ["tp1_partial"]
+    # v81 re-sends the still-unacknowledged fill before the newly observed
+    # lifecycle event; the trade-log assertion below remains the regression.
+    assert [e.transition for e in events] == ["filled", "tp1_partial"]
 
     trades = TradeLog(path=str(tmp_path / "trades.json")).get_trades(limit=None)
     assert any(t["ticker"] == "ZZZ" for t in trades), (

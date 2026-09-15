@@ -32,6 +32,7 @@ from swingbot.core.tracking.performance import TradeLog
 from swingbot.scan_params import ScanParams
 
 from . import analyze, dedup, fetch, runstate, telemetry
+from .analyze import paper_trade_decision
 from .embeds import (
     build_embed, build_simple_alert, notify_closed_trades, notify_near_close,
     plan_numbers_for_display,
@@ -676,7 +677,9 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         # ones that log no trade. Left inside, those alerts would raise
         # NameError into the chart try/except and silently lose their PNG.
         trendline_fit = None
-        if item.all_requirements_met and not already_open:
+        # v81: ticket PLACE / DO NOT PLACE mirrors this exact decision.
+        item.paper_logged, item.not_logged_reason = paper_trade_decision(item, already_open)
+        if item.paper_logged:
             # v2 plan pedigree (tier/badge/quality/source) rides along with
             # plan_id -- same cutover guard: only a live "on" plan is real
             # pedigree, "shadow"/"off" trades log as legacy (None) rows.

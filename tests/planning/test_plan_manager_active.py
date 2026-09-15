@@ -28,7 +28,9 @@ def test_be_move_at_half_way_to_tp1(tmp_path):
     events = mgr.poll()
     assert [e.transition for e in events] == ["be_moved"]
     assert store.get("p1").working_stop == 100.0
-    assert mgr.poll() == []               # idempotent at the same price
+    # The lifecycle decision is idempotent, but the feed keeps requesting the
+    # new resting stop until Discord acknowledges its delivery.
+    assert [e.transition for e in mgr.poll()] == ["stop_moved"]
 
 
 def test_below_trigger_no_move(tmp_path):

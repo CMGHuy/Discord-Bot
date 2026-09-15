@@ -204,6 +204,11 @@ git commit -m "feat(v67): add the store parity report"
 
 ### Task P2-07: The plans repository and importer
 
+> **v81 (2026-09-10):** `TradePlanV2` gained `notified_stop` and
+> `pending_notice`, the execution feed's delivery ledger. Both live inside
+> `doc`; no column is added. The round-trip test below carries both, so an
+> importer that drops keys it does not know fails it.
+
 `plans.json` is the store the scan loop writes most often, and `PlanStore._save()`
 serialises `list(self._plans.values())` on every `add()` and `update()`.
 
@@ -266,7 +271,10 @@ def test_by_ticker(repo, db_conn):
 def test_the_full_plan_dict_round_trips(repo, db_conn):
     from swingbot.core.db.dual import diff_records
     rec = _p("P1", legs=[{"fraction": 0.5, "r": 1.0}], take_profit=110.0,
-             confidence={"level": 4, "score": 71})
+             confidence={"level": 4, "score": 71}, notified_stop=101.5,
+             pending_notice={"transition": "closed",
+                             "detail": {"reason": "loss", "exit_price": 94.5},
+                             "at": "2026-09-10T15:00:00+00:00"})
     repo.insert(rec, conn=db_conn)
     assert diff_records(rec, repo.get("P1", conn=db_conn)) == []
 ```

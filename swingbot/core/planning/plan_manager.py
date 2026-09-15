@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from typing import NamedTuple
 
 from swingbot import config
 from swingbot.core.market.session import (is_quiet_hours, is_tape_open,
@@ -22,6 +23,7 @@ from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
                                        pending_invalidated, record_transition,
                                        runner_floor)
 from swingbot.core.planning.plan_store import PlanStore
+from swingbot.core.planning.plan_types import breakeven_trigger, effective_stop
 
 log = logging.getLogger("swing-bot.plan_manager")
 
@@ -48,6 +50,67 @@ class PlanEvent:
                          # "cancelled_risk_cap"|"be_moved"|"tp1_partial"|
                          # "closed"|"pyramid_add"
     detail: dict = field(default_factory=dict)
+
+
+# v81 execution feed. Stop events tell the reader where to rest the stop and
+# are acknowledged through plan.notified_stop; notice events are queued on
+# plan.pending_notice and re-sent until acknowledged. Neither field is read
+# by any exit path (tests/planning/test_plan_manager_feed.py pins that).
+STOP_EVENTS = frozenset({"be_moved", "tp1_partial", "stop_moved"})
+NOTICE_EVENTS = frozenset({"filled", "cancelled_expired", "cancelled_invalidated", "closed"})
+NOTICE_RESEND_DAYS = 5
+
+
+def trail_notify_min_r() -> float:
+    """config.TRAIL_NOTIFY_MIN_R clamped to its safe range."""
+    return min(1.0, max(0.01, float(config.TRAIL_NOTIFY_MIN_R)))
+
+
+def last_told_stop(plan) -> float:
+    """The stop last delivered to the reader; the ticket delivered stop_loss."""
+    return plan.notified_stop if plan.notified_stop is not None else plan.stop_loss
+
+
+def resting_stop(plan) -> float:
+    """The stop the reader should leave resting, matching the exit check."""
+    if plan.status == PlanStatus.PARTIAL and plan.working_stop is None:
+        return runner_floor(plan.entry_price, plan.tp1)
+    return effective_stop(plan)
+
+
+def _stop_at_close(plan) -> float:
+    """The stop the bot was holding when the plan closed."""
+    if plan.working_stop is not None:
+        return plan.working_stop
+    if plan.legs_realized:
+        return runner_floor(plan.entry_price, plan.tp1)
+    return plan.stop_loss
+
+
+def stop_move_event(plan, today_session: str, min_r: float) -> PlanEvent | None:
+    """Emit stop_moved when the resting stop has changed by at least min_r."""
+    if plan.entry_price is None or plan.status not in (PlanStatus.ACTIVE, PlanStatus.PARTIAL):
+        return None
+    risk = abs(plan.entry_price - plan.stop_loss)
+    if risk <= 0:
+        return None
+    sign = 1 if plan.direction == "bullish" else -1
+    old, new = last_told_stop(plan), resting_stop(plan)
+    r_moved = (new - old) * sign / risk
+    if abs(r_moved) < min_r - 1e-9:
+        return None
+    effective = ("next_session" if plan.status == PlanStatus.ACTIVE
+                 and plan.be_armed_session == today_session else "now")
+    return PlanEvent(plan.plan_id, "stop_moved",
+                     {"old": old, "new": new, "r_moved": r_moved, "effective": effective})
+
+
+class Delivery(NamedTuple):
+    """One execution-feed message that reached a notifying channel."""
+
+    plan_id: str
+    kind: str       # "stop" | "notice"
+    value: object   # delivered stop price, or delivered notice transition
 
 
 # Below this the suggested add is too small to be worth acting on -- a
@@ -142,6 +205,54 @@ class PlanManager:
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
+    def resend_notices(self, *, reload: bool = True) -> list[PlanEvent]:
+        """Re-emit unacknowledged notices, dropping ones older than five days."""
+        if reload:
+            self.store.reload()
+        cutoff = datetime.now(timezone.utc) - timedelta(days=NOTICE_RESEND_DAYS)
+        events: list[PlanEvent] = []
+        for plan in self.store.all():
+            notice = plan.pending_notice
+            if not notice:
+                continue
+            try:
+                queued = datetime.fromisoformat(notice["at"])
+                if queued.tzinfo is None:
+                    queued = queued.replace(tzinfo=timezone.utc)
+            except (KeyError, TypeError, ValueError):
+                queued = None
+            if queued is None or queued < cutoff:
+                log.warning("execution feed: dropping undelivered %s for plan %s (queued %s)",
+                            notice.get("transition"), plan.plan_id, notice.get("at"))
+                plan.pending_notice = None
+                self.store.update(plan)
+                continue
+            events.append(PlanEvent(plan.plan_id, notice["transition"],
+                                    dict(notice["detail"])))
+        return events
+
+    def _feed_bookkeeping(self, plan: TradePlanV2, new_events: list[PlanEvent],
+                          regular: bool, now=None) -> list[PlanEvent]:
+        """Stamp and queue feed events after ordinary lifecycle bookkeeping."""
+        for event in new_events:
+            if event.transition == "tp1_partial":
+                event.detail["working_stop"] = plan.working_stop
+            elif event.transition == "closed":
+                event.detail["session"] = "regular" if regular else "extended"
+                event.detail["notified_stop"] = last_told_stop(plan)
+                event.detail["bot_stop"] = _stop_at_close(plan)
+        notices = [event for event in new_events if event.transition in NOTICE_EVENTS]
+        if notices:
+            latest = notices[-1]
+            plan.pending_notice = {"transition": latest.transition,
+                                   "detail": dict(latest.detail), "at": self._now()}
+            self.store.update(plan)
+        if not regular or any(event.transition in STOP_EVENTS | NOTICE_EVENTS
+                              for event in new_events):
+            return new_events
+        moved = stop_move_event(plan, session_date(now), trail_notify_min_r())
+        return new_events + [moved] if moved is not None else new_events
+
     def poll(self, now=None) -> list[PlanEvent]:
         # One gate, and only one (2026-09-14, on direct request): the
         # operator's quiet window. Outside it, the FULL state machine runs
@@ -178,7 +289,7 @@ class PlanManager:
         self.store.reload()
         if self.trade_log is not None:
             self.trade_log.reload()
-        events: list[PlanEvent] = []
+        events: list[PlanEvent] = self.resend_notices(reload=False)
         for plan in self.store.open_plans():
             try:
                 price = float(self.price_fn(plan.ticker))
@@ -226,7 +337,7 @@ class PlanManager:
                 self._last_seen[plan.plan_id] = (session_date(now), price)
             for event in new_events:
                 self._on_event(plan, event)
-            events.extend(new_events)
+            events.extend(self._feed_bookkeeping(plan, new_events, regular, now))
         return events
 
     def _warn_legacy_open_risk(self, plan: TradePlanV2) -> None:
@@ -421,8 +532,7 @@ class PlanManager:
             self.store.update(plan)
             return [PlanEvent(plan.plan_id, "tp1_partial", dict(leg))]
 
-        target_dist = abs(plan.tp1 - entry)
-        be_trigger = entry + sign * plan.breakeven_trigger_fraction * target_dist
+        be_trigger = breakeven_trigger(plan, entry)
         reached_be = price >= be_trigger if is_bull else price <= be_trigger
         if reached_be and plan.working_stop is None:
             plan.working_stop = entry
@@ -620,17 +730,80 @@ def _bars_since(ticker, created_at):
         if df.index.tz is None else int((df.index > created_at).sum())
 
 
-def run_manager_tick() -> list[PlanEvent]:
-    """One synchronous manager tick -- the trade_monitor loop calls this via
-    asyncio.to_thread. Flag off = pure no-op (no store instantiation, no
-    file creation)."""
+def _manager() -> PlanManager:
+    """The process-wide PlanManager, built on first use."""
     global _MANAGER
-    from swingbot import config
-    if not config.INTRADAY_MANAGER_V2:
-        return []
     if _MANAGER is None:
         from swingbot.core.tracking.performance import TradeLog
         _MANAGER = PlanManager(PlanStore(), _price_fn, atr_fn=_live_atr,
                                bar_count_fn=_bars_since, trade_log=TradeLog())
+    return _MANAGER
+
+
+def run_manager_tick() -> list[PlanEvent]:
+    """One synchronous manager tick -- the trade_monitor loop calls this via
+    asyncio.to_thread. Flag off = pure no-op (no store instantiation, no
+    file creation)."""
+    from swingbot import config
+    if not config.INTRADAY_MANAGER_V2:
+        return []
     # Production reads the wall clock; poll's optional clock is test injection.
-    return _MANAGER.poll()
+    return _manager().poll()
+
+
+def run_notice_sweep() -> list[PlanEvent]:
+    """Re-send notices while no open position exists; this fetches no prices."""
+    from swingbot import config
+    if not config.INTRADAY_MANAGER_V2:
+        return []
+    return _manager().resend_notices()
+
+
+def ack_notified(deliveries) -> None:
+    """Record execution-feed deliveries through the manager-owned plan store."""
+    if not deliveries:
+        return
+    store = _MANAGER.store if _MANAGER is not None else PlanStore()
+    store.reload()
+    for delivery in deliveries:
+        plan = store.get(delivery.plan_id)
+        if plan is None:
+            continue
+        if delivery.kind == "stop":
+            plan.notified_stop = float(delivery.value)
+        elif delivery.kind == "notice":
+            notice = plan.pending_notice
+            if not notice or notice.get("transition") != delivery.value:
+                continue
+            plan.pending_notice = None
+        else:
+            continue
+        store.update(plan)
+
+
+RECYCLE_PROGRESS_R = 0.3
+
+
+def recycle_candidates(plans: list, prices: dict) -> list:
+    """Positions past their strategy's time stop with <0.3R to show for it.
+    Advice-only: the notice says 'this capital is statistically dead',
+    the operator decides."""
+    import datetime as dt
+    out = []
+    today = dt.date.today()
+    for p in plans:
+        if getattr(p, "status", None) not in ("ACTIVE", "PARTIAL"):
+            continue
+        ts_days = getattr(p, "time_stop_days", None)
+        price = prices.get(p.ticker)
+        if ts_days is None or price is None or not getattr(p, "activated_at", None):
+            continue
+        age = (today - dt.date.fromisoformat(p.activated_at[:10])).days
+        if age <= ts_days:
+            continue
+        sign = 1 if p.direction == "bullish" else -1
+        progress = (price - p.entry_price) * sign / p.risk_per_share
+        if progress < RECYCLE_PROGRESS_R:
+            out.append({"plan_id": p.plan_id, "ticker": p.ticker,
+                        "age_days": age, "progress_r": round(progress, 3)})
+    return out

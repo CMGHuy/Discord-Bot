@@ -55,3 +55,16 @@ def test_no_surface_shows_tp1_as_live_target():
     row = _row_from_plan(dict(PLAN), None, set())
     tail, line = _partial_tail(Attr(PLAN)), partial_position_line(Attr(PLAN))
     assert row["target"] is None and "target 120.00" not in line and "TP2 120.00" not in tail
+
+
+def test_execution_feed_stop_agrees(view):
+    """The fifth surface uses the legacy partial runner floor, not risk stop."""
+    from swingbot.core.planning.plan_manager import resting_stop, stop_move_event
+    from swingbot.core.presentation.instructions import instruction_for
+
+    plan = Attr(PLAN)
+    assert resting_stop(plan) == pytest.approx(view.stop)
+    event = stop_move_event(plan, "2026-09-10", 0.25)
+    assert event is not None
+    headline = instruction_for(plan, event).headline
+    assert f"{view.stop:.2f}" in headline and "90.00" not in headline
