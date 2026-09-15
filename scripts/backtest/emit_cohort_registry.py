@@ -65,8 +65,8 @@ def _merge(live_cells: dict, backtest_cells: dict) -> dict:
             "win_rate_live": live.get("win_rate"),
             "expectancy_r_live": live.get("expectancy_r"),
             "n_backtest": backtest.get("n", 0),
-            "win_rate_backtest": backtest.get("win_rate", 0.0),
-            "expectancy_r_backtest": backtest.get("expectancy_r", 0.0),
+            "win_rate_backtest": backtest.get("win_rate"),
+            "expectancy_r_backtest": backtest.get("expectancy_r"),
         }
     return merged
 

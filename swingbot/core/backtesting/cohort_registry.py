@@ -36,8 +36,15 @@ def cohort_key(direction: str, regime2_state: str) -> str:
     return f"{direction}|{regime2_state}"
 
 
-def blend(p_live: float | None, n_live: int, p_backtest: float, k: int = K) -> float:
-    """Shrink a live estimate toward the frozen backtest prior."""
+def blend(p_live: float | None, n_live: int, p_backtest: float | None, k: int = K) -> float:
+    """Shrink a live estimate toward the frozen backtest prior.
+
+    A cell the backtest never occupied has no prior to shrink toward --
+    the live estimate stands alone rather than being dragged toward a
+    fabricated zero (which would masquerade as "measured breakeven").
+    """
+    if p_backtest is None:
+        return float(p_live) if p_live is not None else 0.0
     if p_live is None or n_live <= 0:
         return float(p_backtest)
     return (n_live * float(p_live) + k * float(p_backtest)) / (n_live + k)
@@ -83,9 +90,9 @@ def get_cohort(direction: str, regime2_state: str | None) -> Cohort:
 
     n_live = int(cell.get("n_live", 0))
     n_backtest = int(cell.get("n_backtest", 0))
-    win_rate = blend(cell.get("win_rate_live"), n_live, cell.get("win_rate_backtest", 0.0))
+    win_rate = blend(cell.get("win_rate_live"), n_live, cell.get("win_rate_backtest"))
     expectancy_r = blend(
-        cell.get("expectancy_r_live"), n_live, cell.get("expectancy_r_backtest", 0.0)
+        cell.get("expectancy_r_live"), n_live, cell.get("expectancy_r_backtest")
     )
     label = (
         "COHORT_UNKNOWN"
