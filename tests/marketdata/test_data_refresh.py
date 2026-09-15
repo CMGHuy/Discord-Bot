@@ -1,9 +1,10 @@
 import logging
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 
-from swingbot.core.marketdata import data_store
+from swingbot.core.marketdata import data_refresh as refresh_mod, data_store
 from swingbot.core.marketdata.data_refresh import _adjustment_ratio, _merge_save, _record
 from swingbot.core.marketdata.data_store import cache_path
 
@@ -21,7 +22,7 @@ def _write_frame(base_dir, symbol, tf, start: str, end: str):
     data_store.save_to_disk(df, symbol, tf, base_dir=str(base_dir))
 
 
-def test_record_logs_regression_but_still_adopts_the_new_earliest(tmp_path, caplog):
+def test_record_logs_regression_but_still_adopts_the_new_earliest(tmp_path):
     """A ticker whose on-disk history genuinely shrank (a bug that has since
     been fixed, or Yahoo's rolling intraday window eroding a near-boundary
     archive) must be reported once -- but the stored `earliest` baseline
@@ -34,10 +35,10 @@ def test_record_logs_regression_but_still_adopts_the_new_earliest(tmp_path, capl
     _write_frame(tmp_path, "AAA", "daily", "2024-01-01", "2024-01-10")
     state = {"AAA|daily": {"earliest": "2016-01-01"}}
 
-    with caplog.at_level(logging.ERROR, logger="swing-bot.data_refresh"):
+    with patch.object(refresh_mod.log, "error") as error:
         _record(state, "AAA", "daily", {"status": "fresh", "rows": 10}, str(tmp_path))
 
-    assert "COVERAGE REGRESSION" in caplog.text
+    assert "COVERAGE REGRESSION" in str(error.call_args)
     assert state["AAA|daily"]["earliest"] == "2024-01-01"
 
 
@@ -97,13 +98,13 @@ def test_adjustment_ratio_none_within_normal_eod_noise():
     assert _adjustment_ratio(existing, fresh, "AAA", "daily") is None
 
 
-def test_adjustment_ratio_detects_a_2_for_1_split(caplog):
+def test_adjustment_ratio_detects_a_2_for_1_split():
     existing = _price_frame("2024-01-01", "2024-01-10", close=100.0)
     fresh = _price_frame("2024-01-08", "2024-01-15", close=50.0)   # 2:1 split re-adjusted the whole series
-    with caplog.at_level(logging.WARNING, logger="swing-bot.data_refresh"):
+    with patch.object(refresh_mod.log, "warning") as warning:
         ratio = _adjustment_ratio(existing, fresh, "AAA", "daily")
     assert ratio == 0.5
-    assert "adjustment-basis mismatch" in caplog.text
+    assert "adjustment-basis mismatch" in str(warning.call_args)
 
 
 def test_merge_save_rescales_pre_overlap_bars_to_the_new_basis(tmp_path):

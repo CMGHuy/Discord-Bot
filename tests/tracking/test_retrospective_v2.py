@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from swingbot.core.tracking.retrospective import (summarize_runner_outcomes,
                                          summarize_badge_split)
 
@@ -28,29 +30,29 @@ def test_badge_split_line():
     assert "VALIDATED" in line and "WEAK" in line and "1W" in line
 
 
-def test_load_history_logs_on_corrupt_file(tmp_path, monkeypatch, caplog):
+def test_load_history_logs_on_corrupt_file(tmp_path, monkeypatch):
     from swingbot.core.tracking import retrospective as retro
 
     bad_path = tmp_path / "history.json"
     bad_path.write_text("{not valid json")
     monkeypatch.setattr(retro, "_HISTORY_PATH", str(bad_path))
 
-    with caplog.at_level("WARNING", logger="swing-bot.retrospective"):
+    with patch.object(retro.log, "warning") as warning:
         result = retro._load_history()
 
     assert result == []
-    assert any("history" in r.message.lower() for r in caplog.records)
+    assert any("history" in str(call).lower() for call in warning.call_args_list)
 
 
-def test_to_berlin_logs_on_unparseable_timestamp(caplog):
+def test_to_berlin_logs_on_unparseable_timestamp():
     from swingbot.core.tracking import retrospective as retro
 
-    with caplog.at_level("WARNING", logger="swing-bot.retrospective"):
+    with patch.object(retro.log, "warning") as warning:
         result = retro._to_berlin("not-a-timestamp")
 
     assert result is None
-    assert any("timestamp" in r.message.lower() or "berlin" in r.message.lower()
-               for r in caplog.records)
+    assert any("timestamp" in str(call).lower() or "berlin" in str(call).lower()
+               for call in warning.call_args_list)
 
 
 import datetime as dt
@@ -80,7 +82,7 @@ def test_retrospective_survives_a_level_with_only_manual_closes(tmp_path, monkey
     assert "0% WR" not in joined    # None must never render as zero
 
 
-def test_one_failing_section_does_not_lose_the_whole_report(tmp_path, monkeypatch, caplog):
+def test_one_failing_section_does_not_lose_the_whole_report(tmp_path, monkeypatch):
     """A raise inside one part must cost that part only. Before isolation,
     it aborted all ten parts and the report never posted."""
     from swingbot.core.tracking import retrospective as retro
@@ -93,16 +95,16 @@ def test_one_failing_section_does_not_lose_the_whole_report(tmp_path, monkeypatc
     monkeypatch.setattr(retro.calibration, "level_calibration", _boom)
     trades = [_manual_close("AAPL", 3, "2026-09-03T18:00:00+00:00")]
 
-    with caplog.at_level("ERROR"):
+    with patch.object(retro.log, "error") as error:
         messages = retro.build_daily_retrospective(trades, today=dt.date(2026, 9, 3))
 
     joined = "\n".join(messages)
     assert "Daily Retrospective" in joined          # Part 1 still posted
     assert "calibration" in joined.lower()          # the degraded notice names it
-    assert any("calibration" in r.message for r in caplog.records)
+    assert any("calibration" in str(call) for call in error.call_args_list)
 
 
-def test_weekly_risk_report_failure_still_triggers_degraded_notice(tmp_path, monkeypatch, caplog):
+def test_weekly_risk_report_failure_still_triggers_degraded_notice(tmp_path, monkeypatch):
     """Part 8 (weekly risk report) has its own finer-grained inner
     try/except that logs and swallows the exception. Before this fix, that
     inner handler never told the outer _section() wrapper anything failed,
@@ -119,11 +121,11 @@ def test_weekly_risk_report_failure_still_triggers_degraded_notice(tmp_path, mon
     monkeypatch.setattr(growth, "weekly_risk_report", _boom)
     trades = [_manual_close("AAPL", 3, "2026-09-03T18:00:00+00:00")]
 
-    with caplog.at_level("ERROR"):
+    with patch.object(retro.log, "error") as error:
         # 2026-09-06 is a Sunday (weekday() == 6), so Part 8 runs.
         messages = retro.build_daily_retrospective(trades, today=dt.date(2026, 9, 6))
 
     joined = "\n".join(messages)
     assert "Daily Retrospective" in joined          # Part 1 still posted
     assert "weekly risk" in joined.lower()          # the degraded notice names it
-    assert any("weekly risk" in r.message for r in caplog.records)
+    assert any("weekly risk" in str(call) for call in error.call_args_list)

@@ -2,6 +2,7 @@
 per-ticker process-pool threshold. See docs/superpowers/specs/
 2026-08-24-v55-scan-fetch-batching-design.md."""
 from concurrent.futures import Future
+from unittest.mock import patch
 
 import pytest
 
@@ -72,17 +73,19 @@ def test_run_bounded_returns_the_result_on_success(monkeypatch):
     assert scan_engine._run_bounded(lambda x: x * 2, (21,), 5, "label") == 42
 
 
-def test_run_bounded_returns_none_when_fn_raises(monkeypatch, caplog):
+def test_run_bounded_returns_none_when_fn_raises(monkeypatch):
     def _boom(*a):
         raise ValueError("nope")
     _install_fake_pool(monkeypatch, lambda fn, *a: _raising_future(ValueError("nope")))
-    assert scan_engine._run_bounded(_boom, (), 5, "label") is None
-    assert "label" in caplog.text
+    with patch.object(fetch.log, "error") as error:
+        assert scan_engine._run_bounded(_boom, (), 5, "label") is None
+    assert "label" in str(error.call_args)
 
 
-def test_run_bounded_kills_the_worker_past_the_budget(monkeypatch, caplog):
+def test_run_bounded_kills_the_worker_past_the_budget(monkeypatch):
     pool = _install_fake_pool(monkeypatch, lambda fn, *a: Future())  # never resolves
-    result = scan_engine._run_bounded(lambda: None, (), 0.05, "stuck-label")
+    with patch.object(fetch.log, "error") as error:
+        result = scan_engine._run_bounded(lambda: None, (), 0.05, "stuck-label")
     assert result is None
     assert pool._processes[1].killed
     # wait=True (v56, was False): the killed worker's manager thread must be
@@ -91,7 +94,7 @@ def test_run_bounded_kills_the_worker_past_the_budget(monkeypatch, caplog):
     # caused every subsequent process-pool call that scan pass to fail
     # instantly with "terminated abruptly" on production 2026-08-24.
     assert pool.shutdown_calls == [(True, True)]
-    assert "stuck-label" in caplog.text
+    assert "stuck-label" in str(error.call_args)
 
 
 # ---------------------------------------------------------------------------

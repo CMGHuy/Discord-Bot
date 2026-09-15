@@ -3,12 +3,28 @@
 All series are deterministic (fixed seed where randomness is used) so
 test failures are reproducible.
 """
+import logging
 import os
 import sys
 
 import numpy as np
 import pandas as pd
 import pytest
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_runtest_call(item):
+    """Keep caplog assertions independent of prior tests' runtime settings.
+
+    Admin and bot imports legitimately configure the process root logger from
+    ``LOG_LEVEL``. In a shared pytest/xdist worker that setting otherwise
+    survives into unrelated tests and suppresses warning/error records before
+    ``caplog`` can observe them. Production keeps its configured level; only
+    the test process receives this per-test baseline.
+    """
+    root = logging.getLogger()
+    logging.disable(logging.NOTSET)
+    root.setLevel(logging.WARNING)
 
 
 def make_ohlcv(closes, spread_pct=1.0, volumes=None, start="2019-01-01"):
