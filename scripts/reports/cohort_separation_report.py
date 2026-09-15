@@ -35,10 +35,13 @@ def _stats(rs: list[float]) -> dict:
 def _eligible(entries: list[dict], run_date: str) -> list[dict]:
     """Forward-only: a plan created on or before the freeze was never
     labelled by this table, and including it would let the table be scored
-    against the trades that built it."""
+    against the trades that built it. Use opened_at (immutable, set at creation)
+    not created_at (re-stamped on every write). Extract date portion only to
+    avoid same-day boundary confusion (opened_at is ISO timestamp, run_date is
+    bare date in YYYY-MM-DD format)."""
     return [e for e in entries
             if e.get("r_realized") is not None
-            and str(e.get("created_at", "")) > run_date]
+            and str(e.get("opened_at", ""))[:10] > run_date]
 
 
 def label_separation(entries: list[dict], run_date: str) -> dict:

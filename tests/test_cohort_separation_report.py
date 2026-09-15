@@ -6,13 +6,15 @@ from scripts.reports.cohort_separation_report import (label_separation,
                                                       PASS_SEPARATION_R)
 
 
-def _entry(label, r, created_at="2026-10-01", **feats):
-    return {"cohort_label": label, "r_realized": r, "created_at": created_at,
+def _entry(label, r, opened_at="2026-10-01T10:00:00+00:00", **feats):
+    """Test entry factory. opened_at is ISO timestamp format (immutable, set at creation).
+    Default is after the freeze date (2026-09-14), so eligible for the verdict."""
+    return {"cohort_label": label, "r_realized": r, "opened_at": opened_at,
             "cohort_run_date": "2026-09-14", "risk_features": feats}
 
 
 def test_a_plan_created_before_the_freeze_is_excluded():
-    entries = [_entry("COHORT_POOR", -1.0, created_at="2026-09-01")]
+    entries = [_entry("COHORT_POOR", -1.0, opened_at="2026-09-01T10:00:00+00:00")]
     assert label_separation(entries, "2026-09-14")["n_poor"] == 0
 
 
@@ -52,3 +54,19 @@ def test_feature_separation_groups_by_value():
     rows = {r["value"]: r for r in feature_separation(entries, "session_bucket")}
     assert rows["open"]["n"] == 2 and rows["open"]["expectancy_r"] == pytest.approx(1.0)
     assert rows["close"]["n"] == 1 and rows["close"]["win_rate"] == 0.0
+
+
+def test_same_day_boundary_excludes_freeze_date_includes_next_day():
+    """Plans opened on the freeze date (or any moment that day) are excluded;
+    plans opened the day after are included. This tests the [:10] date slicing."""
+    # Plan opened on freeze date (2026-09-14) — should be excluded
+    freeze_day_entry = _entry("COHORT_POOR", -1.0, opened_at="2026-09-14T23:59:59+00:00")
+    # Plan opened the day after (2026-09-15) — should be included
+    next_day_entry = _entry("COHORT_TYPICAL", 1.0, opened_at="2026-09-15T00:00:00+00:00")
+
+    entries = [freeze_day_entry, next_day_entry]
+    out = label_separation(entries, "2026-09-14")
+    # freeze_day_entry is excluded, so n_poor should be 0
+    # next_day_entry is included, so n_other should be 1
+    assert out["n_poor"] == 0
+    assert out["n_other"] == 1
