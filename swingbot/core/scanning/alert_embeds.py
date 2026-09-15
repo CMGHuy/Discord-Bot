@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 import discord
 
+from swingbot import config
 from swingbot.core.analytics.rank import follow_breakdown, follow_score
 from swingbot.core.market import opex
 from swingbot.core import presentation as ui
