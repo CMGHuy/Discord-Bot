@@ -4,6 +4,7 @@ This module only reads frames fetched during the preceding crawl phase.
 The named `trade_log` import is intentional: engine owns its process-wide
 identity while analysis consumes it for trade state and monitoring.
 """
+import datetime as dt
 import logging
 import os
 from typing import TYPE_CHECKING
@@ -29,12 +30,15 @@ from swingbot.core.planning import account as account_module
 from swingbot.core.planning.account import load_account_config
 from swingbot.core.planning.plan_engine import build_confluence_plan, primary_strategy_for
 from swingbot.core.planning.quality import atr_percentile as _atr_percentile
+from swingbot.core.planning.targets import _safe_atr_value
+from swingbot.core.market.indicators import atr
 
 from . import runstate
 from .confidence import score_confidence
 from .embeds import _build_requirement_checks
 from .regime import get_htf_bias
 from .engine import trade_log
+from . import risk_features
 
 
 log = logging.getLogger("swing-bot.scan_engine")
@@ -281,8 +285,35 @@ def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
     }
 
 
+def _atr_for(df) -> float:
+    """Get the latest ATR value from the dataframe."""
+    atr_series = atr(df, period=14)
+    if atr_series.empty:
+        return 0.0
+    return float(atr_series.iloc[-1])
+
+
+def _regime_at(regimes, when) -> str | None:
+    """The regime label for THIS bar, never the latest one. regime_series is
+    causal at every bar, so indexing it by the creating bar's timestamp is
+    lookahead-free; taking .iloc[-1] instead would stamp a replayed 2024 plan
+    with 2026 volatility."""
+    if regimes is None or when is None:
+        return None
+    try:
+        hit = regimes[regimes.index.normalize() == pd_normalize(when)]
+    except Exception:
+        return None
+    return None if hit.empty else str(hit.iloc[0])
+
+
+def pd_normalize(when):
+    import pandas as pd
+    return pd.Timestamp(when).normalize()
+
+
 def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
-                    regime=None, rs_percentile=None, breadth=None):
+                    regime=None, rs_percentile=None, breadth=None, regime2_state=None):
     """Construct the v2 plan for a qualifying scan item, flag-gated.
     A v2 construction failure must NEVER break the legacy scan -- log and
     move on (shadow mode exists precisely to surface such failures safely).
@@ -298,7 +329,7 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
         plan = build_confluence_plan(
             scenario, df, ticker=ticker, horizon_key=horizon_key,
             primary_strategy=primary_strategy_for(scenario),
-            level_map=level_map, quality_inputs=quality_inputs)
+            level_map=level_map, quality_inputs=quality_inputs, regime2_state=regime2_state)
         if plan is None:
             # No level beyond entry pays MIN_RISK_REWARD_RATIO against this
             # scenario's own risk. That is a real answer -- "no trade here" --
@@ -309,6 +340,19 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             # this change exists to stop posting).
             item.plan_v2_rejected = "no_qualifying_target"
             return
+        plan.risk_features = risk_features.build(
+            regime2_state=regime2_state,
+            confidence_level=getattr(getattr(item, "conf", None), "level", None),
+            htf_bias=getattr(item, "htf_bias", None),
+            direction=scenario.direction,
+            confluence_count=getattr(item, "target_confluence_count", None),
+            entry=scenario.entry, level_price=getattr(scenario, "level_price", None),
+            stop_loss=plan.stop_loss,
+            atr_val=_safe_atr_value(scenario.entry, _atr_for(df)),
+            close=float(df["Close"].iloc[-1]),
+            rs_percentile=rs_percentile,
+            now=dt.datetime.now(),
+        )
         item.plan_v2 = plan
     except Exception:
         log.warning("plan_v2 construction failed for %s/%s", ticker,
