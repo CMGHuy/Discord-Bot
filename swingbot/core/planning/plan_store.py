@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import threading
+from datetime import datetime
 
 from swingbot import config
 from swingbot.core.infra.jsonio import atomic_write_json
@@ -53,6 +54,9 @@ class PlanStore:
         Call this before every poll so the tick always acts on -- and
         writes back -- current state rather than a point-in-time snapshot.
         """
+        from swingbot.core.db import stages
+        if stages.reads_db("plans"):
+            return
         with _LOCK:
             self._plans = self._load()
 
@@ -78,25 +82,37 @@ class PlanStore:
             for record in self._plans.values():
                 repository.upsert(record)
 
+    def _all(self) -> dict[str, dict]:
+        """Map plan ids to records from the backend selected for reads."""
+        from swingbot.core.db import stages
+        if not stages.reads_db("plans"):
+            return self._plans
+        from swingbot.core.db.repositories.plans import plans_repo
+        records = plans_repo().list_all()
+        for record in records:
+            if isinstance(record.get("created_at"), datetime):
+                record["created_at"] = record["created_at"].isoformat()
+        return {record["plan_id"]: record for record in records}
+
     def add(self, plan: TradePlanV2) -> None:
         with _LOCK:
             self._plans[plan.plan_id] = plan_to_dict(plan)
             self._persist(self._plans[plan.plan_id])
 
     def get(self, plan_id: str) -> TradePlanV2 | None:
-        d = self._plans.get(plan_id)
+        d = self._all().get(plan_id)
         return plan_from_dict(d) if d else None
 
     def update(self, plan: TradePlanV2) -> None:
         with _LOCK:
-            if plan.plan_id not in self._plans:
+            if plan.plan_id not in self._all():
                 raise KeyError(plan.plan_id)
             self._plans[plan.plan_id] = plan_to_dict(plan)
             self._persist(self._plans[plan.plan_id])
 
     def open_plans(self) -> list[TradePlanV2]:
-        return [plan_from_dict(d) for d in self._plans.values()
+        return [plan_from_dict(d) for d in self._all().values()
                 if d.get("status") in _OPEN_STATUSES]
 
     def all(self) -> list[TradePlanV2]:
-        return [plan_from_dict(d) for d in self._plans.values()]
+        return [plan_from_dict(d) for d in self._all().values()]
