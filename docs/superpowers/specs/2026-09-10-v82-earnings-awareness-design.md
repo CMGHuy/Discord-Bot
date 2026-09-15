@@ -9,6 +9,16 @@
 `git log --oneline main --grep="feat(v81)"` is non-empty. Plan B (measurement)
 depends on nothing and may start immediately.
 
+## Status
+
+| Part | State |
+|---|---|
+| Phase A — label, notice, stored fields | not started (Plan A; needs v81 merged) |
+| Phase B — measurement | **NO_ELIGIBLE_K**, budget intact — `docs/superpowers/plans/implemented/2026-09-10-v82-earnings-measurement_0-index.md` and the results docs it lists |
+| C1 — wiring into `scan_run.py` | not started (Plan A) |
+| C2/C3 — rename, frozen class, wf_components note | done in Plan B M3 |
+| C4 — default flip | void — default stays 0 |
+
 `Bump:` **bot minor** — the execution feed gains a new message type (the
 earnings heads-up) and the alert's earnings line changes rule entirely (hold
 window → the session before and the day of the report); a reader of yesterday's
@@ -355,7 +365,7 @@ Two plans from this spec.
 ## Planning findings (Plan B, 2026-09-10) — part of the pre-registration
 
 Recorded in the commit that adds the measurement plan
-(`docs/superpowers/plans/2026-09-10-v82-earnings-measurement_0-index.md`),
+(`docs/superpowers/plans/implemented/2026-09-10-v82-earnings-measurement_0-index.md`),
 before any data was fetched or replayed. Where these differ from the sections
 above, these win.
 

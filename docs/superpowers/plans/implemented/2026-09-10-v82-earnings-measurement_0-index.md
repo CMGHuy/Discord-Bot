@@ -132,8 +132,10 @@ that change a task here:
 - [x] M7 — full suite, merge, release (ui patch)
 - [x] M8 — earnings data and dry run
 - [x] M9 — Run 1 (2018-06..2023-12)
-- [ ] M10 — Stage 1 selection
+- [x] M10 — Stage 1 selection
 - [ ] M11 — Stage 0 MDE
 - [ ] M12 — Stage 2 walk-forward
 - [ ] M13 — Run 2 and Stage 3 (one shot)
-- [ ] M14 — record and close out
+- [x] M14 — record and close out
+
+Ended at M10 with NO_ELIGIBLE_K; later tasks (M11-M13) correctly not run.
