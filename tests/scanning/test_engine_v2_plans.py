@@ -785,3 +785,94 @@ def test_risk_features_stamped_on_real_plan_via_attach_plan_v2(monkeypatch):
     assert rf.get("rs_percentile") == 50.0, "rs_percentile should be 50.0"
     assert rf.get("session_bucket") in ("open", "midday", "close"), "session_bucket should be one of the valid buckets"
     assert "days_to_earnings" in rf, "days_to_earnings should be in risk_features"
+
+
+# --- Final-review Fix 3: session_bucket must key off ET, not naive local ---
+
+def _v2_scenario_and_item():
+    scenario = SimpleNamespace(
+        direction="bullish", entry=100.0, stop_loss=95.0, take_profit=110.0,
+        target_sources=["EMA21"], stop_sources=["Rolling support"],
+    )
+    item = SimpleNamespace(
+        plan_v2=None, target_confluence=(2, ["EMA21", "Fib"]),
+        conf=SimpleNamespace(level=3), htf_bias="bullish",
+    )
+    return scenario, item
+
+
+def test_attach_plan_v2_stamps_session_bucket_from_et_not_naive_local(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
+    import datetime as dt
+    from swingbot.core.market.session import US_MARKET_TZ
+
+    # 20:15 UTC == 16:15 ET -- squarely in "close". A naive container clock
+    # (UTC, since production sets no TZ) would instead see 20:15 as local
+    # time and misfile this as neither open/midday/close's real intent.
+    fixed_et = dt.datetime(2026, 9, 14, 16, 15, tzinfo=US_MARKET_TZ)
+    monkeypatch.setattr(analyze, "now_et", lambda: fixed_et)
+
+    scenario, item = _v2_scenario_and_item()
+    analyze.attach_plan_v2(
+        item, scenario, make_ohlcv([100.0] * 60),
+        ticker="TEST", horizon_key="4w", level_map=None,
+        regime=SimpleNamespace(trend="bullish"), rs_percentile=50.0,
+        breadth=60.0, regime2_state="bull_normal",
+    )
+    assert item.plan_v2 is not None
+    assert item.plan_v2.risk_features["session_bucket"] == "close"
+
+
+# --- Final-review Fix 4: a risk_features stamping failure must not unset
+# plan_v2 -- it is a render-only add-on, not a gate on whether the plan
+# posts/logs.
+
+def test_risk_features_stamping_failure_does_not_unset_plan_v2(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
+    monkeypatch.setattr(analyze.risk_features, "build",
+                        lambda *a, **k: 1 / 0)
+
+    scenario, item = _v2_scenario_and_item()
+    analyze.attach_plan_v2(
+        item, scenario, make_ohlcv([100.0] * 60),
+        ticker="TEST", horizon_key="4w", level_map=None,
+        regime=SimpleNamespace(trend="bullish"), rs_percentile=50.0,
+        breadth=60.0, regime2_state="bull_normal",
+    )
+    # The plan itself still posts/logs -- only the render-only risk_features
+    # add-on failed. Before this fix, plan_v2 would stay unset and the item
+    # would silently fall through to legacy-number rendering instead.
+    assert item.plan_v2 is not None
+    assert item.plan_v2.risk_features == {}
+
+
+# --- Final-review Fix 6: a real _regime_at() lookup miss must log ----------
+
+def test_regime_at_logs_a_warning_on_a_real_lookup_miss(caplog):
+    import pandas as pd
+
+    regimes = pd.Series(
+        ["bull_quiet", "bear_volatile"],
+        index=pd.to_datetime(["2026-01-02", "2026-01-05"]),
+    )
+    with caplog.at_level("WARNING", logger="swing-bot.scan_engine"):
+        result = analyze._regime_at(regimes, pd.Timestamp("2030-01-01"))
+    assert result is None
+    assert any("_regime_at" in rec.message for rec in caplog.records)
+
+
+def test_regime_at_stays_silent_on_no_regimes_at_all(caplog):
+    with caplog.at_level("WARNING", logger="swing-bot.scan_engine"):
+        result = analyze._regime_at(None, None)
+    assert result is None
+    assert not caplog.records  # nothing to diagnose -- there was no series to miss on
+
+
+def test_regime_at_returns_the_matching_regime_without_logging(caplog):
+    import pandas as pd
+
+    regimes = pd.Series(["bull_quiet"], index=pd.to_datetime(["2026-01-02"]))
+    with caplog.at_level("WARNING", logger="swing-bot.scan_engine"):
+        result = analyze._regime_at(regimes, pd.Timestamp("2026-01-02"))
+    assert result == "bull_quiet"
+    assert not caplog.records

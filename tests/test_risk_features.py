@@ -61,3 +61,12 @@ def test_days_to_earnings_is_null_when_no_calendar_is_available():
 def test_every_feature_is_json_serialisable():
     import json
     json.dumps(build(**_kwargs()))   # must not raise
+
+
+def test_nan_atr_yields_none_not_a_garbage_ratio():
+    # Final-review Fix 8: `not float('nan')` is False in Python, so the old
+    # `if not atr_val` guard let a NaN ATR reading slip through and compute
+    # a NaN-poisoned (but not None) ratio instead of the honest "no data".
+    f = build(**_kwargs(atr_val=float("nan")))
+    assert f["stop_width_atr"] is None
+    assert f["atr_pct"] is None

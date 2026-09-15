@@ -4,7 +4,6 @@ This module only reads frames fetched during the preceding crawl phase.
 The named `trade_log` import is intentional: engine owns its process-wide
 identity while analysis consumes it for trade state and monitoring.
 """
-import datetime as dt
 import logging
 import os
 from typing import TYPE_CHECKING
@@ -30,8 +29,8 @@ from swingbot.core.planning import account as account_module
 from swingbot.core.planning.account import load_account_config
 from swingbot.core.planning.plan_engine import build_confluence_plan, primary_strategy_for
 from swingbot.core.planning.quality import atr_percentile as _atr_percentile
-from swingbot.core.planning.targets import _safe_atr_value
 from swingbot.core.market.indicators import atr
+from swingbot.core.market.session import now_et
 
 from . import runstate
 from .confidence import score_confidence
@@ -303,8 +302,21 @@ def _regime_at(regimes, when) -> str | None:
     try:
         hit = regimes[regimes.index.normalize() == pd_normalize(when)]
     except Exception:
+        # A real regimes series was supplied but the lookup itself blew up
+        # (bad index dtype, tz mismatch, etc.) -- every such miss silently
+        # became COHORT_UNKNOWN with no way to tell "no data" apart from
+        # "broken lookup" until now.
+        if len(regimes) > 0:
+            log.warning("_regime_at lookup raised for bar %s (regime series has %d rows)",
+                        when, len(regimes), exc_info=True)
         return None
-    return None if hit.empty else str(hit.iloc[0])
+    if hit.empty:
+        if len(regimes) > 0:
+            log.warning("_regime_at found no regime row for bar %s "
+                        "(regime series spans %s..%s) -- plan stamps COHORT_UNKNOWN",
+                        when, regimes.index.min(), regimes.index.max())
+        return None
+    return str(hit.iloc[0])
 
 
 def pd_normalize(when):
@@ -340,20 +352,35 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             # this change exists to stop posting).
             item.plan_v2_rejected = "no_qualifying_target"
             return
-        plan.risk_features = risk_features.build(
-            regime2_state=regime2_state,
-            confidence_level=getattr(getattr(item, "conf", None), "level", None),
-            htf_bias=getattr(item, "htf_bias", None),
-            direction=scenario.direction,
-            confluence_count=(item.target_confluence[0] if getattr(item, "target_confluence", None) else None),
-            entry=scenario.entry,
-            stop_loss=plan.stop_loss,
-            atr_val=_safe_atr_value(scenario.entry, _atr_for(df)),
-            close=float(df["Close"].iloc[-1]),
-            rs_percentile=rs_percentile,
-            now=dt.datetime.now(),
-        )
+        # item.plan_v2 is set BEFORE risk_features stamping (below) is even
+        # attempted -- a render-only feature's stamping failure must never
+        # unset the plan and silently fall the item through to legacy-number
+        # rendering (final-review Fix 4).
         item.plan_v2 = plan
+        try:
+            plan.risk_features = risk_features.build(
+                regime2_state=regime2_state,
+                confidence_level=getattr(getattr(item, "conf", None), "level", None),
+                htf_bias=getattr(item, "htf_bias", None),
+                direction=scenario.direction,
+                confluence_count=(item.target_confluence[0] if getattr(item, "target_confluence", None) else None),
+                entry=scenario.entry,
+                stop_loss=plan.stop_loss,
+                # The raw ATR reading, not _safe_atr_value's synthetic
+                # entry*0.02 fallback -- risk_features are PERSISTED
+                # permanently and a synthetic value would pool undetectably
+                # with real ATR-derived ones in the eventual cohort
+                # separation analysis (final-review Fix 8). risk_features.py's
+                # _ratio()/atr_pct guard a falsy-or-NaN atr_val the same way
+                # _safe_atr_value's caller (position sizing) still does.
+                atr_val=_atr_for(df),
+                close=float(df["Close"].iloc[-1]),
+                rs_percentile=rs_percentile,
+                now=now_et(),
+            )
+        except Exception:
+            log.warning("risk_features stamping failed for %s/%s -- plan_v2 still posts, "
+                        "risk_features left at its default", ticker, horizon_key, exc_info=True)
     except Exception:
         log.warning("plan_v2 construction failed for %s/%s", ticker,
                     horizon_key, exc_info=True)
