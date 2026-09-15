@@ -14,8 +14,8 @@ from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 
 from swingbot import config
-from swingbot.core.market.session import (is_quiet_hours, is_tape_open,
-                                          session_date)
+from swingbot.core.market.session import (is_quiet_hours, is_regular_session,
+                                          is_tape_open, session_date)
 from swingbot.core.risk_limits import (HARD_MAX_PLANNED_LOSS_PCT,
                                        planned_loss_pct)
 from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
@@ -278,6 +278,13 @@ class PlanManager:
         # hatch -- every tick, round the clock, no quiet-hours gate either.
         if config.INTRADAY_RTH_ONLY and is_quiet_hours(now):
             return []
+        # v81: true NYSE RTH, not the wider tape/quiet windows above -- a
+        # resting broker stop order only fires during regular hours, so the
+        # feed's session label and stop-move notices key off this, not off
+        # whether _step() ran (which no longer distinguishes RTH at all).
+        # INTRADAY_RTH_ONLY=false is still the pre-v64 escape hatch: no RTH
+        # distinction at all, so this is unconditionally "regular" there too.
+        regular = is_regular_session(now) if config.INTRADAY_RTH_ONLY else True
         # `self.store` (and `self.trade_log`) can be long-lived instances --
         # the module singleton `_MANAGER` below keeps both for the
         # process's whole life -- so reload each from disk first. Otherwise
