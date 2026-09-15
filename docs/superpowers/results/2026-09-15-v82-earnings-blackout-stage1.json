@@ -1,0 +1,70 @@
+{
+ "verdict": "NO_ELIGIBLE_K",
+ "selected_k": null,
+ "candidates": [
+  {
+   "k": 1,
+   "removed_n": 122,
+   "removed_win_rate": 68.68686868686869,
+   "retained_win_rate": 44.29301533219761,
+   "removed_expectancy_r": 0.7547435897435898,
+   "volume_cut_pct": 2.9047619047619047,
+   "delta_win_rate_pp": -0.9648865732047867,
+   "delta_expectancy_r": -0.016468286052872483,
+   "eligible": false,
+   "reasons": [
+    "mechanism: removed win rate is not below retained",
+    "mechanism: removed expectancy is above 0",
+    "profit: dExpR below -0.01R"
+   ]
+  },
+  {
+   "k": 2,
+   "removed_n": 181,
+   "removed_win_rate": 64.08450704225352,
+   "retained_win_rate": 44.15629322268327,
+   "removed_expectancy_r": 0.5996874999999999,
+   "volume_cut_pct": 4.309523809523809,
+   "delta_win_rate_pp": -0.9558507588592065,
+   "delta_expectancy_r": -0.018126312232450537,
+   "eligible": false,
+   "reasons": [
+    "mechanism: removed win rate is not below retained",
+    "mechanism: removed expectancy is above 0",
+    "profit: dExpR below -0.01R"
+   ]
+  },
+  {
+   "k": 3,
+   "removed_n": 227,
+   "removed_win_rate": 54.94505494505494,
+   "retained_win_rate": 44.460028050490884,
+   "removed_expectancy_r": 0.41281081081081084,
+   "volume_cut_pct": 5.404761904761905,
+   "delta_win_rate_pp": -0.5849944855210367,
+   "delta_expectancy_r": -0.012333952640324969,
+   "eligible": false,
+   "reasons": [
+    "mechanism: removed win rate is not below retained",
+    "mechanism: removed expectancy is above 0",
+    "profit: dExpR below -0.01R"
+   ]
+  },
+  {
+   "k": 5,
+   "removed_n": 340,
+   "removed_win_rate": 47.38805970149254,
+   "retained_win_rate": 44.866232827187275,
+   "removed_expectancy_r": 0.22975748502994014,
+   "volume_cut_pct": 8.095238095238095,
+   "delta_win_rate_pp": -0.34408925101595145,
+   "delta_expectancy_r": -0.002713814496548117,
+   "eligible": false,
+   "reasons": [
+    "mechanism: removed win rate is not below retained",
+    "mechanism: removed expectancy is above 0"
+   ]
+  }
+ ],
+ "plateau": null
+}
