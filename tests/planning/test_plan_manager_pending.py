@@ -1,6 +1,7 @@
 import json
 
 import pytest
+from unittest.mock import patch
 
 from swingbot import config
 from swingbot.core.planning.plan_engine import PlanStatus
@@ -110,7 +111,7 @@ def test_bearish_pending_invalidates_above_stop(tmp_path):
     assert [e.transition for e in events] == ["cancelled_invalidated"]
 
 
-def test_legacy_open_plan_above_cap_is_warned_without_being_changed(tmp_path, caplog):
+def test_legacy_open_plan_above_cap_is_warned_without_being_changed(tmp_path):
     feed = FakePriceFeed([("AAPL", 106.0)])
     store, mgr = _mgr(tmp_path, feed)
     plan = _pending(stop_loss=95.0)
@@ -119,9 +120,11 @@ def test_legacy_open_plan_above_cap_is_warned_without_being_changed(tmp_path, ca
     record_transition(plan, PlanStatus.ACTIVE, at="2026-07-11T10:00:00")
     store.add(plan)
 
-    assert mgr.poll() == []
+    from swingbot.core.planning import plan_manager as manager_mod
+    with patch.object(manager_mod.log, "warning") as warning:
+        assert mgr.poll() == []
     assert store.get("p1").status == PlanStatus.ACTIVE
-    assert "leaving the existing position unchanged" in caplog.text
+    assert "leaving the existing position unchanged" in str(warning.call_args)
 
 @pytest.fixture(autouse=True)
 def _rth_gate_off(monkeypatch):

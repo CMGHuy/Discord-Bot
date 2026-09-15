@@ -848,17 +848,18 @@ def test_risk_features_stamping_failure_does_not_unset_plan_v2(monkeypatch):
 
 # --- Final-review Fix 6: a real _regime_at() lookup miss must log ----------
 
-def test_regime_at_logs_a_warning_on_a_real_lookup_miss(caplog):
+def test_regime_at_logs_a_warning_on_a_real_lookup_miss():
     import pandas as pd
 
     regimes = pd.Series(
         ["bull_quiet", "bear_volatile"],
         index=pd.to_datetime(["2026-01-02", "2026-01-05"]),
     )
-    with caplog.at_level("WARNING", logger="swing-bot.scan_engine"):
+    from unittest.mock import patch
+    with patch.object(analyze.log, "warning") as warning:
         result = analyze._regime_at(regimes, pd.Timestamp("2030-01-01"))
     assert result is None
-    assert any("_regime_at" in rec.message for rec in caplog.records)
+    assert "_regime_at" in str(warning.call_args)
 
 
 def test_regime_at_stays_silent_on_no_regimes_at_all(caplog):

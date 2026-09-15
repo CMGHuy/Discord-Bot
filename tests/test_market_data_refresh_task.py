@@ -13,6 +13,7 @@ the underlying async function, callable directly without going through the
 loop's own scheduling -- the documented way to unit-test a task body.
 """
 import asyncio
+from unittest.mock import patch
 
 from swingbot import config
 from swingbot.commands import scanning as scanning_mod
@@ -41,7 +42,7 @@ def test_market_data_refresh_passes_its_configured_time_budget(monkeypatch):
     assert captured.get("deadline_seconds") == 77
 
 
-def test_market_data_refresh_logs_when_the_budget_is_hit(monkeypatch, caplog):
+def test_market_data_refresh_logs_when_the_budget_is_hit(monkeypatch):
     def fake_refresh_all(symbols, timeframes, **kwargs):
         return {"summary": {tf: {"full": 1, "incremental": 0, "fresh": 0,
                                  "failed": 0, "added": 3} for tf in timeframes},
@@ -52,10 +53,11 @@ def test_market_data_refresh_logs_when_the_budget_is_hit(monkeypatch, caplog):
     monkeypatch.setattr(scanning_mod, "load_watchlist", lambda: ["AAPL"], raising=False)
     monkeypatch.setattr("swingbot.core.marketdata.data_refresh.refresh_all", fake_refresh_all)
 
-    with caplog.at_level("WARNING", logger="swing-bot"):
+    from swingbot.commands.scanning import loops
+    with patch.object(loops.log, "warning") as warning:
         _run(scanning_mod.market_data_refresh.coro())
 
-    assert any("time budget" in r.message for r in caplog.records)
+    assert "time budget" in str(warning.call_args)
 
 
 def test_market_data_refresh_stays_quiet_when_the_budget_is_not_hit(monkeypatch, caplog):

@@ -1,5 +1,6 @@
 """v81 execution-feed bookkeeping: stop delivery state and terminal notices."""
 import datetime as dt
+from unittest.mock import patch
 
 import pytest
 
@@ -92,6 +93,9 @@ def test_stale_notice_is_dropped(tmp_path, caplog):
         "transition": "closed", "detail": {"reason": "loss", "exit_price": 94.5},
         "at": "2000-01-01T00:00:00+00:00"})
     store, manager = _env(tmp_path, [], plan=stale)
-    assert manager.poll(now=DAY) == []
+    from swingbot.core.planning import plan_manager as manager_mod
+    with patch.object(manager_mod.log, "warning") as warning:
+        assert manager.poll(now=DAY) == []
     assert store.get("p1").pending_notice is None
-    assert "dropping undelivered closed" in caplog.text
+    assert "dropping undelivered" in str(warning.call_args)
+    assert "closed" in str(warning.call_args)
