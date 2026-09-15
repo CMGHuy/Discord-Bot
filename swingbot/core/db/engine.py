@@ -12,6 +12,7 @@ log = logging.getLogger(__name__)
 _engine: Engine | None = None
 _POOL_SIZE = 5
 _MAX_OVERFLOW = 5
+_CONNECT_TIMEOUT_SECONDS = 5
 
 
 class DatabaseUnavailable(RuntimeError):
@@ -48,6 +49,7 @@ def get_engine() -> Engine:
         max_overflow=_MAX_OVERFLOW,
         pool_pre_ping=True,
         future=True,
+        connect_args={"connect_timeout": _CONNECT_TIMEOUT_SECONDS},
     )
     log.info("Database engine created for %s", _engine.url.render_as_string(hide_password=True))
     return _engine

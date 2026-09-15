@@ -435,6 +435,13 @@ def _apply_exit_price(t: dict, price: float, reason: str) -> None:
     t["exit_price"] = price
 
 
+def _db_record(trade: dict) -> dict:
+    """Translate a JSON-store trade dict for the normalized trades table."""
+    rest = {key: value for key, value in trade.items()
+            if key not in ("id", "horizon_key")}
+    return {**rest, "trade_id": trade["id"], "horizon": trade["horizon_key"]}
+
+
 class TradeLog:
     def __init__(self, path: str = None):
         self.path = path or os.path.join(config.DATA_DIR, "trades.json")
@@ -468,6 +475,39 @@ class TradeLog:
 
     def _save(self):
         atomic_write_json(self.path, self._trades)
+
+    def _db_upsert(self, trade: dict) -> None:
+        """Mirror one changed trade when the store is at the dual/db stage."""
+        from swingbot.core.db import stages
+        if not stages.writes_db("trades"):
+            return
+        from swingbot.core.db.repositories.trades import trades_repo
+        trades_repo().upsert(_db_record(trade))
+
+    def _db_delete(self, trade_id: str) -> None:
+        from swingbot.core.db import stages
+        if stages.writes_db("trades"):
+            from swingbot.core.db.repositories.trades import trades_repo
+            trades_repo().delete(trade_id)
+
+    def _db_clear(self, status: str | None) -> None:
+        from swingbot.core.db import stages
+        if stages.writes_db("trades"):
+            from swingbot.core.db.repositories.trades import trades_repo
+            trades_repo().clear(status=status)
+
+    def _persist(self, trade: dict | None = None) -> None:
+        """Persist to the configured backend(s), without hiding DB failures."""
+        from swingbot.core.db import stages
+        if stages.writes_json("trades"):
+            self._save()
+        if not stages.writes_db("trades"):
+            return
+        if trade is not None:
+            self._db_upsert(trade)
+        else:
+            for row in self._trades:
+                self._db_upsert(row)
 
     def _shadow_sizing(self, strategy: str) -> dict | None:
         """What each E6 sizing mode WOULD have sized this trade at, computed
@@ -609,7 +649,7 @@ class TradeLog:
 
         with _LOCK:
             self._trades.append(record)
-            self._save()
+            self._persist(record)
         return trade_id
 
     def append_leg_by_plan(self, plan_id: str, leg: dict) -> None:
@@ -622,7 +662,7 @@ class TradeLog:
             if t is None:
                 return
             append_leg(t, leg)
-            self._save()
+            self._persist(t)
 
     def record_plan_fill(self, plan_id: str, fill_price: float) -> str | None:
         """Move the placeholder trade a stop_entry plan_v2 got at scan-detection
@@ -655,7 +695,7 @@ class TradeLog:
                 t["shares"] = sizing["shares"]
                 t["position_value"] = sizing["position_value"]
                 t["sizing_mode"] = sizing["mode"]
-            self._save()
+            self._persist(t)
             return t["id"]
 
     def discard_plan_placeholder(self, plan_id: str) -> bool:
@@ -675,7 +715,8 @@ class TradeLog:
             if t is None:
                 return False
             self._trades.remove(t)
-            self._save()
+            self._persist()
+            self._db_delete(t["id"])
         return True
 
     def close_plan_trade(self, plan_id: str, leg: dict | None, status: str) -> None:
@@ -699,7 +740,7 @@ class TradeLog:
             t["closed_at"] = datetime.now(timezone.utc).isoformat()
             self._settle_account_balance(t)
             closed_trade = dict(t)
-            self._save()
+            self._persist(t)
         _journal_close_safely(closed_trade)
         _refresh_snapshot_safely()
 
@@ -875,8 +916,8 @@ class TradeLog:
         if not updates:
             return []
 
-        # Apply mutations and save atomically under the lock so no concurrent
-        # refresh() can race between the dict mutation and self._save().
+        # Apply mutations and persist atomically under the lock so no concurrent
+        # refresh() can race between the dict mutation and self._persist().
         newly_closed = []
         closed_at = datetime.now(timezone.utc).isoformat()
         with _LOCK:
@@ -891,7 +932,7 @@ class TradeLog:
                 self._settle_account_balance(t)
                 newly_closed.append(t)
             if newly_closed:
-                self._save()
+                self._persist()
         for t in newly_closed:
             _journal_close_safely(t)
         if newly_closed:
@@ -1128,7 +1169,7 @@ class TradeLog:
                     t["close_reason"] = "reversed"
                     self._settle_account_balance(t)
                     closed = dict(t)
-                    self._save()
+                    self._persist(t)
                     break
         if closed is not None:
             if closed.get("plan_id"):
@@ -1191,7 +1232,7 @@ class TradeLog:
             for t in self._trades:
                 if t["id"] == trade_id:
                     t["near_close_alerted"] = alerted
-                    self._save()
+                    self._persist(t)
                     return
 
     def store_trendline_fit(self, trade_id: str, fit: dict) -> bool:
@@ -1214,7 +1255,7 @@ class TradeLog:
                     if t.get("trendline_fit"):
                         return False
                     t["trendline_fit"] = fit
-                    self._save()
+                    self._persist(t)
                     return True
         return False
 
@@ -1260,7 +1301,7 @@ class TradeLog:
                     t["closed_at"] = datetime.now(timezone.utc).isoformat()
                     t["close_reason"] = reason
                     self._settle_account_balance(t)
-                    self._save()
+                    self._persist(t)
                     closed_trade = t
                     break
         if closed_trade is not None:
@@ -1290,7 +1331,7 @@ class TradeLog:
                         return False
                     _apply_exit_price(t, price, reason="manual")
                     self._settle_account_balance(t)
-                    self._save()
+                    self._persist(t)
                     return True
         return False
 
@@ -1301,7 +1342,8 @@ class TradeLog:
             self._trades = [t for t in self._trades if t["id"] != trade_id]
             deleted = len(self._trades) != before
             if deleted:
-                self._save()
+                self._persist()
+                self._db_delete(trade_id)
         return deleted
 
     def clear_history(self) -> int:
@@ -1311,7 +1353,8 @@ class TradeLog:
             self._trades = [t for t in self._trades if t["status"] == "open"]
             removed = before - len(self._trades)
             if removed:
-                self._save()
+                self._persist()
+                self._db_clear("closed")
         return removed
 
     def clear_open(self) -> int:
@@ -1321,7 +1364,8 @@ class TradeLog:
             self._trades = [t for t in self._trades if t["status"] != "open"]
             removed = before - len(self._trades)
             if removed:
-                self._save()
+                self._persist()
+                self._db_clear("open")
         return removed
 
     def clear_all(self) -> int:
@@ -1329,7 +1373,8 @@ class TradeLog:
         with _LOCK:
             count = len(self._trades)
             self._trades = []
-            self._save()
+            self._persist()
+            self._db_clear(None)
         return count
 
     def close_if_live_price_hit(self, ticker: str, live_price: float) -> list:
@@ -1393,7 +1438,7 @@ class TradeLog:
                 self._settle_account_balance(t)
                 newly_closed.append(dict(t))
             if newly_closed:
-                self._save()
+                self._persist()
         for t in newly_closed:
             _journal_close_safely(t)
         if newly_closed:
@@ -1571,7 +1616,7 @@ class TradeLog:
                     t["near_tp_snapshots"] = []
                     self._settle_account_balance(t)
                     newly_closed.append(dict(t))
-            self._save()
+            self._persist()
         for t in newly_closed:
             _journal_close_safely(t)
         if newly_closed:

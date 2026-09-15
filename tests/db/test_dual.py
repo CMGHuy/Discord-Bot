@@ -30,6 +30,11 @@ def test_real_and_missing_value_differences_are_reported():
     assert dual.diff_records({"a": 1}, {"a": 1, "b": 2}) == ["b"]
 
 
+def test_a_none_value_and_an_absent_key_are_the_same_unset_state():
+    assert dual.diff_records({"closed_at": None}, {}) == []
+    assert dual.diff_records({}, {"closed_at": None}) == []
+
+
 def test_nested_differences_are_reported_by_top_level_field():
     assert dual.diff_records({"notes": {"a": 1}}, {"notes": {"a": 2}}) == ["notes"]
 

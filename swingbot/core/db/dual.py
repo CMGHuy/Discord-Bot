@@ -46,6 +46,9 @@ def diff_records(json_record: dict, db_record: dict) -> list[str]:
     for field in set(json_record) | set(db_record):
         json_value = json_record.get(field, sentinel)
         db_value = db_record.get(field, sentinel)
+        if ((json_value is sentinel and db_value is None)
+                or (db_value is sentinel and json_value is None)):
+            continue
         if json_value is sentinel or db_value is sentinel or not _equal(json_value, db_value):
             differing.append(field)
     return sorted(differing)
