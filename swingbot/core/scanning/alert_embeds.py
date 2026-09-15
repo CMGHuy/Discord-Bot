@@ -124,7 +124,7 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
 
     line = cohort_line(plan_v2) if plan_v2 is not None else None
     if line:
-        sections["quality"].append(line)
+        sections["quality"].append(("Cohort", line, False))
 
     # "Why follow this" (Task B6) -- always added (both compact and detailed
     # layouts) when a v2 plan exists, regardless of which branch above fired,
