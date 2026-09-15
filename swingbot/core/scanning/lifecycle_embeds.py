@@ -414,6 +414,8 @@ async def notify_plan_events(bot, events) -> list:
                     _warn_throttled(plan.plan_id, "execution feed: history copy of %s for "
                                     "plan %s failed: %s", event.transition, plan.plan_id, exc)
             if pinged:
+                log.info("execution feed: delivered %s for plan %s",
+                          event.transition, plan.plan_id)
                 deliveries.append(_delivery(plan, event))
             else:
                 _warn_throttled(plan.plan_id, "execution feed: %s for plan %s reached no "
