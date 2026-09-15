@@ -480,7 +480,14 @@ class TradeLog:
         trades.json, erasing every trade logged elsewhere in the meantime.
         Call this before using `self._trades` when this instance is
         long-lived.
+
+        At the database stage this is intentionally a no-op: row-level writes
+        cannot overwrite another process's whole-file snapshot, which was the
+        only race this method existed to narrow.
         """
+        from swingbot.core.db import stages
+        if stages.reads_db("trades"):
+            return
         with _LOCK:
             self._trades = self._load()
 
@@ -1094,7 +1101,11 @@ class TradeLog:
         """Re-read trades from disk.  Called automatically by get_trades() /
         get_stats() / has_open_trade() so the bot always reflects the latest
         state even when a separate process (the admin UI) has modified the file
-        since this instance was constructed."""
+        since this instance was constructed. At the database stage it is a
+        no-op; see reload()."""
+        from swingbot.core.db import stages
+        if stages.reads_db("trades"):
+            return
         with _LOCK:
             self._trades = self._load()
 
