@@ -343,6 +343,25 @@ describe('TradeDetail — the cohort risk chip (v86 C8)', () => {
     expect(chip!.textContent).toContain('Cohort unknown');
   });
 
+  it('renders neutral n= text, not a fabricated 0.0% WR, when COHORT_UNKNOWN carries a real stamped (zeroed) cell', () => {
+    // Final-review Fix 5: once a real registry exists, a COHORT_UNKNOWN cell
+    // is still stamped with the full 8-key dict -- it just fell below the
+    // registry's N floor -- rather than staying `{}`. Computing a WR/ExpR
+    // line off those zeros would be the exact fabricated-zero bug already
+    // fixed once server-side (commit 7d5d4d3a); the tooltip must not
+    // reintroduce it on the frontend.
+    const el = renderHeader('COHORT_UNKNOWN', {
+      regime2_state: 'bear_volatile', win_rate: 0.0, expectancy_r: 0.0,
+      n_live: 3, n_backtest: 0, run_date: '2026-09-14',
+    });
+    const host = el.querySelector('.tags > sb-chip')!;
+    const title = host.getAttribute('title') ?? '';
+    expect(title).toContain('Not enough closed trades');
+    expect(title).toContain('n=3');
+    expect(title).not.toContain('0.0% WR');
+    expect(title).not.toContain('WR');
+  });
+
   it('renders no chip when cohort_label is entirely absent from the response', () => {
     // Defensive: an old cached bundle hitting a pre-C8 backend response
     // shape must not crash or show a chip for a field that isn't there.

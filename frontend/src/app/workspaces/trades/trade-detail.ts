@@ -1049,16 +1049,26 @@ export class TradeDetail {
 
   /** The numbers behind the chip -- same facts `cohort_line()` puts in the
    *  Discord alert (`swingbot/core/scanning/plan_table.py`), so hovering the
-   *  chip answers "why" without a trip to the Strategy tab. Empty for
-   *  COHORT_UNKNOWN, whose `cohort_stats` is always `{}`. */
+   *  chip answers "why" without a trip to the Strategy tab.
+   *
+   *  Empty when `cohort_stats` itself is `{}` (a pre-registry/unstamped
+   *  plan). For `COHORT_UNKNOWN` -- or any cell whose combined n is 0 --
+   *  `cohort_stats` CAN still be a fully-populated dict of zeroed stats (the
+   *  cell just fell below the registry's N floor); computing a WR/ExpR line
+   *  off those zeros would fabricate a "0.0% WR" verdict nobody measured.
+   *  This mirrors the same fabricated-zero bug already fixed once
+   *  server-side (commit 7d5d4d3a) -- don't reintroduce it here. */
   protected readonly cohortTooltip = computed(() => {
     const trade = this.store.trade();
     const stats = trade?.cohort_stats;
     if (!stats || Object.keys(stats).length === 0) return '';
+    const n = Number(stats['n_live'] ?? 0) + Number(stats['n_backtest'] ?? 0);
+    if (trade?.cohort_label === 'COHORT_UNKNOWN' || n === 0) {
+      return `Not enough closed trades under these conditions to say anything yet (n=${n}).`;
+    }
     const regime = String(stats['regime2_state'] ?? 'unknown').replace(/_/g, ' ');
     const winRate = Number(stats['win_rate'] ?? 0);
     const expectancyR = Number(stats['expectancy_r'] ?? 0);
-    const n = Number(stats['n_live'] ?? 0) + Number(stats['n_backtest'] ?? 0);
     const runDate = stats['run_date'] ?? '';
     return (
       `${regime} regime: ${winRate.toFixed(1)}% WR / ` +
