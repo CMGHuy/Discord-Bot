@@ -56,6 +56,11 @@ class TradePlanV2:
     # persisted JSON. Kept on the plan so E33's folds and E40's shadow
     # gate can audit which plans were sized with it, after the fact.
     stop_mult_applied: float | None = None
+    # v86: the frozen cohort verdict given at issuance.  These values are
+    # persisted with the plan so later analysis reads the contemporaneous
+    # evidence, not a regenerated registry.
+    cohort_label: str = "COHORT_UNKNOWN"
+    cohort_stats: dict = field(default_factory=dict)
     # E32, same rationale: the MFE-derived R-multiple this plan's TP2 was
     # priced at (None when the level-based TP2 stood), and the day by
     # which most of this strategy's winners had already reached +0.5R.

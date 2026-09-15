@@ -128,6 +128,29 @@ def stamp_badge(plan: TradePlanV2) -> None:
                         "run_date": b.run_date}
 
 
+def stamp_cohort(plan: TradePlanV2, regime2_state: str | None) -> None:
+    """Stamp the plan with the frozen cohort lookup for its creation bar.
+
+    The caller supplies the regime rather than this function deriving a
+    current value.  That preserves causal attribution in historical replay
+    and catch-up scans.
+    """
+    from swingbot.core.backtesting.cohort_registry import get_cohort
+
+    cohort = get_cohort(plan.direction, regime2_state)
+    plan.cohort_label = cohort.label
+    plan.cohort_stats = {
+        "label": cohort.label,
+        "regime2_state": regime2_state,
+        "n_live": cohort.n_live,
+        "n_backtest": cohort.n_backtest,
+        "win_rate": cohort.win_rate,
+        "expectancy_r": cohort.expectancy_r,
+        "window": cohort.window,
+        "run_date": cohort.run_date,
+    }
+
+
 def badge_stats_line(badge: Badge) -> str:
     window = badge.window.replace("-01-01..", "-").replace("-12-31", "") or "n/a"
     return (f"OOS {window}: N={badge.n}, WR {badge.win_rate:.1f}%, "

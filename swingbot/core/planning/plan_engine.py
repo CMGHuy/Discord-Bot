@@ -28,7 +28,7 @@ from .params import (EXIT_V2_PARAMS, STRUCTURE_BUFFER_ATR, SR_VOLUME_STRENGTH_CE
                      DEFAULT_EXPIRY_BARS, exit_params_for,
                      _journal_entries, _resolve_stop_mult, _resolve_tp2_r,
                      _resolve_time_stop_days, _apply_quality, stamp_badge,
-                     badge_stats_line)
+                     stamp_cohort, badge_stats_line)
 
 __all__ = [
     "PlanStatus", "TradePlanV2", "effective_stop", "plan_to_dict", "plan_from_dict",
@@ -36,7 +36,7 @@ __all__ = [
     "SR_VOLUME_STRENGTH_CEILING", "TRAIL_ATR_MULT", "TP1_FRACTION",
     "RUNNER_FLOOR_FRACTION", "DEFAULT_EXPIRY_BARS", "exit_params_for",
     "_journal_entries", "_resolve_stop_mult", "_resolve_tp2_r", "_resolve_time_stop_days",
-    "_apply_quality", "stamp_badge", "badge_stats_line", "select_structural_target",
+    "_apply_quality", "stamp_badge", "stamp_cohort", "badge_stats_line", "select_structural_target",
     "_safe_atr_value", "atr_target_candidates", "fib_target_candidates",
     "sr_target_candidates", "elliott_target_candidates", "select_tp2", "_tp2_from_r",
     "_lifecycle_levels", "apply_level_lifecycle", "trigger_hit", "fill_price",

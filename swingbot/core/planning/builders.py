@@ -256,7 +256,8 @@ def primary_strategy_for(scenario) -> str:
 
 def build_confluence_plan(scenario, df, *, ticker, horizon_key,
                           primary_strategy, level_map=None,
-                          quality_inputs=None, params=None) -> TradePlanV2 | None:
+                          quality_inputs=None, params=None,
+                          regime2_state=None) -> TradePlanV2 | None:
     """THE constructor for confluence-source plans (a levels.build_scenarios
     Scenario). TP1 is a real structural level -- select_structural_target
     picks the nearest candidate that pays at least MIN_RISK_REWARD_RATIO,
@@ -312,6 +313,7 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
     if entry_type == "market":
         record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
     plan_params.stamp_badge(plan)
+    plan_params.stamp_cohort(plan, regime2_state)
     plan_params._apply_quality(plan, quality_inputs)
     return plan
 
