@@ -16,7 +16,7 @@ import { ChartStore } from '../../stores/chart.store';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
-import { Chip, QualityChip } from '../../ui/chip';
+import { Chip, ChipTone, QualityChip } from '../../ui/chip';
 import { MetricChip } from '../../ui/metric-chip';
 import { ChartContainer } from '../../ui/chart-container';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
@@ -110,6 +110,14 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
               [value]="trade.confidence_level"
               [label]="'Lv' + trade.confidence_level"
             />
+          }
+          <!-- v86 -- the cohort risk verdict. COHORT_TYPICAL renders no
+               chip at all (the brief's own token guidance): "typical" is
+               the silent default every other label is judged against, and a
+               chip for it would just be visual noise on every ordinary
+               trade. -->
+          @if (cohortTone(); as tone) {
+            <sb-chip [label]="cohortChipLabel()" [tone]="tone" [title]="cohortTooltip()" />
           }
         </div>
       } @else if (store.error(); as message) {
@@ -1009,6 +1017,64 @@ export class TradeDetail {
   protected readonly stopLabel = computed(() =>
     this.store.trade()?.status === 'PARTIAL' ? 'Trailing stop' : 'Stop',
   );
+
+  /* -- v86: the cohort risk chip --------------------------------------- */
+
+  private static readonly COHORT_TONE: Record<string, ChipTone> = {
+    COHORT_POOR: 'bad',
+    COHORT_STRONG: 'good',
+    COHORT_UNKNOWN: 'muted',
+    // COHORT_TYPICAL deliberately absent -- no entry means no chip, below.
+  };
+
+  private static readonly COHORT_CHIP_LABEL: Record<string, string> = {
+    COHORT_POOR: 'Poor cohort',
+    COHORT_STRONG: 'Strong cohort',
+    COHORT_UNKNOWN: 'Cohort unknown',
+  };
+
+  /** null for COHORT_TYPICAL (and any other unrecognised label) -- "typical"
+   *  is the silent default every other cohort is judged against, so it earns
+   *  no chip at all rather than a neutral one that would just add noise to
+   *  every ordinary trade. */
+  protected readonly cohortTone = computed<ChipTone | null>(() => {
+    const label = this.store.trade()?.cohort_label;
+    return label ? (TradeDetail.COHORT_TONE[label] ?? null) : null;
+  });
+
+  protected readonly cohortChipLabel = computed(() => {
+    const label = this.store.trade()?.cohort_label;
+    return (label && TradeDetail.COHORT_CHIP_LABEL[label]) || '';
+  });
+
+  /** The numbers behind the chip -- same facts `cohort_line()` puts in the
+   *  Discord alert (`swingbot/core/scanning/plan_table.py`), so hovering the
+   *  chip answers "why" without a trip to the Strategy tab.
+   *
+   *  Empty when `cohort_stats` itself is `{}` (a pre-registry/unstamped
+   *  plan). For `COHORT_UNKNOWN` -- or any cell whose combined n is 0 --
+   *  `cohort_stats` CAN still be a fully-populated dict of zeroed stats (the
+   *  cell just fell below the registry's N floor); computing a WR/ExpR line
+   *  off those zeros would fabricate a "0.0% WR" verdict nobody measured.
+   *  This mirrors the same fabricated-zero bug already fixed once
+   *  server-side (commit 7d5d4d3a) -- don't reintroduce it here. */
+  protected readonly cohortTooltip = computed(() => {
+    const trade = this.store.trade();
+    const stats = trade?.cohort_stats;
+    if (!stats || Object.keys(stats).length === 0) return '';
+    const n = Number(stats['n_live'] ?? 0) + Number(stats['n_backtest'] ?? 0);
+    if (trade?.cohort_label === 'COHORT_UNKNOWN' || n === 0) {
+      return `Not enough closed trades under these conditions to say anything yet (n=${n}).`;
+    }
+    const regime = String(stats['regime2_state'] ?? 'unknown').replace(/_/g, ' ');
+    const winRate = Number(stats['win_rate'] ?? 0);
+    const expectancyR = Number(stats['expectancy_r'] ?? 0);
+    const runDate = stats['run_date'] ?? '';
+    return (
+      `${regime} regime: ${winRate.toFixed(1)}% WR / ` +
+      `${expectancyR >= 0 ? '+' : ''}${expectancyR.toFixed(2)}R (n=${n}, frozen ${runDate})`
+    );
+  });
 
   protected readonly fmt = num;
   protected readonly fmtText = text;

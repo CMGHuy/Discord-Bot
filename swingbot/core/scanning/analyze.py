@@ -29,12 +29,15 @@ from swingbot.core.planning import account as account_module
 from swingbot.core.planning.account import load_account_config
 from swingbot.core.planning.plan_engine import build_confluence_plan, primary_strategy_for
 from swingbot.core.planning.quality import atr_percentile as _atr_percentile
+from swingbot.core.market.indicators import atr
+from swingbot.core.market.session import now_et
 
 from . import runstate
 from .confidence import score_confidence
 from .embeds import _build_requirement_checks
 from .regime import get_htf_bias
 from .engine import trade_log
+from . import risk_features
 
 
 log = logging.getLogger("swing-bot.scan_engine")
@@ -281,8 +284,48 @@ def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
     }
 
 
+def _atr_for(df) -> float:
+    """Get the latest ATR value from the dataframe."""
+    atr_series = atr(df, period=14)
+    if atr_series.empty:
+        return 0.0
+    return float(atr_series.iloc[-1])
+
+
+def _regime_at(regimes, when) -> str | None:
+    """The regime label for THIS bar, never the latest one. regime_series is
+    causal at every bar, so indexing it by the creating bar's timestamp is
+    lookahead-free; taking .iloc[-1] instead would stamp a replayed 2024 plan
+    with 2026 volatility."""
+    if regimes is None or when is None:
+        return None
+    try:
+        hit = regimes[regimes.index.normalize() == pd_normalize(when)]
+    except Exception:
+        # A real regimes series was supplied but the lookup itself blew up
+        # (bad index dtype, tz mismatch, etc.) -- every such miss silently
+        # became COHORT_UNKNOWN with no way to tell "no data" apart from
+        # "broken lookup" until now.
+        if len(regimes) > 0:
+            log.warning("_regime_at lookup raised for bar %s (regime series has %d rows)",
+                        when, len(regimes), exc_info=True)
+        return None
+    if hit.empty:
+        if len(regimes) > 0:
+            log.warning("_regime_at found no regime row for bar %s "
+                        "(regime series spans %s..%s) -- plan stamps COHORT_UNKNOWN",
+                        when, regimes.index.min(), regimes.index.max())
+        return None
+    return str(hit.iloc[0])
+
+
+def pd_normalize(when):
+    import pandas as pd
+    return pd.Timestamp(when).normalize()
+
+
 def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
-                    regime=None, rs_percentile=None, breadth=None):
+                    regime=None, rs_percentile=None, breadth=None, regime2_state=None):
     """Construct the v2 plan for a qualifying scan item, flag-gated.
     A v2 construction failure must NEVER break the legacy scan -- log and
     move on (shadow mode exists precisely to surface such failures safely).
@@ -298,7 +341,7 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
         plan = build_confluence_plan(
             scenario, df, ticker=ticker, horizon_key=horizon_key,
             primary_strategy=primary_strategy_for(scenario),
-            level_map=level_map, quality_inputs=quality_inputs)
+            level_map=level_map, quality_inputs=quality_inputs, regime2_state=regime2_state)
         if plan is None:
             # No level beyond entry pays MIN_RISK_REWARD_RATIO against this
             # scenario's own risk. That is a real answer -- "no trade here" --
@@ -309,7 +352,35 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             # this change exists to stop posting).
             item.plan_v2_rejected = "no_qualifying_target"
             return
+        # item.plan_v2 is set BEFORE risk_features stamping (below) is even
+        # attempted -- a render-only feature's stamping failure must never
+        # unset the plan and silently fall the item through to legacy-number
+        # rendering (final-review Fix 4).
         item.plan_v2 = plan
+        try:
+            plan.risk_features = risk_features.build(
+                regime2_state=regime2_state,
+                confidence_level=getattr(getattr(item, "conf", None), "level", None),
+                htf_bias=getattr(item, "htf_bias", None),
+                direction=scenario.direction,
+                confluence_count=(item.target_confluence[0] if getattr(item, "target_confluence", None) else None),
+                entry=scenario.entry,
+                stop_loss=plan.stop_loss,
+                # The raw ATR reading, not _safe_atr_value's synthetic
+                # entry*0.02 fallback -- risk_features are PERSISTED
+                # permanently and a synthetic value would pool undetectably
+                # with real ATR-derived ones in the eventual cohort
+                # separation analysis (final-review Fix 8). risk_features.py's
+                # _ratio()/atr_pct guard a falsy-or-NaN atr_val the same way
+                # _safe_atr_value's caller (position sizing) still does.
+                atr_val=_atr_for(df),
+                close=float(df["Close"].iloc[-1]),
+                rs_percentile=rs_percentile,
+                now=now_et(),
+            )
+        except Exception:
+            log.warning("risk_features stamping failed for %s/%s -- plan_v2 still posts, "
+                        "risk_features left at its default", ticker, horizon_key, exc_info=True)
     except Exception:
         log.warning("plan_v2 construction failed for %s/%s", ticker,
                     horizon_key, exc_info=True)

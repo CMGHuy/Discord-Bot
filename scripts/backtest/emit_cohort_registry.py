@@ -17,7 +17,55 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
+from swingbot.core.analytics.metrics import r_multiple  # noqa: E402
 from swingbot.core.backtesting.cohort_registry import cohort_key  # noqa: E402
+from swingbot.core.market.session import now_et  # noqa: E402
+
+
+# Real trades.json records (performance.py's log_trade) use these three
+# lowercase closed statuses -- "win"/"loss" on a stop/target hit, "closed" on
+# a manual exit with no win/loss verdict. There is no "CLOSED" status; that
+# was a guess, not a value this codebase ever writes.
+_LIVE_CLOSED_STATUSES = {"win", "loss", "closed"}
+
+
+def _et_calendar_date(opened_at: str | None) -> str | None:
+    """opened_at is a UTC-aware ISO timestamp (performance.py's
+    ``datetime.now(timezone.utc).isoformat()``); the regime series' index is
+    naive ET/NYSE calendar dates. Comparing a tz-aware Timestamp against that
+    naive index doesn't raise -- pandas just returns zero matches, silently
+    dropping every live trade. Converting to ET first, then taking the date,
+    both fixes that silent mismatch and buckets a late-UTC trade into the
+    correct trading day.
+    """
+    if not opened_at:
+        return None
+    try:
+        return now_et(dt.datetime.fromisoformat(opened_at)).date().isoformat()
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_live_trades(trades: list[dict]) -> list[dict]:
+    """Adapt raw trades.json records to the {created_at, direction,
+    r_realized} shape aggregate_cells() expects -- the shape the backtest
+    replay JSON already uses natively.
+
+    A raw trade record has no top-level ``created_at``/``r_realized``: the
+    date lives in ``opened_at`` (immutable, unlike ``created_at`` which gets
+    re-stamped -- see commit 1caafdc4), and realized R is derived with the
+    same shared ``metrics.r_multiple()`` performance.py/journal.py use, not
+    read off a field that only ever exists on a journal entry.
+    """
+    return [
+        {
+            "created_at": _et_calendar_date(trade.get("opened_at")),
+            "direction": trade.get("direction"),
+            "r_realized": r_multiple(trade),
+        }
+        for trade in trades
+        if trade.get("status") in _LIVE_CLOSED_STATUSES
+    ]
 
 
 def aggregate_cells(trades: list[dict], regimes: pd.Series) -> dict:
@@ -92,11 +140,12 @@ def main() -> int:
 
     spy = pd.read_csv(args.spy, index_col=0, parse_dates=True)
     regimes = regime_series(spy)
-    live = [
+    live_raw = [
         trade
         for trade in json.loads(Path(args.live).read_text(encoding="utf-8"))
-        if trade.get("source") == "confluence" and trade.get("status") == "CLOSED"
+        if trade.get("source") == "confluence"
     ]
+    live = _normalize_live_trades(live_raw)
     backtest = json.loads(Path(args.backtest).read_text(encoding="utf-8"))
     print(f"live closed confluence trades: {len(live)}", flush=True)
     print(f"backtest replay trades: {len(backtest)}", flush=True)

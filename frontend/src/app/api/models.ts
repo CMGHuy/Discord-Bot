@@ -75,6 +75,24 @@ export interface TradeRow {
   horizon: string | null;
   tier: string | null;
   badge: string | null;
+  /** v86 -- the cohort risk verdict: `COHORT_POOR` / `COHORT_STRONG` /
+   *  `COHORT_TYPICAL` / `COHORT_UNKNOWN`. Never null -- a pre-v86 record or
+   *  an unstamped plan reports `COHORT_UNKNOWN` server-side rather than a
+   *  field every caller would have to null-check separately from `badge`.
+   *  Optional here (not on every existing fixture) so a spec written before
+   *  this field existed is not forced to grow it. */
+  cohort_label?: string;
+  /** The numbers behind `cohort_label` -- `regime2_state`, `win_rate`,
+   *  `expectancy_r`, `n_live`, `n_backtest`, `run_date`. `{}` only for a plan
+   *  issued before the cohort registry existed, or whose risk-feature
+   *  stamping otherwise never ran. A `COHORT_UNKNOWN` plan issued against a
+   *  real registry is still stamped with the full dict (it just fell below
+   *  the registry's N floor) -- `n_live`/`n_backtest` can be 0 there, and a
+   *  reader must treat that as "not enough data", not compute a WR/ExpR line
+   *  off the zeroed stats. Untyped like `TradeDetailFields`'s other stat
+   *  bags (`badge_stats`, `confidence_breakdown`) -- the shape varies by
+   *  which cohort branch stamped it. */
+  cohort_stats?: Record<string, unknown>;
   confidence_level: number | null;
   confidence_score: number | null;
   quality_score: number | null;

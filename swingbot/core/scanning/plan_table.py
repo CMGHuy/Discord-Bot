@@ -37,6 +37,50 @@ def badge_field_for(plan) -> tuple[str, str] | None:
     return ("⚠️ WEAK", f"**{caution}**")
 
 
+# v86: the cohort line names its own cohort and numbers, the way
+# badge_stats_line does. A vague "be careful" teaches the reader nothing and
+# gets tuned out; "bearish setups in a volatile bear have closed 41.2% /
+# -0.38R over 600 trades" is a fact they can act on.
+COHORT_POOR_TEXT = (
+    "⚠️ **Cohort:** {direction} setups in a {regime} regime have closed "
+    "**{win_rate:.1f}% WR / {expectancy_r:+.2f}R** (n={n}, frozen {run_date}). "
+    "Worth a second look before sizing up."
+)
+COHORT_STRONG_TEXT = (
+    "**Cohort:** {direction} setups in a {regime} regime have closed "
+    "**{win_rate:.1f}% WR / {expectancy_r:+.2f}R** (n={n}, frozen {run_date})."
+)
+COHORT_UNKNOWN_TEXT = (
+    "**Cohort:** Not enough closed trades under these conditions to say "
+    "anything yet (n={n})."
+)
+
+
+def cohort_line(plan) -> str | None:
+    """The one line a reader sees about how trades like this one have closed.
+    Returns None when there is nothing honest to say -- an unstamped plan
+    renders nothing rather than an empty reassurance."""
+    stats = getattr(plan, "cohort_stats", None) or {}
+    label = getattr(plan, "cohort_label", "COHORT_UNKNOWN")
+    if not stats:
+        return None
+    fields = {
+        "direction": plan.direction,
+        "regime": (stats.get("regime2_state") or "unknown").replace("_", " "),
+        "win_rate": stats.get("win_rate", 0.0),
+        "expectancy_r": stats.get("expectancy_r", 0.0),
+        "n": stats.get("n_live", 0) + stats.get("n_backtest", 0),
+        "run_date": stats.get("run_date", ""),
+    }
+    if label == "COHORT_POOR":
+        return COHORT_POOR_TEXT.format(**fields)
+    if label == "COHORT_STRONG":
+        return COHORT_STRONG_TEXT.format(**fields)
+    if label == "COHORT_UNKNOWN":
+        return COHORT_UNKNOWN_TEXT.format(**fields)
+    return None
+
+
 def quality_lines(plan) -> tuple[str, str] | None:
     """('Quality: 82/100', 'regime +15 · htf +8 · ...') or None for
     unscored plans. Middle-dot separated, signed ints -- rendering is

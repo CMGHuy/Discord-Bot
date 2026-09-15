@@ -257,6 +257,14 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "strategy": plan.get("strategy"),
         "horizon": plan.get("horizon_key"),
         "badge": plan.get("badge"),
+        # v86 -- the cohort verdict rides the same row `badge` does. A plan
+        # written before v86 (or one whose cohort field is explicitly None,
+        # e.g. cohort_registry lookup miss -- see scan_run.py) has no
+        # opinion, and "no opinion" must read as COHORT_UNKNOWN, never as a
+        # missing/null field the SPA has to null-check separately from every
+        # other label on this row.
+        "cohort_label": plan.get("cohort_label") or "COHORT_UNKNOWN",
+        "cohort_stats": plan.get("cohort_stats") or {},
         "tier": t.get("tier") or plan.get("tier"),
         "confidence_level": t.get("confidence_level"),
         "confidence_score": t.get("confidence_score"),
@@ -454,6 +462,11 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "strategy": t.get("strategy"),
         "horizon": t.get("horizon_key"),
         "badge": t.get("badge"),
+        # v86 -- same default as _row_from_plan: a legacy/pre-v86 trade has
+        # no cohort opinion, which reports as COHORT_UNKNOWN rather than a
+        # null the chip would have to special-case.
+        "cohort_label": t.get("cohort_label") or "COHORT_UNKNOWN",
+        "cohort_stats": t.get("cohort_stats") or {},
         "tier": t.get("tier"),
         "confidence_level": t.get("confidence_level"),
         "confidence_score": t.get("confidence_score"),

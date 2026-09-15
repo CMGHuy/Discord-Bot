@@ -11,7 +11,7 @@ from swingbot.core import presentation as ui
 
 from .snapshots import _snapshot_and_diff
 from .requirements import _sources_str
-from .plan_table import (_v2_plan, plan_numbers_for_display, leg_rows)
+from .plan_table import (_v2_plan, plan_numbers_for_display, leg_rows, cohort_line)
 from .execution_embeds import build_ticket_embed
 
 
@@ -121,6 +121,10 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
         ))
 
     sections["quality"].append(ui.confidence_field(conf.level, conf.score))
+
+    line = cohort_line(plan_v2) if plan_v2 is not None else None
+    if line:
+        sections["quality"].append(("Cohort", line, False))
 
     # "Why follow this" (Task B6) -- always added (both compact and detailed
     # layouts) when a v2 plan exists, regardless of which branch above fired,

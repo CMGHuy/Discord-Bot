@@ -12,8 +12,26 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
  * v80 D4 adds `good`, `warn` and `info`: states that are judgements but not
  * quality levels (a gate passed, a stale feed, a note). They tint rather than
  * outline, which is what tells them apart from a quality chip in one row.
+ *
+ * v86 adds `bad` and `muted` for the cohort verdict chip: `bad` is `good`'s
+ * negative mirror (the loss/danger colour, tinted the same way) for a cohort
+ * that has been closing poorly; `muted` is dimmer than `neutral` (which
+ * still reads as an ordinary category tag, like a horizon) for "no opinion
+ * yet" -- COHORT_UNKNOWN must not look like a judgement call in either
+ * direction.
  */
-export type ChipTone = 'neutral' | 'good' | 'warn' | 'info' | 'q1' | 'q2' | 'q3' | 'q4' | 'q5';
+export type ChipTone =
+  | 'neutral'
+  | 'good'
+  | 'warn'
+  | 'info'
+  | 'bad'
+  | 'muted'
+  | 'q1'
+  | 'q2'
+  | 'q3'
+  | 'q4'
+  | 'q5';
 
 /**
  * Maps a confidence level (1–5) or a tier (`A`/`B`/`C`) onto the quality ramp
@@ -88,6 +106,13 @@ export function qualityTone(value: number | string | null | undefined): ChipTone
     .good { color: var(--pos); background: var(--pos-soft); border-color: transparent; }
     .warn { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
     .info { color: var(--info); background: var(--info-soft); border-color: transparent; }
+    /* v86 -- bad is good's mirror image, same tint treatment, the loss
+       colour instead of the profit one. */
+    .bad { color: var(--neg); background: var(--neg-soft); border-color: transparent; }
+    /* Dimmer than .neutral on purpose (--text-muted, not --text-secondary):
+       neutral still reads as a plain category tag, and COHORT_UNKNOWN is
+       "no opinion yet", not a category. */
+    .muted { color: var(--text-muted); }
     .q1 { color: var(--quality-1); border-color: color-mix(in srgb, var(--neg) 35%, transparent); }
     .q2 { color: var(--quality-2); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
     .q3 { color: var(--quality-3); }

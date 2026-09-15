@@ -593,6 +593,31 @@ def test_no_intraday_reading_adds_no_field():
     assert _intraday_field(_build(make_item())) is None
 
 
+# --- Final-review Fix 1: a real (non-empty) cohort_stats used to crash ------
+# build_embed's sections["quality"].append(line) appended a bare string
+# instead of a (name, value, inline) tuple -- fine when cohort_line()
+# returned None (every prior task's tests only ever stamped cohort_stats ==
+# {}), but the flush loop's `for name, value, inline in sections[key]`
+# raises ValueError the moment a plan carries a real (non-empty) cohort_stats
+# dict, which is every plan stamp_cohort touches, including a COHORT_UNKNOWN
+# one (params.py always fills the full 8-key dict).
+
+def test_a_stamped_cohort_line_does_not_crash_build_embed_and_renders(monkeypatch):
+    from swingbot.core.planning.params import stamp_cohort
+
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    plan_v2 = make_plan_v2(badge="VALIDATED", confidence_level=3)
+    stamp_cohort(plan_v2, "bear_volatile")
+    assert plan_v2.cohort_stats  # sanity: stamp_cohort always fills a non-empty dict
+    item = make_item(plan_v2=plan_v2)
+
+    embed = _build(item)  # must not raise ValueError
+
+    cohort_fields = [f for f in embed.fields if f.name == "Cohort"]
+    assert len(cohort_fields) == 1
+    assert "Cohort" in cohort_fields[0].value
+
+
 # =====================================================================
 # Final-review Finding 1 -- regenerate_chart_for_trade() must hand its
 # trade's stored trendline fit to generate_trade_chart(), the same way
