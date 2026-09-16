@@ -382,14 +382,20 @@ async def config_watcher():
                             log.warning("Could not post config-change notice to Discord: %s", _e)
 
     # --- Admin UI manual-close notification queue ---
-    if os.path.exists(runstate._MANUAL_CLOSE_QUEUE):
+    from swingbot.core.db import stages
+    if stages.reads_db("notify_queue"):
+        from swingbot.core.db.repositories.notify_queue import notify_queue_repo
+        _queued = notify_queue_repo().drain()
+    elif os.path.exists(runstate._MANUAL_CLOSE_QUEUE):
         try:
             with open(runstate._MANUAL_CLOSE_QUEUE, "r") as _qf:
                 _queued = json.load(_qf)
         except Exception as _qe:
             log.warning("Could not read manual_close_notify queue: %s", _qe)
             _queued = []
-        if _queued:
+    else:
+        _queued = []
+    if _queued:
             try:
                 os.remove(runstate._MANUAL_CLOSE_QUEUE)
             except OSError:
