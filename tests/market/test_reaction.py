@@ -97,3 +97,9 @@ def test_predicates_never_read_past_t():
             assert rx.is_rejection(full, t, **args) == rx.is_rejection(trunc, t, **args)
             assert rx.is_follow_through(full, t, direction) == rx.is_follow_through(trunc, t, direction)
             assert rx.is_reclaim(full, t, floor_index=0, **args) == rx.is_reclaim(trunc, t, floor_index=0, **args)
+            tested_now = rx.is_test(full, t, k=K, atr_t=ATR, **args)
+            tested_prev = t >= 1 and rx.is_test(full, t - 1, k=K, atr_t=ATR, **args)
+            assert rx.reaction_kind(full, t, floor_index=0, tested_now=tested_now,
+                                    tested_prev=tested_prev, **args) == \
+                   rx.reaction_kind(trunc, t, floor_index=0, tested_now=tested_now,
+                                    tested_prev=tested_prev, **args)
