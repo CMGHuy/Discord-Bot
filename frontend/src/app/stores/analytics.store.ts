@@ -930,6 +930,9 @@ export const AnalyticsStore = signalStore(
         label: month.month,
         count: month.return_pct ?? 0,
       }))),
+    holdingPeriodBars: computed(() => rateBars(performance()?.holding_period_split ?? [])),
+    riskRewardBars: computed(() => rateBars(performance()?.risk_reward_split ?? [])),
+    monthBars: computed(() => monthBars(performance()?.calendar ?? [])),
 
     /* -- SR55: the journal's analytics half ----------------------------- */
 

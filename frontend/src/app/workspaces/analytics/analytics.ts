@@ -54,6 +54,7 @@ import { Magnitude } from '../../ui/magnitude';
 import { SectionHead } from '../../ui/section-head';
 import { Segmented, SegmentOption } from '../../ui/segmented';
 import { Histogram, HistogramBin } from '../../ui/histogram';
+import { BarList } from '../../ui/bar-list';
 import { MetricChip } from '../../ui/metric-chip';
 import { PaginationComponent } from '../../ui/pagination';
 import { Sparkline } from '../../ui/sparkline';
@@ -143,6 +144,7 @@ interface ProposalView extends ProposalRow {
     DonutComponent,
     MetricChip,
     Histogram,
+    BarList,
     Chip,
     ChipRow,
     QualityChip,
@@ -559,16 +561,12 @@ interface ProposalView extends ProposalRow {
 
           <div class="chart-grid">
             <sb-panel heading="By holding period">
-              <sb-histogram
-                [bins]="store.holdingPeriodHistogram()"
-                [max]="100"
-                [referenceLine]="store.derived().win_rate"
-              />
+              <sb-bar-list [rows]="store.holdingPeriodBars()" mode="rate" [reference]="store.derived().win_rate" [withheldFloor]="20" [format]="fmtPercent" />
             </sb-panel>
 
             <sb-panel heading="By month">
-              @if (store.monthHistogram().length) {
-                <sb-histogram [bins]="store.monthHistogram()" />
+              @if (store.monthBars().length) {
+                <sb-bar-list [rows]="store.monthBars()" mode="signed" [format]="fmtPercent" />
               } @else {
                 <p class="stale">No months with closed trades.</p>
               }
@@ -589,7 +587,7 @@ interface ProposalView extends ProposalRow {
               </sb-panel>
             }
             <sb-panel heading="By planned R:R">
-              <sb-histogram [bins]="store.riskRewardHistogram()" [max]="100" [referenceLine]="store.derived().win_rate" />
+              <sb-bar-list [rows]="store.riskRewardBars()" mode="rate" [reference]="store.derived().win_rate" [withheldFloor]="20" [format]="fmtPercent" />
             </sb-panel>
           </div>
 
@@ -1520,6 +1518,7 @@ interface ProposalView extends ProposalRow {
   `,
 })
 export class Analytics {
+  protected readonly fmtPercent = (value: number) => `${value.toFixed(1)}%`;
   private readonly router = inject(Router);
   protected readonly store = inject(AnalyticsStore);
   private readonly connection = inject(ConnectionStore);
