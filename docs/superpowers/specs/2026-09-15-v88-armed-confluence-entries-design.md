@@ -79,16 +79,16 @@ Window: bars `j` in `[i, i + N]`. Bullish shown; bearish is the exact mirror
 
 - **Test:** `Low_j <= L + k·ATR_j` (a touch within `k` ATR, or a pierce).
 - **Reaction**, on a bar at or after the first test bar:
-  - **R1 rejection:** `range_j > 0`, lower wick `min(Open_j, Close_j) − Low_j
+  - **R1 rejection:** bar `j` is itself a test bar, `range_j > 0`, lower wick `min(Open_j, Close_j) − Low_j
     >= 0.5·range_j`, `Close_j >= Low_j + (2/3)·range_j`, and `Close_j >= L`.
   - **R2 follow-through:** `Close_j > High_{j−1}`, with a test on `j` or `j−1`.
-  - **R3 reclaim:** some bar in `[j−2, j−1]` closed below `L`, and
+  - **R3 reclaim:** some bar in `[max(i, j−2), j−1]` — inside the arm window — closed below `L`, and
     `Close_j >= L`.
   - The first bar satisfying any of them confirms. When one bar satisfies
     several, the strongest names it: R3 > R2 > R1.
 - **Expiry:** no reaction by `i + N` → `expired_unarmed`, no plan.
 - **Cancel before confirmation:** `High_j >= T1` (the target traded first), or
-  a close below `L` not reclaimed within 2 bars → `cancelled_armed`, no plan.
+  a close below `L` not reclaimed within 2 bars → `cancelled_armed`, no plan. The target check starts on the bar after the arm bar; when one bar both reaches the target and reacts, the cancel wins.
 
 The reaction set is **fixed, not gridded** — it is the definition under test,
 and gridding it would multiply the comparisons the plateau check must survive.
