@@ -108,7 +108,8 @@ export const DECILE_COLUMNS: ColumnDef<DecileRow>[] = [
 export function TIER_COLUMNS(floor: number): ColumnDef<TierRow>[] { return [
   { key: 'level', header: 'Confidence level', value: (r) => String(r.level) },
   { key: 'n', header: 'N', numeric: true, value: (r) => count(r.n) },
-  { key: 'win_rate', header: 'Live WR', numeric: true, value: (r) => r.n < floor || r.win_rate === null ? `n=${r.n}` : rate(r.win_rate) },
+  // v89: the Trades column carries n; a win-rate column holds a rate or nothing.
+  { key: 'win_rate', header: 'Live WR', numeric: true, value: (r) => r.n < floor || r.win_rate === null ? ABSENT : rate(r.win_rate) },
   { key: 'expectancy_r', header: 'ExpR', numeric: true, value: (r) => expectancy(r.expectancy_r) },
 ]; }
 
@@ -123,8 +124,9 @@ export function breakdownColumns(label: string, floor = 0): ColumnDef<BreakdownR
     { key: 'n', header: 'Trades', numeric: true, value: (r) => count(r.n) },
     { key: 'wins', header: 'Wins', numeric: true, value: (r) => count(r.wins) },
     { key: 'losses', header: 'Losses', numeric: true, value: (r) => count(r.losses) },
+    // v89: the Trades column carries n; a win-rate column holds a rate or nothing.
     { key: 'win_rate', header: 'Win rate', numeric: true,
-      value: (r) => (r.n ?? 0) < floor || r.win_rate === null ? `n=${r.n ?? 0}` : rate(r.win_rate) },
+      value: (r) => (r.n ?? 0) < floor || r.win_rate === null ? ABSENT : rate(r.win_rate) },
     {
       key: 'expectancy_r',
       header: 'ExpR',

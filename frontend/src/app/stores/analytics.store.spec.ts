@@ -849,28 +849,28 @@ describe('AnalyticsStore', () => {
       expect(bins).toHaveLength(3);
     });
 
-    it('exposes a month histogram computed from calendarReturns', () => {
+    it('exposes month bar rows computed from calendarReturns, sign intact', () => {
       tick();
       respondPerformance({ calendar: [
         { month: '2026-06', return_pct: 4.2, n: 3 },
         { month: '2026-07', return_pct: -1.8, n: 2 },
       ] });
 
-      expect(store.monthHistogram()).toEqual([
-        { label: '2026-06', count: 4.2 },
-        { label: '2026-07', count: -1.8 },
+      expect(store.monthBars()).toEqual([
+        { label: '2026-06', value: 4.2, n: 3 },
+        { label: '2026-07', value: -1.8, n: 2 },
       ]);
     });
 
 
-    it('exposes holding-period and planned-R:R win-rate histograms with sample sizes', () => {
+    it('exposes holding-period and planned-R:R win-rate bar rows with sample sizes', () => {
       tick();
       respondPerformance({
         holding_period_split: [{ bucket: '0h-2h', n: 0, win_rate: null, avg_return_pct: null }, { bucket: '2h-4h', n: 3, win_rate: 66.7, avg_return_pct: 1.1 }],
         risk_reward_split: [{ bucket: '<1.5', n: 0, win_rate: null, avg_return_pct: null }, { bucket: '1.5-2', n: 4, win_rate: 50, avg_return_pct: 0.4 }],
       });
-      expect(store.holdingPeriodHistogram()).toEqual([{ label: '0h-2h (n=0)', count: 0 }, { label: '2h-4h (n=3)', count: 66.7 }]);
-      expect(store.riskRewardHistogram()).toEqual([{ label: '<1.5 (n=0)', count: 0 }, { label: '1.5-2 (n=4)', count: 50 }]);
+      expect(store.holdingPeriodBars()).toEqual([{ label: '0h-2h', value: null, n: 0, withheld: true }, { label: '2h-4h', value: 66.7, n: 3, withheld: false }]);
+      expect(store.riskRewardBars()).toEqual([{ label: '<1.5', value: null, n: 0, withheld: true }, { label: '1.5-2', value: 50, n: 4, withheld: false }]);
     });
 
     it('echoes the applied range back with its sample size', () => {

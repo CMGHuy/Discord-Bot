@@ -18,3 +18,10 @@ describe('analytics columns', () => {
     expect(DRIFT_COLUMNS.find((column) => column.key === 'strategy')?.value?.(drift)).toBe('MACD');
   });
 });
+
+describe('win rate below the sample floor (v89)', () => {
+  it('shows an em dash, not "n=17", in a win-rate column', () => {
+    const column = breakdownColumns('Ticker', 20).find((c) => c.key === 'win_rate')!;
+    expect(column.value!({ key: 'AXON', n: 17, wins: 8, losses: 9, win_rate: 47.1 } as never)).toBe('—');
+  });
+});

@@ -50,11 +50,11 @@ import { ABSENT, dateTime, rMultiple, signed } from '../../ui/format';
 import { Freshness } from '../../ui/freshness';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
 import { LineChart } from '../../ui/line-chart';
-import { Magnitude } from '../../ui/magnitude';
 import { SectionHead } from '../../ui/section-head';
 import { Segmented, SegmentOption } from '../../ui/segmented';
 import { Histogram, HistogramBin } from '../../ui/histogram';
-import { BarList } from '../../ui/bar-list';
+import { BarList, BarRow } from '../../ui/bar-list';
+import { InlineMd } from '../../ui/inline-md';
 import { MetricChip } from '../../ui/metric-chip';
 import { PaginationComponent } from '../../ui/pagination';
 import { Sparkline } from '../../ui/sparkline';
@@ -155,7 +155,7 @@ interface ProposalView extends ProposalRow {
     ConfirmDialog,
     Freshness,
     LineChart,
-    Magnitude,
+    InlineMd,
     PaginationComponent,
     SectionHead,
     Segmented,
@@ -321,16 +321,7 @@ interface ProposalView extends ProposalRow {
             </sb-panel>
 
             <sb-panel heading="By horizon">
-              <div class="horizon-bars">
-                @for (row of store.horizonAgg(); track row.key) {
-                  <div class="horizon-row" [class.neg]="(measureValue(row) ?? 0) < 0">
-                    <span class="horizon-key">{{ row.key }}</span>
-                    <sb-magnitude [value]="measureValue(row)" [max]="horizonMax()" />
-                    <span class="horizon-value num">{{ fmtMeasure(row) }}</span>
-                    <span class="horizon-n num">N={{ row.n }}</span>
-                  </div>
-                }
-              </div>
+              <sb-bar-list [rows]="horizonBars()" [format]="measureFormat()" />
             </sb-panel>
           </div>
         </sb-async>
@@ -346,6 +337,7 @@ interface ProposalView extends ProposalRow {
           [skeletonCols]="3"
           (retry)="store.load()"
         >
+          <div class="sb-stack">
           @if (store.missingRelocated(); as missing) {
             @if (missing.length) {
               <!-- The relocation's own alarm. These six moved off the Dashboard
@@ -381,16 +373,17 @@ interface ProposalView extends ProposalRow {
 
             <sb-panel heading="Overall">
               <dl>
-                <div><dt>Win rate</dt><dd class="num">{{ fmtRate(store.winRate()) }}</dd></div>
+                <div><dt>Win rate</dt><dd class="num">{{ fmtRate(store.winRate()) }} <span class="n">N={{ store.winRateN() ?? '—' }}</span></dd></div>
                 <div>
                   <dt>Expectancy</dt>
-                  <dd class="num">{{ fmtExpectancy(store.expectancyR()) }}</dd>
+                  <dd class="num">{{ fmtExpectancy(store.expectancyR()) }} <span class="n">N={{ store.expectancyN() ?? '—' }}</span></dd>
                 </div>
                 <div><dt>Trades</dt><dd class="num">{{ fmtCount(store.totals().total) }}</dd></div>
                 <div><dt>Open</dt><dd class="num">{{ fmtCount(store.totals().open) }}</dd></div>
                 <div><dt>Closed</dt><dd class="num">{{ fmtCount(store.totals().closed) }}</dd></div>
               </dl>
             </sb-panel>
+          </div>
           </div>
         </sb-async>
 
@@ -541,6 +534,7 @@ interface ProposalView extends ProposalRow {
             [skeletonRows]="6"
             [skeletonCols]="2"
           >
+          <div class="sb-stack">
           <div class="chart-grid">
             <sb-panel heading="Return distribution">
               @if (store.returnsHistogram().length) {
@@ -594,10 +588,10 @@ interface ProposalView extends ProposalRow {
           <h2 class="section">By segment</h2>
           <div class="chart-grid">
             <sb-panel heading="By direction">
-              <sb-histogram [bins]="store.directionHistogram()" [max]="100" [referenceLine]="store.winRate()" />
+              <sb-bar-list mode="rate" [rows]="store.directionBars()" [format]="fmtRate" [reference]="store.winRate()" [withheldFloor]="store.minCellN()" />
             </sb-panel>
             <sb-panel heading="By day of week">
-              <sb-histogram [bins]="store.dowHistogram()" [max]="100" [referenceLine]="store.winRate()" />
+              <sb-bar-list mode="rate" [rows]="store.dowBars()" [format]="fmtRate" [reference]="store.winRate()" [withheldFloor]="store.minCellN()" />
             </sb-panel>
           </div>
 
@@ -619,6 +613,7 @@ interface ProposalView extends ProposalRow {
               </dl>
             </sb-panel>
           }
+          </div>
           </sb-async>
 
           <!-- SR55. NOT a rebuilt Journal page: spec v14 Decision 4 collapsed
@@ -652,7 +647,7 @@ interface ProposalView extends ProposalRow {
                 <h3 class="sub">This week</h3>
                 <ul class="lines">
                   @for (line of store.digest(); track line) {
-                    <li>{{ line }}</li>
+                    <li><sb-inline-md [text]="line" /></li>
                   }
                 </ul>
               }
@@ -660,7 +655,7 @@ interface ProposalView extends ProposalRow {
                 <h3 class="sub">Recurring lessons</h3>
                 <ul class="lines">
                   @for (lesson of store.lessons(); track lesson) {
-                    <li>{{ lesson }}</li>
+                    <li><sb-inline-md [text]="lesson" /></li>
                   }
                 </ul>
               }
@@ -759,6 +754,7 @@ interface ProposalView extends ProposalRow {
           [skeletonCols]="6"
           (retry)="store.load()"
         >
+          <div class="sb-stack">
           <sb-panel heading="Strategy registry" [flush]="true">
             <p class="panel-subtitle">out-of-sample validation status per strategy</p>
             <sb-data-table
@@ -816,6 +812,7 @@ interface ProposalView extends ProposalRow {
             </sb-panel>
           }
           <sb-strategy-contribution [rows]="store.strategyContribution()" />
+          </div>
         </sb-async>
       }
 
@@ -845,6 +842,7 @@ interface ProposalView extends ProposalRow {
           [skeletonCols]="6"
           (retry)="store.load()"
         >
+          <div class="sb-stack">
           <sb-panel heading="Quality score vs outcome" [flush]="true">
             <!-- SR61. The Jinja chart drew an 80% line across the deciles; the
                  SPA rewrite dropped it and kept only this sentence. Restored
@@ -934,6 +932,7 @@ interface ProposalView extends ProposalRow {
               (perPageChange)="onPerPage('drift', $event)"
             />
           </sb-panel>
+          </div>
         </sb-async>
       }
 
@@ -1111,6 +1110,7 @@ interface ProposalView extends ProposalRow {
           [skeletonCols]="4"
           (retry)="store.load()"
         >
+          <div class="sb-stack">
           <sb-panel heading="Lifecycle funnel">
             @if (store.funnelChart().length) {
               <sb-histogram [bins]="store.funnelChart()" />
@@ -1138,6 +1138,7 @@ interface ProposalView extends ProposalRow {
                 <sb-histogram [bins]="store.tierChart()" />
               }
             </sb-panel>
+          </div>
           </div>
         </sb-async>
       }
@@ -1220,15 +1221,14 @@ interface ProposalView extends ProposalRow {
     />
   `,
   styles: `
-    /* This component has no :host layout of its own -- .head's
-       margin-bottom was the only thing separating the header from the
-       content below, so it moves to the primitive's own host tag. */
-    sb-section-head { margin-bottom: var(--space-14); }
+    /* v89: the page is one stack. Every @case body sits directly on this
+       grid, and --section-gap is the only space between panels (spec §4.2). */
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--section-gap); }
 
-    sb-panel { display: block; margin-top: var(--space-14); }
+    sb-panel { display: block; }
 
     .section {
-      margin: var(--space-20) 0 var(--space-10);
+      margin: 0;
       color: var(--text-faint);
       font-size: var(--text-micro);
       font-weight: 600;
@@ -1238,7 +1238,6 @@ interface ProposalView extends ProposalRow {
     .section:first-of-type { margin-top: 0; }
 
     .alert {
-      margin-top: var(--space-14);
       padding: var(--space-8) var(--space-10);
       border: 1px solid var(--warn);
       border-radius: var(--radius);
@@ -1254,7 +1253,7 @@ interface ProposalView extends ProposalRow {
     .panels {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      gap: var(--space-14);
+      gap: var(--section-gap);
       align-items: start;
     }
     /* Histograms share the same visual grammar, so keep them in their own
@@ -1263,7 +1262,8 @@ interface ProposalView extends ProposalRow {
     .chart-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
-      gap: var(--space-14);
+      gap: var(--section-gap);
+      align-items: start;
     }
     @media (max-width: 1000px) {
       .panels { grid-template-columns: 1fr; }
@@ -1275,8 +1275,7 @@ interface ProposalView extends ProposalRow {
     .kpi-row {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: var(--space-14);
-      margin-bottom: var(--space-14);
+      gap: var(--space-10);
     }
 
     /* -- equity curve and win/loss (v85 D39, R9-04) -- */
@@ -1298,21 +1297,9 @@ interface ProposalView extends ProposalRow {
     :host ::ng-deep tr.badge-validated td:first-child { border-left: 3px solid var(--quality-5); }
     :host ::ng-deep tr.badge-weak td:first-child { border-left: 3px solid var(--quality-2); }
     :host ::ng-deep tr.thin { opacity: 0.7; }
-    .horizon-bars { display: grid; gap: var(--space-10); }
-    .horizon-row {
-      display: grid;
-      grid-template-columns: 40px 1fr auto auto;
-      align-items: center;
-      gap: var(--space-8);
-      font-size: var(--text-table);
-    }
-    .horizon-key { color: var(--text-secondary); }
-    .horizon-value { color: var(--pos); }
-    .horizon-row.neg .horizon-value { color: var(--neg); }
-    .horizon-n { color: var(--text-faint); font-size: var(--text-chip); }
 
     /* -- Breakdowns band (v85 D41, R9-06) -- */
-    .breakdowns { margin: var(--space-14) 0; }
+    .breakdowns { margin: 0; }
     /* Direct children (the histogram .panels rows, Journal, By confidence
        level, By segment's own h2) have no gap of their own -- <details> is
        plain block flow, not a flex/grid parent with a shared gap -- so
@@ -1322,7 +1309,7 @@ interface ProposalView extends ProposalRow {
        flush with none). One rule, applied uniformly, reads as either
        "consistent breathing room" or "redundant space" depending which pair
        you were looking at before this existed. */
-    .breakdowns > * + * { margin-top: var(--space-14); }
+    .breakdowns > * + * { margin-top: 0; }
     .breakdowns summary {
       cursor: pointer;
       padding: var(--space-8) 0;
@@ -1418,6 +1405,7 @@ interface ProposalView extends ProposalRow {
       white-space: nowrap;
       font-size: var(--text-chip);
     }
+    dd .n { color: var(--text-faint); font-size: var(--text-chip); }
     /* Reaches inside sb-metric-chip's own encapsulated styles -- this
        component's scoped styles cannot select .value otherwise (same
        ::ng-deep reasoning as the DataTable row rules above). */
@@ -1721,15 +1709,14 @@ export class Analytics {
     };
   });
 
-  /** The largest magnitude across all horizons for the active measure --
-   *  `sb-magnitude`'s own scale, so no single bar's width depends on
-   *  anything but the whole row set it is being compared against. */
-  protected readonly horizonMax = computed(() => {
-    const values = this.store.horizonAgg()
-      .map((row) => this.measureValue(row))
-      .filter((v): v is number => v !== null)
-      .map(Math.abs);
-    return values.length ? Math.max(...values) : 1;
+  /** v89: signed bars around a centre zero. sb-magnitude is one-sided, which
+   *  anchored losses at the right edge and drew the one gain as a dot on the left. */
+  protected readonly horizonBars = computed<BarRow[]>(() =>
+    this.store.horizonAgg().map((row) => ({ label: row.key, value: this.measureValue(row), n: row.n })));
+
+  protected readonly measureFormat = computed(() => {
+    const totals = this.measure() === 'total_r';
+    return (value: number) => (totals ? rMultiple(value) : expectancy(value));
   });
 
   /* -- v85 D41 (R9-06): the Breakdowns band -----------------------------

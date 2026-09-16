@@ -292,8 +292,11 @@ describe('AnalyticsStore — the snapshot', () => {
         { key: 'Monday', n: 2, wins: 1, losses: 1, win_rate: 50, expectancy_r: 0.1, avg_r: 0.1, profit_factor: 1.1, total_pnl: 20 },
       ],
     } });
-    expect(store.directionHistogram()).toEqual([{ label: 'Long (n=6)', count: 66.7 }, { label: 'Short (n=0 — below 0, rate withheld)', count: 0 }]);
-    expect(store.dowHistogram().map((bin) => bin.label)).toEqual(['Monday (n=2)', 'Tuesday (n=0 — below 0, rate withheld)', 'Wednesday (n=5)', 'Thursday (n=0 — below 0, rate withheld)', 'Friday (n=0 — below 0, rate withheld)', 'Saturday (n=0 — below 0, rate withheld)', 'Sunday (n=0 — below 0, rate withheld)']);
+    expect(store.directionBars()).toEqual([
+      { label: 'Long', value: 66.7, n: 6, withheld: false },
+      { label: 'Short', value: null, n: 0, withheld: true },
+    ]);
+    expect(store.dowBars().map((row) => row.label)).toEqual(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
   });
 });
 
