@@ -99,9 +99,8 @@ account = register(sa.Table(
 
 account_balance_history = register(sa.Table(
     "account_balance_history", METADATA, sa.Column("id", sa.BigInteger, primary_key=True),
-    sa.Column("ts", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("ts", sa.TIMESTAMP(timezone=True), nullable=False, unique=True),
     sa.Column("balance", sa.Numeric, nullable=False), *standard_columns(),
-    sa.Index("account_balance_history_ts_idx", "ts"),
 ), ("ts", "balance"))
 
 journal_entries = register(sa.Table(
