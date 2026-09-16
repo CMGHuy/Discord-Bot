@@ -33,6 +33,20 @@ _RUNNER_SUBSTRINGS = ("runner_tp2", "runner_trail", "runner_be")
 
 _EXIT_REASON_SET = frozenset(EXIT_REASONS)
 
+#: Exact production close-reason texts (lowercased) that name an EXIT_REASONS
+#: bucket unambiguously -- spec v89 §3.5a, each traced to the code that writes
+#: it. Exact keys only; never a substring. A text not listed here stays
+#: "other", which `unmapped_exit_reasons` keeps reporting. Keyed on TEXT ONLY,
+#: so a text written under more than one status for different mechanisms
+#: (e.g. "auto (price monitor)", both a win and a loss path) cannot go here --
+#: see spec §3.5a for why that one stays "other".
+_EXIT_REASON_ALIASES: dict[str, str] = {
+    "loss": "stop",                     # plan_manager.py:553
+    "tp1_runner_be": "runner_be",       # plan_manager.py:630, 740
+    "tp1_runner_tp2": "runner_tp2",     # plan_manager.py:637, 749
+    "auto (near-tp stall)": "timeout",  # performance.py:1647, 1509
+}
+
 
 def resolve_outcome(trade: dict) -> str:
     """status is the coarse open/win/loss/closed vocabulary TradeLog has
@@ -785,6 +799,9 @@ def _exit_reason_bucket(trade: dict) -> str:
     text = close_reason_text(trade)
     if text in _EXIT_REASON_SET:
         return text
+    alias = _EXIT_REASON_ALIASES.get(text)
+    if alias is not None:
+        return alias
     outcome = resolve_outcome(trade)
     if outcome in _EXIT_REASON_SET:
         return outcome

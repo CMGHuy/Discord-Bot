@@ -86,3 +86,44 @@ def test_leg_reason_drives_the_bucket():
     trade["legs"] = [{"reason": "runner_tp2"}]
     rows = {r["reason"]: r for r in metrics.exit_reason_split([trade])}
     assert rows["runner_tp2"]["n"] == 1
+
+
+@pytest.mark.parametrize(("text", "status", "bucket"), [
+    # One row per string mapped in spec §3.5a, copied verbatim from
+    # production's /analytics/exit-quality unmapped_reasons on 2026-09-16.
+    pytest.param("loss", "loss", "stop", id="literal-loss"),
+    pytest.param("tp1_runner_be", "win", "runner_be", id="tp1-runner-be"),
+    pytest.param("tp1_runner_tp2", "win", "runner_tp2", id="tp1-runner-tp2"),
+    pytest.param("auto (near-tp stall)", "win", "timeout", id="near-tp-stall"),
+])
+def test_production_close_reasons_map_by_exact_text(text, status, bucket):
+    trade = {"status": status, "close_reason": text, "entry": 100.0, "stop_loss": 99.0,
+             "direction": "bullish", "exit_price": 100.0}
+    assert metrics._exit_reason_bucket(trade) == bucket
+
+
+def test_an_unlisted_text_that_merely_contains_a_mapped_word_is_still_other():
+    # Exact match only (metrics._exit_reason_bucket docstring): a substring
+    # rule is how a table like this starts lying.
+    trade = {"status": "win", "close_reason": "not a stop at all", "entry": 100.0,
+             "stop_loss": 99.0, "direction": "bullish", "exit_price": 101.0}
+    assert metrics._exit_reason_bucket(trade) == "other"
+
+
+@pytest.mark.parametrize(("text", "status"), [
+    pytest.param("auto (price monitor)", "win", id="price-monitor-win"),
+    pytest.param("auto (price monitor)", "loss", id="price-monitor-loss"),
+    pytest.param("", "win", id="empty-win"),
+    pytest.param("", "loss", id="empty-loss"),
+    pytest.param("manual", "closed", id="manual"),
+    pytest.param("manual (plan close, admin ui)", "closed", id="manual-plan-close"),
+])
+def test_production_texts_with_no_matching_bucket_stay_other(text, status):
+    # These six rows from spec §3.5a were considered and deliberately left
+    # unmapped: "auto (price monitor)" covers both a win (hit take-profit)
+    # and a loss (hit stop) mechanism under one text, which a text-only alias
+    # cannot safely disambiguate; an empty reason; and two operator-initiated
+    # closes with no EXIT_REASONS bucket of their own.
+    trade = {"status": status, "close_reason": text, "entry": 100.0, "stop_loss": 99.0,
+             "direction": "bullish", "exit_price": 100.0}
+    assert metrics._exit_reason_bucket(trade) == "other"

@@ -164,6 +164,35 @@ fallback. Anything ambiguous stays `other`. Tests use the real strings. While
 `other` exceeds 20%, the panel shows that share as a warning line above the
 donut rather than letting a grey ring pass as data.
 
+### 3.5a Production close reasons (UA16)
+
+Read from `/api/v1/analytics/exit-quality`'s `unmapped_reasons` on production,
+2026-09-16 (post-UA15 deploy). Ten distinct `(text, status)` pairs, 725
+trades total.
+
+| text | status | n | bucket | why |
+|---|---|---:|---|---|
+| `auto (price monitor)` | win | 167 | `other` | `_EXIT_REASON_ALIASES` keys on TEXT ONLY (spec constraint: exact match, no status parameter). `performance.py:1446-1471` writes this same text on both the `take_profit` branch (status `win`) and the `stop_loss` branch (status `loss`) -- one text, two mechanisms. Aliasing it would silently mis-bucket whichever status it wasn't written for, which is exactly the "could mean two buckets" case Step 1 says stays `other`. |
+| `` (empty) | win | 142 | `other` | No reason recorded -- always `other`, never guessed. |
+| `` (empty) | loss | 129 | `other` | Same. |
+| `auto (price monitor)` | loss | 129 | `other` | Same writer and same reasoning as the win row above. |
+| `loss` | loss | 86 | `stop` | `plan_manager.py:553`: `reason = "scratch" if is_be_stop else "loss"` -- the literal string `"loss"` is written only on the branch where the stop hit was NOT the breakeven-armed stop, and only ever with status `loss`. Text alone is unambiguous here (unlike the row above), so it aliases safely. |
+| `tp1_runner_be` | win | 36 | `runner_be` | `plan_manager.py:630`/`740`, `presentation/instructions.py:34`: the runner leg closed at its post-TP1 breakeven floor; text is written only on this branch. |
+| `tp1_runner_tp2` | win | 13 | `runner_tp2` | `plan_manager.py:637`/`749`: the runner leg hit TP2; text is written only on this branch. |
+| `auto (near-tp stall)` | win | 9 | `timeout` | `performance.py:1647`, always paired with `status="win"` (line 1643, unconditional). Mechanism documented at `performance.py:1509`: the "stall" check is explicitly the faster variant of the same near-TP early-exit family as `"auto (near-TP timeout)"` (`resolve_outcome`'s own `"timeout" in reason` branch) -- both close before the real target for the same reason, just on a different clock. |
+| `manual` | closed | 8 | `other` | `trade_commands.py:123`/`performance.py:1296`: an operator-initiated close. `EXIT_REASONS` has no manual-close bucket, so this stays `other` by design, not by omission. |
+| `manual (plan close, admin ui)` | closed | 6 | `other` | `trade_commands.py:120`. Same reasoning as `manual`. |
+
+Four rows get an alias (`stop`, `runner_be`, `runner_tp2`, `timeout`); six
+stay `other` on purpose -- including `auto (price monitor)` (296 of the 725,
+the single largest text), which is unmappable through a text-only alias
+because the same text covers both a win and a loss mechanism. A future plan
+that wants that share to resolve would need to key the alias on `(text,
+status)`, not just `text` -- not attempted here, since the spec constraint is
+exact-match-only and this plan does not reopen that data structure. Post-fix
+`other` share: rerun `/api/v1/analytics/exit-quality` after the next deploy
+and record it in the UA16 closing commit.
+
 ### 3.6 Calendar shows the future as flat days
 
 **Observed.** 17–30 September (future) render `0` P&L and `0` trades,
