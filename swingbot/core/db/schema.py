@@ -122,3 +122,42 @@ watchlist = register(sa.Table(
     sa.Column("ticker", sa.Text, nullable=False, unique=True),
     sa.Column("added_at", sa.TIMESTAMP(timezone=True), nullable=False), *standard_columns(),
 ), ("ticker", "added_at"))
+
+# Part 3 operational state.
+runtime_flags = register(sa.Table("runtime_flags", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True), sa.Column("name", sa.Text, nullable=False, unique=True),
+    sa.Column("set_at", sa.TIMESTAMP(timezone=True), nullable=False), *standard_columns()), ("name", "set_at"))
+bot_heartbeat = register(sa.Table("bot_heartbeat", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True), sa.Column("key", sa.Text, nullable=False, unique=True),
+    sa.Column("ts", sa.TIMESTAMP(timezone=True), nullable=False), *standard_columns()), ("key", "ts"))
+admin_jobs = register(sa.Table("admin_jobs", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True), sa.Column("job_id", sa.Text, nullable=False, unique=True),
+    sa.Column("kind", sa.Text, nullable=False), sa.Column("status", sa.Text, nullable=False),
+    sa.Column("started_at", sa.TIMESTAMP(timezone=True), nullable=False), sa.Column("finished_at", sa.TIMESTAMP(timezone=True)),
+    *standard_columns(), sa.Index("admin_jobs_status_idx", "status")), ("job_id", "kind", "status", "started_at", "finished_at"))
+scheduled_jobs = register(sa.Table("scheduled_jobs", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True), sa.Column("job", sa.Text, nullable=False, unique=True),
+    sa.Column("fired_on", sa.Text, nullable=False), *standard_columns()), ("job", "fired_on"))
+ui_preferences = register(sa.Table("ui_preferences", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True), sa.Column("owner", sa.Text, nullable=False, unique=True),
+    *standard_columns()), ("owner",))
+settings_audit = register(sa.Table("settings_audit", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True), sa.Column("ts", sa.TIMESTAMP(timezone=True), nullable=False),
+    *standard_columns(), sa.Index("settings_audit_ts_idx", "ts")), ("ts",))
+killswitch = register(sa.Table("killswitch", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True), sa.Column("key", sa.Text, nullable=False, unique=True),
+    sa.Column("engaged", sa.Boolean, nullable=False), sa.Column("engaged_at", sa.TIMESTAMP(timezone=True)),
+    *standard_columns()), ("key", "engaged", "engaged_at"))
+manual_close_notify = register(sa.Table("manual_close_notify", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True), sa.Column("queued_at", sa.TIMESTAMP(timezone=True), nullable=False),
+    *standard_columns(), sa.Index("manual_close_notify_queued_idx", "queued_at")), ("queued_at",))
+ticker_directory = register(sa.Table("ticker_directory", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True), sa.Column("symbol", sa.Text, nullable=False, unique=True),
+    sa.Column("name", sa.Text), *standard_columns(), sa.Index("ticker_directory_name_idx", "name")), ("symbol", "name"))
+tuning_results = register(sa.Table("tuning_results", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True), sa.Column("job_id", sa.Text, nullable=False, unique=True),
+    sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False), *standard_columns()), ("job_id", "created_at"))
+tuning_proposals = register(sa.Table("tuning_proposals", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True), sa.Column("filename", sa.Text, nullable=False, unique=True),
+    sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False), *standard_columns(),
+    sa.Index("tuning_proposals_created_idx", "created_at")), ("filename", "created_at"))

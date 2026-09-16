@@ -63,14 +63,19 @@ def _queue_notify(record: dict) -> None:
     the time this runs, and turning a successful close into a 500 because a
     notification could not be queued would be strictly worse.
     """
+    from swingbot.core.db import stages
     try:
-        path = _queue_path()
-        with _QUEUE_LOCK:
-            existing = read_json(path, [])
-            existing = existing if isinstance(existing, list) else []
-            existing.append(record)
-            atomic_write_json(path, existing)
-    except OSError as exc:
+        if stages.writes_json("notify_queue"):
+            path = _queue_path()
+            with _QUEUE_LOCK:
+                existing = read_json(path, [])
+                existing = existing if isinstance(existing, list) else []
+                existing.append(record)
+                atomic_write_json(path, existing)
+        if stages.writes_db("notify_queue"):
+            from swingbot.core.db.repositories.notify_queue import notify_queue_repo
+            notify_queue_repo().enqueue(record)
+    except Exception as exc:
         log.warning("could not queue manual-close notification: %s", exc)
 
 

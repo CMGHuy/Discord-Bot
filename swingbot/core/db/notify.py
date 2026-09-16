@@ -9,7 +9,7 @@ import sqlalchemy as sa
 # from admin/ by copying the contract rather than importing the watcher.
 CHANNELS: tuple[str, ...] = (
     "trades", "account", "analytics", "scan",
-    "journal", "bot", "risk", "watchlist", "jobs",
+    "journal", "bot", "risk", "watchlist", "jobs", "settings",
 )
 
 _IDENT = re.compile(r"^[a-z_][a-z0-9_]*$")

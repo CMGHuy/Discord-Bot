@@ -382,14 +382,20 @@ async def config_watcher():
                             log.warning("Could not post config-change notice to Discord: %s", _e)
 
     # --- Admin UI manual-close notification queue ---
-    if os.path.exists(runstate._MANUAL_CLOSE_QUEUE):
+    from swingbot.core.db import stages
+    if stages.reads_db("notify_queue"):
+        from swingbot.core.db.repositories.notify_queue import notify_queue_repo
+        _queued = notify_queue_repo().drain()
+    elif os.path.exists(runstate._MANUAL_CLOSE_QUEUE):
         try:
             with open(runstate._MANUAL_CLOSE_QUEUE, "r") as _qf:
                 _queued = json.load(_qf)
         except Exception as _qe:
             log.warning("Could not read manual_close_notify queue: %s", _qe)
             _queued = []
-        if _queued:
+    else:
+        _queued = []
+    if _queued:
             try:
                 os.remove(runstate._MANUAL_CLOSE_QUEUE)
             except OSError:
@@ -402,112 +408,108 @@ async def config_watcher():
                 log.warning("Failed to post manual-close notifications: %s", _ne)
 
     # --- Admin UI "Run !check now" trigger ---
-    if os.path.exists(runstate._TRIGGER_FILE):
-        try:
-            os.remove(runstate._TRIGGER_FILE)
-        except OSError:
-            pass  # already removed by a parallel tick or a concurrent process
-        else:
-            log.info("Admin UI triggered a manual !check scan.")
-            if not config.DISCORD_CHANNEL_TRADES_ID:
-                log.warning("CHANNEL_ID not set; cannot post scan results.")
+    if runstate.is_trigger_requested():
+        runstate.clear_trigger()
+        log.info("Admin UI triggered a manual !check scan.")
+        if not config.DISCORD_CHANNEL_TRADES_ID:
+            log.warning("CHANNEL_ID not set; cannot post scan results.")
+            return
+        channel = silence(bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
+        if channel is None:
+            try:
+                channel = silence(await bot.fetch_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
+            except Exception as _ce:
+                log.warning("Could not resolve channel %s for triggered scan: %s", config.DISCORD_CHANNEL_TRADES_ID, _ce)
                 return
-            channel = silence(bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
-            if channel is None:
-                try:
-                    channel = silence(await bot.fetch_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
-                except Exception as _ce:
-                    log.warning("Could not resolve channel %s for triggered scan: %s", config.DISCORD_CHANNEL_TRADES_ID, _ce)
-                    return
-            min_lv = config.MIN_ALERT_CONFIDENCE_LEVEL
-            # Post a live-updating progress message — same UX as the Discord
-            # !check command so the user sees per-ticker progress in real time.
-            progress_msg = await channel.send(
-                f"🔍 **Manual scan triggered from admin UI** · min confidence Lv{min_lv}"
-                f" · crawling data… 0%"
-            )
-            progress = scan_engine.ScanProgress()
+        min_lv = config.MIN_ALERT_CONFIDENCE_LEVEL
+        # Post a live-updating progress message — same UX as the Discord
+        # !check command so the user sees per-ticker progress in real time.
+        progress_msg = await channel.send(
+            f"🔍 **Manual scan triggered from admin UI** · min confidence Lv{min_lv}"
+            f" · crawling data… 0%"
+        )
+        progress = scan_engine.ScanProgress()
 
-            async def _ui_poll_progress():
-                last_shown = None
-                while True:
-                    await asyncio.sleep(2.0)
-                    if progress.stage == "starting":
-                        # Same fix as check_cmd's own poller (v56) -- the
-                        # default stage before _sync_run_scan's thread has
-                        # done anything, most commonly while queued behind
-                        # another scan holding _scan_lock. Without this
-                        # branch the generic "Analyzing" label below fires
-                        # with a literal 0/0 (0%), indistinguishable from
-                        # a genuinely stuck scan.
-                        label = "⏳ **Waiting to start** (UI trigger) — queued behind another scan"
-                    elif progress.stage == "crawling data":
-                        pct = round(progress.done / progress.total * 100) if progress.total else 0
-                        ticker_bit = f" `{progress.current_ticker}`" if progress.current_ticker else ""
+        async def _ui_poll_progress():
+            last_shown = None
+            while True:
+                await asyncio.sleep(2.0)
+                if progress.stage == "starting":
+                    # Same fix as check_cmd's own poller (v56) -- the
+                    # default stage before _sync_run_scan's thread has
+                    # done anything, most commonly while queued behind
+                    # another scan holding _scan_lock. Without this
+                    # branch the generic "Analyzing" label below fires
+                    # with a literal 0/0 (0%), indistinguishable from
+                    # a genuinely stuck scan.
+                    label = "⏳ **Waiting to start** (UI trigger) — queued behind another scan"
+                elif progress.stage == "crawling data":
+                    pct = round(progress.done / progress.total * 100) if progress.total else 0
+                    ticker_bit = f" `{progress.current_ticker}`" if progress.current_ticker else ""
+                    label = (
+                        f"📡 **Crawling** (UI trigger) — {progress.done}/{progress.total} "
+                        f"ticker(s) fetched ({pct}%){ticker_bit}"
+                    )
+                elif progress.stage == "building alerts":
+                    if progress.alerts_total:
                         label = (
-                            f"📡 **Crawling** (UI trigger) — {progress.done}/{progress.total} "
-                            f"ticker(s) fetched ({pct}%){ticker_bit}"
+                            f"📊 **Building alerts** (UI trigger) — "
+                            f"{progress.alerts_done}/{progress.alerts_total} done (generating charts…)"
                         )
-                    elif progress.stage == "building alerts":
-                        if progress.alerts_total:
-                            label = (
-                                f"📊 **Building alerts** (UI trigger) — "
-                                f"{progress.alerts_done}/{progress.alerts_total} done (generating charts…)"
-                            )
-                        else:
-                            label = (
-                                f"📊 **Deduplicating** (UI trigger) — "
-                                f"{progress.qualifying_found} qualifying scenario(s) found, merging…"
-                            )
                     else:
-                        ticker_bit = f" `{progress.current_ticker}`" if progress.current_ticker else ""
-                        found_bit = (
-                            f" · **{progress.qualifying_found} qualifying** so far"
-                            if progress.qualifying_found else ""
-                        )
                         label = (
-                            f"🔬 **Analyzing** (UI trigger) — {progress.done}/{progress.total} "
-                            f"ticker·horizon combo(s) ({progress.pct}%){ticker_bit}{found_bit}"
+                            f"📊 **Deduplicating** (UI trigger) — "
+                            f"{progress.qualifying_found} qualifying scenario(s) found, merging…"
                         )
-                    if label != last_shown:
-                        try:
-                            await progress_msg.edit(content=label)
-                        except discord.NotFound:
-                            return
-                        last_shown = label
+                else:
+                    ticker_bit = f" `{progress.current_ticker}`" if progress.current_ticker else ""
+                    found_bit = (
+                        f" · **{progress.qualifying_found} qualifying** so far"
+                        if progress.qualifying_found else ""
+                    )
+                    label = (
+                        f"🔬 **Analyzing** (UI trigger) — {progress.done}/{progress.total} "
+                        f"ticker·horizon combo(s) ({progress.pct}%){ticker_bit}{found_bit}"
+                    )
+                if label != last_shown:
+                    try:
+                        await progress_msg.edit(content=label)
+                    except discord.NotFound:
+                        return
+                    last_shown = label
 
-            poller = asyncio.create_task(_ui_poll_progress())
-            try:
-                alerts = await scan_engine.run_scan(require_confirmation=False, bot=bot, progress=progress)
-            finally:
-                poller.cancel()
+        poller = asyncio.create_task(_ui_poll_progress())
+        try:
+            alerts = await scan_engine.run_scan(require_confirmation=False, bot=bot, progress=progress)
+        finally:
+            poller.cancel()
 
-            await _send_alerts(channel, alerts, route_by_confidence=True)
-            f = progress.funnel
-            if progress.stopped:
-                summary = (
-                    f"🛑 **Triggered scan stopped early** (by the admin UI's Stop button or `!stop`) — "
-                    f"**{len(alerts)} alert(s)** built from what completed before the stop."
-                )
-            elif f:
-                lv_counts = f.get("conf_level_counts", {})
-                lv_breakdown = (
-                    "  ".join(f"Lv{lv}:{cnt}" for lv, cnt in sorted(lv_counts.items()))
-                    if lv_counts else "none"
-                )
-                summary = (
-                    f"✅ **Triggered scan complete** — {f['tickers']} ticker(s) · "
-                    f"{f['fully_qualifying']} fully qualifying → **{len(alerts)} alert(s)**\n"
-                    f"Confidence breakdown: {lv_breakdown}  (min Lv{min_lv})"
-                )
-            else:
-                summary = f"✅ **Triggered scan complete** — {len(alerts)} alert(s) found (min confidence: Lv{min_lv})."
-            try:
-                await progress_msg.edit(content=summary)
-            except discord.NotFound:
-                await channel.send(summary)
-            log.info("Triggered scan complete — %d alert(s) posted%s.", len(alerts),
-                      " (stopped early)" if progress.stopped else "")
+        await _send_alerts(channel, alerts, route_by_confidence=True)
+        f = progress.funnel
+        if progress.stopped:
+            summary = (
+                f"🛑 **Triggered scan stopped early** (by the admin UI's Stop button or `!stop`) — "
+                f"**{len(alerts)} alert(s)** built from what completed before the stop."
+            )
+        elif f:
+            lv_counts = f.get("conf_level_counts", {})
+            lv_breakdown = (
+                "  ".join(f"Lv{lv}:{cnt}" for lv, cnt in sorted(lv_counts.items()))
+                if lv_counts else "none"
+            )
+            summary = (
+                f"✅ **Triggered scan complete** — {f['tickers']} ticker(s) · "
+                f"{f['fully_qualifying']} fully qualifying → **{len(alerts)} alert(s)**\n"
+                f"Confidence breakdown: {lv_breakdown}  (min Lv{min_lv})"
+            )
+        else:
+            summary = f"✅ **Triggered scan complete** — {len(alerts)} alert(s) found (min confidence: Lv{min_lv})."
+        try:
+            await progress_msg.edit(content=summary)
+        except discord.NotFound:
+            await channel.send(summary)
+        log.info("Triggered scan complete — %d alert(s) posted%s.", len(alerts),
+                  " (stopped early)" if progress.stopped else "")
 
 
 @config_watcher.error

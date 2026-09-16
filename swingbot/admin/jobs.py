@@ -104,6 +104,10 @@ def _log_dir() -> str:
 
 
 def _read_jobs() -> dict:
+    from swingbot.core.db import stages
+    if stages.reads_db("jobs"):
+        from swingbot.core.db.repositories.jobs import jobs_repo
+        return jobs_repo().all_jobs()
     path = _jobs_path()
     if not os.path.exists(path):
         return {}
@@ -115,10 +119,17 @@ def _read_jobs() -> dict:
 
 
 def _write_jobs(jobs: dict) -> None:
-    path = _jobs_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(jobs, f, indent=2)
+    from swingbot.core.db import stages
+    if stages.writes_json("jobs"):
+        path = _jobs_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(jobs, f, indent=2)
+    if stages.writes_db("jobs"):
+        from swingbot.core.db.repositories.jobs import jobs_repo
+        repository = jobs_repo()
+        for record in jobs.values():
+            repository.put(record)
 
 
 def _pid_alive(pid: int) -> bool:

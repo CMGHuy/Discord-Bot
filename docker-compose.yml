@@ -45,8 +45,15 @@ services:
       POSTGRES_DB: swingbot
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
     volumes:
-      # Docker-managed storage avoids host bind-mount ownership/fsync hazards.
-      - pgdata:/var/lib/postgresql/data
+      # Mounted at the parent dir, not .../data -- the postgres 18+ image
+      # defaults PGDATA to a version-specific subdirectory of this path
+      # (pg_ctlcluster-style, docker-library/postgres#1259) and refuses to
+      # start if it instead finds a distinct mount sitting at the old
+      # hardcoded .../data path, even an empty one, to avoid silently
+      # orphaning whatever a bind/volume there was meant to persist. Mounting
+      # the parent is also what a future major bump needs for
+      # `pg_upgrade --link` to work across the mount boundary.
+      - pgdata:/var/lib/postgresql
     # Intentionally unpublished: bot and admin use the internal Compose
     # network; maintenance uses `docker compose exec db psql ...`.
     healthcheck:
@@ -69,7 +76,9 @@ services:
     ports:
       - "127.0.0.1:55432:5432"
     tmpfs:
-      - /var/lib/postgresql/data
+      # See the `db` service's volumes: comment -- same parent-dir mount,
+      # same postgres 18+ layout requirement.
+      - /var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U swingbot -d swingbot_test"]
       interval: 5s
