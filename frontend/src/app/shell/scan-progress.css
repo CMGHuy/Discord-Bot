@@ -1,0 +1,78 @@
+/* Over the workspace, not in it. `.workspace` is already `position: relative`
+   for the route-loading overlay, so this anchors to the same box. An
+   automatic scan runs every SCAN_INTERVAL_MINUTES all session; a strip in the
+   flow would shunt the page down 40px and back, several times an hour. */
+:host {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 9;
+  pointer-events: none;
+}
+
+.strip {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-14);
+  /* Legible over whatever it covers without hiding it outright. */
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(2px);
+  animation: scan-strip-in var(--transition) ease-out;
+}
+
+.track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width var(--transition) linear;
+}
+
+.caption {
+  margin: 0;
+  font-size: var(--text-micro);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+/* No percentage is known, so the bar reports motion and nothing else. */
+.fill.sweeping {
+  width: 35% !important;
+  transition: none;
+  animation: scan-sweep 1.4s ease-in-out infinite;
+}
+
+/* The bot has gone quiet. Everything that reads as "live" comes off: the
+   sweep stops, the fill drops to the warning colour, and the caption says how
+   long it has been. A frozen bar that still looks current is the failure this
+   whole component exists to prevent. */
+.strip.stalled .fill {
+  background: var(--warn);
+  animation: none;
+}
+.strip.stalled .caption { color: var(--warn); }
+
+.strip.complete .fill { background: var(--pos, var(--accent)); }
+
+@keyframes scan-sweep {
+  0%   { margin-left: -35%; }
+  100% { margin-left: 100%; }
+}
+
+@keyframes scan-strip-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .strip { animation: none; }
+  .fill { transition: none; }
+  /* Still distinguishable from a determinate bar -- it just does not travel. */
+  .fill.sweeping { animation: none; width: 100% !important; opacity: 0.4; }
+}

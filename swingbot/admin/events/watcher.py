@@ -72,6 +72,10 @@ _DATA_PATHS: tuple[tuple[str, str], ...] = (
     ("stop_scan.flag", "scan"),
     ("scan_snapshots.json", "scan"),
     ("scan_telemetry.jsonl", "scan"),
+    # Rewritten roughly once a second for the life of a scan and deleted when
+    # it ends, so this is the one watched path that moves continuously -- and
+    # the debounce below is what keeps that to one event per settled burst.
+    ("scan_progress.json", "scan"),
     ("bot_heartbeat.json", "bot"),
     ("killswitch.json", "risk"),
     ("watchlist.json", "watchlist"),

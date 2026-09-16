@@ -32,7 +32,7 @@ from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.scan_params import ScanParams
 
-from . import analyze, dedup, fetch, runstate, telemetry
+from . import analyze, dedup, fetch, progress_store, runstate, telemetry
 from .analyze import paper_trade_decision
 from .embeds import (
     build_embed, build_simple_alert, notify_closed_trades, notify_near_close,
@@ -963,9 +963,14 @@ async def run_scan(horizon_filter: str = "all", require_confirmation: bool = Tru
         runstate._clear_stop()
         runstate._mark_running(True)
         try:
-            alerts, newly_closed, near_close_warnings = await asyncio.to_thread(
-                _sync_run_scan, horizon_filter, require_confirmation, progress, min_confluence
-            )
+            # Inside the lock and inside _mark_running, so the published
+            # record exists for exactly the window the admin reports the scan
+            # as running -- a bar that outlives its flag, or vice versa, is
+            # the one thing a progress indicator must never do.
+            with progress_store.publishing(progress):
+                alerts, newly_closed, near_close_warnings = await asyncio.to_thread(
+                    _sync_run_scan, horizon_filter, require_confirmation, progress, min_confluence
+                )
         finally:
             runstate._mark_running(False)
     elapsed = time.monotonic() - started

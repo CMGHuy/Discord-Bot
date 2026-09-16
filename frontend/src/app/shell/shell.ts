@@ -25,6 +25,7 @@ import { RouteRefreshService } from '../routing/route-refresh.service';
 import { RouteTitleService } from '../routing/route-title.service';
 import { SessionStore } from '../stores/session.store';
 import { ConnectionStatus } from './connection-status';
+import { ScanProgressStrip } from './scan-progress';
 import { Tape } from './tape/tape';
 import { ToastHost } from './toast-host';
 
@@ -60,6 +61,7 @@ const ZOOM_DEFAULT = 100;
   selector: 'sb-shell',
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive, ConnectionStatus, ToastHost,
+    ScanProgressStrip,
     Button, Icon, ProfileMenu, Tape,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -10,7 +10,7 @@ import {
 
 import { ApiClient } from '../api/api-client';
 import { EventStream } from '../api/event-stream';
-import { Health } from '../api/models';
+import { Health, ScanProgressRecord } from '../api/models';
 
 /** What the shell's indicator shows. `dead` is not an EventStream state:
  *  it means the fallback itself is failing, i.e. the admin is unreachable
@@ -38,6 +38,19 @@ interface ConnectionStateSlice {
    * caller since NG4.
    */
   health: Health | null;
+  /**
+   * The scan progress strip's two facts, read from the same `/system/scan`
+   * payload the bot-liveness fields above come from.
+   *
+   * They live in THIS store rather than `system.store` because the strip is
+   * shell chrome: `system.store` only exists while the System workspace is
+   * open, so a bar wired to it would appear on one page out of a dozen.
+   *
+   * `scanProgress` is null whenever the bot is publishing nothing -- which
+   * the strip must render as "no bar", never as 0%.
+   */
+  scanRunning: boolean;
+  scanProgress: ScanProgressRecord | null;
 }
 
 /**
@@ -56,6 +69,8 @@ export const ConnectionStore = signalStore(
     botHealthy: null,
     unreachable: false,
     health: null,
+    scanRunning: false,
+    scanProgress: null,
   }),
   withComputed((store, events = inject(EventStream)) => ({
     state: computed<ConnectionState>(() =>
@@ -111,8 +126,13 @@ export const ConnectionStore = signalStore(
             botAlive: scan.bot_alive,
             botHealthy: scan.bot_healthy,
             botLastSeen: scan.bot_last_seen,
+            scanRunning: scan.running,
+            scanProgress: scan.progress,
             unreachable: false,
           }),
+        // The strip is deliberately left as it was: one failed poll while the
+        // stream is live is a blip the next event corrects, and blanking the
+        // bar on it would make it flicker through every scan.
         error: () => patchState(store, { unreachable: true }),
       });
     },
@@ -125,9 +145,19 @@ export const ConnectionStore = signalStore(
       // inside the effect is what subscribes to it; the effect's first run
       // is also the initial load, so there is no separate bootstrap call
       // that could drift from the refetch path.
+      // The `bot` event is the heartbeat file moving; `scan` is the running
+      // scan rewriting `data/scan_progress.json` about once a second. Both
+      // land in the one payload this store reads, so both belong to ONE
+      // effect -- two effects would each fire on their first run and make
+      // every startup refetch twice.
+      //
+      // `scan` is what gives the progress strip its resolution: on `bot`
+      // alone the bar would move once per heartbeat, minutes apart.
       const bot = events.changes('bot');
+      const scan = events.changes('scan');
       effect(() => {
         bot();
+        scan();
         store.refresh();
       });
     },

@@ -103,6 +103,11 @@ def test_default_paths_realise_the_spec_taxonomy(data_dir):
     assert scan_paths == {
         "scan_running.flag", "scan_paused.flag", "trigger_check.flag",
         "stop_scan.flag", "scan_snapshots.json", "scan_telemetry.jsonl",
+        # The running scan's progress record. Watched under the same concern
+        # as the running flag on purpose: the SPA refetches one scan-status
+        # payload that carries both, so a second event type would only ever
+        # produce a second request for the same bytes.
+        "scan_progress.json",
     }
 
 

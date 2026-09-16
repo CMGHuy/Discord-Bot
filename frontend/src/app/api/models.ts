@@ -860,6 +860,34 @@ export interface BotRestartResult {
   message: string;
 }
 
+/** A running scan's published progress, or absent when none is running.
+ *
+ *  `pct` is a **whole-scan** figure the bot derives, not the ratio of the
+ *  `done`/`total` beside it: a scan runs three phases and resets its counters
+ *  at each one, so those two numbers describe the *current phase* only.
+ *  Deriving a bar from them would run 0->100 three times per scan. See
+ *  `swingbot/core/scanning/progress_store.py` for the phase bands.
+ *
+ *  `at` is what makes a stalled scan visible. A bot that dies mid-scan leaves
+ *  its running flag set and this record frozen; without the timestamp the UI
+ *  would show a live-looking bar that will never move again. */
+export interface ScanProgressRecord {
+  /** ISO 8601, UTC. When the bot last published -- not when the scan began. */
+  at: string;
+  /** 0-100 across the whole scan. */
+  pct: number;
+  /** The bot's own phase name: `starting`, `crawling data`, `analyzing`,
+   *  `building alerts`. Mapped to display text in the SPA, not by the bot. */
+  stage: string;
+  current_ticker: string | null;
+  /** Progress within `stage`, whose unit changes with it: tickers while
+   *  crawling, ticker x horizon checks while analysing, alerts while
+   *  building. */
+  done: number;
+  total: number;
+  qualifying_found: number;
+}
+
 export interface ScanStatus {
   pending: boolean;
   triggered_at: string | null;
@@ -875,6 +903,9 @@ export interface ScanStatus {
   /** Null when the bot has never reported -- distinct from false. */
   bot_session_active: boolean | null;
   bot_scan_paused: boolean | null;
+  /** Null whenever no scan is publishing. Render that as "no bar", never as
+   *  0% -- "a scan has started and achieved nothing" is a different claim. */
+  progress: ScanProgressRecord | null;
 }
 
 export interface ScanCommandResult {
