@@ -23,10 +23,12 @@ import {
   AnalyticsPlans,
   AnalyticsSnapshot,
   AnalyticsStrategies,
+  HoldingBucket,
   RiskMetrics,
 } from '../api/models';
 import { DonutSlice } from '../ui/donut';
 import { HistogramBin } from '../ui/histogram';
+import { BarRow } from '../ui/bar-list';
 import { LineChartSeries } from '../ui/line-chart';
 
 /* -- row shapes ---------------------------------------------------------
@@ -412,14 +414,30 @@ export function rateOrWithheld(n: number, rate: number | null | undefined, floor
   return { count: rate, withheld: false };
 }
 
-function zeroFilledHistogram(rows: BreakdownRow[], order: readonly (readonly [string, string])[], floor: number): HistogramBin[] {
+export function zeroFilledBars(rows: BreakdownRow[], order: readonly (readonly [string, string])[], floor: number): BarRow[] {
   const byKey = new Map(rows.map((row) => [row.key, row]));
   return order.map(([key, label]) => {
     const row = byKey.get(key);
     const n = row?.n ?? 0;
     const value = rateOrWithheld(n, row?.win_rate, floor);
+    return { label, value: value.withheld ? null : value.count, n, withheld: value.withheld };
+  });
+}
+
+function zeroFilledHistogram(rows: BreakdownRow[], order: readonly (readonly [string, string])[], floor: number): HistogramBin[] {
+  const byKey = new Map(rows.map((row) => [row.key, row]));
+  return order.map(([key, label]) => {
+    const row = byKey.get(key); const n = row?.n ?? 0; const value = rateOrWithheld(n, row?.win_rate, floor);
     return { label: value.withheld ? `${label} (n=${n} — below ${floor}, rate withheld)` : `${label} (n=${n})`, count: value.count };
   });
+}
+
+export function rateBars(buckets: readonly HoldingBucket[]): BarRow[] {
+  return buckets.map((bucket) => ({ label: bucket.bucket, value: bucket.win_rate, n: bucket.n, withheld: bucket.win_rate === null }));
+}
+
+export function monthBars(rows: readonly { month: string; return_pct: number | null; n: number }[]): BarRow[] {
+  return rows.map((row) => ({ label: row.month, value: row.return_pct, n: row.n }));
 }
 /** One histogram bin. */
 export interface Bin {
