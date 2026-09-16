@@ -42,6 +42,7 @@ import { Magnitude } from '../../ui/magnitude';
 import { Select, TextInput } from '../../ui/form-controls';
 import { ControlRow } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
+import { Icon } from '../../ui/icon';
 import { SectionHead } from '../../ui/section-head';
 import { ConfidenceCell } from '../../ui/confidence-cell';
 import { ControlBar } from '../../ui/control-bar';
@@ -122,6 +123,7 @@ interface LaneChip {
     Magnitude,
     QualityChip,
     RowLink,
+    Icon,
     SectionHead,
   ],
   template: `
@@ -333,7 +335,15 @@ interface LaneChip {
     <!-- cells ---------------------------------------------------------- -->
 
     <ng-template #numCell let-row>
-      <sb-row-link [link]="['/trades', row.id]">{{ shortId(row) }}</sb-row-link>
+      <sb-row-link [link]="['/trades', row.id]">
+        {{ shortId(row) }}
+        <!-- v79 split a scaled-out position into one row per leg, both
+             carrying the same id -- unmarked, the TP1 leg reads as a
+             duplicate of the runner row that finished it. -->
+        @if (isPartialLeg(row)) {
+          <sb-icon name="partial" class="leg-icon" title="TP1 partial exit — the runner leg closed separately" />
+        }
+      </sb-row-link>
     </ng-template>
 
     <ng-template #statusCell let-row>
@@ -482,6 +492,9 @@ interface LaneChip {
     .count { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
 
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
+
+    /* Muted, not accent: the glyph flags the leg, it isn't part of the id. */
+    sb-row-link .leg-icon { color: var(--text-muted); flex: none; }
 
     /* No size or colour of its own -- it used to render smaller and muted,
        which read as a footnote rather than the dollar side of the same
@@ -881,6 +894,15 @@ export class Trades {
    *  detail page it links to. */
   protected shortId(row: TradeRow): string {
     return row.id.length > 6 ? row.id.slice(-6) : row.id;
+  }
+
+  /** True for the TP1 leg of a v79 scale-out split, never for the runner
+   *  leg that finishes it -- the runner IS the position's real close, so
+   *  only the earlier partial exit needs a mark to explain why its row
+   *  shares a hash with another one. Same rule dashboard.ts's own
+   *  isPartialLeg uses. */
+  protected isPartialLeg(row: TradeRow): boolean {
+    return row.leg_total > 1 && row.leg_index < row.leg_total - 1;
   }
 
   /**

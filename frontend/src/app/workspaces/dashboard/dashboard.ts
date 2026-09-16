@@ -47,6 +47,7 @@ import { Panel } from '../../ui/layout';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Hint } from '../../ui/hint';
 import { RowLink } from '../../ui/row-link';
+import { Icon } from '../../ui/icon';
 import { PlanLifecycleDiagram } from '../../ui/plan-lifecycle-diagram';
 import {
   expectedPnlPct,
@@ -95,7 +96,7 @@ import { MarketMovers } from './panels/market-movers';
   imports: [
     Magnitude, Panel, PositionsTable, RowActions, ConfirmDialog,
     StatusCell, PlanCell, ConfidenceCell, Async, Button, Flash,
-    Hint, PlanLifecycleDiagram, RowLink, TradingPerformance,
+    Hint, PlanLifecycleDiagram, RowLink, Icon, TradingPerformance,
     RecentActivity, MarketMovers,
   ],
   // TradesStore, not DashboardStore -- that one is provided at the route
@@ -309,7 +310,16 @@ import { MarketMovers } from './panels/market-movers';
          just trims it to something a 3rem column can hold; the full id is
          on the detail page this links to, same pattern as trades.ts. -->
     <ng-template #numCell let-row>
-      <sb-row-link [link]="['/trades', row.id]">{{ shortId(row) }}</sb-row-link>
+      <sb-row-link [link]="['/trades', row.id]">
+        {{ shortId(row) }}
+        <!-- v79 split a scaled-out position into one row per leg, both
+             carrying the same id -- on the Closed tab that reads as a
+             duplicate row unless the TP1 leg is marked apart from the
+             runner that finished it. -->
+        @if (isPartialLeg(row)) {
+          <sb-icon name="partial" class="leg-icon" title="TP1 partial exit — the runner leg closed separately" />
+        }
+      </sb-row-link>
     </ng-template>
 
     <!-- A real anchor, not a click handler: row activation is mouse-only by
@@ -478,6 +488,9 @@ import { MarketMovers } from './panels/market-movers';
        even on hover, so the old underline becomes the primitive's own
        background-tint hover instead. */
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
+
+    /* Muted, not accent: the glyph flags the leg, it isn't part of the id. */
+    sb-row-link .leg-icon { color: var(--text-muted); flex: none; }
 
     /* No size or weight of its own -- it used to render smaller than the %
        it rides beside, which read as a footnote rather than the dollar side
@@ -859,6 +872,15 @@ export class Dashboard {
    *  don't otherwise depend on each other. */
   protected shortId(row: TradeRow): string {
     return row.id.length > 6 ? row.id.slice(-6) : row.id;
+  }
+
+  /** True for the TP1 leg of a v79 scale-out split, never for the runner
+   *  leg that finishes it -- the runner IS the position's real close, so
+   *  only the earlier partial exit needs a mark to explain why its row
+   *  shares a hash with another one. Same rule trades.ts's own
+   *  isPartialLeg uses. */
+  protected isPartialLeg(row: TradeRow): boolean {
+    return row.leg_total > 1 && row.leg_index < row.leg_total - 1;
   }
 
   /** sb-magnitude's max for the R column. Not an observed max from the
