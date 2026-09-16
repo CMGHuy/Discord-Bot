@@ -338,10 +338,11 @@ interface LaneChip {
       <sb-row-link [link]="['/trades', row.id]">
         {{ shortId(row) }}
         <!-- v79 split a scaled-out position into one row per leg, both
-             carrying the same id -- unmarked, the TP1 leg reads as a
-             duplicate of the runner row that finished it. -->
+             carrying the same id -- unmarked, the later-closing leg reads
+             as a duplicate of the earlier partial exit it shares an id
+             with. -->
         @if (isPartialLeg(row)) {
-          <sb-icon name="partial" class="leg-icon" title="TP1 partial exit — the runner leg closed separately" />
+          <sb-icon name="partial" class="leg-icon" title="Closed after an earlier partial exit of the same position" />
         }
       </sb-row-link>
     </ng-template>
@@ -902,13 +903,13 @@ export class Trades {
     return row.id.length > 6 ? row.id.slice(-6) : row.id;
   }
 
-  /** True for the TP1 leg of a v79 scale-out split, never for the runner
-   *  leg that finishes it -- the runner IS the position's real close, so
-   *  only the earlier partial exit needs a mark to explain why its row
-   *  shares a hash with another one. Same rule dashboard.ts's own
-   *  isPartialLeg uses. */
+  /** True for every leg of a v79 scale-out split except the first-closed
+   *  one -- `leg_index` is assigned in the order legs actually realized,
+   *  so leg 0 is always the earliest close and needs no mark; every later
+   *  leg shares leg 0's hash and closed after it, so it gets the icon.
+   *  Same rule dashboard.ts's own isPartialLeg uses. */
   protected isPartialLeg(row: TradeRow): boolean {
-    return row.leg_total > 1 && row.leg_index < row.leg_total - 1;
+    return row.leg_total > 1 && row.leg_index > 0;
   }
 
   /**
