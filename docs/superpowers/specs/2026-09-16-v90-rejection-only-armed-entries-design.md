@@ -269,7 +269,9 @@ behaviour outside the Stage 1 window before the corresponding stage runs.
 - `swingbot/core/backtesting/armed_measurement.py` — `MODES` deleted, `B_GRID`
   refined, `CELLS` rebuilt over three axes.
 - `scripts/backtest/measure_armed_entries.py` — unchanged in shape; the
-  overlap report (§3.3) added to `summary`.
+  overlap report (§3.3) rendered into the Stage 1 doc by `select` (where
+  §4.3 requires it), and `OUT_ROOT` moved to `data/v90` so v88's run stays
+  intact as the comparison input.
 - `swingbot/core/market/reaction.py` — **not modified.**
 - Results under `docs/superpowers/results/`: Stage 1 selection (full 30-cell
   table, plateau reports on all three axes, the rule quoted, the overlap
