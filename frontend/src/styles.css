@@ -215,6 +215,20 @@ a:hover {
   --register-label: var(--text-micro);
 }
 
+/* v89 -- the one way sibling panels are spaced (spec §4.2). */
+.sb-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--section-gap);
+}
+.sb-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--row-min, 320px)), 1fr));
+  align-items: start;
+  gap: var(--section-gap);
+}
+
 /* Cell-level value feedback. Scoped to the cell, never the card -- see
    tokens.css on why a card flash under real-time push is a flicker. */
 @keyframes flash-up { from { background: var(--pos-soft); } to { background: transparent; } }

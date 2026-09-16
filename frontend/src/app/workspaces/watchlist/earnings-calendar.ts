@@ -164,7 +164,7 @@ interface DayCell {
       gap: 1px;
       padding: var(--space-4);
       background: var(--surface);
-      border-radius: var(--radius-sm);
+      border-radius: var(--radius);
     }
     .symbol { color: var(--text); font-family: var(--font-mono); font-size: var(--text-chip); font-weight: 600; }
     .time {

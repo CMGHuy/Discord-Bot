@@ -60,6 +60,9 @@ import { ControlRow } from './layout';
     </dialog>
   `,
   styles: `
+    /* v89: a closed dialog is display:none, but this host element is not,
+       so in a grid parent it became a zero-height item that added a second gap. */
+    :host { display: contents; }
     dialog {
       max-width: 380px;
       padding: var(--space-20);

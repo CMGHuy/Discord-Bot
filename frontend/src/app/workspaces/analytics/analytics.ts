@@ -1382,7 +1382,7 @@ interface ProposalView extends ProposalRow {
     .glossary summary { cursor: pointer; color: var(--text-faint); }
     .glossary dl, .lines { display: grid; margin: 0; }
     .glossary dl { gap: var(--space-6); margin-top: var(--space-8); }
-    .glossary dt { color: var(--text-primary); font-weight: 600; }
+    .glossary dt { color: var(--text); font-weight: 600; }
     .glossary dd { margin: 0; line-height: 1.5; }
     .sub {
       margin: var(--space-8) 0 var(--space-4);
@@ -1392,7 +1392,7 @@ interface ProposalView extends ProposalRow {
     .lines {
       gap: var(--space-4);
       padding-left: var(--space-8);
-      color: var(--text-primary);
+      color: var(--text);
     }
 
     /* -- SR50: the snapshot's panels ------------------------------------ */
