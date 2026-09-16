@@ -910,7 +910,7 @@ export const AnalyticsStore = signalStore(
     monthHistogram: computed<HistogramBin[]>(() =>
       (performance()?.calendar ?? []).map((month) => ({
         label: month.month,
-        count: month.return_pct,
+        count: month.return_pct ?? 0,
       }))),
 
     /* -- SR55: the journal's analytics half ----------------------------- */

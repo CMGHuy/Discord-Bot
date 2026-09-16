@@ -295,10 +295,10 @@ export interface Dashboard {
   open_trades: number;
   avg_confidence: number | null;
   win_rate: number | null;
-  expectancy_r: number | null;
-  payoff_ratio: number | null;
   win_rate_n: number;
+  expectancy_r: number | null;
   expectancy_n: number;
+  payoff_ratio: number | null;
   equity_30d: EquitySeries;
   position_premium: Record<string, unknown>;
   /** SR53 — the five plan-lifecycle counts, keyed by status. Loosely typed
@@ -444,8 +444,10 @@ export interface AnalyticsPerformance {
   relocated: Record<string, unknown>;
   /** All-time, NOT scoped by the range — see `AnalyticsDerived`. */
   win_rate: number | null;
+  win_rate_n: number;
   /** All-time, NOT scoped by the range — see `AnalyticsDerived`. */
   expectancy_r: number | null;
+  expectancy_n: number;
   by_confidence: Record<string, unknown>;
   range: {
     from: string | null;
@@ -458,7 +460,7 @@ export interface AnalyticsPerformance {
   rolling_returns: { date: string; return_pct: number }[];
   holding_period_split: HoldingBucket[];
   risk_reward_split: HoldingBucket[];
-  calendar: { month: string; return_pct: number; n: number }[];
+  calendar: { month: string; return_pct: number | null; pnl?: number; n: number }[];
   cumulative_by_strategy: Record<string, { date: string; cum_pct: number }[]>;
   benchmark: { spy_cum: Record<string, number> };
 }
@@ -531,6 +533,7 @@ export interface AnalyticsCalibration {
 /** `GET /analytics/exit-quality`: all-time journal exit diagnostics. */
 export interface AnalyticsExitQuality {
   exit_reasons: unknown[];
+  unmapped_reasons: { status: string; text: string; n: number }[];
   hold_by_outcome: unknown;
   efficiency: { bins: unknown[]; n: number; median: number | null };
   mae: { bins: unknown[]; n: number; median: number | null };

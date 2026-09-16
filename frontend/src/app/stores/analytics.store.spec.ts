@@ -70,7 +70,9 @@ const PERFORMANCE: AnalyticsPerformance = {
     avg_holding_days: 9.2,
   },
   win_rate: 61.8,
+  win_rate_n: 34,
   expectancy_r: 0.42,
+  expectancy_n: 34,
   by_confidence: {
     '2': { total: 5, open: 1, closed: 4, wins: 2, losses: 2, win_rate: 50 },
     '1': { total: 3, open: 0, closed: 3, wins: 1, losses: 2, win_rate: 33.3 },
