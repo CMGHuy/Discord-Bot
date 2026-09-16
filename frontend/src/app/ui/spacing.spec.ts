@@ -47,16 +47,6 @@ describe('design tokens are defined before they are used', () => {
 const PANEL_ELEMENTS = /^(sb-panel|sb-section-head|sb-async|sb-data-table|sb-exit-quality|sb-strategy-contribution)$/;
 const LAYOUT_CLASSES = new Set(['panels', 'chart-grid', 'kpi-row', 'bottom-row', 'split', 'section', 'breakdowns', 'sb-stack', 'sb-row']);
 
-/** Exceptions are removed by their owning UA8–UA13 task. */
-export const PENDING_MARGIN_RULES: ReadonlySet<string> = new Set<string>([
-  'app/workspaces/analytics/analytics.ts|sb-section-head',
-  'app/workspaces/analytics/analytics.ts|sb-panel',
-  'app/workspaces/analytics/analytics.ts|.section',
-  'app/workspaces/analytics/analytics.ts|.kpi-row',
-  'app/workspaces/analytics/analytics.ts|.breakdowns',
-  'app/workspaces/analytics/analytics.ts|.breakdowns > * + *',
-]);
-
 function stylesOf(text: string): string {
   const at = text.indexOf('styles:');
   return (at < 0 ? '' : text.slice(at)).replace(/^styles:\s*`/, '').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -88,8 +78,7 @@ describe('spacing between panels comes from the stack gap, not margins', () => {
         if (!margin || /^\s*(0|auto)\s*$/.test(margin[2])) continue;
         for (const selector of m[1].split(',').map((s) => s.trim()).filter(Boolean)) {
           if (!isPanelLevel(selector, panelClasses)) continue;
-          const key = `${path}|${selector}`;
-          if (!PENDING_MARGIN_RULES.has(key)) offenders.push(key);
+          offenders.push(`${path}|${selector}`);
         }
       }
     }
