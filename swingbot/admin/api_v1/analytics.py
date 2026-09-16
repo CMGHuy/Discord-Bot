@@ -112,6 +112,9 @@ def analytics_performance():
     realized = [p for p in (closed_pnl(t) for t in closed) if p is not None]
 
     scoped = m.in_date_range(closed, start=start, end=end)
+    from swingbot.core.planning import account as account_module
+    base_balance = float(account_module.load_account_config().get("base_balance") or 0.0)
+    window_balance = m.balance_at(closed, start, base_balance)
     returns = [r for r in (m.trade_return_pct(t) for t in scoped) if r is not None]
     factor = m.annualisation_factor(scoped)
     raw_sharpe, raw_sortino = m.sharpe(returns), m.sortino(returns)
@@ -145,9 +148,9 @@ def analytics_performance():
         "derived": {
             "avg_win_pct": m.avg_win_pct(scoped),
             "avg_loss_pct": m.avg_loss_pct(scoped),
-            "total_return_pct": m.total_return_pct(scoped),
-            "annualised_return_pct": m.annualised_return_pct(scoped),
-            "calmar": m.calmar(scoped),
+            "total_return_pct": m.total_return_pct(scoped, window_balance),
+            "annualised_return_pct": m.annualised_return_pct(scoped, window_balance),
+            "calmar": m.calmar(scoped, window_balance),
             "volatility_ann_pct": m.volatility_ann_pct(scoped),
             "trades_per_month": m.trades_per_month(scoped),
             "pct_in_market": m.pct_in_market(scoped),
@@ -165,7 +168,7 @@ def analytics_performance():
         "rolling_returns": m.rolling_return_pct(scoped),
         "holding_period_split": m.holding_period_split(scoped),
         "risk_reward_split": m.risk_reward_split(scoped),
-        "calendar": m.calendar_returns(scoped),
+        "calendar": m.calendar_returns(scoped, window_balance),
         "cumulative_by_strategy": m.cumulative_pnl_by_strategy(scoped),
         # Best-effort: get_extended_stats swallows a failed yfinance fetch and
         # returns {}. The key is always present so the workspace never has to

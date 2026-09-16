@@ -567,13 +567,32 @@ def span_years(closed: list[dict]) -> float | None:
     return max(days / 365.25, 1 / 365)
 
 
-def total_return_pct(closed: list[dict]) -> float | None:
-    """Compounded % return across the window. None on an empty window."""
-    returns = _returns(closed)
-    return round(_compound(returns), 4) if returns else None
+def balance_at(closed: list[dict], before: str | None, base_balance: float) -> float:
+    """Balance at the start of ``before`` from realised amounts only."""
+    base = float(base_balance or 0.0)
+    if before is None:
+        return base
+    return base + sum(float(t["realized_pnl_amount"]) for t in closed
+                      if t.get("realized_pnl_amount") is not None and t.get("closed_at")
+                      and str(t["closed_at"])[:10] < before)
 
 
-def annualised_return_pct(closed: list[dict]) -> float | None:
+def _account_points(closed: list[dict], starting_balance: float) -> list[dict]:
+    if not closed or starting_balance <= 0:
+        return []
+    points = equity_curve(closed, starting_balance)["points"]
+    return points if len(points) >= 2 else []
+
+
+def total_return_pct(closed: list[dict], starting_balance: float) -> float | None:
+    """Account growth, not compounded percentage moves of individual trades."""
+    points = _account_points(closed, starting_balance)
+    if not points:
+        return None
+    return round((points[-1]["balance"] / float(starting_balance) - 1.0) * 100.0, 4)
+
+
+def annualised_return_pct(closed: list[dict], starting_balance: float) -> float | None:
     """Total return re-expressed as a yearly rate: (1+total)^(1/years) - 1.
 
     Deliberately NOT clamped. A +10% fortnight really does annualise to a
@@ -581,7 +600,7 @@ def annualised_return_pct(closed: list[dict]) -> float | None:
     window says -- the honest fix is showing the window length beside it,
     which is why the endpoint returns `span_years` too.
     """
-    total = total_return_pct(closed)
+    total = total_return_pct(closed, starting_balance)
     years = span_years(closed)
     if total is None or years is None:
         return None
@@ -619,37 +638,17 @@ def volatility_ann_pct(closed: list[dict]) -> float | None:
     return round(float(np.std(arr, ddof=1)) * annualisation_factor(closed), 4)
 
 
-def _equity_points(closed: list[dict]) -> list[dict]:
-    """The compounded equity walk on a base of 100, with a flat baseline point
-    dated at the first open -- the same shape `drawdown_series` consumes, so
-    drawdown keeps one implementation rather than gaining a second one here."""
-    ordered = _closed_in_order(closed)
-    if not ordered:
-        return []
-    opens = [d for d in (_parse(t.get("opened_at")) for t in ordered) if d]
-    first = min(opens).date().isoformat() if opens else ordered[0]["closed_at"][:10]
-    points = [{"date": first, "balance": 100.0}]
-    balance = 100.0
-    for t in ordered:
-        pct = trade_return_pct(t)
-        if pct is None:
-            continue
-        balance *= (1.0 + pct / 100.0)
-        points.append({"date": t["closed_at"][:10], "balance": round(balance, 6)})
-    return points
-
-
-def calmar(closed: list[dict]) -> float | None:
+def calmar(closed: list[dict], starting_balance: float) -> float | None:
     """Annualised return / maximum drawdown.
 
     None when the curve never drew down: dividing by a zero drawdown is
     undefined, and reporting a huge number for "never lost" would rank a
     two-trade sample above a real track record.
     """
-    ann = annualised_return_pct(closed)
+    ann = annualised_return_pct(closed, starting_balance)
     if ann is None:
         return None
-    max_dd = max_drawdown_pct(_equity_points(closed))
+    max_dd = max_drawdown_pct(_account_points(closed, starting_balance))
     if not max_dd:          # None (too few points) or 0.0 (no drawdown at all)
         return None
     return round(ann / abs(max_dd), 4)
@@ -904,7 +903,7 @@ def hold_by_outcome(closed: list[dict]) -> dict:
             "n_losers": len(losers)}
 
 
-def calendar_returns(closed: list[dict]) -> list[dict]:
+def calendar_returns(closed: list[dict], starting_balance: float) -> list[dict]:
     """Compounded return per calendar month of close, oldest first.
 
     Months with no closes are OMITTED rather than emitted as 0.0 -- a flat
@@ -913,13 +912,16 @@ def calendar_returns(closed: list[dict]) -> list[dict]:
     """
     by_month: dict[str, list[dict]] = {}
     for t in _closed_in_order(closed):
-        if trade_return_pct(t) is None:
+        if t.get("realized_pnl_amount") is None:
             continue
         by_month.setdefault(t["closed_at"][:7], []).append(t)
-    return [{"month": m,
-             "return_pct": round(_compound([trade_return_pct(t) for t in ts]), 4),
-             "n": len(ts)}
-            for m, ts in sorted(by_month.items())]
+    out = []
+    for month, ts in sorted(by_month.items()):
+        opening = balance_at(closed, f"{month}-01", starting_balance)
+        pnl = sum(float(t["realized_pnl_amount"]) for t in ts)
+        out.append({"month": month, "return_pct": round(pnl / opening * 100.0, 4) if opening > 0 else None,
+                    "pnl": round(pnl, 2), "n": len(ts)})
+    return out
 
 
 def cumulative_pnl_by_strategy(closed: list[dict]) -> dict[str, list[dict]]:
