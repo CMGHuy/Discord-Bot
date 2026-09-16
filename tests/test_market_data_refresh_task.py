@@ -100,3 +100,31 @@ def test_market_data_refresh_prioritises_live_tickers_and_short_timeframes(monke
 
     assert captured["symbols"] == ["NVDA", "MSFT", "AAPL"]
     assert captured["timeframes"] == ["hourly", "daily", "monthly"]
+
+
+def test_sub_hourly_frames_refresh_after_hourly(monkeypatch):
+    """v87: when the sweep's time budget binds, the frames it defers must be
+    the archive-only ones (15min/5min), never hourly, which feeds live E29
+    context."""
+    from swingbot.commands.scanning import loops as loops_mod
+
+    captured = {}
+
+    def fake_refresh_all(symbols, timeframes, **_kwargs):
+        captured["timeframes"] = timeframes
+        return {"summary": {tf: {"full": 0, "incremental": 0, "fresh": 1,
+                                  "failed": 0, "added": 0} for tf in timeframes},
+                "failures": [], "state": {}, "deadline_hit": False}
+
+    monkeypatch.setattr(config, "MARKET_DATA_AUTO_REFRESH", True, raising=False)
+    monkeypatch.setattr(config, "MARKET_DATA_TIMEFRAMES", "5min,15min,hourly,daily",
+                        raising=False)
+    monkeypatch.setattr(loops_mod, "load_watchlist", lambda: ["AAPL"], raising=False)
+    monkeypatch.setattr(loops_mod, "_refresh_priority_tickers", lambda: [])
+    monkeypatch.setattr("swingbot.core.marketdata.data_refresh.refresh_all", fake_refresh_all)
+
+    _run(scanning_mod.market_data_refresh.coro())
+
+    order = captured["timeframes"]
+    assert order.index("hourly") < order.index("15min")
+    assert order.index("hourly") < order.index("5min")

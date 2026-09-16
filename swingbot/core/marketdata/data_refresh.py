@@ -43,6 +43,12 @@ REFRESH_HOURS = {
     "weekly": 24.0,
     "daily": 12.0,
     "hourly": 4.0,
+    # v87: archived forward for a future entry-timing measurement. Yahoo
+    # serves these for ~60 days only, so 24h leaves ~59 days of slack before
+    # a missed refresh loses bars. Stated rather than inherited from
+    # DEFAULT_REFRESH_HOURS. 1min is deliberately absent (not archived).
+    "15min": 24.0,
+    "5min": 24.0,
 }
 DEFAULT_REFRESH_HOURS = 24.0
 
