@@ -15,6 +15,7 @@ confirmation bar, the permutation's random bars).
 from __future__ import annotations
 
 import dataclasses
+import zlib
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -24,7 +25,8 @@ from swingbot.core.backtesting.backtest_scenarios import levels_asof
 from swingbot.core.market import levels, reaction
 from swingbot.core.market.indicators import atr
 from swingbot.core.market.strategy_types import HORIZONS, MIN_BARS
-from swingbot.core.planning.plan_engine import PlanStatus, build_confluence_plan, primary_strategy_for
+from swingbot.core.planning.plan_engine import (PlanStatus, build_confluence_plan,
+                                                primary_strategy_for, simulate_exit)
 from swingbot.core.planning.plan_types import record_transition
 from swingbot.core.scanning.gating import passes_confluence, scenario_gate_inputs
 from swingbot.scan_params import ScanParams
@@ -292,3 +294,69 @@ def replay_armed(ticker: str, df, horizon_key: str, cells, *, params: ScanParams
                     result.issued.append((outcome.resolved_index, plan, outcome.kind))
         results[cell.cell_id] = result
     return results
+
+
+def delay_permutations(ticker: str, df, horizon_key: str, cell: Cell, confirmed, *,
+                       n: int, seed: int, level_cache: dict,
+                       params: ScanParams | None = None, level_map_at=None,
+                       confluence_at=None) -> list:
+    """Spec §4.2's random-delay null for one (ticker, horizon): does the
+    reaction carry information beyond simply waiting?
+
+    Each permutation keeps the arms that really confirmed (`confirmed`,
+    from replay_armed -- issued or regated alike) and moves each
+    confirmation to a bar drawn uniformly from its own
+    [i, min(i + N, last bar)] window. The plan is built by plan_at exactly
+    as at a real confirmation: the stop anchors from the first test at or
+    before the drawn bar (the arm bar when nothing has tested yet), and the
+    entry follows the arm's REAL reaction kind -- M2's market/stop split
+    needs a kind, and a random bar has none of its own.
+
+    `level_cache` must be the cache arm_candidates filled walking bars in
+    order (see the module docstring). Plans and exits are memoised per
+    (arm, bar): a window holds at most N+1 bars, so 200 permutations cost
+    about N+1 simulations per arm, not 200.
+
+    Returns one list per permutation of (entry_date, strategy, horizon_key,
+    outcome) for every plan that issued.
+    """
+    if params is None:
+        params = ScanParams.from_config()
+    if level_map_at is None:
+        level_map_at = lambda j: levels_asof(ticker, df, j, horizon_key, level_cache)  # noqa: E731
+    if confluence_at is None:
+        confluence_at = make_confluence_at(df, horizon_key)
+    rng = np.random.default_rng([seed, zlib.crc32(f"{ticker}|{horizon_key}".encode())])
+    bars = reaction.Bars.from_frame(df)
+    atr_values = atr(df, 14).to_numpy(dtype=float)
+    last_bar = len(df) - 1
+    memo: dict = {}
+
+    def row_at(arm_index: int, cand: ArmCandidate, kind: str, j: int):
+        key = (arm_index, j)
+        if key not in memo:
+            first_test = next((t for t in range(cand.index, j + 1)
+                               if reaction.is_test(bars, t, cand.level, cand.direction,
+                                                   cell.k, atr_values[t])), cand.index)
+            plan, _ = plan_at(ticker, df, horizon_key, cand, j=j, first_test_index=first_test,
+                              kind=kind, cell=cell, bars=bars, atr_values=atr_values,
+                              params=params, level_map_at=level_map_at,
+                              confluence_at=confluence_at)
+            if plan is None:
+                memo[key] = None
+            else:
+                result = simulate_exit(df, j, plan, scale_out=True)
+                memo[key] = (df.index[j].date().isoformat(), f"confluence:{plan.strategy}",
+                             horizon_key, result.outcome)
+        return memo[key]
+
+    permutations = []
+    for _ in range(n):
+        rows = []
+        for arm_index, (cand, outcome) in enumerate(confirmed):
+            j = int(rng.integers(cand.index, min(cand.index + cell.n, last_bar) + 1))
+            row = row_at(arm_index, cand, outcome.kind, j)
+            if row is not None:
+                rows.append(row)
+        permutations.append(rows)
+    return permutations

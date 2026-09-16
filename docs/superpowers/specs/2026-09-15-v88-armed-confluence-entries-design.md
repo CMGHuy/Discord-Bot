@@ -179,8 +179,11 @@ information beyond simply waiting?** n = 200, seed 42. Each permutation keeps
 the same set of armed scenarios that confirmed in the real run, and moves each
 confirmation to a bar drawn uniformly from its own `[i, i + N]` window,
 building the stop, entry and gates by §3.3–3.4 exactly as if that bar had
-reacted. The statistic is mix-standardised `ΔWR` vs baseline; `p` = the share
-of permuted `ΔWR >=` the real `ΔWR`.
+reacted. The stop anchors from the first test at or before the drawn bar, or
+from the arm bar when nothing has tested yet; the entry mode follows the
+arm's real reaction kind. The population is every arm that confirmed in the
+real run, issued or regated. The statistic is mix-standardised `ΔWR` vs
+baseline; `p` = the share of permuted `ΔWR >=` the real `ΔWR`.
 
 ### 4.3 Integrity guards
 

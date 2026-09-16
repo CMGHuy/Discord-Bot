@@ -251,3 +251,49 @@ def test_replay_armed_never_reads_past_the_confirmation_bar():
     assert any(r.counts["armed"] for r in full.values()), "fixture must arm at least once"
     for cell in cells:
         assert signature(full[cell.cell_id]) == signature(trunc[cell.cell_id])
+
+
+def _perm_setup(monkeypatch):
+    monkeypatch.setattr(ar, "atr", lambda df, period=14: pd.Series(1.0, index=df.index))
+    df = _frame({27: REJECTION}, n=45)
+    confirmed = [(_cand(index=25), ar.ArmOutcome("confirmed", 27, rx.R1, 27))]
+    res = [levels.Level(T1, ["Fibonacci"])]
+    sup = [levels.Level(90.0, ["Rolling S/R"])]
+    kwargs = dict(level_cache={}, params=_params(),
+                  level_map_at=lambda j: (sup, res), confluence_at=lambda *a: 3)
+    return df, confirmed, kwargs
+
+
+def test_permutations_are_seeded_and_stay_inside_each_arm_window(monkeypatch):
+    df, confirmed, kwargs = _perm_setup(monkeypatch)
+    first = ar.delay_permutations("AAPL", df, "4w", CELL, confirmed, n=50, seed=42, **kwargs)
+    again = ar.delay_permutations("AAPL", df, "4w", CELL, confirmed, n=50, seed=42, **kwargs)
+    assert first == again and len(first) == 50
+    window_dates = {df.index[j].date().isoformat() for j in range(25, 31)}
+    assert all(len(perm) <= 1 for perm in first)
+    assert all(row[0] in window_dates for perm in first for row in perm)
+    assert all(row[1].startswith("confluence:") and row[2] == "4w" for perm in first for row in perm)
+
+
+def test_permutations_memoise_one_simulation_per_arm_bar(monkeypatch):
+    df, confirmed, kwargs = _perm_setup(monkeypatch)
+    calls = []
+    real = ar.simulate_exit
+    monkeypatch.setattr(ar, "simulate_exit", lambda *a, **k: calls.append(a[1]) or real(*a, **k))
+    ar.delay_permutations("AAPL", df, "4w", CELL, confirmed, n=200, seed=42, **kwargs)
+    assert len(calls) == len(set(calls)) <= CELL.n + 1
+
+
+def test_a_random_bar_before_any_test_anchors_the_stop_at_the_arm_bar(monkeypatch):
+    df, confirmed, kwargs = _perm_setup(monkeypatch)
+    seen = {}
+    real = ar.plan_at
+    def spy(*a, **k):
+        seen[k["j"]] = (k["first_test_index"], k["kind"])
+        return real(*a, **k)
+    monkeypatch.setattr(ar, "plan_at", spy)
+    ar.delay_permutations("AAPL", df, "4w", CELL, confirmed, n=200, seed=1, **kwargs)
+    assert seen, "200 draws over 6 bars must visit some bar"
+    for j, (first_test, kind) in seen.items():
+        assert first_test == (27 if j >= 27 else 25)
+        assert kind == rx.R1                      # the arm's REAL reaction kind
