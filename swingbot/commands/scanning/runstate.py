@@ -31,12 +31,19 @@ def _read_heartbeat() -> dict:
 
 def _update_heartbeat(fields: dict) -> None:
     """Merge `fields` into the heartbeat file, preserving everything else."""
-    state = _read_heartbeat()
-    state.update(fields)
     try:
-        os.makedirs(config.DATA_DIR, exist_ok=True)
-        with open(_HEARTBEAT_FILE, "w") as fh:
-            json.dump(state, fh)
+        from swingbot.core.db import stages
+        if stages.writes_json("heartbeat"):
+            state = _read_heartbeat()
+            state.update(fields)
+            os.makedirs(config.DATA_DIR, exist_ok=True)
+            with open(_HEARTBEAT_FILE, "w") as fh:
+                json.dump(state, fh)
+        if stages.writes_db("heartbeat"):
+            from swingbot.core.db.repositories.heartbeat import heartbeat_repo
+            current = heartbeat_repo().last() or {}
+            current.update(fields)
+            heartbeat_repo().beat(current)
     except Exception:
         pass
 
