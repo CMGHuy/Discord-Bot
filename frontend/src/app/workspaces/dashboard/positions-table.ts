@@ -71,7 +71,7 @@ const EMPTY_STATES: Record<string, EmptyState> = {
         </a>
         <!-- The trades collection has no source timestamp. Mark that fact
              rather than implying the arrival time is market-data freshness. -->
-        <sb-freshness [at]="null" />
+        <sb-freshness [at]="trades.pricesAsOf()" />
         <ng-content select="[table-actions]" />
       </div>
 

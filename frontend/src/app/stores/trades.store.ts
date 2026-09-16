@@ -11,13 +11,13 @@ import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
 import { Observable } from 'rxjs';
 import { routeRequest } from '../routing/route-request';
-import { Collection, TradeQuery, TradeRow } from '../api/models';
+import { TradeCollection, TradeQuery, TradeRow } from '../api/models';
 import { PageSpec, SortSpec } from '../ui/data-table/data-table.types';
 
 export const DEFAULT_PER_PAGE = 25;
 
 interface TradesSlice {
-  data: Collection<TradeRow> | null;
+  data: TradeCollection | null;
   query: TradeQuery;
   /** False until `setQuery` has been called at least once.
    *
@@ -97,6 +97,7 @@ export const TradesStore = signalStore(
   }),
   withComputed(({ data, query }) => ({
     rows: computed(() => data()?.items ?? []),
+    pricesAsOf: computed(() => data()?.prices_as_of ?? null),
 
     /** True until the first response and never again: a skeleton belongs on
      *  the first load and nothing at all on a refetch. */

@@ -28,6 +28,7 @@ export interface Collection<T> {
   page: number;
   per_page: number;
 }
+export interface TradeCollection extends Collection<TradeRow> { prices_as_of?: string | null; }
 
 /** The one error body. `code` is stable and may be branched on; `message` is
  *  for humans and may change freely. */
@@ -296,6 +297,8 @@ export interface Dashboard {
   win_rate: number | null;
   expectancy_r: number | null;
   payoff_ratio: number | null;
+  win_rate_n: number;
+  expectancy_n: number;
   equity_30d: EquitySeries;
   position_premium: Record<string, unknown>;
   /** SR53 — the five plan-lifecycle counts, keyed by status. Loosely typed
