@@ -4,8 +4,10 @@
 Yahoo serves sub-hourly bars for ~60 days only; the bot's market_data_refresh
 loop archives them forward, merge-only. This prints, per timeframe, how many
 symbols are archived, the earliest and latest bar across the archive, the
-median depth in sessions, and which symbols have fallen more than
-STALE_SESSIONS behind the archive's newest bar.
+median depth in sessions, which symbols have fallen more than
+STALE_SESSIONS behind the archive's newest bar, and which symbols have a
+cache file that exists but failed to read (corrupt/truncated -- reported
+separately from a zero-bar symbol, never folded into it).
 
 Run on production (the archive lives there, not on the dev machine):
 
@@ -17,6 +19,7 @@ A week after rollout, `earliest` must be unchanged and `latest` current.
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import statistics
 import sys
@@ -28,6 +31,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from swingbot.core.marketdata.data_store import DATA_DIR, load_from_disk, timeframe_name  # noqa: E402
+
+log = logging.getLogger("swing-bot.intraday_archive_coverage")
 
 ARCHIVE_TIMEFRAMES = ("15min", "5min")
 STALE_SESSIONS = 3
@@ -45,15 +50,27 @@ def coverage(base_dir: str, timeframes=ARCHIVE_TIMEFRAMES) -> dict:
     for raw in timeframes:
         tf = timeframe_name(raw)
         spans = {}
+        unreadable = []
         for symbol in _symbols(base_dir, tf):
-            frame = load_from_disk(symbol, tf, base_dir=base_dir)
+            # A corrupt/truncated cache file must degrade to "unreadable",
+            # never to a silent cache miss -- the same call raises in
+            # data_store.load_normalized(), which wraps it for the same
+            # reason: one bad file must not take down the whole sweep, but
+            # it also must not be mistaken for a symbol with zero bars.
+            try:
+                frame = load_from_disk(symbol, tf, base_dir=base_dir)
+            except Exception as exc:
+                log.warning("cache read failed for %s/%s: %s", symbol, tf, exc)
+                unreadable.append(symbol)
+                continue
             if frame is None or frame.empty:
                 continue
             dates = frame.index.normalize().unique()
             spans[symbol] = (dates.min().date(), dates.max().date(), len(dates))
         if not spans:
             report[tf] = {"symbols": 0, "earliest": None, "latest": None,
-                          "median_sessions": None, "stale": []}
+                          "median_sessions": None, "stale": [],
+                          "unreadable": sorted(unreadable)}
             continue
         newest = max(last for _, last, _ in spans.values())
         stale = sorted(s for s, (_, last, _) in spans.items()
@@ -64,6 +81,7 @@ def coverage(base_dir: str, timeframes=ARCHIVE_TIMEFRAMES) -> dict:
             "latest": str(newest),
             "median_sessions": statistics.median(n for _, _, n in spans.values()),
             "stale": stale,
+            "unreadable": sorted(unreadable),
         }
     return report
 
@@ -75,6 +93,9 @@ def render(report: dict) -> str:
                      f"latest={row['latest']} median_sessions={row['median_sessions']}")
         if row["stale"]:
             lines.append(f"  stale (> {STALE_SESSIONS} sessions behind): {', '.join(row['stale'])}")
+        if row["unreadable"]:
+            lines.append(f"  unreadable (cache read failed -- not counted as zero): "
+                         f"{', '.join(row['unreadable'])}")
     return "\n".join(lines)
 
 

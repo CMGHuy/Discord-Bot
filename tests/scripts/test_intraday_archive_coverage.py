@@ -34,7 +34,35 @@ def test_coverage_reports_depth_and_a_stale_symbol(tmp_path):
 def test_an_empty_timeframe_reports_zero_not_a_crash(tmp_path):
     report = cov.coverage(str(tmp_path), timeframes=("5min",))
     assert report["5min"] == {"symbols": 0, "earliest": None, "latest": None,
-                              "median_sessions": None, "stale": []}
+                              "median_sessions": None, "stale": [], "unreadable": []}
+
+
+def test_a_zero_row_cache_file_is_skipped_not_counted(tmp_path):
+    # A file that exists and parses cleanly but has no data rows -- the
+    # frame.empty guard, distinct from a file that fails to parse at all.
+    empty_path = cache_path("EMPTY", "5min", base_dir=str(tmp_path))
+    pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"]).to_csv(empty_path)
+    _write_intraday(tmp_path, "AAPL", "5min", "2026-07-01", 5)
+
+    report = cov.coverage(str(tmp_path), timeframes=("5min",))
+    tf = report["5min"]
+    assert tf["symbols"] == 1
+    assert tf["unreadable"] == []
+
+
+def test_a_malformed_cache_file_is_surfaced_as_unreadable_not_zero(tmp_path):
+    _write_intraday(tmp_path, "AAPL", "5min", "2026-07-01", 5)
+    _write_intraday(tmp_path, "MSFT", "5min", "2026-07-01", 5)
+    # A truncated/corrupt file -- e.g. the writer was killed mid-write.
+    # pandas raises EmptyDataError on a genuinely empty file; this must not
+    # take down the sweep, nor be reported as "zero bars for BAD".
+    bad_path = cache_path("BAD", "5min", base_dir=str(tmp_path))
+    Path(bad_path).write_text("")
+
+    report = cov.coverage(str(tmp_path), timeframes=("5min",))
+    tf = report["5min"]
+    assert tf["symbols"] == 2
+    assert tf["unreadable"] == ["BAD"]
 
 
 def test_render_and_main_exit_zero(tmp_path, capsys):
