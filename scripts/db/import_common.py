@@ -50,7 +50,14 @@ def _index(rows: list[dict], key: str, label: str) -> dict[str, dict]:
     return indexed
 
 
-def compare(source: list[dict], imported: list[dict], key: str) -> ImportReport:
+def compare(source: list[dict], imported: list[dict], key: str,
+            ignore_fields: set[str] | frozenset[str] = frozenset()) -> ImportReport:
+    """Compare records, optionally ignoring fields absent from legacy JSON."""
+    if ignore_fields:
+        source = [{name: value for name, value in row.items() if name not in ignore_fields}
+                  for row in source]
+        imported = [{name: value for name, value in row.items() if name not in ignore_fields}
+                    for row in imported]
     src, dst = _index(source, key, "source"), _index(imported, key, "imported")
     return ImportReport(
         source_count=len(src), imported_count=len(dst),
