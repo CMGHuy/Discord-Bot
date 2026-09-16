@@ -85,20 +85,33 @@ KILL_DATA_FAIL_FRAC = 0.20
 
 
 def kill_state() -> dict:
+    from swingbot.core.db import stages
+    if stages.reads_db("killswitch"):
+        from swingbot.core.db.repositories.killswitch import killswitch_repo
+        return killswitch_repo().state()
     return read_json(KILLSWITCH_PATH,
                       {"on": config.KILLSWITCH_DEFAULT_ON, "reason": None, "at": None,
                        "manual_release": False})
 
 
 def set_kill(on: bool, reason: str = "manual") -> dict:
+    from swingbot.core.db import stages
     prior = kill_state()
-    if on and reason != "manual" and prior.get("manual_release"):
+    if on and (prior.get("on") or (reason != "manual" and prior.get("manual_release"))):
         return prior
-    state = {"on": on, "reason": reason if on else None,
-             "at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
-             "manual_release": not on}
-    atomic_write_json(KILLSWITCH_PATH, state)
-    return state
+    if stages.writes_json("killswitch"):
+        state = {"on": on, "reason": reason if on else None,
+                 "at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+                 "manual_release": not on}
+        atomic_write_json(KILLSWITCH_PATH, state)
+    if stages.writes_db("killswitch"):
+        from swingbot.core.db.repositories.killswitch import killswitch_repo
+        repository = killswitch_repo()
+        if on:
+            repository.engage(reason)
+        else:
+            repository.release()
+    return kill_state()
 
 
 def check_kill_triggers(dd_pct: float, spy_move_pct: float,
