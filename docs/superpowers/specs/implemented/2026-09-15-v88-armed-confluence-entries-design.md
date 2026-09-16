@@ -206,6 +206,8 @@ baseline; `p` = the share of permuted `ΔWR >=` the real `ΔWR`.
 | Stage 3 FAIL | Closed, budget spent, recorded as-is. A2 not written. |
 | Stage 3 PASS | Closed PASS, recorded. A2 brainstormed and specced next. |
 
+**Outcome (2026-09-16):** NO_ELIGIBLE_CELL at Stage 1 selection; A2 is not written.
+
 ## 5. A2 — the live ARMED lifecycle (not built by this spec)
 
 Recorded so the design survives if A1 passes; written as its own document only
