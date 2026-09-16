@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-09-15 16:32:09 UTC",
+  "generated_at": "2026-09-16 19:27:08 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.18.2",
+    "ui": "1.18.3",
     "bot": "1.9.0"
   },
   "releases": [
@@ -1176,8 +1176,8 @@
     {
       "date": "2026-09-15",
       "last_seen": "2026-09-15",
-      "commit": "uncommitted",
-      "subject": "working tree",
+      "commit": "c46273c3",
+      "subject": "chore(v86): register the cohort-label pre-registration, bump versions",
       "versions": {
         "ui": "1.18.2",
         "bot": "1.9.0"
@@ -1185,6 +1185,19 @@
       "changed": [
         "ui",
         "bot"
+      ]
+    },
+    {
+      "date": "2026-09-16",
+      "last_seen": "2026-09-16",
+      "commit": "uncommitted",
+      "subject": "working tree",
+      "versions": {
+        "ui": "1.18.3",
+        "bot": "1.9.0"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]
