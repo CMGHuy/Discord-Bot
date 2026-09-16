@@ -44,7 +44,15 @@ STAGE2_PASS_MARKER = "**Overall: PASS**"
 
 def load_frame(cache_dir, symbol):
     path = Path(cache_dir) / f"{symbol}.csv"
-    return pd.read_csv(path, index_col="Date", parse_dates=True) if path.exists() else None
+    if not path.exists():
+        return None
+    try:
+        return pd.read_csv(path, index_col="Date", parse_dates=True)
+    except Exception as exc:
+        # belt-and-braces: a poisoned cache file must not stall an unattended
+        # multi-hour replay -- same convention as data_refresh.refresh_all.
+        print(f"WARNING: {symbol}.csv unreadable, skipping ({exc})", flush=True)
+        return None
 
 
 def _trade(frame, index, plan, date) -> ArmTrade:

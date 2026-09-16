@@ -81,6 +81,22 @@ def test_replay_writes_shards_and_removes_its_progress_file(tmp_path, monkeypatc
                      "--horizons", "4w", "--workers", "1"]) == 0
 
 
+@pytest.mark.slow
+def test_replay_survives_a_corrupt_cache_csv(tmp_path, monkeypatch):
+    monkeypatch.setattr(am, "CELLS", (am.Cell("M1", 10, 0.5, 0.10),))
+    cache = _cache(tmp_path)
+    (cache / "BBB.csv").write_bytes(b"\xff\xfe\x00garbage-not-real-csv\x01\x02")
+    out = tmp_path / "out"
+    assert mae.main(["replay", "--run", "run1", "--cache-dir", str(cache), "--out-root", str(out),
+                     "--horizons", "4w", "--workers", "1"]) == 0
+    run_dir = out / "run1"
+    # the good ticker still replays normally
+    assert (run_dir / "AAA.jsonl").exists() and (run_dir / "AAA.jsonl").read_text().strip()
+    # the corrupt ticker is skipped, not crashed on: an empty shard, not a missing one
+    assert (run_dir / "BBB.jsonl").exists() and (run_dir / "BBB.jsonl").read_text() == ""
+    assert json.loads((run_dir / "BBB.counts.json").read_text()) == {}
+
+
 def test_summary_select_and_arms(tmp_path):
     out = tmp_path / "out"
     _write_rows(out / "run1", _synthetic_rows())
