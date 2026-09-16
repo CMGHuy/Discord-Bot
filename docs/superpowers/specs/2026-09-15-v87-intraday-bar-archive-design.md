@@ -84,9 +84,10 @@ verified on production after rollout (§4), not assumed to fit.
 ### 3.3 `issued_at` on every live plan
 
 `TradePlanV2` gains one field, `issued_at: str | None = None` — the UTC ISO
-timestamp at which the live scan attached the plan. Set on the live path only
-(strategy- and confluence-sourced plans alike); the backtest leaves it `None`,
-because a replayed plan has no wall-clock issuance. Old records load with
+timestamp at which the live scan attached the plan. Set on the live path only,
+in `analyze.attach_plan_v2` — the single constructor every plan the live scan
+persists goes through; the backtest leaves it `None`, because a replayed plan
+has no wall-clock issuance. Old records load with
 `None`: `plan_from_dict` already filters to known fields, and the field takes a
 default, so it goes at the end of the dataclass.
 
