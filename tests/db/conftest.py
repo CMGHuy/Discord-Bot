@@ -61,6 +61,12 @@ def db_engine():
             ("account", "account"), ("account_balance_history", "account"),
             ("journal_entries", "journal"), ("signal_state", "account"),
             ("watchlist", "watchlist"),
+            ("runtime_flags", "scan"), ("bot_heartbeat", "bot"),
+            ("admin_jobs", "jobs"), ("scheduled_jobs", "jobs"),
+            ("ui_preferences", "jobs"), ("settings_audit", "settings"),
+            ("killswitch", "risk"), ("manual_close_notify", "trades"),
+            ("ticker_directory", "watchlist"), ("tuning_results", "jobs"),
+            ("tuning_proposals", "jobs"),
         ):
             connection.execute(sa.text(trigger_ddl(table, channel)))
     yield engine
