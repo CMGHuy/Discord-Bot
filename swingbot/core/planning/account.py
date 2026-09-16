@@ -79,6 +79,19 @@ def _default_config_path() -> str:
     workers, which all raced writes to that SAME real file at once."""
     return os.path.join(app_config.DATA_DIR, "account.json")
 
+
+def _use_db(path: str | None) -> bool:
+    """Whether this call should read account state from PostgreSQL.
+
+    An explicit path is deliberately an escape hatch for tests and maintenance
+    tools: it always selects the file backend, regardless of migration stage.
+    """
+    if path is not None:
+        return False
+    from swingbot.core.db import stages
+    return stages.reads_db("account")
+
+
 # balance_history is append-only and grows one entry per closed trade (plus
 # manual balance overrides) -- cheap to keep a very long tail of, but capped
 # so a years-old, extremely active account doesn't grow account.json without
@@ -125,6 +138,7 @@ def _sum_realized_pnl(trades_path: str = None) -> float:
 
 
 def load_account_config(path: str = None) -> dict:
+    requested_path = path
     path = path or _default_config_path()
     # Canonical defaults -- every key that exists in the account config schema.
     # Used both as the seed for a brand-new account.json AND as a fallback for
@@ -142,34 +156,31 @@ def load_account_config(path: str = None) -> dict:
         "max_risk_amount_absolute":    app_config.MAX_RISK_AMOUNT_ABSOLUTE,
         "balance_history":    [],
     }
-    if os.path.exists(path):
+    if _use_db(requested_path):
+        from swingbot.core.db.repositories.account import account_repo
+        stored = account_repo().load()
+    elif os.path.exists(path):
         stored = read_json(path, None)
-        if stored is not None:
-                # Merge: stored values win over defaults, but any key that
-                # doesn't exist in the stored file gets the default value.
-                merged = {**defaults, **stored}
-                needs_save = False
-                if "base_balance" not in stored:
-                    # Migrating from the old schema, where "balance" was a
-                    # single incrementally-updated running total with no
-                    # separate base concept. Back-solve base_balance so the
-                    # currently-displayed balance doesn't jump on migration:
-                    # base = old_balance - all-time realized P&L so far, so
-                    # base + realized_total reproduces the old balance exactly
-                    # right now, and going forward base_balance becomes the
-                    # user-settable anchor with realized P&L layered on top.
-                    old_balance = float(stored.get("balance", defaults["base_balance"]))
-                    realized_so_far = _sum_realized_pnl()
-                    merged["base_balance"] = round(old_balance - realized_so_far, 2)
-                    needs_save = True
-                # The displayed/usable balance is ALWAYS recomputed fresh --
-                # never trusted from the stored file -- so a stale or reset
-                # "balance" value in account.json can never silently lose
-                # history: it's just overwritten with the correct figure.
-                merged["balance"] = round(merged["base_balance"] + _sum_realized_pnl(), 2)
-                if needs_save:
-                    save_account_config(merged, path)
-                return merged
+    else:
+        stored = None
+    if stored:
+        # Merge: stored values win over defaults, but any key that doesn't
+        # exist in the stored file gets the default value.
+        merged = {**defaults, **stored}
+        needs_save = False
+        if "base_balance" not in stored:
+            # Migrating from the old schema, where "balance" was a single
+            # incrementally-updated running total with no separate base.
+            old_balance = float(stored.get("balance", defaults["base_balance"]))
+            realized_so_far = _sum_realized_pnl()
+            merged["base_balance"] = round(old_balance - realized_so_far, 2)
+            needs_save = True
+        # The displayed/usable balance is ALWAYS recomputed fresh -- never
+        # trusted from storage -- so it cannot silently lose realized P&L.
+        merged["balance"] = round(merged["base_balance"] + _sum_realized_pnl(), 2)
+        if needs_save:
+            save_account_config(merged, requested_path)
+        return merged
     # Brand-new account -- seed balance_history with a starting point so the
     # "balance over time" chart has something to plot from before the first
     # trade ever closes, instead of an empty series until then.
@@ -180,12 +191,17 @@ def load_account_config(path: str = None) -> dict:
         "pnl_amount": None,
         "reason": "account created",
     }]
-    save_account_config(defaults, path)
+    save_account_config(defaults, requested_path)
     return dict(defaults)
 
 
 def save_account_config(config: dict, path: str = None):
-    atomic_write_json(path or _default_config_path(), config)
+    from swingbot.core.db import stages
+    if path is not None or stages.writes_json("account"):
+        atomic_write_json(path or _default_config_path(), config)
+    if path is None and stages.writes_db("account"):
+        from swingbot.core.db.repositories.account import account_repo
+        account_repo().save(config)
 
 
 def _append_balance_history(cfg: dict, entry: dict) -> dict:
@@ -298,6 +314,9 @@ def get_balance_history(path: str = None) -> list:
     entries -- one per closed trade settlement plus any manual `!account
     balance` overrides -- for the admin Performance page's balance-over-time
     chart."""
+    if _use_db(path):
+        from swingbot.core.db.repositories.account import account_repo
+        return account_repo().history()
     return load_account_config(path).get("balance_history", [])
 
 
