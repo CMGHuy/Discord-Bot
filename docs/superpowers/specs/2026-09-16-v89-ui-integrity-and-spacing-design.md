@@ -131,12 +131,22 @@ pre-registration question, not a UI fix. It is recorded as a follow-on (§7).
 if each trade used 100% of the account in sequence. 798 trades averaging
 −0.33% compound to −93%. `annualised_return_pct` and `calmar` derive from it.
 
-**Fix.** *Total return*, *Annualised* and *Calmar* are computed from the same
-account equity series the Equity chart draws: realised P&L over the starting
-balance. The per-trade compounding functions stay for the backtest code that
-uses them, renamed at their admin call site so they cannot be mistaken for
-account figures. If a per-trade figure is kept on screen, its label says
-"per trade, 100% sizing".
+**Fix.** *Total return*, *Annualised* and *Calmar* are computed from the
+account balance walk, `metrics.equity_curve`: realised P&L over `base_balance`,
+rebased to the balance the selected window opened with. (The Equity chart on
+the same page is in R, not money, so it is not that series.) The functions are
+changed in place: the admin analytics route is their only caller (checked with
+`git grep` while writing the plan), so nothing else depends on the per-trade
+compounding.
+
+**Also affected, found while planning:** *By month* (`metrics.calendar_returns`)
+compounds per-trade returns the same way. That is why production showed
+−82.47% and −72.86% months on a near-flat account, on top of the drawing bug
+in §3.1. It moves to the same definition: each month's realised P&L over the
+balance that month opened with, shipping the P&L beside the percentage.
+
+*Volatility (ann)* stays a per-trade figure and is relabelled
+"Volatility (per trade, ann.)".
 
 ### 3.5 Exit reason mix is 91.4% "other"
 
@@ -203,11 +213,17 @@ server string.
 
 - Donut centre totals (`786`, `708`, `731`) render near-invisible, dark on
   dark. They use the secondary text token.
-- The "age unknown" / "as of … stale" labels float mid-toolbar or at the far
-  edge, away from the data they qualify. They move into the owning panel's
-  header, beside its title. Why Dashboard and Risk read "age unknown" at all is
-  traced in the plan: a freshness stamp the endpoint does not send is a bug,
-  not a label.
+- "age unknown" appears permanently on Dashboard › Open positions and on Risk ›
+  Risk metrics / Correlation matrix. A freshness stamp the endpoint does not
+  send is a bug, not a label. The two causes:
+  - **Dashboard:** `positions-table.ts` hard-codes `[at]="null"`. But the
+    list's live prices are fetched during the request, so `/trades` now
+    returns `prices_as_of` and the panel shows it.
+  - **Risk:** `metrics.as_of` arrives null. It is traced and fixed during the
+    live check, where the production payload can be read.
+
+  Moving these labels into the panel header, beside the title, is a layout
+  change and goes to spec 2.
 - Analytics › *By ticker* replaces the win rate with `n=17` when N<20, mixing
   two units in one column. It shows `—` and leaves N to the Trades column.
 - Row counts repeat: Trades prints "1–25 of 948" three times and the rows
@@ -322,6 +338,13 @@ governing the gap between them.
   `plan_table.py`. Whether that population is the right one for a confidence
   input is a bot spec with its own pre-registration question. This spec only
   stops the admin UI from displaying it as *the* expectancy.
+- **Sector heat cap is not enforced for unmapped tickers** (bot-side, found
+  while planning §3.8). `core/edge/heat.sector_check` returns
+  `allowed: True` with the full cap remaining whenever a ticker has no sector,
+  and production's sector map resolved nothing for any open position. The
+  `SECTOR_HEAT_CAP_PCT` gate is therefore inert today. This spec only makes
+  the Risk page say "sector unknown". Whether to populate the map or treat
+  unknown as its own sector is a bot spec.
 - The 271 trades in the 0.0R bin are the same population as the
   near-TP-timeout lead the book-autopsy work starts from (recorded in v82's
   Follow-on).
