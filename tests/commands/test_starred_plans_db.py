@@ -6,6 +6,7 @@ import pytest
 from swingbot import config
 from swingbot.commands import views
 from swingbot.core.db.repositories.starred import StarredRepository
+from swingbot.core.db.repositories.plans import PlanRepository
 
 
 @pytest.fixture
@@ -31,8 +32,16 @@ def test_json_stage_is_unchanged(data_dir, monkeypatch, db_conn):
     assert StarredRepository().get("P1", conn=db_conn) is None
 
 
+def _seed_plans(*plan_ids):
+    for plan_id in plan_ids:
+        PlanRepository().upsert({"plan_id": plan_id, "ticker": "AAPL", "strategy": "RSI",
+                                 "horizon_key": "2w", "status": "PENDING",
+                                 "created_at": "2026-01-02T15:00:00+00:00"})
+
+
 def test_dual_stage_writes_both(data_dir, monkeypatch, db_committed, db_url):
     monkeypatch.setattr(config, "DB_STORES", "starred_plans:dual")
+    _seed_plans("P1")
     views.star_plan("P1")
     assert views.starred_ids() == {"P1"}
     assert StarredRepository().ids(conn=db_committed) == {"P1"}
@@ -40,6 +49,7 @@ def test_dual_stage_writes_both(data_dir, monkeypatch, db_committed, db_url):
 
 def test_db_stage_reads_rows_and_never_writes_the_file(data_dir, monkeypatch, db_committed, db_url):
     monkeypatch.setattr(config, "DB_STORES", "starred_plans:db")
+    _seed_plans("P1", "P2")
     views.star_plan("P1")
     views.star_plan("P2")
     assert views.starred_ids() == {"P1", "P2"}
@@ -48,6 +58,7 @@ def test_db_stage_reads_rows_and_never_writes_the_file(data_dir, monkeypatch, db
 
 def test_star_and_unstar_are_idempotent(data_dir, monkeypatch, db_committed, db_url):
     monkeypatch.setattr(config, "DB_STORES", "starred_plans:db")
+    _seed_plans("P1")
     views.star_plan("P1")
     views.star_plan("P1")
     assert StarredRepository().count(conn=db_committed) == 1

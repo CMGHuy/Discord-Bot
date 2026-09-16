@@ -88,7 +88,8 @@ plans = register(
 
 starred_plans = register(sa.Table(
     "starred_plans", METADATA, sa.Column("id", sa.BigInteger, primary_key=True),
-    sa.Column("plan_id", sa.Text, nullable=False, unique=True), *standard_columns(),
+    sa.Column("plan_id", sa.Text, sa.ForeignKey("plans.plan_id", ondelete="CASCADE"),
+              nullable=False, unique=True), *standard_columns(),
 ), ("plan_id",))
 
 account = register(sa.Table(
