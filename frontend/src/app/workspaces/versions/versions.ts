@@ -218,7 +218,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     /* v54 D1: --space-20 was this rule's own literal before the registers
        existed; --register-pad's instrument rung is --space-10, so the gap
        between the headline/strip/legend/stream sections below shrinks. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
 
     .stale code, .muted code { font-family: var(--font-mono); font-size: var(--text-micro); }
 

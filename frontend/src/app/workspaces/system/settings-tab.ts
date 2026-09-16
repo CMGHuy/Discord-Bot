@@ -396,7 +396,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
        Clamping the track is what makes the children's own overflow-x
        containers the thing that scrolls instead.
        No backticks in here: these styles live in a TS template literal. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
 
     .fields {
       display: grid;

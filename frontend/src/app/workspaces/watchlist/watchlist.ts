@@ -431,7 +431,7 @@ function sortValue(row: Ticker, key: string, flagged: readonly string[]): string
     /* v54 D1: --space-20 was this rule's own literal before the registers
        existed; --register-pad's instrument rung is --space-10, so both
        gaps below shrink. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
 
     .head-status { display: flex; align-items: baseline; gap: var(--register-pad); }
     /* The count caption beside the section head -- --text-table (13px)

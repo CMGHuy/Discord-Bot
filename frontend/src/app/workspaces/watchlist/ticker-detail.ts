@@ -133,7 +133,7 @@ export const TICKER_TRADES_CAP = 25;
        Clamping the track is what makes the children's own overflow-x
        containers the thing that scrolls instead.
        No backticks in here: these styles live in a TS template literal. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
 
     .back { color: var(--text-secondary); font-size: var(--text-table); text-decoration: none; }
     .back:hover { color: var(--text); }
