@@ -525,10 +525,14 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
     }
 
     /* -- the two side-by-side panels -- */
+    /* v89 audit (UA15): this gap is between sibling PANELS, so it takes
+       --section-gap like every other panel boundary, not --register-pad --
+       that token governs density inside a panel, not the space between two
+       of them (spec §4.2; same rule watchlist's own :host comment states). */
     .split {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: var(--register-pad);
+      gap: var(--section-gap);
     }
     .sectors > div {
       display: flex;

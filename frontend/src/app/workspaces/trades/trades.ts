@@ -477,6 +477,12 @@ interface LaneChip {
     />
   `,
   styles: `
+    /* v89 audit (UA15): sb-trades had no :host stacking rule, so its
+       top-level children (section head, control bar, filter bar, the
+       table) sat flush against each other instead of --section-gap apart.
+       Same pattern as every other workspace host. */
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
+
     /* sb-control-row supplies display, alignment, wrap and gap. */
     .export { color: var(--accent); font-size: var(--text-table); text-decoration: none; }
     .export:hover { text-decoration: underline; }
