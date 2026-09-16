@@ -830,6 +830,23 @@ def exit_reason_split(closed: list[dict]) -> list[dict]:
     return out
 
 
+def unmapped_exit_reasons(closed: list[dict], limit: int = 10) -> list[dict]:
+    """Raw close-reason texts filed under ``other``, ordered by frequency.
+
+    The mapping intentionally stays exact-match only; these rows expose the
+    evidence needed to add a future exact mapping without guessing.
+    """
+    counts: dict[tuple[str, str], int] = {}
+    for trade in closed:
+        if _exit_reason_bucket(trade) != "other":
+            continue
+        key = (str(trade.get("status") or ""), close_reason_text(trade))
+        counts[key] = counts.get(key, 0) + 1
+    rows = [{"status": status, "text": text, "n": n} for (status, text), n in counts.items()]
+    rows.sort(key=lambda row: (-row["n"], row["status"], row["text"]))
+    return rows[:limit]
+
+
 #: Disposition-ratio severity bands, taken verbatim from HKUDS/Vibe-Trading's
 #: `trade-journal` skill. They are that project's numbers, calibrated on retail
 #: broker exports, and have NOT been measured on this repo's trades: a severity

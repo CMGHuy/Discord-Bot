@@ -456,6 +456,7 @@ def analytics_exit_quality():
               if t.get("status") in ("win", "loss", "closed")]
     entries = JournalStore().entries()
     return jsonify({"exit_reasons": m.exit_reason_split(closed),
+                    "unmapped_reasons": m.unmapped_exit_reasons(closed),
                     "hold_by_outcome": m.hold_by_outcome(closed),
                     "efficiency": eq.efficiency_histogram(entries),
                     "mae": eq.mae_histogram(entries),
