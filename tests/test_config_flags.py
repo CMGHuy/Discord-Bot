@@ -101,3 +101,13 @@ def test_v81_trail_notify_min_r_field_exists_with_documented_default():
     assert (field.min, field.max) == (0.01, 1.0)
     assert field.section == "Plan Engine v2"
     assert isinstance(config.TRAIL_NOTIFY_MIN_R, float)
+
+
+def test_v87_market_data_timeframes_default_archives_15m_and_5m():
+    from swingbot.core.marketdata.data_store import timeframe_name
+
+    by_key = {f.key: f for f in config.FIELDS}
+    names = [t.strip() for t in by_key["MARKET_DATA_TIMEFRAMES"].default.split(",")]
+    assert names == ["monthly", "weekly", "daily", "hourly", "15min", "5min"]
+    assert [timeframe_name(n) for n in names] == names
+    assert "1min" not in names

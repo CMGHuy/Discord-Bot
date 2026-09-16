@@ -777,11 +777,13 @@ FIELDS: list[Field] = [
                "bot's connection -- this is what happened in production on 2026-08-24."),
     Field("MARKET_DATA_TIMEFRAMES", "MARKET_DATA_TIMEFRAMES", "Universe & Scanning",
           "Auto-refreshed timeframes",
-          type="text", default="monthly,weekly,daily,hourly",
+          type="text", default="monthly,weekly,daily,hourly,15min,5min",
           help="Comma-separated timeframe folders to keep current. Names come from "
-               "swingbot/core/marketdata/data_store.py:TIMEFRAMES. Sub-hourly ones (15min, 5min, 1min) "
-               "are accepted but Yahoo only serves them for the trailing 30-60 days, so they "
-               "cannot support training -- leave them out unless you want live entry timing."),
+               "swingbot/core/marketdata/data_store.py:TIMEFRAMES. 15min and 5min are archived "
+               "FORWARD (v87): Yahoo serves them for ~60 days only, so the archive is only as "
+               "deep as the day it started, and removing them here stops the archive -- bars "
+               "that age out meanwhile are gone for good. They refresh every 24h, after hourly. "
+               "1min is accepted but not archived by default (~600 MB/year, little use at swing horizons)."),
     Field("REGIME_GATES_ENABLED", "REGIME_GATES_ENABLED", "Universe & Scanning",
           "Per-strategy regime gates enabled",
           type="checkbox", default="false",
