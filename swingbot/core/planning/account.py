@@ -99,6 +99,12 @@ def _use_db(path: str | None) -> bool:
 _MAX_BALANCE_HISTORY = 5000
 
 
+def _read_trades_file(path: str | None) -> list[dict]:
+    """Read the legacy trade store, retaining jsonio's corruption handling."""
+    trades = read_json(path or os.path.join(app_config.DATA_DIR, "trades.json"), [])
+    return trades if isinstance(trades, list) else []
+
+
 def _sum_realized_pnl(trades_path: str = None) -> float:
     """
     All-time realized P&L: sum of `realized_pnl_amount` across every trade
@@ -112,14 +118,16 @@ def _sum_realized_pnl(trades_path: str = None) -> float:
     so an open trade must never be treated as settled merely because it has a
     banked scale-out leg.
     """
-    path = trades_path or os.path.join(app_config.DATA_DIR, "trades.json")
-    # Through jsonio.read_json, not a local open(): the copy that lived here
-    # used the platform default encoding (cp1252 on Windows) and let a
-    # UnicodeDecodeError escape load_account_config, where read_json reads
-    # UTF-8 and logs a corrupt file instead of silently summing zero.
-    trades = read_json(path, [])
-    if not isinstance(trades, list):
-        return 0.0
+    if trades_path is None:
+        from swingbot.core.db import stages
+        if stages.reads_db("trades"):
+            from swingbot.core.db.repositories.trades import trades_repo
+            from swingbot.core.db.dual import normalise
+            trades = normalise(trades_repo().list_all())
+        else:
+            trades = _read_trades_file(None)
+    else:
+        trades = _read_trades_file(trades_path)
     total = 0.0
     for t in trades:
         pnl = t.get("realized_pnl_amount")

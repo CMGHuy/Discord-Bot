@@ -58,7 +58,19 @@ def _starred_rows(raw: object) -> list[dict]:
     return [{"plan_id": value} for value in raw]
 
 
+def _account_repo():
+    from swingbot.core.db.repositories.account import AccountRepository
+    return AccountRepository()
+
+
+def _account_rows(raw: object) -> list[dict]:
+    cfg = dict(raw) if isinstance(raw, dict) else {}
+    cfg.pop("balance_history", None)
+    return [{"key": "config", **cfg}]
+
+
 STORES: dict[str, StoreSpec] = {
+    "account": StoreSpec("account.json", "key", _account_repo, loader=_account_rows),
     "trades": StoreSpec("trades.json", "id", _trades_repo, _trades_from_repo_shape),
     "plans": StoreSpec("plans.json", "plan_id", _plans_repo, _plans_from_repo_shape),
     "starred_plans": StoreSpec("starred_plans.json", "plan_id", _starred_repo,
