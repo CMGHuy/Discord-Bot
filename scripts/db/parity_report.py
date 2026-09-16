@@ -69,8 +69,20 @@ def _account_rows(raw: object) -> list[dict]:
     return [{"key": "config", **cfg}]
 
 
+def _journal_repo():
+    from swingbot.core.db.repositories.journal import JournalRepository
+    return JournalRepository()
+
+
+def _journal_from_repo_shape(row: dict) -> dict:
+    from swingbot.core.db.dual import normalise
+    return normalise(row)
+
+
 STORES: dict[str, StoreSpec] = {
     "account": StoreSpec("account.json", "key", _account_repo, loader=_account_rows),
+    "journal": StoreSpec("journal.json", "trade_id", _journal_repo,
+                         _journal_from_repo_shape),
     "trades": StoreSpec("trades.json", "id", _trades_repo, _trades_from_repo_shape),
     "plans": StoreSpec("plans.json", "plan_id", _plans_repo, _plans_from_repo_shape),
     "starred_plans": StoreSpec("starred_plans.json", "plan_id", _starred_repo,
