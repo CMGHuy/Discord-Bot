@@ -6,7 +6,7 @@ from swingbot.core.db import notify
 
 def test_channels_match_the_existing_watcher_concerns():
     assert notify.CHANNELS == (
-        "trades", "account", "analytics", "scan", "journal", "bot", "risk", "watchlist", "jobs",
+        "trades", "account", "analytics", "scan", "journal", "bot", "risk", "watchlist", "jobs", "settings",
     )
 
 
