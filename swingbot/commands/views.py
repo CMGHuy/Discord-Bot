@@ -29,19 +29,33 @@ _STARRED_PATH = os.path.join(config.DATA_DIR, "starred_plans.json")
 
 
 def starred_ids() -> set:
+    from swingbot.core.db import stages
+    if stages.reads_db("starred_plans"):
+        from swingbot.core.db.repositories.starred import starred_repo
+        return starred_repo().ids()
     return set(read_json(_STARRED_PATH, []))
 
 
 def star_plan(plan_id: str) -> None:
-    ids = starred_ids()
-    ids.add(plan_id)
-    atomic_write_json(_STARRED_PATH, sorted(ids))
+    from swingbot.core.db import stages
+    if stages.writes_json("starred_plans"):
+        ids = set(read_json(_STARRED_PATH, []))
+        ids.add(plan_id)
+        atomic_write_json(_STARRED_PATH, sorted(ids))
+    if stages.writes_db("starred_plans"):
+        from swingbot.core.db.repositories.starred import starred_repo
+        starred_repo().star(plan_id)
 
 
 def unstar_plan(plan_id: str) -> None:
-    ids = starred_ids()
-    ids.discard(plan_id)
-    atomic_write_json(_STARRED_PATH, sorted(ids))
+    from swingbot.core.db import stages
+    if stages.writes_json("starred_plans"):
+        ids = set(read_json(_STARRED_PATH, []))
+        ids.discard(plan_id)
+        atomic_write_json(_STARRED_PATH, sorted(ids))
+    if stages.writes_db("starred_plans"):
+        from swingbot.core.db.repositories.starred import starred_repo
+        starred_repo().unstar(plan_id)
 
 
 class PlanActionView(discord.ui.View):

@@ -21,6 +21,7 @@ class StoreSpec:
     key: str
     repo_factory: Callable[[], object]
     from_repo_shape: Callable[[dict], dict] = lambda row: row
+    loader: Callable[[object], list[dict]] | None = None
 
 
 def _trades_repo():
@@ -48,9 +49,20 @@ def _plans_from_repo_shape(row: dict) -> dict:
     return normalise(row)
 
 
+def _starred_repo():
+    from swingbot.core.db.repositories.starred import StarredRepository
+    return StarredRepository()
+
+
+def _starred_rows(raw: object) -> list[dict]:
+    return [{"plan_id": value} for value in raw]
+
+
 STORES: dict[str, StoreSpec] = {
     "trades": StoreSpec("trades.json", "id", _trades_repo, _trades_from_repo_shape),
     "plans": StoreSpec("plans.json", "plan_id", _plans_repo, _plans_from_repo_shape),
+    "starred_plans": StoreSpec("starred_plans.json", "plan_id", _starred_repo,
+                                loader=_starred_rows),
 }
 
 
@@ -58,6 +70,8 @@ def parity(store: str) -> ImportReport:
     """Return a strict whole-store JSON-to-Postgres parity report."""
     spec = STORES[store]
     source = read_json(os.path.join(config.DATA_DIR, spec.filename), [])
+    if spec.loader is not None:
+        source = spec.loader(source)
     if isinstance(source, dict):
         source = list(source.values())
     rows = [spec.from_repo_shape(row) for row in spec.repo_factory().list_all()]
