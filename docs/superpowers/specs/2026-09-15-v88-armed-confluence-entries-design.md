@@ -79,16 +79,16 @@ Window: bars `j` in `[i, i + N]`. Bullish shown; bearish is the exact mirror
 
 - **Test:** `Low_j <= L + k·ATR_j` (a touch within `k` ATR, or a pierce).
 - **Reaction**, on a bar at or after the first test bar:
-  - **R1 rejection:** `range_j > 0`, lower wick `min(Open_j, Close_j) − Low_j
+  - **R1 rejection:** bar `j` is itself a test bar, `range_j > 0`, lower wick `min(Open_j, Close_j) − Low_j
     >= 0.5·range_j`, `Close_j >= Low_j + (2/3)·range_j`, and `Close_j >= L`.
   - **R2 follow-through:** `Close_j > High_{j−1}`, with a test on `j` or `j−1`.
-  - **R3 reclaim:** some bar in `[j−2, j−1]` closed below `L`, and
+  - **R3 reclaim:** some bar in `[max(i, j−2), j−1]` — inside the arm window — closed below `L`, and
     `Close_j >= L`.
   - The first bar satisfying any of them confirms. When one bar satisfies
     several, the strongest names it: R3 > R2 > R1.
 - **Expiry:** no reaction by `i + N` → `expired_unarmed`, no plan.
 - **Cancel before confirmation:** `High_j >= T1` (the target traded first), or
-  a close below `L` not reclaimed within 2 bars → `cancelled_armed`, no plan.
+  a close below `L` not reclaimed within 2 bars → `cancelled_armed`, no plan. The target check starts on the bar after the arm bar; when one bar both reaches the target and reacts, the cancel wins.
 
 The reaction set is **fixed, not gridded** — it is the definition under test,
 and gridding it would multiply the comparisons the plateau check must survive.
@@ -179,8 +179,11 @@ information beyond simply waiting?** n = 200, seed 42. Each permutation keeps
 the same set of armed scenarios that confirmed in the real run, and moves each
 confirmation to a bar drawn uniformly from its own `[i, i + N]` window,
 building the stop, entry and gates by §3.3–3.4 exactly as if that bar had
-reacted. The statistic is mix-standardised `ΔWR` vs baseline; `p` = the share
-of permuted `ΔWR >=` the real `ΔWR`.
+reacted. The stop anchors from the first test at or before the drawn bar, or
+from the arm bar when nothing has tested yet; the entry mode follows the
+arm's real reaction kind. The population is every arm that confirmed in the
+real run, issued or regated. The statistic is mix-standardised `ΔWR` vs
+baseline; `p` = the share of permuted `ΔWR >=` the real `ΔWR`.
 
 ### 4.3 Integrity guards
 
