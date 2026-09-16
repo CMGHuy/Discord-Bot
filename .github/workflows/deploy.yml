@@ -28,7 +28,7 @@ jobs:
   #     missing, so it was passing while covering half of what it claimed.
   #     Now tests/admin/test_template_endpoints.py, which DERIVES the list
   #     from the templates and therefore cannot drift.
-  test:
+  backend-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -78,8 +78,8 @@ jobs:
   # The Angular suite and a real production build. The build is not redundant
   # with the Docker one below: this fails in ~1 minute with a readable
   # TypeScript error, where the Docker stage fails several minutes in with the
-  # same error buried in build output. It also runs in parallel with `test`.
-  frontend:
+  # same error buried in build output. It also runs in parallel with `backend-test`.
+  frontend-test:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -179,7 +179,7 @@ jobs:
   # against. Build once, prove it, then push that -- never rebuild for the
   # push, which would ship an image nothing tested.
   container-healthcheck:
-    needs: [test, frontend]
+    needs: [backend-test, frontend-test]
     runs-on: ubuntu-latest
     permissions:
       contents: read
