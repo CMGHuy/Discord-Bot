@@ -450,7 +450,11 @@ def _json_record(row: dict) -> dict:
     for name in ("entry", "stop_loss"):
         if row.get(name) is not None:
             result[name] = float(row[name])
-    return result
+    # The JSON backend exposes ISO timestamps and floats.  Keep that public
+    # shape at the database boundary too, rather than leaking PostgreSQL's
+    # datetime/Decimal values into analytics and command consumers.
+    from swingbot.core.db.dual import normalise
+    return normalise(result)
 
 
 class TradeLog:
