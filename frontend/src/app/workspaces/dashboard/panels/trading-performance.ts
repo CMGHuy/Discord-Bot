@@ -57,8 +57,8 @@ export type DashboardScopeMode = DashboardScope;
 
         <div class="grid">
           <sb-metric-card label="Open P&L" [value]="openPnlPct()" tone="pnl" unit="%" />
-          <sb-metric-card label="Win rate" [value]="winRate()" unit="%" [decimals]="1" />
-          <sb-metric-card label="Expectancy" [value]="expectancyR()" tone="pnl" unit="R" />
+          <sb-metric-card label="Win rate" [value]="winRate()" unit="%" [decimals]="1" [sub]="sample(winRateN())" />
+          <sb-metric-card label="Expectancy" [value]="expectancyR()" tone="pnl" unit="R" [sub]="sample(expectancyN())" />
           <sb-metric-card label="Payoff ratio" [value]="payoffRatio()" [decimals]="2" />
           <sb-metric-card [label]="realizedLabel()" [value]="realizedAmount()"
                           tone="pnl" [unit]="currencyUnit()" />
@@ -134,6 +134,9 @@ export class TradingPerformance {
   readonly openPnlPct = input<number | null>(null);
   readonly winRate = input<number | null>(null);
   readonly expectancyR = input<number | null>(null);
+  readonly winRateN = input<number | null>(null);
+  readonly expectancyN = input<number | null>(null);
+  protected sample(n: number | null): string | null { return n === null ? null : `N=${n}`; }
   readonly avgConfidence = input<number | null>(null);
   readonly realizedAmount = input<number | null>(null);
   readonly realizedLabel = input('Realised today');

@@ -50,6 +50,7 @@ import {
   TickerRemoveResult,
   TickerSuggestions,
   TradeDetail,
+  TradeCollection,
   TradeNote,
   TradeQuery,
   TradeRow,
@@ -116,12 +117,12 @@ export class ApiClient {
    *  own camelCase field names, and `toParams` sends a key as-is. Same
    *  pattern as `analyticsPerformance`'s `from`/`to` below -- an omitted or
    *  null bound is left off the URL rather than sent empty. */
-  trades(query: TradeQuery = {}): Observable<Collection<TradeRow>> {
+  trades(query: TradeQuery = {}): Observable<TradeCollection> {
     const { openedFrom, openedTo, ...rest } = query;
     let params = toParams(rest);
     if (openedFrom) params = params.set('opened_from', openedFrom);
     if (openedTo) params = params.set('opened_to', openedTo);
-    return this.http.get<Collection<TradeRow>>(`${this.base}/trades`, {
+    return this.http.get<TradeCollection>(`${this.base}/trades`, {
       params,
     });
   }

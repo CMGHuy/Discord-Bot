@@ -74,6 +74,7 @@ const REQUIRED = [
   '--ease-spring',
 
   '--control-h',
+  '--section-gap',
 ];
 
 describe('design tokens', () => {

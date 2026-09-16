@@ -149,6 +149,8 @@ import { MarketMovers } from './panels/market-movers';
       [openPnlPct]="store.openPnlPct()"
       [winRate]="store.winRate()"
       [expectancyR]="store.expectancyR()"
+      [winRateN]="store.winRateN()"
+      [expectancyN]="store.expectancyN()"
       [avgConfidence]="store.avgConfidence()"
       [realizedAmount]="store.realizedAmount()"
       [realizedLabel]="realizedLabel()"
@@ -417,7 +419,7 @@ import { MarketMovers } from './panels/market-movers';
        literal before, and register-presentation's rung is the same value,
        so this changes nothing visually while making the rhythm follow the
        register instead of a hardcoded token. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
 
     /* Both panels below own their OWN top margin, on top of the grid's own
        --register-pad, rather than the panel above owning a bottom margin --
@@ -426,12 +428,7 @@ import { MarketMovers } from './panels/market-movers';
     .bottom-row {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: var(--register-pad);
-      margin-top: var(--space-20);
-    }
-
-    .positions-panel {
-      margin-top: var(--space-20);
+      gap: var(--section-gap);
     }
 
     /* Same overlay pattern as sb-profile-menu's own dropdown: relative

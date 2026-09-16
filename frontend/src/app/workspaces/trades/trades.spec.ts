@@ -247,14 +247,11 @@ describe('Trades — the opened-at range', () => {
  * by reading the actual render tree rather than assumed from the sketch.
  */
 describe('Trades — the count footer', () => {
-  it('reports the visible slice and the filtered total', () => {
+  it('leaves the non-empty range to the pager, printed once', () => {
     const el = render({ total: 142, page: 1, perPage: 12 }).nativeElement as HTMLElement;
-    expect(el.querySelector('p.count')!.textContent).toContain('Showing 1–12 of 142');
-  });
-
-  it('reports the last page without overrunning the total', () => {
-    const el = render({ total: 142, page: 12, perPage: 12 }).nativeElement as HTMLElement;
-    expect(el.querySelector('p.count')!.textContent).toContain('Showing 133–142 of 142');
+    expect(el.querySelector('p.count')).toBeNull();
+    expect(el.querySelectorAll('.pager .range')).toHaveLength(1);
+    expect(el.querySelector('.pager .range')!.textContent).toContain('1–12 of 142');
   });
 
   it('distinguishes a filter that matched nothing from an empty log', () => {

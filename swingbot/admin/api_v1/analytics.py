@@ -112,6 +112,9 @@ def analytics_performance():
     realized = [p for p in (closed_pnl(t) for t in closed) if p is not None]
 
     scoped = m.in_date_range(closed, start=start, end=end)
+    from swingbot.core.planning import account as account_module
+    base_balance = float(account_module.load_account_config().get("base_balance") or 0.0)
+    window_balance = m.balance_at(closed, start, base_balance)
     returns = [r for r in (m.trade_return_pct(t) for t in scoped) if r is not None]
     factor = m.annualisation_factor(scoped)
     raw_sharpe, raw_sortino = m.sharpe(returns), m.sortino(returns)
@@ -131,8 +134,10 @@ def analytics_performance():
             "worst_trade_pct": round(min(realized), 2) if realized else None,
             "avg_holding_days": stats.get("avg_holding_days"),
         },
-        "win_rate": stats.get("win_rate"),
-        "expectancy_r": stats.get("expectancy_r"),
+        "win_rate": m.win_rate(closed),
+        "win_rate_n": sum(1 for t in closed if t.get("status") in ("win", "loss")),
+        "expectancy_r": m.expectancy_r(closed),
+        "expectancy_n": len(m.r_multiples(closed)),
         "by_confidence": tl.get_stats_by_confidence(),
 
         "range": {
@@ -143,9 +148,9 @@ def analytics_performance():
         "derived": {
             "avg_win_pct": m.avg_win_pct(scoped),
             "avg_loss_pct": m.avg_loss_pct(scoped),
-            "total_return_pct": m.total_return_pct(scoped),
-            "annualised_return_pct": m.annualised_return_pct(scoped),
-            "calmar": m.calmar(scoped),
+            "total_return_pct": m.total_return_pct(scoped, window_balance),
+            "annualised_return_pct": m.annualised_return_pct(scoped, window_balance),
+            "calmar": m.calmar(scoped, window_balance),
             "volatility_ann_pct": m.volatility_ann_pct(scoped),
             "trades_per_month": m.trades_per_month(scoped),
             "pct_in_market": m.pct_in_market(scoped),
@@ -163,7 +168,7 @@ def analytics_performance():
         "rolling_returns": m.rolling_return_pct(scoped),
         "holding_period_split": m.holding_period_split(scoped),
         "risk_reward_split": m.risk_reward_split(scoped),
-        "calendar": m.calendar_returns(scoped),
+        "calendar": m.calendar_returns(scoped, window_balance),
         "cumulative_by_strategy": m.cumulative_pnl_by_strategy(scoped),
         # Best-effort: get_extended_stats swallows a failed yfinance fetch and
         # returns {}. The key is always present so the workspace never has to
@@ -454,6 +459,7 @@ def analytics_exit_quality():
               if t.get("status") in ("win", "loss", "closed")]
     entries = JournalStore().entries()
     return jsonify({"exit_reasons": m.exit_reason_split(closed),
+                    "unmapped_reasons": m.unmapped_exit_reasons(closed),
                     "hold_by_outcome": m.hold_by_outcome(closed),
                     "efficiency": eq.efficiency_histogram(entries),
                     "mae": eq.mae_histogram(entries),

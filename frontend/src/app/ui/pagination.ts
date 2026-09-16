@@ -7,7 +7,8 @@ import { ALL_PER_PAGE, PER_PAGE_OPTIONS } from './table-prefs';
   selector: 'sb-pagination',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    @if (showPerPage()) {
+    @if (!navOnly() || pageCount() > 1) {
+    @if (showPerPage() && !navOnly()) {
       <div class="per-page">
         <label><span class="sb-label">Rows</span><select (change)="onPerPage($any($event.target).value)">
           @for (option of perPageOptions; track option) {
@@ -17,7 +18,7 @@ import { ALL_PER_PAGE, PER_PAGE_OPTIONS } from './table-prefs';
       </div>
     }
     <div class="pager">
-      <span class="range num">{{ rangeLabel() }}</span>
+      @if (!navOnly()) {<span class="range num">{{ rangeLabel() }}</span>}
       @if (pageCount() > 1) {
         <button type="button" aria-label="First page" [disabled]="pagination().page <= 1" (click)="jump(1)">⏮</button>
         <button type="button" aria-label="Previous page" [disabled]="pagination().page <= 1" (click)="goTo(-1)">Previous</button>
@@ -27,6 +28,7 @@ import { ALL_PER_PAGE, PER_PAGE_OPTIONS } from './table-prefs';
       }
     </div>
     @if (announce()) { <span class="sr-only" role="status" aria-live="polite">{{ announcement() }}</span> }
+    }
   `,
   styles: `
     /* padding matches .pager's exactly (both var(--space-10)) so the two
@@ -54,6 +56,7 @@ export class PaginationComponent {
   readonly showPerPage = input(false);
   readonly perPageChange = output<number>();
   readonly announce = input(false);
+  readonly navOnly = input(false);
   protected readonly perPageOptions = PER_PAGE_OPTIONS;
   protected readonly allPerPage = ALL_PER_PAGE;
   protected onPerPage(value: string): void { this.perPageChange.emit(Number(value)); }

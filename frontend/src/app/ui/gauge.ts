@@ -26,7 +26,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
       [attr.aria-valuemin]="0"
       [attr.aria-valuemax]="max()"
     >
-      <svg viewBox="0 0 120 66" width="100%" height="auto" aria-hidden="true">
+      <svg viewBox="0 0 120 66" width="100%" aria-hidden="true">
         <path class="track" d="M10 60 A50 50 0 0 1 110 60" fill="none" stroke-width="10" />
         @if (value() !== null) {
           <path

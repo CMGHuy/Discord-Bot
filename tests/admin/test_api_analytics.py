@@ -80,6 +80,7 @@ def seed(admin_app, tmp_path):
     def _seed(trades=()):
         (tmp_path / "plans.json").write_text("[]", encoding="utf-8")
         (tmp_path / "trades.json").write_text(json.dumps(list(trades)), encoding="utf-8")
+        (tmp_path / "account.json").write_text(json.dumps({"base_balance": 1000.0, "balance": 1150.0, "risk_pct": 1.0, "max_position_pct": 20.0, "sizing_mode": "risk_pct", "balance_history": []}), encoding="utf-8")
     return _seed
 
 
@@ -103,7 +104,7 @@ def test_derived_values_match_the_hand_computed_answers(seed, logged_in):
     derived = _perf(logged_in)["derived"]
     assert derived["avg_win_pct"] == pytest.approx(15.0)
     assert derived["avg_loss_pct"] == pytest.approx(-7.5)
-    assert derived["total_return_pct"] == pytest.approx(12.86, abs=0.01)
+    assert derived["total_return_pct"] == pytest.approx(15.0)
     # These records open 10:00 and close 15:00, so each holding period is
     # 10 (or 20) days PLUS five hours, and the span is 366 days plus five.
     # Spelled out rather than rounded to whole days: the five hours are what
@@ -171,8 +172,8 @@ def test_distributions_and_series_are_present_and_scoped(seed, logged_in):
                  where="distributions")
     assert sum(b["count"] for b in body["distributions"]["returns"]) == 4
     assert_shape(body, {
-        "totals": dict, "relocated": dict, "win_rate": NULLABLE_NUMBER,
-        "expectancy_r": NULLABLE_NUMBER, "by_confidence": dict, "derived": dict,
+        "totals": dict, "relocated": dict, "win_rate": NULLABLE_NUMBER, "win_rate_n": int,
+        "expectancy_r": NULLABLE_NUMBER, "expectancy_n": int, "by_confidence": dict, "derived": dict,
         "range": dict, "distributions": dict, "rolling_returns": list,
         "holding_period_split": list, "risk_reward_split": list, "calendar": list,
         "cumulative_by_strategy": dict, "benchmark": dict,

@@ -23,10 +23,12 @@ import {
   AnalyticsPlans,
   AnalyticsSnapshot,
   AnalyticsStrategies,
+  HoldingBucket,
   RiskMetrics,
 } from '../api/models';
 import { DonutSlice } from '../ui/donut';
 import { HistogramBin } from '../ui/histogram';
+import { BarRow } from '../ui/bar-list';
 import { LineChartSeries } from '../ui/line-chart';
 
 /* -- row shapes ---------------------------------------------------------
@@ -412,14 +414,22 @@ export function rateOrWithheld(n: number, rate: number | null | undefined, floor
   return { count: rate, withheld: false };
 }
 
-function zeroFilledHistogram(rows: BreakdownRow[], order: readonly (readonly [string, string])[], floor: number): HistogramBin[] {
+export function zeroFilledBars(rows: BreakdownRow[], order: readonly (readonly [string, string])[], floor: number): BarRow[] {
   const byKey = new Map(rows.map((row) => [row.key, row]));
   return order.map(([key, label]) => {
     const row = byKey.get(key);
     const n = row?.n ?? 0;
     const value = rateOrWithheld(n, row?.win_rate, floor);
-    return { label: value.withheld ? `${label} (n=${n} — below ${floor}, rate withheld)` : `${label} (n=${n})`, count: value.count };
+    return { label, value: value.withheld ? null : value.count, n, withheld: value.withheld };
   });
+}
+
+export function rateBars(buckets: readonly HoldingBucket[]): BarRow[] {
+  return buckets.map((bucket) => ({ label: bucket.bucket, value: bucket.win_rate, n: bucket.n, withheld: bucket.win_rate === null }));
+}
+
+export function monthBars(rows: readonly { month: string; return_pct: number | null; n: number }[]): BarRow[] {
+  return rows.map((row) => ({ label: row.month, value: row.return_pct, n: row.n }));
 }
 /** One histogram bin. */
 export interface Bin {
@@ -790,13 +800,13 @@ export const AnalyticsStore = signalStore(
     ),
 
 
-    directionHistogram: computed<HistogramBin[]>(() =>
-      zeroFilledHistogram(
+    directionBars: computed<BarRow[]>(() =>
+      zeroFilledBars(
         toBreakdownRows((snapshot()?.by?.['direction'] ?? []) as unknown[]),
         DIRECTION_ORDER, exitQuality()?.min_cell_n ?? 0,
       )),
-    dowHistogram: computed<HistogramBin[]>(() =>
-      zeroFilledHistogram(
+    dowBars: computed<BarRow[]>(() =>
+      zeroFilledBars(
         toBreakdownRows((snapshot()?.by?.['dow'] ?? []) as unknown[]),
         DOW_ORDER.map((day) => [day, day] as const), exitQuality()?.min_cell_n ?? 0,
       )),
@@ -835,7 +845,9 @@ export const AnalyticsStore = signalStore(
     }),
 
     winRate: computed(() => performance()?.win_rate ?? null),
+    winRateN: computed(() => performance()?.win_rate_n ?? null),
     expectancyR: computed(() => performance()?.expectancy_r ?? null),
+    expectancyN: computed(() => performance()?.expectancy_n ?? null),
 
     /* -- SR54: the figures that used to be derived in the browser -------- */
 
@@ -891,27 +903,11 @@ export const AnalyticsStore = signalStore(
         label: `${bucket.lo.toFixed(2)}R`,
         count: bucket.count,
       }))),
-    holdingPeriodHistogram: computed<HistogramBin[]>(() =>
-      (performance()?.holding_period_split ?? []).map((bucket) => ({
-        label: `${bucket.bucket} (n=${bucket.n})`,
-        count: bucket.win_rate ?? 0,
-      }))),
-    riskRewardHistogram: computed<HistogramBin[]>(() =>
-      (performance()?.risk_reward_split ?? []).map((bucket) => ({
-        label: `${bucket.bucket} (n=${bucket.n})`,
-        count: bucket.win_rate ?? 0,
-      }))),
     calendarReturns: computed(() => performance()?.calendar ?? []),
 
-    /** `calendarReturns` reshaped for `Histogram` -- `count` here is a
-     *  monthly return percentage, not literally a count; the field is
-     *  generically a number and Histogram's `negative` predicate already
-     *  colours a signed value correctly regardless of what it represents. */
-    monthHistogram: computed<HistogramBin[]>(() =>
-      (performance()?.calendar ?? []).map((month) => ({
-        label: month.month,
-        count: month.return_pct,
-      }))),
+    holdingPeriodBars: computed(() => rateBars(performance()?.holding_period_split ?? [])),
+    riskRewardBars: computed(() => rateBars(performance()?.risk_reward_split ?? [])),
+    monthBars: computed(() => monthBars(performance()?.calendar ?? [])),
 
     /* -- SR55: the journal's analytics half ----------------------------- */
 

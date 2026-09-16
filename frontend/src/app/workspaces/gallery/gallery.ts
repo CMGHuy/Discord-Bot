@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, TemplateRef, computed, signal, view
 
 import { ChartResponse } from '../../api/models';
 import { Async, AsyncEmptyReason } from '../../ui/async';
+import { BarList, BarRow } from '../../ui/bar-list';
 import { Button, ButtonVariant } from '../../ui/button';
 import { ChartContainer } from '../../ui/chart-container';
 import { TradeChart } from '../../ui/chart/trade-chart';
@@ -27,6 +28,7 @@ import { Gauge } from '../../ui/gauge';
 import { Hint } from '../../ui/hint';
 import { Histogram, HistogramBin } from '../../ui/histogram';
 import { Icon, IconName } from '../../ui/icon';
+import { InlineMd } from '../../ui/inline-md';
 import { ControlRow, Drawer, Panel, Tab, TabBar } from '../../ui/layout';
 import { LineChartSeries } from '../../ui/line-chart';
 import { LineChart } from '../../ui/line-chart';
@@ -87,6 +89,7 @@ interface ContractRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     Async,
+    BarList,
     Button,
     ChartContainer,
     Checkbox,
@@ -113,6 +116,7 @@ interface ContractRow {
     Hint,
     Histogram,
     Icon,
+    InlineMd,
     LineChart,
     Magnitude,
     Matrix,
@@ -255,6 +259,9 @@ interface ContractRow {
         Expectancy
         <sb-hint text="Average R per closed trade, after costs, pooled across strategies." label="About expectancy" />
       </p>
+    </sb-panel>
+    <sb-panel heading="sb-inline-md -- **bold** only, added by UA13, never demoed here">
+      <p class="sb-help"><sb-inline-md text="Cut losers **faster** on choppy days; the plan's stop is not a suggestion." /></p>
     </sb-panel>
     <sb-panel heading="sb-drawer">
       <button sb-button variant="secondary" type="button" (click)="drawerOpen.set(true)">
@@ -422,6 +429,7 @@ interface ContractRow {
       </sb-control-row>
       <sb-sparkline [points]="sparklinePoints" label="Trend" />
       <sb-histogram [bins]="histogramBins" />
+      <sb-bar-list [rows]="barListRows" mode="signed" [format]="barListFormat" />
       <sb-donut [slices]="[{label: 'A', count: 3}, {label: 'B', count: 1}, {label: 'Absent', count: 0}]" />
       <sb-scatter [points]="[{x: .2, y: 2, tone: 'pos'}, {x: 1, y: .4, tone: 'neg'}]" xLabel="MAE (R)" yLabel="MFE (R)" />
       <sb-line-chart [series]="lineChartSeries" />
@@ -757,6 +765,13 @@ export class Gallery {
     { label: '+1R', count: 12 },
     { label: '+2R', count: 6 },
   ];
+  /** v89 -- sb-bar-list, added by UA13, never demoed here. */
+  protected readonly barListRows: BarRow[] = [
+    { label: 'Long', value: 58.3, n: 42 },
+    { label: 'Short', value: -12.1, n: 9 },
+    { label: 'Flat', value: null, n: 4, withheld: true },
+  ];
+  protected readonly barListFormat = (value: number) => `${value.toFixed(1)}%`;
   protected readonly lineChartSeries: LineChartSeries[] = [
     {
       name: 'Equity',

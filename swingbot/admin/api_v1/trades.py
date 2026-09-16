@@ -875,7 +875,13 @@ def list_trades():
     _attach_status_fields(page_rows)
     _attach_unrealized_pnl(page_rows)
     _strip_internal_fields(page_rows)
-    return jsonify(collection(page_rows, total, params.page, params.per_page))
+    body = collection(page_rows, total, params.page, params.per_page)
+    body["prices_as_of"] = (
+        datetime.now(timezone.utc).isoformat(timespec="seconds")
+        if any(row.get("current_price") is not None for row in page_rows)
+        else None
+    )
+    return jsonify(body)
 
 
 def _status_fields(row: dict, price: float | None) -> dict:

@@ -153,7 +153,7 @@ import { Freshness } from '../../ui/freshness';
        Clamping the track is what makes the children's own overflow-x
        containers the thing that scrolls instead.
        No backticks in here: these styles live in a TS template literal. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
 
     .states { display: flex; flex-wrap: wrap; gap: var(--space-8); }
     .state {

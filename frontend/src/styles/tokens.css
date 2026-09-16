@@ -217,6 +217,11 @@
   --space-14: 14px;
   --space-20: 20px;
 
+  /* v89 -- THE gap between sibling panels, vertical and horizontal, in both
+   * registers (spec §4.2). --register-pad still governs density INSIDE a
+   * panel; it no longer decides how far apart two panels sit. */
+  --section-gap: var(--space-20);
+
   /* -- controls --------------------------------------------------------
    * ONE height for every interactive control, so a button beside a field
    * is flush. The two were 29px (button, padding 6px 14px) and 25px
@@ -272,6 +277,12 @@
   /* Alias, so existing `transition: var(--transition)` call sites keep
    * working. New code names the duration it wants. */
   --transition: var(--dur-base) var(--ease-out);
+}
+
+/* v89 -- width only, not pointer: a touch laptop at 1440 keeps desktop
+ * rhythm; only a narrow viewport tightens it. */
+@media (max-width: 639px) {
+  :root { --section-gap: var(--space-14); }
 }
 
 /* v80 D3 -- touch. A finger needs about 44px; a mouse row of 28px controls

@@ -16,6 +16,7 @@ from swingbot.core.analytics.metrics import (
     annualised_return_pct,
     avg_loss_pct,
     avg_win_pct,
+    balance_at,
     calendar_returns,
     calmar,
     cumulative_pnl_by_strategy,
@@ -50,16 +51,18 @@ def _t(opened, closed, entry, exit_price, *, status="win", direction="bullish",
     }
 
 
+BASE = 1000.0
+
 def _year_of_trades():
     """Four trades spanning exactly one calendar year, +10%, -5%, +20%, -10%.
 
     Compounded: 1.10 * 0.95 * 1.20 * 0.90 = 1.1286 -> +12.86% total.
     """
     return [
-        _t("2024-01-01", "2024-01-11", 100.0, 110.0, strategy="RSI"),
-        _t("2024-04-01", "2024-04-11", 100.0, 95.0, status="loss", strategy="RSI"),
-        _t("2024-07-01", "2024-07-21", 100.0, 120.0, strategy="MACD"),
-        _t("2024-12-22", "2025-01-01", 100.0, 90.0, status="loss", strategy="MACD"),
+        _t("2024-01-01", "2024-01-11", 100.0, 110.0, strategy="RSI", pnl_amount=100.0),
+        _t("2024-04-01", "2024-04-11", 100.0, 95.0, status="loss", strategy="RSI", pnl_amount=-50.0),
+        _t("2024-07-01", "2024-07-21", 100.0, 120.0, strategy="MACD", pnl_amount=200.0),
+        _t("2024-12-22", "2025-01-01", 100.0, 90.0, status="loss", strategy="MACD", pnl_amount=-100.0),
     ]
 
 
@@ -113,42 +116,42 @@ def test_span_years_none_on_empty():
 def test_total_return_pct_compounds_rather_than_summing():
     # Summing would give +15.0; compounding gives +12.86. They differ, and
     # the compounded one is the honest account-growth figure.
-    assert round(total_return_pct(_year_of_trades()), 2) == 12.86
+    assert round(total_return_pct(_year_of_trades(), BASE), 2) == 15.0
 
 
 def test_annualised_return_is_close_to_total_return_over_about_one_year():
     trades = _year_of_trades()
-    ann = annualised_return_pct(trades)
-    assert 12.0 < ann < 13.0     # ~366 days, so barely below the raw total
+    ann = annualised_return_pct(trades, BASE)
+    assert 14.0 < ann < 15.0
 
 
 def test_annualised_return_scales_a_short_window_up():
     # +10% earned in ~10 days annualises to a very large number; the point of
     # the assertion is the direction and that it does not silently clamp.
-    quick = [_t("2024-01-01", "2024-01-11", 100.0, 110.0)]
-    assert annualised_return_pct(quick) > 1000.0
+    quick = [_t("2024-01-01", "2024-01-11", 100.0, 110.0, pnl_amount=100.0)]
+    assert annualised_return_pct(quick, BASE) > 1000.0
 
 
 def test_returns_none_on_empty_window():
-    assert total_return_pct([]) is None
-    assert annualised_return_pct([]) is None
-    assert calmar([]) is None
+    assert total_return_pct([], BASE) is None
+    assert annualised_return_pct([], BASE) is None
+    assert calmar([], BASE) is None
 
 
 def test_calmar_is_annualised_return_over_max_drawdown():
     trades = _year_of_trades()
     # Equity walks 100 -> 110 -> 104.5 -> 125.4 -> 112.86; peak 125.4,
     # trough after it 112.86 -> max drawdown 9.9968%.
-    c = calmar(trades)
-    assert c == pytest.approx(annualised_return_pct(trades) / 9.9968, rel=1e-3)
+    c = calmar(trades, BASE)
+    assert c == pytest.approx(annualised_return_pct(trades, BASE) / 8.0, rel=1e-3)
 
 
 def test_calmar_none_when_the_curve_never_drew_down():
     winners = [
-        _t("2024-01-01", "2024-01-11", 100.0, 110.0),
-        _t("2024-02-01", "2024-02-11", 100.0, 110.0),
+        _t("2024-01-01", "2024-01-11", 100.0, 110.0, pnl_amount=100.0),
+        _t("2024-02-01", "2024-02-11", 100.0, 110.0, pnl_amount=100.0),
     ]
-    assert calmar(winners) is None
+    assert calmar(winners, BASE) is None
 
 
 # ------------------------------------------------ annualisation / vol
@@ -299,15 +302,15 @@ def test_holding_period_split_is_empty_on_no_trades():
 # ------------------------------------------------- calendar / by strategy
 
 def test_calendar_returns_group_by_month():
-    cal = {c["month"]: c for c in calendar_returns(_year_of_trades())}
+    cal = {c["month"]: c for c in calendar_returns(_year_of_trades(), BASE)}
     assert cal["2024-01"]["return_pct"] == pytest.approx(10.0)
     assert cal["2024-01"]["n"] == 1
-    assert cal["2025-01"]["return_pct"] == pytest.approx(-10.0)
+    assert cal["2025-01"]["return_pct"] == pytest.approx(-8.0)
     assert "2024-02" not in cal   # months with no trades are omitted, not zeroed
 
 
 def test_calendar_returns_empty_on_no_trades():
-    assert calendar_returns([]) == []
+    assert calendar_returns([], BASE) == []
 
 
 def test_cumulative_pnl_by_strategy_walks_each_strategy_separately():

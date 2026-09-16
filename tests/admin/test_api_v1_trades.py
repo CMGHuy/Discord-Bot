@@ -183,14 +183,14 @@ def test_requires_auth(client):
 def test_empty_stores_give_an_empty_collection(seed, logged_in):
     seed()
     body = logged_in.get("/api/v1/trades").get_json()
-    assert_collection(body, TRADE_ROW)
-    assert body == {"items": [], "total": 0, "page": 1, "per_page": 25}
+    assert_collection(body, TRADE_ROW, envelope={"prices_as_of": (str, type(None))})
+    assert body == {"items": [], "total": 0, "page": 1, "per_page": 25, "prices_as_of": None}
 
 
 def test_a_pending_plan_appears_with_its_plan_status(seed, logged_in):
     seed(plans=[_plan("11111111-1111-4111-8111-111111111111")])
     body = logged_in.get("/api/v1/trades").get_json()
-    assert_collection(body, TRADE_ROW)
+    assert_collection(body, TRADE_ROW, envelope={"prices_as_of": (str, type(None))})
     assert body["total"] == 1
     row = body["items"][0]
     assert row["id"] == "11111111-1111-4111-8111-111111111111"
@@ -1169,7 +1169,7 @@ def test_no_internal_bookkeeping_fields_leak_onto_the_wire(seed, logged_in, pric
     priced(115.0)
 
     body = logged_in.get("/api/v1/trades").get_json()
-    assert_collection(body, TRADE_ROW)
+    assert_collection(body, TRADE_ROW, envelope={"prices_as_of": (str, type(None))})
 
 
 # --- range filters: opened_from / opened_to --------------------------------

@@ -183,7 +183,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
     </div>
 
     <ng-template #pagerTemplate let-page let-announce="announce">
-      <sb-pagination [pagination]="page" [showPerPage]="showPerPage()" [announce]="announce"
+      <sb-pagination [pagination]="page" [showPerPage]="showPerPage()" [announce]="announce" [navOnly]="!announce"
         (pageChange)="pageChange.emit($event)" (perPageChange)="perPageChange.emit($event)" />
     </ng-template>  `,
   styles: `
@@ -301,7 +301,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
     .row:hover { background: var(--surface-raised); }
     tr.filler > td { background: var(--bg); border-bottom: 0; height: var(--row-h); }
     tfoot td { border-top: 1px solid var(--border-strong); border-bottom: 0; font-weight: 600; color: var(--text); }
-    thead th { position: sticky; top: var(--header-h); z-index: 2; background: var(--surface); }
+    thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); }
 
     /* A pulse, not a hard on/off flash: WCAG's flash-rate guidance exists
        for a reason, and an opacity/background fade reads as "attention"

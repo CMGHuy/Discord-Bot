@@ -18,6 +18,7 @@ export interface ActivityEvent {
    *  moved on shows where it stands now, not what this timestamp was. */
   status: string;
   detail: string;
+  r: number | null;
   /** Stable across refetches, so the list does not re-animate: one row can
    *  produce two events, so the row id alone would not be unique. */
   id: string;
@@ -53,6 +54,7 @@ export function deriveActivity(
         detail: cancelled
           ? 'Plan cancelled before filling'
           : `Closed${row.r_multiple != null ? ` at ${row.r_multiple > 0 ? '+' : ''}${row.r_multiple.toFixed(2)}R` : ''}`,
+        r: cancelled ? null : (row.r_multiple ?? null),
         id: `${row.id}:${cancelled ? 'cancelled' : 'closed'}`,
       });
     }
@@ -65,6 +67,7 @@ export function deriveActivity(
         direction: row.direction ?? null,
         status: row.status ?? '',
         detail: row.entry != null ? `at ${num(row.entry)}` : '',
+        r: null,
         id: `${row.id}:opened`,
       });
     }

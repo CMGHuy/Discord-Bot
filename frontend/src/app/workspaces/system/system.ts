@@ -84,7 +84,7 @@ const TAB_IDS = new Set<string>(SYSTEM_TABS);
     /* v54 D1: --space-20 was this rule's own literal before the registers
        existed; --register-pad's instrument rung is --space-10, so the gap
        between the tab bar and the active tab's body shrinks. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
     .dirty { color: var(--warn); font-size: var(--text-table); }
   `,
 })

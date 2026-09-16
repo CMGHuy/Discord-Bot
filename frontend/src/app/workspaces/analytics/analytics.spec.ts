@@ -500,8 +500,9 @@ function measureToggle(el: HTMLElement, label: string): HTMLButtonElement {
 }
 
 function bar(el: HTMLElement, key: string): HTMLElement {
-  const found = [...el.querySelectorAll<HTMLElement>('.horizon-row')]
-    .find((r) => r.querySelector('.horizon-key')?.textContent?.trim() === key);
+  const panel = [...el.querySelectorAll<HTMLElement>('sb-panel')].find((p) => p.textContent?.includes('By horizon'));
+  const found = [...(panel?.querySelectorAll<HTMLElement>('sb-bar-list li') ?? [])]
+    .find((r) => r.querySelector('.label')?.textContent?.trim() === key);
   if (!found) throw new Error(`no horizon bar for ${key}`);
   return found;
 }
@@ -545,7 +546,7 @@ describe('Analytics — performance tab — strategy/horizon aggregates (v85 D40
     const { el } = await renderAgg({
       horizons: [{ key: '2w', exp_r: -0.2, total_r: -8, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 40 }],
     });
-    expect(bar(el, '2w').classList).toContain('neg');
+    expect(bar(el, '2w').querySelector('.fill')!.getAttribute('data-tone')).toBe('neg');
   });
 
   it('labels each horizon bar with its sample size', async () => {

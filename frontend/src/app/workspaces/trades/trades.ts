@@ -479,7 +479,7 @@ interface LaneChip {
 
     /* R6-05. Same voice as sb-pagination's own .range (muted, --text-table)
        so the two read as one family, not a mismatched addition. */
-    .count { color: var(--text-secondary); font-size: var(--text-table); margin: var(--space-4) 0; }
+    .count { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
 
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
@@ -793,15 +793,13 @@ export class Trades {
   protected readonly countText = computed(() => {
     const page = this.store.pagination();
     if (!page) return null;
-    const { total, page: current, perPage } = page;
+    const { total } = page;
     if (total === 0) {
       return this.store.activeFilterCount() > 0
         ? 'No trades match this filter'
         : 'No trades yet';
     }
-    const from = (current - 1) * perPage + 1;
-    const to = Math.min(current * perPage, total);
-    return `Showing ${from}–${to} of ${total}`;
+    return null;
   });
 
   constructor() {

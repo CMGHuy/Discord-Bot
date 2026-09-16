@@ -36,7 +36,7 @@ const STATUS_LABEL: Record<string, string> = {
                        [attr.aria-label]="statusLabel(event)" />
               <sb-direction-arrow [direction]="event.direction" />
               <span class="ticker">{{ event.ticker }}</span>
-              <span class="detail">{{ event.detail }}</span>
+              <span class="detail" [class.pos]="(event.r ?? 0) > 0" [class.neg]="(event.r ?? 0) < 0">{{ event.detail }}</span>
               <time class="at" [attr.datetime]="event.at">{{ fmt(event.at) }}</time>
             </li>
           }
@@ -64,6 +64,8 @@ const STATUS_LABEL: Record<string, string> = {
     sb-icon { color: var(--text-muted); cursor: help; }
     .ticker { font-family: var(--font-mono); color: var(--text); font-weight: 600; }
     .detail { color: var(--text-secondary); }
+    .detail.pos { color: var(--pos); }
+    .detail.neg { color: var(--neg); }
     .at { color: var(--text-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
     .empty { margin: 0; color: var(--text-faint); font-size: var(--text-chip); }
     .all-link { color: var(--accent); font-size: var(--text-table); text-decoration: none; }

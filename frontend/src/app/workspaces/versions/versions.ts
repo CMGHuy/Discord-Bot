@@ -218,7 +218,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     /* v54 D1: --space-20 was this rule's own literal before the registers
        existed; --register-pad's instrument rung is --space-10, so the gap
        between the headline/strip/legend/stream sections below shrinks. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
 
     .stale code, .muted code { font-family: var(--font-mono); font-size: var(--text-micro); }
 
@@ -247,7 +247,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .chip {
       font-family: var(--font-mono); font-size: var(--register-label);
       color: var(--text-muted);
-      padding: var(--space-2) var(--space-6);
+      padding: var(--space-4) var(--space-6);
     }
     .chip strong { color: var(--text); font-weight: 600; }
     .chip.on { color: var(--accent); }
@@ -305,7 +305,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .tooltip { position: absolute; padding: var(--space-6) var(--space-8);
                 background: var(--surface-overlay); border: 1px solid var(--border-strong);
                 border-radius: var(--radius); font-size: var(--text-micro); color: var(--text);
-                display: flex; flex-direction: column; gap: var(--space-2);
+                display: flex; flex-direction: column; gap: var(--space-4);
                 pointer-events: none; }
     .tooltip .when { color: var(--text-faint); }
 
