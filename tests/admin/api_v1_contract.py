@@ -89,11 +89,11 @@ def assert_error(response, code: str, status: int) -> None:
     )
 
 
-def assert_collection(body: Mapping[str, Any], item_spec: Mapping[str, Any]) -> None:
+def assert_collection(body: Mapping[str, Any], item_spec: Mapping[str, Any], *, envelope: Mapping[str, Any] | None = None) -> None:
     """Assert the collection envelope, then every item against `item_spec`."""
     assert_shape(
         body,
-        {"items": list, "total": int, "page": int, "per_page": int},
+        {"items": list, "total": int, "page": int, "per_page": int, **(envelope or {})},
         where="collection",
     )
     assert body["total"] >= len(body["items"]), (
