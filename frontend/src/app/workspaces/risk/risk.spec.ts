@@ -234,17 +234,17 @@ async function render(overrides: Partial<RiskData> = {}): Promise<ComponentFixtu
 }
 
 describe('Risk gauge, budget and correlation matrix', () => {
-  it('drives the gauge from heat utilisation', async () => {
+  it('reports heat once without a gauge', async () => {
     const el = (await render({ heat: { open_pct: 3.1, cap_pct: 6, utilisation_pct: 52 } }))
       .nativeElement as HTMLElement;
-    expect(el.querySelector('sb-gauge .readout')!.textContent).toContain('52');
+    expect(el.querySelector('sb-gauge')).toBeNull();
+    expect(el.querySelector('.heat-note')!.textContent).toContain('52% of the 6.0% cap');
   });
 
-  it('shows a utilisation past the cap truthfully rather than pinned at 100', async () => {
+  it('shows a utilisation past the cap truthfully', async () => {
     const el = (await render({ heat: { open_pct: 7.8, cap_pct: 6, utilisation_pct: 130 } }))
       .nativeElement as HTMLElement;
-    expect(el.querySelector('sb-gauge .readout')!.textContent).toContain('130');
-    expect(el.querySelector('sb-gauge .readout')!.textContent).toContain('over limit');
+    expect(el.querySelector('.heat-note')!.textContent).toContain('130% of the cap');
   });
 
   it('breaks the risk budget into cap, used and remaining', async () => {

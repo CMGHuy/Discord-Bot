@@ -20,7 +20,6 @@ import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.
 import { Flash } from '../../ui/flash';
 import { dateTime, num, share, text } from '../../ui/format';
 import { Freshness } from '../../ui/freshness';
-import { Gauge } from '../../ui/gauge';
 import { Panel } from '../../ui/layout';
 import { Matrix } from '../../ui/matrix';
 import { RowLink } from '../../ui/row-link';
@@ -55,7 +54,7 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
 @Component({
   selector: 'sb-risk',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Freshness, Gauge, Matrix, Panel, RowLink, SectionHead, Sparkline, StatTile],
+  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Freshness, Matrix, Panel, RowLink, SectionHead, Sparkline, StatTile],
   // v54 D1: exposure-by-position is a table and the rest of this workspace
   // (heat, sectors, clusters, scan health) is the same operational reading
   // that table's numbers roll up into -- tight rows, more per screen -- so
@@ -266,11 +265,6 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
            it breaks that one number into cap/used/remaining so "how much
            room is left" doesn't need mental subtraction. -->
       <div class="gauge-budget">
-        <sb-gauge
-          [value]="store.heatUtilisationPct()"
-          [max]="100"
-          label="Heat utilisation"
-        />
         @if (riskBudget(); as budget) {
           <div class="risk-budget">
             <!-- Same precision as the heat figure above (fmt()'s default 2
@@ -425,7 +419,7 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
        existed; --register-pad's instrument rung is --space-10, so both
        gaps below shrink -- the tighter rhythm density is the point of
        opting this workspace into the instrument register. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
 
     /* -- killswitch -- */
     .kill {
@@ -516,7 +510,6 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
       padding-top: var(--register-pad);
       border-top: 1px solid var(--border);
     }
-    .gauge-budget sb-gauge { flex: 0 0 auto; width: 140px; }
     .risk-budget { display: grid; gap: 2px; font-size: var(--text-table); }
     .risk-budget > div { display: flex; justify-content: space-between; gap: var(--space-10); }
     .risk-budget .label { color: var(--text-secondary); }
@@ -707,13 +700,15 @@ export class Risk {
 
   protected readonly heatNote = computed(() => {
     const utilisation = this.store.heatUtilisationPct();
+    const cap = this.store.heatCapPct();
     if (utilisation === null) return 'Portfolio heat is not available.';
     if (this.store.heatOverCap()) {
       // Over the cap is a real state, not an impossible one: the cap gates
       // new entries, and open positions can drift past it as stops move.
-      return `${utilisation.toFixed(0)}% of the cap — over budget. New entries are blocked until heat falls.`;
+      return `${num(utilisation, utilisation >= 10 ? 0 : 1)}% of the cap — over budget. New entries are blocked until heat falls.`;
     }
-    return `${utilisation.toFixed(0)}% of the risk budget in use.`;
+    const used = num(utilisation, utilisation >= 10 ? 0 : 1);
+    return cap === null ? `${used}% of the risk budget in use.` : `${used}% of the ${num(cap, 1)}% cap in use.`;
   });
 
   /** Who engaged it and when, when the server recorded it. */
