@@ -55,7 +55,6 @@ export const PENDING_MARGIN_RULES: ReadonlySet<string> = new Set<string>([
   'app/workspaces/analytics/analytics.ts|.kpi-row',
   'app/workspaces/analytics/analytics.ts|.breakdowns',
   'app/workspaces/analytics/analytics.ts|.breakdowns > * + *',
-  'app/workspaces/trades/trade-detail.ts|.panels',
 ]);
 
 function stylesOf(text: string): string {

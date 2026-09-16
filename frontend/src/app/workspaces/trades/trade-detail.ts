@@ -24,6 +24,7 @@ import { TradeChart } from '../../ui/chart/trade-chart';
 import { dateTime, held, num, pct, rMultiple, share, text } from '../../ui/format';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
 import { StatusIndicator } from '../../ui/status-indicator';
+import { InlineMd } from '../../ui/inline-md';
 import {
   ACTION_LABELS,
   ACTION_TITLES,
@@ -73,6 +74,7 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
     MetricChip,
     Chip,
     Async,
+    InlineMd,
   ],
   template: `
     <header class="head">
@@ -333,7 +335,7 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
           } @else {
             @if (store.explanation(); as why) {
               <sb-panel heading="Why this trade">
-                <p class="prose">{{ why }}</p>
+                <p class="prose"><sb-inline-md [text]="why" /></p>
               </sb-panel>
             }
 
@@ -709,6 +711,7 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
     />
   `,
   styles: `
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--section-gap); }
     .head {
       display: grid;
       gap: var(--space-8);
@@ -761,8 +764,8 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
     .panels {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: var(--space-14);
-      margin-top: var(--space-14);
+      gap: var(--section-gap);
+      align-items: start;
     }
     dl {
       display: grid;
@@ -793,7 +796,6 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
       line-height: 1.6;
     }
     .no-detail {
-      margin-top: var(--space-14);
       max-width: 68ch;
       color: var(--text-faint);
       font-size: var(--text-table);
@@ -886,19 +888,14 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
       font-size: var(--text-chip);
     }
 
-    .chart {
-      margin-top: var(--space-14);
-    }
+    .chart {}
     .progress {
       margin-bottom: var(--space-10);
     }
     /* .commands keeps its class as a marker only -- sb-control-row supplies
        display, alignment, wrap and gap. */
 
-    .notes,
-    .strategy {
-      margin-top: var(--space-14);
-    }
+    .notes, .strategy {}
     .note-label {
       display: block;
       margin-bottom: var(--space-6);
