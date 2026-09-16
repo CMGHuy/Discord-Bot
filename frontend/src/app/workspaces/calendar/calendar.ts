@@ -11,7 +11,7 @@ import { MetricCard } from '../../ui/metric-card';
 import { Select } from '../../ui/form-controls';
 import { SectionHead } from '../../ui/section-head';
 import { StatTile } from '../../ui/stat-tile';
-import { cellValue, GridCell, monthLabel, monthMatrix } from './calendar.helpers';
+import { cellValue, GridCell, localIsoDate, monthLabel, monthMatrix } from './calendar.helpers';
 
 /** Monday-first, matching `monthMatrix` and the API's weekday breakdown. */
 const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -147,7 +147,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                        it has a day record -- a day with zero closed trades
                        shows "0", not a blank cell (2026-09-14); the drawer's
                        own empty state already reads correctly for it. -->
-                  @if (cell.inMonth && !cell.weekend) {
+                  @if (cell.inMonth && !cell.weekend && cell.date <= today) {
                     <button sb-button variant="link" type="button" class="value"
                             [attr.aria-pressed]="store.selectedDay() === cell.date"
                             (click)="store.selectDay(cell.date)">
@@ -255,7 +255,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
        literal before, and register-presentation's rung is the same value,
        so this changes nothing visually while making the rhythm follow the
        register instead of a hardcoded token. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
 
     /* The month stepper: two buttons with the month between them. Centred
        rather than bottom-aligned like the controls around it, because the
@@ -449,6 +449,7 @@ export class Calendar {
   private readonly connection = inject(ConnectionStore);
 
   protected readonly weekdayHeads = WEEKDAY_HEADS;
+  protected readonly today = localIsoDate(new Date());
 
   protected readonly async = computed(() =>
     asyncInputs(this.store, { isEmpty: (data) => data.totals.trade_count === 0 }),

@@ -16,6 +16,11 @@ import { num } from '../../ui/format';
 export type CalendarCellMetric = 'r' | 'currency' | 'trades' | 'win_rate';
 export type CalendarCellTone = 'pos' | 'neg' | 'neutral' | 'empty';
 
+export function localIsoDate(date: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
+}
+
 /** The value and presentation intent for one populated calendar cell.
  * Keeping the four-way branch here lets the template stay a simple display
  * binding and prevents a busy day from accidentally inheriting a profit tone.
