@@ -183,7 +183,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
     </div>
 
     <ng-template #pagerTemplate let-page let-announce="announce">
-      <sb-pagination [pagination]="page" [showPerPage]="showPerPage()" [announce]="announce"
+      <sb-pagination [pagination]="page" [showPerPage]="showPerPage()" [announce]="announce" [navOnly]="!announce"
         (pageChange)="pageChange.emit($event)" (perPageChange)="perPageChange.emit($event)" />
     </ng-template>  `,
   styles: `

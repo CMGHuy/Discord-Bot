@@ -1,0 +1,5 @@
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+export interface InlineSegment { text: string; bold: boolean; }
+export function inlineSegments(source: string | null | undefined): InlineSegment[] { if (!source) return []; const out: InlineSegment[]=[]; const pattern=/\*\*([^*]+?)\*\*/g; let cursor=0; for(const match of source.matchAll(pattern)){const at=match.index??0;if(at>cursor)out.push({text:source.slice(cursor,at),bold:false});out.push({text:match[1],bold:true});cursor=at+match[0].length;}if(cursor<source.length)out.push({text:source.slice(cursor),bold:false});return out; }
+@Component({selector:'sb-inline-md',changeDetection:ChangeDetectionStrategy.OnPush,template:`@for(segment of segments();track $index){@if(segment.bold){<b>{{segment.text}}</b>}@else{{{segment.text}}}}`,styles:`:host{display:inline}b{font-weight:600;color:var(--text)}`})
+export class InlineMd { readonly text=input<string|null>(null); protected readonly segments=computed(()=>inlineSegments(this.text())); }
