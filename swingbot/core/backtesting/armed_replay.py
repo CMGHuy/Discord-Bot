@@ -15,12 +15,14 @@ confirmation bar, the permutation's random bars).
 from __future__ import annotations
 
 import dataclasses
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 
 import numpy as np
 
 from swingbot.core.backtesting.backtest_scenarios import levels_asof
 from swingbot.core.market import levels, reaction
+from swingbot.core.market.indicators import atr
 from swingbot.core.market.strategy_types import HORIZONS, MIN_BARS
 from swingbot.core.planning.plan_engine import PlanStatus, build_confluence_plan, primary_strategy_for
 from swingbot.core.planning.plan_types import record_transition
@@ -208,3 +210,85 @@ def build_armed_plan(ticker: str, df, horizon_key: str, cand: ArmCandidate,
                    first_test_index=outcome.first_test_index, kind=outcome.kind, cell=cell,
                    bars=bars, atr_values=atr_values, params=params,
                    level_map_at=level_map_at, confluence_at=confluence_at)
+
+
+@dataclass
+class CellResult:
+    issued: list = field(default_factory=list)      # (confirmation index, plan, reaction kind)
+    confirmed: list = field(default_factory=list)   # (ArmCandidate, ArmOutcome), issued or regated
+    counts: Counter = field(default_factory=Counter)
+
+
+def make_confluence_at(df, horizon_key: str):
+    """count_confirming_strategies at bar j for (entry, target), memoised --
+    the permutation revisits the same (j, entry, target) many times."""
+    h = HORIZONS[horizon_key]
+    memo: dict = {}
+
+    def confluence_at(j: int, entry: float, target: float) -> int:
+        key = (j, round(entry, 6), round(target, 6))
+        if key not in memo:
+            memo[key] = levels.count_confirming_strategies(
+                df.iloc[:j + 1], h, entry, target, tolerance_pct=CONFLUENCE_TOLERANCE_PCT)[0]
+        return memo[key]
+
+    return confluence_at
+
+
+def replay_armed(ticker: str, df, horizon_key: str, cells, *, params: ScanParams | None = None,
+                 candidates: dict | None = None, level_cache: dict | None = None,
+                 level_map_at=None, confluence_at=None) -> dict:
+    """Every cell's issued plans over one (ticker, horizon) frame.
+
+    One armed scenario per direction at a time: a new arm for a direction
+    is ignored until the live one resolves. After a plan is issued at bar
+    j, arms for that direction wait COOLDOWN_BARS (replay_scenarios' own
+    rule, measured from issuance). Candidates, the level cache and the
+    confluence memo are shared across cells -- they do not depend on the
+    cell -- which is what keeps 24 cells affordable.
+    """
+    if params is None:
+        params = ScanParams.from_config()
+    cache = {} if level_cache is None else level_cache
+    if candidates is None:
+        candidates = arm_candidates(ticker, df, horizon_key, params=params, level_cache=cache)
+    if level_map_at is None:
+        level_map_at = lambda j: levels_asof(ticker, df, j, horizon_key, cache)  # noqa: E731
+    if confluence_at is None:
+        confluence_at = make_confluence_at(df, horizon_key)
+    bars = reaction.Bars.from_frame(df)
+    atr_values = atr(df, 14).to_numpy(dtype=float)
+
+    results = {}
+    for cell in cells:
+        result = CellResult()
+        busy_until: dict[str, int] = {}
+        last_issued: dict[str, int] = {}
+        for i in sorted(candidates):
+            for cand in candidates[i]:
+                d = cand.direction
+                if i <= busy_until.get(d, -1):
+                    continue
+                if d in last_issued and i - last_issued[d] < COOLDOWN_BARS:
+                    continue
+                result.counts["armed"] += 1
+                outcome = walk_arm(bars, atr_values, cand, cell)
+                if outcome.status == "unresolved":
+                    result.counts["unresolved"] += 1
+                    busy_until[d] = len(df)
+                    continue
+                busy_until[d] = outcome.resolved_index
+                if outcome.status != "confirmed":
+                    result.counts[outcome.status] += 1
+                    continue
+                result.confirmed.append((cand, outcome))
+                plan, reason = build_armed_plan(
+                    ticker, df, horizon_key, cand, outcome, cell, bars=bars,
+                    atr_values=atr_values, params=params,
+                    level_map_at=level_map_at, confluence_at=confluence_at)
+                result.counts[reason] += 1
+                if plan is not None:
+                    last_issued[d] = outcome.resolved_index
+                    result.issued.append((outcome.resolved_index, plan, outcome.kind))
+        results[cell.cell_id] = result
+    return results

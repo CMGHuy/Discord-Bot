@@ -184,3 +184,70 @@ def test_nan_atr_refuses():
         bars=rx.Bars.from_frame(df), atr_values=np.full(len(df), np.nan), params=_params(),
         level_map_at=lambda j: ([], []), confluence_at=lambda *a: 3)
     assert (plan, reason) == (None, "regate_invalid_atr")
+
+
+def _replay(df, candidates, cell=CELL):
+    res = [levels.Level(T1, ["Fibonacci"])]
+    sup = [levels.Level(90.0, ["Rolling S/R"])]
+    out = ar.replay_armed("AAPL", df, "4w", [cell], params=_params(), candidates=candidates,
+                          level_map_at=lambda j: (sup, res),
+                          confluence_at=lambda j, entry, target: 3)
+    return out[cell.cell_id]
+
+
+def test_one_live_arm_per_direction_and_cooldown_after_issuance(monkeypatch):
+    # real ATR on this flat frame is ~2, which would make every 99.0 low a
+    # test at k=0.25; pin it at 1.0 so only the rejection bar tests the level
+    monkeypatch.setattr(ar, "atr", lambda df, period=14: pd.Series(1.0, index=df.index))
+    df = _frame({27: REJECTION}, n=45)
+    cands = {i: [_cand(index=i)] for i in (25, 26, 27, 28, 31, 32, 33)}
+    result = _replay(df, cands)
+    # 25 arms and confirms at 27; 26 and 27 are skipped (busy through 27);
+    # 28 and 31 fall inside the 5-bar cooldown from 27; 32 arms and expires at 37;
+    # 33 is skipped (busy through 37).
+    assert [j for j, _, _ in result.issued] == [27]
+    assert result.counts["armed"] == 2
+    assert result.counts["issued"] == 1
+    assert result.counts["expired"] == 1
+    assert len(result.confirmed) == 1
+
+
+def test_confluence_at_is_memoised(monkeypatch):
+    calls = []
+    monkeypatch.setattr(levels, "count_confirming_strategies",
+                        lambda *a, **k: (calls.append(a) or 2, []))
+    f = ar.make_confluence_at(make_ohlcv([100.0] * 30), "4w")
+    assert f(20, 100.0, 105.0) == 2 and f(20, 100.0, 105.0) == 2
+    assert len(calls) == 1
+
+
+def _structured_df():
+    """Trend up, then a 60-bar consolidation between ~95 and ~105 -- the
+    fixture family tests/backtesting/test_backtest_scenarios.py uses, copied
+    so the two files stay independent."""
+    rng = np.random.RandomState(7)
+    trend = list(100 * np.cumprod(1 + rng.normal(0.002, 0.01, 120)))
+    box = [trend[-1] * (1 + 0.05 * np.sin(i / 4)) for i in range(60)]
+    return make_ohlcv(trend + box)
+
+
+@pytest.mark.slow
+def test_replay_armed_never_reads_past_the_confirmation_bar():
+    """NO-LOOKAHEAD: every plan issued at j <= t is identical on the full
+    frame and on the frame truncated at t."""
+    df = _structured_df()
+    params = _params(min_target_confluence_count=1, min_stop_distance_pct=0.5,
+                     max_stop_loss_pct=15.0, min_reward_pct=1.0)
+    cells = [ar.Cell("M1", 10, 0.5, 0.10), ar.Cell("M2", 10, 0.5, 0.10)]
+    t = len(df) - 15
+
+    def signature(result):
+        return sorted((j, kind, p.direction, p.entry_type, round(p.trigger_price, 6),
+                       round(p.stop_loss, 6), round(p.tp1, 6))
+                      for j, p, kind in result.issued if j <= t)
+
+    full = ar.replay_armed("AAPL", df, "4w", cells, params=params)
+    trunc = ar.replay_armed("AAPL", df.iloc[:t + 1], "4w", cells, params=params)
+    assert any(r.counts["armed"] for r in full.values()), "fixture must arm at least once"
+    for cell in cells:
+        assert signature(full[cell.cell_id]) == signature(trunc[cell.cell_id])
