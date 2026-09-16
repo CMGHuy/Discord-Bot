@@ -79,6 +79,15 @@ def _journal_from_repo_shape(row: dict) -> dict:
     return normalise(row)
 
 
+def _state_repo():
+    from swingbot.core.db.repositories.signal_state import SignalStateRepository
+    return SignalStateRepository()
+
+
+def _state_rows(raw: object) -> list[dict]:
+    return [{"key": key, **value} for key, value in raw.items()]
+
+
 STORES: dict[str, StoreSpec] = {
     "account": StoreSpec("account.json", "key", _account_repo, loader=_account_rows),
     "journal": StoreSpec("journal.json", "trade_id", _journal_repo,
@@ -87,6 +96,7 @@ STORES: dict[str, StoreSpec] = {
     "plans": StoreSpec("plans.json", "plan_id", _plans_repo, _plans_from_repo_shape),
     "starred_plans": StoreSpec("starred_plans.json", "plan_id", _starred_repo,
                                 loader=_starred_rows),
+    "state": StoreSpec("state.json", "key", _state_repo, loader=_state_rows),
 }
 
 

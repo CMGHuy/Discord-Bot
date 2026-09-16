@@ -22,13 +22,30 @@ _LOCK = Lock()
 class StateStore:
     def __init__(self, path: str = None):
         self.path = path or os.path.join(config.DATA_DIR, "state.json")
-        self._data = self._load()
+        from swingbot.core.db import stages
+        self._data = {} if stages.reads_db("state") else self._load()
 
     def _load(self) -> dict:
         return read_json(self.path, {})
 
     def _save(self):
         atomic_write_json(self.path, self._data)
+
+    def _read(self, key: str) -> dict:
+        from swingbot.core.db import stages
+        if stages.reads_db("state"):
+            from swingbot.core.db.repositories.signal_state import signal_state_repo
+            return signal_state_repo().entry(key)
+        return self._data.setdefault(key, {})
+
+    def _write(self, key: str, entry: dict) -> None:
+        from swingbot.core.db import stages
+        if stages.writes_json("state"):
+            self._data[key] = entry
+            self._save()
+        if stages.writes_db("state"):
+            from swingbot.core.db.repositories.signal_state import signal_state_repo
+            signal_state_repo().put(key, entry)
 
     def confirm_or_update(self, key: str, new_value: str, required_confirmations: int = 2) -> bool:
         """
@@ -39,7 +56,7 @@ class StateStore:
         pending confirmation.
         """
         with _LOCK:
-            entry = self._data.setdefault(key, {})
+            entry = dict(self._read(key))
             confirmed = entry.get("trend")
 
             if new_value == confirmed:
@@ -47,7 +64,7 @@ class StateStore:
                 if entry.get("pending_value") is not None:
                     entry["pending_value"] = None
                     entry["pending_count"] = 0
-                    self._save()
+                    self._write(key, entry)
                 return False
 
             if entry.get("pending_value") == new_value:
@@ -60,8 +77,8 @@ class StateStore:
                 entry["trend"] = new_value
                 entry["pending_value"] = None
                 entry["pending_count"] = 0
-                self._save()
+                self._write(key, entry)
                 return True
 
-            self._save()
+            self._write(key, entry)
             return False
