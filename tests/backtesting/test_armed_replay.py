@@ -106,3 +106,81 @@ def test_arm_candidates_widen_past_the_min_stop_gate(monkeypatch):
     bullish = [c for bar in cands.values() for c in bar if c.direction == "bullish"]
     assert bullish and all(c.level == L and c.target == T1 for c in bullish)
     assert min(cands) == 45          # MIN_BARS["4w"]
+
+
+from swingbot.core.planning.plan_engine import PlanStatus
+
+
+def _build(df, outcome, cell=CELL, *, resistances=(T1,), confluence=3, params=None):
+    res = [levels.Level(p, ["Fibonacci"]) for p in resistances]
+    sup = [levels.Level(90.0, ["Rolling S/R"])]
+    return ar.build_armed_plan(
+        "AAPL", df, "4w", _cand(), outcome, cell,
+        bars=rx.Bars.from_frame(df), atr_values=np.full(len(df), 1.0),
+        params=params or _params(),
+        level_map_at=lambda j: (sup, res),
+        confluence_at=lambda j, entry, target: confluence)
+
+
+REJECTION = (99.0, 99.6, 97.6, 99.4)
+
+
+def test_m1_issues_a_stop_entry_above_the_reaction_high():
+    df = _frame({26: REJECTION})
+    plan, reason = _build(df, ar.ArmOutcome("confirmed", 26, rx.R1, 26))
+    assert reason == "issued"
+    assert plan.entry_type == "stop_entry" and plan.entry_price is None
+    assert plan.trigger_price == pytest.approx(99.6)
+    assert plan.expiry_bars == ar.STOP_ENTRY_EXPIRY_BARS
+    assert plan.stop_loss == pytest.approx(97.5)              # min(98.5, 97.6) - 0.10 * 1.0
+    assert plan.tp1 == pytest.approx(99.6 + 2.1 * 2.5)        # 106 is past the 2.5R cap
+    assert plan.status == PlanStatus.PENDING
+    assert plan.created_at == df.index[26].date().isoformat()
+
+
+def test_the_widened_scenario_issues_once_its_stop_is_re_anchored():
+    """Today's gates refuse this scenario (1.5% stop); the armed path
+    issues it with a stop >= 2% from the entry."""
+    assert [s for s in levels.build_scenarios(
+        100.0, [levels.Level(L, ["Rolling S/R"])], [levels.Level(T1, ["Fibonacci"])], 3.0,
+        min_stop_distance_pct=2.0, max_stop_distance_pct=7.0, min_risk_reward=1.5)
+        if s.direction == "bullish"] == []
+    plan, reason = _build(_frame({26: REJECTION}), ar.ArmOutcome("confirmed", 26, rx.R1, 26))
+    assert reason == "issued"
+    assert abs(plan.trigger_price - plan.stop_loss) / plan.trigger_price * 100 >= 2.0
+
+
+def test_m2_goes_straight_to_market_on_a_follow_through():
+    df = _frame({25: (99.2, 99.5, 97.9, 99.2), 26: (99.3, 100.2, 98.6, 100.0)})
+    plan, reason = _build(df, ar.ArmOutcome("confirmed", 26, rx.R2, 25),
+                          cell=ar.Cell("M2", 5, 0.25, 0.25))
+    assert reason == "issued"
+    assert plan.entry_type == "market"
+    assert plan.entry_price == pytest.approx(100.0) == plan.trigger_price
+    assert plan.stop_loss == pytest.approx(97.65)             # min(98.5, 97.9) - 0.25
+    assert plan.status == PlanStatus.ACTIVE
+
+
+def test_m2_keeps_a_rejection_as_a_stop_entry():
+    plan, _ = _build(_frame({26: REJECTION}), ar.ArmOutcome("confirmed", 26, rx.R1, 26),
+                     cell=ar.Cell("M2", 5, 0.25, 0.10))
+    assert plan.entry_type == "stop_entry"
+
+
+def test_regates_refuse_rather_than_bend():
+    shallow = _frame({26: (99.0, 99.6, 98.4, 99.4)})
+    assert _build(shallow, ar.ArmOutcome("confirmed", 26, rx.R1, 26)) == (None, "regate_stop_distance")
+    df = _frame({26: REJECTION})
+    ok = ar.ArmOutcome("confirmed", 26, rx.R1, 26)
+    assert _build(df, ok, resistances=()) == (None, "regate_no_target")
+    assert _build(df, ok, params=_params(min_reward_pct=6.0)) == (None, "regate_reward")
+    assert _build(df, ok, confluence=1) == (None, "regate_confluence")
+
+
+def test_nan_atr_refuses():
+    df = _frame({26: REJECTION})
+    plan, reason = ar.build_armed_plan(
+        "AAPL", df, "4w", _cand(), ar.ArmOutcome("confirmed", 26, rx.R1, 26), CELL,
+        bars=rx.Bars.from_frame(df), atr_values=np.full(len(df), np.nan), params=_params(),
+        level_map_at=lambda j: ([], []), confluence_at=lambda *a: 3)
+    assert (plan, reason) == (None, "regate_invalid_atr")
