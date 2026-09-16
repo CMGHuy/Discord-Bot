@@ -196,6 +196,9 @@ def dashboard():
     ]
     stats = tl.get_stats(trades=scoped_raw)
     stats.update(tl.get_extended_stats(trades=scoped_raw))
+    from swingbot.core.analytics import metrics as m
+    closed_scoped = [t for t in scoped_raw if t.get("status") in ("win", "loss", "closed")]
+    scoped_rs = m.r_multiples(closed_scoped)
 
     account_cfg = dash.load_account_config()
     views = dash.build_open_trade_views(open_trades, account_cfg)
@@ -218,11 +221,13 @@ def dashboard():
         "avg_confidence": (
             round(sum(confidences) / len(confidences), 2) if confidences else None
         ),
-        "win_rate": stats.get("win_rate"),
-        "expectancy_r": stats.get("expectancy_r"),
+        "win_rate": m.win_rate(closed_scoped),
+        "win_rate_n": sum(1 for t in closed_scoped if t.get("status") in ("win", "loss")),
+        "expectancy_r": m.expectancy_r(closed_scoped),
+        "expectancy_n": len(scoped_rs),
         # v85 D9. Beside expectancy deliberately: win rate and payoff ratio
         # decompose it, so the three travel together.
-        "payoff_ratio": stats.get("payoff_ratio"),
+        "payoff_ratio": m.payoff_ratio_from_rs(scoped_rs),
         "equity_30d": _equity_30d(),
         "position_premium": dash.build_sizing_note(account_cfg),
         "lifecycle": _lifecycle_counts(mode),

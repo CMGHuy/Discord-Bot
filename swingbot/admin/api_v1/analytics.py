@@ -131,8 +131,10 @@ def analytics_performance():
             "worst_trade_pct": round(min(realized), 2) if realized else None,
             "avg_holding_days": stats.get("avg_holding_days"),
         },
-        "win_rate": stats.get("win_rate"),
-        "expectancy_r": stats.get("expectancy_r"),
+        "win_rate": m.win_rate(closed),
+        "win_rate_n": sum(1 for t in closed if t.get("status") in ("win", "loss")),
+        "expectancy_r": m.expectancy_r(closed),
+        "expectancy_n": len(m.r_multiples(closed)),
         "by_confidence": tl.get_stats_by_confidence(),
 
         "range": {
