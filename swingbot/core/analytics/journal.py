@@ -37,15 +37,26 @@ class JournalStore:
         re-add (e.g. the backfill script re-run, or a future re-journal
         after a correction) always reflects "when this record was last
         written", not "when it was first written"."""
-        with _LOCK:
-            entries = self._load()
-            stamped = dict(entry, created_at=datetime.now(timezone.utc).isoformat())
-            entries = [e for e in entries if e.get("trade_id") != entry.get("trade_id")]
-            entries.append(stamped)
-            self._save(entries)
-            return stamped
+        from swingbot.core.db import stages
+        stamped = dict(entry, created_at=datetime.now(timezone.utc).isoformat())
+        if stages.writes_json("journal"):
+            with _LOCK:
+                entries = self._load()
+                entries = [item for item in entries if item.get("trade_id") != entry.get("trade_id")]
+                entries.append(stamped)
+                self._save(entries)
+        if stages.writes_db("journal"):
+            from swingbot.core.db.repositories.journal import journal_repo
+            journal_repo().upsert(stamped)
+        return stamped
 
     def get(self, trade_id: str) -> dict | None:
+        from swingbot.core.db import stages
+        if stages.reads_db("journal"):
+            from swingbot.core.db.dual import normalise
+            from swingbot.core.db.repositories.journal import journal_repo
+            entry = journal_repo().get(trade_id)
+            return None if entry is None else normalise(entry)
         return next((e for e in self._load() if e.get("trade_id") == trade_id), None)
 
     def entries(self, *, strategy: str | None = None, tag: str | None = None,
@@ -54,6 +65,13 @@ class JournalStore:
         """Every matching entry, newest first (by `closed_at`, falling back
         to `created_at` for an entry that somehow lacks it). All filters
         are AND-combined; omit a filter (leave it None) to not apply it."""
+        from swingbot.core.db import stages
+        if stages.reads_db("journal"):
+            from swingbot.core.db.dual import normalise
+            from swingbot.core.db.repositories.journal import journal_repo
+            return normalise(journal_repo().entries(
+                strategy=strategy, tag=tag, outcome=outcome, since=since, has_note=has_note
+            ))
         rows = self._load()
         if strategy is not None:
             rows = [e for e in rows if e.get("strategy") == strategy]
