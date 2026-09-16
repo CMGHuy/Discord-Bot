@@ -102,16 +102,56 @@ def is_scan_paused() -> bool:
     (!check, and the admin UI's "Run !check now" trigger) are NOT
     affected by this -- pausing only stops the unattended, scheduled
     scanning so the user can still check on demand."""
+    from swingbot.core.db import stages
+    if stages.reads_db("flags"):
+        from swingbot.core.db.repositories.flags import flags_repo
+        return flags_repo().is_set("scan_paused")
     return os.path.exists(_PAUSE_FILE)
 
 
 def set_scan_paused(paused: bool) -> None:
-    os.makedirs(config.DATA_DIR, exist_ok=True)
-    if paused:
+    from swingbot.core.db import stages
+    if stages.writes_json("flags") and paused:
+        os.makedirs(config.DATA_DIR, exist_ok=True)
         with open(_PAUSE_FILE, "w") as f:
             f.write(dt.datetime.now(dt.timezone.utc).isoformat())
-    else:
+    elif stages.writes_json("flags"):
         try:
             os.remove(_PAUSE_FILE)
         except OSError:
-            pass  # already resumed by a parallel caller
+            pass
+    if stages.writes_db("flags"):
+        from swingbot.core.db.repositories.flags import flags_repo
+        repo = flags_repo()
+        repo.set("scan_paused") if paused else repo.clear("scan_paused")
+
+
+def is_trigger_requested() -> bool:
+    from swingbot.core.db import stages
+    if stages.reads_db("flags"):
+        from swingbot.core.db.repositories.flags import flags_repo
+        return flags_repo().is_set("trigger_check")
+    return os.path.exists(_TRIGGER_FILE)
+
+
+def request_trigger() -> None:
+    from swingbot.core.db import stages
+    if stages.writes_json("flags"):
+        os.makedirs(config.DATA_DIR, exist_ok=True)
+        with open(_TRIGGER_FILE, "w") as file:
+            file.write(dt.datetime.now(dt.timezone.utc).isoformat())
+    if stages.writes_db("flags"):
+        from swingbot.core.db.repositories.flags import flags_repo
+        flags_repo().set("trigger_check")
+
+
+def clear_trigger() -> None:
+    from swingbot.core.db import stages
+    if stages.writes_json("flags"):
+        try:
+            os.remove(_TRIGGER_FILE)
+        except OSError:
+            pass
+    if stages.writes_db("flags"):
+        from swingbot.core.db.repositories.flags import flags_repo
+        flags_repo().clear("trigger_check")
