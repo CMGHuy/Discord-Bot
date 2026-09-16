@@ -126,3 +126,5 @@ scripts/ops/ssh-hetzner.sh
 Vibe-Trading-main/
 # v82 earnings-blackout exposure tables (large, regenerable)
 data/v82/
+# v88 armed-confluence-entries replay output (large, regenerable)
+data/v88/
