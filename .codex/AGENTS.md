@@ -37,6 +37,9 @@ Docker image builds the Angular frontend, and bot/admin run as separate
 containers from that image. Configuration is schema-driven through
 `swingbot/config.py` and hot-reloaded by SIGHUP.
 
+**Admin SPA spacing (v89):** sibling panels are gapped by one token,
+`--section-gap` (`.sb-stack`/host grids); panels never own outer margins.
+
 ## Decision standards
 
 Ask as many questions as you need — there is no question budget. One per

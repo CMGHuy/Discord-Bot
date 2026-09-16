@@ -28,6 +28,12 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   Discord colour, glyph, number format and embed part: pure `tokens.py`,
   phone-safe `ansi.py`, then whole embed parts in `components.py`. Nothing
   outside it may touch `discord.Color`; its AST guard enforces that boundary.
+- **Frontend (`frontend/`, the admin SPA).** **Spacing between panels (v89):**
+  one token, `--section-gap`; workspaces stack panels in `.sb-stack`/host
+  grids; panels never own outer margins. Enforced by
+  `frontend/src/app/ui/spacing.spec.ts` and
+  `frontend/src/app/workspaces/workspace-gaps.spec.ts`; measured live with
+  `scripts/dev/ui_spacing_audit.js`.
 - **`swingbot/core/db/`** is the PostgreSQL persistence boundary introduced by
   v67. Its SQLAlchemy Core repositories split flat store records into promoted
   columns and a `doc JSONB` payload, then merge them back so callers keep their
