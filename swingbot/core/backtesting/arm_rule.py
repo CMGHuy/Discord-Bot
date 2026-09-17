@@ -14,15 +14,18 @@ def pooled_stats(trades):
 
 
 def stage1_verdict(pooled, folds):
-    good = sum((fold["stats"].get("n") or 0) >= FOLD_MIN_N and (fold["stats"].get("expectancy_r") or 0) > 0 for fold in folds)
-    clauses = {"wr": (pooled.get("win_rate") or 0) >= WR_FLOOR, "exp_r": (pooled.get("expectancy_r") or 0) > 0,
-               "n": pooled.get("n", 0) >= MIN_N, "scratch_share": (pooled.get("scratch_timeout_share") or 1) <= MAX_SCRATCH_SHARE,
+    good = sum((fold["stats"].get("n") or 0) >= FOLD_MIN_N and (fold["stats"].get("expectancy_r") is not None and fold["stats"]["expectancy_r"] > 0) for fold in folds)
+    clauses = {"wr": pooled.get("win_rate") is not None and pooled["win_rate"] >= WR_FLOOR,
+               "exp_r": pooled.get("expectancy_r") is not None and pooled["expectancy_r"] > 0,
+               "n": pooled.get("n", 0) >= MIN_N,
+               "scratch_share": pooled.get("scratch_timeout_share") is not None and pooled["scratch_timeout_share"] <= MAX_SCRATCH_SHARE,
                "folds": good >= FOLDS_REQUIRED}
     return {"clears": all(clauses.values()), "clauses": clauses, "good_folds": good}
 
 
 def stage2_allowed(pooled):
-    return (pooled.get("expectancy_r") or 0) > 0 and (pooled.get("win_rate") or 100) < WR_FLOOR
+    return (pooled.get("expectancy_r") is not None and pooled["expectancy_r"] > 0
+            and pooled.get("win_rate") is not None and pooled["win_rate"] < WR_FLOOR)
 
 
 def neighbour_subsets(subset, all_horizons):
