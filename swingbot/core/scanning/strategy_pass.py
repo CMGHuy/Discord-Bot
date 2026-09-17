@@ -8,7 +8,7 @@ import pandas as pd
 from swingbot.core.market import market_context
 from swingbot.core.market.entry_filters import ENTRY_FUNCS, entries_for
 from swingbot.core.planning.builders import build_strategy_plan
-from swingbot.core.planning.params import stamp_badge, stamp_cohort
+from swingbot.core.planning.params import stamp_badge, stamp_cohort, stamp_entry_context
 from swingbot.core.tracking import ledger as ledger_mod
 from swingbot.core.edge.rs_gate import rs_verdict
 from swingbot.core.scanning import analyze
@@ -58,7 +58,7 @@ def strategy_signals(df_completed: pd.DataFrame, horizon_key: str, *, spy_df) ->
 
 
 def build_strategy_plan_at(df_completed: pd.DataFrame, *, ticker: str, strategy: str,
-                           horizon_key: str, direction: str, regime2_state: str | None):
+                           horizon_key: str, direction: str, regime2_state: str | None, asof: dict | None = None):
     """Build and freeze all immutable issuance stamps for one strategy signal."""
     plan = build_strategy_plan(df_completed, len(df_completed) - 1, ticker=ticker,
                                strategy=strategy, horizon_key=horizon_key, direction=direction)
@@ -66,6 +66,7 @@ def build_strategy_plan_at(df_completed: pd.DataFrame, *, ticker: str, strategy:
         return None
     stamp_badge(plan)
     stamp_cohort(plan, regime2_state)
+    stamp_entry_context(plan, df_completed, {**(asof or {}), "regime2_state": regime2_state})
     plan.ledger = ledger_mod.ledger_for(plan.source, plan.badge)
     return plan
 
@@ -87,7 +88,7 @@ class PassResult:
 
 
 def run_strategy_pass(tickers, fresh_data, *, now, horizons, spy_df, regimes,
-                      rs_combined_of, mode: str, live_allow: set, trade_log, plan_store) -> PassResult:
+                      rs_combined_of, mode: str, live_allow: set, trade_log, plan_store, asof_of=None) -> PassResult:
     """Build strategy plans after confluence; only eligible live plans open trades."""
     result = PassResult()
     for ticker in tickers:
@@ -113,7 +114,8 @@ def run_strategy_pass(tickers, fresh_data, *, now, horizons, spy_df, regimes,
                             result.rs_blocked += 1
                             continue
                     plan = build_strategy_plan_at(frame, ticker=ticker, strategy=strategy,
-                                                  horizon_key=horizon, direction=direction, regime2_state=regime)
+                                                  horizon_key=horizon, direction=direction, regime2_state=regime,
+                                                  asof=asof_of(ticker) if asof_of else None)
                     if plan is None:
                         continue
                     plan_store.add(plan)
