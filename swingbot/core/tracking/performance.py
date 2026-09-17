@@ -974,6 +974,12 @@ class TradeLog:
     def get_stats(self, confidence_level: int = None, trades: list | None = None,
                   *, expand: bool = True, ledger: str | None = "main") -> dict:
         """
+        `ledger` defaults to "main" (v93 ledger-separation rule). Several
+        Discord command call sites (scanning/loops.py and scanning/presence.py's
+        `open_count = trade_log.get_stats()["open"]`) rely on this default
+        rather than passing `ledger="main"` explicitly -- changing this default
+        would silently reintroduce main+weak pooling at those call sites.
+
         `trades`, if given, overrides the base trade set the stats are
         computed over (e.g. the dashboard's "Today" mode passing in just
         today's opened/closed trades instead of the whole history). Defaults
