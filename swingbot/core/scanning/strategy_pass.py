@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import pandas as pd
 
+from swingbot.core.market import market_context
+from swingbot.core.market.entry_filters import ENTRY_FUNCS, entries_for
 from swingbot.core.market.session import is_regular_session, session_date
 
 
@@ -21,3 +23,25 @@ def already_emitted(store, ticker: str, strategy: str, horizon_key: str, bar_dat
                and plan.ticker == ticker and plan.strategy == strategy
                and plan.horizon_key == horizon_key and plan.created_at == bar_date
                for plan in store.all())
+
+
+def strategy_signals(df_completed: pd.DataFrame, horizon_key: str, *, spy_df) -> list[tuple[str, str]]:
+    """Return entry-rule signals firing on the last completed bar only."""
+    if spy_df is None or len(spy_df) == 0:
+        import logging
+        logging.getLogger(__name__).warning("strategy pass: no SPY frame this scan -- strategy signals skipped (fail-closed)")
+        return []
+    frame = df_completed if market_context.has_context(df_completed) else market_context.attach(df_completed, spy_df=spy_df)
+    fired = []
+    for strategy in ENTRY_FUNCS:
+        try:
+            bullish, bearish = entries_for(strategy, frame, horizon_key)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning("strategy pass: %s/%s raised -- skipped", strategy, horizon_key, exc_info=True)
+            continue
+        if len(bullish) and bool(bullish.iloc[-1]):
+            fired.append((strategy, "bullish"))
+        if len(bearish) and bool(bearish.iloc[-1]):
+            fired.append((strategy, "bearish"))
+    return fired
