@@ -13,6 +13,7 @@ journal.json
 analytics_snapshot.json
 market_data_state.json
 scan_telemetry.jsonl
+scan_progress.json
 docs/superpowers/results/_quarterly_wf_result.json
 validation_results.json
 
