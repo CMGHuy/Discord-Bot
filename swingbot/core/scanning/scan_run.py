@@ -56,22 +56,26 @@ def _maybe_run_strategy_pass(*, tickers, fresh_data, spy_df, regimes, rs_cache, 
         mode = "shadow"
     live_allow = {value.strip() for value in (config.STRATEGY_ALERTS_LIVE_STRATEGIES or "").split(",") if value.strip()}
 
-    def rs_combined_of(ticker):
+    def asof_of(ticker):
         if rs_cache is None or spy_df is None or fresh_data.get(ticker) is None:
-            return None
+            return {}
         pct = rs_factors.rs_percentile(fresh_data[ticker], spy_df, universe_rels=rs_cache.get("rels"))
         sector = sector_of_ticker.get(ticker)
-        if sector and sector_etf_frames:
+        sector_pct = None
+        if sector and sector_etf_frames and etf_symbol_of_sector.get(sector) in sector_etf_frames:
             sector_pct = rs_factors.sector_rs_percentile(
                 sector, sector_etf_frames, spy_df,
                 sector_of_etf={symbol: name for name, symbol in etf_symbol_of_sector.items()})
-            return rs_factors.rs_score(pct, sector_pct)
-        return pct
+        return {"rs_pctile": pct, "sector_pctile": sector_pct,
+                "rs_combined": rs_factors.rs_score(pct, sector_pct) if sector_pct is not None else pct}
+
+    def rs_combined_of(ticker):
+        return asof_of(ticker).get("rs_combined")
 
     result = strategy_pass.run_strategy_pass(
         tickers, fresh_data, now=datetime.now(timezone.utc), horizons=list(HORIZONS), spy_df=spy_df,
         regimes=regimes, rs_combined_of=rs_combined_of, mode=mode, live_allow=live_allow,
-        trade_log=trade_log, plan_store=PlanStore())
+        trade_log=trade_log, plan_store=PlanStore(), asof_of=asof_of)
     alerts.extend(result.alerts)
     return {"strategy_plans": len(result.plans), "strategy_opened": result.opened}
 

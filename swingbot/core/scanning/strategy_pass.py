@@ -134,7 +134,7 @@ def run_strategy_pass(tickers, fresh_data, *, now, horizons, spy_df, regimes,
                                         plan_id=plan.plan_id, badge=plan.badge, quality_score=plan.quality_score,
                                         source=plan.source, cohort_label=plan.cohort_label,
                                         cohort_stats=plan.cohort_stats, risk_features=plan.risk_features,
-                                        ledger=plan.ledger)
+                                        ledger=plan.ledger, entry_context=plan.entry_context)
                     result.opened += 1
                     result.alerts.append((build_strategy_alert_embed(plan), None, plan, simple_line(plan)))
         except Exception:
