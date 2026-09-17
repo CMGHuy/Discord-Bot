@@ -194,10 +194,13 @@ def dashboard():
         t for t in all_raw
         if t.get("status") == "open" or dash.is_today_berlin(t.get("closed_at"))
     ]
-    stats = tl.get_stats(trades=scoped_raw)
-    stats.update(tl.get_extended_stats(trades=scoped_raw))
+    from swingbot.core.tracking.ledger import is_main, split_by_ledger
+    scoped_main = [trade for trade in scoped_raw if is_main(trade)]
+    stats = tl.get_stats(trades=scoped_main)
+    stats.update(tl.get_extended_stats(trades=scoped_main))
     from swingbot.core.analytics import metrics as m
-    closed_scoped = [t for t in scoped_raw if t.get("status") in ("win", "loss", "closed")]
+    closed_scoped_all = [t for t in scoped_raw if t.get("status") in ("win", "loss", "closed")]
+    closed_scoped, closed_weak = split_by_ledger(closed_scoped_all)
     scoped_rs = m.r_multiples(closed_scoped)
 
     account_cfg = dash.load_account_config()
@@ -244,7 +247,9 @@ def dashboard():
         # figures it is showing rather than assume the request applied.
         "scope": {"mode": mode},
         "realized": _realized(
-            [t for t in all_raw if t.get("status") in ("win", "loss", "closed")],
+            [t for t in all_raw if is_main(t) and t.get("status") in ("win", "loss", "closed")],
             mode,
         ),
+        "realized_weak": _realized(
+            [t for t in all_raw if not is_main(t) and t.get("status") in ("win", "loss", "closed")], mode),
     })

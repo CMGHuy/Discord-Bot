@@ -104,7 +104,7 @@ def analytics_performance():
     start, end = _iso_day("from"), _iso_day("to")
 
     tl = TradeLog()
-    all_raw = tl.get_trades(status=None, limit=None) or []
+    all_raw = tl.get_trades(status=None, limit=None, ledger="main") or []
     stats = tl.get_stats(trades=all_raw)
     stats.update(tl.get_extended_stats(trades=all_raw))
 
@@ -139,6 +139,7 @@ def analytics_performance():
         "expectancy_r": m.expectancy_r(closed),
         "expectancy_n": len(m.r_multiples(closed)),
         "by_confidence": tl.get_stats_by_confidence(),
+        "weak": tl.weak_summary(),
 
         "range": {
             "from": start, "to": end,
