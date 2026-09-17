@@ -9,6 +9,21 @@ from swingbot.core.analytics.rank import follow_breakdown, follow_score
 from swingbot.core.market import opex
 from swingbot.core import presentation as ui
 
+
+def build_strategy_alert_embed(plan) -> "discord.Embed":
+    """Render a strategy-sourced plan with its frozen badge and ledger."""
+    embed = discord.Embed(title=f"Strategy signal — {plan.ticker} {plan.direction}")
+    ui.apply_chrome(embed, accent=ui.accent_for_outcome("scratch"), plan_id=plan.plan_id)
+    embed.add_field(name="Plan (v2)", value=(f"{plan.strategy} · {plan.horizon_key} · {plan.direction} · "
+                    f"{'✅' if plan.badge == 'VALIDATED' else '⚠️'} {plan.badge}"), inline=False)
+    for name, value in (("Entry", plan.trigger_price), ("Stop", plan.stop_loss), ("TP1", plan.tp1)):
+        embed.add_field(name=name, value=f"{value:.2f}")
+    if plan.tp2 is not None:
+        embed.add_field(name="TP2", value=f"{plan.tp2:.2f}")
+    embed.add_field(name="Ledger", value=("main" if plan.ledger == "main" else
+                    "weak — P&L tracked separately, never summed into main"), inline=False)
+    return embed
+
 from .snapshots import _snapshot_and_diff
 from .requirements import _sources_str
 from .plan_table import (_v2_plan, plan_numbers_for_display, leg_rows, cohort_line)

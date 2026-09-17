@@ -5,6 +5,9 @@ import pandas as pd
 
 from swingbot.core.market import market_context
 from swingbot.core.market.entry_filters import ENTRY_FUNCS, entries_for
+from swingbot.core.planning.builders import build_strategy_plan
+from swingbot.core.planning.params import stamp_badge, stamp_cohort
+from swingbot.core.tracking import ledger as ledger_mod
 from swingbot.core.market.session import is_regular_session, session_date
 
 
@@ -45,3 +48,22 @@ def strategy_signals(df_completed: pd.DataFrame, horizon_key: str, *, spy_df) ->
         if len(bearish) and bool(bearish.iloc[-1]):
             fired.append((strategy, "bearish"))
     return fired
+
+
+def build_strategy_plan_at(df_completed: pd.DataFrame, *, ticker: str, strategy: str,
+                           horizon_key: str, direction: str, regime2_state: str | None):
+    """Build and freeze all immutable issuance stamps for one strategy signal."""
+    plan = build_strategy_plan(df_completed, len(df_completed) - 1, ticker=ticker,
+                               strategy=strategy, horizon_key=horizon_key, direction=direction)
+    if plan is None:
+        return None
+    stamp_badge(plan)
+    stamp_cohort(plan, regime2_state)
+    plan.ledger = ledger_mod.ledger_for(plan.source, plan.badge)
+    return plan
+
+
+def simple_line(plan) -> str:
+    return (f"{plan.ticker} {plan.direction} · {plan.strategy} {plan.horizon_key} · "
+            f"entry {plan.trigger_price:.2f} stop {plan.stop_loss:.2f} TP1 {plan.tp1:.2f} · "
+            f"{plan.badge} · ledger {plan.ledger}")
