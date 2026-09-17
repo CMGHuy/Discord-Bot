@@ -22,12 +22,16 @@ LIVE_STATUSES = ("PENDING", "ACTIVE")
 
 def soak_lines(strategy: str, verdict: dict, badge) -> list[str]:
     """Human-readable, clause-by-clause v93 live-promotion verdict."""
+    from swingbot.core.edge.strategy_soak import MAX_ENTRY_DEV, MIN_CLOSED
     clauses = verdict["clauses"]
     mark = lambda value: "PASS" if value else "FAIL"
+    exp = f"{verdict['exp_r']:+.3f}R" if verdict["exp_r"] is not None else "n/a"
+    badge_exp = f"{verdict['badge_exp_r']:+.3f}R" if verdict["badge_exp_r"] is not None else "n/a"
+    dev = f"{verdict['median_entry_dev']:.3f}" if verdict["median_entry_dev"] is not None else "n/a"
     lines = [f"**Soak — {strategy}** ({getattr(badge, 'status', 'unknown')})",
-             f"Sample: {verdict['n_closed']}/30 closed — {mark(clauses['n'])}",
-             f"Non-inferior expectancy: {ui.fmt_r(verdict['exp_r'])} vs {ui.fmt_r(verdict['badge_exp_r'])} — {mark(clauses['non_inferior'])}",
-             f"Entry parity: median deviation {ui.fmt_pct(verdict['median_entry_dev'])} — {mark(clauses['entry_parity'])}"]
+             f"Sample: {verdict['n_closed']}/{MIN_CLOSED} closed — {mark(clauses['n'])}",
+             f"Non-inferior expectancy: {exp} vs {badge_exp} — {mark(clauses['non_inferior'])}",
+             f"Entry parity: median deviation {dev} of stop distance (≤ {MAX_ENTRY_DEV:.2f}) — {mark(clauses['entry_parity'])}"]
     lines.append("Ready to consider live." if verdict["pass"] else "Not ready for live; keep in shadow.")
     return lines
 
@@ -37,6 +41,9 @@ async def soak_cmd(ctx, *, strategy: str):
     from swingbot.core.backtesting.registry import get_badge
     from swingbot.core.edge.strategy_soak import soak_verdict
     plans = [plan for plan in PlanStore().all() if plan.source == "strategy" and plan.strategy == strategy]
+    if not plans:
+        await ctx.send(f"No strategy-sourced plans for `{strategy}` yet (is STRATEGY_ALERTS_MODE off?).")
+        return
     badge = get_badge("strategy", strategy)
     await ctx.send("\n".join(soak_lines(strategy, soak_verdict(plans, badge), badge)))
 

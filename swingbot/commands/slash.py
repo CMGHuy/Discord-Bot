@@ -445,6 +445,19 @@ async def slash_stats(interaction: discord.Interaction, period: app_commands.Cho
 
 
 # ──────────────────────────────────────────────
+# /soak
+# ──────────────────────────────────────────────
+
+@bot.tree.command(name="soak", description="v93 trust-rule readout for a strategy's shadow plans")
+@app_commands.describe(strategy="Exact strategy name, e.g. MACD")
+async def slash_soak(interaction: discord.Interaction, strategy: str):
+    await interaction.response.defer()
+    ctx = await commands.Context.from_interaction(interaction)
+    from swingbot.commands.stats import soak_cmd
+    await soak_cmd.callback(ctx, strategy=strategy)
+
+
+# ──────────────────────────────────────────────
 # /lessons
 # ──────────────────────────────────────────────
 
