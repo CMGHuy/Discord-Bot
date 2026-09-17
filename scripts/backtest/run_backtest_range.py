@@ -46,6 +46,23 @@ def write_trades_jsonl(rows, path) -> None:
             handle.write(json.dumps(row, default=str) + "\n")
 
 
+def _build_asof_map(tickers: list, frames: dict, universe: str | None):
+    """Build every loaded ticker's point-in-time cross-sectional context once."""
+    from swingbot.core.backtesting.asof_context import build_asof
+    from swingbot.core.marketdata.universe import sector_map
+
+    spy = _market_frame()
+    if spy is None:
+        print("    ! no SPY frame -- as-of context disabled for this run", flush=True)
+        return {}
+    sector_of_etf = sector_map("etfs")
+    etf_frames = {etf: frame for etf in sector_of_etf
+                  if (frame := load_cached(etf)) is not None}
+    sector_of_ticker = sector_map(universe or "watchlist")
+    return build_asof(frames, spy, sector_of_ticker=sector_of_ticker,
+                      sector_etf_frames=etf_frames, sector_of_etf=sector_of_etf)
+
+
 def _market_frame():
     """The benchmark frame backing market_context, loaded once per process.
 
@@ -314,6 +331,10 @@ def main():
                     help="scope tickers to a named universe (e.g. 'etfs', Task E80) via "
                          "swingbot.core.marketdata.universe.universe_symbols, instead of the watchlist")
     ap.add_argument("--json", dest="json_out", default=None)
+    ap.add_argument("--trades-jsonl", dest="trades_jsonl", default=None,
+                    help="write one JSONL training row per windowed trade")
+    ap.add_argument("--context", choices=["on", "off"], default="on",
+                    help="build cross-sectional entry context (default: on)")
     ap.add_argument("--emit-registry", dest="emit_registry", default=None,
                     help="path to validation_registry.json to merge records into")
     ap.add_argument("--run-date", dest="run_date", default=None,
@@ -377,6 +398,7 @@ def main():
     strategies = [args.strategy] if args.strategy else list(ALL_STRATEGIES)
     by_strategy = defaultdict(list)
     by_combo = defaultdict(list)
+    trade_rows = []
     # Runner sub-outcome counts (v2 + scale-out only). `runner_outcome` is
     # stamped per-trade on BacktestTrade (v2 branch only), so these ARE
     # filtered to the date window exactly like by_strategy/by_combo above --
@@ -387,10 +409,15 @@ def main():
     tp2_mode = args.tp2 if args.exit_model == "v2" else "none"
 
     tickers = _tickers_for_run(args.universe)
+    # Context ranking is cross-sectional, so every cached frame must be loaded
+    # before individual liquidity/data-quality exclusions are applied below.
+    frames = {ticker: _with_context(load_cached(ticker)) for ticker in tickers}
+    frames = {ticker: frame for ticker, frame in frames.items() if frame is not None}
+    asof_map = _build_asof_map(tickers, frames, args.universe) if args.context == "on" else {}
     excluded_illiquid = []   # [(ticker, reason), ...] -- printed as a header block in the final report
     excluded_bad_data = []   # [(ticker, "; ".join(issues)), ...] -- Task E16, same pattern
     for ti, ticker in enumerate(tickers, 1):
-        df = _with_context(load_cached(ticker))
+        df = frames.get(ticker)
         if df is None:
             continue
         reason = liquidity_reason(df)
@@ -409,13 +436,15 @@ def main():
                 try:
                     s = run_backtest(ticker, df, strat, hk, one_at_a_time=True,
                                       exit_model=args.exit_model, scale_out=args.scale_out,
-                                      tp2_mode=tp2_mode, frictions=(args.frictions == "on"))
+                                      tp2_mode=tp2_mode, frictions=(args.frictions == "on"),
+                                      asof=asof_map.get(ticker))
                 except Exception as e:
                     print(f"    ! {strat}/{hk}: {e}")
                     continue
                 tr = window_trades(s, date_from, date_to)
                 by_strategy[strat].extend(tr)
                 by_combo[(strat, hk)].extend(tr)
+                trade_rows.extend((ticker, strat, hk, trade) for trade in tr)
                 if show_runner_cols:
                     rb = runner_by_strategy[strat]
                     rb["tp2"] += sum(1 for t in tr if t.runner_outcome == "runner_tp2")
@@ -491,6 +520,9 @@ def main():
     if args.json_out:
         Path(args.json_out).write_text(json.dumps(
             {k: {kk: vv for kk, vv in v.items()} for k, v in results.items()}, indent=2))
+    if args.trades_jsonl:
+        write_trades_jsonl(trade_rows, args.trades_jsonl)
+        print(f"Wrote {len(trade_rows)} trade rows to {args.trades_jsonl}")
     if args.emit_registry:
         summaries = [{"strategy": k, "n": v["n_eval"], "win_rate": v["win_rate"],
                       "expectancy_r": v["expectancy_r"]} for k, v in results.items()]
