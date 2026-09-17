@@ -83,6 +83,39 @@ def arm_trades(rows, arm) -> list[ArmTrade]:
     return [row.trade for row in rows if row.arm == arm]
 
 
+V88_B_GRID = (0.10, 0.25)      # the b values v88 actually ran, for the overlap only
+
+
+def _trade_key(trade) -> tuple:
+    return (trade.ticker, trade.strategy, trade.horizon_key, trade.entry_date)
+
+
+def overlap_report(rows, v88_rows) -> list[dict]:
+    """Spec §3.3: how much of each cell's confirmed population is the same
+    trades v88 already showed as R1, and how much the released R2/R3
+    cooldown added. `v88_rows` carry v88's mode-bearing cell ids; a v90
+    cell whose `b` v88 never ran has no counterpart and reports None.
+    """
+    v88_by_cell: dict = {}
+    for row in v88_rows:
+        if row.reaction == "R1":
+            v88_by_cell.setdefault(row.arm, set()).add(_trade_key(row.trade))
+    out = []
+    for cell in CELLS:
+        mine = {_trade_key(row.trade) for row in rows if row.arm == cell.cell_id}
+        if cell.b not in V88_B_GRID:
+            out.append({"cell_id": cell.cell_id, "n": len(mine), "v88_r1_n": None,
+                        "shared": None, "new_here": None, "only_in_v88": None})
+            continue
+        theirs: set = set()
+        for mode in ("M1", "M2"):
+            theirs |= v88_by_cell.get(f"{mode}-{cell.cell_id}", set())
+        out.append({"cell_id": cell.cell_id, "n": len(mine), "v88_r1_n": len(theirs),
+                    "shared": len(mine & theirs), "new_here": len(mine - theirs),
+                    "only_in_v88": len(theirs - mine)})
+    return out
+
+
 @dataclass(frozen=True)
 class CellScore:
     cell_id: str
@@ -167,7 +200,7 @@ def _fmt(value, spec):
     return "n/a" if value is None else format(value, spec)
 
 
-def render_selection_md(selection: Selection) -> str:
+def render_selection_md(selection: Selection, overlap: list | None = None) -> str:
     lines = ["# v90 rejection-only armed entries — Stage 1 selection", "",
              f"**Verdict: {selection.verdict}**", "",
              f"Window: {SELECTION_WINDOW[0]}..{SELECTION_WINDOW[1]} (fold-train only).", "",
@@ -188,4 +221,17 @@ def render_selection_md(selection: Selection) -> str:
             lines.append(f"- {p['param']}: grid {p['grid']}, expectancies "
                          f"{[round(e, 4) for e in p['expectancies']]}, adopted {p['adopted']}, "
                          f"plateau {p['is_plateau']}")
+    if overlap:
+        lines += ["", "## Overlap with v88's R1 rows (spec §3.3)", "",
+                  "This mechanism is not a re-label of v88's R1 population: dropping the "
+                  "R2/R3 issuances releases arms their 5-bar cooldown suppressed, and those "
+                  "arms shift later ones in turn. `n/a` means v88 never ran that `b`.", "",
+                  "| cell | n | v88 R1 n | shared | new here | only in v88 |",
+                  "|---|---|---|---|---|---|"]
+        for row in overlap:
+            lines.append(
+                f"| {row['cell_id']} | {row['n']} | "
+                + " | ".join("n/a" if row[key] is None else str(row[key])
+                             for key in ("v88_r1_n", "shared", "new_here", "only_in_v88"))
+                + " |")
     return "\n".join(lines) + "\n"

@@ -128,3 +128,5 @@ Vibe-Trading-main/
 data/v82/
 # v88 armed-confluence-entries replay output (large, regenerable)
 data/v88/
+# v90 rejection-only armed-entries replay output (large, regenerable)
+data/v90/

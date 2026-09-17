@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import sys
 from pathlib import Path
@@ -112,3 +113,20 @@ def test_render_selection_md_lists_every_cell_and_the_verdict():
     assert all(cell.cell_id in md for cell in am.CELLS)
     assert "greatest" in md and "ΔExpR" in md                        # the rule is quoted
     assert am.LIMITATIONS in md                                       # spec §4.3
+
+
+def test_overlap_report_separates_shared_from_newly_released_arms():
+    shared = _rows("N3-k0.25-b0.10", 1, 0, date="2019-01-02")
+    mine_only = _rows("N3-k0.25-b0.10", 1, 0, date="2019-02-02")
+    v88 = [am.Row("M1-N3-k0.25-b0.10", shared[0].trade, "R1"),
+           am.Row("M1-N3-k0.25-b0.10", mine_only[0].trade, "R2"),
+           am.Row("M2-N3-k0.25-b0.10",
+                  dataclasses.replace(shared[0].trade, entry_date="2019-03-02"), "R1")]
+    report = {r["cell_id"]: r for r in am.overlap_report(shared + mine_only, v88)}
+    row = report["N3-k0.25-b0.10"]
+    assert row["n"] == 2
+    assert row["v88_r1_n"] == 2          # the R2 row is not an R1 counterpart
+    assert row["shared"] == 1
+    assert row["new_here"] == 1          # released by the dropped cooldown
+    assert row["only_in_v88"] == 1
+    assert report["N3-k0.25-b0.00"]["v88_r1_n"] is None   # b=0.00 had no v88 counterpart
