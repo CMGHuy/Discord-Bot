@@ -69,6 +69,30 @@ def _iso_day(name: str) -> str | None:
     return raw
 
 
+def _soak_for(strategy: str):
+    from swingbot.core.backtesting.registry import get_badge
+    from swingbot.core.edge.strategy_soak import soak_verdict
+    from swingbot.core.planning.plan_store import PlanStore
+    plans = [plan for plan in PlanStore().all() if plan.source == "strategy" and plan.strategy == strategy]
+    badge = get_badge("strategy", strategy)
+    return soak_verdict(plans, badge), badge
+
+
+@api_v1.route("/analytics/soak", methods=["GET"])
+@require_auth
+def analytics_soak():
+    unknown = set(request.args) - {"strategy"}
+    if unknown:
+        raise ApiError("invalid", f"unknown parameter {sorted(unknown)[0]!r}; allowed: ['strategy']", 400)
+    strategy = (request.args.get("strategy") or "").strip()
+    if not strategy:
+        raise ApiError("invalid", "strategy is required", 400)
+    verdict, badge = _soak_for(strategy)
+    return jsonify({"strategy": strategy,
+                    "badge": {"status": badge.status, "n": badge.n, "expectancy_r": badge.expectancy_r},
+                    "verdict": verdict})
+
+
 @api_v1.route("/analytics/performance", methods=["GET"])
 @require_auth
 def analytics_performance():
@@ -336,6 +360,9 @@ def analytics_by_dimension():
         }
         if dim == "strategy":
             row["badge"] = get_badge("strategy", key).status
+            verdict, _ = _soak_for(key)
+            row["soak"] = {"pass": verdict["pass"], "n_closed": verdict["n_closed"],
+                           "clauses": verdict["clauses"]} if verdict["n_closed"] else None
         rows.append(row)
 
     grouped_closed_at = [
