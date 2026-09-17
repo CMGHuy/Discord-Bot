@@ -147,6 +147,16 @@
     }
 
     <main class="workspace" [class.route-pending]="routeLoading.visible()" [attr.aria-busy]="routeLoading.visible() ? 'true' : null">
+      <!-- Over the content, never in the flow. An automatic scan runs every
+           SCAN_INTERVAL_MINUTES for the whole session, so a strip that took
+           up layout would push whatever is being read down 40px and back,
+           several times an hour. The killswitch above makes the opposite
+           trade on purpose: it must never be missed, this must never
+           interrupt. -->
+      <sb-scan-progress
+        [running]="connection.scanRunning()"
+        [progress]="connection.scanProgress()"
+      />
       <div class="workspace-content" [attr.inert]="routeLoading.visible() ? '' : null"><router-outlet /></div>
       @if (routeLoading.visible()) {
         <div class="route-loading-overlay" role="status" aria-live="polite"><span class="route-loading-mark" aria-hidden="true"></span><span>{{ routeLoading.label() }}</span></div>

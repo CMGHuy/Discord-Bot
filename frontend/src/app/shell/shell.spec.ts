@@ -128,6 +128,22 @@ describe('shell navigation', () => {
     expect(strip.previousElementSibling?.tagName.toLowerCase()).toBe('header');
   });
 
+  it('overlays the scan progress strip on the workspace rather than reflowing it', () => {
+    const f = TestBed.createComponent(Shell);
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+
+    const strip = el.querySelector('sb-scan-progress');
+    expect(strip).not.toBeNull();
+
+    // Deliberately NOT a sibling of the header the way `.killswitch-strip`
+    // is. That one is in the flow because it must never be missed; this one
+    // appears every SCAN_INTERVAL_MINUTES all session, and in the flow it
+    // would shunt the page down and back several times an hour.
+    expect(strip!.parentElement?.classList.contains('workspace')).toBe(true);
+    expect(strip!.previousElementSibling).toBeNull();
+  });
+
   it('loads the tape once on construction', () => {
     // This only proves the constructor's one-time `this.tape.load()` --
     // NOT that `Shell` reacts to a `scan` event, which it does not do and

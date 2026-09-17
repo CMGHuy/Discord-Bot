@@ -100,6 +100,7 @@ def test_scan_status_shape(logged_in, scan_files):
         "bot_healthy": (bool, type(None)),
         "bot_last_success": NULLABLE_STR,
         "bot_consecutive_failures": int,
+        "progress": (dict, type(None)),
     })
 
 
@@ -317,3 +318,39 @@ def test_never_reported_success_is_unknown_not_failing(tmp_path, monkeypatch):
 
     assert payload["bot_healthy"] is None
     assert payload["bot_last_success"] is None
+
+
+# --- scan progress ------------------------------------------------------
+
+def test_scan_status_carries_no_progress_when_nothing_is_scanning(logged_in, scan_files):
+    """Absent, not a zeroed record. A bar rendered at 0% is a claim that a
+    scan has started and done nothing -- which is a different statement from
+    "no scan is running", and the one the UI must not make."""
+    assert logged_in.get("/api/v1/system/scan").get_json()["progress"] is None
+
+
+def test_scan_status_relays_the_record_the_bot_published(logged_in, scan_files, tmp_path):
+    from swingbot.core.scanning import progress_store
+    from swingbot.core.scanning.scan_run import ScanProgress
+
+    progress = ScanProgress()
+    progress.stage, progress.total, progress.done = "analyzing", 100, 50
+    progress.current_ticker, progress.qualifying_found = "AAPL", 3
+    progress_store.publish(progress)
+
+    progress_payload = logged_in.get("/api/v1/system/scan").get_json()["progress"]
+    assert_shape(progress_payload, {
+        "at": str, "pct": int, "stage": str, "current_ticker": NULLABLE_STR,
+        "done": int, "total": int, "qualifying_found": int,
+    })
+    assert progress_payload["pct"] == 66
+    assert progress_payload["current_ticker"] == "AAPL"
+
+
+def test_a_corrupt_progress_record_does_not_take_the_status_endpoint_down(
+    logged_in, scan_files, tmp_path,
+):
+    (tmp_path / "scan_progress.json").write_text("{torn")
+    response = logged_in.get("/api/v1/system/scan")
+    assert response.status_code == 200
+    assert response.get_json()["progress"] is None

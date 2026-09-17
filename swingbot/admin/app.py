@@ -45,6 +45,7 @@ from logging.handlers import RotatingFileHandler
 from flask import Flask, Response, redirect, request, session, url_for
 
 from swingbot import config
+from swingbot.core.scanning import progress_store
 from swingbot.core.scanning.engine import is_scan_running
 # `docker_sdk` is re-exported: api_v1/system.py imports it from here rather
 # than from helpers, so it is used even though nothing in this file calls it.
@@ -376,6 +377,10 @@ def scan_status_payload() -> dict:
     return {
         "pending": pending, "triggered_at": mtime, "paused": paused, "paused_at": paused_at,
         "running": running,
+        # None whenever no scan is publishing, which the SPA must render as
+        # "no bar" rather than as 0% -- see progress_store for why the
+        # percentage in here is not ScanProgress.pct.
+        "progress": progress_store.read(),
         "bot_alive": bot_alive,
         "bot_last_seen": bot_last_seen,
         "bot_session_active": bot_session_active,

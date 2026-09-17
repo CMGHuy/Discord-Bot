@@ -190,3 +190,94 @@ describe('ConnectionStore', () => {
     expect(store.botHealthy()).toBeNull();
   });
 });
+
+/* --- scan progress (the shell strip) ------------------------------------ */
+
+describe('ConnectionStore scan progress', () => {
+  let store: InstanceType<typeof ConnectionStore>;
+  let backend: HttpTestingController;
+  let events: FakeEventStream;
+
+  beforeEach(() => {
+    events = new FakeEventStream();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        { provide: EventStream, useValue: events },
+      ],
+    });
+    store = TestBed.inject(ConnectionStore);
+    backend = TestBed.inject(HttpTestingController);
+  });
+
+  const tick = () => TestBed.inject(ApplicationRef).tick();
+
+  const respond = (scan: object) => {
+    backend.expectOne('/api/v1/health').flush(HEALTH);
+    backend.expectOne('/api/v1/system/scan').flush(scan);
+  };
+
+  const PROGRESS = {
+    at: '2026-08-14T09:00:00Z', pct: 66, stage: 'analyzing',
+    current_ticker: 'AAPL', done: 50, total: 100, qualifying_found: 3,
+  };
+
+  it('reports no scan running before the first answer', () => {
+    expect(store.scanRunning()).toBe(false);
+    expect(store.scanProgress()).toBeNull();
+  });
+
+  it('carries the running flag and the published record to the shell', () => {
+    tick();
+    respond({ ...SCAN, running: true, progress: PROGRESS });
+
+    expect(store.scanRunning()).toBe(true);
+    expect(store.scanProgress()?.pct).toBe(66);
+  });
+
+  it('refetches on the scan event, not only on the bot event', () => {
+    // The strip's whole resolution depends on this: `scan_progress.json`
+    // raises `scan`, and a store that only listened for `bot` would move the
+    // bar once per heartbeat instead of once per second.
+    tick();
+    respond({ ...SCAN, running: false, progress: null });
+
+    events.raise('scan');
+    tick();
+    respond({ ...SCAN, running: true, progress: PROGRESS });
+
+    expect(store.scanRunning()).toBe(true);
+    expect(store.scanProgress()?.current_ticker).toBe('AAPL');
+  });
+
+  it('clears the record when the scan ends so no bar outlives it', () => {
+    tick();
+    respond({ ...SCAN, running: true, progress: PROGRESS });
+
+    events.raise('scan');
+    tick();
+    respond({ ...SCAN, running: false, progress: null });
+
+    expect(store.scanRunning()).toBe(false);
+    expect(store.scanProgress()).toBeNull();
+  });
+
+  it('a failed scan read leaves the bar alone rather than freezing it', () => {
+    tick();
+    respond({ ...SCAN, running: true, progress: PROGRESS });
+
+    events.raise('scan');
+    tick();
+    backend.expectOne('/api/v1/health').flush(HEALTH);
+    backend.expectOne('/api/v1/system/scan')
+      .error(new ProgressEvent('error'), { status: 0 });
+
+    // One failed poll is a blip; the next event corrects it. Blanking the
+    // strip on it would have the bar flicker through every scan.
+    expect(store.scanProgress()?.pct).toBe(66);
+  });
+});
