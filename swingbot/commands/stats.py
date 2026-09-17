@@ -20,6 +20,27 @@ _plan_store = PlanStore()
 LIVE_STATUSES = ("PENDING", "ACTIVE")
 
 
+def soak_lines(strategy: str, verdict: dict, badge) -> list[str]:
+    """Human-readable, clause-by-clause v93 live-promotion verdict."""
+    clauses = verdict["clauses"]
+    mark = lambda value: "PASS" if value else "FAIL"
+    lines = [f"**Soak — {strategy}** ({getattr(badge, 'status', 'unknown')})",
+             f"Sample: {verdict['n_closed']}/30 closed — {mark(clauses['n'])}",
+             f"Non-inferior expectancy: {ui.fmt_r(verdict['exp_r'])} vs {ui.fmt_r(verdict['badge_exp_r'])} — {mark(clauses['non_inferior'])}",
+             f"Entry parity: median deviation {ui.fmt_pct(verdict['median_entry_dev'])} — {mark(clauses['entry_parity'])}"]
+    lines.append("Ready to consider live." if verdict["pass"] else "Not ready for live; keep in shadow.")
+    return lines
+
+
+@bot.command(name="soak")
+async def soak_cmd(ctx, *, strategy: str):
+    from swingbot.core.backtesting.registry import get_badge
+    from swingbot.core.edge.strategy_soak import soak_verdict
+    plans = [plan for plan in PlanStore().all() if plan.source == "strategy" and plan.strategy == strategy]
+    badge = get_badge("strategy", strategy)
+    await ctx.send("\n".join(soak_lines(strategy, soak_verdict(plans, badge), badge)))
+
+
 def top_plans(plans: list, n: int, today=None) -> list:
     """The n highest-follow_score PENDING/ACTIVE plans, ranked by
     analytics.rank.rank_plans (the one shared ordering -- see this
