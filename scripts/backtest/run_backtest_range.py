@@ -10,6 +10,7 @@ Legacy reporting gate: win_rate >= 80; the live decision bar is 50 (see
 docs/claude/backtest-methodology.md). expectancy_r > 0, N >= 30 (train) / 15
 (validation), scratches+timeouts <= 50% of closed trades."""
 import argparse
+import dataclasses
 import json
 import math
 import sys
@@ -33,6 +34,16 @@ from swingbot.core.market.strategy_types import HORIZONS
 from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason
 
 _SPY_CACHE: dict = {}
+
+
+def write_trades_jsonl(rows, path) -> None:
+    """Write one self-contained training row per windowed backtest trade."""
+    target = Path(path)
+    with target.open("w", encoding="utf-8") as handle:
+        for ticker, strategy, horizon_key, trade in rows:
+            row = {"ticker": ticker, "strategy": strategy, "horizon_key": horizon_key}
+            row.update(dataclasses.asdict(trade))
+            handle.write(json.dumps(row, default=str) + "\n")
 
 
 def _market_frame():
