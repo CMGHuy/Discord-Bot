@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-09-17 15:03:06 UTC",
+  "generated_at": "2026-09-17 19:30:51 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.18.3",
-    "bot": "1.9.2"
+    "ui": "1.18.4",
+    "bot": "1.9.3"
   },
   "releases": [
     {
@@ -1223,6 +1223,20 @@
         "bot": "1.9.2"
       },
       "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-17",
+      "last_seen": "2026-09-17",
+      "commit": "a96ca902",
+      "subject": "release(ui,bot): 1.18.4 / 1.9.3 -- scan progress strip over the workspace",
+      "versions": {
+        "ui": "1.18.4",
+        "bot": "1.9.3"
+      },
+      "changed": [
+        "ui",
         "bot"
       ]
     }
