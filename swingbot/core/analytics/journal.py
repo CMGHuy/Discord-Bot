@@ -221,6 +221,7 @@ def build_entry(trade: dict, df) -> dict:
         # this trade was stamped; §6's verification must read what the plan
         # was TOLD at issuance, so the journal freezes it alongside the outcome.
         "risk_features": trade.get("risk_features") or {},
+        "entry_context": trade.get("entry_context") or {},
         "cohort_label": trade.get("cohort_label"),
         "cohort_run_date": (trade.get("cohort_stats") or {}).get("run_date"),
         "holding_days": _holding_days(trade),

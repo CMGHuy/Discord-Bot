@@ -584,7 +584,7 @@ class TradeLog:
                   explanation=None, confirmed_by=None, plan_id=None,
                   badge=None, quality_score=None, source=None,
                   trendline_fit=None, cohort_label=None, cohort_stats=None,
-                  risk_features=None, ledger=None) -> str:
+                  risk_features=None, ledger=None, entry_context=None) -> str:
         """
         The extra keyword args (confidence_score/breakdown, target/stop
         sources, explanation, confirmed_by) are optional and purely for
@@ -617,6 +617,7 @@ class TradeLog:
             "risk_features": risk_features or {},
             "source": source,       # "strategy" | "confluence" | None
             "ledger": ledger or "main",  # v93: frozen at creation
+            "entry_context": entry_context or {},
             "legs": [],             # v2 two-leg realization (Task 63/64/65/66); [] for v1
             "ticker": ticker,
             "strategy": strategy,
