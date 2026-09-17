@@ -405,6 +405,9 @@ async def performance_cmd(ctx, level: int = None):
 
     closed_overall = [t for t in all_trades if t["status"] in ("win", "loss")]
     _append_risk_metrics_lines(lines, closed_overall)
+    weak = trade_log.weak_summary()
+    lines.append(f"\n**WEAK ledger (separate):** {weak['wins']}W/{weak['losses']}L, "
+                 f"N {weak['n']}, P&L {weak['total_pnl']:+.2f}")
     await ctx.send("\n".join(lines))
 
 

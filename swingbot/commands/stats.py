@@ -143,6 +143,16 @@ def stats_embed(snap: dict) -> discord.Embed:
     if strat_rows:
         embed.add_field(name="By strategy (top 5 by N)", value=_mini_table(strat_rows), inline=False)
 
+    weak = snap.get("weak")
+    if weak:
+        embed.add_field(
+            name="WEAK ledger (separate — never summed into the figures above)",
+            value=(f"**N** {weak['n']} ({weak['wins']}W/{weak['losses']}L)  ·  "
+                   f"**Win rate** {ui.fmt_pct(weak['win_rate'])}  ·  "
+                   f"**Expectancy** {ui.fmt_r(weak['expectancy_r'])}  ·  "
+                   f"**Total P&L** {_dash(weak['total_pnl'], '{:+.2f}')}"),
+            inline=False)
+
     ui.apply_chrome(embed, accent=ui.accent_for_outcome("scratch"))
     return embed
 
