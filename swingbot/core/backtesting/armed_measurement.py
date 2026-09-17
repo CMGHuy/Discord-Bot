@@ -20,11 +20,10 @@ from swingbot.core.backtesting.acceptance import (
 from swingbot.core.backtesting.armed_replay import Cell
 from swingbot.core.backtesting.backtest_wf import plateau_report
 
-MODES = ("M1", "M2")
 N_GRID = (3, 5, 10)
 K_GRID = (0.25, 0.5)
-B_GRID = (0.10, 0.25)
-CELLS = tuple(Cell(m, n, k, b) for m in MODES for n in N_GRID for k in K_GRID for b in B_GRID)
+B_GRID = (0.00, 0.05, 0.10, 0.15, 0.20)
+CELLS = tuple(Cell(n, k, b) for n in N_GRID for k in K_GRID for b in B_GRID)
 BASELINE = "baseline"
 
 RUN1_WINDOW = ("2018-06-01", "2023-12-31")
@@ -41,14 +40,13 @@ SELECTION_RULE = (
     "ΔExpR >= −0.01R (clause 2's margin) and mix-standardised ΔWR > 0. Among eligible "
     "cells the greatest ΔExpR is selected; ties go to the greater ΔWR, then the smaller N. "
     "The selected cell must sit on a plateau (plateau_report, tolerance 0.03R) along each "
-    "of N, k and b with the other knobs and the mode held; any spike disqualifies."
+    "of N, k and b with the other knobs held; any spike disqualifies."
 )
 
 # Spec §4.3: quoted in every results doc this measurement writes.
 LIMITATIONS = (
     "Recorded limitations: daily-bar ordering is conservative (stop before target on the "
-    "same bar); the universe is today's cached tickers (survivorship); M2's market entry "
-    "fills at a daily close a live reader could not have traded."
+    "same bar); the universe is today's cached tickers (survivorship)."
 )
 
 
@@ -170,11 +168,11 @@ def _fmt(value, spec):
 
 
 def render_selection_md(selection: Selection) -> str:
-    lines = ["# v88 armed confluence entries — Stage 1 selection", "",
+    lines = ["# v90 rejection-only armed entries — Stage 1 selection", "",
              f"**Verdict: {selection.verdict}**", "",
              f"Window: {SELECTION_WINDOW[0]}..{SELECTION_WINDOW[1]} (fold-train only).", "",
              "## Pre-registered rule", "", SELECTION_RULE, "", LIMITATIONS, "",
-             "## All 24 cells", "",
+             "## All 30 cells", "",
              "| cell | baseline N | component N | cut % | ΔWR pp | ΔExpR R | ExpR R | eligible | reasons |",
              "|---|---|---|---|---|---|---|---|---|"]
     for s in selection.scores:
