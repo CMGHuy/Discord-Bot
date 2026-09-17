@@ -91,6 +91,36 @@ def test_walk_bearish_mirror_confirms():
     assert out == ar.ArmOutcome("confirmed", 27, rx.R1, 27)
 
 
+def test_walk_cancels_on_a_follow_through_instead_of_confirming():
+    """Bar 26 tests the level; bar 27 closes above bar 26's high -> R2."""
+    out = _walk(_frame({26: (99.5, 99.8, 98.6, 99.0),
+                        27: (99.2, 100.5, 99.1, 100.4)}))
+    assert out == ar.ArmOutcome("cancelled_follow_through", 27)
+
+
+def test_walk_cancels_on_a_reclaim_instead_of_confirming():
+    """Bar 26 closes below the level; bar 27 closes back above it -> R3."""
+    out = _walk(_frame({26: (99.0, 99.2, 98.0, 98.2),
+                        27: (98.3, 99.4, 98.1, 99.0)}))
+    assert out == ar.ArmOutcome("cancelled_reclaim", 27)
+
+
+def test_a_follow_through_ends_the_arm_before_a_later_rejection():
+    """Spec §3.1: we do not wait past a follow-through. Bar 29 is a clean
+    R1 the walk must never reach."""
+    df = _frame({26: (99.5, 99.8, 98.6, 99.0),
+                 27: (99.2, 100.5, 99.1, 100.4),
+                 29: (99.0, 99.6, 97.6, 99.4)})
+    assert _walk(df) == ar.ArmOutcome("cancelled_follow_through", 27)
+
+
+def test_walk_bearish_mirror_cancels_on_a_follow_through():
+    cand = _cand(direction="bearish", level=101.5, target=94.0)
+    out = _walk(_frame({26: (100.5, 101.4, 100.2, 101.0),
+                        27: (100.8, 100.9, 99.5, 99.6)}), cand=cand)
+    assert out == ar.ArmOutcome("cancelled_follow_through", 27)
+
+
 def test_arm_candidates_widen_past_the_min_stop_gate(monkeypatch):
     """Spec §3.1's widening: a 1.5% stop is refused by today's replay and
     arms here."""

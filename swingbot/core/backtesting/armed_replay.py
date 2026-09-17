@@ -106,6 +106,11 @@ def walk_arm(bars: reaction.Bars, atr_values: np.ndarray, cand: ArmCandidate,
              cell: Cell) -> ArmOutcome:
     """Walk one armed scenario across [i, i + N] (spec §3.2).
 
+    Only a rejection (R1) confirms. A follow-through (R2) or a reclaim
+    (R3) abandons the arm where it stands -- price left the level without
+    holding it, so the entry thesis is void and a later rejection would be
+    a rejection of a different level.
+
     Per bar t, in this order: the target check (bars after the arm bar
     only; a bar that both reaches the target and reacts is a cancel), the
     test, the reaction, then the close-through-not-reclaimed cancel. Every
@@ -128,8 +133,12 @@ def walk_arm(bars: reaction.Bars, atr_values: np.ndarray, cand: ArmCandidate,
             kind = reaction.reaction_kind(bars, t, cand.level, cand.direction,
                                           tested_now=tested_now, tested_prev=tested_prev,
                                           floor_index=i)
-            if kind is not None:
+            if kind == reaction.R1:
                 return ArmOutcome("confirmed", t, kind, first_test)
+            if kind == reaction.R2:
+                return ArmOutcome("cancelled_follow_through", t)
+            if kind == reaction.R3:
+                return ArmOutcome("cancelled_reclaim", t)
         through = bars.close[t] < cand.level if bull else bars.close[t] > cand.level
         if through:
             if breach_start is None:
