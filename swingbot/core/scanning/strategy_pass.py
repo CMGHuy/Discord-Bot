@@ -1,6 +1,8 @@
 """v93 strategy-sourced alert pass helpers."""
 from __future__ import annotations
 
+import logging
+from dataclasses import dataclass, field
 import pandas as pd
 
 from swingbot.core.market import market_context
@@ -8,6 +10,11 @@ from swingbot.core.market.entry_filters import ENTRY_FUNCS, entries_for
 from swingbot.core.planning.builders import build_strategy_plan
 from swingbot.core.planning.params import stamp_badge, stamp_cohort
 from swingbot.core.tracking import ledger as ledger_mod
+from swingbot.core.edge.rs_gate import rs_verdict
+from swingbot.core.scanning import analyze
+from swingbot.core.scanning.alert_embeds import build_strategy_alert_embed
+
+log = logging.getLogger(__name__)
 from swingbot.core.market.session import is_regular_session, session_date
 
 
@@ -67,3 +74,63 @@ def simple_line(plan) -> str:
     return (f"{plan.ticker} {plan.direction} · {plan.strategy} {plan.horizon_key} · "
             f"entry {plan.trigger_price:.2f} stop {plan.stop_loss:.2f} TP1 {plan.tp1:.2f} · "
             f"{plan.badge} · ledger {plan.ledger}")
+
+
+@dataclass
+class PassResult:
+    plans: list = field(default_factory=list)
+    alerts: list = field(default_factory=list)
+    opened: int = 0
+    stored_only: int = 0
+    rs_blocked: int = 0
+    skipped_dup: int = 0
+
+
+def run_strategy_pass(tickers, fresh_data, *, now, horizons, spy_df, regimes,
+                      rs_combined_of, mode: str, live_allow: set, trade_log, plan_store) -> PassResult:
+    """Build strategy plans after confluence; only eligible live plans open trades."""
+    result = PassResult()
+    for ticker in tickers:
+        raw = fresh_data.get(ticker)
+        if raw is None or len(raw) == 0:
+            continue
+        try:
+            frame = completed_frame(raw, now)
+            if frame is None or len(frame) == 0:
+                continue
+            bar_date = frame.index[-1].date().isoformat()
+            regime = analyze._regime_at(regimes, frame.index[-1]) if regimes is not None else None
+            for horizon in horizons:
+                for strategy, direction in strategy_signals(frame, horizon, spy_df=spy_df):
+                    if already_emitted(plan_store, ticker, strategy, horizon, bar_date):
+                        result.skipped_dup += 1
+                        continue
+                    if direction == "bearish":
+                        rs_value = rs_combined_of(ticker)
+                        verdict = rs_verdict(ticker, direction, rs_value if rs_value is not None else 50.0,
+                                             rs_available=rs_value is not None)
+                        if verdict["status"] == "block":
+                            result.rs_blocked += 1
+                            continue
+                    plan = build_strategy_plan_at(frame, ticker=ticker, strategy=strategy,
+                                                  horizon_key=horizon, direction=direction, regime2_state=regime)
+                    if plan is None:
+                        continue
+                    plan_store.add(plan)
+                    result.plans.append(plan)
+                    goes_live = mode == "live" and (not live_allow or strategy in live_allow)
+                    if not goes_live or trade_log.open_trade_for_ticker(ticker) is not None:
+                        result.stored_only += 1
+                        continue
+                    trade_log.log_trade(ticker=ticker, strategy=strategy, horizon_key=horizon, direction=direction,
+                                        confidence_level=None, confidence_label="strategy signal", entry=plan.trigger_price,
+                                        stop_loss=plan.stop_loss, take_profit=plan.tp1, target2=plan.tp2,
+                                        plan_id=plan.plan_id, badge=plan.badge, quality_score=plan.quality_score,
+                                        source=plan.source, cohort_label=plan.cohort_label,
+                                        cohort_stats=plan.cohort_stats, risk_features=plan.risk_features,
+                                        ledger=plan.ledger)
+                    result.opened += 1
+                    result.alerts.append((build_strategy_alert_embed(plan), None, plan, simple_line(plan)))
+        except Exception:
+            log.warning("strategy pass: %s failed -- continuing", ticker, exc_info=True)
+    return result
