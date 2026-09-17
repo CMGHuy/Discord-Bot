@@ -18,9 +18,23 @@ def _cache(tmp_path):
     rng = np.random.RandomState(7)
     trend = list(100 * np.cumprod(1 + rng.normal(0.002, 0.01, 120)))
     box = [trend[-1] * (1 + 0.05 * np.sin(i / 4)) for i in range(60)]
+    closes = trend + box
+    # Every close-only bar here is a doji (make_ohlcv splits the 1% spread
+    # evenly around it), so reaction.is_rejection's close-in-the-top/bottom-
+    # third test can never pass -- no bar this fixture builds from plain
+    # floats can ever be an R1. Splice one explicit (open, high, low, close)
+    # bar right after the box's last naturally-armed candidate (bullish,
+    # support ~125.98, under Cell(10, 0.5, 0.10)/horizon "4w"): a long lower
+    # wick through the level, closing in the top third of its range without
+    # exceeding the arm bar's high, so it reads as a rejection (R1) rather
+    # than a follow-through (R2) -- confirmed empirically via
+    # armed_replay.replay_armed (counts["issued"] == 1, kind "R1") to give
+    # ticker AAA a genuine armed entry instead of the corrupt-cache test's
+    # empty AAA.jsonl being indistinguishable from BBB's.
+    closes[168] = (127.5, 127.9, 125.5, 127.4)
     cache = tmp_path / "cache"
     cache.mkdir()
-    df = make_ohlcv(trend + box, start="2019-01-02")
+    df = make_ohlcv(closes, start="2019-01-02")
     df.index.name = "Date"
     df.to_csv(cache / "AAA.csv")
     return cache
@@ -64,7 +78,7 @@ def test_replay_refuses_to_resume_under_different_metadata(tmp_path):
 
 @pytest.mark.slow
 def test_replay_writes_shards_and_removes_its_progress_file(tmp_path, monkeypatch):
-    monkeypatch.setattr(am, "CELLS", (am.Cell("M1", 10, 0.5, 0.10),))
+    monkeypatch.setattr(am, "CELLS", (am.Cell(10, 0.5, 0.10),))
     cache = _cache(tmp_path)
     out = tmp_path / "out"
     assert mae.main(["replay", "--run", "run1", "--cache-dir", str(cache), "--out-root", str(out),
@@ -73,9 +87,9 @@ def test_replay_writes_shards_and_removes_its_progress_file(tmp_path, monkeypatc
     assert (run_dir / "AAA.jsonl").exists() and (run_dir / "AAA.counts.json").exists()
     assert not (run_dir / "progress.txt").exists()
     meta = json.loads((run_dir / "run.json").read_text())
-    assert meta["cells"] == ["M1-N10-k0.50-b0.10"] and meta["horizons"] == ["4w"]
+    assert meta["cells"] == ["N10-k0.50-b0.10"] and meta["horizons"] == ["4w"]
     counts = json.loads((run_dir / "AAA.counts.json").read_text())
-    assert "4w|M1-N10-k0.50-b0.10" in counts
+    assert "4w|N10-k0.50-b0.10" in counts
     # resuming skips the finished ticker and still exits clean
     assert mae.main(["replay", "--run", "run1", "--cache-dir", str(cache), "--out-root", str(out),
                      "--horizons", "4w", "--workers", "1"]) == 0
@@ -83,7 +97,7 @@ def test_replay_writes_shards_and_removes_its_progress_file(tmp_path, monkeypatc
 
 @pytest.mark.slow
 def test_replay_survives_a_corrupt_cache_csv(tmp_path, monkeypatch):
-    monkeypatch.setattr(am, "CELLS", (am.Cell("M1", 10, 0.5, 0.10),))
+    monkeypatch.setattr(am, "CELLS", (am.Cell(10, 0.5, 0.10),))
     cache = _cache(tmp_path)
     (cache / "BBB.csv").write_bytes(b"\xff\xfe\x00garbage-not-real-csv\x01\x02")
     out = tmp_path / "out"
@@ -103,26 +117,35 @@ def test_summary_select_and_arms(tmp_path):
     md = tmp_path / "summary.md"
     assert mae.main(["summary", "--run", "run1", "--window", "2018-06-01..2020-12-31",
                      "--out-root", str(out), "--out-md", str(md)]) == 0
-    assert "baseline" in md.read_text() and "M1-N3-k0.25-b0.10" in md.read_text()
+    assert "baseline" in md.read_text() and "N3-k0.25-b0.10" in md.read_text()
     assert am.LIMITATIONS in md.read_text()
 
     sel_md, sel_json = tmp_path / "sel.md", tmp_path / "sel.json"
     assert mae.main(["select", "--out-root", str(out), "--out-md", str(sel_md),
                      "--out-json", str(sel_json)]) == 0
     payload = json.loads(sel_json.read_text())
-    assert payload["verdict"] == am.SELECTED and payload["selected"] == "M1-N3-k0.25-b0.10"
+    assert payload["verdict"] == am.SELECTED and payload["selected"] == "N3-k0.25-b0.00"
     assert "**Verdict: SELECTED**" in sel_md.read_text()
 
     mde = tmp_path / "mde.json"
-    assert mae.main(["arms", "--stage", "mde", "--cell", "M1-N3-k0.25-b0.10",
+    assert mae.main(["arms", "--stage", "mde", "--cell", "N3-k0.25-b0.10",
                      "--out-root", str(out), "--out", str(mde)]) == 0
     baseline, component = vc.load_arms(mde)
     assert len(baseline) == 10 and len(component) == 9          # only the 2019 rows
 
     wf = tmp_path / "wf.json"
-    assert mae.main(["arms", "--stage", "walkforward", "--cell", "M1-N3-k0.25-b0.10",
+    assert mae.main(["arms", "--stage", "walkforward", "--cell", "N3-k0.25-b0.10",
                      "--out-root", str(out), "--out", str(wf)]) == 0
     assert [f["test_year"] for f in vc.load_folds(wf)] == ["2021", "2022", "2023"]
+
+
+def test_select_skips_the_overlap_section_without_a_v88_run(tmp_path):
+    out = tmp_path / "out"
+    _write_rows(out / "run1", _synthetic_rows())
+    md = tmp_path / "stage1.md"
+    assert mae.main(["select", "--out-root", str(out), "--out-md", str(md),
+                     "--v88-run-dir", str(tmp_path / "absent")]) == 0
+    assert "Overlap with v88" not in md.read_text(encoding="utf-8")
 
 
 def test_select_with_no_rows_exits_2(tmp_path):
@@ -131,5 +154,5 @@ def test_select_with_no_rows_exits_2(tmp_path):
 
 
 def test_permute_needs_a_run2(tmp_path):
-    assert mae.main(["permute", "--cell", "M1-N3-k0.25-b0.10", "--out-root", str(tmp_path / "out"),
+    assert mae.main(["permute", "--cell", "N3-k0.25-b0.10", "--out-root", str(tmp_path / "out"),
                      "--out-json", str(tmp_path / "p.json")]) == 4

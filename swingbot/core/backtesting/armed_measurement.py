@@ -20,11 +20,10 @@ from swingbot.core.backtesting.acceptance import (
 from swingbot.core.backtesting.armed_replay import Cell
 from swingbot.core.backtesting.backtest_wf import plateau_report
 
-MODES = ("M1", "M2")
 N_GRID = (3, 5, 10)
 K_GRID = (0.25, 0.5)
-B_GRID = (0.10, 0.25)
-CELLS = tuple(Cell(m, n, k, b) for m in MODES for n in N_GRID for k in K_GRID for b in B_GRID)
+B_GRID = (0.00, 0.05, 0.10, 0.15, 0.20)
+CELLS = tuple(Cell(n, k, b) for n in N_GRID for k in K_GRID for b in B_GRID)
 BASELINE = "baseline"
 
 RUN1_WINDOW = ("2018-06-01", "2023-12-31")
@@ -41,14 +40,13 @@ SELECTION_RULE = (
     "ΔExpR >= −0.01R (clause 2's margin) and mix-standardised ΔWR > 0. Among eligible "
     "cells the greatest ΔExpR is selected; ties go to the greater ΔWR, then the smaller N. "
     "The selected cell must sit on a plateau (plateau_report, tolerance 0.03R) along each "
-    "of N, k and b with the other knobs and the mode held; any spike disqualifies."
+    "of N, k and b with the other knobs held; any spike disqualifies."
 )
 
 # Spec §4.3: quoted in every results doc this measurement writes.
 LIMITATIONS = (
     "Recorded limitations: daily-bar ordering is conservative (stop before target on the "
-    "same bar); the universe is today's cached tickers (survivorship); M2's market entry "
-    "fills at a daily close a live reader could not have traded."
+    "same bar); the universe is today's cached tickers (survivorship)."
 )
 
 
@@ -83,6 +81,39 @@ def in_year(rows, year):
 
 def arm_trades(rows, arm) -> list[ArmTrade]:
     return [row.trade for row in rows if row.arm == arm]
+
+
+V88_B_GRID = (0.10, 0.25)      # the b values v88 actually ran, for the overlap only
+
+
+def _trade_key(trade) -> tuple:
+    return (trade.ticker, trade.strategy, trade.horizon_key, trade.entry_date)
+
+
+def overlap_report(rows, v88_rows) -> list[dict]:
+    """Spec §3.3: how much of each cell's confirmed population is the same
+    trades v88 already showed as R1, and how much the released R2/R3
+    cooldown added. `v88_rows` carry v88's mode-bearing cell ids; a v90
+    cell whose `b` v88 never ran has no counterpart and reports None.
+    """
+    v88_by_cell: dict = {}
+    for row in v88_rows:
+        if row.reaction == "R1":
+            v88_by_cell.setdefault(row.arm, set()).add(_trade_key(row.trade))
+    out = []
+    for cell in CELLS:
+        mine = {_trade_key(row.trade) for row in rows if row.arm == cell.cell_id}
+        if cell.b not in V88_B_GRID:
+            out.append({"cell_id": cell.cell_id, "n": len(mine), "v88_r1_n": None,
+                        "shared": None, "new_here": None, "only_in_v88": None})
+            continue
+        theirs: set = set()
+        for mode in ("M1", "M2"):
+            theirs |= v88_by_cell.get(f"{mode}-{cell.cell_id}", set())
+        out.append({"cell_id": cell.cell_id, "n": len(mine), "v88_r1_n": len(theirs),
+                    "shared": len(mine & theirs), "new_here": len(mine - theirs),
+                    "only_in_v88": len(theirs - mine)})
+    return out
 
 
 @dataclass(frozen=True)
@@ -169,12 +200,12 @@ def _fmt(value, spec):
     return "n/a" if value is None else format(value, spec)
 
 
-def render_selection_md(selection: Selection) -> str:
-    lines = ["# v88 armed confluence entries — Stage 1 selection", "",
+def render_selection_md(selection: Selection, overlap: list | None = None) -> str:
+    lines = ["# v90 rejection-only armed entries — Stage 1 selection", "",
              f"**Verdict: {selection.verdict}**", "",
              f"Window: {SELECTION_WINDOW[0]}..{SELECTION_WINDOW[1]} (fold-train only).", "",
              "## Pre-registered rule", "", SELECTION_RULE, "", LIMITATIONS, "",
-             "## All 24 cells", "",
+             "## All 30 cells", "",
              "| cell | baseline N | component N | cut % | ΔWR pp | ΔExpR R | ExpR R | eligible | reasons |",
              "|---|---|---|---|---|---|---|---|---|"]
     for s in selection.scores:
@@ -190,4 +221,17 @@ def render_selection_md(selection: Selection) -> str:
             lines.append(f"- {p['param']}: grid {p['grid']}, expectancies "
                          f"{[round(e, 4) for e in p['expectancies']]}, adopted {p['adopted']}, "
                          f"plateau {p['is_plateau']}")
+    if overlap:
+        lines += ["", "## Overlap with v88's R1 rows (spec §3.3)", "",
+                  "This mechanism is not a re-label of v88's R1 population: dropping the "
+                  "R2/R3 issuances releases arms their 5-bar cooldown suppressed, and those "
+                  "arms shift later ones in turn. `n/a` means v88 never ran that `b`.", "",
+                  "| cell | n | v88 R1 n | shared | new here | only in v88 |",
+                  "|---|---|---|---|---|---|"]
+        for row in overlap:
+            lines.append(
+                f"| {row['cell_id']} | {row['n']} | "
+                + " | ".join("n/a" if row[key] is None else str(row[key])
+                             for key in ("v88_r1_n", "shared", "new_here", "only_in_v88"))
+                + " |")
     return "\n".join(lines) + "\n"

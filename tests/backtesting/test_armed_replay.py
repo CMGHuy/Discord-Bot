@@ -11,7 +11,7 @@ from swingbot.scan_params import ScanParams
 from tests.helpers import make_ohlcv
 
 L, T1 = 98.5, 106.0
-CELL = ar.Cell("M1", 5, 0.25, 0.10)
+CELL = ar.Cell(5, 0.25, 0.10)
 
 
 def _params(**kw):
@@ -51,7 +51,8 @@ def _walk(df, cand=None, cell=CELL):
 
 
 def test_cell_id_format():
-    assert ar.Cell("M2", 10, 0.5, 0.25).cell_id == "M2-N10-k0.50-b0.25"
+    assert ar.Cell(10, 0.5, 0.25).cell_id == "N10-k0.50-b0.25"
+    assert ar.Cell(3, 0.25, 0.0).cell_id == "N3-k0.25-b0.00"
 
 
 def test_walk_confirms_a_rejection_and_records_the_first_test():
@@ -89,6 +90,64 @@ def test_walk_bearish_mirror_confirms():
     cand = _cand(direction="bearish", level=101.5, target=94.0)
     out = _walk(_frame({27: (101.0, 102.4, 100.4, 100.6)}), cand=cand)
     assert out == ar.ArmOutcome("confirmed", 27, rx.R1, 27)
+
+
+def test_walk_cancels_on_a_follow_through_instead_of_confirming():
+    """Bar 26 tests the level; bar 27 closes above bar 26's high -> R2."""
+    out = _walk(_frame({26: (99.5, 99.8, 98.6, 99.0),
+                        27: (99.2, 100.5, 99.1, 100.4)}))
+    assert out == ar.ArmOutcome("cancelled_follow_through", 27)
+
+
+def test_walk_cancels_on_a_reclaim_instead_of_confirming():
+    """Bar 26 closes below the level; bar 27 closes back above it -> R3."""
+    out = _walk(_frame({26: (99.0, 99.2, 98.0, 98.2),
+                        27: (98.3, 99.4, 98.1, 99.0)}))
+    assert out == ar.ArmOutcome("cancelled_reclaim", 27)
+
+
+def test_a_follow_through_ends_the_arm_before_a_later_rejection():
+    """Spec §3.1: we do not wait past a follow-through. Bar 29 is a clean
+    R1 the walk must never reach."""
+    df = _frame({26: (99.5, 99.8, 98.6, 99.0),
+                 27: (99.2, 100.5, 99.1, 100.4),
+                 29: (99.0, 99.6, 97.6, 99.4)})
+    assert _walk(df) == ar.ArmOutcome("cancelled_follow_through", 27)
+
+
+def test_walk_bearish_mirror_cancels_on_a_follow_through():
+    cand = _cand(direction="bearish", level=101.5, target=94.0)
+    out = _walk(_frame({26: (100.5, 101.4, 100.2, 101.0),
+                        27: (100.8, 100.9, 99.5, 99.6)}), cand=cand)
+    assert out == ar.ArmOutcome("cancelled_follow_through", 27)
+
+
+def test_a_cancelled_follow_through_releases_the_next_arm(monkeypatch):
+    """Spec §3.3: in v88 the R2 at bar 27 ISSUED a plan, setting
+    last_issued=27 and suppressing the arm at 29 for COOLDOWN_BARS. Here it
+    cancels, issues nothing, and the arm at 29 goes on to confirm on R1."""
+    monkeypatch.setattr(ar, "atr", lambda df, period=14: pd.Series(1.0, index=df.index))
+    df = _frame({26: (99.5, 99.8, 98.6, 99.0),      # test
+                 27: (99.2, 100.5, 99.1, 100.4),    # R2 -> cancel, no issuance
+                 31: REJECTION}, n=40)              # R1 for the released arm
+    result = _replay(df, {25: [_cand(index=25)], 29: [_cand(index=29)]})
+    assert result.counts["armed"] == 2              # 29 - 27 = 2 < COOLDOWN_BARS
+    assert result.counts["cancelled_follow_through"] == 1
+    assert [j for j, _, _ in result.issued] == [31]
+
+
+def test_the_new_cancels_resolve_identically_on_a_truncated_frame():
+    """NO-LOOKAHEAD: a cancel at bar j is the same decision whether or not
+    the frame continues past j."""
+    df = _frame({26: (99.5, 99.8, 98.6, 99.0), 27: (99.2, 100.5, 99.1, 100.4)}, n=40)
+    full = _walk(df)
+    assert full == ar.ArmOutcome("cancelled_follow_through", 27)
+    assert _walk(df.iloc[:full.resolved_index + 1]) == full
+
+    df2 = _frame({26: (99.0, 99.2, 98.0, 98.2), 27: (98.3, 99.4, 98.1, 99.0)}, n=40)
+    full2 = _walk(df2)
+    assert full2 == ar.ArmOutcome("cancelled_reclaim", 27)
+    assert _walk(df2.iloc[:full2.resolved_index + 1]) == full2
 
 
 def test_arm_candidates_widen_past_the_min_stop_gate(monkeypatch):
@@ -150,21 +209,17 @@ def test_the_widened_scenario_issues_once_its_stop_is_re_anchored():
     assert abs(plan.trigger_price - plan.stop_loss) / plan.trigger_price * 100 >= 2.0
 
 
-def test_m2_goes_straight_to_market_on_a_follow_through():
-    df = _frame({25: (99.2, 99.5, 97.9, 99.2), 26: (99.3, 100.2, 98.6, 100.0)})
-    plan, reason = _build(df, ar.ArmOutcome("confirmed", 26, rx.R2, 25),
-                          cell=ar.Cell("M2", 5, 0.25, 0.25))
+def test_every_confirmed_plan_is_a_stop_entry():
+    """No mode, no market fill: R1 is the only confirmation and it always
+    triggers above the rejection bar's extreme."""
+    plan, reason = _build(_frame({26: REJECTION}), ar.ArmOutcome("confirmed", 26, rx.R1, 26),
+                          cell=ar.Cell(5, 0.25, 0.25))
     assert reason == "issued"
-    assert plan.entry_type == "market"
-    assert plan.entry_price == pytest.approx(100.0) == plan.trigger_price
-    assert plan.stop_loss == pytest.approx(97.65)             # min(98.5, 97.9) - 0.25
-    assert plan.status == PlanStatus.ACTIVE
-
-
-def test_m2_keeps_a_rejection_as_a_stop_entry():
-    plan, _ = _build(_frame({26: REJECTION}), ar.ArmOutcome("confirmed", 26, rx.R1, 26),
-                     cell=ar.Cell("M2", 5, 0.25, 0.10))
-    assert plan.entry_type == "stop_entry"
+    assert plan.entry_type == "stop_entry" and plan.entry_price is None
+    assert plan.trigger_price == pytest.approx(99.6)
+    assert plan.expiry_bars == ar.STOP_ENTRY_EXPIRY_BARS
+    assert plan.status == PlanStatus.PENDING
+    assert plan.status_history == []
 
 
 def test_regates_refuse_rather_than_bend():
@@ -238,7 +293,7 @@ def test_replay_armed_never_reads_past_the_confirmation_bar():
     df = _structured_df()
     params = _params(min_target_confluence_count=1, min_stop_distance_pct=0.5,
                      max_stop_loss_pct=15.0, min_reward_pct=1.0)
-    cells = [ar.Cell("M1", 10, 0.5, 0.10), ar.Cell("M2", 10, 0.5, 0.10)]
+    cells = [ar.Cell(10, 0.5, 0.10), ar.Cell(10, 0.5, 0.20)]
     t = len(df) - 15
 
     def signature(result):
@@ -289,11 +344,10 @@ def test_a_random_bar_before_any_test_anchors_the_stop_at_the_arm_bar(monkeypatc
     seen = {}
     real = ar.plan_at
     def spy(*a, **k):
-        seen[k["j"]] = (k["first_test_index"], k["kind"])
+        seen[k["j"]] = k["first_test_index"]
         return real(*a, **k)
     monkeypatch.setattr(ar, "plan_at", spy)
     ar.delay_permutations("AAPL", df, "4w", CELL, confirmed, n=200, seed=1, **kwargs)
     assert seen, "200 draws over 6 bars must visit some bar"
-    for j, (first_test, kind) in seen.items():
+    for j, first_test in seen.items():
         assert first_test == (27 if j >= 27 else 25)
-        assert kind == rx.R1                      # the arm's REAL reaction kind

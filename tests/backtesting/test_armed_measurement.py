@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import sys
 from pathlib import Path
@@ -28,17 +29,18 @@ def _grid_rows(default=(6, 3), overrides=None, baseline=(5, 5)):
     return rows
 
 
-def test_the_grid_is_the_pre_registered_24_cells():
-    assert len(am.CELLS) == 24
-    assert len({c.cell_id for c in am.CELLS}) == 24
-    assert am.CELLS[0].cell_id == "M1-N3-k0.25-b0.10"
-    assert am.CELLS[-1].cell_id == "M2-N10-k0.50-b0.25"
-    # order is mode -> n -> k -> b, 4 cells per (mode, n): M2-N5 starts at 12 + 4
-    assert am.cell_by_id("M2-N5-k0.25-b0.10") == am.CELLS[16]
+def test_the_grid_is_the_pre_registered_30_cells():
+    assert len(am.CELLS) == 30
+    assert len({c.cell_id for c in am.CELLS}) == 30
+    assert am.CELLS[0].cell_id == "N3-k0.25-b0.00"
+    assert am.CELLS[-1].cell_id == "N10-k0.50-b0.20"
+    # order is n -> k -> b, 5 cells per (n, k): N5-k0.25 starts at 10
+    assert am.cell_by_id("N5-k0.25-b0.10") == am.CELLS[12]
+    assert not hasattr(am, "MODES")
 
 
 def test_row_round_trips():
-    row = _rows("M1-N3-k0.25-b0.10", 1, 0)[0]
+    row = _rows("N3-k0.25-b0.10", 1, 0)[0]
     assert am.Row.from_dict(json.loads(json.dumps(row.to_dict()))) == row
 
 
@@ -62,14 +64,14 @@ def test_score_cell_reasons():
 def test_select_picks_by_expectancy_then_smaller_n_on_a_plateau():
     selection = am.select_cell(_grid_rows())
     assert selection.verdict == am.SELECTED
-    assert selection.selected == "M1-N3-k0.25-b0.10"                  # all tie -> smaller N, first in order
+    assert selection.selected == "N3-k0.25-b0.00"                     # all tie -> smaller N, first in order
     assert all(p["is_plateau"] for p in selection.plateaus)
     assert [p["param"] for p in selection.plateaus] == ["ARMED_N", "ARMED_K", "ARMED_B"]
 
 
 def test_a_best_cell_whose_neighbours_disagree_is_a_spike():
-    selection = am.select_cell(_grid_rows(overrides={"M1-N5-k0.25-b0.10": (8, 1)}))
-    assert selection.best == "M1-N5-k0.25-b0.10"
+    selection = am.select_cell(_grid_rows(overrides={"N5-k0.25-b0.10": (8, 1)}))
+    assert selection.best == "N5-k0.25-b0.10"
     assert selection.verdict == am.SPIKE and selection.selected is None
 
 
@@ -83,13 +85,13 @@ def test_blobs_load_through_validate_component(tmp_path):
     rows = (_rows(am.BASELINE, 5, 5, date="2021-02-01") + _rows(am.BASELINE, 5, 5, date="2022-02-01")
             + _rows(am.BASELINE, 5, 5, date="2023-02-01"))
     for year in ("2021", "2022", "2023"):
-        rows += _rows("M1-N3-k0.25-b0.10", 6, 3, date=f"{year}-03-01")
+        rows += _rows("N3-k0.25-b0.10", 6, 3, date=f"{year}-03-01")
     arms = tmp_path / "arms.json"
-    arms.write_text(json.dumps(am.arms_blob(rows, "M1-N3-k0.25-b0.10")))
+    arms.write_text(json.dumps(am.arms_blob(rows, "N3-k0.25-b0.10")))
     baseline, component = vc.load_arms(arms)
     assert len(baseline) == 30 and len(component) == 27
     folds = tmp_path / "folds.json"
-    folds.write_text(json.dumps(am.folds_blob(rows, "M1-N3-k0.25-b0.10")))
+    folds.write_text(json.dumps(am.folds_blob(rows, "N3-k0.25-b0.10")))
     loaded = vc.load_folds(folds)
     assert [f["test_year"] for f in loaded] == ["2021", "2022", "2023"]
     assert all(len(f["baseline"]) == 10 and len(f["component"]) == 9 for f in loaded)
@@ -111,3 +113,20 @@ def test_render_selection_md_lists_every_cell_and_the_verdict():
     assert all(cell.cell_id in md for cell in am.CELLS)
     assert "greatest" in md and "ΔExpR" in md                        # the rule is quoted
     assert am.LIMITATIONS in md                                       # spec §4.3
+
+
+def test_overlap_report_separates_shared_from_newly_released_arms():
+    shared = _rows("N3-k0.25-b0.10", 1, 0, date="2019-01-02")
+    mine_only = _rows("N3-k0.25-b0.10", 1, 0, date="2019-02-02")
+    v88 = [am.Row("M1-N3-k0.25-b0.10", shared[0].trade, "R1"),
+           am.Row("M1-N3-k0.25-b0.10", mine_only[0].trade, "R2"),
+           am.Row("M2-N3-k0.25-b0.10",
+                  dataclasses.replace(shared[0].trade, entry_date="2019-03-02"), "R1")]
+    report = {r["cell_id"]: r for r in am.overlap_report(shared + mine_only, v88)}
+    row = report["N3-k0.25-b0.10"]
+    assert row["n"] == 2
+    assert row["v88_r1_n"] == 2          # the R2 row is not an R1 counterpart
+    assert row["shared"] == 1
+    assert row["new_here"] == 1          # released by the dropped cooldown
+    assert row["only_in_v88"] == 1
+    assert report["N3-k0.25-b0.00"]["v88_r1_n"] is None   # b=0.00 had no v88 counterpart

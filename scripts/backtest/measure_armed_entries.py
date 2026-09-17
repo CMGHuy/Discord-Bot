@@ -37,7 +37,7 @@ from swingbot.core.backtesting.acceptance import ArmTrade, arm_trade_from_plan  
 from swingbot.core.market.strategy_types import HORIZONS  # noqa: E402
 
 CACHE_DIR = ROOT / "data" / "backtest_cache"
-OUT_ROOT = ROOT / "data" / "v88"
+OUT_ROOT = ROOT / "data" / "v90"
 RUNS = {"run1": am.RUN1_WINDOW, "run2": am.VALIDATION_WINDOW}
 STAGE2_PASS_MARKER = "**Overall: PASS**"
 
@@ -200,9 +200,11 @@ def cmd_select(args) -> int:
     if args.out_json:
         Path(args.out_json).parent.mkdir(parents=True, exist_ok=True)
         Path(args.out_json).write_text(json.dumps(payload, indent=1), encoding="utf-8")
+    v88_dir = Path(args.v88_run_dir)
+    overlap = am.overlap_report(rows, read_rows(v88_dir)) if v88_dir.exists() else None
     if args.out_md:
         Path(args.out_md).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out_md).write_text(am.render_selection_md(selection), encoding="utf-8")
+        Path(args.out_md).write_text(am.render_selection_md(selection, overlap), encoding="utf-8")
     print(f"verdict: {selection.verdict}; selected: {selection.selected}", flush=True)
     return 0 if selection.verdict == am.SELECTED else 1
 
@@ -296,6 +298,8 @@ def main(argv=None) -> int:
     p.add_argument("--window", required=True); p.add_argument("--out-md", required=True)
     p = sub.add_parser("select"); common(p)
     p.add_argument("--out-md"); p.add_argument("--out-json")
+    p.add_argument("--v88-run-dir", default=str(ROOT / "data" / "v88" / "run1"),
+                   help="v88 run1 shards, read-only, for the spec §3.3 overlap report")
     p = sub.add_parser("arms"); common(p)
     p.add_argument("--stage", choices=("mde", "walkforward", "validation"), required=True)
     p.add_argument("--cell", choices=cell_ids, required=True); p.add_argument("--out", required=True)

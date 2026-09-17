@@ -27,7 +27,6 @@ from swingbot.core.market.indicators import atr
 from swingbot.core.market.strategy_types import HORIZONS, MIN_BARS
 from swingbot.core.planning.plan_engine import (PlanStatus, build_confluence_plan,
                                                 primary_strategy_for, simulate_exit)
-from swingbot.core.planning.plan_types import record_transition
 from swingbot.core.scanning.gating import passes_confluence, scenario_gate_inputs
 from swingbot.scan_params import ScanParams
 
@@ -38,14 +37,13 @@ CONFLUENCE_TOLERANCE_PCT = 5.0    # replay_scenarios' count_confirming_strategie
 
 @dataclass(frozen=True)
 class Cell:
-    mode: str      # "M1" | "M2"
     n: int         # arm window, bars
     k: float       # test proximity, ATR
     b: float       # stop buffer, ATR
 
     @property
     def cell_id(self) -> str:
-        return f"{self.mode}-N{self.n}-k{self.k:.2f}-b{self.b:.2f}"
+        return f"N{self.n}-k{self.k:.2f}-b{self.b:.2f}"
 
 
 @dataclass(frozen=True)
@@ -106,6 +104,11 @@ def walk_arm(bars: reaction.Bars, atr_values: np.ndarray, cand: ArmCandidate,
              cell: Cell) -> ArmOutcome:
     """Walk one armed scenario across [i, i + N] (spec §3.2).
 
+    Only a rejection (R1) confirms. A follow-through (R2) or a reclaim
+    (R3) abandons the arm where it stands -- price left the level without
+    holding it, so the entry thesis is void and a later rejection would be
+    a rejection of a different level.
+
     Per bar t, in this order: the target check (bars after the arm bar
     only; a bar that both reaches the target and reacts is a cancel), the
     test, the reaction, then the close-through-not-reclaimed cancel. Every
@@ -128,8 +131,12 @@ def walk_arm(bars: reaction.Bars, atr_values: np.ndarray, cand: ArmCandidate,
             kind = reaction.reaction_kind(bars, t, cand.level, cand.direction,
                                           tested_now=tested_now, tested_prev=tested_prev,
                                           floor_index=i)
-            if kind is not None:
+            if kind == reaction.R1:
                 return ArmOutcome("confirmed", t, kind, first_test)
+            if kind == reaction.R2:
+                return ArmOutcome("cancelled_follow_through", t)
+            if kind == reaction.R3:
+                return ArmOutcome("cancelled_reclaim", t)
         through = bars.close[t] < cand.level if bull else bars.close[t] > cand.level
         if through:
             if breach_start is None:
@@ -144,7 +151,7 @@ def walk_arm(bars: reaction.Bars, atr_values: np.ndarray, cand: ArmCandidate,
 
 
 def plan_at(ticker: str, df, horizon_key: str, cand: ArmCandidate, *, j: int,
-            first_test_index: int, kind: str, cell: Cell, bars: reaction.Bars,
+            first_test_index: int, cell: Cell, bars: reaction.Bars,
             atr_values: np.ndarray, params: ScanParams, level_map_at, confluence_at):
     """The plan an armed scenario becomes if bar j is its confirmation
     (spec §3.3-3.4). Returns (plan, "issued") or (None, the gate that
@@ -165,11 +172,7 @@ def plan_at(ticker: str, df, horizon_key: str, cand: ArmCandidate, *, j: int,
         stop = min(cand.level, float(bars.low[first_test_index:j + 1].min())) - cell.b * atr_j
     else:
         stop = max(cand.level, float(bars.high[first_test_index:j + 1].max())) + cell.b * atr_j
-    market = cell.mode == "M2" and kind in (reaction.R2, reaction.R3)
-    if market:
-        entry = float(bars.close[j])
-    else:
-        entry = float(bars.high[j] if bull else bars.low[j])
+    entry = float(bars.high[j] if bull else bars.low[j])
 
     if (bull and stop >= entry) or (not bull and stop <= entry):
         return None, "regate_stop_distance"
@@ -195,12 +198,9 @@ def plan_at(ticker: str, df, horizon_key: str, cand: ArmCandidate, *, j: int,
         return None, "regate_confluence"
 
     plan = dataclasses.replace(
-        plan, entry_type="market" if market else "stop_entry", trigger_price=entry,
-        entry_price=entry if market else None,
-        expiry_bars=plan.expiry_bars if market else STOP_ENTRY_EXPIRY_BARS,
+        plan, entry_type="stop_entry", trigger_price=entry, entry_price=None,
+        expiry_bars=STOP_ENTRY_EXPIRY_BARS,
         status=PlanStatus.PENDING, status_history=[])
-    if market:
-        record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=plan.created_at)
     return plan, "issued"
 
 
@@ -209,7 +209,7 @@ def build_armed_plan(ticker: str, df, horizon_key: str, cand: ArmCandidate,
                      level_map_at, confluence_at):
     """plan_at for a real confirmation."""
     return plan_at(ticker, df, horizon_key, cand, j=outcome.resolved_index,
-                   first_test_index=outcome.first_test_index, kind=outcome.kind, cell=cell,
+                   first_test_index=outcome.first_test_index, cell=cell,
                    bars=bars, atr_values=atr_values, params=params,
                    level_map_at=level_map_at, confluence_at=confluence_at)
 
@@ -309,8 +309,8 @@ def delay_permutations(ticker: str, df, horizon_key: str, cell: Cell, confirmed,
     [i, min(i + N, last bar)] window. The plan is built by plan_at exactly
     as at a real confirmation: the stop anchors from the first test at or
     before the drawn bar (the arm bar when nothing has tested yet), and the
-    entry follows the arm's REAL reaction kind -- M2's market/stop split
-    needs a kind, and a random bar has none of its own.
+    entry is a stop-entry at that bar's extreme. The population is every arm
+    that confirmed on R1 -- R2 and R3 no longer confirm anything (spec §4.2).
 
     `level_cache` must be the cache arm_candidates filled walking bars in
     order (see the module docstring). Plans and exits are memoised per
@@ -332,14 +332,14 @@ def delay_permutations(ticker: str, df, horizon_key: str, cell: Cell, confirmed,
     last_bar = len(df) - 1
     memo: dict = {}
 
-    def row_at(arm_index: int, cand: ArmCandidate, kind: str, j: int):
+    def row_at(arm_index: int, cand: ArmCandidate, j: int):
         key = (arm_index, j)
         if key not in memo:
             first_test = next((t for t in range(cand.index, j + 1)
                                if reaction.is_test(bars, t, cand.level, cand.direction,
                                                    cell.k, atr_values[t])), cand.index)
             plan, _ = plan_at(ticker, df, horizon_key, cand, j=j, first_test_index=first_test,
-                              kind=kind, cell=cell, bars=bars, atr_values=atr_values,
+                              cell=cell, bars=bars, atr_values=atr_values,
                               params=params, level_map_at=level_map_at,
                               confluence_at=confluence_at)
             if plan is None:
@@ -355,7 +355,7 @@ def delay_permutations(ticker: str, df, horizon_key: str, cell: Cell, confirmed,
         rows = []
         for arm_index, (cand, outcome) in enumerate(confirmed):
             j = int(rng.integers(cand.index, min(cand.index + cell.n, last_bar) + 1))
-            row = row_at(arm_index, cand, outcome.kind, j)
+            row = row_at(arm_index, cand, j)
             if row is not None:
                 rows.append(row)
         permutations.append(rows)
