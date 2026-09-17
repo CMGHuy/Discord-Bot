@@ -606,9 +606,9 @@ Runs on `main` after IA5's merge (a bump goes last, `working-conventions.md`).
 
 **Outward-facing.** Pushing `main` deploys through GitHub Actions (`docs/deploy/DEPLOY_HETZNER.md`). Confirm with the human partner before `git push`.
 
-- [ ] **Step 1: Deploy.** After approval, `git -C E:/Documents/Private/Projects/Discord-Bot push origin main`. Watch the workflow reach its deploy job.
+- [x] **Step 1: Deploy.** Pushed `main` at `d4fccbf3` on 2026-09-17 after the human partner's confirmation. GitHub Actions run `35207850361` completed successfully.
 
-- [ ] **Step 2: Set the production value.** Production's `.env` sets `MARKET_DATA_TIMEFRAMES` explicitly (verified 2026-09-15: `monthly,weekly,daily,hourly`), so the new default alone does **not** reach it. Change it in the admin UI's Settings page (saving sends the bot `SIGHUP`), or on the VM:
+- [x] **Step 2: Set the production value.** Production's `.env` sets `MARKET_DATA_TIMEFRAMES` explicitly (verified 2026-09-15: `monthly,weekly,daily,hourly`), so the new default alone does **not** reach it. Change it in the admin UI's Settings page (saving sends the bot `SIGHUP`), or on the VM:
 
 ```bash
 ./scripts/ops/ssh-hetzner.sh "sed -i 's/^MARKET_DATA_TIMEFRAMES=.*/MARKET_DATA_TIMEFRAMES=monthly,weekly,daily,hourly,15min,5min/' /opt/swing-bot/.env && grep '^MARKET_DATA_TIMEFRAMES' /opt/swing-bot/.env && cd /opt/swing-bot && docker compose kill -s SIGHUP bot"
@@ -616,7 +616,9 @@ Runs on `main` after IA5's merge (a bump goes last, `working-conventions.md`).
 
 The repo already carries this value (IA4), so the mirror rule is satisfied before the change is made.
 
-- [ ] **Step 3: First-day check.** After two refresh wakes (`MARKET_DATA_REFRESH_MINUTES`, default 60):
+Done by the human partner directly on the VM at 2026-09-17 10:04:18 UTC; the bot's config auto-reload logged the change (`MARKET_DATA_TIMEFRAMES: 'monthly,weekly,daily,hourly' -> 'monthly,weekly,daily,hourly,15min,5min'`), confirmed by SSH read-only log check.
+
+- [x] **Step 3: First-day check.** After two refresh wakes (`MARKET_DATA_REFRESH_MINUTES`, default 60):
 
 ```bash
 ./scripts/ops/ssh-hetzner.sh "grep -h 'market_data_refresh' /opt/swing-bot/logs/*.log | tail -20; grep -hi 'heartbeat\|disconnect' /opt/swing-bot/logs/*.log | tail -5"
@@ -625,6 +627,10 @@ The repo already carries this value (IA4), so the mirror rule is satisfied befor
 
 Read `/opt/swing-bot/logs/*.log`, not `docker logs` (empty after a deploy). Expected within 24h: `15min` and `5min` each report `symbols` equal to the watchlist size and `median_sessions` near 40 (≈60 calendar days), no new gateway disconnects, and summary lines that name `15min`/`5min`. If the cold pull is still incomplete after 24h, record how far it got — do **not** raise `MARKET_DATA_REFRESH_BUDGET_SECONDS` without the human partner's say-so (the budget exists because of the 2026-08-24 outage).
 
-- [ ] **Step 4: One-week check — the done condition.** Seven days after Step 2, run the coverage command again. Done when, for both timeframes, `earliest` is unchanged from Step 3 (or earlier) and `latest` is the most recent session. Record both readings in the close-out commit.
+Ran 2026-09-17 ~12:20 UTC (within 2h of Step 2, ahead of the 24h expectation): `15min` and `5min` both report `symbols=77` (full watchlist), `earliest=2026-06-23`, `latest=2026-09-17`, `median_sessions=60` — beats the ≈40 expectation. No gateway disconnects in the heartbeat log across the window (106-114ms latency throughout). The 11:04 UTC refresh wake did hit its 120s time budget on the cold pull and carried the remainder to the next wake, exactly the documented fallback behavior, not an error.
+
+- [ ] **Step 4: One-week check — the done condition.** Seven days after Step 2 (target: 2026-09-24), run the coverage command again. Done when, for both timeframes, `earliest` is unchanged from Step 3 (or earlier) and `latest` is the most recent session. Record both readings in the close-out commit.
+
+**Note (added after Step 3, human partner's request):** No Claude session or scheduling mechanism available in this repo's tooling reliably survives the dev machine being off for 7 days (session-local cron dies with the session; a cloud routine cannot reach the VM's SSH key, which by design lives only in WSL on the dev machine, never committed). Installed a daily crontab entry directly on the VM instead, mirrored at `scripts/ops/install_intraday_coverage_cron.sh`: it runs `intraday_archive_coverage.py` inside the bot container at 06:07 UTC daily and appends timestamped output to `/opt/swing-bot/logs/intraday_coverage_cron.log`, so a reading exists for 2026-09-24 regardless of session state. Verified with one manual trigger (2026-09-17T14:36:26Z) before relying on the schedule. This is additive ops tooling, not a plan task; left in place after Step 4 unless the human partner asks it removed.
 
 - [ ] **Step 5: Close out** per `document-lifecycle.md`: move this plan and its spec to `implemented/`. Amend `Bump:`/`Edge:` in the closing commit only if the outcome differed from the prediction, with one clause saying why.
