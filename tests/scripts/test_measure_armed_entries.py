@@ -18,9 +18,23 @@ def _cache(tmp_path):
     rng = np.random.RandomState(7)
     trend = list(100 * np.cumprod(1 + rng.normal(0.002, 0.01, 120)))
     box = [trend[-1] * (1 + 0.05 * np.sin(i / 4)) for i in range(60)]
+    closes = trend + box
+    # Every close-only bar here is a doji (make_ohlcv splits the 1% spread
+    # evenly around it), so reaction.is_rejection's close-in-the-top/bottom-
+    # third test can never pass -- no bar this fixture builds from plain
+    # floats can ever be an R1. Splice one explicit (open, high, low, close)
+    # bar right after the box's last naturally-armed candidate (bullish,
+    # support ~125.98, under Cell(10, 0.5, 0.10)/horizon "4w"): a long lower
+    # wick through the level, closing in the top third of its range without
+    # exceeding the arm bar's high, so it reads as a rejection (R1) rather
+    # than a follow-through (R2) -- confirmed empirically via
+    # armed_replay.replay_armed (counts["issued"] == 1, kind "R1") to give
+    # ticker AAA a genuine armed entry instead of the corrupt-cache test's
+    # empty AAA.jsonl being indistinguishable from BBB's.
+    closes[168] = (127.5, 127.9, 125.5, 127.4)
     cache = tmp_path / "cache"
     cache.mkdir()
-    df = make_ohlcv(trend + box, start="2019-01-02")
+    df = make_ohlcv(closes, start="2019-01-02")
     df.index.name = "Date"
     df.to_csv(cache / "AAA.csv")
     return cache
