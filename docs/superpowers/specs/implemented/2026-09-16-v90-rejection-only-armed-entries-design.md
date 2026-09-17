@@ -261,6 +261,8 @@ behaviour outside the Stage 1 window before the corresponding stage runs.
 | Stage 3 FAIL | Closed, budget spent, recorded as-is. |
 | Stage 3 PASS | Closed PASS, recorded. The live ARMED lifecycle (v88 §5) is brainstormed and specced next. |
 
+**Outcome (2026-09-17):** SPIKE at Stage 1; the live ARMED lifecycle is not written.
+
 ## 5. Deliverables
 
 - `swingbot/core/backtesting/armed_replay.py` — the changed terminal
