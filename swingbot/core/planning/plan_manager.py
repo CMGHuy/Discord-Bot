@@ -766,9 +766,34 @@ def _price_fn(ticker):                      # module-level so tests can patch it
 
 
 def _price_batch_fn(tickers):
-    """Fresh-only price map for plan transitions; never fall back to UI data."""
+    """Fresh-only price map for plan transitions; never fall back to UI data.
+
+    Routed through scanning.fetch._run_bounded (2026-09-17): a hung
+    yfinance call here has no exception and no CPU use to signal it, and
+    this function's result is awaited by trade_monitor's single 60s
+    tasks.loop, which does not schedule its next tick until the current
+    one returns -- an unbounded hang here wedges plan_manager.poll()
+    forever, and poll() is the ONLY path that closes a v2-linked trade
+    (see performance.update_open_trades / close_if_live_price_hit).
+    Confirmed live: a Yahoo connection wedged mid-request, and two real
+    positions (AXON, NBIS) sat open more than an hour past their stop with
+    nothing logged anywhere before this fix, because nothing here had ever
+    given this call the same process-level kill ceiling scanning/fetch.py's
+    own cold-fetch/live-price paths already had (_run_bounded's own
+    docstring has the full incident history it now protects against here
+    too). Reuses that helper as-is rather than a second implementation --
+    it is deliberately a PROCESS, not a thread, so a stuck call is
+    actually killable and can't race yfinance's non-reentrant module
+    global from a second thread.
+    """
+    import functools
     from swingbot.core.marketdata.data import get_current_price_batch
-    return get_current_price_batch(tickers, allow_stale=False)
+    from swingbot.core.scanning.fetch import _run_bounded
+    timeout = float(getattr(config, "LIVE_PRICE_TIMEOUT_SECONDS", 60))
+    fn = functools.partial(get_current_price_batch, allow_stale=False)
+    result = _run_bounded(fn, (tickers,), timeout,
+                          label=f"plan manager: live-price batch of {len(tickers)} ticker(s)")
+    return result or {}
 
 
 # Retain the serial seam for deterministic callers/tests that replace

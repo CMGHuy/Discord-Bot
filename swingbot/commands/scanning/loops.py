@@ -1,5 +1,6 @@
 import asyncio
 import datetime as dt
+import functools
 import json
 import os
 
@@ -11,6 +12,7 @@ from swingbot.config import auto_reload_if_changed
 from swingbot.core.scanning import engine as scan_engine
 from swingbot.bot_core import bot, in_session, log, SESSION_TZ, install_reload_signal_handler, on_config_reload
 from swingbot.core.marketdata.data import get_current_price_batch
+from swingbot.core.scanning.fetch import _run_bounded
 from swingbot.core.infra.silent_channel import silence
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.marketdata.watchlist import load_watchlist
@@ -590,9 +592,23 @@ async def trade_monitor():
     # request per ticker.  The batch helper is explicitly fresh-only here:
     # UI callers may show its last-known-good fallback, but acting on an old
     # print could falsely close a trade or satisfy an exit transition.
+    #
+    # Routed through scanning.fetch._run_bounded, not a bare
+    # asyncio.to_thread (2026-09-17 incident): a hung yfinance call has no
+    # exception and no CPU use to signal it, and this loop's own
+    # @tasks.loop(seconds=60) does not schedule its next tick until this
+    # coroutine returns -- an unbounded hang here wedges the WHOLE loop,
+    # silently, forever, and it is one of the two places (this and
+    # plan_manager._price_batch_fn) responsible for ever closing a trade
+    # between full scans. _run_bounded reused as-is, deliberately a
+    # PROCESS rather than a thread -- see its own docstring for the
+    # production history this repeats and why a thread can't stand in.
     if tickers:
         try:
-            live_prices = await asyncio.to_thread(get_current_price_batch, tickers, allow_stale=False)
+            live_prices = await asyncio.to_thread(
+                _run_bounded, functools.partial(get_current_price_batch, allow_stale=False),
+                (tickers,), float(getattr(config, "LIVE_PRICE_TIMEOUT_SECONDS", 60)),
+                f"trade_monitor: live-price batch of {len(tickers)} ticker(s)") or {}
         except Exception as exc:
             log.debug("trade_monitor: batch price fetch failed: %s", exc)
             live_prices = {}

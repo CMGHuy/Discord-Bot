@@ -25,16 +25,26 @@ def _run(coro):
     return asyncio.run(coro)
 
 
+def _one_open_trade(status=None, limit=None):
+    return [{"ticker": "AAPL", "id": "t1", "status": "open"}]
+
+
+def _fake_price_batch_aapl_100(tickers, **kw):
+    """Module-level (not a local lambda/closure) so it survives the real
+    pickling _run_bounded now does to hand this off to a worker process --
+    2026-09-17's fix routes trade_monitor's live-price fetch through the
+    same process-bounded helper scanning/fetch.py's cold-fetch path uses,
+    and a closure can't cross that boundary."""
+    return {"AAPL": 100.0}
+
+
 def test_trade_monitor_still_checks_sl_tp_while_a_scan_is_running(monkeypatch):
     monkeypatch.setattr(scan_engine, "is_scan_running", lambda: True)
 
     calls = {"close": 0, "near_tp": 0, "manager_tick": 0}
 
-    monkeypatch.setattr(
-        loops.trade_log, "get_trades",
-        lambda status=None, limit=None: [{"ticker": "AAPL", "id": "t1", "status": "open"}],
-    )
-    monkeypatch.setattr(loops, "get_current_price_batch", lambda tickers, **kw: {"AAPL": 100.0})
+    monkeypatch.setattr(loops.trade_log, "get_trades", _one_open_trade)
+    monkeypatch.setattr(loops, "get_current_price_batch", _fake_price_batch_aapl_100)
 
     def fake_close(ticker, live):
         calls["close"] += 1
