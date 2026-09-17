@@ -11,7 +11,6 @@ from swingbot.core.planning.builders import build_strategy_plan
 from swingbot.core.planning.params import stamp_badge, stamp_cohort, stamp_entry_context
 from swingbot.core.tracking import ledger as ledger_mod
 from swingbot.core.edge.rs_gate import rs_verdict
-from swingbot.core.scanning import analyze
 from swingbot.core.scanning.alert_embeds import build_strategy_alert_embed
 
 log = logging.getLogger(__name__)
@@ -100,7 +99,12 @@ def run_strategy_pass(tickers, fresh_data, *, now, horizons, spy_df, regimes,
             if frame is None or len(frame) == 0:
                 continue
             bar_date = frame.index[-1].date().isoformat()
-            regime = analyze._regime_at(regimes, frame.index[-1]) if regimes is not None else None
+            if regimes is not None:
+                # Lazy import avoids scan engine's analyze <-> engine import cycle.
+                from swingbot.core.scanning import analyze
+                regime = analyze._regime_at(regimes, frame.index[-1])
+            else:
+                regime = None
             for horizon in horizons:
                 for strategy, direction in strategy_signals(frame, horizon, spy_df=spy_df):
                     if already_emitted(plan_store, ticker, strategy, horizon, bar_date):
