@@ -198,6 +198,39 @@ def test_soak_lines_reports_each_clause():
     assert pass_line != fail_line
 
 
+def test_soak_cmd_empty_state_guard_short_circuits_before_badge_lookup(monkeypatch):
+    """No shadow plans for the strategy -> soak_cmd must send the guard
+    message and never reach get_badge (badge lookups can be a real cost --
+    the guard exists precisely so a strategy with STRATEGY_ALERTS_MODE off,
+    or simply zero shadow plans so far, doesn't pay for one). Same fake-ctx
+    pattern as test_growth_command.py's growth_command tests."""
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock
+
+    from swingbot.commands.stats import soak_cmd
+    from swingbot.core.planning.plan_store import PlanStore
+
+    monkeypatch.setattr(PlanStore, "all", lambda self: [])
+
+    def _get_badge_must_not_be_called(*args, **kwargs):
+        raise AssertionError("get_badge was called despite an empty plans list")
+
+    monkeypatch.setattr(
+        "swingbot.core.backtesting.registry.get_badge", _get_badge_must_not_be_called
+    )
+
+    ctx = MagicMock()
+    ctx.send = AsyncMock()
+
+    asyncio.run(soak_cmd.callback(ctx, strategy="SOMESTRATEGY"))
+
+    ctx.send.assert_awaited_once()
+    args, kwargs = ctx.send.call_args
+    message = args[0] if args else kwargs.get("content", "")
+    assert "No strategy-sourced plans" in message
+    assert "SOMESTRATEGY" in message
+
+
 import datetime as dt
 
 from swingbot.commands.stats import _since
