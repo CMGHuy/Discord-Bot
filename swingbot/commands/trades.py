@@ -375,7 +375,7 @@ def _append_risk_metrics_lines(lines: list, closed_trades: list):
 
 @bot.command(name="performance")
 async def performance_cmd(ctx, level: int = None):
-    all_trades = trade_log.get_trades(status="all", limit=None)
+    all_trades = trade_log.get_trades(status="all", limit=None, ledger="main")
 
     if level is not None:
         if level not in range(1, 6):
@@ -399,7 +399,7 @@ async def performance_cmd(ctx, level: int = None):
         s = by_level[lvl]
         wr = f"{s['win_rate']:.0f}%" if s["win_rate"] is not None else "n/a"
         lines.append(f"Lv{lvl}: {wr} win rate — {s['wins']}W/{s['losses']}L closed, {s['open']} open ({s['total']} total)")
-    overall = trade_log.get_stats()
+    overall = trade_log.get_stats(ledger="main")
     wr_overall = f"{overall['win_rate']:.0f}%" if overall["win_rate"] is not None else "n/a"
     lines.append(f"\n**Overall:** {wr_overall} win rate — {overall['wins']}W/{overall['losses']}L closed, {overall['open']} open")
 
@@ -467,7 +467,7 @@ async def summary_cmd(ctx):
     admin Performance page.
     """
     today = datetime.now(_BERLIN_TZ).date()
-    all_trades = trade_log.get_trades(status="all", limit=None)
+    all_trades = trade_log.get_trades(status="all", limit=None, ledger="main")
 
     opened_today = [t for t in all_trades if _berlin_date(t.get("opened_at")) == today]
     closed_today = [

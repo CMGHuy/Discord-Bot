@@ -231,7 +231,7 @@ async def stats_cmd(ctx, period: str = "all"):
     from swingbot.core.scanning import engine as scan_engine
     from swingbot.core.analytics import metrics as m
 
-    all_trades = scan_engine.trade_log.get_trades(status="all", limit=None)
+    all_trades = scan_engine.trade_log.get_trades(status="all", limit=None, ledger="main")
     closed = [t for t in all_trades if t.get("status") in ("win", "loss")
              and t.get("closed_at", "")[:10] >= since.isoformat()]
     if not closed:
@@ -281,7 +281,7 @@ async def lessons_cmd(ctx, arg: str = "5"):
         from swingbot.core.analytics.insights import weekly_digest
         import datetime as _dt
 
-        all_trades = scan_engine.trade_log.get_trades(status="all", limit=None)
+        all_trades = scan_engine.trade_log.get_trades(status="all", limit=None, ledger="main")
         closed = [t for t in all_trades if t.get("status") in ("win", "loss", "closed")]
         messages = weekly_digest(store.entries(), closed, today=_dt.date.today())
         for msg in messages:
@@ -323,7 +323,7 @@ async def calibration_cmd(ctx):
     from swingbot.core.analytics.calibration import level_calibration, score_deciles
     from swingbot.core.analytics.insights import edge_decay_report
 
-    all_trades = scan_engine.trade_log.get_trades(status="all", limit=None)
+    all_trades = scan_engine.trade_log.get_trades(status="all", limit=None, ledger="main")
     closed = [t for t in all_trades if t.get("status") in ("win", "loss")]
     if not closed:
         await ctx.send("No closed trades yet — nothing to calibrate against.")

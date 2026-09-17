@@ -47,9 +47,10 @@ def _full_trade():
     }
 
 
-def test_all_nine_dimensions_present():
+def test_all_ten_dimensions_present():
     """v32 Task 11: "tier" (A/B/C) retired -- "confidence" already covered
-    the same role, so DIMENSIONS drops from 10 to 9."""
+    the same role, so DIMENSIONS dropped from 10 to 9. v93 then added
+    "ledger" (main/weak) as its own grouping dimension, back to 10."""
     assert set(DIMENSIONS) == {"strategy", "horizon", "badge", "confidence",
                                "direction", "dow", "month", "ticker", "source", "ledger"}
 

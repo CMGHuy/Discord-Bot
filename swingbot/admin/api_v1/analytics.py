@@ -243,7 +243,7 @@ def analytics_equity_curve():
     strategy = (request.args.get("strategy") or "").strip()
 
     tl = TradeLog()
-    all_raw = tl.get_trades(status=None, limit=None) or []
+    all_raw = tl.get_trades(status=None, limit=None, ledger="main") or []
     closed = [t for t in all_raw if t.get("status") in ("win", "loss", "closed")]
     scoped = m.in_date_range(closed, start=start, end=end)
     if strategy:
@@ -320,7 +320,7 @@ def analytics_by_dimension():
     from swingbot.core.market.strategy_types import HORIZONS
     from swingbot.core.tracking.performance import primary_strategy_label
 
-    closed = [t for t in TradeLog().get_trades(status=None, limit=None) or []
+    closed = [t for t in TradeLog().get_trades(status=None, limit=None, ledger="main") or []
               if t.get("status") in ("win", "loss", "closed")]
 
     if dim == "strategy":
@@ -410,7 +410,7 @@ def analytics_journal():
         entries = []
 
     tl = TradeLog()
-    closed = [t for t in (tl.get_trades(status=None, limit=None) or [])
+    closed = [t for t in (tl.get_trades(status=None, limit=None, ledger="main") or [])
               if t.get("status") in ("win", "loss", "closed")]
 
     return jsonify({
@@ -460,7 +460,7 @@ def analytics_strategies():
 
     rows = _registry_rows()
     closed = [
-        t for t in TradeLog().get_trades(status=None, limit=None) or []
+        t for t in TradeLog().get_trades(status=None, limit=None, ledger="main") or []
         if t.get("status") in ("win", "loss", "closed")
     ]
     labeled = [{**t, "strategy": primary_strategy_label(t)} for t in closed]
@@ -483,7 +483,7 @@ def analytics_exit_quality():
     from swingbot.core.analytics.aggregate import MIN_CELL_N
     from swingbot.core.analytics.journal import JournalStore
 
-    closed = [t for t in TradeLog().get_trades(status=None, limit=None) or []
+    closed = [t for t in TradeLog().get_trades(status=None, limit=None, ledger="main") or []
               if t.get("status") in ("win", "loss", "closed")]
     entries = JournalStore().entries()
     return jsonify({"exit_reasons": m.exit_reason_split(closed),

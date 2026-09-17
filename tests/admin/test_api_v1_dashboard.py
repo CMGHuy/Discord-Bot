@@ -48,6 +48,9 @@ DASHBOARD = {
     # SR58. The date-scope toggle and the realised figures it scopes.
     "scope": dict,
     "realized": dict,
+    # v93 -- the weak ledger's own realised P&L, kept separate from
+    # `realized` above per the ledger-separation rule (main and weak must
+    # never be summed): the SPA renders it as its own, clearly-labelled block.
     "realized_weak": dict,
     # The plan-lifecycle diagram's own "Expires" definition names this
     # number rather than hardcoding a copy of DEFAULT_EXPIRY_BARS that
