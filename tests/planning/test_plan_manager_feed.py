@@ -47,12 +47,13 @@ def test_threshold_is_clamped(monkeypatch):
     assert trail_notify_min_r() == 0.01
 
 
-def test_stop_move_has_resting_stop_and_effective_session():
+def test_stop_move_has_resting_stop_and_is_effective_now():
+    # A moved stop is live the instant it moves -- no same-session delay.
     plan = _plan(status="ACTIVE", entry_price=100.0, stop_loss=95.0, tp1=110.0,
                  working_stop=100.0, be_armed_session="2026-08-27")
     event = stop_move_event(plan, "2026-08-27", 0.25)
     assert event.detail == {"old": 95.0, "new": 100.0, "r_moved": pytest.approx(1.0),
-                            "effective": "next_session"}
+                            "effective": "now"}
     assert resting_stop(_runner(None)) == pytest.approx(runner_floor(100.0, 110.0))
 
 

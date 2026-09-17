@@ -32,11 +32,17 @@ def test_arming_stamps_the_session(tmp_path):
     assert store.get("p1").be_armed_session == "2026-08-27"
 
 
-def test_be_stop_does_not_fire_the_session_it_armed(tmp_path):
+def test_be_stop_fires_the_same_session_it_armed(tmp_path):
+    # The old stop is never valid again once working_stop is set -- a
+    # resting broker order this same session must see the same close the
+    # bot's paper book does, not one delayed to the next session.
     store, mgr = _env(tmp_path, [105.0, 99.9])
     mgr.poll(now=DAY1_A)
-    assert [event.transition for event in mgr.poll(now=DAY1_B)] == ["stop_moved"]
-    assert store.get("p1").status == "ACTIVE"
+    event = mgr.poll(now=DAY1_B)[0]
+    assert event.transition == "closed"
+    assert event.detail["reason"] == "scratch"
+    assert event.detail["exit_price"] == 100.0
+    assert store.get("p1").status == "CLOSED"
 
 
 def test_be_stop_fires_the_next_session(tmp_path):
@@ -49,12 +55,15 @@ def test_be_stop_fires_the_next_session(tmp_path):
     assert store.get("p1").status == "CLOSED"
 
 
-def test_original_stop_still_governs_the_arming_session(tmp_path):
+def test_new_stop_governs_even_below_the_original_stop_loss(tmp_path):
+    # 94.0 sits below the ORIGINAL stop_loss (95) too, but the close still
+    # fills at the new working_stop (100), same session -- the original
+    # stop_loss has no further say once working_stop is set.
     store, mgr = _env(tmp_path, [105.0, 94.0])
     mgr.poll(now=DAY1_A)
     event = mgr.poll(now=DAY1_B)[0]
-    assert event.detail["reason"] == "loss"
-    assert event.detail["exit_price"] == 95.0
+    assert event.detail["reason"] == "scratch"
+    assert event.detail["exit_price"] == 100.0
 
 
 def test_unstamped_legacy_break_even_stop_governs_immediately(tmp_path):

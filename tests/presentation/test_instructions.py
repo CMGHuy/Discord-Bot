@@ -137,11 +137,11 @@ def test_filled():
     )
 
 
-def test_break_even_waits_for_the_close():
+def test_break_even_is_effective_immediately():
     plan = _long_pending(status="ACTIVE", entry_price=102.61, working_stop=102.61)
     i = ins.instruction_for(plan, _event("be_moved", working_stop=102.61))
-    assert (i.verb, i.headline) == (ins.MOVE_STOP, "MOVE STOP → 102.61 after today's close")
-    assert i.lines == ("break-even; keep 98.40 until then",)
+    assert (i.verb, i.headline) == (ins.MOVE_STOP, "MOVE STOP → 102.61 now")
+    assert i.lines == ("break-even",)
 
 
 def test_tp1_partial_names_the_filled_shares_and_the_runner_stop():
@@ -172,12 +172,14 @@ def test_a_resent_runner_floor_is_labelled_as_the_floor():
     assert i.lines == ("runner floor; +2.3R since the last ping",)
 
 
-def test_a_resent_break_even_keeps_its_next_session_timing():
+def test_a_resent_break_even_is_effective_now():
+    # "effective" is stamped "now" unconditionally (see stop_move_event) --
+    # no same-session delay to keep, so a resent notice reads the same way.
     plan = _plan(status="ACTIVE", entry_price=100.0, stop_loss=95.0, tp1=110.0,
                  working_stop=100.0)
     i = ins.instruction_for(plan, _event("stop_moved", old=95.0, new=100.0,
-                                         r_moved=1.0, effective="next_session"))
-    assert i.headline == "MOVE STOP → 100.00 after today's close"
+                                         r_moved=1.0, effective="now"))
+    assert i.headline == "MOVE STOP → 100.00 now"
     assert i.lines == ("break-even; +1.0R since the last ping",)
 
 

@@ -234,8 +234,8 @@ def instruction_for(plan, event, *, sizing: dict | None = None) -> Instruction:
     if transition == "be_moved":
         return Instruction(
             verb=MOVE_STOP,
-            headline=f"MOVE STOP → {_price(detail['working_stop'])} after today's close",
-            lines=(f"break-even; keep {_price(plan.stop_loss)} until then",), **common)
+            headline=f"MOVE STOP → {_price(detail['working_stop'])} now",
+            lines=("break-even",), **common)
     if transition == "tp1_partial":
         whole = _whole_shares(sizing)
         qty = (f"{math.floor(whole * detail['fraction']):,} sh" if whole is not None
@@ -248,9 +248,8 @@ def instruction_for(plan, event, *, sizing: dict | None = None) -> Instruction:
                    "(runner floor)",),
             tone="good", **common)
     if transition == "stop_moved":
-        timing = "after today's close" if detail["effective"] == "next_session" else "now"
         return Instruction(
-            verb=MOVE_STOP, headline=f"MOVE STOP → {_price(detail['new'])} {timing}",
+            verb=MOVE_STOP, headline=f"MOVE STOP → {_price(detail['new'])} now",
             lines=(f"{_stop_kind(plan, detail['new'])}; {signed_r(detail['r_moved'])} "
                    "since the last ping",),
             **common)

@@ -99,8 +99,10 @@ def stop_move_event(plan, today_session: str, min_r: float) -> PlanEvent | None:
     r_moved = (new - old) * sign / risk
     if abs(r_moved) < min_r - 1e-9:
         return None
-    effective = ("next_session" if plan.status == PlanStatus.ACTIVE
-                 and plan.be_armed_session == today_session else "now")
+    # A moved stop is live the instant it moves -- the bot's own exit check
+    # (_active_stop) no longer holds the old stop through the arming
+    # session, so the reader's resting order must not either.
+    effective = "now"
     return PlanEvent(plan.plan_id, "stop_moved",
                      {"old": old, "new": new, "r_moved": r_moved, "effective": effective})
 
@@ -537,8 +539,6 @@ class PlanManager:
 
     def _active_stop(self, plan: TradePlanV2, now=None) -> tuple[float, bool]:
         if plan.working_stop is None:
-            return plan.stop_loss, False
-        if plan.be_armed_session == session_date(now):
             return plan.stop_loss, False
         return plan.working_stop, True
     def _step_active(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:

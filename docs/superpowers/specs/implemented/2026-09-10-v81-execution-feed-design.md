@@ -1,5 +1,12 @@
 # v81 — The execution feed: Discord messages you can place orders from
 
+**2026-09-17 amendment:** Decision 4 below ("Break-even takes effect next
+session") is reversed. `_active_stop` no longer holds the original stop
+through the arming session; a moved stop (break-even or trail) is live
+immediately, and `stop_move_event`'s `effective` is always `"now"`. The old
+stop is never valid again once a new one is set. Reasoning and the
+production trigger (e75cbf/INTU): human-partner decision, 2026-09-17.
+
 **Version:** ui 1.14.0 · bot 1.6.5
 **Bump:** bot minor, ui patch
 **Edge:** harvest
