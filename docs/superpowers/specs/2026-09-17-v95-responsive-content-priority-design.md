@@ -54,16 +54,24 @@ Open Positions at 390px shows `#`, `STATUS`, `TICKER`, `CONFIDENCE`. It hides
 horizontal scroller. The columns a trader would open a phone to check are
 precisely the hidden ones, while a progress bar consumes ~40% of the width.
 
-`data-table.ts:360` adds a sort `<select>` and a sticky first column below
-639px, but no card mode. `td.num { white-space: nowrap }` (`:275`) guarantees the
-scroller engages. Trades offers 29 columns through the same component.
+`data-table.ts:360` adds a sort `<select>` and pins the row's identity column
+below 639px. `td.num { white-space: nowrap }` (`:275`) guarantees the scroller
+engages. Trades offers 29 columns through the same component.
 
-Four call sites already describe a card-mode contract that does not exist.
-`dashboard.ts:511-521` sets `white-space: var(--cell-wrap, nowrap)` and cites
-"DataTable's card-mode wrap contract (see its `.card-value` block)". Neither
-`--cell-wrap`, `--sep-wrap` nor `.card-value` appears anywhere in `frontend/src`.
-The widest cell on the page is therefore permanently `nowrap`, behind a comment
-claiming it is handled.
+**This is v80's design, not an oversight.** v80 D4 ("`sb-data-table` phone mode,
+card mode replaced", shipped `ccd57608`, 2026-09-10) deliberately removed card
+mode in favour of the pinned identity column and sort select, and removed
+`.card`, `.card-head`, `.card-body`, `.card-value` and `.card-actions` with it.
+Its test `'keeps the table below the breakpoint -- no cards'` is the record of
+that decision. v95 does not reverse it — see §4.1.
+
+What v80 left behind is debris, and that part is a real defect: `--cell-wrap`
+and `--sep-wrap` are no longer set by anything, while `dashboard.ts:511-521`
+still sets `white-space: var(--cell-wrap, nowrap)` and still cites "DataTable's
+card-mode wrap contract (see its `.card-value` block)". The widest cell on the
+page is permanently `nowrap` behind a comment describing machinery that was
+deleted. `data-table.ts:461` likewise still claims "Cards instead of a table,
+below `sm` — spec v18 Decision 9", which v80 superseded.
 
 ### 1.4 Smaller, confirmed
 
@@ -142,7 +150,7 @@ destination. Three kinds, three destinations:
 
 | Kind | Demoted to |
 |---|---|
-| **Column** | the row's detail expansion (card mode) |
+| **Column** | the row's existing `expansion` template |
 | **Control** | the toolbar's filter sheet |
 | **Panel** | collapsed in place — title, one-line digest, chevron |
 
@@ -154,16 +162,25 @@ Three concrete ladders rather than one engine. This boundary is deliberate: each
 ladder is independently reviewable and independently revertable, where a general
 engine would have to be understood whole before any of it could be trusted.
 
-### 4.1 Columns → card mode
+### 4.1 Columns → the row's existing expansion
 
-Below its `inlineFrom`, a column leaves the grid and joins a per-row detail area.
-At `xs`, a table row renders as a card carrying its `xs` columns; tapping
-expands to the rest. For Open Positions the `xs` set is ticker, P&L% and R — not
-the progress bar that currently occupies 40% of the width.
+Below its `inlineFrom`, a column leaves the grid and renders in the row's
+detail expansion instead. **No cards.** `DataTable` already takes an
+`expansion` input (`TemplateRef<RowContext<T>>`), and v80's pinned identity
+column and phone sort select stay exactly as they are; `inlineFrom` decides
+only which columns render inline and which move into that expansion.
 
-This is the `.card-value` contract that `dashboard.ts:511-521` has been
-describing to itself without it existing. Implementing it retires
-`--cell-wrap`/`--sep-wrap` and the comments that reference them.
+For Open Positions the inline `xs` set is ticker, P&L% and R — not the progress
+bar that currently occupies 40% of the width, which demotes.
+
+This reaches the same destination the ladder names using machinery that is
+already shipped and tested, and reverses no part of v80 D4. Cards may still be
+the better rendering on a 390px screen; that question is deferred to its own
+spec rather than settled by assertion here (§13).
+
+The stale debris goes with this task: delete `--cell-wrap`/`--sep-wrap` and the
+comments at `dashboard.ts:511-521` and `data-table.ts:461` that describe
+removed machinery.
 
 ### 4.2 Controls → the filter sheet
 
@@ -210,9 +227,11 @@ The `inlineFrom` type, the pure resolver (`isInline(inlineFrom, viewport)`), the
 digest contract, and the registry types the parity gate walks. Pure; no Angular
 dependency beyond the `Viewport` import.
 
-**`ui/data-table/`** — per-column `inlineFrom`, card mode at `xs`, row detail
-expansion. Retires the stale `--cell-wrap` contract. Keeps the existing sticky
-first column and phone sort `<select>`.
+**`ui/data-table/`** — per-column `inlineFrom`, routing demoted columns into the
+existing `expansion` template. Retires the dead `--cell-wrap`/`--sep-wrap`
+references and the two superseded comments. **Keeps v80 D4 intact**: the pinned
+identity column, the phone sort `<select>`, and the
+`'keeps the table below the breakpoint -- no cards'` test all stay.
 
 **`ui/control-bar.ts` + `ui/filter-bar.ts` → one toolbar** — owns the sheet and
 the active badge. `filter-bar.ts` is already marked deprecated in favour of
@@ -234,10 +253,10 @@ Eight workspaces, one task each, ordered by observed pain:
 
 | # | Workspace | Principal work |
 |---|---|---|
-| 1 | `trades` | toolbar sheet (the 1,700px), card mode over 29 columns, destructive-action placement |
+| 1 | `trades` | toolbar sheet (the 1,700px), `inlineFrom` over 29 columns, destructive-action placement |
 | 2 | `dashboard` | the 768px equity collapse, panel order at `xs`, duplicate pagination, tab counts |
 | 3 | `calendar` | stat tiles → digest, month grid → agenda at `xs` (copy `earnings-calendar.ts`) |
-| 4 | `watchlist` | card mode, toolbar |
+| 4 | `watchlist` | column `inlineFrom`, toolbar; keep v80's `symbol` identity pin |
 | 5 | `risk` | `minmax(300px,1fr)` → `min(100%, …)`, `matrix.ts` sticky row headers |
 | 6 | `system` | `settings-tab.ts` touch targets and `.fields` overflow; `scan-tab`/`logs-tab` have no narrow rules at all |
 | 7 | `versions` | the hard-coded `4.5rem` lane rail inside `overflow:hidden`, which clips silently |
@@ -291,13 +310,37 @@ the one workspace the parity gate cannot cover.
   last workspace adopting, the app is more broken than today, in ways the suite
   may not catch. Mitigated by the per-task visual pass (§10) and by the eight
   workspace tasks being independently revertable.
-- **Card mode is a genuine interaction change**, not a reflow. A trader used to
-  scanning a table will meet cards on phone. This is the intended outcome of the
-  "full parity" decision, but it is the change most likely to be disliked on
-  contact, and it should be looked at on a real device before Trades merges.
+- **Routing columns into the expansion changes an interaction**, though less
+  than cards would: a value that was visible after a sideways scroll now needs a
+  row tap. Trades is where this bites hardest at 29 columns, and it should be
+  looked at on a real device before Trades merges.
+- **This spec reads v80 as settled and builds on it.** If v80 D4 turns out to
+  have been provisional rather than decided, §4.1 is the task to revisit, and
+  §13 is the place that argument belongs.
 - **Line references in §1 and §8 are as of the 2026-09-17 audit.** They must be
   re-verified at implementation time — several files are large and actively
   edited. The `symbol-verifier` subagent exists for this.
 - **`filter-bar.ts` has live call sites.** Converging it into the toolbar is a
   migration, not a deletion; call sites move in the workspace tasks that own
   them, not in the primitives task.
+
+## 13. Deferred: cards vs pinned column, on evidence
+
+v18 Decision 9 specified cards on phones. v80 D4 replaced them with the pinned
+identity column and shipped that. Neither decision was taken against a measured
+comparison, and this spec deliberately does not settle it — it builds on v80
+because v80 is what is shipped, not because cards were shown to be worse.
+
+That comparison gets its own spec, written after v95's plan and run once v95's
+`inlineFrom` declarations exist (they are the input either rendering needs):
+
+- **The question.** On a 390px viewport, does a trader find a named value on a
+  Trades row faster and more accurately with (a) v80's pinned column plus
+  sideways scroll, (b) v95's pinned column plus row expansion, or (c) cards?
+- **Pre-registered before looking:** the tasks, the rows, and what result would
+  change the decision. A comparison that decides its threshold afterwards is not
+  a comparison.
+- **The honest null.** "No detectable difference, keep v80" is a complete and
+  publishable answer, and the most likely one.
+
+Until that spec closes, v80 D4 stands and §4.1 is the implementation.
