@@ -46,7 +46,7 @@ def entry_context(df, *, direction: str, horizon_key: str, stop: float, target: 
         base = _number(ema(df["Close"], period).iloc[-1])
         out["htf_aligned"] = (close >= base) if direction == "bullish" else (close <= base)
     gaps = gap_stats(df)
-    out["gap_p90_pct"] = _number(gaps.get("p90"))
+    out["gap_p90_pct"] = _number(gaps.get("p90_gap_pct"))
     out["gap_fragile"] = (not stop_beyond_gap_noise(out["stop_pct"], out["gap_p90_pct"])) if out["stop_pct"] is not None and out["gap_p90_pct"] is not None else None
     for key in ("regime2_state", "rs_pctile", "sector_pctile", "rs_combined"):
         out[key] = _number(asof.get(key)) if key != "regime2_state" and asof else (asof.get(key) if asof else None)
