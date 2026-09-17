@@ -20,12 +20,12 @@ describe('PlanCell', () => {
 
   it('reads entry -> target / stop for a long', () => {
     expect(render(178, 195, 170).textContent!.replace(/\s+/g, ' ').trim())
-      .toBe('178.00 → 195.00 / 170.00');
+      .toBe('178.00 → 195.00 / 170.00 (9.6% - 4.5%)');
   });
 
   it('reads the same way for a short, where the target is the lower number', () => {
     expect(render(178, 162, 186).textContent!.replace(/\s+/g, ' ').trim())
-      .toBe('178.00 → 162.00 / 186.00');
+      .toBe('178.00 → 162.00 / 186.00 (9.0% - 4.5%)');
   });
 
   it('colours target and stop by role, not by which is larger', () => {
@@ -38,6 +38,26 @@ describe('PlanCell', () => {
 
   it('renders an em dash for a missing level rather than NaN', () => {
     expect(render(178, null, 170).textContent).toContain('—');
+  });
+
+  /* -- the planned rise%/drop% pair -------------------------------------- */
+
+  it('shows the planned rise and drop as unsigned magnitudes', () => {
+    const el = render(178, 195, 170);
+    expect(el.querySelector('.rise')!.textContent!.trim()).toBe('9.6%');
+    expect(el.querySelector('.drop')!.textContent!.trim()).toBe('4.5%');
+  });
+
+  it('reads the same magnitudes for a short, where target/stop already carry the role', () => {
+    const el = render(178, 162, 186);
+    expect(el.querySelector('.rise')!.textContent!.trim()).toBe('9.0%');
+    expect(el.querySelector('.drop')!.textContent!.trim()).toBe('4.5%');
+  });
+
+  it('shows an em dash for either side when a level is missing', () => {
+    const el = render(178, null, 170);
+    expect(el.querySelector('.rise')!.textContent!.trim()).toBe('—');
+    expect(el.querySelector('.drop')!.textContent!.trim()).toBe('4.5%');
   });
 
   it('carries the spelled-out tooltip', () => {
@@ -63,7 +83,7 @@ describe('PlanCell', () => {
     // them, which is the number the old plans board led with.
     const el = renderWithTrigger(null, 176.5);
     expect(el.textContent!.replace(/\s+/g, ' ').trim())
-      .toBe('176.50 → 195.00 / 170.00');
+      .toBe('176.50 → 195.00 / 170.00 (10.5% - 3.7%)');
   });
 
   it('says in the tooltip that the first number is a trigger', () => {

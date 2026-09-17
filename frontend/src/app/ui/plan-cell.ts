@@ -26,6 +26,7 @@ import { money, num, pct, rMultiple, share } from './format';
       <span class="target">{{ fmt(target()) }}</span>
       <span class="sep">{{ ' / ' }}</span>
       <span class="stop">{{ fmt(stop()) }}</span>
+      <span class="sep">{{ ' (' }}</span><span class="rise">{{ fmtPct(risePct()) }}</span><span class="sep">{{ ' - ' }}</span><span class="drop">{{ fmtPct(dropPct()) }}</span><span class="sep">{{ ')' }}</span>
     </span>
   `,
   styles: `
@@ -46,6 +47,10 @@ import { money, num, pct, rMultiple, share } from './format';
     }
     .target { color: var(--pos); }
     .stop   { color: var(--neg); }
+    /* Same roles as .target/.stop -- rise is the TP-side move, drop is the
+       SL-side move -- so the same colour pair carries the same meaning. */
+    .rise   { color: var(--pos); }
+    .drop   { color: var(--neg); }
     /* Spacing lives in the TEXT, not in a margin. Angular strips whitespace
        between elements, so a margin-only gap renders correctly and leaves
        textContent as '178.00→195.00/170.00' -- which is what a screen reader
@@ -110,6 +115,25 @@ export class PlanCell {
     this.showsTrigger() ? this.trigger() : this.entry(),
   );
 
+  /**
+   * Planned %-move from entry (or trigger, if still pending) to each level --
+   * the risk/reward a trader reads the entry → target/stop triple for in the
+   * first place, so it belongs next to the prices rather than a click away.
+   *
+   * Unsigned: `target`/`stop` already carry the correct role for either
+   * direction (a short's target is the lower number), so the move's
+   * magnitude alone tells the story -- rise is always the TP-side distance,
+   * drop always the SL-side one, regardless of which way the position runs.
+   */
+  protected readonly risePct = computed(() => this.movePct(this.target()));
+  protected readonly dropPct = computed(() => this.movePct(this.stop()));
+
+  private movePct(level: number | null): number | null {
+    const base = this.first();
+    if (base === null || level === null || base === 0) return null;
+    return Math.abs(((level - base) / base) * 100);
+  }
+
   protected readonly tooltip = computed(() => {
     // Names the role, because the styling difference alone does not: an
     // unfilled plan and a filled one are one glyph apart otherwise.
@@ -139,6 +163,10 @@ export class PlanCell {
 
   protected fmt(v: number | null): string {
     return num(v);
+  }
+
+  protected fmtPct(v: number | null): string {
+    return share(v, 1);
   }
 }
 
