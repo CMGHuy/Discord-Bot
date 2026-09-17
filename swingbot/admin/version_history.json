@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-17 19:30:51 UTC",
+  "generated_at": "2026-09-17 20:54:38 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.18.4",
-    "bot": "1.9.3"
+    "bot": "1.9.4"
   },
   "releases": [
     {
@@ -1237,6 +1237,19 @@
       },
       "changed": [
         "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-17",
+      "last_seen": "2026-09-17",
+      "commit": "290514b9",
+      "subject": "release(bot): 1.9.4 -- a moved SL/TP takes effect immediately, not next session",
+      "versions": {
+        "ui": "1.18.4",
+        "bot": "1.9.4"
+      },
+      "changed": [
         "bot"
       ]
     }
