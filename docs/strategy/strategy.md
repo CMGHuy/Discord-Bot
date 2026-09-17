@@ -11,3 +11,5 @@ needs — see `CLAUDE.md` -> "Token discipline".
 
 Code is authoritative where these tables lag — the horizons themselves live in
 `swingbot/core/market/strategy_types.py:HORIZONS`.
+
+Direction availability is code-authoritative. v93 measured the seven currently bullish-only bearish arms; none cleared its frozen TRAIN-and-fold rule, so their masks remain unchanged. See `docs/superpowers/results/2026-09-17-v93-bearish-arms-train.md`.

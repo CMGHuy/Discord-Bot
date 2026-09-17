@@ -97,6 +97,10 @@ pre-registered PASS rule they were judged against:
 
 ## Horizon-to-horizon trend alignment (measured, and OFF)
 
+## Direction masks (v93 re-derivation)
+
+The seven bullish-only strategy masks were re-measured on TRAIN under current arithmetic and the live RS-laggard rule. The frozen rule required WR >= 50, ExpR > 0, N >= 30, scratch+timeout <= 50%, and two positive anchored folds with N >= 15. Every arm failed; no masks changed and no VALIDATION data was spent. See `docs/superpowers/results/2026-09-17-v93-bearish-arms-train.md`.
+
 A 2026-08 spec (v33) asked whether a setup that fights the *next horizon
 up* is worth alerting -- e.g. a `2w` bullish setup while the `4w` trend is
 bearish. Two checks were built and tested (`swingbot/core/market/mtf.py`),
