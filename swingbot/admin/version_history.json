@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-17 09:50:13 UTC",
+  "generated_at": "2026-09-17 15:03:06 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.18.3",
-    "bot": "1.9.1"
+    "bot": "1.9.2"
   },
   "releases": [
     {
@@ -1203,11 +1203,24 @@
     {
       "date": "2026-09-17",
       "last_seen": "2026-09-17",
-      "commit": "uncommitted",
-      "subject": "working tree",
+      "commit": "d4fccbf3",
+      "subject": "release(bot): 1.9.1 -- intraday bar archive",
       "versions": {
         "ui": "1.18.3",
         "bot": "1.9.1"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-17",
+      "last_seen": "2026-09-17",
+      "commit": "a8bcfe16",
+      "subject": "release(bot): 1.9.2 -- bound trade_monitor's live-price fetch against a hang",
+      "versions": {
+        "ui": "1.18.3",
+        "bot": "1.9.2"
       },
       "changed": [
         "bot"
