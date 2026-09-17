@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-16 19:27:08 UTC",
+  "generated_at": "2026-09-17 09:50:13 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.18.3",
-    "bot": "1.9.0"
+    "bot": "1.9.1"
   },
   "releases": [
     {
@@ -1190,14 +1190,27 @@
     {
       "date": "2026-09-16",
       "last_seen": "2026-09-16",
-      "commit": "uncommitted",
-      "subject": "working tree",
+      "commit": "08264982",
+      "subject": "chore(v89): ui patch release -- admin UI integrity and one spacing rule",
       "versions": {
         "ui": "1.18.3",
         "bot": "1.9.0"
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-09-17",
+      "last_seen": "2026-09-17",
+      "commit": "uncommitted",
+      "subject": "working tree",
+      "versions": {
+        "ui": "1.18.3",
+        "bot": "1.9.1"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
