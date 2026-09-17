@@ -15,6 +15,8 @@ from swingbot import config
 from swingbot.core.market import levels
 from swingbot.core.market.chart_patterns import dead_cat_bounce
 from swingbot.core.planning.plan_engine import build_confluence_plan, primary_strategy_for, simulate_exit
+from swingbot.core.planning.params import stamp_entry_context
+from swingbot.core.backtesting.asof_context import asof_row
 from swingbot.core.market.strategy_types import HORIZONS, MIN_BARS
 from swingbot.core.scanning.gating import passes_confluence, scenario_gate_inputs
 from swingbot.scan_params import ScanParams
@@ -71,7 +73,7 @@ def levels_asof(ticker: str, df, bar_index: int, horizon_key: str, cache: dict):
 
 def replay_scenarios(ticker: str, df, horizon_key: str, *, params: ScanParams | None = None,
                      gates: dict | None = None,
-                     dcb_params: dict | None = None) -> list:
+                     dcb_params: dict | None = None, asof=None) -> list:
     """(signal_index, TradePlanV2) for every bar where the confluence scan
     WOULD have emitted a plan, under `gates`, with a per-direction cooldown.
 
@@ -149,6 +151,7 @@ def replay_scenarios(ticker: str, df, horizon_key: str, *, params: ScanParams | 
                 params=ScanParams.from_config() if legacy_gates else params)
             if plan is None:
                 continue          # no qualifying target -> no trade, same as live
+            stamp_entry_context(plan, window, asof_row(asof, window.index[-1]))
             last_accepted[sc.direction] = i
             out.append((i, plan))
     return out
@@ -193,11 +196,12 @@ def _replay_ticker(args) -> dict:
     RESULT rather than being inferred from completion order, which is what
     makes the pooled path order-independent.
     """
-    ticker, df, horizons, start, end, gates, scale_out, dcb_params = args
+    ticker, df, horizons, start, end, gates, scale_out, dcb_params = args[:8]
+    asof_df = args[8] if len(args) > 8 else None
     out = {hk: [] for hk in horizons}
     for hk in horizons:
         for i, plan in replay_scenarios(ticker, df, hk, gates=gates,
-                                        dcb_params=dcb_params):
+                                        dcb_params=dcb_params, asof=asof_df):
             signal_date = str(df.index[i].date())
             if start and signal_date < start:
                 continue
@@ -218,7 +222,7 @@ def _resolve_replay_workers(workers: int | None) -> int:
 
 def run_scenario_backtest(frames: dict, start, end, *, gates,
                           scale_out=True, horizons=None, workers=None,
-                          dcb_params: dict | None = None) -> dict:
+                          dcb_params: dict | None = None, asof_map: dict | None = None) -> dict:
     """frames: {ticker: OHLCV df}. start/end (ISO or None) restrict SIGNAL
     dates -- the exit walk may run past `end`, same convention as
     run_backtest_daterange.
@@ -238,7 +242,8 @@ def run_scenario_backtest(frames: dict, start, end, *, gates,
     results_by_hz: dict = {hk: [] for hk in horizons}
 
     tasks = [
-        (ticker, df, horizons, start, end, gates, scale_out, dcb_params)
+        (ticker, df, horizons, start, end, gates, scale_out, dcb_params,
+         asof_map.get(ticker) if asof_map else None)
         for ticker, df in frames.items()
     ]
 
