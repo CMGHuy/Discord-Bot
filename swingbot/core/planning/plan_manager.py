@@ -360,6 +360,9 @@ class PlanManager:
                 # exit than anything that ever traded, written into the
                 # trade log as realised P&L (found by audit, 2026-09-14,
                 # introduced the same day by widening the poll window).
+                if plan.first_seen_price is None:
+                    plan.first_seen_price = float(price)
+                    self.store.update(plan)
                 self._last_seen[plan.plan_id] = (session_date(now), price)
             for event in new_events:
                 self._on_event(plan, event)
