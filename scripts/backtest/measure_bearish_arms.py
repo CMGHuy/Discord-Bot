@@ -26,7 +26,8 @@ def _unmasked_gates(strategy):
 def bearish_arm_trades(strategy, frames, asof_map, *, date_from, date_to, horizons=ALL_HZ):
     rows = []
     with gate_override(strategy, _unmasked_gates(strategy)):
-        for ticker, frame in sorted(frames.items()):
+        for index, (ticker, frame) in enumerate(sorted(frames.items()), 1):
+            print(f"[{index}/{len(frames)}] {ticker}", flush=True)
             for horizon in horizons:
                 summary = run_backtest(ticker, frame, strategy, horizon, one_at_a_time=True,
                     exit_model="v2", scale_out=True, tp2_mode="levels", frictions=True, asof=asof_map.get(ticker))
