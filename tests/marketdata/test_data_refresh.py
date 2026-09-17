@@ -199,3 +199,28 @@ def test_adjustment_seam_detector_flags_mixed_basis_and_ignores_clean_frame():
 
     assert "likely adjustment-basis seam" in adjustment_seam_issue(mixed, "AAA", "daily")
     assert adjustment_seam_issue(_price_frame("2024-01-01", "2024-01-20", 100.0), "AAA", "daily") is None
+
+
+def test_sub_hourly_archive_frames_state_a_24h_cadence():
+    """v87: 15min/5min are archived forward. 24h against Yahoo's ~60-day
+    window leaves ~59 days of slack; the value is stated, not inherited from
+    DEFAULT_REFRESH_HOURS, so a later change to the default cannot silently
+    stretch it."""
+    assert refresh_mod.REFRESH_HOURS["15min"] == 24.0
+    assert refresh_mod.REFRESH_HOURS["5min"] == 24.0
+    assert "1min" not in refresh_mod.REFRESH_HOURS
+    for tf in ("15min", "5min"):
+        assert data_store.TIMEFRAMES[tf]["max_days"] >= 30 * refresh_mod.REFRESH_HOURS[tf] / 24
+
+
+def test_is_stale_uses_the_sub_hourly_cadence(tmp_path):
+    import os, time
+    path = cache_path("AAPL", "5min", base_dir=str(tmp_path))
+    with open(path, "w") as f:
+        f.write("Datetime,Open,High,Low,Close,Volume\n")
+    twenty_hours_ago = time.time() - 20 * 3600
+    os.utime(path, (twenty_hours_ago, twenty_hours_ago))
+    assert refresh_mod.is_stale("AAPL", "5min", base_dir=str(tmp_path)) is False
+    thirty_hours_ago = time.time() - 30 * 3600
+    os.utime(path, (thirty_hours_ago, thirty_hours_ago))
+    assert refresh_mod.is_stale("AAPL", "5min", base_dir=str(tmp_path)) is True

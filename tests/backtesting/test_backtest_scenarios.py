@@ -94,3 +94,12 @@ def test_scenario_backtest_stats_shape_and_win():
         assert key in pooled, key
     assert pooled["n"] >= 1
     assert stats["by_horizon"]["4w"]["n"] == pooled["n"]
+
+
+def test_replayed_plans_carry_no_issued_at():
+    """v87: a replayed plan has no wall-clock issuance. issued_at is stamped
+    by analyze.attach_plan_v2 only; a backtest plan carrying one would pool
+    fabricated timestamps into any later entry-timing study."""
+    out = bs.replay_scenarios("AAPL", _structured_df(), "4w", gates=GATES)
+    assert out, "fixture must produce at least one plan"
+    assert all(plan.issued_at is None for _, plan in out)

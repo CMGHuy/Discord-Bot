@@ -209,6 +209,10 @@ git commit -m "feat(v67): add the store parity report"
 > `doc`; no column is added. The round-trip test below carries both, so an
 > importer that drops keys it does not know fails it.
 
+> **v87 (2026-09-15):** `TradePlanV2` gained `issued_at` (UTC ISO timestamp,
+> live path only). It lives inside `doc`; no column is added. The round-trip
+> test carries it, so an importer that drops keys it does not know fails it.
+
 `plans.json` is the store the scan loop writes most often, and `PlanStore._save()`
 serialises `list(self._plans.values())` on every `add()` and `update()`.
 
@@ -272,6 +276,7 @@ def test_the_full_plan_dict_round_trips(repo, db_conn):
     from swingbot.core.db.dual import diff_records
     rec = _p("P1", legs=[{"fraction": 0.5, "r": 1.0}], take_profit=110.0,
              confidence={"level": 4, "score": 71}, notified_stop=101.5,
+             issued_at="2026-09-15T14:31:07+00:00",
              pending_notice={"transition": "closed",
                              "detail": {"reason": "loss", "exit_price": 94.5},
                              "at": "2026-09-10T15:00:00+00:00"})

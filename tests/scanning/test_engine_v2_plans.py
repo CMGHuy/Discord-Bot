@@ -877,3 +877,17 @@ def test_regime_at_returns_the_matching_regime_without_logging(caplog):
         result = analyze._regime_at(regimes, pd.Timestamp("2026-01-02"))
     assert result == "bull_quiet"
     assert not caplog.records
+
+
+def test_attach_plan_v2_stamps_issued_at_in_utc(monkeypatch):
+    from datetime import datetime, timezone
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
+    item = _item()
+    before = datetime.now(timezone.utc)
+    engine.attach_plan_v2(item, _scenario(), make_ohlcv([100.0] * 60),
+                          "AAPL", "4w", level_map=None)
+    after = datetime.now(timezone.utc)
+    assert item.plan_v2 is not None
+    stamped = datetime.fromisoformat(item.plan_v2.issued_at)
+    assert stamped.tzinfo is not None and stamped.utcoffset().total_seconds() == 0
+    assert before <= stamped <= after

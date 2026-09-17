@@ -28,6 +28,20 @@ def test_json_safe():
     json.dumps(plan_to_dict(_plan()))   # must not raise
 
 
+def test_issued_at_defaults_to_none_and_round_trips():
+    p = _plan()
+    assert p.issued_at is None
+    stamped = _plan(issued_at="2026-09-15T14:31:07.123456+00:00")
+    q = plan_from_dict(plan_to_dict(stamped))
+    assert q.issued_at == "2026-09-15T14:31:07.123456+00:00"
+
+
+def test_pre_v87_record_without_issued_at_loads_as_none():
+    d = plan_to_dict(_plan())
+    d.pop("issued_at", None)
+    assert plan_from_dict(d).issued_at is None
+
+
 def test_legacy_plan_record_with_tier_still_loads():
     """v32 Task 11: A/B/C tier was retired from TradePlanV2. Persisted
     records written before this land still carry a `tier` key -- loading

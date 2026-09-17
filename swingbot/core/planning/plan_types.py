@@ -98,6 +98,13 @@ class TradePlanV2:
     # v81, which is therefore never resent.
     notified_stop: float | None = None
     pending_notice: dict | None = None
+    # v87: the UTC wall-clock moment the live scan attached this plan
+    # (analyze.attach_plan_v2). created_at is a DATE; an entry-timing study
+    # over the 15m/5m archive needs the minute. None for every replayed plan
+    # -- a backtest has no wall clock -- and for records persisted before
+    # v87. The E29 intraday reading is deliberately NOT stored beside it: it
+    # is a pure function of the archived 1h tape and this timestamp.
+    issued_at: str | None = None
 
 
 def effective_stop(plan: TradePlanV2) -> float:

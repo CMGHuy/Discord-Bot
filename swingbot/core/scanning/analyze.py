@@ -6,6 +6,7 @@ identity while analysis consumes it for trade state and monitoring.
 """
 import logging
 import os
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -356,6 +357,7 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
         # attempted -- a render-only feature's stamping failure must never
         # unset the plan and silently fall the item through to legacy-number
         # rendering (final-review Fix 4).
+        plan.issued_at = datetime.now(timezone.utc).isoformat()
         item.plan_v2 = plan
         try:
             plan.risk_features = risk_features.build(
