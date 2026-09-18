@@ -116,6 +116,14 @@ export interface TradeRow {
   open_shares: number | null;
   position_value: number | null;
   current_price: number | null;
+  /** True when `current_price` did not come from a live intraday tick this
+   *  request -- yfinance's fast_info fallback, or a last-known-good cache
+   *  entry served past its TTL (`admin/api_v1/trades.py::_attach_current_
+   *  prices`). The MRNA incident (2026-09-18): a fallback echoed yesterday's
+   *  close during premarket and the status bar read "Near stop-loss" for a
+   *  position that never actually touched it. Always present, never null --
+   *  false when there is no price at all. */
+  current_price_stale: boolean;
   exit_price: number | null;
   realized_pnl_amount: number | null;
   pnl_pct: number | null;

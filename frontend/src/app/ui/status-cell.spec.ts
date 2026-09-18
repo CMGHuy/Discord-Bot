@@ -61,4 +61,20 @@ describe('StatusCell', () => {
     expect(bar.getAttribute('aria-valuenow')).toBe('62');
     expect(bar.getAttribute('aria-label')).toContain('Trending toward target');
   });
+
+  // -- current_price_stale (2026-09-18, the MRNA incident) ------------------
+  // A fast_info fallback echoed yesterday's close during premarket and the
+  // bar read "Near stop-loss" for a position that never touched it. The bar
+  // still draws at its real, computed position -- this only adds a visible
+  // "the number behind this might be delayed" flag beside it.
+
+  it('shows a delayed flag on a live bar built from a stale price', () => {
+    const el = render({ ...live, current_price_stale: true });
+    expect(el.textContent).toContain('delayed');
+  });
+
+  it('shows no delayed flag on a live bar built from a fresh price', () => {
+    const el = render({ ...live, current_price_stale: false });
+    expect(el.querySelector('.stale')).toBeNull();
+  });
 });

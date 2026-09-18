@@ -32,8 +32,8 @@ log = logging.getLogger("swing-bot.events")
 # which resolve most US symbols from a local directory). Measured on a
 # ~34-ticker watchlist: 23 seconds per load before this cache existed --
 # severe enough to read as "the page shows nothing" rather than "slow".
-# Same in-memory {ticker: (value, fetched_at)} shape as _price_cache in
-# marketdata/data.py, just a much longer TTL.
+# Same {ticker: (value, fetched_at)} shape _price_cache in marketdata/data.py
+# used before it grew a third `stale` element, just a much longer TTL.
 _EARNINGS_DATETIME_CACHE_TTL_SECONDS = 6 * 60 * 60
 _earnings_datetime_cache: dict[str, tuple[dt.datetime | None, float]] = {}
 _earnings_datetimes_cache: dict[str, tuple[list[dt.datetime], float]] = {}

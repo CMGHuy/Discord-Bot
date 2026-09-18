@@ -25,6 +25,13 @@ export interface StatusCellRow {
   progress_band: string | null;
   blink_seconds: number | null;
   status_label: string;
+  /** True when the bar was drawn from a price that was not a live intraday
+   *  tick this request (a fast_info fallback, or a last-known-good cache
+   *  entry served past its TTL -- see `TradeRow.current_price_stale`'s own
+   *  docstring for the MRNA incident this flags). The bar still draws at its
+   *  real, computed position -- the point is to say the number backing it
+   *  might be stale, not to hide it. */
+  current_price_stale: boolean;
 }
 
 /**
@@ -78,6 +85,12 @@ export interface StatusCellRow {
           <span class="tick" [style.left.%]="b.entry" aria-hidden="true"></span>
         </span>
         <span class="pct">{{ b.pct }}%</span>
+        @if (row().current_price_stale) {
+          <span
+            class="hint stale"
+            title="This position's price could not be freshly fetched -- the number shown may be delayed."
+          >delayed</span>
+        }
       </span>
     } @else {
       <span class="cell">
@@ -145,6 +158,11 @@ export interface StatusCellRow {
 
     .pct { font-family: var(--font-mono); font-size: var(--text-table); color: var(--text-secondary); }
     .hint { font-size: var(--text-chip); color: var(--text-faint); }
+    /* --warn is the design system's designated token for stale data (see
+       tokens.css's own legend) -- distinct from the plain --text-faint
+       "no price" hint, because this bar DID get a number, just not
+       necessarily a live one. */
+    .hint.stale { color: var(--warn); }
   `,
 })
 export class StatusCell {

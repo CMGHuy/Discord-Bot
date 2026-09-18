@@ -291,6 +291,7 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "open_shares": _open_shares(t.get("shares"), plan.get("legs_realized") or []),
         "position_value": t.get("position_value"),
         "current_price": None,
+        "current_price_stale": False,
         "exit_price": t.get("exit_price"),
         "realized_pnl_amount": t.get("realized_pnl_amount"),
         "pnl_pct": dash.closed_pnl(t) if trade else None,
@@ -493,6 +494,7 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "open_shares": t.get("shares") if t.get("status") == "open" else None,
         "position_value": t.get("position_value"),
         "current_price": None,
+        "current_price_stale": False,
         "exit_price": t.get("exit_price"),
         "realized_pnl_amount": t.get("realized_pnl_amount"),
         "pnl_pct": dash.closed_pnl(t),
@@ -1022,15 +1024,26 @@ def _attach_current_prices(rows: list[dict]) -> None:
 
     A price failure leaves `current_price` as None. The list must render
     without the network.
+
+    `current_price_stale` (2026-09-18): True when the price did not come
+    from a live intraday tick -- yfinance's fast_info fallback, or the
+    last-known-good cache served past its TTL (`PriceQuote.stale`'s own
+    docstring has the full MRNA incident this exists to surface: the
+    dashboard read "Near stop-loss" from yesterday's close because the
+    primary fetch had failed, and nothing on screen said so). Always False,
+    never null, when there is no price at all -- there is nothing to call
+    stale.
     """
     live = [r for r in rows if r["status"] not in _TERMINAL and r.get("ticker")]
     if not live:
         return
     try:
-        from swingbot.core.marketdata.data import get_current_price, prefetch_prices
+        from swingbot.core.marketdata.data import get_current_price_detail, prefetch_prices
         prefetch_prices([r["ticker"] for r in live])
         for r in live:
-            r["current_price"] = get_current_price(r["ticker"])
+            detail = get_current_price_detail(r["ticker"])
+            r["current_price"] = detail.price if detail is not None else None
+            r["current_price_stale"] = detail.stale if detail is not None else False
     except Exception:
         pass
 

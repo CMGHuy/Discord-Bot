@@ -755,6 +755,7 @@ export class Gallery {
     progress_band: 'normal',
     blink_seconds: null,
     status_label: 'Active',
+    current_price_stale: false,
   };
 
   protected readonly sparklinePoints = [1, 3, 2, 5, 4, 6, 5, 7];

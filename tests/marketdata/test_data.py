@@ -270,7 +270,7 @@ def test_prefetch_prices_batches_once_and_warms_the_single_price_cache(monkeypat
 
 def test_fresh_only_single_price_uses_a_fresh_display_cache(monkeypatch):
     monkeypatch.setattr(
-        data_mod, "_price_cache", {"FRESH-ONLY": (99.0, data_mod.time.monotonic())}
+        data_mod, "_price_cache", {"FRESH-ONLY": (99.0, data_mod.time.monotonic(), False)}
     )
 
     class Ticker:

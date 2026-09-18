@@ -83,6 +83,7 @@ const ROW: TradeRow = {
   open_shares: 10,
   position_value: 1000,
   current_price: 104,
+  current_price_stale: false,
   exit_price: null,
   realized_pnl_amount: null,
   pnl_pct: 4,

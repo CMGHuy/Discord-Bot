@@ -386,7 +386,15 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
               <dl>
                 <div>
                   <dt>Price</dt>
-                  <dd class="num">{{ fmt(trade.current_price) }}</dd>
+                  <dd class="num">
+                    {{ fmt(trade.current_price) }}
+                    @if (trade.current_price_stale) {
+                      <span
+                        class="stale-flag"
+                        title="This position's price could not be freshly fetched -- the number shown may be delayed."
+                      >delayed</span>
+                    }
+                  </dd>
                 </div>
                 <div>
                   <dt>Unrealised</dt>
@@ -712,6 +720,17 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
   `,
   styles: `
     :host { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--section-gap); }
+    /* --warn is the design system's designated token for stale data (see
+       tokens.css's own legend) -- the price itself still renders, this just
+       says the number might not be a live tick (the MRNA incident,
+       2026-09-18: a fast_info fallback echoed yesterday's close). */
+    .stale-flag {
+      display: inline-block;
+      margin-left: var(--space-6);
+      font-size: var(--text-chip);
+      font-weight: normal;
+      color: var(--warn);
+    }
     .head {
       display: grid;
       gap: var(--space-8);

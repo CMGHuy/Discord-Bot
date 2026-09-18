@@ -88,6 +88,13 @@ TRADE_ROW = {
     "open_shares": NULLABLE_NUMBER,
     "position_value": NULLABLE_NUMBER,
     "current_price": NULLABLE_NUMBER,
+    # 2026-09-18 -- True when `current_price` did not come from a live
+    # intraday tick this request (yfinance's fast_info fallback, or the
+    # last-known-good cache served past its TTL): the MRNA incident, a
+    # dashboard reading of "Near stop-loss" built from yesterday's close
+    # because the primary fetch had failed. False (never null) so a cell
+    # never has to ask whether the flag exists before reading it.
+    "current_price_stale": bool,
     "exit_price": NULLABLE_NUMBER,
     "realized_pnl_amount": NULLABLE_NUMBER,
     "pnl_pct": NULLABLE_NUMBER,
@@ -928,10 +935,11 @@ def _open_pair(ticker="MSFT", direction="bullish", entry=100.0, sl=90.0, tp=120.
 def priced(monkeypatch):
     """Pin the live price. The real one is a network call, and the whole
     point of these fields is what they do WITH a price."""
-    def _at(value):
+    def _at(value, *, stale=False):
         import swingbot.core.marketdata.data as data
         monkeypatch.setattr(data, "prefetch_prices", lambda tickers: None)
-        monkeypatch.setattr(data, "get_current_price", lambda t: value)
+        detail = None if value is None else data.PriceQuote(value, stale)
+        monkeypatch.setattr(data, "get_current_price_detail", lambda t: detail)
     return _at
 
 
@@ -961,6 +969,44 @@ def test_status_fields_are_null_without_a_live_price(seed, logged_in, priced):
     assert row["blink_seconds"] is None
     # The label always exists -- it is what the degraded cell shows.
     assert row["status_label"]
+
+
+def test_current_price_stale_flag_is_false_for_a_live_tick(seed, logged_in, priced):
+    plan, trade = _open_pair()
+    seed(plans=[plan], trades=[trade])
+    priced(110.0)
+
+    row = logged_in.get("/api/v1/trades?status=open").get_json()["items"][0]
+
+    assert row["current_price"] == 110.0
+    assert row["current_price_stale"] is False
+
+
+def test_current_price_stale_flag_is_true_for_a_fallback_price(seed, logged_in, priced):
+    """The MRNA incident (2026-09-18): a fast_info fallback echoed
+    yesterday's close during premarket while the live trading engine
+    (which always calls with allow_stale=False and never sees this branch)
+    correctly kept the position open. The dashboard must say the price is
+    not a live tick instead of rendering it with full confidence."""
+    plan, trade = _open_pair(entry=162.18, sl=158.93, tp=170.31)
+    seed(plans=[plan], trades=[trade])
+    priced(158.07, stale=True)                # below the stop, but a fallback quote
+
+    row = logged_in.get("/api/v1/trades?status=open").get_json()["items"][0]
+
+    assert row["current_price"] == 158.07
+    assert row["current_price_stale"] is True
+
+
+def test_current_price_stale_flag_is_false_without_a_live_price(seed, logged_in, priced):
+    plan, trade = _open_pair()
+    seed(plans=[plan], trades=[trade])
+    priced(None)
+
+    row = logged_in.get("/api/v1/trades?status=open").get_json()["items"][0]
+
+    assert row["current_price"] is None
+    assert row["current_price_stale"] is False
 
 
 def test_a_short_reaching_its_target_reads_100_not_0(seed, logged_in, priced):

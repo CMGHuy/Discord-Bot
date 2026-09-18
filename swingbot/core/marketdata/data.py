@@ -2,6 +2,7 @@
 import logging
 import os
 import time
+from dataclasses import dataclass
 
 import pandas as pd
 import yfinance as yf
@@ -100,9 +101,10 @@ def get_daily_data_batch(tickers: list, period: str = "2y") -> dict:
 
 
 #: Last known-good price per ticker from a SUCCESSFUL get_current_price_batch
-#: call, regardless of which batch asked for it. Same in-memory
-#: {ticker: (value, fetched_at)} shape as _price_cache, just fed by the
-#: batch path instead of the single-ticker one.
+#: call, regardless of which batch asked for it. {ticker: (value, fetched_at)}
+#: -- no `stale` third element: unlike _price_cache below, nothing here reads
+#: a PriceQuote off this dict directly, only through get_current_price_batch's
+#: own float-only contract.
 _last_good_batch_price: dict = {}
 #: How long a ticker's last-good batch price stays eligible as a fallback
 #: on a failed batch. Deliberately longer than a single scan cycle (a few
@@ -356,7 +358,33 @@ def get_currency_symbol(ticker: str, default_symbol: str = "€") -> str:
 # 15s TTL means prices stay fresh across the dashboard's 5s auto-refresh
 # without hammering yfinance on every single poll.
 _PRICE_CACHE_TTL_SECONDS = 15
-_price_cache: dict[str, tuple[float, float]] = {}   # ticker -> (price, fetched_at monotonic)
+# ticker -> (price, fetched_at monotonic, stale). `stale` is a property of
+# the QUOTE, not of cache age: a fast_info fallback written THIS second is
+# still stale (see PriceQuote), so a fresh-within-TTL hit must replay the
+# stored flag rather than assume False just because it was just written.
+_price_cache: dict[str, tuple[float, float, bool]] = {}
+
+
+@dataclass(frozen=True)
+class PriceQuote:
+    """A price plus whether it is safe to treat as a live tick.
+
+    `stale=True` covers two cases, both display-only concerns a trading
+    caller never sees (they pass `allow_stale=False` and get `None` instead,
+    same as before this type existed):
+
+    - yfinance's `fast_info` fallback, which can echo the PREVIOUS session's
+      close during early extended hours (`_fast_info_price`'s docstring) --
+      the exact misread that showed MRNA as having hit a stop-loss it never
+      touched (2026-09-18): the primary 1-minute-history fetch failed on a
+      real, logged `YFRateLimitError`, and fast_info's stand-in for it was
+      wrong for the moment even though it was fetched "just now".
+    - the last-known-good `_price_cache` entry served past its normal TTL,
+      which `test_current_price_staleness.py` already covered before this
+      type existed -- any age, by definition not a live observation.
+    """
+    price: float
+    stale: bool
 
 
 def _fast_info_price(fi) -> float | None:
@@ -374,11 +402,15 @@ def _fast_info_price(fi) -> float | None:
     return None
 
 
-def get_current_price(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS,
-                      *, allow_stale: bool = True) -> float | None:
+def get_current_price_detail(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS,
+                             *, allow_stale: bool = True) -> PriceQuote | None:
     """
-    Returns the latest traded price for `ticker`, including premarket and
-    aftermarket sessions.
+    `get_current_price`'s full answer: the price AND whether it is safe to
+    treat as a live tick (see `PriceQuote`). `get_current_price` itself stays
+    a bare float-or-None so no trading call site has to change; this is for
+    a display caller that wants to say "delayed" instead of rendering a
+    fallback number with full confidence -- the admin dashboard's
+    `current_price_stale` field is the one caller today.
 
     Primary source: 1-minute history with prepost=True — this always returns
     the most recently traded price in any session and is the most accurate.
@@ -401,9 +433,10 @@ def get_current_price(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS,
     # A fresh cache entry is a recent market observation for every caller.
     # ``allow_stale=False`` excludes only the expired last-known-good fallback
     # below; otherwise a trading transition needlessly refetches a quote that
-    # was observed moments ago.
+    # was observed moments ago. The stored `stale` bit is replayed as-is: a
+    # fast_info fallback written a second ago is still that fallback.
     if cached and (now - cached[1]) < ttl_seconds:
-        return cached[0]
+        return PriceQuote(cached[0], cached[2])
 
     for candidate in candidate_symbols(ticker_key):
         # Primary: 1-minute history with prepost=True is the most accurate
@@ -416,8 +449,8 @@ def get_current_price(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS,
             if hist is not None and not hist.empty:
                 price = float(hist["Close"].dropna().iloc[-1])
                 if price > 0:
-                    _price_cache[ticker_key] = (price, now)
-                    return price
+                    _price_cache[ticker_key] = (price, now, False)
+                    return PriceQuote(price, False)
         except Exception:
             pass
 
@@ -426,16 +459,29 @@ def get_current_price(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS,
             fi = yf.Ticker(candidate).fast_info
             price = _fast_info_price(fi)
             if price:
-                _price_cache[ticker_key] = (price, now)
-                return price
+                _price_cache[ticker_key] = (price, now, True)
+                return PriceQuote(price, True)
         except Exception:
             continue
 
     # Serve last known-good price on transient failure rather than blanking
-    # the UI -- to display callers only (see the docstring).
+    # the UI -- to display callers only (see the docstring). Always stale:
+    # this is being served past its normal freshness window regardless of
+    # what it was tagged when written.
     if cached and allow_stale:
-        return cached[0]
+        return PriceQuote(cached[0], True)
     return None
+
+
+def get_current_price(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS,
+                      *, allow_stale: bool = True) -> float | None:
+    """The price alone, for every existing (mostly trading) call site.
+
+    See `get_current_price_detail` for the full docstring and for the
+    `stale` flag a display caller should be reading instead of calling this.
+    """
+    detail = get_current_price_detail(ticker, ttl_seconds, allow_stale=allow_stale)
+    return detail.price if detail is not None else None
 
 
 def is_us_market_active(now=None) -> bool:
@@ -467,8 +513,17 @@ def prefetch_prices(tickers: list[str], max_workers: int = 10) -> None:
     ``max_workers`` remains accepted for callers using the old interface, but
     threaded individual yfinance calls are both slower and unsafe with this
     pinned yfinance version. Consumers that follow by calling
-    ``get_current_price`` now hit ``_price_cache`` rather than downloading
-    every ticker again.
+    ``get_current_price``/``get_current_price_detail`` now hit
+    ``_price_cache`` rather than downloading every ticker again.
+
+    Written as `stale=False`: `get_current_price_batch` has its own,
+    separately tested last-good-price fallback (`_stale_batch_fallback`, up
+    to 15 minutes old) with no per-ticker signal of whether a given result
+    came from it, so this warms the display cache without a staleness claim
+    either way rather than a wrong one. The `PriceQuote.stale` flag's proven
+    case is `get_current_price_detail`'s OWN fast_info/last-known-good
+    fallback below it, entered when this batch omits a ticker entirely
+    (see `_attach_current_prices`).
     """
     del max_workers
     unique = list(dict.fromkeys(t.upper().strip() for t in tickers if t and t.strip()))
@@ -482,5 +537,5 @@ def prefetch_prices(tickers: list[str], max_workers: int = 10) -> None:
     now = time.monotonic()
     for ticker, price in prices.items():
         if price and price > 0:
-            _price_cache[ticker.upper().strip()] = (float(price), now)
+            _price_cache[ticker.upper().strip()] = (float(price), now, False)
 

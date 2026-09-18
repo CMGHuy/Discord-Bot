@@ -34,8 +34,8 @@ def _isolated_cache(monkeypatch):
     monkeypatch.setattr(data_mod.yf, "Ticker", _YahooDown)
 
 
-def _cache_an_hour_old(ticker: str, price: float) -> None:
-    data_mod._price_cache[ticker] = (price, time.monotonic() - 3600)
+def _cache_an_hour_old(ticker: str, price: float, *, stale: bool = False) -> None:
+    data_mod._price_cache[ticker] = (price, time.monotonic() - 3600, stale)
 
 
 def test_a_trading_caller_gets_none_rather_than_an_hour_old_price():
@@ -49,9 +49,107 @@ def test_a_display_caller_still_gets_the_last_known_price():
 
 
 def test_a_fresh_cached_price_is_served_to_both():
-    data_mod._price_cache["AAPL"] = (101.0, time.monotonic())
+    data_mod._price_cache["AAPL"] = (101.0, time.monotonic(), False)
     assert data_mod.get_current_price("AAPL", allow_stale=False) == 101.0
     assert data_mod.get_current_price("AAPL") == 101.0
+
+
+# -- get_current_price_detail / PriceQuote.stale ----------------------------
+#
+# The MRNA incident (2026-09-18): the admin dashboard rendered a "Near
+# stop-loss" reading from a price that was actually yesterday's regular-
+# session close, echoed back by yfinance's fast_info during early premarket
+# because the primary 1-minute-history fetch failed (a real, logged
+# YFRateLimitError). The trading engine never saw it -- it always calls with
+# allow_stale=False, and a `None` is safe -- but the dashboard's `allow_stale=
+# True` default rendered the number with no indication it was not a live
+# tick. `get_current_price` itself is unchanged (still a bare float-or-None,
+# so every trading call site is untouched); `get_current_price_detail` is
+# the new, richer sibling the display path uses instead.
+
+def test_detail_marks_the_primary_history_price_as_not_stale(monkeypatch):
+    monkeypatch.setattr(data_mod, "candidate_symbols", lambda ticker: [ticker])
+
+    class _Live:
+        def __init__(self, symbol):
+            pass
+
+        def history(self, **kw):
+            import pandas as pd
+            return pd.DataFrame({"Close": [160.86]})
+
+    monkeypatch.setattr(data_mod.yf, "Ticker", _Live)
+
+    detail = data_mod.get_current_price_detail("MRNA")
+
+    assert detail == data_mod.PriceQuote(160.86, stale=False)
+
+
+def test_detail_marks_the_fast_info_fallback_as_stale(monkeypatch):
+    """yfinance's fast_info can echo the previous session's close during
+    early extended hours (`_fast_info_price`'s own docstring) -- exactly
+    the MRNA misread. `get_current_price` only reaches this branch when the
+    primary history call has already failed."""
+    monkeypatch.setattr(data_mod, "candidate_symbols", lambda ticker: [ticker])
+
+    class _HistoryDownFastInfoUp:
+        def __init__(self, symbol):
+            pass
+
+        def history(self, **kw):
+            raise RuntimeError("yahoo down")
+
+        @property
+        def fast_info(self):
+            return {"lastPrice": 158.07}
+
+    monkeypatch.setattr(data_mod.yf, "Ticker", _HistoryDownFastInfoUp)
+
+    detail = data_mod.get_current_price_detail("MRNA")
+
+    assert detail == data_mod.PriceQuote(158.07, stale=True)
+
+
+def test_detail_marks_the_last_known_good_fallback_as_stale():
+    _cache_an_hour_old("AAPL", 94.0, stale=False)
+    detail = data_mod.get_current_price_detail("AAPL")
+    assert detail == data_mod.PriceQuote(94.0, stale=True)
+
+
+def test_detail_returns_none_for_a_trading_caller_past_the_hour_old_fallback():
+    _cache_an_hour_old("AAPL", 94.0)
+    assert data_mod.get_current_price_detail("AAPL", allow_stale=False) is None
+
+
+def test_detail_preserves_the_stored_staleness_on_a_fresh_cache_hit():
+    """A price warmed moments ago by a fast_info fallback is still that
+    fallback -- cache AGE resets on every write, but the underlying quote's
+    trustworthiness does not, so a hit inside the TTL must not silently
+    launder it into "fresh"."""
+    data_mod._price_cache["MRNA"] = (158.07, time.monotonic(), True)
+    assert data_mod.get_current_price_detail("MRNA") == data_mod.PriceQuote(158.07, stale=True)
+
+
+def test_get_current_price_is_unaffected_by_the_detail_refactor(monkeypatch):
+    """The bare float-or-None contract every trading call site relies on
+    must be byte-identical after get_current_price becomes a thin wrapper
+    over get_current_price_detail."""
+    monkeypatch.setattr(data_mod, "candidate_symbols", lambda ticker: [ticker])
+
+    class _HistoryDownFastInfoUp:
+        def __init__(self, symbol):
+            pass
+
+        def history(self, **kw):
+            raise RuntimeError("yahoo down")
+
+        @property
+        def fast_info(self):
+            return {"lastPrice": 158.07}
+
+    monkeypatch.setattr(data_mod.yf, "Ticker", _HistoryDownFastInfoUp)
+
+    assert data_mod.get_current_price("MRNA") == 158.07
 
 
 # -- is_us_market_active ----------------------------------------------------

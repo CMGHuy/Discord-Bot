@@ -18,7 +18,7 @@ function row(overrides: Partial<TradeRow>): TradeRow {
     entry: 100, stop_loss: 95, target: 110, target2: null,
     banked_fraction: null, banked_exit_price: null, banked_r: null,
     risk_reward: null, shares: 5, open_shares: null, position_value: null,
-    current_price: null, exit_price: 110, realized_pnl_amount: 50,
+    current_price: null, current_price_stale: false, exit_price: 110, realized_pnl_amount: 50,
     pnl_pct: 10, r_multiple: 2, held_hours: 1, opened_at: null, closed_at: null,
     has_note: false, today: true, created_at: null, trigger_price: null,
     follow_score: null, progress_pct: null, entry_pct: null, progress_band: null,

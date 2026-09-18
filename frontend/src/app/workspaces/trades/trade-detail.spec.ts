@@ -74,7 +74,7 @@ const DETAIL = {
   working_stop: 99,
 };
 
-function tradeResponse(detail: object, status = 'ACTIVE') {
+function tradeResponse(detail: object, status = 'ACTIVE', overrides: object = {}) {
   return {
     id: ID,
     origin: 'plan',
@@ -97,6 +97,7 @@ function tradeResponse(detail: object, status = 'ACTIVE') {
     open_shares: 10,
     position_value: 1000,
     current_price: 105,
+    current_price_stale: false,
     exit_price: null,
     realized_pnl_amount: null,
     pnl_pct: 5,
@@ -111,6 +112,7 @@ function tradeResponse(detail: object, status = 'ACTIVE') {
     blink_seconds: null,
     status_label: 'Moving toward target',
     detail,
+    ...overrides,
   };
 }
 
@@ -135,12 +137,12 @@ describe('TradeDetail — the fields that rendered nowhere', () => {
   });
 
   /** Mount on a tab and settle the detail request. */
-  function render(tab: string, detail: object = DETAIL, status = 'ACTIVE') {
+  function render(tab: string, detail: object = DETAIL, status = 'ACTIVE', overrides: object = {}) {
     const fixture = TestBed.createComponent(TradeDetail);
     fixture.componentRef.setInput('id', ID);
     fixture.componentRef.setInput('tab', tab);
     fixture.detectChanges();
-    backend.expectOne(`/api/v1/trades/${ID}`).flush(tradeResponse(detail, status));
+    backend.expectOne(`/api/v1/trades/${ID}`).flush(tradeResponse(detail, status, overrides));
     fixture.detectChanges();
     return (fixture.nativeElement as HTMLElement).textContent ?? '';
   }
@@ -210,6 +212,21 @@ describe('TradeDetail — the fields that rendered nowhere', () => {
     // come here to copy (e.g. for `!trade ID`).
     const text = render('plan');
     expect(text).toContain(ID);
+  });
+
+  // 2026-09-18 -- the MRNA incident. A fast_info fallback echoed yesterday's
+  // close during premarket; the Now panel's Price field must say the number
+  // is not necessarily a live tick instead of rendering it with full
+  // confidence, since this is the ONE page a trader opens to check a
+  // specific position after an alert (e.g. the MRNA trade this pins).
+  it('flags a stale current price on the Now panel', () => {
+    const text = render('live', DETAIL, 'ACTIVE', { current_price_stale: true });
+    expect(text).toContain('delayed');
+  });
+
+  it('does not flag a fresh current price on the Now panel', () => {
+    const text = render('live', DETAIL, 'ACTIVE', { current_price_stale: false });
+    expect(text).not.toContain('delayed');
   });
 
   it('labels the stop "Trailing stop" once TP1 has banked (PARTIAL)', () => {
