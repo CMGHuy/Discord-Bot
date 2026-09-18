@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-09-17 20:54:38 UTC",
+  "generated_at": "2026-09-18 09:55:23 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.18.4",
-    "bot": "1.9.4"
+    "ui": "1.19.0",
+    "bot": "1.10.0"
   },
   "releases": [
     {
@@ -1214,42 +1214,16 @@
       ]
     },
     {
-      "date": "2026-09-17",
-      "last_seen": "2026-09-17",
-      "commit": "a8bcfe16",
-      "subject": "release(bot): 1.9.2 -- bound trade_monitor's live-price fetch against a hang",
+      "date": "2026-09-18",
+      "last_seen": "2026-09-18",
+      "commit": "1a543ba3",
+      "subject": "release(v93): strategy path live -- bot minor, ui minor; plan and spec closed out",
       "versions": {
-        "ui": "1.18.3",
-        "bot": "1.9.2"
-      },
-      "changed": [
-        "bot"
-      ]
-    },
-    {
-      "date": "2026-09-17",
-      "last_seen": "2026-09-17",
-      "commit": "a96ca902",
-      "subject": "release(ui,bot): 1.18.4 / 1.9.3 -- scan progress strip over the workspace",
-      "versions": {
-        "ui": "1.18.4",
-        "bot": "1.9.3"
+        "ui": "1.19.0",
+        "bot": "1.10.0"
       },
       "changed": [
         "ui",
-        "bot"
-      ]
-    },
-    {
-      "date": "2026-09-17",
-      "last_seen": "2026-09-17",
-      "commit": "290514b9",
-      "subject": "release(bot): 1.9.4 -- a moved SL/TP takes effect immediately, not next session",
-      "versions": {
-        "ui": "1.18.4",
-        "bot": "1.9.4"
-      },
-      "changed": [
         "bot"
       ]
     }
