@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-18 09:11:43 UTC",
+  "generated_at": "2026-09-18 09:52:27 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -1216,8 +1216,8 @@
     {
       "date": "2026-09-18",
       "last_seen": "2026-09-18",
-      "commit": "uncommitted",
-      "subject": "working tree",
+      "commit": "1a543ba3",
+      "subject": "release(v93): strategy path live -- bot minor, ui minor; plan and spec closed out",
       "versions": {
         "ui": "1.19.0",
         "bot": "1.10.0"
