@@ -15,6 +15,7 @@ Tunables live in DEFAULT_PARAMS (per strategy); scripts/backtest/tune_strategy.p
 sweeps them on the train window only. STRATEGY_GATES (strategy_types.py)
 lets tuning disable a direction or horizons per strategy.
 """
+import contextlib
 import numpy as np
 import pandas as pd
 
@@ -146,17 +147,37 @@ def entries_for(strategy: str, df: pd.DataFrame, horizon_key: str,
     gates = STRATEGY_GATES.get(strategy)
     if gates:
         horizons = gates.get("horizons")
-        if horizons is not None and horizon_key not in horizons:
-            return _off(df), _off(df)
+        by_direction = gates.get("horizons_by_direction") or {}
         directions = gates.get("directions")
-        if directions is not None:
-            if "bullish" not in directions:
-                bullish = _off(df)
-            if "bearish" not in directions:
-                bearish = _off(df)
+        def allowed(direction):
+            if directions is not None and direction not in directions:
+                return False
+            permitted = by_direction.get(direction, horizons)
+            return permitted is None or horizon_key in permitted
+        if not allowed("bullish"):
+            bullish = _off(df)
+        if not allowed("bearish"):
+            bearish = _off(df)
 
     bullish, bearish = apply_regime_gate(bullish, bearish, strategy, regimes)
     return bullish, bearish
+
+
+@contextlib.contextmanager
+def gate_override(strategy: str, gates: dict | None):
+    missing = object()
+    previous = STRATEGY_GATES.get(strategy, missing)
+    try:
+        if gates is None:
+            STRATEGY_GATES.pop(strategy, None)
+        else:
+            STRATEGY_GATES[strategy] = gates
+        yield
+    finally:
+        if previous is missing:
+            STRATEGY_GATES.pop(strategy, None)
+        else:
+            STRATEGY_GATES[strategy] = previous
 
 
 DEFAULT_PARAMS["Fibonacci"] = {

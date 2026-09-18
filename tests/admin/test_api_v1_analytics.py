@@ -83,9 +83,12 @@ def test_performance_top_level_shape(seed, logged_in):
     assert_shape(logged_in.get("/api/v1/analytics/performance").get_json(), {
         "totals": dict, "relocated": dict, "win_rate": NULLABLE_NUMBER, "win_rate_n": int,
         "expectancy_r": NULLABLE_NUMBER, "expectancy_n": int, "by_confidence": dict,
+        # v93 -- the weak ledger's own separate, never-summed record (weak_summary()).
+        "weak": dict,
         "range": dict, "derived": dict, "distributions": dict,
         "rolling_returns": list, "holding_period_split": list, "risk_reward_split": list,
         "calendar": list, "cumulative_by_strategy": dict, "benchmark": dict,
+        "weak": dict,
     })
 
 

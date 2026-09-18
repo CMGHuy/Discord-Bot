@@ -111,3 +111,16 @@ def test_v87_market_data_timeframes_default_archives_15m_and_5m():
     assert names == ["monthly", "weekly", "daily", "hourly", "15min", "5min"]
     assert [timeframe_name(n) for n in names] == names
     assert "1min" not in names
+
+
+def test_v93_strategy_alert_fields():
+    by_key = {f.key: f for f in config.FIELDS}
+    mode = by_key["STRATEGY_ALERTS_MODE"]
+    assert mode.default == "off"
+    assert {v for v, _ in mode.options} == {"off", "shadow", "live"}
+    assert config._cast(mode, "banana") == "off"
+    assert config._cast(mode, "LIVE") == "live"
+    assert config.STRATEGY_ALERTS_MODE == "off"
+    allow = by_key["STRATEGY_ALERTS_LIVE_STRATEGIES"]
+    assert allow.default == ""
+    assert isinstance(config.STRATEGY_ALERTS_LIVE_STRATEGIES, str)

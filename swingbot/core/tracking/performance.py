@@ -584,7 +584,7 @@ class TradeLog:
                   explanation=None, confirmed_by=None, plan_id=None,
                   badge=None, quality_score=None, source=None,
                   trendline_fit=None, cohort_label=None, cohort_stats=None,
-                  risk_features=None) -> str:
+                  risk_features=None, ledger=None, entry_context=None) -> str:
         """
         The extra keyword args (confidence_score/breakdown, target/stop
         sources, explanation, confirmed_by) are optional and purely for
@@ -616,6 +616,8 @@ class TradeLog:
             "cohort_stats": cohort_stats or {},
             "risk_features": risk_features or {},
             "source": source,       # "strategy" | "confluence" | None
+            "ledger": ledger or "main",  # v93: frozen at creation
+            "entry_context": entry_context or {},
             "legs": [],             # v2 two-leg realization (Task 63/64/65/66); [] for v1
             "ticker": ticker,
             "strategy": strategy,
@@ -970,8 +972,14 @@ class TradeLog:
         return newly_closed
 
     def get_stats(self, confidence_level: int = None, trades: list | None = None,
-                  *, expand: bool = True) -> dict:
+                  *, expand: bool = True, ledger: str | None = "main") -> dict:
         """
+        `ledger` defaults to "main" (v93 ledger-separation rule). Several
+        Discord command call sites (scanning/loops.py and scanning/presence.py's
+        `open_count = trade_log.get_stats()["open"]`) rely on this default
+        rather than passing `ledger="main"` explicitly -- changing this default
+        would silently reintroduce main+weak pooling at those call sites.
+
         `trades`, if given, overrides the base trade set the stats are
         computed over (e.g. the dashboard's "Today" mode passing in just
         today's opened/closed trades instead of the whole history). Defaults
@@ -991,6 +999,11 @@ class TradeLog:
         """
         self.refresh()
         base = self._all() if trades is None else trades
+        from swingbot.core.tracking import ledger as _ledger
+        if ledger == _ledger.MAIN:
+            base = [trade for trade in base if _ledger.is_main(trade)]
+        elif ledger == _ledger.WEAK:
+            base = [trade for trade in base if _ledger.is_weak(trade)]
         trades = base if confidence_level is None else [
             t for t in base if t["confidence_level"] == confidence_level
         ]
@@ -1018,6 +1031,20 @@ class TradeLog:
 
     def get_stats_by_confidence(self) -> dict:
         return {level: self.get_stats(level) for level in range(1, 6)}
+
+    def weak_summary(self) -> dict:
+        """Return the weak ledger's separate, never-summed performance block."""
+        from swingbot.core.analytics import metrics as m
+        from swingbot.core.tracking import ledger as _ledger
+        self.refresh()
+        closed = [trade for trade in self._all()
+                  if _ledger.is_weak(trade) and trade.get("status") in ("win", "loss", "closed")]
+        wins = [trade for trade in closed if trade["status"] == "win"]
+        losses = [trade for trade in closed if trade["status"] == "loss"]
+        return {"n": len(closed), "wins": len(wins), "losses": len(losses),
+                "win_rate": len(wins) / len(closed) * 100 if closed else None,
+                "expectancy_r": m.expectancy_r(closed) if closed else None,
+                "total_pnl": round(sum(float(t.get("realized_pnl_amount") or 0.0) for t in closed), 2)}
 
     def get_extended_stats(self, confidence_level: int = None, trades: list | None = None,
                            *, expand: bool = True) -> dict:
@@ -1114,7 +1141,7 @@ class TradeLog:
             self._trades = self._load()
 
     def get_trades(self, status: str = None, ticker: str = None, limit: int | None = 20,
-                    sort_by: str = "opened_at") -> list:
+                    sort_by: str = "opened_at", ledger: str | None = None) -> list:
         """
         Filtered list of trade records. `sort_by`:
           - "opened_at" (default): most-recent-first.
@@ -1132,6 +1159,11 @@ class TradeLog:
         """
         self.refresh()
         trades = list(self._all())
+        from swingbot.core.tracking import ledger as _ledger
+        if ledger == _ledger.MAIN:
+            trades = [trade for trade in trades if _ledger.is_main(trade)]
+        elif ledger == _ledger.WEAK:
+            trades = [trade for trade in trades if _ledger.is_weak(trade)]
         if status and status != "all":
             trades = [t for t in trades if t["status"] == status]
         if ticker:

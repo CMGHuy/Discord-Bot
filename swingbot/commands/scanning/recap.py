@@ -43,7 +43,7 @@ async def _post_retrospective(channel_id_override: int | None = None, today=None
     by daily_recap task and !recap command."""
     from swingbot.core.tracking.retrospective import build_daily_retrospective
 
-    all_trades = trade_log.get_trades(limit=10_000)
+    all_trades = trade_log.get_trades(limit=10_000, ledger="main")
     messages   = build_daily_retrospective(all_trades, today=today)
 
     channel = await _resolve_retrospective_channel(channel_id_override)

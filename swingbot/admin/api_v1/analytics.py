@@ -69,6 +69,30 @@ def _iso_day(name: str) -> str | None:
     return raw
 
 
+def _soak_for(strategy: str):
+    from swingbot.core.backtesting.registry import get_badge
+    from swingbot.core.edge.strategy_soak import soak_verdict
+    from swingbot.core.planning.plan_store import PlanStore
+    plans = [plan for plan in PlanStore().all() if plan.source == "strategy" and plan.strategy == strategy]
+    badge = get_badge("strategy", strategy)
+    return soak_verdict(plans, badge), badge
+
+
+@api_v1.route("/analytics/soak", methods=["GET"])
+@require_auth
+def analytics_soak():
+    unknown = set(request.args) - {"strategy"}
+    if unknown:
+        raise ApiError("invalid", f"unknown parameter {sorted(unknown)[0]!r}; allowed: ['strategy']", 400)
+    strategy = (request.args.get("strategy") or "").strip()
+    if not strategy:
+        raise ApiError("invalid", "strategy is required", 400)
+    verdict, badge = _soak_for(strategy)
+    return jsonify({"strategy": strategy,
+                    "badge": {"status": badge.status, "n": badge.n, "expectancy_r": badge.expectancy_r},
+                    "verdict": verdict})
+
+
 @api_v1.route("/analytics/performance", methods=["GET"])
 @require_auth
 def analytics_performance():
@@ -104,7 +128,7 @@ def analytics_performance():
     start, end = _iso_day("from"), _iso_day("to")
 
     tl = TradeLog()
-    all_raw = tl.get_trades(status=None, limit=None) or []
+    all_raw = tl.get_trades(status=None, limit=None, ledger="main") or []
     stats = tl.get_stats(trades=all_raw)
     stats.update(tl.get_extended_stats(trades=all_raw))
 
@@ -139,6 +163,7 @@ def analytics_performance():
         "expectancy_r": m.expectancy_r(closed),
         "expectancy_n": len(m.r_multiples(closed)),
         "by_confidence": tl.get_stats_by_confidence(),
+        "weak": tl.weak_summary(),
 
         "range": {
             "from": start, "to": end,
@@ -218,7 +243,7 @@ def analytics_equity_curve():
     strategy = (request.args.get("strategy") or "").strip()
 
     tl = TradeLog()
-    all_raw = tl.get_trades(status=None, limit=None) or []
+    all_raw = tl.get_trades(status=None, limit=None, ledger="main") or []
     closed = [t for t in all_raw if t.get("status") in ("win", "loss", "closed")]
     scoped = m.in_date_range(closed, start=start, end=end)
     if strategy:
@@ -295,7 +320,7 @@ def analytics_by_dimension():
     from swingbot.core.market.strategy_types import HORIZONS
     from swingbot.core.tracking.performance import primary_strategy_label
 
-    closed = [t for t in TradeLog().get_trades(status=None, limit=None) or []
+    closed = [t for t in TradeLog().get_trades(status=None, limit=None, ledger="main") or []
               if t.get("status") in ("win", "loss", "closed")]
 
     if dim == "strategy":
@@ -335,6 +360,9 @@ def analytics_by_dimension():
         }
         if dim == "strategy":
             row["badge"] = get_badge("strategy", key).status
+            verdict, _ = _soak_for(key)
+            row["soak"] = {"pass": verdict["pass"], "n_closed": verdict["n_closed"],
+                           "clauses": verdict["clauses"]} if verdict["n_closed"] else None
         rows.append(row)
 
     grouped_closed_at = [
@@ -382,7 +410,7 @@ def analytics_journal():
         entries = []
 
     tl = TradeLog()
-    closed = [t for t in (tl.get_trades(status=None, limit=None) or [])
+    closed = [t for t in (tl.get_trades(status=None, limit=None, ledger="main") or [])
               if t.get("status") in ("win", "loss", "closed")]
 
     return jsonify({
@@ -432,7 +460,7 @@ def analytics_strategies():
 
     rows = _registry_rows()
     closed = [
-        t for t in TradeLog().get_trades(status=None, limit=None) or []
+        t for t in TradeLog().get_trades(status=None, limit=None, ledger="main") or []
         if t.get("status") in ("win", "loss", "closed")
     ]
     labeled = [{**t, "strategy": primary_strategy_label(t)} for t in closed]
@@ -455,7 +483,7 @@ def analytics_exit_quality():
     from swingbot.core.analytics.aggregate import MIN_CELL_N
     from swingbot.core.analytics.journal import JournalStore
 
-    closed = [t for t in TradeLog().get_trades(status=None, limit=None) or []
+    closed = [t for t in TradeLog().get_trades(status=None, limit=None, ledger="main") or []
               if t.get("status") in ("win", "loss", "closed")]
     entries = JournalStore().entries()
     return jsonify({"exit_reasons": m.exit_reason_split(closed),

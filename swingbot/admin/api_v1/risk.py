@@ -126,7 +126,7 @@ def _risk_metrics_and_correlation() -> tuple[dict, dict]:
 
     try:
         closed = [
-            t for t in TradeLog().get_trades(status=None, limit=None) or []
+            t for t in TradeLog().get_trades(status=None, limit=None, ledger="main") or []
             if t.get("status") in ("win", "loss", "closed")
         ]
     except Exception:

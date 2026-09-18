@@ -22,7 +22,7 @@ DEFAULT_PATH = os.path.join(config.DATA_DIR, "analytics_snapshot.json")
 log = logging.getLogger("swing-bot.snapshots")
 
 
-def build_snapshot(closed: list[dict], starting_balance: float, registry_entries: list[dict]) -> dict:
+def build_snapshot(closed: list[dict], starting_balance: float, registry_entries: list[dict], *, weak_closed=()) -> dict:
     """Assemble the full analytics snapshot from a closed-trade list, the
     account's starting balance, and the already-loaded validation
     registry. Pure -- callers (refresh_snapshot, Task A29) are
@@ -48,6 +48,14 @@ def build_snapshot(closed: list[dict], starting_balance: float, registry_entries
     }
 
     by = {dim: [dataclasses.asdict(row) for row in stats_by(closed, dim)] for dim in DIMENSIONS}
+    weak_closed = list(weak_closed)
+    by["ledger"] = [dataclasses.asdict(row) for row in stats_by(closed + weak_closed, "ledger")]
+    weak_wins = sum(1 for trade in weak_closed if trade.get("status") == "win")
+    weak_losses = sum(1 for trade in weak_closed if trade.get("status") == "loss")
+    weak = {"n": len(weak_closed), "wins": weak_wins, "losses": weak_losses,
+            "win_rate": metrics.win_rate(weak_closed) if weak_closed else None,
+            "expectancy_r": metrics.expectancy_r(weak_closed) if weak_closed else None,
+            "total_pnl": round(sum(float(t.get("realized_pnl_amount") or 0.0) for t in weak_closed), 2)}
 
     calibration_block = {
         "deciles": calibration.score_deciles(closed),
@@ -62,6 +70,7 @@ def build_snapshot(closed: list[dict], starting_balance: float, registry_entries
         "drawdown": metrics.drawdown_series(points),
         "rolling_wr": metrics.rolling_win_rate(closed),
         "by": by,
+        "weak": weak,
         "calibration": calibration_block,
         "r_multiples": metrics.r_multiples(closed),
     }
@@ -105,11 +114,13 @@ def refresh_snapshot() -> None:
         from swingbot.core.tracking.performance import TradeLog
 
         all_trades = TradeLog().get_trades(status="all", limit=None)
-        closed = [t for t in all_trades if t.get("status") in ("win", "loss", "closed")]
+        from swingbot.core.tracking.ledger import split_by_ledger
+        closed_all = [t for t in all_trades if t.get("status") in ("win", "loss", "closed")]
+        closed, weak_closed = split_by_ledger(closed_all)
         starting_balance = account_module.load_account_config().get("base_balance", 0.0)
         registry_entries = registry.load_registry()
 
-        snap = build_snapshot(closed, starting_balance, registry_entries)
+        snap = build_snapshot(closed, starting_balance, registry_entries, weak_closed=weak_closed)
         save_snapshot(snap)
     except Exception:
         log.warning("refresh_snapshot failed -- snapshot left stale for this cycle", exc_info=True)

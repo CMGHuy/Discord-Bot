@@ -141,6 +141,96 @@ def test_stats_embed_none_heavy_snapshot_shows_dashes_not_none():
     assert "—" in joined
 
 
+def test_stats_embed_renders_weak_block_separately():
+    snap = {
+        "built_at": "2026-09-17T00:00:00", "overall": {
+            "n": 3, "wins": 2, "losses": 1, "win_rate": 66.7, "expectancy_r": 0.2, "profit_factor": 1.5,
+            "sharpe": None, "sortino": None, "max_drawdown_pct": 3.0, "total_pnl": 120.0,
+            "streaks": {"current": 1, "current_kind": "win", "best_win_streak": 2, "worst_loss_streak": 1}},
+        "by": {}, "weak": {"n": 2, "wins": 1, "losses": 1, "win_rate": 50.0, "expectancy_r": -0.1, "total_pnl": -30.0},
+    }
+    embed = stats_embed(snap)
+    weak = next(f for f in embed.fields if f.name.startswith("WEAK ledger"))
+    # Shipped format bolds the label ("**N** 2 (1W/1L)"), unlike the plan's
+    # own snippet which assumed an unbolded "N 2" -- match what's actually
+    # rendered.
+    assert "**N** 2" in weak.value and "-30.00" in weak.value
+    assert "120.00" in embed.description          # main total untouched
+
+
+def test_stats_embed_without_weak_key_is_unchanged():
+    snap = {"built_at": None, "overall": {"n": 0, "wins": 0, "losses": 0, "win_rate": None, "expectancy_r": None,
+            "profit_factor": None, "sharpe": None, "sortino": None, "max_drawdown_pct": None, "total_pnl": 0.0,
+            "streaks": {"current": 0, "current_kind": None, "best_win_streak": 0, "worst_loss_streak": 0}}, "by": {}}
+    assert not any(f.name.startswith("WEAK ledger") for f in stats_embed(snap).fields)
+
+
+def test_soak_lines_reports_each_clause():
+    from swingbot.commands.stats import soak_lines
+    from swingbot.core.backtesting.registry import Badge
+
+    verdict = {"n_closed": 12, "exp_r": 0.15, "badge_exp_r": 0.219, "median_entry_dev": 0.04,
+               "clauses": {"n": False, "non_inferior": False, "entry_parity": True}, "pass": False}
+    badge = Badge(status="VALIDATED", n=112, win_rate=50.0, expectancy_r=0.219)
+    lines = soak_lines("MACD", verdict, badge)
+    text = "\n".join(lines)
+
+    from swingbot.core.edge.strategy_soak import MIN_CLOSED
+
+    assert "MACD" in text and f"12/{MIN_CLOSED}" in text and "FAIL" in text and "PASS" in text
+    assert "not ready" in text.lower()
+
+    # Regression: median_entry_dev is a ratio of stop distance, not a
+    # percentage -- it must render without a trailing "%".
+    dev_line = next(line for line in lines if "Entry parity" in line)
+    assert "%" not in dev_line
+    assert "0.040" in dev_line
+
+    # Regression: a 1-decimal render (ui.fmt_r) makes a PASS and a FAIL
+    # print identically for exp_r values this close together; 3-decimal
+    # formatting must keep them visually distinguishable.
+    close_pass = {"n_closed": 30, "exp_r": 0.219, "badge_exp_r": 0.209, "median_entry_dev": 0.04,
+                  "clauses": {"n": True, "non_inferior": True, "entry_parity": True}, "pass": True}
+    close_fail = {"n_closed": 30, "exp_r": 0.209, "badge_exp_r": 0.219, "median_entry_dev": 0.04,
+                  "clauses": {"n": True, "non_inferior": False, "entry_parity": True}, "pass": False}
+    pass_line = next(line for line in soak_lines("MACD", close_pass, badge) if "Non-inferior" in line)
+    fail_line = next(line for line in soak_lines("MACD", close_fail, badge) if "Non-inferior" in line)
+    assert pass_line != fail_line
+
+
+def test_soak_cmd_empty_state_guard_short_circuits_before_badge_lookup(monkeypatch):
+    """No shadow plans for the strategy -> soak_cmd must send the guard
+    message and never reach get_badge (badge lookups can be a real cost --
+    the guard exists precisely so a strategy with STRATEGY_ALERTS_MODE off,
+    or simply zero shadow plans so far, doesn't pay for one). Same fake-ctx
+    pattern as test_growth_command.py's growth_command tests."""
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock
+
+    from swingbot.commands.stats import soak_cmd
+    from swingbot.core.planning.plan_store import PlanStore
+
+    monkeypatch.setattr(PlanStore, "all", lambda self: [])
+
+    def _get_badge_must_not_be_called(*args, **kwargs):
+        raise AssertionError("get_badge was called despite an empty plans list")
+
+    monkeypatch.setattr(
+        "swingbot.core.backtesting.registry.get_badge", _get_badge_must_not_be_called
+    )
+
+    ctx = MagicMock()
+    ctx.send = AsyncMock()
+
+    asyncio.run(soak_cmd.callback(ctx, strategy="SOMESTRATEGY"))
+
+    ctx.send.assert_awaited_once()
+    args, kwargs = ctx.send.call_args
+    message = args[0] if args else kwargs.get("content", "")
+    assert "No strategy-sourced plans" in message
+    assert "SOMESTRATEGY" in message
+
+
 import datetime as dt
 
 from swingbot.commands.stats import _since

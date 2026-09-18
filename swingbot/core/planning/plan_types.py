@@ -64,6 +64,9 @@ class TradePlanV2:
     # v86 §4: what was knowable about this plan at its creating bar. Recorded,
     # never scored -- see scanning/risk_features.py.
     risk_features: dict = field(default_factory=dict)
+    ledger: str = "main"       # v93: "main" | "weak", frozen at creation (tracking/ledger.py)
+    first_seen_price: float | None = None   # v93: first live print, used by soak entry parity
+    entry_context: dict = field(default_factory=dict)
     # E32, same rationale: the MFE-derived R-multiple this plan's TP2 was
     # priced at (None when the level-based TP2 stood), and the day by
     # which most of this strategy's winners had already reached +0.5R.

@@ -232,7 +232,7 @@ def _strategy_horizon_heatmap() -> dict:
     metrics.win_rate() for the actual ratio -- same definition as every
     other win-rate number in this cockpit, not reimplemented here."""
     tl = TradeLog()
-    closed = [t for t in tl.get_trades(status=None, limit=None) if t["status"] in ("win", "loss", "closed")]
+    closed = [t for t in tl.get_trades(status=None, limit=None, ledger="main") if t["status"] in ("win", "loss", "closed")]
     horizons = list(HORIZONS.keys())
     buckets: dict[tuple[str, str], list[dict]] = {}
     for t in closed:

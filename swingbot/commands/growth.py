@@ -52,7 +52,7 @@ def _collect_stats(target: float = 10.0) -> dict:
         from swingbot.core.analytics.metrics import r_multiple as _r_multiple
         from swingbot.core.edge.ruin import simulate as _mc_simulate
         from swingbot.core.charts.portfolio_charts import render_mc_fan
-        rs = [r for t in TradeLog().get_trades(limit=None)
+        rs = [r for t in TradeLog().get_trades(limit=None, ledger="main")
               if (r := _r_multiple(t)) is not None]
         if len(rs) >= MC_MIN_CLOSED_TRADES and base:
             sim = _mc_simulate(rs, risk_pct=stats["risk_pct"], return_paths=True)

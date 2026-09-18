@@ -178,8 +178,12 @@ def _realized(closed: list[dict], mode: str) -> dict:
 def dashboard():
     mode = _scope()
     tl = TradeLog()
+    from swingbot.core.tracking.ledger import is_main, split_by_ledger
     all_raw = tl.get_trades(status=None, limit=None, sort_by="opened_at") or []
-    open_trades = [t for t in all_raw if t.get("status") == "open"]
+    # Open-side figures (open_pnl_pct, the open_trades chip, avg_confidence)
+    # must live on the same ledger as `realized` below -- unfiltered here
+    # would blend weak-ledger open positions into a main-ledger P&L card.
+    open_trades = [t for t in all_raw if t.get("status") == "open" and is_main(t)]
 
     # win_rate/expectancy_r/payoff_ratio must scope with `mode` the same way
     # `_realized`/`_lifecycle_counts` already do -- get_stats' own `trades`
@@ -194,10 +198,12 @@ def dashboard():
         t for t in all_raw
         if t.get("status") == "open" or dash.is_today_berlin(t.get("closed_at"))
     ]
-    stats = tl.get_stats(trades=scoped_raw)
-    stats.update(tl.get_extended_stats(trades=scoped_raw))
+    scoped_main = [trade for trade in scoped_raw if is_main(trade)]
+    stats = tl.get_stats(trades=scoped_main)
+    stats.update(tl.get_extended_stats(trades=scoped_main))
     from swingbot.core.analytics import metrics as m
-    closed_scoped = [t for t in scoped_raw if t.get("status") in ("win", "loss", "closed")]
+    closed_scoped_all = [t for t in scoped_raw if t.get("status") in ("win", "loss", "closed")]
+    closed_scoped, closed_weak = split_by_ledger(closed_scoped_all)
     scoped_rs = m.r_multiples(closed_scoped)
 
     account_cfg = dash.load_account_config()
@@ -244,7 +250,9 @@ def dashboard():
         # figures it is showing rather than assume the request applied.
         "scope": {"mode": mode},
         "realized": _realized(
-            [t for t in all_raw if t.get("status") in ("win", "loss", "closed")],
+            [t for t in all_raw if is_main(t) and t.get("status") in ("win", "loss", "closed")],
             mode,
         ),
+        "realized_weak": _realized(
+            [t for t in all_raw if not is_main(t) and t.get("status") in ("win", "loss", "closed")], mode),
     })

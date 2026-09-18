@@ -798,6 +798,28 @@ FIELDS: list[Field] = [
                "do something -- that reopens a closed pre-registration. NOTE: this flag is also what makes market context "
                "fail closed -- with it on and the benchmark unavailable, entries are blocked "
                "rather than silently passed."),
+    Field("STRATEGY_ALERTS_MODE", "STRATEGY_ALERTS_MODE", "Universe & Scanning",
+          "Strategy-sourced alerts (v93)",
+          type="select", default="off",
+          options=[("off", "Off"),
+                   ("shadow", "Shadow -- build and store strategy plans, no alert, no paper trade"),
+                   ("live", "Live -- alerts + paper trades")],
+          help="v93. Runs the per-strategy entry rules (entry_filters.entries_for, the same "
+               "functions the backtest and the registry badges are measured with) on the last "
+               "COMPLETED daily bar of every scanned ticker/horizon, after the confluence pass. "
+               "off: the scan is byte-identical to before v93. shadow: every strategy plan is "
+               "built, badge- and ledger-stamped and walked through the plan lifecycle so the "
+               "soak rule (!soak) can compare live to backtest -- but nothing posts and no paper "
+               "trade opens. live: alerts post and paper trades open; VALIDATED plans book to the "
+               "main ledger, WEAK plans to the separate weak ledger (never summed). Flip a "
+               "strategy to live only when !soak reports all three clauses PASS."),
+    Field("STRATEGY_ALERTS_LIVE_STRATEGIES", "STRATEGY_ALERTS_LIVE_STRATEGIES",
+          "Universe & Scanning", "Strategies allowed to go live",
+          type="text", default="",
+          help="v93. Comma-separated exact strategy names (e.g. 'MACD,Volume Profile'). While "
+               "STRATEGY_ALERTS_MODE=live, only these strategies post alerts and open paper "
+               "trades; every other strategy stays in shadow. Empty = all strategies. Lets the "
+               "soak rule be applied one strategy at a time."),
     Field("LEVEL_LIFECYCLE_STOPS_ENABLED", "LEVEL_LIFECYCLE_STOPS_ENABLED", "Universe & Scanning",
           "Anchor stops behind tested levels",
           type="checkbox", default="true",
@@ -999,6 +1021,13 @@ def _cast(f: Field, raw: str):
         if v not in ("off", "shadow", "on"):
             logging.getLogger("swingbot.config").warning(
                 "invalid PLAN_ENGINE_V2=%r, falling back to 'off'", raw)
+            return "off"
+        return v
+    if f.attr == "STRATEGY_ALERTS_MODE":
+        v = str(raw).lower()
+        if v not in ("off", "shadow", "live"):
+            logging.getLogger("swingbot.config").warning(
+                "invalid STRATEGY_ALERTS_MODE=%r, falling back to 'off'", raw)
             return "off"
         return v
     caster = _CASTERS.get(f.type)

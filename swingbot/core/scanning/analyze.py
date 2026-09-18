@@ -30,6 +30,7 @@ from swingbot.core.planning import account as account_module
 from swingbot.core.planning.account import load_account_config
 from swingbot.core.planning.plan_engine import build_confluence_plan, primary_strategy_for
 from swingbot.core.planning.quality import atr_percentile as _atr_percentile
+from swingbot.core.planning.params import stamp_entry_context
 from swingbot.core.market.indicators import atr
 from swingbot.core.market.session import now_et
 
@@ -359,6 +360,12 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
         # rendering (final-review Fix 4).
         plan.issued_at = datetime.now(timezone.utc).isoformat()
         item.plan_v2 = plan
+        stamp_entry_context(plan, df, {
+            "regime2_state": regime2_state,
+            "rs_pctile": rs_percentile,
+            "sector_pctile": getattr(item, "sector_rs_percentile", None),
+            "rs_combined": getattr(item, "rs_combined", None),
+        })
         try:
             plan.risk_features = risk_features.build(
                 regime2_state=regime2_state,

@@ -48,6 +48,10 @@ DASHBOARD = {
     # SR58. The date-scope toggle and the realised figures it scopes.
     "scope": dict,
     "realized": dict,
+    # v93 -- the weak ledger's own realised P&L, kept separate from
+    # `realized` above per the ledger-separation rule (main and weak must
+    # never be summed): the SPA renders it as its own, clearly-labelled block.
+    "realized_weak": dict,
     # The plan-lifecycle diagram's own "Expires" definition names this
     # number rather than hardcoding a copy of DEFAULT_EXPIRY_BARS that
     # could drift from it silently.
@@ -236,6 +240,44 @@ def test_open_trades_counts_open_positions(seed, logged_in):
         _trade("cccccccccccccccc", plan_id=None, status="win"),
     ])
     assert logged_in.get("/api/v1/dashboard").get_json()["open_trades"] == 2
+
+
+def test_open_side_excludes_weak_ledger_trades(seed, logged_in, monkeypatch):
+    """v93 -- `open_trades`/`avg_confidence`/`open_pnl_pct` must live on the
+    main ledger only, the same as `realized` beside them: a weak-ledger open
+    position counted here would blend a demoted-strategy trade into a
+    main-ledger P&L card the SPA renders as one number.
+
+    A main-ledger open trade (+10% unrealised, confidence 4) and a
+    weak-ledger open trade (-50% unrealised, confidence 1) are seeded
+    together. If the weak trade leaked into these three figures, the count
+    would read 2, `avg_confidence` would land at 2.5, and `open_pnl_pct`
+    would be dragged deep negative by the weak trade's -50% -- instead all
+    three must read as if only the main trade existed.
+    """
+    import swingbot.admin.dashboard as dash
+    from tests.admin.test_api_v1_trades import _trade
+
+    main_trade = _trade("aaaaaaaaaaaaaaaa", plan_id=None, ticker="AAPL", status="open")
+    main_trade["confidence_level"] = 4
+    main_trade["entry"] = 100.0
+
+    weak_trade = _trade("bbbbbbbbbbbbbbbb", plan_id=None, ticker="MSFT", status="open")
+    weak_trade["confidence_level"] = 1
+    weak_trade["entry"] = 100.0
+    weak_trade["ledger"] = "weak"
+
+    seed(trades=[main_trade, weak_trade])
+
+    prices = {"AAPL": 110.0, "MSFT": 50.0}   # +10% main, -50% weak
+    monkeypatch.setattr(dash, "prefetch_prices", lambda tickers: None)
+    monkeypatch.setattr(dash, "get_current_price", lambda ticker: prices[ticker])
+
+    body = logged_in.get("/api/v1/dashboard").get_json()
+
+    assert body["open_trades"] == 1
+    assert body["avg_confidence"] == 4.0
+    assert body["open_pnl_pct"] == 10.0
 
 
 # ---------------------------------------------------------------------------

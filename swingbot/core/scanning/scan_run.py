@@ -32,7 +32,7 @@ from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.scan_params import ScanParams
 
-from . import analyze, dedup, fetch, progress_store, runstate, telemetry
+from . import analyze, dedup, fetch, progress_store, runstate, strategy_pass, telemetry
 from .analyze import paper_trade_decision
 from .embeds import (
     build_embed, build_simple_alert, notify_closed_trades, notify_near_close,
@@ -43,6 +43,41 @@ from .regime import get_market_regime
 
 
 log = logging.getLogger("swing-bot.scan_engine")
+
+
+def _maybe_run_strategy_pass(*, tickers, fresh_data, spy_df, regimes, rs_cache, sector_of_ticker,
+                             etf_symbol_of_sector, sector_etf_frames, trade_log, alerts,
+                             require_confirmation) -> dict:
+    """Run v93's opt-in path; manual checks are strictly shadow-only."""
+    mode = config.STRATEGY_ALERTS_MODE
+    if mode == "off":
+        return {"strategy_plans": 0, "strategy_opened": 0}
+    if not require_confirmation:
+        mode = "shadow"
+    live_allow = {value.strip() for value in (config.STRATEGY_ALERTS_LIVE_STRATEGIES or "").split(",") if value.strip()}
+
+    def asof_of(ticker):
+        if rs_cache is None or spy_df is None or fresh_data.get(ticker) is None:
+            return {}
+        pct = rs_factors.rs_percentile(fresh_data[ticker], spy_df, universe_rels=rs_cache.get("rels"))
+        sector = sector_of_ticker.get(ticker)
+        sector_pct = None
+        if sector and sector_etf_frames and etf_symbol_of_sector.get(sector) in sector_etf_frames:
+            sector_pct = rs_factors.sector_rs_percentile(
+                sector, sector_etf_frames, spy_df,
+                sector_of_etf={symbol: name for name, symbol in etf_symbol_of_sector.items()})
+        return {"rs_pctile": pct, "sector_pctile": sector_pct,
+                "rs_combined": rs_factors.rs_score(pct, sector_pct) if sector_pct is not None else pct}
+
+    def rs_combined_of(ticker):
+        return asof_of(ticker).get("rs_combined")
+
+    result = strategy_pass.run_strategy_pass(
+        tickers, fresh_data, now=datetime.now(timezone.utc), horizons=list(HORIZONS), spy_df=spy_df,
+        regimes=regimes, rs_combined_of=rs_combined_of, mode=mode, live_allow=live_allow,
+        trade_log=trade_log, plan_store=PlanStore(), asof_of=asof_of)
+    alerts.extend(result.alerts)
+    return {"strategy_plans": len(result.plans), "strategy_opened": result.opened}
 
 # Ensures only one scan (automatic or !check) runs its heavy work at a time --
 # without this, an automatic scan and a manual !check could both write to
@@ -764,6 +799,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 cohort_label=plan_v2.cohort_label if plan_v2 is not None else None,
                 cohort_stats=plan_v2.cohort_stats if plan_v2 is not None else None,
                 risk_features=plan_v2.risk_features if plan_v2 is not None else None,
+                entry_context=plan_v2.entry_context if plan_v2 is not None else None,
             )
             log.info("Logged new paper trade %s for %s", trade_id, result.ticker)
             if plan_v2 is not None:
@@ -895,6 +931,12 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     log.info("Scan pass complete: %d alert(s) built, %d skipped (already open), %d reversed",
               len(alerts), skipped_already_open, reversed_count)
 
+    strategy_counts = _maybe_run_strategy_pass(
+        tickers=tickers, fresh_data=fresh_data, spy_df=spy_df, regimes=regimes,
+        rs_cache=rs_cache, sector_of_ticker=sector_of_ticker,
+        etf_symbol_of_sector=etf_symbol_of_sector, sector_etf_frames=sector_etf_frames,
+        trade_log=trade_log, alerts=alerts, require_confirmation=require_confirmation)
+
     # Filled in only now that the alert-building loop (which is what actually
     # computes it) has finished -- lets callers explain gaps like "2
     # qualifying -> 1 alert posted" (a dedup merge, an already-open skip, or
@@ -905,6 +947,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # so they're the same real setup surfaced by more than one
     # strategy/horizon, not two independent trade ideas.
     if progress is not None and progress.funnel is not None:
+        progress.funnel.update(strategy_counts)
         progress.funnel["deduped"] = len(deduped)
         progress.funnel["skipped_already_open"] = skipped_already_open
         progress.funnel["reversed"] = reversed_count

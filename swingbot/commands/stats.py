@@ -20,6 +20,34 @@ _plan_store = PlanStore()
 LIVE_STATUSES = ("PENDING", "ACTIVE")
 
 
+def soak_lines(strategy: str, verdict: dict, badge) -> list[str]:
+    """Human-readable, clause-by-clause v93 live-promotion verdict."""
+    from swingbot.core.edge.strategy_soak import MAX_ENTRY_DEV, MIN_CLOSED
+    clauses = verdict["clauses"]
+    mark = lambda value: "PASS" if value else "FAIL"
+    exp = f"{verdict['exp_r']:+.3f}R" if verdict["exp_r"] is not None else "n/a"
+    badge_exp = f"{verdict['badge_exp_r']:+.3f}R" if verdict["badge_exp_r"] is not None else "n/a"
+    dev = f"{verdict['median_entry_dev']:.3f}" if verdict["median_entry_dev"] is not None else "n/a"
+    lines = [f"**Soak — {strategy}** ({getattr(badge, 'status', 'unknown')})",
+             f"Sample: {verdict['n_closed']}/{MIN_CLOSED} closed — {mark(clauses['n'])}",
+             f"Non-inferior expectancy: {exp} vs {badge_exp} — {mark(clauses['non_inferior'])}",
+             f"Entry parity: median deviation {dev} of stop distance (≤ {MAX_ENTRY_DEV:.2f}) — {mark(clauses['entry_parity'])}"]
+    lines.append("Ready to consider live." if verdict["pass"] else "Not ready for live; keep in shadow.")
+    return lines
+
+
+@bot.command(name="soak")
+async def soak_cmd(ctx, *, strategy: str):
+    from swingbot.core.backtesting.registry import get_badge
+    from swingbot.core.edge.strategy_soak import soak_verdict
+    plans = [plan for plan in PlanStore().all() if plan.source == "strategy" and plan.strategy == strategy]
+    if not plans:
+        await ctx.send(f"No strategy-sourced plans for `{strategy}` yet (is STRATEGY_ALERTS_MODE off?).")
+        return
+    badge = get_badge("strategy", strategy)
+    await ctx.send("\n".join(soak_lines(strategy, soak_verdict(plans, badge), badge)))
+
+
 def top_plans(plans: list, n: int, today=None) -> list:
     """The n highest-follow_score PENDING/ACTIVE plans, ranked by
     analytics.rank.rank_plans (the one shared ordering -- see this
@@ -143,6 +171,16 @@ def stats_embed(snap: dict) -> discord.Embed:
     if strat_rows:
         embed.add_field(name="By strategy (top 5 by N)", value=_mini_table(strat_rows), inline=False)
 
+    weak = snap.get("weak")
+    if weak:
+        embed.add_field(
+            name="WEAK ledger (separate — never summed into the figures above)",
+            value=(f"**N** {weak['n']} ({weak['wins']}W/{weak['losses']}L)  ·  "
+                   f"**Win rate** {ui.fmt_pct(weak['win_rate'])}  ·  "
+                   f"**Expectancy** {ui.fmt_r(weak['expectancy_r'])}  ·  "
+                   f"**Total P&L** {_dash(weak['total_pnl'], '{:+.2f}')}"),
+            inline=False)
+
     ui.apply_chrome(embed, accent=ui.accent_for_outcome("scratch"))
     return embed
 
@@ -200,7 +238,7 @@ async def stats_cmd(ctx, period: str = "all"):
     from swingbot.core.scanning import engine as scan_engine
     from swingbot.core.analytics import metrics as m
 
-    all_trades = scan_engine.trade_log.get_trades(status="all", limit=None)
+    all_trades = scan_engine.trade_log.get_trades(status="all", limit=None, ledger="main")
     closed = [t for t in all_trades if t.get("status") in ("win", "loss")
              and t.get("closed_at", "")[:10] >= since.isoformat()]
     if not closed:
@@ -250,7 +288,7 @@ async def lessons_cmd(ctx, arg: str = "5"):
         from swingbot.core.analytics.insights import weekly_digest
         import datetime as _dt
 
-        all_trades = scan_engine.trade_log.get_trades(status="all", limit=None)
+        all_trades = scan_engine.trade_log.get_trades(status="all", limit=None, ledger="main")
         closed = [t for t in all_trades if t.get("status") in ("win", "loss", "closed")]
         messages = weekly_digest(store.entries(), closed, today=_dt.date.today())
         for msg in messages:
@@ -292,7 +330,7 @@ async def calibration_cmd(ctx):
     from swingbot.core.analytics.calibration import level_calibration, score_deciles
     from swingbot.core.analytics.insights import edge_decay_report
 
-    all_trades = scan_engine.trade_log.get_trades(status="all", limit=None)
+    all_trades = scan_engine.trade_log.get_trades(status="all", limit=None, ledger="main")
     closed = [t for t in all_trades if t.get("status") in ("win", "loss")]
     if not closed:
         await ctx.send("No closed trades yet — nothing to calibrate against.")

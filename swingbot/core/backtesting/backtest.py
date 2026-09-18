@@ -66,6 +66,8 @@ from swingbot.core.planning.exit_sim import simulate_exit
 import pandas as pd
 
 from swingbot.core.market.indicators import atr, elliott_wave3_entries
+from swingbot.core.backtesting.asof_context import asof_row
+from swingbot.core.edge.context import entry_context
 # Re-exported for callers that import these from `backtest` rather than from
 # their defining modules (tests/test_entry_filters.py does exactly that).
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS, SR_VOLUME_MULTIPLE  # noqa: F401
@@ -90,6 +92,7 @@ class BacktestTrade:
     r_multiple: float | None
     holding_days: int | None
     runner_outcome: str | None = None
+    context: dict | None = None
 
 
 @dataclass
@@ -225,6 +228,7 @@ def run_backtest(
     scale_out: bool = False,
     tp2_mode: str = "none",
     frictions: bool = True,
+    asof=None,
 ) -> BacktestSummary:
     """
     Run a backtest for one (ticker, strategy, horizon) combination.
@@ -246,6 +250,9 @@ def run_backtest(
     round-trip COMMISSION_PER_TRADE expressed against COMMISSION_RISK_BASIS.
     Set False to reproduce the old frictionless arithmetic (e.g. tests
     asserting exact entry/exit/r_multiple logic rather than economics).
+
+    ``asof`` is this ticker's per-date cross-sectional frame; without it the
+    four cross-sectional context features are recorded as ``None``.
     """
     min_bars = MIN_BARS[horizon_key]
     if len(df) < min_bars + 10:
@@ -357,6 +364,9 @@ def run_backtest(
                 exit_price=round(exit_price, 4), return_pct=round(return_pct, 3),
                 r_multiple=round(r_multiple, 3), holding_days=holding_days,
                 runner_outcome=res.runner_outcome,
+                context=entry_context(df.iloc[:i + 1], direction=direction, horizon_key=horizon_key,
+                                      stop=stop_loss, target=take_profit,
+                                      asof=asof_row(asof, df.index[i])),
             ))
             continue
 
@@ -432,6 +442,9 @@ def run_backtest(
             take_profit=round(take_profit, 4), outcome=outcome,
             exit_price=round(exit_fill, 4), return_pct=round(return_pct, 3),
             r_multiple=round(r_multiple, 3), holding_days=holding_days,
+            context=entry_context(df.iloc[:i + 1], direction=direction, horizon_key=horizon_key,
+                                  stop=stop_loss, target=take_profit,
+                                  asof=asof_row(asof, df.index[i])),
         ))
 
     evaluated_trades = [t for t in trades if t.outcome in ("win", "loss")]
@@ -501,6 +514,7 @@ def run_backtest_daterange(
     exit_model: str = "v1",
     scale_out: bool = False,
     tp2_mode: str = "none",
+    asof=None,
 ) -> BacktestSummary:
     """
     Same as run_backtest() but only evaluates signals whose entry_date falls
@@ -514,8 +528,8 @@ def run_backtest_daterange(
     defaults match run_backtest's, so every existing caller is unaffected.
     """
     summary = run_backtest(ticker, df, strategy, horizon_key, frictions=frictions,
-                           exit_model=exit_model, scale_out=scale_out,
-                           tp2_mode=tp2_mode)
+                             exit_model=exit_model, scale_out=scale_out,
+                             tp2_mode=tp2_mode, asof=asof)
     if date_from or date_to:
         from_dt = date_from or "0000-01-01"
         to_dt   = date_to   or "9999-12-31"

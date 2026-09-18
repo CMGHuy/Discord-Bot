@@ -151,6 +151,15 @@ def stamp_cohort(plan: TradePlanV2, regime2_state: str | None) -> None:
     }
 
 
+def stamp_entry_context(plan: TradePlanV2, df, asof: dict | None) -> None:
+    from swingbot.core.edge.context import entry_context
+    try:
+        plan.entry_context = entry_context(df, direction=plan.direction, horizon_key=plan.horizon_key,
+                                            stop=plan.stop_loss, target=plan.tp1, asof=asof)
+    except Exception:
+        plan.entry_context = {}
+
+
 def badge_stats_line(badge: Badge) -> str:
     window = badge.window.replace("-01-01..", "-").replace("-12-31", "") or "n/a"
     return (f"OOS {window}: N={badge.n}, WR {badge.win_rate:.1f}%, "
