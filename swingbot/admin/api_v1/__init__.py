@@ -35,6 +35,33 @@ from flask import Blueprint, jsonify, request
 
 api_v1 = Blueprint("api_v1", __name__, url_prefix="/api/v1")
 
+
+@api_v1.after_request
+def _no_store(response):
+    """Every v1 response is generated fresh per request -- a trade's
+    `current_price`/proximity bar, a plan's `working_stop`, a chart PNG
+    regenerated under the same filename. None of it is safe for an
+    intermediate cache (browser heuristic caching, a corporate proxy, or a
+    CDN sitting in front) to reuse for a second request, the same reasoning
+    `admin/spa.py` already applies to `index.html`. Without an explicit
+    header a GET with no Cache-Control/validators can still be cached
+    heuristically, and the symptom -- data that only updates on a hard
+    reload, because that is the one request a cache cannot intercept -- is
+    indistinguishable from the live-push system (`events/broker.py`) simply
+    not having fired yet, which made this take far longer to find than it
+    should have.
+
+    `setdefault`, not an overwrite: `/api/v1/events` (`events/stream.py`)
+    already sets its own `Cache-Control: no-cache` -- weaker than `no-store`
+    in principle, but the SSE connection is never a candidate for reuse by
+    definition (streamed, not cached wholesale) and `tests/admin/
+    test_event_stream.py` pins that exact value, so this only fills the gap
+    for every endpoint that sets nothing at all.
+    """
+    response.headers.setdefault("Cache-Control", "no-store")
+    return response
+
+
 DEFAULT_PER_PAGE = 25
 MAX_PER_PAGE = 200
 
