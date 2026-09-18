@@ -51,7 +51,7 @@ def test_all_nine_dimensions_present():
     """v32 Task 11: "tier" (A/B/C) retired -- "confidence" already covered
     the same role, so DIMENSIONS drops from 10 to 9."""
     assert set(DIMENSIONS) == {"strategy", "horizon", "badge", "confidence",
-                               "direction", "dow", "month", "ticker", "source"}
+                               "direction", "dow", "month", "ticker", "source", "ledger"}
 
 
 def test_dimension_extractors():

@@ -18,7 +18,7 @@ def test_build_snapshot_has_every_documented_key():
     closed = [_t(1), _t(2), _t(3, "loss"), _t(4), _t(5)]
     snap = build_snapshot(closed, starting_balance=10_000.0, registry_entries=[])
     assert set(snap) == {"built_at", "overall", "equity_curve", "drawdown", "rolling_wr", "by",
-                         "calibration", "r_multiples"}
+                         "calibration", "r_multiples", "weak"}
     assert set(snap["overall"]) == {"n", "wins", "losses", "win_rate", "expectancy_r",
                                     "profit_factor", "sharpe", "sortino", "max_drawdown_pct",
                                     "total_pnl", "streaks"}

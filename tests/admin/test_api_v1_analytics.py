@@ -86,6 +86,7 @@ def test_performance_top_level_shape(seed, logged_in):
         "range": dict, "derived": dict, "distributions": dict,
         "rolling_returns": list, "holding_period_split": list, "risk_reward_split": list,
         "calendar": list, "cumulative_by_strategy": dict, "benchmark": dict,
+        "weak": dict,
     })
 
 

@@ -177,6 +177,7 @@ def test_distributions_and_series_are_present_and_scoped(seed, logged_in):
         "range": dict, "distributions": dict, "rolling_returns": list,
         "holding_period_split": list, "risk_reward_split": list, "calendar": list,
         "cumulative_by_strategy": dict, "benchmark": dict,
+        "weak": dict,
     })
 
 
