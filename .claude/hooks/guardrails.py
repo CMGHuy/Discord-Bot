@@ -204,11 +204,40 @@ def _rule_read_big_doc(ti: dict):
     return _warn(advice + " Continuing anyway.")
 
 
+# CLAUDE.md marks this a hard rule with no exceptions, and it was the only such
+# rule with no mechanical enforcement at all before v96.
+_BRANCH_DESTRUCTIVE_RE = re.compile(
+    r"git\s+branch\s+(?:[^|;&]*\s)?(?:-[a-zA-Z]*[dD][a-zA-Z]*|--delete)(?=\s|$)"
+    r"|git\s+push\s+[^|;&]*(?:--delete(?=\s|$)|\s:\S)"
+    r"|git\s+push\s+[^|;&]*(?:--force(?:-with-lease)?|-f)(?=\s|$)"
+    r"|git\s+update-ref\s+-d(?=\s|$)"
+)
+_PROTECTED_REF_RE = re.compile(r"backup|(?:^|[\s/:])stable-", re.IGNORECASE)
+
+
+def _rule_protected_branch_delete(ti: dict):
+    cmd = ti.get("command")
+    if not isinstance(cmd, str):
+        return None
+    if not _BRANCH_DESTRUCTIVE_RE.search(cmd):
+        return None
+    if not _PROTECTED_REF_RE.search(cmd):
+        return None
+    return _deny(
+        "Hard rule, no exceptions: a branch whose name contains `backup`, and any "
+        "`stable-*` branch, is off limits to every destructive git command -- "
+        "including force push. Run `git rev-list --count main..<branch>` first; "
+        "non-zero means stop. Then ask the human partner. Do not decide this one. "
+        "Evidence and the full checklist: docs/claude/git-safety.md."
+    )
+
+
 # Rules run in list order; the first non-None decision wins. Warn rules are
 # appended after deny rules on the same tool, so deny takes precedence.
 _RULES = {
     "Glob": [_rule_unscoped_glob],
-    "Bash": [_rule_recursive_grep_from_root, _rule_bare_pytest, _rule_cat_big_doc],
+    "Bash": [_rule_protected_branch_delete, _rule_recursive_grep_from_root,
+             _rule_bare_pytest, _rule_cat_big_doc],
     "Read": [_rule_huge_implemented_plan, _rule_read_big_doc],
     "Edit": [_rule_worktree_write],
     "Write": [_rule_worktree_write],

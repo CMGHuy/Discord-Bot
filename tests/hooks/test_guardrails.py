@@ -309,3 +309,41 @@ def test_fixture_payloads_are_all_silently_allowed():
         if tool.startswith("_"):
             continue
         assert evaluate(payload) is None, tool
+
+
+def _bash(cmd):
+    return evaluate({"tool_name": "Bash", "tool_input": {"command": cmd}})
+
+
+def test_deleting_a_backup_branch_is_denied():
+    out = _bash("git branch -D 2026-08-16-v36-backup")
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "git-safety.md" in out["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_deleting_a_stable_branch_is_denied():
+    assert _bash("git branch -d stable-1.9") is not None
+
+
+def test_remote_deleting_a_backup_branch_is_denied():
+    assert _bash("git push origin --delete backup-pre-v67") is not None
+
+
+def test_colon_refspec_delete_of_a_backup_branch_is_denied():
+    assert _bash("git push origin :backup-pre-v67") is not None
+
+
+def test_force_pushing_a_backup_branch_is_denied():
+    assert _bash("git push --force origin backup-pre-v67") is not None
+
+
+def test_deleting_an_ordinary_branch_is_allowed():
+    assert _bash("git branch -D 2026-09-10-v81-execution-feed") is None
+
+
+def test_merely_listing_backup_branches_is_allowed():
+    assert _bash("git branch --list '*backup*'") is None
+
+
+def test_branch_rule_fails_open_on_a_non_string_command():
+    assert evaluate({"tool_name": "Bash", "tool_input": {"command": None}}) is None
