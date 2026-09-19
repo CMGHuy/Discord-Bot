@@ -34,6 +34,7 @@ Copied from the spec; every task's requirements implicitly include these.
 - **Group B (parallel), Phase 2:** S6, S7, S8, S9 — one new directory each, no shared file, no contract dependency.
 - **Group C (parallel), Phase 3:** S10, S11, S12 — one new directory each.
 - **Group D (parallel), Phase 4:** S13, S14, S15, S16 — one new directory each.
+- **Sequential: S20 after Group D** — needs every Tier 1/3 skill's trigger table to exist first (added by the Task S2 spike once it confirmed `claude plugin eval` can target a repo-local skill directory).
 - **Sequential: S17 and S18 last**, after the final skill lands — both enumerate what shipped.
 
 ---
@@ -1081,6 +1082,42 @@ Ordinary commits are the false-positive surface. Confirm they are excluded.
 ```bash
 git add .claude/skills/worktree-lifecycle/SKILL.md tests/hooks/test_skill_shape.py
 git commit -m "feat(skills): worktree-lifecycle -- naming, the concurrent-session pause, and teardown"
+```
+
+---
+
+### Task S20: Wire trigger tables into `claude plugin eval` suites
+
+**Files:**
+- Create: `.claude/skills/<skill>/evals/<case>/prompt.md` +
+  `.claude/skills/<skill>/evals/<case>/graders/*.md` — one case per
+  trigger-table row, for every Tier 1 and Tier 3 skill that exists at this
+  point in the plan (whichever of S6–S9, S13–S16 shipped; S10–S12 are Tier 2
+  and carry `disable-model-invocation: true`, so they're out of scope).
+
+Added after the Task S2 spike confirmed `claude plugin eval .claude/skills/<skill-name>`
+resolves a repo-local skill directory as its target with no
+`.claude-plugin/plugin.json` manifest needed (spec §7). Each skill's trigger
+table becomes that skill's eval corpus.
+
+- [ ] **Step 1: Author eval cases from each skill's trigger table**
+
+For each Tier 1/Tier 3 `SKILL.md`, turn its `## Trigger table` rows into eval
+cases — one `evals/<case>/prompt.md` per should-fire and should-not-fire
+prompt, each with an llm `graders/criteria.md` (or a `tool_used: Skill`
+grader, per `claude plugin eval --help`'s "plugin-fired indicator") asserting
+whether the skill fired.
+
+- [ ] **Step 2: Run each skill's suite**
+
+`claude plugin eval .claude/skills/<skill> --no-publish` per skill. Confirm
+should-fire cases register as fired and should-not-fire cases do not.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add .claude/skills/*/evals
+git commit -m "test(skills): wire trigger tables into claude plugin eval suites"
 ```
 
 ---
