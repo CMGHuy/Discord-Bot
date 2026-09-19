@@ -34,7 +34,7 @@ Copied from the spec; every task's requirements implicitly include these.
 - **Group B (parallel), Phase 2:** S6, S7, S8, S9 — one new directory each, no shared file, no contract dependency.
 - **Group C (parallel), Phase 3:** S10, S11, S12 — one new directory each.
 - **Group D (parallel), Phase 4:** S13, S14, S15, S16 — one new directory each.
-- **Sequential: S20 after Group D** — needs every Tier 1/3 skill's trigger table to exist first (added by the Task S2 spike once it confirmed `claude plugin eval` can target a repo-local skill directory).
+- **Sequential: S20 after Group B and Group D** — needs every Tier 1/3 skill's trigger table to exist first (Tier 1 is S6–S9 in Group B, Tier 3 is S13–S16 in Group D), added by the Task S2 spike once it confirmed `claude plugin eval` can target a repo-local skill directory.
 - **Sequential: S17 and S18 last**, after the final skill lands — both enumerate what shipped.
 
 ---
@@ -1110,7 +1110,7 @@ whether the skill fired.
 
 - [ ] **Step 2: Run each skill's suite**
 
-`claude plugin eval .claude/skills/<skill> --no-publish` per skill. Confirm
+`claude plugin eval .claude/skills/<skill> --no-publish --trust-plugin` per skill. Confirm
 should-fire cases register as fired and should-not-fire cases do not.
 
 - [ ] **Step 3: Commit**
