@@ -23,6 +23,9 @@ this verbatim, from the repo root:
 } | sort -V | tail -1
 ```
 
+The printed value is the highest number already claimed, not the free one
+-- your document takes that number plus one.
+
 `find` recurses into `implemented/`/`no-lift/` on its own -- closed docs
 live one level down, and an `ls` that misses them returns a stale max. The
 `git log` half exists because an informal `vN` in a commit subject with no
