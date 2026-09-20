@@ -123,13 +123,13 @@ Verify with `grep -n "^### Task" <plan>` first.
 **Repo tooling (`.claude/`):** `/task-brief <id>` extracts one plan task and
 preflights this repo's documented traps. `/gate` is the pre-commit
 verification gate. `.claude/hooks/guardrails.py` is a `PreToolUse` hook that
-**denies** the patterns this file forbids in prose, and warns on bare
-`pytest`/`cat` of the big docs — unit-tested in
+**denies** the patterns this file forbids in prose — now including
+protected-branch deletion, closed-pre-registration knobs and malformed
+spec/plan writes — and warns on bare `pytest`/`cat` of the big docs; Tier 1
+skills fire unprompted alongside it, unit-tested in
 `tests/hooks/test_guardrails.py`, fails open by construction (this file wins
-on disagreement). Subagents (`backtest-runner`, `symbol-verifier`,
-`test-runner`) and the one-subagent-at-a-time default:
-`docs/claude/skills-tools.md`. `.mcp.json` provides context7 for
-yfinance/pandas-ta/discord.py docs.
+on disagreement). Subagents, the one-subagent-at-a-time default, and
+`.mcp.json`'s context7 provider: `docs/claude/skills-tools.md`.
 
 ## Commands
 
