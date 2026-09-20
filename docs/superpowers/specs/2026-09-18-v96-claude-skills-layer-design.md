@@ -276,13 +276,17 @@ four prompts that must fire it and about four near-misses that must not. The
 near-misses are the valuable half — they are what a reviewer checks the
 description against.
 
-Whether those tables can be executed automatically depends on whether
-`claude plugin eval` can target a repo-local `.claude/skills/` directory rather
-than a packaged plugin. **That is unverified and this spec does not assume it.**
-Phase 0 carries a timeboxed spike to find out. If it works, the tables become
-an eval suite; if it does not, they remain a documented manual check performed
-at review. The tables get written either way — the spike decides only whether a
-machine reads them.
+**Works.** The Phase 0 spike (Task S2) confirmed `claude plugin eval` accepts a
+path straight to a repo-local skill directory as its target — no
+`.claude-plugin/plugin.json` manifest required. `claude plugin eval
+.claude/skills/<skill-name>` resolves that directory as the plugin under test,
+loads an `evals/` suite beneath it, and runs it (a throwaway two-case suite
+against `.claude/skills/gate` scored and reported cleanly: `claude plugin eval
+.claude/skills/gate --runs 1 --no-publish --trust-plugin`). Each skill's
+trigger table becomes that skill's eval corpus: one `evals/<case>/prompt.md` +
+`graders/*.md` pair per table row, fires and near-misses alike. Wiring the
+existing trigger tables into real `evals/` suites is follow-up work for
+Phase 4, not this spike.
 
 ## 8. Source of truth, sync, and the 200-line ceiling
 

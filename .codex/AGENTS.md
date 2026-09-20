@@ -115,6 +115,18 @@ Claude Code sessions also enforce the worst of these habits mechanically via
 worktree writes from the main tree. That hook does not run for Codex; follow
 the prose rules above directly.
 
+That hook gained three more deny rules this session: one blocking deletion of
+a protected branch, one blocking a backtest/grid invocation that reopens a
+closed pre-registration knob, and one blocking a malformed spec/plan write.
+Each backs a prose rule already listed above — read `git-safety.md`,
+`backtest-methodology.md`, or `document-conventions.md` respectively rather
+than guessing why an equivalent Claude-side action was denied. Claude
+sessions also now carry eight unprompted model-invocable skills -- four
+"Tier 1" integrity gates plus four "Tier 3" seam briefings -- that
+self-trigger around these same situations; Codex has no skill runtime, so
+those same `docs/claude/` files remain the only source of the underlying
+rules here.
+
 ## Testing and long-running work
 
 Use the test wrapper rather than the full raw suite:

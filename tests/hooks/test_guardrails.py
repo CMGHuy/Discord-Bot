@@ -2,6 +2,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import re
 
 _REPO_ROOT = pathlib.Path(__file__).parent.parent.parent
 _SPEC = importlib.util.spec_from_file_location(
@@ -309,3 +310,142 @@ def test_fixture_payloads_are_all_silently_allowed():
         if tool.startswith("_"):
             continue
         assert evaluate(payload) is None, tool
+
+
+def _bash(cmd):
+    return evaluate({"tool_name": "Bash", "tool_input": {"command": cmd}})
+
+
+def test_deleting_a_backup_branch_is_denied():
+    out = _bash("git branch -D 2026-08-16-v36-backup")
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "git-safety.md" in out["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_deleting_a_stable_branch_is_denied():
+    assert _bash("git branch -d stable-1.9") is not None
+
+
+def test_remote_deleting_a_backup_branch_is_denied():
+    assert _bash("git push origin --delete backup-pre-v67") is not None
+
+
+def test_colon_refspec_delete_of_a_backup_branch_is_denied():
+    assert _bash("git push origin :backup-pre-v67") is not None
+
+
+def test_force_pushing_a_backup_branch_is_denied():
+    assert _bash("git push --force origin backup-pre-v67") is not None
+
+
+def test_deleting_an_ordinary_branch_is_allowed():
+    assert _bash("git branch -D 2026-09-10-v81-execution-feed") is None
+
+
+def test_merely_listing_backup_branches_is_allowed():
+    assert _bash("git branch --list '*backup*'") is None
+
+
+def test_branch_rule_fails_open_on_a_non_string_command():
+    assert evaluate({"tool_name": "Bash", "tool_input": {"command": None}}) is None
+
+
+def test_a_closed_knob_in_a_grid_is_denied():
+    out = _bash('python scripts/backtest/tune_strategy.py --strategy "RSI" '
+                '--grid DEAD_CAT_BOUNCE_VETO=true,false')
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "backtest-methodology.md" in out["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_a_closed_knob_as_an_env_assignment_is_denied():
+    assert _bash("EARNINGS_BLACKOUT_SESSIONS=3 python scripts/backtest/run_backtest_range.py --train") is not None
+
+
+def test_an_open_strategy_name_alone_is_allowed():
+    assert _bash('python scripts/backtest/tune_strategy.py --strategy "Break & Retest" '
+                 '--grid min_pullback_atr=0.5,1.0') is None
+
+
+def test_a_closed_knob_outside_a_backtest_command_is_allowed():
+    assert _bash("grep -n DEAD_CAT_BOUNCE_VETO swingbot/config.py") is None
+
+
+def test_closed_preregistration_rule_fails_open_on_a_missing_command():
+    assert evaluate({"tool_name": "Bash", "tool_input": {}}) is None
+
+
+def test_every_closed_knob_constant_appears_in_the_methodology_doc():
+    doc = (_REPO_ROOT / "docs" / "claude" / "backtest-methodology.md").read_text(encoding="utf-8")
+    missing = [k for k in guardrails.CLOSED_PREREGISTRATION_KNOBS if k not in doc]
+    assert not missing, f"constant lists knobs the doc does not: {missing}"
+    assert len(guardrails.CLOSED_PREREGISTRATION_KNOBS) >= 8
+
+
+def test_every_all_caps_knob_in_the_closed_table_is_in_the_constant():
+    """The drift direction that actually bites: a new closed row lands in the
+    doc and the hook never learns about it. Lower-case knobs
+    (min_level_touches, confirm_bars) are out of reach of this half -- the
+    forward assertion above is their only cover."""
+    doc = (_REPO_ROOT / "docs" / "claude" / "backtest-methodology.md").read_text(encoding="utf-8")
+    table = doc.split("### Closed pre-registrations", 1)[1]
+    found = set(re.findall(r"`([A-Z][A-Z0-9_]{4,})`", table))
+    missing = found - set(guardrails.CLOSED_PREREGISTRATION_KNOBS)
+    assert not missing, (
+        f"backtest-methodology.md closes {sorted(missing)} but guardrails.py does "
+        "not list them. Add them to CLOSED_PREREGISTRATION_KNOBS."
+    )
+
+
+def _write(path, content=""):
+    return evaluate({"tool_name": "Write",
+                     "tool_input": {"file_path": path, "content": content}})
+
+
+_GOOD_PLAN = "docs/superpowers/plans/2026-09-18-v96-claude-skills-layer.md"
+
+
+def test_a_misnumbered_plan_filename_is_denied():
+    out = _write("docs/superpowers/plans/skills-layer.md", "# Phase 0 - x\n")
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "document-conventions.md" in out["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_a_two_hash_phase_heading_is_denied():
+    assert _write(_GOOD_PLAN, "## Phase 0 - conventions\n") is not None
+
+
+def test_a_conforming_plan_write_is_allowed():
+    assert _write(_GOOD_PLAN, "# Phase 0 - conventions\n\n### Task S1: x\n") is None
+
+
+def test_a_two_hash_subsection_heading_beside_a_real_one_hash_phase_is_allowed():
+    """A legitimate `## Phase A exit criteria` subsection must not deny a
+    write just because a one-hash `# Phase` heading exists somewhere else in
+    the document -- e.g. docs/superpowers/plans/2026-09-17-v95-responsive-
+    content-priority_1-foundations.md, which the reviewer found denied by
+    the naive two-hash check even though it is fully conforming."""
+    content = (
+        "# Phase A -- Foundations\n\n"
+        "### Task A1: x\n\n"
+        "## Phase A exit criteria\n\n"
+        "- all tasks above are green\n"
+    )
+    assert _write(_GOOD_PLAN, content) is None
+
+
+def test_a_split_part_filename_is_allowed():
+    assert _write("docs/superpowers/plans/2026-08-29-v67-json-to-postgres_1a-foundation-core.md",
+                  "# Phase 1 - x\n") is None
+
+
+def test_a_closed_out_plan_under_implemented_is_allowed():
+    assert _write("docs/superpowers/plans/implemented/2026-09-16-v92-exit-quality-harvest.md",
+                  "# Phase 1 - x\n") is None
+
+
+def test_writes_outside_the_doc_dirs_are_untouched():
+    assert _write("swingbot/config.py", "## Phase 0\n") is None
+
+
+def test_plan_doc_shape_fails_open_on_a_non_string_path():
+    assert _write(None, "## Phase 0\n") is None
