@@ -86,6 +86,31 @@ def _all_trades(tl: TradeLog) -> list[dict]:
     return tl.get_trades(status=None, limit=None, ledger=None) or []
 
 
+def _index_benchmark(spy_cum, start: str | None) -> list[dict]:
+    """SPY as a percent series indexed to the first point at/after `start`
+    (spec v94 D6/H5: one axis -- SPY is only ever drawn in % mode).
+
+    `spy_cum` is a `{date: cumulative_level}` mapping -- the only shape this
+    key has ever had. It came from `TradeLog.get_detailed_stats`, dropped as
+    dead code in 4ae117dc; `get_extended_stats` (what `/performance` reads
+    today) does not compute `spy_cum` at all, so in production this is
+    `{}` until a real benchmark fetch is wired back in. No producer -- past
+    or present -- has ever emitted a list-of-rows shape for this key, so
+    this does not invent handling for one; a non-dict input is treated as
+    absent.
+    """
+    if not isinstance(spy_cum, dict):
+        return []
+    rows = sorted((str(d)[:10], float(v)) for d, v in spy_cum.items() if v is not None)
+    rows = [(d, v) for d, v in rows if not start or d >= start]
+    if not rows:
+        return []
+    base = rows[0][1]
+    if not base:
+        return []
+    return [{"date": d, "pct": round((v / base - 1) * 100, 4)} for d, v in rows]
+
+
 def _soak_for(strategy: str):
     from swingbot.core.backtesting.registry import get_badge
     from swingbot.core.edge.strategy_soak import soak_verdict
@@ -236,41 +261,46 @@ def analytics_equity_curve():
     R-multiple computation (see its docstring); this route does not
     re-derive it. A trade `r_multiple()` cannot compute (missing prices,
     zero risk, an unrecognised direction) is skipped entirely: not counted
-    in `n`, and not folded into the running total as a 0.0 contribution,
-    which would misrepresent an unmeasured trade as a breakeven one.
+    in `points_n`, and not folded into the running total as a 0.0
+    contribution, which would misrepresent an unmeasured trade as a
+    breakeven one. `cum_pnl`/`cum_pct` walk every scoped trade regardless
+    (a currency P&L needs no risk denominator to be measurable), so they
+    can carry one more point than the R series when a trade skips the R
+    computation but still closed with a realised P&L.
 
-    Accepts the same `strategy`/`from`/`to` vocabulary as `/performance`,
-    scoped on `closed_at` via the same `in_date_range` -- do not add a
-    second loader. `strategy` filters on `primary_strategy_label(t)`, the
-    real per-trade label (see its docstring), not the raw `strategy`
-    field: every trade the live confluence engine produces carries the
-    same hardcoded raw string, so filtering on it directly would silently
-    match everything or nothing rather than actually narrowing anything.
+    Scoped like `/performance` (spec v94 D5) -- `?from=`/`to=`/`ledger=`/
+    `strategy=`/`horizon=`/`direction=` all reach this route via the same
+    `BookScope` (`_scope()`/`select()`/`closed_only()`), not a second,
+    hand-rolled filter. `n` in the echoed scope is the scoped CLOSED-trade
+    count (see `scope.echo`); the count of points this route could actually
+    plot (computable-R trades) is `points_n` -- the two can differ (see
+    above), so they carry different keys rather than one number quietly
+    meaning two things.
+
+    `benchmark.spy_indexed` re-bases `spy_cum` (see `_index_benchmark`) to
+    the scope's own start so the SPY overlay and the account curve always
+    share the same day-zero, never SPY's own inception.
     """
-    unknown = set(request.args) - {"strategy", "from", "to"}
-    if unknown:
-        raise ApiError("invalid",
-                        f"unknown parameter {sorted(unknown)[0]!r}; "
-                        "allowed: ['strategy', 'from', 'to']", 400)
-
     from swingbot.core.analytics import metrics as m
-    from swingbot.core.tracking.performance import primary_strategy_label
+    from swingbot.core.analytics.scope import closed_only, echo, select
+    from swingbot.core.planning import account as account_module
 
-    start, end = _iso_day("from"), _iso_day("to")
-    strategy = (request.args.get("strategy") or "").strip()
-
+    scope = _scope()
     tl = TradeLog()
-    all_raw = tl.get_trades(status=None, limit=None, ledger="main") or []
-    closed = [t for t in all_raw if t.get("status") in ("win", "loss", "closed")]
-    scoped = m.in_date_range(closed, start=start, end=end)
-    if strategy:
-        scoped = [t for t in scoped if primary_strategy_label(t) == strategy]
+    all_raw = _all_trades(tl)
+    closed = closed_only(all_raw)
+    scoped = select(closed, scope)
+    base_balance = float(account_module.load_account_config().get("base_balance") or 0.0)
+    window_balance = m.balance_at(closed, scope.start, base_balance)
+    spy_cum = (tl.get_extended_stats(trades=all_raw) or {}).get("spy_cum") or {}
 
     ordered = sorted(scoped, key=lambda t: t.get("closed_at") or "")
     points = []
     cum_r = 0.0
     peak = 0.0
+    cum_pnl = 0.0
     for t in ordered:
+        cum_pnl += float(t.get("realized_pnl_amount") or 0.0)
         r = m.r_multiple(t)
         if r is None:
             continue
@@ -280,12 +310,16 @@ def analytics_equity_curve():
             "date": (t.get("closed_at") or "")[:10],
             "cum_r": round(cum_r, 4),
             "drawdown_r": round(peak - cum_r, 4),
+            "cum_pnl": round(cum_pnl, 2),
+            "cum_pct": round(cum_pnl / window_balance * 100, 4) if window_balance else None,
         })
 
     return jsonify({
         "points": points,
-        "n": len(points),
+        "points_n": len(points),
         "as_of": points[-1]["date"] if points else None,
+        "benchmark": {"spy_indexed": _index_benchmark(spy_cum, scope.start)},
+        **echo(scope, len(scoped)),
     })
 
 

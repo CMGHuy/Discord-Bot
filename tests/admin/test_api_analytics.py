@@ -270,24 +270,28 @@ def test_drawdown_is_never_negative(seed, logged_in):
 
 def test_the_sample_size_is_reported_beside_the_curve(seed, logged_in):
     seed(trades=[_closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0)])
-    assert _curve(logged_in)["n"] == 1
+    assert _curve(logged_in)["points_n"] == 1
 
 
 def test_an_empty_book_returns_no_points_rather_than_a_flat_line(seed, logged_in):
     seed(trades=[])
     body = _curve(logged_in)
     assert body["points"] == []
-    assert body["n"] == 0
+    assert body["points_n"] == 0
     assert body["as_of"] is None
 
 
 def test_a_trade_without_an_r_multiple_is_skipped_not_counted_as_zero(seed, logged_in):
+    """`points_n` (computable-R points) must stay 1 even though the scoped
+    CLOSED-trade count (`echo`'s `n` -- v94 D5/B3) is 2: the r=None trade is
+    still a real scoped trade, it just can't plot an R point."""
     seed(trades=[
         _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0),
         _closed_r("b" * 16, closed_at="2026-04-02T16:00:00+00:00", r=None),
     ])
     body = _curve(logged_in)
-    assert body["n"] == 1
+    assert body["points_n"] == 1
+    assert body["n"] == 2
     assert [p["cum_r"] for p in body["points"]] == [1.0]
 
 
@@ -297,7 +301,7 @@ def test_the_strategy_filter_narrows_the_curve(seed, logged_in):
         _closed_r("b" * 16, closed_at="2026-04-02T16:00:00+00:00", r=5.0, strategy="Fib"),
     ])
     body = _curve(logged_in, "?strategy=RSI")
-    assert body["n"] == 1
+    assert body["points_n"] == 1
 
 
 def test_equity_curve_requires_auth_like_every_other_analytics_route(client):
@@ -310,7 +314,7 @@ def test_equity_curve_range_narrows_like_performance_does(seed, logged_in):
         _closed_r("b" * 16, closed_at="2026-07-01T16:00:00+00:00", r=5.0),
     ])
     body = _curve(logged_in, "?from=2026-04-01&to=2026-04-30")
-    assert body["n"] == 1
+    assert body["points_n"] == 1
     assert body["points"][0]["cum_r"] == 1.0
 
 
