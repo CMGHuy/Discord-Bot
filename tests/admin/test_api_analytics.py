@@ -281,18 +281,33 @@ def test_an_empty_book_returns_no_points_rather_than_a_flat_line(seed, logged_in
     assert body["as_of"] is None
 
 
-def test_a_trade_without_an_r_multiple_is_skipped_not_counted_as_zero(seed, logged_in):
-    """`points_n` (computable-R points) must stay 1 even though the scoped
-    CLOSED-trade count (`echo`'s `n` -- v94 D5/B3) is 2: the r=None trade is
-    still a real scoped trade, it just can't plot an R point."""
+def test_an_r_uncomputable_trade_carries_cum_r_forward_but_still_gets_a_point(seed, logged_in):
+    """A trade whose R can't be computed (zero risk: stop_loss == entry) no
+    longer vanishes from `points` -- it still gets a point, with `cum_r`/
+    `drawdown_r` carried forward UNCHANGED from the prior point (there is
+    nothing to add to the R curve), while `cum_pnl` keeps moving by its own
+    realised P&L: a currency P&L needs no risk denominator to be
+    measurable, so it must not silently drop out just because R couldn't be
+    computed -- especially when this trade is the LAST one in date order,
+    which would otherwise understate `as_of` and the account's true
+    cumulative P&L. `points_n` now equals the scoped-trade count `n`:
+    nothing is skipped from the plot any more, only from the R
+    accumulation."""
+    zero_risk_trade = _closed(
+        "b" * 16, opened="2026-04-02T16:00:00+00:00", closed_at="2026-04-02T16:00:00+00:00",
+        entry=100.0, exit_price=104.0, strategy="RSI", horizon_key="1m",
+    )
+    zero_risk_trade["stop_loss"] = 100.0  # entry == stop_loss -> r_multiple() returns None
     seed(trades=[
         _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0),
-        _closed_r("b" * 16, closed_at="2026-04-02T16:00:00+00:00", r=None),
+        zero_risk_trade,
     ])
     body = _curve(logged_in)
-    assert body["points_n"] == 1
-    assert body["n"] == 2
-    assert [p["cum_r"] for p in body["points"]] == [1.0]
+    assert body["points_n"] == body["n"] == 2
+    pts = body["points"]
+    assert [p["cum_r"] for p in pts] == [1.0, 1.0]
+    assert [p["drawdown_r"] for p in pts] == [0.0, 0.0]
+    assert [p["cum_pnl"] for p in pts] == [50.0, 90.0]
 
 
 def test_the_strategy_filter_narrows_the_curve(seed, logged_in):

@@ -262,25 +262,34 @@ def analytics_equity_curve():
     interpolating one would invent a data point that never happened. The
     x-axis is the sequence of trades, dated.
 
-    Every R comes from `metrics.r_multiple()` -- the one shared
-    R-multiple computation (see its docstring); this route does not
-    re-derive it. A trade `r_multiple()` cannot compute (missing prices,
-    zero risk, an unrecognised direction) is skipped entirely: not counted
-    in `points_n`, and not folded into the running total as a 0.0
-    contribution, which would misrepresent an unmeasured trade as a
-    breakeven one. `cum_pnl`/`cum_pct` walk every scoped trade regardless
-    (a currency P&L needs no risk denominator to be measurable), so they
-    can carry one more point than the R series when a trade skips the R
-    computation but still closed with a realised P&L.
+    A point exists for every scoped closed trade -- `points_n` therefore
+    always equals the echoed `n` (see below) on this route; nothing is ever
+    dropped from the plot. Every R comes from `metrics.r_multiple()` -- the
+    one shared R-multiple computation (see its docstring); this route does
+    not re-derive it. When a trade's R is NOT computable (missing prices,
+    zero risk, an unrecognised direction), its point still exists but
+    carries `cum_r`/`drawdown_r` forward UNCHANGED from the previous point
+    -- flat, not a 0.0 contribution folded into the running total, which
+    would misrepresent an unmeasured trade as a breakeven one. `cum_pnl`/
+    `cum_pct` are not gated on R at all: they walk every scoped trade's
+    realised P&L regardless of whether R could be computed for it (a
+    currency P&L needs no risk denominator to be measurable), so they keep
+    moving on a point where `cum_r`/`drawdown_r` are flat. A trade with an
+    uncomputable R is therefore visible in the money series and invisible
+    (flat) in the R series, on the same point -- never missing from
+    `points` outright, which is what would silently understate `as_of` and
+    the account's real cumulative P&L for a run ending in such a trade.
 
     Scoped like `/performance` (spec v94 D5) -- `?from=`/`to=`/`ledger=`/
     `strategy=`/`horizon=`/`direction=` all reach this route via the same
     `BookScope` (`_scope()`/`select()`/`closed_only()`), not a second,
-    hand-rolled filter. `n` in the echoed scope is the scoped CLOSED-trade
-    count (see `scope.echo`); the count of points this route could actually
-    plot (computable-R trades) is `points_n` -- the two can differ (see
-    above), so they carry different keys rather than one number quietly
-    meaning two things.
+    hand-rolled filter. `n` in the echoed scope (see `scope.echo`) and
+    `points_n` (`len(points)`) are the same number on this route today --
+    kept as two separate keys anyway (rather than reusing `echo`'s `n` for
+    both meanings) because they answer different questions ("how many
+    trades are in scope" vs "how many points does this series have") that
+    happen to coincide only because nothing is currently skipped from
+    `points`.
 
     `benchmark.spy_indexed` re-bases `spy_cum` (see `_index_benchmark`) to
     the scope's own start so the SPY overlay and the account curve always
@@ -307,10 +316,9 @@ def analytics_equity_curve():
     for t in ordered:
         cum_pnl += float(t.get("realized_pnl_amount") or 0.0)
         r = m.r_multiple(t)
-        if r is None:
-            continue
-        cum_r += r
-        peak = max(peak, cum_r)
+        if r is not None:
+            cum_r += r
+            peak = max(peak, cum_r)
         points.append({
             "date": (t.get("closed_at") or "")[:10],
             "cum_r": round(cum_r, 4),
