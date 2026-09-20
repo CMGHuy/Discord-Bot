@@ -27,8 +27,8 @@ you don't yet know what you're about to do to the box.
 
 Apply the identical change to the repo, run the narrow test for the file you
 touched, and commit. A `.env` change mirrors into the schema in
-`swingbot/config.py` and the deploy doc, not just the VM — a value changed
-only on the box is invisible here and reverts on the next manual edit.
+`swingbot/config.py` and the deploy doc, not just the VM (see Step 1 /
+working-conventions.md).
 
 ## The gate
 
@@ -40,7 +40,7 @@ regardless of production being healthy.
 | Tempting | Reality |
 |---|---|
 | "it is a one-line config tweak" | Those are exactly the ones that vanish — nothing this small survives being remembered instead of committed. |
-| "I will mirror it after the next deploy" | The next deploy overwrites it; the deploy pulls the image and the compose file from the repo, not the other way round. |
+| "I will mirror it after the next deploy" | The next deploy overwrites it (see DEPLOY_HETZNER.md). |
 | "production is fine now" | Production being fine is not the deliverable — the repo matching what's running on the box is. |
 | "I already told the human partner what I changed" | Telling is not mirroring; the gate is a commit in `git log`, not a message in the transcript. |
 
