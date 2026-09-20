@@ -284,6 +284,13 @@ cd /opt/swing-bot && docker compose restart bot
 
 # Check container status
 cd /opt/swing-bot && docker compose ps
+
+# Re-run the admin UI smoke test by hand (deploy.sh already runs this after
+# every deploy -- see DOCKER.md's "Verifying a deploy actually works").
+# --from-config reads credentials from the container's own config instead of
+# the shell, which is what avoids a real bug: a password with a `$`,
+# backtick or `!` gets mangled if sourced from .env on the command line instead.
+cd /opt/swing-bot && docker compose exec -T admin python scripts/dev/smoke_spa.py --from-config
 ```
 
 ## Updating settings without a code deploy
