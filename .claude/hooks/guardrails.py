@@ -232,12 +232,55 @@ def _rule_protected_branch_delete(ti: dict):
     )
 
 
+# Knobs whose pre-registration is closed (docs/claude/backtest-methodology.md,
+# "Closed pre-registrations"). Deliberately NOT strategy names: the table closes
+# mechanisms, and a strategy closed for one gate stays open for another.
+# tests/hooks/test_guardrails.py asserts this list against the doc in both
+# directions -- add a row there and the suite fails until this catches up.
+CLOSED_PREREGISTRATION_KNOBS = frozenset({
+    "REGIME_ALLOW",
+    "REGIME_GATES_ENABLED",
+    "DATA_DRIVEN_STOPS_ENABLED",
+    "RS_GATE",
+    "RS_LEADER_PERCENTILE",
+    "RS_LAGGARD_PERCENTILE",
+    "AVWAP_LEVELS_ENABLED",
+    "LEVEL_TOUCH_STRENGTH",
+    "EFFECTIVE_CONFLUENCE_ENABLED",
+    "DEAD_CAT_BOUNCE_VETO",
+    "EARNINGS_BLACKOUT_SESSIONS",
+    "FIB_TARGET_1_0_EXTENSION",
+    "COHORT_POOR",
+    "STRATEGY_GATES",
+    "VALIDATED",
+})
+_BACKTEST_SCRIPT_RE = re.compile(r"(?:tune_strategy|run_backtest_range)\.py")
+
+
+def _rule_closed_preregistration(ti: dict):
+    cmd = ti.get("command")
+    if not isinstance(cmd, str) or not _BACKTEST_SCRIPT_RE.search(cmd):
+        return None
+    hit = next((k for k in sorted(CLOSED_PREREGISTRATION_KNOBS) if k in cmd), None)
+    if hit is None:
+        return None
+    return _deny(
+        f"`{hit}` has a CLOSED pre-registration -- see the table in "
+        "docs/claude/backtest-methodology.md. Re-running it does not produce a "
+        "new result; it spends a shot the repo already spent and invites fitting "
+        "the answer to the knob. A genuinely new mechanism over the same knob is "
+        "a NEW pre-registration and needs its own spec. If this really is that, "
+        "say so to the human partner and let them authorise it -- do not clear "
+        "this yourself."
+    )
+
+
 # Rules run in list order; the first non-None decision wins. Warn rules are
 # appended after deny rules on the same tool, so deny takes precedence.
 _RULES = {
     "Glob": [_rule_unscoped_glob],
-    "Bash": [_rule_protected_branch_delete, _rule_recursive_grep_from_root,
-             _rule_bare_pytest, _rule_cat_big_doc],
+    "Bash": [_rule_protected_branch_delete, _rule_closed_preregistration,
+             _rule_recursive_grep_from_root, _rule_bare_pytest, _rule_cat_big_doc],
     "Read": [_rule_huge_implemented_plan, _rule_read_big_doc],
     "Edit": [_rule_worktree_write],
     "Write": [_rule_worktree_write],

@@ -2,6 +2,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import re
 
 _REPO_ROOT = pathlib.Path(__file__).parent.parent.parent
 _SPEC = importlib.util.spec_from_file_location(
@@ -347,3 +348,49 @@ def test_merely_listing_backup_branches_is_allowed():
 
 def test_branch_rule_fails_open_on_a_non_string_command():
     assert evaluate({"tool_name": "Bash", "tool_input": {"command": None}}) is None
+
+
+def test_a_closed_knob_in_a_grid_is_denied():
+    out = _bash('python scripts/backtest/tune_strategy.py --strategy "RSI" '
+                '--grid DEAD_CAT_BOUNCE_VETO=true,false')
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "backtest-methodology.md" in out["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_a_closed_knob_as_an_env_assignment_is_denied():
+    assert _bash("EARNINGS_BLACKOUT_SESSIONS=3 python scripts/backtest/run_backtest_range.py --train") is not None
+
+
+def test_an_open_strategy_name_alone_is_allowed():
+    assert _bash('python scripts/backtest/tune_strategy.py --strategy "Break & Retest" '
+                 '--grid min_pullback_atr=0.5,1.0') is None
+
+
+def test_a_closed_knob_outside_a_backtest_command_is_allowed():
+    assert _bash("grep -n DEAD_CAT_BOUNCE_VETO swingbot/config.py") is None
+
+
+def test_closed_preregistration_rule_fails_open_on_a_missing_command():
+    assert evaluate({"tool_name": "Bash", "tool_input": {}}) is None
+
+
+def test_every_closed_knob_constant_appears_in_the_methodology_doc():
+    doc = (_REPO_ROOT / "docs" / "claude" / "backtest-methodology.md").read_text(encoding="utf-8")
+    missing = [k for k in guardrails.CLOSED_PREREGISTRATION_KNOBS if k not in doc]
+    assert not missing, f"constant lists knobs the doc does not: {missing}"
+    assert len(guardrails.CLOSED_PREREGISTRATION_KNOBS) >= 8
+
+
+def test_every_all_caps_knob_in_the_closed_table_is_in_the_constant():
+    """The drift direction that actually bites: a new closed row lands in the
+    doc and the hook never learns about it. Lower-case knobs
+    (min_level_touches, confirm_bars) are out of reach of this half -- the
+    forward assertion above is their only cover."""
+    doc = (_REPO_ROOT / "docs" / "claude" / "backtest-methodology.md").read_text(encoding="utf-8")
+    table = doc.split("### Closed pre-registrations", 1)[1]
+    found = set(re.findall(r"`([A-Z][A-Z0-9_]{4,})`", table))
+    missing = found - set(guardrails.CLOSED_PREREGISTRATION_KNOBS)
+    assert not missing, (
+        f"backtest-methodology.md closes {sorted(missing)} but guardrails.py does "
+        "not list them. Add them to CLOSED_PREREGISTRATION_KNOBS."
+    )
