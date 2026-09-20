@@ -124,8 +124,11 @@ def analytics_performance():
     Every block below is computed over the `BookScope` population (spec v94
     D5) -- `?from=`/`?to=`/`ledger=`/`strategy=`/`horizon=`/`direction=` all
     reach every figure the same way, including the top-level `win_rate` and
-    `expectancy_r`. Only `totals.total`/`totals.open` stay book-wide, because
-    an open trade has no close to scope on.
+    `expectancy_r`. Three things stay book-wide instead: `totals.total`/
+    `totals.open`, because an open trade has no close to scope on; and
+    `by_confidence` (`get_stats_by_confidence()`) and `weak`
+    (`weak_summary()`), which are each other's own separate, never-scoped
+    records, not projections of `closed`.
 
     Every figure is computed in `core.analytics.metrics` -- this route selects
     and assembles, it does not derive. That is the same "one definition per
