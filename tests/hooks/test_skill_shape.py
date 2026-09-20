@@ -19,7 +19,7 @@ MAX_SKILL_LINES = 80
 
 # Tier 1 and Tier 3 are model-invocable, so they carry a trigger table.
 # Tier 2 is slash-only and carries disable-model-invocation instead.
-TIER_1_AND_3 = {"backtest-gate", "no-lookahead", "pooled-numbers"}   # each skill task appends its own name
+TIER_1_AND_3 = {"backtest-gate", "no-lookahead", "pooled-numbers", "mirror-prod"}   # each skill task appends its own name
 TIER_2 = set()                # each ritual task appends its own name
 
 # A bare threshold in a SKILL.md is content that belongs in docs/claude/.
