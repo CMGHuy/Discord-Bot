@@ -394,3 +394,43 @@ def test_every_all_caps_knob_in_the_closed_table_is_in_the_constant():
         f"backtest-methodology.md closes {sorted(missing)} but guardrails.py does "
         "not list them. Add them to CLOSED_PREREGISTRATION_KNOBS."
     )
+
+
+def _write(path, content=""):
+    return evaluate({"tool_name": "Write",
+                     "tool_input": {"file_path": path, "content": content}})
+
+
+_GOOD_PLAN = "docs/superpowers/plans/2026-09-18-v96-claude-skills-layer.md"
+
+
+def test_a_misnumbered_plan_filename_is_denied():
+    out = _write("docs/superpowers/plans/skills-layer.md", "# Phase 0 - x\n")
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "document-conventions.md" in out["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_a_two_hash_phase_heading_is_denied():
+    assert _write(_GOOD_PLAN, "## Phase 0 - conventions\n") is not None
+
+
+def test_a_conforming_plan_write_is_allowed():
+    assert _write(_GOOD_PLAN, "# Phase 0 - conventions\n\n### Task S1: x\n") is None
+
+
+def test_a_split_part_filename_is_allowed():
+    assert _write("docs/superpowers/plans/2026-08-29-v67-json-to-postgres_1a-foundation-core.md",
+                  "# Phase 1 - x\n") is None
+
+
+def test_a_closed_out_plan_under_implemented_is_allowed():
+    assert _write("docs/superpowers/plans/implemented/2026-09-16-v92-exit-quality-harvest.md",
+                  "# Phase 1 - x\n") is None
+
+
+def test_writes_outside_the_doc_dirs_are_untouched():
+    assert _write("swingbot/config.py", "## Phase 0\n") is None
+
+
+def test_plan_doc_shape_fails_open_on_a_non_string_path():
+    assert _write(None, "## Phase 0\n") is None

@@ -275,6 +275,44 @@ def _rule_closed_preregistration(ti: dict):
     )
 
 
+# docs/superpowers/{specs,plans}/ have two unconditional shape rules
+# (document-conventions.md): the vN-numbered filename, and `# Phase` with ONE
+# hash so `grep -n "^# Phase"` can find it. v24 and v25 shipped with two and
+# were invisible to the tool that exists to keep plans out of context.
+_DOC_DIR_RE = re.compile(r"docs/superpowers/(?:specs|plans)/", re.IGNORECASE)
+_DOC_NAME_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}-v\d+-[a-z0-9][a-z0-9-]*"
+    r"(?:_[0-9a-z]+(?:-[a-z0-9-]+)?)?\.md$"
+)
+_TWO_HASH_PHASE_RE = re.compile(r"^##\s+Phase\s", re.MULTILINE)
+
+
+def _rule_plan_doc_shape(ti: dict):
+    path = ti.get("file_path")
+    if not isinstance(path, str):
+        return None
+    norm = path.replace("\\", "/")
+    if not _DOC_DIR_RE.search(norm):
+        return None
+    name = norm.rsplit("/", 1)[-1]
+    if not _DOC_NAME_RE.match(name):
+        return _deny(
+            f"`{name}` does not match YYYY-MM-DD-vN-<name>.md. Every spec and plan "
+            "is numbered at creation from one repo-wide counter, recomputed "
+            "immediately before the commit. See docs/claude/document-conventions.md."
+        )
+    content = ti.get("content")
+    if isinstance(content, str) and _TWO_HASH_PHASE_RE.search(content):
+        return _deny(
+            "`## Phase` uses two hashes. `CLAUDE.md` documents "
+            '`grep -n "^# Phase"` as the way to orient in a plan, so a two-hash '
+            "heading returns zero and the plan is invisible to the tooling that "
+            "keeps it out of context. Use one hash, however wrong it looks beside "
+            "the `##` sections around it. See docs/claude/document-conventions.md."
+        )
+    return None
+
+
 # Rules run in list order; the first non-None decision wins. Warn rules are
 # appended after deny rules on the same tool, so deny takes precedence.
 _RULES = {
@@ -283,7 +321,7 @@ _RULES = {
              _rule_recursive_grep_from_root, _rule_bare_pytest, _rule_cat_big_doc],
     "Read": [_rule_huge_implemented_plan, _rule_read_big_doc],
     "Edit": [_rule_worktree_write],
-    "Write": [_rule_worktree_write],
+    "Write": [_rule_worktree_write, _rule_plan_doc_shape],
     "NotebookEdit": [_rule_worktree_write],
 }
 
