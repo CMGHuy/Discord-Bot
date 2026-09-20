@@ -227,12 +227,23 @@ COMMAND_USAGE = {
 
 
 def in_session(now: dt.datetime = None) -> bool:
-    """Whether ``now`` is in the configured Berlin session.
+    """Whether ``now`` is in the configured Berlin session, Mon-Fri only.
 
-    Equal start/end hours intentionally mean an always-on session; an end
-    before the start denotes a session that crosses midnight.
+    Equal start/end hours intentionally mean an always-on session (within
+    the trading week); an end before the start denotes a session that
+    crosses midnight.
+
+    NYSE is closed Saturday and Sunday, so the daily bar `session_scan`
+    evaluates never moves over the weekend -- without this guard,
+    SIGNAL_CONFIRMATION_SCANS treated the same frozen Friday bar
+    reappearing on consecutive weekend ticks as fresh confirmation and
+    posted "new" trade-plan alerts off stale data on days the tape isn't
+    open at all. Same Berlin-weekday exclusion `is_quiet_hours` already
+    uses, for the same reason.
     """
     now = now or dt.datetime.now(SESSION_TZ)
+    if now.weekday() >= 5:
+        return False
     start, end = config.SESSION_START_HOUR, config.SESSION_END_HOUR
     if start == end:
         return True

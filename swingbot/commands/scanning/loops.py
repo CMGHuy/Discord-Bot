@@ -915,7 +915,7 @@ async def on_ready():
     log.info("Watching %d guild(s): %s", len(bot.guilds), ", ".join(g.name for g in bot.guilds) or "none")
     wl_size = len(load_watchlist())
     log.info(
-        "Session window: %02d:00-%02d:00 Europe/Berlin (7 days), scanning every %d min, "
+        "Session window: %02d:00-%02d:00 Europe/Berlin (Mon-Fri), scanning every %d min, "
         "%d-scan confirmation, min confidence Lv%d, min %d strategies confirmed (within %.1f%% deviation), "
         "watchlist size %d",
         config.SESSION_START_HOUR, config.SESSION_END_HOUR, config.SCAN_INTERVAL_MINUTES,

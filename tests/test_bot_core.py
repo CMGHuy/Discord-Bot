@@ -18,3 +18,21 @@ def test_in_session_equal_hours_is_always_on(monkeypatch):
     monkeypatch.setattr(config, "SESSION_END_HOUR", 8)
 
     assert in_session(dt.datetime(2026, 8, 24, 3, tzinfo=SESSION_TZ))
+
+
+def test_in_session_excludes_weekend(monkeypatch):
+    monkeypatch.setattr(config, "SESSION_START_HOUR", 8)
+    monkeypatch.setattr(config, "SESSION_END_HOUR", 23)
+
+    # 2026-08-22 is a Saturday, 2026-08-23 a Sunday -- both squarely inside
+    # the configured hour window but NYSE is closed either day.
+    assert not in_session(dt.datetime(2026, 8, 22, 12, tzinfo=SESSION_TZ))
+    assert not in_session(dt.datetime(2026, 8, 23, 12, tzinfo=SESSION_TZ))
+    assert in_session(dt.datetime(2026, 8, 24, 12, tzinfo=SESSION_TZ))
+
+
+def test_in_session_excludes_weekend_even_when_always_on(monkeypatch):
+    monkeypatch.setattr(config, "SESSION_START_HOUR", 8)
+    monkeypatch.setattr(config, "SESSION_END_HOUR", 8)
+
+    assert not in_session(dt.datetime(2026, 8, 22, 3, tzinfo=SESSION_TZ))

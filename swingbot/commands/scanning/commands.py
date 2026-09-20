@@ -300,7 +300,7 @@ async def session_cmd(ctx):
     status = "🟢 **Active**" if active else "🔴 **Inactive**"
     paused_bit = "\n⏸️ **Scanning is paused** — use `!resume` or the admin UI to resume." if runstate.is_scan_paused() else ""
     await ctx.send(
-        f"{status} — session window: {start:02d}:00–{end:02d}:00 Europe/Berlin (7 days)\n"
+        f"{status} — session window: {start:02d}:00–{end:02d}:00 Europe/Berlin (Mon-Fri)\n"
         f"Current time: {now.strftime('%Y-%m-%d %H:%M %Z')}{paused_bit}"
     )
 
