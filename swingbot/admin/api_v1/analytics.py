@@ -168,7 +168,8 @@ def analytics_performance():
     scope = _scope()
     tl = TradeLog()
     all_raw = _all_trades(tl)
-    closed = select(closed_only(all_raw), scope)     # every block below reads THIS list
+    all_closed = closed_only(all_raw)                # the real, unscoped book -- balance_at reads THIS
+    closed = select(all_closed, scope)                # every other block below reads THIS list
     scoped = closed
     start, end = scope.start, scope.end
     stats = tl.get_stats(trades=all_raw)             # totals.total/open stay book-wide
@@ -177,7 +178,11 @@ def analytics_performance():
 
     from swingbot.core.planning import account as account_module
     base_balance = float(account_module.load_account_config().get("base_balance") or 0.0)
-    window_balance = m.balance_at(closed, start, base_balance)
+    # There is exactly one real pooled account balance -- it has no
+    # per-strategy/per-ledger/per-horizon meaning, so this reads the
+    # unscoped `all_closed`, filtered only by date via balance_at's own
+    # `before` cutoff, matching /analytics/equity-curve's window_balance.
+    window_balance = m.balance_at(all_closed, start, base_balance)
     returns = [r for r in (m.trade_return_pct(t) for t in scoped) if r is not None]
     factor = m.annualisation_factor(scoped)
     raw_sharpe, raw_sortino = m.sharpe(returns), m.sortino(returns)

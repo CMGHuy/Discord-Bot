@@ -124,6 +124,38 @@ def test_performance_rejects_bad_scope(logged_in):
     assert_error(logged_in.get("/api/v1/analytics/performance?bogus=1"), "invalid", 400)
 
 
+def test_performance_window_balance_is_the_real_unscoped_account_balance(seed, tmp_path, logged_in):
+    """A scoped request must not compute `window_balance` from just the
+    scoped subset's own P&L -- there is exactly one real pooled account
+    balance, with no per-strategy meaning (metrics.balance_at's docstring).
+
+    Two strategies: MACD closes $500 and RSI closes $200, both before the
+    `from` cutoff, then RSI closes $300 after it. Scoping to `?strategy=RSI`
+    drops the MACD trade and the early RSI trade from `scoped`/`closed`, but
+    `window_balance` -- the base for `total_return_pct` -- must still count
+    BOTH pre-cutoff closes (base 1000 + 500 + 200 = 1700), not just RSI's
+    own pre-cutoff close (a buggy 1000 + 0 = 1000, since the only RSI trade
+    before the cutoff was itself excluded by the date filter along with
+    MACD's). 300 realised on top of 1700 is +17.6471%; on top of the buggy
+    1000 it would read as +30%.
+    """
+    (tmp_path / "account.json").write_text(json.dumps({
+        "base_balance": 1000.0, "balance": 1000.0, "risk_pct": 1.0,
+        "max_position_pct": 20.0, "sizing_mode": "risk_pct", "balance_history": [],
+    }), encoding="utf-8")
+    seed(trades=[
+        _closed("a" * 16, strategy="MACD", opened_at="2024-01-01T10:00:00+00:00",
+                closed_at="2024-01-05T15:00:00+00:00", realized_pnl_amount=500.0),
+        _closed("b" * 16, strategy="RSI", opened_at="2024-01-02T10:00:00+00:00",
+                closed_at="2024-01-06T15:00:00+00:00", realized_pnl_amount=200.0),
+        _closed("c" * 16, strategy="RSI", opened_at="2024-02-01T10:00:00+00:00",
+                closed_at="2024-02-05T15:00:00+00:00", realized_pnl_amount=300.0),
+    ])
+    body = logged_in.get("/api/v1/analytics/performance?from=2024-01-10&strategy=RSI").get_json()
+    assert body["n"] == 1   # only trade c is in scope (RSI, closed on/after the cutoff)
+    assert body["derived"]["total_return_pct"] == pytest.approx(17.6471)
+
+
 def test_calibration_shape(seed, logged_in):
     seed()
     assert_shape(logged_in.get("/api/v1/analytics/calibration").get_json(),
