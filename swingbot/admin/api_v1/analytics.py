@@ -69,6 +69,18 @@ def _iso_day(name: str) -> str | None:
     return raw
 
 
+def _scope(extra: tuple[str, ...] = ()):
+    """Parse the request's BookScope or 400 (spec v94 D5). `extra` names
+    route-specific parameters (e.g. `dim`) that are not scope fields."""
+    from swingbot.core.analytics.scope import ScopeError, parse_scope, reject_unknown
+
+    try:
+        reject_unknown(request.args, extra)
+        return parse_scope(request.args)
+    except ScopeError as exc:
+        raise ApiError("invalid", str(exc), 400)
+
+
 def _soak_for(strategy: str):
     from swingbot.core.backtesting.registry import get_badge
     from swingbot.core.edge.strategy_soak import soak_verdict
