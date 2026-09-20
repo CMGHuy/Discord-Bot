@@ -13,10 +13,11 @@ repository class for the store you're touching, and does
 `scripts/db/parity_report.py`'s `STORES` dict cover it. A plan can say a
 store is migrated after the code has already moved past it, or before.
 
-## Step 2 — Load the Postgres practices skill
+## Step 2 — Read up before writing DDL
 
-Load `supabase:supabase-postgres-best-practices` before writing any DDL, per
-its own trigger. This skill does not restate what it covers.
+Confirm current Postgres DDL best practice for the change you're making
+before you write it -- a schema change is not reversible the way an app-code
+change is.
 
 ## Step 3 — `parity_report` is the only verifier to trust
 
