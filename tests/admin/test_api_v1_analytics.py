@@ -72,12 +72,11 @@ def test_performance_carries_the_six_relocated_metrics(seed, logged_in):
 
 
 def test_performance_top_level_shape(seed, logged_in):
-    """The NG11 contract, extended by SR54 with the range-scoped blocks.
+    """The NG11 contract, extended by SR54's range-scoped blocks and by v94 D5.
 
-    `win_rate` and `expectancy_r` stay here and stay all-time: pre-SR54
-    clients read them as the account's overall record. Their range-scoped
-    counterparts live in `derived`, and `tests/admin/test_api_analytics.py`
-    owns the assertions about them.
+    `win_rate` and `expectancy_r` now follow the `BookScope` population like
+    every other block (spec v94 D5) rather than staying all-time -- see
+    `tests/admin/test_api_analytics.py` for the range-narrowing assertions.
     """
     seed()
     assert_shape(logged_in.get("/api/v1/analytics/performance").get_json(), {
@@ -88,8 +87,41 @@ def test_performance_top_level_shape(seed, logged_in):
         "range": dict, "derived": dict, "distributions": dict,
         "rolling_returns": list, "holding_period_split": list, "risk_reward_split": list,
         "calendar": list, "cumulative_by_strategy": dict, "benchmark": dict,
+        # v94 D5/D9 -- BookScope echo and the two rolling series.
+        "rolling_wr": list, "rolling_exp_r": list, "scope": dict, "n": int,
         "weak": dict,
     })
+
+
+def _closed(trade_id, *, status="win", closed_at="2026-08-04T15:00:00+00:00", **over):
+    t = _trade(trade_id, plan_id=None, status=status)
+    t["closed_at"] = closed_at
+    t.update(over)
+    return t
+
+
+def test_performance_is_scoped_and_echoes_scope(seed, logged_in):
+    # `_trade`'s default horizon_key ("1m") isn't in the real HORIZONS
+    # vocabulary (2w/4w/2m.../9m -- strategy_types.py), so the in-scope
+    # trades are pinned to "4w" here rather than the brief's "1m", which
+    # `_scope()`'s validation would reject as an unknown horizon.
+    seed(trades=[
+        _closed("a" * 16, closed_at="2026-07-10T15:00:00+00:00", horizon_key="4w"),
+        _closed("b" * 16, status="loss", horizon_key="4w"),
+        _closed("c" * 16, horizon_key="2w"),
+    ])
+    body = logged_in.get("/api/v1/analytics/performance?from=2026-08-01&horizon=4w").get_json()
+    assert body["scope"] == {"from": "2026-08-01", "to": None, "ledger": "main",
+                             "strategy": None, "horizon": "4w", "direction": None}
+    assert body["n"] == 1
+    assert body["win_rate_n"] == 1 and body["win_rate"] == 0.0
+    assert body["rolling_wr"] == [] and body["rolling_exp_r"] == []
+    assert body["totals"]["closed"] == 1
+
+
+def test_performance_rejects_bad_scope(logged_in):
+    assert_error(logged_in.get("/api/v1/analytics/performance?ledger=shadow"), "invalid", 400)
+    assert_error(logged_in.get("/api/v1/analytics/performance?bogus=1"), "invalid", 400)
 
 
 def test_calibration_shape(seed, logged_in):

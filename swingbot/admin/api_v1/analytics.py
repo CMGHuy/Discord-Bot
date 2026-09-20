@@ -81,6 +81,11 @@ def _scope(extra: tuple[str, ...] = ()):
         raise ApiError("invalid", str(exc), 400)
 
 
+def _all_trades(tl: TradeLog) -> list[dict]:
+    """Every trade in every ledger; `scope.select` applies the ledger filter."""
+    return tl.get_trades(status=None, limit=None, ledger=None) or []
+
+
 def _soak_for(strategy: str):
     from swingbot.core.backtesting.registry import get_badge
     from swingbot.core.edge.strategy_soak import soak_verdict
@@ -116,13 +121,11 @@ def analytics_performance():
     actually arrive here, or that trade was a straight loss -- hence the
     explicit block below rather than dumping get_stats() wholesale.
 
-    **What `?from=`/`?to=` scopes, and what it does not.** The range drives
-    `derived`, `distributions` and the four series; the top-level `win_rate`
-    and `expectancy_r` stay all-time, unchanged from before SR54, because
-    existing clients read them as the account's overall record. The scoped
-    copies live inside `derived` alongside everything else the range moves, so
-    a workspace showing "March" reads one block and gets a consistent answer
-    rather than mixing a scoped Calmar with an all-time win rate.
+    Every block below is computed over the `BookScope` population (spec v94
+    D5) -- `?from=`/`?to=`/`ledger=`/`strategy=`/`horizon=`/`direction=` all
+    reach every figure the same way, including the top-level `win_rate` and
+    `expectancy_r`. Only `totals.total`/`totals.open` stay book-wide, because
+    an open trade has no close to scope on.
 
     Every figure is computed in `core.analytics.metrics` -- this route selects
     and assembles, it does not derive. That is the same "one definition per
@@ -130,24 +133,20 @@ def analytics_performance():
     annualised Sharpe here is `sharpe() * annualisation_factor()` rather than
     a second Sharpe expression written inline.
     """
-    unknown = set(request.args) - {"from", "to"}
-    if unknown:
-        raise ApiError("invalid", f"unknown parameter {sorted(unknown)[0]!r}; allowed: ['from', 'to']", 400)
-
     from swingbot.admin.dashboard import closed_pnl
     from swingbot.core.analytics import metrics as m
+    from swingbot.core.analytics.scope import closed_only, echo, select
 
-    start, end = _iso_day("from"), _iso_day("to")
-
+    scope = _scope()
     tl = TradeLog()
-    all_raw = tl.get_trades(status=None, limit=None, ledger="main") or []
-    stats = tl.get_stats(trades=all_raw)
+    all_raw = _all_trades(tl)
+    closed = select(closed_only(all_raw), scope)     # every block below reads THIS list
+    scoped = closed
+    start, end = scope.start, scope.end
+    stats = tl.get_stats(trades=all_raw)             # totals.total/open stay book-wide
     stats.update(tl.get_extended_stats(trades=all_raw))
-
-    closed = [t for t in all_raw if t.get("status") in ("win", "loss", "closed")]
     realized = [p for p in (closed_pnl(t) for t in closed) if p is not None]
 
-    scoped = m.in_date_range(closed, start=start, end=end)
     from swingbot.core.planning import account as account_module
     base_balance = float(account_module.load_account_config().get("base_balance") or 0.0)
     window_balance = m.balance_at(closed, start, base_balance)
@@ -159,7 +158,7 @@ def analytics_performance():
         "totals": {
             "total": stats.get("total"),
             "open": stats.get("open"),
-            "closed": stats.get("closed"),
+            "closed": len(closed),
         },
         # The six spec 3 moved here from the Dashboard header.
         "relocated": {
@@ -211,6 +210,9 @@ def analytics_performance():
         # returns {}. The key is always present so the workspace never has to
         # distinguish "no benchmark" from "no such field".
         "benchmark": {"spy_cum": stats.get("spy_cum") or {}},
+        "rolling_wr": m.rolling_win_rate(scoped, window=50),
+        "rolling_exp_r": m.rolling_expectancy_r(scoped, window=50),
+        **echo(scope, len(scoped)),
     })
 
 

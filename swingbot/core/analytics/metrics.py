@@ -376,6 +376,23 @@ def rolling_win_rate(closed: list[dict], window: int = 20) -> list[dict]:
     return points
 
 
+def rolling_expectancy_r(closed: list[dict], window: int = 50) -> list[dict]:
+    """Trailing mean R over the last `window` computable closes, one point per
+    close, emitted only once 5 have accumulated -- the same floor
+    `rolling_win_rate` uses and for the same reason (spec v94 D9)."""
+    dated = sorted((t for t in closed if t.get("closed_at") and r_multiple(t) is not None),
+                   key=lambda t: t["closed_at"])
+    rs = [r_multiple(t) for t in dated]
+    points = []
+    for i in range(len(dated)):
+        if i + 1 < 5:
+            continue
+        window_slice = rs[max(0, i + 1 - window):i + 1]
+        points.append({"date": dated[i]["closed_at"][:10],
+                       "exp_r": round(sum(window_slice) / len(window_slice), 4)})
+    return points
+
+
 MIN_TRADES_FOR_RATIO = 5  # below this, sample noise dominates any Sharpe/Sortino reading
 
 

@@ -30,9 +30,9 @@ _DERIVED_KEYS = {
     "pct_in_market": NULLABLE_NUMBER,
     "sharpe_ann": NULLABLE_NUMBER,
     "sortino_ann": NULLABLE_NUMBER,
-    # Scoped copies of the two top-level figures. The top-level ones stay
-    # all-time so the pre-SR54 contract is unchanged; these are what the range
-    # control drives, so a user narrowing to March sees March's win rate.
+    # Copies of the two top-level figures, computed over the same scoped
+    # population (spec v94 D5) -- the top-level ones follow the range too now,
+    # so these and the top-level figures always agree for the same request.
     "win_rate": NULLABLE_NUMBER,
     "expectancy_r": NULLABLE_NUMBER,
 }
@@ -179,6 +179,8 @@ def test_distributions_and_series_are_present_and_scoped(seed, logged_in):
         "range": dict, "distributions": dict, "rolling_returns": list,
         "holding_period_split": list, "risk_reward_split": list, "calendar": list,
         "cumulative_by_strategy": dict, "benchmark": dict,
+        # v94 D5/D9 -- BookScope echo and the two rolling series.
+        "rolling_wr": list, "rolling_exp_r": list, "scope": dict, "n": int,
         "weak": dict,
     })
 
