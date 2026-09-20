@@ -16,9 +16,10 @@ skill is a checklist over both; it does not restate their reasoning.
 `guardrails.py`'s `_rule_worktree_write` denies an Edit/Write/NotebookEdit
 whose target path names a different worktree than the one this session is
 running in, and the deny is correct: the edit would land on another branch
-and be invisible from here. The same holds in reverse — never edit a
-main-tree file from inside a worktree session. If the rule fires, it is
-telling you to switch sessions, not to find a way around it.
+and be invisible from here. The same discipline holds in reverse: never edit
+a main-tree file from inside a worktree session. Nothing in `guardrails.py`
+catches this direction — there is no deny for it — so this is convention,
+not tooling.
 
 ## Step 3 — Before merging, check whether anyone else is in it
 
