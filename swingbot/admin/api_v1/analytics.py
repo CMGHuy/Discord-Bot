@@ -369,58 +369,60 @@ def analytics_by_dimension():
     horizon were allowed to set `as_of`, the stamp would claim the rows are
     more current than the data actually shown -- the same "screen hides how
     stale its data is" bug class as an empty range rendering as zeroes.
+
+    spec v94 D7/H1: every `aggregate.DIMENSIONS` value, not just
+    strategy/horizon; rate fields are null under `MIN_CELL_N`.
     """
-    unknown = set(request.args) - {"dim"}
-    if unknown:
-        raise ApiError("invalid", f"unknown parameter {sorted(unknown)[0]!r}; allowed: ['dim']", 400)
-
-    dim = (request.args.get("dim") or "").strip()
-    if dim not in ("strategy", "horizon"):
-        raise ApiError("invalid", f"dim must be 'strategy' or 'horizon', got {dim!r}", 400)
-
     from swingbot.core.analytics import metrics as m
+    from swingbot.core.analytics.aggregate import DIMENSIONS, MIN_CELL_N, group_by
     from swingbot.core.analytics.risk_metrics import max_drawdown_r
+    from swingbot.core.analytics.scope import closed_only, echo, select
     from swingbot.core.backtesting.registry import get_badge
     from swingbot.core.market.strategy_types import HORIZONS
     from swingbot.core.tracking.performance import primary_strategy_label
 
-    closed = [t for t in TradeLog().get_trades(status=None, limit=None, ledger="main") or []
-              if t.get("status") in ("win", "loss", "closed")]
+    scope = _scope(extra=("dim",))
+    dim = (request.args.get("dim") or "").strip()
+    if dim not in DIMENSIONS:
+        raise ApiError("invalid", f"dim must be one of {list(DIMENSIONS)}, got {dim!r}", 400)
 
-    if dim == "strategy":
-        def key_of(t):
-            return primary_strategy_label(t)
+    scoped = select(closed_only(_all_trades(TradeLog())), scope)
+
+    if dim == "strategy":            # the real per-trade label, as before
+        groups: dict[str, list[dict]] = {}
+        for t in scoped:
+            groups.setdefault(primary_strategy_label(t), []).append(t)
+    elif dim == "horizon":
+        groups = {k: v for k, v in group_by(scoped, dim).items() if k in HORIZONS}
     else:
-        def key_of(t):
-            hz = t.get("horizon_key")
-            return hz if hz in HORIZONS else None
-
-    groups: dict[str, list[dict]] = {}
-    for t in closed:
-        key = key_of(t)
-        if key is None:
-            continue
-        groups.setdefault(key, []).append(t)
+        groups = group_by(scoped, dim)
 
     if dim == "horizon":
-        horizon_order = {h: i for i, h in enumerate(HORIZONS)}
-        keys = sorted(groups, key=lambda k: horizon_order.get(k, len(horizon_order)))
-    else:
+        order = {h: i for i, h in enumerate(HORIZONS)}
+        keys = sorted(groups, key=lambda k: order.get(k, len(order)))
+    elif dim == "month":
         keys = sorted(groups)
+    else:
+        keys = sorted(groups, key=lambda k: (-len(groups[k]), str(k)))
 
     rows = []
     for key in keys:
         trades = groups[key]
         ordered = sorted(trades, key=lambda t: t.get("closed_at") or "")
         rs = [r for t in ordered if (r := m.r_multiple(t)) is not None]
+        thin = len(trades) < MIN_CELL_N
         row = {
-            "key": key,
-            "exp_r": m.expectancy_r(trades),
-            "total_r": (sum(rs) if rs else None),
-            "win_rate": m.win_rate(trades),
-            "profit_factor": m.profit_factor(trades),
+            "key": str(key), "n": len(trades),
+            "wins": sum(1 for t in trades if t.get("status") == "win"),
+            "losses": sum(1 for t in trades if t.get("status") == "loss"),
+            "exp_r": None if thin else m.expectancy_r(trades),
+            "win_rate": None if thin else m.win_rate(trades),
+            "profit_factor": None if thin else m.profit_factor(trades),
+            "avg_win_r": None if thin else m.avg_win_r(trades),
+            "avg_loss_r": None if thin else m.avg_loss_r(trades),
+            "total_r": (round(sum(rs), 4) if rs else None),
+            "total_pnl": round(sum(float(t.get("realized_pnl_amount") or 0.0) for t in trades), 2),
             "max_drawdown_r": max_drawdown_r(rs),
-            "n": len(rs),
         }
         if dim == "strategy":
             row["badge"] = get_badge("strategy", key).status
@@ -429,12 +431,9 @@ def analytics_by_dimension():
                            "clauses": verdict["clauses"]} if verdict["n_closed"] else None
         rows.append(row)
 
-    grouped_closed_at = [
-        t["closed_at"][:10]
-        for trades in groups.values() for t in trades
-        if t.get("closed_at")
-    ]
-    return jsonify({"rows": rows, "as_of": max(grouped_closed_at) if grouped_closed_at else None})
+    dated = [t["closed_at"][:10] for trades in groups.values() for t in trades if t.get("closed_at")]
+    return jsonify({"rows": rows, "as_of": max(dated) if dated else None,
+                    "min_cell_n": MIN_CELL_N, **echo(scope, len(scoped))})
 
 
 @api_v1.route("/analytics/journal", methods=["GET"])

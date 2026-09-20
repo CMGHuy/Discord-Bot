@@ -251,3 +251,24 @@ def test_index_benchmark_rebases_to_first_point_in_range():
     # available date at/after it, not to the nearest one before.
     assert _index_benchmark({"2026-08-01": 100.0, "2026-08-02": None, "2026-08-03": 105.0},
                              "2026-08-02") == [{"date": "2026-08-03", "pct": 0.0}]
+
+
+def test_by_dimension_accepts_every_dimension_and_nulls_thin_rates(seed, logged_in):
+    seed(trades=[_closed("a" * 16), _closed("b" * 16, status="loss", direction="bearish")])
+    for dim in ("strategy", "horizon", "badge", "confidence", "direction", "dow", "month", "ticker", "source"):
+        body = logged_in.get(f"/api/v1/analytics/by-dimension?dim={dim}").get_json()
+        assert body["min_cell_n"] == 20 and body["n"] == 2, dim
+        for row in body["rows"]:
+            assert row["n"] < 20
+            assert row["win_rate"] is None and row["exp_r"] is None and row["avg_win_r"] is None, (dim, row)
+            assert isinstance(row["total_pnl"], (int, float))
+
+
+def test_by_dimension_is_scoped(seed, logged_in):
+    seed(trades=[_closed("a" * 16), _closed("b" * 16, direction="bearish")])
+    body = logged_in.get("/api/v1/analytics/by-dimension?dim=direction&direction=bearish").get_json()
+    assert [r["key"] for r in body["rows"]] == ["bearish"] and body["n"] == 1
+
+
+def test_by_dimension_rejects_unknown_dim(logged_in):
+    assert_error(logged_in.get("/api/v1/analytics/by-dimension?dim=tier"), "invalid", 400)

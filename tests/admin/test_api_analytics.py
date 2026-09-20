@@ -370,15 +370,20 @@ def _by_dim(client, dim, query=""):
 
 
 def test_strategy_rows_carry_both_measures(seed, logged_in):
-    seed(trades=[
-        _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0),
-        _closed_r("b" * 16, closed_at="2026-04-02T16:00:00+00:00", r=-1.0),
-        _closed_r("c" * 16, closed_at="2026-04-03T16:00:00+00:00", r=2.0),
-    ])
+    # v94 D7/H1: exp_r is null under aggregate.MIN_CELL_N (20), so this
+    # repeats the original 1/-1/2 pattern (mean 2/3) seven times to clear
+    # the floor while proving the same point -- ExpR and total R live side
+    # by side and neither is derived from the other.
+    trades = [
+        _closed_r(f"{i:016x}", closed_at=f"2026-04-{(i % 28) + 1:02d}T16:00:00+00:00",
+                  r=(1.0, -1.0, 2.0)[i % 3])
+        for i in range(21)
+    ]
+    seed(trades=trades)
     row = _by_dim(logged_in, "strategy")["rows"][0]
     assert row["exp_r"] == pytest.approx(2.0 / 3)
-    assert row["total_r"] == pytest.approx(2.0)
-    assert row["n"] == 3
+    assert row["total_r"] == pytest.approx(14.0)
+    assert row["n"] == 21
 
 
 def test_strategy_rows_carry_the_registry_badge(seed, logged_in, registry):
@@ -426,12 +431,15 @@ def test_as_of_ignores_a_trade_dropped_for_an_unrecognized_horizon(seed, logged_
 
 
 def test_total_r_is_not_expectancy_times_n_when_some_trades_lack_an_r(seed, logged_in):
+    # v94 D7: `n` is now the full group size (aggregate.group_by), not the
+    # count of R-computable trades -- total_r still must not be derived
+    # from it, staying a true sum over just the computable subset.
     seed(trades=[
         _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=2.0),
         _closed_r("b" * 16, closed_at="2026-04-02T16:00:00+00:00", r=None),
     ])
     row = _by_dim(logged_in, "strategy")["rows"][0]
-    assert row["n"] == 1
+    assert row["n"] == 2
     assert row["total_r"] == pytest.approx(2.0)
 
 

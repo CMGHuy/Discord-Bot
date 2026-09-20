@@ -299,6 +299,18 @@ def payoff_ratio(closed: list[dict]) -> float | None:
     return payoff_ratio_from_rs(r_multiples(closed))
 
 
+def avg_win_r(closed: list[dict]) -> float | None:
+    """Mean R of the positive computable R-multiples; None with none."""
+    wins = [r for r in r_multiples(closed) if r > 0]
+    return round(sum(wins) / len(wins), 4) if wins else None
+
+
+def avg_loss_r(closed: list[dict]) -> float | None:
+    """Mean R of the negative computable R-multiples (a negative number); None with none."""
+    losses = [r for r in r_multiples(closed) if r < 0]
+    return round(sum(losses) / len(losses), 4) if losses else None
+
+
 def streaks(closed: list[dict]) -> dict:
     """Current/best/worst consecutive win or loss run, over win/loss trades
     only, ordered by `closed_at`. Any other status (scratch/timeout/manual

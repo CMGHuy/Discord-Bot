@@ -78,3 +78,11 @@ def test_unknown_fields_bucket_as_unknown():
 def test_stats_by_raises_on_unknown_dimension():
     with pytest.raises(ValueError):
         stats_by([], "nope")
+
+
+def test_group_by_is_public_and_row_for_matches_stats_by():
+    from swingbot.core.analytics.aggregate import group_by, row_for
+    closed = [_t(["EMA20"], "win", 80.0), _t(["EMA20"], "loss", -40.0)]
+    groups = group_by(closed, "strategy")
+    assert set(groups) == {"EMA20"} and len(groups["EMA20"]) == 2
+    assert row_for("EMA20", groups["EMA20"]) == stats_by(closed, "strategy")[0]
