@@ -35,7 +35,8 @@ runs before the bump, so nothing else catches a missed regeneration.
 ## Step 4 — Amend a wrong prediction, do not hide it
 
 If the plan predicted a level or an `Edge:` the work did not deliver, amend
-the header in this commit and say why in one clause.
+the header and say why in one clause — fold it into Step 3's commit if that
+ran, otherwise into Step 5's move commit.
 
 ## Step 5 — Move the document
 
