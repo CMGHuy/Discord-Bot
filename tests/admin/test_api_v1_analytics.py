@@ -272,3 +272,13 @@ def test_by_dimension_is_scoped(seed, logged_in):
 
 def test_by_dimension_rejects_unknown_dim(logged_in):
     assert_error(logged_in.get("/api/v1/analytics/by-dimension?dim=tier"), "invalid", 400)
+
+
+def test_by_dimension_strategy_rows_carry_soak_key(seed, logged_in):
+    """v93 Task 13 attaches `soak` to every dim=strategy row; this rewrite
+    must not drop it. No plans are seeded, so the value itself is None
+    (verdict['n_closed'] == 0) -- what matters here is that the key
+    survived the rewrite, not its computed meaning."""
+    seed(trades=[_closed("a" * 16)])
+    row = logged_in.get("/api/v1/analytics/by-dimension?dim=strategy").get_json()["rows"][0]
+    assert "soak" in row
