@@ -285,6 +285,7 @@ _DOC_NAME_RE = re.compile(
     r"(?:_[0-9a-z]+(?:-[a-z0-9-]+)?)?\.md$"
 )
 _TWO_HASH_PHASE_RE = re.compile(r"^##\s+Phase\s", re.MULTILINE)
+_ONE_HASH_PHASE_RE = re.compile(r"^#\s+Phase\s", re.MULTILINE)
 
 
 def _rule_plan_doc_shape(ti: dict):
@@ -302,7 +303,11 @@ def _rule_plan_doc_shape(ti: dict):
             "immediately before the commit. See docs/claude/document-conventions.md."
         )
     content = ti.get("content")
-    if isinstance(content, str) and _TWO_HASH_PHASE_RE.search(content):
+    if (
+        isinstance(content, str)
+        and _TWO_HASH_PHASE_RE.search(content)
+        and not _ONE_HASH_PHASE_RE.search(content)
+    ):
         return _deny(
             "`## Phase` uses two hashes. `CLAUDE.md` documents "
             '`grep -n "^# Phase"` as the way to orient in a plan, so a two-hash '

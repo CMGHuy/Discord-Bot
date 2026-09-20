@@ -121,7 +121,8 @@ closed pre-registration knob, and one blocking a malformed spec/plan write.
 Each backs a prose rule already listed above — read `git-safety.md`,
 `backtest-methodology.md`, or `document-conventions.md` respectively rather
 than guessing why an equivalent Claude-side action was denied. Claude
-sessions also now carry eight unprompted "Tier 1" integrity-tier skills that
+sessions also now carry eight unprompted model-invocable skills -- four
+"Tier 1" integrity gates plus four "Tier 3" seam briefings -- that
 self-trigger around these same situations; Codex has no skill runtime, so
 those same `docs/claude/` files remain the only source of the underlying
 rules here.

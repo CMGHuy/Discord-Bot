@@ -88,3 +88,9 @@ def test_ritual_skills_are_slash_only():
     for name in sorted(TIER_2):
         meta, _ = _read_skill(name)
         assert meta.get("disable-model-invocation") == "true"
+
+
+def test_every_skill_is_registered_in_exactly_one_tier():
+    on_disk = {p.name for p in _skill_dirs()}
+    assert on_disk == GRANDFATHERED | TIER_1_AND_3 | TIER_2
+    assert not (TIER_1_AND_3 & TIER_2)

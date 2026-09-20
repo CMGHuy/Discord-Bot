@@ -17,8 +17,7 @@ everything as **paper trades only** — it never places orders. Python 3.11+,
 discord.py, pandas/numpy, yfinance, mplfinance, pytest. JSON persistence under
 `data/`; no database.
 
-**"Production" always means the Hetzner VM** (`167.233.26.185`, `docs/deploy/DEPLOY_HETZNER.md`) — never this dev machine.
-`scripts/ops/ssh-hetzner.sh` connects to it (a command, or bare for an interactive shell); not committed, since it shells through WSL to a key in WSL's own home.
+**"Production" always means the Hetzner VM** (`167.233.26.185`, `docs/deploy/DEPLOY_HETZNER.md`) — never this dev machine. `scripts/ops/ssh-hetzner.sh` connects to it (a command, or bare for an interactive shell); not committed, since it shells through WSL to a key in WSL's own home.
 
 **Any live fix or config change made directly on production must be mirrored back into this repo and committed before the task is considered done.** Reasoning and what "mirrored" means: `docs/claude/working-conventions.md`.
 
@@ -125,11 +124,12 @@ preflights this repo's documented traps. `/gate` is the pre-commit
 verification gate. `.claude/hooks/guardrails.py` is a `PreToolUse` hook that
 **denies** the patterns this file forbids in prose — now including
 protected-branch deletion, closed-pre-registration knobs and malformed
-spec/plan writes — and warns on bare `pytest`/`cat` of the big docs; Tier 1
-skills fire unprompted alongside it, unit-tested in
-`tests/hooks/test_guardrails.py`, fails open by construction (this file wins
-on disagreement). Subagents, the one-subagent-at-a-time default, and
-`.mcp.json`'s context7 provider: `docs/claude/skills-tools.md`.
+spec/plan writes — and warns on bare `pytest`/`cat` of the big docs, unit-
+tested in `tests/hooks/test_guardrails.py`, fails open by construction (this
+file wins on disagreement). Eleven `.claude/skills/` loaders sit beside it —
+the model-invocable ones self-trigger off `description`, shape-tested in
+`tests/hooks/test_skill_shape.py`. Subagents, the one-subagent-at-a-time
+default, and `.mcp.json`'s context7 provider: `docs/claude/skills-tools.md`.
 
 ## Commands
 

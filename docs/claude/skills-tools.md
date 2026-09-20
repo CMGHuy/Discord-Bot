@@ -62,17 +62,23 @@ heading).
 | `no-lookahead` | 1 | model-invocable | `architecture.md`, `known-traps.md` |
 | `pooled-numbers` | 1 | model-invocable | `edge-priorities.md`, `backtest-methodology.md` |
 | `mirror-prod` | 1 | model-invocable | `working-conventions.md` |
-| `edge-module` | 1 | model-invocable | `architecture.md` |
-| `alert-surface` | 1 | model-invocable | `known-traps.md` |
-| `schema-change` | 1 | model-invocable | none — Step 1 reads code (`swingbot/core/db/repositories/`, `scripts/db/parity_report.py`), not a doc |
-| `worktree-lifecycle` | 1 | model-invocable | `document-lifecycle.md`, `working-conventions.md` |
+| `edge-module` | 3 | model-invocable | `architecture.md` |
+| `alert-surface` | 3 | model-invocable | `known-traps.md` |
+| `schema-change` | 3 | model-invocable | none — Step 1 reads code (`swingbot/core/db/repositories/`, `scripts/db/parity_report.py`), not a doc |
+| `worktree-lifecycle` | 3 | model-invocable | `document-lifecycle.md`, `working-conventions.md` |
 | `close-out` | 2 | slash-only (`/close-out`) | `document-lifecycle.md`, `working-conventions.md` |
 | `new-doc` | 2 | slash-only (`/new-doc`) | `document-conventions.md` |
 | `deploy` | 2 | slash-only (`/deploy`) | none — Step 1 reads `docs/deploy/DEPLOY_HETZNER.md` and `docs/deploy/DOCKER.md`, not `docs/claude/` |
 
-Tier 1 skills carry a `Trigger table` (should-fire / should-not-fire rows) in
-their body and no `disable-model-invocation` frontmatter field — they are
-meant to self-trigger off their `description`. Tier 2 skills carry
+Tier 1 (integrity gates) and Tier 3 (seam briefings) are both
+model-invocable and share one mechanical shape contract — a `Trigger table`
+(should-fire / should-not-fire rows) in the body and no
+`disable-model-invocation` frontmatter field, tested together as
+`TIER_1_AND_3` in `tests/hooks/test_skill_shape.py` — but cover different
+ground: Tier 1 blocks an integrity violation (backtest re-runs, lookahead,
+pooled numbers, unmirrored prod changes), Tier 3 briefs an architectural seam
+before it's crossed (edge module boundaries, the alert surface, a schema
+change, worktree lifecycle). Tier 2 skills carry
 `disable-model-invocation: true` and no Trigger table — they are checklists
 for an explicit slash command (`/close-out`, `/new-doc`, `/deploy`), not
 things the model should decide to run on its own.

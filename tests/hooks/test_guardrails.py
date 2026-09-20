@@ -418,6 +418,21 @@ def test_a_conforming_plan_write_is_allowed():
     assert _write(_GOOD_PLAN, "# Phase 0 - conventions\n\n### Task S1: x\n") is None
 
 
+def test_a_two_hash_subsection_heading_beside_a_real_one_hash_phase_is_allowed():
+    """A legitimate `## Phase A exit criteria` subsection must not deny a
+    write just because a one-hash `# Phase` heading exists somewhere else in
+    the document -- e.g. docs/superpowers/plans/2026-09-17-v95-responsive-
+    content-priority_1-foundations.md, which the reviewer found denied by
+    the naive two-hash check even though it is fully conforming."""
+    content = (
+        "# Phase A -- Foundations\n\n"
+        "### Task A1: x\n\n"
+        "## Phase A exit criteria\n\n"
+        "- all tasks above are green\n"
+    )
+    assert _write(_GOOD_PLAN, content) is None
+
+
 def test_a_split_part_filename_is_allowed():
     assert _write("docs/superpowers/plans/2026-08-29-v67-json-to-postgres_1a-foundation-core.md",
                   "# Phase 1 - x\n") is None
