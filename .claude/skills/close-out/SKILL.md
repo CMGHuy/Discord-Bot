@@ -16,8 +16,10 @@ there, not here.
 
 Read `VERSION.json` — never a plan header, never memory, never an earlier
 task's note. Increment only the line named by the plan's `Bump:`; leave the
-other line untouched. `Bump: none` means no release commit at all — skip
-straight to Step 5.
+other line untouched. `Bump: none` means no release commit at all — Step 3
+(the version-bump mechanics) does not apply, but proceed to Step 4 anyway:
+`Bump: none` is itself a prediction that Step 4 must check, not a reason to
+skip it.
 
 ## Step 3 — Stamp, commit, then regenerate
 
@@ -41,12 +43,18 @@ the header in this commit and say why in one clause.
 still builds from it — into `implemented/` for work that reached `main`, or
 `no-lift/` for a plan whose code deliberately did not.
 
-## Step 6 — Remove the worktree
+## Step 6 — Remove the worktree, unless this closed to `no-lift/`
 
-Per `document-lifecycle.md`'s naming. Never delete a branch containing
-`backup` — `guardrails.py` denies it, and that deny is correct.
+For an `implemented/` close: remove the worktree and its branch, per
+`document-lifecycle.md`'s naming. Never delete a branch containing `backup`
+— `guardrails.py` denies it, and that deny is correct.
+
+For a `no-lift/` close: leave the worktree and branch in place. They are the
+only copy of that unmerged work; deleting them is the human partner's call,
+not a default step here.
 
 ## The gate
 
 `VERSION.json`, the regenerated history and the moved plan are all in the
-log; the worktree is gone; no full-suite run happens after a clean merge.
+log; the worktree is gone for an `implemented/` close, or deliberately kept
+for a `no-lift/` one; no full-suite run happens after a clean merge.
