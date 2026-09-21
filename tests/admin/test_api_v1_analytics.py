@@ -199,6 +199,14 @@ def test_exit_quality_rejects_non_scope_parameters(logged_in):
     assert_error(logged_in.get("/api/v1/analytics/exit-quality?bins=3"), "invalid", 400)
 
 
+def test_journal_is_scoped_and_keeps_lessons_param(seed, logged_in):
+    seed(trades=[_closed("a" * 16)])
+    body = logged_in.get("/api/v1/analytics/journal?lessons=2&direction=bearish").get_json()
+    assert body["n"] == 0 and body["entries_n"] == 0
+    assert body["scope"]["direction"] == "bearish"
+    assert_error(logged_in.get("/api/v1/analytics/journal?lessons=0"), "invalid", 400)
+
+
 def test_plans_shape(seed, logged_in):
     seed()
     assert_shape(logged_in.get("/api/v1/analytics/plans").get_json(), {

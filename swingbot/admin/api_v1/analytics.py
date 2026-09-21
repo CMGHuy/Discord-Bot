@@ -526,7 +526,9 @@ def analytics_journal():
 
     from swingbot.core.analytics.insights import top_lessons, weekly_digest
     from swingbot.core.analytics.journal import JournalStore
+    from swingbot.core.analytics.scope import closed_only, echo, select
 
+    scope = _scope(extra=("lessons",))
     raw_lessons = (request.args.get("lessons") or "").strip()
     lessons_n = _positive_int(raw_lessons, "lessons") if raw_lessons else 5
 
@@ -538,16 +540,17 @@ def analytics_journal():
         # other panels came from elsewhere and are fine.
         entries = []
 
-    tl = TradeLog()
-    closed = [t for t in (tl.get_trades(status=None, limit=None, ledger="main") or [])
-              if t.get("status") in ("win", "loss", "closed")]
+    scoped = select(closed_only(_all_trades(TradeLog())), scope)
+    ids = {trade.get("id") for trade in scoped}
+    entries = [entry for entry in entries if entry.get("trade_id") in ids]
 
     return jsonify({
-        "digest": weekly_digest(entries, closed, today=dt.datetime.now().date()),
+        "digest": weekly_digest(entries, scoped, today=dt.datetime.now().date()),
         "lessons": top_lessons(entries, n=lessons_n),
         # The sample behind both lists. A digest drawn from three entries and
         # one drawn from three hundred should not read the same way.
         "entries_n": len(entries),
+        **echo(scope, len(scoped)),
     })
 
 
