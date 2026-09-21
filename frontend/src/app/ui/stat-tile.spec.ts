@@ -31,6 +31,12 @@ describe('StatTile (v85 D23)', () => {
     expect(el.querySelector('.value')!.textContent).toContain('68%');
   });
 
+  it('renders the always-visible secondary amount and compact trend', () => {
+    const el = render({ secondary: '+$1,240', trend: [1, 2, 3] });
+    expect(el.querySelector('.secondary')!.textContent).toContain('+$1,240');
+    expect(el.querySelector('sb-sparkline')).not.toBeNull();
+  });
+
   it('renders a null value as no-value, never as zero', () => {
     const el = render({ value: null });
     expect(el.querySelector('.value')!.textContent!.trim()).toBe('—');
