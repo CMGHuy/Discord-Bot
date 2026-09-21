@@ -253,10 +253,16 @@ def instruction_for(plan, event, *, sizing: dict | None = None) -> Instruction:
             lines=(f"{_stop_kind(plan, detail['new'])}; {signed_r(detail['r_moved'])} "
                    "since the last ping",),
             **common)
-    if transition in ("cancelled_expired", "cancelled_invalidated"):
-        why = (f"not triggered within {plan.expiry_bars} sessions"
-               if transition == "cancelled_expired"
-               else f"price reached the stop {_price(plan.stop_loss)} before triggering")
+    if transition in ("cancelled_expired", "cancelled_invalidated", "cancelled_risk_cap"):
+        if transition == "cancelled_expired":
+            why = f"not triggered within {plan.expiry_bars} sessions"
+        elif transition == "cancelled_invalidated":
+            why = f"price reached the stop {_price(plan.stop_loss)} before triggering"
+        else:
+            why = (f"triggered at {_price(detail['entry_price'])} but risked "
+                   f"{detail['planned_loss_pct']:.1f}% against stop "
+                   f"{_price(detail['stop_loss'])} -- above the "
+                   f"{detail['max_planned_loss_pct']:.1f}% cap; never filled")
         return Instruction(
             verb=CANCEL, headline=f"CANCEL {side['entry_stop']} {_price(plan.trigger_price)}",
             lines=(why,), tone="inert", **common)

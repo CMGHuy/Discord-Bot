@@ -18,6 +18,7 @@ from swingbot.core.planning.plan_engine import (
     sr_target_candidates,
 )
 from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.risk_limits import capped_planned_loss_pct
 
 from tests.helpers import make_ohlcv
 
@@ -68,10 +69,13 @@ ATR_FALLBACK_STRATEGIES = (
 
 
 def test_atr_plan_stop_is_atr_multiple_capped_by_max_risk_pct():
-    # Stop derivation is untouched by v31 -- same golden value as before.
+    # Stop derivation is untouched by v31 -- same golden value as before,
+    # except the ceiling itself is now HARD_MAX_PLANNED_LOSS_PCT-capped
+    # (2026-09-21: build_strategy_plan/backtest sizing can no longer exceed
+    # the 2% hard cap, even when a horizon's own max_risk_pct is wider).
     close, atr_val, h = 100.0, 2.0, "4w"
     mult = HORIZONS[h]["atr_stop_multiple"]
-    exp_risk = min(mult * atr_val, close * HORIZONS[h]["max_risk_pct"] / 100)
+    exp_risk = min(mult * atr_val, close * capped_planned_loss_pct(HORIZONS[h]["max_risk_pct"]) / 100)
     candidates = atr_target_candidates(close, atr_val, "bullish")
     result = _atr_plan(close, atr_val, "bullish", h, "MACD", candidate_levels=candidates)
     assert result is not None
@@ -129,7 +133,7 @@ def test_fibonacci_parity(df, atr_series, direction):
     is_bull = direction == "bullish"
     buffer = STRUCTURE_BUFFER_ATR * atr_val
     expected_stop = swing_low - buffer if is_bull else swing_high + buffer
-    max_risk_amount = entry * (HORIZONS[hk]["max_risk_pct"] / 100)
+    max_risk_amount = entry * (capped_planned_loss_pct(HORIZONS[hk]["max_risk_pct"]) / 100)
     if abs(entry - expected_stop) > max_risk_amount:
         expected_stop = entry - max_risk_amount if is_bull else entry + max_risk_amount
 
@@ -197,7 +201,7 @@ def test_sr_parity(df, atr_series, ratio):
     hk = "3m"
     h = HORIZONS[hk]
     entry, atr_val = _entry_atr(df, atr_series)
-    expected_stop = entry * (1 - h["sr_stop_pct"] / 100)
+    expected_stop = entry * (1 - capped_planned_loss_pct(h["sr_stop_pct"]) / 100)
 
     candidates = sr_target_candidates(df, I, h, entry, ratio)
     result = _sr_plan(entry, ratio, "bullish", hk, candidate_levels=candidates)
@@ -243,7 +247,7 @@ def test_elliott_parity(df, atr_series, direction):
     entry_level = {"wave0": wave0, "wave1": wave1, "wave2": wave2}
     buffer = STRUCTURE_BUFFER_ATR * atr_val
     expected_stop = wave2 - buffer if is_bull else wave2 + buffer
-    max_risk_amount = entry * (HORIZONS[hk]["max_risk_pct"] / 100)
+    max_risk_amount = entry * (capped_planned_loss_pct(HORIZONS[hk]["max_risk_pct"]) / 100)
     if abs(entry - expected_stop) > max_risk_amount:
         expected_stop = entry - max_risk_amount if is_bull else entry + max_risk_amount
 

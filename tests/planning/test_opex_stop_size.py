@@ -15,7 +15,12 @@ from tests.helpers import make_ohlcv
 
 @pytest.fixture(scope="module")
 def df():
-    return make_ohlcv([100 + i * 0.5 for i in range(80)])
+    # spread=0.002 (2026-09-21): the default 0.01 spread puts the ATR-multiple
+    # stop (2.0x ATR on 4w) at roughly 4% of entry, already clamped at the 2%
+    # HARD_MAX_PLANNED_LOSS_PCT hard cap before opex's widening is even
+    # applied -- masking the property this test exists to check. A tighter
+    # spread keeps the base stop (and the 10%-widened one) both under the cap.
+    return make_ohlcv([100 + i * 0.5 for i in range(80)], spread=0.002)
 
 
 def _plan(df, **kw):

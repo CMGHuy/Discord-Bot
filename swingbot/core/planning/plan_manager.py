@@ -57,7 +57,8 @@ class PlanEvent:
 # plan.pending_notice and re-sent until acknowledged. Neither field is read
 # by any exit path (tests/planning/test_plan_manager_feed.py pins that).
 STOP_EVENTS = frozenset({"be_moved", "tp1_partial", "stop_moved"})
-NOTICE_EVENTS = frozenset({"filled", "cancelled_expired", "cancelled_invalidated", "closed"})
+NOTICE_EVENTS = frozenset({"filled", "cancelled_expired", "cancelled_invalidated",
+                           "cancelled_risk_cap", "closed"})
 NOTICE_RESEND_DAYS = 5
 
 

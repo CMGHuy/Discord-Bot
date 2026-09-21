@@ -291,6 +291,7 @@ PLAN_EVENT_STYLES = {
     "filled":                ("🎯 ENTRY TRIGGERED — {ticker}", _NEUTRAL),
     "cancelled_expired":     ("⏱ Plan expired — {ticker}", _INERT),
     "cancelled_invalidated": ("❌ Plan invalidated — {ticker}", _INERT),
+    "cancelled_risk_cap":    ("🚫 Plan cancelled — risk cap — {ticker}", _INERT),
     "be_moved":              ("🛡 Stop moved to break-even — {ticker}", _NEUTRAL),
     "tp1_partial":           ("💰 TP1 banked — {ticker}", _GOOD),
     "loss":                  ("🔴 Stopped out — {ticker}", _BAD),
@@ -337,6 +338,21 @@ def build_plan_event_embed(plan, event) -> discord.Embed:
                         inline=False)
     elif event.transition == "closed":
         embed.add_field(name="Exit", value=f"{d.get('exit_price', 0):.2f}")
+    elif event.transition == "cancelled_expired":
+        embed.add_field(name="Why", value=(
+            f"Never triggered — {d['bars_waited']} bar(s) waited, past the "
+            f"{plan.expiry_bars}-bar window (trigger {plan.trigger_price:.2f})"),
+            inline=False)
+    elif event.transition == "cancelled_invalidated":
+        embed.add_field(name="Why", value=(
+            f"Price closed through the stop before entry triggered: "
+            f"{d['live_price']:.2f} vs stop {plan.stop_loss:.2f}"), inline=False)
+    elif event.transition == "cancelled_risk_cap":
+        embed.add_field(name="Why", value=(
+            f"Trigger filled at {d['entry_price']:.2f} against stop {d['stop_loss']:.2f} — "
+            f"{d['planned_loss_pct']:.2f}% planned risk, above the "
+            f"{d['max_planned_loss_pct']:.1f}% hard cap. Never opened; no position, no P&L."),
+            inline=False)
     return embed
 
 

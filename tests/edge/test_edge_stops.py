@@ -14,6 +14,7 @@ from swingbot.core.planning import params, plan_engine
 from swingbot.core.edge.stops import MIN_SAMPLE, mae_informed_stop_mult
 from swingbot.core.planning.plan_engine import _atr_plan, atr_target_candidates, build_strategy_plan
 from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.risk_limits import capped_planned_loss_pct
 from tests.helpers import make_ohlcv
 
 
@@ -69,7 +70,13 @@ def test_losers_and_missing_mae_are_excluded():
 
 @pytest.fixture(scope="module")
 def df():
-    return make_ohlcv([100 + i * 0.5 for i in range(80)])
+    # spread=0.002 (2026-09-21): the default 0.01 spread puts the plain
+    # ATR-multiple stop (2.0x ATR on 4w) at roughly 4% of entry, already
+    # clamped at the 2% HARD_MAX_PLANNED_LOSS_PCT hard cap before any
+    # stop_mult widening is even applied -- masking the scaling this file's
+    # wiring tests exist to check. A tighter spread keeps both the base and
+    # a 1.2x-1.3x widened stop under the cap.
+    return make_ohlcv([100 + i * 0.5 for i in range(80)], spread=0.002)
 
 
 def _plan(df, **kw):
@@ -95,8 +102,13 @@ def test_stop_mult_scales_risk_and_preserves_rr():
     now the nearest real ATR-ladder candidate that clears the floor, not a
     fixed multiple of whatever risk_distance happens to be) -- both base
     and widened plans must independently land in the
-    [MIN_RISK_REWARD_RATIO, MAX_RISK_REWARD_RATIO] band instead."""
-    close, atr_val = 100.0, 2.0
+    [MIN_RISK_REWARD_RATIO, MAX_RISK_REWARD_RATIO] band instead.
+
+    atr_val=0.5 (2026-09-21, was 2.0): 2.0x ATR at atr_val=2.0 is already 4%
+    of close, above the 2% HARD_MAX_PLANNED_LOSS_PCT hard cap before any
+    widening -- masking the scaling below the cap this test checks. 0.5
+    keeps both the base (1%) and 1.2x-widened (1.2%) risk under it."""
+    close, atr_val = 100.0, 0.5
     base_candidates = atr_target_candidates(close, atr_val, "bullish")
     base_stop, base_tp = _atr_plan(close, atr_val, "bullish", "4w", "RSI",
                                    candidate_levels=base_candidates)
@@ -112,15 +124,18 @@ def test_stop_mult_scales_risk_and_preserves_rr():
 
 
 def test_stop_mult_still_respects_the_max_risk_cap():
-    """Widening may not punch through the horizon's own max_risk_pct cap."""
+    """Widening may not punch through the HARD_MAX_PLANNED_LOSS_PCT cap
+    (2026-09-21: the effective ceiling, tighter than the horizon's own
+    max_risk_pct whenever that horizon allows more than 2%)."""
     close = 100.0
-    huge_atr = close * HORIZONS["4w"]["max_risk_pct"] / 100  # already at the cap
+    capped_pct = capped_planned_loss_pct(HORIZONS["4w"]["max_risk_pct"])
+    huge_atr = close * capped_pct / 100  # already at the cap
     candidates = atr_target_candidates(close, huge_atr, "bullish")
     result = _atr_plan(close, huge_atr, "bullish", "4w", "RSI", stop_mult=1.3,
                        candidate_levels=candidates)
     assert result is not None
     capped_stop, _ = result
-    assert close - capped_stop == pytest.approx(close * HORIZONS["4w"]["max_risk_pct"] / 100)
+    assert close - capped_stop == pytest.approx(close * capped_pct / 100)
 
 
 def test_build_strategy_plan_threads_an_explicit_mult(df, monkeypatch):

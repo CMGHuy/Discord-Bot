@@ -36,7 +36,8 @@ import pytest
 
 from swingbot.core.backtesting import backtest
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES
-from swingbot.core.market.strategy_types import MIN_BARS
+from swingbot.core.market.strategy_types import HORIZONS, MIN_BARS
+from swingbot.core.risk_limits import capped_planned_loss_pct
 
 from tests.fixtures.legacy_trade_plan_at import legacy_trade_plan_at
 
@@ -112,7 +113,7 @@ def test_sizing_parity(ticker, strategy, horizon_key):
             continue
         direction = "bullish" if bullish.values[i] else "bearish"
 
-        _, old_stop, old_tp = legacy_trade_plan_at(
+        entry, old_stop, old_tp = legacy_trade_plan_at(
             df, i, direction, strategy, horizon_key, atr_series,
             swing_high_series, swing_low_series, volume_ratio_series, entry_levels,
         )
@@ -129,9 +130,24 @@ def test_sizing_parity(ticker, strategy, horizon_key):
             continue
         _, new_stop, new_tp = new_plan
 
-        assert old_stop == pytest.approx(new_stop, abs=TOLERANCE), (
+        # 2026-09-21: another known, designed-in divergence, same treatment
+        # as tp1 below -- HARD_MAX_PLANNED_LOSS_PCT (2%) now clamps every
+        # sizing builder's stop distance, tighter than the frozen legacy
+        # side's uncapped (or horizon-max_risk_pct-capped) formula on any
+        # bar where that formula alone would have sat further than 2% from
+        # entry. Re-deriving the same clamp against the legacy stop keeps
+        # this a real extraction check (still catches drift on every OTHER
+        # bar) instead of a permanent, meaningless failure on every bar the
+        # new cap actually bites.
+        is_bull = direction == "bullish"
+        max_risk_amount = entry * (capped_planned_loss_pct(HORIZONS[horizon_key]["max_risk_pct"]) / 100)
+        expected_stop = old_stop
+        if abs(entry - old_stop) > max_risk_amount:
+            expected_stop = entry - max_risk_amount if is_bull else entry + max_risk_amount
+
+        assert expected_stop == pytest.approx(new_stop, abs=TOLERANCE), (
             f"{ticker}/{strategy}/{horizon_key} bar {i} ({direction}): "
-            f"stop mismatch old={old_stop!r} new={new_stop!r}"
+            f"stop mismatch old={old_stop!r} expected(capped)={expected_stop!r} new={new_stop!r}"
         )
         # tp1 is NOT compared. It diverges from the frozen reference BY
         # DESIGN as of plan v31 (docs/superpowers/plans/implemented/2026-08-16-v31-structural-targets.md):

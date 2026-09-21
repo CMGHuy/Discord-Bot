@@ -7,6 +7,7 @@ import numpy as np
 
 from swingbot.core.market import levels, opex
 from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION, HORIZONS
+from swingbot.core.risk_limits import capped_planned_loss_pct
 from .plan_types import PlanStatus, TradePlanV2, record_transition
 from . import params as plan_params
 from .lifecycle import apply_level_lifecycle
@@ -48,7 +49,7 @@ def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None,
     risk_distance = h["atr_stop_multiple"] * atr_val
     if stop_mult is not None:
         risk_distance *= stop_mult
-    max_risk_amount = entry * (h["max_risk_pct"] / 100)
+    max_risk_amount = entry * (capped_planned_loss_pct(h["max_risk_pct"]) / 100)
     if risk_distance > max_risk_amount:
         risk_distance = max_risk_amount
     stop_loss = entry - risk_distance if is_bull else entry + risk_distance
@@ -355,7 +356,7 @@ def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_ke
     else:
         stop_loss = swing_high + buffer
 
-    max_risk_amount = entry * (h["max_risk_pct"] / 100)
+    max_risk_amount = entry * (capped_planned_loss_pct(h["max_risk_pct"]) / 100)
     if abs(entry - stop_loss) > max_risk_amount:
         stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
 
@@ -367,16 +368,16 @@ def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_ke
     return stop_loss, take_profit
 
 def _sr_plan(entry, volume_ratio, direction, horizon_key, candidate_levels=None, params=None):
-    """Fixed-percent stop. Target is the nearest real S/R candidate
-    (sr_target_candidates) that pays at least MIN_RISK_REWARD_RATIO, capped
-    at MAX_RISK_REWARD_RATIO (v31). Returns None when no candidate clears
-    the floor."""
+    """Fixed-percent stop, risk-capped. Target is the nearest real S/R
+    candidate (sr_target_candidates) that pays at least MIN_RISK_REWARD_RATIO,
+    capped at MAX_RISK_REWARD_RATIO (v31). Returns None when no candidate
+    clears the floor."""
     if params is None:
         from swingbot.scan_params import ScanParams
         params = ScanParams.from_config()
     h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
-    stop_pct = h["sr_stop_pct"]
+    stop_pct = capped_planned_loss_pct(h["sr_stop_pct"])
     stop_loss = entry * (1 - stop_pct / 100) if is_bull else entry * (1 + stop_pct / 100)
 
     take_profit = select_structural_target(
@@ -401,7 +402,7 @@ def _elliott_plan(entry, atr_val, wave2, direction, horizon_key, candidate_level
     buffer = STRUCTURE_BUFFER_ATR * atr_val
     stop_loss = wave2 - buffer if is_bull else wave2 + buffer
 
-    max_risk_amount = entry * (h["max_risk_pct"] / 100)
+    max_risk_amount = entry * (capped_planned_loss_pct(h["max_risk_pct"]) / 100)
     if abs(entry - stop_loss) > max_risk_amount:
         stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
 

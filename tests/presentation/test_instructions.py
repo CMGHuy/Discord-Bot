@@ -194,6 +194,15 @@ def test_cancellations_name_the_order_to_cancel():
     assert invalidated.headline == "CANCEL SELL STOP 97.50"
     assert invalidated.lines == ("price reached the stop 101.60 before triggering",)
 
+    risk_capped = ins.instruction_for(_long_pending(), _event(
+        "cancelled_risk_cap", entry_price=102.5, stop_loss=98.4,
+        planned_loss_pct=4.0, max_planned_loss_pct=2.0))
+    assert (risk_capped.verb, risk_capped.tone) == (ins.CANCEL, "inert")
+    assert risk_capped.headline == "CANCEL BUY STOP 102.50"
+    assert risk_capped.lines == (
+        "triggered at 102.50 but risked 4.0% against stop 98.40 -- above the 2.0% cap; "
+        "never filled",)
+
 
 def test_a_regular_session_stop_out():
     plan = _plan(status="CLOSED", entry_price=100.0, stop_loss=95.0, tp1=110.0)

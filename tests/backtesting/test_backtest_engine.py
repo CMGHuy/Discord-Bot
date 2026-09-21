@@ -233,7 +233,13 @@ def test_v2_scale_out_return_pct_matches_r_multiple_not_just_runner_leg():
             continue
         risk_per_share = abs(t.entry - t.stop_loss)
         implied_return_pct = round(t.r_multiple * (risk_per_share / t.entry) * 100, 3)
-        assert t.return_pct == pytest.approx(implied_return_pct)
+        # abs=0.002 (2026-09-21): both sides are independently rounded to 3
+        # decimals (t.r_multiple upstream in the engine, implied_return_pct
+        # here) -- pytest.approx's tight default relative tolerance can trip
+        # on one rounding-boundary unit of drift with no real inconsistency,
+        # which is what the 2% HARD_MAX_PLANNED_LOSS_PCT cap's changed stop
+        # distance for this fixture's Elliott Wave trade landed on.
+        assert t.return_pct == pytest.approx(implied_return_pct, abs=0.002)
     # At least one runner_be win must exist in this fixture and must show a
     # nonzero return_pct (the exact case the bug reported as 0.0%).
     be_wins = [t for t in v2.trades if t.runner_outcome == "runner_be"]

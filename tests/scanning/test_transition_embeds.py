@@ -18,8 +18,22 @@ def test_filled_embed():
 
 
 def test_expired_and_invalidated_embeds():
-    assert "⏱" in _embed("cancelled_expired", {"bars_waited": 6}).title
-    assert "❌" in _embed("cancelled_invalidated", {"live_price": 94.0}).title
+    expired = _embed("cancelled_expired", {"bars_waited": 6})
+    assert "⏱" in expired.title
+    assert any("6 bar" in (f.value or "") for f in expired.fields)
+
+    invalidated = _embed("cancelled_invalidated", {"live_price": 94.0})
+    assert "❌" in invalidated.title
+    assert any("94.00" in (f.value or "") for f in invalidated.fields)
+
+
+def test_risk_cap_cancellation_embed_explains_why():
+    e = _embed("cancelled_risk_cap", {"entry_price": 102.5, "stop_loss": 98.4,
+                                      "planned_loss_pct": 4.0, "max_planned_loss_pct": 2.0})
+    assert "🚫" in e.title and "risk cap" in e.title.lower()
+    why = next(f.value for f in e.fields if f.name == "Why")
+    assert "4.00%" in why and "2.0%" in why
+    assert PLAN_EVENT_STYLES["cancelled_risk_cap"][1].value == tokens.ACCENT_BLOCKED
 
 
 def test_be_moved_embed():
