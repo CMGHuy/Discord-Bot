@@ -19,6 +19,7 @@ _LOGIN = {"username": "admin", "password": "admin"}
 _PATHS = [
     "/api/v1/analytics/snapshot",
     "/api/v1/analytics/performance",
+    "/api/v1/analytics/heat-grid",
     "/api/v1/analytics/strategies",
     "/api/v1/analytics/calibration",
     "/api/v1/analytics/registry",
@@ -98,6 +99,27 @@ def _closed(trade_id, *, status="win", closed_at="2026-08-04T15:00:00+00:00", **
     t["closed_at"] = closed_at
     t.update(over)
     return t
+
+
+def test_heat_grid_folds_thin_strategies_and_nulls_thin_cells(seed, logged_in):
+    fat = [
+        _closed(f"{i:016d}", strategy="MACD", horizon_key="4w",
+                closed_at=f"2026-08-{(i % 28) + 1:02d}T15:00:00+00:00")
+        for i in range(21)
+    ]
+    thin = [_closed("z" * 16, strategy="Volume Profile", horizon_key="4w")]
+    seed(trades=fat + thin)
+
+    body = logged_in.get("/api/v1/analytics/heat-grid").get_json()
+    assert body["rows"] == ["MACD"] and body["cols"][0] == "2w"
+    macd_4w = next(cell for cell in body["cells"]
+                   if cell["r"] == 0 and body["cols"][cell["c"]] == "4w")
+    assert macd_4w["n"] == 21 and macd_4w["win_rate"] == 100.0
+    assert body["folded"]["n_strategies"] == 1
+    other_4w = next(cell for cell in body["folded"]["cells"]
+                    if body["cols"][cell["c"]] == "4w")
+    assert other_4w["n"] == 1 and other_4w["win_rate"] is None
+    assert body["n"] == 22 and body["min_cell_n"] == 20
 
 
 def test_performance_is_scoped_and_echoes_scope(seed, logged_in):

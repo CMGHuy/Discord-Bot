@@ -436,6 +436,72 @@ def analytics_by_dimension():
                     "min_cell_n": MIN_CELL_N, **echo(scope, len(scoped))})
 
 
+@api_v1.route("/analytics/heat-grid", methods=["GET"])
+@require_auth
+def analytics_heat_grid():
+    """Strategy × horizon grid over the scoped book (spec v94 D7/H1).
+
+    Only strategies whose scoped total clears ``MIN_CELL_N`` get a row; the
+    rest fold into one ``Other`` row so a sparse book does not turn into a
+    confident-looking wall of noise. Every cell under the floor carries its
+    count and null rates for the client to render as a blank, dotted cell.
+    """
+    from swingbot.core.analytics import metrics as m
+    from swingbot.core.analytics.aggregate import MIN_CELL_N
+    from swingbot.core.analytics.scope import closed_only, echo, select
+    from swingbot.core.market.strategy_types import HORIZONS
+    from swingbot.core.tracking.performance import primary_strategy_label
+
+    scope = _scope()
+    scoped = select(closed_only(_all_trades(TradeLog())), scope)
+    cols = list(HORIZONS)
+    by_strategy: dict[str, list[dict]] = {}
+    for trade in scoped:
+        if trade.get("horizon_key") in HORIZONS:
+            by_strategy.setdefault(primary_strategy_label(trade), []).append(trade)
+
+    def cell(trades: list[dict]) -> dict:
+        thin = len(trades) < MIN_CELL_N
+        return {
+            "n": len(trades),
+            "exp_r": None if thin else m.expectancy_r(trades),
+            "win_rate": None if thin else m.win_rate(trades),
+        }
+
+    fat = sorted(
+        (strategy for strategy, trades in by_strategy.items() if len(trades) >= MIN_CELL_N),
+        key=lambda strategy: (-len(by_strategy[strategy]), strategy),
+    )
+    cells = []
+    for row, strategy in enumerate(fat):
+        for column, horizon in enumerate(cols):
+            cells.append({
+                "r": row,
+                "c": column,
+                **cell([trade for trade in by_strategy[strategy]
+                        if trade.get("horizon_key") == horizon]),
+            })
+
+    folded_names = [strategy for strategy in by_strategy if strategy not in fat]
+    folded_trades = [trade for strategy in folded_names for trade in by_strategy[strategy]]
+    folded = {
+        "n_strategies": len(folded_names),
+        "cells": [
+            {"c": column, **cell([trade for trade in folded_trades
+                                   if trade.get("horizon_key") == horizon])}
+            for column, horizon in enumerate(cols)
+        ],
+    }
+    return jsonify({
+        "rows": fat,
+        "cols": cols,
+        "cells": cells,
+        "folded": folded,
+        "min_cell_n": MIN_CELL_N,
+        **echo(scope, len(scoped)),
+    })
+
+
 @api_v1.route("/analytics/journal", methods=["GET"])
 @require_auth
 def analytics_journal():
