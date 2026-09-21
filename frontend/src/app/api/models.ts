@@ -419,12 +419,20 @@ export interface EquityCurvePoint {
   date: string;
   cum_r: number;
   drawdown_r: number;
+  cum_pnl: number;
+  cum_pct: number | null;
 }
 
-export interface AnalyticsEquityCurve {
+export type LedgerScope = 'main' | 'weak' | 'both';
+export type AnalyticsUnit = 'r' | 'pct' | 'money';
+export interface BookScope { from: string | null; to: string | null; ledger: LedgerScope; strategy: string | null; horizon: string | null; direction: string | null; }
+export interface Scoped { scope: BookScope; n: number; }
+
+export interface AnalyticsEquityCurve extends Scoped {
   points: EquityCurvePoint[];
-  n: number;
+  points_n: number;
   as_of: string | null;
+  benchmark: { spy_indexed: { date: string; pct: number }[] };
 }
 
 /** One strategy or horizon's aggregate (v85 D40, R9-02). `total_r` is a
@@ -439,21 +447,22 @@ export interface AnalyticsByDimensionRow {
   profit_factor: number | null;
   max_drawdown_r: number | null;
   n: number;
+  wins: number; losses: number; avg_win_r: number | null; avg_loss_r: number | null; total_pnl: number;
   badge?: string;
+  soak?: unknown;
 }
 
-export interface AnalyticsByDimension {
+export interface AnalyticsByDimension extends Scoped {
   rows: AnalyticsByDimensionRow[];
   as_of: string | null;
+  min_cell_n: number;
 }
 
-export interface AnalyticsPerformance {
+export interface AnalyticsPerformance extends Scoped {
   totals: Record<string, unknown>;
   relocated: Record<string, unknown>;
-  /** All-time, NOT scoped by the range — see `AnalyticsDerived`. */
   win_rate: number | null;
   win_rate_n: number;
-  /** All-time, NOT scoped by the range — see `AnalyticsDerived`. */
   expectancy_r: number | null;
   expectancy_n: number;
   by_confidence: Record<string, unknown>;
@@ -471,6 +480,8 @@ export interface AnalyticsPerformance {
   calendar: { month: string; return_pct: number | null; pnl?: number; n: number }[];
   cumulative_by_strategy: Record<string, { date: string; cum_pct: number }[]>;
   benchmark: { spy_cum: Record<string, number> };
+  rolling_wr: { date: string; win_rate: number }[];
+  rolling_exp_r: { date: string; exp_r: number }[];
 }
 
 /**
@@ -519,7 +530,7 @@ export interface TradeJournal {
 }
 
 /** `GET /analytics/journal` — the trailing-week digest and recurring lessons. */
-export interface AnalyticsJournal {
+export interface AnalyticsJournal extends Scoped {
   digest: string[];
   lessons: string[];
   /** Entries behind both lists, so a digest from three is not read like one
@@ -527,19 +538,22 @@ export interface AnalyticsJournal {
   entries_n: number;
 }
 
-export interface AnalyticsStrategies {
+export interface AnalyticsStrategies extends Scoped {
   strategies: unknown[];
-  heatmap: Record<string, unknown>;
+  registry_scope: 'all-time';
+  contribution: { strategy: string; total_r: number | null; n: number }[];
+  cumulative: Record<string, { date: string; cum_r: number }[]>;
 }
 
 export interface AnalyticsCalibration {
   deciles: unknown[];
   levels: unknown[];
   drift: unknown[];
+  scope: 'all-time';
 }
 
 /** `GET /analytics/exit-quality`: all-time journal exit diagnostics. */
-export interface AnalyticsExitQuality {
+export interface AnalyticsExitQuality extends Scoped {
   exit_reasons: unknown[];
   unmapped_reasons: { status: string; text: string; n: number }[];
   hold_by_outcome: unknown;
@@ -560,6 +574,14 @@ export interface AnalyticsPlans {
   };
   badges: Record<string, number>;
   tiers: Record<string, number>;
+  scope: 'all-time';
+}
+
+export interface AnalyticsHeatGrid extends Scoped {
+  rows: string[]; cols: string[];
+  cells: { r: number; c: number; n: number; exp_r: number | null; win_rate: number | null }[];
+  folded: { n_strategies: number; cells: { c: number; n: number; exp_r: number | null; win_rate: number | null }[] };
+  min_cell_n: number;
 }
 
 /** `GET /analytics/registry`.
@@ -1173,6 +1195,8 @@ export interface Preferences {
    *  expanded. Collapsed (absent/false) by default: the first screen is
    *  the KPI row and equity curve, not the histograms below it. */
   analyticsBreakdownsOpen?: boolean;
+  analyticsUnit?: AnalyticsUnit;
+  analyticsScope?: Partial<BookScope>;
   /** SR12 onward: flat dotted keys, so a new preference is a new key rather
    *  than a schema migration. Values are whatever that key stores, and every
    *  reader validates — see `ui/table-prefs.ts` for why that tolerance is
