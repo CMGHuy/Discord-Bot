@@ -71,12 +71,29 @@ describe('sb-tab-bar overflow (v80 D4)', () => {
     expect(tabs[1].getAttribute('aria-label')).toBeNull();
   });
 
-  it('drops the label below sm for an iconed tab only, via CSS', () => {
-    // 639px, not 640: breakpoints.ts's sm floor is 640px and the rule must
-    // apply BELOW it, same convention shell.css's own mobile rules use.
-    const block = SOURCE.match(/@media \(max-width: 639px\) \{([\s\S]*?)\n {4}\}/);
+  it('drops the label below md (mobile and tablet) for an iconed tab only, via CSS', () => {
+    // 1023px, not 1024: breakpoints.ts's md floor is 1024px and the rule
+    // must apply BELOW it, so both phone and tablet widths are covered.
+    const block = SOURCE.match(/@media \(max-width: 1023px\) \{([\s\S]*?)\n {4}\}/);
     expect(block).not.toBeNull();
     expect(block![1]).toContain('.tab.iconed .label { display: none; }');
+    expect(block![1]).toContain('.tab.iconed .count { display: inline; }');
+  });
+
+  it('renders "· N" next to the icon when a count is given, hidden by default', () => {
+    @Component({
+      imports: [TabBar],
+      template: `<sb-tab-bar [tabs]="tabs" [active]="'plans'" />`,
+    })
+    class CountedHost {
+      readonly tabs: Tab[] = [{ id: 'plans', label: 'Plans', icon: 'dashboard', count: 5 }];
+    }
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    const f = TestBed.createComponent(CountedHost);
+    f.detectChanges();
+    const tab = (f.nativeElement as HTMLElement).querySelector('[role="tab"]')!;
+    expect(tab.querySelector('.count')?.textContent).toBe('· 5');
+    expect(rule('.count')).toContain('display: none');
   });
 });
 

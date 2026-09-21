@@ -53,11 +53,18 @@ describe('positions table', () => {
 
   it('offers the five lifecycle tabs, in lifecycle order', () => {
     const f = mount();
-    const labels = [...(f.nativeElement as HTMLElement).querySelectorAll('[role="tab"]')]
-      .map((t) => t.textContent?.replace(/\s+/g, ' ').trim());
+    const labels = [...(f.nativeElement as HTMLElement).querySelectorAll('[role="tab"] .label')]
+      .map((el) => el.textContent?.replace(/\s+/g, ' ').trim());
     expect(labels).toEqual([
       'Open 1', 'Pending 0', 'Partial 0', 'Closed 0', 'Cancelled 0',
     ]);
+  });
+
+  it('mirrors each tab\'s count into the compact "· N" shown below md', () => {
+    const f = mount();
+    const counts = [...(f.nativeElement as HTMLElement).querySelectorAll('[role="tab"] .count')]
+      .map((el) => el.textContent?.trim());
+    expect(counts).toEqual(['· 1', '· 0', '· 0', '· 0', '· 0']);
   });
 
   it('queries only the active tab, not all five', () => {

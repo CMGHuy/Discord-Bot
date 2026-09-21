@@ -78,6 +78,11 @@ export interface Tab {
    *  via title/aria-label even when hidden visually) -- see
    *  positions-table.ts's lifecycle tabs. */
   icon?: IconName;
+  /** Optional -- shown only alongside `icon`, and only below `md`, as
+   *  "· N" next to the icon once the label text itself is hidden there
+   *  (see positions-table.ts's per-status counts). A tab with no `icon`
+   *  never renders this, regardless of whether it's set. */
+  count?: number;
 }
 
 /**
@@ -116,6 +121,9 @@ export interface Tab {
             <sb-icon [name]="tab.icon" />
           }
           <span class="label">{{ tab.label }}</span>
+          @if (tab.icon && tab.count !== undefined) {
+            <span class="count" aria-hidden="true">· {{ tab.count }}</span>
+          }
         </button>
         }
       </div>
@@ -147,13 +155,19 @@ export interface Tab {
     .tab:hover { color: var(--text); }
     .tab:focus-visible { outline: 1px solid var(--accent); outline-offset: -2px; }
     .active { color: var(--text); border-bottom-color: var(--accent); }
-    /* Below sm, an iconed tab drops its text and becomes the icon alone --
-       title/aria-label (set above) carry the name a sighted mouse user
-       would otherwise read from the label. A tab with no icon is
-       untouched: text is its only content either way. */
-    @media (max-width: 639px) {
-      .tab.iconed { padding: var(--space-8); gap: 0; }
+    .count { display: none; }
+    /* Below md (mobile and tablet -- breakpoints.ts's floor for md is
+       1024, so 1023 is the last width still below it), an iconed tab
+       drops its text and becomes the icon alone -- title/aria-label (set
+       above) carry the name a sighted mouse user would otherwise read
+       from the label. In its place, when a count was given, "· N" renders
+       next to the icon so the tab still answers "how many" without the
+       full label. A tab with no icon is untouched: text is its only
+       content either way. */
+    @media (max-width: 1023px) {
+      .tab.iconed { padding: var(--space-8); gap: var(--space-4); }
       .tab.iconed .label { display: none; }
+      .tab.iconed .count { display: inline; }
     }
     .strip::before, .strip::after {
       content: ''; position: absolute; top: 0; bottom: 0; width: var(--space-20);

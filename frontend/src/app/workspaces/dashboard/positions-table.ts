@@ -135,11 +135,10 @@ export class PositionsTable {
   protected readonly emptyState = computed(() => EMPTY_STATES[this.active()] ?? null);
 
   protected readonly tabs = computed<Tab[]>(() =>
-    POSITION_TABS.map((tab) => ({
-      id: tab.id,
-      label: `${tab.label} ${this.counts()[tab.status] ?? 0}`,
-      icon: tab.icon,
-    })),
+    POSITION_TABS.map((tab) => {
+      const count = this.counts()[tab.status] ?? 0;
+      return { id: tab.id, label: `${tab.label} ${count}`, icon: tab.icon, count };
+    }),
   );
 
   protected choose(id: string): void {
