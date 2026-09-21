@@ -170,3 +170,31 @@ P1 baseline capture plus P2 position-level evaluation, then P3 executable-entry 
 ## Completion of this planning task
 
 The roadmap is complete when it preserves all user choices, identifies concrete code seams and existing research dependencies, separates integrity work from hypothesized edge, and defines falsifiable directional acceptance criteria. Implementation, production access, historical sweeps, and rollout remain future work; this document does not report them as completed.
+
+## Closing note (2026-09-21): withdrawn, no lift
+
+**Withdrawn by the human partner before any implementation began. This was a considered
+decision, not an oversight.**
+
+**No code exists anywhere.** Unlike the usual `no-lift/` case, there is no worktree branch
+holding an unmerged implementation: no task in this roadmap was ever started, so `main` and
+every branch are free of its code. Only this document exists. Nothing needs reverting and no
+branch needs preserving.
+
+**Two of its decisions were load-bearing elsewhere and are recorded here so they are not
+silently inherited by a later reader:**
+
+1. **The stocks-only boundary** ("Individual stocks in the production watchlist only. Exclude
+   ETFs, CFDs, and other instruments" / "LONG buys shares; SHORT borrows shares") no longer
+   applies. `docs/superpowers/specs/2026-09-21-v98-downside-coverage-design.md` originally
+   deferred to it and was respecified once this plan was withdrawn; v98 now proposes
+   unleveraged inverse ETFs as trade candidates.
+2. **Its per-direction evaluation contract was unsatisfiable for SHORT as written.** It required
+   "at least 75% net-profitable positions separately for LONG and SHORT" and "retain at least
+   75% of baseline actionable-plan volume separately for LONG and SHORT", but the measured
+   baseline SHORT population is **zero** (173 of 173 closed trades are bullish). "Retain 75% of
+   zero" is satisfied by changing nothing, and no profitability rate is estimable at N=0. Any
+   successor plan needs a SHORT volume *floor to reach*, not a baseline share to retain.
+
+The diagnosis of why the SHORT population is zero — four suppression layers, measured — lives
+in the v98 spec above, not here.
