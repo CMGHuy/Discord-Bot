@@ -250,13 +250,26 @@ def test_strategies_ships_series_not_svg(seed, logged_in):
     owns how a sparkline looks, so the SPA gets numbers."""
     seed()
     body = logged_in.get("/api/v1/analytics/strategies").get_json()
-    assert_shape(body, {"strategies": list, "heatmap": dict})
-    assert_shape(body["heatmap"],
-                 {"strategies": list, "horizons": list, "cells": list},
-                 where="heatmap")
+    assert_shape(body, {"strategies": list, "registry_scope": str,
+                        "contribution": list, "cumulative": dict, "scope": dict, "n": int})
+    assert "heatmap" not in body and body["registry_scope"] == "all-time"
     for row in body["strategies"]:
         assert "sparkline_svg" not in row
         assert isinstance(row["win_rate_series"], list)
+
+
+def test_strategies_carries_scoped_contribution_and_cumulative_and_no_heatmap(seed, logged_in):
+    seed(trades=[
+        _closed("a" * 16, strategy="MACD"),
+        _closed("b" * 16, strategy="MACD", status="loss", exit_price=98.0,
+                closed_at="2026-08-05T15:00:00+00:00"),
+    ])
+    body = logged_in.get("/api/v1/analytics/strategies").get_json()
+    assert "heatmap" not in body and body["registry_scope"] == "all-time"
+    macd = next(row for row in body["contribution"] if row["strategy"] == "MACD")
+    assert macd["n"] == 2
+    assert [point["date"] for point in body["cumulative"]["MACD"]] == ["2026-08-04", "2026-08-05"]
+    assert body["n"] == 2
 
 
 def test_snapshot_fresh_param_is_accepted(seed, logged_in):

@@ -554,53 +554,52 @@ def analytics_journal():
     })
 
 
-def _json_heatmap(heatmap: dict) -> dict:
-    """Flatten the (strategy, horizon) matrix into JSON-addressable cells.
-
-    `_strategy_horizon_heatmap` keys its matrix by a TUPLE, which Jinja is
-    happy to index and json.dumps refuses outright. Rather than inventing a
-    delimiter-joined string key the client would have to parse apart again,
-    the matrix becomes a list of explicit cells -- each carrying its own
-    strategy and horizon -- with the axes preserved alongside so the SPA can
-    still lay out a grid without deriving them.
-    """
-    return {
-        "strategies": heatmap.get("strategies", []),
-        "horizons": heatmap.get("horizons", []),
-        "cells": [
-            {"strategy": s, "horizon": h, "n": cell.get("n"),
-             "win_rate": cell.get("win_rate")}
-            for (s, h), cell in (heatmap.get("matrix") or {}).items()
-        ],
-    }
-
-
 @api_v1.route("/analytics/strategies", methods=["GET"])
 @require_auth
 def analytics_strategies():
-    """Per-strategy record plus the strategy x horizon heatmap.
+    """Registry rows are all-time; scoped series describe this book slice.
 
-    The rolling win-rate series ships as numbers; the Jinja page renders the
-    same data as an inline SVG.
+    A badge is a methodology verdict and must not change with a filter.
+    Contribution, cumulative R, and sparklines do obey BookScope (v94 D5/D9).
     """
-    from swingbot.admin.queries import (
-        _registry_rows,
-        _rolling_win_rate_series,
-        _strategy_horizon_heatmap,
-    )
+    from swingbot.admin.queries import _registry_rows, _rolling_win_rate_series
+    from swingbot.core.analytics import metrics as m
+    from swingbot.core.analytics.scope import closed_only, echo, select
     from swingbot.core.tracking.performance import primary_strategy_label
 
+    scope = _scope()
     rows = _registry_rows()
-    closed = [
-        t for t in TradeLog().get_trades(status=None, limit=None, ledger="main") or []
-        if t.get("status") in ("win", "loss", "closed")
-    ]
-    labeled = [{**t, "strategy": primary_strategy_label(t)} for t in closed]
+    scoped = select(closed_only(_all_trades(TradeLog())), scope)
+    labeled = [{**trade, "strategy": primary_strategy_label(trade)} for trade in scoped]
     for row in rows:
-        strat = [t for t in labeled if t["strategy"] == row["strategy"]]
+        strat = [trade for trade in labeled if trade["strategy"] == row["strategy"]]
         row["win_rate_series"] = _rolling_win_rate_series(strat, window=10)
 
-    return jsonify({"strategies": rows, "heatmap": _json_heatmap(_strategy_horizon_heatmap())})
+    by_strategy: dict[str, list[dict]] = {}
+    for trade in labeled:
+        by_strategy.setdefault(trade["strategy"], []).append(trade)
+    contribution, cumulative = [], {}
+    for name, trades in by_strategy.items():
+        ordered = sorted(trades, key=lambda trade: trade.get("closed_at") or "")
+        rs = [(trade, r) for trade in ordered if (r := m.r_multiple(trade)) is not None]
+        contribution.append({
+            "strategy": name,
+            "total_r": round(sum(r for _, r in rs), 4) if rs else None,
+            "n": len(trades),
+        })
+        running, series = 0.0, []
+        for trade, r in rs:
+            running += r
+            series.append({"date": (trade.get("closed_at") or "")[:10], "cum_r": round(running, 4)})
+        cumulative[name] = series
+    contribution.sort(key=lambda row: (-(abs(row["total_r"]) if row["total_r"] is not None else -1), row["strategy"]))
+    return jsonify({
+        "strategies": rows,
+        "registry_scope": "all-time",
+        "contribution": contribution,
+        "cumulative": cumulative,
+        **echo(scope, len(scoped)),
+    })
 
 
 @api_v1.route("/analytics/exit-quality", methods=["GET"])
