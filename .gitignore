@@ -131,3 +131,6 @@ data/v82/
 data/v88/
 # v90 rejection-only armed-entries replay output (large, regenerable)
 data/v90/
+
+# claude plugin eval run artefacts (HTML reports, aggregate json) -- never committed
+.claude/skills/*/evals/results/
