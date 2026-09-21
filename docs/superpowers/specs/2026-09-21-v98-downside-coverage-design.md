@@ -147,8 +147,21 @@ Pre-registered before any run, quoted verbatim into the results document, per
   ride in on the basket's pooled number.
 - If nothing clears, the component closes and **no instrument ships**. No threshold is
   loosened and no second grid is run on the same question.
-- If it clears, the instruments ship behind a config flag, default off, and enabling is a
-  separate decision with its own record.
+- If it clears, the instruments ship behind a config flag **default on** (decided 2026-09-21).
+
+**The default-on decision moves the safety checkpoint earlier, and the plan must honour that.**
+The repo's usual posture is default-off with a separate enabling decision. Here there is no
+post-merge checkpoint: the operator places resting broker orders from alerts, so these become
+real-money-actionable the moment the change merges. All three of the following must therefore
+hold **before merge**, not after:
+
+1. Q-INV clears the pre-registered rule above, per instrument and pooled.
+2. The differential test passes (Isolation, below) — long alerts byte-identical.
+3. All four isolation requirements have landed, including the cohort-key change; the registry
+   is not regenerated before it does.
+
+If any one fails, nothing ships and the flag does not exist. The flag remains in place after
+merge as a **kill switch** — the operator can turn the basket off without a revert.
 
 ## Isolation: the long book must not move
 
@@ -171,7 +184,11 @@ requirement:
    long book: `max_position_value_absolute = 1000` / `max_risk_amount_absolute = 100` against a
    $1M balance puts per-trade heat near 0.01%, nowhere near the 6% `PORTFOLIO_HEAT_CAP_PCT`.
    Slots are the only binding limiter, and the four instruments fire together in a decline.
-   **Requirement:** a separate concurrent sub-cap for inverse instruments, outside the 30.
+   **Requirement:** a concurrent sub-cap of **4** inverse positions, held **outside** the 30 and
+   never drawing from it. Four is the full basket, chosen deliberately so no instrument is
+   arbitrarily locked out of a decline. The cap's purpose here is isolation, not diversification
+   — the four are ~0.95 correlated with each other and should be understood as roughly one trade
+   at 4x size, which is why they must never compete for a long slot.
 4. **Shared-table mutation.** **Requirement:** the horizon restriction is a per-symbol overlay
    resolved at call time. Never mutate `STRATEGY_GATES` or `HORIZONS`, and never use
    `entry_filters.gate_override()` outside tests — it mutates a global dict in place and can
@@ -211,12 +228,15 @@ different mechanism with its own risk profile and would need its own decompositi
   live forward sample. Forward data is not the reserved window, so this is the one route that
   could legitimately reopen v93 later at zero budget cost.
 
-## Open decisions for the human partner
+## Decisions taken
 
-1. **Concurrent inverse sub-cap: what number?** Proposed 3-4 of the 30. Lower is safer for long
-   throughput; higher gives deeper coverage in a sustained decline.
-2. **Ship behind a flag default-off, or default-on once Q-INV clears?** Default-off is the
-   repo's usual posture and is what this spec assumes.
-3. **Should the withdrawn v97 plan be restored to `plans/no-lift/`** rather than deleted?
-   `docs/claude/document-lifecycle.md:90` says a plan whose code never reached `main` is
-   `git mv`'d there, preserving its reasoning as history.
+All resolved 2026-09-21. No open questions block the implementing plan.
+
+1. **Inverse sub-cap: 4**, the full basket, held outside the 30-slot long cap. See Isolation
+   requirement 3.
+2. **Ship default-on** once Q-INV clears, with the three pre-merge preconditions above and the
+   flag retained as a kill switch. See Evaluation contract.
+3. **The withdrawn v97 plan was restored and moved** to
+   `docs/superpowers/plans/no-lift/2026-09-20-v97-directional-precision-improvement.md` per
+   `docs/claude/document-lifecycle.md:90`, with a closing note recording the two decisions of
+   its that were load-bearing elsewhere.
