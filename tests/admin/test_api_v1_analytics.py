@@ -181,7 +181,7 @@ def test_performance_window_balance_is_the_real_unscoped_account_balance(seed, t
 def test_calibration_shape(seed, logged_in):
     seed()
     assert_shape(logged_in.get("/api/v1/analytics/calibration").get_json(),
-                 {"deciles": list, "levels": list, "drift": list})
+                 {"deciles": list, "levels": list, "drift": list, "scope": str})
 
 
 def test_exit_quality_is_scoped_and_echoes(seed, logged_in):
@@ -211,8 +211,33 @@ def test_plans_shape(seed, logged_in):
     seed()
     assert_shape(logged_in.get("/api/v1/analytics/plans").get_json(), {
         "funnel": dict, "in_flight": int, "fill_rate": dict,
-        "badges": dict, "confidence_levels": dict,
+        "badges": dict, "confidence_levels": dict, "scope": str,
     })
+
+
+def test_all_time_routes_say_so(seed, logged_in):
+    seed()
+    assert logged_in.get("/api/v1/analytics/calibration").get_json()["scope"] == "all-time"
+    assert logged_in.get("/api/v1/analytics/plans").get_json()["scope"] == "all-time"
+
+
+def test_one_query_string_one_population(seed, logged_in):
+    seed(trades=[
+        _closed("a" * 16, horizon_key="4w"),
+        _closed("b" * 16, direction="bearish", horizon_key="4w"),
+        _closed("c" * 16, closed_at="2026-07-01T15:00:00+00:00", horizon_key="4w"),
+    ])
+    query = "from=2026-08-01&direction=bullish"
+    paths = {
+        name: f"/api/v1/analytics/{name}?{query}"
+        for name in ("performance", "equity-curve", "heat-grid", "exit-quality", "journal", "strategies")
+    }
+    paths["by-dimension"] = f"/api/v1/analytics/by-dimension?dim=horizon&{query}"
+    ns = {
+        name: logged_in.get(path).get_json()["n"]
+        for name, path in paths.items()
+    }
+    assert set(ns.values()) == {1}, ns
 
 
 def test_plans_serves_the_lifecycle_aggregation_over_real_plans(logged_in, monkeypatch):

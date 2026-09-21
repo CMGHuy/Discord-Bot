@@ -640,6 +640,7 @@ def analytics_calibration():
         "deciles": calibration.get("deciles", []),
         "levels": calibration.get("levels", []),
         "drift": calibration.get("drift", []),
+        "scope": "all-time",
     })
 
 
@@ -662,4 +663,4 @@ def analytics_plans():
     from swingbot.admin.queries import _plan_lifecycle
     from swingbot.core.planning.plan_store import PlanStore
 
-    return jsonify(_plan_lifecycle(PlanStore().all()))
+    return jsonify({**_plan_lifecycle(PlanStore().all()), "scope": "all-time"})
