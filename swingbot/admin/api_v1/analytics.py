@@ -603,26 +603,31 @@ def analytics_strategies():
 @api_v1.route("/analytics/exit-quality", methods=["GET"])
 @require_auth
 def analytics_exit_quality():
-    """All-time exit-quality aggregates; the scatter warrants its own call."""
-    if request.args:
-        raise ApiError("invalid", f"unknown parameter {sorted(request.args)[0]!r}; this route takes none", 400)
+    """Exit-quality aggregates over the scoped book (spec v94 D8).
+
+    Journal-derived blocks join on ``trade_id`` so the winners-only
+    histograms describe the same population as the exit strip above them.
+    """
 
     from swingbot.core.analytics import exit_quality as eq
     from swingbot.core.analytics import metrics as m
     from swingbot.core.analytics.aggregate import MIN_CELL_N
     from swingbot.core.analytics.journal import JournalStore
+    from swingbot.core.analytics.scope import closed_only, echo, select
 
-    closed = [t for t in TradeLog().get_trades(status=None, limit=None, ledger="main") or []
-              if t.get("status") in ("win", "loss", "closed")]
-    entries = JournalStore().entries()
-    return jsonify({"exit_reasons": m.exit_reason_split(closed),
-                    "unmapped_reasons": m.unmapped_exit_reasons(closed),
-                    "hold_by_outcome": m.hold_by_outcome(closed),
+    scope = _scope()
+    scoped = select(closed_only(_all_trades(TradeLog())), scope)
+    ids = {trade.get("id") for trade in scoped}
+    entries = [entry for entry in JournalStore().entries() if entry.get("trade_id") in ids]
+    return jsonify({"exit_reasons": m.exit_reason_split(scoped),
+                    "unmapped_reasons": m.unmapped_exit_reasons(scoped),
+                    "hold_by_outcome": m.hold_by_outcome(scoped),
                     "efficiency": eq.efficiency_histogram(entries),
                     "mae": eq.mae_histogram(entries),
                     "scatter": eq.mfe_mae_points(entries),
                     "coverage": eq.coverage(entries),
-                    "min_cell_n": MIN_CELL_N})
+                    "min_cell_n": MIN_CELL_N,
+                    **echo(scope, len(scoped))})
 
 
 @api_v1.route("/analytics/calibration", methods=["GET"])

@@ -184,8 +184,19 @@ def test_calibration_shape(seed, logged_in):
                  {"deciles": list, "levels": list, "drift": list})
 
 
-def test_exit_quality_rejects_unknown_parameters(logged_in):
-    assert logged_in.get("/api/v1/analytics/exit-quality?from=2026-01-01").status_code == 400
+def test_exit_quality_is_scoped_and_echoes(seed, logged_in):
+    seed(trades=[
+        _closed("a" * 16),
+        _closed("b" * 16, closed_at="2026-07-01T15:00:00+00:00"),
+    ])
+    body = logged_in.get("/api/v1/analytics/exit-quality?from=2026-08-01").get_json()
+    assert body["n"] == 1 and body["scope"]["from"] == "2026-08-01"
+    assert body["hold_by_outcome"]["n_winners"] == 1
+    assert body["min_cell_n"] == 20
+
+
+def test_exit_quality_rejects_non_scope_parameters(logged_in):
+    assert_error(logged_in.get("/api/v1/analytics/exit-quality?bins=3"), "invalid", 400)
 
 
 def test_plans_shape(seed, logged_in):
