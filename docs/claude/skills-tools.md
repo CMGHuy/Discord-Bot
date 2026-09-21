@@ -82,3 +82,31 @@ change, worktree lifecycle). Tier 2 skills carry
 `disable-model-invocation: true` and no Trigger table — they are checklists
 for an explicit slash command (`/close-out`, `/new-doc`, `/deploy`), not
 things the model should decide to run on its own.
+
+## Proving a skill fires: the eval suites
+
+Every Tier 1 and Tier 3 trigger table is wired into a runnable suite under
+`.claude/skills/<skill>/evals/` — one case per table row, `fire-*` for a
+should-fire row and `no-fire-*` for a near-miss. A case is a `prompt.md` (the
+request as a session would really phrase it, `allowed_tools: [Read, Glob,
+Grep, Skill]`) plus `graders/skill-fired.md`, a `tool_used` grader on the
+`Skill` tool: `min: 1` for a fire, `min: 0` **and** `max: 0` for a near-miss.
+A near-miss grader must set `min: 0` explicitly — `min` defaults to 1, so a
+bare `max: 0` asks for the impossible range `1..0` and fails every case that
+behaved correctly.
+
+```bash
+claude plugin eval .claude/skills/<skill> --runs 1 --no-publish --trust-plugin --ablation none
+```
+
+`--ablation none` keeps the run to a single arm. Omit it and the run defaults
+to `with-without`, which adds a no-plugin baseline arm at twice the runs and
+cost. That arm is worth paying for when the question is whether the *skill*
+rather than the base model produced the behaviour — a should-fire case then
+reports `with 1.00 / without 0.00 / Δ +1.00`. It adds nothing on a near-miss,
+where the baseline arm trivially scores 1.00.
+
+Each case is a real child `claude` run on your own credential. The full
+52-case sweep is about $3.50 and about 8 minutes; per-skill suites are 3–8
+cases each. Results land in `.claude/skills/<skill>/evals/results/`, which is
+gitignored. Baseline at 2026-09-21: 52/52 cases pass, all eight suites exit 0.
