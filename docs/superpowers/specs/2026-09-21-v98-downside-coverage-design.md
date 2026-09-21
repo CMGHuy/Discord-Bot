@@ -102,8 +102,13 @@ strategies on that single instrument, essentially all in 2022.
 ### Why this is executable
 
 Long PSQ is a plain buy order. A genuine short needs margin and a locate. For an operator
-placing resting orders, this route is **more** actionable, not less. ETFs also skip earnings
-blackout entirely (`market/events.py:49`), removing a whole class of gap risk.
+placing resting orders, this route is **more** actionable, not less.
+
+**Correction (2026-09-21, found while planning):** an earlier revision claimed these
+instruments skip earnings blackout via `market/events.py:49`, removing a class of gap risk.
+That gate keys off `is_etf()`, which reads `data/universe/etfs.json` — and PSQ, SH, RWM and DOG
+are **not in that file** (17 entries, not even SPY or QQQ). The property only holds once the
+implementing plan registers them. It is a task, not a freebie.
 
 ## What is genuinely new and must be measured
 
@@ -180,11 +185,19 @@ requirement:
    closed trades per strategy against the registry. Inverse trades logged under a shared
    strategy name move that strategy's live WR and raise spurious decay alerts.
    **Requirement:** badge and drift populations filter to the equity population.
-3. **Open-slot competition.** `max_open_positions = 30`, and the heat caps will not save the
-   long book: `max_position_value_absolute = 1000` / `max_risk_amount_absolute = 100` against a
-   $1M balance puts per-trade heat near 0.01%, nowhere near the 6% `PORTFOLIO_HEAT_CAP_PCT`.
-   Slots are the only binding limiter, and the four instruments fire together in a decline.
-   **Requirement:** a concurrent sub-cap of **4** inverse positions, held **outside** the 30 and
+3. **Open-slot accounting.** **Correction (2026-09-21, found while planning):** an earlier
+   revision of this spec claimed "slots are the only binding limiter." That is **false**.
+   `max_open_positions` is **advisory only** — `scanning/scan_run.py:824` compares `open_count`
+   against it purely to compose a warning string ("consider skipping new size here"); nothing
+   anywhere blocks on it. The heat caps are separately non-binding:
+   `max_position_value_absolute = 1000` / `max_risk_amount_absolute = 100` against a $1M balance
+   puts per-trade heat near 0.01%, far under the 6% `PORTFOLIO_HEAT_CAP_PCT`.
+
+   The real defect is therefore narrower but still real: inverse positions would inflate the
+   shared `open_count` and raise **spurious warnings on long alerts** — a live path where an
+   inverse position visibly degrades a long trade plan. **Requirement:** the warning's
+   `open_count` becomes equity-only, and a genuine concurrent cap of **4** inverse positions is
+   introduced (it does not exist today), held **outside** the 30 and
    never drawing from it. Four is the full basket, chosen deliberately so no instrument is
    arbitrarily locked out of a decline. The cap's purpose here is isolation, not diversification
    — the four are ~0.95 correlated with each other and should be understood as roughly one trade
@@ -205,7 +218,13 @@ construction; do not "fix" it into two-sided clustering.
 - A differential test: run the scan pipeline over the current watchlist with the inverse
   symbols present and absent, and assert the emitted **long** alerts are identical — tickers,
   strategies, horizons, entries, stops, targets, sizes.
-- Re-derive the closed book and assert N=158 / WR 62.0% / ExpR +1.537 unchanged.
+- A closed-book invariance check. **Correction (2026-09-21):** an earlier revision asserted the
+  fixed figures N=158 / WR 62.0% / ExpR +1.537. That is the wrong shape of assertion — the bot
+  is live and the book grows every session (it read 158 decided when this spec was drafted, 161
+  while the plan was being written, and 162 hours later). A frozen N would fail for reasons
+  having nothing to do with this change. **Requirement:** snapshot per-`trade_id` outcomes
+  before the change and assert every pre-existing trade's outcome is byte-identical after,
+  rather than asserting an aggregate.
 - `python scripts/dev/testrun.py full` as the implementing plan's single final verification
   task.
 
