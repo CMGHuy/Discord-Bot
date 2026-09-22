@@ -31,9 +31,10 @@ from swingbot import config
 from swingbot.core.market.session import session_date
 from swingbot.core.marketdata import data_refresh, data_store
 from swingbot.core.marketdata.data import (
-    get_current_price_batch,
     get_daily_data_batch,
     is_us_market_active,
+    peek_cached_batch_price,
+    warm_batch_price_cache_background,
 )
 from swingbot.core.planning.plan_engine import PlanStatus
 from swingbot.core.planning.plan_store import PlanStore
@@ -165,11 +166,18 @@ def build_market_rows(tickers: list[str]) -> dict[str, dict]:
     live: dict[str, float] = {}
     if is_us_market_active():
         try:
-            live = get_current_price_batch(list(tickers)) or {}
+            live = peek_cached_batch_price(list(tickers)) or {}
         except Exception:
             # An intraday overlay is a nicety. Losing it must not lose the
             # closes, which are the page's actual content.
             live = {}
+        cold = [t for t in tickers if t not in live]
+        if cold:
+            # Cache-only above, never a live Yahoo call on this request
+            # (test_api_v1_watchlist.py's under-1s contract) -- warm the
+            # cache in the background so the next page view (or the next
+            # scheduled poll) sees the live quote instead of paying for it.
+            warm_batch_price_cache_background(cold)
 
     rows: dict[str, dict] = {}
     for symbol in tickers:

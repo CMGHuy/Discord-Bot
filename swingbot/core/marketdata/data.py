@@ -1,6 +1,7 @@
 """Fetches daily OHLC data for a ticker."""
 import logging
 import os
+import threading
 import time
 from dataclasses import dataclass
 
@@ -191,6 +192,45 @@ def get_current_price_batch(tickers: list, *, allow_stale: bool = True) -> dict:
     if missing and allow_stale:
         out.update(_stale_batch_fallback(missing, now))
     return out
+
+
+def peek_cached_batch_price(tickers: list) -> dict:
+    """Cache-only sibling of `get_current_price_batch`: whichever of
+    `tickers` has a fresh-enough last-good batch price, never fetches,
+    never blocks. Same shape as `core.market.events.peek_cached_
+    earnings_datetime` -- pair with `warm_batch_price_cache_background` to
+    fill the gap for next time without making THIS request pay for it.
+    """
+    tickers = list(dict.fromkeys(
+        str(ticker).upper().strip()
+        for ticker in tickers if ticker is not None and str(ticker).strip()
+    ))
+    if not tickers:
+        return {}
+    return _stale_batch_fallback(tickers, time.monotonic())
+
+
+def warm_batch_price_cache_background(tickers: list) -> threading.Thread:
+    """Fire-and-forget: populate `_last_good_batch_price` for `tickers` on
+    a daemon thread. Same shape as `core.market.events.
+    warm_earnings_cache_background` -- the caller gets an immediate return
+    and the next request (or the next poll of the same page) sees the
+    warmed price instead of paying for it.
+
+    ``allow_stale=False`` so the fetch always hits the network rather than
+    short-circuiting on a fresh-enough cache entry `peek_cached_batch_price`
+    would already have returned -- there would be nothing new to warm.
+    """
+    def _run():
+        try:
+            get_current_price_batch(tickers, allow_stale=False)
+        except Exception:
+            log.debug("background price warm-up failed for %d ticker(s)",
+                      len(tickers), exc_info=True)
+
+    t = threading.Thread(target=_run, name="price-cache-warm", daemon=True)
+    t.start()
+    return t
 
 
 def _stale_batch_fallback(tickers: list, now: float) -> dict:

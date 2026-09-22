@@ -252,6 +252,44 @@ def test_get_current_price_batch_reuses_a_short_lived_display_quote(monkeypatch)
     assert calls["n"] == 1
 
 
+def test_peek_cached_batch_price_returns_nothing_before_anything_fetched():
+    assert data_mod.peek_cached_batch_price(["ZZPEEK1"]) == {}
+
+
+def test_peek_cached_batch_price_returns_the_cached_value_without_fetching(monkeypatch):
+    frame = _batch_frame({"ZZPEEK2": [12.0]})
+    monkeypatch.setattr(data_mod.yf, "download", lambda *a, **kw: frame)
+    data_mod.get_current_price_batch(["ZZPEEK2"])  # populates the cache
+
+    def boom(*a, **kw):
+        raise AssertionError("peek must never fetch")
+    monkeypatch.setattr(data_mod.yf, "download", boom)
+
+    assert data_mod.peek_cached_batch_price(["ZZPEEK2"]) == {"ZZPEEK2": 12.0}
+
+
+def test_warm_batch_price_cache_background_populates_the_cache(monkeypatch):
+    frame = _batch_frame({"ZZWARM1": [7.0]})
+    monkeypatch.setattr(data_mod.yf, "download", lambda *a, **kw: frame)
+
+    thread = data_mod.warm_batch_price_cache_background(["ZZWARM1"])
+    thread.join(timeout=5)
+
+    assert data_mod.peek_cached_batch_price(["ZZWARM1"]) == {"ZZWARM1": 7.0}
+
+
+def test_warm_batch_price_cache_background_survives_a_failing_batch(monkeypatch):
+    def boom(*a, **kw):
+        raise RuntimeError("Yahoo throttled")
+    monkeypatch.setattr(data_mod.yf, "download", boom)
+
+    thread = data_mod.warm_batch_price_cache_background(["ZZWARM2"])
+    thread.join(timeout=5)
+
+    assert not thread.is_alive()
+    assert data_mod.peek_cached_batch_price(["ZZWARM2"]) == {}
+
+
 def test_prefetch_prices_batches_once_and_warms_the_single_price_cache(monkeypatch):
     monkeypatch.setattr(data_mod, "_price_cache", {})
     calls = []

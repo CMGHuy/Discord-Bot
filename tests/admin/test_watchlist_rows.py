@@ -80,7 +80,7 @@ def test_an_intraday_quote_overrides_the_close_while_the_market_is_open(bars, mo
     bars["AAPL"] = _frame([100.0] * 26)
     monkeypatch.setattr("swingbot.admin.watchlist_rows.is_us_market_active", lambda: True)
     monkeypatch.setattr(
-        "swingbot.admin.watchlist_rows.get_current_price_batch", lambda t: {"AAPL": 173.25}
+        "swingbot.admin.watchlist_rows.peek_cached_batch_price", lambda t: {"AAPL": 173.25}
     )
     assert build_market_rows(["AAPL"])["AAPL"]["price"] == pytest.approx(173.25)
 
@@ -92,11 +92,43 @@ def test_as_of_names_today_when_the_price_is_the_live_overlay(bars, monkeypatch)
     bars["AAPL"] = _frame([100.0] * 26, start="2026-01-01")  # last close: late Jan
     monkeypatch.setattr("swingbot.admin.watchlist_rows.is_us_market_active", lambda: True)
     monkeypatch.setattr(
-        "swingbot.admin.watchlist_rows.get_current_price_batch", lambda t: {"AAPL": 173.25}
+        "swingbot.admin.watchlist_rows.peek_cached_batch_price", lambda t: {"AAPL": 173.25}
     )
     monkeypatch.setattr("swingbot.admin.watchlist_rows.session_date", lambda: "2026-09-14")
     row = build_market_rows(["AAPL"])["AAPL"]
     assert row["as_of"] == "2026-09-14"
+
+
+def test_a_cold_price_cache_falls_back_to_the_close_without_blocking(bars, monkeypatch):
+    """The whole point of the fix: a not-yet-cached live price must never
+    make build_market_rows wait on a live Yahoo call -- it reads the close
+    for THIS response and warms the cache in the background for next time."""
+    bars["AAPL"] = _frame([100.0] * 25 + [171.5])
+    monkeypatch.setattr("swingbot.admin.watchlist_rows.is_us_market_active", lambda: True)
+    monkeypatch.setattr("swingbot.admin.watchlist_rows.peek_cached_batch_price", lambda t: {})
+
+    warmed = []
+    monkeypatch.setattr(
+        "swingbot.admin.watchlist_rows.warm_batch_price_cache_background",
+        lambda t: warmed.extend(t),
+    )
+
+    assert build_market_rows(["AAPL"])["AAPL"]["price"] == pytest.approx(171.5)
+    assert warmed == ["AAPL"]
+
+
+def test_a_warm_price_cache_does_not_trigger_another_background_warm(bars, monkeypatch):
+    bars["AAPL"] = _frame([100.0] * 26)
+    monkeypatch.setattr("swingbot.admin.watchlist_rows.is_us_market_active", lambda: True)
+    monkeypatch.setattr(
+        "swingbot.admin.watchlist_rows.peek_cached_batch_price", lambda t: {"AAPL": 173.25}
+    )
+
+    def boom(t):
+        raise AssertionError("an already-warm ticker must not be re-warmed")
+    monkeypatch.setattr("swingbot.admin.watchlist_rows.warm_batch_price_cache_background", boom)
+
+    build_market_rows(["AAPL"])
 
 
 def test_an_empty_watchlist_makes_no_batch_call(bars, monkeypatch):
