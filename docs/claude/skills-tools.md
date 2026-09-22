@@ -48,6 +48,10 @@ Referenced from the root `CLAUDE.md`.
   Node API rather than the bare `playwright screenshot` CLI, which can't fill
   a form. A v94 V2 plan task still lists `claude-in-chrome` as its first
   fallback — that ordering is superseded by this rule.
+- **Local `ng serve` uses port 4123, never the Angular CLI default 4200** —
+  `npx ng serve --port 4123` (or `npm start -- --port 4123`). Point any
+  Playwright/browser-driven URL and the `proxy.conf.json` target's own port
+  (`:1234`, unaffected) at `4123` accordingly.
 
 ## The v96 skills layer
 
