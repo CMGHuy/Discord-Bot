@@ -3,7 +3,7 @@ import json
 import pandas as pd
 import pytest
 
-from swingbot.admin.watchlist_rows import build_market_rows, build_signals
+from swingbot.admin.watchlist_rows import build_market_rows, build_signals, clear_signal_cache
 
 
 def _frame(closes: list[float], start: str = "2026-01-01") -> pd.DataFrame:
@@ -126,7 +126,13 @@ def plans(monkeypatch):
     build_signals's own tests use -- translated to the TradePlanV2 field
     names (`quality_score`, `horizon_key`) here, once, rather than in every
     test. Patches PlanStore where watchlist_rows imported it, the same
-    origin-module trick test_api_v1_analytics.py's FakeStore uses."""
+    origin-module trick test_api_v1_analytics.py's FakeStore uses.
+
+    Also clears the module's `_signal_cache`: it's keyed on the *real*
+    `data/plans.json`'s (mtime, size, ctime), which this fixture never
+    touches, so whenever that file happens to exist on disk (any checkout
+    that has ever run `admin_ui.py`), every test here shares one signature
+    and the first test's result silently leaks into every test after it."""
 
     def _install(records):
         installed = [_FakePlan(**r) for r in records]
@@ -136,6 +142,7 @@ def plans(monkeypatch):
                 return installed
 
         monkeypatch.setattr("swingbot.admin.watchlist_rows.PlanStore", FakeStore)
+        clear_signal_cache()
 
     return _install
 
