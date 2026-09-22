@@ -214,8 +214,8 @@ describe('Dashboard v85 layout', () => {
 
   it('feeds the tab counts from the lifecycle payload', async () => {
     const fixture = await loaded();
-    const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('[role="tab"]')]
-      .map((t) => t.textContent?.replace(/\s+/g, ' ').trim());
+    const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('[role="tab"] .label')]
+      .map((el) => el.textContent?.replace(/\s+/g, ' ').trim());
     expect(labels[0]).toMatch(/^Open \d+$/);
   });
 
