@@ -1408,6 +1408,22 @@ export const AnalyticsStore = signalStore(
         if (loadNow) load();
       },
 
+      /** Retry exactly the failed panel; adjacent charts retain their current
+       * payload and never flash back to an empty loading state. */
+      reload(panel: 'performance' | 'equityCurve' | 'exitQuality' | 'strategies' | 'calibration' | 'plans'): void {
+        ({
+          performance: loadPerformance,
+          equityCurve: loadEquityCurve,
+          exitQuality: () => api.analyticsExitQuality(store.scope()).subscribe({
+            next: (exitQuality) => patchState(store, { exitQuality, exitQualityError: null }),
+            error: (error: ApiError) => patchState(store, { exitQualityError: error.message }),
+          }),
+          strategies: loadStrategies,
+          calibration: loadCalibration,
+          plans: loadPlans,
+        })[panel]();
+      },
+
       /** Which dimension the Breakdowns table groups by. Local state, not a
        *  query parameter: it refetches nothing — every dimension is already in
        *  the one snapshot — so there is no request for the URL to describe. */
