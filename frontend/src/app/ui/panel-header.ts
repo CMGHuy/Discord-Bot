@@ -18,7 +18,7 @@ import { Hint } from './hint';
       @if (tableable()) { <button type="button" class="table" [attr.aria-pressed]="tableOpen()" (click)="tableOpen.set(!tableOpen())">Table</button> }
     </header>
   `,
-  styles: `header { display:flex; align-items:center; justify-content:space-between; gap:var(--space-8); } .heading { display:flex; align-items:center; flex-wrap:wrap; gap:var(--space-6); } h2 { margin:0; font-size:var(--text-section); color:var(--text); } .n,.all-time { font-size:var(--text-micro); letter-spacing:.06em; text-transform:uppercase; color:var(--text-faint); } .all-time { color:var(--warn); } .total { font-size:var(--text-chip); color:var(--text-secondary); } .table { border:0; padding:0; background:none; color:var(--accent); cursor:pointer; font:inherit; font-size:var(--text-chip); } .table:focus-visible { outline:1px solid var(--accent); outline-offset:2px; }`,
+  styles: `header { display:flex; align-items:center; justify-content:space-between; gap:var(--space-8); } .heading { display:flex; align-items:center; flex-wrap:wrap; gap:var(--space-6); } h2 { margin:0; font-size:var(--text-subhead); color:var(--text); } .n,.all-time { font-size:var(--text-micro); letter-spacing:.06em; text-transform:uppercase; color:var(--text-faint); } .all-time { color:var(--warn); } .total { font-size:var(--text-chip); color:var(--text-secondary); } .table { border:0; padding:0; background:none; color:var(--accent); cursor:pointer; font:inherit; font-size:var(--text-chip); } .table:focus-visible { outline:1px solid var(--accent); outline-offset:2px; }`,
 })
 export class PanelHeader {
   readonly title = input.required<string>();

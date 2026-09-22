@@ -37,7 +37,7 @@ import { alwaysMoney, inUnit } from '../../../ui/unit-format';
       </sb-panel>
     </div>
   `,
-  styles: `:host{display:grid;gap:var(--space-16)}.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:var(--space-10)}.panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-14)}h3{font-size:var(--text-chip);color:var(--text-secondary);margin:var(--space-12) 0 var(--space-4)}@media(max-width:800px){.panels{grid-template-columns:1fr}}`,
+  styles: `:host{display:grid;gap:var(--space-20)}.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:var(--space-10)}.panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-14)}h3{font-size:var(--text-chip);color:var(--text-secondary);margin:var(--space-10) 0 var(--space-4)}@media(max-width:800px){.panels{grid-template-columns:1fr}}`,
 })
 export class OverviewTab {
   readonly store = inject(AnalyticsStore);
