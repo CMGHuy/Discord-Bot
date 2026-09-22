@@ -14,4 +14,15 @@ describe('PipelineTab', () => {
     expect(el.textContent).toContain('all-time');
     expect(el.textContent).toContain('Posted');
   });
+
+  // A screenshot pass (v94 V2) once caught the Tiers panel rendering as a
+  // blank box -- no bars, no message -- when no strategy carries a tier yet.
+  it('shows an empty state instead of a blank box when no strategy is tiered', () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), { provide: AnalyticsStore, useValue: { plans: signal({ funnel: { posted: 8, filled: 0, hit_tp1: 0, closed: 1 }, fill_rate: { resolved_n: 2, fill_rate_pct: 0, median_days_to_fill: null }, badges: { UNPROVEN: 1, VALIDATED: 7 }, tiers: {} }) } }] });
+    const fixture = TestBed.createComponent(PipelineTab); fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelectorAll('sb-histogram')).toHaveLength(2);
+    expect(el.querySelector('sb-empty-state')).not.toBeNull();
+    expect(el.textContent).toContain('No tiered strategies yet');
+  });
 });
