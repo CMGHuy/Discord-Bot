@@ -7,7 +7,7 @@ import { ExecutionTab } from './execution';
 
 function render() {
   const quality = { exit_reasons: [{ reason: 'tp1', n: 40 }, { reason: 'other', n: 60 }], unmapped_reasons: [{ status: 'closed', text: '', n: 60 }], hold_by_outcome: { ratio: .48, severity: 'low', avg_winner_days: .31, avg_loser_days: .64 }, hold_points: [{ outcome: 'win', days: .31 }, { outcome: 'loss', days: .64 }], efficiency: { bins: [], n: 324, median: .429 }, mae: { bins: [], n: 0, median: null }, scatter: [], coverage: { mfe_r: { non_null: 555, total: 591, pct: 93.9 } }, min_cell_n: 20 };
-  TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), { provide: AnalyticsStore, useValue: { scopeN: signal(591), exitQuality: signal(quality), journal: signal({ digest: ['Wait for the retest.'] }) } }, { provide: PreferencesStore, useValue: { values: () => ({}) } }] });
+  TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), { provide: AnalyticsStore, useValue: { scopeN: signal(591), exitQuality: signal(quality), exitQualityError: signal(null), reload: () => {}, journal: signal({ digest: ['Wait for the retest.'] }) } }, { provide: PreferencesStore, useValue: { values: () => ({}) } }] });
   const fixture = TestBed.createComponent(ExecutionTab); fixture.detectChanges(); return { fixture, el: fixture.nativeElement as HTMLElement };
 }
 describe('ExecutionTab', () => { beforeEach(() => TestBed.resetTestingModule());

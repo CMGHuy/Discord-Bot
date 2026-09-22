@@ -5,16 +5,17 @@ import { Histogram } from '../../../ui/histogram';
 import { InlineMd } from '../../../ui/inline-md';
 import { Panel } from '../../../ui/layout';
 import { PanelHeader } from '../../../ui/panel-header';
+import { PanelError } from '../../../ui/panel-error';
 import { ShareBar, ShareSegment } from '../../../ui/share-bar';
 import { StripGroup, StripPlot } from '../../../ui/strip-plot';
 
 /** Exit-quality is interpreted before it is charted: the verdict is the
  * actionable result; the distributions below explain it. */
-@Component({ selector: 'sb-execution-tab', changeDetection: ChangeDetectionStrategy.OnPush, imports: [Panel, PanelHeader, Histogram, ShareBar, StripPlot, InlineMd], template: `
+@Component({ selector: 'sb-execution-tab', changeDetection: ChangeDetectionStrategy.OnPush, imports: [Panel, PanelHeader, PanelError, Histogram, ShareBar, StripPlot, InlineMd], template: `
   <sb-panel><sb-panel-header title="Execution verdict" [n]="store.scopeN()" hint="Exit quality for the scoped closed book." />
     <dl class="verdict">@for (v of verdict(); track v.label) { <div><dt>{{v.label}}</dt><dd>{{v.value}}</dd><small>{{v.hint}}</small></div> }</dl>
   </sb-panel>
-  <div class="panels"><sb-panel><sb-panel-header title="Exit reasons" [n]="store.scopeN()" /><sb-share-bar label="Exit reasons" [segments]="exitReasonSegments()" /></sb-panel>
+  <div class="panels"><sb-panel><sb-panel-header title="Exit reasons" [n]="store.scopeN()" />@if(store.exitQualityError();as error){<sb-panel-error [message]="error" (retry)="store.reload('exitQuality')"/>}@else{<sb-share-bar label="Exit reasons" [segments]="exitReasonSegments()" />}</sb-panel>
   <sb-panel><sb-panel-header title="Hold time by outcome" [n]="store.scopeN()" /><sb-strip-plot [groups]="holdGroups()" unit="d" /></sb-panel>
   <sb-panel><sb-panel-header title="Exit efficiency" [n]="store.scopeN()" /><sb-histogram [bins]="efficiencyBins()" /></sb-panel>
   <sb-panel><sb-panel-header title="Journal" [n]="store.scopeN()" />@for(line of journal()?.digest ?? [];track line){<p><sb-inline-md [text]="line" /></p>}</sb-panel></div>
