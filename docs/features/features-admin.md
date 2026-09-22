@@ -15,12 +15,13 @@ CSV export can never quietly disagree:
 |---|---|
 | `metrics.py` | Equity curve, drawdown, win rate, expectancy R, profit factor, streaks, rolling win rate, Sharpe/Sortino — pure functions over trade-record lists. |
 | `mfe_mae.py` | Per-trade max favorable/adverse excursion and exit efficiency (how much of the available move a trade actually captured). |
-| `aggregate.py` | `stats_by(closed, dimension)` — one `StatRow` per bucket, across 9 dimensions (strategy, horizon, badge, confidence, direction, day-of-week, month, ticker, source). |
+| `aggregate.py` | `stats_by(closed, dimension)` — one `StatRow` per bucket, across 10 dimensions (strategy, horizon, badge, confidence, direction, day-of-week, month, ticker, source, ledger (v93)). |
 | `calibration.py` | Quality-score decile calibration, per-confidence-level win-rate calibration, and `badge_drift` — the pre-registered edge-decay rule. |
 | `rank.py` | `follow_score` — the one ranking authority (see below). |
 | `journal.py` | `JournalStore` — one auto-generated lesson entry per closed trade (MFE/MAE, exit efficiency, tags, a templated `auto_lesson`), plus hand-added notes via `set_note`. |
 | `insights.py` | Human-readable rollups over the journal: the weekly lessons digest, the edge-decay report, and the top-recurring-lessons list. Formats only — every number here is delegated to `metrics.py`/`calibration.py`. |
 | `snapshots.py` | Assembles everything above into one JSON blob so UIs never recompute on request (see below). |
+| `scope.py` | `BookScope` — the one filter (date range, ledger, strategy, horizon, direction) every `/analytics/*` route parses, applies and echoes, so one query string means one population everywhere (v94). |
 
 **`data/analytics_snapshot.json`** is that pre-built blob — win/loss stats,
 equity curve, drawdown, rolling win rate, all 10 aggregation dimensions,
@@ -29,7 +30,9 @@ after every scan cycle and after every batch of trade closes
 (`refresh_snapshot()`, wrapped so a failure there can never break a scan or
 a close); a consumer calling `load_snapshot(max_age_seconds=...)` gets
 `None` back — never a silently stale read — if the file is missing or older
-than the staleness guard.
+than the staleness guard. The Analytics workspace no longer reads it (v94);
+it serves the Dashboard and Discord, where an all-time pre-built blob is the
+right artefact.
 
 **`data/journal.json`** holds one entry per closed trade: MFE/MAE, exit
 efficiency, auto-generated tags, and an `auto_lesson` sentence templated
@@ -65,6 +68,18 @@ and Trades became one Trades list (a plan and the trade it fills are one
 position, not two rows); Strategies, Calibration and Tuning became tabs on
 Analytics; the Journal's figures moved to where they are read — excursions
 onto the trade detail's Notes tab, the weekly digest onto Analytics.
+
+**The Analytics workspace is six tabs, in the order a trader asks** (spec
+v94): **Overview** (am I making money), **Attribution** (where does it come
+from), **Execution** (am I executing well), **Edge** (is the edge holding,
+is the model calibrated), **Pipeline** (what is coming), **Tuning**
+(operations). One control bar under the tab strip scopes every panel —
+range, ledger, strategy, horizon, direction, plus an R/%/currency unit
+toggle — and reports the closed-trade count it produced. Panels that are
+all-time by design (calibration, the strategy registry, the plan funnel)
+say so with a badge rather than pretending to be scoped. A cell with fewer
+than `MIN_CELL_N` closed trades never shows a rate: the server sends null
+and the cell renders blank with its N.
 
 The table below describes what each surface does. It is written in terms of
 the pages the Jinja UI had, because that is still the clearest description of
