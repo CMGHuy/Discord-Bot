@@ -245,15 +245,15 @@ describe('AnalyticsStore', () => {
 
   const respondPerformance = (body: Partial<AnalyticsPerformance> = {}) => {
     backend
-      .expectOne('/api/v1/analytics/performance')
+      .expectOne((req) => req.url === '/api/v1/analytics/performance')
       .flush({ ...PERFORMANCE, ...body });
     backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
     // SR55 made it THREE. Same reasoning as the snapshot above: the journal
     // is its own module behind its own endpoint, and folding it into the
     // performance response would let a journal read failure empty the KPI
     // cards. Settled here so `backend.verify()` still means "nothing ELSE".
-    backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
-    backend.match('/api/v1/analytics/exit-quality').forEach((request) => request.flush(EXIT_QUALITY));
+    backend.expectOne((req) => req.url === '/api/v1/analytics/journal').flush(JOURNAL);
+    backend.match((req) => req.url === '/api/v1/analytics/exit-quality').forEach((request) => request.flush(EXIT_QUALITY));
     backend.match('/api/v1/risk').forEach((request) => request.flush(RISK));
     backend
       .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
@@ -267,7 +267,7 @@ describe('AnalyticsStore', () => {
   };
 
   const respondStrategies = (body: Record<string, unknown> = {}) =>
-    backend.expectOne('/api/v1/analytics/strategies').flush({ ...STRATEGIES, ...body });
+    backend.expectOne((req) => req.url === '/api/v1/analytics/strategies').flush({ ...STRATEGIES, ...body });
 
   const respondCalibration = (body: Record<string, unknown> = {}) =>
     backend.expectOne('/api/v1/analytics/calibration').flush({ ...CALIBRATION, ...body });
@@ -670,7 +670,7 @@ describe('AnalyticsStore', () => {
     events.raise('analytics');
     store.load();
     backend
-      .expectOne('/api/v1/analytics/performance')
+      .expectOne((req) => req.url === '/api/v1/analytics/performance')
       .error(new ProgressEvent('error'), { status: 0 });
 
     expect(store.winRate()).toBe(61.8);
@@ -680,7 +680,7 @@ describe('AnalyticsStore', () => {
   it('clears the error once a refetch succeeds', () => {
     tick();
     backend
-      .expectOne('/api/v1/analytics/performance')
+      .expectOne((req) => req.url === '/api/v1/analytics/performance')
       .error(new ProgressEvent('error'), { status: 0 });
     // The snapshot goes out alongside it (SR50) and fails with it here. Left
     // outstanding it would still be pending on the refetch below, and the
@@ -691,7 +691,7 @@ describe('AnalyticsStore', () => {
     // SR55's journal goes out with them and fails the same way, for the same
     // reason: left outstanding it would still be pending on the refetch.
     backend
-      .expectOne('/api/v1/analytics/journal')
+      .expectOne((req) => req.url === '/api/v1/analytics/journal')
       .error(new ProgressEvent('error'), { status: 0 });
     // v85 D39's equity curve goes out with them too -- same reason.
     backend
@@ -760,8 +760,8 @@ describe('AnalyticsStore', () => {
         scope: { from: '2026-08-01', to: null, ledger: 'both', strategy: 'MACD', horizon: null, direction: null },
       });
       backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
-      const journal = backend.expectOne('/api/v1/analytics/journal');
-      const curve = backend.expectOne('/api/v1/analytics/equity-curve');
+      const journal = backend.expectOne((request) => request.url === '/api/v1/analytics/journal');
+      const curve = backend.expectOne((request) => request.url === '/api/v1/analytics/equity-curve');
       const strategy = backend.expectOne((request) => request.url === '/api/v1/analytics/by-dimension' && request.params.get('dim') === 'strategy');
       const horizon = backend.expectOne((request) => request.url === '/api/v1/analytics/by-dimension' && request.params.get('dim') === 'horizon');
       [journal, curve, strategy, horizon].forEach((request) => {
@@ -790,7 +790,7 @@ describe('AnalyticsStore', () => {
       expect(request.request.params.get('to')).toBe('2026-06-30');
       request.flush(PERFORMANCE);
       backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
-      backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
+      backend.expectOne((req) => req.url === '/api/v1/analytics/journal').flush(JOURNAL);
     });
 
     it('omits an unset bound instead of sending it empty', () => {
@@ -806,7 +806,7 @@ describe('AnalyticsStore', () => {
       expect(request.request.params.has('to')).toBe(false);
       request.flush(PERFORMANCE);
       backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
-      backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
+      backend.expectOne((req) => req.url === '/api/v1/analytics/journal').flush(JOURNAL);
     });
 
     it('normalises an inverted range rather than rejecting it', () => {
@@ -823,7 +823,7 @@ describe('AnalyticsStore', () => {
         .expectOne((req) => req.url === '/api/v1/analytics/performance')
         .flush(PERFORMANCE);
       backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
-      backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
+      backend.expectOne((req) => req.url === '/api/v1/analytics/journal').flush(JOURNAL);
     });
 
     it('makes exactly one performance request per range change', () => {
@@ -838,7 +838,7 @@ describe('AnalyticsStore', () => {
         .expectOne((req) => req.url === '/api/v1/analytics/performance')
         .flush(PERFORMANCE);
       backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
-      backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
+      backend.expectOne((req) => req.url === '/api/v1/analytics/journal').flush(JOURNAL);
       // v85 D39: the equity curve shares /performance's from/to scope, so it
       // refetches on every range change too -- same from/to vocabulary, not
       // a second definition of the range.
@@ -865,7 +865,7 @@ describe('AnalyticsStore', () => {
         .expectOne((req) => req.url === '/api/v1/analytics/performance')
         .flush(PERFORMANCE);
       backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
-      backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
+      backend.expectOne((req) => req.url === '/api/v1/analytics/journal').flush(JOURNAL);
 
       store.clearRange();
       tick();
@@ -878,7 +878,7 @@ describe('AnalyticsStore', () => {
       expect(store.rangeFrom()).toBeNull();
       request.flush(PERFORMANCE);
       backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
-      backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
+      backend.expectOne((req) => req.url === '/api/v1/analytics/journal').flush(JOURNAL);
     });
 
     it('passes null figures through as null rather than zero', () => {

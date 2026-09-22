@@ -140,7 +140,7 @@ function seed(): { fixture: ComponentFixture<Analytics>; backend: HttpTestingCon
  *  one of the three flushes the other two empty so it doesn't hang on
  *  pending requests it does not care about. */
 function flushJournalAndSnapshot(backend: HttpTestingController): void {
-  backend.expectOne('/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
+  backend.expectOne((req) => req.url === '/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
   backend.expectOne('/api/v1/analytics/snapshot').flush(snapshotPayload());
 }
 
@@ -159,7 +159,7 @@ async function renderKpis(
   const n = overrides.n ?? 782;
   const profitFactor = overrides.profitFactor === undefined ? 1.8 : overrides.profitFactor;
 
-  backend.expectOne('/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
+  backend.expectOne((req) => req.url === '/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
   backend.expectOne('/api/v1/analytics/snapshot').flush(snapshotPayload({
     overall: { n, profit_factor: profitFactor },
     equity_curve: {
@@ -171,7 +171,7 @@ async function renderKpis(
     },
     r_multiples: Array.from({ length: n }, (_, i) => (i % 2 === 0 ? 1 : -0.5)),
   }));
-  backend.expectOne('/api/v1/analytics/performance').flush(performancePayload({
+  backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(performancePayload({
     totals: { total: n, open: 0, closed: n },
     win_rate: 55,
   }));
@@ -215,7 +215,7 @@ describe('Analytics — performance tab', () => {
     fixture.detectChanges();
     flushJournalAndSnapshot(backend);
     backend
-      .expectOne('/api/v1/analytics/performance')
+      .expectOne((req) => req.url === '/api/v1/analytics/performance')
       .flush({ error: { code: 'unavailable', message: 'nope' } }, { status: 503, statusText: 'x' });
     await fixture.whenStable();
     fixture.detectChanges();
@@ -227,11 +227,11 @@ describe('Analytics — performance tab', () => {
   it('a snapshot-only failure does not blank the record/overall panels', async () => {
     const { fixture, backend } = seed();
     fixture.detectChanges();
-    backend.expectOne('/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
+    backend.expectOne((req) => req.url === '/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
     backend
       .expectOne('/api/v1/analytics/snapshot')
       .flush({ error: { code: 'internal', message: 'snapshot down' } }, { status: 500, statusText: 'x' });
-    backend.expectOne('/api/v1/analytics/performance').flush(performancePayload());
+    backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(performancePayload());
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -245,7 +245,7 @@ describe('Analytics — performance tab', () => {
     fixture.detectChanges();
     flushJournalAndSnapshot(backend);
     backend
-      .expectOne('/api/v1/analytics/performance')
+      .expectOne((req) => req.url === '/api/v1/analytics/performance')
       .flush(performancePayload({ totals: { total: 0, open: 0, closed: 0 } }));
     await fixture.whenStable();
     fixture.detectChanges();
@@ -268,8 +268,8 @@ describe('Analytics — performance tab', () => {
       calibration: {},
       r_multiples: [],
     });
-    backend.expectOne('/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
-    backend.expectOne('/api/v1/analytics/performance').flush(performancePayload());
+    backend.expectOne((req) => req.url === '/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
+    backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(performancePayload());
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -320,7 +320,7 @@ describe('Analytics — performance tab — KPI row (v85 D39)', () => {
     const { fixture, backend } = seed();
     fixture.detectChanges();
 
-    backend.expectOne('/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
+    backend.expectOne((req) => req.url === '/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
     backend.expectOne('/api/v1/analytics/snapshot').flush(snapshotPayload({
       overall: { n: 100, profit_factor: 1.8 },
       equity_curve: {
@@ -337,7 +337,7 @@ describe('Analytics — performance tab — KPI row (v85 D39)', () => {
       max_drawdown_r: { value: 3.4, n: 100 },
     }));
     backend
-      .expectOne('/api/v1/analytics/performance')
+      .expectOne((req) => req.url === '/api/v1/analytics/performance')
       .flush({ error: { code: 'internal', message: 'performance down' } }, { status: 500, statusText: 'x' });
     await fixture.whenStable();
     fixture.detectChanges();
@@ -358,11 +358,11 @@ describe('Analytics — performance tab — KPI row (v85 D39)', () => {
     const { fixture, backend } = seed();
     fixture.detectChanges();
 
-    backend.expectOne('/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
+    backend.expectOne((req) => req.url === '/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
     backend
       .expectOne('/api/v1/analytics/snapshot')
       .flush({ error: { code: 'internal', message: 'snapshot down' } }, { status: 500, statusText: 'x' });
-    backend.expectOne('/api/v1/analytics/performance').flush(performancePayload({
+    backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(performancePayload({
       totals: { total: 100, open: 0, closed: 100 },
       win_rate: 55,
     }));
@@ -394,9 +394,9 @@ async function renderEquity(
 ): Promise<{ el: HTMLElement; fixture: ComponentFixture<Analytics>; backend: HttpTestingController }> {
   const { fixture, backend } = seed();
   fixture.detectChanges();
-  backend.expectOne('/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
+  backend.expectOne((req) => req.url === '/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
   backend.expectOne('/api/v1/analytics/snapshot').flush(snapshotPayload());
-  backend.expectOne('/api/v1/analytics/performance').flush(performancePayload());
+  backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(performancePayload());
   backend.expectOne('/api/v1/risk').flush(riskPayload());
   backend
     .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
@@ -474,9 +474,9 @@ async function renderAgg(overrides: {
 } = {}): Promise<{ el: HTMLElement; fixture: ComponentFixture<Analytics> }> {
   const { fixture, backend } = seed();
   fixture.detectChanges();
-  backend.expectOne('/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
+  backend.expectOne((req) => req.url === '/api/v1/analytics/journal').flush({ digest: [], lessons: [], entries_n: 0 });
   backend.expectOne('/api/v1/analytics/snapshot').flush(snapshotPayload());
-  backend.expectOne('/api/v1/analytics/performance').flush(performancePayload());
+  backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(performancePayload());
   backend.expectOne('/api/v1/risk').flush(riskPayload());
   backend
     .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
@@ -601,7 +601,7 @@ async function renderBreakdowns(): Promise<{ el: HTMLElement; fixture: Component
   const { fixture, backend } = seed();
   fixture.detectChanges();
   const n = 20;
-  backend.expectOne('/api/v1/analytics/journal').flush({ digest: ['Two losses, both chased.'], lessons: [], entries_n: 1 });
+  backend.expectOne((req) => req.url === '/api/v1/analytics/journal').flush({ digest: ['Two losses, both chased.'], lessons: [], entries_n: 1 });
   backend.expectOne('/api/v1/analytics/snapshot').flush(snapshotPayload({
     overall: {
       n, profit_factor: 1.5,
@@ -609,7 +609,7 @@ async function renderBreakdowns(): Promise<{ el: HTMLElement; fixture: Component
     },
     r_multiples: Array.from({ length: n }, (_, i) => (i % 2 === 0 ? 1 : -0.5)),
   }));
-  backend.expectOne('/api/v1/analytics/performance').flush(performancePayload({
+  backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(performancePayload({
     totals: { total: n, open: 0, closed: n },
   }));
   backend.expectOne('/api/v1/risk').flush(riskPayload());
@@ -694,7 +694,7 @@ describe('Analytics — strategies tab', () => {
     fixture.componentRef.setInput('tab', 'strategies');
     TestBed.inject(AnalyticsStore).setTab('strategies');
     fixture.detectChanges();
-    backend.expectOne('/api/v1/analytics/strategies').flush(strategiesPayload({ strategies: [] }));
+    backend.expectOne((req) => req.url === '/api/v1/analytics/strategies').flush(strategiesPayload({ strategies: [] }));
     await fixture.whenStable();
     fixture.detectChanges();
 

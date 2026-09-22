@@ -163,7 +163,7 @@ describe('AnalyticsStore — the snapshot', () => {
    *  SR55 added `/analytics/journal` beside the other two. */
   function open(snapshot: object | null = SNAPSHOT) {
     TestBed.inject(ApplicationRef).tick();
-    backend.expectOne('/api/v1/analytics/performance').flush(PERFORMANCE);
+    backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(PERFORMANCE);
     const request = backend.expectOne('/api/v1/analytics/snapshot');
     if (snapshot === null) {
       request.flush({ error: { code: 'unavailable', message: 'down' } },
@@ -172,9 +172,9 @@ describe('AnalyticsStore — the snapshot', () => {
       request.flush(snapshot);
     }
     backend
-      .expectOne('/api/v1/analytics/journal')
+      .expectOne((req) => req.url === '/api/v1/analytics/journal')
       .flush({ digest: [], lessons: [], entries_n: 0 });
-    backend.expectOne('/api/v1/analytics/exit-quality').flush({
+    backend.expectOne((req) => req.url === '/api/v1/analytics/exit-quality').flush({
       exit_reasons: [], hold_by_outcome: {}, efficiency: { bins: [], n: 0, median: null },
       mae: { bins: [], n: 0, median: null }, scatter: [], coverage: {}, min_cell_n: 0,
     });
@@ -347,10 +347,10 @@ describe('AnalyticsStore — the tuning grid', () => {
     store.load();
     const tick = () => TestBed.inject(ApplicationRef).tick();
     tick();
-    backend.expectOne('/api/v1/analytics/performance').flush(PERFORMANCE);
+    backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(PERFORMANCE);
     backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
     backend
-      .expectOne('/api/v1/analytics/journal')
+      .expectOne((req) => req.url === '/api/v1/analytics/journal')
       .flush({ digest: [], lessons: [], entries_n: 0 });
 
     store.setTab('tuning');
@@ -361,7 +361,7 @@ describe('AnalyticsStore — the tuning grid', () => {
     });
     backend.expectOne('/api/v1/jobs/job1/result').flush(grid);
     backend.expectOne('/api/v1/analytics/tuning/proposals').flush({ proposals: [] });
-    backend.expectOne('/api/v1/analytics/strategies').flush({ strategies: [], heatmap: null });
+    backend.expectOne((req) => req.url === '/api/v1/analytics/strategies').flush({ strategies: [], heatmap: null });
   }
 
   it('fetches the tracked job result and reads its rows', () => {
