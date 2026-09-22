@@ -1193,7 +1193,7 @@ export interface Preferences {
    *  and horizon bars are sorted/sized by. ExpR by default: "which is
    *  better per shot" is the question this app's edge priorities rank
    *  first (CLAUDE.md), and a fresh session should open on that answer. */
-  analyticsMeasure?: 'exp_r' | 'total_r';
+  analyticsMeasure?: 'exp_r' | 'total_r' | 'win_rate';
   /** v85 D41 (R9-06) -- whether the Performance tab's Breakdowns band is
    *  expanded. Collapsed (absent/false) by default: the first screen is
    *  the KPI row and equity curve, not the histograms below it. */

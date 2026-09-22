@@ -32,6 +32,7 @@ import { DonutSlice } from '../ui/donut';
 import { HistogramBin } from '../ui/histogram';
 import { BarRow } from '../ui/bar-list';
 import { LineChartSeries } from '../ui/line-chart';
+import { PreferencesStore } from './preferences.store';
 
 /* -- row shapes ---------------------------------------------------------
  *
@@ -543,6 +544,7 @@ interface AnalyticsSlice {
   tab: AnalyticsTab;
   scope: BookScope;
   unit: AnalyticsUnit;
+  measure: 'exp_r' | 'total_r' | 'win_rate';
 
   performance: AnalyticsPerformance | null;
   /**
@@ -662,6 +664,7 @@ export const AnalyticsStore = signalStore(
     tab: 'performance',
     scope: DEFAULT_SCOPE,
     unit: 'r',
+    measure: 'exp_r',
     performance: null,
     rangeFrom: null,
     rangeTo: null,
@@ -1090,7 +1093,7 @@ export const AnalyticsStore = signalStore(
         .map((d) => ({ label: d.decile, count: d.win_rate }))),
   })),
 
-  withMethods((store, api = inject(ApiClient)) => {
+  withMethods((store, api = inject(ApiClient), preferences = inject(PreferencesStore)) => {
     /** Every failure lands here, and none of them clear the data already on
      *  screen. A table that empties because one refetch failed is worse than
      *  a slightly stale one beside a warning — especially when the event
@@ -1418,12 +1421,14 @@ export const AnalyticsStore = signalStore(
           rangeFrom: lo || null, rangeTo: hi || null,
           scope: { ...store.scope(), from: lo || null, to: hi || null },
         });
+        preferences.update((prefs) => ({ ...prefs, analyticsScope: store.scope() }));
         loadPerformance();
       },
 
       /** Back to all-time. */
       clearRange(): void {
         patchState(store, { rangeFrom: null, rangeTo: null, scope: { ...store.scope(), from: null, to: null } });
+        preferences.update((prefs) => ({ ...prefs, analyticsScope: store.scope() }));
         loadPerformance();
       },
 
@@ -1440,13 +1445,22 @@ export const AnalyticsStore = signalStore(
         const next = { ...store.scope(), ...patch };
         if (next.from && next.to && next.from > next.to) [next.from, next.to] = [next.to, next.from];
         patchState(store, { scope: next, rangeFrom: next.from, rangeTo: next.to });
+        preferences.update((prefs) => ({ ...prefs, analyticsScope: next }));
         load();
       },
       clearScope(): void {
         patchState(store, { scope: DEFAULT_SCOPE, rangeFrom: null, rangeTo: null });
+        preferences.update((prefs) => ({ ...prefs, analyticsScope: DEFAULT_SCOPE }));
         load();
       },
-      setUnit(unit: AnalyticsUnit): void { patchState(store, { unit }); },
+      setUnit(unit: AnalyticsUnit): void {
+        patchState(store, { unit });
+        preferences.update((prefs) => ({ ...prefs, analyticsUnit: unit }));
+      },
+      setMeasure(measure: 'exp_r' | 'total_r' | 'win_rate'): void {
+        patchState(store, { measure });
+        preferences.update((prefs) => ({ ...prefs, analyticsMeasure: measure }));
+      },
       /** Route resolvers hydrate before fetching; no request here. */
       hydrate(scope: BookScope, unit: AnalyticsUnit): void {
         patchState(store, { scope, unit, rangeFrom: scope.from, rangeTo: scope.to });
