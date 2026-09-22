@@ -410,6 +410,23 @@ export interface AnalyticsDerived {
   sortino_ann: number | null;
   win_rate: number | null;
   expectancy_r: number | null;
+  /** v94 T1 additions below. Every real response carries all four -- they
+   *  are optional here (rather than widening `EMPTY_DERIVED` and every
+   *  existing `AnalyticsDerived` test fixture across the codebase, which
+   *  T1's brief keeps out of scope) so a fixture that predates them still
+   *  type-checks; `overview.ts` reads each with `?? null`, which already
+   *  treats "absent" and "null" the same way a fixture gap should. */
+  /** Gross realised win / |gross realised loss|, unitless like
+   *  `sharpe_ann`/`sortino_ann` beside it (`metrics.profit_factor`, scoped). */
+  profit_factor?: number | null;
+  /** The Outcome panel's Avg win/Avg loss/Payoff rows. R-based (mean of the
+   *  R-multiples on each side), not the P&L-percent `avg_win_pct`/
+   *  `avg_loss_pct` above -- those answer a different question. `payoff_r`
+   *  is `avg_win_r / |avg_loss_r|` over that SAME R-multiples list
+   *  (`metrics.payoff_ratio`), never re-derived. */
+  avg_win_r?: number | null;
+  avg_loss_r?: number | null;
+  payoff_r?: number | null;
 }
 
 /** One closed trade, cumulative in R (v85 D39, R9-01). `drawdown_r` is
@@ -482,6 +499,16 @@ export interface AnalyticsPerformance extends Scoped {
   benchmark: { spy_cum: Record<string, number> };
   rolling_wr: { date: string; win_rate: number }[];
   rolling_exp_r: { date: string; exp_r: number }[];
+  /** v94 T1 -- the Overview tab's Streaks row (`metrics.streaks`, scoped
+   *  like every other block here). `current`/`current_kind` describe the
+   *  streak still running as of the scope's last close; `current_kind` is
+   *  null only when `current` is 0 (no win/loss trade closes the scope). */
+  streaks: {
+    current: number;
+    current_kind: 'win' | 'loss' | null;
+    best_win_streak: number;
+    worst_loss_streak: number;
+  };
 }
 
 /**

@@ -91,7 +91,32 @@ def test_performance_top_level_shape(seed, logged_in):
         # v94 D5/D9 -- BookScope echo and the two rolling series.
         "rolling_wr": list, "rolling_exp_r": list, "scope": dict, "n": int,
         "weak": dict,
+        # v94 T1 -- the Overview tab's Streaks row.
+        "streaks": dict,
     })
+
+
+def test_performance_streaks_are_scoped(seed, logged_in):
+    """A scope that excludes some trades must not count a streak that runs
+    across the excluded ones -- streaks should read the same scoped `closed`
+    list as every other block on this route, not the unscoped book."""
+    seed(trades=[
+        # Three wins outside the scope (2w horizon), then two wins and a
+        # loss inside it (4w horizon). Unscoped, the win streak spanning
+        # both horizons would be 5; scoped to horizon=4w it must be 2.
+        _closed("a" * 16, status="win", horizon_key="2w", closed_at="2026-08-01T15:00:00+00:00"),
+        _closed("b" * 16, status="win", horizon_key="2w", closed_at="2026-08-02T15:00:00+00:00"),
+        _closed("c" * 16, status="win", horizon_key="2w", closed_at="2026-08-03T15:00:00+00:00"),
+        _closed("d" * 16, status="win", horizon_key="4w", closed_at="2026-08-04T15:00:00+00:00"),
+        _closed("e" * 16, status="win", horizon_key="4w", closed_at="2026-08-05T15:00:00+00:00"),
+        _closed("f" * 16, status="loss", horizon_key="4w", closed_at="2026-08-06T15:00:00+00:00"),
+    ])
+    unscoped = logged_in.get("/api/v1/analytics/performance").get_json()["streaks"]
+    assert unscoped["best_win_streak"] == 5
+
+    scoped = logged_in.get("/api/v1/analytics/performance?horizon=4w").get_json()["streaks"]
+    assert scoped["best_win_streak"] == 2
+    assert scoped["worst_loss_streak"] == 1
 
 
 def _closed(trade_id, *, status="win", closed_at="2026-08-04T15:00:00+00:00", **over):

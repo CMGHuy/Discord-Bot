@@ -229,6 +229,26 @@ def analytics_performance():
             "sortino_ann": round(raw_sortino * factor, 4) if raw_sortino is not None else None,
             "win_rate": m.win_rate(scoped),
             "expectancy_r": m.expectancy_r(scoped),
+            # v94 T1 -- the Overview tab's Profit factor tile. Unitless
+            # (gross win / gross loss in currency), so it belongs beside
+            # sharpe_ann/sortino_ann rather than needing its own block; the
+            # Strategies by-dimension route already computes the same figure
+            # this way (m.profit_factor), so this keeps "one definition per
+            # stat" rather than the workspace re-deriving it from bucketed
+            # histogram data it cannot do exactly.
+            "profit_factor": m.profit_factor(scoped),
+            # v94 T1 -- the Outcome panel's Avg win/Avg loss/Payoff rows.
+            # The panel's own hint text ("means of the R-multiples on each
+            # side") is R-based, not the P&L-percent avg_win_pct/avg_loss_pct
+            # above -- those answer a different question. Same reuse
+            # rationale as profit_factor: the by-dimension route already
+            # computes avg_win_r/avg_loss_r this way, and payoff_r is the
+            # ratio of those same two numbers (payoff_ratio_from_rs over the
+            # SAME r_multiples list -- never re-derived from a different
+            # population).
+            "avg_win_r": m.avg_win_r(scoped),
+            "avg_loss_r": m.avg_loss_r(scoped),
+            "payoff_r": m.payoff_ratio(scoped),
         },
         "distributions": {
             "returns": m.histogram(returns, bins=12),
@@ -245,6 +265,11 @@ def analytics_performance():
         "benchmark": {"spy_cum": stats.get("spy_cum") or {}},
         "rolling_wr": m.rolling_win_rate(scoped, window=50),
         "rolling_exp_r": m.rolling_expectancy_r(scoped, window=50),
+        # v94 T1 -- the Overview tab's Streaks row. Computed over `closed`,
+        # the same BookScope-selected population as everything else on this
+        # route (never the unscoped book): a streak that crossed a scope
+        # boundary the user drew is not a streak the user asked to see.
+        "streaks": m.streaks(closed),
         **echo(scope, len(scoped)),
     })
 

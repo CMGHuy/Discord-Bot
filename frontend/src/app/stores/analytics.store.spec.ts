@@ -137,6 +137,10 @@ const PERFORMANCE: AnalyticsPerformance = {
   benchmark: { spy_cum: { '2026-08-01': 1.4, '2026-07-01': 0.3 } },
   rolling_wr: [],
   rolling_exp_r: [],
+  // v94 T1 -- the Overview tab's Streaks row. Not exercised by anything in
+  // this file (that assertion lives in `tabs/overview.spec.ts`); present
+  // here only so this fixture still satisfies `AnalyticsPerformance`.
+  streaks: { current: 0, current_kind: null, best_win_streak: 2, worst_loss_streak: 1 },
   scope: SCOPE,
   n: 34,
 };

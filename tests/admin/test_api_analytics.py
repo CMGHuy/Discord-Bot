@@ -35,6 +35,12 @@ _DERIVED_KEYS = {
     # so these and the top-level figures always agree for the same request.
     "win_rate": NULLABLE_NUMBER,
     "expectancy_r": NULLABLE_NUMBER,
+    # v94 T1 -- the Overview tab's Profit factor tile.
+    "profit_factor": NULLABLE_NUMBER,
+    # v94 T1 -- the Outcome panel's Avg win/Avg loss/Payoff rows (R-based).
+    "avg_win_r": NULLABLE_NUMBER,
+    "avg_loss_r": NULLABLE_NUMBER,
+    "payoff_r": NULLABLE_NUMBER,
 }
 
 
@@ -105,6 +111,12 @@ def test_derived_values_match_the_hand_computed_answers(seed, logged_in):
     assert derived["avg_win_pct"] == pytest.approx(15.0)
     assert derived["avg_loss_pct"] == pytest.approx(-7.5)
     assert derived["total_return_pct"] == pytest.approx(15.0)
+    # Gross win 100 + 200 = 300, gross loss 50 + 100 = 150 -> 2.0.
+    assert derived["profit_factor"] == pytest.approx(2.0)
+    # R-multiples: a=+2.0, b=-1.0, c=+4.0, d=-2.0 (risk = entry*0.05 throughout).
+    assert derived["avg_win_r"] == pytest.approx(3.0)
+    assert derived["avg_loss_r"] == pytest.approx(-1.5)
+    assert derived["payoff_r"] == pytest.approx(2.0)
     # These records open 10:00 and close 15:00, so each holding period is
     # 10 (or 20) days PLUS five hours, and the span is 366 days plus five.
     # Spelled out rather than rounded to whole days: the five hours are what
@@ -182,6 +194,8 @@ def test_distributions_and_series_are_present_and_scoped(seed, logged_in):
         # v94 D5/D9 -- BookScope echo and the two rolling series.
         "rolling_wr": list, "rolling_exp_r": list, "scope": dict, "n": int,
         "weak": dict,
+        # v94 T1 -- the Overview tab's Streaks row.
+        "streaks": dict,
     })
 
 
