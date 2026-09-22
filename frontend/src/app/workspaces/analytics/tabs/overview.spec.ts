@@ -10,6 +10,7 @@ import { OverviewTab } from './overview';
 function storeStub(overrides: Record<string, unknown> = {}) {
   return {
     unit: signal('r'), scopeN: signal(34),
+    performanceError: signal(null), equityCurveError: signal(null), reload: () => {},
     performance: signal({
       relocated: { wins: 21, losses: 13 }, expectancy_r: 0.42, expectancy_n: 34,
       win_rate: 61.8, win_rate_n: 34, derived: { total_return_pct: 18.4 },

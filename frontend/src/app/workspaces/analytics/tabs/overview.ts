@@ -8,6 +8,7 @@ import { Histogram } from '../../../ui/histogram';
 import { Panel } from '../../../ui/layout';
 import { LineChart, LineChartSeries } from '../../../ui/line-chart';
 import { PanelHeader } from '../../../ui/panel-header';
+import { PanelError } from '../../../ui/panel-error';
 import { ShareBar, ShareSegment } from '../../../ui/share-bar';
 import { StatTile } from '../../../ui/stat-tile';
 import { alwaysMoney, inUnit } from '../../../ui/unit-format';
@@ -16,17 +17,18 @@ import { alwaysMoney, inUnit } from '../../../ui/unit-format';
 @Component({
   selector: 'sb-overview-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, PanelHeader, EmptyStateComponent, StatTile, LineChart, ShareBar, Histogram, BarList],
+  imports: [Panel, PanelHeader, PanelError, EmptyStateComponent, StatTile, LineChart, ShareBar, Histogram, BarList],
   template: `
     <div class="kpis">@for (tile of kpiTiles(); track tile.label) {
       <sb-stat-tile [label]="tile.label" [value]="tile.value" [secondary]="tile.money" [sample]="tile.sample" />
     }</div>
     <div class="panels">
       <sb-panel><sb-panel-header title="Equity" [n]="store.scopeN()" hint="Cumulative realised result per closed trade." />
-        @if (!points().length) { <sb-empty-state title="No closed trades in this scope" reason="measured-zero" /> }
+        @if (store.equityCurveError(); as error) { <sb-panel-error [message]="error" (retry)="store.reload('equityCurve')" /> }
+        @else if (!points().length) { <sb-empty-state title="No closed trades in this scope" reason="measured-zero" /> }
         @else { <sb-line-chart [series]="equitySeries()" [referenceLine]="0" [valueFormat]="format" /><h3>Drawdown</h3><sb-line-chart [series]="drawdownSeries()" [valueFormat]="format" /> }
       </sb-panel>
-      <sb-panel><sb-panel-header title="Outcome" [n]="store.scopeN()" hint="Wins and losses in the selected scope." /><sb-share-bar label="Outcome" [segments]="outcomes()" /></sb-panel>
+      <sb-panel><sb-panel-header title="Outcome" [n]="store.scopeN()" hint="Wins and losses in the selected scope." />@if(store.performanceError();as error){<sb-panel-error [message]="error" (retry)="store.reload('performance')"/>}@else{<sb-share-bar label="Outcome" [segments]="outcomes()" />}</sb-panel>
       <sb-panel><sb-panel-header title="R distribution" [n]="store.scopeN()" />
         <sb-histogram [bins]="rBins()" [isNegative]="negativeBin" />
       </sb-panel>
