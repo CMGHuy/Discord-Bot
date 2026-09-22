@@ -52,7 +52,12 @@ function performancePayload(
 function strategiesPayload(
   overrides: Partial<AnalyticsStrategies> = {},
 ): AnalyticsStrategies {
-  return { strategies: [{ name: 'RSI' }], heatmap: { strategies: [], horizons: [], cells: [] }, ...overrides };
+  return {
+    strategies: [{ name: 'RSI' }], heatmap: { strategies: [], horizons: [], cells: [] },
+    registry_scope: 'all-time', contribution: [], cumulative: {},
+    scope: { from: null, to: null, ledger: 'main', strategy: null, horizon: null, direction: null }, n: 0,
+    ...overrides,
+  };
 }
 
 function plansPayload(overrides: Partial<AnalyticsPlans> = {}): AnalyticsPlans {
