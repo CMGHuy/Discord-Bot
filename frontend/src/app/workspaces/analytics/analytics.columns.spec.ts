@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { DecileRow, DriftRow, StrategyRow, TierRow } from '../../stores/analytics.store';
-import { DECILE_COLUMNS, DRIFT_COLUMNS, STRATEGY_COLUMNS, TIER_COLUMNS } from './analytics.columns';
+import { DECILE_COLUMNS, DRIFT_COLUMNS, soakLabel, STRATEGY_COLUMNS, TIER_COLUMNS } from './analytics.columns';
 
 describe('analytics columns', () => {
   it('renders every plain-text group and label column', () => {
@@ -14,5 +14,19 @@ describe('analytics columns', () => {
     expect(DECILE_COLUMNS.find((column) => column.key === 'decile')?.value?.(decile)).toBe('D3');
     expect(TIER_COLUMNS(20).find((column) => column.key === 'level')?.value?.(tier)).toBe('3');
     expect(DRIFT_COLUMNS.find((column) => column.key === 'strategy')?.value?.(drift)).toBe('MACD');
+  });
+
+  /* A screenshot pass (v94 V2) once caught the Strategy breakdown table's
+   * Soak column rendering the raw `soak_verdict` object -- e.g.
+   * `{"clauses":{"entry_parity":false,"n":false,"non_inferior":false},
+   * "n_closed":1,"pass":false}` -- straight into a table cell via
+   * `JSON.stringify`. `soakLabel` is the fix: a short, human verdict. */
+  it('reads the shadow-soak verdict as a short verdict, never the raw object', () => {
+    expect(soakLabel({ pass: false, n_closed: 1, clauses: { n: false, non_inferior: false, entry_parity: true } }))
+      .toBe('FAIL · n=1');
+    expect(soakLabel({ pass: true, n_closed: 34, clauses: { n: true, non_inferior: true, entry_parity: true } }))
+      .toBe('PASS · n=34');
+    expect(soakLabel(null)).toBeNull();
+    expect(soakLabel(undefined)).toBeNull();
   });
 });

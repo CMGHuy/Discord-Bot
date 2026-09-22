@@ -51,14 +51,36 @@ function render(over: Record<string, unknown> = {}) {
 describe('OverviewTab', () => {
   beforeEach(() => TestBed.resetTestingModule());
 
-  it('shows six KPI tiles, each with the money line whatever the unit', () => {
+  it('shows six KPI tiles, all six labelled', () => {
     const { el } = render();
     expect(el.querySelectorAll('sb-stat-tile').length).toBeGreaterThanOrEqual(6);
     const text = el.textContent as string;
     for (const label of ['Total R', 'ExpR', 'Win rate', 'Profit factor', 'Max drawdown', 'Sharpe']) {
       expect(text).toContain(label);
     }
-    expect(el.querySelectorAll('.secondary').length).toBeGreaterThan(0);
+  });
+
+  it('gives the R-multiple tiles a money line, but never one for a unitless metric', () => {
+    // Win rate, Profit factor and Sharpe carry no money or R reading at all
+    // (`AnalyticsDerivedMetrics.profit_factor`'s own doc comment: "unitless
+    // like sharpe_ann/sortino_ann") -- a screenshot pass once caught them
+    // rendered as "+3.50R" / "+3.50 €" because they were run through the
+    // same R/%/$ tile formatter as Total R and ExpR.
+    const { el } = render();
+    const tileFor = (label: string) =>
+      Array.from(el.querySelectorAll('sb-stat-tile')).find((tile) => tile.textContent?.includes(label));
+
+    for (const label of ['Total R', 'ExpR', 'Max drawdown']) {
+      expect(tileFor(label)?.querySelector('.secondary')).not.toBeNull();
+    }
+    for (const label of ['Win rate', 'Profit factor', 'Sharpe']) {
+      const tile = tileFor(label);
+      expect(tile?.querySelector('.secondary')).toBeNull();
+      expect(tile?.textContent).not.toMatch(/[$€]/);
+    }
+    // Win rate is a rate, not an R-multiple -- it always reads as a percentage.
+    expect(tileFor('Win rate')?.textContent).toContain('53.50%');
+    expect(tileFor('Win rate')?.textContent).not.toContain('R');
   });
 
   it('draws equity and drawdown as two panes, not a toggle', () => {

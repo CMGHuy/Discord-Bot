@@ -8,7 +8,7 @@ import { BarList } from '../../../ui/bar-list';
 import { ColumnDef } from '../../../ui/data-table/data-table.types';
 import { DataTable } from '../../../ui/data-table/data-table';
 import { EmptyStateComponent } from '../../../ui/empty-state';
-import { ABSENT, money, num, pct as pctText, rMultiple } from '../../../ui/format';
+import { ABSENT, money, num, pct as pctText, rMultiple, share, signed } from '../../../ui/format';
 import { Histogram } from '../../../ui/histogram';
 import { Panel } from '../../../ui/layout';
 import { LineChart, LineChartSeries } from '../../../ui/line-chart';
@@ -234,6 +234,21 @@ export class OverviewTab {
       hint,
     });
 
+    // Win rate, profit factor and Sharpe are unitless (or already a fixed
+    // percentage) — they have no R-multiple or money reading at all, so
+    // routing them through the R/%/$ control-bar toggle produced nonsense
+    // like "+3.50R" and "+3.50 €" for a profit factor. This helper renders
+    // them the same way regardless of the selected unit, with no secondary
+    // money line, per `AnalyticsDerivedMetrics.profit_factor`'s own doc
+    // comment ("unitless like sharpe_ann/sortino_ann").
+    const fixedTile = (
+      label: string,
+      formattedValue: string | null,
+      sample: number | null,
+      trend: readonly number[] | null = null,
+      hint?: string,
+    ): KpiTile => ({ label, value: formattedValue, money: null, sample, trend, hint });
+
     const expectancyN = performance?.expectancy_n ?? null;
     const expectancyMoney = last && expectancyN ? last.cum_pnl / expectancyN : null;
 
@@ -248,12 +263,12 @@ export class OverviewTab {
       tile('Total R', last?.cum_r ?? null, derived?.total_return_pct ?? null, last?.cum_pnl ?? null,
         equityCurve?.points_n ?? null, this.totalRTrend()),
       tile('ExpR', performance?.expectancy_r ?? null, null, expectancyMoney, expectancyN),
-      tile('Win rate', winRate, winRate, winRate, performance?.win_rate_n ?? null, this.winRateTrend()),
-      tile('Profit factor', profitFactor, profitFactor, profitFactor, this.store.scopeN(), null,
+      fixedTile('Win rate', share(winRate, 2), performance?.win_rate_n ?? null, this.winRateTrend()),
+      fixedTile('Profit factor', num(profitFactor, 2), this.store.scopeN(), null,
         'Gross realised win ÷ gross realised loss.'),
       tile('Max drawdown', drawdownR, null, drawdownMoney, equityCurve?.points_n ?? null, null,
         'Largest peak-to-trough decline in the scope.'),
-      tile('Sharpe', sharpe, sharpe, sharpe, this.store.scopeN(), null, 'Annualised, from realised returns.'),
+      fixedTile('Sharpe', signed(sharpe, 2), this.store.scopeN(), null, 'Annualised, from realised returns.'),
     ];
   });
 

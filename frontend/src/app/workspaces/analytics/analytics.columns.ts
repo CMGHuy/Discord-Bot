@@ -59,6 +59,21 @@ export function count(value: number | null | undefined): string {
   return value === null || value === undefined ? ABSENT : String(value);
 }
 
+/** The v93 shadow-soak verdict (`swingbot.core.edge.strategy_soak.soak_verdict`
+ *  serialised straight onto the row) -- `{ pass, n_closed, clauses }`, `unknown`
+ *  because nothing on the frontend owns that shape. A screenshot pass once
+ *  caught this rendered as the raw `JSON.stringify`'d object
+ *  (`{"clauses":{...},"n_closed":1,"pass":false}`) sitting in a table cell;
+ *  this reads the two fields a reader actually needs -- whether the strategy
+ *  cleared the gate, and how many shadow trades that verdict rests on. */
+export function soakLabel(value: unknown): string | null {
+  if (value === null || value === undefined || typeof value !== 'object') return null;
+  const verdict = value as { pass?: unknown; n_closed?: unknown };
+  if (typeof verdict.pass !== 'boolean') return null;
+  const n = typeof verdict.n_closed === 'number' ? verdict.n_closed : null;
+  return `${verdict.pass ? 'PASS' : 'FAIL'}${n === null ? '' : ` · n=${n}`}`;
+}
+
 /* -- strategies --------------------------------------------------------- */
 
 /** `rolling` and `status` render through templates; their `value` is omitted
@@ -152,8 +167,7 @@ export function dimensionColumns(
     // soak record; the table's `visible` list omits the key entirely when no
     // row on screen carries it, rather than showing a column of dashes.
     { key: 'badge', header: 'Badge', value: (r) => r.badge ?? null },
-    { key: 'soak', header: 'Soak',
-      value: (r) => (r.soak == null ? null : typeof r.soak === 'object' ? JSON.stringify(r.soak) : String(r.soak)) },
+    { key: 'soak', header: 'Soak', value: (r) => soakLabel(r.soak) },
   ];
 }
 
