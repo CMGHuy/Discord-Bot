@@ -316,15 +316,25 @@ describe('AnalyticsStore', () => {
 
     store.setTab('attribution');
     tick();
-    const breakdown = backend.expectOne((req) => req.url === '/api/v1/analytics/by-dimension');
+    const byDim = (dim: string) =>
+      backend.expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === dim);
     // The dimension the store is grouped by, not a hardcoded one.
+    const breakdown = byDim('strategy');
     expect(breakdown.request.params.get('dim')).toBe('strategy');
     breakdown.flush(BY_DIMENSION);
     backend.expectOne((req) => req.url === '/api/v1/analytics/heat-grid').flush(HEAT_GRID);
     respondStrategies();
     backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(PERFORMANCE);
+    // T2's fixed bar lists -- one request per dimension, independent of
+    // whichever dimension `breakdown` is grouped by.
+    byDim('horizon').flush({ ...BY_DIMENSION, n: 40 });
+    byDim('direction').flush({ ...BY_DIMENSION, n: 41 });
+    byDim('dow').flush({ ...BY_DIMENSION, n: 42 });
 
     expect(store.heatGrid()?.cols).toEqual(['2w', '4w']);
+    expect(store.byHorizon()?.n).toBe(40);
+    expect(store.byDirection()?.n).toBe(41);
+    expect(store.byDow()?.n).toBe(42);
     backend.verify();
   });
 
@@ -336,13 +346,19 @@ describe('AnalyticsStore', () => {
     respondOverview();
     store.setTab('attribution');
     tick();
-    backend.expectOne((req) => req.url === '/api/v1/analytics/by-dimension').flush(BY_DIMENSION);
+    const byDim = (dim: string) =>
+      backend.expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === dim);
+    byDim('strategy').flush(BY_DIMENSION);
     backend.expectOne((req) => req.url === '/api/v1/analytics/heat-grid').flush(HEAT_GRID);
     respondStrategies();
     backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(PERFORMANCE);
+    // T2's fixed bar lists -- unaffected by which dimension `breakdown` groups by.
+    byDim('horizon').flush(BY_DIMENSION);
+    byDim('direction').flush(BY_DIMENSION);
+    byDim('dow').flush(BY_DIMENSION);
 
     store.setBreakdown('ledger');
-    const again = backend.expectOne((req) => req.url === '/api/v1/analytics/by-dimension');
+    const again = byDim('ledger');
     expect(again.request.params.get('dim')).toBe('ledger');
     again.flush(BY_DIMENSION);
     backend.verify();

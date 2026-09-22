@@ -1,5 +1,6 @@
+import { AnalyticsByDimensionRow, AnalyticsUnit } from '../../api/models';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
-import { ABSENT, date, dateTime, share, signed } from '../../ui/format';
+import { ABSENT, date, dateTime, money, rMultiple, share, signed } from '../../ui/format';
 import {
   BreakdownRow,
   ConfidenceRow,
@@ -149,6 +150,53 @@ export function breakdownColumns(label: string, floor = 0): ColumnDef<BreakdownR
     },
     { key: 'total_r', header: 'Total R', numeric: true,
       value: (r) => r.total_r === null || r.total_r === undefined ? ABSENT : `${r.total_r.toFixed(2)}R` },
+  ];
+}
+
+/**
+ * v94 T2 -- one column set for every dimension the Attribution breakdown
+ * table can group by (`store.breakdown()`). Unlike `breakdownColumns`
+ * (SR50's legacy `BreakdownRow`, kept until Task T7 removes its last
+ * caller), this reads `AnalyticsByDimensionRow` straight off
+ * `/analytics/by-dimension` -- `exp_r`/`total_r` are two distinct sums, not
+ * one derived from the other (models.ts's own note on why), and `total_pnl`
+ * needs a currency unit that row shape never carried.
+ *
+ * `unit` decides which of the two totals leads: money-scoped viewers read
+ * P&L first, everyone else reads R first -- both stay in the table either
+ * way, so switching the global unit toggle never hides a figure, only
+ * reorders which one is closer to the row's name.
+ *
+ * A `null` rate is a thin cell (H1): it renders as `ABSENT`, never as a
+ * computed or defaulted 0 -- `n < floor` is exactly the case the server
+ * already declined to answer for.
+ */
+export function dimensionColumns(
+  label: string, unit: AnalyticsUnit, currency: string, floor: number,
+): ColumnDef<AnalyticsByDimensionRow>[] {
+  const totalR: ColumnDef<AnalyticsByDimensionRow> = {
+    key: 'total_r', header: 'Total R', numeric: true,
+    value: (r) => (r.total_r === null ? ABSENT : rMultiple(r.total_r)),
+  };
+  const totalPnl: ColumnDef<AnalyticsByDimensionRow> = {
+    key: 'total_pnl', header: 'P&L', numeric: true,
+    value: (r) => (r.total_pnl === null ? ABSENT : money(r.total_pnl, currency)),
+  };
+  return [
+    { key: 'key', header: label, value: (r) => r.key },
+    { key: 'n', header: 'Trades', numeric: true, value: (r) => count(r.n) },
+    { key: 'win_rate', header: 'Win rate', numeric: true,
+      value: (r) => (r.n < floor || r.win_rate === null ? ABSENT : rate(r.win_rate)) },
+    { key: 'exp_r', header: 'ExpR', numeric: true, value: (r) => expectancy(r.exp_r) },
+    ...(unit === 'money' ? [totalPnl, totalR] : [totalR, totalPnl]),
+    { key: 'avg_win_r', header: 'Avg win', numeric: true, value: (r) => expectancy(r.avg_win_r) },
+    { key: 'avg_loss_r', header: 'Avg loss', numeric: true, value: (r) => expectancy(r.avg_loss_r) },
+    // Present only for `dim=strategy` (badge) or where the server attaches a
+    // soak record; the table's `visible` list omits the key entirely when no
+    // row on screen carries it, rather than showing a column of dashes.
+    { key: 'badge', header: 'Badge', value: (r) => r.badge ?? null },
+    { key: 'soak', header: 'Soak',
+      value: (r) => (r.soak == null ? null : typeof r.soak === 'object' ? JSON.stringify(r.soak) : String(r.soak)) },
   ];
 }
 

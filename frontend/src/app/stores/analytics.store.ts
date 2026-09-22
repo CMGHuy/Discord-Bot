@@ -277,7 +277,8 @@ export const LEGACY_TABS: Record<string, AnalyticsTab> = {
  *  its own (spec v94 H4). */
 export type PanelKey =
   | 'performance' | 'equityCurve' | 'byDimension' | 'heatGrid' | 'exitQuality'
-  | 'journal' | 'strategies' | 'calibration' | 'plans';
+  | 'journal' | 'strategies' | 'calibration' | 'plans'
+  | 'byHorizon' | 'byDirection' | 'byDow';
 
 export const DEFAULT_SCOPE: BookScope = {
   from: null, to: null, ledger: 'main', strategy: null, horizon: null, direction: null,
@@ -496,6 +497,14 @@ interface AnalyticsSlice {
   equityCurve: AnalyticsEquityCurve | null;   equityCurveError: string | null;
   byDimension: AnalyticsByDimension | null;   byDimensionError: string | null;
   heatGrid: AnalyticsHeatGrid | null;         heatGridError: string | null;
+  /** v94 T2 -- the Attribution tab's fixed horizon/direction/day-of-week bar
+   *  lists, each its own `/by-dimension?dim=...` fetch and its own error
+   *  (spec v94 H4): a failed horizon fetch must not blank the direction bars
+   *  beside it. Month reuses `performance().calendar` via `monthBars()`
+   *  rather than a fourth fetch -- that data is already on hand. */
+  byHorizon: AnalyticsByDimension | null;     byHorizonError: string | null;
+  byDirection: AnalyticsByDimension | null;   byDirectionError: string | null;
+  byDow: AnalyticsByDimension | null;         byDowError: string | null;
   exitQuality: AnalyticsExitQuality | null;   exitQualityError: string | null;
   journal: AnalyticsJournal | null;           journalError: string | null;
   strategies: AnalyticsStrategies | null;     strategiesError: string | null;
@@ -574,6 +583,9 @@ export const AnalyticsStore = signalStore(
       equityCurve: null, equityCurveError: null,
       byDimension: null, byDimensionError: null,
       heatGrid: null, heatGridError: null,
+      byHorizon: null, byHorizonError: null,
+      byDirection: null, byDirectionError: null,
+      byDow: null, byDowError: null,
       exitQuality: null, exitQualityError: null,
       journal: null, journalError: null,
       strategies: null, strategiesError: null,
@@ -848,6 +860,11 @@ export const AnalyticsStore = signalStore(
       fetchPanel(api.analyticsHeatGrid(s()), 'heatGrid', 'heatGridError');
       fetchPanel(api.analyticsStrategies(s()), 'strategies', 'strategiesError');
       fetchPanel(api.analyticsPerformance(s()), 'performance', 'performanceError');
+      // T2's fixed bar lists -- one request per dimension, independent of
+      // whichever dimension `breakdown` is currently grouped by.
+      fetchPanel(api.analyticsByDimension('horizon', s()), 'byHorizon', 'byHorizonError');
+      fetchPanel(api.analyticsByDimension('direction', s()), 'byDirection', 'byDirectionError');
+      fetchPanel(api.analyticsByDimension('dow', s()), 'byDow', 'byDowError');
     };
     const loadExecution = (): void => {
       fetchPanel(api.analyticsExitQuality(s()), 'exitQuality', 'exitQualityError');
@@ -969,6 +986,9 @@ export const AnalyticsStore = signalStore(
         fetchPanel(api.analyticsHeatGrid(s()), 'heatGrid', 'heatGridError');
         fetchPanel(api.analyticsStrategies(s()), 'strategies', 'strategiesError');
         fetchPanel(api.analyticsPerformance(s()), 'performance', 'performanceError');
+        fetchPanel(api.analyticsByDimension('horizon', s()), 'byHorizon', 'byHorizonError');
+        fetchPanel(api.analyticsByDimension('direction', s()), 'byDirection', 'byDirectionError');
+        fetchPanel(api.analyticsByDimension('dow', s()), 'byDow', 'byDowError');
       });
 
     const resolveExecution = (): Observable<void> =>
@@ -1039,6 +1059,9 @@ export const AnalyticsStore = signalStore(
           equityCurve: () => fetchPanel(api.analyticsEquityCurve(s()), 'equityCurve', 'equityCurveError'),
           byDimension: () => fetchPanel(api.analyticsByDimension(store.breakdown(), s()), 'byDimension', 'byDimensionError'),
           heatGrid: () => fetchPanel(api.analyticsHeatGrid(s()), 'heatGrid', 'heatGridError'),
+          byHorizon: () => fetchPanel(api.analyticsByDimension('horizon', s()), 'byHorizon', 'byHorizonError'),
+          byDirection: () => fetchPanel(api.analyticsByDimension('direction', s()), 'byDirection', 'byDirectionError'),
+          byDow: () => fetchPanel(api.analyticsByDimension('dow', s()), 'byDow', 'byDowError'),
           exitQuality: () => fetchPanel(api.analyticsExitQuality(s()), 'exitQuality', 'exitQualityError'),
           journal: () => fetchPanel(api.analyticsJournal(s()), 'journal', 'journalError'),
           strategies: () => fetchPanel(api.analyticsStrategies(s()), 'strategies', 'strategiesError'),
