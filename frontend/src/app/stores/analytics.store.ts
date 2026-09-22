@@ -547,6 +547,7 @@ interface AnalyticsSlice {
   measure: 'exp_r' | 'total_r' | 'win_rate';
 
   performance: AnalyticsPerformance | null;
+  performanceError: string | null;
   /**
    * SR54 — the date range scoping every derived figure, as `YYYY-MM-DD` or
    * null for unbounded.
@@ -565,6 +566,8 @@ interface AnalyticsSlice {
    *  panels that arrived fine. */
   journal: AnalyticsJournal | null;
   journalError: string | null;
+  equityCurveError: string | null;
+  exitQualityError: string | null;
   /** SR50 — the pre-built blob, fetched alongside `performance`. */
   snapshot: AnalyticsSnapshot | null;
   /** Its own error: the snapshot self-heals on the server and can rebuild on
@@ -585,7 +588,9 @@ interface AnalyticsSlice {
   proposeError: string | null;
   proposeResult: string | null;
   strategies: AnalyticsStrategies | null;
+  strategiesError: string | null;
   calibration: AnalyticsCalibration | null;
+  calibrationError: string | null;
   exitQuality: AnalyticsExitQuality | null;
   /**
    * The institutional risk metrics block (v85 D37, `GET /risk`), read
@@ -618,6 +623,7 @@ interface AnalyticsSlice {
   strategyAgg: AnalyticsByDimensionRow[];
   horizonAgg: AnalyticsByDimensionRow[];
   plans: AnalyticsPlans | null;
+  plansError: string | null;
   jobs: JobSummary[];
   /** The job whose progress is on screen — status plus a log tail. */
   job: JobStatus | null;
@@ -666,10 +672,13 @@ export const AnalyticsStore = signalStore(
     unit: 'r',
     measure: 'exp_r',
     performance: null,
+    performanceError: null,
     rangeFrom: null,
     rangeTo: null,
     journal: null,
     journalError: null,
+    equityCurveError: null,
+    exitQualityError: null,
     snapshot: null,
     snapshotError: null,
     breakdown: 'ticker',
@@ -679,7 +688,9 @@ export const AnalyticsStore = signalStore(
     proposeError: null,
     proposeResult: null,
     strategies: null,
+    strategiesError: null,
     calibration: null,
+    calibrationError: null,
     exitQuality: null,
     riskMetrics: null,
     equityCurve: null,
@@ -688,6 +699,7 @@ export const AnalyticsStore = signalStore(
     strategyAgg: [],
     horizonAgg: [],
     plans: null,
+    plansError: null,
     jobs: [],
     job: null,
     proposals: [],
@@ -1112,8 +1124,8 @@ export const AnalyticsStore = signalStore(
       api.analyticsPerformance(store.scope())
         .subscribe({
           next: (performance) =>
-            patchState(store, { performance, loading: false, error: null }),
-          error: fail,
+            patchState(store, { performance, performanceError: null, loading: false, error: null }),
+          error: (error: ApiError) => { fail(error); patchState(store, { performanceError: error.message }); },
         });
 
       // SR55. A third request, and a third failure mode, for the same reason
@@ -1148,10 +1160,10 @@ export const AnalyticsStore = signalStore(
       });
       if (store.exitQuality() === null) {
         api.analyticsExitQuality(store.scope()).subscribe({
-          next: (exitQuality) => patchState(store, { exitQuality }),
+          next: (exitQuality) => patchState(store, { exitQuality, exitQualityError: null }),
           // The section degrades independently; do not turn an offline API
           // into an unhandled route-mount error.
-          error: () => {},
+          error: (error: ApiError) => patchState(store, { exitQualityError: error.message }),
         });
       }
       // v85 D39 (R9-03): fetched once, like exitQuality above -- the KPI
@@ -1177,10 +1189,10 @@ export const AnalyticsStore = signalStore(
       api.analyticsEquityCurve({
         ...store.scope(), strategy: store.equityCurveStrategy() ?? store.scope().strategy,
       }).subscribe({
-        next: (equityCurve) => patchState(store, { equityCurve }),
+        next: (equityCurve) => patchState(store, { equityCurve, equityCurveError: null }),
         // Degrades to its own empty state; not a reason to warn about the
         // rest of the Performance tab.
-        error: () => {},
+        error: (error: ApiError) => patchState(store, { equityCurveError: error.message }),
       });
     };
 
@@ -1202,8 +1214,8 @@ export const AnalyticsStore = signalStore(
     const loadStrategies = (): void => {
       patchState(store, { loading: true });
       api.analyticsStrategies(store.scope()).subscribe({
-        next: (strategies) => patchState(store, { strategies, loading: false, error: null }),
-        error: fail,
+        next: (strategies) => patchState(store, { strategies, strategiesError: null, loading: false, error: null }),
+        error: (error: ApiError) => { fail(error); patchState(store, { strategiesError: error.message }); },
       });
     };
 
@@ -1211,16 +1223,16 @@ export const AnalyticsStore = signalStore(
       patchState(store, { loading: true });
       api.analyticsCalibration().subscribe({
         next: (calibration) =>
-          patchState(store, { calibration, loading: false, error: null }),
-        error: fail,
+            patchState(store, { calibration, calibrationError: null, loading: false, error: null }),
+        error: (error: ApiError) => { fail(error); patchState(store, { calibrationError: error.message }); },
       });
     };
 
     const loadPlans = (): void => {
       patchState(store, { loading: true });
       api.analyticsPlans().subscribe({
-        next: (plans) => patchState(store, { plans, loading: false, error: null }),
-        error: fail,
+        next: (plans) => patchState(store, { plans, plansError: null, loading: false, error: null }),
+        error: (error: ApiError) => { fail(error); patchState(store, { plansError: error.message }); },
       });
     };
 
