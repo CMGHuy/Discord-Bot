@@ -52,7 +52,7 @@ function performancePayload(
 function strategiesPayload(
   overrides: Partial<AnalyticsStrategies> = {},
 ): AnalyticsStrategies {
-  return { strategies: [{ name: 'RSI' }], heatmap: {}, ...overrides };
+  return { strategies: [{ name: 'RSI' }], heatmap: { strategies: [], horizons: [], cells: [] }, ...overrides };
 }
 
 function plansPayload(overrides: Partial<AnalyticsPlans> = {}): AnalyticsPlans {
@@ -62,8 +62,16 @@ function plansPayload(overrides: Partial<AnalyticsPlans> = {}): AnalyticsPlans {
     fill_rate: { resolved_n: 2, fill_rate_pct: 50, median_days_to_fill: 3 },
     badges: {},
     tiers: {},
+    scope: 'all-time',
     ...overrides,
   };
+}
+
+/** New aggregate fields are server-owned; legacy display tests only need the
+ * old columns, so supply measured neutral values for the rest of the v94
+ * envelope rather than weakening the shared API contract. */
+function aggregateRow(row: Omit<AnalyticsByDimensionRow, 'wins' | 'losses' | 'avg_win_r' | 'avg_loss_r' | 'total_pnl'> & Partial<Pick<AnalyticsByDimensionRow, 'wins' | 'losses' | 'avg_win_r' | 'avg_loss_r' | 'total_pnl'>>): AnalyticsByDimensionRow {
+  return { wins: 0, losses: 0, avg_win_r: null, avg_loss_r: null, total_pnl: 0, ...row };
 }
 
 function snapshotPayload(overrides: Partial<AnalyticsSnapshot> = {}): AnalyticsSnapshot {
@@ -515,8 +523,8 @@ describe('Analytics — performance tab — strategy/horizon aggregates (v85 D40
   it('sorts the strategy table by the active measure', async () => {
     const { el, fixture } = await renderAgg({
       rows: [
-        { key: 'A', exp_r: 0.1, total_r: 90, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 900 },
-        { key: 'B', exp_r: 0.5, total_r: 20, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 40 },
+        aggregateRow({ key: 'A', exp_r: 0.1, total_r: 90, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 900 }),
+        aggregateRow({ key: 'B', exp_r: 0.5, total_r: 20, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 40 }),
       ],
     });
     expect(rowKeys(el)).toEqual(['B', 'A']);
@@ -528,7 +536,7 @@ describe('Analytics — performance tab — strategy/horizon aggregates (v85 D40
 
   it('renders the registry badge as a rail beside each strategy', async () => {
     const { el } = await renderAgg({
-      rows: [{ key: 'RSI', exp_r: 0.2, total_r: 10, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 238, badge: 'WEAK' }],
+      rows: [aggregateRow({ key: 'RSI', exp_r: 0.2, total_r: 10, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 238, badge: 'WEAK' })],
     });
     const row = firstRow(el);
     expect(row.classList).toContain('badge-weak');
@@ -537,29 +545,29 @@ describe('Analytics — performance tab — strategy/horizon aggregates (v85 D40
 
   it('de-emphasises a strategy row computed from a thin sample', async () => {
     const { el } = await renderAgg({
-      rows: [{ key: 'New', exp_r: 0.9, total_r: 6, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 7 }],
+      rows: [aggregateRow({ key: 'New', exp_r: 0.9, total_r: 6, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 7 })],
     });
     expect(firstRow(el).classList).toContain('thin');
   });
 
   it('renders the horizon bars diverging around zero', async () => {
     const { el } = await renderAgg({
-      horizons: [{ key: '2w', exp_r: -0.2, total_r: -8, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 40 }],
+      horizons: [aggregateRow({ key: '2w', exp_r: -0.2, total_r: -8, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 40 })],
     });
     expect(bar(el, '2w').querySelector('.fill')!.getAttribute('data-tone')).toBe('neg');
   });
 
   it('labels each horizon bar with its sample size', async () => {
     const { el } = await renderAgg({
-      horizons: [{ key: '2w', exp_r: 0.2, total_r: 8, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 40 }],
+      horizons: [aggregateRow({ key: '2w', exp_r: 0.2, total_r: 8, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 40 })],
     });
     expect(bar(el, '2w').textContent).toContain('40');
   });
 
   it('drives both panels from one toggle', async () => {
     const { el, fixture } = await renderAgg({
-      rows: [{ key: 'A', exp_r: 0.1, total_r: 90, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 900 }],
-      horizons: [{ key: '2w', exp_r: 0.1, total_r: 90, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 900 }],
+      rows: [aggregateRow({ key: 'A', exp_r: 0.1, total_r: 90, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 900 })],
+      horizons: [aggregateRow({ key: '2w', exp_r: 0.1, total_r: 90, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 900 })],
     });
     measureToggle(el, 'Total R').click();
     fixture.detectChanges();
@@ -568,7 +576,7 @@ describe('Analytics — performance tab — strategy/horizon aggregates (v85 D40
 
   it('remembers the chosen measure as a preference', async () => {
     const { el, fixture } = await renderAgg({
-      rows: [{ key: 'A', exp_r: 0.1, total_r: 90, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 900 }],
+      rows: [aggregateRow({ key: 'A', exp_r: 0.1, total_r: 90, win_rate: null, profit_factor: null, max_drawdown_r: null, n: 900 })],
     });
     measureToggle(el, 'Total R').click();
     fixture.detectChanges();

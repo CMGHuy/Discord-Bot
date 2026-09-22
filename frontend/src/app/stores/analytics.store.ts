@@ -23,6 +23,8 @@ import {
   AnalyticsPlans,
   AnalyticsSnapshot,
   AnalyticsStrategies,
+  AnalyticsUnit,
+  BookScope,
   HoldingBucket,
   RiskMetrics,
 } from '../api/models';
@@ -270,6 +272,33 @@ export const ANALYTICS_TABS: readonly AnalyticsTab[] = [
   'plans',
 ] as const;
 
+export const DEFAULT_SCOPE: BookScope = {
+  from: null, to: null, ledger: 'main', strategy: null, horizon: null, direction: null,
+};
+
+/** Common range shortcuts used by the v94 scope bar.  The value, rather than
+ * the label, is deliberately what the URL control persists. */
+export const RANGE_PRESETS = [
+  { value: '30d', label: 'Last 30 days', days: 30 },
+  { value: '90d', label: 'Last 90 days', days: 90 },
+  { value: 'ytd', label: 'Year to date', days: null },
+  { value: 'all', label: 'All time', days: null },
+] as const;
+
+const isoDate = (date: Date): string => date.toISOString().slice(0, 10);
+
+/** Resolve a named preset against an explicit day, keeping this calculation
+ * deterministic for tests and independent of the browser's time zone. */
+export function presetRange(preset: string, today: Date): { from: string | null; to: string | null } {
+  if (preset === 'all') return { from: null, to: null };
+  if (preset === 'ytd') return { from: `${today.getUTCFullYear()}-01-01`, to: isoDate(today) };
+  const days = RANGE_PRESETS.find((entry) => entry.value === preset)?.days;
+  if (!days) return { from: null, to: null };
+  const from = new Date(today);
+  from.setUTCDate(from.getUTCDate() - (days - 1));
+  return { from: isoDate(from), to: isoDate(today) };
+}
+
 /* -- the snapshot (SR50) --------------------------------------------------
  *
  * `GET /analytics/snapshot` forwards the whole pre-built analytics blob, and
@@ -311,14 +340,16 @@ export interface Streaks {
  *  Strategies tab and `confidence` has its own table on this one, so offering
  *  them here as well would be three views of one number. */
 export const BREAKDOWN_DIMENSIONS = [
-  { value: 'ticker', label: 'Ticker' },
+  { value: 'strategy', label: 'Strategy' },
   { value: 'horizon', label: 'Horizon' },
   { value: 'direction', label: 'Direction' },
   { value: 'dow', label: 'Day of week' },
   { value: 'month', label: 'Month' },
-  // "tier" was retired from aggregate.DIMENSIONS; it would 400 if selected.
   { value: 'badge', label: 'Badge' },
+  { value: 'confidence', label: 'Confidence' },
   { value: 'source', label: 'Source' },
+  { value: 'ledger', label: 'Ledger' },
+  { value: 'ticker', label: 'Ticker' },
 ] as const;
 
 export type BreakdownDimension = (typeof BREAKDOWN_DIMENSIONS)[number]['value'];
@@ -510,6 +541,8 @@ interface AnalyticsSlice {
   /** Which tab is open, projected from the URL's `?tab=`. Held here rather
    *  than in the component because it decides what gets fetched. */
   tab: AnalyticsTab;
+  scope: BookScope;
+  unit: AnalyticsUnit;
 
   performance: AnalyticsPerformance | null;
   /**
@@ -627,6 +660,8 @@ interface AnalyticsSlice {
 export const AnalyticsStore = signalStore(
   withState<AnalyticsSlice>({
     tab: 'performance',
+    scope: DEFAULT_SCOPE,
+    unit: 'r',
     performance: null,
     rangeFrom: null,
     rangeTo: null,
@@ -660,7 +695,18 @@ export const AnalyticsStore = signalStore(
   }),
 
   withComputed(({ performance, strategies, calibration, plans, jobs, job, snapshot, breakdown, exitQuality,
-                 journal, riskMetrics, equityCurve, equityCurveView }) => ({
+                 journal, riskMetrics, equityCurve, equityCurveView, scope }) => ({
+    /** The server-side population behind the scoped view, never inferred from
+     * a chart's visible rows. */
+    scopeN: computed(() => performance()?.n ?? null),
+    /** A scope is shareable precisely because every non-default filter is
+     * explicit. Ledger counts only when it differs from the default book. */
+    activeFilterCount: computed(() => {
+      const selected = scope();
+      return (['from', 'to', 'strategy', 'horizon', 'direction'] as const)
+        .filter((key) => selected[key] !== null).length +
+        (selected.ledger === DEFAULT_SCOPE.ledger ? 0 : 1);
+    }),
     /* -- SR50: the snapshot's own figures ------------------------------- */
 
     /** When the blob was assembled. Worth showing: the server serves a
@@ -1060,7 +1106,7 @@ export const AnalyticsStore = signalStore(
       patchState(store, { loading: true });
       // SR54: the range travels to the server. See ApiClient.analyticsPerformance
       // for why it cannot be applied to an all-time payload on the client.
-      api.analyticsPerformance({ from: store.rangeFrom(), to: store.rangeTo() })
+      api.analyticsPerformance(store.scope())
         .subscribe({
           next: (performance) =>
             patchState(store, { performance, loading: false, error: null }),
@@ -1071,7 +1117,7 @@ export const AnalyticsStore = signalStore(
       // the snapshot is separate: the journal lives in its own store and its
       // own module, and folding it into the performance response would make a
       // journal read failure empty the KPI cards.
-      api.analyticsJournal().subscribe({
+      api.analyticsJournal(store.scope()).subscribe({
         next: (journal) => patchState(store, { journal, journalError: null }),
         error: (error: ApiError) =>
           patchState(store, {
@@ -1098,7 +1144,7 @@ export const AnalyticsStore = signalStore(
           }),
       });
       if (store.exitQuality() === null) {
-        api.analyticsExitQuality().subscribe({
+        api.analyticsExitQuality(store.scope()).subscribe({
           next: (exitQuality) => patchState(store, { exitQuality }),
           // The section degrades independently; do not turn an offline API
           // into an unhandled route-mount error.
@@ -1126,7 +1172,7 @@ export const AnalyticsStore = signalStore(
      *  not take, so this cannot fold into `loadPerformance`'s own request. */
     const loadEquityCurve = (): void => {
       api.analyticsEquityCurve({
-        from: store.rangeFrom(), to: store.rangeTo(), strategy: store.equityCurveStrategy(),
+        ...store.scope(), strategy: store.equityCurveStrategy() ?? store.scope().strategy,
       }).subscribe({
         next: (equityCurve) => patchState(store, { equityCurve }),
         // Degrades to its own empty state; not a reason to warn about the
@@ -1140,11 +1186,11 @@ export const AnalyticsStore = signalStore(
      *  wasteful but harmless to re-fire on a range change; simpler than a
      *  second guard for data neither panel's own toggle needs range-scoped. */
     const loadByDimension = (): void => {
-      api.analyticsByDimension('strategy').subscribe({
+      api.analyticsByDimension('strategy', store.scope()).subscribe({
         next: ({ rows }) => patchState(store, { strategyAgg: rows }),
         error: () => {},
       });
-      api.analyticsByDimension('horizon').subscribe({
+      api.analyticsByDimension('horizon', store.scope()).subscribe({
         next: ({ rows }) => patchState(store, { horizonAgg: rows }),
         error: () => {},
       });
@@ -1152,7 +1198,7 @@ export const AnalyticsStore = signalStore(
 
     const loadStrategies = (): void => {
       patchState(store, { loading: true });
-      api.analyticsStrategies().subscribe({
+      api.analyticsStrategies(store.scope()).subscribe({
         next: (strategies) => patchState(store, { strategies, loading: false, error: null }),
         error: fail,
       });
@@ -1249,10 +1295,10 @@ export const AnalyticsStore = signalStore(
     };
 
     const resolvePerformance = (): Observable<void> => routeRequest(
-      api.analyticsPerformance({ from: store.rangeFrom(), to: store.rangeTo() }), {
+      api.analyticsPerformance(store.scope()), {
         start: () => {
           patchState(store, { loading: true });
-          api.analyticsJournal().subscribe({
+          api.analyticsJournal(store.scope()).subscribe({
             next: (journal) => patchState(store, { journal, journalError: null }),
             error: (error: ApiError) => patchState(store, { journalError: error.code === 'unavailable' ? 'The admin is not responding.' : error.message }),
           });
@@ -1261,7 +1307,7 @@ export const AnalyticsStore = signalStore(
             error: (error: ApiError) => patchState(store, { snapshotError: error.code === 'unavailable' ? 'The admin is not responding.' : error.message }),
           });
           if (store.exitQuality() === null) {
-            api.analyticsExitQuality().subscribe({
+            api.analyticsExitQuality(store.scope()).subscribe({
               next: (exitQuality) => patchState(store, { exitQuality }),
               error: () => {},
             });
@@ -1281,7 +1327,7 @@ export const AnalyticsStore = signalStore(
       },
     );
 
-    const resolveStrategies = (): Observable<void> => routeRequest(api.analyticsStrategies(), {
+    const resolveStrategies = (): Observable<void> => routeRequest(api.analyticsStrategies(store.scope()), {
       start: () => patchState(store, { loading: true }),
       next: (strategies) => patchState(store, { strategies, loading: false, error: null }),
       error: fail,
@@ -1368,13 +1414,16 @@ export const AnalyticsStore = signalStore(
        */
       setRange(from: string | null, to: string | null): void {
         const [lo, hi] = from && to && from > to ? [to, from] : [from, to];
-        patchState(store, { rangeFrom: lo || null, rangeTo: hi || null });
+        patchState(store, {
+          rangeFrom: lo || null, rangeTo: hi || null,
+          scope: { ...store.scope(), from: lo || null, to: hi || null },
+        });
         loadPerformance();
       },
 
       /** Back to all-time. */
       clearRange(): void {
-        patchState(store, { rangeFrom: null, rangeTo: null });
+        patchState(store, { rangeFrom: null, rangeTo: null, scope: { ...store.scope(), from: null, to: null } });
         loadPerformance();
       },
 
@@ -1384,6 +1433,23 @@ export const AnalyticsStore = signalStore(
       setEquityCurveStrategy(strategy: string | null): void {
         patchState(store, { equityCurveStrategy: strategy || null });
         loadEquityCurve();
+      },
+
+      /** v94 D2: one shared scope feeds every scoped analytics request. */
+      setScope(patch: Partial<BookScope>): void {
+        const next = { ...store.scope(), ...patch };
+        if (next.from && next.to && next.from > next.to) [next.from, next.to] = [next.to, next.from];
+        patchState(store, { scope: next, rangeFrom: next.from, rangeTo: next.to });
+        load();
+      },
+      clearScope(): void {
+        patchState(store, { scope: DEFAULT_SCOPE, rangeFrom: null, rangeTo: null });
+        load();
+      },
+      setUnit(unit: AnalyticsUnit): void { patchState(store, { unit }); },
+      /** Route resolvers hydrate before fetching; no request here. */
+      hydrate(scope: BookScope, unit: AnalyticsUnit): void {
+        patchState(store, { scope, unit, rangeFrom: scope.from, rangeTo: scope.to });
       },
 
       /** Equity | Drawdown -- swaps which field of the one already-fetched

@@ -540,6 +540,9 @@ export interface AnalyticsJournal extends Scoped {
 
 export interface AnalyticsStrategies extends Scoped {
   strategies: unknown[];
+  /** Legacy matrix retained until the v94 Attribution heat grid fully
+   * replaces the existing Strategies workspace. */
+  heatmap?: { strategies: string[]; horizons: string[]; cells: unknown[] };
   registry_scope: 'all-time';
   contribution: { strategy: string; total_r: number | null; n: number }[];
   cumulative: Record<string, { date: string; cum_r: number }[]>;

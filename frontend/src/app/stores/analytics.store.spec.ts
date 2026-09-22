@@ -20,7 +20,12 @@ import {
   loadingInterceptor,
 } from '../api/interceptors';
 import { AnalyticsPerformance } from '../api/models';
-import { AnalyticsStore, RELOCATED_METRICS } from './analytics.store';
+import {
+  AnalyticsStore,
+  BREAKDOWN_DIMENSIONS,
+  presetRange,
+  RELOCATED_METRICS,
+} from './analytics.store';
 
 /* NG48 — Analytics.
  *
@@ -115,6 +120,10 @@ const PERFORMANCE: AnalyticsPerformance = {
     RSI: [{ date: '2026-08-01', cum_pct: 2.0 }],
   },
   benchmark: { spy_cum: { '2026-08-01': 1.4, '2026-07-01': 0.3 } },
+  rolling_wr: [],
+  rolling_exp_r: [],
+  scope: { from: null, to: null, ledger: 'main', strategy: null, horizon: null, direction: null },
+  n: 34,
 };
 
 const STRATEGIES = {
@@ -712,11 +721,61 @@ describe('AnalyticsStore', () => {
   /* -- SR54: the date range -------------------------------------------- */
 
   describe('the analytics date range', () => {
+    it('resolves the range presets inclusively and without local-time drift', () => {
+      const today = new Date('2026-09-17T12:00:00Z');
+      expect(presetRange('30d', today)).toEqual({ from: '2026-08-19', to: '2026-09-17' });
+      expect(presetRange('ytd', today)).toEqual({ from: '2026-01-01', to: '2026-09-17' });
+      expect(presetRange('all', today)).toEqual({ from: null, to: null });
+    });
+
+    it('exposes every server-supported scoped breakdown and retains the chosen unit', () => {
+      expect(BREAKDOWN_DIMENSIONS.map((dimension) => dimension.value)).toEqual([
+        'strategy', 'horizon', 'direction', 'dow', 'month', 'badge',
+        'confidence', 'source', 'ledger', 'ticker',
+      ]);
+      expect(store.unit()).toBe('r');
+      store.setUnit('money');
+      expect(store.unit()).toBe('money');
+    });
+
     /** Settle the first load so the assertions below are about the refetch. */
     const openPerformance = () => {
       tick();
       respondPerformance();
     };
+
+    it('sends the one shared scope to every scoped Performance request', () => {
+      openPerformance();
+
+      store.setScope({ from: '2026-08-01', ledger: 'both', strategy: 'MACD' });
+      tick();
+
+      const performance = backend.expectOne((request) => request.url === '/api/v1/analytics/performance');
+      expect(performance.request.params.get('from')).toBe('2026-08-01');
+      expect(performance.request.params.get('ledger')).toBe('both');
+      expect(performance.request.params.get('strategy')).toBe('MACD');
+      performance.flush({
+        ...PERFORMANCE,
+        n: 312,
+        scope: { from: '2026-08-01', to: null, ledger: 'both', strategy: 'MACD', horizon: null, direction: null },
+      });
+      backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
+      const journal = backend.expectOne('/api/v1/analytics/journal');
+      const curve = backend.expectOne('/api/v1/analytics/equity-curve');
+      const strategy = backend.expectOne((request) => request.url === '/api/v1/analytics/by-dimension' && request.params.get('dim') === 'strategy');
+      const horizon = backend.expectOne((request) => request.url === '/api/v1/analytics/by-dimension' && request.params.get('dim') === 'horizon');
+      [journal, curve, strategy, horizon].forEach((request) => {
+        expect(request.request.params.get('strategy')).toBe('MACD');
+        expect(request.request.params.get('ledger')).toBe('both');
+      });
+      journal.flush(JOURNAL);
+      curve.flush(EQUITY_CURVE);
+      strategy.flush(BY_DIMENSION);
+      horizon.flush(BY_DIMENSION);
+
+      expect(store.scopeN()).toBe(312);
+      expect(store.activeFilterCount()).toBe(3);
+    });
 
     it('sends both bounds as query parameters, not as a client-side filter', () => {
       openPerformance();
