@@ -196,4 +196,4 @@ Not auto-loaded — read the relevant one before starting work in that area.
 | `working-conventions.md` | committing, bumping `VERSION.json`, or mirroring a production change back — two independent `ui`/`bot` lines; the test is observable difference, not diff size |
 | `git-safety.md` | any branch deletion or force push |
 | `testing-cost.md` | optimising or timing tests, or reacting to a changed pass count |
-| `skills-tools.md` | picking a Superpowers skill or subagent for a task here, or dispatching more than one subagent at once |
+| `skills-tools.md` | picking a Superpowers skill or subagent for a task here, dispatching more than one subagent at once, or driving a browser |

@@ -37,6 +37,17 @@ Referenced from the root `CLAUDE.md`.
   look for.
 - Skip `frontend-design`/`dataviz` conventions for the admin UI unless asked —
   it follows the existing TradingView-style theme.
+- **Driving a browser (screenshot passes, UI verification): use Playwright,
+  never `claude-in-chrome`.** The extension isn't installed/connected in this
+  repo's sessions, so trying it first is a wasted round trip every time — go
+  straight to `npx playwright` (install a local copy with
+  `npm install --no-save playwright` inside `frontend/`, then
+  `npx playwright install chromium` once per machine). The admin UI requires
+  login (`ADMIN_USERNAME`/`ADMIN_PASSWORD`, default `admin`/`admin` if unset —
+  never read `.env` to find a real one); script the login with Playwright's
+  Node API rather than the bare `playwright screenshot` CLI, which can't fill
+  a form. A v94 V2 plan task still lists `claude-in-chrome` as its first
+  fallback — that ordering is superseded by this rule.
 
 ## The v96 skills layer
 
