@@ -154,7 +154,8 @@ def test_analytics_journal_returns_the_digest_and_top_lessons(seed, logged_in):
 
     body = logged_in.get("/api/v1/analytics/journal").get_json()
 
-    assert_shape(body, {"digest": list, "lessons": list, "entries_n": int})
+    assert_shape(body, {"digest": list, "lessons": list, "entries_n": int,
+                         "scope": dict, "n": int})
     assert body["entries_n"] == 2
     assert all(isinstance(line, str) for line in body["digest"])
     assert all(isinstance(line, str) for line in body["lessons"])
@@ -165,7 +166,8 @@ def test_analytics_journal_is_empty_but_shaped_on_a_fresh_install(seed, logged_i
     snapshot route has."""
     seed(trades=[], entries=[])
     body = logged_in.get("/api/v1/analytics/journal").get_json()
-    assert_shape(body, {"digest": list, "lessons": list, "entries_n": int})
+    assert_shape(body, {"digest": list, "lessons": list, "entries_n": int,
+                         "scope": dict, "n": int})
     assert body["entries_n"] == 0
 
 
