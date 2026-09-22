@@ -8,6 +8,7 @@ import {
   AnalyticsByDimension,
   AnalyticsCalibration,
   AnalyticsEquityCurve,
+  AnalyticsHeatGrid,
   AnalyticsExitQuality,
   AnalyticsJournal,
   AnalyticsPerformance,
@@ -15,6 +16,7 @@ import {
   AnalyticsRegistry,
   AnalyticsSnapshot,
   AnalyticsStrategies,
+  BookScope,
   BotRestartResult,
   CalendarDayTrades,
   ChartResponse,
@@ -57,6 +59,16 @@ import {
   TradeJournal,
   VersionHistory,
 } from './models';
+
+/** Omits unset scope fields so one state has one request URL (v94 D2/D5). */
+export function scopeParams(scope?: Partial<BookScope> | null, extra?: Record<string, string>): HttpParams {
+  let params = new HttpParams();
+  for (const [key, value] of Object.entries(extra ?? {})) params = params.set(key, value);
+  for (const field of ['from', 'to', 'ledger', 'strategy', 'horizon', 'direction'] as const) {
+    const value = scope?.[field]; if (value) params = params.set(field, String(value));
+  }
+  return params;
+}
 
 /** The application's only HTTP surface.
  *
@@ -210,53 +222,50 @@ export class ApiClient {
    * An omitted bound is omitted from the URL rather than sent empty, so the
    * server sees "unbounded" instead of having to treat `''` as unset.
    */
-  analyticsPerformance(range?: { from?: string | null; to?: string | null }):
+  analyticsPerformance(scope?: Partial<BookScope> | null):
     Observable<AnalyticsPerformance> {
-    let params = new HttpParams();
-    if (range?.from) params = params.set('from', range.from);
-    if (range?.to) params = params.set('to', range.to);
     return this.http.get<AnalyticsPerformance>(
-      `${this.base}/analytics/performance`, { params });
+      `${this.base}/analytics/performance`, { params: scopeParams(scope) });
   }
 
   /** v85 D39 (R9-01) — one point per closed trade, cumulative in R, with a
    *  drawdown-from-peak series alongside it. Same from/to vocabulary as
    *  `analyticsPerformance`, plus an optional `strategy` scope the
    *  Performance tab's overall payload does not take. */
-  analyticsEquityCurve(scope?: { from?: string | null; to?: string | null; strategy?: string | null }):
+  analyticsEquityCurve(scope?: Partial<BookScope> | null):
     Observable<AnalyticsEquityCurve> {
-    let params = new HttpParams();
-    if (scope?.from) params = params.set('from', scope.from);
-    if (scope?.to) params = params.set('to', scope.to);
-    if (scope?.strategy) params = params.set('strategy', scope.strategy);
     return this.http.get<AnalyticsEquityCurve>(
-      `${this.base}/analytics/equity-curve`, { params });
+      `${this.base}/analytics/equity-curve`, { params: scopeParams(scope) });
   }
 
   /** v85 D40 (R9-02) — one row per strategy or per horizon, carrying BOTH
    *  ExpR and total R; the Performance tab's strategy table and horizon
    *  bars share this one endpoint and toggle client-side (R9-05). */
-  analyticsByDimension(dim: 'strategy' | 'horizon'): Observable<AnalyticsByDimension> {
-    const params = new HttpParams().set('dim', dim);
+  analyticsByDimension(dim: string, scope?: Partial<BookScope> | null): Observable<AnalyticsByDimension> {
+    const params = scopeParams(scope, { dim });
     return this.http.get<AnalyticsByDimension>(
       `${this.base}/analytics/by-dimension`, { params });
   }
 
   /** SR55 — the trailing-week digest and recurring lessons. */
-  analyticsJournal(): Observable<AnalyticsJournal> {
-    return this.http.get<AnalyticsJournal>(`${this.base}/analytics/journal`);
+  analyticsJournal(scope?: Partial<BookScope> | null, lessons?: number): Observable<AnalyticsJournal> {
+    return this.http.get<AnalyticsJournal>(`${this.base}/analytics/journal`, { params: scopeParams(scope, lessons ? { lessons: String(lessons) } : undefined) });
   }
 
-  analyticsStrategies(): Observable<AnalyticsStrategies> {
-    return this.http.get<AnalyticsStrategies>(`${this.base}/analytics/strategies`);
+  analyticsStrategies(scope?: Partial<BookScope> | null): Observable<AnalyticsStrategies> {
+    return this.http.get<AnalyticsStrategies>(`${this.base}/analytics/strategies`, { params: scopeParams(scope) });
   }
 
   analyticsCalibration(): Observable<AnalyticsCalibration> {
     return this.http.get<AnalyticsCalibration>(`${this.base}/analytics/calibration`);
   }
 
-  analyticsExitQuality(): Observable<AnalyticsExitQuality> {
-    return this.http.get<AnalyticsExitQuality>(`${this.base}/analytics/exit-quality`);
+  analyticsExitQuality(scope?: Partial<BookScope> | null): Observable<AnalyticsExitQuality> {
+    return this.http.get<AnalyticsExitQuality>(`${this.base}/analytics/exit-quality`, { params: scopeParams(scope) });
+  }
+
+  analyticsHeatGrid(scope?: Partial<BookScope> | null): Observable<AnalyticsHeatGrid> {
+    return this.http.get<AnalyticsHeatGrid>(`${this.base}/analytics/heat-grid`, { params: scopeParams(scope) });
   }
 
   analyticsRegistry(): Observable<AnalyticsRegistry> {
