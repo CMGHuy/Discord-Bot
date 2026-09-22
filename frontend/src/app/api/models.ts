@@ -560,6 +560,7 @@ export interface AnalyticsExitQuality extends Scoped {
   exit_reasons: unknown[];
   unmapped_reasons: { status: string; text: string; n: number }[];
   hold_by_outcome: unknown;
+  hold_points: { outcome: string; days: number }[];
   efficiency: { bins: unknown[]; n: number; median: number | null };
   mae: { bins: unknown[]; n: number; median: number | null };
   scatter: unknown[];

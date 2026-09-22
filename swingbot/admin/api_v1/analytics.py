@@ -619,11 +619,20 @@ def analytics_exit_quality():
 
     scope = _scope()
     scoped = select(closed_only(_all_trades(TradeLog())), scope)
+    # The strip plot needs observations, not only the two aggregates in
+    # hold_by_outcome.  Keep the same scoped population and cap the payload
+    # so a long-lived book cannot turn an analytics view into a bulk export.
+    hold_points = [
+        {"outcome": m.resolve_outcome(trade), "days": round(days, 4)}
+        for trade in scoped
+        if (days := m._holding_days(trade)) is not None
+    ][:2000]
     ids = {trade.get("id") for trade in scoped}
     entries = [entry for entry in JournalStore().entries() if entry.get("trade_id") in ids]
     return jsonify({"exit_reasons": m.exit_reason_split(scoped),
                     "unmapped_reasons": m.unmapped_exit_reasons(scoped),
                     "hold_by_outcome": m.hold_by_outcome(scoped),
+                    "hold_points": hold_points,
                     "efficiency": eq.efficiency_histogram(entries),
                     "mae": eq.mae_histogram(entries),
                     "scatter": eq.mfe_mae_points(entries),

@@ -192,6 +192,7 @@ def test_exit_quality_is_scoped_and_echoes(seed, logged_in):
     body = logged_in.get("/api/v1/analytics/exit-quality?from=2026-08-01").get_json()
     assert body["n"] == 1 and body["scope"]["from"] == "2026-08-01"
     assert body["hold_by_outcome"]["n_winners"] == 1
+    assert body["hold_points"] == [{"outcome": "win", "days": pytest.approx(3.2083)}]
     assert body["min_cell_n"] == 20
 
 
