@@ -105,10 +105,12 @@ function render(store: StoreStub) {
 describe('TuningTab', () => {
   beforeEach(() => TestBed.resetTestingModule());
 
-  it('offers every strategy with contribution history in the launcher, and disables Launch until one is picked', () => {
+  it('offers every strategy with contribution history in the launcher, in the server\'s contribution-magnitude order, and disables Launch until one is picked', () => {
+    // RSI before MACD -- alphabetically backwards -- so this also proves the
+    // picker does not re-sort what `/analytics/strategies` already ordered.
     const { el } = render(storeStub());
     const options = [...el.querySelectorAll('sb-select option')].map((o) => o.textContent!.trim());
-    expect(options).toEqual(['Pick a strategy', 'MACD', 'RSI']);
+    expect(options).toEqual(['Pick a strategy', 'RSI', 'MACD']);
     const launch = [...el.querySelectorAll('button')].find((b) => b.textContent!.includes('Launch TRAIN grid'))!;
     expect(launch.disabled).toBe(true);
   });

@@ -333,13 +333,13 @@ export class TuningTab {
   /** Rebuilt from the still-current `AnalyticsStrategies` shape -- the old
    *  `store.strategyNames()` this read was removed in the v94 S1-S4 rewrite.
    *  `/analytics/strategies` groups its contribution rows by strategy name
-   *  server-side, so this is already one row per strategy; no dedup needed. */
+   *  server-side, so this is already one row per strategy; no dedup needed.
+   *  Not re-sorted: `contribution` arrives sorted by contribution magnitude
+   *  (`-abs(total_r), strategy` -- `analytics.py`'s `/analytics/strategies`),
+   *  and re-sorting it alphabetically here would throw that away. */
   protected readonly strategyOptions = computed(() =>
     (this.store.strategies()?.contribution ?? [])
-      .map((c) => c.strategy)
-      .slice()
-      .sort()
-      .map((name) => ({ value: name, label: name })),
+      .map((c) => ({ value: c.strategy, label: c.strategy })),
   );
 
   protected jobStateLabel(job: JobStatus): string {
