@@ -17,6 +17,46 @@ expectancy.
 
 ## Problem
 
+> ### CORRECTION 2026-09-22 — the founding measurement below is invalid
+>
+> **The "100% long / 0 bearish" premise was derived from the wrong file.** The
+> repo-local `data/journal.json` is dev fixture data, not the book: 179 entries, all
+> bullish, **178 of 179 carry `holding_days = 0.0`**, `opened_at` and `closed_at` sit
+> ~0.07s apart, and the first record carries `mfe_r = 43.26`. No live trade looks like
+> that.
+>
+> Re-derived read-only from **production** (`/opt/swing-bot/data/journal.json` on the
+> Hetzner VM, read 2026-09-22), closed window **2026-07-20 .. 2026-09-22**:
+>
+> | Population | N (decided) | Win rate | ExpR | sumR |
+> |---|---|---|---|---|
+> | All | 622 | 56.3% | **−0.096** | −59.5 |
+> | bullish | 372 | 58.3% | −0.047 | −17.5 |
+> | **bearish** | **250** | **53.2%** | **−0.168** | **−42.0** |
+>
+> (Journal totals including undecided entries: N=625, 373 bullish / 252 bearish.)
+>
+> **The book is not structurally long-only. It shorts, and its shorts lose money.**
+>
+> **What this does NOT invalidate:** the four-layer analysis below was measured by
+> calling `ENTRY_FUNCS` directly over the cached universe, not from the journal, so
+> the mask/regime/RS/universe findings stand. The two results are consistent — the
+> masks discard 80.1% of *raw* bearish signal, but the four unmasked strategies
+> (Break & Retest, EMA Crossover, RSI Divergence, Elliott Wave) still cleared 250
+> decided bearish trades into the book.
+>
+> **What this changes:** the Goal frames this spec as closing a *coverage* gap ("alert
+> something usable when the market is falling", bar is coverage not expectancy). There
+> is no coverage gap — there is a **quality** gap. Bearish trades already reach the
+> operator and run at −0.168R, 3.6x worse per trade than the long side. Routing decline
+> exposure through inverse ETFs on the bullish arms adds a second downside population
+> without addressing why the existing one loses. **Re-derive the premise and re-argue
+> the `Edge: volume` tag before building this plan.** The whole book being negative
+> (−0.096R, N=622) also means "not beating the long book's expectancy" is a floor worth
+> almost nothing.
+>
+> Original text of this section preserved below as written on 2026-09-21.
+
 The production book is not 90% long. It is **100% long**.
 
 Re-derived from `data/journal.json` this session: 173 closed trades, **173 bullish, 0 bearish**.
