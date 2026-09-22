@@ -36,6 +36,39 @@ export function scopeFromParams(params: ParamMap): { tab: AnalyticsTab; scope: B
   };
 }
 
+/** The scope fields, in the order `BookScope` declares them. */
+const SCOPE_KEYS = ['from', 'to', 'ledger', 'strategy', 'horizon', 'direction'] as const;
+
+/**
+ * The same read as `scopeFromParams`, minus the defaults: only the fields
+ * the URL actually carries.
+ *
+ * `scopeFromParams` substitutes a default for every absent field, which is
+ * right for "what is the scope" and wrong for "what did the URL say". The
+ * store's `hydrate` merges this patch onto state seeded from the remembered
+ * preference, so the URL wins where it speaks and the preference answers
+ * where it is silent. Handing it the defaulted scope instead would
+ * overwrite every remembered field on every navigation, and the preference
+ * would be written forever and never read.
+ *
+ * A present-but-invalid value (`?from=yesterday`) counts as the URL
+ * speaking: it patches to the default rather than falling through to the
+ * preference. Resurrecting a stored filter that the URL visibly does not
+ * contain would be the worse surprise of the two.
+ */
+export function scopePatchFromParams(
+  params: ParamMap,
+): { tab: AnalyticsTab; scope: Partial<BookScope>; unit: AnalyticsUnit | undefined } {
+  const { tab, scope, unit } = scopeFromParams(params);
+  const patch: Partial<BookScope> = {};
+  for (const key of SCOPE_KEYS) {
+    if (params.has(key)) Object.assign(patch, { [key]: scope[key] });
+  }
+  // `tab` is unconditional: it always resolves to a real tab (legacy-mapped
+  // or defaulted) and there is no remembered tab for it to trample.
+  return { tab, scope: patch, unit: params.has('unit') ? unit : undefined };
+}
+
 /** A field equal to its default is written as `null` so the URL stays short
  *  and one state has exactly one URL — two spellings of the same view would
  *  make a shared link ambiguous about what was actually being looked at. */

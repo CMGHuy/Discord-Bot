@@ -13,19 +13,23 @@ import {
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { convertToParamMap } from '@angular/router';
+
 import { EventStream } from '../api/event-stream';
 import {
   authInterceptor,
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
-import { AnalyticsPerformance } from '../api/models';
+import { AnalyticsPerformance, Preferences } from '../api/models';
+import { scopePatchFromParams } from '../workspaces/analytics/scope-url';
 import {
   AnalyticsStore,
   BREAKDOWN_DIMENSIONS,
   presetRange,
   RELOCATED_METRICS,
 } from './analytics.store';
+import { PreferencesStore } from './preferences.store';
 
 /* NG48, rewritten for v94 — Analytics.
  *
@@ -895,5 +899,101 @@ describe('AnalyticsStore', () => {
       expect(store.scopeN()).toBe(34);
       expect(store.asOf()).toBe('2026-04-01');
     });
+  });
+});
+
+/* -- the remembered scope --------------------------------------------------
+ *
+ * v94's promise is "the URL wins where it speaks; the preference answers
+ * where it is silent", and the half that is easy to get wrong is the second
+ * one. `setScope`/`setUnit` write the preference on every call, so the write
+ * path looks healthy whether or not anything ever reads it back -- exactly
+ * the failure `PreferencesStore.isLoaded`'s own docstring warns about. These
+ * tests drive the real composition the route resolver uses
+ * (`scopePatchFromParams` into `hydrate`) rather than `hydrate` alone,
+ * because the bug this guards lived in the seam between the two: a
+ * `scopeFromParams` that defaults every absent field, handed to a `hydrate`
+ * that replaced the whole scope.
+ */
+describe('AnalyticsStore — the remembered scope', () => {
+  const REMEMBERED: Preferences = {
+    analyticsScope: { ledger: 'both', strategy: 'MACD' },
+    analyticsUnit: 'money',
+  };
+
+  /** Only the two methods the store calls, so nothing else can drift. */
+  const preferencesStub = (values: Preferences) => ({
+    values: () => values,
+    update: (mutate: (prefs: Preferences) => Preferences) => { values = mutate(values); },
+  });
+
+  const storeWith = (values: Preferences): InstanceType<typeof AnalyticsStore> => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        { provide: EventStream, useValue: new FakeEventStream() },
+        { provide: PreferencesStore, useValue: preferencesStub(values) },
+        AnalyticsStore,
+      ],
+    });
+    return TestBed.inject(AnalyticsStore);
+  };
+
+  /** What `analytics.routes.ts`'s resolver does, on one URL. */
+  const navigate = (store: InstanceType<typeof AnalyticsStore>, query: Record<string, string>) => {
+    const { scope, unit } = scopePatchFromParams(convertToParamMap(query));
+    store.hydrate(scope, unit);
+  };
+
+  it('seeds the scope and unit from the remembered preference', () => {
+    const store = storeWith(REMEMBERED);
+
+    expect(store.scope().ledger).toBe('both');
+    expect(store.scope().strategy).toBe('MACD');
+    expect(store.unit()).toBe('money');
+  });
+
+  it('keeps the remembered scope when the URL says nothing about it', () => {
+    // The regression: the resolver runs on EVERY navigation
+    // (runGuardsAndResolvers: 'always'), so a hydrate that replaced the
+    // whole scope reset the remembered one to the defaults every time --
+    // silently, because the write path still worked.
+    const store = storeWith(REMEMBERED);
+
+    navigate(store, {});
+
+    expect(store.scope().ledger).toBe('both');
+    expect(store.scope().strategy).toBe('MACD');
+    expect(store.unit()).toBe('money');
+  });
+
+  it('lets the URL override exactly the field it names, and no other', () => {
+    const store = storeWith(REMEMBERED);
+
+    navigate(store, { ledger: 'weak', unit: 'pct' });
+
+    expect(store.scope().ledger).toBe('weak');
+    // Untouched by this URL, so still the remembered value.
+    expect(store.scope().strategy).toBe('MACD');
+    expect(store.unit()).toBe('pct');
+
+    navigate(store, { from: '2026-08-01' });
+
+    expect(store.scope().from).toBe('2026-08-01');
+    expect(store.scope().ledger).toBe('weak');
+    // No `unit=` on this URL, so the one already resolved stands.
+    expect(store.unit()).toBe('pct');
+  });
+
+  it('falls back to the plain defaults when nothing is remembered', () => {
+    const store = storeWith({});
+
+    expect(store.scope()).toEqual(SCOPE);
+    expect(store.unit()).toBe('r');
   });
 });

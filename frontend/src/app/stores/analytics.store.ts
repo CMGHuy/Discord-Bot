@@ -1101,9 +1101,24 @@ export const AnalyticsStore = signalStore(
       setTableOpen(panel: string, open: boolean): void {
         patchState(store, { tableOpen: { ...store.tableOpen(), [panel]: open } });
       },
-      /** Route resolvers hydrate before fetching; no request here. */
-      hydrate(scope: BookScope, unit: AnalyticsUnit): void {
-        patchState(store, { scope, unit });
+      /**
+       * Route resolvers hydrate before fetching; no request here.
+       *
+       * A PATCH, not a replacement, and that is the whole point: the
+       * resolver passes only the fields the URL actually carries, so a
+       * field the URL is silent about keeps the value seeded from the
+       * remembered preference. Taking a complete `BookScope` here would
+       * overwrite every remembered field with a default on every
+       * navigation (`runGuardsAndResolvers: 'always'`), which is the
+       * "the write path works, so the preference is saved and then
+       * ignored" failure `PreferencesStore.isLoaded`'s own docstring
+       * warns about.
+       */
+      hydrate(scope: Partial<BookScope>, unit?: AnalyticsUnit): void {
+        patchState(store, {
+          scope: { ...store.scope(), ...scope },
+          ...(unit ? { unit } : {}),
+        });
       },
 
       resolveTab,
