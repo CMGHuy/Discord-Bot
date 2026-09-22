@@ -401,7 +401,7 @@ def _write(path, content=""):
                      "tool_input": {"file_path": path, "content": content}})
 
 
-_GOOD_PLAN = "docs/superpowers/plans/2026-09-18-v96-claude-skills-layer.md"
+_GOOD_PLAN = "docs/superpowers/plans/implemented/2026-09-18-v96-claude-skills-layer.md"
 
 
 def test_a_misnumbered_plan_filename_is_denied():

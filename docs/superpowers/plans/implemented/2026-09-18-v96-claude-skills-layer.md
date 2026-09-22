@@ -5,13 +5,21 @@ Edge: none (integrity)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** `docs/superpowers/specs/2026-09-18-v96-claude-skills-layer-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-09-18-v96-claude-skills-layer-design.md`
 
 **Goal:** Turn this repo's 1,724 lines of read-before-you-work prose into a layer that fires — eleven `.claude/skills/` loaders plus three `guardrails.py` deny rules — without creating a third source of truth.
 
 **Architecture:** Two mechanisms, chosen per item. Anything checkable from a tool's input alone becomes a **pure** rule in the existing `guardrails.py` (which denies). Everything requiring judgement becomes a thin `SKILL.md` loader that reads its authority out of `docs/claude/` and never restates it. A new `tests/hooks/test_skill_shape.py` makes the loader contract mechanical rather than aspirational, so every skill task has a real red-green cycle.
 
 **Tech Stack:** Python 3.11 (hook + tests), pytest, Markdown with YAML frontmatter. No new dependencies. No bot or UI code is touched.
+
+## Progress
+
+> - **Branch:** `main` (worktree `worktree-v96-claude-skills-layer` merged at `bad3ed5e`, worktree and branch both removed).
+> - **Completed 2026-09-20:** Tasks S1-S19 — the shape gate, three `guardrails.py` deny rules, eleven `.claude/skills/` loaders, the inventory table and the Codex mirror. Final review fixes in `2d2a3b86`.
+> - **Completed 2026-09-21:** Task S20 — 52 eval cases under `.claude/skills/<skill>/evals/`, one per trigger-table row across the eight Tier 1/3 skills (`dbe3e7e2`), with the how-to-run section in `docs/claude/skills-tools.md` (`05b283b2`). Baseline: 52/52 pass, all eight suites exit 0.
+> - **Deviation from Task S20 as written:** its Step 2 command needs `--ablation none` to stay on one arm, and a should-not-fire grader needs an explicit `min: 0` (`min` defaults to 1, so a bare `max: 0` asks for the range `1..0` and fails every correctly-behaving case). Both are recorded in `docs/claude/skills-tools.md`.
+> - **Nothing was cut or deferred.** All 20 tasks delivered. `Bump: none` held — the plan touched `.claude/`, `tests/hooks/` and docs only, no `swingbot/`, `frontend/`, `bot.py` or `admin_ui.py` code.
 
 ## Global Constraints
 

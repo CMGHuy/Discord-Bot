@@ -2,7 +2,7 @@
 
 Keeps the skills layer from becoming a third source of truth. The budget and
 the no-threshold rule are the spec's, not pytest's; this file only makes them
-mechanical. See docs/superpowers/specs/2026-09-18-v96-claude-skills-layer-design.md
+mechanical. See docs/superpowers/specs/implemented/2026-09-18-v96-claude-skills-layer-design.md
 """
 import pathlib
 import re
