@@ -19,6 +19,10 @@ export class EdgeTab {
     Object.entries(this.store.strategies()?.cumulative ?? {}).map(([title, rows]) => ({
       title, series: [{ name: title, points: rows.map((point) => ({ date: point.date, value: point.cum_r })) }],
     })));
+  // HistogramBin.count is otherwise always an integer observation count; a
+  // calibration decile's win rate is a percentage borrowing that same bar,
+  // so it must be rounded before display -- a screenshot pass once caught
+  // an unrounded division (2/3 -> 66.66666...) overflowing the panel.
   readonly decileBins = computed(() => ((this.store.calibration()?.deciles ?? []) as { decile: string; win_rate: number | null }[])
-    .filter((row) => row.win_rate !== null).map((row) => ({ label: row.decile, count: row.win_rate! })));
+    .filter((row) => row.win_rate !== null).map((row) => ({ label: row.decile, count: Math.round(row.win_rate! * 10) / 10 })));
 }
