@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 
 import { PreferencesStore } from '../stores/preferences.store';
+import { Sparkline } from './sparkline';
 
 /**
  * The smallest sample a derived metric may be read from without a warning.
@@ -31,10 +32,12 @@ export type StatTone = 'neutral' | 'pos' | 'neg';
 @Component({
   selector: 'sb-stat-tile',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Sparkline],
   template: `
     <div class="tile" [class.thin]="thin()" [class]="tone()">
       <div class="label">{{ label() }}</div>
       <div class="value">{{ value() ?? '—' }}</div>
+      @if (secondary()) { <div class="secondary num">{{ secondary() }}</div> }
       @if (sample() !== null) {
         <div class="sample" [title]="sampleTitle()">
           N={{ sample() }}@if (thin()) {<span class="flag"> · thin sample</span>}
@@ -43,6 +46,7 @@ export type StatTone = 'neutral' | 'pos' | 'neg';
       @if (hint()) {
         <div class="hint">{{ hint() }}</div>
       }
+      @if (trend(); as points) { <sb-sparkline [points]="points" [label]="label() + ' trend'" /> }
     </div>
   `,
   styles: `
@@ -69,11 +73,13 @@ export type StatTone = 'neutral' | 'pos' | 'neg';
     .pos .value { color: var(--pos); }
     .neg .value { color: var(--neg); }
     .sample,
+    .secondary,
     .hint {
       font-size: var(--text-micro);
       font-variant-numeric: tabular-nums;
       color: var(--text-faint);
     }
+    .secondary { color: var(--text-secondary); }
     /* The second cue. Opacity alone would be a colour-only signal, which the
        plan forbids; the .flag span puts the same fact in words. */
     .thin .value { opacity: 0.62; }
@@ -87,6 +93,8 @@ export class StatTile {
   readonly sample = input<number | null>(null);
   readonly tone = input<StatTone>('neutral');
   readonly hint = input<string | undefined>(undefined);
+  readonly secondary = input<string | null>(null);
+  readonly trend = input<readonly number[] | null>(null);
 
   protected readonly thin = computed(() => {
     const n = this.sample();

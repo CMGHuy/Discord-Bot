@@ -13,26 +13,44 @@ import {
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { convertToParamMap } from '@angular/router';
+
 import { EventStream } from '../api/event-stream';
 import {
   authInterceptor,
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
-import { AnalyticsPerformance } from '../api/models';
-import { AnalyticsStore, RELOCATED_METRICS } from './analytics.store';
+import { AnalyticsPerformance, Preferences } from '../api/models';
+import { scopePatchFromParams } from '../workspaces/analytics/scope-url';
+import {
+  AnalyticsStore,
+  BREAKDOWN_DIMENSIONS,
+  presetRange,
+  RELOCATED_METRICS,
+} from './analytics.store';
+import { PreferencesStore } from './preferences.store';
 
-/* NG48 — Analytics.
+/* NG48, rewritten for v94 — Analytics.
  *
- * Two properties carry most of the weight here and neither is incidental:
+ * Three properties carry most of the weight here and none is incidental:
  *
- *   1. **The six relocated Dashboard metrics arrive.** Spec v14 Decision 6
- *      accepted the cost of moving them one click away, not of losing them,
- *      so "all six are present" is asserted rather than assumed.
- *   2. **Tuning progress comes from the `jobs` event, not a timer.** The
+ *   1. **One scope reaches every scoped request, and its N is reported.**
+ *      v94 D2: two panels on one screen may not be answering about
+ *      different populations, and a screen that hides how scoped it is has
+ *      a correctness bug.
+ *   2. **Every panel fails on its own terms.** v94 H4: a failed fetch sets
+ *      THAT panel's error and leaves its neighbours' data alone.
+ *   3. **Tuning progress comes from the `jobs` event, not a timer.** The
  *      tests below drive progress purely by raising events; if polling ever
  *      comes back, the assertions about *which* request follows *which*
  *      event are what break.
+ *
+ * The six relocated Dashboard metrics (spec v14 Decision 6 accepted the cost
+ * of moving them, not of losing them) are asserted here only as far as the
+ * store carries them; they are rendered by the Overview tab's tiles, so the
+ * "all six appear" assertion belongs in `workspaces/analytics/tabs/
+ * overview.spec.ts` and Task T1 adds it there.
  *
  * `EventStream` is faked down to the one method a store uses, matching
  * `dashboard.store.spec.ts`.
@@ -59,6 +77,8 @@ class FakeEventStream {
   }
 }
 
+const SCOPE = { from: null, to: null, ledger: 'main' as const, strategy: null, horizon: null, direction: null };
+
 const PERFORMANCE: AnalyticsPerformance = {
   totals: { total: 40, open: 6, closed: 34 },
   relocated: {
@@ -77,9 +97,9 @@ const PERFORMANCE: AnalyticsPerformance = {
     '2': { total: 5, open: 1, closed: 4, wins: 2, losses: 2, win_rate: 50 },
     '1': { total: 3, open: 0, closed: 3, wins: 1, losses: 2, win_rate: 33.3 },
   },
-  // SR54. Deliberately a mix of populated and null figures: the store's job
-  // is to pass nulls through as nulls, and a fixture where everything has a
-  // value cannot catch a `?? 0` creeping into a computed.
+  // Deliberately a mix of populated and null figures: the store's job is to
+  // pass nulls through as nulls, and a fixture where everything has a value
+  // cannot catch a `?? 0` creeping into a computed.
   range: { from: null, to: null, span_years: 2.5, n: 34 },
   derived: {
     avg_win_pct: 4.2,
@@ -115,6 +135,14 @@ const PERFORMANCE: AnalyticsPerformance = {
     RSI: [{ date: '2026-08-01', cum_pct: 2.0 }],
   },
   benchmark: { spy_cum: { '2026-08-01': 1.4, '2026-07-01': 0.3 } },
+  rolling_wr: [],
+  rolling_exp_r: [],
+  // v94 T1 -- the Overview tab's Streaks row. Not exercised by anything in
+  // this file (that assertion lives in `tabs/overview.spec.ts`); present
+  // here only so this fixture still satisfies `AnalyticsPerformance`.
+  streaks: { current: 0, current_kind: null, best_win_streak: 2, worst_loss_streak: 1 },
+  scope: SCOPE,
+  n: 34,
 };
 
 const STRATEGIES = {
@@ -122,11 +150,11 @@ const STRATEGIES = {
     { strategy: 'RSI', status: 'VALIDATED', n: 120, win_rate: 82, expectancy_r: 0.5, decayed: false },
     { strategy: 'MACD', status: 'WEAK', n: 40, win_rate: 61, expectancy_r: 0.1, decayed: true },
   ],
-  heatmap: {
-    strategies: ['RSI'],
-    horizons: ['2w', '1m'],
-    cells: [{ strategy: 'RSI', horizon: '2w', n: 12, win_rate: 75 }],
-  },
+  registry_scope: 'all-time',
+  contribution: [],
+  cumulative: {},
+  scope: SCOPE,
+  n: 160,
 };
 
 const CALIBRATION = {
@@ -178,90 +206,46 @@ describe('AnalyticsStore', () => {
 
   const tick = () => TestBed.inject(ApplicationRef).tick();
 
-  /** The smallest snapshot the store will accept. Deliberately minimal — this
-   *  file is about which requests go out for which tab, not about the blob. */
-  const SNAPSHOT = {
-    built_at: '2026-08-14T06:00:00Z',
-    overall: {},
-    equity_curve: { points: [] },
-    drawdown: [],
-    rolling_wr: [],
-    by: {},
-    calibration: {},
-    r_multiples: [],
+  const JOURNAL = { digest: ['Two losses, both chased.'], lessons: ['Wait for the retest.'], entries_n: 2, scope: SCOPE, n: 2 };
+  const EXIT_QUALITY = {
+    exit_reasons: [], unmapped_reasons: [], hold_by_outcome: {}, hold_points: [],
+    efficiency: { bins: [], n: 0, median: null }, mae: { bins: [], n: 0, median: null },
+    scatter: [], coverage: {}, min_cell_n: 20, scope: SCOPE, n: 34,
+  };
+  const EQUITY_CURVE = {
+    points: [{ date: '2026-04-01', cum_r: 1, drawdown_r: 0, cum_pnl: 70, cum_pct: 0.7 }],
+    points_n: 1, as_of: '2026-04-01', benchmark: { spy_indexed: [] }, scope: SCOPE, n: 1,
+  };
+  const BY_DIMENSION = { rows: [], as_of: null, min_cell_n: 20, scope: SCOPE, n: 34 };
+  const HEAT_GRID = {
+    rows: [], cols: ['2w', '4w'], cells: [], folded: { n_strategies: 0, cells: [] },
+    min_cell_n: 20, scope: SCOPE, n: 34,
   };
 
-  /**
-   * The Performance tab makes THREE requests, not one.
-   *
-   * SR50 added `/analytics/snapshot` beside it: the snapshot is a whole
-   * pre-built blob with its own endpoint, and folding it into the summary
-   * response would make every visit carry the equity curve whether or not the
-   * panels reading it are on screen. Both are settled here so the
-   * `backend.verify()` assertions below still mean "nothing ELSE went out".
-   *
-   * The snapshot's own contents are exercised in `analytics.snapshot.spec.ts`.
-   */
-  const JOURNAL = { digest: ['Two losses, both chased.'], lessons: ['Wait for the retest.'], entries_n: 2 };
-  const EXIT_QUALITY = { exit_reasons: [], hold_by_outcome: {}, efficiency: { bins: [], n: 0, median: null }, mae: { bins: [], n: 0, median: null }, scatter: [], coverage: {}, min_cell_n: 20 };
-  // v85 D39 (R9-03): the KPI row's Sharpe (R)/Max drawdown (R) tiles read
-  // riskMetrics off the same /risk GET-request/whole-payload the Risk
-  // workspace uses -- only metrics is read here, but the response is
-  // shaped like the real endpoint rather than a partial the store would
-  // never actually receive.
-  const RISK = {
-    heat: { open_pct: 0, cap_pct: 6, utilisation_pct: 0 },
-    positions: [], sector_heat: [], clusters: [],
-    throttle: { multiplier: 1, paused: false },
-    killswitch: { on: false, reason: null, at: null },
-    scan_health: { durations_s: [], latest_s: null, slowdown: false },
-    metrics: {
-      var_95: { value: null, n: 0 },
-      expected_shortfall_95: { value: null, n: 0 },
-      annualised_vol: { value: null, n: 0 },
-      beta_spy: { value: null, n: 0 },
-      sharpe_r: { value: 0.96, n: 42 },
-      max_drawdown_r: { value: 3.2, n: 42 },
-      as_of: null,
-    },
-    correlation: { labels: [], values: [] },
-  };
-  // v85 D39 (R9-01/R9-04): fetched alongside performance on every load AND
-  // every range change -- unlike exit-quality/risk above, never guarded to
-  // "once", so every respondPerformance() call settles a fresh one.
-  const EQUITY_CURVE = { points: [{ date: '2026-04-01', cum_r: 1, drawdown_r: 0 }], n: 1, as_of: '2026-04-01' };
-  // v85 D40 (R9-02/R9-05): fetched alongside performance too, also never
-  // guarded to "once" -- both dims go out on every respondPerformance().
-  const BY_DIMENSION = { rows: [], as_of: null };
-
-  const respondPerformance = (body: Partial<AnalyticsPerformance> = {}) => {
+  /** Overview asks for exactly two payloads: the scoped record and its
+   *  curve. Both are settled here so `backend.verify()` still means
+   *  "nothing ELSE went out". */
+  const respondOverview = (body: Partial<AnalyticsPerformance> = {}) => {
     backend
-      .expectOne('/api/v1/analytics/performance')
+      .expectOne((req) => req.url === '/api/v1/analytics/performance')
       .flush({ ...PERFORMANCE, ...body });
-    backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
-    // SR55 made it THREE. Same reasoning as the snapshot above: the journal
-    // is its own module behind its own endpoint, and folding it into the
-    // performance response would let a journal read failure empty the KPI
-    // cards. Settled here so `backend.verify()` still means "nothing ELSE".
-    backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
-    backend.match('/api/v1/analytics/exit-quality').forEach((request) => request.flush(EXIT_QUALITY));
-    backend.match('/api/v1/risk').forEach((request) => request.flush(RISK));
     backend
       .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
       .flush(EQUITY_CURVE);
-    backend
-      .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'strategy')
-      .flush(BY_DIMENSION);
-    backend
-      .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'horizon')
-      .flush(BY_DIMENSION);
   };
 
   const respondStrategies = (body: Record<string, unknown> = {}) =>
-    backend.expectOne('/api/v1/analytics/strategies').flush({ ...STRATEGIES, ...body });
+    backend.expectOne((req) => req.url === '/api/v1/analytics/strategies').flush({ ...STRATEGIES, ...body });
 
   const respondCalibration = (body: Record<string, unknown> = {}) =>
     backend.expectOne('/api/v1/analytics/calibration').flush({ ...CALIBRATION, ...body });
+
+  /** Edge: the scoped rolling series, the registry, and all-time calibration. */
+  const respondEdge = (calibration: Record<string, unknown> = {}) => {
+    backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(PERFORMANCE);
+    respondStrategies();
+    respondCalibration(calibration);
+  };
 
   const respondJobs = (jobs: unknown[]) =>
     backend.expectOne('/api/v1/jobs').flush({ jobs });
@@ -294,43 +278,115 @@ describe('AnalyticsStore', () => {
 
   /* -- the open tab decides what is fetched --------------------------- */
 
-  it('loads Performance on creation, with no separate bootstrap call', () => {
-    // The first effect run IS the initial load, so the load path and the
-    // refetch path cannot drift apart.
+  it('loads Overview on creation, with no separate bootstrap call', () => {
+    // The load path and the refetch path are the same path, so they cannot
+    // drift apart.
     tick();
-    respondPerformance();
+    respondOverview();
 
+    expect(store.tab()).toBe('overview');
     expect(store.winRate()).toBe(61.8);
   });
 
   it('fetches only the open tab', () => {
     tick();
-    respondPerformance();
+    respondOverview();
 
-    // No strategies, calibration or jobs request went out.
+    // No strategies, calibration, plans or jobs request went out.
     backend.verify();
   });
 
   it('fetches the next tab when it is opened', () => {
     tick();
-    respondPerformance();
+    respondOverview();
 
-    store.setTab('strategies');
+    store.setTab('edge');
     tick();
-    respondStrategies();
+    respondEdge();
 
     expect(store.strategyRows()).toHaveLength(2);
-    // The Performance payload is still there -- switching tabs does not
+    // The Overview payload is still there -- switching tabs does not
     // discard what was already loaded.
     expect(store.winRate()).toBe(61.8);
   });
 
-  it('fetches calibration for the Calibration tab', () => {
+  it('fetches the breakdown, heat grid, registry and record for Attribution', () => {
     tick();
-    respondPerformance();
+    respondOverview();
 
-    store.setTab('calibration');
+    store.setTab('attribution');
     tick();
+    const byDim = (dim: string) =>
+      backend.expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === dim);
+    // The dimension the store is grouped by, not a hardcoded one.
+    const breakdown = byDim('strategy');
+    expect(breakdown.request.params.get('dim')).toBe('strategy');
+    breakdown.flush(BY_DIMENSION);
+    backend.expectOne((req) => req.url === '/api/v1/analytics/heat-grid').flush(HEAT_GRID);
+    respondStrategies();
+    backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(PERFORMANCE);
+    // T2's fixed bar lists -- one request per dimension, independent of
+    // whichever dimension `breakdown` is grouped by.
+    byDim('horizon').flush({ ...BY_DIMENSION, n: 40 });
+    byDim('direction').flush({ ...BY_DIMENSION, n: 41 });
+    byDim('dow').flush({ ...BY_DIMENSION, n: 42 });
+
+    expect(store.heatGrid()?.cols).toEqual(['2w', '4w']);
+    expect(store.byHorizon()?.n).toBe(40);
+    expect(store.byDirection()?.n).toBe(41);
+    expect(store.byDow()?.n).toBe(42);
+    backend.verify();
+  });
+
+  it('refetches only the breakdown when its dimension changes', () => {
+    // Unlike v85's snapshot-backed table, `/by-dimension` serves one
+    // dimension per request, so another dimension is not already on hand --
+    // but it is still only ONE panel that has to move.
+    tick();
+    respondOverview();
+    store.setTab('attribution');
+    tick();
+    const byDim = (dim: string) =>
+      backend.expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === dim);
+    byDim('strategy').flush(BY_DIMENSION);
+    backend.expectOne((req) => req.url === '/api/v1/analytics/heat-grid').flush(HEAT_GRID);
+    respondStrategies();
+    backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(PERFORMANCE);
+    // T2's fixed bar lists -- unaffected by which dimension `breakdown` groups by.
+    byDim('horizon').flush(BY_DIMENSION);
+    byDim('direction').flush(BY_DIMENSION);
+    byDim('dow').flush(BY_DIMENSION);
+
+    store.setBreakdown('ledger');
+    const again = byDim('ledger');
+    expect(again.request.params.get('dim')).toBe('ledger');
+    again.flush(BY_DIMENSION);
+    backend.verify();
+  });
+
+  it('fetches exit quality, the journal and the record for Execution', () => {
+    tick();
+    respondOverview();
+
+    store.setTab('execution');
+    tick();
+    backend.expectOne((req) => req.url === '/api/v1/analytics/exit-quality').flush(EXIT_QUALITY);
+    backend.expectOne((req) => req.url === '/api/v1/analytics/journal').flush(JOURNAL);
+    backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(PERFORMANCE);
+
+    expect(store.digest()).toEqual(['Two losses, both chased.']);
+    expect(store.minCellN()).toBe(20);
+    backend.verify();
+  });
+
+  it('folds calibration into Edge rather than giving it a tab of its own', () => {
+    tick();
+    respondOverview();
+
+    store.setTab('edge');
+    tick();
+    backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(PERFORMANCE);
+    respondStrategies();
     backend.expectOne('/api/v1/analytics/calibration').flush({
       deciles: [{ decile: '80-89', n: 12, win_rate: 83.3, expectancy_r: 0.6 }],
       levels: [{ level: 3, n: 4, win_rate: null, expectancy_r: null }],
@@ -343,10 +399,10 @@ describe('AnalyticsStore', () => {
 
   it('exposes deciles as a fixed-0-100 histogram', () => {
     tick();
-    respondPerformance();
-    store.setTab('calibration');
+    respondOverview();
+    store.setTab('edge');
     tick();
-    respondCalibration({ deciles: [
+    respondEdge({ deciles: [
       { decile: 'D1', n: 12, win_rate: 42, expectancy_r: 0.1 },
       { decile: 'D10', n: 15, win_rate: 88, expectancy_r: 0.4 },
     ] });
@@ -358,10 +414,10 @@ describe('AnalyticsStore', () => {
 
   it('omits a decile with too few trades to have a win rate yet, rather than charting it as 0', () => {
     tick();
-    respondPerformance();
-    store.setTab('calibration');
+    respondOverview();
+    store.setTab('edge');
     tick();
-    respondCalibration({ deciles: [
+    respondEdge({ deciles: [
       { decile: 'D1', n: 12, win_rate: 42, expectancy_r: 0.1 },
       { decile: 'D5', n: 0, win_rate: null, expectancy_r: null },
     ] });
@@ -369,11 +425,11 @@ describe('AnalyticsStore', () => {
     expect(store.decileHistogram()).toEqual([{ label: 'D1', count: 42 }]);
   });
 
-  it('fetches /analytics/plans when the plans tab opens', () => {
+  it('fetches /analytics/plans when the Pipeline tab opens', () => {
     tick();
-    respondPerformance();
+    respondOverview();
 
-    store.setTab('plans');
+    store.setTab('pipeline');
     tick();
     backend.expectOne('/api/v1/analytics/plans').flush({
       funnel: { posted: 10, filled: 8, hit_tp1: 5, closed: 4 },
@@ -396,79 +452,39 @@ describe('AnalyticsStore', () => {
     ]);
   });
 
+  it('says how many panels on the open tab ignore the scope bar', () => {
+    // v94 D2/H2: Edge's evidence and every Pipeline panel are all-time by
+    // construction, and the bar has to say so rather than imply they moved.
+    tick();
+    respondOverview();
+    expect(store.allTimePanelCount()).toBe(0);
+
+    store.setTab('edge', false);
+    expect(store.allTimePanelCount()).toBe(3);
+    store.setTab('pipeline', false);
+    expect(store.allTimePanelCount()).toBe(4);
+  });
+
   /* -- the six relocated metrics -------------------------------------- */
 
-  it('exposes all six metrics relocated from the Dashboard', () => {
+  it('carries all six metrics relocated from the Dashboard', () => {
+    // Spec v14 Decision 6 accepted the cost of moving them one click away,
+    // not of losing them. The tiles that render them live on the Overview
+    // tab now, so `tabs/overview.spec.ts` asserts the render (Task T1);
+    // this asserts the store still carries every key they are driven from.
     tick();
-    respondPerformance();
+    respondOverview();
 
-    const relocated = store.relocated();
-    expect(relocated.map((metric) => metric.key)).toEqual([
-      'wins',
-      'losses',
-      'avg_realized_pct',
-      'best_trade_pct',
-      'worst_trade_pct',
-      'avg_holding_days',
-    ]);
-    expect(relocated.map((metric) => metric.value)).toEqual([
-      21, 13, 1.84, 12.5, -6.1, 9.2,
-    ]);
-    expect(store.missingRelocated()).toEqual([]);
-  });
-
-  it('reports a relocated metric the API stopped sending', () => {
-    // The whole point of the check: a metric that silently vanished looks
-    // exactly like a metric that has no value yet.
-    tick();
-    respondPerformance({
-      relocated: { wins: 21, losses: 13, avg_realized_pct: 1.84 },
-    });
-
-    expect(store.missingRelocated()).toEqual([
-      'Best trade',
-      'Worst trade',
-      'Avg holding',
-    ]);
-    // Still six rows -- the missing ones render as em dashes rather than
-    // shortening the list.
-    expect(store.relocated()).toHaveLength(RELOCATED_METRICS.length);
-  });
-
-  it('treats a null metric as present, not as missing', () => {
-    // Null is the server saying "no closed trades yet", which is a real
-    // answer; only an absent key means the relocation lost something.
-    tick();
-    respondPerformance({
-      relocated: {
-        wins: 0,
-        losses: 0,
-        avg_realized_pct: null,
-        best_trade_pct: null,
-        worst_trade_pct: null,
-        avg_holding_days: null,
-      },
-    });
-
-    expect(store.missingRelocated()).toEqual([]);
-    expect(store.relocated()[2].value).toBeNull();
-  });
-
-  it('marks only the three percentage metrics as P&L', () => {
-    // Green and red mean P&L direction and nothing else; a count of wins is
-    // not money and must not be coloured.
-    tick();
-    respondPerformance();
-
-    const pnl = store.relocated().filter((metric) => metric.pnl).map((m) => m.key);
-    expect(pnl).toEqual(['avg_realized_pct', 'best_trade_pct', 'worst_trade_pct']);
+    const block = store.performance()!.relocated;
+    expect(RELOCATED_METRICS.every((metric) => metric.key in block)).toBe(true);
+    expect(block['avg_holding_days']).toBe(9.2);
   });
 
   it('flattens the confidence breakdown into rows in level order', () => {
     // JSON turns the level keys into strings, where "10" would sort before
     // "2" if a sixth level ever appeared.
     tick();
-    respondPerformance();
+    respondOverview();
 
     expect(store.byConfidence().map((row) => row.level)).toEqual([1, 2]);
     expect(store.byConfidence()[1].win_rate).toBe(50);
@@ -476,20 +492,20 @@ describe('AnalyticsStore', () => {
 
   /* -- events, per tab ------------------------------------------------- */
 
-  it('refetches Performance on an analytics event', () => {
+  it('refetches Overview on an analytics event', () => {
     tick();
-    respondPerformance();
+    respondOverview();
 
     events.raise('analytics');
     store.load();
-    respondPerformance({ win_rate: 70 });
+    respondOverview({ win_rate: 70 });
 
     expect(store.winRate()).toBe(70);
   });
 
-  it('ignores a jobs event while Performance is open', () => {
+  it('ignores a jobs event while Overview is open', () => {
     tick();
-    respondPerformance();
+    respondOverview();
 
     events.raise('jobs');
     tick();
@@ -501,7 +517,7 @@ describe('AnalyticsStore', () => {
 
   it('loads jobs, proposals and the tracked job for the Tuning tab', () => {
     tick();
-    respondPerformance();
+    respondOverview();
     openTuning();
 
     expect(store.job()?.id).toBe('abc123');
@@ -511,7 +527,7 @@ describe('AnalyticsStore', () => {
 
   it('tracks the running job even when a newer finished one exists', () => {
     tick();
-    respondPerformance();
+    respondOverview();
 
     store.setTab('tuning');
     tick();
@@ -530,7 +546,7 @@ describe('AnalyticsStore', () => {
     // The Jinja page reloaded the window the moment a job stopped running,
     // throwing away the log at the moment it became worth reading.
     tick();
-    respondPerformance();
+    respondOverview();
     openTuning([FINISHED_JOB]);
 
     expect(store.job()?.id).toBe('old999');
@@ -539,7 +555,7 @@ describe('AnalyticsStore', () => {
 
   it('clears the tracked job when there are none', () => {
     tick();
-    respondPerformance();
+    respondOverview();
     openTuning([]);
 
     expect(store.job()).toBeNull();
@@ -547,7 +563,7 @@ describe('AnalyticsStore', () => {
 
   it('refetches job progress on a jobs event, with no timer', () => {
     tick();
-    respondPerformance();
+    respondOverview();
     openTuning();
 
     events.raise('jobs');
@@ -565,7 +581,7 @@ describe('AnalyticsStore', () => {
 
   it('ignores an analytics event while Tuning is open', () => {
     tick();
-    respondPerformance();
+    respondOverview();
     openTuning();
 
     events.raise('analytics');
@@ -576,7 +592,7 @@ describe('AnalyticsStore', () => {
 
   it('launches a TRAIN grid and reloads the tuning view', () => {
     tick();
-    respondPerformance();
+    respondOverview();
     openTuning([]);
 
     store.startTune('RSI');
@@ -597,7 +613,7 @@ describe('AnalyticsStore', () => {
 
   it('reports a launch conflict separately from a stale-data error', () => {
     tick();
-    respondPerformance();
+    respondOverview();
     openTuning([]);
 
     store.startTune('RSI');
@@ -616,7 +632,7 @@ describe('AnalyticsStore', () => {
 
   it('refetches proposals after deleting one', () => {
     tick();
-    respondPerformance();
+    respondOverview();
     openTuning([]);
 
     store.removeProposal('20260810-rsi.json');
@@ -630,228 +646,227 @@ describe('AnalyticsStore', () => {
     expect(store.proposals()).toHaveLength(1);
   });
 
-  /* -- strategies, heatmap and failure --------------------------------- */
-
   it('offers the registry strategies to the launcher', () => {
     // Sourced from the registry rather than hardcoded: the server whitelists
     // the name and 400s on anything it does not know.
     tick();
-    respondPerformance();
+    respondOverview();
     openTuning([]);
 
-    expect(store.strategyNames()).toEqual(['RSI', 'MACD']);
+    expect(store.strategyRows().map((row) => row.strategy)).toEqual(['RSI', 'MACD']);
   });
 
-  it('treats an axis-less heatmap as absent', () => {
-    tick();
-    respondPerformance();
+  /* -- per-panel failure (v94 H4) -------------------------------------- */
 
-    store.setTab('strategies');
-    tick();
-    respondStrategies({ heatmap: { strategies: [], horizons: [], cells: [] } });
+  it('keeps a failed panel error out of its neighbours', () => {
+    store.setTab('execution', false);
+    store.load();
+    // The Overview load from `beforeEach` is still outstanding; it is not
+    // what this test is about.
+    backend.match((req) => req.url === '/api/v1/analytics/equity-curve')
+      .forEach((request) => request.flush(EQUITY_CURVE));
+    backend.match((req) => req.url === '/api/v1/analytics/performance')
+      .forEach((request) => request.flush(PERFORMANCE));
 
-    // A grid with no columns renders as an empty box rather than as nothing.
-    expect(store.heatmap()).toBeNull();
+    backend.expectOne((req) => req.url === '/api/v1/analytics/exit-quality')
+      .flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+    backend.expectOne((req) => req.url === '/api/v1/analytics/journal')
+      .flush({ ...JOURNAL, digest: ['ok'], lessons: [], entries_n: 1, n: 1 });
+
+    expect(store.exitQualityError()).not.toBeNull();
+    expect(store.journalError()).toBeNull();
+    expect(store.digest()).toEqual(['ok']);
   });
 
   it('keeps the data on screen when a refetch fails', () => {
     tick();
-    respondPerformance();
+    respondOverview();
 
     events.raise('analytics');
     store.load();
     backend
-      .expectOne('/api/v1/analytics/performance')
+      .expectOne((req) => req.url === '/api/v1/analytics/performance')
       .error(new ProgressEvent('error'), { status: 0 });
-
-    expect(store.winRate()).toBe(61.8);
-    expect(store.error()).toContain('not responding');
-  });
-
-  it('clears the error once a refetch succeeds', () => {
-    tick();
-    backend
-      .expectOne('/api/v1/analytics/performance')
-      .error(new ProgressEvent('error'), { status: 0 });
-    // The snapshot goes out alongside it (SR50) and fails with it here. Left
-    // outstanding it would still be pending on the refetch below, and the
-    // second expectOne would match two requests rather than one.
-    backend
-      .expectOne('/api/v1/analytics/snapshot')
-      .error(new ProgressEvent('error'), { status: 0 });
-    // SR55's journal goes out with them and fails the same way, for the same
-    // reason: left outstanding it would still be pending on the refetch.
-    backend
-      .expectOne('/api/v1/analytics/journal')
-      .error(new ProgressEvent('error'), { status: 0 });
-    // v85 D39's equity curve goes out with them too -- same reason.
     backend
       .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
       .error(new ProgressEvent('error'), { status: 0 });
-    // v85 D40's two by-dimension requests go out with them too -- same reason.
+
+    expect(store.winRate()).toBe(61.8);
+    expect(store.performanceError()).toContain('not responding');
+  });
+
+  it('clears each panel error once its own refetch succeeds', () => {
+    // Two independent failure modes, two independent recoveries.
+    tick();
     backend
-      .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'strategy')
+      .expectOne((req) => req.url === '/api/v1/analytics/performance')
       .error(new ProgressEvent('error'), { status: 0 });
     backend
-      .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'horizon')
+      .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
       .error(new ProgressEvent('error'), { status: 0 });
-    expect(store.error()).not.toBeNull();
-    expect(store.snapshotError()).not.toBeNull();
-    expect(store.journalError()).not.toBeNull();
+    expect(store.performanceError()).not.toBeNull();
+    expect(store.equityCurveError()).not.toBeNull();
 
     events.raise('analytics');
     store.load();
-    respondPerformance();
+    respondOverview();
 
-    expect(store.error()).toBeNull();
-    expect(store.snapshotError()).toBeNull();
-    // Three independent failure modes, three independent recoveries.
-    expect(store.journalError()).toBeNull();
+    expect(store.performanceError()).toBeNull();
+    expect(store.equityCurveError()).toBeNull();
   });
 
-  /* -- SR54: the date range -------------------------------------------- */
+  it('retries exactly one panel', () => {
+    tick();
+    respondOverview();
 
-  describe('the analytics date range', () => {
+    store.reload('equityCurve');
+    backend.expectOne((req) => req.url === '/api/v1/analytics/equity-curve').flush(EQUITY_CURVE);
+    // Nothing else moved: a retry is about the panel that failed.
+    backend.verify();
+  });
+
+  /* -- the one scope ---------------------------------------------------- */
+
+  describe('the analytics scope', () => {
+    it('resolves the range presets inclusively and without local-time drift', () => {
+      const today = new Date('2026-09-17T12:00:00Z');
+      expect(presetRange('30d', today)).toEqual({ from: '2026-08-19', to: '2026-09-17' });
+      expect(presetRange('ytd', today)).toEqual({ from: '2026-01-01', to: '2026-09-17' });
+      expect(presetRange('all', today)).toEqual({ from: null, to: null });
+    });
+
+    it('carries the unit and offers every server-supported scoped breakdown', () => {
+      expect(BREAKDOWN_DIMENSIONS.map((dimension) => dimension.value)).toEqual([
+        'strategy', 'horizon', 'direction', 'dow', 'month', 'badge',
+        'confidence', 'source', 'ledger', 'ticker',
+      ]);
+      expect(BREAKDOWN_DIMENSIONS.map((d) => d.value)).toContain('ledger');
+      expect(BREAKDOWN_DIMENSIONS.map((d) => d.value)).toContain('strategy');
+      expect(store.unit()).toBe('r');
+      store.setUnit('money');
+      expect(store.unit()).toBe('money');
+      // No refetch: every unit is already in the payload (v94 D3).
+      backend.match((req) => req.url === '/api/v1/analytics/performance')
+        .forEach((request) => request.flush(PERFORMANCE));
+      backend.match((req) => req.url === '/api/v1/analytics/equity-curve')
+        .forEach((request) => request.flush(EQUITY_CURVE));
+      backend.verify();
+    });
+
     /** Settle the first load so the assertions below are about the refetch. */
-    const openPerformance = () => {
+    const openOverview = () => {
       tick();
-      respondPerformance();
+      respondOverview();
     };
 
-    it('sends both bounds as query parameters, not as a client-side filter', () => {
-      openPerformance();
+    it('sends one scope to every Overview request and reports its N', () => {
+      openOverview();
 
-      store.setRange('2026-01-01', '2026-06-30');
+      store.setScope({ from: '2026-08-01', ledger: 'both', strategy: 'MACD' });
       tick();
 
-      const request = backend.expectOne(
-        (req) => req.url === '/api/v1/analytics/performance',
-      );
+      const perf = backend.expectOne((r) => r.url === '/api/v1/analytics/performance');
+      expect(perf.request.params.get('from')).toBe('2026-08-01');
+      expect(perf.request.params.get('ledger')).toBe('both');
+      expect(perf.request.params.get('strategy')).toBe('MACD');
+      perf.flush({
+        ...PERFORMANCE, n: 312,
+        scope: { from: '2026-08-01', to: null, ledger: 'both', strategy: 'MACD', horizon: null, direction: null },
+      });
+
+      const curve = backend.expectOne((r) => r.url === '/api/v1/analytics/equity-curve');
+      expect(curve.request.params.get('strategy')).toBe('MACD');
+      expect(curve.request.params.get('ledger')).toBe('both');
+      curve.flush(EQUITY_CURVE);
+
+      expect(store.scopeN()).toBe(312);
+      expect(store.activeFilterCount()).toBe(3);
+    });
+
+    it('sends both bounds as query parameters, not as a client-side filter', () => {
+      openOverview();
+
+      store.setScope({ from: '2026-01-01', to: '2026-06-30' });
+      tick();
+
+      const request = backend.expectOne((req) => req.url === '/api/v1/analytics/performance');
       expect(request.request.params.get('from')).toBe('2026-01-01');
       expect(request.request.params.get('to')).toBe('2026-06-30');
       request.flush(PERFORMANCE);
-      backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
-      backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
+      backend.expectOne((req) => req.url === '/api/v1/analytics/equity-curve').flush(EQUITY_CURVE);
     });
 
     it('omits an unset bound instead of sending it empty', () => {
-      openPerformance();
+      openOverview();
 
-      store.setRange('2026-01-01', null);
+      store.setScope({ from: '2026-01-01' });
       tick();
 
-      const request = backend.expectOne(
-        (req) => req.url === '/api/v1/analytics/performance',
-      );
+      const request = backend.expectOne((req) => req.url === '/api/v1/analytics/performance');
       expect(request.request.params.get('from')).toBe('2026-01-01');
       expect(request.request.params.has('to')).toBe(false);
       request.flush(PERFORMANCE);
-      backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
-      backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
+      backend.expectOne((req) => req.url === '/api/v1/analytics/equity-curve').flush(EQUITY_CURVE);
     });
 
     it('normalises an inverted range rather than rejecting it', () => {
       // A date picker mid-edit legitimately produces from > to; erroring
       // there surfaces a problem the user is one keystroke from fixing.
-      openPerformance();
+      openOverview();
 
-      store.setRange('2026-06-30', '2026-01-01');
+      store.setScope({ from: '2026-06-30', to: '2026-01-01' });
       tick();
 
-      expect(store.rangeFrom()).toBe('2026-01-01');
-      expect(store.rangeTo()).toBe('2026-06-30');
-      backend
-        .expectOne((req) => req.url === '/api/v1/analytics/performance')
-        .flush(PERFORMANCE);
-      backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
-      backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
+      expect(store.scope().from).toBe('2026-01-01');
+      expect(store.scope().to).toBe('2026-06-30');
+      respondOverview();
     });
 
-    it('makes exactly one performance request per range change', () => {
-      // Both bounds move together, so a range pick cannot fire two requests
-      // whose responses could land out of order.
-      openPerformance();
+    it('makes exactly one request per panel per scope change', () => {
+      // Every field moves together, so a scope pick cannot fire two requests
+      // for one panel whose responses could land out of order.
+      openOverview();
 
-      store.setRange('2026-01-01', '2026-06-30');
+      store.setScope({ from: '2026-01-01', to: '2026-06-30' });
       tick();
 
-      backend
-        .expectOne((req) => req.url === '/api/v1/analytics/performance')
-        .flush(PERFORMANCE);
-      backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
-      backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
-      // v85 D39: the equity curve shares /performance's from/to scope, so it
-      // refetches on every range change too -- same from/to vocabulary, not
-      // a second definition of the range.
-      backend
-        .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
-        .flush(EQUITY_CURVE);
-      // v85 D40: /by-dimension has no from/to of its own, but loadPerformance
-      // fires it unconditionally regardless -- see loadByDimension's own
-      // "wasteful but harmless" comment.
-      backend
-        .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'strategy')
-        .flush(BY_DIMENSION);
-      backend
-        .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'horizon')
-        .flush(BY_DIMENSION);
+      backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(PERFORMANCE);
+      backend.expectOne((req) => req.url === '/api/v1/analytics/equity-curve').flush(EQUITY_CURVE);
       backend.verify();
     });
 
-    it('clearRange goes back to unbounded', () => {
-      openPerformance();
-      store.setRange('2026-01-01', '2026-06-30');
+    it('clearScope goes back to the default book, unbounded', () => {
+      openOverview();
+      store.setScope({ from: '2026-01-01', to: '2026-06-30', ledger: 'both' });
       tick();
-      backend
-        .expectOne((req) => req.url === '/api/v1/analytics/performance')
-        .flush(PERFORMANCE);
-      backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
-      backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
+      respondOverview();
 
-      store.clearRange();
+      store.clearScope();
       tick();
 
-      const request = backend.expectOne(
-        (req) => req.url === '/api/v1/analytics/performance',
-      );
+      const request = backend.expectOne((req) => req.url === '/api/v1/analytics/performance');
       expect(request.request.params.has('from')).toBe(false);
       expect(request.request.params.has('to')).toBe(false);
-      expect(store.rangeFrom()).toBeNull();
+      expect(store.scope().ledger).toBe('main');
+      expect(store.activeFilterCount()).toBe(0);
       request.flush(PERFORMANCE);
-      backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
-      backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
+      backend.expectOne((req) => req.url === '/api/v1/analytics/equity-curve').flush(EQUITY_CURVE);
     });
 
-    it('passes null figures through as null rather than zero', () => {
-      // The regression this guards: a `?? 0` in a computed turns "not enough
-      // trades for a Sortino" into a confident 0.00 on a KPI card.
-      openPerformance();
+    it('hydrates from the URL without firing a request', () => {
+      openOverview();
 
-      expect(store.derived().sortino_ann).toBeNull();
-      expect(store.derived().calmar).toBe(1.3);
-    });
+      store.hydrate({ ...SCOPE, ledger: 'weak' }, 'pct');
 
-    it('reports an all-null derived block before the first response', () => {
-      // No tick, no flush: nothing has arrived yet.
-      expect(store.derived().calmar).toBeNull();
-      expect(store.derivedMetrics().length).toBeGreaterThan(0);
-      expect(store.derivedMetrics().every((m) => m.value === null)).toBe(true);
-    });
-
-    it('labels histogram buckets by their lower edge so losses read as losses', () => {
-      openPerformance();
-
-      const bins = store.returnsHistogram();
-      expect(bins[0].label).toBe('-6.1%');
-      // The empty interior bucket survives — dropping it would let the chart
-      // silently redraw its own axis.
-      expect(bins[1].count).toBe(0);
-      expect(bins).toHaveLength(3);
+      expect(store.scope().ledger).toBe('weak');
+      expect(store.unit()).toBe('pct');
+      // The route resolver fetches; hydrate only sets state.
+      backend.verify();
     });
 
     it('exposes month bar rows computed from calendarReturns, sign intact', () => {
       tick();
-      respondPerformance({ calendar: [
+      respondOverview({ calendar: [
         { month: '2026-06', return_pct: 4.2, n: 3 },
         { month: '2026-07', return_pct: -1.8, n: 2 },
       ] });
@@ -862,24 +877,107 @@ describe('AnalyticsStore', () => {
       ]);
     });
 
+    it('reports the population the scope produced, and when it was built', () => {
+      openOverview();
 
-    it('exposes holding-period and planned-R:R win-rate bar rows with sample sizes', () => {
-      tick();
-      respondPerformance({
-        holding_period_split: [{ bucket: '0h-2h', n: 0, win_rate: null, avg_return_pct: null }, { bucket: '2h-4h', n: 3, win_rate: 66.7, avg_return_pct: 1.1 }],
-        risk_reward_split: [{ bucket: '<1.5', n: 0, win_rate: null, avg_return_pct: null }, { bucket: '1.5-2', n: 4, win_rate: 50, avg_return_pct: 0.4 }],
-      });
-      expect(store.holdingPeriodBars()).toEqual([{ label: '0h-2h', value: null, n: 0, withheld: true }, { label: '2h-4h', value: 66.7, n: 3, withheld: false }]);
-      expect(store.riskRewardBars()).toEqual([{ label: '<1.5', value: null, n: 0, withheld: true }, { label: '1.5-2', value: 50, n: 4, withheld: false }]);
+      expect(store.scopeN()).toBe(34);
+      expect(store.asOf()).toBe('2026-04-01');
     });
+  });
+});
 
-    it('echoes the applied range back with its sample size', () => {
-      openPerformance();
+/* -- the remembered scope --------------------------------------------------
+ *
+ * v94's promise is "the URL wins where it speaks; the preference answers
+ * where it is silent", and the half that is easy to get wrong is the second
+ * one. `setScope`/`setUnit` write the preference on every call, so the write
+ * path looks healthy whether or not anything ever reads it back -- exactly
+ * the failure `PreferencesStore.isLoaded`'s own docstring warns about. These
+ * tests drive the real composition the route resolver uses
+ * (`scopePatchFromParams` into `hydrate`) rather than `hydrate` alone,
+ * because the bug this guards lived in the seam between the two: a
+ * `scopeFromParams` that defaults every absent field, handed to a `hydrate`
+ * that replaced the whole scope.
+ */
+describe('AnalyticsStore — the remembered scope', () => {
+  const REMEMBERED: Preferences = {
+    analyticsScope: { ledger: 'both', strategy: 'MACD' },
+    analyticsUnit: 'money',
+  };
 
-      expect(store.rangeSampleSize()).toBe(34);
-      // PERFORMANCE carries no bounds, so the range is not "active" even
-      // though the block is present.
-      expect(store.rangeActive()).toBe(false);
+  /** Only the two methods the store calls, so nothing else can drift. */
+  const preferencesStub = (values: Preferences) => ({
+    values: () => values,
+    update: (mutate: (prefs: Preferences) => Preferences) => { values = mutate(values); },
+  });
+
+  const storeWith = (values: Preferences): InstanceType<typeof AnalyticsStore> => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        { provide: EventStream, useValue: new FakeEventStream() },
+        { provide: PreferencesStore, useValue: preferencesStub(values) },
+        AnalyticsStore,
+      ],
     });
+    return TestBed.inject(AnalyticsStore);
+  };
+
+  /** What `analytics.routes.ts`'s resolver does, on one URL. */
+  const navigate = (store: InstanceType<typeof AnalyticsStore>, query: Record<string, string>) => {
+    const { scope, unit } = scopePatchFromParams(convertToParamMap(query));
+    store.hydrate(scope, unit);
+  };
+
+  it('seeds the scope and unit from the remembered preference', () => {
+    const store = storeWith(REMEMBERED);
+
+    expect(store.scope().ledger).toBe('both');
+    expect(store.scope().strategy).toBe('MACD');
+    expect(store.unit()).toBe('money');
+  });
+
+  it('keeps the remembered scope when the URL says nothing about it', () => {
+    // The regression: the resolver runs on EVERY navigation
+    // (runGuardsAndResolvers: 'always'), so a hydrate that replaced the
+    // whole scope reset the remembered one to the defaults every time --
+    // silently, because the write path still worked.
+    const store = storeWith(REMEMBERED);
+
+    navigate(store, {});
+
+    expect(store.scope().ledger).toBe('both');
+    expect(store.scope().strategy).toBe('MACD');
+    expect(store.unit()).toBe('money');
+  });
+
+  it('lets the URL override exactly the field it names, and no other', () => {
+    const store = storeWith(REMEMBERED);
+
+    navigate(store, { ledger: 'weak', unit: 'pct' });
+
+    expect(store.scope().ledger).toBe('weak');
+    // Untouched by this URL, so still the remembered value.
+    expect(store.scope().strategy).toBe('MACD');
+    expect(store.unit()).toBe('pct');
+
+    navigate(store, { from: '2026-08-01' });
+
+    expect(store.scope().from).toBe('2026-08-01');
+    expect(store.scope().ledger).toBe('weak');
+    // No `unit=` on this URL, so the one already resolved stands.
+    expect(store.unit()).toBe('pct');
+  });
+
+  it('falls back to the plain defaults when nothing is remembered', () => {
+    const store = storeWith({});
+
+    expect(store.scope()).toEqual(SCOPE);
+    expect(store.unit()).toBe('r');
   });
 });

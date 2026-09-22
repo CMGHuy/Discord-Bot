@@ -410,6 +410,23 @@ export interface AnalyticsDerived {
   sortino_ann: number | null;
   win_rate: number | null;
   expectancy_r: number | null;
+  /** v94 T1 additions below. Every real response carries all four -- they
+   *  are optional here (rather than widening `EMPTY_DERIVED` and every
+   *  existing `AnalyticsDerived` test fixture across the codebase, which
+   *  T1's brief keeps out of scope) so a fixture that predates them still
+   *  type-checks; `overview.ts` reads each with `?? null`, which already
+   *  treats "absent" and "null" the same way a fixture gap should. */
+  /** Gross realised win / |gross realised loss|, unitless like
+   *  `sharpe_ann`/`sortino_ann` beside it (`metrics.profit_factor`, scoped). */
+  profit_factor?: number | null;
+  /** The Outcome panel's Avg win/Avg loss/Payoff rows. R-based (mean of the
+   *  R-multiples on each side), not the P&L-percent `avg_win_pct`/
+   *  `avg_loss_pct` above -- those answer a different question. `payoff_r`
+   *  is `avg_win_r / |avg_loss_r|` over that SAME R-multiples list
+   *  (`metrics.payoff_ratio`), never re-derived. */
+  avg_win_r?: number | null;
+  avg_loss_r?: number | null;
+  payoff_r?: number | null;
 }
 
 /** One closed trade, cumulative in R (v85 D39, R9-01). `drawdown_r` is
@@ -419,12 +436,20 @@ export interface EquityCurvePoint {
   date: string;
   cum_r: number;
   drawdown_r: number;
+  cum_pnl: number;
+  cum_pct: number | null;
 }
 
-export interface AnalyticsEquityCurve {
+export type LedgerScope = 'main' | 'weak' | 'both';
+export type AnalyticsUnit = 'r' | 'pct' | 'money';
+export interface BookScope { from: string | null; to: string | null; ledger: LedgerScope; strategy: string | null; horizon: string | null; direction: string | null; }
+export interface Scoped { scope: BookScope; n: number; }
+
+export interface AnalyticsEquityCurve extends Scoped {
   points: EquityCurvePoint[];
-  n: number;
+  points_n: number;
   as_of: string | null;
+  benchmark: { spy_indexed: { date: string; pct: number }[] };
 }
 
 /** One strategy or horizon's aggregate (v85 D40, R9-02). `total_r` is a
@@ -439,21 +464,22 @@ export interface AnalyticsByDimensionRow {
   profit_factor: number | null;
   max_drawdown_r: number | null;
   n: number;
+  wins: number; losses: number; avg_win_r: number | null; avg_loss_r: number | null; total_pnl: number;
   badge?: string;
+  soak?: unknown;
 }
 
-export interface AnalyticsByDimension {
+export interface AnalyticsByDimension extends Scoped {
   rows: AnalyticsByDimensionRow[];
   as_of: string | null;
+  min_cell_n: number;
 }
 
-export interface AnalyticsPerformance {
+export interface AnalyticsPerformance extends Scoped {
   totals: Record<string, unknown>;
   relocated: Record<string, unknown>;
-  /** All-time, NOT scoped by the range — see `AnalyticsDerived`. */
   win_rate: number | null;
   win_rate_n: number;
-  /** All-time, NOT scoped by the range — see `AnalyticsDerived`. */
   expectancy_r: number | null;
   expectancy_n: number;
   by_confidence: Record<string, unknown>;
@@ -471,6 +497,18 @@ export interface AnalyticsPerformance {
   calendar: { month: string; return_pct: number | null; pnl?: number; n: number }[];
   cumulative_by_strategy: Record<string, { date: string; cum_pct: number }[]>;
   benchmark: { spy_cum: Record<string, number> };
+  rolling_wr: { date: string; win_rate: number }[];
+  rolling_exp_r: { date: string; exp_r: number }[];
+  /** v94 T1 -- the Overview tab's Streaks row (`metrics.streaks`, scoped
+   *  like every other block here). `current`/`current_kind` describe the
+   *  streak still running as of the scope's last close; `current_kind` is
+   *  null only when `current` is 0 (no win/loss trade closes the scope). */
+  streaks: {
+    current: number;
+    current_kind: 'win' | 'loss' | null;
+    best_win_streak: number;
+    worst_loss_streak: number;
+  };
 }
 
 /**
@@ -519,7 +557,7 @@ export interface TradeJournal {
 }
 
 /** `GET /analytics/journal` — the trailing-week digest and recurring lessons. */
-export interface AnalyticsJournal {
+export interface AnalyticsJournal extends Scoped {
   digest: string[];
   lessons: string[];
   /** Entries behind both lists, so a digest from three is not read like one
@@ -527,22 +565,29 @@ export interface AnalyticsJournal {
   entries_n: number;
 }
 
-export interface AnalyticsStrategies {
+export interface AnalyticsStrategies extends Scoped {
   strategies: unknown[];
-  heatmap: Record<string, unknown>;
+  /** Legacy matrix retained until the v94 Attribution heat grid fully
+   * replaces the existing Strategies workspace. */
+  heatmap?: { strategies: string[]; horizons: string[]; cells: unknown[] };
+  registry_scope: 'all-time';
+  contribution: { strategy: string; total_r: number | null; n: number }[];
+  cumulative: Record<string, { date: string; cum_r: number }[]>;
 }
 
 export interface AnalyticsCalibration {
   deciles: unknown[];
   levels: unknown[];
   drift: unknown[];
+  scope: 'all-time';
 }
 
 /** `GET /analytics/exit-quality`: all-time journal exit diagnostics. */
-export interface AnalyticsExitQuality {
+export interface AnalyticsExitQuality extends Scoped {
   exit_reasons: unknown[];
   unmapped_reasons: { status: string; text: string; n: number }[];
   hold_by_outcome: unknown;
+  hold_points: { outcome: string; days: number }[];
   efficiency: { bins: unknown[]; n: number; median: number | null };
   mae: { bins: unknown[]; n: number; median: number | null };
   scatter: unknown[];
@@ -560,6 +605,14 @@ export interface AnalyticsPlans {
   };
   badges: Record<string, number>;
   tiers: Record<string, number>;
+  scope: 'all-time';
+}
+
+export interface AnalyticsHeatGrid extends Scoped {
+  rows: string[]; cols: string[];
+  cells: { r: number; c: number; n: number; exp_r: number | null; win_rate: number | null }[];
+  folded: { n_strategies: number; cells: { c: number; n: number; exp_r: number | null; win_rate: number | null }[] };
+  min_cell_n: number;
 }
 
 /** `GET /analytics/registry`.
@@ -1168,11 +1221,13 @@ export interface Preferences {
    *  and horizon bars are sorted/sized by. ExpR by default: "which is
    *  better per shot" is the question this app's edge priorities rank
    *  first (CLAUDE.md), and a fresh session should open on that answer. */
-  analyticsMeasure?: 'exp_r' | 'total_r';
+  analyticsMeasure?: 'exp_r' | 'total_r' | 'win_rate';
   /** v85 D41 (R9-06) -- whether the Performance tab's Breakdowns band is
    *  expanded. Collapsed (absent/false) by default: the first screen is
    *  the KPI row and equity curve, not the histograms below it. */
   analyticsBreakdownsOpen?: boolean;
+  analyticsUnit?: AnalyticsUnit;
+  analyticsScope?: Partial<BookScope>;
   /** SR12 onward: flat dotted keys, so a new preference is a new key rather
    *  than a schema migration. Values are whatever that key stores, and every
    *  reader validates — see `ui/table-prefs.ts` for why that tolerance is

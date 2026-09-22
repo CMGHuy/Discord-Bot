@@ -159,3 +159,12 @@ def test_payoff_ratio_is_none_when_empty():
 def test_payoff_ratio_ignores_breakeven_legs():
     # A scratch is neither a win nor a loss and must not drag either mean.
     assert payoff_ratio_from_rs([2.0, 0.0, -1.0]) == 2.0
+
+
+def test_avg_win_and_loss_r():
+    from swingbot.core.analytics.metrics import avg_loss_r, avg_win_r
+    def t(exit_price, status):
+        return {"status": status, "direction": "bullish", "entry": 100.0, "stop_loss": 95.0, "exit_price": exit_price}
+    closed = [t(110.0, "win"), t(105.0, "win"), t(97.5, "loss")]
+    assert avg_win_r(closed) == 1.5 and avg_loss_r(closed) == -0.5
+    assert avg_win_r([t(97.5, "loss")]) is None

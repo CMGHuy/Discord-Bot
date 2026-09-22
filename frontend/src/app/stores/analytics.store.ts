@@ -13,23 +13,20 @@ import { routeRequest } from '../routing/route-request';
 import { Observable } from 'rxjs';
 import {
   AnalyticsByDimension,
-  AnalyticsByDimensionRow,
   AnalyticsCalibration,
   AnalyticsEquityCurve,
   AnalyticsExitQuality,
-  AnalyticsDerived,
+  AnalyticsHeatGrid,
   AnalyticsJournal,
   AnalyticsPerformance,
   AnalyticsPlans,
-  AnalyticsSnapshot,
   AnalyticsStrategies,
-  HoldingBucket,
-  RiskMetrics,
+  AnalyticsUnit,
+  BookScope,
 } from '../api/models';
-import { DonutSlice } from '../ui/donut';
 import { HistogramBin } from '../ui/histogram';
 import { BarRow } from '../ui/bar-list';
-import { LineChartSeries } from '../ui/line-chart';
+import { PreferencesStore } from './preferences.store';
 
 /* -- row shapes ---------------------------------------------------------
  *
@@ -194,59 +191,6 @@ export interface RelocatedMetric {
 
 const PNL_METRICS = new Set(['avg_realized_pct', 'best_trade_pct', 'worst_trade_pct']);
 
-/* -- SR54: the derived figures ------------------------------------------ */
-
-/**
- * The twelve figures `stats.html` derived in browser JS, now served.
- *
- * Same rationale as `RELOCATED_METRICS`: driving the render off one array
- * makes a lost figure a visible defect rather than a card that quietly stops
- * appearing. `decimals` is per-metric because these have genuinely different
- * scales — a Calmar of 1.2 and a volatility of 34.6% should not be rounded
- * the same way, and an expectancy of 0.08R disappears at one decimal.
- */
-export const DERIVED_METRICS = [
-  { key: 'total_return_pct', label: 'Total return', unit: '%', decimals: 2, pnl: true },
-  { key: 'annualised_return_pct', label: 'Annualised', unit: '%', decimals: 2, pnl: true },
-  { key: 'avg_win_pct', label: 'Avg win', unit: '%', decimals: 2, pnl: true },
-  { key: 'avg_loss_pct', label: 'Avg loss', unit: '%', decimals: 2, pnl: true },
-  { key: 'win_rate', label: 'Win rate', unit: '%', decimals: 1, pnl: false },
-  { key: 'expectancy_r', label: 'Expectancy', unit: 'R', decimals: 3, pnl: true },
-  { key: 'sharpe_ann', label: 'Sharpe (ann)', unit: '', decimals: 2, pnl: false },
-  { key: 'sortino_ann', label: 'Sortino (ann)', unit: '', decimals: 2, pnl: false },
-  { key: 'calmar', label: 'Calmar', unit: '', decimals: 2, pnl: false },
-  { key: 'volatility_ann_pct', label: 'Volatility (ann)', unit: '%', decimals: 1, pnl: false },
-  { key: 'trades_per_month', label: 'Trades / month', unit: '', decimals: 1, pnl: false },
-  { key: 'pct_in_market', label: '% in market', unit: '%', decimals: 1, pnl: false },
-] as const satisfies readonly {
-  key: keyof AnalyticsDerived;
-  label: string;
-  unit: string;
-  decimals: number;
-  pnl: boolean;
-}[];
-
-/** One derived figure, resolved against the payload and ready to render. */
-export interface DerivedMetric {
-  key: keyof AnalyticsDerived;
-  label: string;
-  unit: string;
-  decimals: number;
-  /** Whether green/red P&L colouring applies. A Sharpe is not money. */
-  pnl: boolean;
-  value: number | null;
-}
-
-/** Every figure null — what the cards show before the first response, and
- *  what an empty date range legitimately returns. The two look identical on
- *  purpose: both mean "no number to show", not "the number is zero". */
-const EMPTY_DERIVED: AnalyticsDerived = {
-  avg_win_pct: null, avg_loss_pct: null, total_return_pct: null,
-  annualised_return_pct: null, calmar: null, volatility_ann_pct: null,
-  trades_per_month: null, pct_in_market: null, sharpe_ann: null,
-  sortino_ann: null, win_rate: null, expectancy_r: null,
-};
-
 /** A payload number, or null. Not `Number(value)`: the endpoint returns JSON
  *  `null` for "no closed trades yet", and coercing that to 0 would report a
  *  best trade of exactly break-even on a fresh install. */
@@ -257,47 +201,66 @@ function numberOrNull(record: Record<string, unknown> | undefined, key: string):
 
 /* -- the store ---------------------------------------------------------- */
 
-/** The four tabs of spec v14 Decision 6. Tabs, not sub-navigation: a second
- *  level of nav inside one of six workspaces reintroduces exactly the depth
- *  the IA change removed. */
-export type AnalyticsTab = 'performance' | 'strategies' | 'calibration' | 'tuning' | 'plans';
+/** The six questions, in the order a trader asks them (spec v94 D1).
+ *  Calibration folded into Edge; Performance split into Overview,
+ *  Attribution and Execution. Tabs, not sub-navigation: a second level of
+ *  nav inside one of six workspaces reintroduces exactly the depth the IA
+ *  change removed. */
+export type AnalyticsTab = 'overview' | 'attribution' | 'execution' | 'edge' | 'pipeline' | 'tuning';
 
-export const ANALYTICS_TABS: readonly AnalyticsTab[] = [
-  'performance',
-  'strategies',
-  'calibration',
-  'tuning',
-  'plans',
+export const ANALYTICS_TABS: readonly AnalyticsTab[] =
+  ['overview', 'attribution', 'execution', 'edge', 'pipeline', 'tuning'] as const;
+
+/** Old `?tab=` values keep working (spec D1). A bookmark or a Discord link
+ *  posted before v94 lands on the tab that now answers its question rather
+ *  than silently on Overview. */
+export const LEGACY_TABS: Record<string, AnalyticsTab> = {
+  performance: 'overview', strategies: 'edge', calibration: 'edge', plans: 'pipeline', tuning: 'tuning',
+};
+
+/** Every panel that can fail on its own terms, and therefore be retried on
+ *  its own (spec v94 H4). */
+export type PanelKey =
+  | 'performance' | 'equityCurve' | 'byDimension' | 'heatGrid' | 'exitQuality'
+  | 'journal' | 'strategies' | 'calibration' | 'plans'
+  | 'byHorizon' | 'byDirection' | 'byDow';
+
+export const DEFAULT_SCOPE: BookScope = {
+  from: null, to: null, ledger: 'main', strategy: null, horizon: null, direction: null,
+};
+
+/** Common range shortcuts used by the v94 scope bar.  The value, rather than
+ * the label, is deliberately what the URL control persists. */
+export const RANGE_PRESETS = [
+  { value: '30d', label: 'Last 30 days', days: 30 },
+  { value: '90d', label: 'Last 90 days', days: 90 },
+  { value: 'ytd', label: 'Year to date', days: null },
+  { value: 'all', label: 'All time', days: null },
 ] as const;
 
-/* -- the snapshot (SR50) --------------------------------------------------
- *
- * `GET /analytics/snapshot` forwards the whole pre-built analytics blob, and
- * it already carries every figure `stats.html` charted: profit factor, Sharpe,
- * Sortino, max drawdown, streaks, the equity and drawdown series, R-multiples,
- * and a `by` block grouped along ten dimensions. `ApiClient.analyticsSnapshot()`
- * existed and no store called it, so the parity audit found seventeen "missing"
- * analytics rows whose data was being served the whole time.
- *
- * Narrowed here rather than in a template, and every narrower returns null
- * rather than 0 for anything it cannot read — `ui/format.ts`'s rule, and the
- * difference between "we don't know" and "it is zero" on a Sharpe ratio.
- */
+const isoDate = (date: Date): string => date.toISOString().slice(0, 10);
 
-/** One `StatRow` out of the `by` block (`aggregate.py:47-57`). */
-export interface BreakdownRow {
-  key: string;
-  n: number | null;
-  wins: number | null;
-  losses: number | null;
-  win_rate: number | null;
-  expectancy_r: number | null;
-  avg_r: number | null;
-  profit_factor: number | null;
-  total_pnl: number | null;
-  total_r: number | null;
+/** Resolve a named preset against an explicit day, keeping this calculation
+ * deterministic for tests and independent of the browser's time zone. */
+export function presetRange(preset: string, today: Date): { from: string | null; to: string | null } {
+  if (preset === 'all') return { from: null, to: null };
+  if (preset === 'ytd') return { from: `${today.getUTCFullYear()}-01-01`, to: isoDate(today) };
+  const days = RANGE_PRESETS.find((entry) => entry.value === preset)?.days;
+  if (!days) return { from: null, to: null };
+  const from = new Date(today);
+  from.setUTCDate(from.getUTCDate() - (days - 1));
+  return { from: isoDate(from), to: isoDate(today) };
 }
 
+/* -- row shapes the scoped payloads share ---------------------------------
+ *
+ * v94 retired `GET /analytics/snapshot` as this store's source: every panel
+ * now reads a scoped endpoint instead, so there is no pre-built all-time blob
+ * to narrow. The shapes below survive because the scoped payloads reuse them
+ * (`aggregate.py`'s `StatRow` in particular), and every narrower still returns
+ * null rather than 0 for anything it cannot read — `ui/format.ts`'s rule, and
+ * the difference between "we don't know" and "it is zero" on a Sharpe ratio.
+ */
 
 export interface Streaks {
   current: number | null;
@@ -306,19 +269,19 @@ export interface Streaks {
   worstLoss: number | null;
 }
 
-/** The dimensions the Breakdowns table can group by, in the order they are
- *  offered. A subset of `aggregate.py:DIMENSIONS`: `strategy` has the whole
- *  Strategies tab and `confidence` has its own table on this one, so offering
- *  them here as well would be three views of one number. */
+/** Every dimension `aggregate.DIMENSIONS` serves, including v93's ledger.
+ *  `tier` stays retired -- it would 400. */
 export const BREAKDOWN_DIMENSIONS = [
-  { value: 'ticker', label: 'Ticker' },
+  { value: 'strategy', label: 'Strategy' },
   { value: 'horizon', label: 'Horizon' },
   { value: 'direction', label: 'Direction' },
   { value: 'dow', label: 'Day of week' },
   { value: 'month', label: 'Month' },
-  // "tier" was retired from aggregate.DIMENSIONS; it would 400 if selected.
   { value: 'badge', label: 'Badge' },
+  { value: 'confidence', label: 'Confidence' },
   { value: 'source', label: 'Source' },
+  { value: 'ledger', label: 'Ledger' },
+  { value: 'ticker', label: 'Ticker' },
 ] as const;
 
 export type BreakdownDimension = (typeof BREAKDOWN_DIMENSIONS)[number]['value'];
@@ -327,21 +290,8 @@ function snapNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-function snapText(value: unknown): string | null {
-  return typeof value === 'string' && value !== '' ? value : null;
-}
-
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/** Every computable R-multiple off a snapshot's raw `r_multiples` list,
- *  all-time -- shared by the KPI row's Total R and R-per-month tiles so
- *  the two never silently drift apart on which trades they summed. */
-function rMultiplesOf(snapshot: AnalyticsSnapshot | null): number[] {
-  return ((snapshot?.r_multiples ?? []) as unknown[])
-    .map(snapNumber)
-    .filter((value): value is number => value !== null);
 }
 
 /** Per-trade R, derived from consecutive `cum_r` deltas -- R9-01's endpoint
@@ -358,108 +308,8 @@ function perTradeRs(curve: AnalyticsEquityCurve | null): number[] {
   });
 }
 
-/** How long the book has been trading, in months -- earliest to latest date
- *  on the snapshot's own all-time (dollar) equity curve. Floored at one
- *  day, mirroring `metrics.span_years`'s own floor, so a book only hours
- *  old cannot divide by (near) zero. Null under two points: a single point
- *  has no elapsed span to report. */
-function elapsedMonthsOf(snapshot: AnalyticsSnapshot | null): number | null {
-  const raw = (snapshot?.equity_curve?.points ?? []) as unknown[];
-  const dates = raw.flatMap((point) => {
-    if (!isPlainRecord(point)) return [];
-    const date = snapText(point['date']);
-    return date === null ? [] : [date];
-  });
-  if (dates.length < 2) return null;
-  const first = new Date(dates[0]).getTime();
-  const last = new Date(dates[dates.length - 1]).getTime();
-  if (!Number.isFinite(first) || !Number.isFinite(last)) return null;
-  const days = Math.max((last - first) / 86_400_000, 1);
-  return days / 30.4368;
-}
-
-/** `{date, balance}` / `{date, dd_pct}` points, flattened to one shape. A point
- *  missing either half is dropped: a gap in a series is not a zero, and
- *  drawing it as one invents a crash that never happened. */
-
-function toBreakdownRows(raw: unknown[]): BreakdownRow[] {
-  return raw.flatMap((row) => {
-    if (!isPlainRecord(row)) return [];
-    const key = snapText(row['key']);
-    if (key === null) return [];
-    return [{
-      key,
-      n: snapNumber(row['n']),
-      wins: snapNumber(row['wins']),
-      losses: snapNumber(row['losses']),
-      win_rate: snapNumber(row['win_rate']),
-      expectancy_r: snapNumber(row['expectancy_r']),
-      avg_r: snapNumber(row['avg_r']),
-      profit_factor: snapNumber(row['profit_factor']),
-      total_pnl: snapNumber(row['total_pnl']),
-      total_r: snapNumber(row['total_r']),
-    }];
-  });
-}
-
-
-const DIRECTION_ORDER: readonly [string, string][] = [
-  ['bullish', 'Long'],
-  ['bearish', 'Short'],
-];
-const DOW_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
-
-export function rateOrWithheld(n: number, rate: number | null | undefined, floor: number): { count: number; withheld: boolean } {
-  if (n < floor || rate == null) return { count: 0, withheld: true };
-  return { count: rate, withheld: false };
-}
-
-export function zeroFilledBars(rows: BreakdownRow[], order: readonly (readonly [string, string])[], floor: number): BarRow[] {
-  const byKey = new Map(rows.map((row) => [row.key, row]));
-  return order.map(([key, label]) => {
-    const row = byKey.get(key);
-    const n = row?.n ?? 0;
-    const value = rateOrWithheld(n, row?.win_rate, floor);
-    return { label, value: value.withheld ? null : value.count, n, withheld: value.withheld };
-  });
-}
-
-export function rateBars(buckets: readonly HoldingBucket[]): BarRow[] {
-  return buckets.map((bucket) => ({ label: bucket.bucket, value: bucket.win_rate, n: bucket.n, withheld: bucket.win_rate === null }));
-}
-
 export function monthBars(rows: readonly { month: string; return_pct: number | null; n: number }[]): BarRow[] {
   return rows.map((row) => ({ label: row.month, value: row.return_pct, n: row.n }));
-}
-/** One histogram bin. */
-export interface Bin {
-  label: string;
-  count: number;
-}
-
-/**
- * R-multiples binned at 0.5R.
- *
- * Bins rather than the raw list because the shape is the point: a healthy edge
- * is a cluster of small losses and a tail of larger wins, and that is a
- * statement about a distribution, not about any one trade. Clamped at ±5R so a
- * single outlier cannot flatten every other bin to invisibility.
- */
-export function binRMultiples(values: number[], width = 0.5): Bin[] {
-  if (!values.length) return [];
-  const LIMIT = 5;
-  const counts = new Map<number, number>();
-  for (const value of values) {
-    const clamped = Math.max(-LIMIT, Math.min(LIMIT, value));
-    const bin = Math.floor(clamped / width) * width;
-    counts.set(bin, (counts.get(bin) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([bin, count]) => ({
-      label: `${bin > 0 ? '+' : ''}${bin.toFixed(1)}R`,
-      count,
-    }));
 }
 
 /**
@@ -510,34 +360,37 @@ interface AnalyticsSlice {
   /** Which tab is open, projected from the URL's `?tab=`. Held here rather
    *  than in the component because it decides what gets fetched. */
   tab: AnalyticsTab;
+  /** v94 D2: the ONE scope every scoped panel is fetched against. One state,
+   *  one URL, one population — see `scopeN`. */
+  scope: BookScope;
+  unit: AnalyticsUnit;
+  measure: 'exp_r' | 'total_r' | 'win_rate';
+  /** Which figure the Attribution heat grid paints its cells with. */
+  heatCell: 'exp_r' | 'win_rate' | 'n';
+  /** Which dimension the Attribution breakdown is grouped by. */
+  breakdown: string;
+  /** Which panels' underlying tables the user has opened, by panel key. */
+  tableOpen: Record<string, boolean>;
 
-  performance: AnalyticsPerformance | null;
-  /**
-   * SR54 — the date range scoping every derived figure, as `YYYY-MM-DD` or
-   * null for unbounded.
-   *
-   * Held in the store rather than the component because it is a *fetch*
-   * parameter: changing it re-requests `/analytics/performance`. A range kept
-   * in component state would have to reach back into the store to trigger
-   * that, which is the wiring spec v14 Decision 1 pushes into the store on
-   * purpose.
-   */
-  rangeFrom: string | null;
-  rangeTo: string | null;
-  /** SR55 — the trailing-week digest and recurring lessons. Its own field
-   *  and its own error for the same reason the snapshot has them: it comes
-   *  from a different endpoint, and losing it is not a reason to warn about
-   *  panels that arrived fine. */
-  journal: AnalyticsJournal | null;
-  journalError: string | null;
-  /** SR50 — the pre-built blob, fetched alongside `performance`. */
-  snapshot: AnalyticsSnapshot | null;
-  /** Its own error: the snapshot self-heals on the server and can rebuild on
-   *  the request, so a failure here is not a reason to warn about the rest of
-   *  the tab, which came from a different endpoint that may be fine. */
-  snapshotError: string | null;
-  /** Which dimension the Breakdowns table is grouped by. */
-  breakdown: BreakdownDimension;
+  /* Every panel is its own payload and its own error (spec v94 H4): a failed
+   * fetch may never blank, or warn about, a neighbour that arrived fine. */
+  performance: AnalyticsPerformance | null;   performanceError: string | null;
+  equityCurve: AnalyticsEquityCurve | null;   equityCurveError: string | null;
+  byDimension: AnalyticsByDimension | null;   byDimensionError: string | null;
+  heatGrid: AnalyticsHeatGrid | null;         heatGridError: string | null;
+  /** v94 T2 -- the Attribution tab's fixed horizon/direction/day-of-week bar
+   *  lists, each its own `/by-dimension?dim=...` fetch and its own error
+   *  (spec v94 H4): a failed horizon fetch must not blank the direction bars
+   *  beside it. Month reuses `performance().calendar` via `monthBars()`
+   *  rather than a fourth fetch -- that data is already on hand. */
+  byHorizon: AnalyticsByDimension | null;     byHorizonError: string | null;
+  byDirection: AnalyticsByDimension | null;   byDirectionError: string | null;
+  byDow: AnalyticsByDimension | null;         byDowError: string | null;
+  exitQuality: AnalyticsExitQuality | null;   exitQualityError: string | null;
+  journal: AnalyticsJournal | null;           journalError: string | null;
+  strategies: AnalyticsStrategies | null;     strategiesError: string | null;
+  calibration: AnalyticsCalibration | null;   calibrationError: string | null;
+  plans: AnalyticsPlans | null;               plansError: string | null;
 
   /** SR51 — the tracked job's grid, one row per parameter combination.
    *  Empty while it is still running, which the endpoint answers with a 200
@@ -549,40 +402,6 @@ interface AnalyticsSlice {
   proposing: number | null;
   proposeError: string | null;
   proposeResult: string | null;
-  strategies: AnalyticsStrategies | null;
-  calibration: AnalyticsCalibration | null;
-  exitQuality: AnalyticsExitQuality | null;
-  /**
-   * The institutional risk metrics block (v85 D37, `GET /risk`), read
-   * ONLY for its `sharpe_r`/`max_drawdown_r` — the R-multiple-based figures
-   * the KPI row's "Sharpe (R)"/"Max drawdown (R)" tiles show (v85 D39).
-   * Fetched once, like `exitQuality`, rather than on every `analytics`
-   * event: the Risk workspace already owns keeping this fresh for its own
-   * page, and this tab only borrows two fields off it, not the whole
-   * exposure/killswitch resource. A failed fetch is swallowed exactly like
-   * `exitQuality`'s -- these two tiles degrade to their own em dashes
-   * rather than an unrelated fetch failure warning about the whole tab.
-   */
-  riskMetrics: RiskMetrics | null;
-  /** v85 D39 (R9-01/R9-04). Re-fetched on every range change alongside
-   *  `performance`/`snapshot`/`journal` (same from/to vocabulary, per the
-   *  endpoint's own docstring), and independently on `equityCurveStrategy`
-   *  change -- the Performance tab's own `?from=`/`?to=` scope, but a
-   *  strategy narrowing `/performance` itself does not take. */
-  equityCurve: AnalyticsEquityCurve | null;
-  equityCurveStrategy: string | null;
-  /** Equity vs drawdown -- one fetch, two views of the same points (spec
-   *  D39: "not a second series"). Component-facing, but held here so it
-   *  survives a tab switch away from and back to Performance. */
-  equityCurveView: 'equity' | 'drawdown';
-  /** v85 D40 (R9-02/R9-05). Both fetched together, unguarded, on every
-   *  Performance load -- the strategy table and horizon bars share one
-   *  toggle, so both panels' data has to already be on hand before either
-   *  renders. `[]`, not null: an empty book is a measured-empty list, not
-   *  "not yet fetched" (see the strategy table's own empty state). */
-  strategyAgg: AnalyticsByDimensionRow[];
-  horizonAgg: AnalyticsByDimensionRow[];
-  plans: AnalyticsPlans | null;
   jobs: JobSummary[];
   /** The job whose progress is on screen — status plus a log tail. */
   job: JobStatus | null;
@@ -598,166 +417,109 @@ interface AnalyticsSlice {
 }
 
 /**
- * Analytics — Performance, Strategies, Calibration and Tuning behind one
- * `TabBar` (spec v14 Decision 6).
+ * Analytics — Overview, Attribution, Execution, Edge, Pipeline and Tuning
+ * behind one `TabBar` (spec v94 D1).
  *
  * Follows `DashboardStore`'s shape: one server response per concern in, all
- * derivation in `withComputed`, and a `withHooks` effect whose first run IS
- * the initial load. Two things are specific to this workspace and are the
- * reason it is not just four copies of the Dashboard store:
+ * derivation in `withComputed`. Three things are specific to this workspace
+ * and are the reason it is not six copies of the Dashboard store:
+ *
+ * **One scope, every panel.** v94 D2: `scope` is a single `BookScope` and
+ * every scoped request is issued against it, so no two panels on one screen
+ * can be answering about different populations. `scopeN()` reports the
+ * population that scope actually produced, server-side, never inferred from
+ * a chart's visible rows.
  *
  * **Only the open tab is fetched.** Spec v12's taxonomy says an `analytics`
- * event means "refetch the open Analytics view", not "refetch all four". The
- * effect reads `tab` and dispatches, so switching tabs is what triggers a
+ * event means "refetch the open Analytics view", not "refetch all six".
+ * `LOADERS` reads `tab` and dispatches, so switching tabs is what triggers a
  * fetch — and a tab that has already loaded keeps its data on screen while
- * the next one arrives, rather than four payloads racing on entry.
+ * the next one arrives, rather than six payloads racing on entry.
  *
- * **Tuning listens to `jobs`, the other three to `analytics`.** This is the
+ * **Tuning listens to `jobs`, the other five to `analytics`.** This is the
  * bullet NG48 exists for: the Jinja page drove job progress with a 3-second
  * `setTimeout` poll and a full `window.location.reload()` on completion.
  * Here the server's watcher on `admin_jobs.json` and `tuning_results/` raises
- * `jobs`, the effect refetches `GET /jobs/:id`, and the log tail and state
+ * `jobs`, the route refetches `GET /jobs/:id`, and the log tail and state
  * pill update in place. **There is deliberately no timer anywhere in this
  * file** — if one reappears, the polling came back.
- *
- * The event counters are read *conditionally*, inside the dispatch. Angular's
- * signal graph re-tracks dependencies on every run, so an `analytics` event
- * cannot refetch the jobs list while Tuning is open, and vice versa.
  */
 export const AnalyticsStore = signalStore(
-  withState<AnalyticsSlice>({
-    tab: 'performance',
-    performance: null,
-    rangeFrom: null,
-    rangeTo: null,
-    journal: null,
-    journalError: null,
-    snapshot: null,
-    snapshotError: null,
-    breakdown: 'ticker',
-    gridStrategy: null,
-    grid: [],
-    proposing: null,
-    proposeError: null,
-    proposeResult: null,
-    strategies: null,
-    calibration: null,
-    exitQuality: null,
-    riskMetrics: null,
-    equityCurve: null,
-    equityCurveStrategy: null,
-    equityCurveView: 'equity',
-    strategyAgg: [],
-    horizonAgg: [],
-    plans: null,
-    jobs: [],
-    job: null,
-    proposals: [],
-    loading: false,
-    error: null,
-    launching: false,
-    launchError: null,
+  /* A factory, not a literal, for one reason: the remembered unit, measure
+   * and scope have to be in place BEFORE the route resolver runs, and the
+   * resolver's own `hydrate(scope, unit)` then overrides them from the URL.
+   * The URL wins where it speaks; the preference answers where it is
+   * silent. */
+  withState<AnalyticsSlice>(() => {
+    const preferences = inject(PreferencesStore).values();
+    return {
+      tab: 'overview',
+      scope: { ...DEFAULT_SCOPE, ...(preferences.analyticsScope ?? {}) },
+      unit: preferences.analyticsUnit ?? 'r',
+      measure: preferences.analyticsMeasure ?? 'exp_r',
+      heatCell: 'exp_r',
+      breakdown: 'strategy',
+      tableOpen: {},
+      performance: null, performanceError: null,
+      equityCurve: null, equityCurveError: null,
+      byDimension: null, byDimensionError: null,
+      heatGrid: null, heatGridError: null,
+      byHorizon: null, byHorizonError: null,
+      byDirection: null, byDirectionError: null,
+      byDow: null, byDowError: null,
+      exitQuality: null, exitQualityError: null,
+      journal: null, journalError: null,
+      strategies: null, strategiesError: null,
+      calibration: null, calibrationError: null,
+      plans: null, plansError: null,
+      gridStrategy: null,
+      grid: [],
+      proposing: null,
+      proposeError: null,
+      proposeResult: null,
+      jobs: [],
+      job: null,
+      proposals: [],
+      loading: false,
+      error: null,
+      launching: false,
+      launchError: null,
+    };
   }),
 
-  withComputed(({ performance, strategies, calibration, plans, jobs, job, snapshot, breakdown, exitQuality,
-                 journal, riskMetrics, equityCurve, equityCurveView }) => ({
-    /* -- SR50: the snapshot's own figures ------------------------------- */
+  withComputed(({ performance, strategies, calibration, plans, jobs, job, breakdown, exitQuality,
+                 journal, equityCurve, byDimension, scope, tab }) => ({
+    /** The server-side population the ONE scope produced, never inferred from
+     * a chart's visible rows. Read off whichever scoped payload this tab
+     * actually fetched — every one of them echoes the same `n` for the same
+     * scope, so the fallback chain cannot report two different populations. */
+    scopeN: computed(() =>
+      performance()?.n ?? byDimension()?.n ?? exitQuality()?.n ?? null),
+    /** When the figures on screen were built. A screen that hides how stale
+     *  its data is has a correctness bug. */
+    asOf: computed(() => equityCurve()?.as_of ?? byDimension()?.as_of ?? null),
+    /** A scope is shareable precisely because every non-default filter is
+     * explicit. Ledger counts only when it differs from the default book. */
+    activeFilterCount: computed(() => {
+      const selected = scope();
+      return (['from', 'to', 'strategy', 'horizon', 'direction'] as const)
+        .filter((key) => selected[key]).length +
+        (selected.ledger === DEFAULT_SCOPE.ledger ? 0 : 1);
+    }),
+    /** How many panels on the open tab ignore the bar (spec v94 D2/H2).
+     *  Edge's registry/calibration evidence and every Pipeline panel are
+     *  all-time by construction; saying so is the difference between a
+     *  scoped screen and one that lies about being scoped. */
+    allTimePanelCount: computed(() => (tab() === 'edge' ? 3 : tab() === 'pipeline' ? 4 : 0)),
 
-    /** When the blob was assembled. Worth showing: the server serves a
-     *  snapshot up to an hour old and rebuilds on demand past that, so "these
-     *  numbers are from 09:15" is a real thing to know. */
-    snapshotBuiltAt: computed(() => snapText(snapshot()?.built_at)),
     /** Served by the backend: the SPA never owns the suppression threshold. */
     minCellN: computed(() => exitQuality()?.min_cell_n ?? 0),
 
-    profitFactor: computed(() => snapNumber(snapshot()?.overall?.['profit_factor'])),
-    /** The exact population `profitFactor` was computed over -- `overall.n`
-     *  and `overall.profit_factor` are two fields of the same `build_snapshot`
-     *  call, read from the same `closed` list (snapshots.py). */
-    profitFactorSample: computed(() => snapNumber(snapshot()?.overall?.['n'])),
-    sharpe: computed(() => snapNumber(snapshot()?.overall?.['sharpe'])),
-    sortino: computed(() => snapNumber(snapshot()?.overall?.['sortino'])),
-    maxDrawdownPct: computed(() => snapNumber(snapshot()?.overall?.['max_drawdown_pct'])),
-    totalPnl: computed(() => snapNumber(snapshot()?.overall?.['total_pnl'])),
-
-    /* -- KPI row (v85 D39) ----------------------------------------------
-     *
-     * All six tiles are deliberately ALL-TIME, matching the Record/Overall/
-     * Risk-adjusted panels the row sits above (see this file's own SR54
-     * comment on `winRate`/`expectancyR`: "the top-level win_rate and
-     * expectancy_r stay all-time... existing clients read them as the
-     * account's overall record"). None of the six reads `rangeFrom`/
-     * `rangeTo` or the `derived` block -- that would make this row silently
-     * disagree with the panels directly beneath it the moment a user set a
-     * date filter, the "screen hides how stale its data is" class of bug
-     * this repo treats as a correctness bug, not a nice-to-have.
-     *
-     * "Sharpe (R)"/"Max drawdown (R)" reuse `/risk`'s own R-multiple-based
-     * computation (`rm.sharpe_of`/`rm.max_drawdown_r`, already the Risk
-     * workspace's own tiles) rather than deriving a Sharpe ratio here --
-     * this store has the raw `r_multiples` list (via the snapshot) but
-     * inventing a second Sharpe formula from it would violate "one
-     * definition per stat" the same way a duplicated backend formula would.
-     */
-
-    /** Sum of every computable R-multiple, all-time -- the exact same list
-     *  `overall.expectancy_r` was averaged from (`metrics.r_multiples` and
-     *  `metrics.expectancy_r` both walk the same `closed` list in
-     *  `build_snapshot`). A plain total, not a second statistical formula.
-     *  Null (not 0) with no computable R at all: an empty book has no total
-     *  to report. */
-    totalR: computed(() => {
-      const rs = rMultiplesOf(snapshot());
-      return rs.length ? rs.reduce((sum, r) => sum + r, 0) : null;
-    }),
-    /** The exact sample the total above was summed from. */
-    totalRSample: computed(() => rMultiplesOf(snapshot()).length),
-
-    /** Total R accumulated per month of the book's own history -- NOT the
-     *  same figure as `derived.trades_per_month` (a trade *count* rate,
-     *  range-scoped); this is an R *total* rate, all-time, over
-     *  `elapsedMonthsOf` -- the earliest to latest date on the all-time
-     *  (dollar) equity curve served alongside `r_multiples` in the same
-     *  snapshot. Null when either half is unavailable, never a division
-     *  against a null/zero span. */
-    rPerMonth: computed(() => {
-      const rs = rMultiplesOf(snapshot());
-      const months = elapsedMonthsOf(snapshot());
-      if (!rs.length || months === null) return null;
-      return rs.reduce((sum, r) => sum + r, 0) / months;
-    }),
-
-    /** Sharpe/max-drawdown over R-multiples, and each one's own sample --
-     *  `/risk`'s `sharpe_r.n`/`max_drawdown_r.n`, the closed-trade R-series
-     *  count, never a page-wide count borrowed from somewhere else. */
-    sharpeR: computed(() => riskMetrics()?.sharpe_r.value ?? null),
-    sharpeRSample: computed(() => riskMetrics()?.sharpe_r.n ?? null),
-    maxDrawdownR: computed(() => riskMetrics()?.max_drawdown_r.value ?? null),
-    maxDrawdownRSample: computed(() => riskMetrics()?.max_drawdown_r.n ?? null),
-
-    /* -- v85 D39 (R9-04): the equity/drawdown curve and win/loss donut --- */
+    /* -- the equity curve ------------------------------------------------ */
 
     equityCurveEmpty: computed(() => (equityCurve()?.points.length ?? 0) === 0),
     equityCurveAsOf: computed(() => equityCurve()?.as_of ?? null),
 
-    /** One series, its identity swapped by the toggle rather than refetched
-     *  (spec D39: "one request, two views"). */
-    activeEquitySeries: computed<LineChartSeries[]>(() => {
-      const points = equityCurve()?.points ?? [];
-      const drawdown = equityCurveView() === 'drawdown';
-      return [{
-        name: drawdown ? 'Drawdown (R)' : 'Equity (R)',
-        points: points.map((p) => ({ date: p.date, value: drawdown ? p.drawdown_r : p.cum_r })),
-      }];
-    }),
-
-    winLossSlices: computed<DonutSlice[]>(() => {
-      const rs = perTradeRs(equityCurve());
-      return [
-        { label: 'Win', count: rs.filter((r) => r > 0).length, tone: 'pos' },
-        { label: 'Loss', count: rs.filter((r) => r < 0).length, tone: 'neg' },
-      ];
-    }),
     /** Null (not 0) when there is no win/loss of that sign yet -- an empty
      *  average is not a zero-R one. */
     avgWinR: computed(() => {
@@ -769,144 +531,19 @@ export const AnalyticsStore = signalStore(
       return losses.length ? losses.reduce((sum, r) => sum + r, 0) / losses.length : null;
     }),
 
-    /** Current run, and the best and worst ever. Never rendered even by the
-     *  Jinja page, which computed them and dropped them on the floor. */
-    streaks: computed<Streaks | null>(() => {
-      const raw = snapshot()?.overall?.['streaks'];
-      if (!isPlainRecord(raw)) return null;
-      return {
-        current: snapNumber(raw['current']),
-        currentKind: snapText(raw['current_kind']),
-        bestWin: snapNumber(raw['best_win_streak']),
-        worstLoss: snapNumber(raw['worst_loss_streak']),
-      };
-    }),
-
-    rMultipleBins: computed<Bin[]>(() => binRMultiples(rMultiplesOf(snapshot()))),
-    strategyContribution: computed(() =>
-      ((snapshot()?.by?.['strategy'] ?? []) as { key: string; n: number; total_r: number | null }[])),
-
-    /** The chosen dimension's rows, busiest group first — `stats_by` already
-     *  sorts by trade count descending, which is the order every table in this
-     *  cockpit wants. */
-    breakdownRows: computed<BreakdownRow[]>(() =>
-      toBreakdownRows((snapshot()?.by?.[breakdown()] ?? []) as unknown[]),
-    ),
-
     breakdownLabel: computed(
       () =>
         BREAKDOWN_DIMENSIONS.find((d) => d.value === breakdown())?.label ??
         breakdown(),
     ),
 
-
-    directionBars: computed<BarRow[]>(() =>
-      zeroFilledBars(
-        toBreakdownRows((snapshot()?.by?.['direction'] ?? []) as unknown[]),
-        DIRECTION_ORDER, exitQuality()?.min_cell_n ?? 0,
-      )),
-    dowBars: computed<BarRow[]>(() =>
-      zeroFilledBars(
-        toBreakdownRows((snapshot()?.by?.['dow'] ?? []) as unknown[]),
-        DOW_ORDER.map((day) => [day, day] as const), exitQuality()?.min_cell_n ?? 0,
-      )),
     /* -- performance --------------------------------------------------- */
-
-    /**
-     * The six relocated metrics, resolved in the order the spec names them.
-     * Every entry in `RELOCATED_METRICS` produces a row whether or not the
-     * server sent it, so a metric that goes missing renders as an em dash and
-     * is reported by `missingRelocated` — never silently disappears.
-     */
-    relocated: computed<RelocatedMetric[]>(() => {
-      const block = performance()?.relocated as Record<string, unknown> | undefined;
-      return RELOCATED_METRICS.map((metric) => ({
-        ...metric,
-        value: numberOrNull(block, metric.key),
-        pnl: PNL_METRICS.has(metric.key),
-      }));
-    }),
-
-    /**
-     * Which of the six the payload did not carry at all.
-     *
-     * The distinction is `key in record` rather than "is null": a null is the
-     * server saying "no closed trades yet", which is a legitimate answer. An
-     * absent key means the relocation lost a metric somewhere between
-     * `analytics_performance()` and here, which is the specific regression
-     * spec v14 Decision 6 says must not happen. Empty while nothing has
-     * loaded — an unanswered request has not lost anything.
-     */
-    missingRelocated: computed<string[]>(() => {
-      const data = performance();
-      if (!data) return [];
-      const block = (data.relocated ?? {}) as Record<string, unknown>;
-      return RELOCATED_METRICS.filter((metric) => !(metric.key in block)).map((m) => m.label);
-    }),
 
     winRate: computed(() => performance()?.win_rate ?? null),
     winRateN: computed(() => performance()?.win_rate_n ?? null),
     expectancyR: computed(() => performance()?.expectancy_r ?? null),
     expectancyN: computed(() => performance()?.expectancy_n ?? null),
 
-    /* -- SR54: the figures that used to be derived in the browser -------- */
-
-    /**
-     * The derived block, or an all-null one before the first response.
-     *
-     * All-null rather than `null` so the KPI grid renders its cards with em
-     * dashes on first paint instead of collapsing and then reflowing when the
-     * payload lands. `DERIVED_METRICS` drives the render off this, the same
-     * pattern (and for the same auditability reason) as `RELOCATED_METRICS`.
-     */
-    derived: computed<AnalyticsDerived>(
-      () => performance()?.derived ?? EMPTY_DERIVED),
-
-    /** The derived figures resolved into render-ready rows. */
-    derivedMetrics: computed<DerivedMetric[]>(() => {
-      const block = performance()?.derived ?? EMPTY_DERIVED;
-      return DERIVED_METRICS.map((metric) => ({
-        ...metric,
-        value: block[metric.key] ?? null,
-      }));
-    }),
-
-    /** What the server says it scoped to — echoed back, not what we asked
-     *  for. If the two ever disagree the range silently did not apply, which
-     *  is exactly the failure this echo exists to make visible. */
-    appliedRange: computed(() => performance()?.range ?? null),
-
-    /** True once a bound is set, so the UI can offer "clear" and label the
-     *  section as scoped rather than all-time. */
-    rangeActive: computed(() => {
-      const range = performance()?.range;
-      return Boolean(range?.from || range?.to);
-    }),
-
-    /** Trades inside the window. Shown beside the figures because a Calmar
-     *  computed on four trades and one computed on four hundred should not
-     *  look equally authoritative. */
-    rangeSampleSize: computed(() => performance()?.range?.n ?? 0),
-
-    /** Server buckets mapped onto `sb-histogram`'s `{label, count}` contract.
-     *  The label is the bucket's LOWER edge, which is what makes the default
-     *  "starts with a minus sign means loss" predicate correct — labelling by
-     *  midpoint would mark the bucket straddling zero as a win. */
-    returnsHistogram: computed<HistogramBin[]>(() =>
-      (performance()?.distributions?.returns ?? []).map((bucket) => ({
-        label: `${bucket.lo.toFixed(1)}%`,
-        count: bucket.count,
-      }))),
-
-    rHistogram: computed<HistogramBin[]>(() =>
-      (performance()?.distributions?.r_multiples ?? []).map((bucket) => ({
-        label: `${bucket.lo.toFixed(2)}R`,
-        count: bucket.count,
-      }))),
-    calendarReturns: computed(() => performance()?.calendar ?? []),
-
-    holdingPeriodBars: computed(() => rateBars(performance()?.holding_period_split ?? [])),
-    riskRewardBars: computed(() => rateBars(performance()?.risk_reward_split ?? [])),
     monthBars: computed(() => monthBars(performance()?.calendar ?? [])),
 
     /* -- SR55: the journal's analytics half ----------------------------- */
@@ -962,30 +599,6 @@ export const AnalyticsStore = signalStore(
 
     strategyRows: computed<StrategyRow[]>(
       () => (strategies()?.strategies ?? []) as StrategyRow[],
-    ),
-
-    heatmap: computed<Heatmap | null>(() => {
-      const block = strategies()?.heatmap;
-      if (!block) return null;
-
-      // Read field by field rather than asserting the whole envelope: the
-      // axes and the cells arrive as three independent lists, and a grid
-      // built from a missing axis renders as an empty box instead of as
-      // nothing at all.
-      const axisStrategies = (block['strategies'] ?? []) as string[];
-      const horizons = (block['horizons'] ?? []) as string[];
-      const cells = (block['cells'] ?? []) as HeatmapCell[];
-      if (!axisStrategies.length || !horizons.length) return null;
-
-      return { strategies: axisStrategies, horizons, cells };
-    }),
-
-    /** Strategy names for the Tuning launcher. Sourced from the registry
-     *  rather than hardcoded: the server whitelists the strategy against
-     *  `ALL_STRATEGIES` and 400s on anything else, so a stale hardcoded list
-     *  here would offer a choice that cannot be launched. */
-    strategyNames: computed<string[]>(() =>
-      ((strategies()?.strategies ?? []) as StrategyRow[]).map((row) => row.strategy),
     ),
 
     /* -- calibration --------------------------------------------------- */
@@ -1044,7 +657,7 @@ export const AnalyticsStore = signalStore(
         .map((d) => ({ label: d.decile, count: d.win_rate }))),
   })),
 
-  withMethods((store, api = inject(ApiClient)) => {
+  withMethods((store, api = inject(ApiClient), preferences = inject(PreferencesStore)) => {
     /** Every failure lands here, and none of them clear the data already on
      *  screen. A table that empties because one refetch failed is worse than
      *  a slightly stale one beside a warning — especially when the event
@@ -1052,128 +665,73 @@ export const AnalyticsStore = signalStore(
     const fail = (error: ApiError): void =>
       patchState(store, {
         loading: false,
-        error:
-          error.code === 'unavailable' ? 'The admin is not responding.' : error.message,
+        error: message(error),
       });
 
-    const loadPerformance = (): void => {
-      patchState(store, { loading: true });
-      // SR54: the range travels to the server. See ApiClient.analyticsPerformance
-      // for why it cannot be applied to an all-time payload on the client.
-      api.analyticsPerformance({ from: store.rangeFrom(), to: store.rangeTo() })
-        .subscribe({
-          next: (performance) =>
-            patchState(store, { performance, loading: false, error: null }),
-          error: fail,
-        });
+    /* -- one error handler per panel (spec v94 H4) ----------------------
+     *
+     * A failed fetch sets THAT panel's error and leaves its neighbours' data
+     * untouched. The three silent-degradation paths v94 exists to remove are
+     * the ones that had no error field at all -- a panel that fails without
+     * saying so is indistinguishable from one measuring an empty book.
+     */
 
-      // SR55. A third request, and a third failure mode, for the same reason
-      // the snapshot is separate: the journal lives in its own store and its
-      // own module, and folding it into the performance response would make a
-      // journal read failure empty the KPI cards.
-      api.analyticsJournal().subscribe({
-        next: (journal) => patchState(store, { journal, journalError: null }),
-        error: (error: ApiError) =>
-          patchState(store, {
-            journalError:
-              error.code === 'unavailable'
-                ? 'The admin is not responding.'
-                : error.message,
-          }),
-      });
+    const message = (error: ApiError): string =>
+      error.code === 'unavailable' ? 'The admin is not responding.' : error.message;
 
-      // SR50. A second request rather than a widened /analytics/performance:
-      // the snapshot is a whole pre-built blob served by its own endpoint, and
-      // folding it into the summary response would make every Performance
-      // visit carry the equity curve whether or not the panels using it are on
-      // screen. It fails on its own terms -- see `snapshotError`.
-      api.analyticsSnapshot().subscribe({
-        next: (snapshot) => patchState(store, { snapshot, snapshotError: null }),
-        error: (error: ApiError) =>
-          patchState(store, {
-            snapshotError:
-              error.code === 'unavailable'
-                ? 'The admin is not responding.'
-                : error.message,
-          }),
-      });
-      if (store.exitQuality() === null) {
-        api.analyticsExitQuality().subscribe({
-          next: (exitQuality) => patchState(store, { exitQuality }),
-          // The section degrades independently; do not turn an offline API
-          // into an unhandled route-mount error.
-          error: () => {},
-        });
-      }
-      // v85 D39 (R9-03): fetched once, like exitQuality above -- the KPI
-      // row's Sharpe (R)/Max drawdown (R) tiles need only two fields off
-      // this, not the Risk workspace's whole exposure/killswitch resource,
-      // and a failed fetch degrades those two tiles to an em dash rather
-      // than warning about the rest of the Performance tab.
-      if (store.riskMetrics() === null) {
-        api.risk().subscribe({
-          next: (risk) => patchState(store, { riskMetrics: risk.metrics }),
-          error: () => {},
-        });
-      }
-      loadEquityCurve();
-      loadByDimension();
-    };
+    const panelFail = (errorKey: string) => (error: ApiError): void =>
+      patchState(store, { [errorKey]: message(error) } as never);
 
-    /** v85 D39 (R9-01/R9-04). Re-fetched by `loadPerformance` on every range
-     *  change and by `setEquityCurveStrategy` on its own -- same from/to
-     *  vocabulary as `/performance`, plus a strategy scope that route does
-     *  not take, so this cannot fold into `loadPerformance`'s own request. */
-    const loadEquityCurve = (): void => {
-      api.analyticsEquityCurve({
-        from: store.rangeFrom(), to: store.rangeTo(), strategy: store.equityCurveStrategy(),
-      }).subscribe({
-        next: (equityCurve) => patchState(store, { equityCurve }),
-        // Degrades to its own empty state; not a reason to warn about the
-        // rest of the Performance tab.
-        error: () => {},
+    const fetchPanel = <T>(source: Observable<T>, dataKey: string, errorKey: string): void => {
+      source.subscribe({
+        next: (value) => patchState(store, { [dataKey]: value, [errorKey]: null } as never),
+        error: panelFail(errorKey),
       });
     };
 
-    /** v85 D40 (R9-02/R9-05). `/analytics/by-dimension` takes no from/to --
-     *  every closed trade, always -- so unlike `loadEquityCurve` this is
-     *  wasteful but harmless to re-fire on a range change; simpler than a
-     *  second guard for data neither panel's own toggle needs range-scoped. */
-    const loadByDimension = (): void => {
-      api.analyticsByDimension('strategy').subscribe({
-        next: ({ rows }) => patchState(store, { strategyAgg: rows }),
-        error: () => {},
-      });
-      api.analyticsByDimension('horizon').subscribe({
-        next: ({ rows }) => patchState(store, { horizonAgg: rows }),
-        error: () => {},
-      });
-    };
+    /** The one scope every scoped request is issued against (v94 D2). */
+    const s = (): BookScope => store.scope();
 
-    const loadStrategies = (): void => {
-      patchState(store, { loading: true });
-      api.analyticsStrategies().subscribe({
-        next: (strategies) => patchState(store, { strategies, loading: false, error: null }),
-        error: fail,
-      });
-    };
+    /* -- per-tab loaders -------------------------------------------------
+     *
+     * Each tab fetches exactly the payloads its own panels read, and nothing
+     * else: `/performance` appears in four of them because four tabs read a
+     * different part of it (the KPI row, the horizon/dow/month bars, the
+     * holding-period and R:R splits, the rolling series), not because it is
+     * a catch-all. */
 
-    const loadCalibration = (): void => {
-      patchState(store, { loading: true });
-      api.analyticsCalibration().subscribe({
-        next: (calibration) =>
-          patchState(store, { calibration, loading: false, error: null }),
-        error: fail,
-      });
+    const loadOverview = (): void => {
+      fetchPanel(api.analyticsPerformance(s()), 'performance', 'performanceError');
+      fetchPanel(api.analyticsEquityCurve(s()), 'equityCurve', 'equityCurveError');
     };
+    const loadAttribution = (): void => {
+      fetchPanel(api.analyticsByDimension(store.breakdown(), s()), 'byDimension', 'byDimensionError');
+      fetchPanel(api.analyticsHeatGrid(s()), 'heatGrid', 'heatGridError');
+      fetchPanel(api.analyticsStrategies(s()), 'strategies', 'strategiesError');
+      fetchPanel(api.analyticsPerformance(s()), 'performance', 'performanceError');
+      // T2's fixed bar lists -- one request per dimension, independent of
+      // whichever dimension `breakdown` is currently grouped by.
+      fetchPanel(api.analyticsByDimension('horizon', s()), 'byHorizon', 'byHorizonError');
+      fetchPanel(api.analyticsByDimension('direction', s()), 'byDirection', 'byDirectionError');
+      fetchPanel(api.analyticsByDimension('dow', s()), 'byDow', 'byDowError');
+    };
+    const loadExecution = (): void => {
+      fetchPanel(api.analyticsExitQuality(s()), 'exitQuality', 'exitQualityError');
+      fetchPanel(api.analyticsJournal(s()), 'journal', 'journalError');
+      fetchPanel(api.analyticsPerformance(s()), 'performance', 'performanceError');
+    };
+    const loadEdge = (): void => {
+      fetchPanel(api.analyticsPerformance(s()), 'performance', 'performanceError');
+      fetchPanel(api.analyticsStrategies(s()), 'strategies', 'strategiesError');
+      fetchPanel(api.analyticsCalibration(), 'calibration', 'calibrationError');
+    };
+    const loadPipeline = (): void => fetchPanel(api.analyticsPlans(), 'plans', 'plansError');
 
-    const loadPlans = (): void => {
-      patchState(store, { loading: true });
-      api.analyticsPlans().subscribe({
-        next: (plans) => patchState(store, { plans, loading: false, error: null }),
-        error: fail,
-      });
-    };
+    /** The registry list the Tuning launcher offers. Sourced from the server
+     *  rather than hardcoded: it whitelists the strategy against
+     *  `ALL_STRATEGIES` and 400s on anything else. */
+    const loadStrategies = (): void =>
+      fetchPanel(api.analyticsStrategies(s()), 'strategies', 'strategiesError');
 
     const loadProposals = (): void => {
       api.proposals().subscribe({
@@ -1248,56 +806,54 @@ export const AnalyticsStore = signalStore(
       if (store.strategies() === null) loadStrategies();
     };
 
-    const resolvePerformance = (): Observable<void> => routeRequest(
-      api.analyticsPerformance({ from: store.rangeFrom(), to: store.rangeTo() }), {
-        start: () => {
-          patchState(store, { loading: true });
-          api.analyticsJournal().subscribe({
-            next: (journal) => patchState(store, { journal, journalError: null }),
-            error: (error: ApiError) => patchState(store, { journalError: error.code === 'unavailable' ? 'The admin is not responding.' : error.message }),
-          });
-          api.analyticsSnapshot().subscribe({
-            next: (snapshot) => patchState(store, { snapshot, snapshotError: null }),
-            error: (error: ApiError) => patchState(store, { snapshotError: error.code === 'unavailable' ? 'The admin is not responding.' : error.message }),
-          });
-          if (store.exitQuality() === null) {
-            api.analyticsExitQuality().subscribe({
-              next: (exitQuality) => patchState(store, { exitQuality }),
-              error: () => {},
-            });
-          }
-          // v85 D39 (R9-03) -- see loadPerformance's identical guard above.
-          if (store.riskMetrics() === null) {
-            api.risk().subscribe({
-              next: (risk) => patchState(store, { riskMetrics: risk.metrics }),
-              error: () => {},
-            });
-          }
-          loadEquityCurve();
-          loadByDimension();
-        },
-        next: (performance) => patchState(store, { performance, loading: false, error: null }),
-        error: fail,
-      },
-    );
-
-    const resolveStrategies = (): Observable<void> => routeRequest(api.analyticsStrategies(), {
-      start: () => patchState(store, { loading: true }),
-      next: (strategies) => patchState(store, { strategies, loading: false, error: null }),
-      error: fail,
+    /**
+     * One tab's route resolution: the route waits on the tab's FIRST payload
+     * and the rest of its panels are fired alongside it.
+     *
+     * Waiting on all of them would hold the route open on the slowest, and
+     * waiting on none would mount the page empty — the first payload is the
+     * one the tab's headline panel reads, so the page is never shown before
+     * the number it leads with exists.
+     */
+    const resolveOne = <T>(
+      source: Observable<T>, dataKey: string, errorKey: string, rest: () => void = () => {},
+    ): Observable<void> => routeRequest(source, {
+      start: () => { patchState(store, { loading: true }); rest(); },
+      next: (value) => patchState(store, {
+        [dataKey]: value, [errorKey]: null, loading: false, error: null,
+      } as never),
+      error: (error: ApiError) => { fail(error); panelFail(errorKey)(error); },
     });
 
-    const resolveCalibration = (): Observable<void> => routeRequest(api.analyticsCalibration(), {
-      start: () => patchState(store, { loading: true }),
-      next: (calibration) => patchState(store, { calibration, loading: false, error: null }),
-      error: fail,
-    });
+    const resolveOverview = (): Observable<void> =>
+      resolveOne(api.analyticsPerformance(s()), 'performance', 'performanceError', () => {
+        fetchPanel(api.analyticsEquityCurve(s()), 'equityCurve', 'equityCurveError');
+      });
 
-    const resolvePlans = (): Observable<void> => routeRequest(api.analyticsPlans(), {
-      start: () => patchState(store, { loading: true }),
-      next: (plans) => patchState(store, { plans, loading: false, error: null }),
-      error: fail,
-    });
+    const resolveAttribution = (): Observable<void> =>
+      resolveOne(api.analyticsByDimension(store.breakdown(), s()), 'byDimension', 'byDimensionError', () => {
+        fetchPanel(api.analyticsHeatGrid(s()), 'heatGrid', 'heatGridError');
+        fetchPanel(api.analyticsStrategies(s()), 'strategies', 'strategiesError');
+        fetchPanel(api.analyticsPerformance(s()), 'performance', 'performanceError');
+        fetchPanel(api.analyticsByDimension('horizon', s()), 'byHorizon', 'byHorizonError');
+        fetchPanel(api.analyticsByDimension('direction', s()), 'byDirection', 'byDirectionError');
+        fetchPanel(api.analyticsByDimension('dow', s()), 'byDow', 'byDowError');
+      });
+
+    const resolveExecution = (): Observable<void> =>
+      resolveOne(api.analyticsExitQuality(s()), 'exitQuality', 'exitQualityError', () => {
+        fetchPanel(api.analyticsJournal(s()), 'journal', 'journalError');
+        fetchPanel(api.analyticsPerformance(s()), 'performance', 'performanceError');
+      });
+
+    const resolveEdge = (): Observable<void> =>
+      resolveOne(api.analyticsPerformance(s()), 'performance', 'performanceError', () => {
+        fetchPanel(api.analyticsStrategies(s()), 'strategies', 'strategiesError');
+        fetchPanel(api.analyticsCalibration(), 'calibration', 'calibrationError');
+      });
+
+    const resolvePipeline = (): Observable<void> =>
+      resolveOne(api.analyticsPlans(), 'plans', 'plansError');
 
     const resolveTuning = (): Observable<void> => routeRequest(api.jobs(), {
       start: () => {
@@ -1315,30 +871,22 @@ export const AnalyticsStore = signalStore(
       error: fail,
     });
 
+    const RESOLVERS: Record<AnalyticsTab, () => Observable<void>> = {
+      overview: resolveOverview, attribution: resolveAttribution, execution: resolveExecution,
+      edge: resolveEdge, pipeline: resolvePipeline, tuning: resolveTuning,
+    };
+
     const resolveTab = (tab: AnalyticsTab): Observable<void> => {
       patchState(store, { tab });
-      return ({
-        performance: resolvePerformance,
-        strategies: resolveStrategies,
-        calibration: resolveCalibration,
-        tuning: resolveTuning,
-        plans: resolvePlans,
-      })[tab]();
+      return RESOLVERS[tab]();
     };
-    const load = (): void => {
-      switch (store.tab()) {
-        case 'performance':
-          return loadPerformance();
-        case 'strategies':
-          return loadStrategies();
-        case 'calibration':
-          return loadCalibration();
-        case 'tuning':
-          return loadTuning();
-        case 'plans':
-          return loadPlans();
-      }
+
+    const LOADERS: Record<AnalyticsTab, () => void> = {
+      overview: loadOverview, attribution: loadAttribution, execution: loadExecution,
+      edge: loadEdge, pipeline: loadPipeline, tuning: loadTuning,
     };
+
+    const load = (): void => LOADERS[store.tab()]();
 
     return {
       /** The one way the tab arrives, and it comes from the URL. */
@@ -1347,49 +895,102 @@ export const AnalyticsStore = signalStore(
         if (loadNow) load();
       },
 
-      /** Which dimension the Breakdowns table groups by. Local state, not a
-       *  query parameter: it refetches nothing — every dimension is already in
-       *  the one snapshot — so there is no request for the URL to describe. */
-      setBreakdown(breakdown: BreakdownDimension): void {
+      /**
+       * Retry exactly the failed panel after `sb-panel-error` (spec v94 H4).
+       *
+       * One panel, one request: adjacent charts retain their current payload
+       * and never flash back to an empty loading state because a neighbour
+       * was retried.
+       */
+      reload(panel: PanelKey): void {
+        const one: Record<PanelKey, () => void> = {
+          performance: () => fetchPanel(api.analyticsPerformance(s()), 'performance', 'performanceError'),
+          equityCurve: () => fetchPanel(api.analyticsEquityCurve(s()), 'equityCurve', 'equityCurveError'),
+          byDimension: () => fetchPanel(api.analyticsByDimension(store.breakdown(), s()), 'byDimension', 'byDimensionError'),
+          heatGrid: () => fetchPanel(api.analyticsHeatGrid(s()), 'heatGrid', 'heatGridError'),
+          byHorizon: () => fetchPanel(api.analyticsByDimension('horizon', s()), 'byHorizon', 'byHorizonError'),
+          byDirection: () => fetchPanel(api.analyticsByDimension('direction', s()), 'byDirection', 'byDirectionError'),
+          byDow: () => fetchPanel(api.analyticsByDimension('dow', s()), 'byDow', 'byDowError'),
+          exitQuality: () => fetchPanel(api.analyticsExitQuality(s()), 'exitQuality', 'exitQualityError'),
+          journal: () => fetchPanel(api.analyticsJournal(s()), 'journal', 'journalError'),
+          strategies: () => fetchPanel(api.analyticsStrategies(s()), 'strategies', 'strategiesError'),
+          calibration: () => fetchPanel(api.analyticsCalibration(), 'calibration', 'calibrationError'),
+          plans: () => fetchPanel(api.analyticsPlans(), 'plans', 'plansError'),
+        };
+        one[panel]?.();
+      },
+
+      /** Which dimension the Attribution breakdown groups by. Unlike v85's
+       *  snapshot-backed table this DOES refetch: `/by-dimension` serves one
+       *  dimension per request, scoped, so the rows for another dimension
+       *  are not already on hand. */
+      setBreakdown(breakdown: string): void {
         patchState(store, { breakdown });
+        fetchPanel(api.analyticsByDimension(breakdown, s()), 'byDimension', 'byDimensionError');
       },
 
       /**
-       * SR54 — set the analytics date range and refetch.
+       * v94 D2 — one shared scope feeds every scoped analytics request.
        *
-       * Unlike `setBreakdown` this DOES refetch, because the arithmetic lives
-       * on the server. Both bounds are set together in one call so a user
-       * picking a range never triggers two requests, the second of which
-       * would race the first and could land older numbers last.
+       * The whole patch is applied in one call so a user picking a range
+       * never triggers two requests, the second of which would race the
+       * first and could land older numbers last.
        *
-       * An out-of-order pair is normalised rather than rejected: a date picker
-       * mid-edit legitimately passes through `from > to`, and refusing it
-       * would surface an error for a state the user is about to fix anyway.
+       * An out-of-order pair is normalised rather than rejected: a date
+       * picker mid-edit legitimately passes through `from > to`, and
+       * refusing it would surface an error for a state the user is about to
+       * fix anyway.
        */
-      setRange(from: string | null, to: string | null): void {
-        const [lo, hi] = from && to && from > to ? [to, from] : [from, to];
-        patchState(store, { rangeFrom: lo || null, rangeTo: hi || null });
-        loadPerformance();
+      setScope(patch: Partial<BookScope>): void {
+        const next = { ...store.scope(), ...patch };
+        if (next.from && next.to && next.from > next.to) [next.from, next.to] = [next.to, next.from];
+        patchState(store, { scope: next });
+        preferences.update((prefs) => ({ ...prefs, analyticsScope: next }));
+        load();
       },
-
-      /** Back to all-time. */
-      clearRange(): void {
-        patchState(store, { rangeFrom: null, rangeTo: null });
-        loadPerformance();
+      /** Back to the default book, all-time. */
+      clearScope(): void {
+        patchState(store, { scope: DEFAULT_SCOPE });
+        preferences.update((prefs) => ({ ...prefs, analyticsScope: DEFAULT_SCOPE }));
+        load();
       },
-
-      /** v85 D39 (R9-04). Re-fetches only the equity curve -- `/performance`
-       *  itself takes no `strategy` param (see `analytics_performance`'s own
-       *  docstring), so this is deliberately narrower than `setRange`. */
-      setEquityCurveStrategy(strategy: string | null): void {
-        patchState(store, { equityCurveStrategy: strategy || null });
-        loadEquityCurve();
+      /** No refetch: every unit is already in the payload (spec v94 D3), so
+       *  switching R/%/$ is a re-read of numbers already on screen. */
+      setUnit(unit: AnalyticsUnit): void {
+        patchState(store, { unit });
+        preferences.update((prefs) => ({ ...prefs, analyticsUnit: unit }));
       },
-
-      /** Equity | Drawdown -- swaps which field of the one already-fetched
-       *  series is shown, never refetches (spec D39). */
-      setEquityCurveView(view: 'equity' | 'drawdown'): void {
-        patchState(store, { equityCurveView: view });
+      setMeasure(measure: 'exp_r' | 'total_r' | 'win_rate'): void {
+        patchState(store, { measure });
+        preferences.update((prefs) => ({ ...prefs, analyticsMeasure: measure }));
+      },
+      /** Which figure the heat grid paints. Local: the cells are all in the
+       *  one `/heat-grid` payload. */
+      setHeatCell(heatCell: 'exp_r' | 'win_rate' | 'n'): void {
+        patchState(store, { heatCell });
+      },
+      /** Whether a panel's underlying table is open. Local, per panel. */
+      setTableOpen(panel: string, open: boolean): void {
+        patchState(store, { tableOpen: { ...store.tableOpen(), [panel]: open } });
+      },
+      /**
+       * Route resolvers hydrate before fetching; no request here.
+       *
+       * A PATCH, not a replacement, and that is the whole point: the
+       * resolver passes only the fields the URL actually carries, so a
+       * field the URL is silent about keeps the value seeded from the
+       * remembered preference. Taking a complete `BookScope` here would
+       * overwrite every remembered field with a default on every
+       * navigation (`runGuardsAndResolvers: 'always'`), which is the
+       * "the write path works, so the preference is saved and then
+       * ignored" failure `PreferencesStore.isLoaded`'s own docstring
+       * warns about.
+       */
+      hydrate(scope: Partial<BookScope>, unit?: AnalyticsUnit): void {
+        patchState(store, {
+          scope: { ...store.scope(), ...scope },
+          ...(unit ? { unit } : {}),
+        });
       },
 
       resolveTab,

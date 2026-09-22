@@ -299,6 +299,18 @@ def payoff_ratio(closed: list[dict]) -> float | None:
     return payoff_ratio_from_rs(r_multiples(closed))
 
 
+def avg_win_r(closed: list[dict]) -> float | None:
+    """Mean R of the positive computable R-multiples; None with none."""
+    wins = [r for r in r_multiples(closed) if r > 0]
+    return round(sum(wins) / len(wins), 4) if wins else None
+
+
+def avg_loss_r(closed: list[dict]) -> float | None:
+    """Mean R of the negative computable R-multiples (a negative number); None with none."""
+    losses = [r for r in r_multiples(closed) if r < 0]
+    return round(sum(losses) / len(losses), 4) if losses else None
+
+
 def streaks(closed: list[dict]) -> dict:
     """Current/best/worst consecutive win or loss run, over win/loss trades
     only, ordered by `closed_at`. Any other status (scratch/timeout/manual
@@ -373,6 +385,23 @@ def rolling_win_rate(closed: list[dict], window: int = 20) -> list[dict]:
         wins = sum(1 for t in window_slice if t["status"] == "win")
         wr = wins / len(window_slice) * 100
         points.append({"date": wl[i]["closed_at"][:10], "win_rate": round(wr, 2)})
+    return points
+
+
+def rolling_expectancy_r(closed: list[dict], window: int = 50) -> list[dict]:
+    """Trailing mean R over the last `window` computable closes, one point per
+    close, emitted only once 5 have accumulated -- the same floor
+    `rolling_win_rate` uses and for the same reason (spec v94 D9)."""
+    dated = sorted((t for t in closed if t.get("closed_at") and r_multiple(t) is not None),
+                   key=lambda t: t["closed_at"])
+    rs = [r_multiple(t) for t in dated]
+    points = []
+    for i in range(len(dated)):
+        if i + 1 < 5:
+            continue
+        window_slice = rs[max(0, i + 1 - window):i + 1]
+        points.append({"date": dated[i]["closed_at"][:10],
+                       "exp_r": round(sum(window_slice) / len(window_slice), 4)})
     return points
 
 

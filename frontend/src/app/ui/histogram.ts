@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
 import { CHART_CHROME } from './chart/chart-frame';
+import { ChartTooltip, HoverState, hoverPosition } from './chart-tooltip';
 
 /** One bar: a bin's label and how many observations fell in it. */
 export interface HistogramBin {
@@ -29,8 +30,9 @@ export interface HistogramBin {
 @Component({
   selector: 'sb-histogram',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [ChartTooltip],
   template: `
-    <div class="wrap">
+    <div class="wrap" #host>
       @if (referenceLine(); as ref) {
         <div class="track-col">
           <div class="reference-line" [style.left.%]="referenceLeft()"></div>
@@ -38,7 +40,7 @@ export interface HistogramBin {
       }
       <ul>
         @for (bin of bins(); track bin.label) {
-          <li>
+          <li tabindex="0" (pointermove)="show($event, bin, host)" (focus)="show($event, bin, host)" (pointerleave)="hover.set(null)" (blur)="hover.set(null)">
             <span class="label num">{{ bin.label }}</span>
             <span class="track">
               <span
@@ -51,6 +53,7 @@ export interface HistogramBin {
           </li>
         }
       </ul>
+      <sb-chart-tooltip [state]="hover()" [hostWidth]="host.clientWidth" />
     </div>
   `,
   styles: `
@@ -124,6 +127,7 @@ export class Histogram {
   /** A dashed line drawn across every bar's track, at this value against
    *  the active scale (`max` when given, else the tallest bin). */
   readonly referenceLine = input<number | null>(null);
+  protected readonly hover = signal<HoverState | null>(null);
 
   private readonly tallest = computed(
     () => this.max() ?? Math.max(...this.bins().map((bin) => bin.count), 1),
@@ -136,5 +140,8 @@ export class Histogram {
   protected referenceLeft(): number {
     const ref = this.referenceLine();
     return ref === null ? 0 : (ref / this.tallest()) * 100;
+  }
+  protected show(event: PointerEvent | FocusEvent, bin: HistogramBin, host: HTMLElement): void {
+    this.hover.set({ ...hoverPosition(event, host), title: bin.label, rows: [{ label: 'observations', value: String(bin.count) }] });
   }
 }

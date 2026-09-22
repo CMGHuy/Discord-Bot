@@ -19,21 +19,24 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
-import { AnalyticsStore, binRMultiples } from './analytics.store';
+import { AnalyticsStore } from './analytics.store';
 
-/* SR50 — the snapshot nothing read.
+/* SR51 — the tuning grid and Propose.
  *
- * `GET /analytics/snapshot` forwards the whole pre-built blob and has carried
- * profit factor, Sharpe, Sortino, max drawdown, streaks, the equity and
- * drawdown series, R-multiples and a ten-dimension `by` block the entire time.
- * `ApiClient.analyticsSnapshot()` existed; no store called it. Seventeen rows
- * of the parity audit's "missing" analytics gap were data already on the wire.
+ * SR50's own block lived here too: `GET /analytics/snapshot`, the pre-built
+ * all-time blob that profit factor, Sharpe, Sortino, max drawdown, streaks
+ * and the ten-dimension `by` table were read from. v94 retired it as this
+ * store's source — every panel now reads a SCOPED endpoint instead, because
+ * an all-time blob cannot answer a question about a filtered book, and a
+ * screen that silently answers about a different population than the one on
+ * its bar is the failure v94 exists to remove. Those eleven tests went with
+ * the surface they tested; the scoped replacements live in
+ * `analytics.store.spec.ts`.
  *
- * The absent cases carry as much weight here as the present ones. A fresh
- * install has no closed trades, and `metrics.py` is careful to return None
- * rather than 0 for a Sharpe it cannot compute — a store that coerced that to
- * zero would print "0.00" for "not enough data", which is the one reading that
- * would get someone to trust a strategy with no track record.
+ * What is left here is untouched by that: the grid results the Tuning tab
+ * stages proposals from. `binRMultiples`, the R-multiple binning pure
+ * function this file used to also test, went with T7's removal of its last
+ * caller.
  */
 
 class FakeEventStream {
@@ -49,6 +52,8 @@ class FakeEventStream {
   }
 }
 
+const SCOPE = { from: null, to: null, ledger: 'main' as const, strategy: null, horizon: null, direction: null };
+
 const PERFORMANCE = {
   totals: { total: 10, open: 2, closed: 8 },
   relocated: {
@@ -62,243 +67,13 @@ const PERFORMANCE = {
   win_rate: 62.5,
   expectancy_r: 0.31,
   by_confidence: {},
+  scope: SCOPE,
+  n: 8,
 };
 
-const SNAPSHOT = {
-  built_at: '2026-08-14T06:00:00Z',
-  overall: {
-    n: 8,
-    wins: 5,
-    losses: 3,
-    win_rate: 62.5,
-    expectancy_r: 0.31,
-    profit_factor: 1.85,
-    sharpe: 1.2,
-    sortino: 1.7,
-    max_drawdown_pct: 12.4,
-    total_pnl: 430.5,
-    streaks: {
-      current: 2,
-      current_kind: 'win',
-      best_win_streak: 4,
-      worst_loss_streak: 3,
-    },
-  },
-  equity_curve: {
-    points: [
-      { date: '2026-07-01', balance: 10000 },
-      { date: '2026-07-15', balance: 10250 },
-      { date: '2026-08-01', balance: 10430.5 },
-    ],
-    skipped_n: 0,
-  },
-  drawdown: [
-    { date: '2026-07-01', dd_pct: 0 },
-    { date: '2026-07-15', dd_pct: 2.5 },
-  ],
-  rolling_wr: [],
-  by: {
-    ticker: [
-      { key: 'AAPL', n: 5, wins: 3, losses: 2, win_rate: 60, expectancy_r: 0.2,
-        avg_r: 0.2, profit_factor: 1.4, total_pnl: 210 },
-      { key: 'MSFT', n: 3, wins: 2, losses: 1, win_rate: 66.7, expectancy_r: 0.5,
-        avg_r: 0.5, profit_factor: 2.1, total_pnl: 220.5 },
-    ],
-    dow: [
-      { key: 'Mon', n: 4, wins: 2, losses: 2, win_rate: 50, expectancy_r: 0,
-        avg_r: 0, profit_factor: 1, total_pnl: 0 },
-    ],
-    horizon: [],
-  },
-  calibration: {},
-  r_multiples: [-1, -1, -0.4, 0.6, 1.2, 2.4, 12],
+const EQUITY_CURVE = {
+  points: [], points_n: 0, as_of: null, benchmark: { spy_indexed: [] }, scope: SCOPE, n: 0,
 };
-
-/** A fresh install: the snapshot builds fine and every ratio is None. */
-const EMPTY_SNAPSHOT = {
-  built_at: '2026-08-14T06:00:00Z',
-  overall: {
-    n: 0,
-    wins: 0,
-    losses: 0,
-    win_rate: null,
-    expectancy_r: null,
-    profit_factor: null,
-    sharpe: null,
-    sortino: null,
-    max_drawdown_pct: null,
-    total_pnl: 0,
-    streaks: { current: 0, current_kind: null, best_win_streak: 0, worst_loss_streak: 0 },
-  },
-  equity_curve: { points: [], skipped_n: 0 },
-  drawdown: [],
-  rolling_wr: [],
-  by: {},
-  calibration: {},
-  r_multiples: [],
-};
-
-describe('AnalyticsStore — the snapshot', () => {
-  let store: InstanceType<typeof AnalyticsStore>;
-  let backend: HttpTestingController;
-
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      providers: [
-        provideZonelessChangeDetection(),
-        provideHttpClient(
-          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
-        ),
-        provideHttpClientTesting(),
-        { provide: EventStream, useValue: new FakeEventStream() },
-        AnalyticsStore,
-      ],
-    });
-    store = TestBed.inject(AnalyticsStore);
-    backend = TestBed.inject(HttpTestingController);
-    store.load();
-  });
-
-  /** The Performance tab loads on init; settle all THREE of its requests.
-   *  SR55 added `/analytics/journal` beside the other two. */
-  function open(snapshot: object | null = SNAPSHOT) {
-    TestBed.inject(ApplicationRef).tick();
-    backend.expectOne('/api/v1/analytics/performance').flush(PERFORMANCE);
-    const request = backend.expectOne('/api/v1/analytics/snapshot');
-    if (snapshot === null) {
-      request.flush({ error: { code: 'unavailable', message: 'down' } },
-                    { status: 503, statusText: 'Service Unavailable' });
-    } else {
-      request.flush(snapshot);
-    }
-    backend
-      .expectOne('/api/v1/analytics/journal')
-      .flush({ digest: [], lessons: [], entries_n: 0 });
-    backend.expectOne('/api/v1/analytics/exit-quality').flush({
-      exit_reasons: [], hold_by_outcome: {}, efficiency: { bins: [], n: 0, median: null },
-      mae: { bins: [], n: 0, median: null }, scatter: [], coverage: {}, min_cell_n: 0,
-    });
-    // v85 D39 (R9-03): the KPI row's Sharpe (R)/Max drawdown (R) tiles read
-    // riskMetrics off this same /risk GET, fetched once like exit-quality.
-    // v85 D39 (R9-01/R9-04): fetched alongside performance, never guarded
-    // to "once" like exit-quality/risk above.
-    backend
-      .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
-      .flush({ points: [], n: 0, as_of: null });
-    // v85 D40 (R9-02/R9-05): fetched alongside performance too, also never
-    // guarded to "once".
-    backend
-      .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'strategy')
-      .flush({ rows: [], as_of: null });
-    backend
-      .expectOne((req) => req.url === '/api/v1/analytics/by-dimension' && req.params.get('dim') === 'horizon')
-      .flush({ rows: [], as_of: null });
-    backend.match('/api/v1/risk').forEach((request) => request.flush({
-      heat: { open_pct: 0, cap_pct: 6, utilisation_pct: 0 },
-      positions: [], sector_heat: [], clusters: [],
-      throttle: { multiplier: 1, paused: false },
-      killswitch: { on: false, reason: null, at: null },
-      scan_health: { durations_s: [], latest_s: null, slowdown: false },
-      metrics: {
-        var_95: { value: null, n: 0 },
-        expected_shortfall_95: { value: null, n: 0 },
-        annualised_vol: { value: null, n: 0 },
-        beta_spy: { value: null, n: 0 },
-        sharpe_r: { value: 0.96, n: 42 },
-        max_drawdown_r: { value: 3.2, n: 42 },
-        as_of: null,
-      },
-      correlation: { labels: [], values: [] },
-    }));
-  }
-
-  it('asks for the snapshot at all — the whole point of this task', () => {
-    open();
-    expect(store.snapshot()).not.toBeNull();
-  });
-
-  it('reads the risk-adjusted figures', () => {
-    open();
-    expect(store.profitFactor()).toBe(1.85);
-    expect(store.sharpe()).toBe(1.2);
-    expect(store.sortino()).toBe(1.7);
-    expect(store.maxDrawdownPct()).toBe(12.4);
-    expect(store.totalPnl()).toBe(430.5);
-  });
-
-  it('reads the streaks, which even the Jinja page never rendered', () => {
-    open();
-    expect(store.streaks()).toEqual({
-      current: 2,
-      currentKind: 'win',
-      bestWin: 4,
-      worstLoss: 3,
-    });
-  });
-
-
-  it('groups by ticker out of the box, busiest first', () => {
-    open();
-    expect(store.breakdown()).toBe('ticker');
-    expect(store.breakdownRows().map((r) => r.key)).toEqual(['AAPL', 'MSFT']);
-    expect(store.breakdownLabel()).toBe('Ticker');
-  });
-
-  it('switches dimension without another request', () => {
-    open();
-    store.setBreakdown('dow');
-    expect(store.breakdownRows().map((r) => r.key)).toEqual(['Mon']);
-    // Every dimension is in the one blob, so there is nothing to fetch.
-    backend.verify();
-  });
-
-  it('gives an empty table for a dimension the snapshot has no rows for', () => {
-    open();
-    store.setBreakdown('month');
-    expect(store.breakdownRows()).toEqual([]);
-  });
-
-  it('reports every ratio as absent, not as zero, on a fresh install', () => {
-    open(EMPTY_SNAPSHOT);
-    expect(store.profitFactor()).toBeNull();
-    expect(store.sharpe()).toBeNull();
-    expect(store.sortino()).toBeNull();
-    expect(store.maxDrawdownPct()).toBeNull();
-    expect(store.rMultipleBins()).toEqual([]);
-  });
-
-  it('keeps a snapshot failure out of the tab-wide error', () => {
-    // The snapshot self-heals server-side and can rebuild on the request. A
-    // failure here says nothing about /analytics/performance, which came from
-    // a different endpoint and may be perfectly fine.
-    open(null);
-    expect(store.snapshotError()).toBeTruthy();
-    expect(store.error()).toBeNull();
-    expect(store.winRate()).toBe(62.5);
-  });
-
-  it('reports when the blob was built', () => {
-    open();
-    expect(store.snapshotBuiltAt()).toBe('2026-08-14T06:00:00Z');
-  });
-
-
-
-  it('exposes ordered zero-filled direction and day-of-week win-rate histograms', () => {
-    open({ ...SNAPSHOT, by: { ...SNAPSHOT.by,
-      direction: [{ key: 'bullish', n: 6, wins: 4, losses: 2, win_rate: 66.7, expectancy_r: 0.3, avg_r: 0.3, profit_factor: 1.8, total_pnl: 300 }],
-      dow: [
-        { key: 'Wednesday', n: 5, wins: 3, losses: 2, win_rate: 60, expectancy_r: 0.2, avg_r: 0.2, profit_factor: 1.5, total_pnl: 150 },
-        { key: 'Monday', n: 2, wins: 1, losses: 1, win_rate: 50, expectancy_r: 0.1, avg_r: 0.1, profit_factor: 1.1, total_pnl: 20 },
-      ],
-    } });
-    expect(store.directionBars()).toEqual([
-      { label: 'Long', value: 66.7, n: 6, withheld: false },
-      { label: 'Short', value: null, n: 0, withheld: true },
-    ]);
-    expect(store.dowBars().map((row) => row.label)).toEqual(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
-  });
-});
 
 /* SR51 — the grid results and Propose.
  *
@@ -347,11 +122,9 @@ describe('AnalyticsStore — the tuning grid', () => {
     store.load();
     const tick = () => TestBed.inject(ApplicationRef).tick();
     tick();
-    backend.expectOne('/api/v1/analytics/performance').flush(PERFORMANCE);
-    backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
-    backend
-      .expectOne('/api/v1/analytics/journal')
-      .flush({ digest: [], lessons: [], entries_n: 0 });
+    // Overview is the tab the store opens on; settle its two payloads first.
+    backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(PERFORMANCE);
+    backend.expectOne((req) => req.url === '/api/v1/analytics/equity-curve').flush(EQUITY_CURVE);
 
     store.setTab('tuning');
     tick();
@@ -361,7 +134,8 @@ describe('AnalyticsStore — the tuning grid', () => {
     });
     backend.expectOne('/api/v1/jobs/job1/result').flush(grid);
     backend.expectOne('/api/v1/analytics/tuning/proposals').flush({ proposals: [] });
-    backend.expectOne('/api/v1/analytics/strategies').flush({ strategies: [], heatmap: null });
+    backend.expectOne((req) => req.url === '/api/v1/analytics/strategies')
+      .flush({ strategies: [], registry_scope: 'all-time', contribution: [], cumulative: {}, scope: SCOPE, n: 0 });
   }
 
   it('fetches the tracked job result and reads its rows', () => {
@@ -438,32 +212,5 @@ describe('AnalyticsStore — the tuning grid', () => {
     // for a reason the user could do nothing about.
     store.propose(0);
     backend.verify();
-  });
-});
-
-describe('binRMultiples', () => {
-  it('bins at half an R, labelling each bin by its lower edge', () => {
-    // The label is the edge, not a value, so the bin starting at zero is
-    // "0.0R" -- "+0.0R" would claim a gain of nothing.
-    expect(binRMultiples([0.1, 0.4, 0.6])).toEqual([
-      { label: '0.0R', count: 2 },
-      { label: '+0.5R', count: 1 },
-    ]);
-  });
-
-  it('signs the losing bins', () => {
-    expect(binRMultiples([-1, -0.7]).map((b) => b.label)).toEqual(['-1.0R']);
-  });
-
-  it('clamps outliers so one lottery ticket cannot flatten the chart', () => {
-    // A +12R trade is real and worth knowing about, but given its own bin it
-    // makes every other bar one pixel tall.
-    const bins = binRMultiples([0.1, 12, -30]);
-    expect(bins[0].label).toBe('-5.0R');
-    expect(bins[bins.length - 1].label).toBe('+5.0R');
-  });
-
-  it('has no bins at all when there are no trades', () => {
-    expect(binRMultiples([])).toEqual([]);
   });
 });

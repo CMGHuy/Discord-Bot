@@ -1,7 +1,7 @@
+import { AnalyticsByDimensionRow, AnalyticsUnit } from '../../api/models';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
-import { ABSENT, date, dateTime, share, signed } from '../../ui/format';
+import { ABSENT, date, dateTime, money, rMultiple, share, signed } from '../../ui/format';
 import {
-  BreakdownRow,
   ConfidenceRow,
   DecileRow,
   DriftRow,
@@ -59,6 +59,21 @@ export function count(value: number | null | undefined): string {
   return value === null || value === undefined ? ABSENT : String(value);
 }
 
+/** The v93 shadow-soak verdict (`swingbot.core.edge.strategy_soak.soak_verdict`
+ *  serialised straight onto the row) -- `{ pass, n_closed, clauses }`, `unknown`
+ *  because nothing on the frontend owns that shape. A screenshot pass once
+ *  caught this rendered as the raw `JSON.stringify`'d object
+ *  (`{"clauses":{...},"n_closed":1,"pass":false}`) sitting in a table cell;
+ *  this reads the two fields a reader actually needs -- whether the strategy
+ *  cleared the gate, and how many shadow trades that verdict rests on. */
+export function soakLabel(value: unknown): string | null {
+  if (value === null || value === undefined || typeof value !== 'object') return null;
+  const verdict = value as { pass?: unknown; n_closed?: unknown };
+  if (typeof verdict.pass !== 'boolean') return null;
+  const n = typeof verdict.n_closed === 'number' ? verdict.n_closed : null;
+  return `${verdict.pass ? 'PASS' : 'FAIL'}${n === null ? '' : ` · n=${n}`}`;
+}
+
 /* -- strategies --------------------------------------------------------- */
 
 /** `rolling` and `status` render through templates; their `value` is omitted
@@ -113,42 +128,46 @@ export function TIER_COLUMNS(floor: number): ColumnDef<TierRow>[] { return [
   { key: 'expectancy_r', header: 'ExpR', numeric: true, value: (r) => expectancy(r.expectancy_r) },
 ]; }
 
-/* -- breakdowns (SR50) ---------------------------------------------------
+/**
+ * v94 T2 -- one column set for every dimension the Attribution breakdown
+ * table can group by (`store.breakdown()`). This reads
+ * `AnalyticsByDimensionRow` straight off `/analytics/by-dimension` --
+ * `exp_r`/`total_r` are two distinct sums, not one derived from the other
+ * (models.ts's own note on why), and `total_pnl` needs a currency unit that
+ * row shape never carried.
  *
- * One column set for all eight dimensions of the snapshot's `by` block. The
- * group's own name is the first column and its header changes with the
- * dimension, which is why it is built rather than declared. */
-export function breakdownColumns(label: string, floor = 0): ColumnDef<BreakdownRow>[] {
+ * `total_r` and `total_pnl` are both always-rendered columns, never one
+ * standing in for the other the way `inUnit()` picks a single
+ * representation elsewhere on this workspace -- there is nothing for a
+ * `unit` toggle to hide or reorder between two figures that both stay on
+ * screen regardless of it. `unit` is accepted (matching the tab's
+ * `store.unit()` call site) but currently unused; `currency` is what
+ * `total_pnl`'s `money()` formatting actually needs.
+ *
+ * A `null` rate is a thin cell (H1): it renders as `ABSENT`, never as a
+ * computed or defaulted 0 -- `n < floor` is exactly the case the server
+ * already declined to answer for.
+ */
+export function dimensionColumns(
+  label: string, _unit: AnalyticsUnit, currency: string, floor: number,
+): ColumnDef<AnalyticsByDimensionRow>[] {
   return [
     { key: 'key', header: label, value: (r) => r.key },
     { key: 'n', header: 'Trades', numeric: true, value: (r) => count(r.n) },
-    { key: 'wins', header: 'Wins', numeric: true, value: (r) => count(r.wins) },
-    { key: 'losses', header: 'Losses', numeric: true, value: (r) => count(r.losses) },
-    // v89: the Trades column carries n; a win-rate column holds a rate or nothing.
     { key: 'win_rate', header: 'Win rate', numeric: true,
-      value: (r) => (r.n ?? 0) < floor || r.win_rate === null ? ABSENT : rate(r.win_rate) },
-    {
-      key: 'expectancy_r',
-      header: 'ExpR',
-      numeric: true,
-      value: (r) => expectancy(r.expectancy_r),
-    },
-    {
-      key: 'profit_factor',
-      header: 'Profit factor',
-      numeric: true,
-      // Two decimals, unsigned: a profit factor is a ratio and is never
-      // negative, so `expectancy`'s sign would be noise here.
-      value: (r) => (r.profit_factor === null ? ABSENT : r.profit_factor.toFixed(2)),
-    },
-    {
-      key: 'total_pnl',
-      header: 'P&L',
-      numeric: true,
-      value: (r) => (r.total_pnl === null ? ABSENT : r.total_pnl.toFixed(2)),
-    },
+      value: (r) => (r.n < floor || r.win_rate === null ? ABSENT : rate(r.win_rate)) },
+    { key: 'exp_r', header: 'ExpR', numeric: true, value: (r) => expectancy(r.exp_r) },
     { key: 'total_r', header: 'Total R', numeric: true,
-      value: (r) => r.total_r === null || r.total_r === undefined ? ABSENT : `${r.total_r.toFixed(2)}R` },
+      value: (r) => (r.total_r === null ? ABSENT : rMultiple(r.total_r)) },
+    { key: 'total_pnl', header: 'P&L', numeric: true,
+      value: (r) => (r.total_pnl === null ? ABSENT : money(r.total_pnl, currency)) },
+    { key: 'avg_win_r', header: 'Avg win', numeric: true, value: (r) => expectancy(r.avg_win_r) },
+    { key: 'avg_loss_r', header: 'Avg loss', numeric: true, value: (r) => expectancy(r.avg_loss_r) },
+    // Present only for `dim=strategy` (badge) or where the server attaches a
+    // soak record; the table's `visible` list omits the key entirely when no
+    // row on screen carries it, rather than showing a column of dashes.
+    { key: 'badge', header: 'Badge', value: (r) => r.badge ?? null },
+    { key: 'soak', header: 'Soak', value: (r) => soakLabel(r.soak) },
   ];
 }
 

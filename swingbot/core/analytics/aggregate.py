@@ -58,7 +58,7 @@ class StatRow:
     total_r: float | None = None
 
 
-def _row_for(key: str, trades: list[dict]) -> StatRow:
+def row_for(key: str, trades: list[dict]) -> StatRow:
     wins = sum(1 for t in trades if t.get("status") == "win")
     losses = sum(1 for t in trades if t.get("status") == "loss")
     expectancy = metrics.expectancy_r(trades)
@@ -73,18 +73,29 @@ def _row_for(key: str, trades: list[dict]) -> StatRow:
     )
 
 
-def stats_by(closed: list[dict], dimension: str) -> list[StatRow]:
-    """Group `closed` by `dimension` (see DIMENSIONS in Task A14 for the
-    full set) and return one StatRow per group, sorted by trade count
-    descending -- the busiest bucket first, matching how every table in
-    this cockpit wants "most-traded strategy/ticker/etc. at the top"."""
+# Back-compat alias for any importer still reaching for the old private name.
+_row_for = row_for
+
+
+def group_by(closed: list[dict], dimension: str) -> dict[str, list[dict]]:
+    """The grouping `stats_by` does, exposed so a route can attach per-group
+    extras (badge, soak) before summarising (spec v94 D7)."""
     if dimension not in _EXTRACTORS:
         raise ValueError(f"Unknown aggregation dimension: {dimension!r}")
     groups: dict[str, list[dict]] = defaultdict(list)
     extractor = _EXTRACTORS[dimension]
     for t in closed:
         groups[extractor(t)].append(t)
-    rows = [_row_for(key, trades) for key, trades in groups.items()]
+    return dict(groups)
+
+
+def stats_by(closed: list[dict], dimension: str) -> list[StatRow]:
+    """Group `closed` by `dimension` (see DIMENSIONS in Task A14 for the
+    full set) and return one StatRow per group, sorted by trade count
+    descending -- the busiest bucket first, matching how every table in
+    this cockpit wants "most-traded strategy/ticker/etc. at the top"."""
+    groups = group_by(closed, dimension)
+    rows = [row_for(key, trades) for key, trades in groups.items()]
     rows.sort(key=lambda r: r.n, reverse=True)
     return rows
 

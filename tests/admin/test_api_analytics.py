@@ -30,11 +30,17 @@ _DERIVED_KEYS = {
     "pct_in_market": NULLABLE_NUMBER,
     "sharpe_ann": NULLABLE_NUMBER,
     "sortino_ann": NULLABLE_NUMBER,
-    # Scoped copies of the two top-level figures. The top-level ones stay
-    # all-time so the pre-SR54 contract is unchanged; these are what the range
-    # control drives, so a user narrowing to March sees March's win rate.
+    # Copies of the two top-level figures, computed over the same scoped
+    # population (spec v94 D5) -- the top-level ones follow the range too now,
+    # so these and the top-level figures always agree for the same request.
     "win_rate": NULLABLE_NUMBER,
     "expectancy_r": NULLABLE_NUMBER,
+    # v94 T1 -- the Overview tab's Profit factor tile.
+    "profit_factor": NULLABLE_NUMBER,
+    # v94 T1 -- the Outcome panel's Avg win/Avg loss/Payoff rows (R-based).
+    "avg_win_r": NULLABLE_NUMBER,
+    "avg_loss_r": NULLABLE_NUMBER,
+    "payoff_r": NULLABLE_NUMBER,
 }
 
 
@@ -105,6 +111,12 @@ def test_derived_values_match_the_hand_computed_answers(seed, logged_in):
     assert derived["avg_win_pct"] == pytest.approx(15.0)
     assert derived["avg_loss_pct"] == pytest.approx(-7.5)
     assert derived["total_return_pct"] == pytest.approx(15.0)
+    # Gross win 100 + 200 = 300, gross loss 50 + 100 = 150 -> 2.0.
+    assert derived["profit_factor"] == pytest.approx(2.0)
+    # R-multiples: a=+2.0, b=-1.0, c=+4.0, d=-2.0 (risk = entry*0.05 throughout).
+    assert derived["avg_win_r"] == pytest.approx(3.0)
+    assert derived["avg_loss_r"] == pytest.approx(-1.5)
+    assert derived["payoff_r"] == pytest.approx(2.0)
     # These records open 10:00 and close 15:00, so each holding period is
     # 10 (or 20) days PLUS five hours, and the span is 366 days plus five.
     # Spelled out rather than rounded to whole days: the five hours are what
@@ -179,7 +191,11 @@ def test_distributions_and_series_are_present_and_scoped(seed, logged_in):
         "range": dict, "distributions": dict, "rolling_returns": list,
         "holding_period_split": list, "risk_reward_split": list, "calendar": list,
         "cumulative_by_strategy": dict, "benchmark": dict,
+        # v94 D5/D9 -- BookScope echo and the two rolling series.
+        "rolling_wr": list, "rolling_exp_r": list, "scope": dict, "n": int,
         "weak": dict,
+        # v94 T1 -- the Overview tab's Streaks row.
+        "streaks": dict,
     })
 
 
@@ -268,25 +284,44 @@ def test_drawdown_is_never_negative(seed, logged_in):
 
 def test_the_sample_size_is_reported_beside_the_curve(seed, logged_in):
     seed(trades=[_closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0)])
-    assert _curve(logged_in)["n"] == 1
+    assert _curve(logged_in)["points_n"] == 1
 
 
 def test_an_empty_book_returns_no_points_rather_than_a_flat_line(seed, logged_in):
     seed(trades=[])
     body = _curve(logged_in)
     assert body["points"] == []
-    assert body["n"] == 0
+    assert body["points_n"] == 0
     assert body["as_of"] is None
 
 
-def test_a_trade_without_an_r_multiple_is_skipped_not_counted_as_zero(seed, logged_in):
+def test_an_r_uncomputable_trade_carries_cum_r_forward_but_still_gets_a_point(seed, logged_in):
+    """A trade whose R can't be computed (zero risk: stop_loss == entry) no
+    longer vanishes from `points` -- it still gets a point, with `cum_r`/
+    `drawdown_r` carried forward UNCHANGED from the prior point (there is
+    nothing to add to the R curve), while `cum_pnl` keeps moving by its own
+    realised P&L: a currency P&L needs no risk denominator to be
+    measurable, so it must not silently drop out just because R couldn't be
+    computed -- especially when this trade is the LAST one in date order,
+    which would otherwise understate `as_of` and the account's true
+    cumulative P&L. `points_n` now equals the scoped-trade count `n`:
+    nothing is skipped from the plot any more, only from the R
+    accumulation."""
+    zero_risk_trade = _closed(
+        "b" * 16, opened="2026-04-02T16:00:00+00:00", closed_at="2026-04-02T16:00:00+00:00",
+        entry=100.0, exit_price=104.0, strategy="RSI", horizon_key="1m",
+    )
+    zero_risk_trade["stop_loss"] = 100.0  # entry == stop_loss -> r_multiple() returns None
     seed(trades=[
         _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0),
-        _closed_r("b" * 16, closed_at="2026-04-02T16:00:00+00:00", r=None),
+        zero_risk_trade,
     ])
     body = _curve(logged_in)
-    assert body["n"] == 1
-    assert [p["cum_r"] for p in body["points"]] == [1.0]
+    assert body["points_n"] == body["n"] == 2
+    pts = body["points"]
+    assert [p["cum_r"] for p in pts] == [1.0, 1.0]
+    assert [p["drawdown_r"] for p in pts] == [0.0, 0.0]
+    assert [p["cum_pnl"] for p in pts] == [50.0, 90.0]
 
 
 def test_the_strategy_filter_narrows_the_curve(seed, logged_in):
@@ -295,7 +330,7 @@ def test_the_strategy_filter_narrows_the_curve(seed, logged_in):
         _closed_r("b" * 16, closed_at="2026-04-02T16:00:00+00:00", r=5.0, strategy="Fib"),
     ])
     body = _curve(logged_in, "?strategy=RSI")
-    assert body["n"] == 1
+    assert body["points_n"] == 1
 
 
 def test_equity_curve_requires_auth_like_every_other_analytics_route(client):
@@ -308,7 +343,7 @@ def test_equity_curve_range_narrows_like_performance_does(seed, logged_in):
         _closed_r("b" * 16, closed_at="2026-07-01T16:00:00+00:00", r=5.0),
     ])
     body = _curve(logged_in, "?from=2026-04-01&to=2026-04-30")
-    assert body["n"] == 1
+    assert body["points_n"] == 1
     assert body["points"][0]["cum_r"] == 1.0
 
 
@@ -349,15 +384,20 @@ def _by_dim(client, dim, query=""):
 
 
 def test_strategy_rows_carry_both_measures(seed, logged_in):
-    seed(trades=[
-        _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=1.0),
-        _closed_r("b" * 16, closed_at="2026-04-02T16:00:00+00:00", r=-1.0),
-        _closed_r("c" * 16, closed_at="2026-04-03T16:00:00+00:00", r=2.0),
-    ])
+    # v94 D7/H1: exp_r is null under aggregate.MIN_CELL_N (20), so this
+    # repeats the original 1/-1/2 pattern (mean 2/3) seven times to clear
+    # the floor while proving the same point -- ExpR and total R live side
+    # by side and neither is derived from the other.
+    trades = [
+        _closed_r(f"{i:016x}", closed_at=f"2026-04-{(i % 28) + 1:02d}T16:00:00+00:00",
+                  r=(1.0, -1.0, 2.0)[i % 3])
+        for i in range(21)
+    ]
+    seed(trades=trades)
     row = _by_dim(logged_in, "strategy")["rows"][0]
     assert row["exp_r"] == pytest.approx(2.0 / 3)
-    assert row["total_r"] == pytest.approx(2.0)
-    assert row["n"] == 3
+    assert row["total_r"] == pytest.approx(14.0)
+    assert row["n"] == 21
 
 
 def test_strategy_rows_carry_the_registry_badge(seed, logged_in, registry):
@@ -405,12 +445,15 @@ def test_as_of_ignores_a_trade_dropped_for_an_unrecognized_horizon(seed, logged_
 
 
 def test_total_r_is_not_expectancy_times_n_when_some_trades_lack_an_r(seed, logged_in):
+    # v94 D7: `n` is now the full group size (aggregate.group_by), not the
+    # count of R-computable trades -- total_r still must not be derived
+    # from it, staying a true sum over just the computable subset.
     seed(trades=[
         _closed_r("a" * 16, closed_at="2026-04-01T16:00:00+00:00", r=2.0),
         _closed_r("b" * 16, closed_at="2026-04-02T16:00:00+00:00", r=None),
     ])
     row = _by_dim(logged_in, "strategy")["rows"][0]
-    assert row["n"] == 1
+    assert row["n"] == 2
     assert row["total_r"] == pytest.approx(2.0)
 
 

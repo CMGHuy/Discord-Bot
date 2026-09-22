@@ -1,0 +1,6 @@
+import { provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { ShareBar, ShareSegment } from './share-bar';
+const render = (segments: ShareSegment[]) => { const fixture = TestBed.createComponent(ShareBar); fixture.componentRef.setInput('segments', segments); fixture.componentRef.setInput('label', 'Outcome'); fixture.detectChanges(); return fixture.nativeElement as HTMLElement; };
+describe('ShareBar', () => { beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] })); it('sizes and labels segments by share', () => { const el = render([{ label: 'Wins', count: 53, tone: 'pos' }, { label: 'Losses', count: 47, tone: 'neg' }]); expect([...el.querySelectorAll('.seg')].map((s) => (s as HTMLElement).style.flexGrow)).toEqual(['53', '47']); expect(el.querySelector('.legend')!.textContent).toContain('53%'); expect([...el.querySelectorAll('.seg')].every((s) => s.getAttribute('tabindex') === '0')).toBe(true); }); it('labels an empty composition', () => { const el = render([{ label: 'Wins', count: 0 }, { label: 'Losses', count: 0 }]); expect(el.querySelectorAll('.seg').length).toBe(0); expect(el.textContent).toContain('no observations'); }); });

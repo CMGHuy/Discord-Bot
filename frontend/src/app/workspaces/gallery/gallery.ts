@@ -6,6 +6,7 @@ import { BarList, BarRow } from '../../ui/bar-list';
 import { Button, ButtonVariant } from '../../ui/button';
 import { ChartContainer } from '../../ui/chart-container';
 import { TradeChart } from '../../ui/chart/trade-chart';
+import { ChartTooltip, HoverState } from '../../ui/chart-tooltip';
 import { Chip, ChipTone, QualityChip, qualityTone } from '../../ui/chip';
 import { ChipRow } from '../../ui/chip-row';
 import { ColumnPickerComponent } from '../../ui/column-picker';
@@ -17,6 +18,7 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, PageSpec, RowContext } from '../../ui/data-table/data-table.types';
 import { DirectionArrow } from '../../ui/direction-arrow';
 import { DonutComponent } from '../../ui/donut';
+import { DotPlot, DotPoint } from '../../ui/dot-plot';
 import { EmptyStateComponent } from '../../ui/empty-state';
 import { Figure, FigureStrip } from '../../ui/figure';
 import { FilterBar, FilterChip, FilterChips } from '../../ui/filter-bar';
@@ -25,6 +27,7 @@ import { held, money, num, pct, rMultiple, signed } from '../../ui/format';
 import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-controls';
 import { Freshness } from '../../ui/freshness';
 import { Gauge } from '../../ui/gauge';
+import { HeatCell, HeatGrid } from '../../ui/heat-grid';
 import { Hint } from '../../ui/hint';
 import { Histogram, HistogramBin } from '../../ui/histogram';
 import { Icon, IconName } from '../../ui/icon';
@@ -37,20 +40,26 @@ import { Matrix } from '../../ui/matrix';
 import { MetricCard } from '../../ui/metric-card';
 import { MetricChip } from '../../ui/metric-chip';
 import { PaginationComponent } from '../../ui/pagination';
+import { PanelError } from '../../ui/panel-error';
 import { PanelGrid } from '../../ui/panel-grid';
+import { PanelHeader } from '../../ui/panel-header';
 import { PlanCell } from '../../ui/plan-cell';
 import { PlanLifecycleDiagram } from '../../ui/plan-lifecycle-diagram';
 import { PnlCell } from '../../ui/pnl-cell';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { SegmentOption, Segmented } from '../../ui/segmented';
+import { ShareBar, ShareSegment } from '../../ui/share-bar';
+import { MultiplePane, SmallMultiples } from '../../ui/small-multiples';
 import { Sparkline } from '../../ui/sparkline';
 import { ScatterComponent } from '../../ui/scatter';
 import { StatTile } from '../../ui/stat-tile';
 import { Status } from '../../ui/status';
 import { StatusCell, StatusCellRow } from '../../ui/status-cell';
 import { StatusIndicator } from '../../ui/status-indicator';
+import { StripGroup, StripPlot } from '../../ui/strip-plot';
 import { Timeline, TimelineItem } from '../../ui/timeline';
+import { Waterfall, WaterfallStep } from '../../ui/waterfall';
 
 interface GalleryRow {
   id: string;
@@ -93,6 +102,7 @@ interface ContractRow {
     Button,
     ChartContainer,
     Checkbox,
+    ChartTooltip,
     Chip,
     ChipRow,
     ColumnPickerComponent,
@@ -104,6 +114,7 @@ interface ContractRow {
     DataTable,
     DirectionArrow,
     DonutComponent,
+    DotPlot,
     Drawer,
     EmptyStateComponent,
     Figure,
@@ -113,6 +124,7 @@ interface ContractRow {
     Flash,
     Freshness,
     Gauge,
+    HeatGrid,
     Hint,
     Histogram,
     Icon,
@@ -124,7 +136,9 @@ interface ContractRow {
     MetricChip,
     Panel,
     PaginationComponent,
+    PanelError,
     PanelGrid,
+    PanelHeader,
     PlanCell,
     PlanLifecycleDiagram,
     PnlCell,
@@ -134,15 +148,19 @@ interface ContractRow {
     Segmented,
     Select,
     ScatterComponent,
+    ShareBar,
+    SmallMultiples,
     Sparkline,
     StatTile,
     Status,
     StatusCell,
     StatusIndicator,
+    StripPlot,
     TabBar,
     TextInput,
     Timeline,
     TradeChart,
+    Waterfall,
   ],
   template: `
     <h1>UI gallery</h1>
@@ -485,6 +503,34 @@ interface ContractRow {
       </sb-chart-container>
     </sb-panel>
 
+    <!-- -- v94 analytics workspace primitives ----------------------------------- -->
+    <sb-section-head [heading]="'Analytics primitives (v94)'" [level]="2" />
+    <sb-panel heading="Panel header, panel error and share bar">
+      <sb-panel-header title="Sample panel" [n]="128" hint="Definition text for this metric." [tableable]="true" total="42 rows" />
+      <sb-panel-error message="Request timed out" />
+      <sb-share-bar label="Win / loss" [segments]="shareBarSegments" />
+    </sb-panel>
+    <sb-panel heading="Chart tooltip (static demo state)">
+      <div class="tooltip-demo">
+        <sb-chart-tooltip [state]="chartTooltipState" [hostWidth]="320" />
+      </div>
+    </sb-panel>
+    <sb-panel heading="Dot plot -- ExpR against sample size, with a withheld floor">
+      <sb-dot-plot [points]="dotPlotPoints" [floor]="20" />
+    </sb-panel>
+    <sb-panel heading="Heat grid -- ExpR by horizon x strategy">
+      <sb-heat-grid [rows]="heatGridRows" [cols]="heatGridCols" [cells]="heatGridCells" />
+    </sb-panel>
+    <sb-panel heading="Small multiples -- one pane per strategy">
+      <sb-small-multiples [panes]="smallMultiplesPanes" />
+    </sb-panel>
+    <sb-panel heading="Strip plot -- hold time by outcome">
+      <sb-strip-plot [groups]="stripPlotGroups" />
+    </sb-panel>
+    <sb-panel heading="Waterfall -- contribution to total ExpR">
+      <sb-waterfall [steps]="waterfallSteps" />
+    </sb-panel>
+
     <!-- -- icons -------------------------------------------------------------- -->
     <sb-section-head [heading]="'Icons'" [level]="2" />
     <sb-panel>
@@ -659,6 +705,11 @@ interface ContractRow {
     .narrow-demo { max-width: 320px; margin-top: var(--space-10); }
     .register-demo { display: grid; gap: var(--space-10); }
     .register-demo h3 { margin: 0; }
+
+    /* v94 -- sb-chart-tooltip positions itself absolutely against its nearest
+       positioned ancestor; give it one here so the demo state is visible
+       rather than escaping the panel. */
+    .tooltip-demo { position: relative; height: 70px; }
   `,
 })
 export class Gallery {
@@ -797,6 +848,54 @@ export class Gallery {
     [1, 0.68, 0.12],
     [0.68, 1, null],
     [0.12, null, 1],
+  ];
+
+  /** v94 -- analytics workspace primitives, demoed together in one section. */
+  protected readonly shareBarSegments: ShareSegment[] = [
+    { label: 'Wins', count: 24, tone: 'pos' },
+    { label: 'Losses', count: 16, tone: 'neg' },
+  ];
+
+  protected readonly chartTooltipState: HoverState = {
+    x: 40, y: 20, title: 'AAPL · Mar 2026',
+    rows: [
+      { label: 'ExpR', value: '+0.42R', swatch: 'var(--accent)' },
+      { label: 'trades', value: '18' },
+    ],
+  };
+
+  protected readonly dotPlotPoints: DotPoint[] = [
+    { label: 'RSI reversal', n: 42, value: 0.31 },
+    { label: 'MACD cross', n: 8, value: null },
+    { label: 'VWAP reclaim', n: 120, value: -0.08 },
+  ];
+
+  protected readonly heatGridRows = ['2w', '1m', '3m'];
+  protected readonly heatGridCols = ['RSI', 'MACD', 'VWAP'];
+  protected readonly heatGridCells: HeatCell[] = [
+    { r: 0, c: 0, n: 40, value: 0.22 }, { r: 0, c: 1, n: 5, value: null }, { r: 0, c: 2, n: 60, value: -0.15 },
+    { r: 1, c: 0, n: 30, value: 0.05 }, { r: 1, c: 1, n: 22, value: 0.31 }, { r: 1, c: 2, n: 15, value: null },
+    { r: 2, c: 0, n: 50, value: -0.02 }, { r: 2, c: 1, n: 44, value: 0.18 }, { r: 2, c: 2, n: 33, value: 0.09 },
+  ];
+
+  protected readonly smallMultiplesPanes: MultiplePane[] = [
+    { title: 'RSI reversal', n: 42, series: [{ name: 'RSI reversal', points: [
+      { date: '2026-01-01', value: 0 }, { date: '2026-02-01', value: 0.2 }, { date: '2026-03-01', value: 0.31 },
+    ] }] },
+    { title: 'VWAP reclaim', n: 120, series: [{ name: 'VWAP reclaim', points: [
+      { date: '2026-01-01', value: 0 }, { date: '2026-02-01', value: -0.05 }, { date: '2026-03-01', value: -0.08 },
+    ] }] },
+  ];
+
+  protected readonly stripPlotGroups: StripGroup[] = [
+    { label: 'Winners', tone: 'pos', values: [1, 2, 3.5, 2.2] },
+    { label: 'Losers', tone: 'neg', values: [0.5, 1.2, 0.8] },
+  ];
+
+  protected readonly waterfallSteps: WaterfallStep[] = [
+    { label: 'RSI reversal', value: 0.42, n: 42 },
+    { label: 'MACD cross', value: -0.11, n: 8 },
+    { label: 'VWAP reclaim', value: 0.18, n: 120 },
   ];
 
   /** v54 D5 -- Task 37's chrome-comparison section: the same eight-point

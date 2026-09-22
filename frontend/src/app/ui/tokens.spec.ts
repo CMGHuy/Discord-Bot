@@ -107,6 +107,12 @@ describe('design tokens', () => {
     expect(CSS).not.toMatch(/^\s*--chart-8:/m);
   });
 
+  it('keeps the complete six-colour categorical chart palette', () => {
+    const chartTokens = [...CSS.matchAll(/^\s*--chart-(\d):\s*#[0-9a-f]{6};/gim)]
+      .map((match) => Number(match[1]));
+    expect(chartTokens).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
   it('keeps --transition as an alias so existing call sites still compile', () => {
     expect(CSS).toMatch(/^\s*--transition:/m);
   });
