@@ -208,8 +208,12 @@ describe('breakpoint discipline', () => {
 - [ ] **Step 2: Run the test to verify it fails or passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/breakpoint-guard.spec.ts`
-Expected: PASS if A2, A5, C3 and D5 all landed correctly. **If it fails, the
-named files are real drift the earlier tasks missed** — fix them here rather
+Expected: PASS if A2, A5, A7, C3, D1, D3 and D5 all landed correctly (added
+during execution: A7 fixed Analytics' five `800px` sites; the pre-flight
+scan also found undeclared values D1 left at `risk.ts:567` and D3 left
+unaddressed at `settings-tab.ts:556` — both must be fixed by their own tasks,
+not exempted here, or this guard fails on them). **If it fails, the named
+files are real drift the earlier tasks missed** — fix them here rather
 than exempting them. Only add to `EXEMPT` for a value that is genuinely not a
 breakpoint (a print query, a `min-resolution`), and say why in a comment.
 
@@ -222,63 +226,26 @@ git commit -m "test(v95): guard every width query against the declared breakpoin
 
 ---
 
-### Task E3: Hand the requirement to v94
+### Task E3: SUPERSEDED — hand-off to v94 (do not dispatch)
 
-**Files:**
-- Modify: `docs/superpowers/specs/2026-09-17-v94-analytics-workspace-redesign-design.md:301-302`
+This task originally amended v94's spec (then a **live, open** plan) to add
+the responsive requirement it would need once it rebuilt Analytics, so the
+parity gate would eventually be able to cover that workspace.
 
-v94's spec lists "mobile-first layout beyond the existing breakpoints" as a
-non-goal. That was correct when written and is now incomplete: v95 excluded
-Analytics precisely because v94 rebuilds it, so without this amendment Analytics
-becomes the one workspace the parity gate cannot cover.
+**Ruling, recorded during execution (SDD ledger):** by the time v95 reached
+implementation, v94 had already merged and closed — its spec moved to
+`docs/superpowers/specs/implemented/2026-09-17-v94-analytics-workspace-redesign-design.md`
+— and shipped Analytics **without** adopting this model. There is no longer
+a live plan for a hand-off edit to land in, and amending a closed,
+already-shipped spec after the fact to say it should have done something it
+didn't do is not a meaningful edit. The human partner chose, when this was
+surfaced, to bring Analytics directly onto the declared breakpoint set
+inside v95 instead (**Task A7**, added to `_1-foundations.md`) rather than
+open a follow-up plan. That supersedes what this task existed to arrange —
+Analytics is a v95-owned fix now, not a deferred one.
 
-This edits a **committed spec of a live plan**. It adds a requirement; it
-changes nothing v94 has already decided.
-
-**Interfaces:**
-- Consumes: nothing.
-- Produces: no code.
-
-- [ ] **Step 1: Read the current non-goal**
-
-```bash
-sed -n '295,305p' docs/superpowers/specs/2026-09-17-v94-analytics-workspace-redesign-design.md
-```
-
-- [ ] **Step 2: Apply the amendment**
-
-Replace the non-goal clause naming mobile-first layout with:
-
-```markdown
-per-panel filters (the bar is the only scope); changing `MIN_CELL_N` or making
-it a setting.
-
-**Amended by v95 (2026-09-17).** "Mobile-first layout beyond the existing
-breakpoints" was a non-goal here because no model existed to adopt. v95 now
-provides one, and Analytics is the single workspace it deliberately excluded —
-v95 §11. So the rebuild **does** carry a responsive requirement: every column,
-control and panel this spec creates declares `inlineFrom` per v95 §3, demotes
-to the destination its kind names in v95 §4, and is registered with the parity
-gate in v95 §9. Without this, Analytics is the one workspace that gate cannot
-cover.
-```
-
-- [ ] **Step 3: Verify the cross-reference resolves**
-
-```bash
-grep -n "v95" docs/superpowers/specs/2026-09-17-v94-analytics-workspace-redesign-design.md
-grep -n "§11\|Analytics" docs/superpowers/specs/2026-09-17-v95-responsive-content-priority-design.md | head
-```
-
-Expected: v94 names v95, and v95 §11 names v94. A one-way reference is how this
-gets forgotten.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add docs/superpowers/specs/2026-09-17-v94-analytics-workspace-redesign-design.md
-git commit -m "docs(v94): Analytics adopts v95's content-priority model as it is rebuilt"
-```
+**Do not dispatch this task.** Its Files/Interfaces/Steps below are struck
+from execution and kept only as a record of what was originally planned.
 
 ---
 

@@ -683,11 +683,111 @@ git commit -m "chore(v95): delete the dead --cell-wrap contract v80 left behind"
 
 ---
 
+### Task A7: Correct Analytics' breakpoint drift (added during execution)
+
+**Why this task exists:** the plan as written excluded
+`workspaces/analytics/` entirely, on the assumption that v94 (then still
+open) would adopt this responsive model there. v94 has since merged and
+closed without doing so — see the amended Global Constraint in
+`_0-index.md`. The human partner chose, when this was surfaced, to bring
+Analytics onto the declared breakpoint set inside v95 rather than open a
+separate plan. This is the only file scope Analytics gets in this plan — no
+other task may touch `workspaces/analytics/`.
+
+**Files:**
+- Modify: `frontend/src/app/workspaces/analytics/tabs/attribution.ts:149`
+- Modify: `frontend/src/app/workspaces/analytics/tabs/edge.ts:10`
+- Modify: `frontend/src/app/workspaces/analytics/tabs/execution.ts:22`
+- Modify: `frontend/src/app/workspaces/analytics/tabs/overview.ts:158`
+- Modify: `frontend/src/app/workspaces/analytics/tabs/pipeline.ts:19`
+- Test: the five matching `*.spec.ts` files in the same directory.
+
+All five files carry an identical, independently-authored pattern: a
+two-column `.panels { grid-template-columns: repeat(2, minmax(0,1fr)) }`
+grid that collapses to one column via `@media (max-width: 800px)`. 800px is
+not a declared breakpoint. Following A2's precedent (map each drifted value
+to the *numerically nearest* declared floor: 900px→md's 1023 because
+`|900-1024| < |900-640|`; 720px→sm's 639 because `|720-640| < |720-1024|`),
+800px maps to **sm's `639px`** (`|800-640|=160` vs `|800-1024|=224`).
+
+**This changes behaviour between 640px and 800px**, deliberately, same shape
+as A2: the two-column panel grid now survives down to 640px instead of
+collapsing to one column at 801px.
+
+**Interfaces:**
+- Consumes: `BREAKPOINTS` values as literals (same `@media` cannot read
+  `var()` constraint as every other width-query task).
+- Produces: no API change; five independent style-only edits.
+
+- [ ] **Step 1: Write the failing tests**
+
+Append the same shape of test to each of the five spec files (adjust the
+component/file name per file — shown here for `overview.spec.ts`; repeat for
+`attribution.spec.ts`, `edge.spec.ts`, `execution.spec.ts`, `pipeline.spec.ts`):
+
+```ts
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+describe('overview.ts breakpoints', () => {
+  it('uses only declared breakpoint values in width queries', () => {
+    // A media query at 800px puts this file and ViewportService on
+    // different scales -- see breakpoints.ts. v95 A7.
+    const src = readFileSync(
+      join(process.cwd(), 'src/app/workspaces/analytics/tabs/overview.ts'),
+      'utf8',
+    );
+    const allowed = new Set(['639', '1023', '1439', '1919', '640', '1024', '1440', '1920']);
+    const widths = [...src.matchAll(/\(\s*(?:max|min)-width:\s*(\d+)px\s*\)/g)].map((m) => m[1]);
+    expect(widths.length).toBeGreaterThan(0);
+    expect(widths.filter((w) => !allowed.has(w))).toEqual([]);
+  });
+});
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `cd frontend && npm test -- --include "src/app/workspaces/analytics/tabs/*.spec.ts"`
+Expected: FAIL on all five, each with `received ['800']`.
+
+- [ ] **Step 3: Apply the change**
+
+In each file, replace `@media (max-width: 800px)` with
+`@media (max-width: 639px)`. The rule body (`{ .panels { grid-template-columns: 1fr; } }`)
+does not change — only the threshold. This is a one-line find/replace per
+file; no other line in any of the five is touched.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `cd frontend && npm test -- --include "src/app/workspaces/analytics/tabs/*.spec.ts"`
+Expected: PASS on all five.
+
+- [ ] **Step 5: Verify visually**
+
+Load `/analytics` (each of the five tabs: Overview, Attribution, Edge,
+Execution, Pipeline) at 390 / 768 / 1024 via Chrome DevTools MCP. Expected:
+two-column panel grid at 768 and 1024 (was already two-column at 768 before
+this change, since 768 > 640 either way); single column at 390. Confirm no
+tab regresses to a broken layout at 800×any (the width that used to be the
+threshold — it should now read as clearly "wide", two columns, not sit on an
+edge).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add frontend/src/app/workspaces/analytics/tabs/attribution.ts frontend/src/app/workspaces/analytics/tabs/attribution.spec.ts frontend/src/app/workspaces/analytics/tabs/edge.ts frontend/src/app/workspaces/analytics/tabs/edge.spec.ts frontend/src/app/workspaces/analytics/tabs/execution.ts frontend/src/app/workspaces/analytics/tabs/execution.spec.ts frontend/src/app/workspaces/analytics/tabs/overview.ts frontend/src/app/workspaces/analytics/tabs/overview.spec.ts frontend/src/app/workspaces/analytics/tabs/pipeline.ts frontend/src/app/workspaces/analytics/tabs/pipeline.spec.ts
+git commit -m "fix(v95): analytics panel grids drop at the declared breakpoints, not 800px"
+```
+
+---
+
 ## Phase A exit criteria
 
 - `ui/priority.ts` exists and `priority.spec.ts` passes at every boundary.
 - `shell.css` and `trading-performance.ts` contain no width query outside
   639/640/1023/1024/1439/1440/1919/1920.
+- The five `workspaces/analytics/tabs/*.ts` files touched by A7 contain no
+  width query outside that same set (A7, added during execution).
 - No `min-height: 0` in `button.ts`, `chip.ts` or `control-bar.ts`.
 - `--cell-wrap` and `--sep-wrap` appear nowhere in `frontend/src/`.
 - `/dashboard` at 768×1024 shows the portfolio figure on one line.

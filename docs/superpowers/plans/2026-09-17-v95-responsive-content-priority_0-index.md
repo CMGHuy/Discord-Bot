@@ -47,9 +47,20 @@ this section.
   2. a panel **force-expands** when its data is stale, errored or unrepresentative,
      regardless of `inlineFrom`;
   3. demotion never drops an accessible name.
-- **The Analytics workspace is out of scope.** v94 rebuilds it and adopts this
-  model there (spec §11). No task in this plan edits
-  `frontend/src/app/workspaces/analytics/`.
+- **AMENDMENT (recorded during execution, see SDD ledger):** the original text
+  of this constraint read *"The Analytics workspace is out of scope. v94
+  rebuilds it and adopts this model there (spec §11). No task in this plan
+  edits `frontend/src/app/workspaces/analytics/`."* That was correct when
+  the plan was written; **v94 has since merged and closed** (shipped as
+  1.20.0/1.10.2) **without** adopting this responsive model — its 5 tab
+  files still carry undeclared `800px` width queries. There is no longer a
+  live v94 plan to hand the requirement to, and the human partner chose to
+  fix Analytics' breakpoint drift directly inside v95 rather than open a
+  separate follow-up plan. **Task A7** (new, added during execution) brings
+  `workspaces/analytics/tabs/*.ts` onto the declared breakpoint set — the
+  only file scope Analytics gets in this plan; no other Phase A–D task may
+  edit `workspaces/analytics/`. **Task E3 is superseded** (see its own note)
+  since the v94 hand-off it performed no longer has a target.
 - **`Bump: bot none`.** No task edits Python, the bot, or the API.
 - **Touch floor:** `tokens.css` already raises `--control-h`/`--row-h` to 44px
   and `--text-control` to 16px under `(pointer: coarse), (max-width: 639px)`.
@@ -67,11 +78,11 @@ this section.
 
 | Part | Phase | Tasks | Subject |
 |---|---|---|---|
-| `_1-foundations.md` | A | A1–A6 | breakpoint drift, `priority.ts`, touch floor, overflow fixes |
+| `_1-foundations.md` | A | A1–A7 | breakpoint drift, `priority.ts`, touch floor, overflow fixes, Analytics breakpoint drift (A7, added during execution) |
 | `_2-primitives.md` | B | B1–B8 | DataTable routing, toolbar sheet, panel collapse |
 | `_3-workspaces-a.md` | C | C1–C7 | trades, dashboard, calendar, watchlist |
 | `_4-workspaces-b.md` | D | D1–D6 | risk, system, versions, gallery |
-| `_5-gate.md` | E | E1–E4 | parity gate, v94 amendment, full verification |
+| `_5-gate.md` | E | E1–E4 | parity gate, E3 superseded (v94 already closed), full verification |
 
 Task ids are stable across file splits: `grep -rn "^### Task C3"
 docs/superpowers/plans/` finds a task without knowing which file holds it.
@@ -86,6 +97,9 @@ docs/superpowers/plans/` finds a task without knowing which file holds it.
   no shared contract.
 - **Sequential:** A5 after A2 (the tablet band assumes the drift is already
   corrected, or it encodes the wrong numbers). A6 after A5.
+- **A7 (added during execution):** independent of A2–A6 — disjoint files
+  (`workspaces/analytics/tabs/*.ts`). Can run any time in Phase A, but must
+  land before E2 (the repo-wide breakpoint guard) or E2 fails on Analytics.
 
 **Phase B**
 - **Sequential throughout.** B1 defines `inlineFrom` on `ColumnDef<T>`; B2 and
