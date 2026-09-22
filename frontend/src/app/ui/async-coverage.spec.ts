@@ -15,7 +15,15 @@ const FETCHING = [
   'workspaces/dashboard/dashboard.ts',
   'workspaces/trades/trades.ts',
   'workspaces/trades/trade-detail.ts',
-  'workspaces/analytics/analytics.ts',
+  // v94: `workspaces/analytics/analytics.ts` used to be here and is not any
+  // more. It is now a shell -- a tab strip, a scope bar and a switch -- and
+  // it renders no fetched value of its own, so an sb-async on it would gate
+  // nothing. Deleted deliberately, as this list's own rule requires. What
+  // replaced it is panel-level: each tab under `workspaces/analytics/tabs/`
+  // carries its own `sb-panel-error` and `sb-empty-state`, because v94 H4
+  // makes every panel fail on its own terms rather than one gate blanking
+  // a tab full of panels that arrived fine. ANALYTICS_PANELS below pins
+  // that for the tabs that are finished; T2/T4/T5/T6 add theirs.
   'workspaces/risk/risk.ts',
   'workspaces/watchlist/watchlist.ts',
   'workspaces/versions/versions.ts',
@@ -25,12 +33,29 @@ const FETCHING = [
   'workspaces/calendar/calendar.ts',
 ];
 
+/**
+ * v94's per-panel replacement for the Analytics workspace's one sb-async.
+ * Enumerated for the same reason FETCHING is: a tab that loses its retry
+ * affordance should fail here rather than quietly degrade to a blank panel
+ * with no way back. Only the tabs whose own task has landed are listed.
+ */
+const ANALYTICS_PANELS = [
+  'workspaces/analytics/tabs/overview.ts',
+  'workspaces/analytics/tabs/execution.ts',
+];
+
 const sources = new Map(callSites().map(({ name, source }) => [name, source]));
 
 describe('G1: every fetching surface uses sb-async', () => {
   for (const file of FETCHING) {
     it(`${file} wraps its fetch in sb-async`, () => {
       expect(sources.get(file) ?? '').toContain('<sb-async');
+    });
+  }
+
+  for (const file of ANALYTICS_PANELS) {
+    it(`${file} offers a retry on every panel that can fail`, () => {
+      expect(sources.get(file) ?? '').toContain('<sb-panel-error');
     });
   }
 });
