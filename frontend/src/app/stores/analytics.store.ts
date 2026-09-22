@@ -16,7 +16,6 @@ import {
   AnalyticsCalibration,
   AnalyticsEquityCurve,
   AnalyticsExitQuality,
-  AnalyticsDerived,
   AnalyticsHeatGrid,
   AnalyticsJournal,
   AnalyticsPerformance,
@@ -24,7 +23,6 @@ import {
   AnalyticsStrategies,
   AnalyticsUnit,
   BookScope,
-  HoldingBucket,
 } from '../api/models';
 import { HistogramBin } from '../ui/histogram';
 import { BarRow } from '../ui/bar-list';
@@ -193,59 +191,6 @@ export interface RelocatedMetric {
 
 const PNL_METRICS = new Set(['avg_realized_pct', 'best_trade_pct', 'worst_trade_pct']);
 
-/* -- SR54: the derived figures ------------------------------------------ */
-
-/**
- * The twelve figures `stats.html` derived in browser JS, now served.
- *
- * Same rationale as `RELOCATED_METRICS`: driving the render off one array
- * makes a lost figure a visible defect rather than a card that quietly stops
- * appearing. `decimals` is per-metric because these have genuinely different
- * scales — a Calmar of 1.2 and a volatility of 34.6% should not be rounded
- * the same way, and an expectancy of 0.08R disappears at one decimal.
- */
-export const DERIVED_METRICS = [
-  { key: 'total_return_pct', label: 'Total return', unit: '%', decimals: 2, pnl: true },
-  { key: 'annualised_return_pct', label: 'Annualised', unit: '%', decimals: 2, pnl: true },
-  { key: 'avg_win_pct', label: 'Avg win', unit: '%', decimals: 2, pnl: true },
-  { key: 'avg_loss_pct', label: 'Avg loss', unit: '%', decimals: 2, pnl: true },
-  { key: 'win_rate', label: 'Win rate', unit: '%', decimals: 1, pnl: false },
-  { key: 'expectancy_r', label: 'Expectancy', unit: 'R', decimals: 3, pnl: true },
-  { key: 'sharpe_ann', label: 'Sharpe (ann)', unit: '', decimals: 2, pnl: false },
-  { key: 'sortino_ann', label: 'Sortino (ann)', unit: '', decimals: 2, pnl: false },
-  { key: 'calmar', label: 'Calmar', unit: '', decimals: 2, pnl: false },
-  { key: 'volatility_ann_pct', label: 'Volatility (ann)', unit: '%', decimals: 1, pnl: false },
-  { key: 'trades_per_month', label: 'Trades / month', unit: '', decimals: 1, pnl: false },
-  { key: 'pct_in_market', label: '% in market', unit: '%', decimals: 1, pnl: false },
-] as const satisfies readonly {
-  key: keyof AnalyticsDerived;
-  label: string;
-  unit: string;
-  decimals: number;
-  pnl: boolean;
-}[];
-
-/** One derived figure, resolved against the payload and ready to render. */
-export interface DerivedMetric {
-  key: keyof AnalyticsDerived;
-  label: string;
-  unit: string;
-  decimals: number;
-  /** Whether green/red P&L colouring applies. A Sharpe is not money. */
-  pnl: boolean;
-  value: number | null;
-}
-
-/** Every figure null — what the cards show before the first response, and
- *  what an empty date range legitimately returns. The two look identical on
- *  purpose: both mean "no number to show", not "the number is zero". */
-const EMPTY_DERIVED: AnalyticsDerived = {
-  avg_win_pct: null, avg_loss_pct: null, total_return_pct: null,
-  annualised_return_pct: null, calmar: null, volatility_ann_pct: null,
-  trades_per_month: null, pct_in_market: null, sharpe_ann: null,
-  sortino_ann: null, win_rate: null, expectancy_r: null,
-};
-
 /** A payload number, or null. Not `Number(value)`: the endpoint returns JSON
  *  `null` for "no closed trades yet", and coercing that to 0 would report a
  *  best trade of exactly break-even on a fresh install. */
@@ -317,21 +262,6 @@ export function presetRange(preset: string, today: Date): { from: string | null;
  * the difference between "we don't know" and "it is zero" on a Sharpe ratio.
  */
 
-/** One `StatRow` out of a `by`-dimension block (`aggregate.py:47-57`). */
-export interface BreakdownRow {
-  key: string;
-  n: number | null;
-  wins: number | null;
-  losses: number | null;
-  win_rate: number | null;
-  expectancy_r: number | null;
-  avg_r: number | null;
-  profit_factor: number | null;
-  total_pnl: number | null;
-  total_r: number | null;
-}
-
-
 export interface Streaks {
   current: number | null;
   currentKind: string | null;
@@ -378,57 +308,8 @@ function perTradeRs(curve: AnalyticsEquityCurve | null): number[] {
   });
 }
 
-export function rateOrWithheld(n: number, rate: number | null | undefined, floor: number): { count: number; withheld: boolean } {
-  if (n < floor || rate == null) return { count: 0, withheld: true };
-  return { count: rate, withheld: false };
-}
-
-export function zeroFilledBars(rows: BreakdownRow[], order: readonly (readonly [string, string])[], floor: number): BarRow[] {
-  const byKey = new Map(rows.map((row) => [row.key, row]));
-  return order.map(([key, label]) => {
-    const row = byKey.get(key);
-    const n = row?.n ?? 0;
-    const value = rateOrWithheld(n, row?.win_rate, floor);
-    return { label, value: value.withheld ? null : value.count, n, withheld: value.withheld };
-  });
-}
-
-export function rateBars(buckets: readonly HoldingBucket[]): BarRow[] {
-  return buckets.map((bucket) => ({ label: bucket.bucket, value: bucket.win_rate, n: bucket.n, withheld: bucket.win_rate === null }));
-}
-
 export function monthBars(rows: readonly { month: string; return_pct: number | null; n: number }[]): BarRow[] {
   return rows.map((row) => ({ label: row.month, value: row.return_pct, n: row.n }));
-}
-/** One histogram bin. */
-export interface Bin {
-  label: string;
-  count: number;
-}
-
-/**
- * R-multiples binned at 0.5R.
- *
- * Bins rather than the raw list because the shape is the point: a healthy edge
- * is a cluster of small losses and a tail of larger wins, and that is a
- * statement about a distribution, not about any one trade. Clamped at ±5R so a
- * single outlier cannot flatten every other bin to invisibility.
- */
-export function binRMultiples(values: number[], width = 0.5): Bin[] {
-  if (!values.length) return [];
-  const LIMIT = 5;
-  const counts = new Map<number, number>();
-  for (const value of values) {
-    const clamped = Math.max(-LIMIT, Math.min(LIMIT, value));
-    const bin = Math.floor(clamped / width) * width;
-    counts.set(bin, (counts.get(bin) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([bin, count]) => ({
-      label: `${bin > 0 ? '+' : ''}${bin.toFixed(1)}R`,
-      count,
-    }));
 }
 
 /**
@@ -663,38 +544,6 @@ export const AnalyticsStore = signalStore(
     expectancyR: computed(() => performance()?.expectancy_r ?? null),
     expectancyN: computed(() => performance()?.expectancy_n ?? null),
 
-    /* -- SR54: the figures that used to be derived in the browser -------- */
-
-    /**
-     * The derived block, or an all-null one before the first response.
-     *
-     * All-null rather than `null` so the KPI grid renders its cards with em
-     * dashes on first paint instead of collapsing and then reflowing when the
-     * payload lands. `DERIVED_METRICS` drives the render off this, the same
-     * pattern (and for the same auditability reason) as `RELOCATED_METRICS`.
-     */
-    derived: computed<AnalyticsDerived>(
-      () => performance()?.derived ?? EMPTY_DERIVED),
-
-    /** Server buckets mapped onto `sb-histogram`'s `{label, count}` contract.
-     *  The label is the bucket's LOWER edge, which is what makes the default
-     *  "starts with a minus sign means loss" predicate correct — labelling by
-     *  midpoint would mark the bucket straddling zero as a win. */
-    returnsHistogram: computed<HistogramBin[]>(() =>
-      (performance()?.distributions?.returns ?? []).map((bucket) => ({
-        label: `${bucket.lo.toFixed(1)}%`,
-        count: bucket.count,
-      }))),
-
-    rHistogram: computed<HistogramBin[]>(() =>
-      (performance()?.distributions?.r_multiples ?? []).map((bucket) => ({
-        label: `${bucket.lo.toFixed(2)}R`,
-        count: bucket.count,
-      }))),
-    calendarReturns: computed(() => performance()?.calendar ?? []),
-
-    holdingPeriodBars: computed(() => rateBars(performance()?.holding_period_split ?? [])),
-    riskRewardBars: computed(() => rateBars(performance()?.risk_reward_split ?? [])),
     monthBars: computed(() => monthBars(performance()?.calendar ?? [])),
 
     /* -- SR55: the journal's analytics half ----------------------------- */

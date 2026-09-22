@@ -19,9 +19,9 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
-import { AnalyticsStore, binRMultiples } from './analytics.store';
+import { AnalyticsStore } from './analytics.store';
 
-/* SR51 — the tuning grid and Propose, plus the R-multiple binning.
+/* SR51 — the tuning grid and Propose.
  *
  * SR50's own block lived here too: `GET /analytics/snapshot`, the pre-built
  * all-time blob that profit factor, Sharpe, Sortino, max drawdown, streaks
@@ -34,7 +34,9 @@ import { AnalyticsStore, binRMultiples } from './analytics.store';
  * `analytics.store.spec.ts`.
  *
  * What is left here is untouched by that: the grid results the Tuning tab
- * stages proposals from, and `binRMultiples`, a pure function.
+ * stages proposals from. `binRMultiples`, the R-multiple binning pure
+ * function this file used to also test, went with T7's removal of its last
+ * caller.
  */
 
 class FakeEventStream {
@@ -210,32 +212,5 @@ describe('AnalyticsStore — the tuning grid', () => {
     // for a reason the user could do nothing about.
     store.propose(0);
     backend.verify();
-  });
-});
-
-describe('binRMultiples', () => {
-  it('bins at half an R, labelling each bin by its lower edge', () => {
-    // The label is the edge, not a value, so the bin starting at zero is
-    // "0.0R" -- "+0.0R" would claim a gain of nothing.
-    expect(binRMultiples([0.1, 0.4, 0.6])).toEqual([
-      { label: '0.0R', count: 2 },
-      { label: '+0.5R', count: 1 },
-    ]);
-  });
-
-  it('signs the losing bins', () => {
-    expect(binRMultiples([-1, -0.7]).map((b) => b.label)).toEqual(['-1.0R']);
-  });
-
-  it('clamps outliers so one lottery ticket cannot flatten the chart', () => {
-    // A +12R trade is real and worth knowing about, but given its own bin it
-    // makes every other bar one pixel tall.
-    const bins = binRMultiples([0.1, 12, -30]);
-    expect(bins[0].label).toBe('-5.0R');
-    expect(bins[bins.length - 1].label).toBe('+5.0R');
-  });
-
-  it('has no bins at all when there are no trades', () => {
-    expect(binRMultiples([])).toEqual([]);
   });
 });

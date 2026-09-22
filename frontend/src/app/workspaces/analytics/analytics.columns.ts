@@ -2,7 +2,6 @@ import { AnalyticsByDimensionRow, AnalyticsUnit } from '../../api/models';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
 import { ABSENT, date, dateTime, money, rMultiple, share, signed } from '../../ui/format';
 import {
-  BreakdownRow,
   ConfidenceRow,
   DecileRow,
   DriftRow,
@@ -114,53 +113,13 @@ export function TIER_COLUMNS(floor: number): ColumnDef<TierRow>[] { return [
   { key: 'expectancy_r', header: 'ExpR', numeric: true, value: (r) => expectancy(r.expectancy_r) },
 ]; }
 
-/* -- breakdowns (SR50) ---------------------------------------------------
- *
- * One column set for all eight dimensions of the snapshot's `by` block. The
- * group's own name is the first column and its header changes with the
- * dimension, which is why it is built rather than declared. */
-export function breakdownColumns(label: string, floor = 0): ColumnDef<BreakdownRow>[] {
-  return [
-    { key: 'key', header: label, value: (r) => r.key },
-    { key: 'n', header: 'Trades', numeric: true, value: (r) => count(r.n) },
-    { key: 'wins', header: 'Wins', numeric: true, value: (r) => count(r.wins) },
-    { key: 'losses', header: 'Losses', numeric: true, value: (r) => count(r.losses) },
-    // v89: the Trades column carries n; a win-rate column holds a rate or nothing.
-    { key: 'win_rate', header: 'Win rate', numeric: true,
-      value: (r) => (r.n ?? 0) < floor || r.win_rate === null ? ABSENT : rate(r.win_rate) },
-    {
-      key: 'expectancy_r',
-      header: 'ExpR',
-      numeric: true,
-      value: (r) => expectancy(r.expectancy_r),
-    },
-    {
-      key: 'profit_factor',
-      header: 'Profit factor',
-      numeric: true,
-      // Two decimals, unsigned: a profit factor is a ratio and is never
-      // negative, so `expectancy`'s sign would be noise here.
-      value: (r) => (r.profit_factor === null ? ABSENT : r.profit_factor.toFixed(2)),
-    },
-    {
-      key: 'total_pnl',
-      header: 'P&L',
-      numeric: true,
-      value: (r) => (r.total_pnl === null ? ABSENT : r.total_pnl.toFixed(2)),
-    },
-    { key: 'total_r', header: 'Total R', numeric: true,
-      value: (r) => r.total_r === null || r.total_r === undefined ? ABSENT : `${r.total_r.toFixed(2)}R` },
-  ];
-}
-
 /**
  * v94 T2 -- one column set for every dimension the Attribution breakdown
- * table can group by (`store.breakdown()`). Unlike `breakdownColumns`
- * (SR50's legacy `BreakdownRow`, kept until Task T7 removes its last
- * caller), this reads `AnalyticsByDimensionRow` straight off
- * `/analytics/by-dimension` -- `exp_r`/`total_r` are two distinct sums, not
- * one derived from the other (models.ts's own note on why), and `total_pnl`
- * needs a currency unit that row shape never carried.
+ * table can group by (`store.breakdown()`). This reads
+ * `AnalyticsByDimensionRow` straight off `/analytics/by-dimension` --
+ * `exp_r`/`total_r` are two distinct sums, not one derived from the other
+ * (models.ts's own note on why), and `total_pnl` needs a currency unit that
+ * row shape never carried.
  *
  * `total_r` and `total_pnl` are both always-rendered columns, never one
  * standing in for the other the way `inUnit()` picks a single

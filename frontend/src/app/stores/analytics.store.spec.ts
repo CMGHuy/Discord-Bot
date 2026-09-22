@@ -864,32 +864,6 @@ describe('AnalyticsStore', () => {
       backend.verify();
     });
 
-    it('passes null figures through as null rather than zero', () => {
-      // The regression this guards: a `?? 0` in a computed turns "not enough
-      // trades for a Sortino" into a confident 0.00 on a KPI card.
-      openOverview();
-
-      expect(store.derived().sortino_ann).toBeNull();
-      expect(store.derived().calmar).toBe(1.3);
-    });
-
-    it('reports an all-null derived block before the first response', () => {
-      // No tick, no flush: nothing has arrived yet.
-      expect(store.derived().calmar).toBeNull();
-      expect(store.scopeN()).toBeNull();
-    });
-
-    it('labels histogram buckets by their lower edge so losses read as losses', () => {
-      openOverview();
-
-      const bins = store.returnsHistogram();
-      expect(bins[0].label).toBe('-6.1%');
-      // The empty interior bucket survives — dropping it would let the chart
-      // silently redraw its own axis.
-      expect(bins[1].count).toBe(0);
-      expect(bins).toHaveLength(3);
-    });
-
     it('exposes month bar rows computed from calendarReturns, sign intact', () => {
       tick();
       respondOverview({ calendar: [
@@ -901,16 +875,6 @@ describe('AnalyticsStore', () => {
         { label: '2026-06', value: 4.2, n: 3 },
         { label: '2026-07', value: -1.8, n: 2 },
       ]);
-    });
-
-    it('exposes holding-period and planned-R:R win-rate bar rows with sample sizes', () => {
-      tick();
-      respondOverview({
-        holding_period_split: [{ bucket: '0h-2h', n: 0, win_rate: null, avg_return_pct: null }, { bucket: '2h-4h', n: 3, win_rate: 66.7, avg_return_pct: 1.1 }],
-        risk_reward_split: [{ bucket: '<1.5', n: 0, win_rate: null, avg_return_pct: null }, { bucket: '1.5-2', n: 4, win_rate: 50, avg_return_pct: 0.4 }],
-      });
-      expect(store.holdingPeriodBars()).toEqual([{ label: '0h-2h', value: null, n: 0, withheld: true }, { label: '2h-4h', value: 66.7, n: 3, withheld: false }]);
-      expect(store.riskRewardBars()).toEqual([{ label: '<1.5', value: null, n: 0, withheld: true }, { label: '1.5-2', value: 50, n: 4, withheld: false }]);
     });
 
     it('reports the population the scope produced, and when it was built', () => {

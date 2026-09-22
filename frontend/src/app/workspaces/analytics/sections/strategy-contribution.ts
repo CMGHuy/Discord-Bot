@@ -1,6 +1,0 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { Histogram, HistogramBin } from '../../../ui/histogram';
-import { Panel } from '../../../ui/layout';
-export interface StrategyContributionRow { key:string;n:number;total_r:number|null; }
-@Component({selector:'sb-strategy-contribution',standalone:true,changeDetection:ChangeDetectionStrategy.OnPush,imports:[Panel,Histogram],template:`<sb-panel heading="Total R contributed per strategy"><p>Additive, not a rate — top 12 by absolute R.</p><sb-histogram [bins]="bins()"/></sb-panel>`,styles:`p{color:var(--text-muted);font-size:var(--text-micro)}`})
-export class StrategyContributionComponent {readonly rows=input.required<readonly StrategyContributionRow[]|null>();protected readonly bins=computed<HistogramBin[]>(()=>{const ranked=[...(this.rows()??[]).filter((r):r is StrategyContributionRow&{total_r:number}=>r.total_r!==null)].sort((a,b)=>Math.abs(b.total_r)-Math.abs(a.total_r));const head=ranked.slice(0,12).map(r=>({label:`${r.total_r.toFixed(2)}R · ${r.key} (n=${r.n})`,count:Math.abs(r.total_r)}));const tail=ranked.slice(12);if(tail.length){const total=tail.reduce((sum,r)=>sum+r.total_r,0);head.push({label:`${total.toFixed(2)}R · other (${tail.length} strategies)`,count:Math.abs(total)});}return head;});}
