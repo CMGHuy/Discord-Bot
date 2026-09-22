@@ -60,7 +60,7 @@ import { Segmented } from '../../ui/segmented';
   `,
   styles: `
     .population { font-size: var(--text-chip); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-    .all-time { font-size: var(--text-micro); text-transform: uppercase; letter-spacing: .08em; color: var(--warn); }
+    .all-time { font-size: var(--text-micro); text-transform: uppercase; letter-spacing: .06em; color: var(--warn); }
   `,
 })
 export class ScopeBar {

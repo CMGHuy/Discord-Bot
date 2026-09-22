@@ -152,7 +152,7 @@ function maxDrawdown(values: readonly number[]): number | null {
        be coincidence. */
     .benchmark-note { font-size: var(--text-chip); color: var(--text-faint); margin: var(--space-6) 0 0; }
     .pairs { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-8); margin: var(--space-10) 0 0; }
-    .pairs dt { font-size: var(--text-micro); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; }
+    .pairs dt { font-size: var(--text-micro); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.1em; }
     .pairs dd { margin: var(--space-4) 0 0; color: var(--text); font-variant-numeric: tabular-nums; }
     .pairs .missing dd { color: var(--warn); font-style: italic; }
     @media (max-width: 800px) { .panels { grid-template-columns: 1fr; } }
