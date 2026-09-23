@@ -31,3 +31,14 @@ def test_elliott_without_structure_returns_none():
     p = build_strategy_plan(_df(), 79, ticker="AAPL", strategy="Elliott Wave",
                             horizon_key="4w", direction="bullish")
     assert p is None
+
+
+def test_strategy_plan_populates_stall_exit_day(monkeypatch):
+    from swingbot import config
+    from swingbot.core.planning import params as plan_params
+    monkeypatch.setattr(config, "STALL_EXIT_ENABLED", True)
+    monkeypatch.setattr(plan_params, "_resolve_stall_exit_day", lambda strategy: 5)
+    p = build_strategy_plan(_df(), 79, ticker="AAPL", strategy="MACD",
+                            horizon_key="4w", direction="bullish")
+    assert p is not None
+    assert p.stall_exit_day == 5

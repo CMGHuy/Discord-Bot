@@ -207,6 +207,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     plan.tp2_r_applied = applied_tp2_r
     plan.time_stop_days = (time_stop_days if time_stop_days is not None
                            else plan_params._resolve_time_stop_days(strategy))
+    plan.stall_exit_day = plan_params._resolve_stall_exit_day(strategy)
     return plan
 
 

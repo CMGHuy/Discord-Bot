@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from swingbot import config
 from swingbot.core.market.strategy_types import HORIZONS
 from .plan_types import TradePlanV2
 from .params import RUNNER_FLOOR_FRACTION
@@ -135,6 +136,19 @@ def chandelier_stop(extreme_close_since_tp1: float, atr_value: float,
     return extreme_close_since_tp1 + mult * atr_value
 
 
+def _effective_trail_mult(base_mult: float, runner_r: float) -> float:
+    """R-adaptive tightening (v92 Hypothesis 1). Once the runner has banked
+    TIGHTEN_TRIGGER_R since entry (measured off the same extreme_close the
+    ratchet itself tracks, so this only ever tightens, never loosens on a
+    pullback), trail at TIGHTEN_ATR_MULT instead of the strategy's base
+    multiplier. `min()` guards a misconfigured TIGHTEN_ATR_MULT that is
+    actually looser than base. Byte-identical to `base_mult` when the flag
+    is off."""
+    if not config.ADAPTIVE_RUNNER_TRAIL_ENABLED or runner_r < config.TIGHTEN_TRIGGER_R:
+        return base_mult
+    return min(base_mult, config.TIGHTEN_ATR_MULT)
+
+
 def runner_floor(entry: float, tp1: float) -> float:
     """The runner leg's stop the instant TP1 fires (v39).
 
@@ -159,8 +173,11 @@ def _scale_out_exit_walk(
     df, entry_index: int, entry_price: float, plan: TradePlanV2, max_holding_days: int,
 ) -> ExitResult:
     """Hybrid scale-out walk (spec Sec5). Phase 1 (pre-TP1) is byte-identical
-    to _single_leg_exit_walk; a stop/scratch/timeout before TP1 returns the
-    same single full-fraction leg. TP1 touch banks tp1_fraction at tp1 and
+    to _single_leg_exit_walk when the stall-exit flag is off; a stop/scratch/
+    timeout before TP1 returns the same single full-fraction leg. (Task 12:
+    with STALL_EXIT_ENABLED on and plan.stall_exit_day set, a plan still open
+    and below +0.5R past that day closes early instead -- stop/target checks
+    still win any same-bar tie.) TP1 touch banks tp1_fraction at tp1 and
     hands the rest to the runner: stop starts at the v39 runner floor
     (entry + 2/3 x (tp1 - entry), see runner_floor) and ratchets
     toward profit via a chandelier trail (Task 26) as the runner rides, with
@@ -211,6 +228,20 @@ def _scale_out_exit_walk(
         if hit_target:
             tp1_index = j
             break
+        # Conservative ordering: stop/target above win any tie with the stall
+        # check -- a real stop breach or TP1 touch always beats a stall exit
+        # on the same bar.
+        if (config.STALL_EXIT_ENABLED and plan.stall_exit_day is not None
+                and (j - entry_index) > plan.stall_exit_day):
+            current_r = (float(close[j]) - entry_price) * sign / risk
+            if current_r < 0.5:
+                exit_price = float(close[j])
+                r = round(current_r, 3)
+                return ExitResult(outcome="loss" if r < 0 else "scratch",
+                                  runner_outcome=None, entry_index=entry_index,
+                                  exit_index=j, entry_price=entry_price, r_total=r,
+                                  legs=[{"fraction": 1.0, "exit_price": exit_price,
+                                         "r": r, "reason": "stall_exit"}])
         if reached_trigger and not stop_moved:
             stop_moved = True
 
@@ -264,7 +295,9 @@ def _scale_out_exit_walk(
         extreme_close = (max(extreme_close, float(close[j])) if is_bull
                           else min(extreme_close, float(close[j])))
         atr_val = _safe_atr_value(entry_price, float(atr_series.iloc[j]))
-        trail = chandelier_stop(extreme_close, atr_val, plan.trail_atr_mult, plan.direction)
+        runner_r = (extreme_close - entry_price) * sign / risk
+        mult = _effective_trail_mult(plan.trail_atr_mult, runner_r)
+        trail = chandelier_stop(extreme_close, atr_val, mult, plan.direction)
         runner_stop = max(runner_stop, trail) if is_bull else min(runner_stop, trail)
 
     if runner_exit is None:   # Task 27 pins the runner-timeout case with tests

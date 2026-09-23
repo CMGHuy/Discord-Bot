@@ -73,6 +73,32 @@ interpreting any backtest, grid, or validation result.
   Until that spec exists, a harvest feature must **say in its own
   pre-registration** that it is not using this funnel and name the gate it
   is using instead. `Edge: expectancy` and `Edge: volume` are fully covered.
+- **Harvest acceptance gate (v92, `swingbot/core/backtesting/acceptance_harvest.py`).**
+  Fills the gap named above. Reuses acceptance.py's bootstrap/permutation
+  machinery; the clause set inverts v72's role assignment (expectancy is the
+  objective, win rate a floor):
+
+  | # | Clause | Instrument | Threshold |
+  |---|---|---|---|
+  | 1 | `expectancy_gain` (objective) | ticker-cluster bootstrap ΔExpR | lower 95% bound > 0, one-sided p < 0.05 |
+  | 2 | `win_rate_floor` | ticker-cluster bootstrap Δstandardised-WR | lower 95% bound ≥ −2.0pp (`WIN_RATE_FLOOR_PP`) — `SKIPPED` when the mechanism cannot structurally move WR |
+  | 3 | `volume_floor` | closed-trade count, baseline vs component | cut ≤ 25% (reuses v72's `VOLUME_MAX_CUT_PCT`) |
+  | 4 | `not_luck` | `permutation_test.py`, n=200, on ΔExpR | p < 0.05, validation stage only |
+
+  Same Stage 0 (MDE precheck, via `acceptance_harvest.mde_expectancy_r`) →
+  Stage 1 (TRAIN plateau) → Stage 2 (free walk-forward folds) → Stage 3 (one-shot
+  VALIDATION) funnel as v72. No `mechanism` clause — a harvest feature changes
+  how accepted trades exit, not which trades are accepted, so results docs
+  report the win→non-win outcome-flip count as disclosure instead.
+  **Known limitation, flagged not fixed:** `mde_expectancy_r` uses an
+  unpaired-sample variance formula (`sqrt(2*var(r)/n_eff)`), correct for two
+  independent populations. Both v92 hypotheses are paired, exit-only designs
+  (the same entries replayed under two exit rules), for which the relevant
+  variance is that of the per-trade CHANGE in R, not of R itself — typically
+  much smaller, so the MDE this function reports is likely overstated for
+  that design. A future harvest spec that relies on Stage 0 to rule out
+  small effects should derive a paired variant first; see the comment on
+  `mde_expectancy_r` itself.
 - Frozen constants: `MIN_RISK_REWARD_RATIO = 1.5` / `MAX_RISK_REWARD_RATIO
   = 2.5` (the band `plan_engine.select_structural_target` picks every
   plan's target inside — replaces the pre-v31 per-strategy fixed
@@ -138,6 +164,8 @@ current defaults without a re-run.
 | `Double Pattern` (v69) | **No lift, VALIDATION deliberately NOT spent, NOT merged to `main`.** TRAIN's standard strategy grid (three cached tickers, all replay horizons, 12 parameter cells) had 0/12 qualifying configurations: highest N was 18 (<30), best volume-off WR was 40%, and the volume-confirmation arm reduced populations to at most two trades. No `STRATEGY_GATES` scope was adopted. Do not re-run this pre-registration; a genuinely different mechanism needs a new plan. Code remains on branch `2026-08-30-v69-double-bottom-top-strategy`. | `results/2026-08-30-v69-double-pattern-train.md`, branch `2026-08-30-v69-double-bottom-top-strategy` |
 | EMA Crossover pullback re-measurement (v84) | **CLOSED at fold stability, no VALIDATION spent.** Fresh TRAIN clears every badge clause (N=55, WR 61.8%, ExpR +0.494) but only 1 of 3 fold years hold N>=15 (2021 N=13, 2022 N=16 WR 75.0% ExpR +0.747, 2023 N=13); no fold blew up (worst +0.346). Reopening needs a genuinely new mechanism | `results/2026-09-10-v84-ema-crossover-preregistration.md` |
 | Break & Retest horizon gate `{2m,3m,4m}` (v84) | **Gate ships live (removes a proven-negative population), badge CLOSED before VALIDATION.** Gated TRAIN clears (N=105, WR 53.3%, ExpR +0.308) and the plateau check passes (4/4 neighbours also clear), but fold stability fails on the blowup clause: 2022 scores WR 14.3%, ExpR -0.343 despite N>=15 holding in 2/3 folds. VALIDATION budget NOT spent | `results/2026-09-10-v84-break-retest-preregistration.md` |
+| `ADAPTIVE_RUNNER_TRAIL_ENABLED` (v92 Hypothesis 1) | **No lift, genuinely measured on TRAIN — VALIDATION shot preserved unspent.** Full 9-cell grid (`TIGHTEN_TRIGGER_R` ∈ {1.5, 2.0, 2.5} x `TIGHTEN_ATR_MULT` ∈ {1.5, 1.75, 2.0}) replayed against `evaluate_harvest`, 75 of 77 tickers cached: every cell fails `expectancy_gain` (dExpR +0.0091R to -0.0045R, every lower-95% bound negative — best cell `trigger=2.50/mult=1.50` at `lo95=-0.0131`) against a Stage 0 MDE of +0.2409R, no plateau anywhere on the grid. `win_rate_floor` reports SKIPPED at every cell (mechanism acts only post-TP1, immunity confirmed). Ships default `false` — inert. Distinct in kind from the `STALL_EXIT_ENABLED` row below: this is a real measured null, not an unmeasurable-by-construction closure | `results/2026-09-16-v92-adaptive-trail-train.md` |
+| `STALL_EXIT_ENABLED` (v92 Hypothesis 2) | **Unmeasurable by construction, caught at TRAIN — VALIDATION shot preserved unspent.** Same `_trade_plan_at`-vs-`build_strategy_plan` gap recorded elsewhere in this table for `DATA_DRIVEN_STOPS_ENABLED`: `backtest.py`'s inline `TradePlanV2(...)` construction never sets `stall_exit_day`, so it is always `None` in any backtest-measured trade regardless of the journal — `builders.py` (`build_strategy_plan`, the live scan/plan-building path) is the only caller of `_resolve_stall_exit_day`. Separately, even that live path would return `None` today: the journal schema never records `days_to_half_r` for any entry (0 of 182 live entries have it, confirmed by direct inspection), so `optimal_time_stop_days()`'s `MIN_SAMPLE=40` gate can never clear. Reopening needs BOTH fixed: (a) route backtest-constructed plans through `_resolve_stall_exit_day`/`build_strategy_plan`, and (b) journal-writing fixed to record `days_to_half_r` — both new, separate scope | `results/2026-09-16-v92-stall-exit-train.md` |
 | VWAP narrowed-to-4w gate + slope-persistence fallback (v84) | **4w-only gate ships live (re-derives a stale hand-calibrated mask), badge CLOSED before VALIDATION.** Narrowed TRAIN clears (N=68, WR 52.9%, ExpR +0.335) but fold stability fails (only 2023 of 3 holds); the slope-persistence fallback (`min_vwap_slope_atr`, ships inert/default off) clears TRAIN at all 3 grid points but fails fold stability the same way on its winning config (0.25). VALIDATION budget NOT spent | `results/2026-09-10-v84-vwap-preregistration.md` |
 | RSI Divergence `min_consecutive_rsi_turn` persistence gate (v84) | **REJECTED-ON-TRAIN, permanently WEAK.** 0/3 grid cells qualify (K=2: N=473, WR 49.0%; K=3: N=70, WR 28.6%, ExpR -0.262; K=4: N=10, WR 10.0%) and the best cell is an isolated spike (`is_plateau: False`) — persistence made the population dramatically worse, opposite the hypothesis. Gate ships inert (default `1` = off). No VALIDATION spent | `results/2026-09-10-v84-rsidiv-train.md` |
 | MA Ribbon `confirm_bars` alignment-persistence gate (v84) | **0/2 qualify, axis CLOSED.** K=2 (N=210, WR 48.1%, ExpR +0.269) and K=3 (N=194, WR 49.0%, ExpR +0.289) both miss the WR>=50 floor by 1-2pp, essentially flat vs the K=1 baseline (N=233, WR 48.1%, ExpR +0.270). Gate ships inert (default `1` = off). No VALIDATION spent | `results/2026-09-10-v84-maribbon-train.md` |

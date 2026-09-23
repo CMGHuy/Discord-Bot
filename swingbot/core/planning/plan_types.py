@@ -74,6 +74,12 @@ class TradePlanV2:
     # E48's recycler is the intended consumer.
     tp2_r_applied: float | None = None
     time_stop_days: int | None = None
+    # v92 Hypothesis 2: the day, resolved independently of time_stop_days /
+    # DATA_DRIVEN_STOPS_ENABLED, past which this plan is a stall-exit
+    # candidate if still pre-TP1 and below +0.5R. None when
+    # STALL_EXIT_ENABLED is off or the strategy lacks enough journaled
+    # winners -- see params._resolve_stall_exit_day.
+    stall_exit_day: int | None = None
     # E38: the one pyramid SUGGESTION emitted for this plan, or None. Its
     # presence is what makes the add fire at most once. The bot never sizes
     # real money -- this records what was suggested, not a position.

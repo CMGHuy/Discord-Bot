@@ -545,6 +545,22 @@ class PlanManager:
         if plan.working_stop is None:
             return plan.stop_loss, False
         return plan.working_stop, True
+
+    def _days_since_entry(self, plan: TradePlanV2) -> int | None:
+        """Bars elapsed since the fill that moved this plan PENDING -> ACTIVE
+        -- the live equivalent of exit_sim's `j - entry_index`. TradePlanV2
+        has no dedicated entry-timestamp field, so this reads the fill's
+        `at` off status_history (recorded once, by the stop_entry_fill
+        transition) and hands it to bar_count_fn exactly as _step_pending
+        already does with plan.created_at. None (no stall check possible)
+        when the fill was never recorded -- a plan persisted before this
+        history existed, or one filled some other way."""
+        entered_at = next((h.get("at") for h in plan.status_history
+                           if h.get("status") == PlanStatus.ACTIVE), None)
+        if entered_at is None:
+            return None
+        return self.bar_count_fn(plan.ticker, entered_at)
+
     def _step_active(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
         is_bull = plan.direction == "bullish"
         sign = 1 if is_bull else -1
@@ -582,6 +598,33 @@ class PlanManager:
                               at=at)
             self.store.update(plan)
             return [PlanEvent(plan.plan_id, "tp1_partial", dict(leg))]
+
+        # Task 13 (v92 Hypothesis 2): the live-poll counterpart of
+        # exit_sim._scale_out_exit_walk's Task 12 stall-exit block. Checked
+        # after the stop/TP1 checks above -- same conservative ordering as
+        # the backtest walk, so a genuine stop breach or TP1 touch always
+        # wins a same-tick collision with a stall exit. `current_r` reuses
+        # this function's own entry/sign/risk -- the identical formula the
+        # TP1 branch above already uses -- so live and backtest cannot
+        # silently diverge on this mechanism.
+        if (config.STALL_EXIT_ENABLED and plan.stall_exit_day is not None
+                and self.bar_count_fn is not None):
+            days_held = self._days_since_entry(plan)
+            if days_held is not None and days_held > plan.stall_exit_day:
+                current_r = (price - entry) * sign / risk if risk > 0 else 0.0
+                if current_r < 0.5:
+                    reason = "stall_exit"
+                    r = round(current_r, 3)
+                    record_transition(plan, PlanStatus.CLOSED, reason=reason,
+                                      at=self._now())
+                    leg = {"fraction": 1.0, "exit_price": price, "r": r,
+                           "reason": reason}
+                    persisted = self._persist_terminal(
+                        plan, leg, "loss" if r < 0 else "closed")
+                    return [PlanEvent(plan.plan_id, "closed",
+                                      {"reason": reason, "exit_price": price,
+                                       "leg": leg,
+                                       "_terminal_persisted": persisted})]
 
         be_trigger = breakeven_trigger(plan, entry)
         reached_be = price >= be_trigger if is_bull else price <= be_trigger

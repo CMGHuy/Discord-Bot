@@ -910,6 +910,41 @@ FIELDS: list[Field] = [
                "the strategy or it does nothing. Structure-derived stops (Fibonacci, Elliott "
                "Wave, Support/Resistance) are never scaled. R:R is preserved -- the same "
                "distance feeds stop and target. Off until the E33 walk-forward folds judge it."),
+    Field("ADAPTIVE_RUNNER_TRAIL_ENABLED", "ADAPTIVE_RUNNER_TRAIL_ENABLED",
+          "Exit quality", "Tighten the runner trail once R clears a threshold",
+          type="checkbox", default="false",
+          help="Once the runner leg's own extreme-close-since-TP1 has banked "
+               "TIGHTEN_TRIGGER_R since entry, the chandelier trail multiplier "
+               "switches from the strategy's base value to TIGHTEN_ATR_MULT "
+               "(never looser). Cannot move win rate -- TP1 already decided "
+               "win/loss before the runner leg starts (v92 Hypothesis 1). Off "
+               "until its TRAIN/VALIDATION shots judge it. CLOSED on TRAIN, no "
+               "lift (docs/superpowers/results/2026-09-16-v92-adaptive-trail-"
+               "train.md) -- stays default false. Wired into the backtest walk "
+               "only (exit_sim.py's _effective_trail_mult); plan_manager.py's "
+               "live poll path still calls chandelier_stop with the plan's raw "
+               "trail_atr_mult, so flipping this true would diverge live from "
+               "backtest -- do not flip it without wiring the live path too."),
+    Field("TIGHTEN_TRIGGER_R", "TIGHTEN_TRIGGER_R", "Exit quality",
+          "Runner R that triggers a tighter trail",
+          type="float", default="2.0", min=0.5, max=5.0, step=0.25,
+          help="One of v92 Hypothesis 1's two TRAIN grid dimensions."),
+    Field("TIGHTEN_ATR_MULT", "TIGHTEN_ATR_MULT", "Exit quality",
+          "Tightened chandelier ATR multiplier",
+          type="float", default="1.75", min=0.5, max=2.5, step=0.25,
+          help="Applied once TIGHTEN_TRIGGER_R clears; always <= the base "
+               "trail_atr_mult by construction (min() in exit_sim.py). The "
+               "other of v92 Hypothesis 1's two TRAIN grid dimensions."),
+    Field("STALL_EXIT_ENABLED", "STALL_EXIT_ENABLED", "Exit quality",
+          "Close stalled pre-TP1 positions early",
+          type="checkbox", default="false",
+          help="If a plan is still open past its strategy's "
+               "optimal_time_stop_days (edge/stops.py, needs 40+ journaled "
+               "winners for that strategy) and has not yet reached +0.5R, "
+               "closes it at market instead of continuing to hold. Pre-TP1 "
+               "only -- v92 Hypothesis 2, independent of the older, closed "
+               "DATA_DRIVEN_STOPS_ENABLED flag (see the spec's provenance "
+               "note). Off until its own TRAIN/VALIDATION shots judge it."),
 
     # --- Chart patterns ---
     Field("DEAD_CAT_BOUNCE_VETO", "DEAD_CAT_BOUNCE_VETO", "Chart patterns",
@@ -969,6 +1004,8 @@ _SEARCH_CLASSES = {
         "LEVEL_LIFECYCLE_STOPS_ENABLED", "AVWAP_LEVELS_ENABLED",
         "PYRAMIDING_ENABLED", "VOLUME_PROFILE_NODES_ENABLED",
         "MAX_ALERTS_PER_SCAN", "DATA_DRIVEN_STOPS_ENABLED",
+        "ADAPTIVE_RUNNER_TRAIL_ENABLED", "TIGHTEN_TRIGGER_R", "TIGHTEN_ATR_MULT",
+        "STALL_EXIT_ENABLED",
         "DEAD_CAT_BOUNCE_VETO", "DCB_DECLINE_PCT", "DCB_GAP_REQUIRED",
         "DCB_VOLUME_RATIO", "RSI_DIV_MIN_CONSECUTIVE_TURN",
         "MA_RIBBON_CONFIRM_BARS", "SR_MIN_LEVEL_TOUCHES",

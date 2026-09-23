@@ -396,3 +396,90 @@ def test_bearish_runner_stops_at_the_floor_not_at_plain_breakeven():
     assert result.legs[1]["exit_price"] == pytest.approx(93.33333333333333)
     assert result.legs[1]["r"] == pytest.approx(1.333)
     assert result.r_total == pytest.approx(1.667)
+
+
+# ---------------------------------------------------------------------------
+# Task 6: _effective_trail_mult - R-adaptive trail tightening (v92 Hypothesis 1)
+# ---------------------------------------------------------------------------
+
+from swingbot import config
+from swingbot.core.planning.exit_sim import _effective_trail_mult
+
+
+def test_effective_trail_mult_unchanged_when_flag_off(monkeypatch):
+    monkeypatch.setattr(config, "ADAPTIVE_RUNNER_TRAIL_ENABLED", False)
+    assert _effective_trail_mult(2.5, runner_r=5.0) == 2.5
+
+
+def test_effective_trail_mult_unchanged_below_trigger(monkeypatch):
+    monkeypatch.setattr(config, "ADAPTIVE_RUNNER_TRAIL_ENABLED", True)
+    monkeypatch.setattr(config, "TIGHTEN_TRIGGER_R", 2.0)
+    monkeypatch.setattr(config, "TIGHTEN_ATR_MULT", 1.75)
+    assert _effective_trail_mult(2.5, runner_r=1.9) == 2.5
+
+
+def test_effective_trail_mult_tightens_at_or_past_trigger(monkeypatch):
+    monkeypatch.setattr(config, "ADAPTIVE_RUNNER_TRAIL_ENABLED", True)
+    monkeypatch.setattr(config, "TIGHTEN_TRIGGER_R", 2.0)
+    monkeypatch.setattr(config, "TIGHTEN_ATR_MULT", 1.75)
+    assert _effective_trail_mult(2.5, runner_r=2.0) == 1.75
+    assert _effective_trail_mult(2.5, runner_r=4.0) == 1.75
+
+
+def test_effective_trail_mult_never_loosens_base(monkeypatch):
+    monkeypatch.setattr(config, "ADAPTIVE_RUNNER_TRAIL_ENABLED", True)
+    monkeypatch.setattr(config, "TIGHTEN_TRIGGER_R", 2.0)
+    monkeypatch.setattr(config, "TIGHTEN_ATR_MULT", 3.5)  # misconfigured: "tighter" > base
+    assert _effective_trail_mult(2.5, runner_r=3.0) == 2.5
+
+
+# ---------------------------------------------------------------------------
+# Task 12: pre-TP1 stall-exit check (v92 Hypothesis 2)
+# ---------------------------------------------------------------------------
+
+from swingbot.core.planning.exit_sim import _scale_out_exit_walk
+
+
+def test_stall_exit_fires_past_day_threshold_below_half_r(monkeypatch):
+    monkeypatch.setattr(config, "STALL_EXIT_ENABLED", True)
+    # entry 100, stop 90, tp1 120 -> risk=10. Price drifts to +0.2R (not yet
+    # +0.5R) and holds flat through bar 4. stall_exit_day=3 means bar 4 is the
+    # first bar strictly past the threshold (4 - 0 > 3).
+    plan = _plan(direction="bullish", stop_loss=90.0, tp1=120.0, stall_exit_day=3)
+    df = make_ohlcv([100.0, 100.0, 102.0, 102.0, 102.0, 102.0])
+    result = _scale_out_exit_walk(df, entry_index=0, entry_price=100.0, plan=plan,
+                                  max_holding_days=10)
+    assert result.legs[0]["reason"] == "stall_exit"
+    assert result.exit_index == 4
+
+
+def test_stall_exit_does_not_fire_once_half_r_reached(monkeypatch):
+    monkeypatch.setattr(config, "STALL_EXIT_ENABLED", True)
+    plan = _plan(direction="bullish", stop_loss=90.0, tp1=120.0, stall_exit_day=3)
+    df = make_ohlcv([100.0, 108.0, 115.0, 115.0, 115.0, 115.0])
+    result = _scale_out_exit_walk(df, entry_index=0, entry_price=100.0, plan=plan,
+                                  max_holding_days=10)
+    assert result.legs[0]["reason"] != "stall_exit"
+
+
+def test_stop_loss_still_wins_over_stall_exit_on_same_bar(monkeypatch):
+    monkeypatch.setattr(config, "STALL_EXIT_ENABLED", True)
+    # stall_exit_day=1: bar 2 is the first bar strictly past the threshold
+    # (2 - 0 > 1), and that SAME bar's close (89) breaches the stop (90) --
+    # a genuine same-bar collision, not just a coincidence of timing. Bar 1
+    # is flat (100) so neither condition is live there; the tie is only at
+    # bar 2.
+    plan = _plan(direction="bullish", stop_loss=90.0, tp1=120.0, stall_exit_day=1)
+    df = make_ohlcv([100.0, 100.0, 89.0])
+    result = _scale_out_exit_walk(df, entry_index=0, entry_price=100.0, plan=plan,
+                                  max_holding_days=10)
+    assert result.legs[0]["reason"] == "stop"
+
+
+def test_stall_exit_inert_when_flag_off(monkeypatch):
+    monkeypatch.setattr(config, "STALL_EXIT_ENABLED", False)
+    plan = _plan(direction="bullish", stop_loss=90.0, tp1=120.0, stall_exit_day=3)
+    df = make_ohlcv([100.0, 100.0, 102.0, 102.0, 102.0, 102.0])
+    result = _scale_out_exit_walk(df, entry_index=0, entry_price=100.0, plan=plan,
+                                  max_holding_days=10)
+    assert result.legs[0]["reason"] != "stall_exit"
