@@ -1,5 +1,7 @@
 import { TemplateRef } from '@angular/core';
 
+import { Viewport } from '../breakpoints';
+
 /* The data table's contract — spec `2026-08-08-v14-angular-workspaces-design.md`
  * Decision 1, with one amendment recorded at `PageSpec` below.
  *
@@ -101,6 +103,21 @@ export interface ColumnDef<T> {
 
   /** Any CSS width. Left unset the column takes its content's width. */
   width?: string;
+
+  /**
+   * The narrowest viewport at which this column renders inline — v95 §4.1.
+   *
+   * Below it the column leaves the grid and renders in the row's detail
+   * expansion instead. **Never hidden**: the parity gate asserts every
+   * declared column is reachable at every viewport.
+   *
+   * Omitted means always inline, so a column that says nothing behaves
+   * exactly as it did before v95. Note this is deliberately NOT the same
+   * axis as `visible`: `visible` is what the USER chose to show, `inlineFrom`
+   * is where the layout can afford to put it. A column the user hid is gone;
+   * a column below its floor is one tap away.
+   */
+  inlineFrom?: Viewport;
 
   footer?: (rows: T[]) => string | number | null;
 }

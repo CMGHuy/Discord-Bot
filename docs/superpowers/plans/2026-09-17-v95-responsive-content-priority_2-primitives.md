@@ -29,7 +29,7 @@ call sites rendering exactly as before.
   call sites (Trades, Analytics/Strategies, Risk, Watchlist) compile and render
   unchanged until they opt in.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `frontend/src/app/ui/data-table/data-table.spec.ts`:
 
@@ -54,12 +54,12 @@ describe('ColumnDef inlineFrom', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/data-table/data-table.spec.ts`
 Expected: FAIL — TypeScript rejects `inlineFrom` as not a property of `ColumnDef`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `data-table.types.ts`, add the import and the field to `ColumnDef<T>`, after
 `width`:
@@ -85,12 +85,12 @@ import { Viewport } from '../breakpoints';
   inlineFrom?: Viewport;
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/data-table/data-table.spec.ts`
 Expected: PASS, and every pre-existing test in the file still passes.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/data-table/data-table.types.ts frontend/src/app/ui/data-table/data-table.spec.ts

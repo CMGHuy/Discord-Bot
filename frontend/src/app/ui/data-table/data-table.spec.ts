@@ -9,6 +9,7 @@ import {
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { isInline } from '../priority';
 import { DataTable, SPINNER_DELAY_MS } from './data-table';
 import {
   ColumnDef,
@@ -634,5 +635,22 @@ describe('DataTable rowClass', () => {
     fixture.detectChanges();
 
     expect(bodyRows().map((r) => r.className)).toEqual(['row', 'row blink', 'row']);
+  });
+});
+
+describe('ColumnDef inlineFrom', () => {
+  it('is optional and defaults to always inline', () => {
+    // Adding the field must change nothing for a column that omits it, or
+    // this becomes a breaking change to four call sites at once.
+    const column: ColumnDef<{ ticker: string }> = { key: 'ticker', header: 'Ticker' };
+    expect(isInline(column.inlineFrom, 'xs')).toBe(true);
+  });
+
+  it('carries a declared floor through to the resolver', () => {
+    const column: ColumnDef<{ held: string }> = {
+      key: 'held', header: 'Held', inlineFrom: 'md',
+    };
+    expect(isInline(column.inlineFrom, 'sm')).toBe(false);
+    expect(isInline(column.inlineFrom, 'md')).toBe(true);
   });
 });
