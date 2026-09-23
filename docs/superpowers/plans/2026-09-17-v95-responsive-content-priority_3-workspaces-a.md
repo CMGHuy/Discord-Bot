@@ -257,7 +257,7 @@ declares the order instead, summary-first at every width.
 - Consumes: `PanelGrid.order` (B6).
 - Produces: `DASHBOARD_PANEL_ORDER`, exported for E1.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 describe('Dashboard panel order', () => {
@@ -279,12 +279,12 @@ describe('Dashboard panel order', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/dashboard/dashboard.spec.ts`
 Expected: FAIL — `DASHBOARD_PANEL_ORDER` undefined, and `720` still present.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```ts
 /**
@@ -306,17 +306,17 @@ Delete lines 527–534 entirely. Wrap the panels in
 `<sb-panel-grid [order]="DASHBOARD_PANEL_ORDER">` and give each panel a
 `data-panel-id`.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/dashboard/dashboard.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually — mandatory**
+- [x] **Step 5: Verify visually — mandatory**
 
 At 390px: Trading Performance is the first panel; the portfolio figure is
 visible without scrolling. At 768 and 1024: order unchanged from before.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/dashboard/dashboard.ts frontend/src/app/workspaces/dashboard/dashboard.spec.ts

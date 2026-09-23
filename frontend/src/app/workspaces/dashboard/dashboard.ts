@@ -12,6 +12,7 @@ import {
 } from '@angular/core';
 import { Router } from '@angular/router';
 import { CLOCK } from '../../ui/clock';
+import { Viewport } from '../../ui/breakpoints';
 
 import { CloseScope, TradeRow } from '../../api/models';
 import { ApiClient } from '../../api/api-client';
@@ -91,6 +92,29 @@ import { MarketMovers } from './panels/market-movers';
  * no subscription or refresh call anywhere in this file -- each store's own
  * effect owns both the first load and every refetch.
  */
+
+/**
+ * Panel order per band — v95 C3, replacing the old max-width:720px block.
+ *
+ * Performance leads everywhere. The old rule put positions first on phones,
+ * which meant the portfolio figure, win rate and expectancy sat below a table
+ * that is ~900px tall with five rows. "What is my account doing" is the
+ * question a phone is opened to answer; "which six trades are open" is the
+ * follow-up.
+ *
+ * A declaration, not a live reorder: `activity`/`movers` share `.bottom-row`,
+ * always adjacent and in this same relative order in every band below, so
+ * the three DOM sections (performance-async, positions-panel, bottom-row)
+ * already sit in exactly this order in the template. No band here differs
+ * from that declaration order, which is why fixing the bug was deleting the
+ * override that fought it rather than adding a new one — see the note above
+ * the (now-empty-of-reordering) media query below.
+ */
+export const DASHBOARD_PANEL_ORDER: Partial<Record<Viewport, string[]>> = {
+  xs: ['performance', 'positions', 'activity', 'movers'],
+  sm: ['performance', 'positions', 'activity', 'movers'],
+};
+
 @Component({
   selector: 'sb-dashboard',
   imports: [
@@ -523,14 +547,15 @@ import { MarketMovers } from './panels/market-movers';
     .pnl-plan .tp { color: var(--pos); }
     .pnl-plan .sl { color: var(--neg); }
 
-    @media (max-width: 720px) {
-      /* Option 2: on phones, live positions come before every performance
-         detail. The table keeps its pager on every lifecycle tab, but does
-         not add blank filler rows below a short first page. */
-      :host { display: flex; flex-direction: column; }
-      .positions-panel { order: 1; }
-      .performance-async { order: 2; }
-      .bottom-row { order: 3; }
+    /* v95 C3: the phone reorder above (positions before performance) is
+       deleted, not retriggered. It was backwards -- at 390px it put the
+       portfolio figure, win rate and expectancy below a ~900px table, and it
+       used an undeclared 720px breakpoint besides. :host's declaration order
+       is already performance, positions, bottom-row -- DASHBOARD_PANEL_ORDER
+       below documents that as the intended order at every band; no runtime
+       reordering is needed to produce it, only removing the override that
+       fought it. */
+    @media (max-width: 639px) {
       .lifecycle-hint sb-plan-lifecycle-diagram { min-width: 0; }
     }
   `,

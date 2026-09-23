@@ -20,7 +20,7 @@ import { Dashboard as DashboardData, TradeRow } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
-import { Dashboard } from './dashboard';
+import { Dashboard, DASHBOARD_PANEL_ORDER } from './dashboard';
 import { DashboardStore } from '../../stores/dashboard.store';
 import { ToastService } from '../../shell/toast.service';
 
@@ -417,5 +417,25 @@ describe('dead card-mode contract', () => {
   it('data-table no longer cites the superseded v18 decision', () => {
     expect(read('src/app/ui/data-table/data-table.ts'))
       .not.toMatch(/Cards instead of a table/);
+  });
+});
+
+/* -- v95 C3 -- panel order ------------------------------------------------- */
+
+describe('Dashboard panel order', () => {
+  it('leads with performance at every band', () => {
+    // Observed: at 390px positions came first and the portfolio figure was
+    // below a 900px table. At 768px performance came first. The phone case
+    // was the odd one out, and it was the wrong way round.
+    for (const band of ['xs', 'sm', 'md', 'lg', 'xl'] as const) {
+      expect(DASHBOARD_PANEL_ORDER[band]?.[0] ?? 'performance').toBe('performance');
+    }
+  });
+
+  it('no longer carries an undeclared breakpoint', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/workspaces/dashboard/dashboard.ts'), 'utf8');
+    const allowed = new Set(['639', '1023', '1439', '1919', '640', '1024', '1440', '1920']);
+    const widths = [...src.matchAll(/\(\s*(?:max|min)-width:\s*(\d+)px\s*\)/g)].map((m) => m[1]);
+    expect(widths.filter((w) => !allowed.has(w))).toEqual([]);
   });
 });
