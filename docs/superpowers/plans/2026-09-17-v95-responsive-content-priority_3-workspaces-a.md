@@ -447,7 +447,7 @@ and repeat `N=12 · thin sample` five times.
 - Consumes: `Panel.inlineFrom`, `Panel.digest`, `Panel.problem` (B7, B8).
 - Produces: `calendarDigest()` — one line standing in for the six tiles.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 describe('Calendar stat digest', () => {
@@ -469,12 +469,12 @@ describe('Calendar stat digest', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/calendar/calendar.spec.ts`
 Expected: FAIL — neither member exists.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```ts
   /** The six tiles in one line — v95 C5. Net, count, win rate: the three a
@@ -496,18 +496,18 @@ Expected: FAIL — neither member exists.
 Wrap the six tiles in one `<sb-panel inlineFrom="md" [digest]="calendarDigest()"
 [problem]="calendarProblem()">`.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/calendar/calendar.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually — mandatory**
+- [x] **Step 5: Verify visually — mandatory**
 
 At 390px with a thin sample: the tiles stay expanded and the warning is
 visible (guard 2 fires). With an adequate sample: one digest line, and the
 month grid is reachable in roughly one screen instead of four.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/calendar/calendar.ts frontend/src/app/workspaces/calendar/calendar.spec.ts

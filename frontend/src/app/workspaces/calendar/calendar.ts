@@ -10,7 +10,7 @@ import { ControlRow, Drawer, Panel } from '../../ui/layout';
 import { MetricCard } from '../../ui/metric-card';
 import { Select } from '../../ui/form-controls';
 import { SectionHead } from '../../ui/section-head';
-import { StatTile } from '../../ui/stat-tile';
+import { MIN_SAMPLE_N, StatTile } from '../../ui/stat-tile';
 import { cellValue, GridCell, localIsoDate, monthLabel, monthMatrix } from './calendar.helpers';
 
 /** Monday-first, matching `monthMatrix` and the API's weekday breakdown. */
@@ -91,26 +91,35 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       [skeletonCols]="7"
       (retry)="store.load()"
     >
-      <!-- One row for every summary figure -- the live-month totals and the
-           month-over-month stats used to split across two separate rows
-           (one above the grid, one below) for no reason tied to what they
-           mean; auto-fit wraps to a second row on its own once width runs
-           out, rather than a hardcoded per-row count. -->
-      <div class="totals">
-        <sb-metric-card
-          label="Net this month"
-          [value]="totalValue()"
-          [unit]="totalUnit()"
-          [tone]="totalsTone()"
-        />
-        <sb-metric-card label="Trades" [value]="store.totals()?.trade_count ?? null" [decimals]="0" />
-        <sb-metric-card label="Win rate" [value]="store.totals()?.win_rate ?? null" unit="%" [decimals]="1" />
-        <sb-stat-tile label="Month total" [value]="monthTotal()" [sample]="monthDays().length" />
-        <sb-stat-tile label="Winning days" [value]="winningDaysLabel()" [sample]="monthDays().length" tone="pos" />
-        <sb-stat-tile label="Average day" [value]="averageDay()" [sample]="monthDays().length" />
-        <sb-stat-tile label="Best day" [value]="monthExtreme('best')" [sample]="monthDays().length" tone="pos" />
-        <sb-stat-tile label="Worst day" [value]="monthExtreme('worst')" [sample]="monthDays().length" tone="neg" />
-      </div>
+      <!-- v95 C5: filters plus these eight tiles pushed the month grid --
+           the reason this page exists -- past 1,400px at 390px, four of
+           them dimmed "thin sample" and repeating "N=<n> thin sample" four
+           times over. Below md the panel collapses to calendarDigest(), one
+           line standing in for all eight; a thin sample force-expands it
+           instead (Guard 2) rather than hiding the warning behind a
+           settled-looking digest. -->
+      <sb-panel inlineFrom="md" [digest]="calendarDigest()" [problem]="calendarProblem()">
+        <!-- One row for every summary figure -- the live-month totals and the
+             month-over-month stats used to split across two separate rows
+             (one above the grid, one below) for no reason tied to what they
+             mean; auto-fit wraps to a second row on its own once width runs
+             out, rather than a hardcoded per-row count. -->
+        <div class="totals">
+          <sb-metric-card
+            label="Net this month"
+            [value]="totalValue()"
+            [unit]="totalUnit()"
+            [tone]="totalsTone()"
+          />
+          <sb-metric-card label="Trades" [value]="store.totals()?.trade_count ?? null" [decimals]="0" />
+          <sb-metric-card label="Win rate" [value]="store.totals()?.win_rate ?? null" unit="%" [decimals]="1" />
+          <sb-stat-tile label="Month total" [value]="monthTotal()" [sample]="monthDays().length" />
+          <sb-stat-tile label="Winning days" [value]="winningDaysLabel()" [sample]="monthDays().length" tone="pos" />
+          <sb-stat-tile label="Average day" [value]="averageDay()" [sample]="monthDays().length" />
+          <sb-stat-tile label="Best day" [value]="monthExtreme('best')" [sample]="monthDays().length" tone="pos" />
+          <sb-stat-tile label="Worst day" [value]="monthExtreme('worst')" [sample]="monthDays().length" tone="neg" />
+        </div>
+      </sb-panel>
 
       <!-- The day-detail pane that used to sit beside this grid duplicated
            the drawer below word for word (same store signals, same fields)
@@ -548,6 +557,28 @@ export class Calendar {
 
   /** Closed-trading days only: calendar blanks are not observations. */
   protected readonly monthDays = computed(() => this.store.days().filter((day) => day.trade_count > 0));
+
+  /** The eight tiles in one line — v95 C5. Net, count, win rate: the three a
+   *  trader would read first, in the order they read them. Always in the
+   *  account currency and percent, independent of the metric toggle above --
+   *  a digest that changed shape with the toggle would be a different
+   *  summary each time, not a stand-in for the same one. */
+  protected readonly calendarDigest = computed(() => {
+    const totals = this.store.totals();
+    if (!totals) return ABSENT;
+    const winRate = totals.win_rate === null ? ABSENT : `${totals.win_rate.toFixed(1)}%`;
+    return `${money(totals.net_pnl_amount, this.currency(), 2)} · `
+      + `${totals.trade_count} trades · ${winRate} win`;
+  });
+
+  /** Guard 2 (v95 §5). Every `sb-stat-tile` above already carries
+   *  `[sample]="monthDays().length"` and dims itself below `MIN_SAMPLE_N`;
+   *  collapsing them behind a digest that showed only the headline figures
+   *  would present that same thin month as a settled one. */
+  protected readonly calendarProblem = computed(() => {
+    const n = this.monthDays().length;
+    return n < MIN_SAMPLE_N ? `thin sample — N=${n}` : null;
+  });
 
   protected monthTotal(): string {
     const value = this.totalValue();
