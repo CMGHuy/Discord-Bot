@@ -20,8 +20,24 @@ import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Checkbox, Select, SelectOption } from '../../ui/form-controls';
-import { ControlRow, Panel } from '../../ui/layout';
+import { Panel } from '../../ui/layout';
 import { Freshness } from '../../ui/freshness';
+import { Toolbar, ToolbarControl } from '../../ui/toolbar';
+
+/**
+ * v95 D4 — `sb-control-row` force-stacks below 640px, turning five short
+ * controls into five screen-wide blocks above the log. `source` and
+ * `refresh` are how you pick and load what you're reading, so they stay put;
+ * `raw` is a convenience link and `clear` is destructive, so both step back
+ * first -- the same reasoning Trades applied to its two destructive controls
+ * (TRADES_CONTROLS).
+ */
+export const LOG_CONTROLS: ToolbarControl[] = [
+  { id: 'source', label: 'Log source', inlineFrom: 'xs' },
+  { id: 'refresh', label: 'Refresh', inlineFrom: 'xs' },
+  { id: 'raw', label: 'Raw log', inlineFrom: 'sm' },
+  { id: 'clear', label: 'Clear log', inlineFrom: 'lg' },
+];
 
 /**
  * The log tail — bot or admin, with a raw view and a clear action.
@@ -34,22 +50,28 @@ import { Freshness } from '../../ui/freshness';
 @Component({
   selector: 'sb-logs-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, Checkbox, ConfirmDialog, ControlRow, Select, Freshness, Async],
+  imports: [Panel, Button, Checkbox, ConfirmDialog, Select, Toolbar, Freshness, Async],
   template: `
     <sb-panel [heading]="store.logs()?.path ?? 'Log'">
-      <sb-control-row panel-actions class="actions">
-        @for (source of sources; track source) {
-          <button
-            sb-button
-            [variant]="store.logSource() === source ? 'secondary' : 'ghost'"
-            type="button"
-            [attr.aria-pressed]="store.logSource() === source"
-            (click)="store.setLogSource(source)"
-          >
-            {{ source }}
-          </button>
-        }
+      <sb-toolbar panel-actions [controls]="controls">
+        <!-- The @for is content, not the slotted element -- wrapped in a
+             stable div so sb-toolbar reparents one node, matching its
+             docstring's rule against slotting inside a host-side @for. -->
+        <div slot="source">
+          @for (source of sources; track source) {
+            <button
+              sb-button
+              [variant]="store.logSource() === source ? 'secondary' : 'ghost'"
+              type="button"
+              [attr.aria-pressed]="store.logSource() === source"
+              (click)="store.setLogSource(source)"
+            >
+              {{ source }}
+            </button>
+          }
+        </div>
         <button
+          slot="refresh"
           sb-button
           variant="ghost"
           type="button"
@@ -60,11 +82,11 @@ import { Freshness } from '../../ui/freshness';
         </button>
         <!-- A real link: the raw endpoint is text/plain and the browser
              renders it better than any viewer built here would. -->
-        <a class="raw" [href]="rawUrl()" target="_blank" rel="noopener">Raw</a>
-        <button sb-button variant="danger" type="button" (click)="asking.set(true)">
+        <a slot="raw" class="raw" [href]="rawUrl()" target="_blank" rel="noopener">Raw</a>
+        <button slot="clear" sb-button variant="danger" type="button" (click)="asking.set(true)">
           Clear
         </button>
-      </sb-control-row>
+      </sb-toolbar>
       <!-- Logs have no producer timestamp. “age unknown” is the honest
            per-panel answer until the API grows one; it is not a false Live. -->
       <sb-freshness [at]="null" />
@@ -144,7 +166,8 @@ import { Freshness } from '../../ui/freshness';
     />
   `,
   styles: `
-    /* .actions keeps its class as a marker only -- sb-control-row supplies
+    /* v95 D4: the source/refresh/raw/clear row moved from sb-control-row to
+       sb-toolbar above -- .actions is gone, sb-toolbar's own host supplies
        display, alignment, wrap and gap.
        .triage, .levels and .level below are NOT converted: .level is a
        <label> element whose native checkbox association depends on staying
@@ -212,6 +235,7 @@ import { Freshness } from '../../ui/freshness';
 })
 export class LogsTab {
   protected readonly store = inject(SystemStore);
+  protected readonly controls = LOG_CONTROLS;
 
   protected readonly logsAsync = computed(() =>
     asyncInputs(
