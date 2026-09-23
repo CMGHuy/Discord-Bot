@@ -396,3 +396,38 @@ def test_bearish_runner_stops_at_the_floor_not_at_plain_breakeven():
     assert result.legs[1]["exit_price"] == pytest.approx(93.33333333333333)
     assert result.legs[1]["r"] == pytest.approx(1.333)
     assert result.r_total == pytest.approx(1.667)
+
+
+# ---------------------------------------------------------------------------
+# Task 6: _effective_trail_mult - R-adaptive trail tightening (v92 Hypothesis 1)
+# ---------------------------------------------------------------------------
+
+from swingbot import config
+from swingbot.core.planning.exit_sim import _effective_trail_mult
+
+
+def test_effective_trail_mult_unchanged_when_flag_off(monkeypatch):
+    monkeypatch.setattr(config, "ADAPTIVE_RUNNER_TRAIL_ENABLED", False)
+    assert _effective_trail_mult(2.5, runner_r=5.0) == 2.5
+
+
+def test_effective_trail_mult_unchanged_below_trigger(monkeypatch):
+    monkeypatch.setattr(config, "ADAPTIVE_RUNNER_TRAIL_ENABLED", True)
+    monkeypatch.setattr(config, "TIGHTEN_TRIGGER_R", 2.0)
+    monkeypatch.setattr(config, "TIGHTEN_ATR_MULT", 1.75)
+    assert _effective_trail_mult(2.5, runner_r=1.9) == 2.5
+
+
+def test_effective_trail_mult_tightens_at_or_past_trigger(monkeypatch):
+    monkeypatch.setattr(config, "ADAPTIVE_RUNNER_TRAIL_ENABLED", True)
+    monkeypatch.setattr(config, "TIGHTEN_TRIGGER_R", 2.0)
+    monkeypatch.setattr(config, "TIGHTEN_ATR_MULT", 1.75)
+    assert _effective_trail_mult(2.5, runner_r=2.0) == 1.75
+    assert _effective_trail_mult(2.5, runner_r=4.0) == 1.75
+
+
+def test_effective_trail_mult_never_loosens_base(monkeypatch):
+    monkeypatch.setattr(config, "ADAPTIVE_RUNNER_TRAIL_ENABLED", True)
+    monkeypatch.setattr(config, "TIGHTEN_TRIGGER_R", 2.0)
+    monkeypatch.setattr(config, "TIGHTEN_ATR_MULT", 3.5)  # misconfigured: "tighter" > base
+    assert _effective_trail_mult(2.5, runner_r=3.0) == 2.5
