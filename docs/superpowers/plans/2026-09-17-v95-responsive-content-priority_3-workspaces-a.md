@@ -531,7 +531,7 @@ already solved this in the same repo; copy its shape.
 - Consumes: nothing new.
 - Produces: an `.agenda` list rendering only days with trades, below `sm`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 it('renders an agenda, not a 7-column grid, below sm', () => {
@@ -560,12 +560,12 @@ it('keeps the grid at sm and above', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/calendar/calendar.spec.ts`
 Expected: FAIL — `.agenda` does not exist.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```html
 @if (viewport() === 'xs') {
@@ -599,17 +599,17 @@ Expected: FAIL — `.agenda` does not exist.
     .agenda-count { flex: 0 0 auto; color: var(--text-faint); font-size: var(--text-chip); }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/calendar/calendar.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually — mandatory**
+- [x] **Step 5: Verify visually — mandatory**
 
 At 390px: an agenda of traded days, value and count clearly separate. At 768
 and 1024: the month grid, unchanged.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/calendar/calendar.ts frontend/src/app/workspaces/calendar/calendar.spec.ts

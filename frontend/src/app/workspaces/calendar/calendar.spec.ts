@@ -455,3 +455,50 @@ describe('Calendar stat digest', () => {
     expect(component.calendarProblem()).toBeNull();
   });
 });
+
+/* -- v95 C6 -- the phone agenda --------------------------------------------- */
+
+describe('Calendar phone agenda', () => {
+  it('renders an agenda, not a 7-column grid, below sm', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.componentRef.setInput('viewportAt', 'xs');
+    fixture.detectChanges();
+
+    expect(el(fixture).querySelector('.week')).toBeNull();
+    expect(el(fixture).querySelector('.agenda')).not.toBeNull();
+  });
+
+  it('lists only days that traded', async () => {
+    // RESPONSE.days has exactly two entries, both trade_count > 0.
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.componentRef.setInput('viewportAt', 'xs');
+    fixture.detectChanges();
+
+    expect(el(fixture).querySelectorAll('.agenda-day')).toHaveLength(RESPONSE.days.length);
+  });
+
+  it('separates the value from the count', async () => {
+    // At 390px the grid ran "+71 10" together with no separator; two
+    // numbers touching read as one.
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.componentRef.setInput('viewportAt', 'xs');
+    fixture.detectChanges();
+
+    const day = el(fixture).querySelector('.agenda-day')!;
+    expect(day.querySelector('.agenda-value')).not.toBeNull();
+    expect(day.querySelector('.agenda-count')).not.toBeNull();
+  });
+
+  it('keeps the grid at sm and above', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.componentRef.setInput('viewportAt', 'sm');
+    fixture.detectChanges();
+
+    expect(el(fixture).querySelector('.week')).not.toBeNull();
+    expect(el(fixture).querySelector('.agenda')).toBeNull();
+  });
+});
