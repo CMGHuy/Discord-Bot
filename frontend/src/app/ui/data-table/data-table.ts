@@ -85,8 +85,8 @@ const PIN_KEYS = ['ticker', 'symbol'];
       <table>
         <thead>
           <tr>
-            @if (expansion()) {
-              <th class="expander-cell"><span class="sr-only">Expand row</span></th>
+            @if (hasDetail()) {
+              <th class="expander-cell"><span class="sr-only">Show more</span></th>
             }
             @for (col of inlineColumns(); track col.key) {
               <th
@@ -121,13 +121,13 @@ const PIN_KEYS = ['ticker', 'symbol'];
         <tbody>
           @for (row of rows(); track rowKey()(row)) {
             <tr class="row" [class]="rowClass()(row)" (click)="activate(row, $event)">
-              @if (expansion()) {
-                <td class="expander-cell">
+              @if (hasDetail()) {
+                <td class="expander-cell detail-cell">
                   <button
                     type="button"
-                    class="expander"
+                    class="expander detail-toggle"
                     [attr.aria-expanded]="isExpanded(row)"
-                    [attr.aria-label]="isExpanded(row) ? 'Collapse row' : 'Expand row'"
+                    [attr.aria-label]="(isExpanded(row) ? 'Show less for ' : 'Show more for ') + rowLabel(row)"
                     (click)="toggleExpanded(row)"
                   >
                     {{ isExpanded(row) ? '▾' : '▸' }}
@@ -148,17 +148,32 @@ const PIN_KEYS = ['ticker', 'symbol'];
               }
             </tr>
 
-            @if (expansion(); as expansionTemplate) {
-              @if (isExpanded(row)) {
-                <tr class="expansion">
-                  <td [attr.colspan]="colspan()">
+            @if (hasDetail() && isExpanded(row)) {
+              <tr class="expansion row-detail">
+                <td [attr.colspan]="colspan()">
+                  @for (col of demotedColumns(); track col.key) {
+                    <div class="detail-item">
+                      <span class="detail-label sb-label">{{ col.header }}</span>
+                      <span class="detail-value">
+                        @if (col.cell; as cellTemplate) {
+                          <ng-container
+                            [ngTemplateOutlet]="cellTemplate"
+                            [ngTemplateOutletContext]="{ $implicit: row }"
+                          />
+                        } @else {
+                          {{ text(col, row) }}
+                        }
+                      </span>
+                    </div>
+                  }
+                  @if (expansion(); as expansionTemplate) {
                     <ng-container
                       [ngTemplateOutlet]="expansionTemplate"
                       [ngTemplateOutletContext]="{ $implicit: row }"
                     />
-                  </td>
-                </tr>
-              }
+                  }
+                </td>
+              </tr>
             }
           }
           @for (slot of fillerRows(); track slot) {
@@ -167,7 +182,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
         </tbody>
         @if (hasFooter()) {
           <tfoot><tr>
-            @if (expansion()) { <td class="expander-cell"></td> }
+            @if (hasDetail()) { <td class="expander-cell"></td> }
             @for (col of inlineColumns(); track col.key) { <td [class.num]="col.numeric">{{ footerText(col) }}</td> }
           </tr></tfoot>
         }
@@ -343,6 +358,11 @@ const PIN_KEYS = ['ticker', 'symbol'];
       font-size: var(--text-body);
     }
     .expander:hover { color: var(--text); }
+    .detail-toggle { min-height: var(--control-h); min-width: var(--control-h); }
+    .row-detail > td { padding: var(--space-10) var(--space-14); background: var(--surface-raised); }
+    .detail-item { display: flex; justify-content: space-between; gap: var(--space-10); padding: 2px 0; }
+    .detail-label { flex: 0 0 auto; }
+    .detail-value { min-width: 0; text-align: right; font-family: var(--font-mono); }
     .expander:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 
     .sr-only {
@@ -603,8 +623,29 @@ export class DataTable<T> {
     this.move(key, order[index]);
   }
 
+  /**
+   * Does a row have anything behind its disclosure? — v95 §4.1.
+   *
+   * One mechanism, not two: the table already had a rowKey-keyed expansion
+   * for the call site's own template, and a second index-keyed one would put
+   * two chevrons on a row and two states behind them. Demoted columns render
+   * above that template in the same row.
+   */
+  protected readonly hasDetail = computed(
+    () => this.demotedColumns().length > 0 || this.expansion() !== null,
+  );
+
+  /** The row's identity, for the toggle's accessible name -- a chevron that
+   *  announces only "expand" tells a screen reader nothing about which row. */
+  protected rowLabel(row: T): string {
+    const pin = this.pinKey();
+    const column = this.renderedColumns().find((c) => c.key === pin);
+    const value = column?.value?.(row);
+    return value === null || value === undefined ? 'row' : String(value);
+  }
+
   protected readonly colspan = computed(
-    () => this.inlineColumns().length + (this.expansion() ? 1 : 0),
+    () => this.inlineColumns().length + (this.hasDetail() ? 1 : 0),
   );
   protected readonly fillerRows = computed<number[]>(() => {
     const page = this.pagination();

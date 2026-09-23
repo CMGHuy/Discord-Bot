@@ -277,7 +277,7 @@ site's own `expansion` template when one is supplied.
   - No new input. A row has a detail exactly when `demotedColumns()` is
     non-empty or `expansion()` is set.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `data-table.spec.ts`:
 
@@ -340,12 +340,12 @@ describe('DataTable row detail', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/data-table/data-table.spec.ts`
 Expected: FAIL — no `.detail-toggle` exists.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Add the open-row state to the class:
 
@@ -437,13 +437,13 @@ Styles:
     .detail-value { min-width: 0; text-align: right; font-family: var(--font-mono); }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/data-table/data-table.spec.ts`
 Expected: PASS, and every v80 phone-mode test still passes — no workspace
 declares a floor yet, so `hasDetail()` is false everywhere in production.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/data-table/data-table.ts frontend/src/app/ui/data-table/data-table.spec.ts

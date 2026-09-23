@@ -32,12 +32,13 @@ interface Row {
   id: string;
   ticker: string;
   pnl: number | null;
+  held: string;
 }
 
 const ROWS: Row[] = [
-  { id: 'a', ticker: 'AAPL', pnl: 4.2 },
-  { id: 'b', ticker: 'MSFT', pnl: -1.5 },
-  { id: 'c', ticker: 'NVDA', pnl: null },
+  { id: 'a', ticker: 'AAPL', pnl: 4.2, held: '3d' },
+  { id: 'b', ticker: 'MSFT', pnl: -1.5, held: '11d' },
+  { id: 'c', ticker: 'NVDA', pnl: null, held: '1d' },
 ];
 
 @Component({
@@ -675,8 +676,10 @@ describe('DataTable column demotion', () => {
   });
 
   const el = () => fixture.nativeElement as HTMLElement;
+  /* Excludes the disclosure column (B3): it is a control, not a column, and
+   * it appears exactly when something has been demoted. */
   const headers = () =>
-    [...el().querySelectorAll('thead th')].map((th) => th.textContent!.trim());
+    [...el().querySelectorAll('thead th:not(.expander-cell)')].map((th) => th.textContent!.trim());
 
   it('draws every column when none declares a floor', () => {
     host.viewportAt.set('xs');
@@ -716,5 +719,77 @@ describe('DataTable column demotion', () => {
     host.viewportAt.set('xs');
     fixture.detectChanges();
     expect(headers()).toContain('Ticker');
+  });
+});
+
+describe('DataTable row detail', () => {
+  let fixture: ComponentFixture<Host>;
+  let host: Host;
+
+  const DEMOTING: ColumnDef<Row>[] = [
+    { key: 'ticker', header: 'Ticker', value: (r: Row) => r.ticker },
+    { key: 'pnl', header: 'P&L %', value: (r: Row) => r.pnl, inlineFrom: 'md' as const },
+    { key: 'held', header: 'Held', value: (r: Row) => r.held, inlineFrom: 'md' as const },
+  ];
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(Host);
+    host = fixture.componentInstance;
+    host.columnsOverride.set(DEMOTING);
+    host.visible.set(['ticker', 'pnl', 'held']);
+    host.viewportAt.set('sm');
+    fixture.detectChanges();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+
+  it('offers a detail toggle on every row when columns are demoted', () => {
+    expect(el().querySelectorAll('button.detail-toggle')).toHaveLength(ROWS.length);
+  });
+
+  it('starts collapsed', () => {
+    const toggle = el().querySelector('button.detail-toggle')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(el().querySelector('.row-detail')).toBeNull();
+  });
+
+  it('reveals every demoted column, labelled, on expand', () => {
+    (el().querySelector('button.detail-toggle') as HTMLElement).click();
+    fixture.detectChanges();
+
+    const labels = [...el().querySelectorAll('.row-detail .detail-label')]
+      .map((n) => n.textContent!.trim());
+    expect(labels).toEqual(['P&L %', 'Held']);
+
+    const values = [...el().querySelectorAll('.row-detail .detail-value')]
+      .map((n) => n.textContent!.trim());
+    expect(values).toEqual([String(ROWS[0].pnl), String(ROWS[0].held)]);
+  });
+
+  it('names the row it opens, so the toggle is not an anonymous chevron', () => {
+    const toggle = el().querySelector('button.detail-toggle')!;
+    expect(toggle.getAttribute('aria-label')).toContain(ROWS[0].ticker);
+  });
+
+  it('offers no toggle when nothing is demoted', () => {
+    host.viewportAt.set('xl');
+    fixture.detectChanges();
+    expect(el().querySelector('button.detail-toggle')).toBeNull();
+  });
+
+  it('is the same disclosure as the call site expansion, not a second one', () => {
+    // The table already had a rowKey-keyed expansion with its own chevron.
+    // Two toggles per row would be two things to discover and two states to
+    // reason about; the detail renders above the call site's template inside
+    // the one expansion row.
+    host.withExpansion.set(true);
+    fixture.detectChanges();
+    expect(el().querySelectorAll('tbody tr.row:first-of-type button.expander')).toHaveLength(1);
+
+    (el().querySelector('button.detail-toggle') as HTMLElement).click();
+    fixture.detectChanges();
+    expect(el().querySelectorAll('tr.row-detail')).toHaveLength(1);
+    expect(el().querySelector('.row-detail .expansion-body')).not.toBeNull();
   });
 });
