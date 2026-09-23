@@ -39,7 +39,7 @@ narrows this table) and `Columns`. Everything else demotes.
 - Consumes: `Toolbar`, `ToolbarControl` (B4).
 - Produces: `TRADES_CONTROLS: ToolbarControl[]`, exported so E1 can walk it.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { TRADES_CONTROLS } from './trades';
@@ -75,12 +75,12 @@ describe('Trades toolbar priorities', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/trades/trades.spec.ts`
 Expected: FAIL — `TRADES_CONTROLS` is not exported.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Export the declaration:
 
@@ -133,19 +133,19 @@ Wrap the existing bar markup in `<sb-toolbar [controls]="toolbarControls()">`
 and give every projected control a `slot` attribute matching its `id`. Delete
 the workspace's own responsive rules for the bar — the toolbar owns that now.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/trades/trades.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually — mandatory**
+- [x] **Step 5: Verify visually — mandatory**
 
 At 390px: the first trade row is above the fold or close to it; the sheet
 button reads `Filters 13`; opening it reveals every demoted control; setting a
 ticker filter and closing the sheet leaves a visible active marker. At 768 and
 1024: confirm nothing that used to be inline has vanished without a sheet.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/trades/trades.ts frontend/src/app/workspaces/trades/trades.spec.ts

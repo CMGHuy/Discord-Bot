@@ -40,13 +40,11 @@ import { Flash } from '../../ui/flash';
 import { dateTime, money, pct, signed, text } from '../../ui/format';
 import { Magnitude } from '../../ui/magnitude';
 import { Select, TextInput } from '../../ui/form-controls';
-import { ControlRow } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
 import { Icon } from '../../ui/icon';
-import { SectionHead } from '../../ui/section-head';
 import { ConfidenceCell } from '../../ui/confidence-cell';
-import { ControlBar } from '../../ui/control-bar';
 import { DateRange } from '../../ui/date-range';
+import { Toolbar, ToolbarControl } from '../../ui/toolbar';
 import { DirectionArrow } from '../../ui/direction-arrow';
 import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
 import { StatusCell } from '../../ui/status-cell';
@@ -81,6 +79,35 @@ interface LaneChip {
 }
 
 /**
+ * What the Trades bar shows where — v95 C1.
+ *
+ * `status` and `columns` stay inline at every width: status is how anyone
+ * narrows this table, and the column picker is the only way to make 29
+ * columns fit anything. The eight field filters and the date range are
+ * precise tools used occasionally — exactly what a sheet is for.
+ *
+ * The two destructive controls demote furthest (`lg`). They were the first
+ * thing under a thumb at 390px, above the data they destroy.
+ */
+export const TRADES_CONTROLS: ToolbarControl[] = [
+  { id: 'status', label: 'Status', inlineFrom: 'xs' },
+  { id: 'columns', label: 'Columns', inlineFrom: 'xs' },
+  { id: 'density', label: 'Density', inlineFrom: 'sm' },
+  { id: 'export', label: 'Export CSV', inlineFrom: 'md' },
+  { id: 'dates', label: 'Date range', inlineFrom: 'md' },
+  { id: 'ticker', label: 'Ticker', inlineFrom: 'md' },
+  { id: 'origin', label: 'Origin', inlineFrom: 'md' },
+  { id: 'strategy', label: 'Strategy', inlineFrom: 'md' },
+  { id: 'horizon', label: 'Horizon', inlineFrom: 'md' },
+  { id: 'confidence', label: 'Confidence', inlineFrom: 'md' },
+  { id: 'tier', label: 'Tier', inlineFrom: 'md' },
+  { id: 'badge', label: 'Badge', inlineFrom: 'md' },
+  { id: 'note', label: 'Note', inlineFrom: 'md' },
+  { id: 'clear-open', label: 'Clear open', inlineFrom: 'lg' },
+  { id: 'clear-history', label: 'Clear history', inlineFrom: 'lg' },
+];
+
+/**
  * The Trades workspace — the entity that Plans, Journal and the dashboard's
  * two tables collapse into.
  *
@@ -104,8 +131,7 @@ interface LaneChip {
   host: { class: 'register-instrument' },
   imports: [
     Async,
-    ControlRow,
-    ControlBar,
+    Toolbar,
     DataTable,
     DateRange,
     ColumnPickerComponent,
@@ -124,40 +150,8 @@ interface LaneChip {
     QualityChip,
     RowLink,
     Icon,
-    SectionHead,
   ],
   template: `
-    <sb-section-head>
-      <sb-control-row actions class="head-actions">
-        <button sb-button variant="ghost" type="button" (click)="bulk.set('open')">
-          Clear open
-        </button>
-        <button sb-button variant="ghost" type="button" (click)="bulk.set('history')">
-          Clear history
-        </button>
-        <div class="density" role="group" aria-label="Row density">
-          <button
-            sb-button
-            variant="ghost"
-            type="button"
-            [attr.aria-pressed]="density() === 'compact'"
-            (click)="setDensity('compact')"
-          >
-            Compact
-          </button>
-          <button
-            sb-button
-            variant="ghost"
-            type="button"
-            [attr.aria-pressed]="density() === 'full'"
-            (click)="setDensity('full')"
-          >
-            Full
-          </button>
-        </div>
-      </sb-control-row>
-    </sb-section-head>
-
     @if (store.clearResult(); as message) {
       <!-- The count, not just "done": "cleared 0" and "cleared 40" are
            different answers and want different reactions. -->
@@ -167,47 +161,25 @@ interface LaneChip {
       <p class="command-error" role="alert">{{ message }}</p>
     }
 
-    <!-- v85 D32: the eight controls actually reached for -- status, outcome
-         and direction -- promoted out of the collapsible filter bar below
-         into the shared control bar, one click instead of two. sb-filter-chips
-         (not deprecated sb-segmented: this lane needs the "All" leading chip
-         and the three-key write onLaneChip already provides) still owns the
-         chip markup; only its data and handler changed. The export link and
-         column picker move into the bar's scope slot -- they are the two
-         controls the mockup's own asset-class lane sat beside, not filters. -->
-    <sb-control-bar>
+    <!-- v95 C1: the ~1700px of chrome that used to sit above the first row at
+         390px -- eight field filters, a date range, Export CSV, the column
+         picker, the density toggle, eight status chips and two destructive
+         buttons -- collapses into one sb-toolbar. status and columns stay
+         inline everywhere (TRADES_CONTROLS); everything else demotes into
+         the sheet below its declared floor. sb-filter-chips (not deprecated
+         sb-segmented: this lane needs the "All" leading chip and the
+         three-key write onLaneChip already provides) still owns the chip
+         markup; only its data and handler changed. -->
+    <sb-toolbar [controls]="toolbarControls()">
       <sb-filter-chips
-        filters
+        slot="status"
         [chips]="laneChips"
         [selected]="laneSelected()"
         label="Status"
         (selectedChange)="onLaneChip($event)"
       />
-      <!-- v85 D32: the opened-at range. A scope control, not a filter-bar
-           filter -- it narrows WHEN, not WHAT, the same distinction that
-           already separates this bar's two slots for the export link and
-           column picker beside it. -->
-      <sb-date-range
-        scope
-        [from]="opened_from() ?? null"
-        [to]="opened_to() ?? null"
-        (changed)="onDateRange($event)"
-      />
-      <!-- A plain anchor, not a fetch: the browser gets a Save dialog and
-           the server's filename, both of which an XHR throws away.
-           The title names what comes out, because it is NOT what is on
-           screen: the export is the whole trade log, unfiltered. Saying so
-           here is the same courtesy the two Clear dialogs already pay. -->
-      <a
-        scope
-        class="export"
-        [href]="store.exportUrl()"
-        title="Downloads the entire trade log. The filters above do not narrow it."
-        download
-        >Export CSV</a
-      >
       <sb-column-picker
-        scope
+        slot="columns"
         [tableId]="tableId"
         [density]="density()"
         [pinned]="pinned"
@@ -216,10 +188,50 @@ interface LaneChip {
         [visible]="visible()"
         (visibleChange)="visible.set($event)"
       />
-    </sb-control-bar>
-
-    <sb-filter-bar [activeCount]="store.activeFilterCount()" (cleared)="clearFilters()">
+      <div slot="density" class="density" role="group" aria-label="Row density">
+        <button
+          sb-button
+          variant="ghost"
+          type="button"
+          [attr.aria-pressed]="density() === 'compact'"
+          (click)="setDensity('compact')"
+        >
+          Compact
+        </button>
+        <button
+          sb-button
+          variant="ghost"
+          type="button"
+          [attr.aria-pressed]="density() === 'full'"
+          (click)="setDensity('full')"
+        >
+          Full
+        </button>
+      </div>
+      <!-- A plain anchor, not a fetch: the browser gets a Save dialog and
+           the server's filename, both of which an XHR throws away.
+           The title names what comes out, because it is NOT what is on
+           screen: the export is the whole trade log, unfiltered. Saying so
+           here is the same courtesy the two Clear dialogs already pay. -->
+      <a
+        slot="export"
+        class="export"
+        [href]="store.exportUrl()"
+        title="Downloads the entire trade log. The filters above do not narrow it."
+        download
+        >Export CSV</a
+      >
+      <!-- v85 D32: the opened-at range narrows WHEN, not WHAT -- a scope
+           control rather than a field filter, same distinction that used to
+           separate the control bar from the filter bar. -->
+      <sb-date-range
+        slot="dates"
+        [from]="opened_from() ?? null"
+        [to]="opened_to() ?? null"
+        (changed)="onDateRange($event)"
+      />
       <sb-text-input
+        slot="ticker"
         type="search"
         label="Ticker"
         placeholder="AAPL"
@@ -227,19 +239,18 @@ interface LaneChip {
         (valueChange)="navigate({ ticker: $event })"
       />
       <sb-select
+        slot="origin"
         label="Origin"
         placeholder="Any"
         [value]="origin() ?? ''"
         [options]="originOptions"
         (valueChange)="navigate({ origin: $event })"
       />
-
       <!-- SR52. The five the parity audit found, in the order they narrow a
            search: what the setup was, then how it was graded, then whether it
-           has been written up. Eight controls is a lot for one bar (Direction
-           moved to the control bar's chip lane at v85 D32), which is why the
-           filter bar wraps and reports how many are active. -->
+           has been written up. -->
       <sb-text-input
+        slot="strategy"
         type="search"
         label="Strategy"
         placeholder="RSI"
@@ -247,6 +258,7 @@ interface LaneChip {
         (valueChange)="navigate({ strategy: $event })"
       />
       <sb-select
+        slot="horizon"
         label="Horizon"
         placeholder="Any"
         [value]="horizon() ?? ''"
@@ -254,6 +266,7 @@ interface LaneChip {
         (valueChange)="navigate({ horizon: $event })"
       />
       <sb-select
+        slot="confidence"
         label="Confidence"
         placeholder="Any"
         [value]="confidence() ?? ''"
@@ -261,6 +274,7 @@ interface LaneChip {
         (valueChange)="navigate({ confidence: $event })"
       />
       <sb-select
+        slot="tier"
         label="Tier"
         placeholder="Any"
         [value]="tier() ?? ''"
@@ -268,6 +282,7 @@ interface LaneChip {
         (valueChange)="navigate({ tier: $event })"
       />
       <sb-select
+        slot="badge"
         label="Badge"
         placeholder="Any"
         [value]="badge() ?? ''"
@@ -275,13 +290,39 @@ interface LaneChip {
         (valueChange)="navigate({ badge: $event })"
       />
       <sb-select
+        slot="note"
         label="Note"
         placeholder="Any"
         [value]="has_note() ?? ''"
         [options]="noteOptions"
         (valueChange)="navigate({ has_note: $event })"
       />
-    </sb-filter-bar>
+      <button
+        slot="clear-open"
+        sb-button
+        variant="ghost"
+        type="button"
+        (click)="bulk.set('open')"
+      >
+        Clear open
+      </button>
+      <button
+        slot="clear-history"
+        sb-button
+        variant="ghost"
+        type="button"
+        (click)="bulk.set('history')"
+      >
+        Clear history
+      </button>
+    </sb-toolbar>
+
+    <!-- What sb-filter-bar keeps after C1: no projected controls (those all
+         moved into sb-toolbar above), just the "N active / Clear all"
+         summary -- a persistent, always-inline affordance distinct from the
+         toolbar's own per-control Guard-1 badge, which counts only DEMOTED
+         actives. -->
+    <sb-filter-bar [activeCount]="store.activeFilterCount()" (cleared)="clearFilters()" />
 
     <!-- v54: rows=12 cols=8, measured against a full table page at Slow
          3G (Task 21 G6). measured-zero always -- an empty filtered set is
@@ -484,7 +525,9 @@ interface LaneChip {
        Same pattern as every other workspace host. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
 
-    /* sb-control-row supplies display, alignment, wrap and gap. */
+    /* v95 C1: sb-toolbar lays out its slotted children; this is just the
+       group's own internal gap, which sb-control-row used to supply. */
+    .density { display: flex; gap: var(--space-4); }
     .export { color: var(--accent); font-size: var(--text-table); text-decoration: none; }
     .export:hover { text-decoration: underline; }
 
@@ -937,6 +980,35 @@ export class Trades {
   protected readonly laneSelected = computed(
     () => this.outcome() ?? this.status() ?? this.direction() ?? null,
   );
+
+  /** Guard 1 (v95 §5): the sheet must say when something inside it is
+   *  narrowing the table. Recomputed from the filters themselves, never from
+   *  a flag someone has to remember to set. */
+  protected readonly toolbarControls = computed<ToolbarControl[]>(() =>
+    TRADES_CONTROLS.map((control) => ({
+      ...control,
+      active: this.isFilterEngaged(control.id),
+    })),
+  );
+
+  /** `columns`, `density`, `export` and the two destructive controls are not
+   *  filters -- they have nothing to report here, and stay at the default
+   *  `active: undefined`. */
+  private isFilterEngaged(id: string): boolean {
+    switch (id) {
+      case 'status': return this.laneSelected() !== null;
+      case 'dates': return this.opened_from() != null || this.opened_to() != null;
+      case 'ticker': return !!this.ticker();
+      case 'origin': return !!this.origin();
+      case 'strategy': return !!this.strategy();
+      case 'horizon': return !!this.horizon();
+      case 'confidence': return !!this.confidence();
+      case 'tier': return !!this.tier();
+      case 'badge': return !!this.badge();
+      case 'note': return !!this.has_note();
+      default: return false;
+    }
+  }
 
   /**
    * Drive `status`, `outcome` or `direction` from one control-bar chip.
