@@ -225,6 +225,17 @@ def _scale_out_exit_walk(
         if hit_target:
             tp1_index = j
             break
+        if (config.STALL_EXIT_ENABLED and plan.stall_exit_day is not None
+                and (j - entry_index) > plan.stall_exit_day):
+            current_r = (float(close[j]) - entry_price) * sign / risk
+            if current_r < 0.5:
+                exit_price = float(close[j])
+                r = round(current_r, 3)
+                return ExitResult(outcome="loss" if r < 0 else "scratch",
+                                  runner_outcome=None, entry_index=entry_index,
+                                  exit_index=j, entry_price=entry_price, r_total=r,
+                                  legs=[{"fraction": 1.0, "exit_price": exit_price,
+                                         "r": r, "reason": "stall_exit"}])
         if reached_trigger and not stop_moved:
             stop_moved = True
 
