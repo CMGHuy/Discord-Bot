@@ -269,7 +269,7 @@ In `frontend/src/app/shell/shell.css`, replace lines 368–382 with:
 Run: `cd frontend && npm test -- --include src/app/shell/shell.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually**
+- [x] **Step 5: Verify visually**
 
 Load the shell at 390 / 768 / 1024 via Chrome DevTools MCP (`resize_page` or
 `emulate`). Expected: subtitle hidden at 768 and 390, present at 1024; clock
@@ -367,7 +367,7 @@ Run: `cd frontend && npm test -- --include src/app/ui/chip.spec.ts`
 Expected: PASS. If a test asserts a 28px height, update it to the token — the
 assertion was pinning the opt-out.
 
-- [ ] **Step 5: Verify visually**
+- [x] **Step 5: Verify visually**
 
 At 390px, confirm chips on Trades and the `.clear` control are comfortably
 tappable and that no chip row now overflows its container. A taller chip may
@@ -453,7 +453,7 @@ the `.detail` rule:
 Run: `cd frontend && npm test -- --include src/app/ui/histogram.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually**
+- [x] **Step 5: Verify visually**
 
 At 390px, load Risk (histograms) and the Dashboard's Recent Activity panel.
 Expected: long labels ellipsise inside their track; neither panel scrolls
@@ -558,7 +558,7 @@ block first and reuse its names.
 Run: `cd frontend && npm test -- --include src/app/workspaces/dashboard/panels/trading-performance.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually — this is the task's real gate**
+- [x] **Step 5: Verify visually — this is the task's real gate**
 
 Load `/dashboard` at **768×1024**. Expected: `997,291.88 €` on one line, the
 30-day equity sparkline visible, KPI tiles in two columns of four rows,
@@ -762,7 +762,7 @@ file; no other line in any of the five is touched.
 Run: `cd frontend && npm test -- --include "src/app/workspaces/analytics/tabs/*.spec.ts"`
 Expected: PASS on all five.
 
-- [ ] **Step 5: Verify visually**
+- [x] **Step 5: Verify visually**
 
 Load `/analytics` (each of the five tabs: Overview, Attribution, Edge,
 Execution, Pipeline) at 390 / 768 / 1024 via Chrome DevTools MCP. Expected:
