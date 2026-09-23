@@ -59,3 +59,43 @@ def mde_expectancy_r(population, *, target_n: int, power: float = 0.80,
     if n_eff <= 0:
         return None
     return float((z_a + z_b) * np.sqrt(2.0 * variance / n_eff))
+
+
+def _clause_expectancy_gain(baseline, component, n_resamples, seed) -> ClauseResult:
+    """The objective clause: ExpR must IMPROVE, not merely hold -- the
+    inverse of v72 clause 2's non-inferiority floor, because for
+    Edge:harvest work expectancy is what the feature exists to buy."""
+    res = bootstrap_delta(baseline, component, delta_expectancy_r,
+                          n_resamples=n_resamples, seed=seed)
+    if res.point is None or res.p_greater_than_zero is None:
+        return ClauseResult("expectancy_gain", "FAIL",
+                            "no closed trades in one arm", None, 0.0)
+    ok = res.point > 0.0 and res.p_greater_than_zero < ALPHA
+    return ClauseResult(
+        "expectancy_gain", "PASS" if ok else "FAIL",
+        f"dExpR {res.point:+.4f}R [{res.lo:+.4f},{res.hi:+.4f}] "
+        f"p={res.p_greater_than_zero:.4f}", res.point, 0.0)
+
+
+def _clause_win_rate_floor(baseline, component, n_resamples, seed, *,
+                          structurally_immune: bool = False) -> ClauseResult:
+    """The floor clause: standardised WR may not fall by more than
+    WIN_RATE_FLOOR_PP. A mechanism that only touches behaviour after the
+    win/loss decision (e.g. the runner leg, post-TP1) cannot move WR at
+    all -- pass structurally_immune=True to report that fact instead of
+    bootstrapping a quantity with zero variance."""
+    if structurally_immune:
+        return ClauseResult("win_rate_floor", "PASS",
+                            "mechanism acts only after the win/loss decision "
+                            "(post-TP1) -- win rate cannot move by construction",
+                            0.0, WIN_RATE_FLOOR_PP)
+    res = bootstrap_delta(baseline, component, delta_standardised_win_rate,
+                          n_resamples=n_resamples, seed=seed)
+    if res.point is None or res.lo is None:
+        return ClauseResult("win_rate_floor", "FAIL",
+                            "no decided trades in one arm", None, WIN_RATE_FLOOR_PP)
+    ok = res.lo >= WIN_RATE_FLOOR_PP
+    return ClauseResult(
+        "win_rate_floor", "PASS" if ok else "FAIL",
+        f"standardised dWR {res.point:+.2f}pp, lower bound {res.lo:+.2f}pp "
+        f"vs floor {WIN_RATE_FLOOR_PP:+.2f}pp", res.lo, WIN_RATE_FLOOR_PP)
