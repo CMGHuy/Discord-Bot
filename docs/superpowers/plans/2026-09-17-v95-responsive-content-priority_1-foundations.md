@@ -31,7 +31,7 @@ other; A5 and A6 follow.
   `inlineFrom` on `ColumnDef<T>`; B4 puts it on the toolbar's control
   descriptors; B6 puts it on the panel descriptors; E1 walks `PriorityDecl`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/app/ui/priority.spec.ts`:
 
@@ -106,12 +106,12 @@ describe('isInline', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/priority.spec.ts`
 Expected: FAIL — `Failed to resolve import "./priority"`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `frontend/src/app/ui/priority.ts`:
 
@@ -174,12 +174,12 @@ export interface PriorityDecl {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/priority.spec.ts`
 Expected: PASS, all cases.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/priority.ts frontend/src/app/ui/priority.spec.ts
