@@ -27,7 +27,7 @@ from .params import (EXIT_V2_PARAMS, STRUCTURE_BUFFER_ATR, SR_VOLUME_STRENGTH_CE
                      TRAIL_ATR_MULT, TP1_FRACTION, RUNNER_FLOOR_FRACTION,
                      DEFAULT_EXPIRY_BARS, exit_params_for,
                      _journal_entries, _resolve_stop_mult, _resolve_tp2_r,
-                     _resolve_time_stop_days, _apply_quality, stamp_badge,
+                     _resolve_time_stop_days, _resolve_stall_exit_day, _apply_quality, stamp_badge,
                      stamp_cohort, badge_stats_line)
 
 __all__ = [
@@ -36,6 +36,7 @@ __all__ = [
     "SR_VOLUME_STRENGTH_CEILING", "TRAIL_ATR_MULT", "TP1_FRACTION",
     "RUNNER_FLOOR_FRACTION", "DEFAULT_EXPIRY_BARS", "exit_params_for",
     "_journal_entries", "_resolve_stop_mult", "_resolve_tp2_r", "_resolve_time_stop_days",
+    "_resolve_stall_exit_day",
     "_apply_quality", "stamp_badge", "stamp_cohort", "badge_stats_line", "select_structural_target",
     "_safe_atr_value", "atr_target_candidates", "fib_target_candidates",
     "sr_target_candidates", "elliott_target_candidates", "select_tp2", "_tp2_from_r",

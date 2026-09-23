@@ -929,6 +929,16 @@ FIELDS: list[Field] = [
           help="Applied once TIGHTEN_TRIGGER_R clears; always <= the base "
                "trail_atr_mult by construction (min() in exit_sim.py). The "
                "other of v92 Hypothesis 1's two TRAIN grid dimensions."),
+    Field("STALL_EXIT_ENABLED", "STALL_EXIT_ENABLED", "Exit quality",
+          "Close stalled pre-TP1 positions early",
+          type="checkbox", default="false",
+          help="If a plan is still open past its strategy's "
+               "optimal_time_stop_days (edge/stops.py, needs 40+ journaled "
+               "winners for that strategy) and has not yet reached +0.5R, "
+               "closes it at market instead of continuing to hold. Pre-TP1 "
+               "only -- v92 Hypothesis 2, independent of the older, closed "
+               "DATA_DRIVEN_STOPS_ENABLED flag (see the spec's provenance "
+               "note). Off until its own TRAIN/VALIDATION shots judge it."),
 
     # --- Chart patterns ---
     Field("DEAD_CAT_BOUNCE_VETO", "DEAD_CAT_BOUNCE_VETO", "Chart patterns",
@@ -989,6 +999,7 @@ _SEARCH_CLASSES = {
         "PYRAMIDING_ENABLED", "VOLUME_PROFILE_NODES_ENABLED",
         "MAX_ALERTS_PER_SCAN", "DATA_DRIVEN_STOPS_ENABLED",
         "ADAPTIVE_RUNNER_TRAIL_ENABLED", "TIGHTEN_TRIGGER_R", "TIGHTEN_ATR_MULT",
+        "STALL_EXIT_ENABLED",
         "DEAD_CAT_BOUNCE_VETO", "DCB_DECLINE_PCT", "DCB_GAP_REQUIRED",
         "DCB_VOLUME_RATIO", "RSI_DIV_MIN_CONSECUTIVE_TURN",
         "MA_RIBBON_CONFIRM_BARS", "SR_MIN_LEVEL_TOUCHES",

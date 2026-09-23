@@ -100,6 +100,22 @@ def _resolve_time_stop_days(strategy: str) -> int | None:
         return None
 
 
+def _resolve_stall_exit_day(strategy: str) -> int | None:
+    """Live-path resolution of v92 Hypothesis 2's stall-exit day. Deliberately
+    its own flag (STALL_EXIT_ENABLED), never DATA_DRIVEN_STOPS_ENABLED --
+    see the spec's provenance note. Same degrade-to-None contract as
+    _resolve_time_stop_days: off, thin journal, or a read failure all mean
+    'do nothing', never an exception reaching plan construction."""
+    if not config.STALL_EXIT_ENABLED:
+        return None
+    try:
+        from swingbot.core.edge.stops import optimal_time_stop_days
+        return optimal_time_stop_days(_journal_entries(), strategy)
+    except Exception as exc:
+        log.warning("Stall-exit lookup failed for %s: %s -- not recorded", strategy, exc)
+        return None
+
+
 def _apply_quality(plan: TradePlanV2, quality_inputs: dict | None) -> None:
     if quality_inputs is None:
         return
