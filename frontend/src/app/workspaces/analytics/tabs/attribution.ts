@@ -146,7 +146,7 @@ function measureValue(
     .controls { display: flex; }
     .panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-14); }
     .breakdown-controls { margin: 0 0 var(--space-10); }
-    @media (max-width: 800px) { .panels { grid-template-columns: 1fr; } }
+    @media (max-width: 639px) { .panels { grid-template-columns: 1fr; } }
   `,
 })
 export class AttributionTab {

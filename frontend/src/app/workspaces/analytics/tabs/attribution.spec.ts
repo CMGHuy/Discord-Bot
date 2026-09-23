@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -104,5 +107,20 @@ describe('AttributionTab', () => {
   it('omits the badge column when no row carries one', () => {
     const { fixture } = render();
     expect(fixture.componentInstance['dimensionVisible']()).not.toContain('badge');
+  });
+});
+
+describe('attribution.ts breakpoints', () => {
+  it('uses only declared breakpoint values in width queries', () => {
+    // A media query at 800px puts this file and ViewportService on
+    // different scales -- see breakpoints.ts. v95 A7.
+    const src = readFileSync(
+      join(process.cwd(), 'src/app/workspaces/analytics/tabs/attribution.ts'),
+      'utf8',
+    );
+    const allowed = new Set(['639', '1023', '1439', '1919', '640', '1024', '1440', '1920']);
+    const widths = [...src.matchAll(/\(\s*(?:max|min)-width:\s*(\d+)px\s*\)/g)].map((m) => m[1]);
+    expect(widths.length).toBeGreaterThan(0);
+    expect(widths.filter((w) => !allowed.has(w))).toEqual([]);
   });
 });

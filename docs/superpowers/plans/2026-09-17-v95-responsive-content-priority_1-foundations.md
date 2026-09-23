@@ -719,7 +719,7 @@ collapsing to one column at 801px.
   `var()` constraint as every other width-query task).
 - Produces: no API change; five independent style-only edits.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append the same shape of test to each of the five spec files (adjust the
 component/file name per file — shown here for `overview.spec.ts`; repeat for
@@ -745,19 +745,19 @@ describe('overview.ts breakpoints', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `cd frontend && npm test -- --include "src/app/workspaces/analytics/tabs/*.spec.ts"`
 Expected: FAIL on all five, each with `received ['800']`.
 
-- [ ] **Step 3: Apply the change**
+- [x] **Step 3: Apply the change**
 
 In each file, replace `@media (max-width: 800px)` with
 `@media (max-width: 639px)`. The rule body (`{ .panels { grid-template-columns: 1fr; } }`)
 does not change — only the threshold. This is a one-line find/replace per
 file; no other line in any of the five is touched.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `cd frontend && npm test -- --include "src/app/workspaces/analytics/tabs/*.spec.ts"`
 Expected: PASS on all five.
@@ -772,7 +772,7 @@ tab regresses to a broken layout at 800×any (the width that used to be the
 threshold — it should now read as clearly "wide", two columns, not sit on an
 edge).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/tabs/attribution.ts frontend/src/app/workspaces/analytics/tabs/attribution.spec.ts frontend/src/app/workspaces/analytics/tabs/edge.ts frontend/src/app/workspaces/analytics/tabs/edge.spec.ts frontend/src/app/workspaces/analytics/tabs/execution.ts frontend/src/app/workspaces/analytics/tabs/execution.spec.ts frontend/src/app/workspaces/analytics/tabs/overview.ts frontend/src/app/workspaces/analytics/tabs/overview.spec.ts frontend/src/app/workspaces/analytics/tabs/pipeline.ts frontend/src/app/workspaces/analytics/tabs/pipeline.spec.ts
