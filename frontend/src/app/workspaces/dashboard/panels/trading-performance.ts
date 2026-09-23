@@ -111,6 +111,20 @@ export type DashboardScopeMode = DashboardScope;
       grid-template-columns: repeat(4, minmax(140px, 180px));
       gap: var(--space-14);
     }
+    /* The tablet band -- v95 A5.
+       Between sm and md the 4-up KPI grid's 560px floor and the portfolio
+       block cannot both fit: measured at 768px the portfolio column
+       collapsed to ~40px and '997,291.88 EUR' rendered as four fragments.
+       Two KPI columns and a full-width portfolio row is the narrowest
+       arrangement where both are readable. Above md the original four-up
+       returns untouched. Placed after the base rules deliberately -- a media
+       query adds no specificity, so a base .grid declared below it would
+       win. */
+    @media (max-width: 1023px) {
+      .combined { grid-template-columns: minmax(0, 1fr); }
+      .portfolio { width: 100%; margin-bottom: var(--space-14); }
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
     @media (max-width: 640px) {
       .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .combined { display: none; }

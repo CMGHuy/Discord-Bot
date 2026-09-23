@@ -489,7 +489,7 @@ and the equity block takes a full row of its own.
   fix, not a demotion.)
 - Produces: no API change.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create or append to
 `frontend/src/app/workspaces/dashboard/panels/trading-performance.spec.ts`:
@@ -525,12 +525,12 @@ describe('trading-performance tablet band', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/dashboard/panels/trading-performance.spec.ts`
 Expected: FAIL — no 1023px query exists.
 
-- [ ] **Step 3: Apply the change**
+- [x] **Step 3: Apply the change**
 
 In `trading-performance.ts`, add above the existing `max-width: 639px` block:
 
@@ -553,7 +553,7 @@ Adjust the three class names (`.equity`, `.equity .figure`, `.kpis`) to the
 selectors actually present in the file — read the existing `max-width: 639px`
 block first and reuse its names.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/dashboard/panels/trading-performance.spec.ts`
 Expected: PASS.
@@ -565,7 +565,7 @@ Load `/dashboard` at **768×1024**. Expected: `997,291.88 €` on one line, the
 `REALISED TODAY -133.32 €` not wrapping its currency symbol. Then check 390 and
 1024 are unchanged from before this task.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/dashboard/panels/trading-performance.ts frontend/src/app/workspaces/dashboard/panels/trading-performance.spec.ts
