@@ -38,8 +38,14 @@ describe('workspace consistency (v85)', () => {
   });
 
   it('uses the shared control bar wherever a page has filters (D22)', () => {
+    // v95 C1 superseded D22's sb-control-bar with sb-toolbar for any page
+    // whose filters need to collapse into a sheet rather than wrap -- Trades
+    // dropped sb-control-bar entirely in favour of it, keeping sb-filter-bar
+    // only for the narrower "N active / Clear all" summary strip. Either
+    // shared primitive satisfies the rule this test guards: no page hand-
+    // rolls its own filters bar.
     const offenders = SOURCES
-      .filter((s) => /sb-filter-bar|class="filters"/.test(s.source) && !/sb-control-bar/.test(s.source))
+      .filter((s) => /sb-filter-bar|class="filters"/.test(s.source) && !/sb-control-bar|sb-toolbar/.test(s.source))
       .map((s) => s.name);
     expect(offenders).toEqual([]);
   });
