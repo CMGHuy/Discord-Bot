@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -60,5 +63,18 @@ describe('Matrix (v85 D38)', () => {
 
   it('scrolls inside its own container rather than the page', () => {
     expect(render().classList).toContain('scroll-x');
+  });
+});
+
+/* -- v95 D2 -- sticky row headers -------------------------------------------- */
+
+describe('sb-matrix row headers', () => {
+  const src = readFileSync(join(process.cwd(), 'src/app/ui/matrix.ts'), 'utf8');
+
+  it('pins the row header against horizontal scroll', () => {
+    // Without this, scrolling right to reach a correlation scrolls away the
+    // label naming the pair. A number you cannot attribute is not data.
+    expect(src).toMatch(/th\[scope=["']row["']\][^{]*\{[^}]*position:\s*sticky/s);
+    expect(src).toMatch(/th\[scope=["']row["']\][^{]*\{[^}]*left:\s*0/s);
   });
 });

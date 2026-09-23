@@ -55,6 +55,16 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
       padding: 2px 6px;
       white-space: nowrap;
     }
+    /* v95 D2: the matrix scrolls sideways by design -- an N×N grid of
+       correlations has no narrow form. What it must not do is scroll the row
+       label away with the columns, because then the number on screen belongs
+       to a pair the reader can no longer name. */
+    th[scope="row"] {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      background: var(--surface);
+    }
     td {
       font-size: var(--text-micro);
       font-variant-numeric: tabular-nums;
