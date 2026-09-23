@@ -253,6 +253,7 @@ CLOSED_PREREGISTRATION_KNOBS = frozenset({
     "COHORT_POOR",
     "STRATEGY_GATES",
     "VALIDATED",
+    "STALL_EXIT_ENABLED",
 })
 _BACKTEST_SCRIPT_RE = re.compile(r"(?:tune_strategy|run_backtest_range)\.py")
 

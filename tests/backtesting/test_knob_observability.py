@@ -46,6 +46,10 @@ EXEMPT = {
     "MA_RIBBON_CONFIRM_BARS": "MA Ribbon's rescue gate is read directly from the config global inside entry_filters.py, not threaded through ScanParams; replay's confluence path never passes params into that per-strategy read.",
     "SR_MIN_LEVEL_TOUCHES": "Support/Resistance's rescue gate is read directly from the config global inside entry_filters.py, not threaded through ScanParams; replay's confluence path never passes params into that per-strategy read.",
     "FIB_TARGET_1_0_EXTENSION": "Fibonacci's target-candidate flag is read directly from the config global inside targets.py, not threaded through ScanParams; replay's confluence path never passes params into that per-strategy read.",
+    "ADAPTIVE_RUNNER_TRAIL_ENABLED": "v92 Hypothesis 1's chandelier trail tightening acts only on an already-selected plan's exit behavior during the post-TP1 runner leg, never on trigger/entry/stop/target selection; replay_scenarios only reconstructs and compares selection-time plan fields.",
+    "TIGHTEN_TRIGGER_R": "v92 Hypothesis 1's chandelier trail tightening acts only on an already-selected plan's exit behavior during the post-TP1 runner leg, never on trigger/entry/stop/target selection; replay_scenarios only reconstructs and compares selection-time plan fields.",
+    "TIGHTEN_ATR_MULT": "v92 Hypothesis 1's chandelier trail tightening acts only on an already-selected plan's exit behavior during the post-TP1 runner leg, never on trigger/entry/stop/target selection; replay_scenarios only reconstructs and compares selection-time plan fields.",
+    "STALL_EXIT_ENABLED": "v92 Hypothesis 2's pre-TP1 stall check acts only on an already-selected plan's exit behavior, never on trigger/entry/stop/target selection; replay_scenarios only reconstructs and compares selection-time plan fields.",
 }
 PERTURB = {bool: lambda value: not value, int: lambda value: max(1, value + 1),
            float: lambda value: value * 1.75 + 0.5}
