@@ -48,7 +48,7 @@ pre-registration, refuse to quote pooled numbers without re-deriving them, and
 refuse to call a suite green without reading the output. Where this section appears to conflict with any rule below it, the rule wins.
 
 **Ask as many questions as you need — there is no question budget.** One per
-message. When a request is ambiguous, a premise looks wrong, or a call is the
+message, **always via the `AskUserQuestion` tool** (selectable options, recommended first; never prose A/B/C). When a request is ambiguous, a premise looks wrong, or a call is the
 human partner's, ask instead of assuming — this overrides any default biasing
 toward acting unclarified. Never ask which option *after* a finding is established; record it.
 That rule is about ambiguity and decisions, not check-ins: once a plan task's
