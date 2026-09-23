@@ -73,6 +73,23 @@ interpreting any backtest, grid, or validation result.
   Until that spec exists, a harvest feature must **say in its own
   pre-registration** that it is not using this funnel and name the gate it
   is using instead. `Edge: expectancy` and `Edge: volume` are fully covered.
+- **Harvest acceptance gate (v92, `swingbot/core/backtesting/acceptance_harvest.py`).**
+  Fills the gap named above. Reuses acceptance.py's bootstrap/permutation
+  machinery; the clause set inverts v72's role assignment (expectancy is the
+  objective, win rate a floor):
+
+  | # | Clause | Instrument | Threshold |
+  |---|---|---|---|
+  | 1 | `expectancy_gain` (objective) | ticker-cluster bootstrap ΔExpR | lower 95% bound > 0, one-sided p < 0.05 |
+  | 2 | `win_rate_floor` | ticker-cluster bootstrap Δstandardised-WR | lower 95% bound ≥ −2.0pp (`WIN_RATE_FLOOR_PP`) — `SKIPPED` when the mechanism cannot structurally move WR |
+  | 3 | `volume_floor` | closed-trade count, baseline vs component | cut ≤ 25% (reuses v72's `VOLUME_MAX_CUT_PCT`) |
+  | 4 | `not_luck` | `permutation_test.py`, n=200, on ΔExpR | p < 0.05, validation stage only |
+
+  Same Stage 0 (MDE precheck, via `acceptance_harvest.mde_expectancy_r`) →
+  Stage 1 (TRAIN plateau) → Stage 2 (free walk-forward folds) → Stage 3 (one-shot
+  VALIDATION) funnel as v72. No `mechanism` clause — a harvest feature changes
+  how accepted trades exit, not which trades are accepted, so results docs
+  report the win→non-win outcome-flip count as disclosure instead.
 - Frozen constants: `MIN_RISK_REWARD_RATIO = 1.5` / `MAX_RISK_REWARD_RATIO
   = 2.5` (the band `plan_engine.select_structural_target` picks every
   plan's target inside — replaces the pre-v31 per-strategy fixed
