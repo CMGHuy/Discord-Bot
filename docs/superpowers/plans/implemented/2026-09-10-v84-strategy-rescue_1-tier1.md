@@ -4,7 +4,7 @@
 read its Global Constraints first. They apply to every task here and are not
 repeated.
 
-**Spec:** `docs/superpowers/specs/2026-09-10-v84-strategy-rescue-v2-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-09-10-v84-strategy-rescue-v2-design.md`
 §4.1 (EMA Crossover), §4.2 (Break & Retest), §4.3 (VWAP).
 
 **Covers:** the three strategies whose rescue needs no new signal logic — one
@@ -488,7 +488,7 @@ rather than left standing:
 # numbers that justified this (EMA Crossover bullish+4w reaching only N=28;
 # Elliott Wave firing only on 4w at WR=74.1 ExpR=-0.001) were measured against
 # the fixed per-strategy reward:risk table plan v31 deleted -- see v84
-# (docs/superpowers/specs/2026-09-10-v84-strategy-rescue-v2-design.md). Under
+# (docs/superpowers/specs/implemented/2026-09-10-v84-strategy-rescue-v2-design.md). Under
 # current arithmetic EMA Crossover scores WR 61.8% ExpR +0.494 ungated, so no
 # gate is needed; Elliott Wave's rescue is a wave-structure change, not a mask.
 # NOTE: every WR/ExpR figure in the per-key comments below is likewise pre-v31

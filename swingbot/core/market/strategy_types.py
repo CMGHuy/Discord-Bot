@@ -201,7 +201,7 @@ BREAKEVEN_TRIGGER_FRACTION = 0.5
 # numbers that justified this (EMA Crossover bullish+4w reaching only N=28;
 # Elliott Wave firing only on 4w at WR=74.1 ExpR=-0.001) were measured against
 # the fixed per-strategy reward:risk table plan v31 deleted -- see v84
-# (docs/superpowers/specs/2026-09-10-v84-strategy-rescue-v2-design.md). Under
+# (docs/superpowers/specs/implemented/2026-09-10-v84-strategy-rescue-v2-design.md). Under
 # current arithmetic EMA Crossover's pooled TRAIN scores WR 61.8% ExpR +0.494
 # ungated (N=55), but its per-fold-year stability check failed (1 of 3 years
 # clears N>=15) -- CLOSED, stays WEAK, not gated here either

@@ -283,7 +283,7 @@ observable behaviour changed, so there is nothing to release.
 
 - [ ] **Step 3: Update the spec's status line**
 
-In `docs/superpowers/specs/2026-09-10-v84-strategy-rescue-v2-design.md`, change
+In `docs/superpowers/specs/implemented/2026-09-10-v84-strategy-rescue-v2-design.md`, change
 `**Status:** spec, not yet planned` to `**Status:** implemented — see
 plans/implemented/2026-09-10-v84-strategy-rescue_*.md`.
 
@@ -310,7 +310,7 @@ as current.
 
 ```bash
 git add docs/claude/backtest-methodology.md docs/claude/edge-priorities.md \
-        VERSION.json docs/superpowers/specs/2026-09-10-v84-strategy-rescue-v2-design.md \
+        VERSION.json docs/superpowers/specs/implemented/2026-09-10-v84-strategy-rescue-v2-design.md \
         docs/superpowers/plans/
 git commit -m "docs(v84): close strategy rescue v2 -- <N> rescued, <M> closed
 

@@ -3,7 +3,7 @@
 > Read `2026-09-10-v84-strategy-rescue_0-index.md` first. Its **Global
 > Constraints** and **Shared conventions** apply to every task here and are not
 > repeated. Read spec
-> `docs/superpowers/specs/2026-09-10-v84-strategy-rescue-v2-design.md` §4.4–4.6
+> `docs/superpowers/specs/implemented/2026-09-10-v84-strategy-rescue-v2-design.md` §4.4–4.6
 > for the pre-registered rules these tasks execute.
 
 **Covers:** RSI Divergence (§4.4), MA Ribbon (§4.5), Support/Resistance (§4.6).

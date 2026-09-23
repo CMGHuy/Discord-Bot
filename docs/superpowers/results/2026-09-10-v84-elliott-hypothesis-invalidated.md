@@ -82,7 +82,7 @@ specific failure mode to watch for in any future strategy pre-registration.
 
 ## Spec status
 
-`docs/superpowers/specs/2026-09-10-v84-strategy-rescue-v2-design.md` §4.8
+`docs/superpowers/specs/implemented/2026-09-10-v84-strategy-rescue-v2-design.md` §4.8
 already carries this finding in full (written during the plan's own
 research/pre-registration pass, before this plan's implementation phase
 began) — marked **"WITHDRAWN 2026-09-10, before any measurement"**, with the

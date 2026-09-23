@@ -16,7 +16,7 @@ retried.
 **Tech Stack:** Python 3.11, pandas/numpy, pytest. No new dependencies. **No ML
 in the live path.**
 
-**Spec:** `docs/superpowers/specs/2026-09-10-v84-strategy-rescue-v2-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-09-10-v84-strategy-rescue-v2-design.md`
 — read it before starting any task; the pre-registered rules live there and
 this plan argues from them.
 

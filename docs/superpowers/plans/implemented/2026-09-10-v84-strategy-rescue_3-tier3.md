@@ -5,7 +5,7 @@ Header, Global Constraints, shared command forms and baseline numbers live in
 below inherits it (`--pass-wr 50`, `--exit-model v2 --scale-out`, one
 VALIDATION shot per strategy, plateau-not-spike, record failures as-is).
 
-Spec: `docs/superpowers/specs/2026-09-10-v84-strategy-rescue-v2-design.md`
+Spec: `docs/superpowers/specs/implemented/2026-09-10-v84-strategy-rescue-v2-design.md`
 §4.7 (Fibonacci) and §4.8 (Elliott Wave).
 
 Tier 3 is the honestly speculative tier. Fibonacci is 14.6pp short of the floor
@@ -454,7 +454,7 @@ git commit -m "docs(v84): Fibonacci 1.0 extension VALIDATION result, budget spen
 
 **Files:**
 - Create: `docs/superpowers/results/2026-09-10-v84-elliott-hypothesis-invalidated.md`
-- Modify: `docs/superpowers/specs/2026-09-10-v84-strategy-rescue-v2-design.md` (§4.8 correction note)
+- Modify: `docs/superpowers/specs/implemented/2026-09-10-v84-strategy-rescue-v2-design.md` (§4.8 correction note)
 
 **Interfaces:**
 - Consumes: nothing
@@ -506,7 +506,7 @@ a record of what was believed at the time, not a document to quietly rewrite.
 
 ```bash
 git add docs/superpowers/results/2026-09-10-v84-elliott-hypothesis-invalidated.md \
-        docs/superpowers/specs/2026-09-10-v84-strategy-rescue-v2-design.md
+        docs/superpowers/specs/implemented/2026-09-10-v84-strategy-rescue-v2-design.md
 git commit -m "docs(v84): Elliott Wave hypothesis invalid -- gates already ship"
 ```
 
