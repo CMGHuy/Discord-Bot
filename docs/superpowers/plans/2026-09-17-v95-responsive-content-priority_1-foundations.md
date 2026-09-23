@@ -399,7 +399,7 @@ track with no `min-width: 0`.
 - Consumes: nothing new.
 - Produces: no API change.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `frontend/src/app/ui/histogram.spec.ts`:
 
@@ -423,12 +423,12 @@ describe('histogram label overflow', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/histogram.spec.ts`
 Expected: FAIL — the `.label` rule has none of the three.
 
-- [ ] **Step 3: Apply the change**
+- [x] **Step 3: Apply the change**
 
 In `frontend/src/app/ui/histogram.ts`, add to the `.label` rule:
 
@@ -448,7 +448,7 @@ the `.detail` rule:
       text-overflow: ellipsis;
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/histogram.spec.ts`
 Expected: PASS.
@@ -459,7 +459,7 @@ At 390px, load Risk (histograms) and the Dashboard's Recent Activity panel.
 Expected: long labels ellipsise inside their track; neither panel scrolls
 sideways.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/ui/histogram.ts frontend/src/app/workspaces/dashboard/panels/recent-activity.ts frontend/src/app/ui/histogram.spec.ts

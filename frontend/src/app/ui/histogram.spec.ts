@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -114,5 +117,23 @@ describe('Histogram', () => {
 
   it('draws no reference line when none is given', () => {
     expect(render([{ label: 'a', count: 10 }]).querySelector('.reference-line')).toBeNull();
+  });
+});
+
+describe('histogram label overflow', () => {
+  const css = readFileSync(join(process.cwd(), 'src/app/ui/histogram.ts'), 'utf8');
+
+  it('lets the label shrink below its content width', () => {
+    // A grid item's automatic minimum is min-content. Without min-width: 0
+    // a long label pushes the bar column out of the panel instead of
+    // ellipsising -- and every caller builds labels longer than the 4rem
+    // track (strategy-contribution.ts, exit-quality.ts).
+    // Matched to the rule's closing brace rather than the first `}`: the
+    // declarations interpolate `${CHART_CHROME.*}`, whose own brace ends a
+    // [^}]* match before it reaches the rule body.
+    const label = css.match(/\.label\s*\{[\s\S]*?\n    \}/)?.[0] ?? '';
+    expect(label).toMatch(/min-width:\s*0/);
+    expect(label).toMatch(/text-overflow:\s*ellipsis/);
+    expect(label).toMatch(/overflow:\s*hidden/);
   });
 });
