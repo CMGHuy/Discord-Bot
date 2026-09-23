@@ -1,8 +1,10 @@
 """Pure analysis-phase helpers for scanning.
 
 This module only reads frames fetched during the preceding crawl phase.
-The named `trade_log` import is intentional: engine owns its process-wide
-identity while analysis consumes it for trade state and monitoring.
+The named `trade_log` import is intentional: it is a process-wide singleton
+(`.singletons`) that analysis consumes for trade state and monitoring --
+imported from `.singletons` rather than from `.engine`, which re-exports
+this very module and would otherwise close a circular import.
 """
 import logging
 import os
@@ -38,7 +40,7 @@ from . import runstate
 from .confidence import score_confidence
 from .embeds import _build_requirement_checks
 from .regime import get_htf_bias
-from .engine import trade_log
+from .singletons import trade_log
 from . import risk_features
 
 

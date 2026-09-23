@@ -4,15 +4,14 @@ Split from the 2347-line engine.py on 2026-08-25 (v61). The scan pipeline
 now lives in runstate/telemetry/dedup/fetch/analyze/scan_run; this module
 re-exports the external surface so existing call sites keep working unchanged.
 
-`state` and `trade_log` deliberately live HERE, not in a submodule. They are
-process-wide singletons whose identity the suite pins; this is the permitted
-exception to the no-submodule-imports-the-facade rule.
+`state` and `trade_log` are process-wide singletons whose identity the suite
+pins -- defined in `.singletons` (2026-09-23), not here, because analyze.py
+and scan_run.py both need them too, and this facade re-exports FROM
+analyze/scan_run below: importing those singletons back from this module
+made the whole package a circular import that only worked when engine
+happened to be imported first. See `.singletons`'s own docstring.
 """
-from swingbot.core.infra.state import StateStore
-from swingbot.core.tracking.performance import TradeLog
-
-state = StateStore()
-trade_log = TradeLog()
+from .singletons import state, trade_log
 
 from .runstate import is_scan_running, request_stop
 from .telemetry import log_scan_telemetry, recent_telemetry, scan_slowdown

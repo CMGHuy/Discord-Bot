@@ -38,7 +38,7 @@ from .embeds import (
     build_embed, build_simple_alert, notify_closed_trades, notify_near_close,
     plan_numbers_for_display,
 )
-from .engine import state, trade_log
+from .singletons import state, trade_log
 from .regime import get_market_regime
 
 
