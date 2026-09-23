@@ -1,9 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Component, provideZonelessChangeDetection } from '@angular/core';
+import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { ComponentFixture } from '@angular/core/testing';
+
+import { Viewport } from './breakpoints';
 import { Panel, Tab, TabBar } from './layout';
 
 const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/layout.ts'), 'utf8');
@@ -114,4 +117,76 @@ describe('sb-control-row and sb-drawer on a phone (v80 D4)', () => {
   it('sizes the drawer by the dynamic viewport', () => { expect(rule('.drawer')).toContain('height: 100dvh'); expect(rule('.drawer')).toContain('max-height: 100dvh'); });
   it('takes the full width on a phone', () => expect(SOURCE).toMatch(/@media \(max-width: 639px\) \{\s*\.drawer \{ width: 100vw; \}/));
   it('gives the close button a touch-sized target', () => expect(rule('.close')).toContain('min-height: var(--control-h)'));
+});
+
+@Component({
+  imports: [Panel],
+  template: `
+    <sb-panel
+      [heading]="heading()"
+      [inlineFrom]="inlineFrom()"
+      [digest]="digest()"
+      [viewportAt]="viewportAt()"
+    >
+      <p class="body-content">Body</p>
+    </sb-panel>
+  `,
+})
+class CollapseHost {
+  readonly heading = signal('Watchlist');
+  readonly inlineFrom = signal<Viewport | undefined>(undefined);
+  readonly digest = signal<string | null>(null);
+  readonly viewportAt = signal<Viewport | null>(null);
+}
+
+describe('sb-panel collapse', () => {
+  let fixture: ComponentFixture<CollapseHost>;
+  let host: CollapseHost;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(CollapseHost);
+    host = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+
+  it('renders in full above its floor', () => {
+    host.inlineFrom.set('md'); host.viewportAt.set('md'); fixture.detectChanges();
+    expect(el().querySelector('.body')).not.toBeNull();
+    expect(el().querySelector('.panel-digest')).toBeNull();
+  });
+
+  it('collapses to its digest below its floor', () => {
+    host.inlineFrom.set('md'); host.digest.set('no priced symbols yet');
+    host.viewportAt.set('sm'); fixture.detectChanges();
+    expect(el().querySelector('.panel-digest')!.textContent)
+      .toContain('no priced symbols yet');
+    expect(el().querySelector('.body')).toBeNull();
+  });
+
+  it('expands in place on tap and keeps the digest out of the way', () => {
+    host.inlineFrom.set('md'); host.digest.set('3 open');
+    host.viewportAt.set('sm'); fixture.detectChanges();
+    (el().querySelector('button.panel-toggle') as HTMLElement).click();
+    fixture.detectChanges();
+    expect(el().querySelector('.body')).not.toBeNull();
+    expect(el().querySelector('button.panel-toggle')!.getAttribute('aria-expanded'))
+      .toBe('true');
+    expect(el().querySelector('.panel-digest')).toBeNull();
+  });
+
+  it('never collapses without a digest — an empty summary is worse than none', () => {
+    host.inlineFrom.set('md'); host.digest.set(null);
+    host.viewportAt.set('sm'); fixture.detectChanges();
+    expect(el().querySelector('.body')).not.toBeNull();
+    expect(el().querySelector('button.panel-toggle')).toBeNull();
+  });
+
+  it('keeps the title readable while collapsed', () => {
+    host.inlineFrom.set('md'); host.digest.set('3 open');
+    host.viewportAt.set('sm'); fixture.detectChanges();
+    expect(el().textContent).toContain(host.heading());
+  });
 });

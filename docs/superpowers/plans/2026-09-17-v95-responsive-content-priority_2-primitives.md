@@ -926,7 +926,7 @@ useful to say in one line declares `inlineFrom: 'xs'` and never collapses.
   - `readonly viewportAt = input<Viewport | null>(null)`
   - `.panel-digest` and `button.panel-toggle` markup.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 describe('sb-panel collapse', () => {
@@ -972,12 +972,12 @@ describe('sb-panel collapse', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/panel.spec.ts`
 Expected: FAIL — `inlineFrom` is not an input on `sb-panel`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Add to `panel.ts`:
 
@@ -1010,13 +1010,13 @@ Template: wrap the projected body in `@if (!collapsed())`, and render
 `[attr.aria-expanded]="expanded()"`. When `collapsible()` is true the toggle is
 rendered in the header regardless of `expanded`, so it can be closed again.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/panel.spec.ts`
 Expected: PASS. Every existing panel test must also pass — no call site sets
 `inlineFrom` yet, so `collapsible()` is false in production.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/panel.ts frontend/src/app/ui/panel.spec.ts

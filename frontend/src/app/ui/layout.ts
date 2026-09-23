@@ -3,15 +3,19 @@ import {
   Component,
   ElementRef,
   afterNextRender,
+  computed,
   effect,
+  inject,
   input,
   output,
   signal,
   viewChild,
 } from '@angular/core';
 
+import { Viewport, ViewportService } from './breakpoints';
 import { FocusTrap } from './focus-trap';
 import { Icon, IconName } from './icon';
+import { isInline } from './priority';
 
 /* Spec 3's layout inventory: panel, tab bar, split view, drawer. */
 
@@ -31,12 +35,27 @@ import { Icon, IconName } from './icon';
       @if (heading(); as text) {
         <header>
           <h2 class="sb-label">{{ text }}</h2>
-          <div class="actions"><ng-content select="[panel-actions]" /></div>
+          <div class="actions">
+            <ng-content select="[panel-actions]" />
+            @if (collapsible()) {
+              <button
+                type="button"
+                class="panel-toggle"
+                [attr.aria-expanded]="expanded()"
+                [attr.aria-label]="(expanded() ? 'Collapse ' : 'Expand ') + text"
+                (click)="expanded.set(!expanded())"
+              >{{ expanded() ? '▾' : '▸' }}</button>
+            }
+          </div>
         </header>
       }
-      <div class="body" [class.flush]="flush()">
-        <ng-content />
-      </div>
+      @if (collapsed()) {
+        <p class="panel-digest">{{ digest() }}</p>
+      } @else {
+        <div class="body" [class.flush]="flush()">
+          <ng-content />
+        </div>
+      }
     </section>
   `,
   styles: `
@@ -61,11 +80,46 @@ import { Icon, IconName } from './icon';
     .body { padding: var(--space-14); }
     /* Tables draw their own edge-to-edge padding. */
     .flush { padding: 0; }
+    .panel-digest { margin: 0; padding: var(--space-10) var(--space-14); color: var(--text-secondary); font-size: var(--text-table); }
+    .panel-toggle {
+      min-height: var(--control-h);
+      min-width: var(--control-h);
+      background: none;
+      border: 0;
+      color: var(--text-faint);
+      cursor: pointer;
+    }
+    .panel-toggle:hover { color: var(--text); }
   `,
 })
 export class Panel {
   readonly heading = input<string | null>(null);
   readonly flush = input(false);
+
+  /** The narrowest viewport at which this panel renders in full — v95 §4.3. */
+  readonly inlineFrom = input<Viewport | undefined>(undefined);
+  /** One line answering the panel's own question. `null` means this panel has
+   *  nothing worth saying in one line, and it therefore never collapses —
+   *  v95 §4.3. A digest of '—' above a panel with real content is the defect
+   *  this rule exists to prevent. */
+  readonly digest = input<string | null>(null);
+  /** Test override — jsdom resolves no media query. */
+  readonly viewportAt = input<Viewport | null>(null);
+
+  protected readonly expanded = signal(false);
+
+  private readonly viewportService = inject(ViewportService);
+  private readonly viewport = computed<Viewport>(
+    () => this.viewportAt() ?? this.viewportService.viewport(),
+  );
+
+  protected readonly collapsible = computed(
+    () => this.digest() !== null && !isInline(this.inlineFrom(), this.viewport()),
+  );
+
+  protected readonly collapsed = computed(
+    () => this.collapsible() && !this.expanded(),
+  );
 }
 
 export interface Tab {
