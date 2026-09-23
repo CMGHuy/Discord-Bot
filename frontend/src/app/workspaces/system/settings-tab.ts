@@ -555,7 +555,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
     .category-rail button { justify-content: space-between; text-align: left; }
     .category-rail button.active { background: var(--surface-raised); color: var(--text); }
     .category-rail span { color: var(--text-faint); font-family: var(--font-mono); }
-    @media (max-width: 700px) { .settings-layout { grid-template-columns: minmax(0, 1fr); } .category-rail { grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; } }
+    @media (max-width: 639px) { .settings-layout { grid-template-columns: minmax(0, 1fr); } .category-rail { grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; } }
 
     .stale-form {
       padding: var(--space-8) var(--space-14);

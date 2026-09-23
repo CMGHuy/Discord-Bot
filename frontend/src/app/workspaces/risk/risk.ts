@@ -568,7 +568,7 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
 
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
-    @media (max-width: 720px) {
+    @media (max-width: 639px) {
       .kill { flex-direction: column; align-items: stretch; }
     }
   `,
