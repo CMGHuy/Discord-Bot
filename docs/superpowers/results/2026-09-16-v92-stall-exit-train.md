@@ -43,34 +43,64 @@ effect on a single trade, in either direction. `OVERALL: FAIL` is therefore
 misleading taken at face value: it reads as "measured, no lift" when the
 correct reading is "not measured at all."
 
-Investigating why:
+Investigating why, two independent gaps stack, in this order of primacy:
 
-- The stall-exit path resolves its trigger day via
-  `_resolve_stall_exit_day` → `optimal_time_stop_days(_journal_entries(),
-  strategy)` (`swingbot/core/edge/stops.py`). That function requires
-  `MIN_SAMPLE=40` journal entries per strategy with a non-`None`
-  `days_to_half_r` field, or it returns `None` for that strategy.
-- Direct inspection of the production journal (`data/journal.json` in the
-  main repo, 182 real entries, 107 wins): **`days_to_half_r` is absent from
-  every single entry's schema** — it is not one of the fields ever recorded.
-- A repo-wide grep for `days_to_half_r` (via the `.ignore`-respecting Grep
-  tool) turns up exactly 3 files: `swingbot/core/edge/stops.py` (the
-  consumer, `optimal_time_stop_days` itself), `tests/edge/test_edge_stops.py`
-  (synthetic test fixtures only — not a real journal), and the old
-  `v4-edge-engine` implemented plan doc. **Nothing in the journal-writing
-  path** (`swingbot/core/analytics/journal.py`, `builders.py`, or anywhere
-  else) **ever populates this field.**
-- Conclusion: `optimal_time_stop_days()` returns `None` for every strategy,
-  always — not just in this worktree's backtest replay, in the live
-  production journal too. `plan.stall_exit_day` can therefore never be
-  non-`None`, so the stall-exit mechanism cannot fire in TRAIN, VALIDATION,
-  backtest, or live, **independent of `STALL_EXIT_ENABLED`'s value**. The
-  flag toggling between the two arms above changed nothing because there was
-  never a resolvable `stall_exit_day` for it to act on.
+**Gap 1 (primary) — the backtest harness never resolves `stall_exit_day` at
+all.** `measure_stall_exit.py` calls `run_backtest` → `_trade_plan_at`
+(`swingbot/core/backtesting/backtest.py:160`), which constructs its
+`TradePlanV2(...)` inline at `backtest.py:326-337`. That construction
+**never sets `stall_exit_day`**, so it takes the dataclass default `None`
+unconditionally (`plan_types.py:82`) — for both arms, regardless of the
+journal. `plan.stall_exit_day` is only ever *populated* at
+`builders.py:210` (`plan.stall_exit_day =
+plan_params._resolve_stall_exit_day(strategy)`), inside
+`build_strategy_plan` — the live scan/plan-building path that Task 11
+wired. `backtest.py` never imports `builders.py` or calls
+`build_strategy_plan`/`_resolve_stall_exit_day` anywhere (a repo-wide grep
+of `swingbot/core/backtesting/` confirms zero hits for either name). **This
+is the exact same architecture gap already on record one row above in
+`docs/claude/backtest-methodology.md` for `DATA_DRIVEN_STOPS_ENABLED`**:
+*"it reached `build_strategy_plan` but the backtest sized through
+`_trade_plan_at`, so it was unmeasurable by construction"* — same trap,
+different flag. Because of this gap alone, `plan.stall_exit_day` is
+`None` for every backtest-measured trade in this script's output, and the
+journal question below never even gets reached.
+
+**Gap 2 (secondary, and separately real) — even if Gap 1 were fixed, the
+journal itself couldn't supply a value.** The stall-exit path resolves its
+trigger day via `_resolve_stall_exit_day` → `optimal_time_stop_days(
+_journal_entries(), strategy)` (`swingbot/core/edge/stops.py`). That
+function requires `MIN_SAMPLE=40` journal entries per strategy with a
+non-`None` `days_to_half_r` field, or it returns `None` for that strategy.
+Direct inspection of the production journal (`data/journal.json` in the
+main repo, 182 real entries, 107 wins): **`days_to_half_r` is absent from
+every single entry's schema** — it is not one of the fields ever recorded.
+A repo-wide grep for `days_to_half_r` (via the `.ignore`-respecting Grep
+tool) turns up exactly 3 files: `swingbot/core/edge/stops.py` (the
+consumer, `optimal_time_stop_days` itself), `tests/edge/test_edge_stops.py`
+(synthetic test fixtures only — not a real journal), and the old
+`v4-edge-engine` implemented plan doc. **Nothing in the journal-writing
+path** (`swingbot/core/analytics/journal.py`, `builders.py`, or anywhere
+else) **ever populates this field**, so `optimal_time_stop_days()` would
+return `None` for every strategy even in the live scan/plan-building path
+that does call `_resolve_stall_exit_day`.
+
+**Net effect:** the journal's missing `days_to_half_r` field is a real,
+separate problem, but it isn't even reached — `measure_stall_exit.py`'s two
+arms are byte-identical primarily because the backtest harness never
+resolves `stall_exit_day` at all (Gap 1), before the journal question (Gap
+2) even comes up. Even a fully-populated journal would not change this
+script's output by one trade. `plan.stall_exit_day` can therefore never be
+non-`None` in a backtest-measured trade, so the stall-exit mechanism cannot
+fire in TRAIN, VALIDATION, or backtest, **independent of
+`STALL_EXIT_ENABLED`'s value and independent of the journal's content**. It
+would still be reachable in *live* scanning (which does go through
+`build_strategy_plan`) if Gap 2 alone were fixed — but that path is not
+what this script, or any TRAIN/VALIDATION measurement, exercises.
 
 This was surfaced to the human partner as a premise-level problem (not a
 ruling to make unilaterally), who decided on 2026-09-23 to close the
-hypothesis here rather than fix journal-writing as part of this plan.
+hypothesis here rather than fix either gap as part of this plan.
 
 ## Verdict
 
@@ -81,6 +111,9 @@ hypothesis is preserved unspent.** `STALL_EXIT_ENABLED` stays default
 `false` — ships inert. Decided by the human partner on 2026-09-23 after this
 investigation was surfaced to them. Distinct from a genuine TRAIN failure
 (contrast with Hypothesis 1's Task 7 result, which was a real measured
-null) — reopening this hypothesis requires fixing journal-writing to
-actually record `days_to_half_r`, which is new, separate scope, not part of
-v92.
+null) — reopening this hypothesis needs **both** gaps closed: (a) wiring
+`backtest.py`'s `_trade_plan_at`/`TradePlanV2` construction to call
+`_resolve_stall_exit_day` (or otherwise route backtest-constructed plans
+through `builders.py`'s `build_strategy_plan`), **and** (b) journal-writing
+fixed to actually record `days_to_half_r`. Both are new, separate scope, not
+part of v92.
