@@ -31,10 +31,19 @@ def recent_telemetry(n: int = 50, path: str | None = None) -> list:
         return []
 
 
+def recent_scan_telemetry(n: int = 50, path: str | None = None) -> list:
+    """The last ``n`` SCAN rows only. The file also carries rows with no
+    ``duration_s`` -- deploy_marker.py's ``{"type": "deploy"}`` markers --
+    and a reader that indexes ``duration_s`` must never see those."""
+    rows = [r for r in recent_telemetry(n + 50, path=path)
+            if isinstance(r, dict) and isinstance(r.get("duration_s"), (int, float))]
+    return rows[-n:]
+
+
 def scan_slowdown(path: str | None = None) -> bool:
     """True when the latest logged scan took more than 2x the median of
     the prior 20 -- a real slowdown, not noise from a single slow ticker."""
-    rows = recent_telemetry(21, path=path)
+    rows = recent_scan_telemetry(21, path=path)
     if len(rows) < 6:
         return False
     import statistics

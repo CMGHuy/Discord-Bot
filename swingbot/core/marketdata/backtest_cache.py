@@ -69,13 +69,13 @@ def fetch(ticker: str) -> pd.DataFrame | None:
     ticker_utils.candidate_symbols(ticker) in order (same resolution every
     sibling fetch path in this package uses), returning the first non-empty
     result. Returns None if none resolve."""
-    import yfinance as yf  # local import: keeps module import cheap + test-safe
+    from swingbot.core.marketdata import yf_safe  # local import: keeps module import cheap + test-safe
 
     for candidate in candidate_symbols(ticker):
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                df = yf.download(candidate, period="max", auto_adjust=True, progress=False)
+                df = yf_safe.download(candidate, period="max", auto_adjust=True, progress=False)
         except Exception as e:
             log.warning("backtest cache: candidate %s failed for %s: %s", candidate, ticker, e)
             continue

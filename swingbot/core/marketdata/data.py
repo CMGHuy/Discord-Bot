@@ -10,6 +10,7 @@ import yfinance as yf
 
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.infra.retry import with_retry
+from swingbot.core.marketdata import yf_safe
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
 log = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ def get_daily_data(ticker: str, period: str = "2y") -> pd.DataFrame:
     for candidate in candidate_symbols(ticker):
         tried.append(candidate)
         try:
-            df = with_retry(yf.download, candidate, period=period, interval="1d",
+            df = with_retry(yf_safe.download, candidate, period=period, interval="1d",
                             progress=False, auto_adjust=True,
                             attempts=FETCH_RETRY_ATTEMPTS, base_delay=FETCH_RETRY_BASE_DELAY,
                             label=f"get_daily_data({candidate})")
@@ -80,7 +81,7 @@ def get_daily_data_batch(tickers: list, period: str = "2y") -> dict:
     if not tickers:
         return {}
     try:
-        raw = with_retry(yf.download, " ".join(tickers), period=period, interval="1d",
+        raw = with_retry(yf_safe.download, " ".join(tickers), period=period, interval="1d",
                          group_by="ticker", auto_adjust=True, progress=False,
                          attempts=FETCH_RETRY_ATTEMPTS, base_delay=FETCH_RETRY_BASE_DELAY,
                          label=f"get_daily_data_batch({len(tickers)} tickers)")
@@ -168,7 +169,7 @@ def get_current_price_batch(tickers: list, *, allow_stale: bool = True) -> dict:
         if len(current) == len(tickers):
             return current
     try:
-        raw = yf.download(" ".join(tickers), period="1d", interval="1m",
+        raw = yf_safe.download(" ".join(tickers), period="1d", interval="1m",
                           group_by="ticker", prepost=True, progress=False)
     except Exception as exc:
         log.error("get_current_price_batch failed for %d ticker(s): %s", len(tickers), exc)

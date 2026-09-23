@@ -15,6 +15,37 @@ def _batch_frame(prices: dict) -> pd.DataFrame:
     return pd.concat(per_ticker, axis=1)
 
 
+def test_concurrent_price_and_daily_fetches_never_overlap_inside_yfinance(monkeypatch):
+    """yfinance 0.2.66's download() shares module globals across calls, so
+    two in-process downloads at once corrupt each other. Production logged
+    "dictionary changed size during iteration" and a chart built from another
+    ticker's columns. Every in-process call must be serialised."""
+    import threading
+    import time
+
+    state = {"active": 0, "max": 0}
+    guard = threading.Lock()
+
+    def _fake(*a, **kw):
+        with guard:
+            state["active"] += 1
+            state["max"] = max(state["max"], state["active"])
+        time.sleep(0.05)
+        with guard:
+            state["active"] -= 1
+        return make_ohlcv([10.0, 11.0])
+
+    monkeypatch.setattr(data_mod.yf, "download", _fake)
+    workers = [threading.Thread(target=data_mod.get_daily_data, args=(f"T{i}",)) for i in range(4)]
+    workers += [threading.Thread(target=data_mod.get_current_price_batch, args=([f"P{i}"],),
+                                 kwargs={"allow_stale": False}) for i in range(4)]
+    for w in workers:
+        w.start()
+    for w in workers:
+        w.join()
+    assert state["max"] == 1
+
+
 def test_get_daily_data_retries_a_transient_failure_before_falling_back(monkeypatch):
     """A transient failure on the first candidate must be retried before
     ticker_utils.candidate_symbols() moves on to an alias -- otherwise a

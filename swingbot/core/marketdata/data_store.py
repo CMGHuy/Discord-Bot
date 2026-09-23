@@ -33,6 +33,7 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 import yfinance as yf
 
+from swingbot.core.marketdata import yf_safe
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 from swingbot.core.marketdata.adjustments import merge_adjusted
 
@@ -131,7 +132,7 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 def _chunked_fetch(ticker: str, interval: str, max_days: int, chunk_days: int) -> pd.DataFrame:
     frames = []
     for start, end in chunk_windows(max_days, chunk_days):
-        df = yf.download(ticker, start=start, end=end, interval=interval, progress=False, auto_adjust=True)
+        df = yf_safe.download(ticker, start=start, end=end, interval=interval, progress=False, auto_adjust=True)
         if df is not None and not df.empty:
             frames.append(_normalize_columns(df))
     if not frames:
@@ -168,12 +169,12 @@ def fetch_interval_data(ticker: str, interval: str = "1d") -> pd.DataFrame:
         tried.append(candidate)
         try:
             if cfg["max_days"] is None:
-                df = yf.download(candidate, period="max", interval=code,
+                df = yf_safe.download(candidate, period="max", interval=code,
                                  progress=False, auto_adjust=True)
             elif cfg["chunk_days"] >= cfg["max_days"]:
                 df = None
                 for kwargs in _capped_attempts(cfg["max_days"]):
-                    df = yf.download(candidate, interval=code, progress=False,
+                    df = yf_safe.download(candidate, interval=code, progress=False,
                                      auto_adjust=True, **kwargs)
                     if df is not None and not df.empty:
                         break
@@ -360,7 +361,7 @@ def _default_ranged_fetch(symbol: str, start, interval: str = "1d") -> "pd.DataF
         # that calendar day; any bars already cached get de-duped by the
         # caller's index-based merge, so the coarser start costs nothing.
         start_date = pd.Timestamp(start).strftime("%Y-%m-%d")
-        df = yf.download(symbol, start=start_date, interval=yf_interval(interval),
+        df = yf_safe.download(symbol, start=start_date, interval=yf_interval(interval),
                          auto_adjust=True, progress=False)
         if df is None or df.empty:
             return None
@@ -447,7 +448,7 @@ def get_intraday(symbol: str, interval: str = "1h", base_dir: str = DATA_DIR,
         return load_from_disk(symbol, interval, base_dir=base_dir)
 
     def _default_fetch(sym, iv):
-        df = yf.download(sym, period="700d", interval=iv,
+        df = yf_safe.download(sym, period="700d", interval=iv,
                          auto_adjust=True, progress=False)
         return _normalize_columns(df) if df is not None and not df.empty else None
 

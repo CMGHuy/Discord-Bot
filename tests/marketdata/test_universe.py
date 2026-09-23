@@ -682,6 +682,23 @@ def test_scan_telemetry_roundtrip_and_slowdown_alarm(tmp_path):
     assert scan_slowdown(path=p) is True
 
 
+def test_scan_slowdown_ignores_deploy_marker_rows(tmp_path):
+    # deploy_marker.py appends {"type": "deploy", ...} rows to this same file.
+    # Production raised KeyError('duration_s') on every scan for the 20 scans
+    # after each deploy until slowdown detection learned to skip them.
+    from swingbot.core.scanning.engine import log_scan_telemetry, scan_slowdown
+    from swingbot.core.scanning.telemetry import recent_scan_telemetry
+    p = str(tmp_path / "t.jsonl")
+    for d in [60] * 20:
+        log_scan_telemetry({"duration_s": d}, path=p)
+    log_scan_telemetry({"type": "deploy", "component": "bot"}, path=p)
+    assert scan_slowdown(path=p) is False
+    log_scan_telemetry({"duration_s": 150}, path=p)
+    log_scan_telemetry({"type": "deploy", "component": "admin"}, path=p)
+    assert scan_slowdown(path=p) is True
+    assert recent_scan_telemetry(1, path=p)[-1]["duration_s"] == 150
+
+
 def test_scan_telemetry_retains_phase_breakdown(tmp_path):
     from swingbot.core.scanning.engine import log_scan_telemetry, recent_telemetry
     p = str(tmp_path / "t.jsonl")

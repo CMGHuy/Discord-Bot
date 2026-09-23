@@ -684,9 +684,10 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
     # ── Part 10: Scan health alarm (Task E82) ──────────────────────────────
     with _section("scan health", failed_sections):
         try:
-            from swingbot.core.scanning.engine import recent_telemetry, scan_slowdown
+            from swingbot.core.scanning.engine import scan_slowdown
+            from swingbot.core.scanning.telemetry import recent_scan_telemetry
             if scan_slowdown():
-                rows = recent_telemetry(2)
+                rows = recent_scan_telemetry(1)
                 duration = f"{rows[-1]['duration_s']:.1f}s" if rows else "a scan"
                 messages.append(
                     f"⚠️ **Scan health**: the latest scan took {duration} -- more than 2x the "

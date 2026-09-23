@@ -38,8 +38,8 @@ matplotlib.use("Agg")  # headless rendering, no display needed
 import matplotlib.pyplot as plt
 import mplfinance as mpf
 import pandas as pd
-import yfinance as yf
 
+from swingbot.core.marketdata import yf_safe
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
 # How many tickers to fetch from Yahoo Finance at once during a bulk
@@ -61,7 +61,7 @@ def fetch_full_history(ticker: str) -> pd.DataFrame:
     for candidate in candidate_symbols(ticker):
         tried.append(candidate)
         try:
-            df = yf.download(candidate, period="max", interval="1d", progress=False, auto_adjust=True)
+            df = yf_safe.download(candidate, period="max", interval="1d", progress=False, auto_adjust=True)
         except Exception:
             continue
         if df is not None and not df.empty:
