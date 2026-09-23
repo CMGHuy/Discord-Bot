@@ -6,6 +6,13 @@
 **Bump:** bot patch
 **Edge:** none (integrity)
 
+**Closed 2026-09-23, merged to `main` at `d4fccbf3`, bot patch.** All tasks
+(IA1–IA7) landed as designed; the one-week check (IA7 Step 4) passed. IA1–IA6's
+checkboxes below were never ticked during execution despite the work landing
+(commits `9afac464`…`f94e45b7`) — left as-is rather than rewritten after the
+fact; verdict comes from the merge commits, not the boxes, per
+`document-lifecycle.md`.
+
 **Goal:** Archive 15m and 5m bars forward before Yahoo's 60-day window drops them, and stamp `issued_at` on every live plan, so a later entry-timing measurement has data to run on.
 
 **Architecture:** No new subsystem. The existing `market_data_refresh` loop already archives whatever `MARKET_DATA_TIMEFRAMES` lists, merge-only; this plan states the sub-hourly cadence explicitly, points the default at `15min,5min`, adds one plan field set on the live attach path, and adds an ops coverage report.
@@ -629,8 +636,10 @@ Read `/opt/swing-bot/logs/*.log`, not `docker logs` (empty after a deploy). Expe
 
 Ran 2026-09-17 ~12:20 UTC (within 2h of Step 2, ahead of the 24h expectation): `15min` and `5min` both report `symbols=77` (full watchlist), `earliest=2026-06-23`, `latest=2026-09-17`, `median_sessions=60` — beats the ≈40 expectation. No gateway disconnects in the heartbeat log across the window (106-114ms latency throughout). The 11:04 UTC refresh wake did hit its 120s time budget on the cold pull and carried the remainder to the next wake, exactly the documented fallback behavior, not an error.
 
-- [ ] **Step 4: One-week check — the done condition.** Seven days after Step 2 (target: 2026-09-24), run the coverage command again. Done when, for both timeframes, `earliest` is unchanged from Step 3 (or earlier) and `latest` is the most recent session. Record both readings in the close-out commit.
+- [x] **Step 4: One-week check — the done condition.** Seven days after Step 2 (target: 2026-09-24), run the coverage command again. Done when, for both timeframes, `earliest` is unchanged from Step 3 (or earlier) and `latest` is the most recent session. Record both readings in the close-out commit.
+
+Ran 2026-09-23 (one day ahead of the 2026-09-24 target, at the human partner's request): `15min` reports `symbols=77 earliest=2024-09-19 latest=2026-09-22 median_sessions=63`; `5min` reports `symbols=77 earliest=2026-06-23 latest=2026-09-22 median_sessions=64`. Both `earliest` readings are unchanged from or earlier than Step 3 (`15min` in particular now reaches back to 2024-09-19, well before Step 3's 2026-06-23), and `latest=2026-09-22` is the most recent closed session as of the check. Done condition met.
 
 **Note (added after Step 3, human partner's request):** No Claude session or scheduling mechanism available in this repo's tooling reliably survives the dev machine being off for 7 days (session-local cron dies with the session; a cloud routine cannot reach the VM's SSH key, which by design lives only in WSL on the dev machine, never committed). Installed a daily crontab entry directly on the VM instead, mirrored at `scripts/ops/install_intraday_coverage_cron.sh`: it runs `intraday_archive_coverage.py` inside the bot container at 06:07 UTC daily and appends timestamped output to `/opt/swing-bot/logs/intraday_coverage_cron.log`, so a reading exists for 2026-09-24 regardless of session state. Verified with one manual trigger (2026-09-17T14:36:26Z) before relying on the schedule. This is additive ops tooling, not a plan task; left in place after Step 4 unless the human partner asks it removed.
 
-- [ ] **Step 5: Close out** per `document-lifecycle.md`: move this plan and its spec to `implemented/`. Amend `Bump:`/`Edge:` in the closing commit only if the outcome differed from the prediction, with one clause saying why.
+- [x] **Step 5: Close out** per `document-lifecycle.md`: move this plan and its spec to `implemented/`. Amend `Bump:`/`Edge:` in the closing commit only if the outcome differed from the prediction, with one clause saying why. Outcome matched the prediction — `Bump:`/`Edge:` unchanged.

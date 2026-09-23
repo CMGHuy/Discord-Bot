@@ -3,7 +3,7 @@
 # scripts/ops/intraday_archive_coverage.py inside the bot container and
 # appends timestamped output to logs/intraday_coverage_cron.log.
 #
-# Added for plan v87 (docs/superpowers/plans/2026-09-15-v87-intraday-bar-archive.md)
+# Added for plan v87 (docs/superpowers/plans/implemented/2026-09-15-v87-intraday-bar-archive.md)
 # Task IA7 Step 4, the one-week done-condition check: this gives a coverage
 # reading every day regardless of whether a Claude session is open to run
 # the check manually on the exact day.
