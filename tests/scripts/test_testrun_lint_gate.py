@@ -129,3 +129,32 @@ def test_git_listing_exception_fails_closed(monkeypatch, capsys):
 
     assert testrun.main() == 1
     assert "gate unavailable" in capsys.readouterr().out
+
+
+def test_skip_lint_gate_flag_skips_the_gate(monkeypatch):
+    """CI's backend-test-* shards pass this -- the gate scans the whole repo
+    regardless of shard, so only one shard needs to run it."""
+    import testrun
+
+    monkeypatch.setattr(sys, "argv", ["testrun.py", "full", "--skip-lint-gate"])
+    called = []
+    monkeypatch.setattr(testrun, "undefined_names", lambda: called.append(True) or [])
+    monkeypatch.setattr(testrun, "run", lambda args: ({"passed": 1}, [], 0.1, 0))
+
+    assert testrun.main() == 0
+    assert called == []
+
+
+def test_full_profile_shards_to_given_paths():
+    """CI shards pass specific directories instead of running all of tests/."""
+    import testrun
+
+    args = testrun.build_args("full", ["tests/charts/", "tests/admin/"])
+    assert args[-2:] == ["tests/charts/", "tests/admin/"]
+    assert "tests/" not in args[:-2]
+
+
+def test_full_profile_defaults_to_tests_dir_with_no_target():
+    import testrun
+
+    assert testrun.build_args("full", [])[-1] == "tests/"

@@ -36,6 +36,24 @@ there is fine; a `failed` anywhere is yours.
   Run it serial; workers only add cost.
 - **Single file** (`test_universe.py`, 45 tests): ~7s wall, ~2.4-4.3s internal.
 
+## CI: the suite is sharded across 5 parallel jobs, not run as one
+
+`.github/workflows/deploy.yml` no longer has a single `backend-test` job.
+It's 5 `backend-test-*` jobs (`charts`, `pipeline`, `backtest-edge`, `admin`,
+`misc`), each `testrun.py full <paths>` on its own runner, grouped along
+`swingbot/core`'s own package boundaries (`architecture.md`'s module map) —
+5 is a cap on job count, not a target; a shard boundary changes only when a
+`tests/` subdirectory is added or moves. `tests/charts/` is alone in its own
+shard despite being the smallest by file count: this doc's own numbers above
+are why — the 5 core chart-render files are 84s of the 180.4s serial
+baseline, so leaving them in a shard with anything else makes that shard the
+new bottleneck. Only the `misc` shard runs the whole-repo pyflakes
+undefined-name gate (`testrun.py`'s `undefined_names()`); the other four pass
+`--skip-lint-gate` since the gate isn't shard-scoped and running it 5x would
+just be the same ~52s answer five times. The workflow file's own comments
+carry the full reasoning; this entry exists so "why does CI have 5 backend
+jobs instead of 1" doesn't require reading the YAML to answer.
+
 ## Measuring is fragile — two traps
 
 1. **Cool down 20s between runs.** Back-to-back runs inflate each other by up

@@ -9,26 +9,55 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  # ── 1. Python: compile, then the actual test suite ─────────────────────────
+  # ── 1. Python: compile, then the actual test suite, sharded by topic ───────
   #
-  # This job replaced two (`sanity-check` and `test`) that each did their own
-  # full `pip install -r requirements.txt` — pandas, numpy, matplotlib, scipy,
-  # discord.py — uncached, from scratch, in parallel, for the same result.
-  # Installing the dependency set once is the single biggest saving available
-  # here; everything the old sanity-check proved (does it import?) is proved
-  # more thoroughly by the suite below failing at collection.
+  # This used to be one `backend-test` job running the whole suite (`testrun.py
+  # full`) on a single runner's 4 xdist workers. It's now 5 jobs, each a
+  # `full` shard (`testrun.py full --skip-lint-gate <paths>`) on its OWN
+  # 4-core runner, so a push actually gets ~5x the CPU working the suite in
+  # parallel instead of contending for one runner's 4 cores. `container-
+  # healthcheck` waits on the SLOWEST shard, not their sum.
   #
-  # It also dropped three hardcoded-list checks that had quietly stopped
-  # earning their keep:
-  #   - a "required symbol" list, subsumed by 1549 tests that call those
-  #     symbols rather than merely assert they exist;
-  #   - a "config key" list, subsumed by tests/admin/test_config_flags.py;
-  #   - a "Flask route coverage" list of 23 endpoint names, which had drifted
-  #     badly — the templates reference 44, and every `pages.*` one was
-  #     missing, so it was passing while covering half of what it claimed.
-  #     Now tests/admin/test_template_endpoints.py, which DERIVES the list
-  #     from the templates and therefore cannot drift.
-  backend-test:
+  # 5 is a cap, not a target -- more shards means more fixed per-job overhead
+  # (checkout + setup-python + uv install + compileall, paid on every shard)
+  # for less benefit each, and GitHub bills per job-minute regardless of
+  # wall-clock overlap. Split further only if a specific shard becomes the
+  # visible bottleneck.
+  #
+  # The 5 groups follow swingbot/core's own package boundaries
+  # (docs/claude/architecture.md), not file-count arithmetic, and every group
+  # is a set of PATHS, never a hand-maintained file list -- a plan or
+  # directory listing that drifts from what actually exists was already
+  # rejected once here (see the dropped Flask-route-list note this comment
+  # used to carry): a new test file in an existing shard directory is picked
+  # up the next run with no CI edit needed. A new tests/ subdirectory is the
+  # one case that DOES need a line added below, the same way a 12th core
+  # package needs a line in architecture.md's module map.
+  #
+  # tests/charts/ is its own shard (backend-test-charts) even though it's the
+  # smallest by file count: docs/claude/testing-cost.md measured the 5 core
+  # chart-render files alone at 84s of the suite's 180s serial baseline (43%)
+  # -- rendering PNGs is what actually dominates wall-clock here, not test
+  # count, so isolating it is what gets the other four shards down near the
+  # "fast tier" floor (~27s) instead of one of them randomly inheriting most
+  # of that 84s.
+  #
+  # Only ONE shard (backend-test-misc) runs the pyflakes undefined-name gate
+  # (testrun.py's `undefined_names()`) -- it scans every tracked .py file
+  # regardless of `target`, so running it in all 5 would just be the same
+  # ~52s check five times for one answer. The other four pass
+  # --skip-lint-gate. `compileall`, by contrast, IS cheap (~5s) and stays in
+  # every shard: fast, independent, fail-fast confirmation the whole tree
+  # still compiles, without waiting on whichever shard "owns" that check.
+  #
+  # Steps below are identical across all 5 jobs except the shard's own name,
+  # target paths and (misc only) the lint-gate flag -- YAML anchors would
+  # dedupe that, but this file uses none anywhere else, and explicit is what
+  # the rest of it already is.
+
+  # tests/charts/ -- chart/PNG rendering. See header comment above for why
+  # this is alone.
+  backend-test-charts:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -37,11 +66,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      # uv, with its cache persisted between runs. Same installer the
-      # Dockerfile uses, for the same reason: it resolves and downloads in
-      # parallel instead of pip's one-at-a-time fetch. The cache key is the
-      # pinned requirements file, so a run that changes no dependency
-      # reinstalls nothing from the network.
       - uses: astral-sh/setup-uv@v10.0.0
         with:
           enable-cache: true
@@ -50,26 +74,173 @@ jobs:
       - name: Install dependencies
         run: uv pip install --system -r requirements.txt
 
-      # Catches truncated or corrupted files anywhere in the tree, including
-      # modules nothing imports — which is the one thing the suite cannot do,
-      # since it only reaches what it imports. Replaces a 15-line inline
-      # heredoc that did the same thing with ast.parse.
       - name: Compile every module
         run: python -m compileall -q swingbot bot.py admin_ui.py scripts tests
 
-      # Not piped: testrun.py exits 1 on failure, and a pipe would substitute
-      # the exit status of whatever it fed.
-      - name: Test suite
-        run: python scripts/dev/testrun.py full
+      - name: Test suite (charts)
+        run: python scripts/dev/testrun.py full --skip-lint-gate tests/charts/
 
-      # testrun.py prints a one-line verdict and writes the tracebacks to a
-      # file -- which is right for a terminal and useless in CI, where a red
-      # run gave nothing but a node id and no way to see why. Upload it.
       - name: Upload pytest log on failure
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: pytest-log
+          name: pytest-log-charts
+          path: .pytest-last-run.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  # tests/marketdata/, tests/market/, tests/scanning/, tests/planning/ -- the
+  # scan-to-plan pipeline: OHLCV fetch/cache -> entry signals -> the scan
+  # engine -> trade-plan construction and lifecycle.
+  backend-test-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - uses: astral-sh/setup-uv@v10.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: requirements.txt
+
+      - name: Install dependencies
+        run: uv pip install --system -r requirements.txt
+
+      - name: Compile every module
+        run: python -m compileall -q swingbot bot.py admin_ui.py scripts tests
+
+      - name: Test suite (scan/plan pipeline)
+        run: |
+          python scripts/dev/testrun.py full --skip-lint-gate \
+            tests/marketdata/ tests/market/ tests/scanning/ tests/planning/
+
+      - name: Upload pytest log on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pytest-log-pipeline
+          path: .pytest-last-run.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  # tests/backtesting/, tests/edge/, tests/analytics/, tests/tracking/ --
+  # strategy/edge validation, the backtest engine, analytics, and the paper
+  # trade log's write path that both backtests and live tracking feed.
+  backend-test-backtest-edge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - uses: astral-sh/setup-uv@v10.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: requirements.txt
+
+      - name: Install dependencies
+        run: uv pip install --system -r requirements.txt
+
+      - name: Compile every module
+        run: python -m compileall -q swingbot bot.py admin_ui.py scripts tests
+
+      - name: Test suite (backtest/edge/analytics/tracking)
+        run: |
+          python scripts/dev/testrun.py full --skip-lint-gate \
+            tests/backtesting/ tests/edge/ tests/analytics/ tests/tracking/
+
+      - name: Upload pytest log on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pytest-log-backtest-edge
+          path: .pytest-last-run.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  # tests/admin/, tests/presentation/, tests/commands/, tests/infra/ -- the
+  # admin API/SPA backend, Discord embed/message rendering, slash commands,
+  # and shared infra (jsonio etc.).
+  backend-test-admin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - uses: astral-sh/setup-uv@v10.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: requirements.txt
+
+      - name: Install dependencies
+        run: uv pip install --system -r requirements.txt
+
+      - name: Compile every module
+        run: python -m compileall -q swingbot bot.py admin_ui.py scripts tests
+
+      - name: Test suite (admin/presentation/commands/infra)
+        run: |
+          python scripts/dev/testrun.py full --skip-lint-gate \
+            tests/admin/ tests/presentation/ tests/commands/ tests/infra/
+
+      - name: Upload pytest log on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pytest-log-admin
+          path: .pytest-last-run.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  # tests/db/, tests/scripts/, tests/hooks/, tests/dev/, and every loose
+  # tests/test_*.py (bot.py/discord glue, config, slash-command wiring --
+  # nothing with its own package subdirectory). Also the ONE shard that runs
+  # the whole-repo pyflakes undefined-name gate -- see header comment.
+  #
+  # `tests/test_*.py` is unquoted on purpose: bash glob-expands it before
+  # testrun.py ever sees argv, so this shard's file list is derived at run
+  # time from whatever loose top-level test files actually exist, the same
+  # anti-drift reasoning as every other shard's directory paths. A quoted
+  # version would hand testrun.py the literal string "tests/test_*.py",
+  # which pytest does not glob-expand itself.
+  backend-test-misc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - uses: astral-sh/setup-uv@v10.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: requirements.txt
+
+      - name: Install dependencies
+        run: uv pip install --system -r requirements.txt
+
+      - name: Compile every module
+        run: python -m compileall -q swingbot bot.py admin_ui.py scripts tests
+
+      - name: Test suite (db/scripts/hooks/dev + top-level)
+        run: |
+          python scripts/dev/testrun.py full \
+            tests/db/ tests/scripts/ tests/hooks/ tests/dev/ tests/test_*.py
+
+      - name: Upload pytest log on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pytest-log-misc
           path: .pytest-last-run.log
           if-no-files-found: warn
           retention-days: 7
@@ -78,7 +249,8 @@ jobs:
   # The Angular suite and a real production build. The build is not redundant
   # with the Docker one below: this fails in ~1 minute with a readable
   # TypeScript error, where the Docker stage fails several minutes in with the
-  # same error buried in build output. It also runs in parallel with `backend-test`.
+  # same error buried in build output. It also runs in parallel with the
+  # `backend-test-*` shards.
   frontend-test:
     runs-on: ubuntu-latest
     defaults:
@@ -162,28 +334,31 @@ jobs:
           COMPOSE_PROFILES=tunnel CLOUDFLARE_TUNNEL_TOKEN=ci-stub \
             docker compose config --quiet
 
-  # ── 3. Docker build + container health ────────────────────────────────────
+  # ── 3a. Docker build ────────────────────────────────────────────────────────
   # Builds the real Docker image (same Dockerfile used in production) and
-  # actually starts both entrypoints to prove the containers come up
-  # healthy.  Catches:
-  #   - Dockerfile or requirements.txt breakage that a plain `pip install`
-  #     in the earlier jobs wouldn't catch (e.g. system-level deps).
-  #   - admin_ui.py failing to bind / Flask crashing on startup.
-  #   - Auth gate regression (an unauthenticated browser must reach the SPA,
-  #     which renders its own login form; /api/v1/* must still 401; wrong
-  #     Basic Auth credentials still 401).
-  #   - Any route returning 5xx instead of 200.
+  # hands it to container-healthcheck below as a workflow artifact.
   #
-  # It also PUBLISHES the image, and the ordering is the point: the artifact
-  # that gets pushed is byte-identical to the one every check below ran
-  # against. Build once, prove it, then push that -- never rebuild for the
-  # push, which would ship an image nothing tested.
-  container-healthcheck:
-    needs: [backend-test, frontend-test]
+  # This used to be the first step of container-healthcheck, gated on
+  # `needs: [backend-test, frontend-test]` -- so the multi-minute image build
+  # (Node stage + Python deps) only started after the test job(s) finished,
+  # putting it fully on the critical path to deploy. It has no actual
+  # dependency on their result, only a "don't bother if tests would fail"
+  # rationale -- so it now starts immediately alongside every
+  # `backend-test-*` shard, frontend-test, compose-lint and cleanup, and only
+  # the smoke tests + GHCR push (which DO need a proven, unchanged artifact)
+  # wait on all of them. On a green run this overlaps the build with the
+  # slowest test shard instead of stacking them, which is where most of the
+  # wall-clock saving comes from.
+  #
+  # cache-from/cache-to use the `gha` backend (GitHub's own Actions cache)
+  # rather than a local /tmp dir: it needs no manual "rotate the cache
+  # directory" step to avoid unbounded growth, and unlike a local dir it
+  # survives being read by a job (this one) that's a different runner from
+  # whichever job wrote it last time.
+  docker-build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write        # GITHUB_TOKEN needs this to push to GHCR
     outputs:
       image: ${{ steps.imagename.outputs.image }}
       tag: ${{ steps.imagename.outputs.tag }}
@@ -209,16 +384,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      # Layer cache: keyed on Dockerfile + requirements.txt so a
-      # source-only change reuses the cached pip/uv layer entirely.
-      - name: Cache Docker layers
-        uses: actions/cache@v6
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ hashFiles('Dockerfile', 'requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
       - name: Build Docker image
         uses: docker/build-push-action@v7
         with:
@@ -226,14 +391,63 @@ jobs:
           push: false
           load: true
           tags: swing-bot:ci
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      # Without the move the cache directory grows unboundedly across runs.
-      - name: Rotate build cache
-        run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+      # docker-build and container-healthcheck are different runners, so the
+      # loaded image has to cross as a file, not a docker daemon reference.
+      # Compressed, since the layer set here (Python + pandas/numpy/scipy/
+      # matplotlib + the built SPA) is large enough that shipping it
+      # uncompressed would eat into the time this split is meant to save.
+      - name: Save image for container-healthcheck
+        run: docker save swing-bot:ci | gzip > /tmp/swing-bot-ci.tar.gz
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: swing-bot-ci-image
+          path: /tmp/swing-bot-ci.tar.gz
+          retention-days: 1
+
+  # ── 3b. Container health ─────────────────────────────────────────────────
+  # Actually starts both entrypoints against the image docker-build produced,
+  # to prove the containers come up healthy. Catches:
+  #   - Dockerfile or requirements.txt breakage that a plain `pip install`
+  #     in the earlier jobs wouldn't catch (e.g. system-level deps).
+  #   - admin_ui.py failing to bind / Flask crashing on startup.
+  #   - Auth gate regression (an unauthenticated browser must reach the SPA,
+  #     which renders its own login form; /api/v1/* must still 401; wrong
+  #     Basic Auth credentials still 401).
+  #   - Any route returning 5xx instead of 200.
+  #
+  # It also PUBLISHES the image, and the ordering is still the point: the
+  # artifact that gets pushed is the exact tar docker-build produced --
+  # loaded here, never rebuilt -- so what ships is byte-identical to what
+  # every check below ran against.
+  container-healthcheck:
+    needs:
+      - docker-build
+      - backend-test-charts
+      - backend-test-pipeline
+      - backend-test-backtest-edge
+      - backend-test-admin
+      - backend-test-misc
+      - frontend-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write        # GITHUB_TOKEN needs this to push to GHCR
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download image artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: swing-bot-ci-image
+          path: /tmp
+
+      - name: Load image built by docker-build
+        run: gunzip -c /tmp/swing-bot-ci.tar.gz | docker load
 
       # ── Entrypoint import checks (no network, no Discord token needed) ──
       - name: bot.py — entrypoint imports cleanly inside the image
@@ -429,8 +643,8 @@ jobs:
       - name: Push the tested image
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: |
-          IMAGE="${{ steps.imagename.outputs.image }}"
-          TAG="${{ steps.imagename.outputs.tag }}"
+          IMAGE="${{ needs.docker-build.outputs.image }}"
+          TAG="${{ needs.docker-build.outputs.tag }}"
           docker tag swing-bot:ci "$IMAGE:$TAG"
           docker tag swing-bot:ci "$IMAGE:latest"
           docker push "$IMAGE:$TAG"
@@ -490,21 +704,24 @@ jobs:
   # before returning (see deploy/deploy.sh). The server no longer builds
   # anything.
   #
-  # needs container-healthcheck (the image to pull), cleanup (the disk space
-  # to pull it into), AND compose-lint (a docker-compose.yml that still
-  # parses in every profile -- deploy.sh runs `docker compose up` on the
-  # server, so a broken compose file fails there instead of here otherwise).
-  # Cleanup moved to run from the start of the workflow rather than after
-  # deploy specifically so the box's disk is freed BEFORE this job asks it to
-  # pull a new image -- a disk that's already full is exactly what makes a
-  # `docker pull` fail, and finding that out mid-deploy is worse than finding
-  # it out before. That guarantee only holds if this job actually waits for
-  # cleanup to finish rather than merely starting after it by convention:
-  # without this in `needs`, the two jobs race, and nothing stops the pull
-  # from landing before the prune does on the exact disk-is-nearly-full run
-  # this ordering exists to protect.
+  # needs container-healthcheck (the proof the image is healthy), docker-build
+  # (only to read its image/tag outputs -- GitHub Actions requires a job to be
+  # a direct `needs` entry to read `needs.<job>.outputs`, even though the
+  # dependency already holds transitively through container-healthcheck),
+  # cleanup (the disk space to pull it into), AND compose-lint (a
+  # docker-compose.yml that still parses in every profile -- deploy.sh runs
+  # `docker compose up` on the server, so a broken compose file fails there
+  # instead of here otherwise). Cleanup moved to run from the start of the
+  # workflow rather than after deploy specifically so the box's disk is freed
+  # BEFORE this job asks it to pull a new image -- a disk that's already full
+  # is exactly what makes a `docker pull` fail, and finding that out
+  # mid-deploy is worse than finding it out before. That guarantee only holds
+  # if this job actually waits for cleanup to finish rather than merely
+  # starting after it by convention: without this in `needs`, the two jobs
+  # race, and nothing stops the pull from landing before the prune does on
+  # the exact disk-is-nearly-full run this ordering exists to protect.
   deploy:
-    needs: [container-healthcheck, cleanup, compose-lint]
+    needs: [docker-build, container-healthcheck, cleanup, compose-lint]
     # Skip on a manual run against a branch, where nothing was published --
     # deploying would silently re-run whatever :latest currently points at.
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
@@ -529,7 +746,7 @@ jobs:
           # deploy reproducible: the server runs exactly the artifact this
           # run tested, even if another push lands while this one is in
           # flight and moves :latest underneath it.
-          SWING_BOT_IMAGE: ${{ needs.container-healthcheck.outputs.image }}:${{ needs.container-healthcheck.outputs.tag }}
+          SWING_BOT_IMAGE: ${{ needs.docker-build.outputs.image }}:${{ needs.docker-build.outputs.tag }}
           # Where the checkout lives on the server. Overridable via the
           # HETZNER_APP_DIR secret without editing this file.
           #

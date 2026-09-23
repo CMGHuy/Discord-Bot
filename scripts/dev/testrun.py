@@ -10,6 +10,7 @@ Profiles (see docs/claude/testing-cost.md for the measurements behind them):
 
     python scripts/dev/testrun.py fast              # -m "not slow", serial   ~27s
     python scripts/dev/testrun.py full              # -n 4                    ~40s
+    python scripts/dev/testrun.py full tests/charts/ tests/admin/  # shard, -n 4
     python scripts/dev/testrun.py file tests/x.py   # one path, serial         ~7s
     python scripts/dev/testrun.py lf                # --lf, serial          seconds
 
@@ -17,6 +18,17 @@ Profiles (see docs/claude/testing-cost.md for the measurements behind them):
 is already at the fixed per-invocation overhead floor and workers only add
 startup cost. `full` uses -n 4, not -n auto -- over-subscribing 12 logical
 cores measured 60.0s against 40.2s.
+
+`full` with extra positional args runs -n 4 over just those paths instead of
+all of `tests/` -- this is what the CI backend-test-* shards use
+(.github/workflows/deploy.yml) to split the suite across parallel jobs by
+topic. Always pass directories, never a hardcoded file list: a shard is
+"every test under these paths", so a new test file in an existing shard
+directory is picked up automatically, the same failure mode CLAUDE.md already
+warns about (`Flask route coverage` list) for a hand-maintained list that
+quietly drifts. `--skip-lint-gate` skips the whole-repo pyflakes undefined-
+name gate below -- it's not shard-scoped (it scans everything regardless of
+`target`), so only one shard needs to run it.
 
 Exit codes: 0 pass, 1 test failure, 2 could not determine the result.
 """
@@ -153,17 +165,17 @@ def undefined_names(paths: list[str] | None = None) -> list[str]:
     return [line for line in result.stdout.splitlines() if "undefined name" in line]
 
 
-def build_args(profile: str, target: str | None) -> list[str]:
+def build_args(profile: str, target: list[str]) -> list[str]:
     if profile == "fast":
         return BASE + ["-m", "not slow", "tests/"]
     if profile == "full":
-        return BASE + ["-n", WORKERS, "tests/"]
+        return BASE + ["-n", WORKERS, *(target or ["tests/"])]
     if profile == "lf":
         return BASE + ["--lf", "tests/"]
     if profile == "file":
         if not target:
             sys.exit("testrun.py file <path>: missing path")
-        return BASE + [target]
+        return BASE + target
     sys.exit(f"unknown profile: {profile}")
 
 
@@ -235,9 +247,14 @@ def run(pytest_args: list[str]) -> tuple[dict[str, int], list[str], float, int]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("profile", choices=["fast", "full", "file", "lf"])
-    ap.add_argument("target", nargs="?")
+    ap.add_argument("target", nargs="*",
+                    help="`file`: one or more paths. `full`: shard to these "
+                         "paths instead of all of tests/. Ignored otherwise.")
     ap.add_argument("--no-escalate", action="store_true",
                     help="keep `fast` narrow even if chart/template files changed")
+    ap.add_argument("--skip-lint-gate", action="store_true",
+                    help="skip the whole-repo pyflakes undefined-name gate "
+                         "(for a `full` shard where another shard already runs it)")
     args = ap.parse_args()
 
     profile = args.profile
@@ -247,7 +264,7 @@ def main() -> int:
             print(f"NOTE: {why} -> escalating to full tier")
             profile = "full"
 
-    if profile == "full":
+    if profile == "full" and not args.skip_lint_gate:
         try:
             findings = undefined_names()
         except RuntimeError as exc:
