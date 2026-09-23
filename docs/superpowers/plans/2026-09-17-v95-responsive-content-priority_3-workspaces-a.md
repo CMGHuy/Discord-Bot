@@ -348,7 +348,7 @@ to fend for themselves below it:
 - Produces: `DASHBOARD_COLUMNS` with floors; `sb-tab-bar` renders counts at
   every width; `sb-data-table` renders one pager below `md`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `dashboard.spec.ts`:
 
@@ -377,12 +377,12 @@ it('keeps the count visible when the tab bar goes icon-only', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `cd frontend && npm test -- --include src/app/ui/layout.spec.ts`
 Expected: FAIL — icon-only tabs render no text.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `layout.ts`, in the icon-only block at roughly line 154, stop hiding the
 count. Keep hiding the word:
@@ -410,7 +410,7 @@ In `dashboard.ts`, lift the ten Open Positions columns into an **exported**
 add `inlineFrom`: `ticker`, `pnl`, `r` at `'xs'`; `now`, `held` at `'sm'`;
 `id`, `status`, `confidence`, `plan`, `opened` at `'md'`.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `cd frontend && npm test -- --include src/app/ui/layout.spec.ts`
 Run: `cd frontend && npm test -- --include src/app/workspaces/dashboard/dashboard.spec.ts`
@@ -418,13 +418,13 @@ Run: `cd frontend && npm test -- --include src/app/ui/data-table/data-table.spec
 Expected: PASS for all three. The data-table run is the regression check —
 v80's phone-mode tests must still pass.
 
-- [ ] **Step 5: Verify visually — mandatory**
+- [x] **Step 5: Verify visually — mandatory**
 
 At 390px: tabs read as icon + number; one pager below the table; a row shows
 ticker, P&L% and R with a detail chevron. At 768: two-column KPI grid from A5
 still correct, one pager. At 1024: two pagers, all ten columns.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/dashboard/dashboard.ts frontend/src/app/ui/data-table/data-table.ts frontend/src/app/ui/layout.ts frontend/src/app/workspaces/dashboard/dashboard.spec.ts frontend/src/app/ui/layout.spec.ts

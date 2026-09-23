@@ -67,7 +67,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
       @if (showSpinner()) {
         <span class="loading-spinner" aria-hidden="true"></span>
       }
-      @if (pagination(); as page) {
+      @if (showHeaderPager() && pagination(); as page) {
         <ng-container [ngTemplateOutlet]="pagerTemplate" [ngTemplateOutletContext]="{ $implicit: page, announce: true }" />
       }
       @if (sortOptions().length) {
@@ -496,6 +496,14 @@ export class DataTable<T> {
   readonly cardsAt = input<boolean | null>(null);
   protected readonly phone = computed(
     () => this.cardsAt() ?? this.viewportService.isPhone(),
+  );
+
+  /** One pager below md — v95 C4. Two pagers cost ~250px on a phone, more
+   *  than the five rows between them; the footer one (which also carries
+   *  per-page) stays, so the reader's eye is already there after scanning
+   *  the rows. */
+  protected readonly showHeaderPager = computed(
+    () => isInline('md', this.viewport()),
   );
 
   protected readonly pinKey = computed(() => {

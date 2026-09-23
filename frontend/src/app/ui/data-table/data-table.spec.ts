@@ -793,3 +793,44 @@ describe('DataTable row detail', () => {
     expect(el().querySelector('.row-detail .expansion-body')).not.toBeNull();
   });
 });
+
+/* -- v95 C4 -- one pager below md ------------------------------------------ */
+
+describe('DataTable single pager below md', () => {
+  let fixture: ComponentFixture<Host>;
+  let host: Host;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(Host);
+    host = fixture.componentInstance;
+    host.pagination.set({ page: 1, perPage: 12, total: 40 });
+    fixture.detectChanges();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+
+  it('shows one pager below md, two above', () => {
+    // Six rows between two six-control pagers is ~250px of chrome for
+    // ~200px of data.
+    host.viewportAt.set('sm');
+    fixture.detectChanges();
+    expect(el().querySelectorAll('sb-pagination')).toHaveLength(1);
+
+    host.viewportAt.set('lg');
+    fixture.detectChanges();
+    expect(el().querySelectorAll('sb-pagination')).toHaveLength(2);
+  });
+
+  it('keeps the one pager below md at the footer, not the header', () => {
+    // The footer pager also carries per-page below the table's own content,
+    // which is where a reader's eye already is after scanning the rows.
+    host.viewportAt.set('sm');
+    fixture.detectChanges();
+    const pager = el().querySelector('sb-pagination')!;
+    // From the pager's own position, the table PRECEDES it -- i.e. the pager
+    // renders after the table, not above it.
+    expect(pager.compareDocumentPosition(el().querySelector('table')!) &
+      Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  });
+});

@@ -20,7 +20,7 @@ import { Dashboard as DashboardData, TradeRow } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
-import { Dashboard, DASHBOARD_PANEL_ORDER } from './dashboard';
+import { Dashboard, DASHBOARD_COLUMNS, DASHBOARD_PANEL_ORDER } from './dashboard';
 import { DashboardStore } from '../../stores/dashboard.store';
 import { ToastService } from '../../shell/toast.service';
 
@@ -437,5 +437,16 @@ describe('Dashboard panel order', () => {
     const allowed = new Set(['639', '1023', '1439', '1919', '640', '1024', '1440', '1920']);
     const widths = [...src.matchAll(/\(\s*(?:max|min)-width:\s*(\d+)px\s*\)/g)].map((m) => m[1]);
     expect(widths.filter((w) => !allowed.has(w))).toEqual([]);
+  });
+});
+
+/* -- v95 C4 -- Open Positions column floors -------------------------------- */
+
+describe('DASHBOARD_COLUMNS', () => {
+  it('reuses tradeColumns() rather than a second, driftable floor list', () => {
+    // Every entry v95 C2 declared a floor on carries it here too, because
+    // this is literally that same function's return value.
+    expect(DASHBOARD_COLUMNS.length).toBeGreaterThan(0);
+    expect(DASHBOARD_COLUMNS.filter((c) => c.inlineFrom === undefined)).toEqual([]);
   });
 });

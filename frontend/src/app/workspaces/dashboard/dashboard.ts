@@ -115,6 +115,20 @@ export const DASHBOARD_PANEL_ORDER: Partial<Record<Viewport, string[]>> = {
   sm: ['performance', 'positions', 'activity', 'movers'],
 };
 
+/**
+ * Open Positions' columns — v95 C4, exported for E1's parity gate.
+ *
+ * Not a separate definition: this table renders the exact same
+ * `tradeColumns()` set Trades does (same `COMPACT_COLUMNS`/`FULL_COLUMNS`
+ * baseline, same `DASHBOARD_TABLE_ID` preference key for the ORDER only), so
+ * it already carries the floors v95 C2 declared there. A second, hand-tuned
+ * floor list for the same ten-to-sixteen columns would drift from C2's the
+ * first time either changed — two names for one fact is exactly what this
+ * plan's global constraints exist to prevent. `now: signal(Date.now())`
+ * default: the gate reads `inlineFrom`, never a cell's rendered value, so
+ * which instant it is does not matter here. */
+export const DASHBOARD_COLUMNS = tradeColumns();
+
 @Component({
   selector: 'sb-dashboard',
   imports: [

@@ -231,3 +231,20 @@ describe('sb-panel force-expand guard', () => {
     expect(el().querySelector('button.panel-toggle')).toBeNull();
   });
 });
+
+/* -- v95 C4 -- tab counts survive icon-only ------------------------------- */
+
+describe('sb-tab-bar icon-only counts', () => {
+  // TabBar has no viewportAt override -- its icon-only demotion is CSS-only
+  // (`@media (max-width: 1023px)`), so this is asserted against the
+  // stylesheet text the way A2/A7 assert breakpoint values, not by forcing a
+  // viewport signal jsdom cannot lay out anyway.
+  it('keeps the count visible when the tab bar goes icon-only', () => {
+    // An icon-only tab that drops "6" answers none of the question the tab
+    // exists to answer. The icon may replace the word; it must not replace
+    // the number.
+    const block = SOURCE.match(/@media \(max-width: 1023px\) \{([\s\S]*?)\n    \}/)?.[1] ?? '';
+    expect(block).toMatch(/\.tab\.iconed \.label \{ display: none; \}/);
+    expect(block).toMatch(/\.tab\.iconed \.count \{ display: inline; \}/);
+  });
+});
