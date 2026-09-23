@@ -691,7 +691,7 @@ choice, hiding an engaged one changes what the numbers on screen mean.
 - Consumes: `ToolbarControl.active` (B4).
 - Produces: no API change.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `toolbar.spec.ts`:
 
@@ -739,23 +739,23 @@ describe('sb-toolbar active badge', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/toolbar.spec.ts`
 Expected: the third case may already pass; the `aria-label` cases fail if B4's
 string differs. Fix B4's `sheetLabel` to match exactly, not the test.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 No new code if B4 is correct. If the assertions fail, the defect is in
 `sheetLabel`/`activeCount` — correct those, not the expectations.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/toolbar.spec.ts`
 Expected: PASS, all three.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/toolbar.ts frontend/src/app/ui/toolbar.spec.ts

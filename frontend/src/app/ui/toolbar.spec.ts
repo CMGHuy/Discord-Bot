@@ -71,3 +71,45 @@ describe('sb-toolbar', () => {
     expect(el().querySelector('.toolbar-inline [slot="ticker"]')).toBe(demoted);
   });
 });
+
+describe('sb-toolbar active badge', () => {
+  let fixture: ComponentFixture<Host>;
+  let host: Host;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(Host);
+    host = fixture.componentInstance;
+    host.viewportAt.set('sm');
+    fixture.detectChanges();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  const button = () => el().querySelector('.toolbar-sheet-button')!;
+
+  it('shows no active marker when every demoted control is at its default', () => {
+    expect(el().querySelector('.active-dot')).toBeNull();
+    expect(button().getAttribute('aria-label')).toBe('Filters — 2 hidden');
+  });
+
+  it('marks the sheet when a demoted control is engaged', () => {
+    host.controls.set([
+      { id: 'status', label: 'Status' },
+      { id: 'ticker', label: 'Ticker', inlineFrom: 'md', active: true },
+      { id: 'badge', label: 'Badge', inlineFrom: 'md' },
+    ]);
+    fixture.detectChanges();
+    expect(el().querySelector('.active-dot')).not.toBeNull();
+    expect(button().getAttribute('aria-label')).toBe('Filters — 2 hidden, 1 active');
+  });
+
+  it('counts only DEMOTED actives — an inline active is already visible', () => {
+    host.controls.set([
+      { id: 'status', label: 'Status', active: true },
+      { id: 'ticker', label: 'Ticker', inlineFrom: 'md' },
+      { id: 'badge', label: 'Badge', inlineFrom: 'md' },
+    ]);
+    fixture.detectChanges();
+    expect(el().querySelector('.active-dot')).toBeNull();
+  });
+});
