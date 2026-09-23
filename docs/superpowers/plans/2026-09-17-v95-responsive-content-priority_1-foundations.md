@@ -303,7 +303,7 @@ The fix is to stop opting out, not to add new rules.
 - Produces: no API change. `sb-chip` and `button[sb-button].link` become
   44px-tall targets under a coarse pointer and stay visually unchanged above it.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `frontend/src/app/ui/button.spec.ts`:
 
@@ -327,12 +327,12 @@ describe('button touch floor', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/button.spec.ts`
 Expected: FAIL for `button.ts`.
 
-- [ ] **Step 3: Apply the change**
+- [x] **Step 3: Apply the change**
 
 In `frontend/src/app/ui/button.ts`, in both the `:host(.chip)` and
 `:host(.link)` blocks, delete the `min-height: 0;` declaration and replace it
@@ -355,7 +355,7 @@ In `frontend/src/app/ui/control-bar.ts`, add to the `.clear` rule:
 
 matching what `pagination.ts` already does for the same reason.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/button.spec.ts`
 Expected: PASS.
@@ -373,7 +373,7 @@ At 390px, confirm chips on Trades and the `.clear` control are comfortably
 tappable and that no chip row now overflows its container. A taller chip may
 wrap a row that previously fit; that is expected and acceptable.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/ui/button.ts frontend/src/app/ui/chip.ts frontend/src/app/ui/control-bar.ts frontend/src/app/ui/button.spec.ts

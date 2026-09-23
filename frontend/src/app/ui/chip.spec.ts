@@ -60,10 +60,12 @@ describe('Chip (v80 D4)', () => {
     expect(SOURCE).toMatch(/\.muted \{ color: var\(--text-muted\); \}/);
   });
 
-  it('grows to a 28px minimum on touch and narrow screens', () => {
-    const block = SOURCE.match(/@media \(pointer: coarse\), \(max-width: 639px\) \{([\s\S]*?)\n    \}/);
-    expect(block).not.toBeNull();
-    expect(block![1]).toContain('min-height: 28px');
+  it('v95: takes its touch floor from --control-h rather than restoring 28px', () => {
+    // The 28px restoration existed only to undo button.ts's `min-height: 0`
+    // on :host(.chip). With that opt-out gone (v95 A3), a chip inside a
+    // button gets the 44px token floor, and a chip that is only a label has
+    // no business claiming a tap target's height.
+    expect(SOURCE).not.toContain('min-height: 28px');
   });
 
   it('no longer borrows --info for the level-4 band', () => {
