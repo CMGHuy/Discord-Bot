@@ -137,3 +137,23 @@ describe('the gallery is the v80 D6 reference', () => {
     expect(GALLERY).toContain("'register-instrument'");
   });
 });
+
+describe('the gallery covers the v95 content-priority primitives', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
+    });
+  });
+
+  it.each([
+    ['toolbar sheet', '.toolbar-sheet-button'],
+    ['collapsed panel digest', '.panel-digest'],
+    ['force-expanded panel', '.panel-problem'],
+    ['row detail', 'button.detail-toggle'],
+  ])('demonstrates the %s', (_name, selector) => {
+    const fixture = TestBed.createComponent(Gallery);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector(selector)).not.toBeNull();
+  });
+});
