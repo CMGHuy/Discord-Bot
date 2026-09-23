@@ -55,6 +55,16 @@ def _company_names(tickers: list[str]) -> dict[str, str | None]:
     US-listed symbols come from the local NASDAQ/NYSE directory instantly;
     only OTC and international ones hit the network, and doing those
     sequentially stalls the whole response.
+
+    `pool.submit` itself can raise, not just the future it returns --
+    confirmed live on production 2026-09-23: a concurrent 77-ticker scan's
+    process-spawn chunks starved the host of memory for a new OS thread,
+    and `RuntimeError: can't start new thread` came out of `submit()`
+    before there was even a future to attach a try/except to. Submitting in
+    a loop rather than the previous dict comprehension means one ticker
+    failing to submit degrades that ticker to an unknown name instead of
+    aborting every ticker after it -- this field is cosmetic everywhere
+    else in the response, and is not worth 500ing the whole watchlist over.
     """
     from swingbot.core.marketdata.data import get_company_name
 
@@ -62,7 +72,12 @@ def _company_names(tickers: list[str]) -> dict[str, str | None]:
         return {}
     names: dict[str, str | None] = {}
     with ThreadPoolExecutor(max_workers=min(10, len(tickers))) as pool:
-        futures = {pool.submit(get_company_name, t): t for t in tickers}
+        futures = {}
+        for t in tickers:
+            try:
+                futures[pool.submit(get_company_name, t)] = t
+            except RuntimeError:
+                names[t] = None
         for fut in as_completed(futures):
             t = futures[fut]
             try:

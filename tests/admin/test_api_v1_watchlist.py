@@ -114,6 +114,35 @@ def test_list_shape(watchlist, logged_in, monkeypatch):
     }, where="ticker")
 
 
+def test_company_name_lookup_survives_a_full_thread_pool(watchlist, logged_in, monkeypatch):
+    """Confirmed live on production 2026-09-23: a concurrent 77-ticker scan's
+    process-spawn chunks starved the host of memory for a new OS thread, and
+    `pool.submit(get_company_name, t)` raised `RuntimeError: can't start new
+    thread` -- uncaught, because it happens in the submission loop itself,
+    not inside a future whose `.result()` is already wrapped in try/except.
+    That took the whole endpoint down with it (500, page shows nothing) over
+    a field that is cosmetic for every OTHER row in the response. One
+    ticker failing to submit must degrade to a null company_name for that
+    ticker, not fail the batch."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    real_submit = ThreadPoolExecutor.submit
+
+    def flaky_submit(self, fn, ticker):
+        if ticker == "MSFT":
+            raise RuntimeError("can't start new thread")
+        return real_submit(self, fn, ticker)
+
+    monkeypatch.setattr(ThreadPoolExecutor, "submit", flaky_submit)
+
+    watchlist(["AAPL", "MSFT"])
+    resp = logged_in.get("/api/v1/watchlist/tickers")
+    assert resp.status_code == 200
+    by_symbol = {row["symbol"]: row for row in resp.get_json()["tickers"]}
+    assert by_symbol["AAPL"]["company_name"] == "AAPL Inc."
+    assert by_symbol["MSFT"]["company_name"] is None
+
+
 def test_next_earnings_fields_are_iso_strings_from_the_cache(watchlist, logged_in):
     # _next_earnings only ever reads the cache (never fetches inline -- see
     # its own docstring for why), so the way to give a ticker a known
