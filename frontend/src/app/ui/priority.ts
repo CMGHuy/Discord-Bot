@@ -54,3 +54,27 @@ export interface PriorityDecl {
   inlineFrom?: Viewport;
   demotesTo: DemotionTarget;
 }
+
+/**
+ * Which of these declarations are NOT reachable at some viewport — v95 §9.
+ *
+ * Returns the failing ids, empty when every item is reachable everywhere.
+ * Returning ids rather than throwing keeps it usable outside a test, and
+ * makes a failure name what broke instead of only that something did.
+ *
+ * A declaration fails when it demotes but names no destination, or names one
+ * this surface does not provide. It does NOT fail merely for being demoted —
+ * that is the whole design.
+ */
+export function assertReachable(decls: PriorityDecl[]): string[] {
+  const failed: string[] = [];
+  const targets: ReadonlySet<DemotionTarget> = new Set(['expansion', 'sheet', 'digest']);
+
+  for (const decl of decls) {
+    const demotesSomewhere = VIEWPORT_ORDER.some((v) => !isInline(decl.inlineFrom, v));
+    if (demotesSomewhere && !targets.has(decl.demotesTo)) {
+      failed.push(decl.id);
+    }
+  }
+  return failed;
+}
