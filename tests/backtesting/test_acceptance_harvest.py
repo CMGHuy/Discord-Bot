@@ -51,3 +51,32 @@ def test_win_rate_floor_fails_when_wr_collapses():
     component = _arm([0.3] * 40 + [-1.0] * 60, ["win"] * 40 + ["loss"] * 60)
     res = ah._clause_win_rate_floor(baseline, component, 500, seed=1)
     assert res.verdict == "FAIL"
+
+
+def test_evaluate_harvest_passes_clean_improvement_at_validation():
+    baseline = _arm([0.3] * 60 + [-1.0] * 40, ["win"] * 60 + ["loss"] * 40)
+    component = _arm([0.9] * 60 + [-1.0] * 40, ["win"] * 60 + ["loss"] * 40)
+    result = ah.evaluate_harvest(baseline, component, stage="validation",
+                                structurally_immune_to_wr=True,
+                                permutation_p=0.001)
+    assert result.verdict == "PASS"
+    assert result.clause("win_rate_floor").verdict == "PASS"
+    assert result.version == ah.HARVEST_VERSION
+
+
+def test_evaluate_harvest_fails_without_permutation_p_at_validation():
+    baseline = _arm([0.3] * 60 + [-1.0] * 40, ["win"] * 60 + ["loss"] * 40)
+    component = _arm([0.9] * 60 + [-1.0] * 40, ["win"] * 60 + ["loss"] * 40)
+    result = ah.evaluate_harvest(baseline, component, stage="validation",
+                                structurally_immune_to_wr=True)
+    assert result.verdict == "FAIL"
+    assert result.clause("permutation").verdict == "FAIL"
+
+
+def test_evaluate_harvest_permutation_skipped_at_walkforward():
+    baseline = _arm([0.3] * 60 + [-1.0] * 40, ["win"] * 60 + ["loss"] * 40)
+    component = _arm([0.9] * 60 + [-1.0] * 40, ["win"] * 60 + ["loss"] * 40)
+    result = ah.evaluate_harvest(baseline, component, stage="walkforward",
+                                structurally_immune_to_wr=True)
+    assert result.clause("permutation").verdict == "SKIPPED"
+    assert result.verdict == "PASS"

@@ -99,3 +99,35 @@ def _clause_win_rate_floor(baseline, component, n_resamples, seed, *,
         "win_rate_floor", "PASS" if ok else "FAIL",
         f"standardised dWR {res.point:+.2f}pp, lower bound {res.lo:+.2f}pp "
         f"vs floor {WIN_RATE_FLOOR_PP:+.2f}pp", res.lo, WIN_RATE_FLOOR_PP)
+
+
+def evaluate_harvest(baseline, component, *, stage: str,
+                    structurally_immune_to_wr: bool = False,
+                    permutation_p: float | None = None,
+                    n_resamples: int = BOOTSTRAP_RESAMPLES,
+                    seed: int = 42) -> AcceptanceResult:
+    """The harvest gate. Every applicable clause must PASS.
+
+    No `mechanism` clause (v72 clause 6) -- these hypotheses don't remove
+    trades, they change how already-accepted trades exit, so there is no
+    removed population to interrogate. The caller's results doc should
+    instead report the win->non-win outcome-flip count from
+    population_split(baseline, component)['changed'] as a disclosure table
+    (informational, not gating -- expectancy_gain already prices in
+    whatever those flips cost or bought)."""
+    if stage not in STAGES:
+        raise ValueError(f"stage must be one of {STAGES}, got {stage!r}")
+    split = population_split(baseline, component)
+    clauses = (
+        _clause_expectancy_gain(baseline, component, n_resamples, seed),
+        _clause_win_rate_floor(baseline, component, n_resamples, seed,
+                              structurally_immune=structurally_immune_to_wr),
+        _clause_volume(baseline, component),
+        _clause_permutation(stage, permutation_p),
+    )
+    verdict = "FAIL" if any(c.verdict == "FAIL" for c in clauses) else "PASS"
+    return AcceptanceResult(stage=stage, verdict=verdict, clauses=clauses,
+                            strata=stratum_table(baseline, component),
+                            split={k: len(v) if isinstance(v, list) else v
+                                   for k, v in split.items()},
+                            seed=seed, version=HARVEST_VERSION)
