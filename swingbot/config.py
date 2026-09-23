@@ -910,6 +910,25 @@ FIELDS: list[Field] = [
                "the strategy or it does nothing. Structure-derived stops (Fibonacci, Elliott "
                "Wave, Support/Resistance) are never scaled. R:R is preserved -- the same "
                "distance feeds stop and target. Off until the E33 walk-forward folds judge it."),
+    Field("ADAPTIVE_RUNNER_TRAIL_ENABLED", "ADAPTIVE_RUNNER_TRAIL_ENABLED",
+          "Exit quality", "Tighten the runner trail once R clears a threshold",
+          type="checkbox", default="false",
+          help="Once the runner leg's own extreme-close-since-TP1 has banked "
+               "TIGHTEN_TRIGGER_R since entry, the chandelier trail multiplier "
+               "switches from the strategy's base value to TIGHTEN_ATR_MULT "
+               "(never looser). Cannot move win rate -- TP1 already decided "
+               "win/loss before the runner leg starts (v92 Hypothesis 1). Off "
+               "until its TRAIN/VALIDATION shots judge it."),
+    Field("TIGHTEN_TRIGGER_R", "TIGHTEN_TRIGGER_R", "Exit quality",
+          "Runner R that triggers a tighter trail",
+          type="float", default="2.0", min=0.5, max=5.0, step=0.25,
+          help="One of v92 Hypothesis 1's two TRAIN grid dimensions."),
+    Field("TIGHTEN_ATR_MULT", "TIGHTEN_ATR_MULT", "Exit quality",
+          "Tightened chandelier ATR multiplier",
+          type="float", default="1.75", min=0.5, max=2.5, step=0.25,
+          help="Applied once TIGHTEN_TRIGGER_R clears; always <= the base "
+               "trail_atr_mult by construction (min() in exit_sim.py). The "
+               "other of v92 Hypothesis 1's two TRAIN grid dimensions."),
 
     # --- Chart patterns ---
     Field("DEAD_CAT_BOUNCE_VETO", "DEAD_CAT_BOUNCE_VETO", "Chart patterns",
@@ -969,6 +988,7 @@ _SEARCH_CLASSES = {
         "LEVEL_LIFECYCLE_STOPS_ENABLED", "AVWAP_LEVELS_ENABLED",
         "PYRAMIDING_ENABLED", "VOLUME_PROFILE_NODES_ENABLED",
         "MAX_ALERTS_PER_SCAN", "DATA_DRIVEN_STOPS_ENABLED",
+        "ADAPTIVE_RUNNER_TRAIL_ENABLED", "TIGHTEN_TRIGGER_R", "TIGHTEN_ATR_MULT",
         "DEAD_CAT_BOUNCE_VETO", "DCB_DECLINE_PCT", "DCB_GAP_REQUIRED",
         "DCB_VOLUME_RATIO", "RSI_DIV_MIN_CONSECUTIVE_TURN",
         "MA_RIBBON_CONFIRM_BARS", "SR_MIN_LEVEL_TOUCHES",
