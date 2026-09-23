@@ -531,7 +531,11 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
        of them (spec §4.2; same rule watchlist's own :host comment states). */
     .split {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      /* v95 D1: the 300px floor used to be bare, which overflows a 320px
+         phone once panel padding is taken off. min() lets the track
+         collapse rather than push the panel sideways -- same idiom as
+         analytics.ts:1264 and panel-grid.ts. */
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
       gap: var(--section-gap);
     }
     .sectors > div {
