@@ -86,3 +86,90 @@ def _rth_gate_off(monkeypatch):
     """Arithmetic tests stay independent of the wall clock."""
     from swingbot import config
     monkeypatch.setattr(config, "INTRADAY_RTH_ONLY", False)
+
+
+# ---------------------------------------------------------------------------
+# Task 13: pre-TP1 stall-exit check, live poll path (v92 Hypothesis 2) --
+# mirrors Task 12's exit_sim._scale_out_exit_walk coverage
+# (tests/planning/test_exit_sim_scaleout.py) so the live poll and the
+# backtest walk can never silently drift apart on this mechanism.
+# ---------------------------------------------------------------------------
+
+
+def test_stall_exit_fires_past_day_threshold_below_half_r(tmp_path, monkeypatch):
+    from swingbot import config
+    monkeypatch.setattr(config, "STALL_EXIT_ENABLED", True)
+    # entry 100, stop 95, tp1 110 -> risk=5. Price 101 is +0.2R, not yet
+    # +0.5R (102.5) and below the BE-arm trigger (105). stall_exit_day=3
+    # with bar_count_fn stubbed to 4 days held (4 > 3) puts this past the
+    # threshold.
+    plan = _active(stall_exit_day=3)
+    feed = FakePriceFeed()
+    feed.set_series("AAPL", [101.0])
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(plan)
+    mgr = PlanManager(store, feed.get_price, bar_count_fn=lambda t, entered: 4)
+    events = mgr.poll()
+    assert [e.transition for e in events] == ["closed"]
+    assert events[0].detail["reason"] == "stall_exit"
+    assert events[0].detail["exit_price"] == 101.0
+    assert store.get("p1").status == PlanStatus.CLOSED
+
+
+def test_stall_exit_does_not_fire_once_half_r_reached(tmp_path, monkeypatch):
+    from swingbot import config
+    monkeypatch.setattr(config, "STALL_EXIT_ENABLED", True)
+    # 103 is +0.6R (>= 0.5R) and still below the BE-arm trigger (105) --
+    # no event should fire at all.
+    plan = _active(stall_exit_day=3)
+    feed = FakePriceFeed()
+    feed.set_series("AAPL", [103.0])
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(plan)
+    mgr = PlanManager(store, feed.get_price, bar_count_fn=lambda t, entered: 4)
+    events = mgr.poll()
+    assert events == []
+
+
+def test_stop_loss_still_wins_over_stall_exit_on_same_bar(tmp_path, monkeypatch):
+    from swingbot import config
+    monkeypatch.setattr(config, "STALL_EXIT_ENABLED", True)
+    # Same tick both breaches the stop (94.5 <= 95) and is past the stall
+    # threshold (2 > 1) at well below +0.5R -- a genuine same-tick
+    # collision. The stop-loss check runs first in _step_active, so it
+    # must win.
+    plan = _active(stall_exit_day=1)
+    feed = FakePriceFeed()
+    feed.set_series("AAPL", [94.5])
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(plan)
+    mgr = PlanManager(store, feed.get_price, bar_count_fn=lambda t, entered: 2)
+    events = mgr.poll()
+    assert [e.transition for e in events] == ["closed"]
+    assert events[0].detail["reason"] == "loss"
+
+
+def test_stall_exit_inert_when_flag_off(tmp_path, monkeypatch):
+    from swingbot import config
+    monkeypatch.setattr(config, "STALL_EXIT_ENABLED", False)
+    plan = _active(stall_exit_day=3)
+    feed = FakePriceFeed()
+    feed.set_series("AAPL", [101.0])
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(plan)
+    mgr = PlanManager(store, feed.get_price, bar_count_fn=lambda t, entered: 4)
+    events = mgr.poll()
+    assert events == []
+
+
+def test_stall_exit_inert_without_bar_count_fn(tmp_path, monkeypatch):
+    """No bar_count_fn wired (as in production before this deploy, or a
+    test harness that never injected one) means days_held cannot be
+    computed -- the check must stay silent rather than guess, exactly
+    like _step_pending's expiry check does."""
+    from swingbot import config
+    monkeypatch.setattr(config, "STALL_EXIT_ENABLED", True)
+    plan = _active(stall_exit_day=3)
+    store, mgr = _env(tmp_path, [101.0], plan=plan)
+    events = mgr.poll()
+    assert events == []
