@@ -18,7 +18,8 @@ import {
 import { Ticker } from '../../api/models';
 import { date } from '../../ui/format';
 import { SortSpec } from '../../ui/data-table/data-table.types';
-import { compareTickers, isWithinCurrentWeek, Watchlist } from './watchlist';
+import { isInline } from '../../ui/priority';
+import { compareTickers, isWithinCurrentWeek, Watchlist, WATCHLIST_COLUMNS } from './watchlist';
 import { WatchlistStore } from '../../stores/watchlist.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { TapeStore } from '../../stores/tape.store';
@@ -495,5 +496,26 @@ describe('Watchlist tag chips, search and freshness', () => {
 
   it('keeps the symbol search', () => {
     expect((render().nativeElement as HTMLElement).querySelector('input[type="search"]')).not.toBeNull();
+  });
+});
+
+/* -- v95 C7 -- column priorities -------------------------------------------- */
+
+describe('Watchlist priorities', () => {
+  it('declares a floor on every column but the pinned symbol', () => {
+    const undeclared = WATCHLIST_COLUMNS
+      .filter((c) => c.key !== 'symbol' && c.inlineFrom === undefined);
+    expect(undeclared).toEqual([]);
+  });
+
+  it('leaves symbol undeclared — v80 pins it regardless', () => {
+    expect(WATCHLIST_COLUMNS.find((c) => c.key === 'symbol')!.inlineFrom).toBeUndefined();
+  });
+
+  it('keeps last price and 1-day change inline on a phone', () => {
+    for (const key of ['price', 'change_1d_pct']) {
+      expect(isInline(WATCHLIST_COLUMNS.find((c) => c.key === key)!.inlineFrom, 'xs'))
+        .toBe(true);
+    }
   });
 });

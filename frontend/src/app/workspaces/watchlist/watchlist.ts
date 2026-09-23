@@ -18,7 +18,6 @@ import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
-import { ControlBar } from '../../ui/control-bar';
 import { DataTable } from '../../ui/data-table/data-table';
 import { createClientPage } from '../../ui/data-table/client-page';
 import { FilterChip, FilterChips } from '../../ui/filter-bar';
@@ -28,6 +27,7 @@ import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.
 import { date, num, pct, text } from '../../ui/format';
 import { Select, TextInput } from '../../ui/form-controls';
 import { Icon } from '../../ui/icon';
+import { Toolbar, ToolbarControl } from '../../ui/toolbar';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
@@ -113,10 +113,60 @@ function sortValue(row: Ticker, key: string, flagged: readonly string[]): string
  * definition of done, property 3). A second table implementation anywhere is
  * a defect, and this screen is small enough to have been tempting.
  */
+
+/**
+ * Column floors — v95 C7, exported for E1's parity gate.
+ *
+ * Module-level rather than a class member: cell templates are `viewChild`
+ * (instance-scoped, unavailable until the view exists), so this carries
+ * every column's shape and floor without them, and `Watchlist.columns`
+ * below layers its own templates on at render time — the same split
+ * Dashboard's `DASHBOARD_COLUMNS` uses over `tradeColumns()`.
+ *
+ * `price` and the 1-day change are what a glance at a watchlist is for; the
+ * two coarser change windows and everything else wait for `md`. `symbol` is
+ * deliberately left undeclared: v80 pins it because a narrow Tape toggle
+ * sits before it, B2's pin exemption ignores any floor it carries anyway,
+ * and declaring one would be a comment that lies about what the code does.
+ */
+export const WATCHLIST_COLUMNS: ColumnDef<Ticker>[] = [
+  { key: 'tape', header: 'Tape', width: '1%', sortable: true, inlineFrom: 'sm' },
+  { key: 'symbol', header: 'Symbol', sortable: true },
+  { key: 'company_name', header: 'Company', value: (row) => text(row.company_name), sortable: true, inlineFrom: 'md' },
+  { key: 'price', header: 'Price', numeric: true, inlineFrom: 'xs' },
+  { key: 'change_1d_pct', header: '1D%', value: (row) => pct(row.change_1d_pct), numeric: true, inlineFrom: 'xs' },
+  { key: 'change_1w_pct', header: '1W%', value: (row) => pct(row.change_1w_pct), numeric: true, inlineFrom: 'md' },
+  { key: 'change_1m_pct', header: '1M%', value: (row) => pct(row.change_1m_pct), numeric: true, inlineFrom: 'md' },
+  { key: 'spark', header: '30d', width: '90px', inlineFrom: 'md' },
+  { key: 'signal', header: 'Signal', inlineFrom: 'md' },
+  {
+    key: 'next_earnings_date', header: 'Next earnings', sortable: true, inlineFrom: 'md',
+    value: (row) => (row.next_earnings_date ? date(row.next_earnings_date) : null),
+  },
+  { key: 'open_trades', header: 'Open', value: (row) => row.open_trades, numeric: true, sortable: true, inlineFrom: 'md' },
+  { key: 'closed_trades', header: 'Closed', value: (row) => row.closed_trades, numeric: true, sortable: true, inlineFrom: 'md' },
+  { key: 'actions', header: '', width: '1%', inlineFrom: 'md' },
+];
+
+/**
+ * What the Watchlist bar shows where — v95 C7.
+ *
+ * The tag filter and symbol search are how anyone narrows ten-odd rows down
+ * to the one they came for, so both stay inline at every width. Add-tag and
+ * the freshness marker are scope, not filters (same split Trades' export
+ * link and column picker draw) and wait for `sm`.
+ */
+export const WATCHLIST_CONTROLS: ToolbarControl[] = [
+  { id: 'tag', label: 'Tag', inlineFrom: 'xs' },
+  { id: 'search', label: 'Search', inlineFrom: 'xs' },
+  { id: 'add-tag', label: 'Add tag', inlineFrom: 'sm' },
+  { id: 'freshness', label: 'Updated', inlineFrom: 'sm' },
+];
+
 @Component({
   selector: 'sb-watchlist',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DataTable, Panel, Button, Chip, ConfirmDialog, ControlBar, ControlRow, FilterChips, Freshness, Select, TabBar, TextInput, EarningsCalendar, RowLink, SectionHead, Async, Icon, Sparkline],
+  imports: [DataTable, Panel, Button, Chip, ConfirmDialog, Toolbar, ControlRow, FilterChips, Freshness, Select, TabBar, TextInput, EarningsCalendar, RowLink, SectionHead, Async, Icon, Sparkline],
   // v54 D1: the whole point of this workspace (spec v14 Decision 9) is the
   // ticker table -- tight rows, more per screen -- so it defaults to the
   // instrument register. On the host (a static class, not a template
@@ -223,16 +273,16 @@ function sortValue(row: Ticker, key: string, flagged: readonly string[]): string
          request changes, symbols and their scan cadence are untouched);
          search narrows by symbol; add-tag and the table's own freshness
          marker are scope, not filters, same slot split trades.ts uses. -->
-    <sb-control-bar>
+    <sb-toolbar [controls]="toolbarControls()">
       <sb-filter-chips
-        filters
+        slot="tag"
         [chips]="tagChips()"
         [selected]="tagFilter()"
         label="Tag"
         (selectedChange)="onTagChip($event)"
       />
       <sb-text-input
-        filters
+        slot="search"
         type="search"
         ariaLabel="Filter the watchlist by symbol"
         placeholder="Filter by symbol"
@@ -240,7 +290,7 @@ function sortValue(row: Ticker, key: string, flagged: readonly string[]): string
         (valueChange)="symbolQuery.set($event)"
       />
       <button
-        scope
+        slot="add-tag"
         type="button"
         class="add-tag"
         sb-button
@@ -249,8 +299,8 @@ function sortValue(row: Ticker, key: string, flagged: readonly string[]): string
       >
         + Tag
       </button>
-      <sb-freshness scope [at]="maxAsOf()" />
-    </sb-control-bar>
+      <sb-freshness slot="freshness" [at]="maxAsOf()" />
+    </sb-toolbar>
 
     @if (addingTag()) {
       <sb-control-row class="tag-form">
@@ -709,27 +759,34 @@ export class Watchlist {
     'spark', 'signal', 'next_earnings_date', 'open_trades', 'closed_trades', 'actions',
   ];
 
-  protected readonly columns = computed<ColumnDef<Ticker>[]>(() => [
-    {
-      key: 'tape', header: 'Tape', cell: this.tapeCell(), width: '1%',
-      sortable: true,
-    },
-    { key: 'symbol', header: 'Symbol', cell: this.symbolCell(), sortable: true },
-    { key: 'company_name', header: 'Company', value: (row) => text(row.company_name), sortable: true },
-    { key: 'price', header: 'Price', cell: this.priceCell(), numeric: true },
-    { key: 'change_1d_pct', header: '1D%', value: (row) => pct(row.change_1d_pct), numeric: true },
-    { key: 'change_1w_pct', header: '1W%', value: (row) => pct(row.change_1w_pct), numeric: true },
-    { key: 'change_1m_pct', header: '1M%', value: (row) => pct(row.change_1m_pct), numeric: true },
-    { key: 'spark', header: '30d', cell: this.sparkCell(), width: '90px' },
-    { key: 'signal', header: 'Signal', cell: this.signalCell() },
-    {
-      key: 'next_earnings_date', header: 'Next earnings', sortable: true,
-      value: (row) => (row.next_earnings_date ? date(row.next_earnings_date) : null),
-    },
-    { key: 'open_trades', header: 'Open', value: (row) => row.open_trades, numeric: true, sortable: true },
-    { key: 'closed_trades', header: 'Closed', value: (row) => row.closed_trades, numeric: true, sortable: true },
-    { key: 'actions', header: '', cell: this.actionsCell(), width: '1%' },
-  ]);
+  /** v95 C7: layers this instance's cell templates onto the module-level
+   *  WATCHLIST_COLUMNS, the same split Dashboard's own `columns` uses over
+   *  `tradeColumns()` -- the floors live in one shared place, not duplicated
+   *  per render path. */
+  protected readonly columns = computed<ColumnDef<Ticker>[]>(() => {
+    const cells: Partial<Record<string, TemplateRef<RowContext<Ticker>>>> = {
+      tape: this.tapeCell(),
+      symbol: this.symbolCell(),
+      price: this.priceCell(),
+      spark: this.sparkCell(),
+      signal: this.signalCell(),
+      actions: this.actionsCell(),
+    };
+    return WATCHLIST_COLUMNS.map((column) =>
+      cells[column.key] ? { ...column, cell: cells[column.key] } : column,
+    );
+  });
+
+  /** Guard 1 (v95 §5): the sheet must say when something inside it is
+   *  narrowing the table. */
+  protected readonly toolbarControls = computed<ToolbarControl[]>(() =>
+    WATCHLIST_CONTROLS.map((control) => ({
+      ...control,
+      active: control.id === 'tag' ? this.tagFilter() !== null
+        : control.id === 'search' ? this.symbolQuery().length > 0
+        : false,
+    })),
+  );
 
   protected readonly consequence = computed(() => {
     const row = this.pending();

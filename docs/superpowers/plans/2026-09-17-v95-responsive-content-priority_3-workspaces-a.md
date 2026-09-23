@@ -635,7 +635,7 @@ specifically because a narrow Tape toggle sits before it. Do not put a floor on
 `symbol`; B2's exemption would ignore it anyway, and declaring one would be a
 lie in the source.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 describe('Watchlist priorities', () => {
@@ -658,29 +658,29 @@ describe('Watchlist priorities', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/watchlist/watchlist.spec.ts`
 Expected: FAIL — no floors declared.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Add `inlineFrom` to the watchlist columns: `last` and `change` at `'xs'`;
 the tape toggle at `'sm'`; everything else at `'md'`. Leave `symbol`
 undeclared, with a comment saying why. Wrap the search box and filters in
 `<sb-toolbar>` with `WATCHLIST_CONTROLS`.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/watchlist/watchlist.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually — mandatory**
+- [x] **Step 5: Verify visually — mandatory**
 
 At 390 / 768 / 1024. Confirm `symbol` stays pinned at every width and the
 `.box` search field still reaches its 420px max without overflowing.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/watchlist/watchlist.ts frontend/src/app/workspaces/watchlist/watchlist.spec.ts
