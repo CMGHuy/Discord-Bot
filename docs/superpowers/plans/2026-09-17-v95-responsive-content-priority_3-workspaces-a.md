@@ -164,7 +164,7 @@ git commit -m "feat(v95): Trades toolbar collapses -- 1700px of chrome becomes a
 - Consumes: `ColumnDef.inlineFrom` (B1).
 - Produces: every column in the Trades set carries an explicit `inlineFrom`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 describe('Trades column floors', () => {
@@ -191,12 +191,12 @@ describe('Trades column floors', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/trades/trades.columns.spec.ts`
 Expected: FAIL — no column declares a floor.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Add `inlineFrom` to every entry in `trades.columns.ts`. The four inline at `xs`
 are `ticker`, `pnl`, `r` and the row-id link; `now`, `plan` and `held` take
@@ -219,12 +219,12 @@ Write the reasoning once, above the array:
  * tap into the row detail, never gone. */
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/trades/trades.columns.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually — mandatory, and this is the interaction change**
+- [x] **Step 5: Verify visually — mandatory, and this is the interaction change**
 
 At 390px: a row shows ticker, P&L% and R with a detail chevron; expanding shows
 every other column labelled. Confirm v80's pinned identity column is still
@@ -232,7 +232,7 @@ pinned and the sort select still lists only inline columns. Check on a real
 phone if one is to hand — spec §12 flags this as the change most likely to feel
 wrong on contact.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/trades/trades.columns.ts frontend/src/app/workspaces/trades/trades.columns.spec.ts
