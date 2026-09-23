@@ -121,7 +121,7 @@ inline set.
   B3 renders `demotedColumns`. `pinKey` and `sortOptions` must be re-pointed at
   `inlineColumns` in this task, not B3.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `frontend/src/app/ui/data-table/data-table.spec.ts`. Add
 `[viewportAt]="viewportAt()"` to the `Host` template's `sb-data-table` and
@@ -187,12 +187,12 @@ describe('DataTable column demotion', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/data-table/data-table.spec.ts`
 Expected: FAIL — `viewportAt` is not an input; the drop case still shows `Held`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `data-table.ts`, after `renderedColumns` (which stays as the union), add:
 
@@ -242,12 +242,12 @@ Finally, change the template's `@for` over header cells and body cells from
 and the reorder handlers pointed at `renderedColumns()` — those are the user's
 choice, not the layout's.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/data-table/data-table.spec.ts`
 Expected: PASS — including every pre-existing v80 phone-mode test, unmodified.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/data-table/data-table.ts frontend/src/app/ui/data-table/data-table.spec.ts

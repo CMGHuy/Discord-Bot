@@ -9,6 +9,7 @@ import {
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { Viewport } from '../breakpoints';
 import { isInline } from '../priority';
 import { DataTable, SPINNER_DELAY_MS } from './data-table';
 import {
@@ -63,6 +64,7 @@ const ROWS: Row[] = [
       [emptyState]="emptyState()"
       [pinned]="pinned()"
       [cardsAt]="cardsAt()"
+      [viewportAt]="viewportAt()"
       (sortChange)="lastSort = $event"
       (pageChange)="pages.push($event)"
       (rowActivate)="activated.push($event)"
@@ -81,6 +83,7 @@ class Host {
   readonly withExpansion = signal(false);
   readonly pinned = signal<string[]>([]);
   readonly cardsAt = signal<boolean | null>(null);
+  readonly viewportAt = signal<Viewport | null>(null);
 
   readonly expansionTemplate =
     viewChild.required<TemplateRef<RowContext<Row>>>('expansion');
@@ -90,7 +93,11 @@ class Host {
   readonly rowKey = (row: Row) => row.id;
   readonly rowClass = signal<(row: Row) => string | null>(() => null);
 
-  readonly columns = computed<ColumnDef<Row>[]>(() => [
+  /* An override rather than a writable `columns`: the default set reads
+   * `actionCell()`, a viewChild that does not exist until the view does. */
+  readonly columnsOverride = signal<ColumnDef<Row>[] | null>(null);
+
+  readonly columns = computed<ColumnDef<Row>[]>(() => this.columnsOverride() ?? [
     { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, sortable: true },
     { key: 'pnl', header: 'P&L %', value: (row) => row.pnl, numeric: true, sortable: true },
     { key: 'held', header: 'Held', value: () => '3d' },
@@ -652,5 +659,62 @@ describe('ColumnDef inlineFrom', () => {
     };
     expect(isInline(column.inlineFrom, 'sm')).toBe(false);
     expect(isInline(column.inlineFrom, 'md')).toBe(true);
+  });
+});
+
+describe('DataTable column demotion', () => {
+  let fixture: ComponentFixture<Host>;
+  let host: Host;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(Host);
+    host = fixture.componentInstance;
+    host.visible.set(['ticker', 'pnl', 'held']);
+    fixture.detectChanges();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  const headers = () =>
+    [...el().querySelectorAll('thead th')].map((th) => th.textContent!.trim());
+
+  it('draws every column when none declares a floor', () => {
+    host.viewportAt.set('xs');
+    fixture.detectChanges();
+    expect(headers()).toEqual(['Ticker', 'P&L %', 'Held']);
+  });
+
+  it('drops a below-floor column out of the grid', () => {
+    host.columnsOverride.set([
+      { key: 'ticker', header: 'Ticker' },
+      { key: 'pnl', header: 'P&L %' },
+      { key: 'held', header: 'Held', inlineFrom: 'md' },
+    ]);
+    host.viewportAt.set('sm');
+    fixture.detectChanges();
+    expect(headers()).toEqual(['Ticker', 'P&L %']);
+  });
+
+  it('restores it at and above its floor', () => {
+    host.columnsOverride.set([
+      { key: 'ticker', header: 'Ticker' },
+      { key: 'pnl', header: 'P&L %' },
+      { key: 'held', header: 'Held', inlineFrom: 'md' },
+    ]);
+    host.viewportAt.set('md');
+    fixture.detectChanges();
+    expect(headers()).toEqual(['Ticker', 'P&L %', 'Held']);
+  });
+
+  it('never demotes the pinned identity column, whatever it declares', () => {
+    // v80 D4: the pinned column is what says which row you are on. A floor
+    // that scrolled it away would undo that decision by accident.
+    host.columnsOverride.set([
+      { key: 'ticker', header: 'Ticker', inlineFrom: 'xl' },
+      { key: 'pnl', header: 'P&L %' },
+    ]);
+    host.viewportAt.set('xs');
+    fixture.detectChanges();
+    expect(headers()).toContain('Ticker');
   });
 });

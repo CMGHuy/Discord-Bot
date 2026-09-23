@@ -13,7 +13,8 @@ import {
 
 import { EmptyStateComponent } from '../empty-state';
 import { PaginationComponent } from '../pagination';
-import { ViewportService } from '../breakpoints';
+import { Viewport, ViewportService } from '../breakpoints';
+import { isInline } from '../priority';
 import {
   ColumnDef,
   EmptyState,
@@ -87,7 +88,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
             @if (expansion()) {
               <th class="expander-cell"><span class="sr-only">Expand row</span></th>
             }
-            @for (col of renderedColumns(); track col.key) {
+            @for (col of inlineColumns(); track col.key) {
               <th
                 class="sb-label"
                 [style.width]="col.width"
@@ -133,7 +134,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
                   </button>
                 </td>
               }
-              @for (col of renderedColumns(); track col.key) {
+              @for (col of inlineColumns(); track col.key) {
                 <td [class.num]="col.numeric" [class.pin]="col.key === pinKey()">
                   @if (col.cell; as cellTemplate) {
                     <ng-container
@@ -167,7 +168,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
         @if (hasFooter()) {
           <tfoot><tr>
             @if (expansion()) { <td class="expander-cell"></td> }
-            @for (col of renderedColumns(); track col.key) { <td [class.num]="col.numeric">{{ footerText(col) }}</td> }
+            @for (col of inlineColumns(); track col.key) { <td [class.num]="col.numeric">{{ footerText(col) }}</td> }
           </tr></tfoot>
         }
       </table>
@@ -481,7 +482,38 @@ export class DataTable<T> {
     const shown = this.renderedColumns();
     return (shown.find((column) => PIN_KEYS.includes(column.key)) ?? shown[0])?.key ?? null;
   });
-  protected readonly sortOptions = computed(() => this.renderedColumns().filter((column) => column.sortable).flatMap((column) => [
+  /** A test override, for the reason `cardsAt` is one: jsdom evaluates no
+   *  media query, so the viewport is the only thing a test cannot observe. */
+  readonly viewportAt = input<Viewport | null>(null);
+  private readonly viewport = computed<Viewport>(
+    () => this.viewportAt() ?? this.viewportService.viewport(),
+  );
+
+  /**
+   * The split — v95 §4.1.
+   *
+   * The pinned identity column is exempt: v80 D4 made it the thing that says
+   * which row you are looking at, and a declared floor that demoted it would
+   * reverse that decision silently. A call site that puts a floor on its
+   * identity column is asking for something incoherent, and the exemption is
+   * cheaper than a runtime error nobody sees.
+   */
+  protected readonly inlineColumns = computed(() => {
+    const viewport = this.viewport();
+    const pin = this.pinKey();
+    return this.renderedColumns().filter(
+      (column) => column.key === pin || isInline(column.inlineFrom, viewport),
+    );
+  });
+
+  protected readonly demotedColumns = computed(() => {
+    const inline = new Set(this.inlineColumns().map((column) => column.key));
+    return this.renderedColumns().filter((column) => !inline.has(column.key));
+  });
+
+  /* Reads the inline set, so the phone sort select never offers a column the
+   * grid is not drawing. */
+  protected readonly sortOptions = computed(() => this.inlineColumns().filter((column) => column.sortable).flatMap((column) => [
     { value: `${column.key}:asc`, label: `${column.header} ↑` },
     { value: `${column.key}:desc`, label: `${column.header} ↓` },
   ]));
@@ -572,7 +604,7 @@ export class DataTable<T> {
   }
 
   protected readonly colspan = computed(
-    () => this.renderedColumns().length + (this.expansion() ? 1 : 0),
+    () => this.inlineColumns().length + (this.expansion() ? 1 : 0),
   );
   protected readonly fillerRows = computed<number[]>(() => {
     const page = this.pagination();
@@ -582,7 +614,7 @@ export class DataTable<T> {
   });
 
   protected readonly hasFooter = computed(
-    () => this.rows().length > 0 && this.renderedColumns().some((column) => column.footer),
+    () => this.rows().length > 0 && this.inlineColumns().some((column) => column.footer),
   );
 
   protected footerText(column: ColumnDef<T>): string {
