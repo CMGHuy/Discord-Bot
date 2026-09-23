@@ -1041,7 +1041,7 @@ says why.
 - Produces: `readonly problem = input<string | null>(null)` — a short reason,
   rendered when set; overrides collapse.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 describe('sb-panel force-expand guard', () => {
@@ -1076,12 +1076,12 @@ describe('sb-panel force-expand guard', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/panel.spec.ts`
 Expected: FAIL — `problem` is not an input.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```ts
   /**
@@ -1108,12 +1108,12 @@ and change `collapsible` to:
 Render `@if (problem(); as reason) { <p class="panel-problem">{{ reason }}</p> }`
 above the projected body.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/panel.spec.ts`
 Expected: PASS, all of B7's and B8's cases.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/panel.ts frontend/src/app/ui/panel.spec.ts

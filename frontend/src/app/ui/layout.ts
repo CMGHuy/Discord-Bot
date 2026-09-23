@@ -52,6 +52,9 @@ import { isInline } from './priority';
       @if (collapsed()) {
         <p class="panel-digest">{{ digest() }}</p>
       } @else {
+        @if (problem(); as reason) {
+          <p class="panel-problem" role="status">{{ reason }}</p>
+        }
         <div class="body" [class.flush]="flush()">
           <ng-content />
         </div>
@@ -81,6 +84,7 @@ import { isInline } from './priority';
     /* Tables draw their own edge-to-edge padding. */
     .flush { padding: 0; }
     .panel-digest { margin: 0; padding: var(--space-10) var(--space-14); color: var(--text-secondary); font-size: var(--text-table); }
+    .panel-problem { margin: 0; padding: var(--space-10) var(--space-14); color: var(--warn); font-size: var(--text-table); }
     .panel-toggle {
       min-height: var(--control-h);
       min-width: var(--control-h);
@@ -103,6 +107,15 @@ export class Panel {
    *  v95 §4.3. A digest of '—' above a panel with real content is the defect
    *  this rule exists to prevent. */
   readonly digest = input<string | null>(null);
+  /**
+   * Why this panel must not be collapsed right now — v95 §5 guard 2.
+   *
+   * Stale data, a failed load, or a scope that makes the number
+   * unrepresentative. Set, the panel force-expands, renders the reason, and
+   * drops its toggle: a warning the user can fold back behind a digest that
+   * does not mention it is a warning that does not exist.
+   */
+  readonly problem = input<string | null>(null);
   /** Test override — jsdom resolves no media query. */
   readonly viewportAt = input<Viewport | null>(null);
 
@@ -114,7 +127,9 @@ export class Panel {
   );
 
   protected readonly collapsible = computed(
-    () => this.digest() !== null && !isInline(this.inlineFrom(), this.viewport()),
+    () => this.problem() === null
+      && this.digest() !== null
+      && !isInline(this.inlineFrom(), this.viewport()),
   );
 
   protected readonly collapsed = computed(

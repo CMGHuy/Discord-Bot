@@ -126,6 +126,7 @@ describe('sb-control-row and sb-drawer on a phone (v80 D4)', () => {
       [heading]="heading()"
       [inlineFrom]="inlineFrom()"
       [digest]="digest()"
+      [problem]="problem()"
       [viewportAt]="viewportAt()"
     >
       <p class="body-content">Body</p>
@@ -136,6 +137,7 @@ class CollapseHost {
   readonly heading = signal('Watchlist');
   readonly inlineFrom = signal<Viewport | undefined>(undefined);
   readonly digest = signal<string | null>(null);
+  readonly problem = signal<string | null>(null);
   readonly viewportAt = signal<Viewport | null>(null);
 }
 
@@ -188,5 +190,44 @@ describe('sb-panel collapse', () => {
     host.inlineFrom.set('md'); host.digest.set('3 open');
     host.viewportAt.set('sm'); fixture.detectChanges();
     expect(el().textContent).toContain(host.heading());
+  });
+});
+
+describe('sb-panel force-expand guard', () => {
+  let fixture: ComponentFixture<CollapseHost>;
+  let host: CollapseHost;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(CollapseHost);
+    host = fixture.componentInstance;
+    host.inlineFrom.set('md'); host.digest.set('3 open'); host.viewportAt.set('sm');
+    fixture.detectChanges();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+
+  it('collapses normally when there is no problem', () => {
+    expect(el().querySelector('.body')).toBeNull();
+  });
+
+  it('force-expands when the data is stale', () => {
+    host.problem.set('stale — last updated 18:41');
+    fixture.detectChanges();
+    expect(el().querySelector('.body')).not.toBeNull();
+  });
+
+  it('says what the problem is rather than just opening', () => {
+    host.problem.set('stale — last updated 18:41');
+    fixture.detectChanges();
+    expect(el().textContent).toContain('stale — last updated 18:41');
+  });
+
+  it('offers no collapse toggle while the problem stands', () => {
+    // Letting the user re-collapse it would put the warning back behind a
+    // digest that does not mention it.
+    host.problem.set('failed to load');
+    fixture.detectChanges();
+    expect(el().querySelector('button.panel-toggle')).toBeNull();
   });
 });
