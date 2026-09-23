@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   HttpTestingController,
@@ -80,5 +83,29 @@ describe('SettingsTab states', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.skeleton')).toBeNull();
     expect(el.querySelector('.failed')).toBeNull();
+  });
+});
+
+/* -- v95 D3 -- touch targets and a collapsing field grid -------------------- */
+
+describe('System settings touch targets', () => {
+  const src = readFileSync(join(process.cwd(), 'src/app/workspaces/system/settings-tab.ts'), 'utf8');
+
+  // .restart is a status pill ("Restart required to take effect"), not a
+  // button -- a plain <span> with no click handler and cursor: help. Only
+  // .reset (a real per-field button, store.resetField(field)) needs the
+  // shared control height; the plan's own sketch named .restart too, but
+  // inflating a non-interactive span to 44px has nothing to accomplish.
+  it('.reset meets the shared control height', () => {
+    const rule = src.match(/\.reset\s*\{[^}]*\}/s)?.[0] ?? '';
+    expect(rule).toMatch(/min-height:\s*var\(--control-h\)/);
+  });
+
+  it('.restart stays a plain status pill, not a control', () => {
+    expect(src).toMatch(/<span class="restart"/);
+  });
+
+  it('field grid collapses rather than overflowing a narrow panel', () => {
+    expect(src).toMatch(/minmax\(\s*min\(100%,\s*260px\)/);
   });
 });
