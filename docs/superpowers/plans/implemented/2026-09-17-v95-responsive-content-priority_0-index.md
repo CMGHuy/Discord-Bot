@@ -1,6 +1,19 @@
 Bump: ui minor · bot none
 Edge: none (integrity)
 
+**Closed 2026-09-23, merged to `main`, ui 1.21.0.** All tasks (A1–E4) landed
+as designed. Real findings along the way, fixed rather than exempted: E2's
+breakpoint guard caught undeclared width queries D1/D3 left behind
+(`risk.ts` 720px, `settings-tab.ts` 700px — both corrected to 639 and
+verified live); E4's full-suite run caught a stale v85 D22 consistency test
+that didn't know C1 had superseded `sb-control-bar` with `sb-toolbar` for
+Trades. D3–D5's own test sketches contained errors (a non-interactive
+element the D3 test wrongly targeted, D4's `SCAN_CONTROLS` test naming
+tuning controls that don't exist in this codebase, D5's test asserting
+zero occurrences of a literal value its own reference implementation
+contains) — corrected against the running code rather than implemented
+as written.
+
 # v95 — Responsive content priority: implementation plan (index)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
