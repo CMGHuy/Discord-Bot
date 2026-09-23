@@ -44,6 +44,8 @@ import { amount, pct } from '../../../ui/format';
       color: var(--text);
       font-variant-numeric: tabular-nums;
       line-height: 1.1;
+      /* v95 A5: the figure is one number -- wrapped, it reads as several. */
+      white-space: nowrap;
     }
     .figure.muted { color: var(--text-faint); }
     .change {

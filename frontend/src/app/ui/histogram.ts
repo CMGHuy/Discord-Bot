@@ -88,7 +88,17 @@ export interface HistogramBin {
        axis -- it keeps the body-text pair every other value in this app
        uses, so the number the reader is there to read does not get dimmer
        and smaller than its own label. */
-    .label { color: var(${CHART_CHROME.tickColour}); font-size: var(${CHART_CHROME.tickSize}); }
+    /* A grid item's automatic minimum is min-content, so without min-width: 0
+       a label longer than its 4rem track pushes the bar column out of the
+       panel rather than ellipsising -- v95 A4. */
+    .label {
+      color: var(${CHART_CHROME.tickColour});
+      font-size: var(${CHART_CHROME.tickSize});
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .count { color: var(--text-secondary); font-size: var(--text-chip); text-align: right; }
     .track {
       height: 10px;

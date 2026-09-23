@@ -59,6 +59,7 @@ import { StatusCell, StatusCellRow } from '../../ui/status-cell';
 import { StatusIndicator } from '../../ui/status-indicator';
 import { StripGroup, StripPlot } from '../../ui/strip-plot';
 import { Timeline, TimelineItem } from '../../ui/timeline';
+import { Toolbar, ToolbarControl } from '../../ui/toolbar';
 import { Waterfall, WaterfallStep } from '../../ui/waterfall';
 
 interface GalleryRow {
@@ -159,6 +160,7 @@ interface ContractRow {
     TabBar,
     TextInput,
     Timeline,
+    Toolbar,
     TradeChart,
     Waterfall,
   ],
@@ -566,6 +568,59 @@ interface ContractRow {
       <sb-pagination [pagination]="pageSpec" />
     </sb-panel>
 
+    <!-- -- v95: content priority -- four states forced via viewportAt, ------
+         the gallery's job is to show them, not to make the reader resize. -->
+    <sb-section-head [heading]="'Content priority (v95)'" [level]="2" />
+    <sb-panel heading="Toolbar sheet -- spec §4.2">
+      <p class="section-help">
+        A control below its declared floor moves into a labelled sheet
+        instead of stacking or disappearing.
+      </p>
+      <sb-toolbar [controls]="priorityToolbarControls" [viewportAt]="'xs'">
+        <button slot="always" sb-button variant="secondary" type="button">Always inline</button>
+        <button slot="demoted" sb-button variant="secondary" type="button">Demoted below lg</button>
+      </sb-toolbar>
+    </sb-panel>
+
+    <sb-panel
+      heading="Collapsed panel digest -- spec §4.3"
+      [inlineFrom]="'lg'"
+      [viewportAt]="'xs'"
+      digest="3 open, 1.2% heat, no alerts"
+    >
+      <p class="section-help">
+        Below its floor, the panel's body collapses behind the one-line
+        digest above; the toggle expands it back.
+      </p>
+    </sb-panel>
+
+    <sb-panel
+      heading="Force-expanded panel -- spec §5 guard 2"
+      [inlineFrom]="'lg'"
+      [viewportAt]="'xs'"
+      digest="3 open, 1.2% heat, no alerts"
+      problem="Data is 6 hours stale -- the last refresh failed"
+    >
+      <p class="section-help">
+        A digest and a floor are not enough to collapse this panel: a
+        problem forces it open and says why, every time.
+      </p>
+    </sb-panel>
+
+    <sb-panel heading="Row detail -- spec §4.1" [flush]="true">
+      <p class="section-help">
+        P&amp;L is demoted below lg; its value moves into a labelled row
+        detail instead of a hidden column.
+      </p>
+      <sb-data-table
+        [rows]="tableRows"
+        [columns]="priorityColumns"
+        [visible]="['ticker', 'pnl']"
+        [rowKey]="rowKey"
+        [viewportAt]="'xs'"
+      />
+    </sb-panel>
+
     <!-- -- v80 D6: both registers, and one row per table cell contract -------
          The cell templates come first: contractColumns() reads them through
          viewChild, and the table below must find them resolved. -->
@@ -967,6 +1022,17 @@ export class Gallery {
     { key: 'pnl', header: 'P&L', value: (row) => row.pnl },
   ];
   protected readonly rowKey = (row: GalleryRow) => row.id;
+
+  /** v95: same rows as tableColumns, with a declared floor so the row
+   *  detail toggle has something to demonstrate. */
+  protected readonly priorityColumns: ColumnDef<GalleryRow>[] = [
+    { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, inlineFrom: 'xs' },
+    { key: 'pnl', header: 'P&L', value: (row) => row.pnl, inlineFrom: 'lg' },
+  ];
+  protected readonly priorityToolbarControls: ToolbarControl[] = [
+    { id: 'always', label: 'Always inline', inlineFrom: 'xs' },
+    { id: 'demoted', label: 'Demoted below lg', inlineFrom: 'lg' },
+  ];
   protected readonly pickableColumns = [
     { key: 'ticker', header: 'Ticker' },
     { key: 'pnl', header: 'P&L' },

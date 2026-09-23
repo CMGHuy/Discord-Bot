@@ -31,7 +31,7 @@ other; A5 and A6 follow.
   `inlineFrom` on `ColumnDef<T>`; B4 puts it on the toolbar's control
   descriptors; B6 puts it on the panel descriptors; E1 walks `PriorityDecl`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/app/ui/priority.spec.ts`:
 
@@ -106,12 +106,12 @@ describe('isInline', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/priority.spec.ts`
 Expected: FAIL — `Failed to resolve import "./priority"`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `frontend/src/app/ui/priority.ts`:
 
@@ -174,12 +174,12 @@ export interface PriorityDecl {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/priority.spec.ts`
 Expected: PASS, all cases.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/priority.ts frontend/src/app/ui/priority.spec.ts
@@ -208,7 +208,7 @@ the wide tape now survive down to 640px instead of disappearing at 721px.
   see `breakpoints.ts`).
 - Produces: no API change.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `frontend/src/app/shell/shell.spec.ts`:
 
@@ -232,12 +232,12 @@ describe('shell.css breakpoints', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/shell/shell.spec.ts`
 Expected: FAIL — received `['900', '720']`.
 
-- [ ] **Step 3: Apply the change**
+- [x] **Step 3: Apply the change**
 
 In `frontend/src/app/shell/shell.css`, replace lines 368–382 with:
 
@@ -264,19 +264,19 @@ In `frontend/src/app/shell/shell.css`, replace lines 368–382 with:
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/shell/shell.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually**
+- [x] **Step 5: Verify visually**
 
 Load the shell at 390 / 768 / 1024 via Chrome DevTools MCP (`resize_page` or
 `emulate`). Expected: subtitle hidden at 768 and 390, present at 1024; clock
 present at 768, hidden at 390. Confirm the top bar is still one row at all
 three.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/shell/shell.css frontend/src/app/shell/shell.spec.ts
@@ -303,7 +303,7 @@ The fix is to stop opting out, not to add new rules.
 - Produces: no API change. `sb-chip` and `button[sb-button].link` become
   44px-tall targets under a coarse pointer and stay visually unchanged above it.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `frontend/src/app/ui/button.spec.ts`:
 
@@ -327,12 +327,12 @@ describe('button touch floor', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/button.spec.ts`
 Expected: FAIL for `button.ts`.
 
-- [ ] **Step 3: Apply the change**
+- [x] **Step 3: Apply the change**
 
 In `frontend/src/app/ui/button.ts`, in both the `:host(.chip)` and
 `:host(.link)` blocks, delete the `min-height: 0;` declaration and replace it
@@ -355,7 +355,7 @@ In `frontend/src/app/ui/control-bar.ts`, add to the `.clear` rule:
 
 matching what `pagination.ts` already does for the same reason.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/button.spec.ts`
 Expected: PASS.
@@ -367,13 +367,13 @@ Run: `cd frontend && npm test -- --include src/app/ui/chip.spec.ts`
 Expected: PASS. If a test asserts a 28px height, update it to the token — the
 assertion was pinning the opt-out.
 
-- [ ] **Step 5: Verify visually**
+- [x] **Step 5: Verify visually**
 
 At 390px, confirm chips on Trades and the `.clear` control are comfortably
 tappable and that no chip row now overflows its container. A taller chip may
 wrap a row that previously fit; that is expected and acceptable.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/ui/button.ts frontend/src/app/ui/chip.ts frontend/src/app/ui/control-bar.ts frontend/src/app/ui/button.spec.ts
@@ -399,7 +399,7 @@ track with no `min-width: 0`.
 - Consumes: nothing new.
 - Produces: no API change.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `frontend/src/app/ui/histogram.spec.ts`:
 
@@ -423,12 +423,12 @@ describe('histogram label overflow', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/histogram.spec.ts`
 Expected: FAIL — the `.label` rule has none of the three.
 
-- [ ] **Step 3: Apply the change**
+- [x] **Step 3: Apply the change**
 
 In `frontend/src/app/ui/histogram.ts`, add to the `.label` rule:
 
@@ -448,18 +448,18 @@ the `.detail` rule:
       text-overflow: ellipsis;
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/histogram.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually**
+- [x] **Step 5: Verify visually**
 
 At 390px, load Risk (histograms) and the Dashboard's Recent Activity panel.
 Expected: long labels ellipsise inside their track; neither panel scrolls
 sideways.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/ui/histogram.ts frontend/src/app/workspaces/dashboard/panels/recent-activity.ts frontend/src/app/ui/histogram.spec.ts
@@ -489,7 +489,7 @@ and the equity block takes a full row of its own.
   fix, not a demotion.)
 - Produces: no API change.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create or append to
 `frontend/src/app/workspaces/dashboard/panels/trading-performance.spec.ts`:
@@ -525,12 +525,12 @@ describe('trading-performance tablet band', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/dashboard/panels/trading-performance.spec.ts`
 Expected: FAIL — no 1023px query exists.
 
-- [ ] **Step 3: Apply the change**
+- [x] **Step 3: Apply the change**
 
 In `trading-performance.ts`, add above the existing `max-width: 639px` block:
 
@@ -553,19 +553,19 @@ Adjust the three class names (`.equity`, `.equity .figure`, `.kpis`) to the
 selectors actually present in the file — read the existing `max-width: 639px`
 block first and reuse its names.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/dashboard/panels/trading-performance.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually — this is the task's real gate**
+- [x] **Step 5: Verify visually — this is the task's real gate**
 
 Load `/dashboard` at **768×1024**. Expected: `997,291.88 €` on one line, the
 30-day equity sparkline visible, KPI tiles in two columns of four rows,
 `REALISED TODAY -133.32 €` not wrapping its currency symbol. Then check 390 and
 1024 are unchanged from before this task.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/dashboard/panels/trading-performance.ts frontend/src/app/workspaces/dashboard/panels/trading-performance.spec.ts
@@ -595,7 +595,7 @@ output with an honest source.
 - Consumes: nothing.
 - Produces: `--cell-wrap` and `--sep-wrap` no longer appear in `frontend/src/`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `frontend/src/app/workspaces/dashboard/dashboard.spec.ts`:
 
@@ -623,12 +623,12 @@ describe('dead card-mode contract', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/dashboard/dashboard.spec.ts`
 Expected: FAIL on both cases.
 
-- [ ] **Step 3: Apply the change**
+- [x] **Step 3: Apply the change**
 
 In `dashboard.ts`, replace lines 511–523 with:
 
@@ -666,7 +666,7 @@ In `data-table.ts`, replace the comment at lines 460–467 with:
    */
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/dashboard/dashboard.spec.ts`
 Expected: PASS.
@@ -674,11 +674,109 @@ Expected: PASS.
 Run: `cd frontend && npm test -- --include src/app/ui/data-table/data-table.spec.ts`
 Expected: PASS, unchanged — this task touched only a comment there.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/dashboard/dashboard.ts frontend/src/app/ui/data-table/data-table.ts frontend/src/app/workspaces/dashboard/dashboard.spec.ts
 git commit -m "chore(v95): delete the dead --cell-wrap contract v80 left behind"
+```
+
+---
+
+### Task A7: Correct Analytics' breakpoint drift (added during execution)
+
+**Why this task exists:** the plan as written excluded
+`workspaces/analytics/` entirely, on the assumption that v94 (then still
+open) would adopt this responsive model there. v94 has since merged and
+closed without doing so — see the amended Global Constraint in
+`_0-index.md`. The human partner chose, when this was surfaced, to bring
+Analytics onto the declared breakpoint set inside v95 rather than open a
+separate plan. This is the only file scope Analytics gets in this plan — no
+other task may touch `workspaces/analytics/`.
+
+**Files:**
+- Modify: `frontend/src/app/workspaces/analytics/tabs/attribution.ts:149`
+- Modify: `frontend/src/app/workspaces/analytics/tabs/edge.ts:10`
+- Modify: `frontend/src/app/workspaces/analytics/tabs/execution.ts:22`
+- Modify: `frontend/src/app/workspaces/analytics/tabs/overview.ts:158`
+- Modify: `frontend/src/app/workspaces/analytics/tabs/pipeline.ts:19`
+- Test: the five matching `*.spec.ts` files in the same directory.
+
+All five files carry an identical, independently-authored pattern: a
+two-column `.panels { grid-template-columns: repeat(2, minmax(0,1fr)) }`
+grid that collapses to one column via `@media (max-width: 800px)`. 800px is
+not a declared breakpoint. Following A2's precedent (map each drifted value
+to the *numerically nearest* declared floor: 900px→md's 1023 because
+`|900-1024| < |900-640|`; 720px→sm's 639 because `|720-640| < |720-1024|`),
+800px maps to **sm's `639px`** (`|800-640|=160` vs `|800-1024|=224`).
+
+**This changes behaviour between 640px and 800px**, deliberately, same shape
+as A2: the two-column panel grid now survives down to 640px instead of
+collapsing to one column at 801px.
+
+**Interfaces:**
+- Consumes: `BREAKPOINTS` values as literals (same `@media` cannot read
+  `var()` constraint as every other width-query task).
+- Produces: no API change; five independent style-only edits.
+
+- [x] **Step 1: Write the failing tests**
+
+Append the same shape of test to each of the five spec files (adjust the
+component/file name per file — shown here for `overview.spec.ts`; repeat for
+`attribution.spec.ts`, `edge.spec.ts`, `execution.spec.ts`, `pipeline.spec.ts`):
+
+```ts
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+describe('overview.ts breakpoints', () => {
+  it('uses only declared breakpoint values in width queries', () => {
+    // A media query at 800px puts this file and ViewportService on
+    // different scales -- see breakpoints.ts. v95 A7.
+    const src = readFileSync(
+      join(process.cwd(), 'src/app/workspaces/analytics/tabs/overview.ts'),
+      'utf8',
+    );
+    const allowed = new Set(['639', '1023', '1439', '1919', '640', '1024', '1440', '1920']);
+    const widths = [...src.matchAll(/\(\s*(?:max|min)-width:\s*(\d+)px\s*\)/g)].map((m) => m[1]);
+    expect(widths.length).toBeGreaterThan(0);
+    expect(widths.filter((w) => !allowed.has(w))).toEqual([]);
+  });
+});
+```
+
+- [x] **Step 2: Run the tests to verify they fail**
+
+Run: `cd frontend && npm test -- --include "src/app/workspaces/analytics/tabs/*.spec.ts"`
+Expected: FAIL on all five, each with `received ['800']`.
+
+- [x] **Step 3: Apply the change**
+
+In each file, replace `@media (max-width: 800px)` with
+`@media (max-width: 639px)`. The rule body (`{ .panels { grid-template-columns: 1fr; } }`)
+does not change — only the threshold. This is a one-line find/replace per
+file; no other line in any of the five is touched.
+
+- [x] **Step 4: Run the tests to verify they pass**
+
+Run: `cd frontend && npm test -- --include "src/app/workspaces/analytics/tabs/*.spec.ts"`
+Expected: PASS on all five.
+
+- [x] **Step 5: Verify visually**
+
+Load `/analytics` (each of the five tabs: Overview, Attribution, Edge,
+Execution, Pipeline) at 390 / 768 / 1024 via Chrome DevTools MCP. Expected:
+two-column panel grid at 768 and 1024 (was already two-column at 768 before
+this change, since 768 > 640 either way); single column at 390. Confirm no
+tab regresses to a broken layout at 800×any (the width that used to be the
+threshold — it should now read as clearly "wide", two columns, not sit on an
+edge).
+
+- [x] **Step 6: Commit**
+
+```bash
+git add frontend/src/app/workspaces/analytics/tabs/attribution.ts frontend/src/app/workspaces/analytics/tabs/attribution.spec.ts frontend/src/app/workspaces/analytics/tabs/edge.ts frontend/src/app/workspaces/analytics/tabs/edge.spec.ts frontend/src/app/workspaces/analytics/tabs/execution.ts frontend/src/app/workspaces/analytics/tabs/execution.spec.ts frontend/src/app/workspaces/analytics/tabs/overview.ts frontend/src/app/workspaces/analytics/tabs/overview.spec.ts frontend/src/app/workspaces/analytics/tabs/pipeline.ts frontend/src/app/workspaces/analytics/tabs/pipeline.spec.ts
+git commit -m "fix(v95): analytics panel grids drop at the declared breakpoints, not 800px"
 ```
 
 ---
@@ -688,6 +786,8 @@ git commit -m "chore(v95): delete the dead --cell-wrap contract v80 left behind"
 - `ui/priority.ts` exists and `priority.spec.ts` passes at every boundary.
 - `shell.css` and `trading-performance.ts` contain no width query outside
   639/640/1023/1024/1439/1440/1919/1920.
+- The five `workspaces/analytics/tabs/*.ts` files touched by A7 contain no
+  width query outside that same set (A7, added during execution).
 - No `min-height: 0` in `button.ts`, `chip.ts` or `control-bar.ts`.
 - `--cell-wrap` and `--sep-wrap` appear nowhere in `frontend/src/`.
 - `/dashboard` at 768×1024 shows the portfolio figure on one line.

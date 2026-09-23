@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   HttpTestingController,
@@ -309,5 +312,18 @@ describe('Risk freshness and chrome', () => {
 
   it('renders no in-page heading', async () => {
     expect((await render()).nativeElement.querySelector('h1')).toBeNull();
+  });
+});
+
+/* -- v95 D1 -- grid tracks that survive a 320px phone ----------------------- */
+
+describe('Risk grid floors', () => {
+  const src = readFileSync(join(process.cwd(), 'src/app/workspaces/risk/risk.ts'), 'utf8');
+
+  it('never declares a fixed px floor a 320px phone cannot meet', () => {
+    // minmax(300px, 1fr) overflows its container below ~330px of content
+    // box. min(100%, 300px) collapses instead, which is the whole point.
+    const bare = [...src.matchAll(/minmax\(\s*(\d+)px/g)].map((m) => Number(m[1]));
+    expect(bare.filter((px) => px > 260)).toEqual([]);
   });
 });

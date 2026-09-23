@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { TRADE_SORTABLE } from '../../api/models';
+import { isInline } from '../../ui/priority';
 
 import {
   COMPACT_COLUMNS,
@@ -168,5 +169,30 @@ describe('trade column sets', () => {
         key === 'held' ? 'held_hours' : key,
       );
     }
+  });
+});
+
+/* -- v95 C2 -- column floors ----------------------------------------------- */
+
+describe('Trades column floors', () => {
+  it('declares a floor on every column', () => {
+    expect(tradeColumns().filter((c) => c.inlineFrom === undefined)).toEqual([]);
+  });
+
+  it('keeps identity and outcome inline on a phone', () => {
+    // What a trader opens a phone to check: which trade, and how is it doing.
+    const xs = tradeColumns().filter((c) => c.inlineFrom === 'xs').map((c) => c.key);
+    expect(xs).toEqual(expect.arrayContaining(['ticker', 'pnl_pct', 'r_multiple']));
+  });
+
+  it('demotes the progress bar, which ate 40% of a 390px row', () => {
+    expect(isInline(tradeColumns().find((c) => c.key === 'status')!.inlineFrom, 'xs'))
+      .toBe(false);
+  });
+
+  it('leaves at most four columns inline at xs', () => {
+    // Five 60px columns plus a detail toggle does not fit 390px.
+    expect(tradeColumns().filter((c) => isInline(c.inlineFrom, 'xs')).length)
+      .toBeLessThanOrEqual(4);
   });
 });

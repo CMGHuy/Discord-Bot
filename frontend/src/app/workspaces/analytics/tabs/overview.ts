@@ -155,7 +155,7 @@ function maxDrawdown(values: readonly number[]): number | null {
     .pairs dt { font-size: var(--text-micro); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.1em; }
     .pairs dd { margin: var(--space-4) 0 0; color: var(--text); font-variant-numeric: tabular-nums; }
     .pairs .missing dd { color: var(--warn); font-style: italic; }
-    @media (max-width: 800px) { .panels { grid-template-columns: 1fr; } }
+    @media (max-width: 639px) { .panels { grid-template-columns: 1fr; } }
   `,
 })
 export class OverviewTab {

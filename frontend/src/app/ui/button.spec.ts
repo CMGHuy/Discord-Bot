@@ -81,3 +81,18 @@ describe('v80 D4: the button restyle', () => {
     expect(SOURCE).toMatch(/Deprecated \(v80 D4\)[\s\S]*sb-segmented/);
   });
 });
+
+describe('button touch floor', () => {
+  const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8');
+
+  it.each([
+    'src/app/ui/button.ts',
+    'src/app/ui/chip.ts',
+    'src/app/ui/control-bar.ts',
+  ])('%s never sets min-height: 0 on an interactive host', (path) => {
+    // tokens.css raises --control-h to 44px under a coarse pointer. A
+    // component that sets min-height: 0 opts every one of its call sites out
+    // of that floor, which is how chips reached ~28px on a phone.
+    expect(read(path)).not.toMatch(/min-height:\s*0\b/);
+  });
+});

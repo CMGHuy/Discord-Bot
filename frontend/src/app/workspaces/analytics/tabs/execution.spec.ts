@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -13,4 +16,19 @@ function render() {
 describe('ExecutionTab', () => { beforeEach(() => TestBed.resetTestingModule());
   it('leads with the four-number verdict before its charts', () => { const { el } = render(); expect(el.querySelector('.verdict')!.compareDocumentPosition(el.querySelector('sb-histogram')!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING); expect(el.textContent).toContain('0.43'); expect(el.textContent).toContain('0.48'); });
   it('keeps unrecorded exits visible and uses hold strips', () => { const { fixture, el } = render(); expect((fixture.componentInstance as any).exitReasonSegments().find((x: any) => x.label === 'unrecorded')?.count).toBe(60); expect(el.querySelector('sb-strip-plot')).not.toBeNull(); expect(el.querySelector('sb-donut')).toBeNull(); });
+});
+
+describe('execution.ts breakpoints', () => {
+  it('uses only declared breakpoint values in width queries', () => {
+    // A media query at 800px puts this file and ViewportService on
+    // different scales -- see breakpoints.ts. v95 A7.
+    const src = readFileSync(
+      join(process.cwd(), 'src/app/workspaces/analytics/tabs/execution.ts'),
+      'utf8',
+    );
+    const allowed = new Set(['639', '1023', '1439', '1919', '640', '1024', '1440', '1920']);
+    const widths = [...src.matchAll(/\(\s*(?:max|min)-width:\s*(\d+)px\s*\)/g)].map((m) => m[1]);
+    expect(widths.length).toBeGreaterThan(0);
+    expect(widths.filter((w) => !allowed.has(w))).toEqual([]);
+  });
 });

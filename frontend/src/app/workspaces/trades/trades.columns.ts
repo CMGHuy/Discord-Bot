@@ -84,50 +84,64 @@ export const DASHBOARD_TABLE_ID = 'dashboard';
  * (strategy, horizon, tier) are not clickable: the server does not sort by
  * them, and offering a control that 400s would be worse than not offering it.
  */
+/* Column floors — v95 C2.
+ *
+ * Measured at 390px before this change: the visible four were #, STATUS,
+ * TICKER and CONFIDENCE, with NOW, PLAN, P&L %, R, HELD and OPENED pushed off
+ * the right edge behind a horizontal scroller. The columns a trader opens a
+ * phone to check were exactly the hidden ones, while the status progress bar
+ * took ~40% of the width.
+ *
+ * So: identity and outcome inline, the progress bar demoted, everything the
+ * picker adds beyond the default twelve demoted furthest. Demoted means one
+ * tap into the row detail, never gone. */
 export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDef<TradeRow>[] {
   return [
     // Rendered by the workspace as a link to the detail view — the keyboard
     // route into a row, since row clicks are mouse-only by design.
-    { key: 'num', header: '#', width: '3rem' },
-    { key: 'status', header: 'Status', sortable: true },
-    { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, sortable: true },
-    { key: 'now', header: 'Now', value: (row) => num(row.current_price), numeric: true },
-    { key: 'pnl_pct', header: 'P&L %', numeric: true, sortable: true },
-    { key: 'held', header: 'Held', value: (row) => held(row.closed_at ? row.held_hours : elapsedHours(row.opened_at, now())), numeric: true, sortable: true },
-    { key: 'actions', header: '', width: '1px' },
+    { key: 'num', header: '#', width: '3rem', inlineFrom: 'xs' },
+    { key: 'status', header: 'Status', sortable: true, inlineFrom: 'md' },
+    { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, sortable: true, inlineFrom: 'xs' },
+    { key: 'now', header: 'Now', value: (row) => num(row.current_price), numeric: true, inlineFrom: 'sm' },
+    { key: 'pnl_pct', header: 'P&L %', numeric: true, sortable: true, inlineFrom: 'xs' },
+    { key: 'held', header: 'Held', value: (row) => held(row.closed_at ? row.held_hours : elapsedHours(row.opened_at, now())), numeric: true, sortable: true, inlineFrom: 'sm' },
+    { key: 'actions', header: '', width: '1px', inlineFrom: 'lg' },
 
     /* -- individually re-addable through the column picker ---------------- */
-    { key: 'entry', header: 'Entry', value: (row) => num(row.entry), numeric: true, sortable: true },
-    { key: 'stop_loss', header: 'Stop', value: (row) => num(row.stop_loss), numeric: true },
-    { key: 'target', header: 'Target', value: (row) => num(row.target), numeric: true },
-    { key: 'risk_reward', header: 'R:R', value: (row) => num(row.risk_reward), numeric: true },
+    { key: 'entry', header: 'Entry', value: (row) => num(row.entry), numeric: true, sortable: true, inlineFrom: 'lg' },
+    { key: 'stop_loss', header: 'Stop', value: (row) => num(row.stop_loss), numeric: true, inlineFrom: 'lg' },
+    { key: 'target', header: 'Target', value: (row) => num(row.target), numeric: true, inlineFrom: 'lg' },
+    { key: 'risk_reward', header: 'R:R', value: (row) => num(row.risk_reward), numeric: true, inlineFrom: 'lg' },
     // Rich cell (trades.ts's rMultipleCell) adds sb-magnitude beneath; value
     // is the fallback used wherever cell isn't wired up. v54 Task 28: signed()
     // not rMultiple() -- the header already names the unit ('R'), so the cell
     // does not repeat it down every row.
-    { key: 'r_multiple', header: 'R', value: (row) => signed(row.r_multiple), numeric: true, sortable: true },
-    { key: 'strategy', header: 'Strategy', value: (row) => text(row.strategy) },
-    { key: 'horizon', header: 'Horizon', value: (row) => text(row.horizon) },
-    { key: 'direction', header: 'Direction', width: '3.5rem' },
+    { key: 'r_multiple', header: 'R', value: (row) => signed(row.r_multiple), numeric: true, sortable: true, inlineFrom: 'xs' },
+    { key: 'strategy', header: 'Strategy', value: (row) => text(row.strategy), inlineFrom: 'lg' },
+    { key: 'horizon', header: 'Horizon', value: (row) => text(row.horizon), inlineFrom: 'lg' },
+    { key: 'direction', header: 'Direction', width: '3.5rem', inlineFrom: 'sm' },
     // Entry, target and stop in one cell (SR8). Not sortable: there is no
     // single field behind it, and `sort=plan` is a 400 from the collection
     // endpoint. The three keys remain as separate columns for the picker.
-    { key: 'plan', header: 'Plan', width: '12rem' },
-    { key: 'tier', header: 'Tier' },
-    { key: 'confidence_level', header: 'Confidence' },
-    { key: 'shares', header: 'Shares', value: (row) => num(row.shares, 0), numeric: true },
-    { key: 'position_value', header: 'Deployed', value: (row) => num(row.position_value), numeric: true },
+    { key: 'plan', header: 'Plan', width: '12rem', inlineFrom: 'sm' },
+    { key: 'tier', header: 'Tier', inlineFrom: 'lg' },
+    { key: 'confidence_level', header: 'Confidence', inlineFrom: 'md' },
+    { key: 'shares', header: 'Shares', value: (row) => num(row.shares, 0), numeric: true, inlineFrom: 'lg' },
+    { key: 'position_value', header: 'Deployed', value: (row) => num(row.position_value), numeric: true, inlineFrom: 'lg' },
     {
       key: 'realized_pnl_amount',
       header: 'Realised',
       value: (row) => num(row.realized_pnl_amount),
       numeric: true,
       sortable: true,
+      inlineFrom: 'lg',
     },
-    { key: 'exit_price', header: 'Exit', value: (row) => num(row.exit_price), numeric: true, sortable: true },
-    { key: 'opened_at', header: 'Opened', sortable: true },
-    { key: 'closed_at', header: 'Closed', sortable: true },
-    { key: 'origin', header: 'Origin', value: (row) => text(row.origin) },
+    { key: 'exit_price', header: 'Exit', value: (row) => num(row.exit_price), numeric: true, sortable: true, inlineFrom: 'lg' },
+    { key: 'opened_at', header: 'Opened', sortable: true, inlineFrom: 'md' },
+    // Pairs with 'opened_at' (both describe when a position was live), so it
+    // takes the same floor rather than the picker-only 'lg' tier.
+    { key: 'closed_at', header: 'Closed', sortable: true, inlineFrom: 'md' },
+    { key: 'origin', header: 'Origin', value: (row) => text(row.origin), inlineFrom: 'lg' },
 
     /* -- SR53: the plan's own columns ---------------------------------------
      *
@@ -140,8 +154,8 @@ export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDe
     // The stop-entry price still being waited on. `plan` (SR8) falls back to it
     // when there is no fill, so this column is for reading the two side by
     // side rather than for finding out there is a trigger at all.
-    { key: 'trigger_price', header: 'Trigger', value: (row) => num(row.trigger_price), numeric: true },
-    { key: 'target2', header: 'Target 2', value: (row) => num(row.target2), numeric: true },
+    { key: 'trigger_price', header: 'Trigger', value: (row) => num(row.trigger_price), numeric: true, inlineFrom: 'lg' },
+    { key: 'target2', header: 'Target 2', value: (row) => num(row.target2), numeric: true, inlineFrom: 'lg' },
     // The plans board's Age column. Sorts on the plan's creation, which is the
     // only time an unfilled plan has.
     {
@@ -149,6 +163,7 @@ export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDe
       header: 'Created',
       value: (row) => (row.created_at ? age(row.created_at) : null),
       sortable: true,
+      inlineFrom: 'lg',
     },
     // 0-100 composite from analytics.rank — badge, quality, regime, freshness.
     // Zero decimals: it is a ranking, and the third digit of a composite is
@@ -159,6 +174,7 @@ export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDe
       value: (row) => num(row.follow_score, 0),
       numeric: true,
       sortable: true,
+      inlineFrom: 'lg',
     },
   ];
 }

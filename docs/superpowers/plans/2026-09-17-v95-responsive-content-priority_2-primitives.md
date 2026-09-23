@@ -29,7 +29,7 @@ call sites rendering exactly as before.
   call sites (Trades, Analytics/Strategies, Risk, Watchlist) compile and render
   unchanged until they opt in.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `frontend/src/app/ui/data-table/data-table.spec.ts`:
 
@@ -54,12 +54,12 @@ describe('ColumnDef inlineFrom', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/data-table/data-table.spec.ts`
 Expected: FAIL — TypeScript rejects `inlineFrom` as not a property of `ColumnDef`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `data-table.types.ts`, add the import and the field to `ColumnDef<T>`, after
 `width`:
@@ -85,12 +85,12 @@ import { Viewport } from '../breakpoints';
   inlineFrom?: Viewport;
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/data-table/data-table.spec.ts`
 Expected: PASS, and every pre-existing test in the file still passes.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/data-table/data-table.types.ts frontend/src/app/ui/data-table/data-table.spec.ts
@@ -121,7 +121,7 @@ inline set.
   B3 renders `demotedColumns`. `pinKey` and `sortOptions` must be re-pointed at
   `inlineColumns` in this task, not B3.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `frontend/src/app/ui/data-table/data-table.spec.ts`. Add
 `[viewportAt]="viewportAt()"` to the `Host` template's `sb-data-table` and
@@ -187,12 +187,12 @@ describe('DataTable column demotion', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/data-table/data-table.spec.ts`
 Expected: FAIL — `viewportAt` is not an input; the drop case still shows `Held`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `data-table.ts`, after `renderedColumns` (which stays as the union), add:
 
@@ -242,12 +242,12 @@ Finally, change the template's `@for` over header cells and body cells from
 and the reorder handlers pointed at `renderedColumns()` — those are the user's
 choice, not the layout's.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/data-table/data-table.spec.ts`
 Expected: PASS — including every pre-existing v80 phone-mode test, unmodified.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/data-table/data-table.ts frontend/src/app/ui/data-table/data-table.spec.ts
@@ -277,7 +277,7 @@ site's own `expansion` template when one is supplied.
   - No new input. A row has a detail exactly when `demotedColumns()` is
     non-empty or `expansion()` is set.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `data-table.spec.ts`:
 
@@ -340,12 +340,12 @@ describe('DataTable row detail', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/data-table/data-table.spec.ts`
 Expected: FAIL — no `.detail-toggle` exists.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Add the open-row state to the class:
 
@@ -437,13 +437,13 @@ Styles:
     .detail-value { min-width: 0; text-align: right; font-family: var(--font-mono); }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/data-table/data-table.spec.ts`
 Expected: PASS, and every v80 phone-mode test still passes — no workspace
 declares a floor yet, so `hasDetail()` is false everywhere in production.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/data-table/data-table.ts frontend/src/app/ui/data-table/data-table.spec.ts
@@ -473,7 +473,7 @@ component nothing uses yet and breaks nothing.
   - `.toolbar-sheet-button` carrying `[attr.aria-expanded]`, and
     `.toolbar-sheet` containing the demoted controls' projected content.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/app/ui/toolbar.spec.ts`:
 
@@ -544,12 +544,12 @@ describe('sb-toolbar', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/toolbar.spec.ts`
 Expected: FAIL — `Failed to resolve import "./toolbar"`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `frontend/src/app/ui/toolbar.ts`:
 
@@ -663,12 +663,12 @@ export class Toolbar {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/toolbar.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/toolbar.ts frontend/src/app/ui/toolbar.spec.ts
@@ -691,7 +691,7 @@ choice, hiding an engaged one changes what the numbers on screen mean.
 - Consumes: `ToolbarControl.active` (B4).
 - Produces: no API change.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `toolbar.spec.ts`:
 
@@ -739,23 +739,23 @@ describe('sb-toolbar active badge', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/toolbar.spec.ts`
 Expected: the third case may already pass; the `aria-label` cases fail if B4's
 string differs. Fix B4's `sheetLabel` to match exactly, not the test.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 No new code if B4 is correct. If the assertions fail, the defect is in
 `sheetLabel`/`activeCount` — correct those, not the expectations.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/toolbar.spec.ts`
 Expected: PASS, all three.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/toolbar.ts frontend/src/app/ui/toolbar.spec.ts
@@ -784,7 +784,7 @@ does with a hand-rolled `max-width: 720px` block in `dashboard.ts:527`.
   - Children are matched by their `data-panel-id` attribute and ordered with
     the CSS `order` property, so no DOM node moves.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
@@ -854,12 +854,12 @@ describe('sb-panel-grid ordering', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/panel-grid.spec.ts`
 Expected: FAIL — `order` is not an input.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Rewrite `panel-grid.ts`, keeping the existing `track` input and styles intact
 and adding:
@@ -894,12 +894,12 @@ and adding:
   }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/panel-grid.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/panel-grid.ts frontend/src/app/ui/panel-grid.spec.ts
@@ -926,7 +926,7 @@ useful to say in one line declares `inlineFrom: 'xs'` and never collapses.
   - `readonly viewportAt = input<Viewport | null>(null)`
   - `.panel-digest` and `button.panel-toggle` markup.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 describe('sb-panel collapse', () => {
@@ -972,12 +972,12 @@ describe('sb-panel collapse', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/panel.spec.ts`
 Expected: FAIL — `inlineFrom` is not an input on `sb-panel`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Add to `panel.ts`:
 
@@ -1010,13 +1010,13 @@ Template: wrap the projected body in `@if (!collapsed())`, and render
 `[attr.aria-expanded]="expanded()"`. When `collapsible()` is true the toggle is
 rendered in the header regardless of `expanded`, so it can be closed again.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/panel.spec.ts`
 Expected: PASS. Every existing panel test must also pass — no call site sets
 `inlineFrom` yet, so `collapsible()` is false in production.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/panel.ts frontend/src/app/ui/panel.spec.ts
@@ -1041,7 +1041,7 @@ says why.
 - Produces: `readonly problem = input<string | null>(null)` — a short reason,
   rendered when set; overrides collapse.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 describe('sb-panel force-expand guard', () => {
@@ -1076,12 +1076,12 @@ describe('sb-panel force-expand guard', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/panel.spec.ts`
 Expected: FAIL — `problem` is not an input.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```ts
   /**
@@ -1108,12 +1108,12 @@ and change `collapsible` to:
 Render `@if (problem(); as reason) { <p class="panel-problem">{{ reason }}</p> }`
 above the projected body.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/panel.spec.ts`
 Expected: PASS, all of B7's and B8's cases.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/panel.ts frontend/src/app/ui/panel.spec.ts

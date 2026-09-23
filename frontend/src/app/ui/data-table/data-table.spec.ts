@@ -9,6 +9,8 @@ import {
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { Viewport } from '../breakpoints';
+import { isInline } from '../priority';
 import { DataTable, SPINNER_DELAY_MS } from './data-table';
 import {
   ColumnDef,
@@ -30,12 +32,13 @@ interface Row {
   id: string;
   ticker: string;
   pnl: number | null;
+  held: string;
 }
 
 const ROWS: Row[] = [
-  { id: 'a', ticker: 'AAPL', pnl: 4.2 },
-  { id: 'b', ticker: 'MSFT', pnl: -1.5 },
-  { id: 'c', ticker: 'NVDA', pnl: null },
+  { id: 'a', ticker: 'AAPL', pnl: 4.2, held: '3d' },
+  { id: 'b', ticker: 'MSFT', pnl: -1.5, held: '11d' },
+  { id: 'c', ticker: 'NVDA', pnl: null, held: '1d' },
 ];
 
 @Component({
@@ -62,6 +65,7 @@ const ROWS: Row[] = [
       [emptyState]="emptyState()"
       [pinned]="pinned()"
       [cardsAt]="cardsAt()"
+      [viewportAt]="viewportAt()"
       (sortChange)="lastSort = $event"
       (pageChange)="pages.push($event)"
       (rowActivate)="activated.push($event)"
@@ -80,6 +84,7 @@ class Host {
   readonly withExpansion = signal(false);
   readonly pinned = signal<string[]>([]);
   readonly cardsAt = signal<boolean | null>(null);
+  readonly viewportAt = signal<Viewport | null>(null);
 
   readonly expansionTemplate =
     viewChild.required<TemplateRef<RowContext<Row>>>('expansion');
@@ -89,7 +94,11 @@ class Host {
   readonly rowKey = (row: Row) => row.id;
   readonly rowClass = signal<(row: Row) => string | null>(() => null);
 
-  readonly columns = computed<ColumnDef<Row>[]>(() => [
+  /* An override rather than a writable `columns`: the default set reads
+   * `actionCell()`, a viewChild that does not exist until the view does. */
+  readonly columnsOverride = signal<ColumnDef<Row>[] | null>(null);
+
+  readonly columns = computed<ColumnDef<Row>[]>(() => this.columnsOverride() ?? [
     { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, sortable: true },
     { key: 'pnl', header: 'P&L %', value: (row) => row.pnl, numeric: true, sortable: true },
     { key: 'held', header: 'Held', value: () => '3d' },
@@ -634,5 +643,194 @@ describe('DataTable rowClass', () => {
     fixture.detectChanges();
 
     expect(bodyRows().map((r) => r.className)).toEqual(['row', 'row blink', 'row']);
+  });
+});
+
+describe('ColumnDef inlineFrom', () => {
+  it('is optional and defaults to always inline', () => {
+    // Adding the field must change nothing for a column that omits it, or
+    // this becomes a breaking change to four call sites at once.
+    const column: ColumnDef<{ ticker: string }> = { key: 'ticker', header: 'Ticker' };
+    expect(isInline(column.inlineFrom, 'xs')).toBe(true);
+  });
+
+  it('carries a declared floor through to the resolver', () => {
+    const column: ColumnDef<{ held: string }> = {
+      key: 'held', header: 'Held', inlineFrom: 'md',
+    };
+    expect(isInline(column.inlineFrom, 'sm')).toBe(false);
+    expect(isInline(column.inlineFrom, 'md')).toBe(true);
+  });
+});
+
+describe('DataTable column demotion', () => {
+  let fixture: ComponentFixture<Host>;
+  let host: Host;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(Host);
+    host = fixture.componentInstance;
+    host.visible.set(['ticker', 'pnl', 'held']);
+    fixture.detectChanges();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  /* Excludes the disclosure column (B3): it is a control, not a column, and
+   * it appears exactly when something has been demoted. */
+  const headers = () =>
+    [...el().querySelectorAll('thead th:not(.expander-cell)')].map((th) => th.textContent!.trim());
+
+  it('draws every column when none declares a floor', () => {
+    host.viewportAt.set('xs');
+    fixture.detectChanges();
+    expect(headers()).toEqual(['Ticker', 'P&L %', 'Held']);
+  });
+
+  it('drops a below-floor column out of the grid', () => {
+    host.columnsOverride.set([
+      { key: 'ticker', header: 'Ticker' },
+      { key: 'pnl', header: 'P&L %' },
+      { key: 'held', header: 'Held', inlineFrom: 'md' },
+    ]);
+    host.viewportAt.set('sm');
+    fixture.detectChanges();
+    expect(headers()).toEqual(['Ticker', 'P&L %']);
+  });
+
+  it('restores it at and above its floor', () => {
+    host.columnsOverride.set([
+      { key: 'ticker', header: 'Ticker' },
+      { key: 'pnl', header: 'P&L %' },
+      { key: 'held', header: 'Held', inlineFrom: 'md' },
+    ]);
+    host.viewportAt.set('md');
+    fixture.detectChanges();
+    expect(headers()).toEqual(['Ticker', 'P&L %', 'Held']);
+  });
+
+  it('never demotes the pinned identity column, whatever it declares', () => {
+    // v80 D4: the pinned column is what says which row you are on. A floor
+    // that scrolled it away would undo that decision by accident.
+    host.columnsOverride.set([
+      { key: 'ticker', header: 'Ticker', inlineFrom: 'xl' },
+      { key: 'pnl', header: 'P&L %' },
+    ]);
+    host.viewportAt.set('xs');
+    fixture.detectChanges();
+    expect(headers()).toContain('Ticker');
+  });
+});
+
+describe('DataTable row detail', () => {
+  let fixture: ComponentFixture<Host>;
+  let host: Host;
+
+  const DEMOTING: ColumnDef<Row>[] = [
+    { key: 'ticker', header: 'Ticker', value: (r: Row) => r.ticker },
+    { key: 'pnl', header: 'P&L %', value: (r: Row) => r.pnl, inlineFrom: 'md' as const },
+    { key: 'held', header: 'Held', value: (r: Row) => r.held, inlineFrom: 'md' as const },
+  ];
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(Host);
+    host = fixture.componentInstance;
+    host.columnsOverride.set(DEMOTING);
+    host.visible.set(['ticker', 'pnl', 'held']);
+    host.viewportAt.set('sm');
+    fixture.detectChanges();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+
+  it('offers a detail toggle on every row when columns are demoted', () => {
+    expect(el().querySelectorAll('button.detail-toggle')).toHaveLength(ROWS.length);
+  });
+
+  it('starts collapsed', () => {
+    const toggle = el().querySelector('button.detail-toggle')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(el().querySelector('.row-detail')).toBeNull();
+  });
+
+  it('reveals every demoted column, labelled, on expand', () => {
+    (el().querySelector('button.detail-toggle') as HTMLElement).click();
+    fixture.detectChanges();
+
+    const labels = [...el().querySelectorAll('.row-detail .detail-label')]
+      .map((n) => n.textContent!.trim());
+    expect(labels).toEqual(['P&L %', 'Held']);
+
+    const values = [...el().querySelectorAll('.row-detail .detail-value')]
+      .map((n) => n.textContent!.trim());
+    expect(values).toEqual([String(ROWS[0].pnl), String(ROWS[0].held)]);
+  });
+
+  it('names the row it opens, so the toggle is not an anonymous chevron', () => {
+    const toggle = el().querySelector('button.detail-toggle')!;
+    expect(toggle.getAttribute('aria-label')).toContain(ROWS[0].ticker);
+  });
+
+  it('offers no toggle when nothing is demoted', () => {
+    host.viewportAt.set('xl');
+    fixture.detectChanges();
+    expect(el().querySelector('button.detail-toggle')).toBeNull();
+  });
+
+  it('is the same disclosure as the call site expansion, not a second one', () => {
+    // The table already had a rowKey-keyed expansion with its own chevron.
+    // Two toggles per row would be two things to discover and two states to
+    // reason about; the detail renders above the call site's template inside
+    // the one expansion row.
+    host.withExpansion.set(true);
+    fixture.detectChanges();
+    expect(el().querySelectorAll('tbody tr.row:first-of-type button.expander')).toHaveLength(1);
+
+    (el().querySelector('button.detail-toggle') as HTMLElement).click();
+    fixture.detectChanges();
+    expect(el().querySelectorAll('tr.row-detail')).toHaveLength(1);
+    expect(el().querySelector('.row-detail .expansion-body')).not.toBeNull();
+  });
+});
+
+/* -- v95 C4 -- one pager below md ------------------------------------------ */
+
+describe('DataTable single pager below md', () => {
+  let fixture: ComponentFixture<Host>;
+  let host: Host;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(Host);
+    host = fixture.componentInstance;
+    host.pagination.set({ page: 1, perPage: 12, total: 40 });
+    fixture.detectChanges();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+
+  it('shows one pager below md, two above', () => {
+    // Six rows between two six-control pagers is ~250px of chrome for
+    // ~200px of data.
+    host.viewportAt.set('sm');
+    fixture.detectChanges();
+    expect(el().querySelectorAll('sb-pagination')).toHaveLength(1);
+
+    host.viewportAt.set('lg');
+    fixture.detectChanges();
+    expect(el().querySelectorAll('sb-pagination')).toHaveLength(2);
+  });
+
+  it('keeps the one pager below md at the footer, not the header', () => {
+    // The footer pager also carries per-page below the table's own content,
+    // which is where a reader's eye already is after scanning the rows.
+    host.viewportAt.set('sm');
+    fixture.detectChanges();
+    const pager = el().querySelector('sb-pagination')!;
+    // From the pager's own position, the table PRECEDES it -- i.e. the pager
+    // renders after the table, not above it.
+    expect(pager.compareDocumentPosition(el().querySelector('table')!) &
+      Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   });
 });

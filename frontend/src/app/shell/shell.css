@@ -365,16 +365,21 @@
 @keyframes route-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .route-loading-mark { animation: none; } }
 
-/* The drop order, widest trigger first -- spec v85 "Responsive behaviour".
+/* The drop order, widest trigger first -- spec v85 "Responsive behaviour",
+   retriggered onto the declared breakpoints by v95 A2.
    Everything here is a removal: the bar never wraps to a second row, because
    a two-row bar changes the height of every page's content area. The title
    itself already truncates with an ellipsis (R1-05) and the tape already
-   scrolls (R1-06), so below 720px the bar degrades to
-   mark - title - scrolling tape - status, with nothing overflowing. */
-@media (max-width: 900px) {
+   scrolls (R1-06), so below sm the bar degrades to
+   mark - title - scrolling tape - status, with nothing overflowing.
+
+   v95: these were 900px and 720px -- neither a declared breakpoint, so the
+   stylesheet and ViewportService.isNarrow() disagreed between 640 and 720.
+   The clock and the wide tape now survive down to 640px. */
+@media (max-width: 1023px) {
   .page-subtitle { display: none; }
 }
-@media (max-width: 720px) {
+@media (max-width: 639px) {
   .clock { display: none; }
   .topbar { gap: var(--space-10); }
   .topbar-tape { flex-basis: 7rem; max-width: 7rem; }

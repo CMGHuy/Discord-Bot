@@ -400,7 +400,9 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
 
     .fields {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      /* v95 D3: the bare 260px floor overflowed a panel content box below
+         ~290px. min() lets the track collapse instead. */
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
       gap: var(--space-14);
       /* Between groups, against --space-14 between fields. The grouping is
          signposted by this gap and nothing else: sub-headings here would be
@@ -518,13 +520,13 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
       cursor: help;
     }
     .secret { color: var(--text-faint); font-size: var(--text-chip); }
-    /* Real button chrome, at --text-chip scale to sit comfortably below the
-       badges row rather than at sb-button's own --control-h (28px) -- this
-       is the same reasoning e66c06b applied when it flattened this into a
-       link, just aimed at the opposite conclusion now that .reset is off
-       .meta-badges' row: nothing here is towering over plain text any more,
-       so it can look like the button it is. */
+    /* v95 D3: min-height: var(--control-h) added -- this resets a live
+       config field (store.resetField), and 20px was a misfire waiting to
+       happen on a touch screen. Kept at --text-chip scale and a hairline
+       border rather than sb-button's own filled chrome, so raising its
+       height does not also raise its visual weight to primary-button level. */
     .reset {
+      min-height: var(--control-h);
       padding: 2px var(--space-8);
       border: 1px solid var(--border);
       border-radius: var(--radius-chip);
@@ -553,7 +555,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
     .category-rail button { justify-content: space-between; text-align: left; }
     .category-rail button.active { background: var(--surface-raised); color: var(--text); }
     .category-rail span { color: var(--text-faint); font-family: var(--font-mono); }
-    @media (max-width: 700px) { .settings-layout { grid-template-columns: minmax(0, 1fr); } .category-rail { grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; } }
+    @media (max-width: 639px) { .settings-layout { grid-template-columns: minmax(0, 1fr); } .category-rail { grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; } }
 
     .stale-form {
       padding: var(--space-8) var(--space-14);

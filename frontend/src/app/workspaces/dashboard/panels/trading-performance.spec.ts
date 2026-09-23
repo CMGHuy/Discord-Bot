@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, beforeEach } from 'vitest';
@@ -53,5 +56,30 @@ describe('trading performance panel', () => {
     const el = render({ riskUsedPct: 0, riskCapPct: 6, currency: '€', scope: 'today' });
     expect(el.querySelector('sb-donut')).toBeNull();
     expect(el.textContent).not.toContain('Remaining risk');
+  });
+});
+
+describe('trading-performance tablet band', () => {
+  const src = readFileSync(
+    join(process.cwd(), 'src/app/workspaces/dashboard/panels/trading-performance.ts'),
+    'utf8',
+  );
+
+  it('has a treatment between sm and md, not only below sm', () => {
+    // 640 alone leaves iPad portrait on the desktop layout: the 4-up KPI
+    // grid's 560px floor starves the equity block to ~40px and the portfolio
+    // figure breaks into fragments.
+    expect(src).toMatch(/@media\s*\(\s*max-width:\s*1023px\s*\)/);
+  });
+
+  it('never leaves a four-track KPI grid below md', () => {
+    const tabletBlock = src.match(/@media\s*\(\s*max-width:\s*1023px\s*\)\s*\{[\s\S]*?\n\s{0,4}\}/)?.[0] ?? '';
+    expect(tabletBlock).toMatch(/grid-template-columns:\s*repeat\(2,/);
+  });
+
+  it('uses only declared breakpoint values', () => {
+    const allowed = new Set(['639', '1023', '1439', '1919', '640', '1024', '1440', '1920']);
+    const widths = [...src.matchAll(/\(\s*(?:max|min)-width:\s*(\d+)px\s*\)/g)].map((m) => m[1]);
+    expect(widths.filter((w) => !allowed.has(w))).toEqual([]);
   });
 });

@@ -51,6 +51,8 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
       background: none;
       border: 0;
       cursor: pointer;
+      min-height: var(--control-h);
+      min-width: var(--control-h);
     }
     /* At phone width the two groups stack rather than compete for one row.
        Nothing is hidden — the plan forbids a control that vanishes silently. */

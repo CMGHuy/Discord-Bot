@@ -16,7 +16,9 @@ import { TradeRow } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { TradesStore } from '../../stores/trades.store';
-import { Trades } from './trades';
+import { isInline } from '../../ui/priority';
+import { ToolbarControl } from '../../ui/toolbar';
+import { Trades, TRADES_CONTROLS } from './trades';
 
 function row(overrides: Partial<TradeRow>): TradeRow {
   return {
@@ -120,11 +122,14 @@ function render(footer?: FooterFixture): ComponentFixture<Trades> {
   return fixture;
 }
 
-/** The `.chip` inside the control bar's lane whose text trims to `label`. */
+/** The `.chip` inside the toolbar's status slot whose text trims to `label`.
+ *  v95 C1: the lane used to live inside `sb-control-bar [filters]`; it is
+ *  now `sb-toolbar`'s `slot="status"` child, always inline (TRADES_CONTROLS),
+ *  so it renders whether or not anything is demoted. */
 function chip(fixture: ComponentFixture<Trades>, label: string): HTMLButtonElement {
   const found = Array.from(
     (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>(
-      'sb-control-bar [filters] .chip',
+      'sb-toolbar [slot=status] .chip',
     ),
   ).find((el) => el.textContent!.trim() === label);
   if (!found) throw new Error(`no chip labelled "${label}"`);
@@ -132,9 +137,9 @@ function chip(fixture: ComponentFixture<Trades>, label: string): HTMLButtonEleme
 }
 
 describe('Trades — the promoted status/outcome/direction lane', () => {
-  it('renders the eight promoted chips in the control bar', () => {
+  it('renders the eight promoted chips in the toolbar', () => {
     const labels = Array.from(
-      (render().nativeElement as HTMLElement).querySelectorAll('sb-control-bar [filters] .chip'),
+      (render().nativeElement as HTMLElement).querySelectorAll('sb-toolbar [slot=status] .chip'),
     ).map((c) => c.textContent!.trim());
     expect(labels).toEqual(['All', 'Open', 'Closed', 'Pending', 'Win', 'Loss', 'Long', 'Short']);
   });
@@ -144,7 +149,11 @@ describe('Trades — the promoted status/outcome/direction lane', () => {
     expect(el.querySelector('.chip')!.classList).toContain('active');
   });
 
-  it('keeps the filter bar for the filters the lane does not carry', () => {
+  it('keeps a persistent Clear-all summary now that its filters live in the toolbar', () => {
+    // v95 C1: sb-filter-bar no longer wraps the eight field filters (they
+    // moved into sb-toolbar's sheet) -- it keeps only its own
+    // activeCount/Clear-all summary, distinct from the toolbar's own
+    // per-control Guard-1 badge.
     expect((render().nativeElement as HTMLElement).querySelector('sb-filter-bar')).not.toBeNull();
   });
 
@@ -220,7 +229,7 @@ describe('Trades — the opened-at range', () => {
     const navigateSpy = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
 
     const to = (f.nativeElement as HTMLElement).querySelector(
-      'sb-control-bar sb-date-range input.to',
+      'sb-toolbar [slot=dates] input.to',
     ) as HTMLInputElement;
     to.value = '2026-04-28';
     to.dispatchEvent(new Event('change'));
@@ -262,5 +271,51 @@ describe('Trades — the count footer', () => {
   it('says the log is empty when nothing is filtered and there is nothing', () => {
     const el = render({ total: 0, page: 1, perPage: 12, activeFilterCount: 0 }).nativeElement as HTMLElement;
     expect(el.querySelector('p.count')!.textContent).toContain('No trades yet');
+  });
+});
+
+/* -- v95 C1 -- the toolbar's priorities ----------------------------------- */
+
+describe('Trades toolbar priorities', () => {
+  it('declares a floor for every control', () => {
+    // A control with no floor is inline everywhere, which is how the 1700px
+    // stack happened. Requiring the declaration makes the choice deliberate.
+    expect(TRADES_CONTROLS.every((c) => c.inlineFrom !== undefined)).toBe(true);
+  });
+
+  it('keeps the status filter and the column picker inline on a phone', () => {
+    const inlineAtXs = TRADES_CONTROLS.filter((c) => c.inlineFrom === 'xs').map((c) => c.id);
+    expect(inlineAtXs).toEqual(expect.arrayContaining(['status', 'columns']));
+  });
+
+  it('demotes the eight field filters and the date range below md', () => {
+    const demoted = ['ticker', 'origin', 'strategy', 'horizon', 'confidence', 'tier', 'badge', 'note', 'dates'];
+    for (const id of demoted) {
+      const control = TRADES_CONTROLS.find((c) => c.id === id);
+      expect(control, `missing control ${id}`).toBeDefined();
+      expect(isInline(control!.inlineFrom, 'sm')).toBe(false);
+      expect(isInline(control!.inlineFrom, 'md')).toBe(true);
+    }
+  });
+
+  it('reports a filter as active when it is not at its default', () => {
+    // Guard 1: a hidden filter that is narrowing the table must be counted.
+    const f = render();
+    f.componentRef.setInput('ticker', 'AAPL');
+    f.detectChanges();
+    const controls = (f.componentInstance as unknown as {
+      toolbarControls: () => ToolbarControl[];
+    }).toolbarControls();
+    expect(controls.find((c) => c.id === 'ticker')!.active).toBe(true);
+  });
+
+  it('leaves a filter at its default unmarked', () => {
+    const f = render();
+    const controls = (f.componentInstance as unknown as {
+      toolbarControls: () => ToolbarControl[];
+    }).toolbarControls();
+    expect(controls.find((c) => c.id === 'ticker')!.active).toBe(false);
+    // columns/density/export/clear-* are not filters and report no state.
+    expect(controls.find((c) => c.id === 'columns')!.active).toBe(false);
   });
 });

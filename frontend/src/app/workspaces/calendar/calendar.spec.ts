@@ -409,3 +409,96 @@ describe('Calendar states', () => {
     expect(host.querySelectorAll('.dow-row').length).toBe(RESPONSE.day_of_week.length);
   });
 });
+
+/* -- v95 C5 -- the stat digest --------------------------------------------- */
+
+describe('Calendar stat digest', () => {
+  it('summarises the month in one line', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    // RESPONSE.totals: net_pnl_amount -60, trade_count 3, win_rate 33.33.
+    // ConnectionStore's default currency (no stub here) is '€'.
+    const component = fixture.componentInstance as unknown as {
+      calendarDigest: () => string;
+    };
+    expect(component.calendarDigest()).toBe('-60.00 € · 3 trades · 33.3% win');
+  });
+
+  it('carries the thin-sample warning into the digest rather than losing it', async () => {
+    // Guard 2: RESPONSE has only 2 trading days, far below MIN_SAMPLE_N (30).
+    // A digest that dropped that would present a thin number as a settled one.
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const component = fixture.componentInstance as unknown as {
+      calendarProblem: () => string | null;
+    };
+    expect(component.calendarProblem()).toContain('thin sample');
+    expect(component.calendarProblem()).toContain('N=2');
+  });
+
+  it('reports no problem once the sample is adequate', async () => {
+    const days = Array.from({ length: 30 }, (_, i) => ({
+      date: `2026-08-${String(i + 1).padStart(2, '0')}`,
+      net_pnl_amount: 10, net_r: 0.5, trade_count: 1, win_rate: 100,
+    }));
+    const fixture = seed({ ...RESPONSE, days });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const component = fixture.componentInstance as unknown as {
+      calendarProblem: () => string | null;
+    };
+    expect(component.calendarProblem()).toBeNull();
+  });
+});
+
+/* -- v95 C6 -- the phone agenda --------------------------------------------- */
+
+describe('Calendar phone agenda', () => {
+  it('renders an agenda, not a 7-column grid, below sm', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.componentRef.setInput('viewportAt', 'xs');
+    fixture.detectChanges();
+
+    expect(el(fixture).querySelector('.week')).toBeNull();
+    expect(el(fixture).querySelector('.agenda')).not.toBeNull();
+  });
+
+  it('lists only days that traded', async () => {
+    // RESPONSE.days has exactly two entries, both trade_count > 0.
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.componentRef.setInput('viewportAt', 'xs');
+    fixture.detectChanges();
+
+    expect(el(fixture).querySelectorAll('.agenda-day')).toHaveLength(RESPONSE.days.length);
+  });
+
+  it('separates the value from the count', async () => {
+    // At 390px the grid ran "+71 10" together with no separator; two
+    // numbers touching read as one.
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.componentRef.setInput('viewportAt', 'xs');
+    fixture.detectChanges();
+
+    const day = el(fixture).querySelector('.agenda-day')!;
+    expect(day.querySelector('.agenda-value')).not.toBeNull();
+    expect(day.querySelector('.agenda-count')).not.toBeNull();
+  });
+
+  it('keeps the grid at sm and above', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.componentRef.setInput('viewportAt', 'sm');
+    fixture.detectChanges();
+
+    expect(el(fixture).querySelector('.week')).not.toBeNull();
+    expect(el(fixture).querySelector('.agenda')).toBeNull();
+  });
+});

@@ -30,7 +30,7 @@ one-line fix applied consistently.
 - Consumes: nothing new.
 - Produces: no API change.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { readFileSync } from 'node:fs';
@@ -48,12 +48,12 @@ describe('Risk grid floors', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/risk/risk.spec.ts`
 Expected: FAIL — received `[300]`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `risk.ts`, change the `.split` rule:
 
@@ -68,17 +68,17 @@ In `risk.ts`, change the `.split` rule:
 Leave the `max-width: 639px` block at `:567` as it is — stacking `.kill` is
 correct and already uses a declared breakpoint.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/risk/risk.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually — mandatory**
+- [x] **Step 5: Verify visually — mandatory**
 
 At 390px and, if the browser allows it, 320px. Expected: no horizontal page
 scroll on Risk at either width.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/risk/risk.ts frontend/src/app/workspaces/risk/risk.spec.ts
@@ -103,7 +103,7 @@ in the strict sense that you cannot tell what it describes.
 - Consumes: nothing new.
 - Produces: the leading `th` in each row is sticky.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { readFileSync } from 'node:fs';
@@ -121,12 +121,12 @@ describe('sb-matrix row headers', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/matrix.spec.ts`
 Expected: FAIL — no sticky rule.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Ensure each row's leading cell is `<th scope="row">`, then add:
 
@@ -143,17 +143,17 @@ Ensure each row's leading cell is `<th scope="row">`, then add:
     }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/matrix.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually — mandatory**
+- [x] **Step 5: Verify visually — mandatory**
 
 At 390px on Risk: scroll the matrix right and confirm the row labels stay put
 and remain legible against the scrolling cells.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/ui/matrix.ts frontend/src/app/ui/matrix.spec.ts

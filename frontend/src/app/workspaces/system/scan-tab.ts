@@ -4,8 +4,23 @@ import { SystemStore } from '../../stores/system.store';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { dateTime } from '../../ui/format';
-import { ControlRow, Panel } from '../../ui/layout';
+import { Panel } from '../../ui/layout';
 import { Freshness } from '../../ui/freshness';
+import { Toolbar, ToolbarControl } from '../../ui/toolbar';
+
+/**
+ * Three short commands, nothing to demote. `sb-control-row` force-stacks
+ * into a full-width column below 640px, which turns "Scan now" into the
+ * first of three screen-wide blocks; `sb-toolbar`'s inline row wraps them
+ * instead, at whatever width the buttons actually need. All `'xs'`: unlike
+ * Trades' filters, there is no lower-priority subset here to send to a
+ * sheet -- everything on this tab is the thing the tab is for.
+ */
+export const SCAN_CONTROLS: ToolbarControl[] = [
+  { id: 'run', label: 'Scan now', inlineFrom: 'xs' },
+  { id: 'stop', label: 'Stop current scan', inlineFrom: 'xs' },
+  { id: 'pause', label: 'Pause or resume automatic scanning', inlineFrom: 'xs' },
+];
 
 /**
  * Scan control and bot restart.
@@ -24,7 +39,7 @@ import { Freshness } from '../../ui/freshness';
 @Component({
   selector: 'sb-scan-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, ConfirmDialog, ControlRow, Freshness],
+  imports: [Panel, Button, ConfirmDialog, Toolbar, Freshness],
   template: `
     <sb-panel heading="Scan">
       <div class="states">
@@ -47,8 +62,9 @@ import { Freshness } from '../../ui/freshness';
       }
       <sb-freshness [at]="store.scan()?.bot_last_seen ?? null" />
 
-      <sb-control-row class="commands">
+      <sb-toolbar class="commands" [controls]="controls">
         <button
+          slot="run"
           sb-button
           variant="primary"
           type="button"
@@ -58,6 +74,7 @@ import { Freshness } from '../../ui/freshness';
           Scan now
         </button>
         <button
+          slot="stop"
           sb-button
           variant="secondary"
           type="button"
@@ -68,29 +85,35 @@ import { Freshness } from '../../ui/freshness';
           Stop current scan
         </button>
         <!-- Pause and resume are one control in two states rather than two
-             buttons, one of which is always a no-op. -->
-        @if (store.scanPaused()) {
-          <button
-            sb-button
-            variant="secondary"
-            type="button"
-            [loading]="store.scanPending() === 'resume'"
-            (click)="store.runScanCommand('resume')"
-          >
-            Resume automatic scanning
-          </button>
-        } @else {
-          <button
-            sb-button
-            variant="secondary"
-            type="button"
-            [loading]="store.scanPending() === 'pause'"
-            (click)="store.runScanCommand('pause')"
-          >
-            Pause automatic scanning
-          </button>
-        }
-      </sb-control-row>
+             buttons, one of which is always a no-op. The div, not the
+             button, is what sb-toolbar reparents -- its docstring rules out
+             putting a slotted element directly inside a host-side @if/@for,
+             and this @if/@else is exactly that; wrapping it in a stable
+             slot="pause" element keeps only the *content* swapping. -->
+        <div slot="pause">
+          @if (store.scanPaused()) {
+            <button
+              sb-button
+              variant="secondary"
+              type="button"
+              [loading]="store.scanPending() === 'resume'"
+              (click)="store.runScanCommand('resume')"
+            >
+              Resume automatic scanning
+            </button>
+          } @else {
+            <button
+              sb-button
+              variant="secondary"
+              type="button"
+              [loading]="store.scanPending() === 'pause'"
+              (click)="store.runScanCommand('pause')"
+            >
+              Pause automatic scanning
+            </button>
+          }
+        </div>
+      </sb-toolbar>
 
       @if (store.scanMessage(); as message) {
         <!-- The server's own words: "queued -- the bot picks it up within 30
@@ -184,6 +207,7 @@ import { Freshness } from '../../ui/freshness';
 })
 export class ScanTab {
   protected readonly store = inject(SystemStore);
+  protected readonly controls = SCAN_CONTROLS;
 
   protected readonly asking = signal(false);
 

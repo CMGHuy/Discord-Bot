@@ -121,11 +121,6 @@ export function qualityTone(value: number | string | null | undefined): ChipTone
     .q4 { color: var(--quality-4); border-color: color-mix(in srgb, var(--quality-4) 35%, transparent); }
     .q5 { color: var(--quality-5); border-color: color-mix(in srgb, var(--pos) 35%, transparent); }
 
-    /* v80 D4 -- a chip in a phone row is a tap target when it sits inside a
-       button, and a line of text when it does not; 28px serves both. */
-    @media (pointer: coarse), (max-width: 639px) {
-      .chip { min-height: 28px; }
-    }
   `,
 })
 export class Chip {

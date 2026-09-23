@@ -93,7 +93,7 @@ export type ButtonVariant =
     :host(.ghost:not([disabled]):hover) { color: var(--text); background: var(--surface-raised); }
 
     :host(.icon) {
-      min-height: 0;
+      min-height: var(--control-h);
       padding: var(--space-4);
       background: transparent;
       color: var(--text-muted);
@@ -126,7 +126,7 @@ export type ButtonVariant =
        a chip in appearance and a toggle in function. \`.on\` is the pressed
        state and pairs with aria-pressed at the call site. */
     :host(.chip) {
-      min-height: 0;
+      min-height: var(--control-h);
       padding: var(--space-4) var(--space-8);
       border-color: var(--border);
       border-radius: var(--radius-chip);
@@ -160,7 +160,7 @@ export type ButtonVariant =
        Still a button: it performs an action rather than navigating, and an
        <a> without an href is not focusable. */
     :host(.link) {
-      min-height: 0;
+      min-height: var(--control-h);
       padding: 0;
       background: transparent;
       color: var(--accent);

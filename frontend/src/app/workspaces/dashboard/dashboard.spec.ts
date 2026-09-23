@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   HttpTestingController,
@@ -17,7 +20,7 @@ import { Dashboard as DashboardData, TradeRow } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
-import { Dashboard } from './dashboard';
+import { Dashboard, DASHBOARD_COLUMNS, DASHBOARD_PANEL_ORDER } from './dashboard';
 import { DashboardStore } from '../../stores/dashboard.store';
 import { ToastService } from '../../shell/toast.service';
 
@@ -395,5 +398,55 @@ describe('Dashboard v85 close-all', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).not.toContain('Clear open');
     expect(text).not.toContain('Clear history');
+  });
+});
+
+describe('dead card-mode contract', () => {
+  const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8');
+
+  it('no longer reads variables nothing sets', () => {
+    // v80 D4 removed card mode and with it .card-value; --cell-wrap and
+    // --sep-wrap have been set by nothing since. Reading them made the
+    // widest cell on the page permanently nowrap behind a comment claiming
+    // it was handled.
+    const src = read('src/app/workspaces/dashboard/dashboard.ts');
+    expect(src).not.toMatch(/--cell-wrap/);
+    expect(src).not.toMatch(/--sep-wrap/);
+  });
+
+  it('data-table no longer cites the superseded v18 decision', () => {
+    expect(read('src/app/ui/data-table/data-table.ts'))
+      .not.toMatch(/Cards instead of a table/);
+  });
+});
+
+/* -- v95 C3 -- panel order ------------------------------------------------- */
+
+describe('Dashboard panel order', () => {
+  it('leads with performance at every band', () => {
+    // Observed: at 390px positions came first and the portfolio figure was
+    // below a 900px table. At 768px performance came first. The phone case
+    // was the odd one out, and it was the wrong way round.
+    for (const band of ['xs', 'sm', 'md', 'lg', 'xl'] as const) {
+      expect(DASHBOARD_PANEL_ORDER[band]?.[0] ?? 'performance').toBe('performance');
+    }
+  });
+
+  it('no longer carries an undeclared breakpoint', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/workspaces/dashboard/dashboard.ts'), 'utf8');
+    const allowed = new Set(['639', '1023', '1439', '1919', '640', '1024', '1440', '1920']);
+    const widths = [...src.matchAll(/\(\s*(?:max|min)-width:\s*(\d+)px\s*\)/g)].map((m) => m[1]);
+    expect(widths.filter((w) => !allowed.has(w))).toEqual([]);
+  });
+});
+
+/* -- v95 C4 -- Open Positions column floors -------------------------------- */
+
+describe('DASHBOARD_COLUMNS', () => {
+  it('reuses tradeColumns() rather than a second, driftable floor list', () => {
+    // Every entry v95 C2 declared a floor on carries it here too, because
+    // this is literally that same function's return value.
+    expect(DASHBOARD_COLUMNS.length).toBeGreaterThan(0);
+    expect(DASHBOARD_COLUMNS.filter((c) => c.inlineFrom === undefined)).toEqual([]);
   });
 });

@@ -63,7 +63,14 @@ const STATUS_LABEL: Record<string, string> = {
        simply having opened or closed is not. */
     sb-icon { color: var(--text-muted); cursor: help; }
     .ticker { font-family: var(--font-mono); color: var(--text); font-weight: 600; }
-    .detail { color: var(--text-secondary); }
+    /* 1fr with no min-width: 0 is a min-content floor -- a long detail string
+       widens the row instead of ellipsising inside it (v95 A4). */
+    .detail {
+      color: var(--text-secondary);
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
     .detail.pos { color: var(--pos); }
     .detail.neg { color: var(--neg); }
     .at { color: var(--text-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }

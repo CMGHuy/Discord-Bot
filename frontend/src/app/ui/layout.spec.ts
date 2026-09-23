@@ -1,9 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Component, provideZonelessChangeDetection } from '@angular/core';
+import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { ComponentFixture } from '@angular/core/testing';
+
+import { Viewport } from './breakpoints';
 import { Panel, Tab, TabBar } from './layout';
 
 const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/layout.ts'), 'utf8');
@@ -114,4 +117,134 @@ describe('sb-control-row and sb-drawer on a phone (v80 D4)', () => {
   it('sizes the drawer by the dynamic viewport', () => { expect(rule('.drawer')).toContain('height: 100dvh'); expect(rule('.drawer')).toContain('max-height: 100dvh'); });
   it('takes the full width on a phone', () => expect(SOURCE).toMatch(/@media \(max-width: 639px\) \{\s*\.drawer \{ width: 100vw; \}/));
   it('gives the close button a touch-sized target', () => expect(rule('.close')).toContain('min-height: var(--control-h)'));
+});
+
+@Component({
+  imports: [Panel],
+  template: `
+    <sb-panel
+      [heading]="heading()"
+      [inlineFrom]="inlineFrom()"
+      [digest]="digest()"
+      [problem]="problem()"
+      [viewportAt]="viewportAt()"
+    >
+      <p class="body-content">Body</p>
+    </sb-panel>
+  `,
+})
+class CollapseHost {
+  readonly heading = signal('Watchlist');
+  readonly inlineFrom = signal<Viewport | undefined>(undefined);
+  readonly digest = signal<string | null>(null);
+  readonly problem = signal<string | null>(null);
+  readonly viewportAt = signal<Viewport | null>(null);
+}
+
+describe('sb-panel collapse', () => {
+  let fixture: ComponentFixture<CollapseHost>;
+  let host: CollapseHost;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(CollapseHost);
+    host = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+
+  it('renders in full above its floor', () => {
+    host.inlineFrom.set('md'); host.viewportAt.set('md'); fixture.detectChanges();
+    expect(el().querySelector('.body')).not.toBeNull();
+    expect(el().querySelector('.panel-digest')).toBeNull();
+  });
+
+  it('collapses to its digest below its floor', () => {
+    host.inlineFrom.set('md'); host.digest.set('no priced symbols yet');
+    host.viewportAt.set('sm'); fixture.detectChanges();
+    expect(el().querySelector('.panel-digest')!.textContent)
+      .toContain('no priced symbols yet');
+    expect(el().querySelector('.body')).toBeNull();
+  });
+
+  it('expands in place on tap and keeps the digest out of the way', () => {
+    host.inlineFrom.set('md'); host.digest.set('3 open');
+    host.viewportAt.set('sm'); fixture.detectChanges();
+    (el().querySelector('button.panel-toggle') as HTMLElement).click();
+    fixture.detectChanges();
+    expect(el().querySelector('.body')).not.toBeNull();
+    expect(el().querySelector('button.panel-toggle')!.getAttribute('aria-expanded'))
+      .toBe('true');
+    expect(el().querySelector('.panel-digest')).toBeNull();
+  });
+
+  it('never collapses without a digest — an empty summary is worse than none', () => {
+    host.inlineFrom.set('md'); host.digest.set(null);
+    host.viewportAt.set('sm'); fixture.detectChanges();
+    expect(el().querySelector('.body')).not.toBeNull();
+    expect(el().querySelector('button.panel-toggle')).toBeNull();
+  });
+
+  it('keeps the title readable while collapsed', () => {
+    host.inlineFrom.set('md'); host.digest.set('3 open');
+    host.viewportAt.set('sm'); fixture.detectChanges();
+    expect(el().textContent).toContain(host.heading());
+  });
+});
+
+describe('sb-panel force-expand guard', () => {
+  let fixture: ComponentFixture<CollapseHost>;
+  let host: CollapseHost;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(CollapseHost);
+    host = fixture.componentInstance;
+    host.inlineFrom.set('md'); host.digest.set('3 open'); host.viewportAt.set('sm');
+    fixture.detectChanges();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+
+  it('collapses normally when there is no problem', () => {
+    expect(el().querySelector('.body')).toBeNull();
+  });
+
+  it('force-expands when the data is stale', () => {
+    host.problem.set('stale — last updated 18:41');
+    fixture.detectChanges();
+    expect(el().querySelector('.body')).not.toBeNull();
+  });
+
+  it('says what the problem is rather than just opening', () => {
+    host.problem.set('stale — last updated 18:41');
+    fixture.detectChanges();
+    expect(el().textContent).toContain('stale — last updated 18:41');
+  });
+
+  it('offers no collapse toggle while the problem stands', () => {
+    // Letting the user re-collapse it would put the warning back behind a
+    // digest that does not mention it.
+    host.problem.set('failed to load');
+    fixture.detectChanges();
+    expect(el().querySelector('button.panel-toggle')).toBeNull();
+  });
+});
+
+/* -- v95 C4 -- tab counts survive icon-only ------------------------------- */
+
+describe('sb-tab-bar icon-only counts', () => {
+  // TabBar has no viewportAt override -- its icon-only demotion is CSS-only
+  // (`@media (max-width: 1023px)`), so this is asserted against the
+  // stylesheet text the way A2/A7 assert breakpoint values, not by forcing a
+  // viewport signal jsdom cannot lay out anyway.
+  it('keeps the count visible when the tab bar goes icon-only', () => {
+    // An icon-only tab that drops "6" answers none of the question the tab
+    // exists to answer. The icon may replace the word; it must not replace
+    // the number.
+    const block = SOURCE.match(/@media \(max-width: 1023px\) \{([\s\S]*?)\n    \}/)?.[1] ?? '';
+    expect(block).toMatch(/\.tab\.iconed \.label \{ display: none; \}/);
+    expect(block).toMatch(/\.tab\.iconed \.count \{ display: inline; \}/);
+  });
 });

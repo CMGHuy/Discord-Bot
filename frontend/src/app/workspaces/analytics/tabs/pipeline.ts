@@ -16,7 +16,7 @@ import { PanelHeader } from '../../../ui/panel-header';
   <sb-panel><sb-panel-header title="Tiers" [allTime]="true" />
     @if (tierBins().length) { <sb-histogram [bins]="tierBins()" /> } @else { <sb-empty-state title="No tiered strategies yet" reason="measured-zero" /> }
   </sb-panel></div>
-`, styles: `.panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-14)}dl{display:grid;gap:var(--space-8)}dt{font-size:var(--text-micro);text-transform:uppercase;letter-spacing:.1em;color:var(--text-faint)}dd{margin:2px 0;font-variant-numeric:tabular-nums}@media(max-width:800px){.panels{grid-template-columns:1fr}}` })
+`, styles: `.panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-14)}dl{display:grid;gap:var(--space-8)}dt{font-size:var(--text-micro);text-transform:uppercase;letter-spacing:.1em;color:var(--text-faint)}dd{margin:2px 0;font-variant-numeric:tabular-nums}@media(max-width:639px){.panels{grid-template-columns:1fr}}` })
 export class PipelineTab {
   readonly store = inject(AnalyticsStore); readonly plans = computed(() => this.store.plans());
   readonly funnelBins = computed(() => { const f = this.plans()?.funnel; return f ? [['Posted', f.posted], ['Filled', f.filled], ['Hit TP1', f.hit_tp1], ['Closed', f.closed]].map(([label, count]) => ({ label: String(label), count: Number(count) })) : []; });

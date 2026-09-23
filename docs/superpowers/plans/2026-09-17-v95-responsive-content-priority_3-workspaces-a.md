@@ -39,7 +39,7 @@ narrows this table) and `Columns`. Everything else demotes.
 - Consumes: `Toolbar`, `ToolbarControl` (B4).
 - Produces: `TRADES_CONTROLS: ToolbarControl[]`, exported so E1 can walk it.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { TRADES_CONTROLS } from './trades';
@@ -75,12 +75,12 @@ describe('Trades toolbar priorities', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/trades/trades.spec.ts`
 Expected: FAIL — `TRADES_CONTROLS` is not exported.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Export the declaration:
 
@@ -133,19 +133,19 @@ Wrap the existing bar markup in `<sb-toolbar [controls]="toolbarControls()">`
 and give every projected control a `slot` attribute matching its `id`. Delete
 the workspace's own responsive rules for the bar — the toolbar owns that now.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/trades/trades.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually — mandatory**
+- [x] **Step 5: Verify visually — mandatory**
 
 At 390px: the first trade row is above the fold or close to it; the sheet
 button reads `Filters 13`; opening it reveals every demoted control; setting a
 ticker filter and closing the sheet leaves a visible active marker. At 768 and
 1024: confirm nothing that used to be inline has vanished without a sheet.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/trades/trades.ts frontend/src/app/workspaces/trades/trades.spec.ts
@@ -164,7 +164,7 @@ git commit -m "feat(v95): Trades toolbar collapses -- 1700px of chrome becomes a
 - Consumes: `ColumnDef.inlineFrom` (B1).
 - Produces: every column in the Trades set carries an explicit `inlineFrom`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 describe('Trades column floors', () => {
@@ -191,12 +191,12 @@ describe('Trades column floors', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/trades/trades.columns.spec.ts`
 Expected: FAIL — no column declares a floor.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Add `inlineFrom` to every entry in `trades.columns.ts`. The four inline at `xs`
 are `ticker`, `pnl`, `r` and the row-id link; `now`, `plan` and `held` take
@@ -219,12 +219,12 @@ Write the reasoning once, above the array:
  * tap into the row detail, never gone. */
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/trades/trades.columns.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually — mandatory, and this is the interaction change**
+- [x] **Step 5: Verify visually — mandatory, and this is the interaction change**
 
 At 390px: a row shows ticker, P&L% and R with a detail chevron; expanding shows
 every other column labelled. Confirm v80's pinned identity column is still
@@ -232,7 +232,7 @@ pinned and the sort select still lists only inline columns. Check on a real
 phone if one is to hand — spec §12 flags this as the change most likely to feel
 wrong on contact.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/trades/trades.columns.ts frontend/src/app/workspaces/trades/trades.columns.spec.ts
@@ -257,7 +257,7 @@ declares the order instead, summary-first at every width.
 - Consumes: `PanelGrid.order` (B6).
 - Produces: `DASHBOARD_PANEL_ORDER`, exported for E1.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 describe('Dashboard panel order', () => {
@@ -279,12 +279,12 @@ describe('Dashboard panel order', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/dashboard/dashboard.spec.ts`
 Expected: FAIL — `DASHBOARD_PANEL_ORDER` undefined, and `720` still present.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```ts
 /**
@@ -306,17 +306,17 @@ Delete lines 527–534 entirely. Wrap the panels in
 `<sb-panel-grid [order]="DASHBOARD_PANEL_ORDER">` and give each panel a
 `data-panel-id`.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/dashboard/dashboard.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually — mandatory**
+- [x] **Step 5: Verify visually — mandatory**
 
 At 390px: Trading Performance is the first panel; the portfolio figure is
 visible without scrolling. At 768 and 1024: order unchanged from before.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/dashboard/dashboard.ts frontend/src/app/workspaces/dashboard/dashboard.spec.ts
@@ -348,7 +348,7 @@ to fend for themselves below it:
 - Produces: `DASHBOARD_COLUMNS` with floors; `sb-tab-bar` renders counts at
   every width; `sb-data-table` renders one pager below `md`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `dashboard.spec.ts`:
 
@@ -377,12 +377,12 @@ it('keeps the count visible when the tab bar goes icon-only', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `cd frontend && npm test -- --include src/app/ui/layout.spec.ts`
 Expected: FAIL — icon-only tabs render no text.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `layout.ts`, in the icon-only block at roughly line 154, stop hiding the
 count. Keep hiding the word:
@@ -410,7 +410,7 @@ In `dashboard.ts`, lift the ten Open Positions columns into an **exported**
 add `inlineFrom`: `ticker`, `pnl`, `r` at `'xs'`; `now`, `held` at `'sm'`;
 `id`, `status`, `confidence`, `plan`, `opened` at `'md'`.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `cd frontend && npm test -- --include src/app/ui/layout.spec.ts`
 Run: `cd frontend && npm test -- --include src/app/workspaces/dashboard/dashboard.spec.ts`
@@ -418,13 +418,13 @@ Run: `cd frontend && npm test -- --include src/app/ui/data-table/data-table.spec
 Expected: PASS for all three. The data-table run is the regression check —
 v80's phone-mode tests must still pass.
 
-- [ ] **Step 5: Verify visually — mandatory**
+- [x] **Step 5: Verify visually — mandatory**
 
 At 390px: tabs read as icon + number; one pager below the table; a row shows
 ticker, P&L% and R with a detail chevron. At 768: two-column KPI grid from A5
 still correct, one pager. At 1024: two pagers, all ten columns.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/dashboard/dashboard.ts frontend/src/app/ui/data-table/data-table.ts frontend/src/app/ui/layout.ts frontend/src/app/workspaces/dashboard/dashboard.spec.ts frontend/src/app/ui/layout.spec.ts
@@ -447,7 +447,7 @@ and repeat `N=12 · thin sample` five times.
 - Consumes: `Panel.inlineFrom`, `Panel.digest`, `Panel.problem` (B7, B8).
 - Produces: `calendarDigest()` — one line standing in for the six tiles.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 describe('Calendar stat digest', () => {
@@ -469,12 +469,12 @@ describe('Calendar stat digest', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/calendar/calendar.spec.ts`
 Expected: FAIL — neither member exists.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```ts
   /** The six tiles in one line — v95 C5. Net, count, win rate: the three a
@@ -496,18 +496,18 @@ Expected: FAIL — neither member exists.
 Wrap the six tiles in one `<sb-panel inlineFrom="md" [digest]="calendarDigest()"
 [problem]="calendarProblem()">`.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/calendar/calendar.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually — mandatory**
+- [x] **Step 5: Verify visually — mandatory**
 
 At 390px with a thin sample: the tiles stay expanded and the warning is
 visible (guard 2 fires). With an adequate sample: one digest line, and the
 month grid is reachable in roughly one screen instead of four.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/calendar/calendar.ts frontend/src/app/workspaces/calendar/calendar.spec.ts
@@ -531,7 +531,7 @@ already solved this in the same repo; copy its shape.
 - Consumes: nothing new.
 - Produces: an `.agenda` list rendering only days with trades, below `sm`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 it('renders an agenda, not a 7-column grid, below sm', () => {
@@ -560,12 +560,12 @@ it('keeps the grid at sm and above', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/calendar/calendar.spec.ts`
 Expected: FAIL — `.agenda` does not exist.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```html
 @if (viewport() === 'xs') {
@@ -599,17 +599,17 @@ Expected: FAIL — `.agenda` does not exist.
     .agenda-count { flex: 0 0 auto; color: var(--text-faint); font-size: var(--text-chip); }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/calendar/calendar.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually — mandatory**
+- [x] **Step 5: Verify visually — mandatory**
 
 At 390px: an agenda of traded days, value and count clearly separate. At 768
 and 1024: the month grid, unchanged.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/calendar/calendar.ts frontend/src/app/workspaces/calendar/calendar.spec.ts
@@ -635,7 +635,7 @@ specifically because a narrow Tape toggle sits before it. Do not put a floor on
 `symbol`; B2's exemption would ignore it anyway, and declaring one would be a
 lie in the source.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 describe('Watchlist priorities', () => {
@@ -658,29 +658,29 @@ describe('Watchlist priorities', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/watchlist/watchlist.spec.ts`
 Expected: FAIL — no floors declared.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Add `inlineFrom` to the watchlist columns: `last` and `change` at `'xs'`;
 the tape toggle at `'sm'`; everything else at `'md'`. Leave `symbol`
 undeclared, with a comment saying why. Wrap the search box and filters in
 `<sb-toolbar>` with `WATCHLIST_CONTROLS`.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/watchlist/watchlist.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Verify visually — mandatory**
+- [x] **Step 5: Verify visually — mandatory**
 
 At 390 / 768 / 1024. Confirm `symbol` stays pinned at every width and the
 `.box` search field still reaches its 420px max without overflowing.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/watchlist/watchlist.ts frontend/src/app/workspaces/watchlist/watchlist.spec.ts
