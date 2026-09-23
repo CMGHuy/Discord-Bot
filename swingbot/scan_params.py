@@ -44,6 +44,10 @@ class ScanParams:
     volume_profile_nodes_enabled: bool
     level_lifecycle_stops_enabled: bool
     data_driven_stops_enabled: bool
+    adaptive_runner_trail_enabled: bool
+    tighten_trigger_r: float
+    tighten_atr_mult: float
+    stall_exit_enabled: bool
     regime_gates_enabled: bool
     pyramiding_enabled: bool
     plan_engine_v2: bool
@@ -93,6 +97,10 @@ class ScanParams:
             volume_profile_nodes_enabled=config.VOLUME_PROFILE_NODES_ENABLED,
             level_lifecycle_stops_enabled=config.LEVEL_LIFECYCLE_STOPS_ENABLED,
             data_driven_stops_enabled=config.DATA_DRIVEN_STOPS_ENABLED,
+            adaptive_runner_trail_enabled=config.ADAPTIVE_RUNNER_TRAIL_ENABLED,
+            tighten_trigger_r=config.TIGHTEN_TRIGGER_R,
+            tighten_atr_mult=config.TIGHTEN_ATR_MULT,
+            stall_exit_enabled=config.STALL_EXIT_ENABLED,
             regime_gates_enabled=config.REGIME_GATES_ENABLED,
             pyramiding_enabled=config.PYRAMIDING_ENABLED,
             plan_engine_v2=config.PLAN_ENGINE_V2,
