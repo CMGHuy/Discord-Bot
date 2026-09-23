@@ -46,7 +46,21 @@ def mde_expectancy_r(population, *, target_n: int, power: float = 0.80,
     `alpha`, given `target_n` closed trades per arm and the clustering
     `population` exhibits. Same z-score/design-effect math as
     acceptance.mde_win_rate, with the sample variance of `r_multiple`
-    standing in for the binomial variance term."""
+    standing in for the binomial variance term.
+
+    KNOWN LIMITATION (flagged, not fixed -- see docs/claude/backtest-
+    methodology.md's "Harvest acceptance gate" section): this formula is
+    an UNPAIRED-design MDE -- sqrt(2*var(r)/n_eff), appropriate for two
+    independent populations. Both H1 and H2 (v92) are paired, exit-only
+    designs (the same entries replayed under two exit rules), for which
+    the relevant variance is the variance of the per-trade CHANGE in R,
+    not the variance of R itself -- typically far smaller than what this
+    formula assumes, so the MDE it reports is likely overstated for that
+    design. This is a defect in the spec's own Stage 0 instruction (v92
+    §3), not an implementation bug, and is deliberately NOT being changed
+    here. A future harvest spec relying on Stage 0 to rule out small
+    effects should first derive a paired variant (variance of the
+    per-trade R delta) before citing this function's output as a bound."""
     closed = [t for t in population if t.outcome in CLOSED and t.r_multiple is not None]
     if not closed or target_n <= 0:
         return None
@@ -70,7 +84,12 @@ def _clause_expectancy_gain(baseline, component, n_resamples, seed) -> ClauseRes
     if res.point is None or res.p_greater_than_zero is None:
         return ClauseResult("expectancy_gain", "FAIL",
                             "no closed trades in one arm", None, 0.0)
-    ok = res.point > 0.0 and res.p_greater_than_zero < ALPHA
+    # BOTH conditions of the pre-registration, not just p: res.lo is the
+    # bootstrap's 2.5th percentile, so lo > 0 implies p < 0.025 -- but the
+    # inverse doesn't hold. Checking p alone would silently accept a draw
+    # with 0.025 <= p < 0.05 whose lower tail still crosses zero.
+    ok = (res.point > 0.0 and res.lo is not None and res.lo > 0.0
+          and res.p_greater_than_zero < ALPHA)
     return ClauseResult(
         "expectancy_gain", "PASS" if ok else "FAIL",
         f"dExpR {res.point:+.4f}R [{res.lo:+.4f},{res.hi:+.4f}] "
@@ -78,17 +97,36 @@ def _clause_expectancy_gain(baseline, component, n_resamples, seed) -> ClauseRes
 
 
 def _clause_win_rate_floor(baseline, component, n_resamples, seed, *,
-                          structurally_immune: bool = False) -> ClauseResult:
+                          structurally_immune: bool = False,
+                          split: dict | None = None) -> ClauseResult:
     """The floor clause: standardised WR may not fall by more than
     WIN_RATE_FLOOR_PP. A mechanism that only touches behaviour after the
     win/loss decision (e.g. the runner leg, post-TP1) cannot move WR at
     all -- pass structurally_immune=True to report that fact instead of
-    bootstrapping a quantity with zero variance."""
+    bootstrapping a quantity with zero variance.
+
+    The immunity claim is verified, not trusted blindly: with
+    `one_at_a_time=True` in the backtest harness, a runner-leg exit that
+    changes timing COULD change which later entries fire for the same
+    ticker, so 'this hypothesis is exit-only' does not by itself guarantee
+    'WR cannot move'. `population_split` (reused from `evaluate_harvest`
+    when the caller already computed it, to avoid doing it twice) must
+    show no added, removed or changed trades before the claim is honoured.
+    If the populations differ despite `structurally_immune=True`, this
+    falls through to a real bootstrap instead of reporting SKIPPED on
+    a false premise."""
     if structurally_immune:
-        return ClauseResult("win_rate_floor", "PASS",
-                            "mechanism acts only after the win/loss decision "
-                            "(post-TP1) -- win rate cannot move by construction",
-                            0.0, WIN_RATE_FLOOR_PP)
+        if split is None:
+            split = population_split(baseline, component)
+        immunity_confirmed = not split["added"] and not split["removed"] and not split["changed"]
+        if immunity_confirmed:
+            return ClauseResult("win_rate_floor", "SKIPPED",
+                                "mechanism acts only after the win/loss decision "
+                                "(post-TP1) -- win rate cannot move by construction",
+                                0.0, WIN_RATE_FLOOR_PP)
+        # Claimed immunity does not hold: the two arms' trade populations
+        # actually differ (added/removed/changed), so fall through and
+        # bootstrap for real rather than trusting the claim.
     res = bootstrap_delta(baseline, component, delta_standardised_win_rate,
                           n_resamples=n_resamples, seed=seed)
     if res.point is None or res.lo is None:
@@ -121,7 +159,8 @@ def evaluate_harvest(baseline, component, *, stage: str,
     clauses = (
         _clause_expectancy_gain(baseline, component, n_resamples, seed),
         _clause_win_rate_floor(baseline, component, n_resamples, seed,
-                              structurally_immune=structurally_immune_to_wr),
+                              structurally_immune=structurally_immune_to_wr,
+                              split=split),
         _clause_volume(baseline, component),
         _clause_permutation(stage, permutation_p),
     )

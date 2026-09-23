@@ -254,6 +254,9 @@ CLOSED_PREREGISTRATION_KNOBS = frozenset({
     "STRATEGY_GATES",
     "VALIDATED",
     "STALL_EXIT_ENABLED",
+    "ADAPTIVE_RUNNER_TRAIL_ENABLED",
+    "TIGHTEN_TRIGGER_R",
+    "TIGHTEN_ATR_MULT",
 })
 _BACKTEST_SCRIPT_RE = re.compile(r"(?:tune_strategy|run_backtest_range)\.py")
 

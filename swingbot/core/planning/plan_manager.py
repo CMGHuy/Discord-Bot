@@ -560,6 +560,7 @@ class PlanManager:
         if entered_at is None:
             return None
         return self.bar_count_fn(plan.ticker, entered_at)
+
     def _step_active(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
         is_bull = plan.direction == "bullish"
         sign = 1 if is_bull else -1

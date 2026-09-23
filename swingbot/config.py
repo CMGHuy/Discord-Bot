@@ -918,7 +918,13 @@ FIELDS: list[Field] = [
                "switches from the strategy's base value to TIGHTEN_ATR_MULT "
                "(never looser). Cannot move win rate -- TP1 already decided "
                "win/loss before the runner leg starts (v92 Hypothesis 1). Off "
-               "until its TRAIN/VALIDATION shots judge it."),
+               "until its TRAIN/VALIDATION shots judge it. CLOSED on TRAIN, no "
+               "lift (docs/superpowers/results/2026-09-16-v92-adaptive-trail-"
+               "train.md) -- stays default false. Wired into the backtest walk "
+               "only (exit_sim.py's _effective_trail_mult); plan_manager.py's "
+               "live poll path still calls chandelier_stop with the plan's raw "
+               "trail_atr_mult, so flipping this true would diverge live from "
+               "backtest -- do not flip it without wiring the live path too."),
     Field("TIGHTEN_TRIGGER_R", "TIGHTEN_TRIGGER_R", "Exit quality",
           "Runner R that triggers a tighter trail",
           type="float", default="2.0", min=0.5, max=5.0, step=0.25,

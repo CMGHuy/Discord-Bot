@@ -3,8 +3,11 @@
 Plan v92 Task 14. Single TRAIN-window flag-off-vs-flag-on comparison for
 Hypothesis 2 (`STALL_EXIT_ENABLED`) — no grid, since `stall_exit_day` is
 journal-derived (`optimal_time_stop_days`), not a tuned constant
-(`scripts/backtest/measure_stall_exit.py`). Raw per-ticker log archived at
-`docs/superpowers/results/2026-09-23-measure_stall_exit.log`.
+(`scripts/backtest/measure_stall_exit.py`). Raw per-ticker log was written
+to `docs/superpowers/results/2026-09-23-measure_stall_exit.log` during this
+run for cross-checking at the time; not committed -- `.gitignore` excludes
+`docs/superpowers/results/*.log`, so it does not persist past this
+worktree.
 
 ## Setup
 
@@ -58,8 +61,9 @@ plan_params._resolve_stall_exit_day(strategy)`), inside
 wired. `backtest.py` never imports `builders.py` or calls
 `build_strategy_plan`/`_resolve_stall_exit_day` anywhere (a repo-wide grep
 of `swingbot/core/backtesting/` confirms zero hits for either name). **This
-is the exact same architecture gap already on record one row above in
-`docs/claude/backtest-methodology.md` for `DATA_DRIVEN_STOPS_ENABLED`**:
+is the exact same architecture gap already recorded elsewhere in
+`docs/claude/backtest-methodology.md`'s closed-pre-registrations table, for
+`DATA_DRIVEN_STOPS_ENABLED`**:
 *"it reached `build_strategy_plan` but the backtest sized through
 `_trade_plan_at`, so it was unmeasurable by construction"* — same trap,
 different flag. Because of this gap alone, `plan.stall_exit_day` is
@@ -101,6 +105,44 @@ what this script, or any TRAIN/VALIDATION measurement, exercises.
 This was surfaced to the human partner as a premise-level problem (not a
 ruling to make unilaterally), who decided on 2026-09-23 to close the
 hypothesis here rather than fix either gap as part of this plan.
+
+**Win→non-win outcome-flip disclosure (spec §3):** not measured. The
+baseline and component arms are byte-identical (Gap 1 above), so there are
+no differing trades between them to compare for a win→non-win flip in
+either direction.
+
+## Caveats -- latent semantic gaps while the flag is off
+
+Not gating (the hypothesis is already closed above as unmeasurable by
+construction), but recorded honestly for whoever next reads this flag's
+spec, since none of these are reachable while `STALL_EXIT_ENABLED` and the
+harness gap both stay as they are today:
+
+- **"Has not yet reached +0.5R" is implemented as a point-in-time check, not
+  a high-water-mark check.** The spec's plainer reading ("has not yet
+  reached +0.5R") would naturally mean "never reached +0.5R at any point
+  since entry." The actual implementation (both `exit_sim.py`'s
+  `_scale_out_exit_walk` and `plan_manager.py`'s live-poll block) checks
+  `current_r < 0.5` at the moment the stall check fires -- a trade that
+  touched +0.8R and slipped back to +0.3R by the check bar would still be
+  exited by the current code. This is a real semantic gap from the spec's
+  plainer reading, not an implementation bug per se, but worth knowing
+  before this mechanism is ever reopened.
+- **Live and backtest can disagree by up to one bar/one intraday move.**
+  The live poll path (`plan_manager.py`) evaluates the stall condition
+  against the current intraday price the instant `days_held >
+  stall_exit_day` becomes true; the backtest walk (`exit_sim.py`) decides
+  at each bar's CLOSE. A trade could stall-exit on different information
+  in the two paths for the same calendar day.
+- **Only strategy-source plans ever get `stall_exit_day` populated.**
+  `builders.py:210`'s `build_strategy_plan` is the only writer of
+  `plan.stall_exit_day` (via `_resolve_stall_exit_day`);
+  `build_confluence_plan` never sets it, so it stays `None` for every
+  confluence-sourced plan regardless of the flag. Per this repo's own live-
+  book numbers (`prod-live-book-2026-09-10`), roughly 80% of the live book
+  is confluence-sourced -- so even if both gaps above were fixed and this
+  hypothesis reopened and passed, the mechanism would only ever apply to a
+  minority of live plans as currently wired.
 
 ## Verdict
 
