@@ -173,8 +173,11 @@ def _scale_out_exit_walk(
     df, entry_index: int, entry_price: float, plan: TradePlanV2, max_holding_days: int,
 ) -> ExitResult:
     """Hybrid scale-out walk (spec Sec5). Phase 1 (pre-TP1) is byte-identical
-    to _single_leg_exit_walk; a stop/scratch/timeout before TP1 returns the
-    same single full-fraction leg. TP1 touch banks tp1_fraction at tp1 and
+    to _single_leg_exit_walk when the stall-exit flag is off; a stop/scratch/
+    timeout before TP1 returns the same single full-fraction leg. (Task 12:
+    with STALL_EXIT_ENABLED on and plan.stall_exit_day set, a plan still open
+    and below +0.5R past that day closes early instead -- stop/target checks
+    still win any same-bar tie.) TP1 touch banks tp1_fraction at tp1 and
     hands the rest to the runner: stop starts at the v39 runner floor
     (entry + 2/3 x (tp1 - entry), see runner_floor) and ratchets
     toward profit via a chandelier trail (Task 26) as the runner rides, with
@@ -225,6 +228,9 @@ def _scale_out_exit_walk(
         if hit_target:
             tp1_index = j
             break
+        # Conservative ordering: stop/target above win any tie with the stall
+        # check -- a real stop breach or TP1 touch always beats a stall exit
+        # on the same bar.
         if (config.STALL_EXIT_ENABLED and plan.stall_exit_day is not None
                 and (j - entry_index) > plan.stall_exit_day):
             current_r = (float(close[j]) - entry_price) * sign / risk

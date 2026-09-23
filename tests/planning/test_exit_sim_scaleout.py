@@ -464,8 +464,13 @@ def test_stall_exit_does_not_fire_once_half_r_reached(monkeypatch):
 
 def test_stop_loss_still_wins_over_stall_exit_on_same_bar(monkeypatch):
     monkeypatch.setattr(config, "STALL_EXIT_ENABLED", True)
+    # stall_exit_day=1: bar 2 is the first bar strictly past the threshold
+    # (2 - 0 > 1), and that SAME bar's close (89) breaches the stop (90) --
+    # a genuine same-bar collision, not just a coincidence of timing. Bar 1
+    # is flat (100) so neither condition is live there; the tie is only at
+    # bar 2.
     plan = _plan(direction="bullish", stop_loss=90.0, tp1=120.0, stall_exit_day=1)
-    df = make_ohlcv([100.0, 89.0])  # stop breached exactly when the stall day passes
+    df = make_ohlcv([100.0, 100.0, 89.0])
     result = _scale_out_exit_walk(df, entry_index=0, entry_price=100.0, plan=plan,
                                   max_holding_days=10)
     assert result.legs[0]["reason"] == "stop"
