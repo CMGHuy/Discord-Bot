@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   HttpTestingController,
@@ -228,5 +231,35 @@ describe('Versions states', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.textContent).toContain('No version history');
     expect(el.querySelector('.skeleton')).toBeNull();
+  });
+});
+
+/* -- v95 D5 -- lane rail width and the strip's scroll affordance ---------- */
+
+describe('Versions lane rail', () => {
+  const src = readFileSync(join(process.cwd(), 'src/app/workspaces/versions/versions.ts'), 'utf8');
+
+  it('expresses the rail width once', () => {
+    // 4.5rem appeared in five rules; changing one and missing the others
+    // slides the brackets, legend or ticks off the lanes. Only the --lane-w
+    // declaration itself may still spell out the literal value -- every
+    // consumer reads the token.
+    expect(src).toMatch(/--lane-w:\s*4\.5rem/);
+    const consumers = src.match(
+      /(?:\.lane-name|\.bracket-row|\.overlay-row|\.legend|\.ticks)\s*\{[^}]*\}/gs,
+    ) ?? [];
+    expect(consumers.length).toBeGreaterThan(0);
+    for (const rule of consumers) {
+      expect(rule).not.toMatch(/4\.5rem/);
+    }
+  });
+
+  it('narrows the rail below sm rather than clipping the track', () => {
+    expect(src).toMatch(/@media\s*\(\s*max-width:\s*639px\s*\)[\s\S]*--lane-w:/);
+  });
+
+  it('gives the strip a scroll affordance instead of hiding overflow', () => {
+    const strip = src.match(/\.strip\s*\{[^}]*\}/s)?.[0] ?? '';
+    expect(strip).not.toMatch(/overflow:\s*hidden/);
   });
 });

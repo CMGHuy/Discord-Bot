@@ -220,6 +220,13 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
        between the headline/strip/legend/stream sections below shrinks. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
 
+    /* v95 D5: the rail width was 4.5rem written into five rules, inside a
+       strip with overflow: hidden -- so at 390px the timeline was cut off
+       with nothing on screen saying so. One custom property, a narrower
+       rail below sm, and a real scroller. */
+    :host { --lane-w: 4.5rem; }
+    @media (max-width: 639px) { :host { --lane-w: 3rem; } }
+
     .stale code, .muted code { font-family: var(--font-mono); font-size: var(--text-micro); }
 
     /* .muted itself is forbidden here (the gate blocks redefining the
@@ -257,9 +264,9 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .telemetry-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-8); margin-top: var(--space-8); }
 
     .strip { display: flex; flex-direction: column; gap: var(--space-6);
-              position: relative; overflow: hidden; }
+              position: relative; overflow-x: auto; }
     .lane { display: flex; align-items: center; gap: var(--space-8); }
-    .lane-name { width: 4.5rem; flex: none; font-family: var(--font-mono);
+    .lane-name { width: var(--lane-w); flex: none; font-family: var(--font-mono);
                  font-size: var(--register-label); color: var(--text-muted); }
     .track { position: relative; flex: 1; height: 15px; min-width: 0; }
     /* The 2px surface-colour ring is the separator between two segments that
@@ -272,7 +279,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .segment.current { background: var(--accent); }
     .absent { position: absolute; top: 0; height: 100%;
               border: 1px dashed var(--border-strong); border-radius: 2px; }
-    .bracket-row { position: relative; height: 12px; margin-left: calc(4.5rem + var(--space-8)); }
+    .bracket-row { position: relative; height: 12px; margin-left: calc(var(--lane-w) + var(--space-8)); }
     .bracket { position: absolute; top: 0; height: 100%; border: 1px solid var(--text-faint);
                border-radius: 3px; background: var(--surface-raised); }
 
@@ -281,7 +288,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
        exactly the track's own width, the same trick .bracket-row already
        relies on for its own left/width percentages. */
     .overlay-row { position: absolute; top: 0; bottom: 0;
-                    left: calc(4.5rem + var(--space-8)); right: 0;
+                    left: calc(var(--lane-w) + var(--space-8)); right: 0;
                     pointer-events: none; }
     /* Two real rectangles flanking the hovered segment's own left/width,
        clipped to .strip's bounds by its overflow: hidden -- real geometry
@@ -313,7 +320,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
       display: flex; flex-wrap: wrap; gap: var(--register-pad);
       margin: 0; padding: 0; list-style: none;
       font-size: var(--register-label); color: var(--text-muted);
-      margin-left: calc(4.5rem + var(--space-8));
+      margin-left: calc(var(--lane-w) + var(--space-8));
     }
     .legend span { display: flex; align-items: center; gap: var(--space-6); }
     .sw { display: inline-block; width: .8rem; height: .5rem; border-radius: 2px; }
@@ -324,7 +331,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 
     .ticks {
       display: flex; justify-content: space-between;
-      margin-left: calc(4.5rem + var(--space-8));
+      margin-left: calc(var(--lane-w) + var(--space-8));
       font-family: var(--font-mono); font-size: var(--register-label); color: var(--text-faint);
     }
     .ticks .now { color: var(--text-muted); }
