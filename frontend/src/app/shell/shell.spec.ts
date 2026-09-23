@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import {
@@ -267,8 +270,10 @@ describe('shell navigation', () => {
       .join('\n');
     // Both must be hidden under a max-width query -- the order in the spec is
     // subtitle first, then clock, so the subtitle's breakpoint is the wider one.
-    expect(rules).toMatch(/max-width:\s*900px[\s\S]*\.page-subtitle[\s\S]*display:\s*none/);
-    expect(rules).toMatch(/max-width:\s*720px[\s\S]*\.clock[\s\S]*display:\s*none/);
+    // v95 A2 retriggered these onto the declared breakpoints: the subtitle
+    // goes below md (1023), the clock below sm (639).
+    expect(rules).toMatch(/max-width:\s*1023px[\s\S]*\.page-subtitle[\s\S]*display:\s*none/);
+    expect(rules).toMatch(/max-width:\s*639px[\s\S]*\.clock[\s\S]*display:\s*none/);
   });
 
   it('renders the brand mark beside the wordmark', () => {
@@ -315,5 +320,20 @@ describe('shell navigation', () => {
     f.detectChanges();
     expect(el.querySelector('.brand sb-icon')).not.toBeNull();
     expect(el.querySelector('.brand .word')).toBeNull();
+  });
+});
+
+describe('shell.css breakpoints', () => {
+  const css = readFileSync(join(process.cwd(), 'src/app/shell/shell.css'), 'utf8');
+
+  it('uses only declared breakpoint values in width queries', () => {
+    // A media query at 900px or 720px puts the stylesheet and
+    // ViewportService on different scales -- see breakpoints.ts.
+    const allowed = new Set(['639', '1023', '1439', '1919', '640', '1024', '1440', '1920']);
+    const widths = [...css.matchAll(/\(\s*(?:max|min)-width:\s*(\d+)px\s*\)/g)]
+      .map((m) => m[1]);
+
+    expect(widths.length).toBeGreaterThan(0);
+    expect(widths.filter((w) => !allowed.has(w))).toEqual([]);
   });
 });

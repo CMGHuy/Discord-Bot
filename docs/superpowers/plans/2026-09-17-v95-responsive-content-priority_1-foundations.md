@@ -208,7 +208,7 @@ the wide tape now survive down to 640px instead of disappearing at 721px.
   see `breakpoints.ts`).
 - Produces: no API change.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `frontend/src/app/shell/shell.spec.ts`:
 
@@ -232,12 +232,12 @@ describe('shell.css breakpoints', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/shell/shell.spec.ts`
 Expected: FAIL — received `['900', '720']`.
 
-- [ ] **Step 3: Apply the change**
+- [x] **Step 3: Apply the change**
 
 In `frontend/src/app/shell/shell.css`, replace lines 368–382 with:
 
@@ -264,7 +264,7 @@ In `frontend/src/app/shell/shell.css`, replace lines 368–382 with:
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/shell/shell.spec.ts`
 Expected: PASS.
@@ -276,7 +276,7 @@ Load the shell at 390 / 768 / 1024 via Chrome DevTools MCP (`resize_page` or
 present at 768, hidden at 390. Confirm the top bar is still one row at all
 three.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/shell/shell.css frontend/src/app/shell/shell.spec.ts
