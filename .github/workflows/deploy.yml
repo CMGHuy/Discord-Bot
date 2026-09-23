@@ -13,7 +13,7 @@ jobs:
   #
   # This used to be one `backend-test` job running the whole suite (`testrun.py
   # full`) on a single runner's 4 xdist workers. It's now 5 jobs, each a
-  # `full` shard (`testrun.py full --skip-lint-gate <paths>`) on its OWN
+  # `full` shard (`testrun.py full <paths> --skip-lint-gate`) on its OWN
   # 4-core runner, so a push actually gets ~5x the CPU working the suite in
   # parallel instead of contending for one runner's 4 cores. `container-
   # healthcheck` waits on the SLOWEST shard, not their sum.
@@ -78,7 +78,7 @@ jobs:
         run: python -m compileall -q swingbot bot.py admin_ui.py scripts tests
 
       - name: Test suite (charts)
-        run: python scripts/dev/testrun.py full --skip-lint-gate tests/charts/
+        run: python scripts/dev/testrun.py full tests/charts/ --skip-lint-gate
 
       - name: Upload pytest log on failure
         if: failure()
@@ -114,8 +114,9 @@ jobs:
 
       - name: Test suite (scan/plan pipeline)
         run: |
-          python scripts/dev/testrun.py full --skip-lint-gate \
-            tests/marketdata/ tests/market/ tests/scanning/ tests/planning/
+          python scripts/dev/testrun.py full \
+            tests/marketdata/ tests/market/ tests/scanning/ tests/planning/ \
+            --skip-lint-gate
 
       - name: Upload pytest log on failure
         if: failure()
@@ -151,8 +152,9 @@ jobs:
 
       - name: Test suite (backtest/edge/analytics/tracking)
         run: |
-          python scripts/dev/testrun.py full --skip-lint-gate \
-            tests/backtesting/ tests/edge/ tests/analytics/ tests/tracking/
+          python scripts/dev/testrun.py full \
+            tests/backtesting/ tests/edge/ tests/analytics/ tests/tracking/ \
+            --skip-lint-gate
 
       - name: Upload pytest log on failure
         if: failure()
@@ -188,8 +190,9 @@ jobs:
 
       - name: Test suite (admin/presentation/commands/infra)
         run: |
-          python scripts/dev/testrun.py full --skip-lint-gate \
-            tests/admin/ tests/presentation/ tests/commands/ tests/infra/
+          python scripts/dev/testrun.py full \
+            tests/admin/ tests/presentation/ tests/commands/ tests/infra/ \
+            --skip-lint-gate
 
       - name: Upload pytest log on failure
         if: failure()

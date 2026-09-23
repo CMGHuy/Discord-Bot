@@ -244,7 +244,15 @@ def run(pytest_args: list[str]) -> tuple[dict[str, int], list[str], float, int]:
     return counts, failed, time.time() - started, rc
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """Split out from main() so tests/dev/test_testrun_ci_invocations.py can
+    feed it every `testrun.py` command line deploy.yml actually runs --
+    argparse's positional/optional interleaving is stricter than it looks
+    (a `--flag` sandwiched between `profile` and a `nargs='*'` target is
+    silently NOT the same as one after the target list; CI shipped broken
+    2026-09-23 on exactly that), so the only reliable check is parsing the
+    real strings, not hand-picked ones.
+    """
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("profile", choices=["fast", "full", "file", "lf"])
     ap.add_argument("target", nargs="*",
@@ -255,7 +263,11 @@ def main() -> int:
     ap.add_argument("--skip-lint-gate", action="store_true",
                     help="skip the whole-repo pyflakes undefined-name gate "
                          "(for a `full` shard where another shard already runs it)")
-    args = ap.parse_args()
+    return ap
+
+
+def main() -> int:
+    args = build_parser().parse_args()
 
     profile = args.profile
     if profile == "fast" and not args.no_escalate:
