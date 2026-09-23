@@ -473,7 +473,7 @@ component nothing uses yet and breaks nothing.
   - `.toolbar-sheet-button` carrying `[attr.aria-expanded]`, and
     `.toolbar-sheet` containing the demoted controls' projected content.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/app/ui/toolbar.spec.ts`:
 
@@ -544,12 +544,12 @@ describe('sb-toolbar', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/toolbar.spec.ts`
 Expected: FAIL — `Failed to resolve import "./toolbar"`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `frontend/src/app/ui/toolbar.ts`:
 
@@ -663,12 +663,12 @@ export class Toolbar {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/toolbar.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/toolbar.ts frontend/src/app/ui/toolbar.spec.ts
