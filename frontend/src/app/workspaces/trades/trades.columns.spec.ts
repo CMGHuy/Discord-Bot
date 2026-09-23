@@ -172,11 +172,18 @@ describe('trade column sets', () => {
   });
 });
 
-/* -- v95 C2 -- column floors ----------------------------------------------- */
+/* -- v95 C2 -- column floors, amended 2026-09-23 --------------------------- */
+
+// now/plan/held/confidence_level are the one exception: pulled back inline at
+// every viewport by explicit request, to match desktop's column set on phone
+// and tablet rather than stay demoted below sm/md. See the amendment note on
+// tradeColumns() in trades.columns.ts.
+const ALWAYS_INLINE = ['now', 'plan', 'held', 'confidence_level'];
 
 describe('Trades column floors', () => {
-  it('declares a floor on every column', () => {
-    expect(tradeColumns().filter((c) => c.inlineFrom === undefined)).toEqual([]);
+  it('declares a floor on every column except the always-inline set', () => {
+    const noFloor = tradeColumns().filter((c) => c.inlineFrom === undefined).map((c) => c.key);
+    expect(noFloor.sort()).toEqual([...ALWAYS_INLINE].sort());
   });
 
   it('keeps identity and outcome inline on a phone', () => {
@@ -190,9 +197,17 @@ describe('Trades column floors', () => {
       .toBe(false);
   });
 
-  it('leaves at most four columns inline at xs', () => {
-    // Five 60px columns plus a detail toggle does not fit 390px.
-    expect(tradeColumns().filter((c) => isInline(c.inlineFrom, 'xs')).length)
-      .toBeLessThanOrEqual(4);
+  it('renders now/plan/held/confidence_level inline even at xs, by explicit choice', () => {
+    for (const key of ALWAYS_INLINE) {
+      expect(isInline(tradeColumns().find((c) => c.key === key)!.inlineFrom, 'xs')).toBe(true);
+    }
+  });
+
+  it('inlines eight columns at xs -- past the old 390px budget, by request', () => {
+    // Was capped at 4 (five 60px columns plus a detail toggle does not fit
+    // 390px). now/plan/held/confidence_level pushed that to 8; the table's
+    // `.scroller` (data-table.ts) is the accepted fallback below that width
+    // now, not a bug -- see the amendment note on tradeColumns().
+    expect(tradeColumns().filter((c) => isInline(c.inlineFrom, 'xs')).length).toBe(8);
   });
 });

@@ -84,17 +84,25 @@ export const DASHBOARD_TABLE_ID = 'dashboard';
  * (strategy, horizon, tier) are not clickable: the server does not sort by
  * them, and offering a control that 400s would be worse than not offering it.
  */
-/* Column floors — v95 C2.
+/* Column floors — v95 C2, amended 2026-09-23.
  *
- * Measured at 390px before this change: the visible four were #, STATUS,
- * TICKER and CONFIDENCE, with NOW, PLAN, P&L %, R, HELD and OPENED pushed off
- * the right edge behind a horizontal scroller. The columns a trader opens a
- * phone to check were exactly the hidden ones, while the status progress bar
- * took ~40% of the width.
+ * Measured at 390px before v95: the visible four were #, STATUS, TICKER and
+ * CONFIDENCE, with NOW, PLAN, P&L %, R, HELD and OPENED pushed off the right
+ * edge behind a horizontal scroller. The columns a trader opens a phone to
+ * check were exactly the hidden ones, while the status progress bar took
+ * ~40% of the width.
  *
- * So: identity and outcome inline, the progress bar demoted, everything the
- * picker adds beyond the default twelve demoted furthest. Demoted means one
- * tap into the row detail, never gone. */
+ * v95's fix: identity and outcome inline, the progress bar demoted,
+ * everything the picker adds beyond the default twelve demoted furthest.
+ * Demoted means one tap into the row detail, never gone.
+ *
+ * Amendment: NOW, PLAN, HELD and CONFIDENCE are back inline at every
+ * viewport, by explicit request, to match what desktop shows instead of
+ * staying demoted below `sm`/`md`. This reopens the 390px budget measured
+ * above — eight inline columns do not fit a phone row, so `.scroller`'s
+ * horizontal scroll (data-table.ts) is the accepted fallback on a phone now,
+ * not a bug. STATUS stays demoted; the progress bar's ~40% width is still
+ * why. */
 export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDef<TradeRow>[] {
   return [
     // Rendered by the workspace as a link to the detail view — the keyboard
@@ -102,9 +110,9 @@ export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDe
     { key: 'num', header: '#', width: '3rem', inlineFrom: 'xs' },
     { key: 'status', header: 'Status', sortable: true, inlineFrom: 'md' },
     { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, sortable: true, inlineFrom: 'xs' },
-    { key: 'now', header: 'Now', value: (row) => num(row.current_price), numeric: true, inlineFrom: 'sm' },
+    { key: 'now', header: 'Now', value: (row) => num(row.current_price), numeric: true },
     { key: 'pnl_pct', header: 'P&L %', numeric: true, sortable: true, inlineFrom: 'xs' },
-    { key: 'held', header: 'Held', value: (row) => held(row.closed_at ? row.held_hours : elapsedHours(row.opened_at, now())), numeric: true, sortable: true, inlineFrom: 'sm' },
+    { key: 'held', header: 'Held', value: (row) => held(row.closed_at ? row.held_hours : elapsedHours(row.opened_at, now())), numeric: true, sortable: true },
     { key: 'actions', header: '', width: '1px', inlineFrom: 'lg' },
 
     /* -- individually re-addable through the column picker ---------------- */
@@ -123,9 +131,9 @@ export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDe
     // Entry, target and stop in one cell (SR8). Not sortable: there is no
     // single field behind it, and `sort=plan` is a 400 from the collection
     // endpoint. The three keys remain as separate columns for the picker.
-    { key: 'plan', header: 'Plan', width: '12rem', inlineFrom: 'sm' },
+    { key: 'plan', header: 'Plan', width: '12rem' },
     { key: 'tier', header: 'Tier', inlineFrom: 'lg' },
-    { key: 'confidence_level', header: 'Confidence', inlineFrom: 'md' },
+    { key: 'confidence_level', header: 'Confidence' },
     { key: 'shares', header: 'Shares', value: (row) => num(row.shares, 0), numeric: true, inlineFrom: 'lg' },
     { key: 'position_value', header: 'Deployed', value: (row) => num(row.position_value), numeric: true, inlineFrom: 'lg' },
     {
