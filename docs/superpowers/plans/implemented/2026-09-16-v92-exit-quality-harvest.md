@@ -1,6 +1,18 @@
 Bump: bot patch
 Edge: harvest
 
+## Progress (closed 2026-09-23)
+
+**Closed with no lift; the code shipped inert on `main`.** Merged at `6732b7da`. The `[ ]` boxes below were never ticked and do not reflect the work; status is derived from the merge and its commits.
+
+- **Tasks 1-4 (harvest gate, `acceptance_harvest.py`):** done. This is the durable deliverable.
+- **Tasks 5-7 (H1 adaptive runner trail):** done. Full 9-cell TRAIN grid is a real measured null (best lower-95% bound -0.0131R vs Stage 0 MDE +0.2409R). `ADAPTIVE_RUNNER_TRAIL_ENABLED` ships `false`.
+- **Tasks 8-9 and 15-16 (walk-forward folds, VALIDATION shot):** deliberately not run. Both hypotheses closed on TRAIN; the VALIDATION shot is preserved unspent for each.
+- **Tasks 10-14 (H2 stall-exit):** code done, `STALL_EXIT_ENABLED` ships `false`. Unmeasurable by construction: `backtest.py` never sets `stall_exit_day`, and the journal has no `days_to_half_r`. Reopening needs both fixed.
+- **Task 17 (verification):** its findings were fixed in `03030929` and `fbf9d328`.
+- **Version:** no `VERSION.json` bump. Both flags default `false`, so nothing observable changes (`working-conventions.md`, "When NOT to bump"); the `Bump: bot patch` header above is superseded.
+- **Results and gate rows:** `docs/claude/backtest-methodology.md` (closed pre-registrations table).
+
 # Exit-quality harvest (adaptive trail + stall-exit) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
