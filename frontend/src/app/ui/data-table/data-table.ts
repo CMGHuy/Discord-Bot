@@ -458,12 +458,18 @@ export class DataTable<T> {
   });
 
   /**
-   * Cards instead of a table, below `sm` — spec v18 Decision 9.
+   * Phone mode below `sm` — v80 D4.
+   *
+   * NOT cards: v80 replaced card mode with a pinned identity column and a
+   * sort select, and removed `.card`/`.card-value` with it. The test
+   * `'keeps the table below the breakpoint -- no cards'` is that decision's
+   * record; v95 builds on it rather than reversing it (spec v95 §4.1, and
+   * §13 for the comparison that could revisit it).
    *
    * Driven by the viewport rather than by an input, so no call site has to
-   * remember to ask for it. `cardsAt` exists only so a test can force the
-   * mode without a layout engine: jsdom does not lay out, so asserting on
-   * widths there would be theatre.
+   * remember to ask for it. `cardsAt` keeps its name and type for the same
+   * reason it always had them: jsdom does not lay out, so forcing the mode is
+   * the only way a test can reach it.
    */
   private readonly viewportService = inject(ViewportService);
   readonly cardsAt = input<boolean | null>(null);

@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   HttpTestingController,
@@ -395,5 +398,24 @@ describe('Dashboard v85 close-all', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).not.toContain('Clear open');
     expect(text).not.toContain('Clear history');
+  });
+});
+
+describe('dead card-mode contract', () => {
+  const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8');
+
+  it('no longer reads variables nothing sets', () => {
+    // v80 D4 removed card mode and with it .card-value; --cell-wrap and
+    // --sep-wrap have been set by nothing since. Reading them made the
+    // widest cell on the page permanently nowrap behind a comment claiming
+    // it was handled.
+    const src = read('src/app/workspaces/dashboard/dashboard.ts');
+    expect(src).not.toMatch(/--cell-wrap/);
+    expect(src).not.toMatch(/--sep-wrap/);
+  });
+
+  it('data-table no longer cites the superseded v18 decision', () => {
+    expect(read('src/app/ui/data-table/data-table.ts'))
+      .not.toMatch(/Cards instead of a table/);
   });
 });

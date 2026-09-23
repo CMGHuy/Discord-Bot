@@ -595,7 +595,7 @@ output with an honest source.
 - Consumes: nothing.
 - Produces: `--cell-wrap` and `--sep-wrap` no longer appear in `frontend/src/`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `frontend/src/app/workspaces/dashboard/dashboard.spec.ts`:
 
@@ -623,12 +623,12 @@ describe('dead card-mode contract', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/dashboard/dashboard.spec.ts`
 Expected: FAIL on both cases.
 
-- [ ] **Step 3: Apply the change**
+- [x] **Step 3: Apply the change**
 
 In `dashboard.ts`, replace lines 511–523 with:
 
@@ -666,7 +666,7 @@ In `data-table.ts`, replace the comment at lines 460–467 with:
    */
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/workspaces/dashboard/dashboard.spec.ts`
 Expected: PASS.
@@ -674,7 +674,7 @@ Expected: PASS.
 Run: `cd frontend && npm test -- --include src/app/ui/data-table/data-table.spec.ts`
 Expected: PASS, unchanged — this task touched only a comment there.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/dashboard/dashboard.ts frontend/src/app/ui/data-table/data-table.ts frontend/src/app/workspaces/dashboard/dashboard.spec.ts

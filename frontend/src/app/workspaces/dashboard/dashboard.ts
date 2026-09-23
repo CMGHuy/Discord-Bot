@@ -508,19 +508,18 @@ import { MarketMovers } from './panels/market-movers';
     /* The live-to-target-to-stop P&L line -- same layout language as
        PlanCell's own entry → target / stop (font, separators, fixed
        target/stop colours), just in percent rather than price. */
-    /* --cell-wrap/--sep-wrap: DataTable's card-mode wrap contract (see its
-       .card-value block). Undefined in a table, so this stays nowrap; inside
-       a card it becomes normal. This is the widest cell on the page -- four
-       figures in two units, '+2.34% (+118.20 USD) → +8.00% - −3.00%' -- and
-       it measured 279px inside a 255px card at 375px, which put the whole
-       projected half of the line past the edge with body's overflow-x:hidden
-       swallowing it. */
+    /* The widest cell on the page -- four figures in two units,
+       '+2.34% (+118.20 USD) → +8.00% - −3.00%'. It measured 279px at 375px
+       and must not wrap: a wrapped plan line reads as two separate trades.
+       Below md the column demotes into the row expansion instead (v95 C4),
+       which is what keeps it off a phone rather than a wrap rule.
+       (v80 D4 removed card mode; the wrap hook it fed died with it.) */
     .pnl-plan {
       font-family: var(--font-mono);
       font-size: var(--text-table);
-      white-space: var(--cell-wrap, nowrap);
+      white-space: nowrap;
     }
-    .pnl-plan .sep { color: var(--text-faint); white-space: var(--sep-wrap, pre); }
+    .pnl-plan .sep { color: var(--text-faint); white-space: pre; }
     .pnl-plan .tp { color: var(--pos); }
     .pnl-plan .sl { color: var(--neg); }
 
