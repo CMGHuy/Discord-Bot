@@ -784,7 +784,7 @@ does with a hand-rolled `max-width: 720px` block in `dashboard.ts:527`.
   - Children are matched by their `data-panel-id` attribute and ordered with
     the CSS `order` property, so no DOM node moves.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
@@ -854,12 +854,12 @@ describe('sb-panel-grid ordering', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npm test -- --include src/app/ui/panel-grid.spec.ts`
 Expected: FAIL — `order` is not an input.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Rewrite `panel-grid.ts`, keeping the existing `track` input and styles intact
 and adding:
@@ -894,12 +894,12 @@ and adding:
   }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend && npm test -- --include src/app/ui/panel-grid.spec.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/panel-grid.ts frontend/src/app/ui/panel-grid.spec.ts
