@@ -9,8 +9,28 @@ N=246, WR 35.4%, ExpR +0.232 (`validation_registry.json`, `run_date:
 2026-09-10`). It fails on the `win_rate >= 50` badge clause alone. A
 `VALIDATED` badge moves it into the booked, top-plans population, so the lift
 is expectancy delivered to the operator, not a new metric. The short side is
-the widening that pairs with this tightening: `STRATEGY_GATES` currently
-suppresses every bearish Fibonacci signal on a stale pre-v31 justification.
+the widening that pairs with this tightening, but its baseline was already
+measured and failed (v93, below), so it only re-enters if a mechanism in
+Phase A turns it around.
+
+> ### CORRECTION 2026-09-24, while planning: two premises were wrong
+>
+> 1. **The short side was already re-measured under current arithmetic.**
+>    v93 (`results/2026-09-17-v93-bearish-arms-train.md`, closed row in
+>    `backtest-methodology.md`): Fibonacci bearish, TRAIN, 226 trades before
+>    the live `rs_combined` laggard rule and 107 after, decided N=89,
+>    **WR 21.3%, ExpR −0.255**, decision `fail`. Negative ExpR also rules out
+>    v93's Stage 2 horizon-subset search. The bullish-only gate is therefore
+>    *supported* by current data, not stale; only its comment's figures are.
+>    Enabling shorts with no mechanism would re-run v93 and is off the table.
+> 2. **The horizon split (#3) is closed for the long side too.** v31's TRAIN
+>    grid (`results/2026-08-17-structural-target-train.md`) found Fibonacci
+>    "never clear[s] 50% win rate at any horizon with N>=30". #3 is dropped as
+>    a mechanism. Phase A still reports per-horizon rows, as description only.
+>
+> What survives: mechanisms #1, #2 and #4 are new for **both** directions, so
+> Phase A measures both. The short side starts from a far worse baseline, and
+> the Phase A exit rule applies to it unchanged.
 
 ## What is already true (so nobody rebuilds it)
 
@@ -20,8 +40,9 @@ suppresses every bearish Fibonacci signal on a stale pre-v31 justification.
   band). `_fibonacci_plan` (`swingbot/core/planning/builders.py:342`) prices
   both directions. The only block is
   `STRATEGY_GATES["Fibonacci"] = {"directions": ("bullish",)}`
-  (`swingbot/core/market/strategy_types.py`), whose comment cites
-  pre-v31 WR 81.8% — arithmetic v31 deleted.
+  (`swingbot/core/market/strategy_types.py`). Its comment cites pre-v31
+  WR 81.8%, arithmetic v31 deleted, but v93 re-measured the bearish arm and
+  it failed (see the correction above), so the gate itself stands.
 - **Closed and not re-runnable:** the 2026-09-10 legacy badge refresh and the
   v84 Fibonacci 1.0-extension target candidate (flag-on changed one trade).
   `docs/claude/backtest-methodology.md` requires a genuinely new mechanism to
@@ -44,11 +65,14 @@ than −1.0pp, per-fold N ≥ 30) → Stage 3 VALIDATION 2024-01-01..2025-12-31,
 
 # Phase A — free TRAIN diagnostic
 
-A read-only script under `scripts/reports/` (no production code, no
-VALIDATION data). It calls `_plan_series` / `_trade_plan_at` from
-`swingbot/core/backtesting/backtest.py` and the v2 + scale-out exit engine, so
-its arithmetic is the backtest's, not a copy. The bullish-only mask is lifted
-**inside the script only**, via the entry series directly, never by editing
+A read-only script, `scripts/backtest/measure_fib_diagnostic.py` (no
+production code, no VALIDATION data). It sits beside
+`measure_bearish_arms.py` and reuses that script's universe filter, laggard
+rule and `gate_override` pattern, so its bearish baseline must reproduce
+v93's figures exactly, which serves as the built-in sanity check. Trades come
+from `run_backtest` with the v2 + scale-out exit engine, so its arithmetic is
+the backtest's, not a copy. The bullish-only mask is lifted **inside the
+script only**, through `entry_filters.gate_override`, never by editing
 `STRATEGY_GATES`.
 
 Over TRAIN 2020-01-01..2023-12-31, full cached universe × all 10 horizons, it
@@ -62,8 +86,9 @@ reports per direction and per direction × horizon:
 2. **Deeper-ratio stop distance.** Distance from entry to the next deeper fib
    ratio (e.g. 0.786) in ATR, with the WR that stop would have produced
    (hypothesis #2).
-3. **Horizon split.** N / WR / ExpR per horizon (hypothesis #3, the
-   Break & Retest v84 R7 shape).
+3. **Horizon rows, description only.** N / WR / ExpR per horizon. #3 is
+   closed as a mechanism (v31, see the correction above); these rows only
+   show where #1, #2 and #4 act.
 4. **Reclaim-close rate.** Share of signals where a later bar within the
    horizon's entry window closes back through the level, and the outcome of
    entering there instead (hypothesis #4).
@@ -82,7 +107,7 @@ closed pre-registrations table and the spec and plan move to `no-lift/`.
 `docs/superpowers/results/YYYY-MM-DD-v101-fib-preregistration.md`, committed
 before Stage 0 runs. It names:
 
-- **exactly one mechanism** from #1–#4, with the Phase A figure that
+- **exactly one mechanism** from #1, #2 or #4, with the Phase A figure that
   justifies it;
 - its parameter grid and the plateau neighbours, fixed in advance;
 - the direction(s) entering the funnel. A direction that failed Phase A does
@@ -92,16 +117,23 @@ before Stage 0 runs. It names:
 Adding a second mechanism after seeing Stage 1–2 results is a new
 pre-registration, not a revision of this one.
 
+**The mechanism's flag is built before the funnel runs, not after.** Stage 0–3
+measure a config-flag arm (`measure_strategy_arm.py --component-json`, or
+v100's `measure_arms.py` if v100 has merged by then, in which case its
+stamp is required). So the flag, default off, lands in Phase B. Phase C
+only flips it and rewrites the gate. The code for the flag depends on which
+mechanism is chosen, so it goes in a second plan part written after the
+pre-registration, not guessed now.
+
 # Phase C — wiring (only for direction(s) that pass VALIDATION)
 
-- **Mechanism behind a config flag** in `swingbot/config.py`, default off
-  until it passes, then flipped on in the same release. It lives in
-  `_fibonacci_plan` (#1, #2) or `fibonacci_entries` (#4); both are shared by
-  the backtest and live scans, so parity holds by construction. #3 is a
-  `STRATEGY_GATES` horizon mask and needs no flag.
+- **Flip the Phase B flag on.** It lives in `_fibonacci_plan` (#1, #2) or
+  `fibonacci_entries` (#4); both are shared by the backtest and live scans,
+  so parity holds by construction.
 - **`STRATEGY_GATES["Fibonacci"]` rewritten** to list only the passing
-  directions (and horizons, if #3). The stale pre-v31 comment is replaced
-  with the current-arithmetic TRAIN and VALIDATION figures.
+  directions. The stale pre-v31 comment is replaced with the
+  current-arithmetic TRAIN and VALIDATION figures, citing v93 for the
+  bearish side if it stays gated.
 - **Registry rows re-emitted** with `run_backtest_range.py --emit-registry`,
   one row per direction if the registry key supports it (otherwise the plan's
   first task extends the key). Never hand-edited.
@@ -136,6 +168,9 @@ pre-registration, not a revision of this one.
 - **Group 1 (parallel, inside Phase A):** the diagnostic script and its unit
   test fixture touch different files and can be written together. The run
   itself is a single `backtest-runner` dispatch.
-- **Group 2 (parallel, inside Phase C):** the mechanism + flag, and the
-  `STRATEGY_GATES` / registry update, touch disjoint files. The parity test
+- **Group 2 (parallel, inside Phase C):** the flag flip and the
+  `STRATEGY_GATES` / registry update touch disjoint files. The parity test
   waits for both.
+- **Cross-plan:** v100 (arm producer) is live and unimplemented. If it merges
+  before Phase B, Phase B's funnel runs go through `measure_arms.py` stamps.
+  Nothing in Phase A touches v100's files.
