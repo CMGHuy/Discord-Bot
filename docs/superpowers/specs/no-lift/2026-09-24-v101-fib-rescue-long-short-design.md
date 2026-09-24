@@ -3,6 +3,7 @@
 **Version:** ui 1.21.0 · bot 1.10.3 (at writing)
 **Bump:** bot minor if a mechanism passes VALIDATION in either direction; none on no-lift
 **Edge:** expectancy
+**Status:** Closed no-lift 2026-09-24. Phase A found no pooled per-direction cell with WR >= 50 and N >= 30, under current arithmetic or a pre-cap control; VALIDATION not spent. See `results/2026-09-24-v101-fib-diagnostic.md`.
 
 Fibonacci is `WEAK` with a positive expectancy: TRAIN 2020-01-01..2023-12-31,
 N=246, WR 35.4%, ExpR +0.232 (`validation_registry.json`, `run_date:
