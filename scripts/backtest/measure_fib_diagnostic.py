@@ -42,6 +42,9 @@ sys.path[:0] = [str(ROOT), str(Path(__file__).resolve().parent)]
 from swingbot.core.market.strategy_types import HORIZONS  # noqa: E402
 from swingbot.core.planning.params import STRUCTURE_BUFFER_ATR  # noqa: E402
 from swingbot.core.risk_limits import capped_planned_loss_pct  # noqa: E402
+from swingbot.core.backtesting import arm_rule  # noqa: E402
+from swingbot.core.backtesting.backtest_wf import ANCHORED_FOLDS  # noqa: E402
+from swingbot.core.planning.targets import fib_target_candidates, select_structural_target  # noqa: E402
 
 STRATEGY = "Fibonacci"
 ENTRY_RATIOS = (0.382, 0.5, 0.618)              # DEFAULT_PARAMS["Fibonacci"]["ratios"]
@@ -121,3 +124,149 @@ def reclaim_bar(high, low, close, i, direction, window=RECLAIM_WINDOW):
         if direction == "bearish" and close[j] < low[i]:
             return j
     return None
+
+
+DIRECTIONS = ("bullish", "bearish")
+ALL_HZ = tuple(HORIZONS)
+
+
+def trade_features(frame, i, horizon_key, trade, atr_val, swing_high, swing_low, cap, min_rr, max_rr):
+    """Everything the three mechanisms need about one baseline trade.
+
+    Geometry (cap flag, ratio, stop distance, re-selected targets) reads bars
+    <= i, or <= j for the reclaim entry. Only simulate_first_touch walks
+    forward, which is an exit, the same as run_backtest."""
+    h = HORIZONS[horizon_key]
+    direction, entry = trade.direction, trade.entry
+    is_bull = direction == "bullish"
+    high, low, close = frame["High"].values, frame["Low"].values, frame["Close"].values
+    hold = h["max_holding_days"]
+
+    struct = structural_stop(swing_high, swing_low, atr_val, direction)
+    expected_stop, capped = apply_cap(entry, struct, direction, cap)
+    # The builder's own stop should equal expected_stop; a mismatch means the
+    # diagnostic's geometry drifted from _fibonacci_plan and #1 is unreliable.
+    stop_mismatch = abs(trade.stop_loss - expected_stop) > 1e-6 * entry
+
+    base = simulate_first_touch(high, low, close, i, entry, trade.stop_loss,
+                                trade.take_profit, direction, hold)
+
+    # #2: stop beyond the next deeper ratio (still risk-capped), new target.
+    deep_stop, _ = apply_cap(entry, deeper_ratio_stop(close[i], swing_high, swing_low, atr_val, direction),
+                             direction, cap)
+    deep_target = select_structural_target(entry, deep_stop, is_bull,
+                                           fib_target_candidates(frame, i, h, entry), min_rr, max_rr)
+    deeper = (simulate_first_touch(high, low, close, i, entry, deep_stop, deep_target, direction, hold)
+              if deep_target is not None else ("no_target", None))
+
+    # #4: enter on the reclaim close, same stop, target re-selected at j.
+    j = reclaim_bar(high, low, close, i, direction)
+    if j is None:
+        reclaim = ("no_reclaim", None)
+    else:
+        entry_j = float(close[j])
+        still_valid = entry_j > trade.stop_loss if is_bull else entry_j < trade.stop_loss
+        target_j = (select_structural_target(entry_j, trade.stop_loss, is_bull,
+                                             fib_target_candidates(frame, j, h, entry_j), min_rr, max_rr)
+                    if still_valid else None)
+        reclaim = (simulate_first_touch(high, low, close, j, entry_j, trade.stop_loss, target_j, direction, hold)
+                   if target_j is not None else ("no_target", None))
+
+    return {
+        "capped": bool(capped),
+        "stop_mismatch": bool(stop_mismatch),
+        "tested_ratio": tested_ratio(close[i], swing_high, swing_low, direction),
+        "stop_atr": abs(entry - trade.stop_loss) / atr_val if atr_val else None,
+        "base_simple": base,
+        "deeper": deeper,
+        "reclaim": reclaim,
+    }
+
+
+def simple_stats(pairs):
+    closed = [(o, r) for o, r in pairs if o in ("win", "loss", "timeout")]
+    decided = [o for o, _ in closed if o in ("win", "loss")]
+    wins = sum(o == "win" for o in decided)
+    returns = [r for _, r in closed if r is not None]
+    return {"n": len(decided),
+            "win_rate": wins / len(decided) * 100 if decided else None,
+            "expectancy_r": sum(returns) / len(returns) if returns else None,
+            "closed": len(closed),
+            "dropped": len(pairs) - len(closed)}
+
+
+def _real(rows):
+    """Real v2 backtest outcomes, pooled plus the anchored test-year folds
+    the v93 Stage 1 rule reads."""
+    trades = [r["trade"] for r in rows]
+    pooled = arm_rule.pooled_stats(trades)
+    folds = [{"test_year": start[:4],
+              "stats": arm_rule.pooled_stats([r["trade"] for r in rows
+                                              if start <= r["trade"].entry_date <= end])}
+             for _, _, start, end in ANCHORED_FOLDS]
+    return {"pooled": pooled, "folds": folds, "verdict": arm_rule.stage1_verdict(pooled, folds)}
+
+
+def _deeper_stop_summary(rows):
+    """Mechanism #2 metrics: base_simple from all rows, arm from deeper stops."""
+    return {
+        "base_simple": simple_stats([r["features"]["base_simple"] for r in rows]),
+        "arm": simple_stats([r["features"]["deeper"] for r in rows]),
+    }
+
+
+def _reclaim_summary(rows):
+    """Mechanism #4 metrics: reclaim entry rate and paired stats."""
+    reclaimed = [r for r in rows if r["features"]["reclaim"][0] != "no_reclaim"]
+    return {
+        "reclaim_rate": len(reclaimed) / len(rows) if rows else None,
+        "base_simple": simple_stats([r["features"]["base_simple"] for r in reclaimed]),
+        "arm": simple_stats([r["features"]["reclaim"] for r in reclaimed]),
+    }
+
+
+def _horizons_summary(rows, structural):
+    """Per-horizon baseline and structural-only pooled stats."""
+    return {h: {"baseline": arm_rule.pooled_stats([r["trade"] for r in rows if r["horizon_key"] == h]),
+                "structural_only": arm_rule.pooled_stats([r["trade"] for r in structural
+                                                          if r["horizon_key"] == h])}
+            for h in ALL_HZ}
+
+
+def direction_summary(rows):
+    structural = [r for r in rows if not r["features"]["capped"]]
+    capped = [r for r in rows if r["features"]["capped"]]
+    return {
+        "n_rows": len(rows),
+        "baseline": _real(rows),
+        "cap_rate": len(capped) / len(rows) if rows else None,
+        "structural_only": _real(structural),
+        "capped_only": _real(capped),
+        "deeper_stop": _deeper_stop_summary(rows),
+        "reclaim": _reclaim_summary(rows),
+        "stop_mismatch": sum(r["features"]["stop_mismatch"] for r in rows),
+        "horizons": _horizons_summary(rows, structural),
+    }
+
+
+def _clears(stats):
+    return (stats.get("win_rate") is not None and stats["win_rate"] >= WR_FLOOR
+            and (stats.get("n") or 0) >= MIN_N)
+
+
+def phase_a_candidates(summary):
+    """The spec's Phase A exit rule: pooled per-direction cells only."""
+    out = []
+    for d in DIRECTIONS:
+        s = summary[d]
+        cells = {"#1 structural_only": s["structural_only"]["pooled"],
+                 "#2 deeper_stop": s["deeper_stop"]["arm"],
+                 "#4 reclaim": s["reclaim"]["arm"]}
+        out.extend({"direction": d, "mechanism": k, "stats": v} for k, v in cells.items() if _clears(v))
+    return out
+
+
+def summarise(records):
+    out = {d: direction_summary([r for r in records if r["trade"].direction == d]) for d in DIRECTIONS}
+    out["candidates"] = phase_a_candidates(out)
+    return out
