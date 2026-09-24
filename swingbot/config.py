@@ -213,6 +213,14 @@ FIELDS: list[Field] = [
                "high/low and the 1.272 extension. Ships OFF: it is a pre-registered "
                "measurement (v84), not a demonstrated edge, and flips on only if its one "
                "VALIDATION shot passes."),
+    Field("FIB_SR_CONFLUENCE_ATR", "FIB_SR_CONFLUENCE_ATR", "Trade Filters & Risk",
+          "Fibonacci: Rolling S/R confluence tolerance (x ATR)",
+          type="float", default="0.0", min=0.0, max=2.0, step=0.25,
+          help="Keeps a Fibonacci entry only when the tested retracement level sits "
+               "within this many ATRs of the bar's rolling support or resistance -- "
+               "the one level family nearly independent of Fibonacci (v49). 0 disables "
+               "the filter. Ships OFF: a pre-registered measurement (v102), not a "
+               "demonstrated edge; it changes only if its VALIDATION shot passes."),
     Field("MIN_ALERT_CONFIDENCE_LEVEL", "MIN_ALERT_CONFIDENCE_LEVEL", "Trade Filters & Risk", "Min confidence level to alert",
           type="select", default="4", options=["1", "2", "3", "4", "5"],
           help="Only this level and above are shown as alerts (quality over quantity)."),

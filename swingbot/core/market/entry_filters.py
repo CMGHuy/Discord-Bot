@@ -187,6 +187,33 @@ DEFAULT_PARAMS["Fibonacci"] = {
 }
 
 
+def _fib_sr_confluence(df, h, levels, close, atr14):
+    """v102: True where the tested Fibonacci retracement level (the ratio
+    level nearest the close -- the one is_testing found) sits within
+    FIB_SR_CONFLUENCE_ATR x ATR14 of the bar's Rolling support or resistance.
+    Rolling S/R is levels.py's own definition (rolling sr_lookback extreme,
+    shift(1)), the one level family v49 measured as nearly independent of
+    Fibonacci. Never compared against the swing extremes: a shorter-window
+    rolling low often IS the Fibonacci swing low, which would be trivially
+    true. Flag 0 (or absent) -> all True, so entries are bit-identical to
+    pre-v102. Reads bars <= i only."""
+    from swingbot import config
+    tol = float(getattr(config, "FIB_SR_CONFLUENCE_ATR", 0.0) or 0.0)
+    if tol <= 0:
+        return pd.Series(True, index=df.index)
+    arr = levels.to_numpy(dtype=float)
+    dist = np.abs(arr - close.to_numpy(dtype=float)[:, None])
+    dist = np.where(np.isnan(dist), np.inf, dist)
+    tested = arr[np.arange(len(arr)), dist.argmin(axis=1)]
+    lookback = h["sr_lookback"]
+    support = df["Low"].rolling(lookback).min().shift(1).to_numpy(dtype=float)
+    resistance = df["High"].rolling(lookback).max().shift(1).to_numpy(dtype=float)
+    gap = np.fmin(np.abs(tested - support), np.abs(tested - resistance))
+    with np.errstate(invalid="ignore"):
+        keep = gap <= tol * atr14.to_numpy(dtype=float)
+    return pd.Series(keep, index=df.index)
+
+
 def fibonacci_entries(df, horizon_key, params=None):
     """Retracement bounce WITH swing-direction awareness: a bullish bounce is
     only valid when the up-impulse is the recent structure (swing low set
@@ -229,6 +256,8 @@ def fibonacci_entries(df, horizon_key, params=None):
                & g["bear_regime"] & g["trend50_bear"]
                & rsi14.between(*p["rsi_bear"])
                & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    confluence = _fib_sr_confluence(df, h, levels, close, g["atr14"])
+    bullish, bearish = bullish & confluence, bearish & confluence
     return bullish, bearish
 
 
