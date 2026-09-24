@@ -91,6 +91,7 @@ Read before acting:
 - `docs/claude/git-safety.md` before deleting branches or force-pushing.
 - `docs/claude/testing-cost.md` before optimizing, timing, or interpreting a
   changed test count.
+- `docs/claude/code-complexity.md` before writing or changing any function.
 - `docs/claude/skills-tools.md` before choosing repo-specific skills or
   automation.
 
@@ -217,6 +218,8 @@ Live scan and replay gating differ through OPEX and manual-scan behavior, so
 do not unify them without a separate behavior-change decision.
 
 Make focused, isolated changes that preserve module seams and surrounding code
-style. Run proportionate verification and report the actual command/result; do
+style. Every function or method you write or change must end at cyclomatic
+complexity below 15 (`python -m radon cc -s -n C <files>`); split into named
+helpers rather than growing a function, and never worsen a legacy one. Run proportionate verification and report the actual command/result; do
 not claim a change works without evidence. For edits, finish with the concise
 file summary required by the repository's development instructions.

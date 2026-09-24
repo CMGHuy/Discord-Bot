@@ -119,17 +119,9 @@ moved to `plans/implemented/` or `plans/no-lift/`.
 exist in the plan file it labels active (a different prefix, e.g. `U34`).
 Verify with `grep -n "^### Task" <plan>` first.
 
-**Repo tooling (`.claude/`):** `/task-brief <id>` extracts one plan task and
-preflights this repo's documented traps. `/gate` is the pre-commit
-verification gate. `.claude/hooks/guardrails.py` is a `PreToolUse` hook that
-**denies** the patterns this file forbids in prose — now including
-protected-branch deletion, closed-pre-registration knobs and malformed
-spec/plan writes — and warns on bare `pytest`/`cat` of the big docs, unit-
-tested in `tests/hooks/test_guardrails.py`, fails open by construction (this
-file wins on disagreement). Eleven `.claude/skills/` loaders sit beside it —
-the model-invocable ones self-trigger off `description`, shape-tested in
-`tests/hooks/test_skill_shape.py`. Subagents, the one-subagent-at-a-time
-default, and `.mcp.json`'s context7 provider: `docs/claude/skills-tools.md`.
+**Repo tooling (`.claude/`):** `/task-brief <id>` extracts one plan task, `/gate` is the
+pre-commit gate, `guardrails.py` denies what this file forbids (this file wins on
+disagreement), skills self-trigger off `description`. Detail: `docs/claude/skills-tools.md`.
 
 ## Commands
 
@@ -173,6 +165,13 @@ verification cadence: `document-conventions.md`, `document-lifecycle.md`.
 **Specs and plans are written and committed on `main`** — no branch, no
 worktree; branch only to *implement* one. Why: `document-lifecycle.md`.
 
+## Keep every function under complexity 15
+
+Every function and method you write or change ends at cyclomatic complexity
+**< 15** (`python -m radon cc -s -n C <files>`): split into named helpers,
+table-drive `if/elif` chains, return early. A legacy function already >= 15
+never gets worse. A refactor never changes behaviour. Detail: `code-complexity.md`.
+
 ## Never delete a branch whose name contains "backup"
 
 **Hard rule, no exceptions, no "but it looks merged":** any branch with
@@ -196,4 +195,5 @@ Not auto-loaded — read the relevant one before starting work in that area.
 | `working-conventions.md` | committing, bumping `VERSION.json`, or mirroring a production change back — two independent `ui`/`bot` lines; the test is observable difference, not diff size |
 | `git-safety.md` | any branch deletion or force push |
 | `testing-cost.md` | optimising or timing tests, or reacting to a changed pass count |
+| `code-complexity.md` | writing or changing any function — the < 15 limit, how to measure it, how to split without changing behaviour |
 | `skills-tools.md` | picking a Superpowers skill or subagent for a task here, dispatching more than one subagent at once, or driving a browser |

@@ -125,3 +125,19 @@ Each case is a real child `claude` run on your own credential. The full
 52-case sweep is about $3.50 and about 8 minutes; per-skill suites are 3–8
 cases each. Results land in `.claude/skills/<skill>/evals/results/`, which is
 gitignored. Baseline at 2026-09-21: 52/52 cases pass, all eight suites exit 0.
+
+## Repo tooling (`.claude/`)
+
+Moved verbatim from the root `CLAUDE.md` to keep it under 200 lines.
+
+**Repo tooling (`.claude/`):** `/task-brief <id>` extracts one plan task and
+preflights this repo's documented traps. `/gate` is the pre-commit
+verification gate. `.claude/hooks/guardrails.py` is a `PreToolUse` hook that
+**denies** the patterns this file forbids in prose — now including
+protected-branch deletion, closed-pre-registration knobs and malformed
+spec/plan writes — and warns on bare `pytest`/`cat` of the big docs, unit-
+tested in `tests/hooks/test_guardrails.py`, fails open by construction (this
+file wins on disagreement). Eleven `.claude/skills/` loaders sit beside it —
+the model-invocable ones self-trigger off `description`, shape-tested in
+`tests/hooks/test_skill_shape.py`. Subagents, the one-subagent-at-a-time
+default, and `.mcp.json`'s context7 provider: `docs/claude/skills-tools.md`.
