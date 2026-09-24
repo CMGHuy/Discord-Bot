@@ -1,0 +1,844 @@
+{
+ "bullish": {
+  "n_rows": 360,
+  "baseline": {
+   "pooled": {
+    "n": 249,
+    "wins": 88,
+    "losses": 161,
+    "win_rate": 35.34136546184739,
+    "expectancy_r": 0.23101666666666673,
+    "scratch_timeout_share": 0.30833333333333335
+   },
+   "folds": [
+    {
+     "test_year": "2021",
+     "stats": {
+      "n": 101,
+      "wins": 32,
+      "losses": 69,
+      "win_rate": 31.683168316831683,
+      "expectancy_r": 0.1711216216216216,
+      "scratch_timeout_share": 0.31756756756756754
+     }
+    },
+    {
+     "test_year": "2022",
+     "stats": {
+      "n": 35,
+      "wins": 6,
+      "losses": 29,
+      "win_rate": 17.142857142857142,
+      "expectancy_r": -0.37773469387755104,
+      "scratch_timeout_share": 0.2857142857142857
+     }
+    },
+    {
+     "test_year": "2023",
+     "stats": {
+      "n": 66,
+      "wins": 23,
+      "losses": 43,
+      "win_rate": 34.84848484848485,
+      "expectancy_r": 0.1671157894736842,
+      "scratch_timeout_share": 0.30526315789473685
+     }
+    }
+   ],
+   "verdict": {
+    "clears": false,
+    "clauses": {
+     "wr": false,
+     "exp_r": true,
+     "n": true,
+     "scratch_share": true,
+     "folds": true
+    },
+    "good_folds": 2
+   }
+  },
+  "cap_rate": 0.9027777777777778,
+  "lifecycle_rate": 0.005555555555555556,
+  "over_hard_cap_rate": 1.0,
+  "structural_only": {
+   "pooled": {
+    "n": 17,
+    "wins": 4,
+    "losses": 13,
+    "win_rate": 23.52941176470588,
+    "expectancy_r": 0.07642857142857143,
+    "scratch_timeout_share": 0.5142857142857142
+   },
+   "folds": [
+    {
+     "test_year": "2021",
+     "stats": {
+      "n": 7,
+      "wins": 2,
+      "losses": 5,
+      "win_rate": 28.57142857142857,
+      "expectancy_r": 0.27924999999999994,
+      "scratch_timeout_share": 0.65
+     }
+    },
+    {
+     "test_year": "2022",
+     "stats": {
+      "n": 3,
+      "wins": 0,
+      "losses": 3,
+      "win_rate": 0.0,
+      "expectancy_r": -0.7146666666666667,
+      "scratch_timeout_share": 0.5
+     }
+    },
+    {
+     "test_year": "2023",
+     "stats": {
+      "n": 4,
+      "wins": 1,
+      "losses": 3,
+      "win_rate": 25.0,
+      "expectancy_r": 0.259,
+      "scratch_timeout_share": 0.2
+     }
+    }
+   ],
+   "verdict": {
+    "clears": false,
+    "clauses": {
+     "wr": false,
+     "exp_r": true,
+     "n": false,
+     "scratch_share": false,
+     "folds": false
+    },
+    "good_folds": 0
+   }
+  },
+  "capped_only": {
+   "pooled": {
+    "n": 232,
+    "wins": 84,
+    "losses": 148,
+    "win_rate": 36.206896551724135,
+    "expectancy_r": 0.24766461538461537,
+    "scratch_timeout_share": 0.28615384615384615
+   },
+   "folds": [
+    {
+     "test_year": "2021",
+     "stats": {
+      "n": 94,
+      "wins": 30,
+      "losses": 64,
+      "win_rate": 31.914893617021278,
+      "expectancy_r": 0.1542265625,
+      "scratch_timeout_share": 0.265625
+     }
+    },
+    {
+     "test_year": "2022",
+     "stats": {
+      "n": 32,
+      "wins": 6,
+      "losses": 26,
+      "win_rate": 18.75,
+      "expectancy_r": -0.3307209302325581,
+      "scratch_timeout_share": 0.2558139534883721
+     }
+    },
+    {
+     "test_year": "2023",
+     "stats": {
+      "n": 62,
+      "wins": 22,
+      "losses": 40,
+      "win_rate": 35.483870967741936,
+      "expectancy_r": 0.1620111111111111,
+      "scratch_timeout_share": 0.3111111111111111
+     }
+    }
+   ],
+   "verdict": {
+    "clears": false,
+    "clauses": {
+     "wr": false,
+     "exp_r": true,
+     "n": true,
+     "scratch_share": true,
+     "folds": true
+    },
+    "good_folds": 2
+   }
+  },
+  "deeper_stop": {
+   "base_simple": {
+    "n": 282,
+    "win_rate": 34.751773049645394,
+    "expectancy_r": 0.20410317802105185,
+    "closed": 360,
+    "dropped": 0
+   },
+   "arm": {
+    "n": 341,
+    "win_rate": 36.070381231671554,
+    "expectancy_r": 0.1680921697713215,
+    "closed": 360,
+    "dropped": 0
+   },
+   "arm_coverage": 1.0,
+   "calibrated": {
+    "win_rate": 36.65997364387355,
+    "expectancy_r": 0.19500565841693637,
+    "n": 341
+   }
+  },
+  "reclaim": {
+   "reclaim_rate": 0.7194444444444444,
+   "base_simple": {
+    "n": 195,
+    "win_rate": 44.61538461538462,
+    "expectancy_r": 0.44523180814043534,
+    "closed": 250,
+    "dropped": 0
+   },
+   "arm": {
+    "n": 206,
+    "win_rate": 26.699029126213592,
+    "expectancy_r": 0.02602754584274744,
+    "closed": 250,
+    "dropped": 0
+   },
+   "arm_coverage": 0.6944444444444444,
+   "calibrated": {
+    "win_rate": 29.356371783556245,
+    "expectancy_r": 0.026535737702312268,
+    "n": 206
+   }
+  },
+  "stop_mismatch": 0,
+  "horizons": {
+   "2w": {
+    "baseline": {
+     "n": 43,
+     "wins": 16,
+     "losses": 27,
+     "win_rate": 37.2093023255814,
+     "expectancy_r": 0.21272580645161288,
+     "scratch_timeout_share": 0.3064516129032258
+    },
+    "structural_only": {
+     "n": 2,
+     "wins": 1,
+     "losses": 1,
+     "win_rate": 50.0,
+     "expectancy_r": 0.6053333333333333,
+     "scratch_timeout_share": 0.6666666666666666
+    }
+   },
+   "4w": {
+    "baseline": {
+     "n": 63,
+     "wins": 19,
+     "losses": 44,
+     "win_rate": 30.158730158730158,
+     "expectancy_r": 0.2755249999999999,
+     "scratch_timeout_share": 0.475
+    },
+    "structural_only": {
+     "n": 13,
+     "wins": 2,
+     "losses": 11,
+     "win_rate": 15.384615384615385,
+     "expectancy_r": -0.17486956521739128,
+     "scratch_timeout_share": 0.43478260869565216
+    }
+   },
+   "2m": {
+    "baseline": {
+     "n": 35,
+     "wins": 12,
+     "losses": 23,
+     "win_rate": 34.285714285714285,
+     "expectancy_r": 0.11991304347826091,
+     "scratch_timeout_share": 0.2391304347826087
+    },
+    "structural_only": {
+     "n": 2,
+     "wins": 1,
+     "losses": 1,
+     "win_rate": 50.0,
+     "expectancy_r": 0.5415000000000001,
+     "scratch_timeout_share": 0.0
+    }
+   },
+   "3m": {
+    "baseline": {
+     "n": 29,
+     "wins": 12,
+     "losses": 17,
+     "win_rate": 41.37931034482759,
+     "expectancy_r": 0.44724324324324327,
+     "scratch_timeout_share": 0.21621621621621623
+    },
+    "structural_only": {
+     "n": 0,
+     "wins": 0,
+     "losses": 0,
+     "win_rate": null,
+     "expectancy_r": null,
+     "scratch_timeout_share": null
+    }
+   },
+   "4m": {
+    "baseline": {
+     "n": 20,
+     "wins": 7,
+     "losses": 13,
+     "win_rate": 35.0,
+     "expectancy_r": 0.0961111111111111,
+     "scratch_timeout_share": 0.25925925925925924
+    },
+    "structural_only": {
+     "n": 0,
+     "wins": 0,
+     "losses": 0,
+     "win_rate": null,
+     "expectancy_r": 0.991,
+     "scratch_timeout_share": 1.0
+    }
+   },
+   "5m": {
+    "baseline": {
+     "n": 17,
+     "wins": 6,
+     "losses": 11,
+     "win_rate": 35.294117647058826,
+     "expectancy_r": 0.1937142857142857,
+     "scratch_timeout_share": 0.19047619047619047
+    },
+    "structural_only": {
+     "n": 0,
+     "wins": 0,
+     "losses": 0,
+     "win_rate": null,
+     "expectancy_r": 0.0,
+     "scratch_timeout_share": 1.0
+    }
+   },
+   "6m": {
+    "baseline": {
+     "n": 15,
+     "wins": 6,
+     "losses": 9,
+     "win_rate": 40.0,
+     "expectancy_r": 0.25242105263157893,
+     "scratch_timeout_share": 0.21052631578947367
+    },
+    "structural_only": {
+     "n": 0,
+     "wins": 0,
+     "losses": 0,
+     "win_rate": null,
+     "expectancy_r": 0.0,
+     "scratch_timeout_share": 1.0
+    }
+   },
+   "7m": {
+    "baseline": {
+     "n": 10,
+     "wins": 3,
+     "losses": 7,
+     "win_rate": 30.0,
+     "expectancy_r": -0.013000000000000001,
+     "scratch_timeout_share": 0.09090909090909091
+    },
+    "structural_only": {
+     "n": 0,
+     "wins": 0,
+     "losses": 0,
+     "win_rate": null,
+     "expectancy_r": null,
+     "scratch_timeout_share": null
+    }
+   },
+   "8m": {
+    "baseline": {
+     "n": 8,
+     "wins": 3,
+     "losses": 5,
+     "win_rate": 37.5,
+     "expectancy_r": 0.05662500000000001,
+     "scratch_timeout_share": 0.0
+    },
+    "structural_only": {
+     "n": 0,
+     "wins": 0,
+     "losses": 0,
+     "win_rate": null,
+     "expectancy_r": null,
+     "scratch_timeout_share": null
+    }
+   },
+   "9m": {
+    "baseline": {
+     "n": 9,
+     "wins": 4,
+     "losses": 5,
+     "win_rate": 44.44444444444444,
+     "expectancy_r": 0.3423333333333334,
+     "scratch_timeout_share": 0.0
+    },
+    "structural_only": {
+     "n": 0,
+     "wins": 0,
+     "losses": 0,
+     "win_rate": null,
+     "expectancy_r": null,
+     "scratch_timeout_share": null
+    }
+   }
+  }
+ },
+ "bearish": {
+  "n_rows": 107,
+  "baseline": {
+   "pooled": {
+    "n": 89,
+    "wins": 19,
+    "losses": 70,
+    "win_rate": 21.34831460674157,
+    "expectancy_r": -0.2548878504672897,
+    "scratch_timeout_share": 0.16822429906542055
+   },
+   "folds": [
+    {
+     "test_year": "2021",
+     "stats": {
+      "n": 3,
+      "wins": 0,
+      "losses": 3,
+      "win_rate": 0.0,
+      "expectancy_r": -0.4588571428571428,
+      "scratch_timeout_share": 0.5714285714285714
+     }
+    },
+    {
+     "test_year": "2022",
+     "stats": {
+      "n": 22,
+      "wins": 11,
+      "losses": 11,
+      "win_rate": 50.0,
+      "expectancy_r": 0.46285185185185185,
+      "scratch_timeout_share": 0.18518518518518517
+     }
+    },
+    {
+     "test_year": "2023",
+     "stats": {
+      "n": 14,
+      "wins": 4,
+      "losses": 10,
+      "win_rate": 28.57142857142857,
+      "expectancy_r": 0.046071428571428576,
+      "scratch_timeout_share": 0.0
+     }
+    }
+   ],
+   "verdict": {
+    "clears": false,
+    "clauses": {
+     "wr": false,
+     "exp_r": false,
+     "n": true,
+     "scratch_share": true,
+     "folds": false
+    },
+    "good_folds": 1
+   }
+  },
+  "cap_rate": 0.9439252336448598,
+  "lifecycle_rate": 0.0,
+  "over_hard_cap_rate": 1.0,
+  "structural_only": {
+   "pooled": {
+    "n": 2,
+    "wins": 0,
+    "losses": 2,
+    "win_rate": 0.0,
+    "expectancy_r": -0.36866666666666664,
+    "scratch_timeout_share": 0.6666666666666666
+   },
+   "folds": [
+    {
+     "test_year": "2021",
+     "stats": {
+      "n": 0,
+      "wins": 0,
+      "losses": 0,
+      "win_rate": null,
+      "expectancy_r": -0.053000000000000005,
+      "scratch_timeout_share": 1.0
+     }
+    },
+    {
+     "test_year": "2022",
+     "stats": {
+      "n": 1,
+      "wins": 0,
+      "losses": 1,
+      "win_rate": 0.0,
+      "expectancy_r": -1.0,
+      "scratch_timeout_share": 0.0
+     }
+    },
+    {
+     "test_year": "2023",
+     "stats": {
+      "n": 1,
+      "wins": 0,
+      "losses": 1,
+      "win_rate": 0.0,
+      "expectancy_r": -1.0,
+      "scratch_timeout_share": 0.0
+     }
+    }
+   ],
+   "verdict": {
+    "clears": false,
+    "clauses": {
+     "wr": false,
+     "exp_r": false,
+     "n": false,
+     "scratch_share": false,
+     "folds": false
+    },
+    "good_folds": 0
+   }
+  },
+  "capped_only": {
+   "pooled": {
+    "n": 87,
+    "wins": 19,
+    "losses": 68,
+    "win_rate": 21.839080459770116,
+    "expectancy_r": -0.24812871287128707,
+    "scratch_timeout_share": 0.13861386138613863
+   },
+   "folds": [
+    {
+     "test_year": "2021",
+     "stats": {
+      "n": 3,
+      "wins": 0,
+      "losses": 3,
+      "win_rate": 0.0,
+      "expectancy_r": -1.0,
+      "scratch_timeout_share": 0.0
+     }
+    },
+    {
+     "test_year": "2022",
+     "stats": {
+      "n": 21,
+      "wins": 11,
+      "losses": 10,
+      "win_rate": 52.38095238095239,
+      "expectancy_r": 0.5191153846153846,
+      "scratch_timeout_share": 0.19230769230769232
+     }
+    },
+    {
+     "test_year": "2023",
+     "stats": {
+      "n": 13,
+      "wins": 4,
+      "losses": 9,
+      "win_rate": 30.76923076923077,
+      "expectancy_r": 0.12653846153846152,
+      "scratch_timeout_share": 0.0
+     }
+    }
+   ],
+   "verdict": {
+    "clears": false,
+    "clauses": {
+     "wr": false,
+     "exp_r": false,
+     "n": true,
+     "scratch_share": true,
+     "folds": false
+    },
+    "good_folds": 1
+   }
+  },
+  "deeper_stop": {
+   "base_simple": {
+    "n": 103,
+    "win_rate": 18.446601941747574,
+    "expectancy_r": -0.3993749815894619,
+    "closed": 107,
+    "dropped": 0
+   },
+   "arm": {
+    "n": 105,
+    "win_rate": 20.0,
+    "expectancy_r": -0.3650224259910169,
+    "closed": 107,
+    "dropped": 0
+   },
+   "arm_coverage": 1.0,
+   "calibrated": {
+    "win_rate": 22.901712664993997,
+    "expectancy_r": -0.2205352948688447,
+    "n": 105
+   }
+  },
+  "reclaim": {
+   "reclaim_rate": 0.6261682242990654,
+   "base_simple": {
+    "n": 59,
+    "win_rate": 32.20338983050847,
+    "expectancy_r": 0.028539286322798917,
+    "closed": 62,
+    "dropped": 0
+   },
+   "arm": {
+    "n": 59,
+    "win_rate": 22.033898305084744,
+    "expectancy_r": -0.2592022459350008,
+    "closed": 62,
+    "dropped": 0
+   },
+   "arm_coverage": 0.5794392523364486,
+   "calibrated": {
+    "win_rate": 25.015693659761457,
+    "expectancy_r": -0.15499959677392877,
+    "n": 59
+   }
+  },
+  "stop_mismatch": 0,
+  "horizons": {
+   "2w": {
+    "baseline": {
+     "n": 19,
+     "wins": 9,
+     "losses": 10,
+     "win_rate": 47.368421052631575,
+     "expectancy_r": 0.6122105263157894,
+     "scratch_timeout_share": 0.0
+    },
+    "structural_only": {
+     "n": 1,
+     "wins": 0,
+     "losses": 1,
+     "win_rate": 0.0,
+     "expectancy_r": -1.0,
+     "scratch_timeout_share": 0.0
+    }
+   },
+   "4w": {
+    "baseline": {
+     "n": 19,
+     "wins": 6,
+     "losses": 13,
+     "win_rate": 31.57894736842105,
+     "expectancy_r": -0.0236086956521739,
+     "scratch_timeout_share": 0.17391304347826086
+    },
+    "structural_only": {
+     "n": 0,
+     "wins": 0,
+     "losses": 0,
+     "win_rate": null,
+     "expectancy_r": 0.218,
+     "scratch_timeout_share": 1.0
+    }
+   },
+   "2m": {
+    "baseline": {
+     "n": 8,
+     "wins": 2,
+     "losses": 6,
+     "win_rate": 25.0,
+     "expectancy_r": -0.0948888888888889,
+     "scratch_timeout_share": 0.1111111111111111
+    },
+    "structural_only": {
+     "n": 0,
+     "wins": 0,
+     "losses": 0,
+     "win_rate": null,
+     "expectancy_r": 0.139,
+     "scratch_timeout_share": 1.0
+    }
+   },
+   "3m": {
+    "baseline": {
+     "n": 6,
+     "wins": 2,
+     "losses": 4,
+     "win_rate": 33.33333333333333,
+     "expectancy_r": -0.0631428571428572,
+     "scratch_timeout_share": 0.14285714285714285
+    },
+    "structural_only": {
+     "n": 0,
+     "wins": 0,
+     "losses": 0,
+     "win_rate": null,
+     "expectancy_r": -0.503,
+     "scratch_timeout_share": 1.0
+    }
+   },
+   "4m": {
+    "baseline": {
+     "n": 6,
+     "wins": 0,
+     "losses": 6,
+     "win_rate": 0.0,
+     "expectancy_r": -0.6066,
+     "scratch_timeout_share": 0.4
+    },
+    "structural_only": {
+     "n": 0,
+     "wins": 0,
+     "losses": 0,
+     "win_rate": null,
+     "expectancy_r": -0.066,
+     "scratch_timeout_share": 1.0
+    }
+   },
+   "5m": {
+    "baseline": {
+     "n": 6,
+     "wins": 0,
+     "losses": 6,
+     "win_rate": 0.0,
+     "expectancy_r": -0.8571428571428571,
+     "scratch_timeout_share": 0.14285714285714285
+    },
+    "structural_only": {
+     "n": 0,
+     "wins": 0,
+     "losses": 0,
+     "win_rate": null,
+     "expectancy_r": null,
+     "scratch_timeout_share": null
+    }
+   },
+   "6m": {
+    "baseline": {
+     "n": 7,
+     "wins": 0,
+     "losses": 7,
+     "win_rate": 0.0,
+     "expectancy_r": -0.875,
+     "scratch_timeout_share": 0.125
+    },
+    "structural_only": {
+     "n": 0,
+     "wins": 0,
+     "losses": 0,
+     "win_rate": null,
+     "expectancy_r": null,
+     "scratch_timeout_share": null
+    }
+   },
+   "7m": {
+    "baseline": {
+     "n": 7,
+     "wins": 0,
+     "losses": 7,
+     "win_rate": 0.0,
+     "expectancy_r": -0.7777777777777778,
+     "scratch_timeout_share": 0.2222222222222222
+    },
+    "structural_only": {
+     "n": 1,
+     "wins": 0,
+     "losses": 1,
+     "win_rate": 0.0,
+     "expectancy_r": -1.0,
+     "scratch_timeout_share": 0.0
+    }
+   },
+   "8m": {
+    "baseline": {
+     "n": 6,
+     "wins": 0,
+     "losses": 6,
+     "win_rate": 0.0,
+     "expectancy_r": -0.75,
+     "scratch_timeout_share": 0.25
+    },
+    "structural_only": {
+     "n": 0,
+     "wins": 0,
+     "losses": 0,
+     "win_rate": null,
+     "expectancy_r": null,
+     "scratch_timeout_share": null
+    }
+   },
+   "9m": {
+    "baseline": {
+     "n": 5,
+     "wins": 0,
+     "losses": 5,
+     "win_rate": 0.0,
+     "expectancy_r": -0.7142857142857143,
+     "scratch_timeout_share": 0.2857142857142857
+    },
+    "structural_only": {
+     "n": 0,
+     "wins": 0,
+     "losses": 0,
+     "win_rate": null,
+     "expectancy_r": null,
+     "scratch_timeout_share": null
+    }
+   }
+  }
+ },
+ "candidates": [],
+ "meta": {
+  "bearish_before_rs": 226,
+  "bearish_after_rs": 107
+ },
+ "universe_n": 73,
+ "elapsed_s": 167.9,
+ "reproduction": {
+  "v93_expected": {
+   "before_rs": 226,
+   "after_rs": 107,
+   "n": 89,
+   "win_rate": 21.3,
+   "expectancy_r": -0.255
+  },
+  "v93_observed": {
+   "before_rs": 226,
+   "after_rs": 107,
+   "n": 89,
+   "win_rate": 21.3,
+   "expectancy_r": -0.255
+  },
+  "v93_exact": true,
+  "registry_bullish_expected": {
+   "n": 246,
+   "win_rate": 35.4,
+   "expectancy_r": 0.232
+  },
+  "bullish_observed": {
+   "n": 249,
+   "wins": 88,
+   "losses": 161,
+   "win_rate": 35.34136546184739,
+   "expectancy_r": 0.23101666666666673,
+   "scratch_timeout_share": 0.30833333333333335
+  },
+  "note": "bullish uses the v93 universe filter, not run_backtest_range's; expect an approximate match"
+ }
+}
