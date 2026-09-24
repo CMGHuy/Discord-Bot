@@ -3,6 +3,7 @@
 **Version:** ui 1.21.0 · bot 1.10.3 (at writing)
 **Bump:** none for this spec; bot minor if a direction passes VALIDATION and the flag ships
 **Edge:** expectancy
+**Status:** Closed no-lift 2026-09-24 at Stage 2 (bullish) / Stage 0 (bearish); VALIDATION not spent.
 
 ## Why this, and the honest prior
 
