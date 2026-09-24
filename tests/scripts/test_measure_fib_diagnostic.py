@@ -181,3 +181,53 @@ def test_phase_a_candidates_needs_both_the_wr_floor_and_n():
     enough = thin + [_record("bullish", "3m", "win", 2.0, False)]
     cands = mfd.summarise(enough)["candidates"]
     assert {(c["direction"], c["mechanism"]) for c in cands} >= {("bullish", "#1 structural_only")}
+
+
+def _fake_summary(frame, i):
+    entry = float(frame["Close"].iloc[i])
+    d = str(frame.index[i].date())
+    return T(trades=[
+        T(direction="bullish", entry_date=d, entry=entry, stop_loss=entry * 0.95,
+          take_profit=entry * 1.1, outcome="win", r_multiple=2.0, context={}),
+        T(direction="bearish", entry_date=d, entry=entry, stop_loss=entry * 1.05,
+          take_profit=entry * 0.9, outcome="loss", r_multiple=-1.0, context={"rs_combined": 10.0}),
+        T(direction="bearish", entry_date=d, entry=entry, stop_loss=entry * 1.05,
+          take_profit=entry * 0.9, outcome="win", r_multiple=2.0, context={"rs_combined": 80.0}),
+    ])
+
+
+def test_collect_takes_bulls_from_the_live_pass_and_laggard_bears_from_the_unmasked_pass():
+    mfd = _mfd()
+    frame = make_ohlcv([100 + 0.1 * k for k in range(300)], start="2020-01-01")
+    seen_gates = []
+
+    def run_fn(ticker, df, strategy, horizon, **kw):
+        seen_gates.append(dict(mfd.STRATEGY_GATES.get(strategy) or {}))
+        return _fake_summary(df, 250)
+
+    records, meta = mfd.collect({"AAA": frame}, {}, horizons=("3m",), run_fn=run_fn)
+    assert [r["trade"].direction for r in records] == ["bullish", "bearish"]
+    assert meta == {"bearish_before_rs": 2, "bearish_after_rs": 1}
+    assert seen_gates[0].get("directions") == ("bullish",)            # live gate
+    assert seen_gates[1].get("directions") == ("bullish", "bearish")  # unmasked
+    assert mfd.STRATEGY_GATES["Fibonacci"]["directions"] == ("bullish",)  # restored
+    assert set(records[0]["features"]) >= {"capped", "deeper", "reclaim"}
+
+
+def test_reproduction_report_is_exact_only_on_the_v93_figures():
+    mfd = _mfd()
+    pooled = {"n": 89, "win_rate": 21.3, "expectancy_r": -0.255}
+    summary = {"bearish": {"baseline": {"pooled": pooled}}, "bullish": {"baseline": {"pooled": {}}}}
+    ok = mfd.reproduction_report(summary, {"bearish_before_rs": 226, "bearish_after_rs": 107})
+    off = mfd.reproduction_report(summary, {"bearish_before_rs": 225, "bearish_after_rs": 107})
+    assert ok["v93_exact"] is True and off["v93_exact"] is False
+
+
+def test_render_markdown_names_every_mechanism_and_the_reproduction_line():
+    mfd = _mfd()
+    rows = [_record("bullish", "3m", "win", 2.0, False) for _ in range(3)]
+    result = mfd.summarise(rows)
+    result["reproduction"] = mfd.reproduction_report(result, {"bearish_before_rs": 0, "bearish_after_rs": 0})
+    md = mfd.render_markdown(result)
+    for needle in ("#1 structural_only", "#2 deeper_stop", "#4 reclaim", "v93 reproduction", "Candidates"):
+        assert needle in md

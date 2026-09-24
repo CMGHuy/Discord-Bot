@@ -46,6 +46,17 @@ from swingbot.core.backtesting import arm_rule  # noqa: E402
 from swingbot.core.backtesting.backtest_wf import ANCHORED_FOLDS  # noqa: E402
 from swingbot.core.planning.targets import fib_target_candidates, select_structural_target  # noqa: E402
 
+from measure_bearish_arms import _unmasked_gates, apply_laggard_rule  # noqa: E402
+from run_backtest_range import (  # noqa: E402
+    TRAIN, _build_asof_map, _tickers_for_run, _with_context, load_cached, window_trades,
+)
+from swingbot.core.backtesting.backtest import _plan_series, run_backtest  # noqa: E402
+from swingbot.core.market.entry_filters import gate_override  # noqa: E402
+from swingbot.core.market.strategy_types import STRATEGY_GATES  # noqa: E402
+from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason  # noqa: E402
+from swingbot.core.planning.plan_engine import _safe_atr_value  # noqa: E402
+from swingbot.scan_params import ScanParams  # noqa: E402
+
 STRATEGY = "Fibonacci"
 ENTRY_RATIOS = (0.382, 0.5, 0.618)              # DEFAULT_PARAMS["Fibonacci"]["ratios"]
 RATIO_LADDER = (0.382, 0.5, 0.618, 0.786, 1.0)  # fixed before the run; 1.0 == the swing extreme
@@ -270,3 +281,153 @@ def summarise(records):
     out = {d: direction_summary([r for r in records if r["trade"].direction == d]) for d in DIRECTIONS}
     out["candidates"] = phase_a_candidates(out)
     return out
+
+
+# v93's bearish Fibonacci row (results/2026-09-17-v93-bearish-arms-train.md).
+# Same universe filter, same unmasked pass, same laggard rule: must match exactly.
+V93_BEARISH = {"before_rs": 226, "after_rs": 107, "n": 89, "win_rate": 21.3, "expectancy_r": -0.255}
+# Registry row (run_backtest_range universe, which filters differently): approximate only.
+REGISTRY_BULLISH = {"n": 246, "win_rate": 35.4, "expectancy_r": 0.232}
+
+
+def _features_for(frame, horizon_key, trade, series, rr):
+    atr_s, sh_s, sl_s = series
+    i = frame.index.get_loc(pd.Timestamp(trade.entry_date))
+    atr_val = _safe_atr_value(trade.entry, float(atr_s.iloc[i]))
+    return trade_features(frame, i, horizon_key, trade, atr_val, float(sh_s.iloc[i]), float(sl_s.iloc[i]),
+                          cap_distance(trade.entry, horizon_key), *rr)
+
+
+def collect(frames, asof_map, *, horizons=ALL_HZ, run_fn=None):
+    """Two passes. Bullish trades come from the LIVE gate, so an unmasked
+    bearish trade never blocks a bullish one under one_at_a_time. Bearish
+    trades come from v93's unmasked pass plus its laggard rule."""
+    run_fn = run_fn or run_backtest
+    params = ScanParams.from_config()
+    rr = (params.min_risk_reward_ratio, params.max_risk_reward_ratio)
+    total = len(frames) * len(horizons) * len(DIRECTIONS)
+    done, records, meta = 0, [], {}
+    for direction in DIRECTIONS:
+        ctx = (gate_override(STRATEGY, _unmasked_gates(STRATEGY)) if direction == "bearish"
+               else contextlib.nullcontext())
+        rows = []
+        with ctx:
+            for ticker, frame in sorted(frames.items()):
+                for h in horizons:
+                    done += 1
+                    print(f"[{done}/{total}] {done / total * 100:.0f}% {direction} {ticker} {h}", flush=True)
+                    summary = run_fn(ticker, frame, STRATEGY, h, one_at_a_time=True, exit_model="v2",
+                                     scale_out=True, tp2_mode="levels", frictions=True,
+                                     asof=asof_map.get(ticker))
+                    trades = [t for t in window_trades(summary, *TRAIN) if t.direction == direction]
+                    if not trades:
+                        continue
+                    atr_s, sh_s, sl_s, _, _ = _plan_series(frame, STRATEGY, h)
+                    rows.extend({"ticker": ticker, "horizon_key": h, "trade": t,
+                                 "features": _features_for(frame, h, t, (atr_s, sh_s, sl_s), rr)}
+                                for t in trades)
+        if direction == "bearish":
+            meta["bearish_before_rs"] = len(rows)
+            rows = apply_laggard_rule(rows)
+            meta["bearish_after_rs"] = len(rows)
+        records.extend(rows)
+    return records, meta
+
+
+def reproduction_report(summary, meta):
+    bear = summary["bearish"]["baseline"]["pooled"]
+    observed = {"before_rs": meta.get("bearish_before_rs"), "after_rs": meta.get("bearish_after_rs"),
+                "n": bear.get("n"),
+                "win_rate": None if bear.get("win_rate") is None else round(bear["win_rate"], 1),
+                "expectancy_r": None if bear.get("expectancy_r") is None else round(bear["expectancy_r"], 3)}
+    return {"v93_expected": V93_BEARISH, "v93_observed": observed, "v93_exact": observed == V93_BEARISH,
+            "registry_bullish_expected": REGISTRY_BULLISH,
+            "bullish_observed": summary["bullish"]["baseline"]["pooled"],
+            "note": "bullish uses the v93 universe filter, not run_backtest_range's; expect an approximate match"}
+
+
+def _fmt(s):
+    wr = "—" if s.get("win_rate") is None else f"{s['win_rate']:.1f}%"
+    er = "—" if s.get("expectancy_r") is None else f"{s['expectancy_r']:+.3f}"
+    return f"{s.get('n', 0)} | {wr} | {er}"
+
+
+def _render_pooled_table(result):
+    lines = ["| Direction | Cell | N (decided) | WR | ExpR |", "|---|---|---:|---:|---:|"]
+    for d in DIRECTIONS:
+        s = result[d]
+        cells = [("baseline (v2)", s["baseline"]["pooled"]),
+                 ("#1 structural_only (v2)", s["structural_only"]["pooled"]),
+                 ("#1 capped_only (v2)", s["capped_only"]["pooled"]),
+                 ("#2 deeper_stop base (simple)", s["deeper_stop"]["base_simple"]),
+                 ("#2 deeper_stop arm (simple)", s["deeper_stop"]["arm"]),
+                 ("#4 reclaim base (simple)", s["reclaim"]["base_simple"]),
+                 ("#4 reclaim arm (simple)", s["reclaim"]["arm"])]
+        lines += [f"| {d} | {name} | {_fmt(st)} |" for name, st in cells]
+    return lines
+
+
+def _render_rate_table(result):
+    lines = ["", "| Direction | cap rate | reclaim rate | stop mismatches |", "|---|---:|---:|---:|"]
+    for d in DIRECTIONS:
+        s = result[d]
+        cap = "—" if s["cap_rate"] is None else f"{s['cap_rate'] * 100:.1f}%"
+        rec = "—" if s["reclaim"]["reclaim_rate"] is None else f"{s['reclaim']['reclaim_rate'] * 100:.1f}%"
+        lines.append(f"| {d} | {cap} | {rec} | {s['stop_mismatch']} |")
+    return lines
+
+
+def _render_horizon_table(result):
+    lines = ["", "Per-horizon rows (description only; #3 is closed):", "",
+              "| Direction | Horizon | baseline N / WR / ExpR | #1 structural N / WR / ExpR |",
+              "|---|---|---|---|"]
+    for d in DIRECTIONS:
+        for h, row in result[d]["horizons"].items():
+            lines.append(f"| {d} | {h} | {_fmt(row['baseline'])} | {_fmt(row['structural_only'])} |")
+    return lines
+
+
+def _render_reproduction(result):
+    rep = result["reproduction"]
+    lines = ["", f"**v93 reproduction:** exact={rep['v93_exact']} "
+                 f"observed={rep['v93_observed']} expected={rep['v93_expected']}", "",
+              "**Candidates** (pooled per-direction cells with WR >= 50 and N >= 30):", ""]
+    lines += ([f"- {c['direction']} {c['mechanism']}: {_fmt(c['stats'])}" for c in result["candidates"]]
+              or ["- none"])
+    return lines
+
+
+def render_markdown(result):
+    lines = _render_pooled_table(result)
+    lines += _render_rate_table(result)
+    lines += _render_horizon_table(result)
+    lines += _render_reproduction(result)
+    return "\n".join(lines) + "\n"
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description="v101 Phase A Fibonacci diagnostic (TRAIN only)")
+    ap.add_argument("--out", required=True, help="JSON output path")
+    ap.add_argument("--md", help="markdown table output path")
+    ap.add_argument("--universe")
+    ap.add_argument("--tickers", help="comma-separated subset, for smoke runs only")
+    args = ap.parse_args(argv)
+    started = time.monotonic()
+    tickers = args.tickers.split(",") if args.tickers else _tickers_for_run(args.universe)
+    frames = {t: _with_context(load_cached(t)) for t in tickers}
+    frames = {t: f for t, f in frames.items()
+              if f is not None and liquidity_reason(f) is None and not data_quality_issues(f, t)}
+    records, meta = collect(frames, _build_asof_map(list(frames), frames, args.universe))
+    result = summarise(records)
+    result.update(meta=meta, universe_n=len(frames), elapsed_s=round(time.monotonic() - started, 1),
+                  reproduction=reproduction_report(result, meta))
+    Path(args.out).write_text(json.dumps(result, indent=1, default=str), encoding="utf-8")
+    if args.md:
+        Path(args.md).write_text(render_markdown(result), encoding="utf-8")
+    print(f"v93_exact={result['reproduction']['v93_exact']} candidates={len(result['candidates'])} -> {args.out}",
+          flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
