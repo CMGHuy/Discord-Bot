@@ -162,17 +162,21 @@ def _lifecycle_arm(frame, idx, entry, stop, target, atr_val, direction, horizon_
 
 
 def trade_features(frame, i, horizon_key, trade, atr_val, swing_high, swing_low, cap, min_rr, max_rr,
-                   stop_mismatch):
-    """Everything the three mechanisms need about one baseline trade.
+                   stop_mismatch, reclaim=("no_reclaim", None)):
+    """Everything the #1/#2 mechanisms need about one baseline trade, plus
+    the #4 reclaim outcome the caller already computed.
 
-    Geometry (cap flag, ratio, stop distance, re-selected targets) reads bars
-    <= i, or <= j for the reclaim entry. Only simulate_first_touch walks
-    forward, which is an exit, the same as run_backtest.
+    Geometry (cap flag, ratio, stop distance, re-selected #2 target) reads
+    bars <= i. Only simulate_first_touch walks forward, which is an exit,
+    the same as run_backtest.
 
     `stop_mismatch` is computed by the caller (_features_for) against
     _trade_plan_at's own (stop, target) -- the full production pipeline
     including apply_level_lifecycle -- and passed in so this function stays
-    free of the series plumbing _trade_plan_at needs."""
+    free of the series plumbing _trade_plan_at needs. `reclaim` (I3) is
+    computed by the caller too, via `_reclaim_result`, which needs the
+    atr/swing_high/swing_low *series* (not just this bar's floats) to call
+    _trade_plan_at at the reclaim bar j."""
     h = HORIZONS[horizon_key]
     direction, entry = trade.direction, trade.entry
     is_bull = direction == "bullish"
@@ -184,16 +188,22 @@ def trade_features(frame, i, horizon_key, trade, atr_val, swing_high, swing_low,
     # trade.stop_loss vs the pre-lifecycle stop _fibonacci_plan itself would
     # build: True whenever apply_level_lifecycle widened the stop onto a
     # tested S/R level. Not a diagnostic-geometry bug (see stop_mismatch
-    # above) -- this is the mechanism that produces the difference.
-    lifecycle_adjusted = abs(trade.stop_loss - expected_stop) > 1e-6 * entry
+    # above) -- this is the mechanism that produces the difference. Tolerance
+    # matches _stop_mismatch's: v2 stores stop/take_profit as round(x, 4)
+    # (backtest.py), so anything tighter than that rounding step flags a
+    # rounded-but-exact match as falsely adjusted (I1).
+    tol = max(1e-4, 1e-6 * entry)
+    lifecycle_adjusted = abs(trade.stop_loss - expected_stop) > tol
     # apply_level_lifecycle's own widening ceiling is entry * h["max_risk_pct"]
     # / 100 (lifecycle.py), not run through capped_planned_loss_pct like
     # _fibonacci_plan's cap is -- so a widened stop can land past the hard
     # safety ceiling. Live plan_manager cancels such stop-entry plans at fill.
-    # 1e-9 tolerance: a trade sitting exactly at the cap (not lifecycle-
-    # widened) can read back a hair over HARD_MAX_PLANNED_LOSS_PCT from
-    # entry/cap floating-point round-trip -- far below any real breach.
-    over_hard_cap = planned_loss_pct(trade.entry, trade.stop_loss) > HARD_MAX_PLANNED_LOSS_PCT + 1e-9
+    # Tolerance is that same round(., 4) price step expressed in percent of
+    # entry (100 * 1e-4 / entry), plus a 1e-9 float-noise margin -- a trade
+    # sitting exactly at the cap must not read back over
+    # HARD_MAX_PLANNED_LOSS_PCT purely from the rounding round-trip (I1).
+    hard_cap_tol_pct = 100 * 1e-4 / entry + 1e-9
+    over_hard_cap = planned_loss_pct(trade.entry, trade.stop_loss) > HARD_MAX_PLANNED_LOSS_PCT + hard_cap_tol_pct
 
     base = simulate_first_touch(high, low, close, i, entry, trade.stop_loss,
                                 trade.take_profit, direction, hold)
@@ -208,22 +218,6 @@ def trade_features(frame, i, horizon_key, trade, atr_val, swing_high, swing_low,
                                             direction, horizon_key, candidates_i)
     deeper = (simulate_first_touch(high, low, close, i, entry, deep_stop, deep_target, direction, hold)
               if deep_target is not None else ("no_target", None))
-
-    # #4: enter on the reclaim close, same stop, target re-selected at j,
-    # then lifecycle-adjusted at j (its own bar, its own tested levels).
-    j = reclaim_bar(high, low, close, i, direction)
-    if j is None:
-        reclaim = ("no_reclaim", None)
-    else:
-        entry_j = float(close[j])
-        still_valid = entry_j > trade.stop_loss if is_bull else entry_j < trade.stop_loss
-        candidates_j = fib_target_candidates(frame, j, h, entry_j)
-        target_j = (select_structural_target(entry_j, trade.stop_loss, is_bull, candidates_j, min_rr, max_rr)
-                    if still_valid else None)
-        stop_j, target_j = _lifecycle_arm(frame, j, entry_j, trade.stop_loss, target_j, atr_val,
-                                          direction, horizon_key, candidates_j)
-        reclaim = (simulate_first_touch(high, low, close, j, entry_j, stop_j, target_j, direction, hold)
-                   if target_j is not None else ("no_target", None))
 
     return {
         "capped": bool(capped),
@@ -262,21 +256,59 @@ def _real(rows):
     return {"pooled": pooled, "folds": folds, "verdict": arm_rule.stage1_verdict(pooled, folds)}
 
 
+def _paired(rows, arm_key):
+    """Rows where both the base_simple and `arm_key` outcome are closed
+    (win/loss/timeout) -- the #2/#4 base and arm must be computed on the
+    same subset, or the delta mixes the mechanism with the selection effect
+    the arm's own no_target/no_reclaim/invalidated rows would otherwise
+    introduce into one side only (I2)."""
+    closed = ("win", "loss", "timeout")
+    return [r for r in rows if r["features"]["base_simple"][0] in closed
+            and r["features"][arm_key][0] in closed]
+
+
+def _calibrated(paired_rows, base_simple, arm_simple):
+    """v2's own pooled WR/ExpR for the paired trades, shifted by the simple
+    simulator's arm-minus-base delta (I4) -- the simple simulator's absolute
+    numbers are not comparable to v2's; only its deltas are the signal."""
+    v2 = arm_rule.pooled_stats([r["trade"] for r in paired_rows])
+    wr = er = None
+    if None not in (v2["win_rate"], base_simple["win_rate"], arm_simple["win_rate"]):
+        wr = v2["win_rate"] + (arm_simple["win_rate"] - base_simple["win_rate"])
+    if None not in (v2["expectancy_r"], base_simple["expectancy_r"], arm_simple["expectancy_r"]):
+        er = v2["expectancy_r"] + (arm_simple["expectancy_r"] - base_simple["expectancy_r"])
+    return {"win_rate": wr, "expectancy_r": er, "n": arm_simple["n"]}
+
+
 def _deeper_stop_summary(rows):
-    """Mechanism #2 metrics: base_simple from all rows, arm from deeper stops."""
+    """Mechanism #2 metrics: base_simple and arm on the paired subset (I2),
+    arm_coverage of `rows`, and the calibrated exit-rule figures (I4)."""
+    paired = _paired(rows, "deeper")
+    base_simple = simple_stats([r["features"]["base_simple"] for r in paired])
+    arm_simple = simple_stats([r["features"]["deeper"] for r in paired])
     return {
-        "base_simple": simple_stats([r["features"]["base_simple"] for r in rows]),
-        "arm": simple_stats([r["features"]["deeper"] for r in rows]),
+        "base_simple": base_simple,
+        "arm": arm_simple,
+        "arm_coverage": len(paired) / len(rows) if rows else None,
+        "calibrated": _calibrated(paired, base_simple, arm_simple),
     }
 
 
 def _reclaim_summary(rows):
-    """Mechanism #4 metrics: reclaim entry rate and paired stats."""
+    """Mechanism #4 metrics: reclaim_rate over all `rows`; base_simple/arm
+    computed on the paired subset of reclaimed rows (I2); arm_coverage is
+    that paired count over all `rows` (not just the reclaimed subset); plus
+    the calibrated exit-rule figures (I4)."""
     reclaimed = [r for r in rows if r["features"]["reclaim"][0] != "no_reclaim"]
+    paired = _paired(reclaimed, "reclaim")
+    base_simple = simple_stats([r["features"]["base_simple"] for r in paired])
+    arm_simple = simple_stats([r["features"]["reclaim"] for r in paired])
     return {
         "reclaim_rate": len(reclaimed) / len(rows) if rows else None,
-        "base_simple": simple_stats([r["features"]["base_simple"] for r in reclaimed]),
-        "arm": simple_stats([r["features"]["reclaim"] for r in reclaimed]),
+        "base_simple": base_simple,
+        "arm": arm_simple,
+        "arm_coverage": len(paired) / len(rows) if rows else None,
+        "calibrated": _calibrated(paired, base_simple, arm_simple),
     }
 
 
@@ -312,13 +344,15 @@ def _clears(stats):
 
 
 def phase_a_candidates(summary):
-    """The spec's Phase A exit rule: pooled per-direction cells only."""
+    """The spec's Phase A exit rule. #1 reads real v2 pooled stats unchanged;
+    #2/#4 read the calibrated WR/ExpR (I4) -- the simple simulator's
+    absolute numbers are not comparable to v2's, only their deltas are."""
     out = []
     for d in DIRECTIONS:
         s = summary[d]
         cells = {"#1 structural_only": s["structural_only"]["pooled"],
-                 "#2 deeper_stop": s["deeper_stop"]["arm"],
-                 "#4 reclaim": s["reclaim"]["arm"]}
+                 "#2 deeper_stop": s["deeper_stop"]["calibrated"],
+                 "#4 reclaim": s["reclaim"]["calibrated"]}
         out.extend({"direction": d, "mechanism": k, "stats": v} for k, v in cells.items() if _clears(v))
     return out
 
@@ -358,13 +392,38 @@ def _stop_mismatch(trade, plan_at):
     return abs(trade.stop_loss - plan_stop) > tol or abs(trade.take_profit - plan_target) > tol
 
 
+def _reclaim_result(frame, i, trade, direction, horizon_key, atr_s, sh_s, sl_s, high, low, close, hold):
+    """#4 arm: the full production plan at the reclaim bar j -- _trade_plan_at,
+    which applies _fibonacci_plan's cap at entry_j and the lifecycle step
+    itself (I3; supersedes the plan's "same stop" wording). Invalidated
+    first if any bar in (i, j] trades through the bar-i trade's stop: live
+    cancels a pending stop-entry plan on that touch (lifecycle.py), so the
+    reclaim could never have entered."""
+    j = reclaim_bar(high, low, close, i, direction)
+    if j is None:
+        return "no_reclaim", None
+    stop_i, bull = trade.stop_loss, direction == "bullish"
+    if any((low[k] <= stop_i) if bull else (high[k] >= stop_i) for k in range(i + 1, j + 1)):
+        return "invalidated", None
+    plan_at = _trade_plan_at(frame, j, direction, STRATEGY, horizon_key, atr_s, sh_s, sl_s)
+    if plan_at is None:
+        return "no_target", None
+    entry_j, stop_j, target_j = plan_at
+    return simulate_first_touch(high, low, close, j, entry_j, stop_j, target_j, direction, hold)
+
+
 def _features_for(frame, horizon_key, trade, series, rr):
     atr_s, sh_s, sl_s = series
     i = frame.index.get_loc(pd.Timestamp(trade.entry_date))
     atr_val = _safe_atr_value(trade.entry, float(atr_s.iloc[i]))
     plan_at = _trade_plan_at(frame, i, trade.direction, STRATEGY, horizon_key, atr_s, sh_s, sl_s)
+    high, low, close = frame["High"].values, frame["Low"].values, frame["Close"].values
+    hold = HORIZONS[horizon_key]["max_holding_days"]
+    reclaim = _reclaim_result(frame, i, trade, trade.direction, horizon_key, atr_s, sh_s, sl_s,
+                              high, low, close, hold)
     return trade_features(frame, i, horizon_key, trade, atr_val, float(sh_s.iloc[i]), float(sl_s.iloc[i]),
-                          cap_distance(trade.entry, horizon_key), *rr, _stop_mismatch(trade, plan_at))
+                          cap_distance(trade.entry, horizon_key), *rr, _stop_mismatch(trade, plan_at),
+                          reclaim=reclaim)
 
 
 def collect(frames, asof_map, *, horizons=ALL_HZ, run_fn=None):
@@ -430,22 +489,27 @@ def _render_pooled_table(result):
                  ("#1 capped_only (v2)", s["capped_only"]["pooled"]),
                  ("#2 deeper_stop base (simple)", s["deeper_stop"]["base_simple"]),
                  ("#2 deeper_stop arm (simple)", s["deeper_stop"]["arm"]),
+                 ("#2 deeper_stop calibrated (v2+delta)", s["deeper_stop"]["calibrated"]),
                  ("#4 reclaim base (simple)", s["reclaim"]["base_simple"]),
-                 ("#4 reclaim arm (simple)", s["reclaim"]["arm"])]
+                 ("#4 reclaim arm (simple)", s["reclaim"]["arm"]),
+                 ("#4 reclaim calibrated (v2+delta)", s["reclaim"]["calibrated"])]
         lines += [f"| {d} | {name} | {_fmt(st)} |" for name, st in cells]
     return lines
 
 
 def _render_rate_table(result):
-    lines = ["", "| Direction | cap rate | lifecycle rate | over-hard-cap rate | reclaim rate | stop mismatches |",
-              "|---|---:|---:|---:|---:|---:|"]
+    lines = ["", "| Direction | cap rate | lifecycle rate | over-hard-cap rate | reclaim rate | "
+                 "#2 coverage | #4 coverage | stop mismatches |",
+              "|---|---:|---:|---:|---:|---:|---:|---:|"]
     for d in DIRECTIONS:
         s = result[d]
         cap = "—" if s["cap_rate"] is None else f"{s['cap_rate'] * 100:.1f}%"
         lc = "—" if s["lifecycle_rate"] is None else f"{s['lifecycle_rate'] * 100:.1f}%"
         ohc = "—" if s["over_hard_cap_rate"] is None else f"{s['over_hard_cap_rate'] * 100:.1f}%"
         rec = "—" if s["reclaim"]["reclaim_rate"] is None else f"{s['reclaim']['reclaim_rate'] * 100:.1f}%"
-        lines.append(f"| {d} | {cap} | {lc} | {ohc} | {rec} | {s['stop_mismatch']} |")
+        cov2 = "—" if s["deeper_stop"]["arm_coverage"] is None else f"{s['deeper_stop']['arm_coverage'] * 100:.1f}%"
+        cov4 = "—" if s["reclaim"]["arm_coverage"] is None else f"{s['reclaim']['arm_coverage'] * 100:.1f}%"
+        lines.append(f"| {d} | {cap} | {lc} | {ohc} | {rec} | {cov2} | {cov4} | {s['stop_mismatch']} |")
     return lines
 
 

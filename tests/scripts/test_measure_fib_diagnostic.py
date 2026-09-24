@@ -105,6 +105,54 @@ def test_reclaim_bar_is_the_first_close_beyond_the_signal_bar_extreme():
     assert mfd.reclaim_bar(high, low, close, 0, "bullish", window=1) is None
 
 
+def test_reclaim_result_is_invalidated_when_a_bar_before_the_reclaim_trades_through_the_stop():
+    """I3: a close through the bar-i stop anywhere in (i, j] means live would
+    have cancelled the pending stop-entry plan before the reclaim bar -- the
+    arm must never build a plan on that path."""
+    mfd = _mfd()
+    high = np.array([101, 100, 103.0])
+    low = np.array([99, 97.0, 100.0])   # bar 1's low(97) <= stop(98) -> invalidated
+    close = np.array([100, 98.5, 102.0])
+    trade = T(stop_loss=98.0)
+    result = mfd._reclaim_result(None, 0, trade, "bullish", "4w", None, None, None,
+                                 high, low, close, 5)
+    assert result == ("invalidated", None)
+
+
+def test_reclaim_result_calls_trade_plan_at_the_reclaim_bar_and_simulates_from_there(monkeypatch):
+    """I3: the #4 arm is the full production plan at the reclaim bar j
+    (_trade_plan_at, which applies _fibonacci_plan's cap at entry_j and the
+    lifecycle step itself) -- supersedes the plan's "same stop" wording."""
+    mfd = _mfd()
+    calls = []
+
+    def fake_trade_plan_at(frame, idx, direction, strategy, horizon_key, atr_s, sh_s, sl_s):
+        calls.append(idx)
+        return 102.0, 99.5, 110.0   # entry_j, capped stop_j, target_j
+
+    monkeypatch.setattr(mfd, "_trade_plan_at", fake_trade_plan_at)
+    high = np.array([101, 100, 103, 111.0])
+    low = np.array([99, 100, 100, 100.0])
+    close = np.array([100, 100, 102.0, 110.0])
+    trade = T(stop_loss=90.0)  # far below every bar's low -- never invalidated
+    result = mfd._reclaim_result(object(), 0, trade, "bullish", "4w", object(), object(), object(),
+                                 high, low, close, 5)
+    assert calls == [2]   # the reclaim bar, not the signal bar
+    assert result == mfd.simulate_first_touch(high, low, close, 2, 102.0, 99.5, 110.0, "bullish", 5)
+
+
+def test_reclaim_result_is_no_target_when_the_production_plan_finds_none(monkeypatch):
+    mfd = _mfd()
+    monkeypatch.setattr(mfd, "_trade_plan_at", lambda *a, **kw: None)
+    high = np.array([101, 100, 103.0])
+    low = np.array([99, 100.0, 100.0])
+    close = np.array([100, 100.0, 102.0])
+    trade = T(stop_loss=90.0)
+    result = mfd._reclaim_result(object(), 0, trade, "bullish", "4w", object(), object(), object(),
+                                 high, low, close, 5)
+    assert result == ("no_target", None)
+
+
 def _impulse_frame():
     # 30-bar up impulse, then a 15-bar pullback, then a flat tail.
     closes = [100 + k for k in range(30)] + [129 - 0.8 * k for k in range(1, 16)] + [117.0] * 25
@@ -228,6 +276,50 @@ def test_lifecycle_arm_passes_through_when_lifecycle_leaves_the_pair_unchanged(m
     assert result == (110.0, 130.0)
 
 
+def test_capped_stop_at_the_exact_rounding_step_reads_no_lifecycle_or_hard_cap_flags():
+    """I1: v2 stores stop/take_profit as round(x, 4) (backtest.py). A trade
+    sitting exactly at the 2% hard cap, whose stored stop is only the 4-decimal
+    rounding of the exact cap stop, must not read back as lifecycle-widened or
+    over the hard cap -- the old 1e-6*entry / 1e-9pp tolerances were tighter
+    than that rounding step and flagged ~half of all capped trades falsely."""
+    mfd = _mfd()
+    frame, i = _impulse_frame(), 44
+    # This exact price makes round(., 4) land 4e-5 away from the unrounded
+    # cap stop -- bigger than the old 1e-6*entry (1.3e-5) / 1e-9pp
+    # tolerances, so it reproduced the reviewer's false positives; the new
+    # tolerances (>= the rounding step) must read both flags False.
+    entry = 13.333
+    hi, lo = float(frame["High"].iloc[i - 42:i + 1].max()), float(frame["Low"].iloc[i - 42:i + 1].min())
+    cap = mfd.cap_distance(entry, "4w")
+    struct = mfd.structural_stop(hi, lo, 1.0, "bullish")
+    expected_stop, capped = mfd.apply_cap(entry, struct, "bullish", cap)
+    assert capped is True
+    trade = T(entry_date=str(frame.index[i].date()), direction="bullish", entry=entry,
+             stop_loss=round(expected_stop, 4), take_profit=entry * 1.2, outcome="win", r_multiple=1.0)
+    features = mfd.trade_features(frame, i, "4w", trade, 1.0, hi, lo, cap, 1.5, 2.5, False)
+    assert features["lifecycle_adjusted"] is False
+    assert features["over_hard_cap"] is False
+
+
+def test_stop_widened_past_the_cap_reads_lifecycle_adjusted_and_over_hard_cap():
+    """I1: a stop genuinely widened (e.g. by lifecycle) to 3% loss -- well past
+    both the 2% cap and any rounding tolerance -- must read True on both flags."""
+    mfd = _mfd()
+    frame, i = _impulse_frame(), 44
+    entry = 13.333
+    hi, lo = float(frame["High"].iloc[i - 42:i + 1].max()), float(frame["Low"].iloc[i - 42:i + 1].min())
+    cap = mfd.cap_distance(entry, "4w")
+    struct = mfd.structural_stop(hi, lo, 1.0, "bullish")
+    _, capped = mfd.apply_cap(entry, struct, "bullish", cap)
+    assert capped is True
+    widened_stop = entry - entry * 0.03  # 3% planned loss, past the 2% hard cap
+    trade = T(entry_date=str(frame.index[i].date()), direction="bullish", entry=entry,
+             stop_loss=widened_stop, take_profit=entry * 1.2, outcome="win", r_multiple=1.0)
+    features = mfd.trade_features(frame, i, "4w", trade, 1.0, hi, lo, cap, 1.5, 2.5, False)
+    assert features["lifecycle_adjusted"] is True
+    assert features["over_hard_cap"] is True
+
+
 def test_simple_stats_counts_decided_and_drops_non_trades():
     mfd = _mfd()
     pairs = [("win", 2.0), ("loss", -1.0), ("timeout", 0.5), ("no_target", None), ("open", None)]
@@ -273,6 +365,35 @@ def test_summarise_reports_exact_lifecycle_and_over_hard_cap_rates():
     assert bull["over_hard_cap_rate"] == pytest.approx(0.5)  # 2 of 4
 
 
+def test_deeper_stop_summary_pairs_base_and_arm_and_drops_rows_the_arm_could_not_decide():
+    """I2: base_simple and arm must be computed on the same paired subset --
+    a row whose arm is no_target must not linger in the base."""
+    mfd = _mfd()
+    rows = [_record("bullish", "3m", "win", 2.0, False) for _ in range(2)]
+    rows[1]["features"]["deeper"] = ("no_target", None)
+    out = mfd.summarise(rows)
+    d = out["bullish"]["deeper_stop"]
+    assert d["base_simple"]["n"] == 1
+    assert d["arm"]["n"] == 1
+    assert d["arm_coverage"] == pytest.approx(0.5)
+
+
+def test_reclaim_summary_pairs_base_and_arm_with_coverage_over_all_rows():
+    """I2: #4's base/arm are paired on the reclaimed subset only, but
+    arm_coverage is reported against ALL rows, not just the reclaimed ones."""
+    mfd = _mfd()
+    rows = [_record("bullish", "3m", "win", 2.0, False) for _ in range(4)]
+    rows[0]["features"]["reclaim"] = ("win", 1.5)          # closed both sides -> paired
+    rows[1]["features"]["reclaim"] = ("no_target", None)   # arm undecided -> dropped from both
+    # rows[2], rows[3] keep the default "no_reclaim" -- never entered
+    out = mfd.summarise(rows)
+    r = out["bullish"]["reclaim"]
+    assert r["reclaim_rate"] == pytest.approx(2 / 4)
+    assert r["arm_coverage"] == pytest.approx(1 / 4)
+    assert r["base_simple"]["n"] == 1
+    assert r["arm"]["n"] == 1
+
+
 def test_phase_a_candidates_needs_both_the_wr_floor_and_n():
     mfd = _mfd()
     thin = [_record("bullish", "3m", "win", 2.0, False) for _ in range(29)]
@@ -280,6 +401,47 @@ def test_phase_a_candidates_needs_both_the_wr_floor_and_n():
     enough = thin + [_record("bullish", "3m", "win", 2.0, False)]
     cands = mfd.summarise(enough)["candidates"]
     assert {(c["direction"], c["mechanism"]) for c in cands} >= {("bullish", "#1 structural_only")}
+
+
+def _calib_row(trade_outcome, base_outcome, arm_outcome):
+    trade = T(direction="bullish", entry_date="2021-06-01", outcome=trade_outcome,
+             r_multiple=1.0 if trade_outcome == "win" else -1.0)
+    features = {"capped": False, "stop_mismatch": False, "lifecycle_adjusted": False, "over_hard_cap": False,
+               "tested_ratio": 0.5, "stop_atr": 2.0,
+               "base_simple": (base_outcome, 1.0 if base_outcome == "win" else -1.0),
+               "deeper": (arm_outcome, 1.0 if arm_outcome == "win" else -1.0),
+               "reclaim": ("no_reclaim", None)}
+    return {"ticker": "AAA", "horizon_key": "3m", "trade": trade, "features": features}
+
+
+def test_deeper_stop_candidate_uses_calibrated_wr_not_the_raw_arm_wr():
+    """I4: a raw arm WR >= 50 that calibrates below 50 -- because the same
+    trades' real v2 pooled WR plus the arm-minus-base delta lands under the
+    floor -- must not produce a #2 candidate."""
+    mfd = _mfd()
+    rows = []
+    for i in range(30):
+        base_outcome = "win" if i < 27 else "loss"   # base_simple WR = 90%
+        arm_outcome = "win" if i < 18 else "loss"     # arm_simple WR = 60% (>= 50 on its own)
+        rows.append(_calib_row(arm_outcome, base_outcome, arm_outcome))  # v2 WR matches the arm: 60%
+    cands = mfd.summarise(rows)["candidates"]
+    # calibrated = 60 (v2) + (60 - 90) (arm - base delta) = 30 < 50 -> no candidate,
+    # despite the raw arm_simple WR of 60 clearing the floor on its own.
+    assert ("bullish", "#2 deeper_stop") not in {(c["direction"], c["mechanism"]) for c in cands}
+
+
+def test_deeper_stop_candidate_appears_when_calibrated_wr_clears_despite_a_low_raw_arm_wr():
+    """I4: the reverse -- a raw arm WR < 50 that calibrates above 50 must
+    produce a #2 candidate."""
+    mfd = _mfd()
+    rows = []
+    for i in range(30):
+        base_outcome = "win" if i < 3 else "loss"    # base_simple WR = 10%
+        arm_outcome = "win" if i < 12 else "loss"     # arm_simple WR = 40% (< 50 on its own)
+        rows.append(_calib_row(arm_outcome, base_outcome, arm_outcome))  # v2 WR matches the arm: 40%
+    cands = mfd.summarise(rows)["candidates"]
+    # calibrated = 40 (v2) + (40 - 10) (arm - base delta) = 70 >= 50, paired N = 30 -> candidate.
+    assert ("bullish", "#2 deeper_stop") in {(c["direction"], c["mechanism"]) for c in cands}
 
 
 def _fake_summary(frame, i):
@@ -329,5 +491,5 @@ def test_render_markdown_names_every_mechanism_and_the_reproduction_line():
     result["reproduction"] = mfd.reproduction_report(result, {"bearish_before_rs": 0, "bearish_after_rs": 0})
     md = mfd.render_markdown(result)
     for needle in ("#1 structural_only", "#2 deeper_stop", "#4 reclaim", "v93 reproduction", "Candidates",
-                  "lifecycle rate", "over-hard-cap rate"):
+                  "lifecycle rate", "over-hard-cap rate", "calibrated (v2+delta)", "#2 coverage", "#4 coverage"):
         assert needle in md
