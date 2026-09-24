@@ -1,4 +1,4 @@
-Bump: bot minor
+Bump: none — Q-INV failed its pre-registered per-instrument sample and fold gates; no inverse scan feature ships.
 Edge: volume
 
 # Downside coverage: inverse-instrument alerts Implementation Plan
@@ -27,7 +27,22 @@ is never called outside tests.
 `swingbot/core/backtesting/backtest.py:run_backtest` simulator, `yfinance` via
 `scripts/data/fetch_backtest_data.py`.
 
-**Spec:** `docs/superpowers/specs/2026-09-21-v98-downside-coverage-design.md`
+**Spec:** `docs/superpowers/specs/no-lift/2026-09-21-v98-downside-coverage-design.md`
+
+> **Closed 2026-09-24 — no lift.** The pre-registered Q-INV TRAIN run failed:
+> PSQ, SH, RWM and DOG each miss the decided-N floor at every horizon and no
+> horizon has two qualifying fold years. VALIDATION was not spent. No v98
+> code reached `main`: the implementation branch (population isolation,
+> inverse carry, `scripts/backtest/measure_v98_qinv.py`) was deleted
+> 2026-09-24 after its pre-registration, verdict and raw JSON were copied to
+> `docs/superpowers/results/`. See
+> `docs/superpowers/results/2026-09-21-v98-q-inv-train.md`.
+>
+> **Why it could not pass:** four funds over TRAIN produced 314 trades across
+> all ten horizons (~8 decided per fund per horizon; best single fund-year
+> N=7), so the per-instrument N≥30 and per-fold N≥15 clauses were
+> unreachable before the run. A future pre-registration on a thin population
+> must count candidate entries (outcome-blind) against its N floors first.
 
 ---
 

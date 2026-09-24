@@ -1,0 +1,831 @@
+{
+  "window": "2020-01-01..2023-12-31",
+  "by_horizon": {
+    "2w": {
+      "metrics": {
+        "decided_n": 7,
+        "win_rate": 14.2857,
+        "expectancy_r": -0.589571,
+        "scratch_timeout_share": 0.0
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 3,
+          "win_rate": 33.3333,
+          "expectancy_r": -0.038333,
+          "scratch_timeout_share": 0.0
+        },
+        "2022": {
+          "decided_n": 2,
+          "win_rate": 0.0,
+          "expectancy_r": -1.0045,
+          "scratch_timeout_share": 0.0
+        },
+        "2023": {
+          "decided_n": 1,
+          "win_rate": 0.0,
+          "expectancy_r": -1.002,
+          "scratch_timeout_share": 0.0
+        }
+      }
+    },
+    "4w": {
+      "metrics": {
+        "decided_n": 10,
+        "win_rate": 20.0,
+        "expectancy_r": -0.4235,
+        "scratch_timeout_share": 0.0
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 4,
+          "win_rate": 50.0,
+          "expectancy_r": 0.44475,
+          "scratch_timeout_share": 0.0
+        },
+        "2022": {
+          "decided_n": 4,
+          "win_rate": 0.0,
+          "expectancy_r": -1.00225,
+          "scratch_timeout_share": 0.0
+        },
+        "2023": {
+          "decided_n": 1,
+          "win_rate": 0.0,
+          "expectancy_r": -1.004,
+          "scratch_timeout_share": 0.0
+        }
+      }
+    },
+    "2m": {
+      "metrics": {
+        "decided_n": 11,
+        "win_rate": 18.1818,
+        "expectancy_r": -0.309917,
+        "scratch_timeout_share": 0.083333
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 3,
+          "win_rate": 33.3333,
+          "expectancy_r": 0.196,
+          "scratch_timeout_share": 0.25
+        },
+        "2022": {
+          "decided_n": 5,
+          "win_rate": 0.0,
+          "expectancy_r": -1.0028,
+          "scratch_timeout_share": 0.0
+        },
+        "2023": {
+          "decided_n": 1,
+          "win_rate": 0.0,
+          "expectancy_r": -1.003,
+          "scratch_timeout_share": 0.0
+        }
+      }
+    },
+    "3m": {
+      "metrics": {
+        "decided_n": 8,
+        "win_rate": 12.5,
+        "expectancy_r": -0.6765,
+        "scratch_timeout_share": 0.0
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 3,
+          "win_rate": 33.3333,
+          "expectancy_r": -0.134333,
+          "scratch_timeout_share": 0.0
+        },
+        "2022": {
+          "decided_n": 3,
+          "win_rate": 0.0,
+          "expectancy_r": -1.001667,
+          "scratch_timeout_share": 0.0
+        },
+        "2023": {
+          "decided_n": 1,
+          "win_rate": 0.0,
+          "expectancy_r": -1.003,
+          "scratch_timeout_share": 0.0
+        }
+      }
+    },
+    "4m": {
+      "metrics": {
+        "decided_n": 5,
+        "win_rate": 20.0,
+        "expectancy_r": -0.4816,
+        "scratch_timeout_share": 0.0
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 3,
+          "win_rate": 33.3333,
+          "expectancy_r": -0.134667,
+          "scratch_timeout_share": 0.0
+        },
+        "2022": {
+          "decided_n": 0,
+          "win_rate": null,
+          "expectancy_r": null,
+          "scratch_timeout_share": null
+        },
+        "2023": {
+          "decided_n": 1,
+          "win_rate": 0.0,
+          "expectancy_r": -1.003,
+          "scratch_timeout_share": 0.0
+        }
+      }
+    },
+    "5m": {
+      "metrics": {
+        "decided_n": 5,
+        "win_rate": 20.0,
+        "expectancy_r": -0.4816,
+        "scratch_timeout_share": 0.0
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 3,
+          "win_rate": 33.3333,
+          "expectancy_r": -0.134667,
+          "scratch_timeout_share": 0.0
+        },
+        "2022": {
+          "decided_n": 0,
+          "win_rate": null,
+          "expectancy_r": null,
+          "scratch_timeout_share": null
+        },
+        "2023": {
+          "decided_n": 1,
+          "win_rate": 0.0,
+          "expectancy_r": -1.003,
+          "scratch_timeout_share": 0.0
+        }
+      }
+    },
+    "6m": {
+      "metrics": {
+        "decided_n": 5,
+        "win_rate": 20.0,
+        "expectancy_r": -0.401833,
+        "scratch_timeout_share": 0.166667
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 3,
+          "win_rate": 33.3333,
+          "expectancy_r": -0.134667,
+          "scratch_timeout_share": 0.0
+        },
+        "2022": {
+          "decided_n": 0,
+          "win_rate": null,
+          "expectancy_r": -0.003,
+          "scratch_timeout_share": 1.0
+        },
+        "2023": {
+          "decided_n": 1,
+          "win_rate": 0.0,
+          "expectancy_r": -1.003,
+          "scratch_timeout_share": 0.0
+        }
+      }
+    },
+    "7m": {
+      "metrics": {
+        "decided_n": 5,
+        "win_rate": 20.0,
+        "expectancy_r": -0.4814,
+        "scratch_timeout_share": 0.0
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 3,
+          "win_rate": 33.3333,
+          "expectancy_r": -0.134333,
+          "scratch_timeout_share": 0.0
+        },
+        "2022": {
+          "decided_n": 0,
+          "win_rate": null,
+          "expectancy_r": null,
+          "scratch_timeout_share": null
+        },
+        "2023": {
+          "decided_n": 1,
+          "win_rate": 0.0,
+          "expectancy_r": -1.003,
+          "scratch_timeout_share": 0.0
+        }
+      }
+    },
+    "8m": {
+      "metrics": {
+        "decided_n": 5,
+        "win_rate": 20.0,
+        "expectancy_r": -0.4814,
+        "scratch_timeout_share": 0.0
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 3,
+          "win_rate": 33.3333,
+          "expectancy_r": -0.134333,
+          "scratch_timeout_share": 0.0
+        },
+        "2022": {
+          "decided_n": 0,
+          "win_rate": null,
+          "expectancy_r": null,
+          "scratch_timeout_share": null
+        },
+        "2023": {
+          "decided_n": 1,
+          "win_rate": 0.0,
+          "expectancy_r": -1.003,
+          "scratch_timeout_share": 0.0
+        }
+      }
+    },
+    "9m": {
+      "metrics": {
+        "decided_n": 5,
+        "win_rate": 20.0,
+        "expectancy_r": -0.4816,
+        "scratch_timeout_share": 0.0
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 3,
+          "win_rate": 33.3333,
+          "expectancy_r": -0.134667,
+          "scratch_timeout_share": 0.0
+        },
+        "2022": {
+          "decided_n": 0,
+          "win_rate": null,
+          "expectancy_r": null,
+          "scratch_timeout_share": null
+        },
+        "2023": {
+          "decided_n": 1,
+          "win_rate": 0.0,
+          "expectancy_r": -1.003,
+          "scratch_timeout_share": 0.0
+        }
+      }
+    }
+  },
+  "trades": [
+    {
+      "symbol": "PSQ",
+      "strategy": "MA Ribbon",
+      "horizon": "2w",
+      "entry_date": "2022-07-14",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "MA Ribbon",
+      "horizon": "2w",
+      "entry_date": "2022-11-02",
+      "outcome": "loss",
+      "r_multiple": -1.006
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.891
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.002
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Fibonacci",
+      "horizon": "4w",
+      "entry_date": "2022-06-03",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Elliott Wave",
+      "horizon": "4w",
+      "entry_date": "2021-06-10",
+      "outcome": "win",
+      "r_multiple": 2.182
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Elliott Wave",
+      "horizon": "4w",
+      "entry_date": "2022-06-13",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "MA Ribbon",
+      "horizon": "4w",
+      "entry_date": "2022-07-14",
+      "outcome": "loss",
+      "r_multiple": -1.002
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "MA Ribbon",
+      "horizon": "4w",
+      "entry_date": "2022-11-02",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.602
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Fibonacci",
+      "horizon": "2m",
+      "entry_date": "2022-06-03",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Support/Resistance",
+      "horizon": "2m",
+      "entry_date": "2022-05-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Support/Resistance",
+      "horizon": "2m",
+      "entry_date": "2022-05-11",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "MA Ribbon",
+      "horizon": "2m",
+      "entry_date": "2022-12-20",
+      "outcome": "loss",
+      "r_multiple": -1.008
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Break & Retest",
+      "horizon": "2m",
+      "entry_date": "2020-11-25",
+      "outcome": "win",
+      "r_multiple": 2.515
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Break & Retest",
+      "horizon": "2m",
+      "entry_date": "2021-05-07",
+      "outcome": "timeout",
+      "r_multiple": 1.189
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Break & Retest",
+      "horizon": "2m",
+      "entry_date": "2022-11-03",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.002
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.602
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Support/Resistance",
+      "horizon": "3m",
+      "entry_date": "2022-05-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Support/Resistance",
+      "horizon": "3m",
+      "entry_date": "2022-05-11",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Break & Retest",
+      "horizon": "3m",
+      "entry_date": "2022-11-03",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.602
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.602
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.602
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "MA Ribbon",
+      "horizon": "6m",
+      "entry_date": "2022-08-31",
+      "outcome": "scratch",
+      "r_multiple": -0.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.602
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.602
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.602
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.602
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    }
+  ]
+}

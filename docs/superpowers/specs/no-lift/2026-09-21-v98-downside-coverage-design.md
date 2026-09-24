@@ -2,7 +2,8 @@
 
 **Bump:** none (spec; the implementing plan declares its own release level)
 **Edge:** volume
-**Status:** Spec. No gate changed, no pre-registration spent, no production change performed.
+**Status:** Closed no-lift 2026-09-24. Q-INV failed on TRAIN and anchored folds;
+VALIDATION was not spent and no inverse scan feature ships.
 **Basis:** Session diagnosis 2026-09-21 against the live book, the cached universe and the
 shipped gate tables. An earlier revision of this spec deferred to a stocks-only/no-ETF
 boundary inherited from the v97 roadmap; that plan has since been withdrawn and the boundary

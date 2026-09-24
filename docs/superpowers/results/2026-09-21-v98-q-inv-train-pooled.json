@@ -1,0 +1,2799 @@
+{
+  "window": "2020-01-01..2023-12-31",
+  "by_horizon": {
+    "2w": {
+      "metrics": {
+        "decided_n": 22,
+        "win_rate": 36.3636,
+        "expectancy_r": -0.02125,
+        "scratch_timeout_share": 0.214286
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 6,
+          "win_rate": 50.0,
+          "expectancy_r": 0.338857,
+          "scratch_timeout_share": 0.142857
+        },
+        "2022": {
+          "decided_n": 5,
+          "win_rate": 40.0,
+          "expectancy_r": 0.063,
+          "scratch_timeout_share": 0.166667
+        },
+        "2023": {
+          "decided_n": 5,
+          "win_rate": 0.0,
+          "expectancy_r": -0.8375,
+          "scratch_timeout_share": 0.166667
+        }
+      }
+    },
+    "4w": {
+      "metrics": {
+        "decided_n": 31,
+        "win_rate": 35.4839,
+        "expectancy_r": 0.016675,
+        "scratch_timeout_share": 0.225
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 6,
+          "win_rate": 50.0,
+          "expectancy_r": 0.262875,
+          "scratch_timeout_share": 0.25
+        },
+        "2022": {
+          "decided_n": 12,
+          "win_rate": 33.3333,
+          "expectancy_r": -0.067643,
+          "scratch_timeout_share": 0.142857
+        },
+        "2023": {
+          "decided_n": 6,
+          "win_rate": 0.0,
+          "expectancy_r": -0.862,
+          "scratch_timeout_share": 0.142857
+        }
+      }
+    },
+    "2m": {
+      "metrics": {
+        "decided_n": 31,
+        "win_rate": 22.5806,
+        "expectancy_r": -0.17,
+        "scratch_timeout_share": 0.261905
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 5,
+          "win_rate": 20.0,
+          "expectancy_r": 0.039167,
+          "scratch_timeout_share": 0.583333
+        },
+        "2022": {
+          "decided_n": 12,
+          "win_rate": 16.6667,
+          "expectancy_r": -0.366077,
+          "scratch_timeout_share": 0.076923
+        },
+        "2023": {
+          "decided_n": 5,
+          "win_rate": 0.0,
+          "expectancy_r": -1.005,
+          "scratch_timeout_share": 0.0
+        }
+      }
+    },
+    "3m": {
+      "metrics": {
+        "decided_n": 32,
+        "win_rate": 40.625,
+        "expectancy_r": 0.052615,
+        "scratch_timeout_share": 0.179487
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 9,
+          "win_rate": 44.4444,
+          "expectancy_r": 0.208111,
+          "scratch_timeout_share": 0.0
+        },
+        "2022": {
+          "decided_n": 13,
+          "win_rate": 46.1538,
+          "expectancy_r": 0.182357,
+          "scratch_timeout_share": 0.071429
+        },
+        "2023": {
+          "decided_n": 3,
+          "win_rate": 0.0,
+          "expectancy_r": -0.6072,
+          "scratch_timeout_share": 0.4
+        }
+      }
+    },
+    "4m": {
+      "metrics": {
+        "decided_n": 25,
+        "win_rate": 52.0,
+        "expectancy_r": 0.271515,
+        "scratch_timeout_share": 0.242424
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 9,
+          "win_rate": 55.5556,
+          "expectancy_r": 0.479111,
+          "scratch_timeout_share": 0.0
+        },
+        "2022": {
+          "decided_n": 6,
+          "win_rate": 66.6667,
+          "expectancy_r": 0.566375,
+          "scratch_timeout_share": 0.25
+        },
+        "2023": {
+          "decided_n": 3,
+          "win_rate": 0.0,
+          "expectancy_r": -0.605,
+          "scratch_timeout_share": 0.4
+        }
+      }
+    },
+    "5m": {
+      "metrics": {
+        "decided_n": 20,
+        "win_rate": 50.0,
+        "expectancy_r": 0.239462,
+        "scratch_timeout_share": 0.230769
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 7,
+          "win_rate": 57.1429,
+          "expectancy_r": 0.556143,
+          "scratch_timeout_share": 0.0
+        },
+        "2022": {
+          "decided_n": 4,
+          "win_rate": 75.0,
+          "expectancy_r": 0.612167,
+          "scratch_timeout_share": 0.333333
+        },
+        "2023": {
+          "decided_n": 3,
+          "win_rate": 0.0,
+          "expectancy_r": -0.755,
+          "scratch_timeout_share": 0.25
+        }
+      }
+    },
+    "6m": {
+      "metrics": {
+        "decided_n": 22,
+        "win_rate": 54.5455,
+        "expectancy_r": 0.350033,
+        "scratch_timeout_share": 0.266667
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 6,
+          "win_rate": 50.0,
+          "expectancy_r": 0.344286,
+          "scratch_timeout_share": 0.142857
+        },
+        "2022": {
+          "decided_n": 6,
+          "win_rate": 83.3333,
+          "expectancy_r": 0.836778,
+          "scratch_timeout_share": 0.333333
+        },
+        "2023": {
+          "decided_n": 4,
+          "win_rate": 0.0,
+          "expectancy_r": -0.8048,
+          "scratch_timeout_share": 0.2
+        }
+      }
+    },
+    "7m": {
+      "metrics": {
+        "decided_n": 21,
+        "win_rate": 52.381,
+        "expectancy_r": 0.263821,
+        "scratch_timeout_share": 0.25
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 6,
+          "win_rate": 50.0,
+          "expectancy_r": 0.344429,
+          "scratch_timeout_share": 0.142857
+        },
+        "2022": {
+          "decided_n": 5,
+          "win_rate": 80.0,
+          "expectancy_r": 0.631571,
+          "scratch_timeout_share": 0.285714
+        },
+        "2023": {
+          "decided_n": 3,
+          "win_rate": 0.0,
+          "expectancy_r": -0.6054,
+          "scratch_timeout_share": 0.4
+        }
+      }
+    },
+    "8m": {
+      "metrics": {
+        "decided_n": 18,
+        "win_rate": 38.8889,
+        "expectancy_r": 0.012667,
+        "scratch_timeout_share": 0.25
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 6,
+          "win_rate": 50.0,
+          "expectancy_r": 0.344429,
+          "scratch_timeout_share": 0.142857
+        },
+        "2022": {
+          "decided_n": 2,
+          "win_rate": 50.0,
+          "expectancy_r": 0.05875,
+          "scratch_timeout_share": 0.5
+        },
+        "2023": {
+          "decided_n": 3,
+          "win_rate": 0.0,
+          "expectancy_r": -0.755,
+          "scratch_timeout_share": 0.25
+        }
+      }
+    },
+    "9m": {
+      "metrics": {
+        "decided_n": 18,
+        "win_rate": 44.4444,
+        "expectancy_r": 0.172708,
+        "scratch_timeout_share": 0.25
+      },
+      "folds": {
+        "2021": {
+          "decided_n": 6,
+          "win_rate": 50.0,
+          "expectancy_r": 0.344286,
+          "scratch_timeout_share": 0.142857
+        },
+        "2022": {
+          "decided_n": 2,
+          "win_rate": 50.0,
+          "expectancy_r": 0.293,
+          "scratch_timeout_share": 0.5
+        },
+        "2023": {
+          "decided_n": 3,
+          "win_rate": 0.0,
+          "expectancy_r": -0.755,
+          "scratch_timeout_share": 0.25
+        }
+      }
+    }
+  },
+  "trades": [
+    {
+      "symbol": "PSQ",
+      "strategy": "MA Ribbon",
+      "horizon": "2w",
+      "entry_date": "2022-07-14",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "MA Ribbon",
+      "horizon": "2w",
+      "entry_date": "2022-11-02",
+      "outcome": "loss",
+      "r_multiple": -1.006
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.891
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.002
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Fibonacci",
+      "horizon": "4w",
+      "entry_date": "2022-06-03",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Elliott Wave",
+      "horizon": "4w",
+      "entry_date": "2021-06-10",
+      "outcome": "win",
+      "r_multiple": 2.182
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Elliott Wave",
+      "horizon": "4w",
+      "entry_date": "2022-06-13",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "MA Ribbon",
+      "horizon": "4w",
+      "entry_date": "2022-07-14",
+      "outcome": "loss",
+      "r_multiple": -1.002
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "MA Ribbon",
+      "horizon": "4w",
+      "entry_date": "2022-11-02",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.602
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Fibonacci",
+      "horizon": "2m",
+      "entry_date": "2022-06-03",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Support/Resistance",
+      "horizon": "2m",
+      "entry_date": "2022-05-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Support/Resistance",
+      "horizon": "2m",
+      "entry_date": "2022-05-11",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "MA Ribbon",
+      "horizon": "2m",
+      "entry_date": "2022-12-20",
+      "outcome": "loss",
+      "r_multiple": -1.008
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Break & Retest",
+      "horizon": "2m",
+      "entry_date": "2020-11-25",
+      "outcome": "win",
+      "r_multiple": 2.515
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Break & Retest",
+      "horizon": "2m",
+      "entry_date": "2021-05-07",
+      "outcome": "timeout",
+      "r_multiple": 1.189
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Break & Retest",
+      "horizon": "2m",
+      "entry_date": "2022-11-03",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.002
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.602
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Support/Resistance",
+      "horizon": "3m",
+      "entry_date": "2022-05-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Support/Resistance",
+      "horizon": "3m",
+      "entry_date": "2022-05-11",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "Break & Retest",
+      "horizon": "3m",
+      "entry_date": "2022-11-03",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.602
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.602
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.602
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "MA Ribbon",
+      "horizon": "6m",
+      "entry_date": "2022-08-31",
+      "outcome": "scratch",
+      "r_multiple": -0.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.602
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.602
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.602
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2021-02-24",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2021-08-19",
+      "outcome": "win",
+      "r_multiple": 1.602
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2021-09-22",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "PSQ",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Fibonacci",
+      "horizon": "2w",
+      "entry_date": "2022-07-18",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Fibonacci",
+      "horizon": "2w",
+      "entry_date": "2023-03-17",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "SH",
+      "strategy": "MA Ribbon",
+      "horizon": "2w",
+      "entry_date": "2022-06-10",
+      "outcome": "win",
+      "r_multiple": 1.839
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2020-02-03",
+      "outcome": "win",
+      "r_multiple": 1.345
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2020-06-29",
+      "outcome": "win",
+      "r_multiple": 1.845
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2021-02-01",
+      "outcome": "win",
+      "r_multiple": 1.423
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2021-05-13",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.008
+    },
+    {
+      "symbol": "SH",
+      "strategy": "EMA Crossover",
+      "horizon": "4w",
+      "entry_date": "2022-09-13",
+      "outcome": "win",
+      "r_multiple": 1.304
+    },
+    {
+      "symbol": "SH",
+      "strategy": "VWAP",
+      "horizon": "4w",
+      "entry_date": "2023-03-23",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Fibonacci",
+      "horizon": "4w",
+      "entry_date": "2022-05-31",
+      "outcome": "win",
+      "r_multiple": 1.677
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Fibonacci",
+      "horizon": "4w",
+      "entry_date": "2022-11-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "SH",
+      "strategy": "MA Ribbon",
+      "horizon": "4w",
+      "entry_date": "2022-06-10",
+      "outcome": "win",
+      "r_multiple": 1.839
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2020-02-03",
+      "outcome": "win",
+      "r_multiple": 1.345
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2020-06-29",
+      "outcome": "win",
+      "r_multiple": 1.845
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2021-02-01",
+      "outcome": "win",
+      "r_multiple": 1.336
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2021-05-13",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.008
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Fibonacci",
+      "horizon": "2m",
+      "entry_date": "2022-05-31",
+      "outcome": "win",
+      "r_multiple": 1.763
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Fibonacci",
+      "horizon": "2m",
+      "entry_date": "2022-11-02",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Support/Resistance",
+      "horizon": "2m",
+      "entry_date": "2022-06-13",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2020-02-03",
+      "outcome": "win",
+      "r_multiple": 1.345
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2020-06-29",
+      "outcome": "win",
+      "r_multiple": 1.845
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2021-02-01",
+      "outcome": "scratch",
+      "r_multiple": -0.015
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2021-05-13",
+      "outcome": "timeout",
+      "r_multiple": 1.12
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.008
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Fibonacci",
+      "horizon": "3m",
+      "entry_date": "2022-06-01",
+      "outcome": "win",
+      "r_multiple": 1.741
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Fibonacci",
+      "horizon": "3m",
+      "entry_date": "2022-11-02",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Support/Resistance",
+      "horizon": "3m",
+      "entry_date": "2022-06-13",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "SH",
+      "strategy": "MA Ribbon",
+      "horizon": "3m",
+      "entry_date": "2022-09-15",
+      "outcome": "scratch",
+      "r_multiple": -0.014
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2020-02-03",
+      "outcome": "win",
+      "r_multiple": 1.345
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2020-06-29",
+      "outcome": "win",
+      "r_multiple": 1.845
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2021-02-01",
+      "outcome": "win",
+      "r_multiple": 1.75
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2021-05-13",
+      "outcome": "win",
+      "r_multiple": 1.465
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.008
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Fibonacci",
+      "horizon": "4m",
+      "entry_date": "2022-06-01",
+      "outcome": "win",
+      "r_multiple": 2.07
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Fibonacci",
+      "horizon": "4m",
+      "entry_date": "2022-10-26",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "MA Ribbon",
+      "horizon": "4m",
+      "entry_date": "2022-09-16",
+      "outcome": "win",
+      "r_multiple": 1.465
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Break & Retest",
+      "horizon": "4m",
+      "entry_date": "2020-04-22",
+      "outcome": "win",
+      "r_multiple": 1.479
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2020-02-03",
+      "outcome": "win",
+      "r_multiple": 1.345
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2020-06-29",
+      "outcome": "win",
+      "r_multiple": 1.845
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2021-02-01",
+      "outcome": "win",
+      "r_multiple": 1.75
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2021-05-13",
+      "outcome": "win",
+      "r_multiple": 1.566
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.008
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Fibonacci",
+      "horizon": "5m",
+      "entry_date": "2022-06-01",
+      "outcome": "win",
+      "r_multiple": 1.692
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Fibonacci",
+      "horizon": "5m",
+      "entry_date": "2022-10-26",
+      "outcome": "scratch",
+      "r_multiple": -0.009
+    },
+    {
+      "symbol": "SH",
+      "strategy": "MA Ribbon",
+      "horizon": "5m",
+      "entry_date": "2022-09-14",
+      "outcome": "win",
+      "r_multiple": 1.259
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2020-02-03",
+      "outcome": "win",
+      "r_multiple": 1.345
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2020-06-29",
+      "outcome": "win",
+      "r_multiple": 1.845
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2021-02-01",
+      "outcome": "win",
+      "r_multiple": 1.75
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2021-05-13",
+      "outcome": "win",
+      "r_multiple": 1.478
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.008
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Fibonacci",
+      "horizon": "6m",
+      "entry_date": "2022-06-01",
+      "outcome": "win",
+      "r_multiple": 1.387
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Fibonacci",
+      "horizon": "6m",
+      "entry_date": "2022-10-26",
+      "outcome": "scratch",
+      "r_multiple": -0.009
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2020-02-03",
+      "outcome": "win",
+      "r_multiple": 1.345
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2020-06-29",
+      "outcome": "win",
+      "r_multiple": 1.845
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2021-02-01",
+      "outcome": "win",
+      "r_multiple": 1.75
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2021-05-13",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.008
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Fibonacci",
+      "horizon": "7m",
+      "entry_date": "2022-06-01",
+      "outcome": "win",
+      "r_multiple": 1.377
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Fibonacci",
+      "horizon": "7m",
+      "entry_date": "2022-10-26",
+      "outcome": "loss",
+      "r_multiple": -1.012
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2020-02-03",
+      "outcome": "win",
+      "r_multiple": 1.345
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2020-06-29",
+      "outcome": "win",
+      "r_multiple": 1.845
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2021-02-01",
+      "outcome": "win",
+      "r_multiple": 1.75
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2021-05-13",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.008
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Volume Profile",
+      "horizon": "7m",
+      "entry_date": "2022-05-31",
+      "outcome": "win",
+      "r_multiple": 1.855
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Fibonacci",
+      "horizon": "8m",
+      "entry_date": "2022-10-26",
+      "outcome": "loss",
+      "r_multiple": -1.012
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2020-02-03",
+      "outcome": "win",
+      "r_multiple": 1.345
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2020-06-29",
+      "outcome": "win",
+      "r_multiple": 1.845
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2021-02-01",
+      "outcome": "win",
+      "r_multiple": 1.75
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2021-05-13",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.008
+    },
+    {
+      "symbol": "SH",
+      "strategy": "Fibonacci",
+      "horizon": "9m",
+      "entry_date": "2022-10-26",
+      "outcome": "loss",
+      "r_multiple": -1.012
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2020-02-03",
+      "outcome": "win",
+      "r_multiple": 1.345
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2020-06-29",
+      "outcome": "win",
+      "r_multiple": 1.845
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2021-02-01",
+      "outcome": "win",
+      "r_multiple": 1.75
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2021-05-13",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "SH",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2023-08-07",
+      "outcome": "loss",
+      "r_multiple": -1.008
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "MA Ribbon",
+      "horizon": "2w",
+      "entry_date": "2023-05-31",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2020-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2020-02-04",
+      "outcome": "scratch",
+      "r_multiple": -0.004
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2021-03-05",
+      "outcome": "win",
+      "r_multiple": 2.07
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2022-03-03",
+      "outcome": "scratch",
+      "r_multiple": -0.008
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2023-11-08",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Fibonacci",
+      "horizon": "4w",
+      "entry_date": "2022-02-14",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Fibonacci",
+      "horizon": "4w",
+      "entry_date": "2022-02-18",
+      "outcome": "win",
+      "r_multiple": 2.078
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Fibonacci",
+      "horizon": "4w",
+      "entry_date": "2022-03-01",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Elliott Wave",
+      "horizon": "4w",
+      "entry_date": "2020-10-05",
+      "outcome": "win",
+      "r_multiple": 1.955
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Elliott Wave",
+      "horizon": "4w",
+      "entry_date": "2022-06-16",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "MA Ribbon",
+      "horizon": "4w",
+      "entry_date": "2023-05-31",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2020-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2020-02-04",
+      "outcome": "scratch",
+      "r_multiple": -0.004
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2021-03-05",
+      "outcome": "scratch",
+      "r_multiple": -0.006
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2022-03-03",
+      "outcome": "timeout",
+      "r_multiple": 0.173
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2023-11-08",
+      "outcome": "loss",
+      "r_multiple": -1.002
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Fibonacci",
+      "horizon": "2m",
+      "entry_date": "2022-02-10",
+      "outcome": "timeout",
+      "r_multiple": 2.053
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Support/Resistance",
+      "horizon": "2m",
+      "entry_date": "2022-05-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Support/Resistance",
+      "horizon": "2m",
+      "entry_date": "2022-05-11",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Support/Resistance",
+      "horizon": "2m",
+      "entry_date": "2023-10-19",
+      "outcome": "loss",
+      "r_multiple": -1.008
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "MA Ribbon",
+      "horizon": "2m",
+      "entry_date": "2022-04-11",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Break & Retest",
+      "horizon": "2m",
+      "entry_date": "2021-05-27",
+      "outcome": "scratch",
+      "r_multiple": -0.014
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Break & Retest",
+      "horizon": "2m",
+      "entry_date": "2021-06-24",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2020-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.007
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2021-03-05",
+      "outcome": "scratch",
+      "r_multiple": -0.006
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2022-03-03",
+      "outcome": "win",
+      "r_multiple": 1.45
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2023-11-08",
+      "outcome": "loss",
+      "r_multiple": -1.002
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Fibonacci",
+      "horizon": "3m",
+      "entry_date": "2022-02-10",
+      "outcome": "win",
+      "r_multiple": 2.059
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Support/Resistance",
+      "horizon": "3m",
+      "entry_date": "2022-05-09",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Support/Resistance",
+      "horizon": "3m",
+      "entry_date": "2022-05-11",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Support/Resistance",
+      "horizon": "3m",
+      "entry_date": "2023-10-19",
+      "outcome": "scratch",
+      "r_multiple": -0.013
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "MA Ribbon",
+      "horizon": "3m",
+      "entry_date": "2022-04-11",
+      "outcome": "win",
+      "r_multiple": 1.271
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "MA Ribbon",
+      "horizon": "3m",
+      "entry_date": "2022-09-20",
+      "outcome": "win",
+      "r_multiple": 1.725
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Break & Retest",
+      "horizon": "3m",
+      "entry_date": "2021-09-02",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Break & Retest",
+      "horizon": "3m",
+      "entry_date": "2022-03-04",
+      "outcome": "win",
+      "r_multiple": 1.335
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2020-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2020-02-04",
+      "outcome": "scratch",
+      "r_multiple": -0.004
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2021-03-05",
+      "outcome": "win",
+      "r_multiple": 2.07
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2022-03-03",
+      "outcome": "win",
+      "r_multiple": 1.45
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2023-11-08",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Fibonacci",
+      "horizon": "4m",
+      "entry_date": "2022-02-10",
+      "outcome": "scratch",
+      "r_multiple": -0.006
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Fibonacci",
+      "horizon": "4m",
+      "entry_date": "2022-09-13",
+      "outcome": "win",
+      "r_multiple": 1.58
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Break & Retest",
+      "horizon": "4m",
+      "entry_date": "2021-09-02",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Break & Retest",
+      "horizon": "4m",
+      "entry_date": "2021-10-19",
+      "outcome": "win",
+      "r_multiple": 1.336
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Break & Retest",
+      "horizon": "4m",
+      "entry_date": "2023-11-08",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2020-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2020-02-04",
+      "outcome": "scratch",
+      "r_multiple": -0.004
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2021-03-05",
+      "outcome": "win",
+      "r_multiple": 2.07
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2022-03-03",
+      "outcome": "win",
+      "r_multiple": 1.45
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2023-11-08",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Fibonacci",
+      "horizon": "5m",
+      "entry_date": "2022-02-10",
+      "outcome": "scratch",
+      "r_multiple": -0.006
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "MA Ribbon",
+      "horizon": "5m",
+      "entry_date": "2022-12-28",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2020-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2020-02-04",
+      "outcome": "scratch",
+      "r_multiple": -0.004
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2021-03-05",
+      "outcome": "win",
+      "r_multiple": 2.07
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2022-03-03",
+      "outcome": "win",
+      "r_multiple": 1.738
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2023-11-08",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Fibonacci",
+      "horizon": "6m",
+      "entry_date": "2022-02-10",
+      "outcome": "scratch",
+      "r_multiple": -0.006
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Fibonacci",
+      "horizon": "6m",
+      "entry_date": "2022-09-13",
+      "outcome": "win",
+      "r_multiple": 2.063
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "MA Ribbon",
+      "horizon": "6m",
+      "entry_date": "2022-09-21",
+      "outcome": "win",
+      "r_multiple": 1.772
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "MA Ribbon",
+      "horizon": "6m",
+      "entry_date": "2022-12-28",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2020-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2020-02-04",
+      "outcome": "scratch",
+      "r_multiple": -0.004
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2020-09-09",
+      "outcome": "win",
+      "r_multiple": 1.901
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2021-03-05",
+      "outcome": "win",
+      "r_multiple": 2.07
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2022-03-03",
+      "outcome": "win",
+      "r_multiple": 1.738
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2023-11-08",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Fibonacci",
+      "horizon": "7m",
+      "entry_date": "2022-09-13",
+      "outcome": "timeout",
+      "r_multiple": -0.644
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "MACD",
+      "horizon": "7m",
+      "entry_date": "2022-04-12",
+      "outcome": "win",
+      "r_multiple": 1.368
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2020-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2020-02-04",
+      "outcome": "loss",
+      "r_multiple": -1.006
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2020-09-09",
+      "outcome": "win",
+      "r_multiple": 1.901
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2021-03-05",
+      "outcome": "win",
+      "r_multiple": 2.07
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2022-03-03",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2023-11-08",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Volume Profile",
+      "horizon": "7m",
+      "entry_date": "2022-04-21",
+      "outcome": "win",
+      "r_multiple": 1.482
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Volume Profile",
+      "horizon": "7m",
+      "entry_date": "2023-05-24",
+      "outcome": "scratch",
+      "r_multiple": -0.007
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Fibonacci",
+      "horizon": "8m",
+      "entry_date": "2022-09-13",
+      "outcome": "timeout",
+      "r_multiple": -0.179
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "MACD",
+      "horizon": "8m",
+      "entry_date": "2022-04-12",
+      "outcome": "win",
+      "r_multiple": 1.43
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2020-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2020-02-04",
+      "outcome": "loss",
+      "r_multiple": -1.006
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2020-09-09",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2021-03-05",
+      "outcome": "win",
+      "r_multiple": 2.07
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2022-03-03",
+      "outcome": "scratch",
+      "r_multiple": -0.004
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2023-11-08",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "Fibonacci",
+      "horizon": "9m",
+      "entry_date": "2022-09-13",
+      "outcome": "timeout",
+      "r_multiple": 0.376
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "MACD",
+      "horizon": "9m",
+      "entry_date": "2022-04-12",
+      "outcome": "win",
+      "r_multiple": 1.812
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2020-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2020-02-04",
+      "outcome": "loss",
+      "r_multiple": -1.005
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2020-09-09",
+      "outcome": "win",
+      "r_multiple": 1.901
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2021-03-05",
+      "outcome": "win",
+      "r_multiple": 2.07
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2022-03-03",
+      "outcome": "scratch",
+      "r_multiple": -0.004
+    },
+    {
+      "symbol": "RWM",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2023-11-08",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "MA Ribbon",
+      "horizon": "2w",
+      "entry_date": "2022-06-10",
+      "outcome": "win",
+      "r_multiple": 1.557
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.007
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2020-09-28",
+      "outcome": "win",
+      "r_multiple": 1.514
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2021-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "2w",
+      "entry_date": "2023-11-09",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "VWAP",
+      "horizon": "4w",
+      "entry_date": "2023-10-13",
+      "outcome": "scratch",
+      "r_multiple": -0.008
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "Elliott Wave",
+      "horizon": "4w",
+      "entry_date": "2020-11-09",
+      "outcome": "timeout",
+      "r_multiple": 1.91
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "MA Ribbon",
+      "horizon": "4w",
+      "entry_date": "2022-06-10",
+      "outcome": "scratch",
+      "r_multiple": -0.005
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.007
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2020-09-28",
+      "outcome": "win",
+      "r_multiple": 1.514
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2021-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "4w",
+      "entry_date": "2023-11-09",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "Break & Retest",
+      "horizon": "2m",
+      "entry_date": "2020-06-23",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "Break & Retest",
+      "horizon": "2m",
+      "entry_date": "2020-07-06",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "Break & Retest",
+      "horizon": "2m",
+      "entry_date": "2020-07-13",
+      "outcome": "scratch",
+      "r_multiple": -0.017
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "Break & Retest",
+      "horizon": "2m",
+      "entry_date": "2021-08-05",
+      "outcome": "timeout",
+      "r_multiple": 0.621
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "Break & Retest",
+      "horizon": "2m",
+      "entry_date": "2021-12-21",
+      "outcome": "scratch",
+      "r_multiple": -0.014
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.007
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2020-09-28",
+      "outcome": "win",
+      "r_multiple": 1.514
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2021-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "2m",
+      "entry_date": "2023-11-09",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "Break & Retest",
+      "horizon": "3m",
+      "entry_date": "2020-06-23",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "Break & Retest",
+      "horizon": "3m",
+      "entry_date": "2020-07-13",
+      "outcome": "scratch",
+      "r_multiple": -0.017
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "Break & Retest",
+      "horizon": "3m",
+      "entry_date": "2021-09-27",
+      "outcome": "loss",
+      "r_multiple": -1.003
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.007
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2020-09-28",
+      "outcome": "win",
+      "r_multiple": 1.514
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2021-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "3m",
+      "entry_date": "2023-11-09",
+      "outcome": "loss",
+      "r_multiple": -1.007
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "MA Ribbon",
+      "horizon": "4m",
+      "entry_date": "2022-09-13",
+      "outcome": "scratch",
+      "r_multiple": -0.009
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "Break & Retest",
+      "horizon": "4m",
+      "entry_date": "2020-07-13",
+      "outcome": "scratch",
+      "r_multiple": -0.017
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "Break & Retest",
+      "horizon": "4m",
+      "entry_date": "2022-03-22",
+      "outcome": "loss",
+      "r_multiple": -1.014
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.007
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2020-09-28",
+      "outcome": "win",
+      "r_multiple": 1.514
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2021-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "4m",
+      "entry_date": "2023-11-09",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.007
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2020-09-28",
+      "outcome": "win",
+      "r_multiple": 1.514
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2021-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "5m",
+      "entry_date": "2023-11-09",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "Fibonacci",
+      "horizon": "6m",
+      "entry_date": "2023-11-09",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "MA Ribbon",
+      "horizon": "6m",
+      "entry_date": "2022-08-31",
+      "outcome": "win",
+      "r_multiple": 1.59
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.007
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2020-09-28",
+      "outcome": "win",
+      "r_multiple": 1.514
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2021-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "6m",
+      "entry_date": "2023-11-09",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.007
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2020-09-28",
+      "outcome": "win",
+      "r_multiple": 1.514
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2021-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "7m",
+      "entry_date": "2023-11-09",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.007
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2020-09-28",
+      "outcome": "win",
+      "r_multiple": 1.514
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2021-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "8m",
+      "entry_date": "2023-11-09",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2020-09-11",
+      "outcome": "scratch",
+      "r_multiple": -0.007
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2020-09-28",
+      "outcome": "win",
+      "r_multiple": 1.514
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2021-01-28",
+      "outcome": "loss",
+      "r_multiple": -1.001
+    },
+    {
+      "symbol": "DOG",
+      "strategy": "RSI Divergence",
+      "horizon": "9m",
+      "entry_date": "2023-11-09",
+      "outcome": "loss",
+      "r_multiple": -1.004
+    }
+  ]
+}
