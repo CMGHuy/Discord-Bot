@@ -196,6 +196,38 @@ def test_features_for_stop_mismatch_is_false_when_trade_carries_trade_plan_ats_o
     assert features["stop_mismatch"] is False
 
 
+def test_lifecycle_arm_simulates_with_the_widened_stop_and_target(monkeypatch):
+    """apply_level_lifecycle's enabled, widening branch: _lifecycle_arm must
+    return exactly the (stop, tp1) it hands back, not the pre-widening pair
+    it was called with."""
+    mfd = _mfd()
+
+    def fake_apply_level_lifecycle(df, index, *, entry, stop, tp1, atr_val, direction,
+                                   strategy, horizon_key, level_map=None, candidate_levels=None):
+        return stop - 1.0, tp1 + 2.0, {"lifecycle_stop": {"price": stop - 1.0}}
+
+    monkeypatch.setattr(mfd, "apply_level_lifecycle", fake_apply_level_lifecycle)
+    frame = _impulse_frame()
+    result = mfd._lifecycle_arm(frame, 44, 117.0, 110.0, 130.0, 1.0, "bullish", "4w", [])
+    assert result == (109.0, 132.0)
+
+
+def test_lifecycle_arm_passes_through_when_lifecycle_leaves_the_pair_unchanged(monkeypatch):
+    """When apply_level_lifecycle finds no tested anchor to widen onto (or
+    the flag is off), it hands back the same (stop, tp1) it was given --
+    _lifecycle_arm must not alter that pass-through pair."""
+    mfd = _mfd()
+
+    def fake_apply_level_lifecycle(df, index, *, entry, stop, tp1, atr_val, direction,
+                                   strategy, horizon_key, level_map=None, candidate_levels=None):
+        return stop, tp1, {}
+
+    monkeypatch.setattr(mfd, "apply_level_lifecycle", fake_apply_level_lifecycle)
+    frame = _impulse_frame()
+    result = mfd._lifecycle_arm(frame, 44, 117.0, 110.0, 130.0, 1.0, "bullish", "4w", [])
+    assert result == (110.0, 130.0)
+
+
 def test_simple_stats_counts_decided_and_drops_non_trades():
     mfd = _mfd()
     pairs = [("win", 2.0), ("loss", -1.0), ("timeout", 0.5), ("no_target", None), ("open", None)]
@@ -205,10 +237,11 @@ def test_simple_stats_counts_decided_and_drops_non_trades():
     assert s["closed"] == 3 and s["dropped"] == 2
 
 
-def _record(direction, horizon, outcome, r, capped, entry_date="2021-06-01"):
+def _record(direction, horizon, outcome, r, capped, entry_date="2021-06-01", *,
+           lifecycle_adjusted=False, over_hard_cap=False):
     trade = T(direction=direction, entry_date=entry_date, outcome=outcome, r_multiple=r)
-    features = {"capped": capped, "stop_mismatch": False, "lifecycle_adjusted": False, "over_hard_cap": False,
-                "tested_ratio": 0.5, "stop_atr": 2.0,
+    features = {"capped": capped, "stop_mismatch": False, "lifecycle_adjusted": lifecycle_adjusted,
+                "over_hard_cap": over_hard_cap, "tested_ratio": 0.5, "stop_atr": 2.0,
                 "base_simple": (outcome, r), "deeper": (outcome, r), "reclaim": ("no_reclaim", None)}
     return {"ticker": "AAA", "horizon_key": horizon, "trade": trade, "features": features}
 
@@ -224,6 +257,20 @@ def test_summarise_partitions_capped_and_structural():
     assert bull["capped_only"]["pooled"]["win_rate"] == pytest.approx(0.0)
     assert out["bearish"]["n_rows"] == 0
     assert set(bull["horizons"]) == set(mfd.HORIZONS)
+
+
+def test_summarise_reports_exact_lifecycle_and_over_hard_cap_rates():
+    mfd = _mfd()
+    rows = [
+        _record("bullish", "3m", "win", 2.0, False, lifecycle_adjusted=True, over_hard_cap=True),
+        _record("bullish", "3m", "win", 2.0, False, over_hard_cap=True),
+        _record("bullish", "3m", "loss", -1.0, False),
+        _record("bullish", "3m", "loss", -1.0, False),
+    ]
+    out = mfd.summarise(rows)
+    bull = out["bullish"]
+    assert bull["lifecycle_rate"] == pytest.approx(0.25)   # 1 of 4
+    assert bull["over_hard_cap_rate"] == pytest.approx(0.5)  # 2 of 4
 
 
 def test_phase_a_candidates_needs_both_the_wr_floor_and_n():
@@ -281,5 +328,6 @@ def test_render_markdown_names_every_mechanism_and_the_reproduction_line():
     result = mfd.summarise(rows)
     result["reproduction"] = mfd.reproduction_report(result, {"bearish_before_rs": 0, "bearish_after_rs": 0})
     md = mfd.render_markdown(result)
-    for needle in ("#1 structural_only", "#2 deeper_stop", "#4 reclaim", "v93 reproduction", "Candidates"):
+    for needle in ("#1 structural_only", "#2 deeper_stop", "#4 reclaim", "v93 reproduction", "Candidates",
+                  "lifecycle rate", "over-hard-cap rate"):
         assert needle in md
