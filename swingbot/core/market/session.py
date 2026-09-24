@@ -112,6 +112,14 @@ def session_date(now: dt.datetime | None = None) -> str:
     return now_et(now).date().isoformat()
 
 
+def market_today(now: dt.datetime | None = None) -> dt.date:
+    """Today's ET calendar date -- the clock plan `created_at`, earnings and
+    macro-event dates are all in. Use it instead of `date.today()`, which
+    reads the container's UTC clock and runs a day ahead of ET from 20:00 ET
+    (19:00 under EST) until midnight."""
+    return now_et(now).date()
+
+
 #: NYSE full-day closures from 2018 through 2030.  Weekend holidays are
 #: represented by their observed weekday (except Saturday New Year's Day,
 #: which NYSE does not observe).  Keep this in agreement with opex's subset.

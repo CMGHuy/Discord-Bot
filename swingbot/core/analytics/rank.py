@@ -6,6 +6,7 @@ docs/superpowers/plans/implemented/2026-07-11-v3-cockpit.md."""
 from __future__ import annotations
 
 import datetime as dt
+from swingbot.core.market.session import market_today
 
 BADGE_WEIGHT = 40.0
 QUALITY_WEIGHT = 0.4          # applied to a 0-100 quality_score -> 0-40 contribution
@@ -51,7 +52,7 @@ def follow_score(plan, *, today: dt.date | None = None) -> float:
     it never crashes a ranking pass.
     """
     if today is None:
-        today = dt.date.today()
+        today = market_today()
 
     badge_score = BADGE_WEIGHT if _get(plan, "badge") == "VALIDATED" else 0.0
 
@@ -85,7 +86,7 @@ def follow_breakdown(plan, today: dt.date | None = None) -> list:
     the field), matching follow_chip's "only show what actually
     contributed" spirit."""
     if today is None:
-        today = dt.date.today()
+        today = market_today()
 
     parts = []
 

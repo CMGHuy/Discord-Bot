@@ -21,6 +21,7 @@ import yfinance as yf
 
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 from swingbot.core.marketdata.universe import is_etf
+from swingbot.core.market.session import market_today
 
 log = logging.getLogger("swing-bot.events")
 
@@ -62,7 +63,7 @@ def get_next_earnings_date(ticker: str) -> dt.date | None:
         if not dates:
             continue
 
-        today = dt.date.today()
+        today = market_today()
         upcoming = [d for d in dates if isinstance(d, dt.date) and d >= today]
         if upcoming:
             return min(upcoming)
@@ -215,7 +216,7 @@ def earnings_within_window(ticker: str, max_holding_days: int):
     if next_date is None:
         return None
 
-    days_away = (next_date - dt.date.today()).days
+    days_away = (next_date - market_today()).days
     if 0 <= days_away <= max_holding_days:
         return next_date, days_away
     return None

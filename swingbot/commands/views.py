@@ -22,6 +22,7 @@ from swingbot.core.backtesting.registry import decay_for, decay_note
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.market.strategy import HORIZONS
+from swingbot.core.market.session import market_today
 
 _plan_store = PlanStore()
 
@@ -147,7 +148,6 @@ def breakdown_embed(plan) -> discord.Embed:
     without any Interaction plumbing -- the button callback below is a
     thin wrapper that just calls this and sends it ephemeral."""
     from swingbot.core.analytics.rank import follow_score, follow_breakdown
-    import datetime as dt
 
     embed = discord.Embed(title=f"🔍 Breakdown — {plan.ticker} ({plan.badge})")
 
@@ -164,7 +164,7 @@ def breakdown_embed(plan) -> discord.Embed:
     )
     embed.add_field(name="🏷️ Badge / track record", value=badge_lines, inline=False)
 
-    today = dt.date.today()
+    today = market_today()
     score = follow_score(plan, today=today)
     breakdown = follow_breakdown(plan, today)
     breakdown_lines = "\n".join(f"{label}: +{pts:.0f}" for label, pts in breakdown) or "no components"

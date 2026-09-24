@@ -156,7 +156,8 @@ def test_tape_earnings_context_shown_alone(logged_in):
     matter what day the suite runs on: "today" is always inside its own
     Monday-Sunday week.
     """
-    today_iso = dt.date.today().isoformat()
+    from swingbot.core.market.session import market_today
+    today_iso = market_today().isoformat()
     with patch("swingbot.core.marketdata.data.get_current_price_batch",
                return_value={"NVDA": 182.0}), \
          patch("swingbot.admin.api_v1.watchlist._next_earnings",

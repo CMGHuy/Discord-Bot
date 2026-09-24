@@ -24,6 +24,7 @@ it never blocks a trade recommendation.
 import calendar
 import datetime as dt
 from dataclasses import dataclass
+from swingbot.core.market.session import market_today
 
 # FOMC decision dates = the SECOND day of each 2-day meeting, when the
 # rate decision + press conference happen. Source: federalreserve.gov.
@@ -92,7 +93,7 @@ def get_market_events(max_days_ahead: int, today: dt.date = None) -> list[Market
     Returns every known/approximate macro event (FOMC, NFP, CPI) that
     falls within the next `max_days_ahead` calendar days, soonest first.
     """
-    today = today or dt.date.today()
+    today = today or market_today()
     events = []
 
     for d in FOMC_DECISION_DATES:

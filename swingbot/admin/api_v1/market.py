@@ -632,10 +632,12 @@ def _tape_context(symbol: str, price, open_trades: dict, open_plans: dict,
 
     earnings_date = earnings.get(symbol)
     if earnings_date is not None:
-        from datetime import date, timedelta
+        from datetime import timedelta
+
+        from swingbot.core.market.session import market_today
 
         if today is None:
-            today = date.today()
+            today = market_today()
         # Monday=0..Sunday=6, so this needs no offset arithmetic (contrast
         # the frontend's `(now.getDay() + 6) % 7`, whose Sunday=0 DOES).
         monday = today - timedelta(days=today.weekday())

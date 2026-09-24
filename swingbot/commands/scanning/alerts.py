@@ -6,6 +6,7 @@ from swingbot import config
 from swingbot.bot_core import bot, log
 from swingbot.core import presentation as ui
 from swingbot.core.analytics.rank import rank_plans
+from swingbot.core.market.session import market_today
 
 def _ordered_alerts(alerts: list, today=None) -> list:
     """Splits `alerts` (each a (embed, chart_path, plan_or_none) tuple)
@@ -48,7 +49,6 @@ async def _post_daily_digest(channel) -> None:
     default off. Reuses _fake_item_from_plan/build_embed exactly like
     !top (Task B17) so the digest embeds are pixel-identical to what a
     user would see running !top themselves."""
-    import datetime as _dt
 
     from swingbot.core.planning.plan_store import PlanStore
     from swingbot.commands.stats import _fake_item_from_plan
@@ -56,7 +56,7 @@ async def _post_daily_digest(channel) -> None:
     from swingbot.commands.views import PlanActionView
 
     plans = PlanStore().all()
-    top = digest_payload(plans, _dt.date.today(), config.DIGEST_MAX_PLANS)
+    top = digest_payload(plans, market_today(), config.DIGEST_MAX_PLANS)
     if not top:
         await channel.send("📌 **Top plans today** — no VALIDATED plans qualified today.")
         return

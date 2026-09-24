@@ -14,6 +14,7 @@ from swingbot.core.analytics.rank import rank_plans
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.commands.views import PlanActionView
 from swingbot.core.scanning.embeds import build_embed
+from swingbot.core.market.session import market_today
 
 _plan_store = PlanStore()
 
@@ -108,7 +109,7 @@ def _fake_item_from_plan(plan):
 async def top_cmd(ctx, n: int = None):
     n = n or config.DIGEST_MAX_PLANS
     plans = PlanStore().all()
-    top = top_plans(plans, n, today=dt.date.today())
+    top = top_plans(plans, n, today=market_today())
     if not top:
         await ctx.send("No PENDING/ACTIVE plans right now.")
         return

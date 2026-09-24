@@ -7,6 +7,7 @@ from swingbot.core.market.session import (
     US_MARKET_TZ,
     is_quiet_hours,
     is_regular_session,
+    market_today,
     now_et,
     session_date,
 )
@@ -97,3 +98,12 @@ def test_a_utc_input_is_converted_before_the_window_is_applied():
     # Thursday evening, one hour before the window opens, not inside it.
     utc = dt.datetime(2026, 8, 27, 20, 0, tzinfo=dt.timezone.utc)
     assert is_quiet_hours(utc) is False
+
+
+def test_market_today_is_the_et_date_when_utc_has_already_rolled_over():
+    # 2026-01-15 00:30 UTC is 2026-01-14 19:30 EST -- inside the extended-
+    # hours tape, but date.today() on the UTC container already says the
+    # 15th. Plan created_at, earnings and macro dates are all ET dates.
+    utc = dt.datetime(2026, 1, 15, 0, 30, tzinfo=dt.timezone.utc)
+    assert market_today(utc) == dt.date(2026, 1, 14)
+    assert market_today(utc).isoformat() == session_date(utc)

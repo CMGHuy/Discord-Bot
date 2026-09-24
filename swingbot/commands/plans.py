@@ -13,6 +13,7 @@ from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core import presentation as ui
 from swingbot.core.presentation.plan_view import plan_view
 from swingbot.core.scanning.embeds import banked_leg_pct_and_amount, signed_money
+from swingbot.core.market.session import market_today
 from swingbot.commands.views import (
     starred_ids,
     paginate,
@@ -60,10 +61,9 @@ def _partial_tail(plan) -> str:
 def _plan_line(plan, *, price: float | None = None,
                bars_since_created: int | None = None) -> str:
     from swingbot.core.analytics.rank import follow_score
-    import datetime as dt
 
     star = "⭐" if plan.plan_id in starred_ids() else ""
-    score = follow_score(plan, today=dt.date.today())
+    score = follow_score(plan, today=market_today())
     direction_word = "LONG" if plan.direction == "bullish" else "SHORT"
     if plan.status == "PARTIAL":
         tail = _partial_tail(plan)
@@ -109,8 +109,7 @@ def render_board(plans: list, *, status: str, level: str, badge: str, page: int,
     ranked = rank_plans(live, today=today)
     starred = starred_ids()
     from swingbot.core.analytics.rank import follow_score
-    import datetime as _dt
-    _today = today or _dt.date.today()
+    _today = today or market_today()
     ranked.sort(key=lambda p: (-round(follow_score(p, today=_today)), p.plan_id not in starred))
 
     page_items, page_num, max_page = paginate(ranked, page, PLAN_BOARD_PAGE_SIZE)
