@@ -14,6 +14,7 @@ caller, and works in both the bot process and the separate Flask admin
 process because it uses a plain daemon thread, not the asyncio loop.
 """
 import logging
+import os
 import threading
 import warnings
 from dataclasses import dataclass
@@ -26,7 +27,21 @@ from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
 log = logging.getLogger("swing-bot.backtest_cache")
 
-CACHE_DIR = Path(config.DATA_DIR) / "backtest_cache"
+
+def _cache_dir() -> Path:
+    """data/backtest_cache/ unless BACKTEST_CACHE_DIR points elsewhere -- the
+    v102 extended-history cache (data/backtest_cache_ext/) is the one user.
+    A relative override resolves against the project root, not the cwd, so
+    every script agrees on it. Read once at import: set it on the command
+    line (`BACKTEST_CACHE_DIR=... python ...`), never mid-process."""
+    override = os.environ.get("BACKTEST_CACHE_DIR")
+    if not override:
+        return Path(config.DATA_DIR) / "backtest_cache"
+    path = Path(override)
+    return path if path.is_absolute() else Path(config.DATA_DIR).parent / path
+
+
+CACHE_DIR = _cache_dir()
 # Below this many daily bars a ticker can't clear the backtest warm-up
 # (200-SMA + 120-bar shift); we still cache it, just flag it as too short.
 BACKTEST_MIN_BARS = 260
