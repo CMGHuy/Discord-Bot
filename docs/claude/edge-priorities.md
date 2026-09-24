@@ -67,6 +67,23 @@ table has the seven per-strategy rows). Do not re-derive the pooled table
 above from `2026-07-pooled-validation.md`'s membership list without first
 excluding the three demoted strategies.
 
+## Two standing constraints on what to work on
+
+**The partner trades real money off the alerts.** They place resting orders at
+the broker when an alert posts and adjust them as the plan moves, so the
+alert channel is an execution feed. Judge any message or lifecycle change by
+whether their orders stay in step with the bot's paper position: a silent stop
+move, a missing expiry or a lost send is real-money divergence, which makes
+that work `Edge: harvest`, not cosmetics. They chose exact stop pings over a
+broker-native trail because the chandelier trail is the validated exit rule.
+
+**Pair every tightening with a widening.** A plan whose entire effect is a
+stricter gate (`Edge: none (integrity)`) buys no edge, and stacking more
+rigour on it without a wider search only makes the bot fail more honestly.
+When scoping methodology work, say where the plausible improvement to the
+bot's trade-plan decisions comes from — the breadth that gives the stricter
+bar something real to find — and keep the `Edge:` label honest regardless.
+
 ## What this rule does not do
 
 **It does not loosen a single acceptance gate.** It governs *what to work on*,

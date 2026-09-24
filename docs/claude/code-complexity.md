@@ -72,8 +72,8 @@ Splitting a function for this rule is a refactor: same inputs, same outputs.
   compare the rendered image bytes before and after).
 - Refactors and behaviour changes go in **separate commits**, so a regression
   bisects to one or the other.
-- A refactor with no observable difference does not bump `VERSION.json`
-  (`working-conventions.md`: the test is observable difference, not diff size).
+- Whether a refactor bumps `VERSION.json` follows `working-conventions.md`
+  (the test is observable difference, not diff size); never bump to mark one.
 - Anything under `swingbot/core/market/`, `edge/`, `scanning/`, `planning/` is
   also under the NO-LOOKAHEAD rule, and a decomposition that could move a
   backtest number goes through `backtest-gate`. Byte-identical output is the

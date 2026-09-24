@@ -178,6 +178,54 @@ fix committed, not just the live workaround. Update `.env.example`'s own
 default alongside any `.env` config value this reveals should change (e.g.
 `DEFAULT_HISTORY_PERIOD`).
 
+## Sharing the working tree with other sessions
+
+Other sessions (Claude and Codex) work in this same main tree and commit on
+their own schedule; `git add -A` or `git commit -a` from one sweeps up every
+untracked and modified file in the tree, including another session's
+half-written work.
+
+- Before any status claim, audit or commit, `git fetch origin && git status -sb`
+  (`git-safety.md`): a stale checkout describes the wrong project.
+- Before committing, `git log --oneline -5` and `git status --porcelain --
+  <your paths>`. An empty status on files you never committed means someone
+  else already committed them; check `git show HEAD:<path>` is your final
+  version rather than assuming your commit is the one that landed.
+- **Stage files by name**, never `-A` or `-a`, and commit a finished unit
+  promptly instead of leaving it uncommitted across a long background run.
+- Do not edit source while a full-suite run is in flight: it reads the tree
+  as it goes, and a half-written file fails tests that were never broken.
+
+## Investigating production (read-only)
+
+- **The real book lives on the VM, not here.** `data/journal.json`,
+  `trades.json` and `plans.json` in this checkout are dev fixture data (tells:
+  every entry bullish, `holding_days` of 0, `opened_at`/`closed_at` a fraction
+  of a second apart). **Never derive a pooled figure — ExpR, win rate, N —
+  from them.** The specs that did drew a wrong conclusion. Read the real files
+  at `/opt/swing-bot/data/` via `scripts/ops/ssh-hetzner.sh "<cmd>"`, and when
+  a document cites a book figure, check which file it came from.
+- **Use the bind-mounted logs, not `docker logs`.** A deploy recreates the
+  containers, so `docker logs` shows only minutes of history after any release
+  and looks like "no errors" while a multi-day outage sits in the rotated
+  files. The history is `/opt/swing-bot/logs/{bot,admin}.log*` (note the
+  hyphen; rotated at ~5 MB). Split findings into *still firing in the current
+  log* versus *historical*, and say which is which.
+- Ssh is outward-facing: run it only when the task needs it, never to deploy
+  or change anything without an explicit ask (`/deploy`, `mirror-prod`).
+
+## How the human partner wants work done
+
+- **A wrong premise gets recorded, not menu-ed.** State the correction with
+  evidence, then write it into its durable home (`CLAUDE.md` for standing
+  rules, `known-traps.md` for "looks broken but isn't", `backtest-methodology.md`
+  for closed pre-registrations, the spec's own header for component status)
+  and commit. Ask only when proceeding would be unsafe or irreversible.
+- **Prove correctness, then move on.** Run the touched tests, confirm green,
+  commit. Timings on this machine swing 2-4x with external load, so do not
+  re-measure to justify a change; record an unverifiable timing claim as
+  unverified (`testing-cost.md`).
+
 ## Long-running scripts must report progress
 
 **Any script meant to run in the background for more than a couple of minutes

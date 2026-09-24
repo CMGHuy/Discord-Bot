@@ -57,13 +57,13 @@ scope is clear, run it straight through — edits, tests, commits per the plan
 
 ## Claude is the operator; Codex follows
 
-This repo also has a Codex agent (`.codex/AGENTS.md`), a condensed mirror of
-this file, not an independent source. **Claude is the primary operator** — the
-one making decisions, executing plans, owning these conventions. The sync is
-**one-way**: when a change here or under `docs/claude/` should reach
-`.codex/AGENTS.md`, a Claude session updates it, condensed, not copied. A
-Codex-authored edit is never grounds to change `CLAUDE.md`/`docs/claude/*.md`;
-if the two disagree, fix `.codex/AGENTS.md`.
+This repo also has a Codex agent (root `AGENTS.md` — Codex never loads
+`.codex/AGENTS.md`), a condensed mirror of this file, not an independent
+source. **Claude is the primary operator** — the one making decisions,
+executing plans, owning these conventions. The sync is **one-way**: when a
+change here or under `docs/claude/` should reach `AGENTS.md`, a Claude session
+updates it, condensed, not copied. A Codex-authored edit is never grounds to
+change `CLAUDE.md`/`docs/claude/*.md`; if the two disagree, fix `AGENTS.md`.
 
 ## Prioritise expectancy and win rate
 
@@ -192,7 +192,7 @@ Not auto-loaded — read the relevant one before starting work in that area.
 | `edge-priorities.md` | choosing what to work on — pooled numbers, the `Edge:` taxonomy |
 | `document-conventions.md` | writing any spec or plan — `Bump:`/`Edge:` headers, `## Parallelisation`, length budgets (**split, never compress**), verification cadence |
 | `document-lifecycle.md` | closing a plan out — `implemented/`, `no-lift/`, worktree naming and removal |
-| `working-conventions.md` | committing, bumping `VERSION.json`, or mirroring a production change back — two independent `ui`/`bot` lines; the test is observable difference, not diff size |
+| `working-conventions.md` | committing, bumping `VERSION.json`, mirroring a production change back, or investigating production — two independent `ui`/`bot` lines; the test is observable difference, not diff size |
 | `git-safety.md` | any branch deletion or force push |
 | `testing-cost.md` | optimising or timing tests, or reacting to a changed pass count |
 | `code-complexity.md` | writing or changing any function — the < 15 limit, how to measure it, how to split without changing behaviour |
