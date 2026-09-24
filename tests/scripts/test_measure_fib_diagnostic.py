@@ -6,6 +6,7 @@ from types import SimpleNamespace as T
 import numpy as np
 import pytest
 
+from swingbot import config
 from tests.helpers import make_ohlcv
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -122,11 +123,11 @@ def test_trade_features_flags_capped_only_when_the_cap_binds():
     entry = float(frame["Close"].iloc[i])
     hi, lo = float(frame["High"].iloc[i - 42:i + 1].max()), float(frame["Low"].iloc[i - 42:i + 1].min())
     trade = _trade(frame, i, "bullish", entry * 0.9, entry * 1.2)
-    wide = mfd.trade_features(frame, i, "4w", trade, 1.0, hi, lo, 1e9, 1.5, 2.5)
-    tight = mfd.trade_features(frame, i, "4w", trade, 1.0, hi, lo, 0.01, 1.5, 2.5)
+    wide = mfd.trade_features(frame, i, "4w", trade, 1.0, hi, lo, 1e9, 1.5, 2.5, False)
+    tight = mfd.trade_features(frame, i, "4w", trade, 1.0, hi, lo, 0.01, 1.5, 2.5, False)
     assert wide["capped"] is False and tight["capped"] is True
-    assert set(wide) == {"capped", "stop_mismatch", "tested_ratio", "stop_atr",
-                         "base_simple", "deeper", "reclaim"}
+    assert set(wide) == {"capped", "stop_mismatch", "lifecycle_adjusted", "over_hard_cap",
+                         "tested_ratio", "stop_atr", "base_simple", "deeper", "reclaim"}
     assert wide["tested_ratio"] in mfd.ENTRY_RATIOS
 
 
@@ -136,13 +137,63 @@ def test_trade_features_never_reads_past_the_signal_bar_for_geometry():
     entry = float(frame["Close"].iloc[i])
     hi, lo = float(frame["High"].iloc[i - 42:i + 1].max()), float(frame["Low"].iloc[i - 42:i + 1].min())
     trade = _trade(frame, i, "bullish", entry * 0.9, entry * 1.2)
-    base = mfd.trade_features(frame, i, "4w", trade, 1.0, hi, lo, 1e9, 1.5, 2.5)
+    base = mfd.trade_features(frame, i, "4w", trade, 1.0, hi, lo, 1e9, 1.5, 2.5, False)
     poisoned = frame.copy()
     poisoned.iloc[i + 1:, :4] = poisoned.iloc[i + 1:, :4] * 3   # future bars only
-    again = mfd.trade_features(poisoned, i, "4w", trade, 1.0, hi, lo, 1e9, 1.5, 2.5)
+    again = mfd.trade_features(poisoned, i, "4w", trade, 1.0, hi, lo, 1e9, 1.5, 2.5, False)
     # Geometry (cap flag, tested ratio, stop distance) must not see the future.
     assert (again["capped"], again["tested_ratio"], again["stop_atr"]) == \
            (base["capped"], base["tested_ratio"], base["stop_atr"])
+
+
+def test_lifecycle_disabled_flags_are_false_and_arms_match_pre_lifecycle_geometry(monkeypatch):
+    """With LEVEL_LIFECYCLE_STOPS_ENABLED off, apply_level_lifecycle is a
+    no-op (lifecycle.py), so a trade carrying the pre-lifecycle capped stop
+    must show lifecycle_adjusted=False, over_hard_cap=False (the pre-lifecycle
+    cap is itself hard-cap-safe), and the #2 arm must equal the geometry
+    computed with no lifecycle step at all."""
+    mfd = _mfd()
+    monkeypatch.setattr(config, "LEVEL_LIFECYCLE_STOPS_ENABLED", False)
+    frame, i = _impulse_frame(), 44
+    entry = float(frame["Close"].iloc[i])
+    hi, lo = float(frame["High"].iloc[i - 42:i + 1].max()), float(frame["Low"].iloc[i - 42:i + 1].min())
+    cap = mfd.cap_distance(entry, "4w")
+    struct = mfd.structural_stop(hi, lo, 1.0, "bullish")
+    expected_stop, _ = mfd.apply_cap(entry, struct, "bullish", cap)
+    trade = _trade(frame, i, "bullish", expected_stop, entry * 1.2)
+
+    features = mfd.trade_features(frame, i, "4w", trade, 1.0, hi, lo, cap, 1.5, 2.5, False)
+    assert features["lifecycle_adjusted"] is False
+    assert features["over_hard_cap"] is False
+
+    h = mfd.HORIZONS["4w"]
+    close = frame["Close"].values
+    deep_stop, _ = mfd.apply_cap(entry, mfd.deeper_ratio_stop(close[i], hi, lo, 1.0, "bullish"), "bullish", cap)
+    deep_target = mfd.select_structural_target(
+        entry, deep_stop, True, mfd.fib_target_candidates(frame, i, h, entry), 1.5, 2.5)
+    expected_deeper = mfd.simulate_first_touch(
+        frame["High"].values, frame["Low"].values, close, i, entry, deep_stop, deep_target,
+        "bullish", h["max_holding_days"])
+    assert features["deeper"] == expected_deeper
+
+
+def test_features_for_stop_mismatch_is_false_when_trade_carries_trade_plan_ats_own_stop():
+    """The new stop_mismatch definition compares against _trade_plan_at's own
+    (stop, target) -- the full production pipeline including
+    apply_level_lifecycle -- not the pre-lifecycle structural_stop/apply_cap
+    geometry."""
+    mfd = _mfd()
+    frame, horizon, i = _impulse_frame(), "4w", 44
+    atr_s, sh_s, sl_s, _, _ = mfd._plan_series(frame, mfd.STRATEGY, horizon)
+    plan_at = mfd._trade_plan_at(frame, i, "bullish", mfd.STRATEGY, horizon, atr_s, sh_s, sl_s)
+    assert plan_at is not None
+    entry, stop, target = plan_at
+    trade = T(entry_date=str(frame.index[i].date()), direction="bullish", entry=entry,
+              stop_loss=stop, take_profit=target, outcome="win", r_multiple=1.0)
+    params = mfd.ScanParams.from_config()
+    rr = (params.min_risk_reward_ratio, params.max_risk_reward_ratio)
+    features = mfd._features_for(frame, horizon, trade, (atr_s, sh_s, sl_s), rr)
+    assert features["stop_mismatch"] is False
 
 
 def test_simple_stats_counts_decided_and_drops_non_trades():
@@ -156,7 +207,8 @@ def test_simple_stats_counts_decided_and_drops_non_trades():
 
 def _record(direction, horizon, outcome, r, capped, entry_date="2021-06-01"):
     trade = T(direction=direction, entry_date=entry_date, outcome=outcome, r_multiple=r)
-    features = {"capped": capped, "stop_mismatch": False, "tested_ratio": 0.5, "stop_atr": 2.0,
+    features = {"capped": capped, "stop_mismatch": False, "lifecycle_adjusted": False, "over_hard_cap": False,
+                "tested_ratio": 0.5, "stop_atr": 2.0,
                 "base_simple": (outcome, r), "deeper": (outcome, r), "reclaim": ("no_reclaim", None)}
     return {"ticker": "AAA", "horizon_key": horizon, "trade": trade, "features": features}
 

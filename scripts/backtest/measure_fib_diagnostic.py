@@ -41,7 +41,7 @@ sys.path[:0] = [str(ROOT), str(Path(__file__).resolve().parent)]
 
 from swingbot.core.market.strategy_types import HORIZONS  # noqa: E402
 from swingbot.core.planning.params import STRUCTURE_BUFFER_ATR  # noqa: E402
-from swingbot.core.risk_limits import capped_planned_loss_pct  # noqa: E402
+from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, capped_planned_loss_pct, planned_loss_pct  # noqa: E402
 from swingbot.core.backtesting import arm_rule  # noqa: E402
 from swingbot.core.backtesting.backtest_wf import ANCHORED_FOLDS  # noqa: E402
 from swingbot.core.planning.targets import fib_target_candidates, select_structural_target  # noqa: E402
@@ -50,10 +50,11 @@ from measure_bearish_arms import _unmasked_gates, apply_laggard_rule  # noqa: E4
 from run_backtest_range import (  # noqa: E402
     TRAIN, _build_asof_map, _tickers_for_run, _with_context, load_cached, window_trades,
 )
-from swingbot.core.backtesting.backtest import _plan_series, run_backtest  # noqa: E402
+from swingbot.core.backtesting.backtest import _plan_series, _trade_plan_at, run_backtest  # noqa: E402
 from swingbot.core.market.entry_filters import gate_override  # noqa: E402
 from swingbot.core.market.strategy_types import STRATEGY_GATES  # noqa: E402
 from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason  # noqa: E402
+from swingbot.core.planning.lifecycle import apply_level_lifecycle  # noqa: E402
 from swingbot.core.planning.plan_engine import _safe_atr_value  # noqa: E402
 from swingbot.scan_params import ScanParams  # noqa: E402
 
@@ -141,12 +142,37 @@ DIRECTIONS = ("bullish", "bearish")
 ALL_HZ = tuple(HORIZONS)
 
 
-def trade_features(frame, i, horizon_key, trade, atr_val, swing_high, swing_low, cap, min_rr, max_rr):
+def _lifecycle_arm(frame, idx, entry, stop, target, atr_val, direction, horizon_key, candidates):
+    """Run one arm's (stop, target) through the same apply_level_lifecycle
+    step production applies at plan-build time, so #2/#4 are compared
+    against a lifecycle-aware baseline rather than a pre-lifecycle one. A
+    no-op (returns the pair unchanged) when there is no target to widen for,
+    or when LEVEL_LIFECYCLE_STOPS_ENABLED is off. NO-LOOKAHEAD: this calls
+    the same apply_level_lifecycle the backtest calls, which slices df to
+    idx before building its own level map (lifecycle.py's
+    _lifecycle_levels/classify_levels both slice first) -- reads only bars
+    <= idx, same as the caller's own geometry."""
+    if target is None:
+        return stop, target
+    stop, target, _ = apply_level_lifecycle(
+        frame, idx, entry=entry, stop=stop, tp1=target, atr_val=atr_val,
+        direction=direction, strategy=STRATEGY, horizon_key=horizon_key,
+        candidate_levels=candidates)
+    return stop, target
+
+
+def trade_features(frame, i, horizon_key, trade, atr_val, swing_high, swing_low, cap, min_rr, max_rr,
+                   stop_mismatch):
     """Everything the three mechanisms need about one baseline trade.
 
     Geometry (cap flag, ratio, stop distance, re-selected targets) reads bars
     <= i, or <= j for the reclaim entry. Only simulate_first_touch walks
-    forward, which is an exit, the same as run_backtest."""
+    forward, which is an exit, the same as run_backtest.
+
+    `stop_mismatch` is computed by the caller (_features_for) against
+    _trade_plan_at's own (stop, target) -- the full production pipeline
+    including apply_level_lifecycle -- and passed in so this function stays
+    free of the series plumbing _trade_plan_at needs."""
     h = HORIZONS[horizon_key]
     direction, entry = trade.direction, trade.entry
     is_bull = direction == "bullish"
@@ -155,37 +181,55 @@ def trade_features(frame, i, horizon_key, trade, atr_val, swing_high, swing_low,
 
     struct = structural_stop(swing_high, swing_low, atr_val, direction)
     expected_stop, capped = apply_cap(entry, struct, direction, cap)
-    # The builder's own stop should equal expected_stop; a mismatch means the
-    # diagnostic's geometry drifted from _fibonacci_plan and #1 is unreliable.
-    stop_mismatch = abs(trade.stop_loss - expected_stop) > 1e-6 * entry
+    # trade.stop_loss vs the pre-lifecycle stop _fibonacci_plan itself would
+    # build: True whenever apply_level_lifecycle widened the stop onto a
+    # tested S/R level. Not a diagnostic-geometry bug (see stop_mismatch
+    # above) -- this is the mechanism that produces the difference.
+    lifecycle_adjusted = abs(trade.stop_loss - expected_stop) > 1e-6 * entry
+    # apply_level_lifecycle's own widening ceiling is entry * h["max_risk_pct"]
+    # / 100 (lifecycle.py), not run through capped_planned_loss_pct like
+    # _fibonacci_plan's cap is -- so a widened stop can land past the hard
+    # safety ceiling. Live plan_manager cancels such stop-entry plans at fill.
+    # 1e-9 tolerance: a trade sitting exactly at the cap (not lifecycle-
+    # widened) can read back a hair over HARD_MAX_PLANNED_LOSS_PCT from
+    # entry/cap floating-point round-trip -- far below any real breach.
+    over_hard_cap = planned_loss_pct(trade.entry, trade.stop_loss) > HARD_MAX_PLANNED_LOSS_PCT + 1e-9
 
     base = simulate_first_touch(high, low, close, i, entry, trade.stop_loss,
                                 trade.take_profit, direction, hold)
 
-    # #2: stop beyond the next deeper ratio (still risk-capped), new target.
+    # #2: stop beyond the next deeper ratio (still risk-capped), new target,
+    # then the same lifecycle widening production would apply at this bar.
+    candidates_i = fib_target_candidates(frame, i, h, entry)
     deep_stop, _ = apply_cap(entry, deeper_ratio_stop(close[i], swing_high, swing_low, atr_val, direction),
                              direction, cap)
-    deep_target = select_structural_target(entry, deep_stop, is_bull,
-                                           fib_target_candidates(frame, i, h, entry), min_rr, max_rr)
+    deep_target = select_structural_target(entry, deep_stop, is_bull, candidates_i, min_rr, max_rr)
+    deep_stop, deep_target = _lifecycle_arm(frame, i, entry, deep_stop, deep_target, atr_val,
+                                            direction, horizon_key, candidates_i)
     deeper = (simulate_first_touch(high, low, close, i, entry, deep_stop, deep_target, direction, hold)
               if deep_target is not None else ("no_target", None))
 
-    # #4: enter on the reclaim close, same stop, target re-selected at j.
+    # #4: enter on the reclaim close, same stop, target re-selected at j,
+    # then lifecycle-adjusted at j (its own bar, its own tested levels).
     j = reclaim_bar(high, low, close, i, direction)
     if j is None:
         reclaim = ("no_reclaim", None)
     else:
         entry_j = float(close[j])
         still_valid = entry_j > trade.stop_loss if is_bull else entry_j < trade.stop_loss
-        target_j = (select_structural_target(entry_j, trade.stop_loss, is_bull,
-                                             fib_target_candidates(frame, j, h, entry_j), min_rr, max_rr)
+        candidates_j = fib_target_candidates(frame, j, h, entry_j)
+        target_j = (select_structural_target(entry_j, trade.stop_loss, is_bull, candidates_j, min_rr, max_rr)
                     if still_valid else None)
-        reclaim = (simulate_first_touch(high, low, close, j, entry_j, trade.stop_loss, target_j, direction, hold)
+        stop_j, target_j = _lifecycle_arm(frame, j, entry_j, trade.stop_loss, target_j, atr_val,
+                                          direction, horizon_key, candidates_j)
+        reclaim = (simulate_first_touch(high, low, close, j, entry_j, stop_j, target_j, direction, hold)
                    if target_j is not None else ("no_target", None))
 
     return {
         "capped": bool(capped),
         "stop_mismatch": bool(stop_mismatch),
+        "lifecycle_adjusted": bool(lifecycle_adjusted),
+        "over_hard_cap": bool(over_hard_cap),
         "tested_ratio": tested_ratio(close[i], swing_high, swing_low, direction),
         "stop_atr": abs(entry - trade.stop_loss) / atr_val if atr_val else None,
         "base_simple": base,
@@ -251,6 +295,8 @@ def direction_summary(rows):
         "n_rows": len(rows),
         "baseline": _real(rows),
         "cap_rate": len(capped) / len(rows) if rows else None,
+        "lifecycle_rate": (sum(r["features"]["lifecycle_adjusted"] for r in rows) / len(rows)) if rows else None,
+        "over_hard_cap_rate": (sum(r["features"]["over_hard_cap"] for r in rows) / len(rows)) if rows else None,
         "structural_only": _real(structural),
         "capped_only": _real(capped),
         "deeper_stop": _deeper_stop_summary(rows),
@@ -290,12 +336,35 @@ V93_BEARISH = {"before_rs": 226, "after_rs": 107, "n": 89, "win_rate": 21.3, "ex
 REGISTRY_BULLISH = {"n": 246, "win_rate": 35.4, "expectancy_r": 0.232}
 
 
+def _stop_mismatch(trade, plan_at):
+    """True reproduction check: does the trade carry _trade_plan_at's own
+    (stop, target) -- the full production pipeline including
+    apply_level_lifecycle -- not just the pre-lifecycle structural geometry.
+    None means _trade_plan_at found no qualifying target at this bar, which
+    itself is a mismatch against a trade that did happen.
+
+    Tolerance is 1e-6*entry OR 1e-4 absolute, whichever is larger: run_backtest's
+    v2 branch stores trade.stop_loss/take_profit as round(x, 4) (backtest.py),
+    so a low-priced ticker (e.g. NVDA ~$13) can read back up to 5e-5 off
+    _trade_plan_at's unrounded value on a genuine exact match -- 1e-6*entry
+    alone (~1.3e-5 there) is tighter than that rounding step and flags false
+    mismatches. 1e-4 is 2x the rounding error and still two-plus orders of
+    magnitude below any real lifecycle-widening delta observed (dimes to
+    dollars, not fractions of a cent)."""
+    if plan_at is None:
+        return True
+    _, plan_stop, plan_target = plan_at
+    tol = max(1e-4, 1e-6 * trade.entry)
+    return abs(trade.stop_loss - plan_stop) > tol or abs(trade.take_profit - plan_target) > tol
+
+
 def _features_for(frame, horizon_key, trade, series, rr):
     atr_s, sh_s, sl_s = series
     i = frame.index.get_loc(pd.Timestamp(trade.entry_date))
     atr_val = _safe_atr_value(trade.entry, float(atr_s.iloc[i]))
+    plan_at = _trade_plan_at(frame, i, trade.direction, STRATEGY, horizon_key, atr_s, sh_s, sl_s)
     return trade_features(frame, i, horizon_key, trade, atr_val, float(sh_s.iloc[i]), float(sl_s.iloc[i]),
-                          cap_distance(trade.entry, horizon_key), *rr)
+                          cap_distance(trade.entry, horizon_key), *rr, _stop_mismatch(trade, plan_at))
 
 
 def collect(frames, asof_map, *, horizons=ALL_HZ, run_fn=None):
@@ -368,12 +437,15 @@ def _render_pooled_table(result):
 
 
 def _render_rate_table(result):
-    lines = ["", "| Direction | cap rate | reclaim rate | stop mismatches |", "|---|---:|---:|---:|"]
+    lines = ["", "| Direction | cap rate | lifecycle rate | over-hard-cap rate | reclaim rate | stop mismatches |",
+              "|---|---:|---:|---:|---:|---:|"]
     for d in DIRECTIONS:
         s = result[d]
         cap = "—" if s["cap_rate"] is None else f"{s['cap_rate'] * 100:.1f}%"
+        lc = "—" if s["lifecycle_rate"] is None else f"{s['lifecycle_rate'] * 100:.1f}%"
+        ohc = "—" if s["over_hard_cap_rate"] is None else f"{s['over_hard_cap_rate'] * 100:.1f}%"
         rec = "—" if s["reclaim"]["reclaim_rate"] is None else f"{s['reclaim']['reclaim_rate'] * 100:.1f}%"
-        lines.append(f"| {d} | {cap} | {rec} | {s['stop_mismatch']} |")
+        lines.append(f"| {d} | {cap} | {lc} | {ohc} | {rec} | {s['stop_mismatch']} |")
     return lines
 
 
