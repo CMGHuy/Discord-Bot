@@ -171,8 +171,10 @@ def _gate_description(strategy: str) -> str:
     gate = STRATEGY_GATES.get(strategy)
     if not gate:
         return "no gate (all directions, all horizons)"
-    parts = []
     directions = gate.get("directions")
+    if directions is not None and len(directions) == 0:
+        return "disabled (no direction allowed)"
+    parts = []
     if directions:
         parts.append(f"{'/'.join(directions)} only" if len(directions) == 1 else "/".join(directions))
     horizons = gate.get("horizons")
