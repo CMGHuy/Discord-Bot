@@ -3,6 +3,7 @@
 **Version:** ui 1.21.0 · bot 1.10.3 (at writing)
 **Bump:** none until wiring; bot minor if any mechanism × direction ships
 **Edge:** expectancy
+**Status:** Closed no-lift 2026-09-25; shipped inert (A's two flags off, C masked and out of the backtest strategy list); VALIDATION spent: A bullish at b=0.1, Tier 2, FAIL (lower bound -0.203); no other cell reached VALIDATION. Filed under `implemented/` rather than `no-lift/` because the inert code is on `main`; results in `docs/superpowers/results/2026-09-25-v103-*` and the two v103 rows in `docs/claude/backtest-methodology.md`.
 
 ## Why this, and the honest prior
 
