@@ -221,6 +221,20 @@ FIELDS: list[Field] = [
                "the one level family nearly independent of Fibonacci (v49). 0 disables "
                "the filter. Ships OFF: a pre-registered measurement (v102), not a "
                "demonstrated edge; it changes only if its VALIDATION shot passes."),
+    Field("FIB_LEVEL_STOP_ATR", "FIB_LEVEL_STOP_ATR", "Trade Filters & Risk",
+          "Fibonacci: stop past the tested level (x ATR)",
+          type="float", default="0.0", min=0.0, max=1.0, step=0.05,
+          help="v103 mechanism A. Puts a Fibonacci plan's stop this many ATRs past the "
+               "retracement level being tested, and DROPS the signal when that stop would "
+               "exceed the 2% planned-loss cap (never caps it). 0 disables. Applies only to "
+               "the directions in FIB_LEVEL_STOP_DIRECTIONS. Ships OFF: a pre-registered "
+               "measurement, not a demonstrated edge."),
+    Field("FIB_LEVEL_STOP_DIRECTIONS", "FIB_LEVEL_STOP_DIRECTIONS", "Trade Filters & Risk",
+          "Fibonacci level-stop directions",
+          type="text", default="",
+          help="v103. Comma-separated: bullish, bearish, or both. Empty disables "
+               "FIB_LEVEL_STOP_ATR entirely, so it can ship for only the direction(s) whose "
+               "VALIDATION shot passed."),
     Field("MIN_ALERT_CONFIDENCE_LEVEL", "MIN_ALERT_CONFIDENCE_LEVEL", "Trade Filters & Risk", "Min confidence level to alert",
           type="select", default="4", options=["1", "2", "3", "4", "5"],
           help="Only this level and above are shown as alerts (quality over quantity)."),

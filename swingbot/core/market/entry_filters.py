@@ -24,6 +24,7 @@ from swingbot.core.market.strategy_types import (
     FIB_TOLERANCE_PCT, HORIZONS, MACD_PERIODS_BY_HORIZON, SR_VOLUME_MULTIPLE,
     STRATEGY_GATES,
 )
+from swingbot.core.risk_limits import capped_planned_loss_pct
 
 ATR_FLOOR_PCT = 0.007   # skip dead-flat tape: ATR must be >= 0.7% of price
 ATR_CALM_MULT = 1.4     # skip panic tape: ATR must be <= 1.4x its 60-bar mean
@@ -214,6 +215,84 @@ def _fib_sr_confluence(df, h, levels, close, atr14):
     return pd.Series(keep, index=df.index)
 
 
+_LEVEL_STOP_DIRECTIONS = ("bullish", "bearish")
+
+
+def _fib_level_stop_config():
+    """Return the v103 level-stop ATR buffer and enabled directions.
+
+    Configuration is read at call time so SIGHUP reloads take effect. Parsing
+    forgives case and spaces; unknown direction names are ignored.
+    """
+    from swingbot import config
+
+    buffer_atr = float(getattr(config, "FIB_LEVEL_STOP_ATR", 0.0) or 0.0)
+    raw_directions = str(getattr(config, "FIB_LEVEL_STOP_DIRECTIONS", "") or "")
+    directions = frozenset(value.strip().lower() for value in raw_directions.split(","))
+    return buffer_atr, directions & frozenset(_LEVEL_STOP_DIRECTIONS)
+
+
+def fib_level_stop_series(df, horizon_key, direction, buffer_atr, params=None):
+    """Return each bar's eligible Fibonacci level stop, otherwise NaN.
+
+    The tested ratio level and ATR use only the current bar and its trailing
+    lookback. Stops that are non-losing or exceed the hard planned-loss cap
+    are dropped, never moved to the cap.
+    """
+    params = _params("Fibonacci", params)
+    horizon = HORIZONS[horizon_key]
+    lookback = horizon["fib_lookback"]
+    swing_high = df["High"].rolling(lookback).max()
+    swing_low = df["Low"].rolling(lookback).min()
+    price_range = swing_high - swing_low
+    levels = np.column_stack([
+        (swing_high - ratio * price_range).to_numpy(dtype=float)
+        for ratio in params["ratios"]
+    ])
+    close = df["Close"].to_numpy(dtype=float)
+    distances = np.abs(levels - close[:, None])
+    distances = np.where(np.isnan(distances), np.inf, distances)
+    tested_level = levels[np.arange(len(close)), distances.argmin(axis=1)]
+    atr14 = atr(df, 14).to_numpy(dtype=float)
+    is_bullish = direction == "bullish"
+    stop = tested_level - buffer_atr * atr14 if is_bullish else tested_level + buffer_atr * atr14
+    with np.errstate(invalid="ignore", divide="ignore"):
+        losing_side = stop < close if is_bullish else stop > close
+        loss_pct = np.abs(close - stop) / close * 100
+        within_cap = loss_pct <= capped_planned_loss_pct(horizon["max_risk_pct"]) + 1e-9
+    return pd.Series(np.where(losing_side & within_cap, stop, np.nan), index=df.index)
+
+
+def fib_level_stop_at(df, index, horizon_key, direction, params=None):
+    """Read the enabled level stop at one bar; None means the mode is off."""
+    buffer_atr, directions = _fib_level_stop_config()
+    if buffer_atr <= 0 or direction not in directions:
+        return None
+    if index < 0:
+        index += len(df)
+    frame_at_bar = df.iloc[:index + 1]
+    stop = fib_level_stop_series(
+        frame_at_bar, horizon_key, direction, buffer_atr, params=params,
+    ).iloc[-1]
+    return float(stop)
+
+
+def _apply_fib_level_stop(df, horizon_key, params, bullish, bearish):
+    """Drop in-scope Fibonacci signals whose level stop is ineligible."""
+    buffer_atr, directions = _fib_level_stop_config()
+    if buffer_atr <= 0:
+        return bullish, bearish
+    if "bullish" in directions:
+        bullish = bullish & fib_level_stop_series(
+            df, horizon_key, "bullish", buffer_atr, params=params,
+        ).notna()
+    if "bearish" in directions:
+        bearish = bearish & fib_level_stop_series(
+            df, horizon_key, "bearish", buffer_atr, params=params,
+        ).notna()
+    return bullish, bearish
+
+
 def fibonacci_entries(df, horizon_key, params=None):
     """Retracement bounce WITH swing-direction awareness: a bullish bounce is
     only valid when the up-impulse is the recent structure (swing low set
@@ -258,6 +337,7 @@ def fibonacci_entries(df, horizon_key, params=None):
                & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
     confluence = _fib_sr_confluence(df, h, levels, close, g["atr14"])
     bullish, bearish = bullish & confluence, bearish & confluence
+    bullish, bearish = _apply_fib_level_stop(df, horizon_key, p, bullish, bearish)
     return bullish, bearish
 
 
