@@ -255,3 +255,21 @@ VALIDATION (see `docs/claude/backtest-methodology.md`'s closed-pre-registration
 table) and ships default-off, but the invisibility trap outlives that
 particular result — any future confluence-path-only gate needs its own
 purpose-built measurement script, never `run_backtest_range.py`.
+
+## The level-lifecycle stop breaches the 2% cap in the backtest
+
+Every builder caps a strategy stop at `capped_planned_loss_pct(...) = 2%`, but
+`apply_level_lifecycle` (`LEVEL_LIFECYCLE_STOPS_ENABLED`, default **on**) runs
+afterwards on both paths. It widens the stop behind a tested level, bounded by
+the horizon's `max_risk_pct` (3–11%), **not** by 2%. Live, a pending plan whose
+fill would exceed 2% is cancelled (`plan_manager.py`, `cancelled_risk_cap`).
+The backtest has no such check, so it scores trades live would never open.
+
+Found 2026-09-25 by a spot check: 5 tickers x Fibonacci/MACD/Support-Resistance
+x 4w/3m/6m, v2 exits with scale-out.
+- **Lifecycle on:** 22 of 83 trades had an initial stop over 2%, the worst at 8.87%.
+- **Lifecycle off:** the worst was exactly 2.00%.
+
+Every post-cap TRAIN/VALIDATION figure (v101–v103 included) was measured
+with this gap in place. It is unfixed, and the fix needs its own plan
+(`Edge: none (integrity)`). Detail: `docs/strategy-types/shared-mechanics.md` §4a.

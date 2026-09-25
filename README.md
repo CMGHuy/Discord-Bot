@@ -24,6 +24,7 @@ Run `!commands` (or `!help`) in Discord any time for the full command list.
 | [docs/strategy/strategy-signals.md](docs/strategy/strategy-signals.md) | Finding setups: levels from every method, filters, duplicate merging, horizons |
 | [docs/strategy/strategy-plans.md](docs/strategy/strategy-plans.md) | Building the plan: entry, target, stop, confidence, alert contents, tracking |
 | [docs/strategy/strategy-gates.md](docs/strategy/strategy-gates.md) | Gates: market regime, relative strength, trend alignment, symbol resolution |
+| [docs/strategy-types/README.md](docs/strategy-types/README.md) | One page per strategy: idea, exact algorithm, wiring, measured results, for all 12 strategies plus their shared mechanics |
 | [docs/setup.md](docs/setup.md) | Creating the Discord bot, configuring `.env`, installing, running 24/7 |
 | [docs/commands.md](docs/commands.md) | Every Discord command |
 | [docs/features/features.md](docs/features/features.md) | Plan Engine v2, analytics, the admin cockpit and SPA |

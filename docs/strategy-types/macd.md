@@ -1,0 +1,59 @@
+# MACD momentum
+
+`ENTRY_FUNCS["MACD"]` = `macd_entries` · signal `macd_signal` · sizing **ATR
+family** · gate **bullish, horizons 3m / 4m / 7m / 8m / 9m**. Shared rules:
+[shared-mechanics.md](shared-mechanics.md).
+
+**One of the two VALIDATED strategies.** Volume Profile is the other.
+
+## Idea
+
+MACD is the difference between a fast EMA and a slow EMA, and its signal line
+is an EMA of MACD. When MACD turns up through its signal line **while already
+above zero**, with the histogram accelerating, momentum is re-asserting inside
+an existing up-trend.
+
+## Periods per horizon (`MACD_PERIODS_BY_HORIZON`)
+
+| 2w | 4w | 2m | 3m | 4m | 5m | 6m | 7m | 8m | 9m |
+|---|---|---|---|---|---|---|---|---|---|
+| 8/17/9 | 12/26/9 | 12/26/9 | 19/39/9 | 21/43/9 | 24/48/9 | 26/52/9 | 28/56/9 | 31/61/9 | 33/65/9 |
+
+## Entry rule (bullish; bearish mirrors)
+
+`hist = MACD − signal`.
+
+1. **Trigger:** either MACD crossed above the signal line on this bar, **or**
+   the histogram turned positive and held (`hist[t−2] ≤ 0`, `hist[t−1] > 0`,
+   `hist[t] > 0`).
+2. **Accelerating:** `hist[t] > hist[t−1] > hist[t−2]`.
+3. **Above zero:** `MACD > 0`.
+4. `RSI14 > 50`.
+5. **Not extended:** `|close − EMA(fast period)| ≤ 1.0 × ATR14`.
+6. Shared: `bull_regime`, `trend50_bull`, `atr_floor`, `atr_calm`, `vol_ok`.
+
+Bearish: a cross down (or the histogram turning negative), the histogram
+falling for 2 bars, `MACD < 0`, `RSI < 50`, and the bear gates.
+
+## Plan and exits
+
+Stop `2 × ATR14`, capped at 2%. TP1 comes from the ATR ladder. Exits: trail
+**2.0** × ATR, **TP2 on**, the only ATR-family strategy with TP2.
+
+## Measured
+
+| Source | Window | N | WR | ExpR | Note |
+|---|---|---|---|---|---|
+| Registry (run 2026-08-17) | VALIDATION 2024–25 | 112 | 50.0% | +0.219 | **VALIDATED** (v31 shot, current targets, pre-2% cap) |
+
+The win rate sits exactly on the 50% floor. The bearish arm was re-derived in
+v93 and failed, so it stays masked.
+
+## Pseudocode
+
+```python
+m, s = macd(close, *PERIODS[h]); hist = m - s
+trigger = crossed_up(m, s) or (hist[t-2] <= 0 < hist[t-1] and hist[t] > 0)
+fire if trigger and hist[t] > hist[t-1] > hist[t-2] and m > 0 and RSI > 50
+        and |Close - EMA(fast)| <= ATR and bull_regime and Close > MA50 and tape_ok
+```
