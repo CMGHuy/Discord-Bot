@@ -208,6 +208,13 @@ def fib_target_candidates(df, index, h, entry) -> list[float]:
     return candidates
 
 
+def fib_continuation_targets(level, impulse, retrace, direction) -> list[float]:
+    """Return v103 continuation measured-move and Fibonacci extensions."""
+    if direction == "bullish":
+        return [retrace + impulse, level + 0.272 * impulse, level + 0.618 * impulse]
+    return [retrace - impulse, level - 0.272 * impulse, level - 0.618 * impulse]
+
+
 def sr_target_candidates(df, index, h, entry, volume_ratio) -> list[float]:
     """The S/R strategy's OWN target-side candidates: the rolling
     structural high/low over `h["sr_lookback"]` (`.shift(1)`, matching

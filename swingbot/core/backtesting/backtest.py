@@ -201,6 +201,18 @@ def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_hi
         result = _elliott_plan(
             entry, atr_val, entry_levels[i]["wave2"], direction, horizon_key,
             candidate_levels=candidates)
+    elif strategy == "Fibonacci Continuation":
+        from swingbot.core.market.entry_filters import fib_continuation_at
+        from swingbot.core.planning.builders import _fib_continuation_plan
+        from swingbot.core.planning.targets import fib_continuation_targets
+
+        structure = fib_continuation_at(df, i, horizon_key, direction)
+        candidates = [] if structure is None else fib_continuation_targets(
+            structure["level"], structure["impulse"], structure["retrace"], direction,
+        )
+        result = None if structure is None else _fib_continuation_plan(
+            entry, structure, direction, horizon_key, candidates,
+        )
     else:
         candidates = atr_target_candidates(entry, atr_val, direction)
         result = _atr_plan(entry, atr_val, direction, horizon_key, strategy,

@@ -4,7 +4,7 @@ from swingbot.core.planning import builders
 
 def test_structural_strategies_have_their_own_branch():
     assert set(builders._STRUCTURAL_BRANCHES) == {
-        "Fibonacci", "Support/Resistance", "Elliott Wave",
+        "Fibonacci", "Support/Resistance", "Elliott Wave", "Fibonacci Continuation",
     }
 
 

@@ -38,6 +38,7 @@ EXIT_V2_PARAMS: dict[str, dict] = {
     "Break & Retest": {"trail_atr_mult": 3.0, "tp2": False},  # N=355  WR=80.3 ExpR=+0.085
     "RSI Divergence": {"trail_atr_mult": 2.0, "tp2": False},  # N=1702 WR=81.0 ExpR=+0.218
     "Volume Profile": {"trail_atr_mult": 3.0, "tp2": False},  # N=73   WR=82.2 ExpR=+0.180
+    "Fibonacci Continuation": {"trail_atr_mult": 2.5, "tp2": True},
 }
 
 

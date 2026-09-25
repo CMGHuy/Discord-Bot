@@ -16,6 +16,7 @@ from .params import (DEFAULT_EXPIRY_BARS, STRUCTURE_BUFFER_ATR, TP1_FRACTION,
                      TRAIL_ATR_MULT)
 from .targets import (_safe_atr_value, _tp2_from_r, atr_target_candidates,
                       elliott_target_candidates, fib_target_candidates,
+                      fib_continuation_targets,
                       select_structural_target, select_tp2,
                       sr_target_candidates)
 
@@ -149,6 +150,25 @@ def _elliott_branch(inputs):
     return _branch_result(result, candidates)
 
 
+def _fib_continuation_branch(inputs):
+    """Size an enabled Fibonacci Continuation from its signal-bar structure."""
+    from swingbot.core.market.entry_filters import fib_continuation_at
+
+    structure = fib_continuation_at(
+        inputs.df, inputs.index, inputs.horizon_key, inputs.direction,
+    )
+    if structure is None:
+        return None
+    candidates = fib_continuation_targets(
+        structure["level"], structure["impulse"], structure["retrace"], inputs.direction,
+    )
+    result = _fib_continuation_plan(
+        inputs.close, structure, inputs.direction, inputs.horizon_key, candidates,
+        params=inputs.scan_params,
+    )
+    return _branch_result(result, candidates)
+
+
 def _atr_branch(inputs):
     """Size all non-structural strategies from the ATR target ladder."""
     applied_stop_mult = (
@@ -171,6 +191,7 @@ _STRUCTURAL_BRANCHES = {
     "Fibonacci": _fib_branch,
     "Support/Resistance": _sr_branch,
     "Elliott Wave": _elliott_branch,
+    "Fibonacci Continuation": _fib_continuation_branch,
 }
 
 
@@ -396,6 +417,27 @@ def _level_stop_or_none(entry, level_stop, is_bull, horizon):
     if planned_loss_pct(entry, level_stop) > cap + 1e-9:
         return None
     return float(level_stop)
+
+
+def _fib_continuation_plan(entry, structure, direction, horizon_key, candidate_levels,
+                           params=None):
+    """Size v103 continuation with its structure stop, or reject the plan."""
+    if params is None:
+        from swingbot.scan_params import ScanParams
+        params = ScanParams.from_config()
+    is_bull = direction == "bullish"
+    stop_loss = _level_stop_or_none(
+        entry, structure["stop"], is_bull, HORIZONS[horizon_key],
+    )
+    if stop_loss is None:
+        return None
+    take_profit = select_structural_target(
+        entry, stop_loss, is_bull, candidate_levels,
+        params.min_risk_reward_ratio, params.max_risk_reward_ratio,
+    )
+    if take_profit is None:
+        return None
+    return stop_loss, take_profit
 
 
 def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_key,
