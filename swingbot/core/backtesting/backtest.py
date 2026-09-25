@@ -184,11 +184,14 @@ def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_hi
     h = HORIZONS[horizon_key]
 
     if strategy == "Fibonacci" and swing_high_series is not None:
+        from swingbot.core.market.entry_filters import fib_level_stop_at
+
         candidates = fib_target_candidates(df, i, h, entry)
         result = _fibonacci_plan(
             entry, atr_val, float(swing_high_series.iloc[i]),
             float(swing_low_series.iloc[i]), direction, horizon_key,
-            candidate_levels=candidates)
+            candidate_levels=candidates,
+            level_stop=fib_level_stop_at(df, i, horizon_key, direction))
     elif strategy == "Support/Resistance" and volume_ratio_series is not None:
         ratio = float(volume_ratio_series.iloc[i])
         candidates = sr_target_candidates(df, i, h, entry, ratio)

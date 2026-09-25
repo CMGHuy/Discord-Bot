@@ -8,7 +8,7 @@ import numpy as np
 
 from swingbot.core.market import levels, opex
 from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION, HORIZONS
-from swingbot.core.risk_limits import capped_planned_loss_pct
+from swingbot.core.risk_limits import capped_planned_loss_pct, planned_loss_pct
 from .plan_types import PlanStatus, TradePlanV2, record_transition
 from . import params as plan_params
 from .lifecycle import apply_level_lifecycle
@@ -98,6 +98,8 @@ def _branch_result(result, candidates, applied_stop_mult=None):
 
 def _fib_branch(inputs):
     """Size Fibonacci from its trailing swing structure."""
+    from swingbot.core.market.entry_filters import fib_level_stop_at
+
     horizon = HORIZONS[inputs.horizon_key]
     lookback = horizon["fib_lookback"]
     swing_high = float(inputs.df["High"].rolling(lookback).max().iloc[inputs.index])
@@ -108,6 +110,9 @@ def _fib_branch(inputs):
     result = _fibonacci_plan(
         inputs.close, inputs.atr_val, swing_high, swing_low, inputs.direction,
         inputs.horizon_key, candidate_levels=candidates, params=inputs.scan_params,
+        level_stop=fib_level_stop_at(
+            inputs.df, inputs.index, inputs.horizon_key, inputs.direction,
+        ),
     )
     return _branch_result(result, candidates)
 
@@ -381,27 +386,40 @@ def entry_type_for(strategy: str, source: str) -> str:
     return STRATEGY_ENTRY_TYPE.get(strategy, "market")
 
 
+def _level_stop_or_none(entry, level_stop, is_bull, horizon):
+    """Return an eligible v103 level stop, or None without capping it."""
+    if not np.isfinite(level_stop):
+        return None
+    if (level_stop >= entry) if is_bull else (level_stop <= entry):
+        return None
+    cap = capped_planned_loss_pct(horizon["max_risk_pct"])
+    if planned_loss_pct(entry, level_stop) > cap + 1e-9:
+        return None
+    return float(level_stop)
+
+
 def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_key,
-                    candidate_levels=None, params=None):
-    """Structural sizing off the fib swing, risk-capped. Target is the
-    nearest real Fibonacci level (fib_target_candidates) that pays at least
-    MIN_RISK_REWARD_RATIO, capped at MAX_RISK_REWARD_RATIO (v31) -- see
-    select_structural_target. Returns None when no candidate clears the
-    floor: no fallback to a fixed fraction of risk."""
+                    candidate_levels=None, params=None, level_stop=None):
+    """Size Fibonacci from its swing or an eligible v103 level stop.
+
+    A supplied level stop is used verbatim or rejects the plan. The legacy
+    swing stop remains risk-capped for the default-off path.
+    """
     if params is None:
         from swingbot.scan_params import ScanParams
         params = ScanParams.from_config()
     h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
-    buffer = STRUCTURE_BUFFER_ATR * atr_val
-    if is_bull:
-        stop_loss = swing_low - buffer
+    if level_stop is not None:
+        stop_loss = _level_stop_or_none(entry, level_stop, is_bull, h)
+        if stop_loss is None:
+            return None
     else:
-        stop_loss = swing_high + buffer
-
-    max_risk_amount = entry * (capped_planned_loss_pct(h["max_risk_pct"]) / 100)
-    if abs(entry - stop_loss) > max_risk_amount:
-        stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
+        buffer = STRUCTURE_BUFFER_ATR * atr_val
+        stop_loss = swing_low - buffer if is_bull else swing_high + buffer
+        max_risk_amount = entry * (capped_planned_loss_pct(h["max_risk_pct"]) / 100)
+        if abs(entry - stop_loss) > max_risk_amount:
+            stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
 
     take_profit = select_structural_target(
         entry, stop_loss, is_bull, candidate_levels or [],
