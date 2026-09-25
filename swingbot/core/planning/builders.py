@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -72,6 +73,102 @@ def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None,
 # _trade_plan_at. Anything that touches stop/target must be shared by both or
 # it is unmeasurable by construction.
 
+
+@dataclass(frozen=True)
+class _BranchInputs:
+    """Values shared by one strategy-sizing branch."""
+
+    df: object
+    index: int
+    strategy: str
+    horizon_key: str
+    direction: str
+    close: float
+    atr_val: float
+    stop_mult: float | None
+    scan_params: object
+
+
+def _branch_result(result, candidates, applied_stop_mult=None):
+    """Attach target candidates to a successful structural sizing result."""
+    if result is None:
+        return None
+    return result[0], result[1], candidates, applied_stop_mult
+
+
+def _fib_branch(inputs):
+    """Size Fibonacci from its trailing swing structure."""
+    horizon = HORIZONS[inputs.horizon_key]
+    lookback = horizon["fib_lookback"]
+    swing_high = float(inputs.df["High"].rolling(lookback).max().iloc[inputs.index])
+    swing_low = float(inputs.df["Low"].rolling(lookback).min().iloc[inputs.index])
+    if not (np.isfinite(swing_high) and np.isfinite(swing_low)):
+        return None
+    candidates = fib_target_candidates(inputs.df, inputs.index, horizon, inputs.close)
+    result = _fibonacci_plan(
+        inputs.close, inputs.atr_val, swing_high, swing_low, inputs.direction,
+        inputs.horizon_key, candidate_levels=candidates, params=inputs.scan_params,
+    )
+    return _branch_result(result, candidates)
+
+
+def _sr_branch(inputs):
+    """Size Support/Resistance from its volume-qualified shelf."""
+    horizon = HORIZONS[inputs.horizon_key]
+    volume_average = inputs.df["Volume"].rolling(20).mean()
+    volume_ratio = float((inputs.df["Volume"] / volume_average).iloc[inputs.index])
+    candidates = sr_target_candidates(
+        inputs.df, inputs.index, horizon, inputs.close, volume_ratio,
+    )
+    result = _sr_plan(
+        inputs.close, volume_ratio, inputs.direction, inputs.horizon_key,
+        candidate_levels=candidates, params=inputs.scan_params,
+    )
+    return _branch_result(result, candidates)
+
+
+def _elliott_branch(inputs):
+    """Size an Elliott Wave plan only when its wave-two structure is known."""
+    from swingbot.core.market.indicators import elliott_wave3_entries
+
+    horizon = HORIZONS[inputs.horizon_key]
+    _, _, entry_levels = elliott_wave3_entries(inputs.df, horizon["max_risk_pct"])
+    if not entry_levels or inputs.index not in entry_levels:
+        return None
+    candidates = elliott_target_candidates(entry_levels[inputs.index], inputs.direction)
+    result = _elliott_plan(
+        inputs.close, inputs.atr_val, entry_levels[inputs.index]["wave2"],
+        inputs.direction, inputs.horizon_key, candidate_levels=candidates,
+        params=inputs.scan_params,
+    )
+    return _branch_result(result, candidates)
+
+
+def _atr_branch(inputs):
+    """Size all non-structural strategies from the ATR target ladder."""
+    applied_stop_mult = (
+        inputs.stop_mult if inputs.stop_mult is not None
+        else plan_params._resolve_stop_mult(inputs.strategy)
+    )
+    opex_stop_mult = opex.stop_mult()
+    if opex_stop_mult != 1.0:
+        applied_stop_mult = (applied_stop_mult or 1.0) * opex_stop_mult
+    candidates = atr_target_candidates(inputs.close, inputs.atr_val, inputs.direction)
+    result = _atr_plan(
+        inputs.close, inputs.atr_val, inputs.direction, inputs.horizon_key,
+        inputs.strategy, stop_mult=applied_stop_mult, candidate_levels=candidates,
+        params=inputs.scan_params,
+    )
+    return _branch_result(result, candidates, applied_stop_mult)
+
+
+_STRUCTURAL_BRANCHES = {
+    "Fibonacci": _fib_branch,
+    "Support/Resistance": _sr_branch,
+    "Elliott Wave": _elliott_branch,
+}
+
+
 def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
                         direction, level_map=None, quality_inputs=None,
                         stop_mult=None, tp2_r=None,
@@ -85,72 +182,17 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     journal iff config.DATA_DRIVEN_STOPS_ENABLED -- so the flag-off path
     is bit-identical to before and never opens the journal at all."""
     from swingbot.core.market.indicators import atr as atr_indicator
-    from swingbot.core.market.indicators import elliott_wave3_entries
-
     close = float(df["Close"].iloc[index])
     atr_series = atr_indicator(df, 14)
     atr_val = _safe_atr_value(close, float(atr_series.iloc[index]))
-    h = HORIZONS[horizon_key]
-    applied_stop_mult = None
-
-    if strategy == "Fibonacci":
-        lookback = h["fib_lookback"]
-        swing_high = float(df["High"].rolling(lookback).max().iloc[index])
-        swing_low = float(df["Low"].rolling(lookback).min().iloc[index])
-        if not (np.isfinite(swing_high) and np.isfinite(swing_low)):
-            return None
-        candidates = fib_target_candidates(df, index, h, close)
-        result = _fibonacci_plan(close, atr_val, swing_high, swing_low, direction, horizon_key,
-                                 candidate_levels=candidates, params=scan_params)
-        if result is None:
-            return None
-        stop, tp1 = result
-    elif strategy == "Support/Resistance":
-        vol_avg20 = df["Volume"].rolling(20).mean()
-        ratio = float((df["Volume"] / vol_avg20).iloc[index])
-        candidates = sr_target_candidates(df, index, h, close, ratio)
-        result = _sr_plan(close, ratio, direction, horizon_key, candidate_levels=candidates,
-                          params=scan_params)
-        if result is None:
-            return None
-        stop, tp1 = result
-    elif strategy == "Elliott Wave":
-        _, _, entry_levels = elliott_wave3_entries(df, h["max_risk_pct"])
-        if not entry_levels or index not in entry_levels:
-            return None
-        candidates = elliott_target_candidates(entry_levels[index], direction)
-        result = _elliott_plan(close, atr_val, entry_levels[index]["wave2"], direction, horizon_key,
-                               candidate_levels=candidates, params=scan_params)
-        if result is None:
-            return None
-        stop, tp1 = result
-    else:
-        # Only the genuine ATR-multiple path takes the MAE adjustment
-        # (edge E31). The three branches above put their stop behind real
-        # structure -- a fib swing, an Elliott wave-2 low, an S/R shelf --
-        # and scaling those would slide the stop off the very structure it
-        # exists to hide behind. That's a different, unvalidated idea from
-        # "give the ATR stop the room this strategy's winners actually
-        # used", so they stay structure-derived on purpose.
-        # Opex composes ON TOP of whatever multiplier was already resolved --
-        # an explicit caller override or E31's per-strategy MAE figure -- so
-        # neither silently replaces the other. Off an opex day stop_mult() is
-        # exactly 1.0 and this line is a no-op.
-        applied_stop_mult = stop_mult if stop_mult is not None else plan_params._resolve_stop_mult(strategy)
-        _opex_stop_mult = opex.stop_mult()
-        if _opex_stop_mult != 1.0:
-            # Guarded rather than composed unconditionally: `None` here is
-            # the contract for "no multiplier applied" and is asserted on by
-            # tests/edge/test_edge_stops.py, so an unconditional `or 1.0`
-            # would rewrite every ordinary plan's stop_mult_applied to 1.0.
-            applied_stop_mult = (applied_stop_mult or 1.0) * _opex_stop_mult
-        candidates = atr_target_candidates(close, atr_val, direction)
-        result = _atr_plan(close, atr_val, direction, horizon_key, strategy,
-                           stop_mult=applied_stop_mult, candidate_levels=candidates,
-                           params=scan_params)
-        if result is None:
-            return None
-        stop, tp1 = result
+    branch = _STRUCTURAL_BRANCHES.get(strategy, _atr_branch)
+    picked = branch(_BranchInputs(
+        df, index, strategy, horizon_key, direction, close, atr_val, stop_mult,
+        scan_params,
+    ))
+    if picked is None:
+        return None
+    stop, tp1, candidates, applied_stop_mult = picked
 
     # P1: the same adjuster backtest._trade_plan_at calls, with the level_map
     # this path already has (so it costs no extra level build here).
