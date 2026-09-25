@@ -344,6 +344,99 @@ def fibonacci_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["Fibonacci"] = fibonacci_entries
 
 
+# --- v103 C: Fibonacci Continuation ----------------------------------------
+
+DEFAULT_PARAMS["Fibonacci Continuation"] = {
+    "d_min": 0.382,
+    "d_max": 0.618,
+    "min_pullback_bars": 2,
+}
+# Kept as a market-layer literal so market never imports planning. The test
+# pins it to planning.params.STRUCTURE_BUFFER_ATR.
+FIB_CONTINUATION_STOP_ATR = 0.25
+
+
+def _extreme_after(values, lookback, positions, reducer):
+    """Return each rolling window's extreme strictly after its indexed bar."""
+    values = np.asarray(values, dtype=float)
+    result = np.full(len(values), np.nan)
+    if len(values) < lookback:
+        return result
+    windows = np.lib.stride_tricks.sliding_window_view(values, lookback)
+    suffix = reducer.accumulate(windows[:, ::-1], axis=1)[:, ::-1]
+    positions = np.asarray(positions, dtype=float)[lookback - 1:]
+    rows = np.nonzero(np.isfinite(positions) & (positions < lookback - 1))[0]
+    result[lookback - 1 + rows] = suffix[rows, positions[rows].astype(int) + 1]
+    return result
+
+
+def _continuation_sides(prior_high, prior_low, lookback, direction):
+    """Return structural continuation arrays for one direction."""
+    high_position = _rolling_argmax_pos(prior_high, lookback).to_numpy()
+    low_position = _rolling_argmin_pos(prior_low, lookback).to_numpy()
+    swing_high = prior_high.rolling(lookback).max().to_numpy(dtype=float)
+    swing_low = prior_low.rolling(lookback).min().to_numpy(dtype=float)
+    if direction == "bullish":
+        retrace = _extreme_after(prior_low.to_numpy(), lookback, high_position, np.minimum)
+        return swing_high, swing_low, high_position, low_position, retrace, 1.0
+    retrace = _extreme_after(prior_high.to_numpy(), lookback, low_position, np.maximum)
+    return swing_low, swing_high, low_position, high_position, retrace, -1.0
+
+
+def fib_continuation_frame(df, horizon_key, direction, params=None):
+    """Compute v103 continuation structure from prior bars and this close."""
+    params = _params("Fibonacci Continuation", params)
+    horizon = HORIZONS[horizon_key]
+    lookback = horizon["fib_lookback"]
+    level, anchor, position, other_position, retrace, sign = _continuation_sides(
+        df["High"].shift(1), df["Low"].shift(1), lookback, direction,
+    )
+    close = df["Close"].to_numpy(dtype=float)
+    atr14 = atr(df, 14).to_numpy(dtype=float)
+    stop = level - sign * FIB_CONTINUATION_STOP_ATR * atr14
+    with np.errstate(invalid="ignore", divide="ignore"):
+        impulse = np.abs(level - anchor)
+        depth = np.where(impulse > 0, np.abs(level - retrace) / impulse, np.nan)
+        structure = (other_position < position) & (
+            (lookback - 1 - position) >= params["min_pullback_bars"]
+        )
+        held = (depth >= params["d_min"]) & (depth <= params["d_max"])
+        crossed = sign * (close - level) > 0
+        loss_pct = np.abs(close - stop) / close * 100
+        fits = loss_pct <= capped_planned_loss_pct(horizon["max_risk_pct"]) + 1e-9
+        signal = structure & held & crossed & fits & (impulse > 0)
+    return pd.DataFrame({
+        "level": level, "impulse": impulse, "retrace": retrace, "depth": depth,
+        "stop": stop, "signal": signal.astype(bool),
+    }, index=df.index)
+
+
+def fib_continuation_at(df, index, horizon_key, direction, params=None):
+    """Return one signal bar's continuation structure, otherwise None."""
+    if index < 0:
+        index += len(df)
+    row = fib_continuation_frame(
+        df.iloc[:index + 1], horizon_key, direction, params,
+    ).iloc[-1]
+    if not bool(row["signal"]):
+        return None
+    return {key: float(row[key]) for key in ("level", "impulse", "retrace", "stop")}
+
+
+def fib_continuation_entries(df, horizon_key, params=None):
+    """Return continuation entries after the common trend, ATR, and volume gates."""
+    gates = compute_shared_gates(df)
+    common = gates["atr_floor"] & gates["atr_calm"] & gates["vol_ok"]
+    bullish_signal = fib_continuation_frame(df, horizon_key, "bullish", params)["signal"]
+    bearish_signal = fib_continuation_frame(df, horizon_key, "bearish", params)["signal"]
+    bullish = (bullish_signal & gates["bull_regime"] & gates["trend50_bull"] & common)
+    bearish = (bearish_signal & gates["bear_regime"] & gates["trend50_bear"] & common)
+    return bullish.fillna(False).astype(bool), bearish.fillna(False).astype(bool)
+
+
+ENTRY_FUNCS["Fibonacci Continuation"] = fib_continuation_entries
+
+
 DEFAULT_PARAMS["EMA Crossover"] = {
     "rsi_dip": 45, "ext_atr": 1.0,
     # Rescue gate (Task 107/108): pullback entry mode. TRAIN grid

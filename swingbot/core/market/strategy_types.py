@@ -214,6 +214,8 @@ BREAKEVEN_TRIGGER_FRACTION = 0.5
 STRATEGY_GATES: dict[str, dict] = {
     # bullish-only: N=286 WR=81.8 ExpR=+0.106 excl=27% (train, PRE-v31 -- stale)
     "Fibonacci": {"directions": ("bullish",)},
+    # v103 C ships masked until a direction passes its pre-registered shot.
+    "Fibonacci Continuation": {"directions": ()},
     # bullish-only: N=608 WR=85.2 ExpR=+0.140 excl=28% (train, PRE-v31 -- stale)
     "RSI": {"directions": ("bullish",)},
     # bullish-only: N=259 WR=81.1 ExpR=+0.071 excl=25% (train, PRE-v31 -- stale)
