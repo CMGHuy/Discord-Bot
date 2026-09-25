@@ -206,15 +206,21 @@ Shared, fixed and not tuned:
 - **Entry:** `close[d+1]`, only if `close[d+1] < close[d]`.
 - **Stop:** `High[d] + 0.25 × ATR14`.
 - **TP1 candidates:** the ATR ladder, plus swing lows as in B2.
-- **Data:** v82's historical earnings dates. Coverage before 2018 is unknown.
-  Stage 0 reports events per year. If early years are empty, B3's TRAIN window
-  starts where coverage does, and that is recorded, never back-filled.
+- **Data:** v82's frozen earnings CSVs (`market_data/earnings/`, untracked,
+  73 tickers). *Amended with the plan:* they already cover 2002–2026, so the
+  pre-registration records a sha256 of the directory. Stage 0 still reports
+  events per year, and missing coverage is recorded, never back-filled.
 
 ### 3.4 Earnings axis (B1 and B2)
 
 `e ∈ {hold, exit_before}`. `exit_before` blocks an entry whose next earnings
-reaction session falls within `max_holding_days`, and closes an open short at
-the close before that session. B1 and B2 therefore have 3 × 2 = 6 cells each.
+reaction session is **≤ 1 bar** away. Otherwise it enters and closes the short
+at the close of the bar before that session, as a per-plan hold cap.
+
+*Amended 2026-09-25 with the plan.* The original wording blocked entries whose
+report fell within `max_holding_days`. Reports come about every 63 sessions
+and horizons hold up to 270, so that would have blocked almost every entry.
+The forced exit, not the entry block, is the mechanism. B1 and B2 therefore have 3 × 2 = 6 cells each.
 The plateau is checked along k or m **within** the same `e`.
 
 ## 4. Horizons
@@ -294,8 +300,16 @@ The script refuses a Stage 3 run when:
   `ALL_STRATEGIES` and the strategy lists (as v103's C wiring task
   specified).
 - `STRATEGY_ALERTS_MODE` is never changed. Live only through `!soak`.
-- Registry rows are written by the script only, one per passing strategy ×
-  direction, labelled with the holdout window.
+- Registry rows are written by the script only, labelled with the holdout
+  window. *Amended with the plan:* the registry is keyed `(source, strategy,
+  horizon)` with no direction. A Part A pass therefore writes that strategy's
+  row only when **every** direction its live gate admits passed; otherwise no
+  row is written and the methodology row records why (the v103 rule). A short
+  is one direction and gets one row.
+- A passing short whose winning cell is `exit_before`, and any passing B3, is
+  recorded but **stays masked**. Live has no forced exit on the hold cap, and
+  no live earnings context, so live would not equal the measured backtest.
+  Each needs its own follow-up plan.
 - The sizing-parity harness pins `STRUCTURAL_STOP_SCOPE` to `""`, exactly as
   it pins `LEVEL_LIFECYCLE_STOPS_ENABLED`.
 
