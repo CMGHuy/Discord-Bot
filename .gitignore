@@ -30,6 +30,9 @@ data/admin_session_secret
 exports/
 market_data/
 data/backtest_cache/
+# v102's extended 2010-2025 OHLCV cache (BACKTEST_CACHE_DIR); rebuilt by
+# scripts/data/fetch_backtest_data.py --start 2010-01-01 --end 2025-12-31.
+data/backtest_cache_ext/
 data/backups/
 # Runtime relative-strength cache, rebuilt from the configured universe.
 data/universe/rs_cache.json
@@ -53,6 +56,11 @@ data/v32_factor_correlation.json
 # remembers to list -- Task 7's own reproducibility re-run wrote a fourth
 # (data/v33_train_verify.json) that three explicit lines would have missed.
 data/v33_*.json
+# v102/v103 Fibonacci funnel collect dumps -- rebuilt by the scripts' `collect`
+# subcommand. The committed evaluate/validation JSONs under
+# docs/superpowers/results/ are the record.
+data/v102_*.json
+data/v103_*.json
 # Same reason and same glob shape for v34's RS-gate measurement dumps
 # (data/v34_train.json, data/v34_train_rows.json, data/v34_validation.json),
 # re-derivable via scripts/backtest/measure_rs_gate_effect.py.
