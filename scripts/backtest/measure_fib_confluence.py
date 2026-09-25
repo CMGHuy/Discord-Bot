@@ -29,7 +29,6 @@ import json
 import sys
 import time
 from pathlib import Path
-from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(Path(__file__).resolve().parent)]
@@ -38,11 +37,15 @@ from measure_bearish_arms import _unmasked_gates, apply_laggard_rule  # noqa: E4
 from run_backtest_range import (  # noqa: E402
     _build_asof_map, _tickers_for_run, _with_context, load_cached, merge_registry, window_trades,
 )
-from swingbot.core.backtesting import arm_rule  # noqa: E402
 from swingbot.core.backtesting.backtest import run_backtest  # noqa: E402
 from swingbot.core.market.entry_filters import entries_for, gate_override  # noqa: E402
 from swingbot.core.market.strategy_types import HORIZONS, STRATEGY_GATES  # noqa: E402
 from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason  # noqa: E402
+from fib_funnel import FOLD_YEARS, MIN_N_TRAIN, MIN_N_VALIDATION  # noqa: E402
+from fib_funnel import badge_verdict, fold_verdict, plateau_ok, pooled  # noqa: E402
+from fib_funnel import cell_key as tol_key  # noqa: E402
+from fib_funnel import dir_rows as _dir, year_rows as _years  # noqa: E402
+from fib_funnel import fold_pick as _fold_pick_on  # noqa: E402
 
 STRATEGY = "Fibonacci"
 DIRECTIONS = ("bullish", "bearish")
@@ -52,21 +55,8 @@ EXT_CACHE_NAME = "backtest_cache_ext"
 # --- pre-registered constants (spec "Windows and funnel") ---
 TRAIN_EXT = ("2010-01-01", "2023-12-31")
 VALIDATION = ("2024-01-01", "2025-12-31")
-TRAIN_START_YEAR = 2010
-FOLD_YEARS = tuple(range(2013, 2024))
 GRID = (0.25, 0.5, 0.75, 1.0)
 BASELINE_TOL = 0.0
-WR_FLOOR = 50.0
-MIN_N_TRAIN = 30
-MIN_N_VALIDATION = 15
-MAX_SCRATCH_SHARE = 0.5
-FOLD_MIN_N = 15
-FOLD_POSITIVE_SHARE = 2 / 3
-MIN_QUALIFYING_FOLDS = 3
-
-
-def tol_key(tol) -> str:
-    return f"{float(tol):g}"
 
 
 def require_ext_cache():
@@ -160,33 +150,8 @@ def count_signals(frames, tols, *, horizons=ALL_HZ):
     return out
 
 
-def pooled(rows):
-    return arm_rule.pooled_stats([SimpleNamespace(**r) for r in rows])
-
-
-def badge_verdict(stats, min_n):
-    clauses = {
-        "wr": stats.get("win_rate") is not None and stats["win_rate"] >= WR_FLOOR,
-        "exp_r": stats.get("expectancy_r") is not None and stats["expectancy_r"] > 0,
-        "n": (stats.get("n") or 0) >= min_n,
-        "scratch": (stats.get("scratch_timeout_share") is not None
-                    and stats["scratch_timeout_share"] <= MAX_SCRATCH_SHARE),
-    }
-    return {"clears": all(clauses.values()), "clauses": clauses}
-
-
-def _dir(rows, direction):
-    return [r for r in rows if r["direction"] == direction]
-
-
-def _years(rows, first, last):
-    return [r for r in rows if first <= int(r["entry_date"][:4]) <= last]
-
-
 def _plateau_ok(cells, tol):
-    i = GRID.index(tol)
-    neighbours = [GRID[j] for j in (i - 1, i + 1) if 0 <= j < len(GRID)]
-    return all(cells[n]["verdict"]["clears"] for n in neighbours)
+    return plateau_ok({value: cells[value]["verdict"]["clears"] for value in cells}, GRID, tol)
 
 
 def stage1(rows_by_tol, direction):
@@ -202,26 +167,8 @@ def stage1(rows_by_tol, direction):
 
 
 def fold_pick(rows_by_tol, direction, year):
-    """Train span TRAIN_START_YEAR..year-1: the highest-ExpR grid tolerance
-    among cells with decided N >= MIN_N_TRAIN. None when no cell qualifies."""
-    best = None
-    for tol in GRID:
-        stats = pooled(_dir(_years(rows_by_tol[tol_key(tol)], TRAIN_START_YEAR, year - 1), direction))
-        if stats["n"] < MIN_N_TRAIN or stats["expectancy_r"] is None:
-            continue
-        if best is None or stats["expectancy_r"] > best[1]:
-            best = (tol, stats["expectancy_r"])
-    return None if best is None else best[0]
-
-
-def fold_verdict(folds):
-    qualifying = [f for f in folds if f["stats"] is not None and f["stats"]["n"] >= FOLD_MIN_N]
-    positive = sum(1 for f in qualifying
-                   if f["stats"]["expectancy_r"] is not None and f["stats"]["expectancy_r"] > 0)
-    clears = (len(qualifying) >= MIN_QUALIFYING_FOLDS
-              and positive >= FOLD_POSITIVE_SHARE * len(qualifying))
-    return {"clears": clears, "qualifying": len(qualifying), "positive": positive,
-            "unselected": sum(1 for f in folds if f["tol"] is None)}
+    """v102's grid bound onto the shared Fibonacci funnel's fold picker."""
+    return _fold_pick_on(rows_by_tol, direction, year, GRID)
 
 
 def stage2(rows_by_tol, direction):
