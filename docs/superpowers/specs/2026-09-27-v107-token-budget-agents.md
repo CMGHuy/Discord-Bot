@@ -153,3 +153,28 @@ trap preflight is judgement (silent-no-op shims, removed modules); a missed
 trap costs a full implement/review loop, which outweighs the Haiku saving.
 Live check of fork + `disable-model-invocation` is in TB13 (skills load from
 `main` at session start, so it cannot be checked from the branch).
+
+## Measurements
+
+Fresh session in the repo root, `/context` as the first command (2026-09-27).
+"Before" was taken on `main` before the v107 merge.
+
+| Bucket | Before (tokens) | After (tokens) |
+|---|---|---|
+| System prompt | 8.9k | — |
+| System tools | 22.7k | — |
+| MCP tools (177, deferred) | 0.7k | — |
+| MCP instructions | 1.5k | — |
+| Custom agents (3) | 0.2k | — |
+| Memory files (2: CLAUDE.md + MEMORY.md) | 6.2k | — |
+| Skills (157) | 9.9k | — |
+| **Total at startup** | **51.4k** | — |
+
+Byte sizes before: `CLAUDE.md` 13276, `MEMORY.md` 4580. After (branch):
+`CLAUDE.md` 9034, `MEMORY.md` 2905.
+
+**Reading the baseline honestly.** System tools (22.7k) and the system prompt
+(8.9k) are Claude Code's own and v107 cannot touch them — they are 61% of the
+total. The reducible buckets are skills, MCP, memory and agents: 18.5k. The
+spec's "≥ 30%" target is therefore judged against those **reducible buckets**,
+not against the 51.4k total, where the ceiling is ~36%.
