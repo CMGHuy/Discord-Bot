@@ -126,3 +126,24 @@ one-subagent-at-a-time rule applies regardless.
   agent body if a field is unsupported.
 - **Disabling a plugin another project needs** — changes are project-scoped
   only; user-level settings untouched.
+
+## Verified support
+
+Checked 2026-09-27 via `claude-code-guide` against current Claude Code docs.
+
+1. **Agent `skills:`** (docs: sub-agents) — supported, YAML array syntax
+   `skills: [a, b]`. **Cannot preload a skill with
+   `disable-model-invocation: true`** → `new-doc` cannot be preloaded into
+   `plan-writer`; it gets an inline `## Conventions` block instead.
+   Plugin-namespaced names (`superpowers:…`) are not explicitly documented —
+   the TB13 smoke run is the check.
+2. **Skill `context: fork` / `agent:` / `model:`** (docs: skills) — all exist;
+   `agent:` defaults to `general-purpose`; only the fork's final result
+   returns to the caller. Compatibility with `disable-model-invocation: true`
+   is undocumented — TB8's manual check is the test.
+3. **Project `enabledPlugins`** (docs: settings) — shared project settings
+   outrank user settings (Managed > CLI > project local > shared project >
+   user), so a project-level `false` disables a user-enabled plugin.
+4. **MCP servers** (docs: mcp) — `disabledMcpjsonServers` covers `.mcp.json`
+   servers only; a plugin-provided MCP server goes away by disabling its
+   plugin (or the per-user `/mcp` toggle, which is not committed).
