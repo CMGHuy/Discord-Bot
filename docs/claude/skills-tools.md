@@ -22,6 +22,15 @@ Referenced from the root `CLAUDE.md`.
   against them; `test-runner` for any full-suite or fast-tier pytest run.
 - `.mcp.json` provides the `context7` server, scoped to yfinance/pandas-ta/
   discord.py docs — not this repo's own code.
+- **Plugins off for this project (v107)** — `.claude/settings.json`
+  `enabledPlugins` disables the claude.ai-synced knowledge-work plugins
+  (`small-business`, `legal`, `finance`, `product-management`, `data`,
+  `engineering`, `productivity`, `pdf-viewer`, all `@synced`) and the
+  `chrome-devtools-mcp`/`playwright` MCP plugins, which also removes their
+  MCP servers. Project scope only; user settings are untouched. Need one for
+  a session? `claude --settings` or a `settings.local.json` override.
+  Not locally disableable: `anthropic-skills:*` and the Claude Docs
+  connector (claude.ai-served) and the built-in skills.
 - **At most ONE subagent at a time, by default.** Dispatch one, wait for it to
   return, then decide whether the next is still needed. Spawning several at
   once requires the human partner to ask for it explicitly — "in parallel",

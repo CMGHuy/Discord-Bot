@@ -75,6 +75,19 @@
     ]
   },
 
+  "enabledPlugins": {
+    "chrome-devtools-mcp@claude-plugins-official": false,
+    "playwright@claude-plugins-official": false,
+    "small-business@synced": false,
+    "legal@synced": false,
+    "finance@synced": false,
+    "product-management@synced": false,
+    "data@synced": false,
+    "engineering@synced": false,
+    "productivity@synced": false,
+    "pdf-viewer@synced": false
+  },
+
   "preferredNotifChannel": "terminal_bell",
 
   "statusLine": {
