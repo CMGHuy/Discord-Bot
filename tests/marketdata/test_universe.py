@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from tests.conftest import make_ohlcv
@@ -792,3 +793,65 @@ def test_large_gap_with_prior_twenty_bar_volume_spike_is_not_a_bad_split():
     df.iloc[-1, df.columns.get_loc("Volume")] = 164_000_000.0
 
     assert not any("split" in issue for issue in data_quality_issues(df, "QBTS"))
+
+
+# --- v106: 1h bars via Alpaca through the provider router -------------------
+
+def _ny_hourly(days):
+    stamps = [f"{d} {h}" for d in days for h in ("09:30", "10:30", "11:30")]
+    idx = pd.DatetimeIndex(stamps).tz_localize("America/New_York")
+    n = len(idx)
+    return pd.DataFrame({"Open": [100.0] * n, "High": [101.0] * n, "Low": [99.0] * n,
+                         "Close": [100.5] * n, "Volume": [1000.0] * n}, index=idx)
+
+
+class _HourlyProvider:
+    def __init__(self, frame):
+        self.frame, self.calls = frame, 0
+
+    def intraday_bars(self, ticker, interval):
+        self.calls += 1
+        return self.frame.copy()
+
+
+@pytest.fixture
+def _alpaca_router(monkeypatch):
+    from swingbot import config
+    from swingbot.core.marketdata.providers import router
+    monkeypatch.setattr(config, "ALPACA_ENABLED", True)
+    monkeypatch.setattr(config, "ALPACA_API_KEY_ID", "k")
+    monkeypatch.setattr(config, "ALPACA_API_SECRET_KEY", "s")
+    router.reset()
+    yield router
+    router.reset()
+
+
+def test_get_intraday_alpaca_merges_with_yfinance_csv(tmp_path, monkeypatch, _alpaca_router):
+    import time
+    from swingbot.core.marketdata.data_store import (
+        cache_path, get_intraday, load_from_disk, save_to_disk)
+
+    save_to_disk(_ny_hourly(["2026-09-23", "2026-09-24"]), "AAPL", "1h",
+                 base_dir=str(tmp_path))
+    path = cache_path("AAPL", "1h", base_dir=str(tmp_path))
+    stale_time = time.time() - 5 * 3600
+    os.utime(path, (stale_time, stale_time))
+    prov = _HourlyProvider(_ny_hourly(["2026-09-24", "2026-09-25"]))
+    monkeypatch.setattr(_alpaca_router, "_provider_factory", lambda *a: prov)
+
+    get_intraday("AAPL", base_dir=str(tmp_path))
+
+    merged = load_from_disk("AAPL", "1h", base_dir=str(tmp_path))
+    assert prov.calls == 1
+    assert not merged.index.duplicated().any()
+    assert len(merged) == 9          # 3 days x 3 bars, the overlap day once
+
+
+def test_get_intraday_injected_fetch_bypasses_router(tmp_path, monkeypatch, _alpaca_router):
+    from swingbot.core.marketdata.data_store import get_intraday
+
+    prov = _HourlyProvider(_ny_hourly(["2026-09-25"]))
+    monkeypatch.setattr(_alpaca_router, "_provider_factory", lambda *a: prov)
+    out = get_intraday("AAPL", base_dir=str(tmp_path),
+                       fetch_fn=lambda s, i: _ny_hourly(["2026-09-24"]))
+    assert prov.calls == 0 and len(out) == 3

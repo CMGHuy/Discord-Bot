@@ -34,6 +34,7 @@ import pandas as pd
 import yfinance as yf
 
 from swingbot.core.marketdata import yf_safe
+from swingbot.core.marketdata.providers import router
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 from swingbot.core.marketdata.adjustments import merge_adjusted
 
@@ -448,9 +449,11 @@ def get_intraday(symbol: str, interval: str = "1h", base_dir: str = DATA_DIR,
         return load_from_disk(symbol, interval, base_dir=base_dir)
 
     def _default_fetch(sym, iv):
-        df = yf_safe.download(sym, period="700d", interval=iv,
-                         auto_adjust=True, progress=False)
-        return _normalize_columns(df) if df is not None and not df.empty else None
+        def _yf(s, i):
+            df = yf_safe.download(s, period="700d", interval=i,
+                                  auto_adjust=True, progress=False)
+            return _normalize_columns(df) if df is not None and not df.empty else None
+        return router.intraday_bars(sym, iv, _yf)
 
     try:
         df = (fetch_fn or _default_fetch)(symbol, interval)
