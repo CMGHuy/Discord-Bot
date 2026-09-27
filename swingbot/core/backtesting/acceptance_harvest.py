@@ -60,7 +60,10 @@ def mde_expectancy_r(population, *, target_n: int, power: float = 0.80,
     §3), not an implementation bug, and is deliberately NOT being changed
     here. A future harvest spec relying on Stage 0 to rule out small
     effects should first derive a paired variant (variance of the
-    per-trade R delta) before citing this function's output as a bound."""
+    per-trade R delta) before citing this function's output as a bound.
+    v100: that paired variant is ``acceptance.mde_paired(...,
+    statistic=delta_expectancy_r)``.
+    """
     closed = [t for t in population if t.outcome in CLOSED and t.r_multiple is not None]
     if not closed or target_n <= 0:
         return None

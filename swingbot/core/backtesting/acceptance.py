@@ -345,6 +345,35 @@ def mde_win_rate(population, *, target_n: int, power: float = MDE_POWER,
     return 100.0 * (z_a + z_b) * float(np.sqrt(2.0 * p * (1.0 - p) / n_eff))
 
 
+def mde_paired(baseline, component, statistic, *, observed_n: int,
+               target_n: int, power: float = MDE_POWER,
+               alpha: float = ALPHA,
+               n_resamples: int = BOOTSTRAP_RESAMPLES,
+               seed: int = 42) -> float | None:
+    """Return an MDE from the paired ticker-cluster bootstrap SE.
+
+    ``mde_win_rate`` and ``acceptance_harvest.mde_expectancy_r`` assume
+    independent populations. The designs measured here are normally paired:
+    a veto arm is a baseline subset and an exit arm replays the same entries.
+    The shared ticker draw in ``cluster_bootstrap`` preserves that pairing and
+    ticker clustering together, including for subset and zero-overlap designs.
+    The observed SE projects to ``target_n`` using square-root scaling.
+    """
+    if observed_n <= 0 or target_n <= 0:
+        return None
+    z_alpha = _Z_ALPHA_ONE_SIDED.get(alpha)
+    z_power = _Z_POWER.get(power)
+    if z_alpha is None or z_power is None:
+        raise ValueError(f"no tabulated z for alpha={alpha}, power={power}")
+    draws = cluster_bootstrap(baseline, component, statistic,
+                              n_resamples=n_resamples, seed=seed)
+    if draws.size < 2:
+        return None
+    scale = float(np.sqrt(observed_n / target_n))
+    standard_error = float(np.std(draws, ddof=1)) * scale
+    return float((z_alpha + z_power) * standard_error)
+
+
 def project_target_n(*, observed_n: int, observed_days: int,
                      target_days: int) -> int:
     """Project achievable N by window length, from a window we are allowed
