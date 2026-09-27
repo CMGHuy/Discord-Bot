@@ -4,7 +4,7 @@
 
 **Bump:** none
 **Edge:** none (integrity)
-**Spec:** `docs/superpowers/specs/2026-09-27-v107-token-budget-agents.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-09-27-v107-token-budget-agents.md`
 
 **Goal:** Cut Opus token spend by moving mechanical work onto pinned-model role
 agents with preloaded skills, forking two mechanical slash skills, and
