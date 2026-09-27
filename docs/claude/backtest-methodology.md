@@ -56,6 +56,7 @@ interpreting any backtest, grid, or validation result.
 
   | Stage | Window | Cost | Rule |
   |---|---|---|---|
+  | −1 `reachability` | pilot (2018-06..2020-12, 10 tickers) | free | a knob unreachable by replay, or zero changed outcomes, is **refused; budget intact** |
   | 0 `mde` | fold-train | free | TRAIN effect below the minimum detectable effect ⇒ **shot refused, budget intact** |
   | 1 selection | fold-train only (2018-06..2020 / ..2021 / ..2022) | free | `plateau_report()` mandatory and disqualifying — a spike, not a plateau, does not proceed |
   | 2 `walkforward` | fold-test 2021 / 2022 / 2023 | free, repeatable | `gate_win_rate`: ≥ 2 of 3 folds improving, no fold worse than −1.0pp, per-fold N ≥ 30 |
@@ -64,6 +65,17 @@ interpreting any backtest, grid, or validation result.
   Stage 2 being free and repeatable is the point: it is where v68 would have
   died at no cost to its budget. Sample width for stages 2–3 is the full
   cached universe × all 10 horizons, dispatched to `backtest-runner`.
+
+- **Standard arm producer (v100, `scripts/backtest/measure_arms.py`).** New
+  pre-registrations produce stamped, keyed arms with this producer rather
+  than a bespoke `measure_*.py` script. It replays baseline and a knob delta
+  through confluence and strategy (`build_strategy_plan`, the live
+  constructor), then `validate_component.py` refuses unstamped, wrong-stage,
+  code-mismatched, validation-contacting, or narrow-universe files. A bespoke
+  instrument needs `--bespoke-instrument` and its reason is retained in the
+  result. The reachability registry classifies every searchable knob before
+  compute. Stage 0 uses the paired ticker-cluster-bootstrap MDE whenever the
+  arms share keys; this better instrument does not reopen any closed row.
 
 - **`Edge: harvest` features are OUT OF SCOPE for this funnel, and that is a
   known gap, not an oversight.** Exits, targets and sizing move geometry by
@@ -96,9 +108,9 @@ interpreting any backtest, grid, or validation result.
   (the same entries replayed under two exit rules), for which the relevant
   variance is that of the per-trade CHANGE in R, not of R itself — typically
   much smaller, so the MDE this function reports is likely overstated for
-  that design. A future harvest spec that relies on Stage 0 to rule out
-  small effects should derive a paired variant first; see the comment on
-  `mde_expectancy_r` itself.
+  that design. v100 added that paired variant:
+  `acceptance.mde_paired(..., statistic=delta_expectancy_r)`, used by
+  `validate_component.py --stage mde --gate harvest`.
 - Frozen constants: `MIN_RISK_REWARD_RATIO = 1.5` / `MAX_RISK_REWARD_RATIO
   = 2.5` (the band `plan_engine.select_structural_target` picks every
   plan's target inside — replaces the pre-v31 per-strategy fixed
