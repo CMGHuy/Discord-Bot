@@ -2,7 +2,8 @@
 
 **Bump:** none (dev tooling only — no observable bot or ui difference)
 **Edge:** none (integrity) — frees session budget for expectancy work; changes no trading behaviour
-**Plan:** `docs/superpowers/plans/2026-09-27-v107-token-budget-agents.md`
+**Plan:** `docs/superpowers/plans/implemented/2026-09-27-v107-token-budget-agents.md`
+**Result:** partial — role agents, forked skills and memory trim shipped and smoke-tested; the startup ≥ 30% target was missed (−2%) because project `enabledPlugins` is not honoured by the session runtime. Open follow-up, see `## Measurements`.
 
 ## Problem
 
