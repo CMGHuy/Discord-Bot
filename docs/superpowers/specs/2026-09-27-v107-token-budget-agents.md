@@ -147,3 +147,9 @@ Checked 2026-09-27 via `claude-code-guide` against current Claude Code docs.
 4. **MCP servers** (docs: mcp) — `disabledMcpjsonServers` covers `.mcp.json`
    servers only; a plugin-provided MCP server goes away by disabling its
    plugin (or the per-user `/mcp` toggle, which is not committed).
+
+**TB8 deviation:** `/task-brief` forks on **sonnet**, not haiku. Its Step 3
+trap preflight is judgement (silent-no-op shims, removed modules); a missed
+trap costs a full implement/review loop, which outweighs the Haiku saving.
+Live check of fork + `disable-model-invocation` is in TB13 (skills load from
+`main` at session start, so it cannot be checked from the branch).

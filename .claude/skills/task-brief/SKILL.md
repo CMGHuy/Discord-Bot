@@ -2,6 +2,8 @@
 name: task-brief
 description: Extract one plan task into an execution brief with this repo's known traps pre-corrected. Use when starting a numbered plan task (E53, G134, C43...).
 disable-model-invocation: true
+context: fork
+model: sonnet
 ---
 
 # Task brief with trap preflight
