@@ -2,7 +2,7 @@
 
 **Bump:** none (dev tooling only — no observable bot or ui difference)
 **Edge:** none (integrity) — frees session budget for expectancy work; changes no trading behaviour
-**Plan:** to be written (`plan-writer` agent is itself a deliverable here; this plan is written by hand on Opus)
+**Plan:** `docs/superpowers/plans/2026-09-27-v107-token-budget-agents.md`
 
 ## Problem
 
@@ -93,6 +93,13 @@ skill's own output is large.
 4. **Dispatch table** — add a 6-row "which agent for what" table to
    `skills-tools.md`, a two-line pointer in `CLAUDE.md`, condensed mirror in
    `AGENTS.md`.
+
+## Parallelisation
+
+**Sequential throughout.** The agent tasks share one shape-test file, the
+frontmatter-support check gates the syntax every later task writes, the
+baseline measurement must precede the startup trims, and the
+one-subagent-at-a-time rule applies regardless.
 
 ## Measurement (success criteria)
 
