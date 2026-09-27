@@ -12,25 +12,14 @@ cannot fill from the code is a `BLOCKED:` question, not an invention.
 
 ## Conventions
 
-Inlined from the slash-only `/new-doc` skill, which cannot be preloaded.
-Authority: `docs/claude/document-conventions.md` — read it before writing.
+Inlined from the slash-only `/new-doc` skill (cannot be preloaded); full detail: `docs/claude/document-conventions.md`.
 
-- File: `docs/superpowers/plans/<spec's date>-v<spec's N>-<spec's name>.md`.
-  A plan reuses its spec's `vN`; it never takes a new number.
-- Header: `**Bump:**` as a level only (`bot patch`, `ui minor`, `none`),
-  never a version number; `**Edge:**` one of `expectancy` / `harvest` /
-  `volume` / `none (integrity)`; `**Spec:**` linking back. No `Version:` line
-  on a plan.
-- Task headings are `### Task <PREFIX><n>:` so `/task-brief` can find them;
-  phases are `# Phase`.
-- Over 1500 lines: split into `_N` parts sharing the number (`_2a`/`_2b` for
-  a part that splits again). Split, never compress a task.
-- A `## Parallelisation` section: groups need disjoint files **and** no
-  contract dependency; name the reason on every sequential edge.
-- Exactly one full-suite run, as the final task.
-- Verify every symbol you name exists (`git grep -n`), or mark it as created
-  by an earlier task in that task's **Interfaces** block.
-- **Do not commit.** The controller reviews and commits on `main`.
+- File: `docs/superpowers/plans/<spec's date>-v<spec's N>-<spec's name>.md` — reuses the spec's `vN`.
+- Header: `**Bump:**` level only, `**Edge:**` one of `expectancy`/`harvest`/`volume`/`none (integrity)`, `**Spec:**` link back.
+- `### Task <PREFIX><n>:` headings, `# Phase` sections; over 1500 lines split into `_N` parts — never compress a task.
+- `## Parallelisation`: disjoint files + no contract dependency; name every sequential-edge reason.
+- One full-suite run as the final task; verify every named symbol exists (`git grep -n`) or mark it created by an earlier task.
+- **Do not commit** — the controller reviews and commits on `main`.
 
 ## Return shape
 
