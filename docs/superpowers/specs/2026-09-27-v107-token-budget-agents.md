@@ -161,14 +161,14 @@ Fresh session in the repo root, `/context` as the first command (2026-09-27).
 
 | Bucket | Before (tokens) | After (tokens) |
 |---|---|---|
-| System prompt | 8.9k | — |
-| System tools | 22.7k | — |
-| MCP tools (177, deferred) | 0.7k | — |
-| MCP instructions | 1.5k | — |
-| Custom agents (3) | 0.2k | — |
-| Memory files (2: CLAUDE.md + MEMORY.md) | 6.2k | — |
-| Skills (157) | 9.9k | — |
-| **Total at startup** | **51.4k** | — |
+| System prompt | 8.9k | 8.9k |
+| System tools | 22.7k | 22.7k |
+| MCP tools (177, deferred) | 0.7k | ~0.7k (unchanged — plugin MCPs still loaded) |
+| MCP instructions | 1.5k | 1.5k |
+| Custom agents (3) | 0.2k | 0.6k (7 agents) |
+| Memory files (2: CLAUDE.md + MEMORY.md) | 6.2k | 4.7k (3.5k + 1.2k) |
+| Skills (157) | 9.9k | 9.9k (plugins still loaded) |
+| **Total at startup** | **51.4k** | **50.5k** |
 
 Byte sizes before: `CLAUDE.md` 13276, `MEMORY.md` 4580. After (branch):
 `CLAUDE.md` 9034, `MEMORY.md` 2905.
@@ -194,3 +194,21 @@ not against the 51.4k total, where the ceiling is ~36%.
   (closes TB1 caveat 2). It returned a synthesized brief noting TB3 was
   already merged rather than the verbatim task text; acceptable, watch it.
 - `plan-writer` — not smoke-run (Opus spawn); shape test covers frontmatter.
+
+**After — result (2026-09-27, fresh session post-merge).** Startup 51.4k →
+50.5k (−0.9k, −2%); reducible buckets 18.5k → 17.4k (−6%). **The ≥ 30% target
+was not met.** Memory delivered (−1.5k, −24%); agents cost +0.4k.
+
+**Why: project `enabledPlugins` did not take effect in the interactive
+session.** `claude plugin list` from the repo root reports all ten plugins
+`✘ disabled`, yet the live session still loads their skills (small-business,
+data, legal, … and even `chrome-devtools-mcp`, a standard non-synced plugin)
+and their MCP tools. No `settings.local.json` override exists. Root cause not
+established — the CLI and the session runtime disagree. The settings block
+stays (harmless, and correct if the runtime starts honouring it); the fix is
+a follow-up, not a re-measure of this one.
+
+**Where the remaining savings actually are** (per-session, not startup):
+routing plan work through `task-implementer`/`task-reviewer`, forked `/gate`
+and `/task-brief`, and `prod-inspector` — the smoke runs confirm each works.
+Startup was never the larger lever: 61% of it is Claude Code's own.
