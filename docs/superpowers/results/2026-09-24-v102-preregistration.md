@@ -61,4 +61,4 @@ At most **one** `python scripts/backtest/measure_fib_confluence.py validation` i
 
 ## Cross-plan note
 
-As of this pre-registration's commit, v100 (the standard arm producer, `docs/superpowers/plans/2026-09-23-v100-arm-producer_2-producer-funnel.md`) has **not** merged to `main` — only its spec and plan are committed. v102's funnel is self-contained regardless (its own Stage 1/2 rules, defined above) and does not go through `scripts/backtest/validate_component.py`.
+As of this pre-registration's commit, v100 (the standard arm producer, `docs/superpowers/plans/implemented/2026-09-23-v100-arm-producer_2-producer-funnel.md`) had **not** merged to `main` — only its spec and plan were committed. v102's funnel is self-contained regardless (its own Stage 1/2 rules, defined above) and does not go through `scripts/backtest/validate_component.py`.
