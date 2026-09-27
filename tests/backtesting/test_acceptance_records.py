@@ -20,7 +20,7 @@ def _trade(**kw):
 
 def test_key_is_the_pairing_tuple():
     t = _trade()
-    assert t.key == ("AAPL", "MACD", "3m", "2021-03-01")
+    assert t.key == ("AAPL", "MACD", "3m", "2021-03-01", None, None)
 
 
 def test_stratum_is_strategy_by_horizon():
@@ -44,6 +44,7 @@ def test_planned_rr_is_none_on_zero_risk():
 def test_from_plan_prefers_entry_price_over_trigger():
     class _Plan:
         ticker, strategy, horizon_key = "MSFT", "VWAP", "4w"
+        source, direction = "strategy", "bullish"
         entry_price, trigger_price = 50.0, 49.0
         stop_loss, tp1 = 45.0, 60.0
     t = arm_trade_from_plan(_Plan(), entry_date="2021-06-02",
@@ -56,6 +57,7 @@ def test_from_plan_prefers_entry_price_over_trigger():
 def test_from_plan_falls_back_to_trigger_price():
     class _Plan:
         ticker, strategy, horizon_key = "MSFT", "VWAP", "4w"
+        source, direction = "strategy", "bullish"
         entry_price, trigger_price = None, 50.0
         stop_loss, tp1 = 45.0, 60.0
     assert arm_trade_from_plan(_Plan(), entry_date="2021-06-02",

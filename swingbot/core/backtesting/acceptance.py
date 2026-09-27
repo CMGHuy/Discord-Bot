@@ -40,11 +40,18 @@ class ArmTrade:
     outcome: str                  # win | loss | scratch | timeout | not_triggered
     r_multiple: float | None
     planned_rr: float | None
+    source: str | None = None       # confluence | strategy; None on pre-v100 rows
+    direction: str | None = None    # bullish | bearish; None on pre-v100 rows
 
     @property
     def key(self) -> tuple:
-        """Pairing key across arms."""
-        return (self.ticker, self.strategy, self.horizon_key, self.entry_date)
+        """Pairing key across arms.
+
+        ``source`` and ``direction`` are None on rows written before v100,
+        which keeps those rows pairing exactly as they did.
+        """
+        return (self.ticker, self.strategy, self.horizon_key, self.entry_date,
+                self.source, self.direction)
 
     @property
     def stratum(self) -> tuple:
@@ -72,7 +79,8 @@ def arm_trade_from_plan(plan, *, entry_date: str, outcome: str,
     return ArmTrade(ticker=plan.ticker, strategy=plan.strategy,
                     horizon_key=plan.horizon_key, entry_date=entry_date,
                     outcome=outcome, r_multiple=r_multiple,
-                    planned_rr=planned_rr(entry, plan.stop_loss, plan.tp1))
+                    planned_rr=planned_rr(entry, plan.stop_loss, plan.tp1),
+                    source=plan.source, direction=plan.direction)
 
 
 def arm_trade_from_backtest(trade, *, ticker: str, strategy: str,
