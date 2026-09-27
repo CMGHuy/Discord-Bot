@@ -637,11 +637,13 @@ FIELDS: list[Field] = [
                "change. Leave blank to disable FMP crawling."),
     Field("ALPACA_ENABLED", "ALPACA_ENABLED", "Data Sources",
           "Use Alpaca for live US bars/quotes",
-          type="checkbox", default="false",
+          type="checkbox", default="true",
           help="v106. When on, live-path daily bars, 1h bars and last-trade prices for "
                "US equities/ETFs come from Alpaca (SIP bars >=15 min old, IEX last "
                "trade), falling back per symbol to yfinance. Off = exact pre-v106 "
-               "yfinance behaviour. Backtests never use Alpaca."),
+               "yfinance behaviour. Backtests never use Alpaca. Harmless with no "
+               "ALPACA_API_KEY_ID/SECRET set -- the router falls back to yfinance "
+               "for everything until keys are added."),
     Field("ALPACA_API_KEY_ID", "ALPACA_API_KEY_ID", "Data Sources", "Alpaca API key ID",
           type="password", sensitive=True, default="",
           help="From the Alpaca dashboard (paper or live account; market data is the same)."),
