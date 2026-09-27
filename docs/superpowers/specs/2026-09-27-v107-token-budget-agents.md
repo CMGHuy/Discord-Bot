@@ -178,3 +178,19 @@ Byte sizes before: `CLAUDE.md` 13276, `MEMORY.md` 4580. After (branch):
 total. The reducible buckets are skills, MCP, memory and agents: 18.5k. The
 spec's "≥ 30%" target is therefore judged against those **reducible buckets**,
 not against the 51.4k total, where the ceiling is ~36%.
+
+## Smoke results (TB13, fresh session after merge)
+
+- `task-implementer` — DONE in the fixed 6-field shape, no commit, tests
+  green; **zero `Skill` calls for test-driven-development** → `skills:`
+  preload works, including a plugin-namespaced name (closes TB1 caveat 1).
+- `task-reviewer` — FINDINGS: `plan-writer.md`'s inline Conventions block
+  exceeded the spec's ≤ 10-line fallback cap; fixed in 23f6d55e (19 → 8
+  lines, rules intact). Otherwise clean.
+- `prod-inspector` — answered the ERROR-count question; refused "restart the
+  bot container" with no command run.
+- `/task-brief TB3` (forked, sonnet) — only the brief reached the caller, no
+  intermediate grep output → fork + `disable-model-invocation` compatible
+  (closes TB1 caveat 2). It returned a synthesized brief noting TB3 was
+  already merged rather than the verbatim task text; acceptable, watch it.
+- `plan-writer` — not smoke-run (Opus spawn); shape test covers frontmatter.
