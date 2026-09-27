@@ -2,6 +2,8 @@
 name: gate
 description: Pre-commit verification gate — syntax pass plus the full suite via scripts/dev/testrun.py, where green means literally zero failures.
 disable-model-invocation: true
+context: fork
+model: sonnet
 ---
 
 # Pre-commit gate

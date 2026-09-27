@@ -84,6 +84,19 @@ def test_model_invocable_skills_carry_a_trigger_table():
         assert body.count("Should not fire:") >= 3
 
 
+# v107: mechanical slash skills run forked on a cheaper model. task-brief is
+# sonnet, not the spec's haiku: its trap preflight is judgement, and a missed
+# trap costs a whole implement/review loop.
+FORKED = {"gate": "sonnet", "task-brief": "sonnet"}
+
+
+@pytest.mark.parametrize("name", sorted(FORKED))
+def test_mechanical_skills_run_forked(name):
+    meta, _ = _read_skill(name)
+    assert meta.get("context") == "fork"
+    assert meta.get("model") == FORKED[name]
+
+
 def test_ritual_skills_are_slash_only():
     for name in sorted(TIER_2):
         meta, _ = _read_skill(name)

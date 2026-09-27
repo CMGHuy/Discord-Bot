@@ -157,3 +157,22 @@ branch are removed** as part of that same closing commit's work, before the
 `git mv` into `implemented/`/`no-lift/` — simpler now than it was under
 deferred numbering, since that move never has to rename anything the
 worktree's own name would need to catch up to.
+
+## Current status is not tracked in CLAUDE.md
+
+Moved from the root `CLAUDE.md` verbatim by v107.
+
+It drifts stale. The `SessionStart` hook (`.claude/hooks/session-cursor.ps1`)
+prints it every session: active plan + task count, last/next task, git HEAD
+and dirty files, live worktrees, and any in-progress multi-hour backtest.
+**The live plans are whatever sits at the top level of
+`docs/superpowers/plans/`** — everything closed, abandoned or rolled back has
+moved to `plans/implemented/` or `plans/no-lift/`.
+
+**Don't trust the hook's "NEXT" task ID blind** — it can name IDs that don't
+exist in the plan file it labels active (a different prefix, e.g. `U34`).
+Verify with `grep -n "^### Task" <plan>` first.
+
+**Repo tooling (`.claude/`):** `/task-brief <id>` extracts one plan task, `/gate` is the
+pre-commit gate, `guardrails.py` denies what this file forbids (this file wins on
+disagreement), skills self-trigger off `description`. Detail: `docs/claude/skills-tools.md`.

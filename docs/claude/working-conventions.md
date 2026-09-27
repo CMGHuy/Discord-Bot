@@ -272,3 +272,15 @@ figure (see "Long-running scripts must report progress" above), and gets
 deleted once the subagent's final report lands — the controller answers a
 mid-run progress question from this file's percentage, never by reading the
 subagent's own transcript.
+
+## Codex mirror
+
+Moved from the root `CLAUDE.md` verbatim by v107.
+
+This repo also has a Codex agent (root `AGENTS.md` — Codex never loads
+`.codex/AGENTS.md`), a condensed mirror of this file, not an independent
+source. **Claude is the primary operator** — the one making decisions,
+executing plans, owning these conventions. The sync is **one-way**: when a
+change here or under `docs/claude/` should reach `AGENTS.md`, a Claude session
+updates it, condensed, not copied. A Codex-authored edit is never grounds to
+change `CLAUDE.md`/`docs/claude/*.md`; if the two disagree, fix `AGENTS.md`.

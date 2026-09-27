@@ -126,3 +126,55 @@ one-subagent-at-a-time rule applies regardless.
   agent body if a field is unsupported.
 - **Disabling a plugin another project needs** — changes are project-scoped
   only; user-level settings untouched.
+
+## Verified support
+
+Checked 2026-09-27 via `claude-code-guide` against current Claude Code docs.
+
+1. **Agent `skills:`** (docs: sub-agents) — supported, YAML array syntax
+   `skills: [a, b]`. **Cannot preload a skill with
+   `disable-model-invocation: true`** → `new-doc` cannot be preloaded into
+   `plan-writer`; it gets an inline `## Conventions` block instead.
+   Plugin-namespaced names (`superpowers:…`) are not explicitly documented —
+   the TB13 smoke run is the check.
+2. **Skill `context: fork` / `agent:` / `model:`** (docs: skills) — all exist;
+   `agent:` defaults to `general-purpose`; only the fork's final result
+   returns to the caller. Compatibility with `disable-model-invocation: true`
+   is undocumented — TB8's manual check is the test.
+3. **Project `enabledPlugins`** (docs: settings) — shared project settings
+   outrank user settings (Managed > CLI > project local > shared project >
+   user), so a project-level `false` disables a user-enabled plugin.
+4. **MCP servers** (docs: mcp) — `disabledMcpjsonServers` covers `.mcp.json`
+   servers only; a plugin-provided MCP server goes away by disabling its
+   plugin (or the per-user `/mcp` toggle, which is not committed).
+
+**TB8 deviation:** `/task-brief` forks on **sonnet**, not haiku. Its Step 3
+trap preflight is judgement (silent-no-op shims, removed modules); a missed
+trap costs a full implement/review loop, which outweighs the Haiku saving.
+Live check of fork + `disable-model-invocation` is in TB13 (skills load from
+`main` at session start, so it cannot be checked from the branch).
+
+## Measurements
+
+Fresh session in the repo root, `/context` as the first command (2026-09-27).
+"Before" was taken on `main` before the v107 merge.
+
+| Bucket | Before (tokens) | After (tokens) |
+|---|---|---|
+| System prompt | 8.9k | — |
+| System tools | 22.7k | — |
+| MCP tools (177, deferred) | 0.7k | — |
+| MCP instructions | 1.5k | — |
+| Custom agents (3) | 0.2k | — |
+| Memory files (2: CLAUDE.md + MEMORY.md) | 6.2k | — |
+| Skills (157) | 9.9k | — |
+| **Total at startup** | **51.4k** | — |
+
+Byte sizes before: `CLAUDE.md` 13276, `MEMORY.md` 4580. After (branch):
+`CLAUDE.md` 9034, `MEMORY.md` 2905.
+
+**Reading the baseline honestly.** System tools (22.7k) and the system prompt
+(8.9k) are Claude Code's own and v107 cannot touch them — they are 61% of the
+total. The reducible buckets are skills, MCP, memory and agents: 18.5k. The
+spec's "≥ 30%" target is therefore judged against those **reducible buckets**,
+not against the 51.4k total, where the ceiling is ~36%.

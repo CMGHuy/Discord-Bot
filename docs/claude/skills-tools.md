@@ -22,6 +22,15 @@ Referenced from the root `CLAUDE.md`.
   against them; `test-runner` for any full-suite or fast-tier pytest run.
 - `.mcp.json` provides the `context7` server, scoped to yfinance/pandas-ta/
   discord.py docs — not this repo's own code.
+- **Plugins off for this project (v107)** — `.claude/settings.json`
+  `enabledPlugins` disables the claude.ai-synced knowledge-work plugins
+  (`small-business`, `legal`, `finance`, `product-management`, `data`,
+  `engineering`, `productivity`, `pdf-viewer`, all `@synced`) and the
+  `chrome-devtools-mcp`/`playwright` MCP plugins, which also removes their
+  MCP servers. Project scope only; user settings are untouched. Need one for
+  a session? `claude --settings` or a `settings.local.json` override.
+  Not locally disableable: `anthropic-skills:*` and the Claude Docs
+  connector (claude.ai-served) and the built-in skills.
 - **At most ONE subagent at a time, by default.** Dispatch one, wait for it to
   return, then decide whether the next is still needed. Spawning several at
   once requires the human partner to ask for it explicitly — "in parallel",
@@ -141,3 +150,26 @@ file wins on disagreement). Eleven `.claude/skills/` loaders sit beside it —
 the model-invocable ones self-trigger off `description`, shape-tested in
 `tests/hooks/test_skill_shape.py`. Subagents, the one-subagent-at-a-time
 default, and `.mcp.json`'s context7 provider: `docs/claude/skills-tools.md`.
+
+## Which agent for what (v107)
+
+Serial, one at a time. Opus (main session) decides; agents do.
+
+| Work | Agent | Model |
+|---|---|---|
+| Implement one plan task from `/task-brief` | `task-implementer` | sonnet |
+| Review that task's commits | `task-reviewer` | sonnet |
+| Draft a plan from an approved spec | `plan-writer` | opus |
+| Read-only production question | `prod-inspector` | haiku |
+| Backtest / grid / fold run > ~2 min | `backtest-runner` | sonnet |
+| Full or fast suite run | `test-runner` | sonnet |
+| Check a plan's symbols exist | `symbol-verifier` | haiku |
+
+Plan loop: `/task-brief` → `task-implementer` → `task-reviewer` → Opus reads
+findings → fix via `SendMessage` to the same implementer, or next task. A task
+that fails review twice is implemented by Opus directly. Brainstorming never
+goes to an agent — it needs the partner. `/gate` and `/task-brief` run forked
+on sonnet, so their tool output never reaches the Opus context.
+
+For small edits (a few lines of markdown or config), work inline: every agent
+spawn is a cold start that costs more than the edit.
