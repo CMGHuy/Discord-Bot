@@ -1300,8 +1300,18 @@ Hetzner VM.
   live-price batch -- Alpaca's largest share of traffic -- is not counted
   at all. Both measurements must be fixed before the flag goes on, never
   after.
-- [ ] **Step 5:** Set `ALPACA_ENABLED=true` and send SIGHUP to both
+- [x] **Step 5:** Set `ALPACA_ENABLED=true` and send SIGHUP to both
   containers. Soak for **5 trading days**.
+  *Flag on 2026-09-27 ~10:28 UTC (Sunday, user's call), after the soak
+  telemetry deploy (bd99ebd4). Soak window = trading days 2026-09-28 ..
+  2026-10-02. **Trap:** `sed -i` on the host `.env` replaces the file, and
+  the single-file bind mount `./.env:/app/.env` keeps the old inode -- the
+  SIGHUP reported "no changes" and the containers still read `false`. A
+  `docker compose restart bot admin` re-binds it; edit in place (or via the
+  admin UI) to avoid that. First Alpaca-on scan (user `/check`, 10:29-10:31
+  UTC): price_sources alpaca 75 / fallback 0 / none 2 (GC=F, SI=F --
+  ineligible, no yfinance weekend price), live_prices phase 6.2 s vs ~11.6 s
+  baseline, cold_fetch_s [1.03], errors 0, data_skips 1, 0 alerts.*
 - [ ] **Step 6: Acceptance.** All of these must hold:
   - (a) p95 cold `get_daily_data_batch` wall time < 3 s (taken from the
     cold-fetch phase in `phases_s`);
