@@ -8,7 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 
-import { RiskPosition } from '../../api/models';
+import { DataSourcesHealth, RiskPosition } from '../../api/models';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { RiskStore } from '../../stores/risk.store';
 import { asyncInputs, Async } from '../../ui/async';
@@ -396,6 +396,28 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
       }
     </sb-panel>
 
+    <!-- v106: where live bars and prices come from, and how often Alpaca
+         misses. A fallback price is still a real price, so the rate is
+         information; an open breaker is the caution -- every eligible
+         symbol is on yfinance until it closes. -->
+    <sb-panel heading="Data source">
+      @if (store.dataSources(); as ds) {
+        <div class="sources" [class.warn]="ds.breaker_open">
+          <span class="source-name">{{ sourceName(ds) }}</span>
+          @if (ds.enabled) {
+            <span class="source-rate num">{{ fallbackText(ds) }}</span>
+          }
+        </div>
+        @if (ds.enabled && ds.breaker_open) {
+          <p class="heat-note warn">
+            Alpaca breaker open — live prices are coming from yfinance until it closes.
+          </p>
+        }
+      } @else {
+        <p class="none">No data-source reading yet.</p>
+      }
+    </sb-panel>
+
     <!-- cells ----------------------------------------------------------- -->
 
     <ng-template #tickerCell let-row>
@@ -566,6 +588,12 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
     .scan-label { color: var(--text-secondary); font-size: var(--text-micro); text-transform: uppercase; letter-spacing: 0.1em; }
     .scan sb-sparkline { flex: 1 1 auto; min-width: 80px; max-width: 320px; }
 
+    /* -- data source (v106) -- */
+    .sources { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-8); }
+    .source-name { font-weight: 600; }
+    .source-rate { color: var(--text-secondary); font-size: var(--text-table); }
+    .sources.warn .source-name { color: var(--warn); }
+
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
     @media (max-width: 639px) {
@@ -625,6 +653,17 @@ export class Risk {
   protected readonly asking = signal(false);
 
   protected readonly rowKey = (row: RiskPosition) => row.trade_id;
+
+  /** v106: "Alpaca · IEX" when Alpaca serves the live path, else the plain
+   *  pre-v106 source. */
+  protected sourceName(ds: DataSourcesHealth): string {
+    return ds.enabled ? `Alpaca · ${ds.feed.toUpperCase()}` : 'yfinance only';
+  }
+
+  protected fallbackText(ds: DataSourcesHealth): string {
+    if (ds.fallback_rate === null) return `no Alpaca traffic yet (${ds.scans} scans)`;
+    return `${(ds.fallback_rate * 100).toFixed(1)}% fallback (${ds.scans} scans)`;
+  }
 
   protected readonly emptyState = {
     title: 'No open positions',

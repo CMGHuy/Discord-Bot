@@ -402,6 +402,11 @@ export const WATCHLIST_CONTROLS: ToolbarControl[] = [
     <ng-template #priceCell let-row>
       <span class="price">{{ num(row.price) }}</span>
       <span class="as-of">{{ text(row.as_of) }}</span>
+      <!-- v106: only the exception is flagged -- Alpaca missed and yfinance
+           answered. An Alpaca or plain-yfinance price stays quiet. -->
+      @if (row.price_source === 'yfinance-fallback') {
+        <span class="source-badge" title="Alpaca missed this quote; yfinance answered instead">fallback</span>
+      }
     </ng-template>
 
     <ng-template #sparkCell let-row>
@@ -538,6 +543,11 @@ export const WATCHLIST_CONTROLS: ToolbarControl[] = [
        legible rather than mysterious: it names the date that is behind. */
     .price { display: block; font-variant-numeric: tabular-nums; }
     .as-of { display: block; color: var(--text-faint); font-size: var(--register-label); }
+    .source-badge {
+      display: inline-block; margin-top: var(--space-4);
+      padding: 0 var(--space-6); border: 1px solid var(--warn); border-radius: var(--radius-chip);
+      color: var(--warn); font-size: var(--text-micro); text-transform: uppercase; letter-spacing: 0.1em;
+    }
 
     .signal { display: inline-flex; align-items: center; gap: var(--space-6); }
     .signal-state { font-weight: 600; color: var(--pos); }
