@@ -29,7 +29,8 @@ def write_arms(tmp_path, n_tickers=25, drop_from=8):
 
 
 def run(*args):
-    return subprocess.run([sys.executable, str(CLI), *args],
+    return subprocess.run([sys.executable, str(CLI), *args,
+                           "--bespoke-instrument", "pre-v100 unstamped test fixture"],
                           capture_output=True, text=True)
 
 
@@ -66,7 +67,8 @@ def test_mde_stage_prints_a_refusal_when_the_effect_is_too_small(tmp_path):
     arms = write_arms(tmp_path)
     r = run("--stage", "mde", "--arms", str(arms), "--title", "t",
             "--window", "w", "--train-effect-pp", "0.01",
-            "--target-days", "730", "--observed-days", "365")
+            "--target-days", "730", "--observed-days", "365",
+            "--mde-method", "unpaired")
     assert r.returncode == 1
     assert "REFUSED" in r.stdout
 
@@ -75,7 +77,8 @@ def test_mde_stage_allows_a_resolvable_effect(tmp_path):
     arms = write_arms(tmp_path)
     r = run("--stage", "mde", "--arms", str(arms), "--title", "t",
             "--window", "w", "--train-effect-pp", "40.0",
-            "--target-days", "730", "--observed-days", "365")
+            "--target-days", "730", "--observed-days", "365",
+            "--mde-method", "unpaired")
     assert r.returncode == 0
     assert "RESOLVABLE" in r.stdout
 

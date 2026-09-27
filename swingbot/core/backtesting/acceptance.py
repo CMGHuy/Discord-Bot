@@ -40,11 +40,18 @@ class ArmTrade:
     outcome: str                  # win | loss | scratch | timeout | not_triggered
     r_multiple: float | None
     planned_rr: float | None
+    source: str | None = None       # confluence | strategy; None on pre-v100 rows
+    direction: str | None = None    # bullish | bearish; None on pre-v100 rows
 
     @property
     def key(self) -> tuple:
-        """Pairing key across arms."""
-        return (self.ticker, self.strategy, self.horizon_key, self.entry_date)
+        """Pairing key across arms.
+
+        ``source`` and ``direction`` are None on rows written before v100,
+        which keeps those rows pairing exactly as they did.
+        """
+        return (self.ticker, self.strategy, self.horizon_key, self.entry_date,
+                self.source, self.direction)
 
     @property
     def stratum(self) -> tuple:
@@ -72,7 +79,8 @@ def arm_trade_from_plan(plan, *, entry_date: str, outcome: str,
     return ArmTrade(ticker=plan.ticker, strategy=plan.strategy,
                     horizon_key=plan.horizon_key, entry_date=entry_date,
                     outcome=outcome, r_multiple=r_multiple,
-                    planned_rr=planned_rr(entry, plan.stop_loss, plan.tp1))
+                    planned_rr=planned_rr(entry, plan.stop_loss, plan.tp1),
+                    source=plan.source, direction=plan.direction)
 
 
 def arm_trade_from_backtest(trade, *, ticker: str, strategy: str,
@@ -335,6 +343,35 @@ def mde_win_rate(population, *, target_n: int, power: float = MDE_POWER,
     if n_eff <= 0:
         return None
     return 100.0 * (z_a + z_b) * float(np.sqrt(2.0 * p * (1.0 - p) / n_eff))
+
+
+def mde_paired(baseline, component, statistic, *, observed_n: int,
+               target_n: int, power: float = MDE_POWER,
+               alpha: float = ALPHA,
+               n_resamples: int = BOOTSTRAP_RESAMPLES,
+               seed: int = 42) -> float | None:
+    """Return an MDE from the paired ticker-cluster bootstrap SE.
+
+    ``mde_win_rate`` and ``acceptance_harvest.mde_expectancy_r`` assume
+    independent populations. The designs measured here are normally paired:
+    a veto arm is a baseline subset and an exit arm replays the same entries.
+    The shared ticker draw in ``cluster_bootstrap`` preserves that pairing and
+    ticker clustering together, including for subset and zero-overlap designs.
+    The observed SE projects to ``target_n`` using square-root scaling.
+    """
+    if observed_n <= 0 or target_n <= 0:
+        return None
+    z_alpha = _Z_ALPHA_ONE_SIDED.get(alpha)
+    z_power = _Z_POWER.get(power)
+    if z_alpha is None or z_power is None:
+        raise ValueError(f"no tabulated z for alpha={alpha}, power={power}")
+    draws = cluster_bootstrap(baseline, component, statistic,
+                              n_resamples=n_resamples, seed=seed)
+    if draws.size < 2:
+        return None
+    scale = float(np.sqrt(observed_n / target_n))
+    standard_error = float(np.std(draws, ddof=1)) * scale
+    return float((z_alpha + z_power) * standard_error)
 
 
 def project_target_n(*, observed_n: int, observed_days: int,

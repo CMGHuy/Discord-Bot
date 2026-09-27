@@ -31,6 +31,10 @@ draws on the one-shot budget. A validation run with no registered train
 result behind it is not a validation — it is a train run wearing the wrong
 label. The doc's funnel table says what each stage actually requires.
 
+New pre-registrations use `scripts/backtest/measure_arms.py`: Stage −1
+reachability and paired Stage 0 MDE precede the one-shot stage, and unstamped
+arms require an explicit `--bespoke-instrument` reason.
+
 ## Step 4 — Run it off this context
 
 Anything past a couple of minutes goes to the `backtest-runner` subagent,

@@ -1,7 +1,7 @@
 # Standard Arm Producer — Part 1: Foundations
 
-**Index:** `docs/superpowers/plans/2026-09-23-v100-arm-producer_0-index.md` — header block, Global Constraints, planning deviations and `## Parallelisation` live there and apply to every task below.
-**Spec:** `docs/superpowers/specs/2026-09-23-v100-arm-producer.md`
+**Index:** `docs/superpowers/plans/implemented/2026-09-23-v100-arm-producer_0-index.md` — header block, Global Constraints, planning deviations and `## Parallelisation` live there and apply to every task below.
+**Spec:** `docs/superpowers/specs/implemented/2026-09-23-v100-arm-producer.md`
 **Bump:** none
 **Edge:** none (integrity)
 
@@ -96,7 +96,7 @@ and in `arm_trade_from_plan` pass `source=plan.source, direction=plan.direction`
 Create `swingbot/core/backtesting/arms/__init__.py`:
 
 ```python
-"""v100 standard arm producer. See docs/superpowers/specs/2026-09-23-v100-arm-producer.md."""
+"""v100 standard arm producer. See docs/superpowers/specs/implemented/2026-09-23-v100-arm-producer.md."""
 ```
 
 Create `swingbot/core/backtesting/arms/pairing.py`:
