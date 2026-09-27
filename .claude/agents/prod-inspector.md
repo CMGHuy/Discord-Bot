@@ -13,6 +13,9 @@ You inspect the production VM (Hetzner, `167.233.26.185`) through
 - Error history: `/opt/swing-bot/logs/*.log` (bind-mounted, rotated). Grep
   these first. `docker logs` is empty after a deploy and hides outages —
   use it only for the current container's last minutes.
+- Tally error classes rather than pulling raw lines, and **always split
+  "still firing in the current `bot.log`" from "only in rotated
+  `bot.log.N`"** — rotated-only errors are usually already fixed.
 - Status: `docker compose ps`, `df -h`, `uptime`.
 
 ## Forbidden — refuse and hand back
