@@ -38,3 +38,67 @@ def test_single_ticker_yfinance_path_is_tagged(monkeypatch):
     monkeypatch.setattr(config, "ALPACA_ENABLED", False)
     monkeypatch.setattr(data_mod.yf, "download", lambda *a, **k: _frame())
     assert data_mod.get_daily_data("SAP.DE").attrs["source"] == "yfinance"
+
+
+# --- v106 soak telemetry: cold_fetch_s and price_sources ---------------------
+
+class _InlinePool:
+    def __init__(self, max_workers=None, mp_context=None):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def submit(self, fn, *args):
+        from concurrent.futures import Future
+        fut = Future()
+        try:
+            fut.set_result(fn(*args))
+        except Exception as exc:
+            fut.set_exception(exc)
+        return fut
+
+
+def test_cold_fetch_records_one_timing_per_chunk(monkeypatch):
+    from swingbot import config
+    from swingbot.core.scanning import fetch
+    monkeypatch.setattr(fetch, "ProcessPoolExecutor", _InlinePool)
+    monkeypatch.setattr(config, "BATCH_FETCH_CHUNK_SIZE", 2)
+    monkeypatch.setattr(fetch, "get_daily_data_batch",
+                        lambda tickers, period=None: {t: _frame("alpaca") for t in tickers})
+    fetch.reset_fetch_stats()
+    pairs = fetch._fetch_cold_frames(["A", "B", "C"])
+    stats = fetch.fetch_stats()
+    assert [t for t, df in pairs if df is not None] == ["A", "B", "C"]
+    assert len(stats["cold_fetch_s"]) == 2
+    assert all(isinstance(s, float) and s >= 0 for s in stats["cold_fetch_s"])
+
+
+def test_live_prices_count_each_tickers_provider(monkeypatch):
+    from swingbot.core.marketdata.providers import router
+    from swingbot.core.scanning import fetch
+    monkeypatch.setattr(fetch, "ProcessPoolExecutor", _InlinePool)
+    monkeypatch.setattr(fetch, "get_current_price_batch",
+                        lambda tickers: {"AAPL": 190.0, "SAP.DE": 50.0})
+    monkeypatch.setattr(router, "last_source",
+                        lambda t: {"AAPL": "alpaca", "SAP.DE": "yfinance"}.get(t))
+    fetch.reset_fetch_stats()
+    prices = fetch._fetch_live_prices(["AAPL", "SAP.DE", "MSFT"])
+    assert prices == {"AAPL": 190.0, "SAP.DE": 50.0}
+    assert fetch.fetch_stats()["price_sources"] == {
+        "alpaca": 1, "yfinance": 1, "yfinance-fallback": 0, "none": 1}
+
+
+def test_a_failed_chunk_counts_its_tickers_as_none(monkeypatch):
+    from swingbot.core.scanning import fetch
+
+    def boom(tickers):
+        raise RuntimeError("worker died")
+    monkeypatch.setattr(fetch, "ProcessPoolExecutor", _InlinePool)
+    monkeypatch.setattr(fetch, "get_current_price_batch", boom)
+    fetch.reset_fetch_stats()
+    assert fetch._fetch_live_prices(["AAPL", "MSFT"]) == {}
+    assert fetch.fetch_stats()["price_sources"]["none"] == 2

@@ -24,6 +24,58 @@ from . import runstate
 
 log = logging.getLogger("swing-bot.scan_engine")
 
+#: v106 soak telemetry for the current scan, reset by reset_fetch_stats()
+#: at scan start and read into the telemetry row at scan end.
+#: cold_fetch_s: wall time of each get_daily_data_batch call, timed INSIDE
+#: the worker (the call itself, not process spawn). price_sources: which
+#: provider answered each ticker of the live-price batch ("none" = no price).
+_fetch_stats: dict = {"cold_fetch_s": [], "price_sources": {}}
+_PRICE_SOURCE_KEYS = ("alpaca", "yfinance", "yfinance-fallback", "none")
+
+
+def reset_fetch_stats() -> None:
+    _fetch_stats["cold_fetch_s"] = []
+    _fetch_stats["price_sources"] = dict.fromkeys(_PRICE_SOURCE_KEYS, 0)
+
+
+def fetch_stats() -> dict:
+    return {"cold_fetch_s": list(_fetch_stats["cold_fetch_s"]),
+            "price_sources": dict(_fetch_stats["price_sources"])}
+
+
+def _timed_daily_batch(tickers: list, period: str) -> tuple:
+    """Worker body for a cold chunk: the batch plus its own wall time."""
+    started = time.monotonic()
+    frames = get_daily_data_batch(tickers, period)
+    return frames, round(time.monotonic() - started, 3)
+
+
+def _cold_chunk(chunk: list, period: str, timeout: int) -> dict:
+    """One bounded cold batch; records its in-worker wall time when it ran."""
+    result, elapsed = _run_bounded(
+        _timed_daily_batch, (chunk, period), timeout,
+        label=f"Crawl: cold-fetch batch of {len(chunk)} ticker(s)") or ({}, None)
+    if elapsed is not None:
+        _fetch_stats["cold_fetch_s"].append(elapsed)
+    return result or {}
+
+
+def _price_batch_with_sources(tickers: list) -> tuple:
+    """Worker body for a live-price chunk: the prices plus which provider
+    answered each -- the router's record lives in this worker process, so it
+    has to travel back with the result."""
+    from swingbot.core.marketdata.providers import router
+    prices = get_current_price_batch(tickers)
+    return prices, {t: router.last_source(t) or "none" for t in prices}
+
+
+def _record_price_sources(chunk: list, sources: dict) -> None:
+    counts = _fetch_stats["price_sources"]
+    for ticker in chunk:
+        key = sources.get(ticker, "none")
+        bucket = key if key in _PRICE_SOURCE_KEYS else "none"
+        counts[bucket] = counts.get(bucket, 0) + 1
+
 
 class LRUFrames(OrderedDict):
     """Frame store with an explicit capacity for one complete scan.
@@ -207,9 +259,7 @@ def _fetch_cold_frames(tickers: list, progress: "ScanProgress" = None) -> list:
             if progress is not None:
                 progress.stopped = True
             break
-        result = _run_bounded(
-            get_daily_data_batch, (chunk, period), timeout,
-            label=f"Crawl: cold-fetch batch of {len(chunk)} ticker(s)") or {}
+        result = _cold_chunk(chunk, period, timeout)
         for ticker in chunk:
             if ticker in result:
                 resolved[ticker] = result[ticker]
@@ -361,9 +411,10 @@ def _fetch_live_prices(tickers: list, progress: "ScanProgress" = None) -> dict:
             if progress is not None:
                 progress.stopped = True
             break
-        result = _run_bounded(
-            get_current_price_batch, (chunk,), timeout,
-            label=f"Crawl: live-price batch of {len(chunk)} ticker(s)")
+        result, sources = _run_bounded(
+            _price_batch_with_sources, (chunk,), timeout,
+            label=f"Crawl: live-price batch of {len(chunk)} ticker(s)") or ({}, {})
+        _record_price_sources(chunk, sources)
         if result:
             prices.update(result)
     log.info("Live-price fetch complete in %.1fs: %d/%d ticker(s) resolved",

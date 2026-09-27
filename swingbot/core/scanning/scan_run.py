@@ -182,6 +182,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     default) to just use whatever's currently configured.
     """
     _scan_started = time.monotonic()   # Task E82: feeds log_scan_telemetry's duration_s
+    fetch.reset_fetch_stats()          # v106: cold_fetch_s / price_sources for this scan
     _phase_started = _scan_started
     phase_durations: dict[str, float] = {}
 
@@ -985,6 +986,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "phases_s": phase_durations,
             "normalized_frame_cache": data_store.normalized_frame_cache_stats(),
             "data_sources": _count_sources(fresh_data),
+            **fetch.fetch_stats(),
         }
         telemetry.log_scan_telemetry(scan_stats)
         if telemetry.scan_slowdown():

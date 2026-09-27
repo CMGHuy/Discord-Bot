@@ -545,6 +545,19 @@ def test_scan_health_summarises_data_sources(logged_in, killswitch_file, tmp_pat
     assert ds["scans"] == 2
 
 
+def test_fallback_rate_pools_daily_frames_and_live_prices(
+        logged_in, killswitch_file, tmp_path, monkeypatch):
+    from swingbot.core.scanning import engine
+    from swingbot.core.scanning import telemetry
+
+    monkeypatch.setattr(telemetry, "TELEMETRY_PATH", str(tmp_path / "scan_telemetry.jsonl"))
+    engine.log_scan_telemetry({"duration_s": 60, "tickers": 150,
+        "data_sources": {"alpaca": 2, "yfinance": 0, "yfinance-fallback": 0, "cache": 70},
+        "price_sources": {"alpaca": 72, "yfinance": 2, "yfinance-fallback": 6, "none": 0}})
+    ds = logged_in.get("/api/v1/risk").get_json()["scan_health"]["data_sources"]
+    assert ds["fallback_rate"] == pytest.approx(6 / 80)
+
+
 def test_data_sources_fallback_rate_is_null_without_alpaca_traffic(
         logged_in, killswitch_file, tmp_path, monkeypatch):
     from swingbot.core.scanning import engine
