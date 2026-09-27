@@ -635,6 +635,36 @@ FIELDS: list[Field] = [
                "fundamentals, earnings, transcripts, and more. Works on the free tier -- endpoints "
                "your tier can't reach are skipped, not fatal -- and on any paid tier with no code "
                "change. Leave blank to disable FMP crawling."),
+    Field("ALPACA_ENABLED", "ALPACA_ENABLED", "Data Sources",
+          "Use Alpaca for live US bars/quotes",
+          type="checkbox", default="false",
+          help="v106. When on, live-path daily bars, 1h bars and last-trade prices for "
+               "US equities/ETFs come from Alpaca (SIP bars >=15 min old, IEX last "
+               "trade), falling back per symbol to yfinance. Off = exact pre-v106 "
+               "yfinance behaviour. Backtests never use Alpaca."),
+    Field("ALPACA_API_KEY_ID", "ALPACA_API_KEY_ID", "Data Sources", "Alpaca API key ID",
+          type="password", sensitive=True, default="",
+          help="From the Alpaca dashboard (paper or live account; market data is the same)."),
+    Field("ALPACA_API_SECRET_KEY", "ALPACA_API_SECRET_KEY", "Data Sources",
+          "Alpaca API secret key", type="password", sensitive=True, default="",
+          help="Paired with ALPACA_API_KEY_ID."),
+    Field("ALPACA_DATA_FEED_LIVE", "ALPACA_DATA_FEED_LIVE", "Data Sources",
+          "Alpaca live-price feed", default="iex",
+          help="'iex' on the free plan, 'sip' on a paid plan. Bars always use SIP."),
+    Field("ALPACA_TIMEOUT_SECONDS", "ALPACA_TIMEOUT_SECONDS", "Data Sources",
+          "Alpaca call timeout (s)", type="number", default="5", min=1, max=30, step=1,
+          help="Past this an Alpaca call is abandoned and the symbols fall back to yfinance."),
+    Field("ALPACA_MAX_TRADE_AGE_SECONDS", "ALPACA_MAX_TRADE_AGE_SECONDS", "Data Sources",
+          "Max IEX last-trade age in session (s)", type="number", default="300",
+          min=30, max=3600, step=30,
+          help="During the regular session an older IEX print is treated as a miss so a "
+               "lagging print never reaches a trading caller."),
+    Field("ALPACA_BREAKER_FAILURES", "ALPACA_BREAKER_FAILURES", "Data Sources",
+          "Alpaca breaker: consecutive failures", type="number", default="3",
+          min=1, max=20, step=1, help="Failed calls in a row before Alpaca is skipped."),
+    Field("ALPACA_BREAKER_COOLDOWN_SECONDS", "ALPACA_BREAKER_COOLDOWN_SECONDS",
+          "Data Sources", "Alpaca breaker cool-down (s)", type="number", default="300",
+          min=30, max=3600, step=30, help="How long Alpaca is skipped once the breaker opens."),
 
     # --- Admin UI (affects the admin container, not the bot -- see docstring) ---
     Field("ADMIN_USERNAME", "ADMIN_USERNAME", "Admin UI", "Admin username",
