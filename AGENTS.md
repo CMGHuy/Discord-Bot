@@ -238,6 +238,8 @@ Use at most one subagent at a time by default: dispatch it, wait for its result,
 then decide whether another is needed. Parallel subagents need the human
 partner's explicit request; a plan's parallelisation section only describes what
 could run concurrently. The project Codex config enforces this one-agent limit.
+Claude-side role agents (`.claude/agents/`, v107) are Claude-only; Codex has no
+equivalent and needs none.
 
 ## Function complexity limit
 

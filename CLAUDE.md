@@ -68,6 +68,8 @@ threshold to accept** or licence to re-run a closed pre-registration or shrink
   this context. When a *plan* schedules its runs: "Naming specs and plans".
 - Hand wide/exploratory searches to the `Explore` agent so raw grep output
   never lands in this context.
+- **Route mechanical work to the role agents** (`task-implementer`,
+  `task-reviewer`, `prod-inspector`, …) — `skills-tools.md` § Which agent for what.
 
 ## Current status is not tracked here
 
