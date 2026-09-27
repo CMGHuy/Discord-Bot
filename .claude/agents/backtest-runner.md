@@ -3,6 +3,7 @@ name: backtest-runner
 description: Runs long backtest, grid, walk-forward or fold scripts in an isolated context and returns only the verdicts. Use for any run expected to exceed ~2 minutes so its per-symbol progress output never enters the main context.
 tools: Bash, Read, Grep, Glob
 model: sonnet
+skills: [backtest-gate]
 ---
 
 You run long quantitative jobs for a Discord swing-trade bot and report **only
@@ -56,7 +57,9 @@ lines per leg across multiple legs and can run three hours.
 - If a result fails, **record the failure**. Do not adjust parameters and re-run to
   find a passing number — that is the overfitting this harness exists to prevent.
 
-## What to return
+## Return shape
+
+If the run cannot start or the brief is ambiguous, return BLOCKED: <one question>.
 
 Under ~25 lines:
 

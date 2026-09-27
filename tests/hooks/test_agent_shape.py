@@ -18,6 +18,24 @@ EXPECTED = {
         "skills": {"superpowers:test-driven-development",
                    "superpowers:verification-before-completion"},
     },
+    "task-reviewer": {
+        "model": "sonnet",
+        "skills": {"no-lookahead"},
+    },
+    # new-doc is slash-only (disable-model-invocation), which the agent
+    # `skills:` field cannot preload -- its rules are inlined instead.
+    "plan-writer": {
+        "model": "opus",
+        "skills": {"superpowers:writing-plans"},
+    },
+    "prod-inspector": {
+        "model": "haiku",
+        "skills": set(),
+    },
+    "backtest-runner": {
+        "model": "sonnet",
+        "skills": {"backtest-gate"},
+    },
 }
 
 VALID_MODELS = {"haiku", "sonnet", "opus"}
@@ -70,3 +88,11 @@ def test_role_agent_has_fixed_return_shape(name):
     _, body = _read_agent(name)
     assert "## Return shape" in body
     assert "BLOCKED:" in body
+
+
+def test_prod_inspector_is_read_only():
+    meta, body = _read_agent("prod-inspector")
+    assert "Edit" not in meta.get("tools", "")
+    assert "Write" not in meta.get("tools", "")
+    for forbidden in ("restart", ".env", "docker compose up", "sed -i"):
+        assert forbidden in body, f"body must name {forbidden!r} as forbidden"
