@@ -21,6 +21,9 @@
 # checks before committing the bump.
 discord.py==2.7.1
 yfinance==0.2.66
+# v106: live-path US bars/quotes from Alpaca, yfinance fallback; see
+# docs/superpowers/specs/2026-09-26-v106-alpaca-data-provider-design.md
+alpaca-py==0.44.0
 pandas==2.3.3
 numpy==2.4.6
 python-dotenv==1.2.2

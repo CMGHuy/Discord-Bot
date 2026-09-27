@@ -36,6 +36,7 @@ from swingbot.core.marketdata.data import (
     peek_cached_batch_price,
     warm_batch_price_cache_background,
 )
+from swingbot.core.marketdata.providers import router
 from swingbot.core.planning.plan_engine import PlanStatus
 from swingbot.core.planning.plan_store import PlanStore
 
@@ -114,6 +115,7 @@ def _pct_change(closes: pd.Series, back: int) -> float | None:
 def _empty_row() -> dict:
     return {
         "price": None,
+        "price_source": None,
         "as_of": None,
         "change_1d_pct": None,
         "change_1w_pct": None,
@@ -163,49 +165,55 @@ def build_market_rows(tickers: list[str]) -> dict[str, dict]:
     fetched = get_daily_data_batch(cold, period="6mo") if cold else {}
     frames = {**{t: df for t, df in cached.items() if df is not None}, **fetched}
 
-    live: dict[str, float] = {}
-    if is_us_market_active():
-        try:
-            live = peek_cached_batch_price(list(tickers)) or {}
-        except Exception:
-            # An intraday overlay is a nicety. Losing it must not lose the
-            # closes, which are the page's actual content.
-            live = {}
-        cold = [t for t in tickers if t not in live]
-        if cold:
-            # Cache-only above, never a live Yahoo call on this request
-            # (test_api_v1_watchlist.py's under-1s contract) -- warm the
-            # cache in the background so the next page view (or the next
-            # scheduled poll) sees the live quote instead of paying for it.
-            warm_batch_price_cache_background(cold)
+    live = _live_overlay(tickers)
+    return {symbol: _market_row(symbol, frames.get(symbol), live.get(symbol))
+            for symbol in tickers}
 
-    rows: dict[str, dict] = {}
-    for symbol in tickers:
-        frame = frames.get(symbol)
-        if frame is None or getattr(frame, "empty", True) or "Close" not in frame:
-            rows[symbol] = _empty_row()
-            continue
 
-        closes = frame["Close"].dropna()
-        if closes.empty:
-            rows[symbol] = _empty_row()
-            continue
+def _live_overlay(tickers: list[str]) -> dict[str, float]:
+    """Cached intraday quotes while the US market is open, {} otherwise."""
+    if not is_us_market_active():
+        return {}
+    try:
+        live = peek_cached_batch_price(list(tickers)) or {}
+    except Exception:
+        # An intraday overlay is a nicety. Losing it must not lose the
+        # closes, which are the page's actual content.
+        live = {}
+    cold = [t for t in tickers if t not in live]
+    if cold:
+        # Cache-only above, never a live Yahoo call on this request
+        # (test_api_v1_watchlist.py's under-1s contract) -- warm the
+        # cache in the background so the next page view (or the next
+        # scheduled poll) sees the live quote instead of paying for it.
+        warm_batch_price_cache_background(cold)
+    return live
 
-        row = _empty_row()
-        live_price = live.get(symbol)
-        has_live = live_price is not None
-        row["price"] = round(float(live_price if has_live else closes.iloc[-1]), 4)
-        # as_of names the bar the PRICE came from (module docstring) -- when
-        # price is the live intraday overlay rather than the cached close,
-        # the bar date must say so too, or a mid-day tick reads as stamped
-        # with yesterday's close (the daily cache often hasn't rolled yet).
-        row["as_of"] = session_date() if has_live else str(pd.Timestamp(closes.index[-1]).date())
-        for field, back in _WINDOWS.items():
-            row[field] = _pct_change(closes, back)
-        row["spark"] = [round(float(v), 4) for v in closes.iloc[-_SPARK_BARS:]]
-        rows[symbol] = row
 
-    return rows
+def _market_row(symbol: str, frame, live_price: float | None) -> dict:
+    """One build_market_rows row: a row of nulls when the frame has no
+    closes, otherwise price (live overlay or last close), as_of, the
+    change windows and the sparkline."""
+    if frame is None or getattr(frame, "empty", True) or "Close" not in frame:
+        return _empty_row()
+    closes = frame["Close"].dropna()
+    if closes.empty:
+        return _empty_row()
+
+    row = _empty_row()
+    has_live = live_price is not None
+    row["price"] = round(float(live_price if has_live else closes.iloc[-1]), 4)
+    # v106: which provider served the live quote; a cached close has none.
+    row["price_source"] = router.last_source(symbol) if has_live else None
+    # as_of names the bar the PRICE came from (module docstring) -- when
+    # price is the live intraday overlay rather than the cached close,
+    # the bar date must say so too, or a mid-day tick reads as stamped
+    # with yesterday's close (the daily cache often hasn't rolled yet).
+    row["as_of"] = session_date() if has_live else str(pd.Timestamp(closes.index[-1]).date())
+    for field, back in _WINDOWS.items():
+        row[field] = _pct_change(closes, back)
+    row["spark"] = [round(float(v), 4) for v in closes.iloc[-_SPARK_BARS:]]
+    return row
 
 
 def _empty_signal() -> dict:

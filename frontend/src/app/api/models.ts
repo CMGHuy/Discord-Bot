@@ -700,6 +700,10 @@ export interface Ticker {
    *  last close, when the US market is open; all fields are null together
    *  when the cache has nothing for this symbol yet. */
   price: number | null;
+  /** v106 -- which provider served `price` when it is the live overlay;
+   *  null when `price` is the cached close. Only `yfinance-fallback` is
+   *  flagged in the table: Alpaca missed and yfinance answered instead. */
+  price_source?: 'alpaca' | 'yfinance' | 'yfinance-fallback' | null;
   /** The date of the bar `price`/the change columns/`spark` were computed
    *  from -- NOT when the request was served. A page reading "as of now"
    *  over Friday's close on a Sunday is the failure this field guards
@@ -785,10 +789,22 @@ export interface Killswitch {
   at: string | null;
 }
 
+/** v106 -- the live data provider and how often Alpaca misses.
+ *  `fallback_rate` is yfinance-fallback over everything Alpaca was asked for
+ *  across the last `scans` scans that logged it; null when none did. */
+export interface DataSourcesHealth {
+  enabled: boolean;
+  feed: string;
+  breaker_open: boolean;
+  fallback_rate: number | null;
+  scans: number;
+}
+
 export interface ScanHealth {
   durations_s: number[];
   latest_s: number | null;
   slowdown: boolean;
+  data_sources?: DataSourcesHealth | null;
 }
 
 /** `POST /risk/killswitch`'s body. The toggle deliberately does NOT return

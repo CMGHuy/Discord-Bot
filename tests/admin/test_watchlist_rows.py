@@ -268,3 +268,22 @@ def test_signal_projection_cache_reuses_a_plans_file_version_and_returns_copies(
     (tmp_path / "plans.json").write_text(json.dumps([{"new": True}]), encoding="utf-8")
     build_signals(["AAPL"])
     assert calls == ["read", "read"]
+
+
+def test_a_live_price_carries_the_provider_it_came_from(bars, monkeypatch):
+    """v106: the row names which provider served its live quote."""
+    bars["AAPL"] = _frame([100.0] * 26)
+    monkeypatch.setattr("swingbot.admin.watchlist_rows.is_us_market_active", lambda: True)
+    monkeypatch.setattr(
+        "swingbot.admin.watchlist_rows.peek_cached_batch_price", lambda t: {"AAPL": 173.25}
+    )
+    monkeypatch.setattr("swingbot.admin.watchlist_rows.router.last_source", lambda t: "alpaca")
+    assert build_market_rows(["AAPL"])["AAPL"]["price_source"] == "alpaca"
+
+
+def test_a_close_price_has_no_provider_source(bars, monkeypatch):
+    bars["AAPL"] = _frame([100.0] * 26)
+    monkeypatch.setattr("swingbot.admin.watchlist_rows.router.last_source", lambda t: "alpaca")
+    assert build_market_rows(["AAPL"])["AAPL"]["price_source"] is None
+    assert build_market_rows(["ZZZZ"])["ZZZZ"]["price_source"] is None
+

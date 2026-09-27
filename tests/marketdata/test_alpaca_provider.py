@@ -1,0 +1,78 @@
+from datetime import datetime, timezone
+from types import SimpleNamespace
+import pandas as pd
+import pytest
+from swingbot.core.marketdata.providers import alpaca_provider as ap
+
+def _barset(symbols):
+    rows = []
+    for s in symbols:
+        for d in ("2026-09-24 04:00", "2026-09-25 04:00"):
+            rows.append((s, pd.Timestamp(d, tz="UTC"), 1.0, 2.0, 0.5, 1.5, 100.0, 5, 1.4))
+    df = pd.DataFrame(rows, columns=["symbol", "timestamp", "open", "high", "low",
+                                     "close", "volume", "trade_count", "vwap"])
+    return SimpleNamespace(df=df.set_index(["symbol", "timestamp"]))
+
+class FakeClient:
+    def __init__(self, bars=None, snaps=None, exc=None):
+        self.bars, self.snaps, self.exc, self.requests = bars, snaps, exc, []
+    def get_stock_bars(self, req):
+        self.requests.append(req)
+        if self.exc: raise self.exc
+        return self.bars
+    def get_stock_snapshot(self, req):
+        self.requests.append(req)
+        if self.exc: raise self.exc
+        return self.snaps
+
+NOW = datetime(2026, 9, 25, 15, 0, tzinfo=timezone.utc)   # 11:00 ET, in session
+
+def _prov(client):
+    return ap.AlpacaProvider("k", "s", "iex", client=client, now=lambda: NOW)
+
+def test_daily_bars_uses_sip_all_adjustment_and_delayed_end():
+    c = FakeClient(bars=_barset(["AAPL"]))
+    out = _prov(c).daily_bars(["AAPL"], "2y")
+    req = c.requests[0]
+    assert str(req.feed.value) == "sip" and str(req.adjustment.value) == "all"
+    # alpaca-py's request model converts datetimes to UTC and drops tzinfo
+    assert req.end <= (NOW - pd.Timedelta(minutes=15)).replace(tzinfo=None)
+    assert list(out["AAPL"].columns) == ["Open", "High", "Low", "Close", "Volume"]
+
+def test_daily_bars_rekeys_class_shares():
+    out = _prov(FakeClient(bars=_barset(["BRK.B"]))).daily_bars(["BRK-B"], "1y")
+    assert set(out) == {"BRK-B"}
+
+def test_symbol_absent_from_response_is_absent_from_result():
+    out = _prov(FakeClient(bars=_barset(["AAPL"]))).daily_bars(["AAPL", "ZZZZ"], "1y")
+    assert set(out) == {"AAPL"}
+
+def _snap(price, ts):
+    return SimpleNamespace(latest_trade=SimpleNamespace(price=price, timestamp=ts))
+
+def test_latest_prices_fresh_trade():
+    c = FakeClient(snaps={"AAPL": _snap(190.0, NOW - pd.Timedelta(seconds=30))})
+    assert _prov(c).latest_prices(["AAPL"], 300) == {"AAPL": 190.0}
+    assert str(c.requests[0].feed.value) == "iex"
+
+def test_stale_iex_trade_is_a_miss_in_session():
+    c = FakeClient(snaps={"AAPL": _snap(190.0, NOW - pd.Timedelta(minutes=20))})
+    assert _prov(c).latest_prices(["AAPL"], 300) == {}
+
+def test_old_trade_ok_outside_session():
+    sat = datetime(2026, 9, 26, 15, 0, tzinfo=timezone.utc)
+    c = FakeClient(snaps={"AAPL": _snap(190.0, sat - pd.Timedelta(hours=40))})
+    p = ap.AlpacaProvider("k", "s", "iex", client=c, now=lambda: sat)
+    assert p.latest_prices(["AAPL"], 300) == {"AAPL": 190.0}
+
+def test_auth_error_maps_to_alpaca_auth_error():
+    err = Exception("forbidden"); err.status_code = 403
+    with pytest.raises(ap.AlpacaAuthError):
+        _prov(FakeClient(exc=err)).daily_bars(["AAPL"], "1y")
+
+def test_other_error_maps_to_miss():
+    with pytest.raises(ap.AlpacaMiss):
+        _prov(FakeClient(exc=RuntimeError("500"))).daily_bars(["AAPL"], "1y")
+
+def test_intraday_only_1h_supported():
+    assert _prov(FakeClient()).intraday_bars("AAPL", "1d") is None

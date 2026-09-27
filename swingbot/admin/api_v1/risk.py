@@ -76,6 +76,35 @@ def _positions(balance: float) -> list[dict]:
     return rows
 
 
+_DATA_SOURCE_WINDOW = 20
+
+
+def _data_sources_summary(rows: list) -> dict:
+    """v106: which provider is live and how often Alpaca misses. The rate is
+    yfinance-fallback over everything Alpaca was asked for (hits + misses)
+    across the last `_DATA_SOURCE_WINDOW` scans that logged `data_sources`;
+    None when none of them asked Alpaca for anything.
+
+    `breaker_open` is this admin process's own router -- the bot's scans run
+    their fetches in spawned children whose breaker never reaches here, so
+    the fallback rate is the scan-side signal and the breaker the live-price
+    one.
+    """
+    from swingbot.core.marketdata.providers import router
+
+    tagged = [r["data_sources"] for r in rows if isinstance(r.get("data_sources"), dict)]
+    tagged = tagged[-_DATA_SOURCE_WINDOW:]
+    hits = sum(int(d.get("alpaca", 0)) for d in tagged)
+    misses = sum(int(d.get("yfinance-fallback", 0)) for d in tagged)
+    return {
+        "enabled": bool(config.ALPACA_ENABLED),
+        "feed": str(config.ALPACA_DATA_FEED_LIVE),
+        "breaker_open": bool(router.stats()["breaker_open"]),
+        "fallback_rate": round(misses / (hits + misses), 4) if hits + misses else None,
+        "scans": len(tagged),
+    }
+
+
 def _scan_health() -> dict:
     """Best-effort, matching how the Risk page already treats it.
 
@@ -86,15 +115,21 @@ def _scan_health() -> dict:
     try:
         from swingbot.core.scanning.engine import recent_telemetry, scan_slowdown
 
-        durations = [r["duration_s"] for r in recent_telemetry(50) if "duration_s" in r]
+        rows = recent_telemetry(50)
+        durations = [r["duration_s"] for r in rows if "duration_s" in r]
         slowdown = scan_slowdown()
     except Exception:
-        durations, slowdown = [], False
+        rows, durations, slowdown = [], [], False
+    try:
+        data_sources = _data_sources_summary(rows)
+    except Exception:
+        data_sources = None
 
     return {
         "durations_s": durations,
         "latest_s": durations[-1] if durations else None,
         "slowdown": bool(slowdown),
+        "data_sources": data_sources,
     }
 
 

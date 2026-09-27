@@ -519,3 +519,17 @@ describe('Watchlist priorities', () => {
     }
   });
 });
+
+/* -- v106 -- the price-source badge flags only the exception -- */
+
+describe('Watchlist price source', () => {
+  it('flags a yfinance-fallback price', () => {
+    const row = firstRow({ price: 171.5, price_source: 'yfinance-fallback' });
+    expect(row.querySelector('.source-badge')?.textContent).toContain('fallback');
+  });
+
+  it('keeps an Alpaca price quiet', () => {
+    const row = firstRow({ price: 171.5, price_source: 'alpaca' });
+    expect(row.querySelector('.source-badge')).toBeNull();
+  });
+});

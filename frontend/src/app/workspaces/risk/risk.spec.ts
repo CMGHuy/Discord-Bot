@@ -327,3 +327,45 @@ describe('Risk grid floors', () => {
     expect(bare.filter((px) => px > 260)).toEqual([]);
   });
 });
+
+/* -- v106 -- the data-source panel -- */
+
+async function renderDataSources(
+  dataSources: Record<string, unknown> | null,
+): Promise<HTMLElement> {
+  const { fixture, backend } = seed();
+  fixture.detectChanges();
+  backend.expectOne('/api/v1/risk').flush(payload({
+    scan_health: { durations_s: [], latest_s: 1.2, slowdown: false, data_sources: dataSources },
+  } as Partial<RiskData>));
+  await fixture.whenStable();
+  fixture.detectChanges();
+  return fixture.nativeElement as HTMLElement;
+}
+
+describe('Risk data-source panel', () => {
+  it('names the Alpaca feed and the fallback rate over its sample', async () => {
+    const el = await renderDataSources({
+      enabled: true, feed: 'iex', breaker_open: false, fallback_rate: 0.05, scans: 20,
+    });
+    expect(el.textContent).toContain('Alpaca · IEX');
+    expect(el.textContent).toContain('5.0% fallback (20 scans)');
+    expect(el.querySelector('.sources.warn')).toBeNull();
+  });
+
+  it('flags an open breaker as a warning', async () => {
+    const el = await renderDataSources({
+      enabled: true, feed: 'iex', breaker_open: true, fallback_rate: 0.4, scans: 20,
+    });
+    expect(el.querySelector('.sources.warn')).toBeTruthy();
+    expect(el.textContent).toContain('Alpaca breaker open');
+  });
+
+  it('says yfinance only when Alpaca is off', async () => {
+    const el = await renderDataSources({
+      enabled: false, feed: 'iex', breaker_open: false, fallback_rate: null, scans: 0,
+    });
+    expect(el.textContent).toContain('yfinance only');
+    expect(el.textContent).not.toContain('fallback (');
+  });
+});

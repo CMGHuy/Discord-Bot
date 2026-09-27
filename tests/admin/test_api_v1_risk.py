@@ -151,6 +151,7 @@ def test_risk_shape(logged_in, killswitch_file):
     }, where="killswitch")
     assert_shape(body["scan_health"], {
         "durations_s": list, "latest_s": NULLABLE_NUMBER, "slowdown": bool,
+        "data_sources": (dict, type(None)),
     }, where="scan_health")
     # v85 D37: every metric is a {value, n} pair, never a bare number.
     metric_keys = ("var_95", "expected_shortfall_95", "annualised_vol",
@@ -519,3 +520,38 @@ def test_scan_health_ships_numbers_not_svg(logged_in, killswitch_file, tmp_path,
     assert health["latest_s"] == 150
     assert health["slowdown"] is True
     assert all(isinstance(d, (int, float)) for d in health["durations_s"])
+
+
+def test_scan_health_summarises_data_sources(logged_in, killswitch_file, tmp_path, monkeypatch):
+    """v106: the fallback rate is yfinance-fallback over everything Alpaca was
+    asked for (hits + misses), across the recent rows that carry the key."""
+    from swingbot import config
+    from swingbot.core.scanning import engine
+    from swingbot.core.scanning import telemetry
+
+    monkeypatch.setattr(telemetry, "TELEMETRY_PATH", str(tmp_path / "scan_telemetry.jsonl"))
+    monkeypatch.setattr(config, "ALPACA_ENABLED", True)
+    monkeypatch.setattr(config, "ALPACA_DATA_FEED_LIVE", "iex")
+    engine.log_scan_telemetry({"duration_s": 60, "tickers": 150})   # pre-v106 row, no key
+    engine.log_scan_telemetry({"duration_s": 60, "tickers": 150, "data_sources": {
+        "alpaca": 9, "yfinance": 3, "yfinance-fallback": 1, "cache": 0}})
+    engine.log_scan_telemetry({"duration_s": 60, "tickers": 150, "data_sources": {
+        "alpaca": 10, "yfinance": 3, "yfinance-fallback": 0, "cache": 0}})
+
+    ds = logged_in.get("/api/v1/risk").get_json()["scan_health"]["data_sources"]
+    assert ds["enabled"] is True and ds["feed"] == "iex"
+    assert ds["breaker_open"] is False
+    assert ds["fallback_rate"] == pytest.approx(0.05)
+    assert ds["scans"] == 2
+
+
+def test_data_sources_fallback_rate_is_null_without_alpaca_traffic(
+        logged_in, killswitch_file, tmp_path, monkeypatch):
+    from swingbot.core.scanning import engine
+    from swingbot.core.scanning import telemetry
+
+    monkeypatch.setattr(telemetry, "TELEMETRY_PATH", str(tmp_path / "scan_telemetry.jsonl"))
+    engine.log_scan_telemetry({"duration_s": 60, "tickers": 150, "data_sources": {
+        "alpaca": 0, "yfinance": 12, "yfinance-fallback": 0, "cache": 3}})
+    ds = logged_in.get("/api/v1/risk").get_json()["scan_health"]["data_sources"]
+    assert ds["fallback_rate"] is None and ds["scans"] == 1

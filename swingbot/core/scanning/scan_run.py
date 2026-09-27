@@ -44,6 +44,19 @@ from .regime import get_market_regime
 
 log = logging.getLogger("swing-bot.scan_engine")
 
+_SOURCE_BUCKETS = ("alpaca", "yfinance", "yfinance-fallback")
+
+
+def _count_sources(frames) -> dict:
+    """v106 telemetry: how many of this scan's daily frames each provider
+    served. A frame with no source tag came off the on-disk cache."""
+    counts = dict.fromkeys(_SOURCE_BUCKETS, 0)
+    counts["cache"] = 0
+    for df in frames.values():
+        source = df.attrs.get("source") if df is not None else None
+        counts[source if source in counts else "cache"] += 1
+    return counts
+
 
 def _maybe_run_strategy_pass(*, tickers, fresh_data, spy_df, regimes, rs_cache, sector_of_ticker,
                              etf_symbol_of_sector, sector_etf_frames, trade_log, alerts,
@@ -971,6 +984,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                                             account_cfg.get("balance", 0.0)),
             "phases_s": phase_durations,
             "normalized_frame_cache": data_store.normalized_frame_cache_stats(),
+            "data_sources": _count_sources(fresh_data),
         }
         telemetry.log_scan_telemetry(scan_stats)
         if telemetry.scan_slowdown():
