@@ -1251,21 +1251,55 @@ and this task isn't done until both runs are green. Also run
 Use the `mirror-prod` and `worktree-lifecycle` skills. Production is the
 Hetzner VM.
 
-- [ ] **Step 1:** Merge to `main`. Deploy (`docs/deploy/DEPLOY_HETZNER.md`)
+- [x] **Step 1:** Merge to `main`. Deploy (`docs/deploy/DEPLOY_HETZNER.md`)
   with `ALPACA_ENABLED` absent (false). Confirm the containers are healthy and
   a scan completes. Nothing should change observably.
-- [ ] **Step 2:** The **user** creates the Alpaca account and keys. Add
+  *Done 2026-09-27: merge 00e9d2bb, CI run 36308021440 green, both
+  containers healthy, `ALPACA_ENABLED=False` in the bot. Deployed on a
+  Sunday -- the first post-deploy scan is Monday's.*
+- [x] **Step 2:** The **user** creates the Alpaca account and keys. Add
   `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` to the production `.env`
   (never commit values). Mirror the placeholder names into `.env.example` if
   they differ from T1's, and commit.
-- [ ] **Step 3:** On production, run
+  *Done 2026-09-27. Names match T1. A first `CK…` pair (Broker API) got 401;
+  the replacement `PK…` paper-trading pair authenticates: daily, 1h and
+  latest-trade calls all answer (valid keys are 26/44 chars, not 20/40).*
+- [x] **Step 3:** On production, run
   `python scripts/reports/provider_parity_report.py --json /tmp/parity.json`
   and bring the summary back. **Pre-registered clause (d):** median close
   difference ≤ 5 bps, and every `action_mismatches` row explained (a known
   split/dividend date, and which side is right).
-- [ ] **Step 4:** Record the baseline: the last 5 trading days of
+  *Result 2026-09-27, 75 eligible watchlist symbols x 60 sessions: close
+  bps median 0.0, p95 0.28, max 9.38 (ILMN); missing_alpaca 0, missing_yf 0;
+  volume ratio median 1.00; action_mismatches 0. **Clause (d) PASS.** Live
+  diffs up to ~71 bps are a weekend artefact (IEX last print vs yfinance
+  prepost 1m last) and are not part of the gate.*
+- [x] **Step 4:** Record the baseline: the last 5 trading days of
   `data/scan_telemetry.jsonl` (cold-fetch phase times, `errors`,
   `data_skips`, `tickers`).
+  *Baseline 2026-09-21..25 (yfinance only), ~180 scans/day, 77 tickers:*
+
+  | day | scans | errors | data_skips | crawl p50 s | crawl p95 s | crawl max s |
+  |---|---|---|---|---|---|---|
+  | 09-21 | 180 | 0 | 180 | 12.68 | 14.68 | 25.11 |
+  | 09-22 | 181 | 0 | 181 | 12.58 | 18.36 | 21.81 |
+  | 09-23 | 180 | 0 | 180 | 12.47 | 19.11 | 22.51 |
+  | 09-24 | 180 | 0 | 180 | 9.31 | 16.90 | 22.05 |
+  | 09-25 | 180 | 0 | 180 | 0.40 | 14.53 | 27.12 |
+
+  *(errors + data_skips) / tickers = **0.01299** over 69,377 ticker-scans
+  (one ticker is data-skipped every scan).*
+
+  **Finding (recorded before Step 5, so before any soak data exists):**
+  clause (a) names "the cold-fetch phase in `phases_s`", but `phases_s`
+  has no such phase -- only `crawl`, which also holds warm-cache loads,
+  per-chunk process spawn and the sequential remainder loop (baseline p95
+  14.5-19.1 s). (a) cannot be read as written. Clause (b)'s
+  `data_sources` counts only the scan's daily frames, most of which are
+  disk-cache hits kept warm by the yfinance-only refresh loop; the per-scan
+  live-price batch -- Alpaca's largest share of traffic -- is not counted
+  at all. Both measurements must be fixed before the flag goes on, never
+  after.
 - [ ] **Step 5:** Set `ALPACA_ENABLED=true` and send SIGHUP to both
   containers. Soak for **5 trading days**.
 - [ ] **Step 6: Acceptance.** All of these must hold:
