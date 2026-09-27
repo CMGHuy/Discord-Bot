@@ -11,6 +11,8 @@ import yfinance as yf
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.infra.retry import with_retry
 from swingbot.core.marketdata import yf_safe
+from swingbot.core.marketdata.providers import router
+from swingbot.core.marketdata.providers.base import is_alpaca_eligible
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
 log = logging.getLogger(__name__)
@@ -34,6 +36,13 @@ def get_daily_data(ticker: str, period: str = "2y") -> pd.DataFrame:
     indicator used across all swing horizons (EMA200 for the 6-month
     horizon, plus its lookback window).
     """
+    if is_alpaca_eligible(ticker):
+        # v106: an Alpaca miss comes back empty (the no-op yf_fetch), so the
+        # candidate_symbols loop below runs exactly as before.
+        key = ticker.upper().strip()
+        hit = router.daily_bars([key], period, lambda ts, p: {}).get(key)
+        if hit is not None and not hit.empty:
+            return hit
     tried = []
     for candidate in candidate_symbols(ticker):
         tried.append(candidate)
@@ -80,6 +89,13 @@ def get_daily_data_batch(tickers: list, period: str = "2y") -> dict:
     ))
     if not tickers:
         return {}
+    return router.daily_bars(tickers, period, _yf_daily_batch)
+
+
+def _yf_daily_batch(tickers: list, period: str) -> dict:
+    """get_daily_data_batch's yfinance path (pre-v106 body, unchanged): one
+    batched download, sliced per ticker. The router hands it the tickers
+    Alpaca does not serve or missed."""
     try:
         raw = with_retry(yf_safe.download, " ".join(tickers), period=period, interval="1d",
                          group_by="ticker", auto_adjust=True, progress=False,
@@ -160,22 +176,44 @@ def get_current_price_batch(tickers: list, *, allow_stale: bool = True) -> dict:
         return {}
     now = time.monotonic()
     if allow_stale:
-        current = {
-            ticker: cached[0]
-            for ticker in tickers
-            if (cached := _last_good_batch_price.get(ticker))
-            and now - cached[1] < _BATCH_PRICE_CACHE_TTL_SECONDS
-        }
+        current = _fresh_batch_prices(tickers, now)
         if len(current) == len(tickers):
             return current
+    out = router.latest_prices(tickers, _yf_batch_prices)
+    for ticker, price in out.items():
+        _last_good_batch_price[ticker] = (price, now)
+    # A failed download (every ticker missed) and a partial one land here
+    # alike: each ticker THIS call missed still gets a stale-fallback chance
+    # individually.
+    missing = [t for t in tickers if t not in out]
+    if missing and allow_stale:
+        out.update(_stale_batch_fallback(missing, now))
+    return out
+
+
+def _fresh_batch_prices(tickers: list, now: float) -> dict:
+    """The tickers whose last-good batch price is inside the short display
+    cache TTL -- a display caller whose whole batch is here skips the fetch."""
+    return {
+        ticker: cached[0]
+        for ticker in tickers
+        if (cached := _last_good_batch_price.get(ticker))
+        and now - cached[1] < _BATCH_PRICE_CACHE_TTL_SECONDS
+    }
+
+
+def _yf_batch_prices(tickers: list) -> dict:
+    """get_current_price_batch's yfinance path (pre-v106, unchanged): one
+    1-day/1-minute prepost download, each ticker's last non-NaN Close > 0.
+    Returns {} on a failed or empty download."""
     try:
         raw = yf_safe.download(" ".join(tickers), period="1d", interval="1m",
                           group_by="ticker", prepost=True, progress=False)
     except Exception as exc:
         log.error("get_current_price_batch failed for %d ticker(s): %s", len(tickers), exc)
-        return _stale_batch_fallback(tickers, now) if allow_stale else {}
+        return {}
     if raw is None or raw.empty:
-        return _stale_batch_fallback(tickers, now) if allow_stale else {}
+        return {}
     out: dict = {}
     for ticker in tickers:
         try:
@@ -186,12 +224,6 @@ def get_current_price_batch(tickers: list, *, allow_stale: bool = True) -> dict:
             price = float(closes.iloc[-1])
             if price > 0:
                 out[ticker] = price
-                _last_good_batch_price[ticker] = (price, now)
-    # Tickers THIS batch call missed (a partial failure, not the all-or-
-    # nothing case above) still get a stale-fallback chance individually.
-    missing = [t for t in tickers if t not in out]
-    if missing and allow_stale:
-        out.update(_stale_batch_fallback(missing, now))
     return out
 
 
@@ -443,6 +475,30 @@ def _fast_info_price(fi) -> float | None:
     return None
 
 
+def _cached_or_alpaca_quote(ticker_key: str, cached, now: float,
+                            ttl_seconds: int) -> PriceQuote | None:
+    """The answers get_current_price_detail tries before yfinance.
+
+    A fresh cache entry is a recent market observation for every caller.
+    ``allow_stale=False`` excludes only the expired last-known-good fallback
+    in the caller; otherwise a trading transition needlessly refetches a
+    quote that was observed moments ago. The stored `stale` bit is replayed
+    as-is: a fast_info fallback written a second ago is still that fallback.
+
+    v106: then a fresh Alpaca last trade for an eligible US symbol, cached
+    like the 1-minute-history hit it stands in for. None (a miss, or
+    ineligible) lets the yfinance path run exactly as before."""
+    if cached and (now - cached[1]) < ttl_seconds:
+        return PriceQuote(cached[0], cached[2])
+    if not is_alpaca_eligible(ticker_key):
+        return None
+    price = router.latest_prices([ticker_key], lambda ts: {}).get(ticker_key)
+    if not price:
+        return None
+    _price_cache[ticker_key] = (price, now, False)
+    return PriceQuote(price, False)
+
+
 def get_current_price_detail(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS,
                              *, allow_stale: bool = True) -> PriceQuote | None:
     """
@@ -471,13 +527,9 @@ def get_current_price_detail(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SE
     ticker_key = ticker.upper().strip()
     cached = _price_cache.get(ticker_key)
     now = time.monotonic()
-    # A fresh cache entry is a recent market observation for every caller.
-    # ``allow_stale=False`` excludes only the expired last-known-good fallback
-    # below; otherwise a trading transition needlessly refetches a quote that
-    # was observed moments ago. The stored `stale` bit is replayed as-is: a
-    # fast_info fallback written a second ago is still that fallback.
-    if cached and (now - cached[1]) < ttl_seconds:
-        return PriceQuote(cached[0], cached[2])
+    early = _cached_or_alpaca_quote(ticker_key, cached, now, ttl_seconds)
+    if early is not None:
+        return early
 
     for candidate in candidate_symbols(ticker_key):
         # Primary: 1-minute history with prepost=True is the most accurate
