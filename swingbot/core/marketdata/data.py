@@ -12,7 +12,7 @@ from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.infra.retry import with_retry
 from swingbot.core.marketdata import yf_safe
 from swingbot.core.marketdata.providers import router
-from swingbot.core.marketdata.providers.base import is_alpaca_eligible
+from swingbot.core.marketdata.providers.base import SOURCE_YF, is_alpaca_eligible
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
 log = logging.getLogger(__name__)
@@ -56,6 +56,7 @@ def get_daily_data(ticker: str, period: str = "2y") -> pd.DataFrame:
         if df is not None and not df.empty:
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = df.columns.get_level_values(0)
+            df.attrs["source"] = SOURCE_YF
             return df
 
     raise ValueError(
