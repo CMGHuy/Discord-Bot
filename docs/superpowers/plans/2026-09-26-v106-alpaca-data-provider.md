@@ -1312,6 +1312,20 @@ Hetzner VM.
   **Any failed clause:** set `ALPACA_ENABLED=false`, send SIGHUP, and write up
   the failure. Do not tune thresholds after the fact.
 
+  **Measurement definitions -- fixed 2026-09-27, before the flag went on
+  and before any soak row existed** (resolves the Step 4 finding; the user
+  chose to add telemetry rather than read `crawl`). Thresholds unchanged:
+  - (a) reads telemetry key `cold_fetch_s`: the in-worker wall time of each
+    `get_daily_data_batch` chunk (the call itself, not process spawn),
+    pooled over every scan in the 5 soak days; p95 < 3 s. A soak with fewer
+    than 20 chunk timings in total cannot pass (a) -- it is reported as
+    unmeasured, not as a pass.
+  - (b) pools telemetry keys `data_sources` (daily frames) and
+    `price_sources` (live-price batch answers): Σ yfinance-fallback /
+    Σ (alpaca + yfinance-fallback) over the soak rows < 5%. This is the
+    figure the Risk page's data-source card shows.
+  - (c) as written, against the Step 4 baseline 0.01299.
+
 ### Task T14: Close-out
 
 The user runs `/close-out`; the Skill tool blocks it for Claude. It follows
