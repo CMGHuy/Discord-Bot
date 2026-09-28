@@ -45,6 +45,9 @@ Stop `2 × ATR14`, capped at 2%. TP1 comes from the ATR ladder. Exits: trail
 | Source | Window | N | WR | ExpR | Note |
 |---|---|---|---|---|---|
 | Registry (run 2026-08-17) | VALIDATION 2024–25 | 112 | 50.0% | +0.219 | **VALIDATED** (v31 shot, current targets, pre-2% cap) |
+| v104 structural stop, out-of-scope arm | TRAIN 2010-2025, universe 74 | 732 | 39.9% | +0.202 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, in-scope arm | same | 633 | 51.2% | +0.240 | Tier 1, beats baseline, clears the fold check (13/13) — **PROCEEDED to the 2026 holdout** |
+| v104 structural stop, in-scope arm | HOLDOUT 2026-01-01..2026-09-25 | 27 | 44.4% | +0.053 | win-rate clause **FAILS** (44.4% < 50% floor); ExpR positive and beats baseline. Shot spent, final. `results/2026-09-28-v104-holdout.md` |
 
 The win rate sits exactly on the 50% floor. The bearish arm was re-derived in
 v93 and failed, so it stays masked.

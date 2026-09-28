@@ -64,6 +64,10 @@ Exits use the defaults: trail 2.5 × ATR, TP2 on.
 | Source | Window | N | WR | ExpR | Note |
 |---|---|---|---|---|---|
 | Registry (run 2026-07-18) | VALIDATION 2024–25 | 75 | 77.3% | +0.064 | **WEAK**, pre-v31 arithmetic: stale |
+| v104 structural stop, bullish, out-of-scope arm | TRAIN 2010-2025, universe 74 | 295 | 41.0% | +0.418 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, bullish, in-scope arm | same | 0 | — | — | every structural stop for this strategy exceeds its horizon's `max_risk_pct` — the in-scope arm dropped every trade. **NO-LIFT at Stage 1 (N=0)** |
+| v104 structural stop, bearish, out-of-scope arm | TRAIN 2010-2025, universe 74 | 55 | 25.5% | −0.182 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, bearish, in-scope arm | same | 0 | — | — | same — **NO-LIFT at Stage 1 (N=0)** |
 
 - Tasks 104–106 (2026-07): TRAIN chose the strict wave-2 config (N=117,
   WR 83.8%, ExpR +0.094, pre-v31 arithmetic). Its VALIDATION shot FAILED.

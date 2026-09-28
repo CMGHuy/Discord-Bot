@@ -54,6 +54,9 @@ Exits use the defaults: trail 2.5 × ATR, TP2 on.
 |---|---|---|---|---|---|
 | Registry (run 2026-09-10) | TRAIN 2020–23 | 247 | 45.7% | +0.316 | **WEAK** (legacy badge refresh, pre-2% cap) |
 | v84 `min_level_touches` K=1..3 | TRAIN | ≈ same | 44.9 / 44.3 / 44.2% | — | stable plateau but toothless, so **closed** |
+| v104 structural stop, out-of-scope arm | TRAIN 2010-2025, universe 74 | 1399 | 33.6% | +0.250 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, in-scope arm | same | 907 | 43.9% | +0.357 | Tier 2 (lower bound +0.281), beats baseline, clears the fold check (12/12) — **PROCEEDED to the 2026 holdout** |
+| v104 structural stop, in-scope arm | HOLDOUT 2026-01-01..2026-09-25 | 45 | 40.0% | +0.139 | bootstrap lower bound **−0.143 → FAIL** (Tier 2's deciding clause); shot spent, final. `results/2026-09-28-v104-holdout.md` |
 
 ## Pseudocode
 

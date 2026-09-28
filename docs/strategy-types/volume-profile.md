@@ -43,6 +43,9 @@ is not used for sizing. Exits: trail **3.0** × ATR, no TP2.
 | Source | Window | N | WR | ExpR | Note |
 |---|---|---|---|---|---|
 | Registry (run 2026-08-17) | VALIDATION 2024–25 | 32 | 53.1% | +0.547 | **VALIDATED** (v31 shot, pre-2% cap) |
+| v104 structural stop, out-of-scope arm | TRAIN 2010-2025, universe 74 | 354 | 42.7% | +0.334 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, in-scope arm | same | 300 | 54.3% | +0.372 | Tier 1, beats baseline, clears the fold check (11 qualifying, 8 positive) — **PROCEEDED to the 2026 holdout** |
+| v104 structural stop, in-scope arm | HOLDOUT 2026-01-01..2026-09-25 | 9 | — | — | **sealed-thin** (N=9 < 15); shot unspent, one retry when the holdout reaches 12 months. `results/2026-09-28-v104-holdout.md` |
 
 It has the best ExpR in the registry but the smallest N. N=32 barely clears
 the VALIDATION floor of 15, so treat the size of the edge with caution. The
