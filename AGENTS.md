@@ -47,9 +47,11 @@ Angular SPA served by Flask's `/api/v1/*` API.
 
 **"Production" always means the Hetzner VM** (`docs/deploy/DEPLOY_HETZNER.md`),
 never this dev machine. Do not deploy, SSH to production or make live changes
-unless the user explicitly asks. `scripts/ops/ssh-hetzner.sh` connects to it (a
-command, or bare for a shell); it is deliberately uncommitted because it shells
-through WSL to a key in WSL's own home. **Any live fix or config change made on
+unless the user explicitly asks. **Always connect through
+`scripts/ops/ssh-hetzner.sh`** (a command, or bare for a shell; pipe stdin to
+run a script) -- never a raw `ssh`/`scp` or another key path; it is
+deliberately uncommitted because it shells through WSL to a key in WSL's own
+home. **Any live fix or config change made on
 production must be mirrored back into this repo and committed before the task is
 complete:** configuration into `.env.example` or docs, local mirrored data where
 appropriate, and a committed code fix if the incident exposed a real defect.
