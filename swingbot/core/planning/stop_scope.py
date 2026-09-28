@@ -63,6 +63,10 @@ def risk_sizing_ok(plan, sizing_fn=None) -> bool:
         return False
     if not sizing or sizing.get("mode") != "risk_pct":
         return False
-    risk_amount = float(sizing.get("risk_amount") or 0.0)
-    budget = float(sizing.get("balance") or 0.0) * float(sizing.get("risk_pct") or 0.0) / 100.0
-    return 0.0 < risk_amount <= budget + 0.01
+    try:
+        budget = float(sizing.get("balance") or 0.0) * float(sizing.get("risk_pct") or 0.0) / 100.0
+        shares = float(sizing.get("shares") or 0.0)
+        actual_risk = shares * abs(plan.trigger_price - plan.stop_loss)
+    except (TypeError, ValueError):
+        return False
+    return 0.0 < actual_risk <= budget

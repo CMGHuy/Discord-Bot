@@ -93,6 +93,14 @@ def test_risk_sizing_fails_closed_over_budget(monkeypatch):
     assert not ss.risk_sizing_ok(_plan(), sizing_fn=lambda entry, stop: _sizing(risk_amount=450.0))
 
 
+def test_risk_sizing_rejects_rounded_shares_over_budget(monkeypatch):
+    monkeypatch.setattr(config, "STRUCTURAL_STOP_SCOPE", "Fibonacci:bullish", raising=False)
+    plan = _plan(stop=94.0)
+    sizing = {"mode": "risk_pct", "balance": 10_000.0, "risk_pct": 1.0,
+              "risk_amount": 100.0, "shares": 16.67}
+    assert not ss.risk_sizing_ok(plan, sizing_fn=lambda entry, stop: sizing)
+
+
 def test_shorts_are_always_checked(monkeypatch):
     monkeypatch.setattr(config, "STRUCTURAL_STOP_SCOPE", "", raising=False)
     short = _plan(strategy=SHORT_STRATEGIES[0], direction="bearish", stop=109.0)
