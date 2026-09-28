@@ -235,6 +235,14 @@ FIELDS: list[Field] = [
           help="v103. Comma-separated: bullish, bearish, or both. Empty disables "
                "FIB_LEVEL_STOP_ATR entirely, so it can ship for only the direction(s) whose "
                "VALIDATION shot passed."),
+    Field("STRUCTURAL_STOP_SCOPE", "STRUCTURAL_STOP_SCOPE", "Trade Filters & Risk",
+          "Structural stops (Strategy:direction list)",
+          type="text", default="",
+          help="v104. Comma-separated Strategy:direction pairs (e.g. 'Fibonacci:bullish') whose "
+               "plans keep their structural stop up to the horizon's max_risk_pct and are sized to "
+               "a fixed dollar risk, instead of being capped at the 2% price cap. A stop beyond that "
+               "ceiling drops the signal. Empty = every strategy uses the 2% cap. A pair is added "
+               "only after its pre-registered 2026 holdout shot passes."),
     Field("MIN_ALERT_CONFIDENCE_LEVEL", "MIN_ALERT_CONFIDENCE_LEVEL", "Trade Filters & Risk", "Min confidence level to alert",
           type="select", default="4", options=["1", "2", "3", "4", "5"],
           help="Only this level and above are shown as alerts (quality over quantity)."),
