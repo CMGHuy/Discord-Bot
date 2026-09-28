@@ -12,7 +12,9 @@ from tests.helpers import make_ohlcv
 
 HZ = "2w"                              # sr_lookback 10
 PAD = [(100.0, 101.0, 99.0, 100.0)] * 40
-FLAT = [(100.0, 101.0, 99.0, 100.0)] * 4
+# 6 trailing bars (brief listed 3): the truncation case k=45 must stay strictly
+# inside the 48-row frame, or iloc[:k+1] is the whole frame and proves nothing.
+FLAT = [(100.0, 101.0, 99.0, 100.0)] * 6
 
 
 def _frame(tail):
