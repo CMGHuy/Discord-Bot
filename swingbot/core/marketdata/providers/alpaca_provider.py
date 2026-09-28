@@ -17,6 +17,7 @@ HISTORY_FLOOR = datetime(2016, 1, 1, tzinfo=timezone.utc)
 _PERIOD_DAYS = {"1d": 5, "5d": 7, "1mo": 31, "3mo": 92, "6mo": 183, "1y": 366,
                 "2y": 731, "5y": 1827, "10y": 3653}
 INTRADAY_DAYS = 700
+ROWS_PER_PAGE = 10_000      # Alpaca bars page size; a request past it paginates serially
 
 
 class AlpacaMiss(Exception):
@@ -30,6 +31,13 @@ class AlpacaAuthError(AlpacaMiss):
 def _start_for(period: str, now: datetime) -> datetime:
     days = _PERIOD_DAYS.get(period)
     return HISTORY_FLOOR if days is None else max(HISTORY_FLOOR, now - timedelta(days=days))
+
+
+def symbols_per_request(period: str, now: datetime = None) -> int:
+    """Symbols whose daily bars for `period` fit one 10k-row page (v106 T13a)."""
+    now = now or datetime.now(timezone.utc)
+    rows = (now - _start_for(period, now)).days * 252 // 365 + 10
+    return max(1, ROWS_PER_PAGE // rows)
 
 
 def _in_regular_session(now: datetime) -> bool:
