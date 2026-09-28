@@ -61,6 +61,7 @@ data/v33_*.json
 # docs/superpowers/results/ are the record.
 data/v102_*.json
 data/v103_*.json
+data/v104_*.json
 # Same reason and same glob shape for v34's RS-gate measurement dumps
 # (data/v34_train.json, data/v34_train_rows.json, data/v34_validation.json),
 # re-derivable via scripts/backtest/measure_rs_gate_effect.py.
