@@ -27,8 +27,9 @@ async def watchlist_add(ctx, ticker: str):
         await ctx.send(
             f"⚠️ Heads up: couldn't fetch data for **{ticker.upper()}** ({e}). "
             f"It's still in your watchlist, but scans will skip it until this resolves. "
-            f"Common fixes: indices use Yahoo's `^` format (S&P 500 = `^GSPC`), metals use "
-            f"futures tickers (gold = `GC=F`, silver = `SI=F`), forex needs a `=X` suffix "
+            f"Common fixes: indices use Yahoo's `^` format (S&P 500 = `^GSPC`), spot metals are "
+            f"gold = `XAUUSD`, silver = `XAGUSD` (futures `GC=F` / `SI=F` still work and stay "
+            f"futures-priced), forex needs a `=X` suffix "
             f"(e.g. `EURUSD=X`). Use `!watchlist remove {ticker.upper()}` if you want to try a different symbol."
         )
 

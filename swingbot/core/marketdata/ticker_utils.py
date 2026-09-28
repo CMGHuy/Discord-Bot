@@ -8,6 +8,10 @@ forex that don't match how people normally write them:
     isn't a valid Yahoo symbol
   - Silver spot is "SI=F"; "XAGUSD" alone isn't valid either
   - Forex pairs need a "=X" suffix, e.g. "EURUSD=X"
+  - v109: XAUUSD / XAGUSD are NOT resolved through ALIASES any more. They are
+    spot-priced instruments (core/marketdata/spot_metals.py) whose branch runs
+    before any candidate loop; the aliases remain for GOLD/XAU/SILVER/XAG and
+    for metadata lookups (company name, currency).
 
 This module maps common aliases and provides sensible fallback guesses so
 `!watchlist add SPX` or `!watchlist add XAUUSD` work instead of silently
