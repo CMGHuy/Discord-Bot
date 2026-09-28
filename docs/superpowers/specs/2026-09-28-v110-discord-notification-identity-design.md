@@ -73,7 +73,7 @@ badge in the title.
 
 | Family | Badge | Stripe | Kinds |
 |---|---|---|---|
-| NEW SETUP | 🆕 | blue ramp by confidence Lv1→Lv5; muted grey-blue when blocked / DO NOT PLACE | full alert, strategy signal, simple ticket (PLACE and DO NOT PLACE), legacy simple mirror, top-plans digest entries, weekend deep scan |
+| NEW SETUP | 🆕 | blue ramp by confidence Lv1→Lv5; muted grey-blue when blocked / DO NOT PLACE | full alert, strategy signal, simple ticket (PLACE and DO NOT PLACE), legacy simple mirror, top-plans digest entries |
 | ENTRY | 🎯 | teal | entry triggered, FILLED |
 | MANAGE | 🛡️ break-even · 💰 TP1 / scale-out · ✂️ move stop · 🚫 cancel / risk-cap block | amber | BE moved, TP1 hit, MOVE STOP, CANCEL, risk cap |
 | WATCH | 👀 | orange (nearing stop) / lime (nearing TP) | approaching SL, approaching TP |
