@@ -754,7 +754,7 @@ In `STRATEGY_GATES`, directly after the `"Earnings Gap Drift": {"directions": ()
 
 ```python
     # v113 Part A ships masked; a holdout pass would admit it as
-    # "cells": {("bearish", "1w")} -- see the v113 plan's V113-19.
+    # "cells": {("bearish", "1w")} -- see the v113 plan's V113-24.
     "Downtrend Overbought Fade": {"directions": ()},
 ```
 

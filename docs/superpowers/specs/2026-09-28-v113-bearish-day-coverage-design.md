@@ -64,10 +64,15 @@ pre-registration; **none is ever grid-searched.**
 | `max_holding_days` | 7 |
 | `rs_window` | 10 |
 
-**Reward floor becomes horizon-scoped.** The global 5% `MIN_REWARD_PCT` floor
-would reject nearly every `1w` plan. It gains a per-horizon value: `1w` = 2.0%,
-every other horizon keeps exactly today's value. A test pins that every
-existing horizon's plan output is byte-identical before and after.
+**A horizon-scoped reward floor for strategy plans.** (Corrected 2026-09-28,
+with the plan: `MIN_REWARD_PCT` is not a global 5% floor — its config default
+is 3.0 and it gates only confluence scenarios; strategy-source plans have no
+reward floor today.) `1w` gets a strategy-plan floor of 2.0% via a new
+`HORIZONS["1w"]["min_reward_pct"]`, applied identically by the live builder
+and the backtest; every other horizon keeps exactly today's value — no floor.
+The confluence path and `MIN_REWARD_PCT` are unchanged and never run `1w`. A
+test pins that every existing horizon's plan output is byte-identical before
+and after.
 
 **Masked by default.** Every strategy's `STRATEGY_MASKS` entry excludes `1w`
 until its cell passes. Nothing live changes by adding the horizon.
@@ -158,8 +163,21 @@ D).
 ## 7. Ship rules
 
 - A cell ships only after passing Stage 3. Shipping = adding its pair via
-  `cells` (Part B), unmasking A's `("bearish",)` on `1w`, or adding the four
-  ETFs to the watchlist (D).
+  `cells` (Part B), unmasking A on `(bearish, 1w)` via `cells`, or adding the
+  four ETFs to the watchlist (D).
+- **A ships only with live parity** (partner decision 2026-09-28), in the same
+  phase, before its unmask — conditional tasks that run only if A passes Stage 3
+  (otherwise recorded as skipped): (1) live strategy frames carry the `evt_*`
+  earnings columns the fade reads, from the live calendar; (2) `PlanManager`
+  fills a limit entry — sell limit at `close_t`, good for the next session only,
+  filling only if that session trades at or above the limit, else the plan
+  expires unfilled; (3) a whole-position close at the single target
+  (`tp1_fraction 1.0`: no PARTIAL, no break-even move); (4) an enforced time
+  stop at the close of the 7th session after the fill, distinct from today's
+  advice-only recycle notice, which keeps its behaviour for every other plan.
+  Each is reached only through plan-level fields the fade's plans declare, so
+  no existing plan changes — pinned by byte-identical tests written before the
+  change. The alert states the resting orders (limit, stop, target, time stop).
 - Registry: the existing rule holds (a strategy's row ships only when every
   admitted direction passes). A `1w` pass gets its own (strategy, `1w`) row.
 - Nothing passes → everything stays masked and one row per part goes into
@@ -175,7 +193,10 @@ D).
 3. D data fetch + manifest.
 4. `measure_v113.py` + pre-registration commit.
 5. Runs (TRAIN → folds → holdout), results files, methodology row.
-6. Unmask passing cells + registry rows; full suite as the final task.
+6. Unmask passing Part B cells + registry rows. If A passed: its four
+   live-parity pieces (§7), then its unmask + registry row. If D passed: the
+   inverse tag, RS exemption and alert label.
+7. Methodology rows; full suite as the final task.
 
 Every function written or changed stays under cyclomatic complexity 15.
 

@@ -28,7 +28,7 @@ Phase A (V113-1 … V113-11) must be merged to `main` first. Check: `git log --o
 
 **Interfaces:**
 - Consumes: `fetch_backtest_data.py --tickers` (V113-9); `measure_fib_confluence._load_frames` (liquidity and data-quality filter, same as every measurement).
-- Produces: `data/backtest_cache_ext/{SH,PSQ,RWM,DOG}.csv` (local, untracked); the manifest (read by V113-20 only if D ships); `<date>`; the recorded Part A/B `universe_n` and Part D `universe_n` every later stage must reproduce.
+- Produces: `data/backtest_cache_ext/{SH,PSQ,RWM,DOG}.csv` (local, untracked); the manifest (read by V113-25 only if D ships); `<date>`; the recorded Part A/B `universe_n` and Part D `universe_n` every later stage must reproduce.
 
 - [ ] **Step 1: Git-ignore the dumps.** In `.gitignore`, directly under `data/v104_*.json`, add `data/v113_*.json`. Run `git status --short data/`. Expected: empty.
 
@@ -86,7 +86,7 @@ Record the output verbatim. Part D's `universe_n` is `len(kept)`. **Do not lower
 
 Check it loads: `python -c "from swingbot.core.marketdata.universe import universe_symbols; print(universe_symbols('inverse_etfs'))"`. Expected: `['SH', 'PSQ', 'RWM', 'DOG']`.
 
-- [ ] **Step 5: Earnings data for Part A and the universe for A/B.** Part A's earnings block reads `market_data/earnings/*.csv`. Hash it with the V104-13 Step 3 snippet (`grep -n "Check the earnings CSVs" -A 22 docs/superpowers/plans/2026-09-25-v104-structural-stops-and-shorts_2-measurement.md`) and compare with v104's recorded final sha256 (`3eeb8012…` in `results/2026-09-28-v104-data.md`). A different hash is fine; record both and the file count. Then record the universe:
+- [ ] **Step 5: Earnings data for Part A and the universe for A/B.** Part A's earnings block reads `market_data/earnings/*.csv`. Hash it with the V104-13 Step 3 snippet (`grep -n "Check the earnings CSVs" -A 22 docs/superpowers/plans/implemented/2026-09-25-v104-structural-stops-and-shorts_2-measurement.md`) and compare with v104's recorded final sha256 (`3eeb8012…` in `results/2026-09-28-v104-data.md`). A different hash is fine; record both and the file count. Then record the universe:
 
 ```bash
 python -c "import json,hashlib;n=sorted(json.load(open('data/watchlist.json')));print(len(n));print(hashlib.sha256(','.join(n).encode()).hexdigest());print(','.join(n))"
@@ -349,7 +349,7 @@ for p in sorted(glob.glob("docs/superpowers/results/*-v113-holdout-*.json")):
 EOF
 ```
 
-- [ ] **Step 4: Write `results/<date>-v113-holdout.md`.** Load `pooled-numbers`. Per candidate: status, N, WR, ExpR, lower bound, each clause, PASS / FAIL (naming the failing clause) / SEALED-THIN (N only, retry date). Then `## What Phase C does`: the passing candidates by part — B passes go to V113-18, an A pass to V113-19 (recorded, not unmasked — amendment 2), a D pass to V113-20.
+- [ ] **Step 4: Write `results/<date>-v113-holdout.md`.** Load `pooled-numbers`. Per candidate: status, N, WR, ExpR, lower bound, each clause, PASS / FAIL (naming the failing clause) / SEALED-THIN (N only, retry date). Then `## What Phase C does`: the passing candidates by part — B passes go to V113-18, an A pass to V113-19 … V113-24 (live parity, then unmask — amendment 2), a D pass to V113-25.
 
 - [ ] **Step 5: Commit**
 
