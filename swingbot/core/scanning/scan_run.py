@@ -522,9 +522,9 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 if (config.PLAN_ENGINE_V2 == "on"
                         and getattr(item, "plan_v2_rejected", None)):
                     filtered_by_rr += 1
-                    log.debug("%s (%s, %s): no level clears %.1f:1 reward:risk -- skipped",
+                    log.debug("%s (%s, %s): plan rejected (%s) -- skipped",
                               item.result.ticker, item.result.horizon_key,
-                              item.result.trend, config.MIN_RISK_REWARD_RATIO)
+                              item.result.trend, item.plan_v2_rejected)
                     continue          # never reaches scan_items -> never alerts
             scan_items.append(item)
 
@@ -565,7 +565,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         "Signal funnel: %d ticker/horizon combo(s) checked -> %d had no qualifying entry point (no real "
         "support/resistance, or didn't meet min reward/stop/risk-reward requirements) -> %d scenario(s) found, "
         "%d fully qualifying (min strategies confirmed failed %d, min confidence failed %d) -> "
-        "%d still awaiting confirmation (automatic scan only) -> %d filtered by structural reward:risk -> "
+        "%d still awaiting confirmation (automatic scan only) -> %d rejected at plan build (no reward:risk target, or stop beyond the 2%% cap) -> "
         "%d shown/posted",
         checked_count, no_entry_point, scenarios_found_count, fully_qualifying_count,
         failed_counts["min_confluence"], failed_counts["min_confidence"],

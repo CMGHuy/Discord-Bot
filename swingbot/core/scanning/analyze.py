@@ -33,6 +33,7 @@ from swingbot.core.planning.account import load_account_config
 from swingbot.core.planning.plan_engine import build_confluence_plan, primary_strategy_for
 from swingbot.core.planning.quality import atr_percentile as _atr_percentile
 from swingbot.core.planning.params import stamp_entry_context
+from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, planned_loss_pct
 from swingbot.core.market.indicators import atr
 from swingbot.core.market.session import now_et
 
@@ -355,6 +356,15 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             # does for plan=None, and would silently re-post the very prices
             # this change exists to stop posting).
             item.plan_v2_rejected = "no_qualifying_target"
+            return
+        if planned_loss_pct(plan.trigger_price, plan.stop_loss) > HARD_MAX_PLANNED_LOSS_PCT + 1e-9:
+            # Scenario building keeps the horizon's wider stop ceiling so
+            # historical replay evaluates the same candidates (90e3ddef), but
+            # PlanManager refuses to open any plan beyond the hard cap -- a
+            # stop_entry plan is cancelled_risk_cap on fill and a market plan
+            # would open in breach of the 2% rule. Posting it only issues an
+            # alert the bot then cancels seconds later (GC=F, 2026-09-28).
+            item.plan_v2_rejected = "risk_cap"
             return
         # item.plan_v2 is set BEFORE risk_features stamping (below) is even
         # attempted -- a render-only feature's stamping failure must never

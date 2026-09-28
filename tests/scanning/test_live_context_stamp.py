@@ -8,7 +8,7 @@ from tests.helpers import make_ohlcv
 def _plan():
     return TradePlanV2(plan_id="p", ticker="AAPL", created_at="2026-09-16", source="confluence",
                        strategy="MACD", horizon_key="3m", direction="bullish", entry_type="market",
-                       trigger_price=100.0, entry_price=100.0, expiry_bars=5, stop_loss=95.0, tp1=110.0,
+                       trigger_price=100.0, entry_price=100.0, expiry_bars=5, stop_loss=98.0, tp1=110.0,
                        tp1_fraction=0.5, tp2=None, breakeven_trigger_fraction=0.5, trail_atr_mult=2.0,
                        quality_score=0, quality_breakdown=[], badge="WEAK", badge_stats={}, status=PlanStatus.PENDING)
 

@@ -91,7 +91,7 @@ def _item():
     return SimpleNamespace(plan_v2=None)   # or a real ScanItem fixture
 
 def _scenario():
-    return SimpleNamespace(direction="bullish", entry=100.0, stop_loss=95.0,
+    return SimpleNamespace(direction="bullish", entry=100.0, stop_loss=98.0,
                            take_profit=110.0, target_sources=["EMA21"],
                            stop_sources=["Rolling support"])
 
@@ -305,6 +305,33 @@ def test_attach_plan_v2_records_the_rejection_reason(monkeypatch):
                           "AAPL", "4w", level_map=None)
     assert item.plan_v2 is None
     assert item.plan_v2_rejected == "no_qualifying_target"
+
+
+def test_attach_plan_v2_rejects_a_plan_whose_stop_is_beyond_the_hard_cap(monkeypatch):
+    # Production 2026-09-28: GC=F plans with a 2.01% trigger-to-stop loss were
+    # posted, then cancelled_risk_cap by PlanManager seconds later on fill. A
+    # plan the execution guard can never open must not be posted at all.
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = _item()
+    scenario = SimpleNamespace(direction="bearish", entry=4194.30, stop_loss=4278.68,
+                               take_profit=4066.11, target_sources=["FVG (bullish)"],
+                               stop_sources=["Rolling resistance"])
+    engine.attach_plan_v2(item, scenario, make_ohlcv([4194.30] * 60),
+                          "GC=F", "4w", level_map=None)
+    assert item.plan_v2 is None
+    assert item.plan_v2_rejected == "risk_cap"
+
+
+def test_attach_plan_v2_keeps_a_plan_exactly_at_the_hard_cap(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = _item()
+    scenario = SimpleNamespace(direction="bullish", entry=100.0, stop_loss=98.0,
+                               take_profit=110.0, target_sources=["EMA21"],
+                               stop_sources=["Rolling support"])
+    engine.attach_plan_v2(item, scenario, make_ohlcv([100.0] * 60),
+                          "AAPL", "4w", level_map=None)
+    assert item.plan_v2 is not None
+    assert getattr(item, "plan_v2_rejected", None) is None
 
 
 def test_a_builder_exception_is_still_a_warning_not_a_rejection(monkeypatch, stub_batch_fetch):
@@ -735,7 +762,7 @@ def test_risk_features_stamped_on_real_plan_via_attach_plan_v2(monkeypatch):
     scenario = SimpleNamespace(
         direction="bullish",
         entry=100.0,
-        stop_loss=95.0,
+        stop_loss=98.0,
         take_profit=110.0,
         target_sources=["EMA21"],
         stop_sources=["Rolling support"],
@@ -791,7 +818,7 @@ def test_risk_features_stamped_on_real_plan_via_attach_plan_v2(monkeypatch):
 
 def _v2_scenario_and_item():
     scenario = SimpleNamespace(
-        direction="bullish", entry=100.0, stop_loss=95.0, take_profit=110.0,
+        direction="bullish", entry=100.0, stop_loss=98.0, take_profit=110.0,
         target_sources=["EMA21"], stop_sources=["Rolling support"],
     )
     item = SimpleNamespace(
