@@ -35,7 +35,7 @@ from swingbot.core.market.strategy_types import HORIZONS, SHORT_STRATEGIES, STRA
 # --- pre-registered constants (spec §5.1) ---
 TRAIN = ("2010-01-01", "2025-12-31")
 HOLDOUT_START = "2026-01-01"
-HOLDOUT_END: str | None = None     # frozen ONCE by V104-15 and committed before any Stage 3 run
+HOLDOUT_END: str | None = "2026-09-25"     # frozen ONCE by V104-15 and committed before any Stage 3 run
 THIN_REOPEN = "2026-12-31"         # spec §5.4
 FOLD_YEARS = tuple(range(2013, 2026))
 ALL_HZ = tuple(HORIZONS)
