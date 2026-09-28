@@ -37,6 +37,11 @@ def df():
 
 def _flags(monkeypatch, *, stops=False):
     monkeypatch.setattr("swingbot.config.LEVEL_LIFECYCLE_STOPS_ENABLED", stops, raising=False)
+    if stops:
+        # v104: these fixtures intentionally exercise lifecycle widening. A
+        # structural stop is now allowed to widen only for a scoped pair.
+        monkeypatch.setattr("swingbot.config.STRUCTURAL_STOP_SCOPE", "RSI:bullish",
+                            raising=False)
 
 
 # --- the fast path must be bit-identical ------------------------------------
