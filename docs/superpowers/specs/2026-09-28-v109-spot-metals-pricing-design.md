@@ -3,7 +3,7 @@
 **Version:** ui 1.21.0 · bot 1.10.4
 **Bump:** bot patch
 **Edge:** volume
-**Plan:** `docs/superpowers/plans/2026-09-28-v109-spot-metals-pricing.md`
+**Plan:** `docs/superpowers/plans/2026-09-28-v109-spot-metals-pricing_0-index.md`
 
 ## Why
 
@@ -77,7 +77,10 @@ falls back to *unscaled* `GC=F` via `ticker_utils.ALIASES`:
 
 - `data.get_daily_data` and `data.get_daily_data_batch` (the scan crawl uses
   the batch path, which does no aliasing at all today).
-- `get_intraday` (the 5m / 1h horizons — the 2026-09-28 gold plans were 5m).
+- `get_intraday` (the 1h bars behind the entry-timing note,
+  `factors.intraday_confirms`). Correction: "5m" in this repo is the
+  5-**month** horizon, not 5-minute bars — the 2026-09-28 gold plans were
+  daily-bar plans on the 5-month and 2-week horizons.
 - `providers/router.py`: spot symbols are split off before `_split`, tagged
   with a new `SOURCE_SPOT_SCALED`, and never sent to Alpaca or to yfinance
   under their own name.
