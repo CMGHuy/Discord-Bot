@@ -1,11 +1,11 @@
-"""v103: grid-agnostic Fibonacci funnel -- two tiers, plateau, folds."""
+"""v103/v104: grid-agnostic measurement funnel -- two tiers, plateau, folds."""
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "backtest"))
 
-import fib_funnel as funnel  # noqa: E402
+import funnel  # noqa: E402
 
 FAST = dict(n_resamples=400, seed=42)
 GRID = (0.1, 0.25, 0.5)
@@ -97,3 +97,28 @@ def test_stage2_shape():
     rows = {funnel.cell_key(value): _tier2_only() for value in GRID}
     result = funnel.stage2(rows, "bullish", GRID)
     assert len(result["folds"]) == len(funnel.FOLD_YEARS) and set(result["verdict"]) >= {"clears", "qualifying"}
+
+
+def test_stage2_accepts_custom_fold_years():
+    rows = [_row(f"T{index}", "win", 1.0, year=str(year))
+            for year in range(2010, 2026) for index in range(40)]
+    by_cell = {funnel.cell_key(0.5): rows}
+    result = funnel.stage2(by_cell, "bullish", (0.5,), fold_years=tuple(range(2013, 2026)))
+    assert [fold["test_year"] for fold in result["folds"]] == list(range(2013, 2026))
+
+
+def test_fixed_folds_score_one_arm_per_year():
+    rows = [_row("A", "win", 1.0, year="2014")] * 16 + [_row("B", "loss", -1.0, year="2015")] * 16
+    folds = funnel.fixed_folds(rows, (2014, 2015, 2016))
+    assert [fold["tol"] for fold in folds] == ["fixed"] * 3
+    assert folds[0]["stats"]["n"] == 16 and folds[2]["stats"]["n"] == 0
+    verdict = funnel.fold_verdict(folds)
+    assert verdict["qualifying"] == 2 and verdict["positive"] == 1
+
+
+def test_assert_rows_before_refuses_a_future_row():
+    funnel.assert_rows_before([_row("A", "win", 1.0, year="2025")], "2025-12-31")
+    import pytest
+
+    with pytest.raises(SystemExit):
+        funnel.assert_rows_before([_row("A", "win", 1.0, year="2026")], "2025-12-31")

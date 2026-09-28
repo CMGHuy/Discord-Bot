@@ -15,8 +15,8 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(Path(__file__).resolve().parent)]
 
-import fib_funnel
-from fib_funnel import BOOTSTRAP_SEED, MIN_N_TRAIN, MIN_N_VALIDATION, cell_key, dir_rows
+import funnel as fib_funnel
+from funnel import BOOTSTRAP_SEED, MIN_N_TRAIN, MIN_N_VALIDATION, cell_key, dir_rows
 from measure_bearish_arms import _unmasked_gates, apply_laggard_rule
 from measure_fib_confluence import TRAIN_EXT, VALIDATION, Progress, _load_frames, _write, require_ext_cache
 from run_backtest_range import _build_asof_map, merge_registry, window_trades

@@ -1,4 +1,4 @@
-"""Grid-agnostic Fibonacci measurement funnel shared by v102 and v103."""
+"""Grid-agnostic measurement funnel shared by v102, v103 and v104."""
 from __future__ import annotations
 
 import sys
@@ -136,10 +136,23 @@ def fold_verdict(folds):
             "unselected": sum(1 for fold in folds if fold["tol"] is None)}
 
 
-def stage2(rows_by_cell, direction, grid):
+def stage2(rows_by_cell, direction, grid, fold_years=FOLD_YEARS):
     folds = []
-    for year in FOLD_YEARS:
+    for year in fold_years:
         value = fold_pick(rows_by_cell, direction, year, grid)
         stats = pooled(dir_rows(year_rows(rows_by_cell[cell_key(value)], year, year), direction)) if value is not None else None
         folds.append({"test_year": year, "tol": value, "stats": stats})
     return {"folds": folds, "verdict": fold_verdict(folds)}
+
+
+def fixed_folds(rows, fold_years):
+    """Return per-year stats for one fixed arm without re-selecting a grid."""
+    return [{"test_year": year, "tol": "fixed", "stats": pooled(year_rows(rows, year, year))}
+            for year in fold_years]
+
+
+def assert_rows_before(rows, last_date):
+    """Refuse rows entered after ``last_date`` to prevent a holdout leak."""
+    late = [row["entry_date"] for row in rows if row["entry_date"] > last_date]
+    if late:
+        raise SystemExit(f"{len(late)} row(s) after {last_date} (first {min(late)}): holdout leak refused")
