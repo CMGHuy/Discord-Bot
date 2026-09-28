@@ -221,6 +221,10 @@ STRATEGY_GATES: dict[str, dict] = {
     "Fibonacci": {"directions": ("bullish",)},
     # v103 C ships masked until a direction passes its pre-registered shot.
     "Fibonacci Continuation": {"directions": ()},
+    # v104 Part B shorts ship masked until their 2026 holdout shot passes.
+    "Bull Trap": {"directions": ()},
+    "Vol Expansion Breakdown": {"directions": ()},
+    "Earnings Gap Drift": {"directions": ()},
     # bullish-only: N=608 WR=85.2 ExpR=+0.140 excl=28% (train, PRE-v31 -- stale)
     "RSI": {"directions": ("bullish",)},
     # bullish-only: N=259 WR=81.1 ExpR=+0.071 excl=25% (train, PRE-v31 -- stale)

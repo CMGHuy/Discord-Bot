@@ -1062,3 +1062,8 @@ def elliott_wave_entries(df, horizon_key, params=None):
 
 
 ENTRY_FUNCS["Elliott Wave"] = elliott_wave_entries
+
+
+# v104 Part B registers its short-only strategies into ENTRY_FUNCS and
+# DEFAULT_PARAMS. Imported last: short_entries imports names defined above.
+from swingbot.core.market import short_entries  # noqa: E402,F401
