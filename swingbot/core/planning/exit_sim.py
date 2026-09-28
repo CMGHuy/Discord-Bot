@@ -353,6 +353,10 @@ def simulate_exit(
     if max_holding_days is None:
         max_holding_days = HORIZONS[plan.horizon_key]["max_holding_days"]
 
+    hold_cap = getattr(plan, "hold_cap_bars", None)
+    if hold_cap is not None:
+        max_holding_days = min(max_holding_days, int(hold_cap))
+
     if plan.entry_type == "market":
         entry_index = signal_index
         entry_price = float(df["Close"].values[signal_index])
