@@ -242,3 +242,30 @@ def test_entries_are_untouched_when_the_flag_is_off_and_context_is_absent(monkey
     bull, bear = _entries(make_trend_df(500, 0.10))
 
     assert bull.index.equals(bear.index)
+
+
+# --- v104 B2 columns -----------------------------------------------------------
+
+def test_spy_down_flags_a_falling_market_only():
+    falling = mc.attach(make_trend_df(200, -0.3), spy_df=make_trend_df(200, -0.3))
+    rising = mc.attach(make_trend_df(200, 0.3), spy_df=make_trend_df(200, 0.3))
+    assert falling["ctx_spy_down"].iloc[-1] == 1.0
+    assert rising["ctx_spy_down"].iloc[-1] == 0.0
+    assert falling["ctx_spy_down"].iloc[:69].isna().all()      # MA50 needs 50 bars, its shift 20 more
+
+
+def test_spy_ret63_is_the_63_bar_return():
+    spy = _spy(200)
+    out = mc.attach(spy.copy(), spy_df=spy)
+    expected = spy["Close"].iloc[-1] / spy["Close"].iloc[-64] - 1.0
+    assert out["ctx_spy_ret63"].iloc[-1] == pytest.approx(expected)
+
+
+def test_new_spy_columns_are_truncation_invariant():
+    spy = _spy(400)
+    df = make_trend_df(400, 0.10)
+    i = 350
+    full = mc.attach(df, spy_df=spy).iloc[i]
+    truncated = mc.attach(df.iloc[:i + 1], spy_df=spy.iloc[:i + 1]).iloc[i]
+    for col in ("ctx_spy_down", "ctx_spy_ret63"):
+        assert full[col] == pytest.approx(truncated[col], nan_ok=True)

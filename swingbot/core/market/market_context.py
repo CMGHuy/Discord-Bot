@@ -44,7 +44,8 @@ from swingbot.core.edge.regime2 import VOL_HISTORY, VOL_WINDOW, regime_series
 # The full context block. `has_context()` is all-or-nothing over this tuple:
 # a frame carrying only some of it is treated as carrying none, so a partial
 # rebuild can never be mistaken for a complete one.
-CTX_COLUMNS: tuple[str, ...] = ("ctx_regime", "ctx_rv_pct", "ctx_cot_z")
+CTX_COLUMNS: tuple[str, ...] = ("ctx_regime", "ctx_rv_pct", "ctx_cot_z",
+                                "ctx_spy_down", "ctx_spy_ret63")
 
 # Reserved for P2b (CFTC Traders in Financial Futures positioning). Declared
 # now so adding it later never reshapes the block. Populated with NaN, which
@@ -68,6 +69,22 @@ def _rv_percentile(spy_df: pd.DataFrame) -> pd.Series:
     return rv.rolling(VOL_HISTORY, min_periods=VOL_WINDOW * 3).rank(pct=True)
 
 
+def _spy_down(spy_df: pd.DataFrame) -> pd.Series:
+    """v104 B2: 1.0 when SPY is below a FALLING 50-day average, else 0.0.
+
+    Trailing windows only; NaN until MA50 has a 20-bar-old value to compare."""
+    close = spy_df["Close"]
+    ma50 = close.rolling(50).mean()
+    down = (close < ma50) & (ma50 < ma50.shift(20))
+    return down.astype(float).where(ma50.shift(20).notna())
+
+
+def _spy_ret63(spy_df: pd.DataFrame) -> pd.Series:
+    """v104 B2: SPY's trailing 63-bar return, the relative-weakness benchmark."""
+    close = spy_df["Close"]
+    return close / close.shift(63) - 1.0
+
+
 def attach(df: pd.DataFrame, *, spy_df: pd.DataFrame,
            cot_df: pd.DataFrame | None = None) -> pd.DataFrame:
     """Return a copy of `df` carrying the context block.
@@ -84,7 +101,9 @@ def attach(df: pd.DataFrame, *, spy_df: pd.DataFrame,
 
     out = df.copy()
     for col, series in (("ctx_regime", regime_series(spy_df)),
-                        ("ctx_rv_pct", _rv_percentile(spy_df))):
+                        ("ctx_rv_pct", _rv_percentile(spy_df)),
+                        ("ctx_spy_down", _spy_down(spy_df)),
+                        ("ctx_spy_ret63", _spy_ret63(spy_df))):
         out[col] = series.reindex(out.index, method="ffill")
 
     for col in _RESERVED:
