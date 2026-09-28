@@ -20,6 +20,8 @@ Work on a short branch/worktree named `2026-09-25-v104-structural-stops-and-shor
 
 - [ ] **A1: Default the scope.** In `swingbot/config.py`, set the `STRUCTURAL_STOP_SCOPE` Field's `default` to the passing pairs, comma-joined in `PART_A` order (e.g. `"Fibonacci:bullish,Support/Resistance:bullish"`). Prefix its help with `Validated in v104 (<date>): <pairs>, Tier <t> each. `. Set the same value in `.env.example`.
 
+- [ ] **A1b: The live post-time reject reads the ceiling (added 2026-09-28).** `f01e87e2` (bot 1.10.4, after this plan was written) made `attach_plan_v2` in `swingbot/core/scanning/analyze.py` reject any plan with `planned_loss_pct(trigger, stop) > HARD_MAX_PLANNED_LOSS_PCT` (`plan_v2_rejected="risk_cap"`). Left alone, it silently blocks every in-scope plan the moment A1 ships. Replace that bound with the plan's `stop_scope.stop_ceiling(strategy, direction, horizon)` pct (the same ceiling V104-4's fill check uses), so out of scope stays exactly 2% and in scope allows up to `max_risk_pct`. Test first in `tests/scanning/test_engine_v2_plans.py`: an in-scope 3% plan is attached, an out-of-scope 2.01% plan is still `risk_cap`, and an in-scope plan beyond `max_risk_pct` is still rejected. Keep `attach_plan_v2` from getting worse on radon CC (extract a helper if needed).
+
 - [ ] **A2: Pin the parity witnesses off.** The sizing-parity harness compares against a frozen pre-v31 copy, and structural stops are a deliberate change:
   - In `tests/backtesting/test_sizing_parity.py`, inside `_lifecycle_off`, directly after its `LEVEL_LIFECYCLE_STOPS_ENABLED` `monkeypatch.setattr(...)`, add:
 
