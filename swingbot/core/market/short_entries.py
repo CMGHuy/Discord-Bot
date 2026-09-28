@@ -13,13 +13,16 @@ import pandas as pd
 
 from swingbot.core.market.entry_filters import (DEFAULT_PARAMS, ENTRY_FUNCS, _params,
                                                 compute_shared_gates)
-from swingbot.core.market.strategy_types import HORIZONS, SHORT_STRATEGIES
+from swingbot.core.market.strategy_types import HORIZONS, SHORT_STRATEGIES, SR_VOLUME_MULTIPLE
 
 BULL_TRAP, VOL_BREAKDOWN, GAP_DRIFT = SHORT_STRATEGIES
 # Pinned to planning.params.STRUCTURE_BUFFER_ATR by a test (market never imports planning).
 STOP_ATR = 0.25
 
 DEFAULT_PARAMS[BULL_TRAP] = {"k": 3, "earnings": "hold"}
+DEFAULT_PARAMS[VOL_BREAKDOWN] = {"m": 1.0, "earnings": "hold"}
+DEFAULT_PARAMS[GAP_DRIFT] = {"g": 0.05}
+_SPY_COLUMNS = ("ctx_spy_down", "ctx_spy_ret63")
 
 _COLUMNS = ("signal", "level", "stop", "target_a", "target_b")
 
@@ -83,7 +86,51 @@ def bull_trap_frame(df: pd.DataFrame, horizon_key: str, params: dict | None = No
     }, index=df.index)
 
 
-FRAMES = {BULL_TRAP: bull_trap_frame}
+def vol_breakdown_frame(df: pd.DataFrame, horizon_key: str, params: dict | None = None) -> pd.DataFrame:
+    """B2: a close under the prior sr_lookback low, in a falling market (SPY below
+    a falling MA50), on heavy volume, with ATR EXPANDING (>= m x its 60-bar mean,
+    the reverse of atr_calm), by a name weaker than SPY over 63 bars. Without the
+    market-context block there is no signal (silent while masked)."""
+    p = _params(VOL_BREAKDOWN, params)
+    if not all(col in df.columns for col in _SPY_COLUMNS):
+        return _empty(df)
+    lookback = HORIZONS[horizon_key]["sr_lookback"]
+    gates = compute_shared_gates(df)
+    close, atr14 = df["Close"], gates["atr14"]
+    support = df["Low"].rolling(lookback).min().shift(1)
+    market_down = df["ctx_spy_down"] == 1.0
+    weaker = (close / close.shift(63) - 1.0) < df["ctx_spy_ret63"]
+    heavy = df["Volume"] >= SR_VOLUME_MULTIPLE * df["Volume"].rolling(20).mean()
+    expanding = atr14 >= float(p["m"]) * atr14.rolling(60).mean()
+    signal = ((close < support) & market_down & weaker & heavy & expanding
+              & gates["atr_floor"] & earnings_ok(df, p))
+    frame = _empty(df)
+    frame["signal"] = signal.fillna(False).astype(bool)
+    frame["level"] = support.to_numpy(dtype=float)
+    frame["stop"] = (support + STOP_ATR * atr14).to_numpy(dtype=float)
+    return frame
+
+
+def gap_drift_frame(df: pd.DataFrame, horizon_key: str, params: dict | None = None) -> pd.DataFrame:
+    """B3: the session after an earnings reaction that gapped down >= g and did
+    not recover (close below the reaction day's close). Stop above the reaction
+    day's high. Horizon-independent entry. Without earnings context, no signal."""
+    p = _params(GAP_DRIFT, params)
+    if "evt_reaction" not in df.columns:
+        return _empty(df)
+    close = df["Close"]
+    gap_day = (df["evt_reaction"] == 1.0) & (df["Open"] <= close.shift(1) * (1.0 - float(p["g"])))
+    after_gap = gap_day.shift(1, fill_value=False).astype(bool)
+    signal = after_gap & (close < close.shift(1))
+    gates = compute_shared_gates(df)
+    frame = _empty(df)
+    frame["signal"] = signal.fillna(False).astype(bool)
+    frame["level"] = close.shift(1).to_numpy(dtype=float)
+    frame["stop"] = (df["High"].shift(1) + STOP_ATR * gates["atr14"]).to_numpy(dtype=float)
+    return frame
+
+
+FRAMES = {BULL_TRAP: bull_trap_frame, VOL_BREAKDOWN: vol_breakdown_frame, GAP_DRIFT: gap_drift_frame}
 
 
 def _short_only(frame_fn):
