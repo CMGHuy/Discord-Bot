@@ -1,0 +1,210 @@
+{
+ "part": "A",
+ "strategy": "EMA Crossover",
+ "direction": "bearish",
+ "baseline": {
+  "n": 23,
+  "wins": 6,
+  "losses": 17,
+  "win_rate": 26.08695652173913,
+  "expectancy_r": -0.18015384615384614,
+  "scratch_timeout_share": 0.11538461538461539
+ },
+ "in_scope": {
+  "stats": {
+   "n": 3,
+   "wins": 1,
+   "losses": 2,
+   "win_rate": 33.33333333333333,
+   "expectancy_r": -0.10714285714285714,
+   "scratch_timeout_share": 0.5714285714285714
+  },
+  "lower_bound": -0.6666666666666666,
+  "tier1": {
+   "clears": false,
+   "clauses": {
+    "wr": false,
+    "exp_r": false,
+    "n": false,
+    "scratch": false
+   }
+  },
+  "tier2": {
+   "clears": false,
+   "clauses": {
+    "exp_r": false,
+    "lower_bound": false,
+    "n": false,
+    "scratch": false
+   }
+  },
+  "tier": null
+ },
+ "beats_baseline": true,
+ "folds": [
+  {
+   "test_year": 2013,
+   "tol": "fixed",
+   "stats": {
+    "n": 1,
+    "wins": 0,
+    "losses": 1,
+    "win_rate": 0.0,
+    "expectancy_r": -1.0,
+    "scratch_timeout_share": 0.0
+   }
+  },
+  {
+   "test_year": 2014,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2015,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2016,
+   "tol": "fixed",
+   "stats": {
+    "n": 1,
+    "wins": 0,
+    "losses": 1,
+    "win_rate": 0.0,
+    "expectancy_r": -0.5,
+    "scratch_timeout_share": 0.5
+   }
+  },
+  {
+   "test_year": 2017,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2018,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2019,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2020,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": 0.0,
+    "scratch_timeout_share": 1.0
+   }
+  },
+  {
+   "test_year": 2021,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": 0.0,
+    "scratch_timeout_share": 1.0
+   }
+  },
+  {
+   "test_year": 2022,
+   "tol": "fixed",
+   "stats": {
+    "n": 1,
+    "wins": 1,
+    "losses": 0,
+    "win_rate": 100.0,
+    "expectancy_r": 0.625,
+    "scratch_timeout_share": 0.5
+   }
+  },
+  {
+   "test_year": 2023,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2024,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2025,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  }
+ ],
+ "stage2": {
+  "clears": false,
+  "qualifying": 0,
+  "positive": 0,
+  "unselected": 0
+ },
+ "proceed_to_holdout": false,
+ "tier": null
+}

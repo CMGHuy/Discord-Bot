@@ -1,0 +1,210 @@
+{
+ "part": "A",
+ "strategy": "MA Ribbon",
+ "direction": "bullish",
+ "baseline": {
+  "n": 1139,
+  "wins": 506,
+  "losses": 633,
+  "win_rate": 44.42493415276558,
+  "expectancy_r": 0.3362888283378751,
+  "scratch_timeout_share": 0.22411444141689374
+ },
+ "in_scope": {
+  "stats": {
+   "n": 670,
+   "wins": 327,
+   "losses": 343,
+   "win_rate": 48.80597014925373,
+   "expectancy_r": 0.2581364102564102,
+   "scratch_timeout_share": 0.3128205128205128
+  },
+  "lower_bound": 0.178381327162238,
+  "tier1": {
+   "clears": false,
+   "clauses": {
+    "wr": false,
+    "exp_r": true,
+    "n": true,
+    "scratch": true
+   }
+  },
+  "tier2": {
+   "clears": true,
+   "clauses": {
+    "exp_r": true,
+    "lower_bound": true,
+    "n": true,
+    "scratch": true
+   }
+  },
+  "tier": 2
+ },
+ "beats_baseline": false,
+ "folds": [
+  {
+   "test_year": 2013,
+   "tol": "fixed",
+   "stats": {
+    "n": 67,
+    "wins": 37,
+    "losses": 30,
+    "win_rate": 55.223880597014926,
+    "expectancy_r": 0.3709010989010989,
+    "scratch_timeout_share": 0.26373626373626374
+   }
+  },
+  {
+   "test_year": 2014,
+   "tol": "fixed",
+   "stats": {
+    "n": 52,
+    "wins": 34,
+    "losses": 18,
+    "win_rate": 65.38461538461539,
+    "expectancy_r": 0.6006753246753247,
+    "scratch_timeout_share": 0.3246753246753247
+   }
+  },
+  {
+   "test_year": 2015,
+   "tol": "fixed",
+   "stats": {
+    "n": 50,
+    "wins": 19,
+    "losses": 31,
+    "win_rate": 38.0,
+    "expectancy_r": 0.0269054054054054,
+    "scratch_timeout_share": 0.32432432432432434
+   }
+  },
+  {
+   "test_year": 2016,
+   "tol": "fixed",
+   "stats": {
+    "n": 45,
+    "wins": 20,
+    "losses": 25,
+    "win_rate": 44.44444444444444,
+    "expectancy_r": 0.2310344827586208,
+    "scratch_timeout_share": 0.22413793103448276
+   }
+  },
+  {
+   "test_year": 2017,
+   "tol": "fixed",
+   "stats": {
+    "n": 55,
+    "wins": 26,
+    "losses": 29,
+    "win_rate": 47.27272727272727,
+    "expectancy_r": 0.3233711340206187,
+    "scratch_timeout_share": 0.4329896907216495
+   }
+  },
+  {
+   "test_year": 2018,
+   "tol": "fixed",
+   "stats": {
+    "n": 32,
+    "wins": 15,
+    "losses": 17,
+    "win_rate": 46.875,
+    "expectancy_r": 0.14534,
+    "scratch_timeout_share": 0.36
+   }
+  },
+  {
+   "test_year": 2019,
+   "tol": "fixed",
+   "stats": {
+    "n": 77,
+    "wins": 40,
+    "losses": 37,
+    "win_rate": 51.94805194805194,
+    "expectancy_r": 0.3594639175257733,
+    "scratch_timeout_share": 0.20618556701030927
+   }
+  },
+  {
+   "test_year": 2020,
+   "tol": "fixed",
+   "stats": {
+    "n": 24,
+    "wins": 13,
+    "losses": 11,
+    "win_rate": 54.166666666666664,
+    "expectancy_r": 0.2550487804878048,
+    "scratch_timeout_share": 0.4146341463414634
+   }
+  },
+  {
+   "test_year": 2021,
+   "tol": "fixed",
+   "stats": {
+    "n": 60,
+    "wins": 31,
+    "losses": 29,
+    "win_rate": 51.66666666666667,
+    "expectancy_r": 0.32683544303797474,
+    "scratch_timeout_share": 0.24050632911392406
+   }
+  },
+  {
+   "test_year": 2022,
+   "tol": "fixed",
+   "stats": {
+    "n": 21,
+    "wins": 8,
+    "losses": 13,
+    "win_rate": 38.095238095238095,
+    "expectancy_r": -0.05675,
+    "scratch_timeout_share": 0.4166666666666667
+   }
+  },
+  {
+   "test_year": 2023,
+   "tol": "fixed",
+   "stats": {
+    "n": 41,
+    "wins": 22,
+    "losses": 19,
+    "win_rate": 53.65853658536586,
+    "expectancy_r": 0.29805769230769236,
+    "scratch_timeout_share": 0.21153846153846154
+   }
+  },
+  {
+   "test_year": 2024,
+   "tol": "fixed",
+   "stats": {
+    "n": 46,
+    "wins": 22,
+    "losses": 24,
+    "win_rate": 47.82608695652174,
+    "expectancy_r": 0.23430158730158723,
+    "scratch_timeout_share": 0.2698412698412698
+   }
+  },
+  {
+   "test_year": 2025,
+   "tol": "fixed",
+   "stats": {
+    "n": 20,
+    "wins": 10,
+    "losses": 10,
+    "win_rate": 50.0,
+    "expectancy_r": 0.39887500000000004,
+    "scratch_timeout_share": 0.375
+   }
+  }
+ ],
+ "stage2": {
+  "clears": true,
+  "qualifying": 13,
+  "positive": 12,
+  "unselected": 0
+ },
+ "proceed_to_holdout": false,
+ "tier": null
+}
