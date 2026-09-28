@@ -49,3 +49,51 @@ def test_plan_ceiling_is_the_hard_cap_for_non_strategy_plans(monkeypatch):
 
 def test_config_default_is_empty():
     assert config.STRUCTURAL_STOP_SCOPE == ""
+
+
+def _plan(strategy="Fibonacci", direction="bullish", entry=100.0, stop=91.0):
+    return SimpleNamespace(strategy=strategy, direction=direction, trigger_price=entry, stop_loss=stop)
+
+
+def _sizing(mode="risk_pct", balance=10_000.0, risk_pct=1.0, risk_amount=None, entry=100.0, stop=91.0):
+    if risk_amount is None:
+        risk_amount = balance * risk_pct / 100
+    return {"mode": mode, "balance": balance, "risk_pct": risk_pct, "risk_amount": risk_amount,
+            "shares": risk_amount / abs(entry - stop)}
+
+
+def test_out_of_scope_plans_are_never_blocked(monkeypatch):
+    monkeypatch.setattr(config, "STRUCTURAL_STOP_SCOPE", "", raising=False)
+    assert ss.risk_sizing_ok(_plan(), sizing_fn=lambda entry, stop: None)
+
+
+def test_in_scope_risk_pct_sizing_passes(monkeypatch):
+    monkeypatch.setattr(config, "STRUCTURAL_STOP_SCOPE", "Fibonacci:bullish", raising=False)
+    assert ss.risk_sizing_ok(_plan(), sizing_fn=lambda entry, stop: _sizing())
+
+
+def test_risk_sizing_fails_closed_on_account_pct(monkeypatch):
+    monkeypatch.setattr(config, "STRUCTURAL_STOP_SCOPE", "Fibonacci:bullish", raising=False)
+    assert not ss.risk_sizing_ok(_plan(), sizing_fn=lambda entry, stop: _sizing(mode="account_pct"))
+
+
+def test_risk_sizing_fails_closed_when_sizing_is_unavailable(monkeypatch):
+    monkeypatch.setattr(config, "STRUCTURAL_STOP_SCOPE", "Fibonacci:bullish", raising=False)
+
+    def boom(entry, stop):
+        raise OSError("account file unreadable")
+
+    assert not ss.risk_sizing_ok(_plan(), sizing_fn=lambda entry, stop: None)
+    assert not ss.risk_sizing_ok(_plan(), sizing_fn=boom)
+    assert not ss.risk_sizing_ok(_plan(), sizing_fn=lambda entry, stop: _sizing(risk_amount=0.0))
+
+
+def test_risk_sizing_fails_closed_over_budget(monkeypatch):
+    monkeypatch.setattr(config, "STRUCTURAL_STOP_SCOPE", "Fibonacci:bullish", raising=False)
+    assert not ss.risk_sizing_ok(_plan(), sizing_fn=lambda entry, stop: _sizing(risk_amount=450.0))
+
+
+def test_shorts_are_always_checked(monkeypatch):
+    monkeypatch.setattr(config, "STRUCTURAL_STOP_SCOPE", "", raising=False)
+    short = _plan(strategy=SHORT_STRATEGIES[0], direction="bearish", stop=109.0)
+    assert not ss.risk_sizing_ok(short, sizing_fn=lambda entry, stop: _sizing(mode="account_pct"))

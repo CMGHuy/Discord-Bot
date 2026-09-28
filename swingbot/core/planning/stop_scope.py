@@ -49,3 +49,20 @@ def plan_stop_ceiling(plan) -> float:
     if getattr(plan, "source", None) != "strategy":
         return HARD_MAX_PLANNED_LOSS_PCT
     return stop_ceiling(plan.strategy, plan.direction, plan.horizon_key)[0]
+
+
+def risk_sizing_ok(plan, sizing_fn=None) -> bool:
+    """Return whether an in-scope plan has safe risk-based dollar sizing."""
+    if not in_scope(plan.strategy, plan.direction):
+        return True
+    if sizing_fn is None:
+        from swingbot.core.planning.account import compute_position_size as sizing_fn
+    try:
+        sizing = sizing_fn(plan.trigger_price, plan.stop_loss)
+    except Exception:
+        return False
+    if not sizing or sizing.get("mode") != "risk_pct":
+        return False
+    risk_amount = float(sizing.get("risk_amount") or 0.0)
+    budget = float(sizing.get("balance") or 0.0) * float(sizing.get("risk_pct") or 0.0) / 100.0
+    return 0.0 < risk_amount <= budget + 0.01
