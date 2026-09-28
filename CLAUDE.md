@@ -35,7 +35,11 @@ Once a plan task's scope is clear, run it straight through. Detail: `persona.md`
 
 Root `AGENTS.md` is a condensed one-way mirror for Codex (which never loads
 `.codex/AGENTS.md`); Claude updates it, never the reverse, and a Codex edit is
-never grounds to change `CLAUDE.md`. Detail: `working-conventions.md` § Codex mirror.
+never grounds to change `CLAUDE.md`. **Every Claude setup change ships its Codex
+mirror in the same commit:** `CLAUDE.md`/`docs/claude/` → `AGENTS.md`
+(condensed), `.claude/skills|agents` → `python scripts/dev/sync_codex.py`,
+`.claude/settings.json` hooks → `.codex/hooks.json`. `tests/hooks/
+test_codex_mirror.py` fails on drift. Detail: `working-conventions.md` § Codex mirror.
 
 ## Prioritise expectancy and win rate
 

@@ -449,3 +449,72 @@ def test_writes_outside_the_doc_dirs_are_untouched():
 
 def test_plan_doc_shape_fails_open_on_a_non_string_path():
     assert _write(None, "## Phase 0\n") is None
+
+
+# --- Codex mirror reminder and Codex's apply_patch payloads -------------------
+
+def test_editing_claude_setup_reminds_to_update_the_codex_mirror():
+    for path in ("CLAUDE.md", "/repo/docs/claude/known-traps.md",
+                 r"E:\repo\.claude\skills\gate\SKILL.md",
+                 ".claude/agents/test-runner.md", ".claude/hooks/guardrails.py",
+                 ".claude/settings.json"):
+        out = evaluate(_edit(path))
+        assert out is not None, path
+        assert out["hookSpecificOutput"]["permissionDecision"] == "allow"
+        assert "sync_codex.py" in out["additionalContext"]
+        assert "AGENTS.md" in out["hookSpecificOutput"]["additionalContext"]
+
+
+def test_editing_ordinary_files_does_not_mention_codex():
+    for path in ("swingbot/config.py", "docs/claude-notes.md",
+                 ".claude/skills/gate/evals/x/prompt.md", "AGENTS.md"):
+        assert evaluate(_edit(path)) is None, path
+
+
+def test_setup_files_inside_a_worktree_do_not_warn(monkeypatch):
+    monkeypatch.setattr(os, "getcwd", lambda: "/repo/.claude/worktrees/v60-thing")
+    assert evaluate(_edit("/repo/.claude/worktrees/v60-thing/CLAUDE.md")) is None
+
+
+def test_worktree_deny_outranks_the_mirror_reminder_on_write(monkeypatch):
+    monkeypatch.setattr(os, "getcwd", lambda: "/repo")
+    out = evaluate({"tool_name": "Write", "tool_input": {
+        "file_path": "/repo/.claude/worktrees/x/CLAUDE.md", "content": ""}})
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def _patch(*headers):
+    body = "\n".join(headers)
+    return evaluate({"tool_name": "apply_patch", "tool_input": {
+        "command": f"*** Begin Patch\n{body}\n@@\n-a\n+b\n*** End Patch\n"}})
+
+
+def test_apply_patch_on_ordinary_code_is_silent():
+    assert _patch("*** Update File: swingbot/config.py") is None
+
+
+def test_apply_patch_into_another_worktree_is_denied(monkeypatch):
+    monkeypatch.setattr(os, "getcwd", lambda: "/repo")
+    out = _patch("*** Update File: .claude/worktrees/x/swingbot/config.py")
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_apply_patch_with_a_misnamed_plan_is_denied():
+    out = _patch("*** Add File: docs/superpowers/plans/my-plan.md")
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_apply_patch_deny_on_a_later_path_beats_a_warn_on_an_earlier_one():
+    out = _patch("*** Update File: CLAUDE.md",
+                 "*** Add File: docs/superpowers/plans/my-plan.md")
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_apply_patch_on_claude_setup_warns():
+    out = _patch("*** Update File: .claude/skills/gate/SKILL.md")
+    assert out["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert "sync_codex.py" in out["additionalContext"]
+
+
+def test_apply_patch_with_no_patch_text_fails_open():
+    assert evaluate({"tool_name": "apply_patch", "tool_input": {}}) is None

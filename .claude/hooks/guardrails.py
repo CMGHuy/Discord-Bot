@@ -25,9 +25,12 @@ def _deny(reason: str) -> dict:
 
 
 def _warn(message: str) -> dict:
+    # additionalContext twice: inside hookSpecificOutput is the documented
+    # PreToolUse spelling (the one Codex reads); the top-level key predates it.
     return {"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "allow",
+        "additionalContext": message,
     }, "additionalContext": message}
 
 
@@ -322,16 +325,66 @@ def _rule_plan_doc_shape(ti: dict):
     return None
 
 
+# Claude's setup is canonical and Codex runs a mirror of it (AGENTS.md,
+# .agents/skills/, .codex/agents/, .codex/hooks.json). Every edit to the
+# canonical side must land with its mirror in the same commit -- this reminder
+# fires at the edit, where the step is cheapest to remember.
+_CLAUDE_SETUP_RE = re.compile(
+    r"(?:^|/)(?:CLAUDE\.md|docs/claude/[^/]+\.md|\.claude/skills/[^/]+/SKILL\.md"
+    r"|\.claude/agents/[^/]+\.md|\.claude/hooks/[^/]+|\.claude/settings\.json)$"
+)
+
+
+def _rule_codex_mirror_reminder(ti: dict):
+    path = ti.get("file_path")
+    if not isinstance(path, str) or "/.claude/worktrees/" in path.replace("\\", "/"):
+        return None
+    if not _CLAUDE_SETUP_RE.search(path.replace("\\", "/")):
+        return None
+    return _warn(
+        "This is Claude setup, which Codex mirrors. In the same commit: run "
+        "`python scripts/dev/sync_codex.py` (regenerates .agents/skills/ and "
+        ".codex/agents/), and update AGENTS.md (condensed) and .codex/hooks.json "
+        "by hand if the rule, workflow or hook changed. "
+        "See docs/claude/working-conventions.md, Codex mirror."
+    )
+
+
+# Codex edits files through apply_patch, whose tool_input.command is the patch
+# text; the paths live in its `*** Add/Update/Delete File:` and `Move to:` lines.
+_PATCH_PATH_RE = re.compile(
+    r"^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+)$", re.MULTILINE)
+# Rule-major order: every path meets the deny rules before any path can warn.
+_PATCH_PATH_RULES = (_rule_worktree_write, _rule_plan_doc_shape,
+                     _rule_codex_mirror_reminder)
+
+
+def _rule_apply_patch(ti: dict):
+    patch = ti.get("command")
+    if not isinstance(patch, str):
+        return None
+    paths = [p.strip() for p in _PATCH_PATH_RE.findall(patch)]
+    for rule in _PATCH_PATH_RULES:
+        for path in paths:
+            decision = rule({"file_path": path})
+            if decision is not None:
+                return decision
+    return None
+
+
 # Rules run in list order; the first non-None decision wins. Warn rules are
 # appended after deny rules on the same tool, so deny takes precedence.
+# Codex (.codex/hooks.json) runs this same hook: its shell tool is `Bash` and
+# its file edits arrive as `apply_patch`, `Edit` or `Write`.
 _RULES = {
     "Glob": [_rule_unscoped_glob],
     "Bash": [_rule_protected_branch_delete, _rule_closed_preregistration,
              _rule_recursive_grep_from_root, _rule_bare_pytest, _rule_cat_big_doc],
     "Read": [_rule_huge_implemented_plan, _rule_read_big_doc],
-    "Edit": [_rule_worktree_write],
-    "Write": [_rule_worktree_write, _rule_plan_doc_shape],
+    "Edit": [_rule_worktree_write, _rule_codex_mirror_reminder],
+    "Write": [_rule_worktree_write, _rule_plan_doc_shape, _rule_codex_mirror_reminder],
     "NotebookEdit": [_rule_worktree_write],
+    "apply_patch": [_rule_apply_patch],
 }
 
 

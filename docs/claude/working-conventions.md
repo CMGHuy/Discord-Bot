@@ -284,3 +284,35 @@ executing plans, owning these conventions. The sync is **one-way**: when a
 change here or under `docs/claude/` should reach `AGENTS.md`, a Claude session
 updates it, condensed, not copied. A Codex-authored edit is never grounds to
 change `CLAUDE.md`/`docs/claude/*.md`; if the two disagree, fix `AGENTS.md`.
+
+### Codex runs the same setup, and every change ships its mirror
+
+Added 2026-09-28 at the partner's request: Codex follows the same conventions
+and workflow as Claude, so **every change to the Claude setup updates Codex in
+the same commit**, never as a follow-up. Codex 0.153 natively loads repo skills
+(`.agents/skills/`), role agents (`.codex/agents/*.toml`) and hooks
+(`.codex/hooks.json`, Claude-compatible `permissionDecision` protocol), so the
+mirror is the real setup, not a prose summary of it:
+
+| Claude (canonical) | Codex (mirror) | Sync |
+|---|---|---|
+| `CLAUDE.md`, `docs/claude/*.md` | `AGENTS.md` | by hand, condensed (32 KiB Codex cap) |
+| `.claude/skills/<n>/SKILL.md` | `.agents/skills/<n>/SKILL.md` (+ `agents/openai.yaml` disabling implicit use for `disable-model-invocation` skills) | `python scripts/dev/sync_codex.py` |
+| `.claude/agents/<n>.md` | `.codex/agents/<n>.toml` | `python scripts/dev/sync_codex.py` |
+| `.claude/settings.json` hooks | `.codex/hooks.json` | by hand; `usage-watch.ps1` is Claude-only |
+| `.claude/hooks/guardrails.py` | the same file (Codex runs it) | nothing to copy; its `apply_patch` rule is Codex's edit path |
+
+Enforcement is layered so no single miss slips through:
+
+- **At the edit:** `guardrails.py` warns on any write to a Claude setup path
+  (both agents).
+- **At the suite:** `tests/hooks/test_codex_mirror.py` runs `sync_codex.py
+  --check`: generated copies byte-current, no orphans, `AGENTS.md` naming every
+  skill, agent and `docs/claude/*.md`, and Codex's hooks running the same
+  guardrail command.
+
+The check proves *coverage*, not *meaning*: a changed rule inside
+`docs/claude/` still needs a human-judged condensation into `AGENTS.md`. Never
+hand-edit a generated file; a new Claude hook or a changed matcher needs a
+matching `.codex/hooks.json` entry, and Codex runs it only after the partner
+trusts it in `/hooks`.

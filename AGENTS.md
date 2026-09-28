@@ -12,6 +12,22 @@ mirror, synchronised one-way by Claude sessions. A Codex-specific instruction
 never modifies the canonical Claude docs; if the two disagree, this file is the
 one that is wrong.
 
+**Codex runs the same setup as Claude, not a lookalike.** Every Claude setup
+change lands with its Codex mirror in the same commit, and
+`tests/hooks/test_codex_mirror.py` fails the suite otherwise:
+
+| Claude (canonical) | Codex (mirror) | How it syncs |
+|---|---|---|
+| `CLAUDE.md`, `docs/claude/*.md` | this file | condensed by hand |
+| `.claude/skills/<n>/SKILL.md` | `.agents/skills/<n>/` | generated |
+| `.claude/agents/<n>.md` | `.codex/agents/<n>.toml` | generated |
+| `.claude/settings.json` hooks | `.codex/hooks.json` | by hand |
+
+Generated files come from `python scripts/dev/sync_codex.py` (`--check` lists
+drift); never edit them. Do not edit the Claude side from Codex either: when the
+partner asks Codex for a convention change, edit the Claude source, run the
+script and condense the change into this file, all in one commit.
+
 **Where this file lives matters.** Codex auto-loads `AGENTS.md` only from
 `~/.codex` and from the git root downward. A copy at `.codex/AGENTS.md` is never
 read, which is why this file sits at the repository root. Codex stops adding
@@ -62,6 +78,9 @@ top-tier firm:
   before claiming it works, never report done on unverified work.
 - **UX/UI designer**: design *instruments*, not decorations. A screen that hides
   how stale its data is has a correctness bug.
+
+Detail: `docs/claude/persona.md`, read before deciding how to question the
+partner or what bar a change must meet.
 
 **This persona raises the bar; it never lowers a gate.** It is what makes you
 refuse to re-run a closed pre-registration, refuse to quote pooled numbers
@@ -142,12 +161,12 @@ Read before acting:
 - `docs/claude/skills-tools.md` before choosing repo-specific skills or
   automation.
 
-## Claude's skills are checklists you can read
+## Skills: the same ones Claude uses
 
-Claude Code carries skills and slash commands that Codex has no runtime for.
-They are plain markdown under `.claude/skills/<name>/SKILL.md`, each a short
-checklist that points at the `docs/claude/` reasoning. **When the situation
-below arises, open that file and follow it before acting:**
+Claude's skills are mirrored as Codex skills under `.agents/skills/<name>/`, so
+Codex discovers them itself; each is a short checklist pointing at the
+`docs/claude/` reasoning. **When the situation below arises, the skill must run
+before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 
 | Situation | Read |
 |---|---|
@@ -160,10 +179,11 @@ below arises, open that file and follow it before acting:**
 | About to change anything on the Hetzner VM | `mirror-prod` |
 | Creating, merging or removing a git worktree | `worktree-lifecycle` |
 
-Slash-only rituals, which you follow by hand when asked for the equivalent:
-`gate` (pre-commit gate), `task-brief` (extract one plan task with its trap
-preflight), `new-doc` (new spec or plan), `close-out` (plan close-out) and
-`deploy` (Hetzner deploy sequence).
+Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
+whenever Claude would run `/<name>`: `gate` (pre-commit gate), `task-brief`
+(extract one plan task with its trap preflight), `new-doc` (new spec or plan),
+`close-out` (plan close-out) and `deploy` (Hetzner deploy sequence). Skill text
+names Claude tools (`AskUserQuestion`, `Agent`, `Grep`); use your equivalent.
 
 ## Efficient repository navigation
 
@@ -189,12 +209,15 @@ a reported "next task" until it appears in the active plan. Plan `[x]` boxes
 are not a status signal; deliverables and merge commits are. Hand wide
 exploratory searches to a subagent so raw output stays out of the main context.
 
-Claude sessions enforce these habits mechanically via `.claude/hooks/
-guardrails.py`, a `PreToolUse` hook that denies unscoped `Glob`, `grep -r` from
-the repo root, huge `implemented/` plan reads, worktree writes from the main
-tree, protected-branch deletion, closed-pre-registration backtest knobs and
-malformed spec/plan writes, and warns on bare `pytest` and `cat` of the big
-docs. That hook does not run for Codex, so follow those rules directly.
+Both agents enforce these habits with one hook, `.claude/hooks/guardrails.py`,
+wired for Codex in `.codex/hooks.json` (with the same session-status
+`SessionStart` hook). It denies `grep -r` from the repo root, worktree writes
+from the main tree, protected-branch deletion, closed-pre-registration backtest
+knobs and malformed spec/plan names, and warns on bare `pytest`, `cat` of the
+big docs, and edits to Claude setup (the mirror reminder). Codex runs a new or
+changed hook only after it is trusted in `/hooks`: if a guardrail change has not
+been reviewed there, follow its rules by hand until it is. A deny is final:
+never route around it with another tool.
 
 ## Commands
 
@@ -238,8 +261,13 @@ Use at most one subagent at a time by default: dispatch it, wait for its result,
 then decide whether another is needed. Parallel subagents need the human
 partner's explicit request; a plan's parallelisation section only describes what
 could run concurrently. The project Codex config enforces this one-agent limit.
-Claude-side role agents (`.claude/agents/`, v107) are Claude-only; Codex has no
-equivalent and needs none.
+
+Claude's role agents are mirrored as Codex agents (`.codex/agents/`); route the
+same work to them so bulk output stays out of your context:
+`test-runner` (full or fast suite), `backtest-runner` (runs past ~2 minutes),
+`prod-inspector` (read-only VM questions), `symbol-verifier` (a plan's named
+symbols exist), `task-implementer` then `task-reviewer` (one plan task each,
+from a `task-brief`), and `plan-writer` (a plan from an approved spec).
 
 ## Function complexity limit
 

@@ -1,0 +1,28 @@
+{
+  "description": "Mirror of the hooks in .claude/settings.json -- the same guardrails.py and session cursor Claude runs. Hand-maintained; keep in step with .claude/settings.json (docs/claude/working-conventions.md, Codex mirror). The Claude-only usage watcher is deliberately absent.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File .claude/hooks/session-cursor.ps1",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/guardrails.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
