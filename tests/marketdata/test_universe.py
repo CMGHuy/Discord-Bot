@@ -29,6 +29,27 @@ def test_explicit_thresholds_override_config():
     assert liquidity_ok(df, min_avg_dollar_vol=1_000_000, min_price=1.0) is True
 
 
+@pytest.mark.parametrize("symbol", ["SI=F", "XAGUSD", "GC=F", "EURUSD=X", "^GSPC"])
+def test_non_share_symbols_skip_the_dollar_volume_floor(symbol):
+    # Production 2026-09-28: SI=F read as $0.1M/day and was skipped every
+    # scan. Yahoo reports futures volume in contracts (5,000 oz each) and FX
+    # volume as 0, so Close x Volume says nothing about these markets.
+    from swingbot.core.marketdata.universe import liquidity_reason
+    df = make_ohlcv(np.full(60, 61.5), volumes=np.full(60, 1_400.0))
+    assert liquidity_reason(df, symbol=symbol) is None
+
+
+def test_symbol_aware_floor_still_applies_to_shares():
+    from swingbot.core.marketdata.universe import liquidity_reason
+    df = make_ohlcv(np.full(60, 30.0), volumes=np.full(60, 100_000.0))
+    assert "avg dollar vol" in liquidity_reason(df, symbol="THIN")
+
+
+def test_non_share_symbols_still_need_history_and_price():
+    from swingbot.core.marketdata.universe import liquidity_reason
+    assert liquidity_reason(make_ohlcv(np.full(10, 61.5)), symbol="SI=F") is not None
+
+
 def test_load_etfs_universe():
     from swingbot.core.marketdata.universe import load, universe_symbols
     rows = load("etfs")

@@ -661,7 +661,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
     # dollar volume dipped today. `return` here only skips the
     # horizon loop below (levels/scenarios/confidence/plan-v2), which
     # is the only thing left in this per-ticker analysis.
-    illiquid_reason = universe.liquidity_reason(df)
+    illiquid_reason = universe.liquidity_reason(df, symbol=ticker)
     if illiquid_reason is not None:
         log.info("%s: skipping new-signal scan -- %s", ticker, illiquid_reason)
         if progress is not None:
