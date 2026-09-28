@@ -1,4 +1,4 @@
-# v110 — Point-in-time S&P 500 training universe + confluence-scan re-check
+# v112 — Point-in-time S&P 500 training universe + confluence-scan re-check
 
 **Version:** ui 1.21.0 · bot 1.10.4
 **Bump:** bot patch
@@ -93,12 +93,12 @@ BACKTEST_CACHE_DIR=data/backtest_cache_ext python scripts/backtest/run_backtest_
 ```
 
 Record all three tables as-is in
-`docs/superpowers/results/2026-MM-DD-v110-confluence-recheck.md`, with
+`docs/superpowers/results/2026-MM-DD-v112-confluence-recheck.md`, with
 `cached/members` from the coverage file.
 
 **Pre-registered reading, fixed before any run:** if the pooled
 `confluence/pooled` ExpR is negative on **both** run 1 and the `sp500_pit`
-run, the next spec (v111+) pre-registers muting or gating confluence-scan
+run, the next spec (v113+) pre-registers muting or gating confluence-scan
 alerts (`Edge: expectancy`, judged by the v72 gate's mechanism clause). If
 either run is ≥ 0, the July finding is treated as a 2024–25 artefact and no
 gating plan is opened on this evidence.

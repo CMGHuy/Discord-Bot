@@ -1,4 +1,4 @@
-"""v110: point-in-time S&P 500 membership for survivorship-aware universes."""
+"""v112: point-in-time S&P 500 membership for survivorship-aware universes."""
 import json
 
 import pytest

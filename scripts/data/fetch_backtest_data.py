@@ -21,7 +21,7 @@ run_backtest_range.py / backtest_scenarios.py / this script's default mode
 still only read data/backtest_cache/, not market_data/.
     python scripts/data/fetch_backtest_data.py --universe sp500
 
---training-universe NAME (v110) widens the DEFAULT mode instead: it caches
+--training-universe NAME (v112) widens the DEFAULT mode instead: it caches
 watchlist + benchmark + the named universe into data/backtest_cache/ (or
 BACKTEST_CACHE_DIR), the cache every backtest script reads, so a later
 `run_backtest_range.py --universe NAME` finds the frames. Tickers Yahoo no

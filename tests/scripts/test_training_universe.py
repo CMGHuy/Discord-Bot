@@ -1,4 +1,4 @@
-"""v110: widening the backtest training universe with a point-in-time mask."""
+"""v112: widening the backtest training universe with a point-in-time mask."""
 import sys
 from pathlib import Path
 from types import SimpleNamespace
