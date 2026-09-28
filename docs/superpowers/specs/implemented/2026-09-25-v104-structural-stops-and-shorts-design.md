@@ -3,6 +3,7 @@
 **Version:** ui 1.21.0 · bot 1.10.3 (at writing)
 **Bump:** none until wiring; bot minor if any strategy × direction ships
 **Edge:** expectancy
+**Status:** Closed no-lift 2026-09-28; holdout spent: MACD bullish (FAIL, win-rate clause), Support/Resistance bullish (FAIL, bootstrap lower bound); sealed-thin: Break & Retest bullish (N=4), Volume Profile bullish (N=9) — each keeps one unspent retry once the holdout reaches 12 months (`HOLDOUT_END ≥ 2026-12-31`). All other Part A cells and all three Part B short mechanisms closed at Stage 0/1/2 on TRAIN, no shot spent. The code (stop_scope, fail-closed sizing, level-lifecycle fix, three masked short strategies) merged to `main`; `STRUCTURAL_STOP_SCOPE` stays empty. Detail: `docs/superpowers/results/2026-09-28-v104-{data,stage0,preregistration,partA,partB,holdout}.md`, `docs/claude/backtest-methodology.md`.
 
 ## Why this, and the honest prior
 
