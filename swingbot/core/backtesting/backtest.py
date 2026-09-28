@@ -72,7 +72,7 @@ from swingbot.core.edge.context import entry_context
 # their defining modules (tests/test_entry_filters.py does exactly that).
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS, SR_VOLUME_MULTIPLE  # noqa: F401
 from swingbot.core.market.strategy_types import (  # noqa: F401
-    BREAKEVEN_TRIGGER_FRACTION, STRATEGY_GATES,
+    BREAKEVEN_TRIGGER_FRACTION, SHORT_STRATEGIES, STRATEGY_GATES,
 )
 
 ENTRY_SHIFT = 0
@@ -157,6 +157,16 @@ def _plan_series(df: pd.DataFrame, strategy: str, horizon_key: str):
     return atr_series, swing_high_series, swing_low_series, volume_ratio_series, entry_levels
 
 
+def _short_plan_at(df, i, strategy, horizon_key, direction, entry, atr_val):
+    """((stop, tp1) | None, candidates) for a v104 short -- one call site keeps
+    _trade_plan_at's complexity flat."""
+    from swingbot.core.planning.short_builders import plan_short
+    picked = plan_short(df, i, strategy, horizon_key, direction, entry=entry, atr_val=atr_val)
+    if picked is None:
+        return None, []
+    return picked[:2], picked[2]
+
+
 def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_high_series=None, swing_low_series=None, volume_ratio_series=None, entry_levels=None):
     """Sizing lives in plan_engine (single source of truth shared with live
     plans); this wrapper only picks the branch from the precomputed series.
@@ -213,6 +223,8 @@ def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_hi
         result = None if structure is None else _fib_continuation_plan(
             entry, structure, direction, horizon_key, candidates,
         )
+    elif strategy in SHORT_STRATEGIES:
+        result, candidates = _short_plan_at(df, i, strategy, horizon_key, direction, entry, atr_val)
     else:
         candidates = atr_target_candidates(entry, atr_val, direction)
         result = _atr_plan(entry, atr_val, direction, horizon_key, strategy,
@@ -300,6 +312,7 @@ def run_backtest(
             PlanStatus, TradePlanV2, entry_type_for, exit_params_for,
             select_tp2,
         )
+        from swingbot.core.planning.short_builders import short_hold_cap
         _exit_params = exit_params_for(strategy)
 
     entry_idx = np.where((bullish_entries.values | bearish_entries.values))[0]
@@ -347,6 +360,7 @@ def run_backtest(
                 tp1=take_profit, tp1_fraction=0.5, tp2=tp2,
                 breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
                 trail_atr_mult=_exit_params["trail_atr_mult"],
+                hold_cap_bars=short_hold_cap(df, i, strategy),
                 quality_score=0, quality_breakdown=[],
                 badge="WEAK", badge_stats={}, status=PlanStatus.ACTIVE,
             )

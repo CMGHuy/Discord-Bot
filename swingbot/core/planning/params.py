@@ -39,6 +39,10 @@ EXIT_V2_PARAMS: dict[str, dict] = {
     "RSI Divergence": {"trail_atr_mult": 2.0, "tp2": False},  # N=1702 WR=81.0 ExpR=+0.218
     "Volume Profile": {"trail_atr_mult": 3.0, "tp2": False},  # N=73   WR=82.2 ExpR=+0.180
     "Fibonacci Continuation": {"trail_atr_mult": 2.5, "tp2": True},
+    # v104 Part B shorts: fixed by spec §3 (not a TRAIN-grid result).
+    "Bull Trap":               {"trail_atr_mult": 2.5, "tp2": False},
+    "Vol Expansion Breakdown": {"trail_atr_mult": 2.5, "tp2": False},
+    "Earnings Gap Drift":      {"trail_atr_mult": 2.5, "tp2": False},
 }
 
 

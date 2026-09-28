@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from swingbot.core.market import levels, opex
-from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION, HORIZONS
+from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION, HORIZONS, SHORT_STRATEGIES
 from swingbot.core.risk_limits import capped_planned_loss_pct, planned_loss_pct
 from .plan_types import PlanStatus, TradePlanV2, record_transition
 from . import params as plan_params
@@ -199,12 +199,25 @@ def _atr_branch(inputs):
     return _branch_result(result, candidates, applied_stop_mult)
 
 
+def _short_branch(inputs):
+    """v104 Part B shorts: planning/short_builders.py."""
+    from .short_builders import plan_short
+
+    picked = plan_short(inputs.df, inputs.index, inputs.strategy, inputs.horizon_key,
+                        inputs.direction, entry=inputs.close, atr_val=inputs.atr_val,
+                        scan_params=inputs.scan_params)
+    if picked is None:
+        return None
+    return _branch_result(picked[:2], picked[2])
+
+
 _STRUCTURAL_BRANCHES = {
     "Fibonacci": _fib_branch,
     "Support/Resistance": _sr_branch,
     "Elliott Wave": _elliott_branch,
     "Fibonacci Continuation": _fib_continuation_branch,
 }
+_STRUCTURAL_BRANCHES.update({name: _short_branch for name in SHORT_STRATEGIES})
 
 
 def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
