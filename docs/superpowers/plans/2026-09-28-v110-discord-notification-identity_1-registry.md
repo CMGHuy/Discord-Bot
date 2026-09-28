@@ -781,8 +781,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- swingbot/core/presen
 - Consumes: V110-1's `kinds.stripe`, `kinds.footer`, `kinds.title`, `kinds.content_line` and `Kind`.
 - Produces:
   - `ui.apply_chrome(embed, *, accent=None, plan_id=None, kind=None, level=None, r=None, blocked=False) -> None`. With `kind`, the stripe and footer come from the registry. Without it, `accent` is required and the legacy disclaimer footer is kept for command replies. With neither, it raises `ValueError`.
-  - `ui.PushEmbed(discord.Embed)` with a `push_text` slot.
-  - `ui.push_embed(kind, ticker="", direction=None, detail="", *, description=None) -> PushEmbed`, which sets `title` and `push_text` from the registry.
+  - `ui.PushEmbed(discord.Embed)` with `push_text` and `kind` slots. `kind` is read by v111's V111-18 "alert posted" log line; `push_kwargs` never passes it to `send()`.
+  - `ui.push_embed(kind, ticker="", direction=None, detail="", *, description=None) -> PushEmbed`, which sets `title` and `push_text` from the registry and records `kind`.
   - `ui.push_kwargs(embed) -> dict`: `{"embed": e, "content": e.push_text}` when the embed carries a push line, else `{"embed": e}`. This also holds for plain embeds and the strings the existing tests pass.
 
 - [ ] **Step 1: Write the failing tests**
@@ -825,6 +825,7 @@ def test_push_embed_carries_title_and_push_line():
     assert isinstance(embed, discord.Embed)
     assert embed.title == "🆕 ▲ LONG AAPL · ALERT · Lv4 ⭐"
     assert embed.push_text == "🆕 NEW SETUP · ▲ LONG AAPL · ALERT · Lv4 ⭐"
+    assert embed.kind is Kind.SETUP_ALERT
     assert embed.description == "body"
 
 
@@ -881,9 +882,10 @@ class PushEmbed(discord.Embed):
     A phone push shows a message's ``content``, never the embed title, so every
     pushed builder returns one of these and every sender passes
     ``push_kwargs(embed)`` to ``send()``. Carrying the line on the embed keeps
-    the alert tuples' shape unchanged."""
+    the alert tuples' shape unchanged. ``kind`` is kept for v111's
+    "alert posted" log line and is never sent."""
 
-    __slots__ = ("push_text",)
+    __slots__ = ("push_text", "kind")
 
 
 def push_embed(kind: Kind, ticker: str = "", direction: str | None = None,
@@ -891,6 +893,7 @@ def push_embed(kind: Kind, ticker: str = "", direction: str | None = None,
     """A PushEmbed whose title and push line both come from the registry."""
     embed = PushEmbed(title=kinds.title(kind, ticker, direction, detail), description=description)
     embed.push_text = kinds.content_line(kind, ticker, direction, detail)
+    embed.kind = kind
     return embed
 
 
