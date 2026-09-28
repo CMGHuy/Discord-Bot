@@ -235,6 +235,14 @@ FIELDS: list[Field] = [
           help="v103. Comma-separated: bullish, bearish, or both. Empty disables "
                "FIB_LEVEL_STOP_ATR entirely, so it can ship for only the direction(s) whose "
                "VALIDATION shot passed."),
+    Field("STRUCTURAL_STOP_SCOPE", "STRUCTURAL_STOP_SCOPE", "Trade Filters & Risk",
+          "Structural stops (Strategy:direction list)",
+          type="text", default="",
+          help="v104. Comma-separated Strategy:direction pairs (e.g. 'Fibonacci:bullish') whose "
+               "plans keep their structural stop up to the horizon's max_risk_pct and are sized to "
+               "a fixed dollar risk, instead of being capped at the 2% price cap. A stop beyond that "
+               "ceiling drops the signal. Empty = every strategy uses the 2% cap. A pair is added "
+               "only after its pre-registered 2026 holdout shot passes."),
     Field("MIN_ALERT_CONFIDENCE_LEVEL", "MIN_ALERT_CONFIDENCE_LEVEL", "Trade Filters & Risk", "Min confidence level to alert",
           type="select", default="4", options=["1", "2", "3", "4", "5"],
           help="Only this level and above are shown as alerts (quality over quantity)."),
@@ -880,7 +888,8 @@ FIELDS: list[Field] = [
           help="Moves a stop out beyond a support/resistance level that price has actually "
                "tested and held, instead of leaving it at the ATR default inside that noise "
                "(swingbot/core/market/levels_lifecycle.py). Only ever widens, never tightens, is "
-               "capped by the horizon's max_risk_pct, and re-selects the target against the new "
+               "capped by the plan's stop ceiling (the 2% hard cap, or the horizon's max_risk_pct "
+               "for STRUCTURAL_STOP_SCOPE pairs), and re-selects the target against the new "
                "risk from the same candidate levels the plan was built from -- rolling the "
                "widening back entirely if nothing still clears the min reward:risk ratio at the "
                "new stop. Costs a level build per entry bar in backtests. "

@@ -7,6 +7,7 @@ from swingbot import config
 from swingbot.core.market.strategy_types import HORIZONS
 from .plan_types import TradePlanV2
 from .params import STRUCTURE_BUFFER_ATR
+from .stop_scope import stop_ceiling
 from .targets import select_structural_target
 
 log = logging.getLogger("swing-bot.plan_engine")
@@ -72,9 +73,12 @@ def apply_level_lifecycle(df, index, *, entry, stop, tp1, atr_val, direction,
 
     from swingbot.core.market import levels_lifecycle
 
-    h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
-    max_risk_amount = entry * (h["max_risk_pct"] / 100)
+    # v104 Part 0: bounded by the plan's own stop ceiling. Out of scope that is
+    # the 2% hard cap the builders already applied -- widening past it built
+    # backtest trades the live fill check cancels (known-traps.md).
+    ceiling_pct, _mode = stop_ceiling(strategy, direction, horizon_key)
+    max_risk_amount = entry * (ceiling_pct / 100)
     buffer = STRUCTURE_BUFFER_ATR * atr_val
     meta: dict = {}
 

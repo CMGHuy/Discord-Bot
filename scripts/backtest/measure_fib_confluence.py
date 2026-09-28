@@ -41,11 +41,11 @@ from swingbot.core.backtesting.backtest import run_backtest  # noqa: E402
 from swingbot.core.market.entry_filters import entries_for, gate_override  # noqa: E402
 from swingbot.core.market.strategy_types import HORIZONS, STRATEGY_GATES  # noqa: E402
 from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason  # noqa: E402
-from fib_funnel import FOLD_YEARS, MIN_N_TRAIN, MIN_N_VALIDATION  # noqa: E402
-from fib_funnel import badge_verdict, fold_verdict, plateau_ok, pooled  # noqa: E402
-from fib_funnel import cell_key as tol_key  # noqa: E402
-from fib_funnel import dir_rows as _dir, year_rows as _years  # noqa: E402
-from fib_funnel import fold_pick as _fold_pick_on  # noqa: E402
+from funnel import FOLD_YEARS, MIN_N_TRAIN, MIN_N_VALIDATION  # noqa: E402
+from funnel import badge_verdict, fold_verdict, plateau_ok, pooled  # noqa: E402
+from funnel import cell_key as tol_key  # noqa: E402
+from funnel import dir_rows as _dir, year_rows as _years  # noqa: E402
+from funnel import fold_pick as _fold_pick_on  # noqa: E402
 
 STRATEGY = "Fibonacci"
 DIRECTIONS = ("bullish", "bearish")

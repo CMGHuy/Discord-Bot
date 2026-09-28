@@ -9,6 +9,7 @@ from swingbot.core.market import market_context
 from swingbot.core.market.entry_filters import ENTRY_FUNCS, entries_for
 from swingbot.core.planning.builders import build_strategy_plan
 from swingbot.core.planning.params import stamp_badge, stamp_cohort, stamp_entry_context
+from swingbot.core.planning.stop_scope import risk_sizing_ok
 from swingbot.core.tracking import ledger as ledger_mod
 from swingbot.core.edge.rs_gate import rs_verdict
 from swingbot.core.scanning.alert_embeds import build_strategy_alert_embed
@@ -84,12 +85,90 @@ class PassResult:
     stored_only: int = 0
     rs_blocked: int = 0
     skipped_dup: int = 0
+    sizing_blocked: int = 0
+
+
+@dataclass
+class _PassDeps:
+    """The collaborators one strategy pass threads through every signal."""
+
+    plan_store: object
+    trade_log: object
+    mode: str
+    live_allow: set
+    rs_combined_of: object
+    asof_of: object = None
+
+
+def _regime_for(regimes, frame):
+    if regimes is None:
+        return None
+    # Lazy import avoids scan engine's analyze <-> engine import cycle.
+    from swingbot.core.scanning import analyze
+
+    return analyze._regime_at(regimes, frame.index[-1])
+
+
+def _rs_blocked(ticker: str, direction: str, rs_combined_of) -> bool:
+    """Return whether the live v93 laggard rule blocks a bearish signal."""
+    if direction != "bearish":
+        return False
+    rs_value = rs_combined_of(ticker)
+    verdict = rs_verdict(ticker, direction, rs_value if rs_value is not None else 50.0,
+                         rs_available=rs_value is not None)
+    return verdict["status"] == "block"
+
+
+def _open_trade(deps: _PassDeps, plan, *, ticker, strategy, horizon, direction) -> None:
+    deps.trade_log.log_trade(
+        ticker=ticker, strategy=strategy, horizon_key=horizon, direction=direction,
+        confidence_level=None, confidence_label="strategy signal", entry=plan.trigger_price,
+        stop_loss=plan.stop_loss, take_profit=plan.tp1, target2=plan.tp2,
+        plan_id=plan.plan_id, badge=plan.badge, quality_score=plan.quality_score,
+        source=plan.source, cohort_label=plan.cohort_label,
+        cohort_stats=plan.cohort_stats, risk_features=plan.risk_features,
+        ledger=plan.ledger, entry_context=plan.entry_context)
+
+
+def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, horizon,
+                 bar_date, regime, deps: _PassDeps) -> None:
+    """Store and, when eligible, alert one fired strategy signal."""
+    if already_emitted(deps.plan_store, ticker, strategy, horizon, bar_date):
+        result.skipped_dup += 1
+        return
+    if _rs_blocked(ticker, direction, deps.rs_combined_of):
+        result.rs_blocked += 1
+        return
+    plan = build_strategy_plan_at(
+        frame, ticker=ticker, strategy=strategy, horizon_key=horizon,
+        direction=direction, regime2_state=regime,
+        asof=deps.asof_of(ticker) if deps.asof_of else None)
+    if plan is None:
+        return
+    if not risk_sizing_ok(plan):
+        log.error(
+            "strategy pass: %s %s %s %s uses structural stops but has no risk-based sizing "
+            "-- not stored, not posted (v104 fail-closed)",
+            ticker, strategy, horizon, direction)
+        result.sizing_blocked += 1
+        return
+    deps.plan_store.add(plan)
+    result.plans.append(plan)
+    goes_live = deps.mode == "live" and (not deps.live_allow or strategy in deps.live_allow)
+    if not goes_live or deps.trade_log.open_trade_for_ticker(ticker) is not None:
+        result.stored_only += 1
+        return
+    _open_trade(deps, plan, ticker=ticker, strategy=strategy, horizon=horizon, direction=direction)
+    result.opened += 1
+    result.alerts.append((build_strategy_alert_embed(plan), None, plan, simple_line(plan)))
 
 
 def run_strategy_pass(tickers, fresh_data, *, now, horizons, spy_df, regimes,
-                      rs_combined_of, mode: str, live_allow: set, trade_log, plan_store, asof_of=None) -> PassResult:
+                      rs_combined_of, mode: str, live_allow: set, trade_log, plan_store,
+                      asof_of=None) -> PassResult:
     """Build strategy plans after confluence; only eligible live plans open trades."""
     result = PassResult()
+    deps = _PassDeps(plan_store, trade_log, mode, live_allow, rs_combined_of, asof_of)
     for ticker in tickers:
         raw = fresh_data.get(ticker)
         if raw is None or len(raw) == 0:
@@ -99,44 +178,11 @@ def run_strategy_pass(tickers, fresh_data, *, now, horizons, spy_df, regimes,
             if frame is None or len(frame) == 0:
                 continue
             bar_date = frame.index[-1].date().isoformat()
-            if regimes is not None:
-                # Lazy import avoids scan engine's analyze <-> engine import cycle.
-                from swingbot.core.scanning import analyze
-                regime = analyze._regime_at(regimes, frame.index[-1])
-            else:
-                regime = None
+            regime = _regime_for(regimes, frame)
             for horizon in horizons:
                 for strategy, direction in strategy_signals(frame, horizon, spy_df=spy_df):
-                    if already_emitted(plan_store, ticker, strategy, horizon, bar_date):
-                        result.skipped_dup += 1
-                        continue
-                    if direction == "bearish":
-                        rs_value = rs_combined_of(ticker)
-                        verdict = rs_verdict(ticker, direction, rs_value if rs_value is not None else 50.0,
-                                             rs_available=rs_value is not None)
-                        if verdict["status"] == "block":
-                            result.rs_blocked += 1
-                            continue
-                    plan = build_strategy_plan_at(frame, ticker=ticker, strategy=strategy,
-                                                  horizon_key=horizon, direction=direction, regime2_state=regime,
-                                                  asof=asof_of(ticker) if asof_of else None)
-                    if plan is None:
-                        continue
-                    plan_store.add(plan)
-                    result.plans.append(plan)
-                    goes_live = mode == "live" and (not live_allow or strategy in live_allow)
-                    if not goes_live or trade_log.open_trade_for_ticker(ticker) is not None:
-                        result.stored_only += 1
-                        continue
-                    trade_log.log_trade(ticker=ticker, strategy=strategy, horizon_key=horizon, direction=direction,
-                                        confidence_level=None, confidence_label="strategy signal", entry=plan.trigger_price,
-                                        stop_loss=plan.stop_loss, take_profit=plan.tp1, target2=plan.tp2,
-                                        plan_id=plan.plan_id, badge=plan.badge, quality_score=plan.quality_score,
-                                        source=plan.source, cohort_label=plan.cohort_label,
-                                        cohort_stats=plan.cohort_stats, risk_features=plan.risk_features,
-                                        ledger=plan.ledger, entry_context=plan.entry_context)
-                    result.opened += 1
-                    result.alerts.append((build_strategy_alert_embed(plan), None, plan, simple_line(plan)))
+                    _emit_signal(result, frame, ticker=ticker, strategy=strategy, direction=direction,
+                                 horizon=horizon, bar_date=bar_date, regime=regime, deps=deps)
         except Exception:
             log.warning("strategy pass: %s failed -- continuing", ticker, exc_info=True)
     return result

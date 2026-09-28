@@ -271,5 +271,8 @@ x 4w/3m/6m, v2 exits with scale-out.
 - **Lifecycle off:** the worst was exactly 2.00%.
 
 Every post-cap TRAIN/VALIDATION figure (v101–v103 included) was measured
-with this gap in place. It is unfixed, and the fix needs its own plan
-(`Edge: none (integrity)`). Detail: `docs/strategy-types/shared-mechanics.md` §4a.
+with this gap in place. Detail: `docs/strategy-types/shared-mechanics.md` §4a.
+
+**Fixed by v104 Part 0 (V104-2):** the widening ceiling is now
+`stop_scope.stop_ceiling(...)` -- 2% out of scope. Numbers measured before
+this fix are not comparable to numbers after it.

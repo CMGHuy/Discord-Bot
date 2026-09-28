@@ -80,6 +80,10 @@ class TradePlanV2:
     # STALL_EXIT_ENABLED is off or the strategy lacks enough journaled
     # winners -- see params._resolve_stall_exit_day.
     stall_exit_day: int | None = None
+    # v104 §3.4: bars after entry at which a short on its `exit_before`
+    # earnings setting is closed -- the bar before the report reacts. None =
+    # the horizon's own max_holding_days. Only ever SHORTENS the hold.
+    hold_cap_bars: int | None = None
     # E38: the one pyramid SUGGESTION emitted for this plan, or None. Its
     # presence is what makes the add fire at most once. The bot never sizes
     # real money -- this records what was suggested, not a position.

@@ -16,13 +16,13 @@ from typing import NamedTuple
 from swingbot import config
 from swingbot.core.market.session import (is_quiet_hours, is_regular_session,
                                           is_tape_open, session_date)
-from swingbot.core.risk_limits import (HARD_MAX_PLANNED_LOSS_PCT,
-                                       planned_loss_pct)
+from swingbot.core.risk_limits import planned_loss_pct
 from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
                                        chandelier_stop, pending_expired,
                                        pending_invalidated, record_transition,
                                        runner_floor)
 from swingbot.core.planning.plan_store import PlanStore
+from swingbot.core.planning.stop_scope import plan_stop_ceiling
 from swingbot.core.planning.plan_types import breakeven_trigger, effective_stop
 
 log = logging.getLogger("swing-bot.plan_manager")
@@ -382,13 +382,14 @@ class PlanManager:
         if plan.status not in (PlanStatus.ACTIVE, PlanStatus.PARTIAL):
             return
         risk_pct = planned_loss_pct(plan.entry_price, plan.stop_loss)
-        if risk_pct <= HARD_MAX_PLANNED_LOSS_PCT or plan.plan_id in self._risk_cap_warned:
+        ceiling_pct = plan_stop_ceiling(plan)
+        if risk_pct <= ceiling_pct or plan.plan_id in self._risk_cap_warned:
             return
         self._risk_cap_warned.add(plan.plan_id)
         log.warning(
             "risk cap: active plan %s (%s) has a %.2f%% initial stop, above the %.2f%% cap; "
             "leaving the existing position unchanged",
-            plan.plan_id, plan.ticker, risk_pct, HARD_MAX_PLANNED_LOSS_PCT,
+            plan.plan_id, plan.ticker, risk_pct, ceiling_pct,
         )
 
     def _on_event(self, plan: TradePlanV2, event: PlanEvent) -> None:
@@ -516,7 +517,8 @@ class PlanManager:
             fill = max(price, plan.trigger_price) if is_bull \
                 else min(price, plan.trigger_price)
             risk_pct = planned_loss_pct(fill, plan.stop_loss)
-            if risk_pct > HARD_MAX_PLANNED_LOSS_PCT:
+            ceiling_pct = plan_stop_ceiling(plan)
+            if risk_pct > ceiling_pct:
                 record_transition(plan, PlanStatus.CANCELLED, reason="risk_cap",
                                   at=self._now())
                 self.store.update(plan)
@@ -524,7 +526,7 @@ class PlanManager:
                     "entry_price": fill,
                     "stop_loss": plan.stop_loss,
                     "planned_loss_pct": round(risk_pct, 4),
-                    "max_planned_loss_pct": HARD_MAX_PLANNED_LOSS_PCT,
+                    "max_planned_loss_pct": ceiling_pct,
                 })]
             plan.entry_price = fill
             record_transition(plan, PlanStatus.ACTIVE, reason="stop_entry_fill",

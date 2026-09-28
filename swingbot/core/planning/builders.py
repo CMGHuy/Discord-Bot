@@ -7,11 +7,12 @@ from dataclasses import dataclass
 import numpy as np
 
 from swingbot.core.market import levels, opex
-from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION, HORIZONS
+from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION, HORIZONS, SHORT_STRATEGIES
 from swingbot.core.risk_limits import capped_planned_loss_pct, planned_loss_pct
 from .plan_types import PlanStatus, TradePlanV2, record_transition
 from . import params as plan_params
 from .lifecycle import apply_level_lifecycle
+from .stop_scope import DROP, stop_ceiling
 from .params import (DEFAULT_EXPIRY_BARS, STRUCTURE_BUFFER_ATR, TP1_FRACTION,
                      TRAIL_ATR_MULT)
 from .targets import (_safe_atr_value, _tp2_from_r, atr_target_candidates,
@@ -19,6 +20,17 @@ from .targets import (_safe_atr_value, _tp2_from_r, atr_target_candidates,
                       fib_continuation_targets,
                       select_structural_target, select_tp2,
                       sr_target_candidates)
+
+
+def _bounded_stop(entry, stop_loss, is_bull, strategy, direction, horizon_key):
+    """Return a compliant stop, capping or dropping by the scope's mode."""
+    ceiling_pct, mode = stop_ceiling(strategy, direction, horizon_key)
+    max_risk_amount = entry * (ceiling_pct / 100)
+    if abs(entry - stop_loss) <= max_risk_amount:
+        return stop_loss
+    if mode == DROP:
+        return None
+    return entry - max_risk_amount if is_bull else entry + max_risk_amount
 
 
 def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None,
@@ -38,7 +50,7 @@ def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None,
     Scaling `risk_distance` (rather than the stop price) keeps the stop's
     ATR-multiple exact -- the same distance feeds both the stop and, via
     select_structural_target's own risk argument, the target floor/cap.
-    `strategy` is accepted but unused: the ladder is identical for all
+    `strategy` selects the stop ceiling (v104 stop_scope); the ladder is identical for all
     eight fallback strategies (kept for call-site signature parity, not
     because a per-strategy R:R table survives here -- that table is
     deleted in Task 14).
@@ -51,10 +63,10 @@ def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None,
     risk_distance = h["atr_stop_multiple"] * atr_val
     if stop_mult is not None:
         risk_distance *= stop_mult
-    max_risk_amount = entry * (capped_planned_loss_pct(h["max_risk_pct"]) / 100)
-    if risk_distance > max_risk_amount:
-        risk_distance = max_risk_amount
     stop_loss = entry - risk_distance if is_bull else entry + risk_distance
+    stop_loss = _bounded_stop(entry, stop_loss, is_bull, strategy, direction, horizon_key)
+    if stop_loss is None:
+        return None
 
     take_profit = select_structural_target(
         entry, stop_loss, is_bull, candidate_levels or [],
@@ -187,12 +199,25 @@ def _atr_branch(inputs):
     return _branch_result(result, candidates, applied_stop_mult)
 
 
+def _short_branch(inputs):
+    """v104 Part B shorts: planning/short_builders.py."""
+    from .short_builders import plan_short
+
+    picked = plan_short(inputs.df, inputs.index, inputs.strategy, inputs.horizon_key,
+                        inputs.direction, entry=inputs.close, atr_val=inputs.atr_val,
+                        scan_params=inputs.scan_params)
+    if picked is None:
+        return None
+    return _branch_result(picked[:2], picked[2])
+
+
 _STRUCTURAL_BRANCHES = {
     "Fibonacci": _fib_branch,
     "Support/Resistance": _sr_branch,
     "Elliott Wave": _elliott_branch,
     "Fibonacci Continuation": _fib_continuation_branch,
 }
+_STRUCTURAL_BRANCHES.update({name: _short_branch for name in SHORT_STRATEGIES})
 
 
 def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
@@ -458,10 +483,11 @@ def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_ke
             return None
     else:
         buffer = STRUCTURE_BUFFER_ATR * atr_val
-        stop_loss = swing_low - buffer if is_bull else swing_high + buffer
-        max_risk_amount = entry * (capped_planned_loss_pct(h["max_risk_pct"]) / 100)
-        if abs(entry - stop_loss) > max_risk_amount:
-            stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
+        stop_loss = _bounded_stop(
+            entry, swing_low - buffer if is_bull else swing_high + buffer,
+            is_bull, "Fibonacci", direction, horizon_key)
+        if stop_loss is None:
+            return None
 
     take_profit = select_structural_target(
         entry, stop_loss, is_bull, candidate_levels or [],
@@ -480,7 +506,11 @@ def _sr_plan(entry, volume_ratio, direction, horizon_key, candidate_levels=None,
         params = ScanParams.from_config()
     h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
-    stop_pct = capped_planned_loss_pct(h["sr_stop_pct"])
+    # min(sr_stop_pct, ceiling) is exactly capped_planned_loss_pct out of scope
+    # (ceiling 2.0), and sr_stop_pct itself in scope (sr_stop_pct == max_risk_pct
+    # in every horizon, so it never needs dropping).
+    stop_pct = min(float(h["sr_stop_pct"]), stop_ceiling(
+        "Support/Resistance", direction, horizon_key)[0])
     stop_loss = entry * (1 - stop_pct / 100) if is_bull else entry * (1 + stop_pct / 100)
 
     take_profit = select_structural_target(
@@ -500,14 +530,13 @@ def _elliott_plan(entry, atr_val, wave2, direction, horizon_key, candidate_level
     if params is None:
         from swingbot.scan_params import ScanParams
         params = ScanParams.from_config()
-    h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
     buffer = STRUCTURE_BUFFER_ATR * atr_val
-    stop_loss = wave2 - buffer if is_bull else wave2 + buffer
-
-    max_risk_amount = entry * (capped_planned_loss_pct(h["max_risk_pct"]) / 100)
-    if abs(entry - stop_loss) > max_risk_amount:
-        stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
+    stop_loss = _bounded_stop(
+        entry, wave2 - buffer if is_bull else wave2 + buffer,
+        is_bull, "Elliott Wave", direction, horizon_key)
+    if stop_loss is None:
+        return None
 
     take_profit = select_structural_target(
         entry, stop_loss, is_bull, candidate_levels or [],
