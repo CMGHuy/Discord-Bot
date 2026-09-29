@@ -58,7 +58,21 @@ def _count_sources(frames) -> dict:
     return counts
 
 
-def _maybe_run_strategy_pass(*, tickers, fresh_data, spy_df, regimes, rs_cache, sector_of_ticker,
+def _skip_rejected_plan(item, require_confirmation: bool) -> None:
+    """Log a confirmed setup whose plan was rejected at build, and revoke its
+    confirmation: nothing was posted, so the setup must stay able to confirm
+    and alert on a later scan (e.g. once its stop fits the 2% cap). Left
+    confirmed, it stayed silent for good (production, 2026-09-28/29)."""
+    scenario = item.plan
+    log.info("%s (%s, %s): plan rejected (%s, stop %.2f%% from entry) -- not posted",
+             item.result.ticker, item.result.horizon_key, item.result.trend,
+             item.plan_v2_rejected, getattr(scenario, "stop_distance_pct", float("nan")))
+    if require_confirmation:
+        state.revoke_confirmation(item.result.state_key, item.result.state_value,
+                                  item.previous_confirmed)
+
+
+def _maybe_run_strategy_pass(*,tickers, fresh_data, spy_df, regimes, rs_cache, sector_of_ticker,
                              etf_symbol_of_sector, sector_etf_frames, trade_log, alerts,
                              require_confirmation) -> dict:
     """Run v93's opt-in path; manual checks are strictly shadow-only."""
@@ -438,6 +452,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 # the old inline loop, which never even built it.
                 if not item.all_requirements_met:
                     continue
+                item.previous_confirmed = state.confirmed_value(item.result.state_key)
                 confirmed = state.confirm_or_update(
                     item.result.state_key, item.result.state_value,
                     required_confirmations=config.SIGNAL_CONFIRMATION_SCANS,
@@ -522,9 +537,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 if (config.PLAN_ENGINE_V2 == "on"
                         and getattr(item, "plan_v2_rejected", None)):
                     filtered_by_rr += 1
-                    log.debug("%s (%s, %s): plan rejected (%s) -- skipped",
-                              item.result.ticker, item.result.horizon_key,
-                              item.result.trend, item.plan_v2_rejected)
+                    _skip_rejected_plan(item, require_confirmation)
                     continue          # never reaches scan_items -> never alerts
             scan_items.append(item)
 

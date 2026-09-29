@@ -82,3 +82,20 @@ class StateStore:
 
             self._write(key, entry)
             return False
+
+    def confirmed_value(self, key: str) -> str | None:
+        """The last confirmed state_value for `key`, or None if none yet."""
+        with _LOCK:
+            return self._read(key).get("trend")
+
+    def revoke_confirmation(self, key: str, value: str, previous: str | None) -> None:
+        """Undo a confirmation whose alert was never posted (its plan was
+        rejected at build): restore `previous`, so the same value has to
+        re-confirm -- and can alert -- on a later scan. A no-op if `value`
+        is no longer the confirmed state."""
+        with _LOCK:
+            entry = dict(self._read(key))
+            if entry.get("trend") != value:
+                return
+            entry["trend"] = previous
+            self._write(key, entry)
