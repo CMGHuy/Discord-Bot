@@ -59,3 +59,33 @@ def test_parity_names_missing_extra_and_mismatched_rows(isolated):
 def test_unknown_store_raises_instead_of_reporting_clean(isolated):
     with pytest.raises(KeyError):
         parity("not-a-store")
+
+
+def test_midnight_utc_created_at_renders_back_to_a_date():
+    """plans.json stores date-only strings; the promoted timestamptz widens them."""
+    import datetime as dt
+
+    from scripts.db.parity_report import _plans_from_repo_shape
+    row = {"plan_id": "p1",
+           "created_at": dt.datetime(2026, 8, 11, tzinfo=dt.timezone.utc)}
+    assert _plans_from_repo_shape(row)["created_at"] == "2026-08-11"
+
+
+def test_a_created_at_with_a_real_time_is_left_alone():
+    """Only midnight collapses -- a genuine timestamp must not lose its time."""
+    import datetime as dt
+
+    from scripts.db.parity_report import _plans_from_repo_shape
+    row = {"plan_id": "p1",
+           "created_at": dt.datetime(2026, 8, 11, 12, 3, 7, tzinfo=dt.timezone.utc)}
+    assert _plans_from_repo_shape(row)["created_at"].startswith("2026-08-11T12:03:07")
+
+
+def test_a_null_created_at_survives():
+    from scripts.db.parity_report import _plans_from_repo_shape
+    assert _plans_from_repo_shape({"plan_id": "p1", "created_at": None})["created_at"] is None
+
+
+def test_a_plan_without_created_at_survives():
+    from scripts.db.parity_report import _plans_from_repo_shape
+    assert "created_at" not in _plans_from_repo_shape({"plan_id": "p1"})
