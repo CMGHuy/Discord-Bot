@@ -268,6 +268,25 @@ gives the admin UI a real public hostname via a Cloudflare Tunnel
 (`docker-compose.yml`'s `cloudflared` service, off by default behind the
 `tunnel` Compose profile).
 
+## PostgreSQL (v67 migration, in progress)
+
+The `db` service (`postgres:18-alpine`) keeps its data in the `pgdata` volume.
+The port is deliberately unpublished; reach it with
+`docker compose exec db psql -U swingbot -d swingbot`.
+
+- **Stages.** `DB_STORES` in `.env` selects a per-store stage
+  (`name:json|dual|db`). Empty means every store is JSON-only and nothing reads
+  the database. Stages are re-read on SIGHUP.
+- **Schema.** `docker compose exec bot alembic upgrade head`.
+- **Import.** `scripts/ops/reimport_production.sh` re-imports every migrated
+  store from JSON (idempotent upserts, JSON read-only) and prints counts. Run it
+  from WSL, piped over ssh; the header of the script has the exact command.
+- **Verification.** `docker compose exec -T bot python scripts/db/parity_report.py --all`
+  is the only verifier to trust; an import's own summary is not authoritative.
+
+**Nightly backups do not exist yet** (v67 P6-03/P6-04 are unbuilt). No store may
+reach the `db` stage until they do.
+
 ## Useful one-liners on the server
 
 ```bash
