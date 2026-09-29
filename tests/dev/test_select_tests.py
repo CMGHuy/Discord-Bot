@@ -3,10 +3,13 @@
 Every case runs against a fixture tree under tmp_path, not the real repo: the
 real graph changes every commit and a test pinned to it would drift.
 """
+import ast
+import functools
 import importlib.util
 import pathlib
 import subprocess
 import sys
+import warnings
 
 import pytest
 
@@ -263,7 +266,7 @@ def test_unplaceable_extension_widens(sel, tmp_path):
 
 
 def test_inert_path_alone_runs_nothing(sel, tmp_path):
-    result = sel.select(["docs/claude/testing-cost.md"], _repo(tmp_path))
+    result = sel.select(["docs/deploy/DEPLOY_HETZNER.md"], _repo(tmp_path))
     assert (result.full, result.targets) == (False, [])
     assert "inert" in result.reason
 
@@ -423,3 +426,205 @@ def test_non_ascii_paths_are_listed_despite_core_quotepath(sel, tmp_path):
     files = sel.repo_python_files(repo)
     assert "pkg/caf\u00e9.py" in files and "tests/test_caf\u00e9.py" in files
     assert "pkg/new_\u00fc.py" in files
+
+
+def _with_readers(repo: pathlib.Path) -> pathlib.Path:
+    """Add the tests that read repo data files rather than importing code."""
+    for rel in ("tests/hooks/test_guardrails.py", "tests/hooks/test_codex_mirror.py",
+                "tests/dev/test_testrun_ci_invocations.py"):
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text("X = 1\n", encoding="utf-8")
+    return repo
+
+
+@pytest.mark.parametrize("path, expected", [
+    (".github/workflows/deploy.yml", ["tests/dev/test_testrun_ci_invocations.py"]),
+    (".claude/settings.json", ["tests/hooks/"]),
+    (".claude/skills/gate/SKILL.md", ["tests/hooks/"]),
+    (".claude/agents/test-runner.md", ["tests/hooks/"]),
+    ("CLAUDE.md", ["tests/hooks/"]),
+    ("AGENTS.md", ["tests/hooks/"]),
+    ("docs/claude/backtest-methodology.md",
+     ["tests/hooks/test_codex_mirror.py", "tests/hooks/test_guardrails.py"]),
+])
+def test_data_read_path_routes_to_its_readers(sel, tmp_path, path, expected):
+    """Partner decision 2026-09-29: the widening rule beats the inert list."""
+    result = sel.select([path], _with_readers(_repo(tmp_path)))
+    assert (result.full, result.targets) == (False, expected)
+
+
+@pytest.mark.parametrize("path", ["requirements.txt", ".github/dependabot.yml"])
+def test_formerly_inert_non_python_now_widens(sel, tmp_path, path):
+    result = sel.select([path], _with_readers(_repo(tmp_path)))
+    assert result.full is True
+
+
+def test_data_reader_target_missing_on_disk_widens(sel, tmp_path):
+    result = sel.select([".github/workflows/deploy.yml"], _repo(tmp_path))
+    assert result.full is True
+    assert "test_testrun_ci_invocations.py" in result.reason
+
+
+def test_data_read_path_and_source_union_their_targets(sel, tmp_path):
+    result = sel.select(
+        ["CLAUDE.md", "tests/planning/test_plan_engine.py"],
+        _with_readers(_repo(tmp_path)),
+    )
+    assert (result.full, result.targets) == (
+        False, ["tests/hooks/", "tests/planning/test_plan_engine.py"])
+
+
+def _is_str(node) -> bool:
+    return isinstance(node, ast.Constant) and isinstance(node.value, str)
+
+
+def _is_div(node) -> bool:
+    return isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div)
+
+
+def _join_parts(node) -> list | None:
+    """Operands of a path join -- `a / 'b' / 'c'` or os.path.join(a, 'b',
+    'c') -- in order, else None."""
+    if _is_div(node):
+        left = _join_parts(node.left)
+        return (left if left is not None else [node.left]) + [node.right]
+    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "join" and not _is_str(node.func.value)):
+        return list(node.args)
+    return None
+
+
+def _string_tail(parts: list) -> str:
+    """'b/c' for [ROOT, 'b', 'c'] -- the trailing string operands, joined."""
+    tail: list[str] = []
+    for part in reversed(parts):
+        if not _is_str(part):
+            break
+        tail.insert(0, part.value)
+    return "/".join(tail)
+
+
+def _path_literals(tree) -> set[str]:
+    """String constants, plus the joined string tail of every path join.
+    Join fragments are consumed so a lone 'docs' or 'frontend' never stands
+    in for the joined path."""
+    found, consumed = set(), set()
+    # ast.walk is breadth-first: a join is always seen before its operands.
+    for node in ast.walk(tree):
+        if id(node) in consumed:
+            continue
+        if _is_str(node) and len(node.value) < 200:
+            found.add(node.value)
+        parts = _join_parts(node) or []
+        tail = _string_tail(parts)
+        if tail:
+            found.add(tail)
+        consumed |= {id(part) for part in parts if _is_str(part)}
+        consumed |= _inner_links(node)
+    return found
+
+
+def _inner_links(node) -> set[int]:
+    """ids of the inner BinOps of the `/` chain `node` heads."""
+    links: set[int] = set()
+    while _is_div(node) and _is_div(node.left):
+        node = node.left
+        links.add(id(node))
+    return links
+
+
+# Literals that name an existing file but are only ever fed to a function as
+# a string -- never opened -- so their being inert is correct.
+_NOT_READ = {
+    # test_guardrails.py feeds these to the hook's plan-doc shape check.
+    "docs/superpowers/plans/implemented/2026-09-18-v96-claude-skills-layer.md",
+    "docs/superpowers/plans/implemented/2026-09-16-v92-exit-quality-harvest.md",
+    "docs/superpowers/plans/2026-08-29-v67-json-to-postgres_1a-foundation-core.md",
+    # test_env_example_sync.py quotes these in an assertion message.
+    "docs/superpowers/plans/implemented/v34-train-preregistration.md",
+    "docs/superpowers/plans/implemented/v35-avwap-preregistration.md",
+}
+
+
+@functools.lru_cache(maxsize=None)
+def _listed_under(rel_dir: str) -> tuple[str, ...]:
+    """Files under a directory that could show up in a diff: tracked, or
+    untracked and not ignored -- the same set testrun.changed_paths sees."""
+    out = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard",
+         "--", rel_dir], cwd=REPO, capture_output=True, check=True)
+    return tuple(item for item in out.stdout.decode("utf-8").split("\0") if item)
+
+
+@functools.lru_cache(maxsize=None)
+def _entries(directory: pathlib.Path) -> frozenset[str]:
+    return frozenset(entry.name for entry in directory.iterdir()) | {".."}
+
+
+def _candidates(literal: str, test_dir: pathlib.Path) -> list[str]:
+    """Non-.py repo files a literal names: the file itself, or for a
+    directory every listable file under it (a directory reader reads them)."""
+    literal = literal.replace("\\", "/").strip("/")
+    if not literal or any(c in literal for c in "\0\n*?<>|:{"):
+        return []
+    target = _existing_in_repo(literal, test_dir)
+    if target is None:
+        return []
+    rel = target.relative_to(REPO).as_posix()
+    listed = _listed_under(rel) if target.is_dir() else (rel,)
+    return [path for path in listed if not path.endswith(".py")]
+
+
+def _existing_in_repo(literal: str, test_dir: pathlib.Path) -> pathlib.Path | None:
+    """The existing in-repo path a literal names, relative to the repo root
+    or to the naming test's own directory."""
+    first = literal.split("/", 1)[0]
+    for base in (REPO, test_dir):
+        if first not in _entries(base):  # cheap pre-filter before resolve()
+            continue
+        target = (base / literal).resolve()
+        if target.exists() and REPO in target.parents:
+            return target
+    return None
+
+
+def test_no_path_a_test_reads_is_classified_inert(sel, monkeypatch):
+    """Against the REAL repo: every repo file a test names by literal must
+    route somewhere (targets or full), never to 'nothing to test'. A new
+    test reading, say, docs/strategy/x.md fails here until DATA_READERS
+    learns about it.
+
+    This file is skipped: its path literals are inputs to select() on
+    fixture trees, not files it reads. The threshold is stubbed out because
+    it can only widen, so it cannot change an inert verdict -- and it costs
+    two whole-repo git listings per call.
+    """
+    monkeypatch.setattr(sel, "_threshold_reason", lambda *_a: None)
+    this = pathlib.Path(__file__).resolve()
+    named: dict[str, str] = {}
+    for test in sorted((REPO / "tests").rglob("*.py")):
+        if test == this:
+            continue
+        with warnings.catch_warnings():  # invalid escapes in other tests' source
+            warnings.simplefilter("ignore")
+            tree = ast.parse(test.read_text(encoding="utf-8", errors="replace"))
+        for literal in _path_literals(tree):
+            for rel in _candidates(literal, test.parent):
+                named.setdefault(rel, test.relative_to(REPO).as_posix())
+    inert = []
+    for rel, test in sorted(named.items()):
+        result = sel.select([rel], REPO)
+        if rel not in _NOT_READ and not result.full and not result.targets:
+            inert.append(f"{rel} (named in {test})")
+    assert not inert, "\n".join(inert)
+
+
+def test_unreached_source_widens_even_beside_a_reached_one(sel, tmp_path):
+    """A second, reachable change must not hide one no test imports."""
+    repo = _repo(tmp_path)
+    (repo / "scripts").mkdir()
+    (repo / "scripts/orphan.py").write_text("X = 1\n", encoding="utf-8")
+    result = sel.select(
+        ["scripts/orphan.py", "swingbot/core/planning/plan_engine.py"], repo)
+    assert result.full is True
+    assert "scripts/orphan.py" in result.reason

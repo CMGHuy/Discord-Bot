@@ -180,6 +180,20 @@ Evaluated in order; the first matching rule decides.
    (`docs/**`, `*.md`, `.claude/**`, `.superpowers/**`) → **full**, reason
    naming it. A changed `.json`, `.css`, `.yml` or `Dockerfile` is unplaceable
    by a Python import graph, and unplaceable means widen.
+
+   > **Correction 2026-09-29 (partner decision, v99 final review):** the
+   > allowlist above let files that tests *read as data* through as inert —
+   > `.claude/settings.json`, skill/agent `.md`, `AGENTS.md`,
+   > `docs/claude/backtest-methodology.md`, `.github/workflows/deploy.yml`.
+   > The widening rule wins over the allowlist: data-read paths route to
+   > their readers via `DATA_READERS` in `select_tests.py`, checked before
+   > the inert rule (`.claude/`, `CLAUDE.md`, `AGENTS.md`, `.agents/`,
+   > `.codex/` → `tests/hooks/`; `docs/claude/` → `test_guardrails.py` +
+   > `test_codex_mirror.py`; `.github/workflows/` →
+   > `test_testrun_ci_invocations.py`); a reader missing on disk widens.
+   > `.claude/**` is no longer inert, and `.github/`/`.txt` never were in
+   > this spec — both now widen when no reader claims them. A guard test
+   > fails when a test starts naming a repo file that still classifies inert.
 5. Otherwise, per changed Python path:
    - under `tests/` → selects itself.
    - a `conftest.py` → selects its entire directory subtree (there are four:

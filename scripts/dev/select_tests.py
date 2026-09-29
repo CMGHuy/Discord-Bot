@@ -237,12 +237,37 @@ REGISTRY_PREFIXES = (
     "swingbot/config.py",
 )
 
+# Non-Python files that tests READ as data (open/read_text/json.load/glob),
+# which an import graph cannot see. Checked BEFORE the inert rule: partner
+# decision 2026-09-29 -- the widening rule beats the inert allowlist. A key
+# ending in '/' is a prefix; any other key is an exact path. A target missing
+# on disk widens. tests/dev/test_select_tests.py::
+# test_no_path_a_test_reads_is_classified_inert fails when a test starts
+# naming a data file this table (or the inert rule) mis-routes.
+DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    # Skill/agent/settings shape and the Codex mirror: test_skill_shape,
+    # test_agent_shape, test_codex_mirror (directly and via sync_codex.py),
+    # test_guardrails.
+    (".claude/", ("tests/hooks/",)),
+    ("CLAUDE.md", ("tests/hooks/",)),
+    # Codex mirror outputs, compared against a fresh render by test_codex_mirror.
+    ("AGENTS.md", ("tests/hooks/",)),
+    (".agents/", ("tests/hooks/",)),
+    (".codex/", ("tests/hooks/",)),
+    # backtest-methodology.md's closed table (test_guardrails); every
+    # reference doc must be named in AGENTS.md (sync_codex via test_codex_mirror).
+    ("docs/claude/", ("tests/hooks/test_guardrails.py",
+                      "tests/hooks/test_codex_mirror.py")),
+    # Every testrun.py command line deploy.yml runs is parsed for real.
+    (".github/workflows/", ("tests/dev/test_testrun_ci_invocations.py",)),
+)
+
 # Known to affect no test. Distinct from "unplaceable", which widens: silence
 # and ignorance get opposite treatment. Python is checked FIRST and is never
-# inert -- .claude/hooks/guardrails.py lives under an inert prefix and is
-# tested by tests/hooks/test_guardrails.py.
-INERT_PREFIXES = ("docs/", ".claude/", ".superpowers/", ".github/")
-INERT_SUFFIXES = (".md", ".txt")
+# inert -- .claude/hooks/guardrails.py is tested by tests/hooks/test_guardrails.py.
+# Data-read paths (DATA_READERS) are checked before this list.
+INERT_PREFIXES = ("docs/", ".superpowers/")
+INERT_SUFFIXES = (".md",)
 
 # UNMEASURED. The serial-vs-`-n 4` crossover has not been derived: it needs a
 # cooled idle box, and docs/claude/testing-cost.md records timings on this
@@ -269,8 +294,30 @@ def _is_python(path: str) -> bool:
     return path.endswith(".py")
 
 
+def _readers_of(path: str) -> tuple[str, ...]:
+    """DATA_READERS targets for a non-Python path, else ()."""
+    if _is_python(path):
+        return ()
+    for key, targets in DATA_READERS:
+        if path == key or (key.endswith("/") and path.startswith(key)):
+            return targets
+    return ()
+
+
 def _is_inert(path: str) -> bool:
     return path.startswith(INERT_PREFIXES) or path.endswith(INERT_SUFFIXES)
+
+
+def _data_targets(changed: list[str], repo: pathlib.Path) -> set[str] | str:
+    """Reader targets for the data-read paths in `changed`, or a widening
+    reason when a reader named in DATA_READERS is gone from disk."""
+    targets: set[str] = set()
+    for path in changed:
+        for target in _readers_of(path):
+            if not (repo / target).exists():
+                return f"{path} is read by {target}, which does not exist"
+            targets.add(target)
+    return targets
 
 
 def _is_test_file(path: str) -> bool:
@@ -298,7 +345,8 @@ def _widen_for_path(changed: list[str]) -> str | None:
         hits = [path for path in changed if path.startswith(prefixes)]
         if hits:
             return f"{hits[0]} touched ({label})"
-    unplaceable = [p for p in changed if not _is_python(p) and not _is_inert(p)]
+    unplaceable = [p for p in changed
+                   if not (_is_python(p) or _readers_of(p) or _is_inert(p))]
     if unplaceable:
         return f"{unplaceable[0]} is not placeable by an import graph"
     return None
@@ -339,8 +387,23 @@ def _targets_for(
         reach = _reach_of(path, reverse, repo)
         if isinstance(reach, str):
             return reach
+        if not reach:
+            # Per source, not per change set: a reachable second change must
+            # not hide one that no test imports.
+            return f"no test reaches {path}"
         targets |= reach
     return targets
+
+
+def _source_targets(sources: list[str], repo: pathlib.Path) -> set[str] | str:
+    """Import-graph targets for changed Python, or a widening reason (str)."""
+    if not sources:
+        return set()  # data-read paths only: no graph to build
+    try:
+        reverse = build_import_graph(repo)
+    except (UnparseableFile, RuntimeError) as exc:
+        return str(exc)
+    return _targets_for(sources, reverse, repo)
 
 
 def _threshold_reason(targets: set[str], repo: pathlib.Path) -> str | None:
@@ -374,29 +437,31 @@ def select(changed: list[str] | None, repo: pathlib.Path) -> Selection:
     widen = _widen_for_path(changed)
     if widen:
         return Selection(full=True, changed=changed, reason=widen)
+    return _select_placed(changed, repo)
+
+
+def _select_placed(changed: list[str], repo: pathlib.Path) -> Selection:
+    """select() once every path is known placeable: data-read, Python or inert."""
+    targets = _data_targets(changed, repo)
+    if isinstance(targets, str):
+        return Selection(full=True, changed=changed, reason=targets)
 
     sources = [path for path in changed if _is_python(path)]
-    if not sources:
+    if not sources and not targets:
         return Selection(changed=changed,
                          reason=f"nothing to test ({len(changed)} inert path(s))")
 
-    try:
-        reverse = build_import_graph(repo)
-    except (UnparseableFile, RuntimeError) as exc:
-        return Selection(full=True, changed=changed, reason=str(exc))
-
-    targets = _targets_for(sources, reverse, repo)
-    if isinstance(targets, str):
-        return Selection(full=True, changed=changed, reason=targets)
-    if not targets:
-        return Selection(full=True, changed=changed,
-                         reason=f"no test reaches {sources[0]}")
+    found = _source_targets(sources, repo)
+    if isinstance(found, str):
+        return Selection(full=True, changed=changed, reason=found)
+    targets |= found
 
     too_wide = _threshold_reason(targets, repo)
     if too_wide:
         return Selection(full=True, changed=changed, reason=too_wide)
 
+    placed = len(sources) + sum(1 for path in changed if _readers_of(path))
     return Selection(
         targets=sorted(targets), changed=changed,
-        reason=f"{len(targets)} target(s) from {len(sources)} changed file(s)",
+        reason=f"{len(targets)} target(s) from {placed} changed file(s)",
     )
