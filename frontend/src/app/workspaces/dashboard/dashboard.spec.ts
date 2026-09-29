@@ -444,12 +444,9 @@ describe('Dashboard panel order', () => {
 
 describe('DASHBOARD_COLUMNS', () => {
   it('reuses tradeColumns() rather than a second, driftable floor list', () => {
-    // Every floor (and the now/plan/held/confidence_level always-inline
-    // exception -- see trades.columns.ts's amendment note) carries here too,
-    // because this is literally that same function's return value.
-    const alwaysInline = ['now', 'plan', 'held', 'confidence_level'];
+    // Every entry v95 C2 declared a floor on carries it here too, because
+    // this is literally that same function's return value.
     expect(DASHBOARD_COLUMNS.length).toBeGreaterThan(0);
-    const noFloor = DASHBOARD_COLUMNS.filter((c) => c.inlineFrom === undefined).map((c) => c.key);
-    expect(noFloor.sort()).toEqual([...alwaysInline].sort());
+    expect(DASHBOARD_COLUMNS.filter((c) => c.inlineFrom === undefined)).toEqual([]);
   });
 });

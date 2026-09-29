@@ -1336,6 +1336,89 @@ Hetzner VM.
     figure the Risk page's data-source card shows.
   - (c) as written, against the Step 4 baseline 0.01299.
 
+  **Soak attempt 1 -- FAILED on day 1 (2026-09-28), recorded before any fix.**
+  148 scans 06:04-18:18 UTC: (a) p95 `cold_fetch_s` **13.99 s** (224 timings,
+  max 18.75) -- FAIL; (b) fallback **48.99%** (2809 / 5734) -- FAIL; (c)
+  0.01299 -- PASS (equal); (d) PASS. Every `Alpaca daily_bars miss:` line had
+  empty text -- `str(FutureTimeout())` is `""`, so all 45 were the 5 s router
+  timeout; the first all-fallback scan was 13:39 UTC (US open), all-fallback
+  from 18:00. **Root cause, measured on production 19:01 UTC:** the scan's
+  one request (75 symbols, 2y, SIP) is 36,843 rows = **4 sequential 10k-row
+  pages, 3.9-4.8 s** whether or not today's forming bar is included, and
+  whether adjusted or raw; SPY alone is 0.14-0.26 s. So the call sits at the
+  timeout and tips over under session load, and even a successful call can
+  never meet (a)'s 3 s. The user chose to fix it inside v106 with Alpaca left
+  on (**T13a**), then restart the soak from Step 5 with **every threshold and
+  measurement definition above unchanged**.
+
+### Task T13a: Page-sized parallel daily-bar requests
+
+**Files:** modify `swingbot/core/marketdata/providers/alpaca_provider.py`,
+`swingbot/core/marketdata/providers/router.py`; tests in
+`tests/marketdata/test_alpaca_provider.py`, `tests/marketdata/test_provider_router.py`.
+
+**Design.** Alpaca already batches many symbols per request; the cost is
+pagination (10,000 rows per page, fetched one after another inside
+alpaca-py). So split the eligible symbols into batches that each fit **one**
+page, and send the batches **in parallel**. Same HTTP request count as today
+(4 for the live watchlist) -- no extra rate-limit pressure -- but each bucket
+token now pays for exactly one HTTP call, where today one token covers 4.
+
+- `alpaca_provider.symbols_per_request(period, now=None) -> int`:
+  `rows = (now - _start_for(period, now)).days * 252 // 365 + 10`
+  (trading-day estimate plus margin; holidays make it an over-estimate);
+  return `max(1, ROWS_PER_PAGE // rows)` with `ROWS_PER_PAGE = 10_000`.
+  `"2y"` gives 19 (measured 491 rows/symbol, 19 × 491 = 9,329 < 10,000).
+- `router.daily_bars` slices `wanted` into consecutive batches of that size
+  and calls a new `_attempt_many("daily_bars", batches, period)`:
+  - one `_bucket.take()` per batch, **in the calling thread**; a batch with no
+    token is not submitted (its symbols become misses → yfinance-fallback);
+  - every submitted batch runs on `_pool` (4 workers) under **one shared
+    deadline** `now + ALPACA_TIMEOUT_SECONDS`, so the whole call still returns
+    within the timeout plus the yfinance time (Review Focus 4 holds);
+  - each batch result is collected in the calling thread and recorded on the
+    breaker on its own (bucket, breaker and `_stats` stay single-threaded);
+  - a failed or timed-out batch sends **only its own symbols** to yfinance.
+- Factor the per-future collection out of `_attempt` into
+  `_collect(future, method, deadline)`, used by both. `_attempt`'s
+  behaviour for `latest_prices` and `intraday_bars` is unchanged.
+- The miss log names the exception type when its text is empty:
+  `log.info("Alpaca %s miss: %s", method, str(exc) or type(exc).__name__)`
+  (today's 45 blank lines are why).
+- `latest_prices` and `intraday_bars` are out of scope (one snapshot call;
+  one symbol).
+
+- [ ] **Step 1: Failing tests.** Provider:
+  `test_symbols_per_request_fits_one_page` (`"2y"` → 19; `"10y"` and an
+  unknown period each ≥ 1 with `n × rows ≤ 10_000`). Router -- extend
+  `FakeProvider` to record each `daily_bars` batch and to raise for a batch
+  containing a given symbol; monkeypatch `alpaca_provider.symbols_per_request`
+  (as imported by the router) to a small size:
+  - `test_daily_bars_sends_page_sized_batches` (45 tickers, size 20 →
+    batches of 20, 20, 5; all tagged `alpaca`);
+  - `test_failed_batch_falls_back_only_its_symbols`;
+  - `test_batches_run_in_parallel_under_one_deadline` (3 batches sleeping
+    0.3 s, timeout 0.5 s → all `alpaca`, wall < 0.5 s);
+  - `test_each_batch_takes_a_bucket_token` (2 tokens, no refill, 3 batches →
+    the third batch's symbols are `yfinance-fallback`);
+  - `test_miss_log_names_timeout` (caplog contains `TimeoutError`).
+  Run `python scripts/dev/testrun.py file tests/marketdata/test_provider_router.py`
+  and the provider test file: the new tests fail, the old ones pass.
+- [ ] **Step 2: Implement** as designed. Both test files green, plus
+  `tests/marketdata/test_data_alpaca_routing.py` and
+  `tests/scanning/test_scan_telemetry_sources.py`.
+- [ ] **Step 3: Complexity.** `python -m radon cc -s -n C` on both modules
+  prints nothing.
+- [ ] **Step 4: Full suite** via the `test-runner` agent (this task follows
+  T12's run): `0 failed`, `0 xfailed`.
+- [ ] **Step 5: Merge and deploy** (`docs/deploy/DEPLOY_HETZNER.md`), Alpaca
+  still on. Confirm on the first market-hours scan after deploy: no
+  `daily_bars miss` lines, `data_sources` fallback 0, `cold_fetch_s` for the
+  Alpaca chunk under 3 s.
+- [ ] **Step 6: Restart the soak.** Soak attempt 2 = the 5 trading days
+  starting the first full trading day after the deploy; record the window
+  here, then run T13 Step 6 unchanged.
+
 ### Task T14: Close-out
 
 The user runs `/close-out`; the Skill tool blocks it for Claude. It follows
@@ -1358,7 +1441,8 @@ The user runs `/close-out`; the Skill tool blocks it for Claude. It follows
     untouched code).
   - T6 after T3–T5.
   - T10 after T9 (consumes its fields).
-  - T12 after all code tasks; T13 → T14.
+  - T12 after all code tasks; T13 → T14. T13a runs inside T13 (after soak
+    attempt 1 failed, before its Step 6 restarts the soak).
 - **Group A (parallel after T2):** T3 (`alpaca_provider.py`), T4
   (`router.py`). Disjoint files; T4 fakes the provider and consumes only T2
   plus T3's exception names. **Land T3 first if you're not dispatching

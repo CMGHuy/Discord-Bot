@@ -14,7 +14,7 @@ multi-method-confirmed support/resistance setups across swing horizons
 with charts. **Paper trades only** — it never places orders. Python 3.11+,
 discord.py, pandas/numpy, yfinance, mplfinance, pytest; JSON under `data/`.
 
-**"Production" always means the Hetzner VM** (`167.233.26.185`, `docs/deploy/DEPLOY_HETZNER.md`) — never this dev machine; `scripts/ops/ssh-hetzner.sh` (uncommitted) connects.
+**"Production" always means the Hetzner VM** (`167.233.26.185`, `docs/deploy/DEPLOY_HETZNER.md`) — never this dev machine. **Always connect through `scripts/ops/ssh-hetzner.sh`** (uncommitted; WSL key) — never a raw `ssh`/`scp` or another key path: `bash scripts/ops/ssh-hetzner.sh "<cmd>"`, piping stdin for a script (`... "cd /opt/swing-bot && docker compose exec -T bot python -" < script.py`).
 
 **Any live fix or config change made directly on production must be mirrored back into this repo and committed before the task is considered done.** Reasoning and what "mirrored" means: `docs/claude/working-conventions.md`.
 
