@@ -66,8 +66,9 @@ threshold to accept** or licence to re-run a closed pre-registration or shrink
 - **`swingbot/core/` is eleven packages, no flat modules** — map:
   `architecture.md`.
 - **Don't re-run the full suite to check a local change** — use
-  `python scripts/dev/testrun.py file tests/test_foo.py` (~7s) or `... fast`
-  (~27s). It prints a one-line verdict instead of ~1150 progress lines.
+  `python scripts/dev/testrun.py changed` (diff-selected; widens when unsure)
+  or `... file tests/test_foo.py` (~7s), or `... fast` (~27s). One-line
+  verdict instead of ~1150 progress lines.
   Dispatch the `test-runner` subagent for a full run so none of it reaches
   this context. When a *plan* schedules its runs: "Naming specs and plans".
 - Hand wide/exploratory searches to the `Explore` agent so raw grep output
@@ -88,6 +89,7 @@ with `grep -n "^### Task" <plan>`. Tooling (`/task-brief`, `/gate`,
 ```bash
 python scripts/dev/testrun.py full             # full suite via -n 4 — the pre-commit gate; one-line verdict
 python scripts/dev/testrun.py fast             # ~27s, skips the slow tier; auto-escalates if charts/templates touched
+python scripts/dev/testrun.py changed          # only tests reaching your diff; widens to full when unsure (--dry-run: print, don't run)
 python scripts/dev/testrun.py file tests/test_foo.py  # one file (~7s) — use this while iterating
 python -m pytest tests/test_foo.py::test_bar -v   # single test, raw pytest
 make check                                 # py_compile syntax pass (no make on Windows: run python -m py_compile over bot.py admin_ui.py swingbot/**/*.py)
