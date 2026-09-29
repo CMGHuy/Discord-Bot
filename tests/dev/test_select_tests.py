@@ -345,3 +345,81 @@ def test_deleted_test_file_is_not_a_target(sel, tmp_path):
     (repo / "tests/planning/test_plan_engine.py").unlink()
     result = sel.select(["tests/planning/test_plan_engine.py"], repo)
     assert result.full is True
+
+
+# --- final-review fix wave (2026-09-29) ------------------------------------
+
+@pytest.mark.parametrize("source", [
+    "a" + ".b" * 300000,   # RecursionError during ast construction
+    "-" * 200000 + "1",    # MemoryError from the parser stack
+], ids=["recursion", "memory"])
+def test_pathological_source_raises_unparseable(sel, tmp_path, source):
+    repo = _tree(tmp_path, {"pkg/deep.py": source})
+    with pytest.raises(sel.UnparseableFile):
+        sel.build_import_graph(repo)
+
+
+def test_bare_name_import_after_sys_path_insert_reaches_the_script(sel, tmp_path):
+    """~20 tests do sys.path.insert(0, ROOT/'scripts'/'backtest') then
+    `import validate_component`: a top-level name no dotted module matches."""
+    repo = _tree(tmp_path, {
+        "scripts/backtest/validate_component.py": "VALUE = 1\n",
+        "tests/test_cli.py": "import scripts.backtest.validate_component\n",
+        "tests/test_stamps.py": (
+            "import sys\nsys.path.insert(0, 'scripts/backtest')\n"
+            "import validate_component\n"),
+        "tests/test_from.py": "from validate_component import VALUE\n",
+        "tests/test_pkg_rel.py": "from backtest import validate_component\n",
+    })
+    reverse = sel.build_import_graph(repo)
+    assert reverse["scripts/backtest/validate_component.py"] == {
+        "tests/test_cli.py", "tests/test_stamps.py", "tests/test_from.py",
+        "tests/test_pkg_rel.py",
+    }
+
+
+def test_unresolved_bare_name_over_approximates_to_every_same_named_file(sel, tmp_path):
+    repo = _tree(tmp_path, {
+        "scripts/a/tool.py": "X = 1\n",
+        "scripts/b/tool/__init__.py": "X = 2\n",
+        "tests/test_tool.py": "import tool\n",
+    })
+    reverse = sel.build_import_graph(repo)
+    assert reverse["scripts/a/tool.py"] == {"tests/test_tool.py"}
+    assert reverse["scripts/b/tool/__init__.py"] == {"tests/test_tool.py"}
+
+
+def test_conftest_imported_by_the_root_conftest_widens(sel, tmp_path):
+    """tests/conftest.py re-exports tests/db/conftest.py fixtures suite-wide."""
+    repo = _repo(tmp_path)
+    (repo / "tests/db").mkdir()
+    (repo / "tests/db/__init__.py").write_text("", encoding="utf-8")
+    (repo / "tests/db/conftest.py").write_text("FIXTURE = 1\n", encoding="utf-8")
+    (repo / "tests/conftest.py").write_text(
+        "from tests.db.conftest import FIXTURE\n", encoding="utf-8")
+    result = sel.select(["tests/db/conftest.py"], repo)
+    assert result.full is True
+    assert "root conftest" in result.reason
+
+
+def test_module_imported_by_a_conftest_selects_the_conftest_subtree(sel, tmp_path):
+    repo = _repo(tmp_path)
+    (repo / "tests/scanning/helpers.py").write_text("H = 1\n", encoding="utf-8")
+    (repo / "tests/scanning/conftest.py").write_text(
+        "from tests.scanning.helpers import H\n", encoding="utf-8")
+    result = sel.select(["tests/scanning/helpers.py"], repo)
+    assert (result.full, result.targets) == (False, ["tests/scanning/"])
+
+
+def test_non_ascii_paths_are_listed_despite_core_quotepath(sel, tmp_path):
+    """core.quotePath wraps non-ASCII names in quotes; they must still list."""
+    repo = _tree(tmp_path, {
+        "pkg/__init__.py": "",
+        "pkg/caf\u00e9.py": "VALUE = 1\n",
+        "tests/test_caf\u00e9.py": "from pkg.caf\u00e9 import VALUE\n",
+    })
+    subprocess.run(["git", "config", "core.quotepath", "true"], cwd=repo, check=True)
+    (repo / "pkg/new_\u00fc.py").write_text("X = 1\n", encoding="utf-8")  # untracked
+    files = sel.repo_python_files(repo)
+    assert "pkg/caf\u00e9.py" in files and "tests/test_caf\u00e9.py" in files
+    assert "pkg/new_\u00fc.py" in files

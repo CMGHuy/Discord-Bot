@@ -43,12 +43,17 @@ class UnparseableFile(Exception):
 
 
 def _git(repo: pathlib.Path, *args: str) -> list[str]:
+    """Run a NUL-separated (-z) git listing. Newline output is not safe:
+    core.quotePath wraps non-ASCII names in quotes, and a quoted '.py"' name
+    would silently drop out of the graph."""
     out = subprocess.run(
-        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=30,
+        ["git", *args], cwd=repo, capture_output=True, timeout=30,
     )
     if out.returncode != 0:
-        raise RuntimeError(f"git {' '.join(args)} failed: {out.stderr.strip()}")
-    return [line.strip().replace("\\", "/") for line in out.stdout.splitlines() if line.strip()]
+        stderr = out.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"git {' '.join(args)} failed: {stderr}")
+    text = out.stdout.decode("utf-8", errors="surrogateescape")
+    return [item.replace("\\", "/") for item in text.split("\0") if item]
 
 
 def repo_python_files(repo: pathlib.Path) -> list[str]:
@@ -58,8 +63,8 @@ def repo_python_files(repo: pathlib.Path) -> list[str]:
     where you most want its new test selected, and a tracked-only listing
     would leave it out of the graph entirely.
     """
-    paths = _git(repo, "ls-files", "*.py")
-    paths += _git(repo, "ls-files", "--others", "--exclude-standard", "*.py")
+    paths = _git(repo, "ls-files", "-z", "*.py")
+    paths += _git(repo, "ls-files", "-z", "--others", "--exclude-standard", "*.py")
     seen: dict[str, None] = {}
     for path in paths:
         if path.startswith(EXCLUDED_DIRS):
@@ -122,7 +127,9 @@ def _parse(repo: pathlib.Path, rel: str) -> ast.AST | None:
     try:
         source = path.read_text(encoding="utf-8", errors="replace")
         return ast.parse(source)
-    except (SyntaxError, ValueError, OSError) as exc:
+    # RecursionError / MemoryError: pathologically nested source blows the
+    # parser's stack. Still "could not parse", so still widen.
+    except (SyntaxError, ValueError, OSError, RecursionError, MemoryError) as exc:
         raise UnparseableFile(rel) from exc
 
 
@@ -138,15 +145,46 @@ def _with_ancestor_packages(name: str, by_module: dict[str, str]) -> set[str]:
     return found
 
 
+def _suffix_index(by_module: dict[str, str]) -> dict[str, set[str]]:
+    """Every dotted suffix of every module -> the files it could name.
+
+    'scripts.backtest.validate_component' is indexed under
+    'validate_component', 'backtest.validate_component' and itself.
+    """
+    index: dict[str, set[str]] = {}
+    for module, rel in by_module.items():
+        parts = module.split(".")
+        for start in range(len(parts)):
+            index.setdefault(".".join(parts[start:]), set()).add(rel)
+    return index
+
+
+def _by_suffix(name: str, suffixes: dict[str, set[str]]) -> set[str]:
+    """Fallback for a name no dotted module matches -- typically a bare
+    `import validate_component` after sys.path.insert(0, 'scripts/backtest').
+    The static graph cannot know sys.path, so link to EVERY repo file the
+    name could mean. Over-approximation only widens; a stdlib/third-party
+    name that collides with a repo basename just adds a spurious edge."""
+    parts = name.split(".")
+    found: set[str] = set()
+    for end in range(1, len(parts) + 1):
+        for target in suffixes.get(".".join(parts[:end]), ()):
+            if end == len(parts) or target.endswith("__init__.py"):
+                found.add(target)
+    return found
+
+
 def build_import_graph(repo: pathlib.Path) -> dict[str, set[str]]:
     """file -> set of files that import it (reverse edges, direct only).
 
     Importing a.b.c also executes a/__init__.py and a/b/__init__.py, so those
-    get edges too. Raises UnparseableFile, which every caller must turn into
-    a full run.
+    get edges too. A name that resolves to no dotted module falls back to
+    every file whose module name ends with it (_by_suffix). Raises
+    UnparseableFile, which every caller must turn into a full run.
     """
     files = repo_python_files(repo)
     by_module = {_module_name(rel): rel for rel in files}
+    suffixes = _suffix_index(by_module)
     reverse: dict[str, set[str]] = {rel: set() for rel in files}
 
     for rel in files:
@@ -154,9 +192,10 @@ def build_import_graph(repo: pathlib.Path) -> dict[str, set[str]]:
         if tree is None:
             continue
         for name in _imported_names(tree, _package_of(rel)):
-            for target in _with_ancestor_packages(name, by_module):
-                if target != rel:
-                    reverse[target].add(rel)
+            targets = (_with_ancestor_packages(name, by_module)
+                       or _by_suffix(name, suffixes))
+            for target in targets - {rel}:
+                reverse[target].add(rel)
     return reverse
 
 
@@ -265,22 +304,42 @@ def _widen_for_path(changed: list[str]) -> str | None:
     return None
 
 
+def _is_conftest(path: str) -> bool:
+    return path.rsplit("/", 1)[-1] == "conftest.py"
+
+
+def _reach_of(path: str, reverse: dict[str, set[str]],
+              repo: pathlib.Path) -> set[str] | str:
+    """Targets for one changed source, or a widening reason (str).
+
+    The changed file and every transitive importer are treated alike: a
+    conftest among them contributes its whole subtree (fixtures reach tests
+    by NAME, not by import), and the root conftest means the whole suite --
+    tests/conftest.py re-exports tests/db/conftest.py suite-wide.
+    """
+    targets: set[str] = set()
+    for hit in sorted({path} | importers_of(reverse, path)):
+        if _is_conftest(hit):
+            subtree = hit[: -len("conftest.py")]
+            if subtree in ("tests/", ""):
+                return f"{hit} is the root conftest -- its subtree is the suite"
+            targets.add(subtree)
+        # A deleted test file is no target: pytest errors on a missing path.
+        elif _is_test_file(hit) and (hit != path or (repo / path).exists()):
+            targets.add(hit)
+    return targets
+
+
 def _targets_for(
     sources: list[str], reverse: dict[str, set[str]], repo: pathlib.Path
 ) -> set[str] | str:
     """Test targets reaching `sources`, or a widening reason (str)."""
     targets: set[str] = set()
     for path in sources:
-        if path.endswith("conftest.py"):
-            subtree = path[: -len("conftest.py")]
-            if subtree in ("tests/", ""):
-                return f"{path} is the root conftest -- its subtree is the suite"
-            targets.add(subtree)
-            continue
-        # A deleted test file is no target: pytest errors on a missing path.
-        if _is_test_file(path) and (repo / path).exists():
-            targets.add(path)
-        targets |= {p for p in importers_of(reverse, path) if _is_test_file(p)}
+        reach = _reach_of(path, reverse, repo)
+        if isinstance(reach, str):
+            return reach
+        targets |= reach
     return targets
 
 
