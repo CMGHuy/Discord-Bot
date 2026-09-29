@@ -440,6 +440,14 @@ def select(changed: list[str] | None, repo: pathlib.Path) -> Selection:
     return _select_placed(changed, repo)
 
 
+def _collapse(targets: set[str]) -> set[str]:
+    """Drop targets already inside a selected directory target ('x/'), so
+    pytest is never handed the same file twice."""
+    dirs = [t for t in targets if t.endswith("/")]
+    return {t for t in targets
+            if not any(t != d and t.startswith(d) for d in dirs)}
+
+
 def _select_placed(changed: list[str], repo: pathlib.Path) -> Selection:
     """select() once every path is known placeable: data-read, Python or inert."""
     targets = _data_targets(changed, repo)
@@ -461,6 +469,7 @@ def _select_placed(changed: list[str], repo: pathlib.Path) -> Selection:
         return Selection(full=True, changed=changed, reason=too_wide)
 
     placed = len(sources) + sum(1 for path in changed if _readers_of(path))
+    targets = _collapse(targets)
     return Selection(
         targets=sorted(targets), changed=changed,
         reason=f"{len(targets)} target(s) from {placed} changed file(s)",

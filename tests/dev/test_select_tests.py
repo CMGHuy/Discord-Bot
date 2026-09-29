@@ -628,3 +628,11 @@ def test_unreached_source_widens_even_beside_a_reached_one(sel, tmp_path):
         ["scripts/orphan.py", "swingbot/core/planning/plan_engine.py"], repo)
     assert result.full is True
     assert "scripts/orphan.py" in result.reason
+
+
+def test_targets_inside_a_selected_directory_are_collapsed(sel, tmp_path):
+    """tests/hooks/ plus tests/hooks/test_guardrails.py would hand pytest the
+    same file twice; the directory already covers it."""
+    result = sel.select(["AGENTS.md", "docs/claude/testing-cost.md"],
+                        _with_readers(_repo(tmp_path)))
+    assert (result.full, result.targets) == (False, ["tests/hooks/"])
