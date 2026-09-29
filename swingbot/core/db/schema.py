@@ -57,8 +57,8 @@ trades = register(
         sa.Column("status", sa.Text, nullable=False),
         sa.Column("opened_at", sa.TIMESTAMP(timezone=True), nullable=False),
         sa.Column("closed_at", sa.TIMESTAMP(timezone=True)),
-        sa.Column("entry", sa.Numeric),
-        sa.Column("stop_loss", sa.Numeric),
+        sa.Column("entry", sa.Float(53)),
+        sa.Column("stop_loss", sa.Float(53)),
         *standard_columns(),
         sa.Index("trades_ticker_opened_idx", "ticker", sa.text("opened_at DESC")),
         sa.Index("trades_status_idx", "status"),
@@ -100,7 +100,7 @@ account = register(sa.Table(
 account_balance_history = register(sa.Table(
     "account_balance_history", METADATA, sa.Column("id", sa.BigInteger, primary_key=True),
     sa.Column("ts", sa.TIMESTAMP(timezone=True), nullable=False, unique=True),
-    sa.Column("balance", sa.Numeric, nullable=False), *standard_columns(),
+    sa.Column("balance", sa.Float(53), nullable=False), *standard_columns(),
 ), ("ts", "balance"))
 
 journal_entries = register(sa.Table(
