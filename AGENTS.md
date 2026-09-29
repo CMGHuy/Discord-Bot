@@ -247,6 +247,9 @@ of ~1150 progress lines. Never re-run the full suite to check a local change.
   dispatch, an unplaceable file type, a failed git call). Inner loop only:
   it is not a gate, and the plan-final full run is unchanged. `--dry-run`
   prints the selection without running it, even when it widens to full.
+  `--audit` runs the selection then the full suite and reports failures the
+  selection missed (exit 1 on a miss; SKIPPED when it already widened;
+  UNKNOWN, exit 2, when the full run did not complete).
 - `python scripts/dev/testrun.py file tests/test_foo.py` while iterating.
 - `python scripts/dev/testrun.py fast` for broader, non-render-heavy checks.
 - `python scripts/dev/testrun.py full` once as final verification of an entire
