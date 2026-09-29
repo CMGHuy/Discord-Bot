@@ -1,0 +1,366 @@
+{
+ "mechanism": "E",
+ "strategy": "EMA Crossover",
+ "bullish": {
+  "baseline": {
+   "n": 117,
+   "wins": 44,
+   "losses": 73,
+   "win_rate": 37.60683760683761,
+   "expectancy_r": 0.09219718309859154,
+   "scratch_timeout_share": 0.176056338028169
+  },
+  "stage1": {
+   "cells": {
+    "2": {
+     "stats": {
+      "n": 160,
+      "wins": 68,
+      "losses": 92,
+      "win_rate": 42.5,
+      "expectancy_r": 0.2265306122448981,
+      "scratch_timeout_share": 0.1836734693877551
+     },
+     "lower_bound": -0.011392264563106796,
+     "tier1": {
+      "clears": false,
+      "clauses": {
+       "wr": false,
+       "exp_r": true,
+       "n": true,
+       "scratch": true
+      }
+     },
+     "tier2": {
+      "clears": false,
+      "clauses": {
+       "exp_r": true,
+       "lower_bound": false,
+       "n": true,
+       "scratch": true
+      }
+     },
+     "tier": null
+    },
+    "3": {
+     "stats": {
+      "n": 187,
+      "wins": 82,
+      "losses": 105,
+      "win_rate": 43.85026737967914,
+      "expectancy_r": 0.27239380530973467,
+      "scratch_timeout_share": 0.17256637168141592
+     },
+     "lower_bound": 0.02150445594035335,
+     "tier1": {
+      "clears": false,
+      "clauses": {
+       "wr": false,
+       "exp_r": true,
+       "n": true,
+       "scratch": true
+      }
+     },
+     "tier2": {
+      "clears": true,
+      "clauses": {
+       "exp_r": true,
+       "lower_bound": true,
+       "n": true,
+       "scratch": true
+      }
+     },
+     "tier": 2
+    }
+   },
+   "plateau_tier1": [],
+   "plateau_tier2": [],
+   "winner": null,
+   "winner_tier": null
+  },
+  "stage2": {
+   "folds": [
+    {
+     "test_year": 2013,
+     "tol": null,
+     "stats": null
+    },
+    {
+     "test_year": 2014,
+     "tol": 3,
+     "stats": {
+      "n": 9,
+      "wins": 4,
+      "losses": 5,
+      "win_rate": 44.44444444444444,
+      "expectancy_r": 0.2517222222222222,
+      "scratch_timeout_share": 0.5
+     }
+    },
+    {
+     "test_year": 2015,
+     "tol": 3,
+     "stats": {
+      "n": 30,
+      "wins": 13,
+      "losses": 17,
+      "win_rate": 43.333333333333336,
+      "expectancy_r": 0.3801666666666666,
+      "scratch_timeout_share": 0.0
+     }
+    },
+    {
+     "test_year": 2016,
+     "tol": 3,
+     "stats": {
+      "n": 11,
+      "wins": 6,
+      "losses": 5,
+      "win_rate": 54.54545454545454,
+      "expectancy_r": 0.541,
+      "scratch_timeout_share": 0.21428571428571427
+     }
+    },
+    {
+     "test_year": 2017,
+     "tol": 3,
+     "stats": {
+      "n": 17,
+      "wins": 8,
+      "losses": 9,
+      "win_rate": 47.05882352941176,
+      "expectancy_r": 0.19456521739130433,
+      "scratch_timeout_share": 0.2608695652173913
+     }
+    },
+    {
+     "test_year": 2018,
+     "tol": 3,
+     "stats": {
+      "n": 18,
+      "wins": 11,
+      "losses": 7,
+      "win_rate": 61.111111111111114,
+      "expectancy_r": 0.8558333333333334,
+      "scratch_timeout_share": 0.0
+     }
+    },
+    {
+     "test_year": 2019,
+     "tol": 3,
+     "stats": {
+      "n": 17,
+      "wins": 3,
+      "losses": 14,
+      "win_rate": 17.647058823529413,
+      "expectancy_r": -0.22390909090909092,
+      "scratch_timeout_share": 0.22727272727272727
+     }
+    },
+    {
+     "test_year": 2020,
+     "tol": 3,
+     "stats": {
+      "n": 15,
+      "wins": 7,
+      "losses": 8,
+      "win_rate": 46.666666666666664,
+      "expectancy_r": 0.0927,
+      "scratch_timeout_share": 0.25
+     }
+    },
+    {
+     "test_year": 2021,
+     "tol": 3,
+     "stats": {
+      "n": 27,
+      "wins": 16,
+      "losses": 11,
+      "win_rate": 59.25925925925925,
+      "expectancy_r": 0.7326666666666668,
+      "scratch_timeout_share": 0.1
+     }
+    },
+    {
+     "test_year": 2022,
+     "tol": 3,
+     "stats": {
+      "n": 2,
+      "wins": 0,
+      "losses": 2,
+      "win_rate": 0.0,
+      "expectancy_r": -1.0,
+      "scratch_timeout_share": 0.0
+     }
+    },
+    {
+     "test_year": 2023,
+     "tol": 3,
+     "stats": {
+      "n": 10,
+      "wins": 5,
+      "losses": 5,
+      "win_rate": 50.0,
+      "expectancy_r": 0.4614545454545455,
+      "scratch_timeout_share": 0.09090909090909091
+     }
+    }
+   ],
+   "verdict": {
+    "clears": true,
+    "qualifying": 6,
+    "positive": 5,
+    "unselected": 1
+   }
+  },
+  "proceed_to_validation": false,
+  "validation_cell": null,
+  "tier": null
+ },
+ "bearish": {
+  "baseline": {
+   "n": 18,
+   "wins": 2,
+   "losses": 16,
+   "win_rate": 11.11111111111111,
+   "expectancy_r": -0.5722857142857143,
+   "scratch_timeout_share": 0.14285714285714285
+  },
+  "stage1": {
+   "cells": {
+    "2": {
+     "stats": {
+      "n": 25,
+      "wins": 4,
+      "losses": 21,
+      "win_rate": 16.0,
+      "expectancy_r": -0.4906428571428571,
+      "scratch_timeout_share": 0.10714285714285714
+     },
+     "lower_bound": -0.9285714285714286,
+     "tier1": {
+      "clears": false,
+      "clauses": {
+       "wr": false,
+       "exp_r": false,
+       "n": false,
+       "scratch": true
+      }
+     },
+     "tier2": {
+      "clears": false,
+      "clauses": {
+       "exp_r": false,
+       "lower_bound": false,
+       "n": false,
+       "scratch": true
+      }
+     },
+     "tier": null
+    },
+    "3": {
+     "stats": {
+      "n": 27,
+      "wins": 4,
+      "losses": 23,
+      "win_rate": 14.814814814814813,
+      "expectancy_r": -0.5246,
+      "scratch_timeout_share": 0.1
+     },
+     "lower_bound": -0.9354838709677419,
+     "tier1": {
+      "clears": false,
+      "clauses": {
+       "wr": false,
+       "exp_r": false,
+       "n": false,
+       "scratch": true
+      }
+     },
+     "tier2": {
+      "clears": false,
+      "clauses": {
+       "exp_r": false,
+       "lower_bound": false,
+       "n": false,
+       "scratch": true
+      }
+     },
+     "tier": null
+    }
+   },
+   "plateau_tier1": [],
+   "plateau_tier2": [],
+   "winner": null,
+   "winner_tier": null
+  },
+  "stage2": {
+   "folds": [
+    {
+     "test_year": 2013,
+     "tol": null,
+     "stats": null
+    },
+    {
+     "test_year": 2014,
+     "tol": null,
+     "stats": null
+    },
+    {
+     "test_year": 2015,
+     "tol": null,
+     "stats": null
+    },
+    {
+     "test_year": 2016,
+     "tol": null,
+     "stats": null
+    },
+    {
+     "test_year": 2017,
+     "tol": null,
+     "stats": null
+    },
+    {
+     "test_year": 2018,
+     "tol": null,
+     "stats": null
+    },
+    {
+     "test_year": 2019,
+     "tol": null,
+     "stats": null
+    },
+    {
+     "test_year": 2020,
+     "tol": null,
+     "stats": null
+    },
+    {
+     "test_year": 2021,
+     "tol": null,
+     "stats": null
+    },
+    {
+     "test_year": 2022,
+     "tol": null,
+     "stats": null
+    },
+    {
+     "test_year": 2023,
+     "tol": null,
+     "stats": null
+    }
+   ],
+   "verdict": {
+    "clears": false,
+    "qualifying": 0,
+    "positive": 0,
+    "unselected": 11
+   }
+  },
+  "proceed_to_validation": false,
+  "validation_cell": null,
+  "tier": null
+ }
+}
