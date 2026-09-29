@@ -67,8 +67,8 @@ through the v93 laggard rule (`apply_laggard_rule`), as live does. `exit_model="
 
 The extended cache at `E:/Documents/Private/Projects/Discord-Bot/data/backtest_cache_ext`, and the universe
 file `2026-09-29-v108-universe.txt`, sha256 `4452b50f6391e7b3f14a224874b7a0dcc8f4245f7f5cca006c0f0ed7c2dca4de`
-(77 names; equals the v103 universe and, on 2026-09-29, the main-tree watchlist). 73 of 77 survive the
-liquidity/data-quality filter, and **any run whose `universe_n` != 73 is discarded**. Survivorship bias is
+(77 names; equals the v103 universe and, on 2026-09-29, the main-tree watchlist). 74 of 77 survive the
+liquidity/data-quality filter (see Amendment 1), and **any run whose `universe_n` != 74 is discarded**. Survivorship bias is
 stated, not corrected: it biases WR and ExpR upward in the early years.
 
 ## The one-shot rule
@@ -95,3 +95,15 @@ badge did not change. This is v103's population-equality rule applied to a strat
 
 Not consulted: the 2026-07 VALIDATION read (N=36, WR 75.0%, fixed R:R table). Not re-run: v84's
 `pullback_max_bars` axis (closed, round 2) and the v84 EMA fold-stability row.
+
+## Amendment 1 -- universe_n 73 -> 74 (2026-09-29, before any counted run was kept)
+
+The plan and the text above said 73 of 77 survive the filter. The first Stage 0 `count` run returned
+`universe_n = 74` and was **discarded** (JSON deleted, not committed). Cause: `data/backtest_cache_ext` was
+refreshed on 2026-09-28 (after the plan was written) and now holds `CRWV` and `SNDK`; only `SPCX` is still
+missing. SPY spans 2010-01-04..2026-09-28. The partner approved amending the constant to **74**; the
+universe file, its sha256 and every threshold, grid value and window are unchanged.
+
+Disclosure: the discarded run's Stage 0 counts were seen before this amendment (K3/K1 about 1.6 in both
+directions, so neither direction was near a Stage 0 closure). The amendment is a data-availability fix, not
+a response to those counts, and it is committed before any kept count, collect or validation run.
