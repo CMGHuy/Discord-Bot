@@ -8,8 +8,14 @@ from dataclasses import dataclass, field
 
 
 def record_checksum(record: dict) -> str:
-    """Return a type-sensitive canonical checksum for one source record."""
-    blob = json.dumps(record, sort_keys=True, default=str, separators=(",", ":"))
+    """Return a type-sensitive canonical checksum for one source record.
+
+    Non-finite floats are folded to None first: the write path narrows NaN to
+    null at the codec boundary, so a source NaN and a stored null are the same
+    record and parity must not report them as a mismatch.
+    """
+    from swingbot.core.db.codec import sanitise_non_finite
+    blob = json.dumps(sanitise_non_finite(record), sort_keys=True, default=str, separators=(",", ":"))
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 

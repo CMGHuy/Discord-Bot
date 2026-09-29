@@ -1,6 +1,7 @@
 """Split a flat record into promoted columns plus a JSONB document, and back."""
 from __future__ import annotations
 
+import math
 from typing import Any, Mapping, Sequence
 
 # Infrastructure columns are not part of a store record's public shape.  A
@@ -11,6 +12,24 @@ RESERVED_KEYS = frozenset({"id", "doc", "updated_at"})
 
 class ReservedKeyError(ValueError):
     """A record used a key reserved for an infrastructure column."""
+
+
+def sanitise_non_finite(value: Any) -> Any:
+    """Replace NaN and +/-Infinity with ``None``, recursively.
+
+    ``json.dumps`` emits these as bare ``NaN``/``Infinity`` tokens, which
+    Python's own parser accepts but JSON does not define and PostgreSQL's JSONB
+    rejects outright.  Every producer of one here means "not computed", and the
+    JSON stores already spell that ``None`` elsewhere, so this narrowing is
+    deliberate and one-way: a value does not round-trip back to NaN.
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, Mapping):
+        return {key: sanitise_non_finite(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [sanitise_non_finite(item) for item in value]
+    return value
 
 
 def split_doc(record: Mapping[str, Any], promoted: Sequence[str]) -> tuple[dict, dict]:
@@ -31,9 +50,9 @@ def split_doc(record: Mapping[str, Any], promoted: Sequence[str]) -> tuple[dict,
     doc: dict[str, Any] = {}
     for key, value in record.items():
         if key in promoted_set:
-            columns[key] = value
+            columns[key] = sanitise_non_finite(value)
         else:
-            doc[key] = value
+            doc[key] = sanitise_non_finite(value)
     return columns, doc
 
 

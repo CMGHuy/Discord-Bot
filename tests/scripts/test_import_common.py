@@ -89,3 +89,8 @@ def test_run_import_fails_when_parity_fails(monkeypatch):
                         write_one=lambda repo, rec: None, repo=FakeRepo(),
                         key="k", name="watchlist")
     assert rc == 1
+
+
+def test_checksum_treats_nan_as_null():
+    """Source holds NaN; the database holds null. Parity must call that equal."""
+    assert record_checksum({"k": "a", "v": float("nan")}) ==            record_checksum({"k": "a", "v": None})
