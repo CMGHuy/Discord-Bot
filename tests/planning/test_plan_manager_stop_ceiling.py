@@ -9,6 +9,9 @@ from tests.planning.test_plan_manager_pending import _mgr, _pending
 
 def _poll(tmp_path, monkeypatch, scope, **plan_kw):
     monkeypatch.setattr(config, "STRUCTURAL_STOP_SCOPE", scope, raising=False)
+    # poll() reads the wall clock; without this the Berlin quiet window
+    # (23:00-08:00) makes it return [] and these tests fail overnight.
+    monkeypatch.setattr(config, "INTRADAY_RTH_ONLY", False)
     store, mgr = _mgr(tmp_path, FakePriceFeed([("AAPL", 106.0)]))
     store.add(_pending(**plan_kw))
     return store, mgr.poll()
