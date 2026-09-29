@@ -46,8 +46,27 @@ def _plans_repo():
 
 
 def _plans_from_repo_shape(row: dict) -> dict:
+    """Translate a plans row back to its JSON-store representation.
+
+    `created_at` is a promoted timestamptz, so a date-only source string comes
+    back widened to a full ISO instant. Every consumer treats the field as an
+    opaque string or parses either form (api_v1/trades.py passes it through,
+    rank._parse_created_at accepts date or datetime, the SPA types it
+    `string | null` and feeds it to age()/asText()), so the honest round trip
+    is to render midnight UTC back to the date it was written as. A timestamp
+    with a real time of day is left alone; only the widening is undone.
+    """
+    import datetime as dt
+
     from swingbot.core.db.dual import normalise
-    return normalise(row)
+
+    out = dict(row)
+    created = out.get("created_at")
+    if isinstance(created, dt.datetime) and created.tzinfo is not None:
+        midnight = (created.time() == dt.time(0)
+                    and created.utcoffset() == dt.timedelta(0))
+        out["created_at"] = created.date().isoformat() if midnight else created.isoformat()
+    return normalise(out)
 
 
 def _starred_repo():
