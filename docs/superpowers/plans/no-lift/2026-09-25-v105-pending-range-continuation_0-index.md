@@ -207,5 +207,5 @@ The five failure modes most likely to bite a user. Each is pinned by a named tes
   broker integration, so the PENDING notice is a paper instruction with
   retry-until-acknowledged, not an order; the pilot's x3 power extrapolation
   overstated bearish power (full universe stayed at 10-16 filled).
-- **Bump / Edge:** no release; `VERSION.json` untouched. Edge stayed as
-  predicted (`volume`) but produced no lift.
+- **Bump / Edge:** no release; `VERSION.json` untouched. Edge stays
+  `expectancy` (as registered); it produced no lift.
