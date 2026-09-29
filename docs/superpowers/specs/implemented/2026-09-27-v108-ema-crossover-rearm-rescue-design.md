@@ -3,7 +3,7 @@
 **Version:** ui 1.21.0 · bot 1.10.3 (at writing)
 **Bump:** none until wiring; bot minor if a K > 1 ships (alert stream gains entries, badge flips)
 **Edge:** volume
-**Status:** Approved 2026-09-27; not started.
+**Status:** Closed no-lift at Stage 1 (both directions) 2026-09-29; VALIDATION spent: none. Phase A code (inert, K=1 default) merged to `main` at `53fc7c09`.
 
 ## Why this, and the honest prior
 

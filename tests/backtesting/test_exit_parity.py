@@ -1,17 +1,9 @@
-from pathlib import Path
-import pandas as pd
 import pytest
 
-from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
+from swingbot.core.backtesting.backtest import run_backtest
 from swingbot.core.planning.plan_engine import TradePlanV2, PlanStatus, simulate_exit
 
-ROOT = Path(__file__).resolve().parent.parent.parent
-CACHE_DIR = ROOT / "data" / "backtest_cache"
-SAMPLE_TICKERS = ["AAPL", "MSFT", "TSLA"]
-HORIZON_KEYS = ["4w", "3m"]
-
-pytestmark = pytest.mark.skipif(not CACHE_DIR.is_dir(),
-                                reason="no OHLCV cache present")
+from tests.fixtures.ohlcv_parity import PARITY_CASES, load_ohlcv
 
 def _plan_from_backtest_trade(t, ticker, strategy, horizon_key):
     """Market-entry plan with the legacy trade's exact numbers, so
@@ -27,14 +19,9 @@ def _plan_from_backtest_trade(t, ticker, strategy, horizon_key):
         badge="WEAK", badge_stats={}, status=PlanStatus.ACTIVE,
     )
 
-@pytest.mark.parametrize("horizon_key", HORIZON_KEYS)
-@pytest.mark.parametrize("strategy", ALL_STRATEGIES)
-@pytest.mark.parametrize("ticker", SAMPLE_TICKERS)
+@pytest.mark.parametrize(("ticker", "strategy", "horizon_key"), PARITY_CASES)
 def test_exit_parity(ticker, strategy, horizon_key):
-    path = CACHE_DIR / f"{ticker}.csv"
-    if not path.exists():
-        pytest.skip(f"{ticker}.csv missing")
-    df = pd.read_csv(path, index_col="Date", parse_dates=True)
+    df = load_ohlcv(ticker)
 
     # frictions=False: this test re-walks the legacy v1 trade through the v2
     # exit simulator and expects near-identical outcome/exit-bar/r_total --
@@ -42,8 +29,9 @@ def test_exit_parity(ticker, strategy, horizon_key):
     # price and r_multiple away from what simulate_exit (unmodified, no
     # frictions concept) computes, which is unrelated to this test's purpose.
     summary = run_backtest(ticker, df, strategy, horizon_key, frictions=False)
-    if not summary.trades:
-        pytest.skip("no trades")
+    assert summary.trades, (
+        f"{ticker}/{strategy}/{horizon_key} no longer trades on the fixture; "
+        "swap in another ticker in tests/fixtures/ohlcv_parity.py")
 
     date_to_idx = {str(d.date()): i for i, d in enumerate(df.index)}
     for t in summary.trades:

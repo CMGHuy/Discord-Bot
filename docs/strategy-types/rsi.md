@@ -42,6 +42,8 @@ Stop `2 × ATR14`, capped at 2%. TP1 comes from the ATR ladder. Exits: trail
 | Source | Window | N | WR | ExpR | Note |
 |---|---|---|---|---|---|
 | Registry (run 2026-09-10) | TRAIN 2020–23 | 38 | 23.7% | **−0.120** | **WEAK** (legacy badge refresh, pre-2% cap) |
+| v104 structural stop, out-of-scope arm | TRAIN 2010-2025, universe 74 | 89 | 43.8% | +0.105 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, in-scope arm | same | 63 | 44.4% | +0.056 | bootstrap lower bound −0.605, no tier — **NO-LIFT at Stage 1** |
 
 **Negative expectancy** on current arithmetic. It is the weakest strategy in
 the registry. The pre-v31 VALIDATED badge described deleted arithmetic and was

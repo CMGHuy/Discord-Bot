@@ -1,0 +1,210 @@
+{
+ "part": "A",
+ "strategy": "RSI",
+ "direction": "bullish",
+ "baseline": {
+  "n": 89,
+  "wins": 39,
+  "losses": 50,
+  "win_rate": 43.82022471910113,
+  "expectancy_r": 0.10539534883720938,
+  "scratch_timeout_share": 0.31007751937984496
+ },
+ "in_scope": {
+  "stats": {
+   "n": 63,
+   "wins": 28,
+   "losses": 35,
+   "win_rate": 44.44444444444444,
+   "expectancy_r": 0.05553271028037379,
+   "scratch_timeout_share": 0.411214953271028
+  },
+  "lower_bound": -0.6047954545454545,
+  "tier1": {
+   "clears": false,
+   "clauses": {
+    "wr": false,
+    "exp_r": true,
+    "n": true,
+    "scratch": true
+   }
+  },
+  "tier2": {
+   "clears": false,
+   "clauses": {
+    "exp_r": true,
+    "lower_bound": false,
+    "n": true,
+    "scratch": true
+   }
+  },
+  "tier": null
+ },
+ "beats_baseline": false,
+ "folds": [
+  {
+   "test_year": 2013,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2014,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2015,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2016,
+   "tol": "fixed",
+   "stats": {
+    "n": 9,
+    "wins": 0,
+    "losses": 9,
+    "win_rate": 0.0,
+    "expectancy_r": -1.0,
+    "scratch_timeout_share": 0.0
+   }
+  },
+  {
+   "test_year": 2017,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2018,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2019,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2020,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": 0.0,
+    "scratch_timeout_share": 1.0
+   }
+  },
+  {
+   "test_year": 2021,
+   "tol": "fixed",
+   "stats": {
+    "n": 17,
+    "wins": 9,
+    "losses": 8,
+    "win_rate": 52.94117647058824,
+    "expectancy_r": 0.5163529411764706,
+    "scratch_timeout_share": 0.0
+   }
+  },
+  {
+   "test_year": 2022,
+   "tol": "fixed",
+   "stats": {
+    "n": 9,
+    "wins": 0,
+    "losses": 9,
+    "win_rate": 0.0,
+    "expectancy_r": -1.0,
+    "scratch_timeout_share": 0.0
+   }
+  },
+  {
+   "test_year": 2023,
+   "tol": "fixed",
+   "stats": {
+    "n": 9,
+    "wins": 0,
+    "losses": 9,
+    "win_rate": 0.0,
+    "expectancy_r": -0.25,
+    "scratch_timeout_share": 0.75
+   }
+  },
+  {
+   "test_year": 2024,
+   "tol": "fixed",
+   "stats": {
+    "n": 19,
+    "wins": 19,
+    "losses": 0,
+    "win_rate": 100.0,
+    "expectancy_r": 1.2717894736842101,
+    "scratch_timeout_share": 0.0
+   }
+  },
+  {
+   "test_year": 2025,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  }
+ ],
+ "stage2": {
+  "clears": false,
+  "qualifying": 2,
+  "positive": 2,
+  "unselected": 0
+ },
+ "proceed_to_holdout": false,
+ "tier": null
+}

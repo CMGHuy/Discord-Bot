@@ -106,10 +106,40 @@ risk. If no candidate still clears 1.5R, the widening is rolled back.
 > (`plan_manager.py`, `cancelled_risk_cap`). The backtest has no equivalent,
 > so it scores trades that live would cancel. That is a backtest ≠ live gap,
 > and it affects every strategy's post-cap badge and TRAIN figures, including
-> v101–v103. Not yet fixed; it needs its own plan (`Edge: none (integrity)`).
-> Script: scratch `cap_check.py` in the 2026-09-25 session, a
-> `run_backtest(..., exit_model="v2", scale_out=True, tp2_mode="levels",
-> frictions=True)` sweep comparing `|entry − stop_loss| / entry`.
+> v101–v103. **Fixed by v104 V104-2**: the level lifecycle now widens a stop
+> only up to the same ceiling the builder used, so backtest and live cannot
+> diverge on this axis again. Script: scratch `cap_check.py` in the
+> 2026-09-25 session, a `run_backtest(..., exit_model="v2", scale_out=True,
+> tp2_mode="levels", frictions=True)` sweep comparing
+> `|entry − stop_loss| / entry`.
+
+### 4b. Structural stops (v104)
+
+v104 (2026-09-25) let chosen strategy × direction pairs keep their own
+structural stop — up to the horizon's `max_risk_pct` — under fixed-dollar-risk
+sizing, instead of the flat 2% cap every strategy uses by default. One module,
+`swingbot/core/planning/stop_scope.py`, decides the regime:
+`stop_ceiling(strategy, direction, horizon)` returns `(pct, "cap"|"drop")`,
+and the builders, the level lifecycle (§4a) and the live fill check all read
+it, so backtest and live cannot diverge. A pair named in the structural-stop
+scope list gets `"drop"` (a stop beyond the ceiling builds no plan at all,
+never a capped one); every other pair still gets `"cap"` at exactly 2%,
+byte-identical to pre-v104 arithmetic.
+
+An in-scope plan is sized in dollars, not by a fixed price distance: it is
+not built unless `compute_position_size` returns `mode == "risk_pct"` with
+`0 < risk_amount ≤ balance × risk_pct / 100` (fail-closed — sizing
+unavailable means no plan, never a legacy fallback).
+
+**Current scope value: empty.** All 15 measured strategy × direction pairs
+(V104-16) and all three candidate short mechanisms (V104-17) were tested
+against this sizing regime on TRAIN 2010-2025 plus a 2026-01-01..2026-09-25
+holdout. Two pairs (MACD bullish, Support/Resistance bullish) reached the
+holdout and failed it; two (Break & Retest bullish, Volume Profile bullish)
+sealed thin and keep an unspent retry once the holdout reaches 12 months; the
+rest closed at Stage 1 or 2 on TRAIN. Nothing is in the scope list today.
+Detail and every figure: `docs/claude/backtest-methodology.md`'s v104 rows,
+`results/2026-09-28-v104-{partA,partB,holdout}.md`.
 
 ## 5. Exits (exit model v2)
 

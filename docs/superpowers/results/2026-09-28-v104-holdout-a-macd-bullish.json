@@ -1,0 +1,365 @@
+{
+ "candidate": "a-macd-bullish",
+ "part": "A",
+ "strategy": "MACD",
+ "direction": "bullish",
+ "window": [
+  "2026-01-01",
+  "2026-09-25"
+ ],
+ "evaluate": "docs/superpowers/results/2026-09-28-v104-partA-macd-bullish.json",
+ "preregistration": "docs/superpowers/results/2026-09-28-v104-preregistration.md",
+ "status": "scored",
+ "tier": 1,
+ "stats": {
+  "n": 27,
+  "wins": 12,
+  "losses": 15,
+  "win_rate": 44.44444444444444,
+  "expectancy_r": 0.052999999999999985,
+  "scratch_timeout_share": 0.25
+ },
+ "lower_bound": -0.40592538480635554,
+ "baseline": {
+  "n": 47,
+  "wins": 8,
+  "losses": 39,
+  "win_rate": 17.02127659574468,
+  "expectancy_r": -0.3804821428571428,
+  "scratch_timeout_share": 0.16071428571428573
+ },
+ "clauses": {
+  "wr": false,
+  "exp_r": true,
+  "n": true,
+  "scratch": true,
+  "beats_baseline": true
+ },
+ "passes": false,
+ "rows": [
+  {
+   "ticker": "AAPL",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-08-31",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 4.5677
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2026-09-16",
+   "outcome": "win",
+   "r_multiple": 1.511,
+   "risk_pct": 9.1018
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-01-28",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 7.1493
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-06-05",
+   "outcome": "win",
+   "r_multiple": 1.25,
+   "risk_pct": 3.8015
+  },
+  {
+   "ticker": "GEV",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2026-01-21",
+   "outcome": "win",
+   "r_multiple": 1.661,
+   "risk_pct": 8.7122
+  },
+  {
+   "ticker": "GEV",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2026-01-21",
+   "outcome": "win",
+   "r_multiple": 1.664,
+   "risk_pct": 8.6856
+  },
+  {
+   "ticker": "GEV",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2026-06-23",
+   "outcome": "win",
+   "r_multiple": 1.25,
+   "risk_pct": 9.8122
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-05-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 5.6626
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2026-05-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 5.6626
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2026-05-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 5.6626
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2026-05-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 5.6626
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2026-07-23",
+   "outcome": "win",
+   "r_multiple": 1.661,
+   "risk_pct": 6.2565
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2026-05-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 5.6626
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2026-07-23",
+   "outcome": "win",
+   "r_multiple": 1.661,
+   "risk_pct": 6.2565
+  },
+  {
+   "ticker": "GOOGL",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2026-08-05",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 7.6872
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-01-05",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 8.7411
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-01-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 7.2845
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-02-12",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 6.9013
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2026-01-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 5.4233
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2026-02-12",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 6.9013
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2026-01-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 6.702
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2026-02-12",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 6.9013
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2026-07-22",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 6.9366
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2026-01-16",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 5.575
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2026-02-12",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 6.9013
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2026-07-22",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 6.9366
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2026-01-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 6.702
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2026-02-12",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 6.9013
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2026-07-22",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 6.9366
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-01-16",
+   "outcome": "win",
+   "r_multiple": 1.25,
+   "risk_pct": 3.8477
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2026-01-16",
+   "outcome": "win",
+   "r_multiple": 1.25,
+   "risk_pct": 3.8477
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2026-01-16",
+   "outcome": "win",
+   "r_multiple": 1.25,
+   "risk_pct": 3.8477
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2026-01-16",
+   "outcome": "win",
+   "r_multiple": 1.25,
+   "risk_pct": 3.8477
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2026-01-16",
+   "outcome": "win",
+   "r_multiple": 1.25,
+   "risk_pct": 3.8477
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-04-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 4.4254
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2026-04-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 4.4254
+  }
+ ]
+}

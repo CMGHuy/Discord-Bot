@@ -1,0 +1,210 @@
+{
+ "part": "A",
+ "strategy": "VWAP",
+ "direction": "bullish",
+ "baseline": {
+  "n": 382,
+  "wins": 172,
+  "losses": 210,
+  "win_rate": 45.0261780104712,
+  "expectancy_r": 0.4113226452905813,
+  "scratch_timeout_share": 0.23446893787575152
+ },
+ "in_scope": {
+  "stats": {
+   "n": 316,
+   "wins": 155,
+   "losses": 161,
+   "win_rate": 49.050632911392405,
+   "expectancy_r": 0.23353863134657837,
+   "scratch_timeout_share": 0.30242825607064017
+  },
+  "lower_bound": 0.12373554748941319,
+  "tier1": {
+   "clears": false,
+   "clauses": {
+    "wr": false,
+    "exp_r": true,
+    "n": true,
+    "scratch": true
+   }
+  },
+  "tier2": {
+   "clears": true,
+   "clauses": {
+    "exp_r": true,
+    "lower_bound": true,
+    "n": true,
+    "scratch": true
+   }
+  },
+  "tier": 2
+ },
+ "beats_baseline": false,
+ "folds": [
+  {
+   "test_year": 2013,
+   "tol": "fixed",
+   "stats": {
+    "n": 34,
+    "wins": 20,
+    "losses": 14,
+    "win_rate": 58.82352941176471,
+    "expectancy_r": 0.4711666666666667,
+    "scratch_timeout_share": 0.19047619047619047
+   }
+  },
+  {
+   "test_year": 2014,
+   "tol": "fixed",
+   "stats": {
+    "n": 35,
+    "wins": 13,
+    "losses": 22,
+    "win_rate": 37.142857142857146,
+    "expectancy_r": -0.05006249999999999,
+    "scratch_timeout_share": 0.2708333333333333
+   }
+  },
+  {
+   "test_year": 2015,
+   "tol": "fixed",
+   "stats": {
+    "n": 20,
+    "wins": 5,
+    "losses": 15,
+    "win_rate": 25.0,
+    "expectancy_r": -0.10085714285714287,
+    "scratch_timeout_share": 0.42857142857142855
+   }
+  },
+  {
+   "test_year": 2016,
+   "tol": "fixed",
+   "stats": {
+    "n": 16,
+    "wins": 8,
+    "losses": 8,
+    "win_rate": 50.0,
+    "expectancy_r": 0.1754666666666667,
+    "scratch_timeout_share": 0.4666666666666667
+   }
+  },
+  {
+   "test_year": 2017,
+   "tol": "fixed",
+   "stats": {
+    "n": 32,
+    "wins": 19,
+    "losses": 13,
+    "win_rate": 59.375,
+    "expectancy_r": 0.5502916666666667,
+    "scratch_timeout_share": 0.3333333333333333
+   }
+  },
+  {
+   "test_year": 2018,
+   "tol": "fixed",
+   "stats": {
+    "n": 27,
+    "wins": 15,
+    "losses": 12,
+    "win_rate": 55.55555555555556,
+    "expectancy_r": 0.449625,
+    "scratch_timeout_share": 0.15625
+   }
+  },
+  {
+   "test_year": 2019,
+   "tol": "fixed",
+   "stats": {
+    "n": 13,
+    "wins": 4,
+    "losses": 9,
+    "win_rate": 30.76923076923077,
+    "expectancy_r": -0.06954166666666667,
+    "scratch_timeout_share": 0.4583333333333333
+   }
+  },
+  {
+   "test_year": 2020,
+   "tol": "fixed",
+   "stats": {
+    "n": 13,
+    "wins": 7,
+    "losses": 6,
+    "win_rate": 53.84615384615385,
+    "expectancy_r": 0.4343,
+    "scratch_timeout_share": 0.35
+   }
+  },
+  {
+   "test_year": 2021,
+   "tol": "fixed",
+   "stats": {
+    "n": 21,
+    "wins": 7,
+    "losses": 14,
+    "win_rate": 33.33333333333333,
+    "expectancy_r": -0.016312500000000035,
+    "scratch_timeout_share": 0.34375
+   }
+  },
+  {
+   "test_year": 2022,
+   "tol": "fixed",
+   "stats": {
+    "n": 4,
+    "wins": 2,
+    "losses": 2,
+    "win_rate": 50.0,
+    "expectancy_r": 0.24185714285714285,
+    "scratch_timeout_share": 0.42857142857142855
+   }
+  },
+  {
+   "test_year": 2023,
+   "tol": "fixed",
+   "stats": {
+    "n": 25,
+    "wins": 16,
+    "losses": 9,
+    "win_rate": 64.0,
+    "expectancy_r": 0.48234375000000007,
+    "scratch_timeout_share": 0.21875
+   }
+  },
+  {
+   "test_year": 2024,
+   "tol": "fixed",
+   "stats": {
+    "n": 30,
+    "wins": 17,
+    "losses": 13,
+    "win_rate": 56.666666666666664,
+    "expectancy_r": 0.383972972972973,
+    "scratch_timeout_share": 0.1891891891891892
+   }
+  },
+  {
+   "test_year": 2025,
+   "tol": "fixed",
+   "stats": {
+    "n": 13,
+    "wins": 7,
+    "losses": 6,
+    "win_rate": 53.84615384615385,
+    "expectancy_r": 0.33019999999999994,
+    "scratch_timeout_share": 0.13333333333333333
+   }
+  }
+ ],
+ "stage2": {
+  "clears": true,
+  "qualifying": 9,
+  "positive": 6,
+  "unselected": 0
+ },
+ "proceed_to_holdout": false,
+ "tier": null
+}

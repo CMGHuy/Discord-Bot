@@ -44,6 +44,10 @@ Stop `2 × ATR14`, capped at 2%. TP1 comes from the ATR ladder. Exits: trail
 |---|---|---|---|---|---|
 | Registry (run 2026-07-18) | VALIDATION 2024–25 | 1099 | 75.8% | +0.208 | **WEAK**, pre-v31 arithmetic: stale |
 | v84 persistence K=2 / 3 / 4 | TRAIN | 473 / 70 / 10 | 49.0 / 28.6 / 10.0% | K=3: −0.262 | persistence made it worse, so it was **rejected on TRAIN** and is permanently WEAK |
+| v104 structural stop, bullish, out-of-scope arm | TRAIN 2010-2025, universe 74 | 5282 | 43.6% | +0.395 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, bullish, in-scope arm | same | 3855 | 50.9% | +0.288 | Tier 1, clears the fold check (13 qualifying, 10 positive), but in-scope ExpR is below the out-of-scope arm's — **NO-LIFT at Stage 1** |
+| v104 structural stop, bearish, out-of-scope arm | TRAIN 2010-2025, universe 74 | 768 | 34.9% | +0.281 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, bearish, in-scope arm | same | 391 | 34.8% | −0.070 | bootstrap lower bound −0.362, no tier — **NO-LIFT at Stage 1** |
 
 This is by far the highest-volume strategy. N=1099 counts every horizon, and
 because the entry ignores the horizon, those are heavily the same bars counted

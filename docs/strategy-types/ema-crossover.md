@@ -44,6 +44,10 @@ capped at 2.5R. Exits use the defaults: trail 2.5 × ATR, TP2 on.
 |---|---|---|---|---|---|
 | Registry (run 2026-07-18) | VALIDATION 2024–25 | 36 | 75.0% | +0.061 | **WEAK**, pre-v31 arithmetic: stale |
 | v84 re-measurement | TRAIN | 55 | 61.8% | +0.494 | clears every badge clause, but only 1 of 3 fold years has N ≥ 15, so **CLOSED** before VALIDATION |
+| v104 structural stop, bullish, out-of-scope arm | TRAIN 2010-2025, universe 74 | 137 | 39.4% | +0.150 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, bullish, in-scope arm | same | 70 | 51.4% | +0.284 | Tier 1, beats baseline, but 0 of 13 folds qualify — **NO-LIFT at Stage 2** |
+| v104 structural stop, bearish, out-of-scope arm | TRAIN 2010-2025, universe 74 | 23 | 26.1% | −0.180 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, bearish, in-scope arm | same | 3 | 33.3% | −0.107 | N=3, below the N ≥ 30 floor — **NO-LIFT at Stage 1** |
 
 ## History
 

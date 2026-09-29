@@ -143,3 +143,123 @@ def test_registry_status_and_record():
     assert module.registry_status([{"verdict": {"tier": 1}}, {"verdict": {"tier": 2}}], rows) == "WEAK"
     record = module.registry_record("Fibonacci Continuation", rows, "WEAK", "2026-10-01")
     assert record["strategy"] == "Fibonacci Continuation" and record["horizon"] is None and record["n"] == 15
+
+
+# --- v108 mechanism E: EMA Crossover re-arm (K touch events per held cross) ---
+
+@pytest.fixture
+def ema_knobs(monkeypatch):
+    """Pin the v108 keys so these tests never depend on the entry-filter task having landed."""
+    from swingbot.core.market import entry_filters
+    params = entry_filters.DEFAULT_PARAMS["EMA Crossover"]
+    monkeypatch.setitem(params, "max_touches_bull", 1)
+    monkeypatch.setitem(params, "max_touches_bear", 1)
+    return params
+
+
+def _tier1(direction="bullish"):
+    return [row for index in range(10) for row in (
+        [_row(f"T{index}", "win", 2.0, direction) for _ in range(4)]
+        + [_row(f"T{index}", "loss", -1.0, direction) for _ in range(2)]
+    )]
+
+
+def test_mechanism_e_definition_keeps_k1_out_of_the_grid():
+    from fractions import Fraction
+    spec = _module().MECHANISMS["E"]
+    assert (spec.strategy, spec.grid, spec.loosest, spec.baseline) == ("EMA Crossover", (2, 3), 3, 1)
+    assert spec.inert_ratio == Fraction(115, 100)
+    assert spec.baseline not in spec.grid
+    assert _module().MECHANISMS["A"].inert_ratio is None and _module().MECHANISMS["C"].inert_ratio is None
+
+
+def test_mechanism_e_sets_only_the_scored_direction_and_restores(ema_knobs):
+    module = _module()
+    with module.mechanism_cell("E", 3, "bullish"):
+        assert (ema_knobs["max_touches_bull"], ema_knobs["max_touches_bear"]) == (3, 1)
+    with module.mechanism_cell("E", 2, "bearish"):
+        assert (ema_knobs["max_touches_bull"], ema_knobs["max_touches_bear"]) == (1, 2)
+    assert (ema_knobs["max_touches_bull"], ema_knobs["max_touches_bear"]) == (1, 1)
+
+
+def test_mechanism_e_restores_after_an_exception(ema_knobs):
+    with pytest.raises(RuntimeError):
+        with _module().mechanism_cell("E", 3, "bullish"):
+            raise RuntimeError("boom")
+    assert ema_knobs["max_touches_bull"] == 1
+
+
+def test_mechanism_e_needs_a_direction(ema_knobs):
+    with pytest.raises(ValueError):
+        _module().mechanism_cell("E", 2)
+
+
+def test_collect_trades_e_scores_each_direction_under_its_own_knob(ema_knobs):
+    module, frame, seen = _module(), make_ohlcv([100.0] * 300, start="2012-01-02"), []
+    def run_fn(ticker, df, strategy, horizon, **kwargs):
+        seen.append((strategy, ema_knobs["max_touches_bull"], ema_knobs["max_touches_bear"]))
+        return NS(trades=[])
+    module.collect_trades("E", {"AAA": frame}, {}, 3, module.TRAIN_EXT, horizons=("4w",), run_fn=run_fn, progress=NS(tick=lambda label: None))
+    assert seen == [("EMA Crossover", 3, 1), ("EMA Crossover", 1, 3)]
+    assert (ema_knobs["max_touches_bull"], ema_knobs["max_touches_bear"]) == (1, 1)
+
+
+def test_count_signals_e_counts_each_direction_under_its_own_knob(monkeypatch, ema_knobs):
+    import pandas as pd
+    module, seen = _module(), []
+    def fake(strategy, df, horizon):
+        seen.append((ema_knobs["max_touches_bull"], ema_knobs["max_touches_bear"]))
+        on = pd.Series(True, index=df.index)
+        return on, on
+    monkeypatch.setattr(module, "entries_for", fake)
+    counts = module.count_signals("E", {"AAA": make_ohlcv([100.0] * 5, start="2015-01-05")}, (1, 3), horizons=("4w",))
+    assert set(counts) == {"1|bullish", "1|bearish", "3|bullish", "3|bearish"}
+    assert seen == [(1, 1), (1, 1), (3, 1), (1, 3)]
+
+
+def test_stage0_e_closes_an_inert_direction_at_the_exact_ratio():
+    module = _module()
+    counts = {"1|bullish": {"total": 40}, "3|bullish": {"total": 45},
+              "1|bearish": {"total": 40}, "3|bearish": {"total": 46}}
+    assert module.stage0_reasons(counts, "E") == {"bullish": "inert", "bearish": None}
+    assert module.stage0_closures(counts, "E") == ["bullish"]
+
+
+def test_stage0_e_min_n_is_checked_first():
+    counts = {"1|bullish": {"total": 10}, "3|bullish": {"total": 29},
+              "1|bearish": {"total": 100}, "3|bearish": {"total": 300}}
+    assert _module().stage0_reasons(counts, "E") == {"bullish": "min_n", "bearish": None}
+
+
+def test_count_command_counts_the_reference_and_writes_reasons(monkeypatch, tmp_path):
+    module, asked = _module(), []
+    monkeypatch.setattr(module, "require_ext_cache", lambda: None)
+    monkeypatch.setattr(module, "_load_frames", lambda universe, tickers: {"AAA": None, "BBB": None})
+    def fake_counts(mech, frames, values, **kwargs):
+        asked.append(values)
+        return {f"{value}|{direction}": {"total": 100 if value == 1 else 200}
+                for value in values for direction in module.DIRECTIONS}
+    monkeypatch.setattr(module, "count_signals", fake_counts)
+    out = tmp_path / "s0.json"
+    module.main(["count", "--mechanism", "E", "--out", str(out)])
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert asked == [(1, 2, 3)] and payload["universe_n"] == 2
+    assert payload["closed_at_stage0"] == []
+    assert payload["stage0_reasons"] == {"bullish": None, "bearish": None}
+
+
+def test_evaluate_e_never_selects_the_k1_reference():
+    module = _module()
+    failing = [_row(f"T{index}", "loss", -1.0) for index in range(40)]
+    result = module.evaluate("E", {"1": _tier1(), "2": failing, "3": failing}, closed=("bearish",), **FAST)
+    bullish = result["bullish"]
+    assert bullish["baseline"]["n"] == 60
+    assert set(bullish["stage1"]["cells"]) == {"2", "3"}
+    assert bullish["stage1"]["winner"] is None and bullish["proceed_to_validation"] is False
+    assert result["bearish"]["closed_at"] == "stage0"
+
+
+def test_evaluate_e_picks_a_tier1_plateau_winner_from_the_grid():
+    result = _module().evaluate("E", {"1": _tier1(), "2": _tier1(), "3": _tier1()}, closed=("bearish",), **FAST)
+    stage1 = result["bullish"]["stage1"]
+    assert stage1["winner"] in (2, 3) and stage1["winner_tier"] == 1

@@ -1,0 +1,725 @@
+{
+ "candidate": "a-support-resistance-bullish",
+ "part": "A",
+ "strategy": "Support/Resistance",
+ "direction": "bullish",
+ "window": [
+  "2026-01-01",
+  "2026-09-25"
+ ],
+ "evaluate": "docs/superpowers/results/2026-09-28-v104-partA-support-resistance-bullish.json",
+ "preregistration": "docs/superpowers/results/2026-09-28-v104-preregistration.md",
+ "status": "scored",
+ "tier": 2,
+ "stats": {
+  "n": 45,
+  "wins": 18,
+  "losses": 27,
+  "win_rate": 40.0,
+  "expectancy_r": 0.1391052631578947,
+  "scratch_timeout_share": 0.40789473684210525
+ },
+ "lower_bound": -0.14324595722483044,
+ "baseline": {
+  "n": 72,
+  "wins": 21,
+  "losses": 51,
+  "win_rate": 29.166666666666668,
+  "expectancy_r": 0.06308333333333332,
+  "scratch_timeout_share": 0.14285714285714285
+ },
+ "clauses": {
+  "exp_r": true,
+  "lower_bound": false,
+  "n": true,
+  "scratch": true,
+  "beats_baseline": true
+ },
+ "passes": false,
+ "rows": [
+  {
+   "ticker": "ABNB",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-07-28",
+   "outcome": "win",
+   "r_multiple": 1.997,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-07-28",
+   "outcome": "win",
+   "r_multiple": 1.886,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-01-05",
+   "outcome": "win",
+   "r_multiple": 1.667,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-01-05",
+   "outcome": "win",
+   "r_multiple": 1.667,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-09-21",
+   "outcome": "timeout",
+   "r_multiple": -0.362,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-09-21",
+   "outcome": "timeout",
+   "r_multiple": -0.321,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "ASML",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-01-02",
+   "outcome": "win",
+   "r_multiple": 2.012,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "ASML",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-01-02",
+   "outcome": "win",
+   "r_multiple": 1.9,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "ASTS",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-01-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "ASTS",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-01-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-05-29",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-05-29",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "BA",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-01-02",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "CRWD",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-08-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "CRWD",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-09-14",
+   "outcome": "timeout",
+   "r_multiple": 1.097,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "CRWD",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-08-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "CRWD",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-09-14",
+   "outcome": "timeout",
+   "r_multiple": 0.975,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-03-12",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-03-12",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "DELL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-02-27",
+   "outcome": "win",
+   "r_multiple": 1.676,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "DELL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-05-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "DELL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-09-03",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "DELL",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-05-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "DELL",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-09-03",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-08-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-08-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-01-20",
+   "outcome": "win",
+   "r_multiple": 1.667,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-01-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-06-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "GLW",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-06-25",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "GLW",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-06-25",
+   "outcome": "win",
+   "r_multiple": 1.667,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-01-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-01-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "GS",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-01-05",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "GS",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-05-20",
+   "outcome": "win",
+   "r_multiple": 1.667,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "GS",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-01-05",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "GS",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-05-20",
+   "outcome": "win",
+   "r_multiple": 1.667,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-08-13",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-08-13",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 8.9997
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-07-30",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-08-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-09-17",
+   "outcome": "timeout",
+   "r_multiple": 1.334,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-07-30",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-09-17",
+   "outcome": "timeout",
+   "r_multiple": 1.186,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "IREN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-05-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "IREN",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-05-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "ISRG",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-01-06",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "ISRG",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-01-06",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-02-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-06-26",
+   "outcome": "timeout",
+   "r_multiple": 0.778,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-06-26",
+   "outcome": "timeout",
+   "r_multiple": 0.85,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-09-21",
+   "outcome": "timeout",
+   "r_multiple": -0.36,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-09-21",
+   "outcome": "timeout",
+   "r_multiple": -0.32,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "MRNA",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-06-17",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "MRNA",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-06-17",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-01-21",
+   "outcome": "win",
+   "r_multiple": 1.667,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-01-21",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "NBIS",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-03-11",
+   "outcome": "win",
+   "r_multiple": 1.667,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-01-27",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 8.0003
+  },
+  {
+   "ticker": "QBTS",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-05-21",
+   "outcome": "win",
+   "r_multiple": 1.667,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "RKLB",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-05-08",
+   "outcome": "win",
+   "r_multiple": 1.667,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "RKLB",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-05-08",
+   "outcome": "win",
+   "r_multiple": 1.667,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-04-29",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-04-29",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "SNDK",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-01-06",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "SNDK",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-05-01",
+   "outcome": "win",
+   "r_multiple": 1.666,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "SNDK",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-01-06",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "SNDK",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-05-01",
+   "outcome": "win",
+   "r_multiple": 1.667,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "SNOW",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-08-03",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "SNOW",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-08-03",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-01-06",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-03-17",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-01-06",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-03-17",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "risk_pct": 9.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2026-01-12",
+   "outcome": "timeout",
+   "r_multiple": 1.211,
+   "risk_pct": 8.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2026-01-12",
+   "outcome": "timeout",
+   "r_multiple": 0.363,
+   "risk_pct": 9.0
+  }
+ ]
+}

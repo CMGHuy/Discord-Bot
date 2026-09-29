@@ -48,6 +48,8 @@ Stop `2 × ATR14`, capped at 2%. TP1 comes from the ATR ladder. Exits: trail
 |---|---|---|---|---|---|
 | Registry (run 2026-08-17) | VALIDATION 2024–25 | 75 | 49.3% | +0.302 | **WEAK**: v31's VALIDATION flipped it from VALIDATED |
 | v84, 4w-only | TRAIN | 68 | 52.9% | +0.335 | gate shipped; badge closed at fold stability (only 2023 of 3 folds holds) |
+| v104 structural stop, out-of-scope arm | TRAIN 2010-2025, universe 74 | 382 | 45.0% | +0.411 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, in-scope arm | same | 316 | 49.1% | +0.234 | Tier 2, clears the fold check (9 qualifying, 6 positive), but in-scope ExpR is below the out-of-scope arm's — **NO-LIFT at Stage 1** |
 
 Positive expectancy, but a win rate just under 50%, and the fold years don't
 hold N.
