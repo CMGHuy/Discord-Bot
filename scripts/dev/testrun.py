@@ -15,6 +15,7 @@ Profiles (see docs/claude/testing-cost.md for the measurements behind them):
     python scripts/dev/testrun.py lf                # --lf, serial          seconds
     python scripts/dev/testrun.py changed          # only tests reaching your diff
     python scripts/dev/testrun.py changed --dry-run  # print the selection, run nothing
+    python scripts/dev/testrun.py changed --audit    # selection, then full: report misses
 
 `fast` runs serial on purpose: measured 27.1s serial vs 27.2s at -n 4, i.e. it
 is already at the fixed per-invocation overhead floor and workers only add
@@ -263,6 +264,48 @@ def resolve_changed(args) -> Selection | None:
     return selection
 
 
+def audit_misses(selected: list[str], full_failed: list[str]) -> list[str]:
+    """Failing node ids that the selection would NOT have run.
+
+    This set is the only interesting output of an audit: a regression the
+    inner loop would have hidden. Directory targets end in '/', so a prefix
+    match is the right test for both shapes.
+    """
+    return [
+        node for node in full_failed
+        if not any(node.split("::")[0].startswith(t) for t in selected)
+    ]
+
+
+def run_audit(targets: list[str]) -> int:
+    """Run the full suite and compare its failures with the selection.
+
+    Returns 1 on a miss, else 0. An empty selection is audited too: every
+    failure is then a miss, which is exactly the claim 'nothing needs running'
+    being checked. One clean run is weak evidence, not proof -- hence
+    'covered every failure', never 'the selection is safe'.
+    """
+    print("AUDIT: running the full suite to check the selection...")
+    _, full_failed, full_elapsed, _ = run(build_args("full", None))
+    misses = audit_misses(targets, full_failed)
+    if not misses:
+        print(f"AUDIT: OK  selection covered every failure  (full: {full_elapsed:.1f}s)")
+        return 0
+    print(f"AUDIT: MISS  {len(misses)} failure(s) the selection would not have run:")
+    for node in misses[:10]:
+        print(f"  {node}")
+    return 1
+
+
+def audit_leg(targets: list[str] | None, code: int) -> int:
+    """Audit after a `changed` run; a miss turns a green exit code into 1."""
+    if targets is None:
+        # Widened: that run WAS the full suite, so there is nothing to compare.
+        print("AUDIT: SKIPPED  selection widened to the full suite; nothing to compare")
+        return code
+    return code or run_audit(targets)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Split out from main() so tests/dev/test_testrun_ci_invocations.py can
     feed it every `testrun.py` command line deploy.yml actually runs --
@@ -284,6 +327,9 @@ def build_parser() -> argparse.ArgumentParser:
                          "(for a `full` shard where another shard already runs it)")
     ap.add_argument("--dry-run", action="store_true",
                     help="`changed`: print the selection and exit without running")
+    ap.add_argument("--audit", action="store_true",
+                    help="`changed`: run the selection, then the full suite, "
+                         "and report any failure the selection would have missed")
     return ap
 
 
@@ -340,7 +386,8 @@ def main() -> int:
         if selection is None:
             profile = "full"
         elif not selection.targets:
-            return 0                      # inert change: nothing to run, and that is a pass
+            # inert change: nothing to run, and that is a pass -- unless audited
+            return run_audit([]) if args.audit else 0
         else:
             targets = selection.targets
 
@@ -360,7 +407,10 @@ def main() -> int:
         print(warning, file=sys.stderr, flush=True)
 
     counts, failed, elapsed, rc = run(build_args(profile, args.target, targets))
-    return report(counts, failed, elapsed, rc, targets)
+    code = report(counts, failed, elapsed, rc, targets)
+    if args.profile == "changed" and args.audit:
+        return audit_leg(targets, code)
+    return code
 
 
 if __name__ == "__main__":
