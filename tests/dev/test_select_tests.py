@@ -6,6 +6,7 @@ real graph changes every commit and a test pinned to it would drift.
 import importlib.util
 import pathlib
 import subprocess
+import sys
 
 import pytest
 
@@ -19,6 +20,8 @@ def sel():
     )
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
+    # @dataclass resolves string annotations through sys.modules[cls.__module__].
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -153,3 +156,192 @@ def test_null_byte_source_raises_unparseable(sel, tmp_path):
     (repo / "pkg/nullbyte.py").write_bytes(b"x = 1\x00\n")
     with pytest.raises(sel.UnparseableFile):
         sel.build_import_graph(repo)
+
+
+def _repo(tmp_path):
+    """A fixture tree shaped like this repo.
+
+    ELEVEN test files on purpose. FULL_THRESHOLD is 0.4, so a fixture with
+    four would make the threshold fire on selections these tests expect to be
+    narrow -- the test would then pass or fail for a reason it is not about.
+    `hub.py` exists to be the one module that DOES trip the threshold, since
+    the obvious real hub (config.py) is in REGISTRY_PREFIXES and widens one
+    rule earlier.
+    """
+    unrelated = "from swingbot.core.unrelated import NOOP\n"
+    return _tree(tmp_path, {
+        "swingbot/__init__.py": "",
+        "swingbot/config.py": "SETTING = 1\n",
+        "swingbot/core/__init__.py": "",
+        "swingbot/core/hub.py": "SHARED = 1\n",
+        "swingbot/core/unrelated.py": "NOOP = 0\n",
+        "swingbot/core/planning/__init__.py": "",
+        "swingbot/core/planning/plan_engine.py": "VALUE = 1\n",
+        "swingbot/core/scanning/__init__.py": "",
+        "swingbot/core/scanning/engine.py": "from swingbot.core.planning.plan_engine import VALUE\n",
+        "swingbot/core/edge/__init__.py": "",
+        "swingbot/core/edge/rsi.py": "NAME = 'rsi'\n",
+        "swingbot/core/charts/__init__.py": "",
+        "swingbot/core/charts/render.py": "DPI = 110\n",
+        "tests/__init__.py": "",
+        "tests/conftest.py": "",
+        "tests/planning/__init__.py": "",
+        "tests/planning/test_plan_engine.py": "from swingbot.core.planning.plan_engine import VALUE\n",
+        "tests/scanning/__init__.py": "",
+        "tests/scanning/conftest.py": "",
+        "tests/scanning/test_engine.py": "from swingbot.core.scanning.engine import VALUE\n",
+        "tests/scanning/test_extra.py": "from swingbot.core.scanning.engine import VALUE\n",
+        "tests/test_config.py": "from swingbot.config import SETTING\n",
+        # Five importers of the hub: changing hub.py selects 5 of 11 test
+        # files (45%), over the 0.4 threshold. Every other case here selects
+        # at most 3 of 11 (27%) and stays narrow.
+        "tests/test_hub_a.py": "from swingbot.core.hub import SHARED\n",
+        "tests/test_hub_b.py": "from swingbot.core.hub import SHARED\n",
+        "tests/test_hub_c.py": "from swingbot.core.hub import SHARED\n",
+        "tests/test_hub_d.py": "from swingbot.core.hub import SHARED\n",
+        "tests/test_hub_e.py": "from swingbot.core.hub import SHARED\n",
+        "tests/test_filler_a.py": unrelated,
+        "tests/test_filler_b.py": unrelated,
+    })
+
+
+def test_git_unavailable_widens(sel, tmp_path):
+    result = sel.select(None, _repo(tmp_path))
+    assert result.full is True
+    assert "git unavailable" in result.reason
+
+
+def test_nothing_changed_runs_nothing(sel, tmp_path):
+    result = sel.select([], _repo(tmp_path))
+    assert (result.full, result.targets) == (False, [])
+    assert "nothing changed" in result.reason
+
+
+def test_source_change_selects_transitively(sel, tmp_path):
+    """plan_engine is imported by scanning/engine, so scanning's tests count."""
+    result = sel.select(["swingbot/core/planning/plan_engine.py"], _repo(tmp_path))
+    assert result.full is False
+    assert set(result.targets) == {
+        "tests/planning/test_plan_engine.py",
+        "tests/scanning/test_engine.py",
+        "tests/scanning/test_extra.py",
+    }
+
+
+def test_changed_test_file_selects_itself(sel, tmp_path):
+    result = sel.select(["tests/planning/test_plan_engine.py"], _repo(tmp_path))
+    assert (result.full, result.targets) == (False, ["tests/planning/test_plan_engine.py"])
+
+
+def test_changed_conftest_selects_its_subtree(sel, tmp_path):
+    result = sel.select(["tests/scanning/conftest.py"], _repo(tmp_path))
+    assert (result.full, result.targets) == (False, ["tests/scanning/"])
+
+
+def test_root_conftest_widens(sel, tmp_path):
+    """tests/conftest.py's subtree IS the suite; say so rather than pretend."""
+    result = sel.select(["tests/conftest.py"], _repo(tmp_path))
+    assert result.full is True
+
+
+def test_registry_prefix_widens(sel, tmp_path):
+    result = sel.select(["swingbot/core/edge/rsi.py"], _repo(tmp_path))
+    assert result.full is True
+    assert "swingbot/core/edge/rsi.py" in result.reason
+
+
+def test_escalate_prefix_widens(sel, tmp_path):
+    result = sel.select(["swingbot/core/charts/render.py"], _repo(tmp_path))
+    assert result.full is True
+    assert "swingbot/core/charts/render.py" in result.reason
+
+
+def test_unplaceable_extension_widens(sel, tmp_path):
+    result = sel.select(["frontend/src/styles/theme.css"], _repo(tmp_path))
+    assert result.full is True
+    assert "theme.css" in result.reason
+
+
+def test_inert_path_alone_runs_nothing(sel, tmp_path):
+    result = sel.select(["docs/claude/testing-cost.md"], _repo(tmp_path))
+    assert (result.full, result.targets) == (False, [])
+    assert "inert" in result.reason
+
+
+def test_inert_path_does_not_suppress_a_real_one(sel, tmp_path):
+    result = sel.select(
+        ["README.md", "tests/planning/test_plan_engine.py"], _repo(tmp_path)
+    )
+    assert (result.full, result.targets) == (False, ["tests/planning/test_plan_engine.py"])
+
+
+def test_python_is_never_inert(sel, tmp_path):
+    """.claude/hooks/guardrails.py is Python under an otherwise-inert prefix."""
+    repo = _repo(tmp_path)
+    (repo / ".claude/hooks").mkdir(parents=True, exist_ok=True)
+    (repo / ".claude/hooks/guardrails.py").write_text("RULES = []\n", encoding="utf-8")
+    result = sel.select([".claude/hooks/guardrails.py"], repo)
+    assert result.full is True          # no test imports it -> widen, never skip
+    assert "no test reaches" in result.reason
+
+
+def test_unparseable_file_widens_and_names_it(sel, tmp_path):
+    repo = _repo(tmp_path)
+    (repo / "swingbot/core/planning/plan_engine.py").write_text("def f(:\n", encoding="utf-8")
+    result = sel.select(["swingbot/core/planning/plan_engine.py"], repo)
+    assert result.full is True
+    assert "plan_engine.py" in result.reason
+
+
+def test_threshold_widens(sel, tmp_path):
+    """hub.py reaches 5 of 11 test files (45%), over the 0.4 threshold.
+
+    Note this must NOT use config.py: it is in REGISTRY_PREFIXES and widens
+    one rule earlier, so the reason would name registry dispatch and this
+    test would pass without ever exercising the threshold.
+    """
+    result = sel.select(["swingbot/core/hub.py"], _repo(tmp_path))
+    assert result.full is True
+    assert "%" in result.reason and "cheaper" in result.reason
+
+
+def test_narrow_selection_stays_under_the_threshold(sel, tmp_path):
+    """The other side of the same boundary: 3 of 11 must not widen."""
+    result = sel.select(["swingbot/core/planning/plan_engine.py"], _repo(tmp_path))
+    assert result.full is False
+
+
+def test_selection_is_sorted_and_deterministic(sel, tmp_path):
+    repo = _repo(tmp_path)
+    first = sel.select(["swingbot/core/scanning/engine.py"], repo)
+    second = sel.select(["swingbot/core/scanning/engine.py"], repo)
+    assert first.targets == second.targets == sorted(first.targets)
+
+
+def test_real_repo_smoke(sel):
+    """Against the live repo: must not raise, and config.py must widen.
+
+    Deliberately not a fixed expected set -- that would need editing on every
+    unrelated commit.
+    """
+    result = sel.select(["swingbot/config.py"], REPO)
+    assert isinstance(result.reason, str) and result.reason
+    assert result.full is True
+
+
+def test_deleted_source_file_reaches_its_importers(sel, tmp_path):
+    """A tracked file removed from disk stays in the graph; it must neither
+    crash select nor narrow below its importers' tests."""
+    repo = _repo(tmp_path)
+    (repo / "swingbot/core/planning/plan_engine.py").unlink()
+    result = sel.select(["swingbot/core/planning/plan_engine.py"], repo)
+    assert result.full is False
+    assert "tests/scanning/test_engine.py" in result.targets
+
+
+def test_deleted_test_file_is_not_a_target(sel, tmp_path):
+    """pytest errors on a path that no longer exists; widen instead."""
+    repo = _repo(tmp_path)
+    (repo / "tests/planning/test_plan_engine.py").unlink()
+    result = sel.select(["tests/planning/test_plan_engine.py"], repo)
+    assert result.full is True

@@ -170,3 +170,174 @@ def importers_of(reverse: dict[str, set[str]], start: str) -> set[str]:
                 seen.add(importer)
                 stack.append(importer)
     return seen
+
+
+# --- selection ---------------------------------------------------------
+
+from dataclasses import dataclass, field  # noqa: E402  (grouped with its users)
+
+# Moved here from testrun.py so both the fast tier and the changed tier read
+# one list. Editing any of these can break a test that only runs in the slow
+# tier. Tiering is a speed optimisation; it must not become a way to miss a
+# regression.
+ESCALATE_PREFIXES = (
+    "swingbot/core/charts/",
+    "frontend/src/styles/tokens.css",
+)
+
+# Reached by NAME, not by import -- a static graph structurally cannot see the
+# edge, so these widen unconditionally. Each entry needs its reason, because a
+# future reader's first instinct will be to delete it as over-cautious.
+REGISTRY_PREFIXES = (
+    # Strategy modules dispatched through the registry by name.
+    "swingbot/core/edge/",
+    # HORIZONS and strategy identity, consumed by name across the scan pipeline.
+    "swingbot/core/market/strategy_types.py",
+    # .env-driven schema read by attribute across the tree. Also a hub that
+    # would select nearly everything anyway, so widening costs little.
+    "swingbot/config.py",
+)
+
+# Known to affect no test. Distinct from "unplaceable", which widens: silence
+# and ignorance get opposite treatment. Python is checked FIRST and is never
+# inert -- .claude/hooks/guardrails.py lives under an inert prefix and is
+# tested by tests/hooks/test_guardrails.py.
+INERT_PREFIXES = ("docs/", ".claude/", ".superpowers/", ".github/")
+INERT_SUFFIXES = (".md", ".txt")
+
+# UNMEASURED. The serial-vs-`-n 4` crossover has not been derived: it needs a
+# cooled idle box, and docs/claude/testing-cost.md records timings on this
+# machine swinging up to 4x under load. 0.4 is a placeholder that is honest
+# about being one. Do not quote it as measured.
+FULL_THRESHOLD = 0.4
+
+
+@dataclass(frozen=True)
+class Selection:
+    """What to run, and -- always -- why.
+
+    full=True means the caller must run the whole suite instead of `targets`.
+    `reason` is never empty: an unexplained selection is an unauditable one.
+    """
+
+    targets: list[str] = field(default_factory=list)
+    full: bool = False
+    reason: str = ""
+    changed: list[str] = field(default_factory=list)
+
+
+def _is_python(path: str) -> bool:
+    return path.endswith(".py")
+
+
+def _is_inert(path: str) -> bool:
+    return path.startswith(INERT_PREFIXES) or path.endswith(INERT_SUFFIXES)
+
+
+def _is_test_file(path: str) -> bool:
+    return (
+        path.startswith("tests/")
+        and path.endswith(".py")
+        and path.rsplit("/", 1)[-1].startswith("test_")
+    )
+
+
+def _covered(targets: set[str], all_tests: list[str]) -> int:
+    """How many test files a target set resolves to (dir targets end in '/')."""
+    return sum(
+        1 for test in all_tests
+        if any(test == target or test.startswith(target) for target in targets)
+    )
+
+
+def _widen_for_path(changed: list[str]) -> str | None:
+    """Reason to run everything based on paths alone, else None."""
+    for prefixes, label in (
+        (REGISTRY_PREFIXES, "registry dispatch, invisible to an import graph"),
+        (ESCALATE_PREFIXES, "render tier"),
+    ):
+        hits = [path for path in changed if path.startswith(prefixes)]
+        if hits:
+            return f"{hits[0]} touched ({label})"
+    unplaceable = [p for p in changed if not _is_python(p) and not _is_inert(p)]
+    if unplaceable:
+        return f"{unplaceable[0]} is not placeable by an import graph"
+    return None
+
+
+def _targets_for(
+    sources: list[str], reverse: dict[str, set[str]], repo: pathlib.Path
+) -> set[str] | str:
+    """Test targets reaching `sources`, or a widening reason (str)."""
+    targets: set[str] = set()
+    for path in sources:
+        if path.endswith("conftest.py"):
+            subtree = path[: -len("conftest.py")]
+            if subtree in ("tests/", ""):
+                return f"{path} is the root conftest -- its subtree is the suite"
+            targets.add(subtree)
+            continue
+        # A deleted test file is no target: pytest errors on a missing path.
+        if _is_test_file(path) and (repo / path).exists():
+            targets.add(path)
+        targets |= {p for p in importers_of(reverse, path) if _is_test_file(p)}
+    return targets
+
+
+def _threshold_reason(targets: set[str], repo: pathlib.Path) -> str | None:
+    """Reason to run everything when the selection covers most of the suite."""
+    all_tests = [p for p in repo_python_files(repo) if _is_test_file(p)]
+    if not all_tests:
+        return None
+    share = _covered(targets, all_tests) / len(all_tests)
+    if share > FULL_THRESHOLD:
+        return (f"{share:.0%} of test files selected -- -n 4 over "
+                "everything is cheaper than serial over most of it")
+    return None
+
+
+def select(changed: list[str] | None, repo: pathlib.Path) -> Selection:
+    """Map changed paths to test paths. Widens to full on any uncertainty.
+
+    `changed=None` means the caller's git query failed. The caller owns that
+    query (testrun.changed_paths) so this module stays a pure function of
+    (files on disk, changed paths).
+
+    Rules are evaluated in order; the first match decides.
+    """
+    if changed is None:
+        return Selection(full=True, reason="git unavailable")
+
+    changed = sorted({path.strip().replace("\\", "/") for path in changed if path.strip()})
+    if not changed:
+        return Selection(reason="nothing changed")
+
+    widen = _widen_for_path(changed)
+    if widen:
+        return Selection(full=True, changed=changed, reason=widen)
+
+    sources = [path for path in changed if _is_python(path)]
+    if not sources:
+        return Selection(changed=changed,
+                         reason=f"nothing to test ({len(changed)} inert path(s))")
+
+    try:
+        reverse = build_import_graph(repo)
+    except (UnparseableFile, RuntimeError) as exc:
+        return Selection(full=True, changed=changed, reason=str(exc))
+
+    targets = _targets_for(sources, reverse, repo)
+    if isinstance(targets, str):
+        return Selection(full=True, changed=changed, reason=targets)
+    if not targets:
+        return Selection(full=True, changed=changed,
+                         reason=f"no test reaches {sources[0]}")
+
+    too_wide = _threshold_reason(targets, repo)
+    if too_wide:
+        return Selection(full=True, changed=changed, reason=too_wide)
+
+    return Selection(
+        targets=sorted(targets), changed=changed,
+        reason=f"{len(targets)} target(s) from {len(sources)} changed file(s)",
+    )
