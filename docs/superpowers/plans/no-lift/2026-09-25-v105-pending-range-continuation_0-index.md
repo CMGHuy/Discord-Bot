@@ -180,3 +180,32 @@ The five failure modes most likely to bite a user. Each is pinned by a named tes
   Tasks 7–8. Task 10 after the pre-registered window matures. Task 11 after
   Task 10. Task 12 last.
 - No parallel subagent execution is required.
+
+## Closing note (2026-09-29) -- NO-LIFT, code deliberately not merged
+
+- **Outcome:** Tasks 1-8 were built and measured; Tasks 9-11 (holdout freeze,
+  holdout shot, direction enablement) were skipped by Task 9's own precondition
+  because no direction produced a selected cell. TRAIN 2020-2023, 75 cached
+  tickers, nine (N, d) cells, both directions, both the `per_horizon` (deciding)
+  and `live` paths: **`no-eligible-cell`.** Bullish had two eligible cells
+  (N15/d0.50, N15/d0.75) but neither had the two eligible grid neighbours the
+  frozen plateau rule requires; bearish showed dWR 0.0 wherever it had data,
+  with component N of 10-16 (< 30). No threshold, geometry, 2% cap or RR band was
+  loosened. MDE and walk-forward did not run (they apply only to a selected
+  cell). Numbers: `results/2026-09-29-v105-train.md`.
+- **One-shot holdout budget: unused.** Nothing was frozen or scored.
+- **Where the code lives:** branch `2026-09-25-v105-pending-range-continuation`
+  (worktree of the same name), tip `5c0c4b82`, about 2,900 lines all inert
+  behind `RANGE_ALERTS_MODE=off`. `main` received only these docs. **Not
+  merging it was a considered decision by the partner (2026-09-29), not an
+  oversight**, matching v36/v49/v69. The branch and worktree are kept.
+- **Full suite:** 4226 passed, 165 skipped, 0 failed, on the branch after
+  merging `main` (the two `test_knob_observability` failures before that merge
+  were the branch being 20 commits behind `dafd4d89`, not v105 code).
+- **Actual limitations:** daily replay cannot order events inside the entry bar
+  (worse-of fills and entry-bar diagnostics are the only handle); there is no
+  broker integration, so the PENDING notice is a paper instruction with
+  retry-until-acknowledged, not an order; the pilot's x3 power extrapolation
+  overstated bearish power (full universe stayed at 10-16 filled).
+- **Bump / Edge:** no release; `VERSION.json` untouched. Edge stayed as
+  predicted (`volume`) but produced no lift.
