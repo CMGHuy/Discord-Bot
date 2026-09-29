@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 from dataclasses import dataclass, field
@@ -94,8 +95,30 @@ def parity(store: str, source_path: str | None = None) -> ImportReport:
     return _parity(store, source_path)
 
 
-def run_import(argv, *, load_source, write_one, repo, key: str, name: str) -> int:
-    """Run a reusable dry-run/import/verification CLI."""
+def _write_all(source, write_one, repo, name: str, one_transaction: bool) -> None:
+    from swingbot.core.db.engine import transaction
+    with (transaction() if one_transaction else contextlib.nullcontext()) as conn:
+        for index, record in enumerate(source, 1):
+            if one_transaction:
+                write_one(repo, record, conn=conn)
+            else:
+                write_one(repo, record)
+            if index % 100 == 0 or index == len(source):
+                print(f"[{name}] {index}/{len(source)} written", flush=True)
+
+
+def run_import(argv, *, load_source, write_one, repo, key: str, name: str,
+               prepare=None, one_transaction: bool = False) -> int:
+    """Run a reusable dry-run/import/verification CLI.
+
+    ``prepare(repo)`` runs once before the first write. A store with no natural
+    key (the append-only settings audit) uses it to empty the table, so a rerun
+    converges on the file instead of appending a second copy.
+
+    ``one_transaction`` writes every record on one connection, passed to
+    ``write_one(repo, record, conn=...)`` and committed once. A per-record
+    commit is fine for hundreds of rows and minutes for ten thousand.
+    """
     parser = argparse.ArgumentParser(description=f"Import {name} into Postgres")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--source", help="path to the JSON file (default: data/)")
@@ -105,10 +128,9 @@ def run_import(argv, *, load_source, write_one, repo, key: str, name: str) -> in
     if args.dry_run:
         print(f"[{name}] DRY RUN -- would write {len(source)} row(s); table currently holds {repo.count()}")
         return 0
-    for index, record in enumerate(source, 1):
-        write_one(repo, record)
-        if index % 100 == 0 or index == len(source):
-            print(f"[{name}] {index}/{len(source)} written", flush=True)
+    if prepare is not None:
+        prepare(repo)
+    _write_all(source, write_one, repo, name, one_transaction)
     # One verifier. The ad-hoc comparison this replaced had neither the
     # per-store from_repo_shape translation nor ignore_fields, so it reported
     # watchlist FAILED on all 77 rows while authoritative parity reported OK,
