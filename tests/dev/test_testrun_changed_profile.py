@@ -1,6 +1,7 @@
 """The `changed` profile wires selection into the runner (v99, Task V99-3)."""
 import importlib.util
 import pathlib
+import subprocess
 import sys
 from dataclasses import dataclass, field
 
@@ -143,3 +144,53 @@ def test_audit_with_dry_run_runs_nothing(testrun, monkeypatch):
     with pytest.raises(SystemExit) as exc:
         testrun.main()
     assert exc.value.code == 0
+
+
+# --- final-review fix wave (2026-09-29) ------------------------------------
+
+def _git(repo, *args):
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                   cwd=repo, check=True, capture_output=True)
+
+
+def _committed_repo(tmp_path, files):
+    for rel, body in files.items():
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text(body, encoding="utf-8")
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "core.quotepath", "true")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "init")
+    return tmp_path
+
+
+def test_changed_paths_lists_both_sides_of_a_staged_rename(testrun, monkeypatch, tmp_path):
+    """Rename detection would list only the new path, so the old module's
+    registry prefix and importers would escape selection."""
+    repo = _committed_repo(tmp_path, {"swingbot/core/edge/a.py": "X = 1\n"})
+    (repo / "swingbot/other").mkdir(parents=True)
+    _git(repo, "mv", "swingbot/core/edge/a.py", "swingbot/other/a.py")
+    monkeypatch.setattr(testrun, "REPO", repo)
+    paths = testrun.changed_paths()
+    assert "swingbot/core/edge/a.py" in paths
+    assert "swingbot/other/a.py" in paths
+
+
+def test_changed_paths_keeps_non_ascii_names_unquoted(testrun, monkeypatch, tmp_path):
+    repo = _committed_repo(tmp_path, {"pkg/caf\u00e9.py": "X = 1\n"})
+    (repo / "pkg/caf\u00e9.py").write_text("X = 2\n", encoding="utf-8")
+    (repo / "pkg/new_\u00fc.py").write_text("Y = 1\n", encoding="utf-8")
+    monkeypatch.setattr(testrun, "REPO", repo)
+    paths = testrun.changed_paths()
+    assert sorted(paths) == ["pkg/caf\u00e9.py", "pkg/new_\u00fc.py"]
+
+
+@pytest.mark.parametrize("counts, rc", [({}, 1), ({"passed": 3}, 2), ({}, 0)],
+                         ids=["unparseable", "internal-error-rc", "no-counts-rc0"])
+def test_run_audit_after_a_broken_full_run_is_unknown(testrun, monkeypatch, capsys, counts, rc):
+    """No counts, or pytest's rc outside (0, 1), means the full run did not
+    finish: its empty failure list proves nothing about the selection."""
+    monkeypatch.setattr(testrun, "run", lambda args: (counts, [], 1.0, rc))
+    assert testrun.run_audit(["tests/planning/"]) == 2
+    out = capsys.readouterr().out
+    assert "AUDIT: UNKNOWN" in out and "AUDIT: OK" not in out

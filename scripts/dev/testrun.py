@@ -72,23 +72,36 @@ FAILED_RE = re.compile(r"^(?:FAILED|ERROR)\s+(\S+)")
 COUNT_RE = re.compile(r"(\d+) (passed|failed|skipped|xfailed|xpassed|error|errors|deselected)")
 
 
-def changed_paths() -> list[str] | None:
-    """Working-tree + staged paths vs HEAD. None if git can't answer."""
+def _git_listing(*args: str) -> list[str] | None:
+    """NUL-separated (-z) git listing, or None if git can't answer.
+
+    -z because core.quotePath would otherwise wrap non-ASCII names in
+    quotes, and a quoted name matches no prefix and no file.
+    """
     try:
-        out = subprocess.run(
-            ["git", "diff", "--name-only", "HEAD"], cwd=REPO,
-            capture_output=True, text=True, timeout=15,
-        )
-        untracked = subprocess.run(
-            ["git", "ls-files", "--others", "--exclude-standard"], cwd=REPO,
-            capture_output=True, text=True, timeout=15,
-        )
+        out = subprocess.run(["git", *args, "-z"], cwd=REPO,
+                             capture_output=True, timeout=15)
     except (OSError, subprocess.SubprocessError):
         return None
     if out.returncode != 0:
         return None
-    paths = out.stdout.splitlines() + untracked.stdout.splitlines()
-    return [p.strip().replace("\\", "/") for p in paths if p.strip()]
+    text = out.stdout.decode("utf-8", errors="surrogateescape")
+    return [item.replace("\\", "/") for item in text.split("\0") if item]
+
+
+def changed_paths() -> list[str] | None:
+    """Working-tree + staged paths vs HEAD, plus untracked. None if git can't
+    answer.
+
+    --no-renames: with rename detection a staged `git mv` lists only the new
+    path, so the old one would escape REGISTRY_PREFIXES widening and its
+    importers would never be selected. Both sides must be listed.
+    """
+    diff = _git_listing("diff", "--name-only", "--no-renames", "HEAD")
+    untracked = _git_listing("ls-files", "--others", "--exclude-standard")
+    if diff is None or untracked is None:
+        return None
+    return diff + untracked
 
 
 def should_escalate() -> tuple[bool, str]:
@@ -280,13 +293,20 @@ def audit_misses(selected: list[str], full_failed: list[str]) -> list[str]:
 def run_audit(targets: list[str]) -> int:
     """Run the full suite and compare its failures with the selection.
 
-    Returns 1 on a miss, else 0. An empty selection is audited too: every
+    Returns 1 on a miss, 2 when the full run itself did not complete (no
+    parseable counts, or pytest exit code outside 0/1), else 0. An empty selection is audited too: every
     failure is then a miss, which is exactly the claim 'nothing needs running'
     being checked. One clean run is weak evidence, not proof -- hence
     'covered every failure', never 'the selection is safe'.
     """
     print("AUDIT: running the full suite to check the selection...")
-    _, full_failed, full_elapsed, _ = run(build_args("full", None))
+    counts, full_failed, full_elapsed, rc = run(build_args("full", None))
+    if not counts or rc not in (0, 1):
+        # INTERNALERROR, interrupt, collection crash: the full run did not
+        # finish, so its (empty) failure list proves nothing either way.
+        print(f"AUDIT: UNKNOWN  full run did not complete "
+              f"(pytest exit code {rc}); full output: {LOG}")
+        return 2
     misses = audit_misses(targets, full_failed)
     if not misses:
         print(f"AUDIT: OK  selection covered every failure  (full: {full_elapsed:.1f}s)")
