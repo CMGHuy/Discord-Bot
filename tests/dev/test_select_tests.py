@@ -113,3 +113,43 @@ def test_worktree_copies_are_excluded(sel, tmp_path):
     reverse = sel.build_import_graph(repo)
     assert reverse["pkg/core.py"] == set()
     assert not any(p.startswith(".claude/worktrees/") for p in reverse)
+
+
+def test_ancestor_package_inits_reach_importers_of_submodules(sel, tmp_path):
+    """Importing pkg.sub.mod executes pkg/__init__ and pkg/sub/__init__ too."""
+    repo = _tree(tmp_path, {
+        "pkg/__init__.py": "",
+        "pkg/sub/__init__.py": "",
+        "pkg/sub/mod.py": "VALUE = 1\n",
+        "tests/test_mod.py": "from pkg.sub import mod\n",
+    })
+    reverse = sel.build_import_graph(repo)
+    assert "tests/test_mod.py" in sel.importers_of(reverse, "pkg/__init__.py")
+    assert "tests/test_mod.py" in sel.importers_of(reverse, "pkg/sub/__init__.py")
+
+
+def test_tracked_but_deleted_file_keeps_its_importer_edge(sel, tmp_path):
+    repo = _tree(tmp_path, {
+        "pkg/__init__.py": "",
+        "pkg/gone.py": "VALUE = 1\n",
+        "tests/test_gone.py": "from pkg.gone import VALUE\n",
+    })
+    (repo / "pkg/gone.py").unlink()
+    reverse = sel.build_import_graph(repo)
+    assert reverse["pkg/gone.py"] == {"tests/test_gone.py"}
+
+
+def test_unreadable_file_raises_unparseable(sel, tmp_path):
+    repo = _tree(tmp_path, {"pkg/dir.py": "x = 1\n"})
+    (repo / "pkg/dir.py").unlink()
+    (repo / "pkg/dir.py").mkdir()  # exists but read_text raises OSError
+    with pytest.raises(sel.UnparseableFile) as caught:
+        sel.build_import_graph(repo)
+    assert caught.value.path == "pkg/dir.py"
+
+
+def test_null_byte_source_raises_unparseable(sel, tmp_path):
+    repo = _tree(tmp_path, {"pkg/nullbyte.py": "x = 1\n"})
+    (repo / "pkg/nullbyte.py").write_bytes(b"x = 1\x00\n")
+    with pytest.raises(sel.UnparseableFile):
+        sel.build_import_graph(repo)

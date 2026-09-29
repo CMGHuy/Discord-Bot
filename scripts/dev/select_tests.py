@@ -112,25 +112,51 @@ def _imported_names(tree: ast.AST, package: str) -> set[str]:
     return names
 
 
+def _parse(repo: pathlib.Path, rel: str) -> ast.AST | None:
+    """Parse one file. None when it is gone from disk (tracked but deleted):
+    it imports nothing now, yet stays a resolution target so its importers
+    keep their edge. Anything else unreadable or unparseable must widen."""
+    path = repo / rel
+    if not path.exists() and not path.is_symlink():
+        return None
+    try:
+        source = path.read_text(encoding="utf-8", errors="replace")
+        return ast.parse(source)
+    except (SyntaxError, ValueError, OSError) as exc:
+        raise UnparseableFile(rel) from exc
+
+
+def _with_ancestor_packages(name: str, by_module: dict[str, str]) -> set[str]:
+    """Files executed by importing `name`: itself plus every ancestor
+    package's __init__.py that exists in the repo."""
+    parts = name.split(".")
+    found: set[str] = set()
+    for end in range(1, len(parts) + 1):
+        target = by_module.get(".".join(parts[:end]))
+        if target is not None and (end == len(parts) or target.endswith("__init__.py")):
+            found.add(target)
+    return found
+
+
 def build_import_graph(repo: pathlib.Path) -> dict[str, set[str]]:
     """file -> set of files that import it (reverse edges, direct only).
 
-    Raises UnparseableFile, which every caller must turn into a full run.
+    Importing a.b.c also executes a/__init__.py and a/b/__init__.py, so those
+    get edges too. Raises UnparseableFile, which every caller must turn into
+    a full run.
     """
     files = repo_python_files(repo)
     by_module = {_module_name(rel): rel for rel in files}
     reverse: dict[str, set[str]] = {rel: set() for rel in files}
 
     for rel in files:
-        source = (repo / rel).read_text(encoding="utf-8", errors="replace")
-        try:
-            tree = ast.parse(source)
-        except SyntaxError as exc:
-            raise UnparseableFile(rel) from exc
+        tree = _parse(repo, rel)
+        if tree is None:
+            continue
         for name in _imported_names(tree, _package_of(rel)):
-            target = by_module.get(name)
-            if target is not None and target != rel:
-                reverse[target].add(rel)
+            for target in _with_ancestor_packages(name, by_module):
+                if target != rel:
+                    reverse[target].add(rel)
     return reverse
 
 
