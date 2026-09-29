@@ -118,10 +118,14 @@ STORES: dict[str, StoreSpec] = {
 }
 
 
-def parity(store: str) -> ImportReport:
-    """Return a strict whole-store JSON-to-Postgres parity report."""
+def parity(store: str, source_path: str | None = None) -> ImportReport:
+    """Return a strict whole-store JSON-to-Postgres parity report.
+
+    ``source_path`` mirrors the importers' ``--source`` flag: verification must
+    read the same file the import read, or it is checking the wrong thing.
+    """
     spec = STORES[store]
-    source = read_json(os.path.join(config.DATA_DIR, spec.filename), [])
+    source = read_json(source_path or os.path.join(config.DATA_DIR, spec.filename), [])
     if spec.loader is not None:
         source = spec.loader(source)
     if isinstance(source, dict):

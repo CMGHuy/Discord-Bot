@@ -31,3 +31,61 @@ def test_compare_names_missing_extra_and_changed_rows():
 def test_compare_rejects_duplicate_source_keys():
     with pytest.raises(ValueError, match="duplicate"):
         compare([{"trade_id": "T1"}, {"trade_id": "T1"}], [], key="trade_id")
+
+
+def test_every_run_import_name_is_a_parity_store():
+    """run_import delegates verification by name, so the names must match."""
+    import importlib
+    from scripts.db.parity_report import STORES
+    for module_name, expected in [
+        ("import_watchlist", "watchlist"), ("import_state", "state"),
+        ("import_plans", "plans"), ("import_starred", "starred_plans"),
+        ("import_trades", "trades"), ("import_journal", "journal"),
+    ]:
+        importlib.import_module(f"scripts.db.{module_name}")
+        assert expected in STORES, f"{module_name} verifies against a missing store"
+
+
+def test_parity_accepts_a_source_override():
+    """run_import --source must verify against the file it actually imported."""
+    import inspect
+
+    from scripts.db.parity_report import parity
+    assert "source_path" in inspect.signature(parity).parameters
+
+
+def test_run_import_verdict_comes_from_parity(monkeypatch):
+    """A store whose parity is OK must not be reported FAILED by run_import."""
+    import scripts.db.import_common as mod
+    from scripts.db.import_common import ImportReport
+
+    monkeypatch.setattr(mod, "parity",
+                        lambda name, source_path=None: ImportReport(
+                            source_count=3, imported_count=3))
+
+    class FakeRepo:
+        def count(self):
+            return 0
+
+    rc = mod.run_import([], load_source=lambda p: [{"k": 1}, {"k": 2}, {"k": 3}],
+                        write_one=lambda repo, rec: None, repo=FakeRepo(),
+                        key="k", name="watchlist")
+    assert rc == 0
+
+
+def test_run_import_fails_when_parity_fails(monkeypatch):
+    import scripts.db.import_common as mod
+    from scripts.db.import_common import ImportReport
+
+    monkeypatch.setattr(mod, "parity",
+                        lambda name, source_path=None: ImportReport(
+                            source_count=3, imported_count=2, missing=["c"]))
+
+    class FakeRepo:
+        def count(self):
+            return 0
+
+    rc = mod.run_import([], load_source=lambda p: [{"k": 1}],
+                        write_one=lambda repo, rec: None, repo=FakeRepo(),
+                        key="k", name="watchlist")
+    assert rc == 1

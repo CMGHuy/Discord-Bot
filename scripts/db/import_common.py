@@ -67,6 +67,12 @@ def compare(source: list[dict], imported: list[dict], key: str,
     )
 
 
+def parity(store: str, source_path: str | None = None) -> ImportReport:
+    """Authoritative per-store parity (lazy: parity_report imports this module)."""
+    from scripts.db.parity_report import parity as _parity
+    return _parity(store, source_path)
+
+
 def run_import(argv, *, load_source, write_one, repo, key: str, name: str) -> int:
     """Run a reusable dry-run/import/verification CLI."""
     parser = argparse.ArgumentParser(description=f"Import {name} into Postgres")
@@ -82,7 +88,11 @@ def run_import(argv, *, load_source, write_one, repo, key: str, name: str) -> in
         write_one(repo, record)
         if index % 100 == 0 or index == len(source):
             print(f"[{name}] {index}/{len(source)} written", flush=True)
-    report = compare(source, repo.list_all(), key=key)
+    # One verifier. The ad-hoc comparison this replaced had neither the
+    # per-store from_repo_shape translation nor ignore_fields, so it reported
+    # watchlist FAILED on all 77 rows while authoritative parity reported OK,
+    # and passed stores whose shape it never translated.
+    report = parity(name, args.source)
     print(f"[{name}] verification:")
     print(report.render())
     return 0 if report.ok else 1
