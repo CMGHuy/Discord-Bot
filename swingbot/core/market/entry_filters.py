@@ -448,7 +448,46 @@ DEFAULT_PARAMS["EMA Crossover"] = {
     # Task 109 spends the single VALIDATION-window look against this exact
     # config, no retuning after.
     "entry_mode": "pullback", "pullback_max_bars": 15,
+    # v108 re-arm: pullback touch *events* taken per held cross, per direction.
+    # 1 = first touch only -- the pre-v108 entry, bit-for-bit. Changed only by
+    # a v108 funnel verdict (docs/superpowers/results/*-v108-*.md).
+    "max_touches_bull": 1, "max_touches_bear": 1,
 }
+
+
+def _touch_events_after(cross, touch, window, max_touches):
+    """Mark the first `max_touches` touch events in the `window` bars after each cross.
+
+    A touch event is a touching bar whose previous bar did not touch, so a run
+    of consecutive touching bars is one event. The first touching bar inside a
+    window always opens an event, even when the cross bar itself touched --
+    that keeps max_touches=1 identical to the pre-v108 first-touch rule. Each
+    cross counts independently. Bar j reads only the cross at ci < j and the
+    touch mask at j and j-1 (no lookahead).
+    """
+    if max_touches < 1:
+        raise ValueError(f"max_touches must be >= 1, got {max_touches}")
+    cross = np.asarray(cross, dtype=bool)
+    touch = np.asarray(touch, dtype=bool)
+    starts = touch & ~np.concatenate(([False], touch[:-1]))
+    out = np.zeros(len(touch), dtype=bool)
+    for ci in np.flatnonzero(cross):
+        taken = 0
+        for j in range(ci + 1, min(ci + 1 + window, len(touch))):
+            if touch[j] and (j == ci + 1 or starts[j]):
+                out[j] = True
+                taken += 1
+                if taken >= max_touches:
+                    break
+    return out
+
+
+def _pullback_entries(cross, touch, window, max_touches):
+    """Series wrapper: the touch-event bars that follow a held cross."""
+    marks = _touch_events_after(cross.fillna(False).to_numpy(dtype=bool),
+                                touch.fillna(False).to_numpy(dtype=bool),
+                                window, max_touches)
+    return pd.Series(marks, index=cross.index)
 
 
 def ema_cross_entries(df, horizon_key, params=None):
@@ -469,17 +508,11 @@ def ema_cross_entries(df, horizon_key, params=None):
         touched_bull = (df["Low"] <= fast) & (df["Close"] > fast)
         touched_bear = (df["High"] >= fast) & (df["Close"] < fast)
 
-        def _first_touch_after(cross_mask, touch_mask):
-            out = pd.Series(False, index=df.index)
-            for ci in np.where(cross_mask.values)[0]:
-                for j in range(ci + 1, min(ci + 1 + window, len(df))):
-                    if touch_mask.values[j]:
-                        out.iloc[j] = True
-                        break                     # first touch only
-            return out
-
-        held_bull = _first_touch_after(held_bull, touched_bull).fillna(False)
-        held_bear = _first_touch_after(held_bear, touched_bear).fillna(False)
+        # v108 re-arm: the first K touch events per held cross (K=1 = pre-v108).
+        held_bull = _pullback_entries(held_bull, touched_bull, window,
+                                      int(p.get("max_touches_bull", 1)))
+        held_bear = _pullback_entries(held_bear, touched_bear, window,
+                                      int(p.get("max_touches_bear", 1)))
 
     rsi14 = g["rsi14"]
     rsi_dipped = rsi14.rolling(5).min().shift(1) < p["rsi_dip"]          # real pullback preceded
