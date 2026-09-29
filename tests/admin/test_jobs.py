@@ -81,13 +81,17 @@ def test_a_finished_job_is_never_reaped_as_failed(admin_app):
             jobs_mod._WATCHED.discard("watched01")
 
 
-def test_an_orphaned_job_is_still_reaped(admin_app):
+def test_an_orphaned_job_is_still_reaped(admin_app, monkeypatch):
     """The other half: without this, the fix above would be "never reap", and
     a job orphaned by an admin restart would sit `running` for ever with
     nothing able to correct it -- and `_any_active` would refuse every new
     job because one is perpetually "in progress"."""
     from swingbot.admin import jobs as jobs_mod
 
+    # The pid must read as dead however busy the machine is: a reaped pid can
+    # be recycled by an unrelated process within the window, which made this
+    # test flaky under a loaded full run. Liveness itself is not under test.
+    monkeypatch.setattr(jobs_mod, "_pid_alive", lambda pid: False)
     mgr = jobs_mod.JobManager()
     table = {"orphan01": {
         "id": "orphan01", "kind": "test", "args": [], "state": "running",

@@ -78,6 +78,7 @@ class ScanItem:
     stop_confluence: tuple = None
     combined_from: list = field(default_factory=list)
     htf_info: dict = None             # from get_htf_bias() -- None when HTF check is off or inconclusive
+    previous_confirmed: str = None    # state's confirmed value before this scan confirmed the item
     htf_bias: str | None = None       # "bullish"/"bearish" from the same get_htf_bias() call, always stored (not just on counter-trend like htf_info) so attach_plan_v2/_build_quality_inputs can reuse it instead of recomputing
     plan_v2: object = None            # TradePlanV2 | None
     plan_v2_rejected: str | None = None  # e.g. "no_qualifying_target" (v31 Task 6) -- distinguishes a real "no trade here" from a builder exception

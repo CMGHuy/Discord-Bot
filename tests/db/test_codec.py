@@ -52,3 +52,43 @@ def test_round_trip_is_lossless(record):
     columns, doc = split_doc(record, PROMOTED)
     row = {**columns, "id": 1, "doc": doc, "updated_at": "2026-01-01"}
     assert merge_doc(row, PROMOTED) == record
+
+
+def test_nan_in_a_document_field_becomes_none():
+    """Bare NaN is not valid JSON and JSONB rejects it outright."""
+    _, doc = split_doc({"trade_id": "t1", "mfe_r": float("nan")}, ["trade_id"])
+    assert doc["mfe_r"] is None
+
+
+def test_infinity_in_a_document_field_becomes_none():
+    _, doc = split_doc({"trade_id": "t1", "r": float("inf")}, ["trade_id"])
+    assert doc["r"] is None
+
+
+def test_nan_nested_in_a_list_of_dicts_becomes_none():
+    """legs_realized and status_history are lists of dicts; NaN hides in there."""
+    _, doc = split_doc(
+        {"trade_id": "t1", "legs": [{"r": float("nan"), "fraction": 0.5}]},
+        ["trade_id"])
+    assert doc["legs"][0]["r"] is None
+    assert doc["legs"][0]["fraction"] == 0.5
+
+
+def test_nan_in_a_promoted_column_becomes_none():
+    columns, _ = split_doc({"trade_id": "t1", "entry": float("nan")},
+                           ["trade_id", "entry"])
+    assert columns["entry"] is None
+
+
+def test_finite_values_are_untouched():
+    columns, doc = split_doc(
+        {"trade_id": "t1", "entry": 152.36, "n": 0, "flag": False, "s": "x"},
+        ["trade_id", "entry"])
+    assert columns["entry"] == 152.36
+    assert doc == {"n": 0, "flag": False, "s": "x"}
+
+
+def test_sanitise_leaves_bools_and_ints_alone():
+    """bool is a subclass of int, not float -- it must not be coerced."""
+    from swingbot.core.db.codec import sanitise_non_finite
+    assert sanitise_non_finite({"a": True, "b": 3}) == {"a": True, "b": 3}
