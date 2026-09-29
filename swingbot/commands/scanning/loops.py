@@ -682,16 +682,26 @@ def _scheduled_jobs_path() -> str:
 
 
 def _scheduled_job_already_fired(job: str, today: dt.date) -> bool:
+    from swingbot.core.db import stages
+    if stages.reads_db("scheduled_jobs"):
+        from swingbot.core.db.repositories.scheduled import scheduled_repo
+        return scheduled_repo().fired_on(job) == today.isoformat()
     data = read_json(_scheduled_jobs_path(), {})
     return isinstance(data, dict) and data.get(job) == today.isoformat()
 
 
 def _mark_scheduled_job_fired(job: str, today: dt.date) -> None:
-    data = read_json(_scheduled_jobs_path(), {})
-    if not isinstance(data, dict):
-        data = {}
-    data[job] = today.isoformat()
-    atomic_write_json(_scheduled_jobs_path(), data)
+    from swingbot.core.db import stages
+    if stages.writes_json("scheduled_jobs"):
+        data = read_json(_scheduled_jobs_path(), {})
+        if not isinstance(data, dict):
+            data = {}
+        data[job] = today.isoformat()
+        atomic_write_json(_scheduled_jobs_path(), data)
+    if stages.writes_db("scheduled_jobs"):
+        from swingbot.core.db.repositories.scheduled import scheduled_repo
+        scheduled_repo().mark(job, today.isoformat())
+
 
 @tasks.loop(minutes=1)
 async def daily_recap():
