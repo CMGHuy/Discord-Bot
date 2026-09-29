@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** [`docs/superpowers/specs/2026-09-27-v108-ema-crossover-rearm-rescue-design.md`](../specs/2026-09-27-v108-ema-crossover-rearm-rescue-design.md)
+**Spec:** [`docs/superpowers/specs/2026-09-27-v108-ema-crossover-rearm-rescue-design.md`](../../specs/implemented/2026-09-27-v108-ema-crossover-rearm-rescue-design.md)
 **Bump:** `none` for Phases A–B (the code ships inert); `bot minor` only if V108-8's PASS path ships a K > 1 (the alert stream gains entries; the badge may flip)
 **Edge:** volume
 
