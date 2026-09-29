@@ -7,15 +7,30 @@ import json
 from dataclasses import dataclass, field
 
 
+def _fold_negative_zero(value):
+    """Replace ``-0.0`` with ``0.0``, recursively."""
+    if isinstance(value, float) and value == 0.0:
+        return 0.0
+    if isinstance(value, dict):
+        return {key: _fold_negative_zero(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_fold_negative_zero(item) for item in value]
+    return value
+
+
 def record_checksum(record: dict) -> str:
     """Return a type-sensitive canonical checksum for one source record.
 
     Non-finite floats are folded to None first: the write path narrows NaN to
     null at the codec boundary, so a source NaN and a stored null are the same
-    record and parity must not report them as a mismatch.
+    record and parity must not report them as a mismatch. Negative zero is
+    folded to zero for the same reason: JSONB stores a numeric, so a source
+    ``-0.0`` (a scratch exit's R) comes back ``0.0``; they compare equal and
+    no consumer divides by them.
     """
     from swingbot.core.db.codec import sanitise_non_finite
-    blob = json.dumps(sanitise_non_finite(record), sort_keys=True, default=str, separators=(",", ":"))
+    blob = json.dumps(_fold_negative_zero(sanitise_non_finite(record)),
+                      sort_keys=True, default=str, separators=(",", ":"))
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 

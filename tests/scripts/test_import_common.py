@@ -94,3 +94,17 @@ def test_run_import_fails_when_parity_fails(monkeypatch):
 def test_checksum_treats_nan_as_null():
     """Source holds NaN; the database holds null. Parity must call that equal."""
     assert record_checksum({"k": "a", "v": float("nan")}) ==            record_checksum({"k": "a", "v": None})
+
+
+def test_negative_zero_and_zero_have_the_same_checksum():
+    """JSONB returns 0.0 for a stored -0.0; parity must not call that a loss."""
+    from scripts.db.import_common import record_checksum
+    source = {"id": "a", "r": -0.0, "legs": [{"r": -0.0}], "gate": {"x": [-0.0]}}
+    stored = {"id": "a", "r": 0.0, "legs": [{"r": 0.0}], "gate": {"x": [0.0]}}
+    assert record_checksum(source) == record_checksum(stored)
+
+
+def test_a_real_difference_still_changes_the_checksum():
+    from scripts.db.import_common import record_checksum
+    assert record_checksum({"r": 0.0}) != record_checksum({"r": 0.1})
+    assert record_checksum({"r": 0}) != record_checksum({"r": None})
