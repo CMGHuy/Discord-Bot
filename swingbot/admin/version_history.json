@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-29 21:29:26 UTC",
+  "generated_at": "2026-09-29 21:53:57 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.21.0",
-    "bot": "1.10.5"
+    "bot": "1.10.6"
   },
   "releases": [
     {
@@ -1301,6 +1301,19 @@
       "versions": {
         "ui": "1.21.0",
         "bot": "1.10.5"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-29",
+      "last_seen": "2026-09-29",
+      "commit": "3a51b0ce",
+      "subject": "release(bot): 1.10.6 -- spot gold/silver alerts priced on spot (XAUUSD/XAGUSD)",
+      "versions": {
+        "ui": "1.21.0",
+        "bot": "1.10.6"
       },
       "changed": [
         "bot"
