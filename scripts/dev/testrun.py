@@ -253,6 +253,8 @@ def resolve_changed(args) -> Selection | None:
     selection = select(changed_paths(), REPO)
     print(f"SELECTION: {selection.reason}")
     if selection.full:
+        if args.dry_run:
+            sys.exit(0)
         return None
     for path in selection.targets:
         print(f"  {path}")

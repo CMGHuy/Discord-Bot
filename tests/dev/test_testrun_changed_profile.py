@@ -62,3 +62,17 @@ def test_dry_run_prints_targets_and_exits_zero(testrun, monkeypatch, capsys):
         testrun.resolve_changed(args)
     assert exc.value.code == 0
     assert "tests/scanning/" in capsys.readouterr().out
+
+
+def test_dry_run_with_widened_selection_exits_without_running(testrun, monkeypatch, capsys):
+    monkeypatch.setattr(testrun, "select", lambda *_a, **_k: FakeSelection())
+    monkeypatch.setattr(testrun, "changed_paths", lambda: ["swingbot/core/edge/rsi.py"])
+    calls = []
+    monkeypatch.setattr(testrun, "run", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(testrun, "undefined_names", lambda *a, **k: calls.append(a) or [])
+    monkeypatch.setattr(sys, "argv", ["testrun.py", "changed", "--dry-run"])
+    with pytest.raises(SystemExit) as exc:
+        testrun.main()
+    assert exc.value.code == 0
+    assert calls == [], "dry-run must not run the lint gate or pytest"
+    assert "registry dispatch" in capsys.readouterr().out
