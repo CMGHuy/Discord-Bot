@@ -13,6 +13,13 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   78 hourly, what the edge-engine tasks depend on -- and, since v47, what
   the live scan reads first). Both are gitignored.
   Check which one a script reads before pointing it at a path.
+- **Spot metals are never cached under their own name (v109).** `XAUUSD` /
+  `XAGUSD` bars are `GC=F` / `SI=F` bars × a live spot ratio
+  (`marketdata/spot_metals.py`). Only the raw future is cached (`GC_F.csv`);
+  `save_to_disk` and `data_refresh._merge_save` raise on a spot name, and
+  `refresh_all`, `update_cache` and `backtest_cache.ensure_cached` map it to
+  the future. A cached scaled frame would freeze one day's ratio into later
+  levels. The scan crawl skips the disk cache for spot symbols entirely.
 - **`market_data/` is timeframe-first, not ticker-first.** Folders are the
   semantic names in `data_store.TIMEFRAMES` (`monthly`, `weekly`, `daily`,
   `hourly`, `15min`, …); filenames are sanitized (`GC=F` → `GC_F.csv`, same

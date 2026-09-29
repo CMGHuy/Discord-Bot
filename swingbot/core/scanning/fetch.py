@@ -17,7 +17,7 @@ from swingbot.core.marketdata.data import get_current_price  # noqa: F401
 from swingbot.core.marketdata.data import (
     get_current_price_batch, get_daily_data, get_daily_data_batch,
 )
-from swingbot.core.marketdata import data_refresh, data_store, universe
+from swingbot.core.marketdata import data_refresh, data_store, spot_metals, universe
 
 from . import runstate
 
@@ -281,6 +281,54 @@ def _fetch_cold_frames(tickers: list, progress: "ScanProgress" = None) -> list:
 
     return [(t, resolved.get(t)) for t in tickers]
 
+
+def _spot_daily_worker(ticker: str, period: str) -> tuple:
+    """v109 worker body for one spot symbol: its spot-scaled frame, or None
+    plus the reason the router recorded -- that record lives in this worker
+    process, so it travels back with the result (the same shape as
+    _price_batch_with_sources)."""
+    from swingbot.core.marketdata.providers import router
+    df = get_daily_data_batch([ticker], period).get(ticker)
+    if df is not None:
+        return df, ""
+    return None, router.spot_miss_reason(ticker) or "no spot frame"
+
+
+def _log_spot_outcome(ticker: str, df, reason: str) -> None:
+    """The scan's one line per spot symbol: the ratio its levels are drawn at
+    (so an alert reconciles with the futures chart), or why it was skipped."""
+    if df is None:
+        log.info("%s: skipping new-signal scan -- spot quote unavailable (%s)", ticker, reason)
+        return
+    a = df.attrs
+    log.info("%s: spot ratio %.5f (spot %.2f / %s %.2f)", ticker, a["spot_ratio"],
+             a["spot_price"], a["spot_underlying"], a["futures_price"])
+
+
+def _crawl_spot(tickers: list, progress: "ScanProgress" = None) -> dict:
+    """v109: spot metals skip the disk cache (a scaled frame is never cached)
+    and the cold path's single-ticker fallback (candidate_symbols() would
+    alias XAUUSD to UNSCALED GC=F). One bounded worker per symbol; the
+    outcome is logged here, in the scan's own process. A skipped symbol is
+    simply absent -- _scan_one's existing "no frame" path, never futures."""
+    period = config.DEFAULT_HISTORY_PERIOD
+    timeout = int(getattr(config, "COLD_FETCH_TIMEOUT_SECONDS", 180))
+    out: dict = {}
+    for ticker in tickers:
+        if runstate.is_stop_requested():
+            break
+        df, reason = _run_bounded(
+            _spot_daily_worker, (ticker, period), timeout,
+            label=f"Crawl: spot fetch for {ticker}") or (None, "spot fetch failed or timed out")
+        _log_spot_outcome(ticker, df, reason)
+        if df is not None:
+            out[ticker] = df
+        if progress is not None:
+            progress.done += 1
+            progress.current_ticker = ticker
+    return out
+
+
 def _load_cached_daily(ticker: str):
     """v47: today's daily bar from market_data/daily/{TICKER}.csv, or None.
 
@@ -358,9 +406,10 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     results = LRUFrames(max_frames=len(tickers))
     started = time.monotonic()
 
+    spot, plain = spot_metals.split_spot(tickers)
     cold = []
     warm = 0
-    for ticker in tickers:
+    for ticker in plain:
         if runstate.is_stop_requested():
             log.info("Crawl: stop requested -- ending early (%d/%d ticker(s) resolved so far)",
                       len(results), len(tickers))
@@ -380,6 +429,7 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     for ticker, df in _fetch_cold_frames(cold, progress):
         if df is not None:
             results[ticker] = df
+    results.update(_crawl_spot(spot, progress))
 
     elapsed = time.monotonic() - started
     log.info("Crawl complete in %.1fs: %d/%d ticker(s) resolved (%d from cache, %d fetched)",

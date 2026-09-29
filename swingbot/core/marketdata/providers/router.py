@@ -12,10 +12,11 @@ import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
 from swingbot import config
+from swingbot.core.marketdata import spot_metals
 from swingbot.core.marketdata.providers.alpaca_provider import (
     AlpacaAuthError, AlpacaMiss, AlpacaProvider)
 from swingbot.core.marketdata.providers.base import (
-    SOURCE_ALPACA, SOURCE_FALLBACK, SOURCE_YF, is_alpaca_eligible)
+    SOURCE_ALPACA, SOURCE_FALLBACK, SOURCE_SPOT, SOURCE_YF, is_alpaca_eligible)
 
 log = logging.getLogger(__name__)
 _provider_factory = AlpacaProvider
@@ -65,6 +66,7 @@ _breaker = _Breaker()
 _provider = None
 _provider_key = None
 _last_source: dict = {}
+_spot_miss: dict = {}
 _stats = {"alpaca": 0, "yfinance": 0, "fallback": 0, "failures": 0}
 
 
@@ -73,6 +75,7 @@ def reset() -> None:
     _provider, _provider_key = None, None
     _bucket, _breaker = _Bucket(), _Breaker()
     _last_source.clear()
+    _spot_miss.clear()
     for k in _stats:
         _stats[k] = 0
 
@@ -132,14 +135,57 @@ def _merge(alpaca: dict, rest: list, misses: list, fetch) -> dict:
     return out
 
 
+def _scaled_or_miss(ticker, raw):
+    """v109: one spot symbol's scaled frame, or None with the reason recorded
+    for spot_miss_reason() (the scan crawl reads it back in its worker)."""
+    df, reason = spot_metals.scale_underlying(ticker, raw)
+    key = str(ticker).upper().strip()
+    if df is None:
+        _spot_miss[key] = reason
+        log.info("%s: no spot-scaled bars (%s)", key, reason)
+    else:
+        _spot_miss.pop(key, None)
+    return df
+
+
+def _spot_daily(spot, have: dict, fetch) -> dict:
+    """v109: spot symbols are never sent to Alpaca or to yfinance under their
+    own name -- their future is fetched under ITS name (reusing a frame this
+    call already has) and rescaled by the live spot ratio."""
+    if not spot:
+        return {}
+    unders = list(dict.fromkeys(spot_metals.underlying(t) for t in spot))
+    need = [u for u in unders if u not in have]
+    raw = {**have, **(fetch(need) if need else {})}
+    scaled = {t: _scaled_or_miss(t, raw.get(spot_metals.underlying(t))) for t in spot}
+    return {t: df for t, df in scaled.items() if df is not None}
+
+
+def _spot_prices(spot) -> dict:
+    """v109: a spot symbol's live price is its spot quote -- or nothing."""
+    out = {}
+    for ticker in spot:
+        quote, reason = spot_metals.quote_with_reason(ticker)
+        if quote is None:
+            _spot_miss[str(ticker).upper().strip()] = reason
+            continue
+        out[ticker] = quote.price
+        _last_source[ticker] = SOURCE_SPOT
+    return out
+
+
 def daily_bars(tickers, period, yf_fetch):
+    spot, tickers = spot_metals.split_spot(tickers)
     wanted, rest = _split(tickers)
     got = (_attempt("daily_bars", wanted, period) or {}) if wanted else {}
     misses = [t for t in wanted if t not in got]
-    return _merge(got, rest, misses, lambda ts: yf_fetch(ts, period))
+    out = _merge(got, rest, misses, lambda ts: yf_fetch(ts, period))
+    out.update(_spot_daily(spot, out, lambda ts: yf_fetch(ts, period)))
+    return out
 
 
 def latest_prices(tickers, yf_fetch):
+    spot, tickers = spot_metals.split_spot(tickers)
     wanted, rest = _split(tickers)
     got = (_attempt("latest_prices", wanted,
                     int(config.ALPACA_MAX_TRADE_AGE_SECONDS)) or {}) if wanted else {}
@@ -153,10 +199,16 @@ def latest_prices(tickers, yf_fetch):
     _stats["alpaca"] += len(got)
     _stats["yfinance"] += len(rest)
     _stats["fallback"] += len(misses)
+    out.update(_spot_prices(spot))
     return out
 
 
 def intraday_bars(ticker, interval, yf_fetch):
+    if spot_metals.is_spot_metal(ticker):
+        # v109: the future's bars under its own name, rescaled -- never the
+        # spot symbol itself, never unscaled.
+        return _scaled_or_miss(
+            ticker, intraday_bars(spot_metals.underlying(ticker), interval, yf_fetch))
     # Only 1h is served by Alpaca; any other interval is plain yfinance,
     # not a fallback.
     if interval != "1h" or not is_alpaca_eligible(ticker) or _active_provider() is None:
@@ -174,6 +226,11 @@ def intraday_bars(ticker, interval, yf_fetch):
 
 def last_source(ticker: str):
     return _last_source.get(str(ticker).upper().strip())
+
+
+def spot_miss_reason(ticker: str):
+    """v109: why this process last served a spot symbol no frame/price, or None."""
+    return _spot_miss.get(str(ticker).upper().strip())
 
 
 def stats() -> dict:

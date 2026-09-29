@@ -24,6 +24,7 @@ from swingbot import config
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.infra.retry import with_retry
 from swingbot.core.marketdata.adjustments import merge_adjusted
+from swingbot.core.marketdata import spot_metals
 from swingbot.core.marketdata.data_store import (
     DATA_DIR,
     TRAINING_TIMEFRAMES,
@@ -31,6 +32,7 @@ from swingbot.core.marketdata.data_store import (
     cache_path,
     fetch_interval_data,
     load_from_disk,
+    refuse_spot_write,
     timeframe_name,
 )
 
@@ -229,6 +231,7 @@ def _merge_save(existing, fresh, symbol: str, timeframe: str,
     isn't needed to fix the observed symptom and isn't worth the extra risk
     of getting split-vs-dividend volume conventions wrong here.
     """
+    refuse_spot_write(symbol)
     if existing is None or len(existing) == 0:
         merged, added = fresh, len(fresh)
     else:
@@ -363,6 +366,7 @@ def refresh_all(symbols, timeframes=TRAINING_TIMEFRAMES, base_dir: str = DATA_DI
     provider, to starve the Discord gateway heartbeat and drop the bot's
     connection.
     """
+    symbols = spot_metals.cache_symbols(symbols)   # v109: refresh GC=F for XAUUSD, never XAUUSD
     timeframes = [timeframe_name(t) for t in timeframes]
     summary = {tf: {"full": 0, "incremental": 0, "fresh": 0, "failed": 0,
                     "added": 0} for tf in timeframes}

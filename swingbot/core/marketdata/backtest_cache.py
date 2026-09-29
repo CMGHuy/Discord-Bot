@@ -23,6 +23,7 @@ from pathlib import Path
 import pandas as pd
 
 from swingbot import config
+from swingbot.core.marketdata.spot_metals import cache_symbol
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
 log = logging.getLogger("swing-bot.backtest_cache")
@@ -105,7 +106,7 @@ def ensure_cached(ticker: str, force: bool = False) -> CacheResult:
     Blocking. Never raises -- failures come back as CacheResult(status=failed).
     Unlike the backtest bar-count gate, this caches whatever history exists
     (a brand-new IPO still gets a file), noting when it's too short to backtest."""
-    ticker = ticker.upper()
+    ticker = cache_symbol(ticker.upper())   # v109: XAUUSD caches GC=F, never itself
     if is_cached(ticker) and not force:
         return CacheResult(ticker, "skipped", note="already cached")
     try:
@@ -132,7 +133,7 @@ def ensure_cached_background(ticker: str) -> threading.Thread:
     """Fire-and-forget: cache the ticker on a daemon thread, log the result.
     Returns the thread (mainly so tests can join it). Skips instantly if the
     ticker is already cached without spawning network work."""
-    ticker = ticker.upper()
+    ticker = cache_symbol(ticker.upper())   # v109: XAUUSD caches GC=F, never itself
     if is_cached(ticker):
         log.debug("backtest cache: %s already cached, skipping background fetch", ticker)
         # Still spawn-and-return a no-op thread so callers get a uniform type.

@@ -675,6 +675,13 @@ FIELDS: list[Field] = [
     Field("ALPACA_BREAKER_COOLDOWN_SECONDS", "ALPACA_BREAKER_COOLDOWN_SECONDS",
           "Data Sources", "Alpaca breaker cool-down (s)", type="number", default="300",
           min=30, max=3600, step=30, help="How long Alpaca is skipped once the breaker opens."),
+    Field("SPOT_QUOTE_MAX_AGE_SECONDS", "SPOT_QUOTE_MAX_AGE_SECONDS", "Data Sources",
+          "Max spot metals quote age (s)", type="number", default="900",
+          min=60, max=86400, step=60,
+          help="v109. XAUUSD/XAGUSD are priced off gold-api.com's spot quote. A quote whose "
+               "updatedAt is older than this is treated exactly like a missing one: the scan "
+               "skips new signals for that metal and open plans are not stepped until a fresh "
+               "quote arrives. Never falls back to unscaled futures prices."),
 
     # --- Admin UI (affects the admin container, not the bot -- see docstring) ---
     Field("ADMIN_USERNAME", "ADMIN_USERNAME", "Admin UI", "Admin username",

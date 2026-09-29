@@ -33,7 +33,7 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 import yfinance as yf
 
-from swingbot.core.marketdata import yf_safe
+from swingbot.core.marketdata import spot_metals, yf_safe
 from swingbot.core.marketdata.providers import router
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 from swingbot.core.marketdata.adjustments import merge_adjusted
@@ -196,7 +196,18 @@ def cache_path(ticker: str, interval: str, base_dir: str = DATA_DIR) -> str:
     return os.path.join(d, f"{safe_symbol(ticker)}.csv")
 
 
+def refuse_spot_write(ticker: str) -> None:
+    """v109 cache rule: a spot metal's frame is its future's bars x a live
+    ratio. Cached under XAUUSD it would freeze one day's ratio into every
+    later read -- so only the raw future is ever cached, under its own name."""
+    if spot_metals.is_spot_metal(ticker):
+        raise ValueError(
+            f"'{ticker}' is spot-scaled and never cached -- cache "
+            f"{spot_metals.underlying(ticker)} instead")
+
+
 def save_to_disk(df: pd.DataFrame, ticker: str, interval: str, base_dir: str = DATA_DIR) -> str:
+    refuse_spot_write(ticker)
     path = cache_path(ticker, interval, base_dir)
     df.to_csv(path)
     return path
@@ -378,6 +389,7 @@ def update_cache(symbols: list, interval: str = "1d", base_dir: str = DATA_DIR,
     last date; atomic replace so a crash mid-write never corrupts a file."""
     # Interval is bound here rather than threaded through the call: injected
     # fetch_fn's are (symbol, start) two-arg callables and must stay that way.
+    symbols = spot_metals.cache_symbols(symbols)   # v109: cache the future, never the spot name
     fetch = fetch_fn or (lambda symbol, start: _default_ranged_fetch(symbol, start, interval))
     result = {}
     for symbol in symbols:
@@ -442,6 +454,8 @@ def get_intraday(symbol: str, interval: str = "1h", base_dir: str = DATA_DIR,
     save_to_disk() once wiped years of that archived history out from under
     the background loop the moment this ran first.
     """
+    if spot_metals.is_spot_metal(symbol):
+        return _spot_intraday(symbol, interval, base_dir, fetch_fn)
     path = cache_path(symbol, interval, base_dir=base_dir)
     fresh_enough = (os.path.exists(path)
                     and time.time() - os.path.getmtime(path) < INTRADAY_MAX_AGE_SECONDS)
@@ -470,3 +484,13 @@ def get_intraday(symbol: str, interval: str = "1h", base_dir: str = DATA_DIR,
         merged = merge_adjusted(existing, df, symbol, interval, _align_tz)
     save_to_disk(merged, symbol, interval, base_dir=base_dir)
     return merged
+
+
+def _spot_intraday(symbol: str, interval: str, base_dir: str, fetch_fn):
+    """v109: the future's cached/fetched intraday bars (cached under ITS
+    name), rescaled on read. None when the spot ratio is unavailable -- the
+    E29 annotation treats None as neutral, never as unscaled futures."""
+    raw = get_intraday(spot_metals.underlying(symbol), interval,
+                       base_dir=base_dir, fetch_fn=fetch_fn)
+    df, _ = spot_metals.scale_underlying(symbol, raw)
+    return df
