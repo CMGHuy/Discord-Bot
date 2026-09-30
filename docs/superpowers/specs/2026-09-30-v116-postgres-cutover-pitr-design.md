@@ -9,6 +9,22 @@ Supersedes the unbuilt remainder of v67
 2026-09-30). v67's spec stays the reference for the hybrid-schema design this
 spec builds on (`specs/implemented/2026-08-29-v67-json-to-postgres-design.md`).
 
+> **Corrections found while planning (2026-09-30).** The plan follows these,
+> not the text below. Full list: plan `_0-index` § Spec points.
+> - `PROMOTED` lives in `schema.py`, so the promotion reasons go in a
+>   `PROMOTION_REASONS` dict there.
+> - The branch's listener does not reconnect, so V116-15 builds reconnect and
+>   `resync`.
+> - GHCR keeps tags for only 14 days; V116-02 raises that to 45.
+> - Nothing logs "dual divergence" lines, so the soak check counts database
+>   exception lines instead.
+> - `market_data_state` raised no SSE event; it now raises `watchlist`.
+> - Two bugs would have broken the ops flip, and V116-22 fixes both: at
+>   `heartbeat:db` the heartbeat was still read from the file, and at
+>   `notify_queue:dual` the table was never drained.
+> - The watchlist/state dual history does not shorten the reference group's
+>   gate, because the group flips as one.
+
 ## Why this
 
 v67 built the foundation: `swingbot/core/db/` (codec, engine, Alembic,
