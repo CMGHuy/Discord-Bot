@@ -41,6 +41,10 @@ def test_every_run_import_name_is_a_parity_store():
         ("import_watchlist", "watchlist"), ("import_state", "state"),
         ("import_plans", "plans"), ("import_starred", "starred_plans"),
         ("import_trades", "trades"), ("import_journal", "journal"),
+        ("import_jobs", "jobs"), ("import_scheduled", "scheduled_jobs"),
+        ("import_preferences", "preferences"), ("import_killswitch", "killswitch"),
+        ("import_settings_audit", "settings_audit"),
+        ("import_ticker_directory", "ticker_directory"),
     ]:
         importlib.import_module(f"scripts.db.{module_name}")
         assert expected in STORES, f"{module_name} verifies against a missing store"

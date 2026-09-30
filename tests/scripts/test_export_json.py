@@ -55,7 +55,7 @@ def fake_db(monkeypatch):
 
 def _trade(trade_id, opened_at, **extra):
     return {"id": trade_id, "ticker": "AAPL", "strategy": "RSI", "horizon_key": "2w",
-            "status": "CLOSED", "opened_at": opened_at, "closed_at": "2026-02-01T00:00:00+00:00",
+            "direction": "bullish", "status": "CLOSED", "opened_at": opened_at, "closed_at": "2026-02-01T00:00:00+00:00",
             "entry": 100.0, "stop_loss": 95.5, "r_multiple": 1.25, **extra}
 
 

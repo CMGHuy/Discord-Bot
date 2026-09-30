@@ -521,6 +521,25 @@ def _preferences_path() -> str:
     return os.path.join(config.DATA_DIR, "ui_preferences.json")
 
 
+def _load_preferences() -> dict:
+    from swingbot.core.db import stages
+    if stages.reads_db("preferences"):
+        from swingbot.core.db.repositories.preferences import preferences_repo
+        return preferences_repo().load()
+    from swingbot.core.infra.jsonio import read_json
+    return read_json(_preferences_path(), {}) or {}
+
+
+def _store_preferences(saved: dict) -> None:
+    from swingbot.core.db import stages
+    if stages.writes_json("preferences"):
+        from swingbot.core.infra.jsonio import atomic_write_json
+        atomic_write_json(_preferences_path(), saved)
+    if stages.writes_db("preferences"):
+        from swingbot.core.db.repositories.preferences import preferences_repo
+        preferences_repo().save(saved)
+
+
 @api_v1.route("/system/preferences", methods=["GET"])
 @require_auth
 def get_preferences():
@@ -544,9 +563,7 @@ def get_preferences():
     server that validated its shape would need editing every time the SPA
     remembered one more thing.
     """
-    from swingbot.core.infra.jsonio import read_json
-
-    preferences = read_json(_preferences_path(), {}) or {}
+    preferences = _load_preferences()
     # A missing value is an older preferences blob, not an instruction to
     # remove the statistical guard. Keep the default server-side so every
     # client receives one truth before it has ever written preferences.
@@ -563,8 +580,6 @@ def put_preferences():
     a merge would make deleting a key impossible without a second verb.
     """
     import json
-
-    from swingbot.core.infra.jsonio import atomic_write_json
 
     payload = request.get_json(silent=True)
     if not isinstance(payload, Mapping):
@@ -586,5 +601,5 @@ def put_preferences():
 
     saved = dict(preferences)
     saved.setdefault("minSampleN", _DEFAULT_MIN_SAMPLE_N)
-    atomic_write_json(_preferences_path(), saved)
+    _store_preferences(saved)
     return jsonify({"preferences": saved})

@@ -181,13 +181,22 @@ def append_settings_audit(diff: list) -> None:
         "ts": datetime.now(timezone.utc).isoformat(),
         "changes": [{"key": d["key"], "old": d["old"], "new": d["new"]} for d in diff],
     }
-    path = _audit_log_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(entry) + "\n")
+    from swingbot.core.db import stages
+    if stages.writes_json("settings_audit"):
+        path = _audit_log_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+    if stages.writes_db("settings_audit"):
+        from swingbot.core.db.repositories.settings_audit import settings_audit_repo
+        settings_audit_repo().append(entry["changes"], ts=entry["ts"])
 
 
 def read_settings_audit(n: int = 20) -> list[dict]:
+    from swingbot.core.db import stages
+    if stages.reads_db("settings_audit"):
+        from swingbot.core.db.repositories.settings_audit import settings_audit_repo
+        return settings_audit_repo().recent(n)
     path = _audit_log_path()
     if not os.path.exists(path):
         return []

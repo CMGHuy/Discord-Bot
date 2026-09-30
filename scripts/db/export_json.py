@@ -139,7 +139,11 @@ def export_one(name: str, out_dir: str, *, dry_run: bool, force: bool) -> Export
 
 
 def run_export(names: list[str], out_dir: str, *, dry_run: bool, force: bool) -> list[ExportResult]:
-    selected = sorted(STORES) if "all" in names else names
+    exportable = sorted(name for name in STORES if name == "account" or name in SHAPERS)
+    selected = exportable if "all" in names else names
+    unshaped = [name for name in selected if name not in exportable]
+    if unshaped:
+        raise SystemExit(f"export_json: no JSON shaper for store(s): {', '.join(unshaped)}")
     return [export_one(name, out_dir, dry_run=dry_run, force=force) for name in selected]
 
 
