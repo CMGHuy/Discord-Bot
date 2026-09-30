@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-29 21:53:57 UTC",
+  "generated_at": "2026-09-30 08:27:06 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.21.0",
-    "bot": "1.10.6"
+    "bot": "1.11.0"
   },
   "releases": [
     {
@@ -1314,6 +1314,19 @@
       "versions": {
         "ui": "1.21.0",
         "bot": "1.10.6"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-30",
+      "last_seen": "2026-09-30",
+      "commit": "5b3f34dc",
+      "subject": "release(bot): 1.11.0 -- distinct, colourful Discord notifications (one registry of kinds)",
+      "versions": {
+        "ui": "1.21.0",
+        "bot": "1.11.0"
       },
       "changed": [
         "bot"
