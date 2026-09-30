@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+"""v113 measurement: Part A (Downtrend Overbought Fade on 1w, grid m), Part B
+(the 22 legacy strategy x direction cells on 1w, Tier 1 + bootstrap lower
+bound) and Part D (every live bullish mask on SH/PSQ/RWM/DOG, one pooled cell).
+
+Stages (spec §6): collect -> evaluate (Stages 1-2 on TRAIN) -> holdout (Stage 3,
+one shot per cell, thin-holdout rule) -> emit-registry. Reads the EXTENDED
+cache only:
+  BACKTEST_CACHE_DIR=data/backtest_cache_ext python scripts/backtest/measure_v113.py <command> ...
+"""
+from __future__ import annotations
+
+import argparse
+import collections
+import contextlib
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path[:0] = [str(ROOT), str(Path(__file__).resolve().parent)]
+
+import funnel  # noqa: E402
+from funnel import BOOTSTRAP_SEED, MIN_N_TRAIN, cell_key  # noqa: E402
+from measure_fib_confluence import Progress, _write  # noqa: E402
+from measure_v104 import FOLD_YEARS, TRAIN, _frames, params, trade_rows  # noqa: E402
+from swingbot.core.backtesting.acceptance import BOOTSTRAP_RESAMPLES  # noqa: E402
+from swingbot.core.backtesting.backtest import ALL_STRATEGIES  # noqa: E402
+from swingbot.core.market.entry_filters import gate_override  # noqa: E402
+from swingbot.core.market.short_entries import FADE  # noqa: E402
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS, STRATEGY_GATES, admits  # noqa: E402
+from swingbot.core.planning import reward_floor  # noqa: E402
+from swingbot.core.planning.stop_scope import stop_ceiling  # noqa: E402
+
+# --- pre-registered constants (spec §1, §3-§6) ---
+HOLDOUT_END: str | None = "2026-09-25"     # spec §6; frozen by the pre-registration commit (V113-13)
+HZ = "1w"
+A_GRID = (1.0, 1.25, 1.5)
+PART_B = tuple((strategy, direction) for strategy in ALL_STRATEGIES for direction in ("bullish", "bearish"))
+D_TICKERS = ("SH", "PSQ", "RWM", "DOG")
+CAP_TOLERANCE_PCT = 0.001
+RESULTS = ROOT / "docs" / "superpowers" / "results"
+
+
+# --- small helpers ------------------------------------------------------------
+
+def d_cells() -> tuple:
+    """Every (strategy, horizon) today's live masks admit BULLISH (spec §5),
+    legacy horizons only -- run unchanged on the four inverse ETFs."""
+    return tuple((strategy, horizon) for strategy in ALL_STRATEGIES for horizon in LEGACY_HORIZONS
+                 if admits(strategy, "bullish", horizon))
+
+
+@contextlib.contextmanager
+def admit_1w(strategy: str, direction: str):
+    """Admit exactly (direction, 1w) for `strategy` during the run; every other
+    pair keeps its live mask (spec §2)."""
+    gates = dict(STRATEGY_GATES.get(strategy) or {})
+    gates["cells"] = frozenset(gates.get("cells", ())) | {(direction, HZ)}
+    with gate_override(strategy, gates):
+        yield
+
+
+def cap_bind_rate(rows, strategy, direction):
+    """Share of trades whose planned risk sits on the 1w stop ceiling (spec §4)."""
+    if not rows:
+        return None
+    cap = stop_ceiling(strategy, direction, HZ)[0]
+    return sum(1 for row in rows if row["risk_pct"] >= cap - CAP_TOLERANCE_PCT) / len(rows)
+
+
+def floor_counts(strategy) -> dict:
+    """The 1w reward floor's decisions for `strategy` since the last reset (spec §4)."""
+    key = (strategy, HZ)
+    drops, passes = reward_floor.DROPS[key], reward_floor.PASSES[key]
+    total = drops + passes
+    return {"floor_drops": drops, "floor_passes": passes,
+            "floor_drop_rate": drops / total if total else None}
+
+
+def strict_clauses(scored) -> dict:
+    """Part B's bar (spec §4): every Tier 1 clause AND the bootstrap lower bound > 0."""
+    return {**scored["tier1"]["clauses"], "lower_bound": scored["tier2"]["clauses"]["lower_bound"]}
+
+
+def _ab_frames(args):
+    """Parts A and B run on the watchlist universe, never on Part D's ETFs."""
+    frames, asof_map = _frames(args)
+    return {ticker: frame for ticker, frame in frames.items() if ticker not in D_TICKERS}, asof_map
+
+
+def _d_frames(args):
+    if sorted((args.tickers or "").split(",")) != sorted(D_TICKERS):
+        raise SystemExit(f"Part D runs on exactly --tickers {','.join(D_TICKERS)}")
+    return _frames(args)
+
+
+# --- collectors -----------------------------------------------------------------
+
+def collect_a(frames, asof_map, window, *, values=A_GRID, progress=None, run_fn=None) -> dict:
+    out = {"rows_by_cell": {}, "floor": {}}
+    with admit_1w(FADE, "bearish"):
+        for value in values:
+            reward_floor.reset()
+            with params(FADE, {"m": value}):
+                out["rows_by_cell"][cell_key(value)] = trade_rows(
+                    FADE, frames, asof_map, "bearish", window, (HZ,),
+                    progress=progress, label=f"A m={cell_key(value)}", run_fn=run_fn)
+            out["floor"][cell_key(value)] = floor_counts(FADE)
+    return out
+
+
+def collect_b(strategy, direction, frames, asof_map, window, *, progress=None, run_fn=None) -> dict:
+    reward_floor.reset()
+    with admit_1w(strategy, direction):
+        rows = trade_rows(strategy, frames, asof_map, direction, window, (HZ,),
+                          progress=progress, label=f"B {strategy} {direction}", run_fn=run_fn)
+    return {"rows": rows, "floor": floor_counts(strategy)}
+
+
+def collect_d(frames, asof_map, window, *, progress=None, run_fn=None) -> list:
+    rows = []
+    for strategy, horizon in d_cells():
+        rows.extend({**row, "strategy": strategy} for row in trade_rows(
+            strategy, frames, asof_map, "bullish", window, (horizon,),
+            progress=progress, label=f"D {strategy} {horizon}", run_fn=run_fn))
+    return rows
+
+
+# --- evaluators (Stages 1-2 on TRAIN) --------------------------------------------
+
+def evaluate_a(collected, *, n_resamples=BOOTSTRAP_RESAMPLES, seed=BOOTSTRAP_SEED) -> dict:
+    """Stage 1: standard tiers per m, plateau winner (funnel.stage1). Stage 2:
+    per-fold reselection over the grid (funnel.stage2)."""
+    rows_by_cell = collected["rows_by_cell"]
+    stage1 = funnel.stage1(rows_by_cell, "bearish", A_GRID, n_resamples=n_resamples, seed=seed)
+    stage2 = funnel.stage2(rows_by_cell, "bearish", A_GRID, fold_years=FOLD_YEARS)
+    proceed = stage1["winner"] is not None and stage2["verdict"]["clears"]
+    return {"part": "A", "strategy": FADE, "direction": "bearish", "horizon": HZ,
+            "stage1": stage1, "stage2": stage2, "floor": collected["floor"],
+            "cap_bind": {key: cap_bind_rate(rows, FADE, "bearish") for key, rows in rows_by_cell.items()},
+            "proceed_to_holdout": proceed,
+            "validation_cell": {"value": stage1["winner"]} if proceed else None,
+            "tier": stage1["winner_tier"] if proceed else None}
+
+
+def evaluate_b(strategy, direction, collected, *, n_resamples=BOOTSTRAP_RESAMPLES,
+               seed=BOOTSTRAP_SEED) -> dict:
+    """Stage 1: the single cell must clear strict_clauses. Stage 2: fixed folds."""
+    rows = collected["rows"]
+    scored = funnel.score_cell(rows, MIN_N_TRAIN, n_resamples=n_resamples, seed=seed)
+    clauses = strict_clauses(scored)
+    folds = funnel.fixed_folds(rows, FOLD_YEARS)
+    stage2 = funnel.fold_verdict(folds)
+    proceed = all(clauses.values()) and stage2["clears"]
+    return {"part": "B", "strategy": strategy, "direction": direction, "horizon": HZ,
+            "scored": scored, "clauses": clauses, "folds": folds, "stage2": stage2,
+            "floor": collected["floor"], "cap_bind_rate": cap_bind_rate(rows, strategy, direction),
+            "proceed_to_holdout": proceed, "tier": 1 if proceed else None}
+
+
+def _breakdown(rows, key) -> dict:
+    groups = collections.defaultdict(list)
+    for row in rows:
+        groups[row[key]].append(row)
+    return {name: funnel.pooled(group) for name, group in sorted(groups.items())}
+
+
+def evaluate_d(rows, *, n_resamples=BOOTSTRAP_RESAMPLES, seed=BOOTSTRAP_SEED) -> dict:
+    """One pooled cell, standard tiers; breakdowns are reported, never used to select."""
+    scored = funnel.score_cell(rows, MIN_N_TRAIN, n_resamples=n_resamples, seed=seed)
+    folds = funnel.fixed_folds(rows, FOLD_YEARS)
+    stage2 = funnel.fold_verdict(folds)
+    proceed = scored["tier"] is not None and stage2["clears"]
+    return {"part": "D", "strategy": "inverse-etf-longs", "direction": "bullish", "horizon": None,
+            "cells": [list(cell) for cell in d_cells()], "scored": scored, "folds": folds,
+            "stage2": stage2, "by_strategy": _breakdown(rows, "strategy"),
+            "by_ticker": _breakdown(rows, "ticker"),
+            "proceed_to_holdout": proceed, "tier": scored["tier"] if proceed else None}
+
+
+EVALUATORS = {
+    "A": lambda collected: evaluate_a(collected),
+    "B": lambda collected: evaluate_b(collected["strategy"], collected["direction"], collected),
+    "D": lambda collected: evaluate_d(collected["rows"]),
+}
+
+
+# --- commands -------------------------------------------------------------------
+
+def _cmd_collect_a(args):
+    frames, asof_map = _ab_frames(args)
+    collected = collect_a(frames, asof_map, TRAIN, progress=Progress(len(A_GRID) * len(frames)))
+    for rows in collected["rows_by_cell"].values():
+        funnel.assert_rows_before(rows, TRAIN[1])
+    _write(args.out, {"part": "A", "window": list(TRAIN), "universe_n": len(frames), **collected})
+
+
+def _cmd_collect_b(args):
+    if (args.strategy, args.direction) not in PART_B:
+        raise SystemExit(f"{args.strategy}:{args.direction} is not a pre-registered Part B cell")
+    frames, asof_map = _ab_frames(args)
+    collected = collect_b(args.strategy, args.direction, frames, asof_map, TRAIN,
+                          progress=Progress(len(frames)))
+    funnel.assert_rows_before(collected["rows"], TRAIN[1])
+    _write(args.out, {"part": "B", "strategy": args.strategy, "direction": args.direction,
+                      "window": list(TRAIN), "universe_n": len(frames), **collected})
+
+
+def _cmd_collect_d(args):
+    frames, asof_map = _d_frames(args)
+    rows = collect_d(frames, asof_map, TRAIN, progress=Progress(len(d_cells()) * len(frames)))
+    funnel.assert_rows_before(rows, TRAIN[1])
+    _write(args.out, {"part": "D", "window": list(TRAIN), "universe_n": len(frames),
+                      "tickers": sorted(frames), "cells": [list(cell) for cell in d_cells()], "rows": rows})
+
+
+def _cmd_evaluate(args):
+    collected = json.loads(Path(args.rows).read_text(encoding="utf-8"))
+    _write(args.out, {"universe_n": collected["universe_n"], **EVALUATORS[collected["part"]](collected)})
+
+
+def _parser():
+    parser = argparse.ArgumentParser(description="v113 1w horizon, fade and inverse-ETF funnel")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    for name in ("collect-a", "collect-b", "collect-d"):
+        command = sub.add_parser(name)
+        command.add_argument("--out", required=True)
+        command.add_argument("--universe")
+        command.add_argument("--tickers", help="comma-separated; Part D requires exactly SH,PSQ,RWM,DOG")
+    sub.choices["collect-b"].add_argument("--strategy", required=True)
+    sub.choices["collect-b"].add_argument("--direction", required=True, choices=("bullish", "bearish"))
+    evaluate_parser = sub.add_parser("evaluate")
+    evaluate_parser.add_argument("--rows", required=True)
+    evaluate_parser.add_argument("--out", required=True)
+    return parser
+
+
+COMMANDS = {"collect-a": _cmd_collect_a, "collect-b": _cmd_collect_b, "collect-d": _cmd_collect_d,
+            "evaluate": _cmd_evaluate}
+
+
+def main(argv=None) -> int:
+    args = _parser().parse_args(argv)
+    COMMANDS[args.cmd](args)
+    print(f"v113 {args.cmd} done", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
