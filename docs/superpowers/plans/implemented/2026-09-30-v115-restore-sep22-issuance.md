@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** [`docs/superpowers/specs/2026-09-30-v115-restore-sep22-issuance-design.md`](../specs/2026-09-30-v115-restore-sep22-issuance-design.md) (partner-approved 2026-09-30, committed at `5c52ee69`)
+**Spec:** [`docs/superpowers/specs/implemented/2026-09-30-v115-restore-sep22-issuance-design.md`](../../specs/implemented/2026-09-30-v115-restore-sep22-issuance-design.md) (partner-approved 2026-09-30, committed at `5c52ee69`)
 **Bump:** bot minor
 **Edge:** volume
 
