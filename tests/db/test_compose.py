@@ -45,3 +45,7 @@ def test_application_services_wait_for_a_healthy_database(compose, service):
     assert compose["services"][service]["depends_on"]["db"] == {
         "condition": "service_healthy"
     }
+
+
+def test_admin_writes_env_versions_into_the_host_backups(compose):
+    assert "./backups/env:/app/backups/env" in compose["services"]["admin"]["volumes"]

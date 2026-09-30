@@ -195,6 +195,7 @@ services:
       - ./market_data:/app/market_data
       - ./.env:/app/.env
       - ./.env.bak:/app/.env.bak
+      - ./backups/env:/app/backups/env   # v116: .env versions written on every settings save
       # Optional: lets the admin UI's "Restart bot container" button
       # actually restart the bot service via the Docker API. Remove this
       # line if you'd rather not grant the admin container access to the
