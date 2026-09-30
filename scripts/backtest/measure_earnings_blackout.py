@@ -10,7 +10,7 @@ from swingbot.core.backtesting import earnings_blackout as eb
 from swingbot.core.backtesting.acceptance import arm_trade_from_backtest, arm_trade_from_plan, delta_standardised_win_rate
 from swingbot.core.market.earnings_calendar import EARNINGS_CSV_DIR, UNCONFIRMED, CsvSource, next_reaction_distance, reaction_session
 from swingbot.core.market.session import SessionCalendar
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 CACHE_DIR, OUT_ROOT=ROOT / "data" / "backtest_cache", ROOT / "data" / "v82"
 RUNS={"run1": eb.RUN1_WINDOW, "run2": eb.VALIDATION_WINDOW}; STAGE2_PASS_MARKER="**Overall: PASS**"
 def load_frame(cache_dir, symbol):
@@ -63,7 +63,7 @@ def cmd_replay(args):
     from swingbot.core.marketdata.universe import is_etf
     cache=Path(args.cache_dir); calendar=load_calendar(cache); run_dir=Path(args.out_root)/args.run; run_dir.mkdir(parents=True,exist_ok=True); meta=calendar_meta(calendar); previous=run_dir/"calendar.json"
     if previous.exists() and json.loads(previous.read_text()) != meta:return 4
-    previous.write_text(json.dumps(meta)); symbols=args.tickers.split(",") if args.tickers else sorted(path.stem for path in cache.glob("*.csv")); todo=[symbol for symbol in symbols if not (run_dir/f"{symbol}.jsonl").exists()]; horizons=args.horizons.split(",") if args.horizons else list(HORIZONS); strategies=args.strategies.split("|") if args.strategies else list(ALL_STRATEGIES)
+    previous.write_text(json.dumps(meta)); symbols=args.tickers.split(",") if args.tickers else sorted(path.stem for path in cache.glob("*.csv")); todo=[symbol for symbol in symbols if not (run_dir/f"{symbol}.jsonl").exists()]; horizons=args.horizons.split(",") if args.horizons else list(LEGACY_HORIZONS); strategies=args.strategies.split("|") if args.strategies else list(ALL_STRATEGIES)
     progress=run_dir/"progress.txt"; tasks=[(symbol,str(cache),str(args.csv_dir),RUNS[args.run],horizons,strategies,is_etf(symbol)) for symbol in todo]
     try:
         iterator=map(_worker,tasks) if args.workers==1 else ProcessPoolExecutor(max_workers=args.workers).map(_worker,tasks)

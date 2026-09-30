@@ -30,7 +30,7 @@ from swingbot import config
 from swingbot.core.market import market_context
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.backtesting.backtest_scenarios import CONFLUENCE_GATES, run_scenario_backtest
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason
 
 _SPY_CACHE: dict = {}
@@ -186,7 +186,7 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
 
     stats = run_scenario_backtest(frames, date_from, date_to,
                                   gates=CONFLUENCE_GATES, scale_out=scale_out,
-                                  horizons=list(HORIZONS), membership=membership)
+                                  horizons=list(LEGACY_HORIZONS), membership=membership)
 
     header = f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s} {'Scr':>5s} {'TO':>5s} {'Excl%':>6s}  PASS"
     lines = []
@@ -201,7 +201,7 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
     lines.append(f"== {label} {date_from} .. {date_to} | confluence scenario replay | "
                  f"pass: WR>=80, ExpR>0, N>={min_n}, excl<=50% ==")
     lines.append(header)
-    for hk in HORIZONS:
+    for hk in LEGACY_HORIZONS:
         st = _scenario_row_stats(stats["by_horizon"][hk])
         if st["n_eval"] == 0 and st["scratches"] == 0 and st["timeouts"] == 0:
             continue
@@ -470,7 +470,7 @@ def main():
             continue
         spans = _spans_for(membership, ticker)
         print(f"[{ti}/{len(tickers)}] {ticker}", flush=True)
-        for hk in HORIZONS:
+        for hk in LEGACY_HORIZONS:
             for strat in strategies:
                 try:
                     s = run_backtest(ticker, df, strat, hk, one_at_a_time=True,

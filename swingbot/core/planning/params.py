@@ -43,6 +43,21 @@ EXIT_V2_PARAMS: dict[str, dict] = {
     "Bull Trap":               {"trail_atr_mult": 2.5, "tp2": False},
     "Vol Expansion Breakdown": {"trail_atr_mult": 2.5, "tp2": False},
     "Earnings Gap Drift":      {"trail_atr_mult": 2.5, "tp2": False},
+    # v113 Part A: one whole-position target, no runner, fixed by spec §3.
+    "Downtrend Overbought Fade": {"trail_atr_mult": 2.5, "tp2": False},
+}
+
+# v113: the shape of a plan whose strategy is traded as resting orders placed at
+# alert time -- entry type, how long the entry order lives, how much of the
+# position TP1 closes, and the break-even trigger (1.0 = never before TP1,
+# because a resting bracket is never edited). A strategy not listed gets
+# today's shape (builders.plan_shape_for). Read by the live builder and the
+# backtest alike.
+PLAN_SHAPES: dict[str, dict] = {
+    # v113 §3: sell limit at the signal close, good for one bar; one target for
+    # the whole position; no break-even move (amendment 3).
+    "Downtrend Overbought Fade": {"entry_type": "limit", "expiry_bars": 1,
+                                  "tp1_fraction": 1.0, "breakeven_trigger_fraction": 1.0},
 }
 
 

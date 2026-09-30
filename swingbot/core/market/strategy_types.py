@@ -17,7 +17,10 @@ SR_VOLUME_MULTIPLE = 1.5  # breakout day volume must exceed this x the 20-day av
 # v104 Part B: short-only strategies. Named here (market layer) so both
 # market/short_entries.py and planning/stop_scope.py can import them without
 # market ever importing planning.
-SHORT_STRATEGIES = ("Bull Trap", "Vol Expansion Breakdown", "Earnings Gap Drift")
+V104_SHORTS = ("Bull Trap", "Vol Expansion Breakdown", "Earnings Gap Drift")
+# v113 Part A: short-only and 1w only; masked until its 2026 holdout shot passes.
+FADE_STRATEGY = "Downtrend Overbought Fade"
+SHORT_STRATEGIES = V104_SHORTS + (FADE_STRATEGY,)
 
 # MACD (fast, slow, signal) periods scaled by horizon -- module-level so
 # trade_plan.py can recompute the same fast EMA of price as a pullback
@@ -39,6 +42,27 @@ MACD_PERIODS_BY_HORIZON = {
 # Horizon definitions -- indicator settings AND risk sizing, per horizon
 # ---------------------------------------------------------------------------
 HORIZONS = {
+    "1w": {
+        # v113 §1: fixed by the spec and its pre-registration -- never grid-searched.
+        # Masked for every strategy (MASKED_BY_DEFAULT_HORIZONS) until a
+        # STRATEGY_GATES "cells" pair admits it; the confluence scan never runs it.
+        "label": "3-7 day swing",
+        "ema_fast": 5,
+        "ema_slow": 8,
+        "vwap_window": 5,
+        "fib_lookback": 10,
+        "sr_lookback": 5,
+        "atr_stop_multiple": 1.5,
+        "max_risk_pct": 2.0,
+        "sr_stop_pct": 2.0,
+        "sr_target_min_pct": 2.0,
+        "sr_target_max_pct": 5.0,
+        "max_holding_days": 7,
+        "rs_window": 10,
+        # v113 §1: the only horizon with a strategy-plan reward floor
+        # (planning/reward_floor.py). Legacy horizons have none, as before v113.
+        "min_reward_pct": 2.0,
+    },
     "2w": {
         "label": "1-2 week swing",
         "ema_fast": 8,
@@ -191,6 +215,14 @@ HORIZONS = {
     },
 }
 
+# v113 §1: horizons every strategy excludes -- and the confluence scan never
+# runs -- until a STRATEGY_GATES "cells" pair admits them (see admits()).
+MASKED_BY_DEFAULT_HORIZONS: tuple[str, ...] = ("1w",)
+# The ten horizons that existed before v113, in HORIZONS order. Confluence
+# scans, scenario replays and every measurement script iterate these, never
+# HORIZONS itself (tests/horizon_iteration.py guards it).
+LEGACY_HORIZONS: tuple[str, ...] = tuple(key for key in HORIZONS if key not in MASKED_BY_DEFAULT_HORIZONS)
+
 # When a trade's favorable excursion covers this fraction of the distance to
 # target, the stop moves to entry (subsequent bars only). Exits at the moved
 # stop are "scratch" (~0R), not losses. See backtest.py exit engine.
@@ -199,8 +231,11 @@ BREAKEVEN_TRIGGER_FRACTION = 0.5
 # Per-strategy gating decided by TRAIN-window tuning (Task 19, train window
 # 2020-01-01..2023-12-31, docs/superpowers/results/2026-07-train-tuning.md).
 # {"Strategy Name": {"directions": ("bullish",), "horizons": ("4w", "2m")}}
-# A missing key means both directions, all horizons. entry_filters.entries_for
-# applies the mask, so backtest and live signals both respect it.
+# A missing key means both directions, all LEGACY horizons. v113 §2: an optional
+# "cells" set of (direction, horizon) pairs is admitted IN ADDITION to what the
+# legacy axes admit; it is the only way to admit a MASKED_BY_DEFAULT horizon.
+# admits() is the rule; entry_filters.entries_for is its reader, so backtest
+# and live signals both respect it.
 #
 # EMA Crossover and Elliott Wave are left ungated deliberately. The pre-v31
 # numbers that justified this (EMA Crossover bullish+4w reaching only N=28;
@@ -225,6 +260,9 @@ STRATEGY_GATES: dict[str, dict] = {
     "Bull Trap": {"directions": ()},
     "Vol Expansion Breakdown": {"directions": ()},
     "Earnings Gap Drift": {"directions": ()},
+    # v113 Part A ships masked; a holdout pass would admit it as
+    # "cells": {("bearish", "1w")} -- see the v113 plan's V113-24.
+    "Downtrend Overbought Fade": {"directions": ()},
     # bullish-only: N=608 WR=85.2 ExpR=+0.140 excl=28% (train, PRE-v31 -- stale)
     "RSI": {"directions": ("bullish",)},
     # bullish-only: N=259 WR=81.1 ExpR=+0.071 excl=25% (train, PRE-v31 -- stale)
@@ -249,8 +287,36 @@ STRATEGY_GATES: dict[str, dict] = {
     "Break & Retest": {"horizons": ("2m", "3m", "4m")},
 }
 
+
+def admits(strategy: str, direction: str, horizon_key: str) -> bool:
+    """v113 §2: THE mask rule. A (direction, horizon) pair is admitted when it
+    is in the strategy's "cells", or when the horizon is not masked by default
+    and the legacy axes (directions, horizons, horizons_by_direction) admit it.
+    With no "cells" anywhere this is exactly the pre-v113 rule on every legacy
+    horizon (pinned by tests/market/test_v113_horizon.py)."""
+    gates = STRATEGY_GATES.get(strategy) or {}
+    if (direction, horizon_key) in gates.get("cells", ()):
+        return True
+    if horizon_key in MASKED_BY_DEFAULT_HORIZONS:
+        return False
+    directions = gates.get("directions")
+    if directions is not None and direction not in directions:
+        return False
+    permitted = (gates.get("horizons_by_direction") or {}).get(direction, gates.get("horizons"))
+    return permitted is None or horizon_key in permitted
+
+
+def live_horizons() -> tuple[str, ...]:
+    """The strategy vocabulary, in HORIZONS order: LEGACY_HORIZONS plus any
+    masked-by-default horizon at least one "cells" pair admits. Read at call
+    time, so a cell shipped in code (or a test's gate_override) shows up in
+    commands, the admin UI and the live strategy pass without another edit."""
+    admitted = {hk for gates in STRATEGY_GATES.values() for _direction, hk in gates.get("cells", ())}
+    return tuple(key for key in HORIZONS if key not in MASKED_BY_DEFAULT_HORIZONS or key in admitted)
+
 # Minimum bars of history required for each horizon's slowest calculation
 MIN_BARS = {
+    "1w": 20,   # v113: the 2w floor already covers every 1w lookback (<= 10) and the 20-bar volume mean
     "2w": 20,
     "4w": 45,
     "2m": 75,

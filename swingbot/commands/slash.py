@@ -17,14 +17,14 @@ from discord.ext import commands
 
 from swingbot.bot_core import bot, COMMANDS_BY_CATEGORY, CONFIDENCE_EXPLAINER
 from swingbot.core import presentation as ui
-from swingbot.core.market.strategy import HORIZONS
+from swingbot.core.market.strategy import HORIZONS, live_horizons
 from swingbot.core.scanning import engine as scan_engine
 
 # ──────────────────────────────────────────────
 # Choice lists
 # ──────────────────────────────────────────────
 
-HORIZON_CHOICES = [app_commands.Choice(name=k, value=k) for k in HORIZONS] + [
+HORIZON_CHOICES = [app_commands.Choice(name=k, value=k) for k in live_horizons()] + [
     app_commands.Choice(name="all", value="all")
 ]
 
@@ -116,7 +116,8 @@ async def slash_strategies(interaction: discord.Interaction):
         "RSI mean-reversion, MACD, Elliott Wave, MA Ribbon, Break & Retest, RSI Divergence, Volume Profile",
         "", "**Swing horizons:**",
     ]
-    for key, h in HORIZONS.items():
+    for key in live_horizons():
+        h = HORIZONS[key]
         lines.append(f"`{key}` — {h['label']}")
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
 

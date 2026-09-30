@@ -8,7 +8,7 @@ import discord
 from swingbot import config
 from swingbot.bot_core import SESSION_TZ, bot, in_session
 from swingbot.core.scanning import engine as scan_engine
-from swingbot.core.market.strategy import HORIZONS
+from swingbot.core.market.strategy import LEGACY_HORIZONS
 from swingbot.core.marketdata.watchlist import load_watchlist
 from . import presence, recap, runstate
 from .alerts import _send_alerts
@@ -69,7 +69,7 @@ async def check_cmd(ctx, *args: str):
 
     for token in args:
         tl = token.lower()
-        if tl in ("all", *HORIZONS.keys()):
+        if tl in ("all", *LEGACY_HORIZONS):
             horizon = tl
         elif tl.startswith("from:"):
             date_from = token[5:]

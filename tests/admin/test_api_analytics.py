@@ -415,9 +415,9 @@ def test_horizon_rows_carry_no_badge_field(seed, logged_in):
 
 
 def test_horizon_rows_use_the_real_horizon_vocabulary(seed, logged_in):
-    from swingbot.core.market.strategy_types import HORIZONS
+    from swingbot.core.market.strategy_types import HORIZONS, LEGACY_HORIZONS
 
-    horizons = list(HORIZONS)[:3]
+    horizons = list(LEGACY_HORIZONS)[:3]
     seed(trades=[
         _closed_r(chr(ord("a") + i) * 16,
                   closed_at=f"2026-04-0{i + 1}T16:00:00+00:00", r=1.0, horizon=h)

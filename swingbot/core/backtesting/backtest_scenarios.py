@@ -18,7 +18,7 @@ from swingbot.core.planning.plan_engine import build_confluence_plan, primary_st
 from swingbot.core.planning.params import stamp_entry_context
 from swingbot.core.backtesting.asof_context import asof_row
 from swingbot.core.marketdata.pit_membership import is_member
-from swingbot.core.market.strategy_types import HORIZONS, MIN_BARS
+from swingbot.core.market.strategy_types import HORIZONS, LEGACY_HORIZONS, MIN_BARS
 from swingbot.core.scanning.gating import passes_confluence, scenario_gate_inputs
 from swingbot.scan_params import ScanParams
 
@@ -254,7 +254,7 @@ def run_scenario_backtest(frames: dict, start, end, *, gates,
     pit_membership.membership_map) masks signals to the dates each ticker was
     an index member; None (every non-`_pit` universe) leaves them unmasked.
     """
-    horizons = horizons or list(HORIZONS)
+    horizons = horizons or list(LEGACY_HORIZONS)
     results_by_hz: dict = {hk: [] for hk in horizons}
 
     tasks = [

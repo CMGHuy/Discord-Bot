@@ -152,6 +152,37 @@ def pending_invalidated(plan: TradePlanV2, bar_close: float) -> bool:
     return bar_close >= plan.stop_loss
 
 
+def limit_hit(plan: TradePlanV2, bar_high: float, bar_low: float) -> bool:
+    """v113: a resting LIMIT order at trigger_price trades on this bar -- a sell
+    limit (bearish) when the high reaches it, a buy limit (bullish) when the
+    low does. Touching the limit exactly counts."""
+    if plan.direction == "bullish":
+        return bar_low <= plan.trigger_price
+    return bar_high >= plan.trigger_price
+
+
+def limit_fill_price(plan: TradePlanV2, bar_open: float) -> float:
+    """At the limit, or at the open when the bar gapped through it: a limit
+    never fills worse than its own price (a sell fills at max(open, limit))."""
+    if plan.direction == "bullish":
+        return min(bar_open, plan.trigger_price)
+    return max(bar_open, plan.trigger_price)
+
+
+def stop_touched(plan: TradePlanV2, bar_high: float, bar_low: float) -> bool:
+    """This bar reached the plan's initial stop."""
+    if plan.direction == "bullish":
+        return bar_low <= plan.stop_loss
+    return bar_high >= plan.stop_loss
+
+
+def at_or_beyond_stop(plan: TradePlanV2, price: float) -> bool:
+    """`price` already sits at or through the stop (a fill that gapped past it)."""
+    if plan.direction == "bullish":
+        return price <= plan.stop_loss
+    return price >= plan.stop_loss
+
+
 # ---------------------------------------------------------------------------
 # Phase 2: exit model v2 (hybrid scale-out). simulate_exit is the shared
 # bar-by-bar walk that backtest.py and (eventually) the live plan manager

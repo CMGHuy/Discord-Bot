@@ -24,7 +24,7 @@ import numpy as np
 from fetch_backtest_data import load_cached, load_watchlist
 import swingbot.core.backtesting.backtest as bt
 import swingbot.core.market.entry_filters as ef
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 
 TRAIN = ("2020-01-01", "2023-12-31")
 
@@ -65,7 +65,7 @@ def run_config(strategy, dfs, exit_model="v1", scale_out=False):
     tp2_mode = "levels" if exit_model == "v2" else "none"
     trades = []
     for ticker, df in dfs.items():
-        for hk in HORIZONS:
+        for hk in LEGACY_HORIZONS:
             try:
                 s = bt.run_backtest(ticker, df, strategy, hk, one_at_a_time=True,
                                     exit_model=exit_model, scale_out=scale_out,

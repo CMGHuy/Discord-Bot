@@ -115,11 +115,26 @@ def _resolve_end(end: str) -> str:
     return end
 
 
+def _tickers(args) -> list[str]:
+    """--tickers wins outright (v113: the four inverse ETFs, never the
+    watchlist or benchmark). Otherwise the watchlist plus the market-context
+    benchmark (P0) -- not necessarily on the watchlist, but every backtest that
+    gates on regime needs its history cached -- plus --training-universe."""
+    if args.tickers:
+        return [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
+    from swingbot import config
+    return training_tickers(load_watchlist(), config.MARKET_REGIME_TICKER,
+                            getattr(args, "training_universe", None))
+
+
 def main():
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap =argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--start", default=START, help=f"start date YYYY-MM-DD (default {START})")
     ap.add_argument("--end", default=END, help=f"end date YYYY-MM-DD, or 'today' (default {END})")
     ap.add_argument("--force", action="store_true", help="re-fetch and overwrite already-cached tickers")
+    ap.add_argument("--tickers", default=None,
+                    help="comma-separated tickers to fetch INSTEAD of the watchlist "
+                         "(the market-context benchmark is not added)")
     # --universe is a SEPARATE, additive code path (Task E15). It does NOT
     # touch data/backtest_cache/ (owned by swingbot.core.marketdata.backtest_cache and
     # read by run_backtest_range.py / backtest_scenarios.py / this script's
@@ -161,13 +176,7 @@ def main():
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-    # The market-context benchmark (P0) is not necessarily on the watchlist,
-    # but every backtest that gates on regime needs its history cached like
-    # any other ticker. Without this the whole context channel is silently
-    # unavailable in the one place that can actually measure it.
-    from swingbot import config
-    tickers = training_tickers(load_watchlist(), config.MARKET_REGIME_TICKER,
-                               args.training_universe)
+    tickers = _tickers(args)
 
     print(f"Fetching {len(tickers)} tickers | {start} -> {end} | force={args.force}\n")
     ok, skipped, failed = 0, 0, []

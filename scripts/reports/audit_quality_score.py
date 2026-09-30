@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from swingbot.core.planning import quality
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.backtesting.registry import get_badge
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 
 CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "backtest_cache"
 TRAIN = ("2020-01-01", "2023-12-31")
@@ -26,7 +26,7 @@ def collect_scored_trades() -> list[dict]:
               for p in sorted(CACHE_DIR.glob("*.csv"))}
     for ticker, df in frames.items():
         vol_ratio_series = df["Volume"] / df["Volume"].rolling(20).mean()
-        for hk in HORIZONS:
+        for hk in LEGACY_HORIZONS:
             for strategy in ALL_STRATEGIES:
                 s = run_backtest(ticker, df, strategy, hk, exit_model="v2",
                                  scale_out=True)

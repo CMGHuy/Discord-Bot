@@ -510,7 +510,7 @@ def main():
     rbr = _plumbing()
     from swingbot.core.backtesting.backtest import ALL_STRATEGIES
     from swingbot.core.backtesting.backtest_scenarios import CONFLUENCE_GATES
-    from swingbot.core.market.strategy_types import HORIZONS
+    from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 
     ap = argparse.ArgumentParser(
         description="Measure expectancy by entry-day trade density (plan v51).")
@@ -552,10 +552,10 @@ def main():
               "decision.", flush=True)
 
     horizons = ([h.strip() for h in args.horizons.split(",")]
-                if args.horizons else list(HORIZONS))
-    unknown = [h for h in horizons if h not in HORIZONS]
+                if args.horizons else list(LEGACY_HORIZONS))
+    unknown = [h for h in horizons if h not in LEGACY_HORIZONS]
     if unknown:
-        ap.error(f"unknown horizon(s): {unknown}; known: {list(HORIZONS)}")
+        ap.error(f"unknown horizon(s): {unknown}; known: {list(LEGACY_HORIZONS)}")
 
     tickers = rbr._tickers_for_run(args.universe)
     if args.limit:
