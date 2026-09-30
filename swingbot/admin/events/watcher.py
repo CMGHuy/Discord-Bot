@@ -184,7 +184,7 @@ class FileWatcher:
         last = self._complained_at.get(path)
         if last is None or now - last >= LOG_INTERVAL:
             self._complained_at[path] = now
-            log.warning("event watcher could not stat %s: %s", path, exc)
+            log.warning("event watcher could not stat %s: %s", path, exc, exc_info=exc)
 
     # -- the two halves of a tick ----------------------------------------
 

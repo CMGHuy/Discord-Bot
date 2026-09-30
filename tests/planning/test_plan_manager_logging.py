@@ -90,3 +90,22 @@ def test_poll_logs_the_fill_it_performs(tmp_path, monkeypatch, caplog):
     with caplog.at_level(logging.INFO, logger=pm.log.name):
         mgr.poll()
     assert "Plan filled: AAPL id=p1 bullish price=106.00" in [r.getMessage() for r in _plan_lines(caplog)]
+
+
+def test_a_malformed_event_detail_does_not_raise(caplog):
+    with caplog.at_level(logging.DEBUG, logger=pm.log.name):
+        log_plan_event(_plan(), PlanEvent("p1", "filled", None))
+    assert any(r.levelno == logging.DEBUG and r.exc_info for r in _plan_lines(caplog))
+
+
+def test_a_logging_failure_does_not_skip_the_event_handler(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "INTRADAY_RTH_ONLY", False)
+    feed = FakePriceFeed([("AAPL", 106.0)])
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_pending(stop_loss=104.0))
+    mgr = PlanManager(store, feed.get_price)
+    handled = []
+    monkeypatch.setattr(mgr, "_on_event", lambda plan, event: handled.append(event.transition))
+    monkeypatch.setattr(pm, "_plan_line", lambda *a, **k: 1 / 0)
+    mgr.poll()
+    assert "filled" in handled

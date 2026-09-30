@@ -212,6 +212,17 @@ def _earnings_in_window(ticker: str, max_holding_days: int):
     return earnings_info
 
 
+def _persist_plan_v2(plan_v2) -> None:
+    """Add the plan to PlanStore; log it as armed only once that succeeded."""
+    try:
+        PlanStore().add(plan_v2)
+    except Exception:
+        log.warning("Failed to persist plan_v2 %s to PlanStore",
+                    plan_v2.plan_id, exc_info=True)
+        return
+    log_plan_armed(plan_v2)
+
+
 def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "ScanProgress" = None,
                     min_confluence: int = None, params: ScanParams | None = None) -> tuple:
     """
@@ -852,12 +863,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 # (INTRADAY_MANAGER_V2) both read from. Without this, plans.json
                 # never gained an entry: the Plans page stayed at 0/0/0 forever
                 # and the intraday manager's poll() had nothing to ever act on.
-                try:
-                    PlanStore().add(plan_v2)
-                    log_plan_armed(plan_v2)
-                except Exception:
-                    log.warning("Failed to persist plan_v2 %s to PlanStore",
-                                plan_v2.plan_id, exc_info=True)
+                _persist_plan_v2(plan_v2)
         else:
             log.info("%s (%s) already has an open trade -- not logging a duplicate", result.ticker, result.horizon_key)
 

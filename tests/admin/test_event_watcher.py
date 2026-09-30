@@ -363,6 +363,7 @@ def test_a_stat_failure_is_survived_and_does_not_raise_an_event(
 
     assert recorder == ["trades"], "an unreadable path must not look like a change"
     assert any(str(broken) in r.getMessage() for r in caplog.records)
+    assert any(r.exc_info for r in caplog.records if str(broken) in r.getMessage())
 
 
 def test_an_unreadable_path_logs_at_most_once_per_minute(

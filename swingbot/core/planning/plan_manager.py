@@ -88,16 +88,21 @@ def _plan_line(label: str, plan, price, suffix: str = "") -> None:
 
 
 def log_plan_event(plan, event: PlanEvent) -> None:
-    """INFO line for one lifecycle transition; silent for feed-only events."""
-    entry = _TRANSITION_LOG.get(event.transition)
-    if entry is None:
-        return
-    label, price_key = entry
-    reason = event.detail.get("reason")
-    if event.transition == "closed" and reason in _STOPPED_REASONS:
-        label = "stopped"
-    price = event.detail.get(price_key) if price_key else None
-    _plan_line(label, plan, price, f" reason={reason}" if reason else "")
+    """INFO line for one lifecycle transition; silent for feed-only events.
+
+    Never raises: a logging failure must not skip the event handler."""
+    try:
+        entry = _TRANSITION_LOG.get(event.transition)
+        if entry is None:
+            return
+        label, price_key = entry
+        reason = event.detail.get("reason")
+        if event.transition == "closed" and reason in _STOPPED_REASONS:
+            label = "stopped"
+        price = event.detail.get(price_key) if price_key else None
+        _plan_line(label, plan, price, f" reason={reason}" if reason else "")
+    except Exception:
+        log.debug("could not write the plan-transition line", exc_info=True)
 
 
 def log_plan_armed(plan) -> None:
