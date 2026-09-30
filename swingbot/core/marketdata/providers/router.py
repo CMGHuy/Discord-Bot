@@ -15,7 +15,7 @@ from swingbot import config
 from swingbot.core.infra.logsetup import with_current_context
 from swingbot.core.marketdata import spot_metals
 from swingbot.core.marketdata.providers.alpaca_provider import (
-    AlpacaAuthError, AlpacaMiss, AlpacaProvider)
+    AlpacaAuthError, AlpacaMiss, AlpacaProvider, symbols_per_request)
 from swingbot.core.marketdata.providers.base import (
     SOURCE_ALPACA, SOURCE_FALLBACK, SOURCE_SPOT, SOURCE_YF, is_alpaca_eligible)
 
@@ -93,21 +93,39 @@ def _active_provider():
     return _provider if _breaker.allows() else None
 
 
+def _collect(future, method: str, deadline: float):
+    """Result of one submitted call before `deadline` (monotonic), else None.
+    Records the breaker/stats outcome; runs in the calling thread."""
+    try:
+        result = future.result(timeout=max(0.0, deadline - time.monotonic()))
+    except (AlpacaMiss, FutureTimeout, Exception) as exc:
+        _stats["failures"] += 1
+        _breaker.record(False, auth=isinstance(exc, AlpacaAuthError))
+        log.debug("Alpaca %s miss: %s", method, str(exc) or type(exc).__name__)
+        return None
+    _breaker.record(True)
+    return result
+
+
 def _attempt(method: str, *args):
     """One bounded Alpaca call. Returns its result, or None on any miss."""
     prov = _active_provider()
     if prov is None or not _bucket.take():
         return None
-    try:
-        result = _pool.submit(with_current_context(getattr(prov, method)), *args).result(
-            timeout=float(config.ALPACA_TIMEOUT_SECONDS))
-    except (AlpacaMiss, FutureTimeout, Exception) as exc:
-        _stats["failures"] += 1
-        _breaker.record(False, auth=isinstance(exc, AlpacaAuthError))
-        log.debug("Alpaca %s miss: %s", method, exc)
-        return None
-    _breaker.record(True)
-    return result
+    deadline = time.monotonic() + float(config.ALPACA_TIMEOUT_SECONDS)
+    return _collect(_pool.submit(with_current_context(getattr(prov, method)), *args), method, deadline)
+
+
+def _attempt_many(method: str, batches: list, *args) -> list:
+    """One result per batch (None on miss), all in flight together under one
+    shared deadline. A batch without a bucket token is not submitted."""
+    prov = _active_provider()
+    if prov is None:
+        return [None] * len(batches)
+    deadline = time.monotonic() + float(config.ALPACA_TIMEOUT_SECONDS)
+    futures = [_pool.submit(with_current_context(getattr(prov, method)), b, *args) if _bucket.take() else None
+               for b in batches]
+    return [_collect(f, method, deadline) if f is not None else None for f in futures]
 
 
 def _split(tickers):
@@ -185,7 +203,11 @@ def _spot_prices(spot) -> dict:
 def daily_bars(tickers, period, yf_fetch):
     spot, tickers = spot_metals.split_spot(tickers)
     wanted, rest = _split(tickers)
-    got = (_attempt("daily_bars", wanted, period) or {}) if wanted else {}
+    n = symbols_per_request(period)
+    batches = [wanted[i:i + n] for i in range(0, len(wanted), n)]
+    got = {}
+    for part in _attempt_many("daily_bars", batches, period):
+        got.update(part or {})
     misses = [t for t in wanted if t not in got]
     _log_fallback("daily_bars", misses)
     out = _merge(got, rest, misses, lambda ts: yf_fetch(ts, period))

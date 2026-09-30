@@ -76,3 +76,12 @@ def test_other_error_maps_to_miss():
 
 def test_intraday_only_1h_supported():
     assert _prov(FakeClient()).intraday_bars("AAPL", "1d") is None
+
+
+def test_symbols_per_request_fits_one_page():
+    now = datetime(2026, 9, 25, tzinfo=timezone.utc)
+    assert ap.symbols_per_request("2y", now) == 19
+    for period in ("10y", "nonsense"):
+        n = ap.symbols_per_request(period, now)
+        rows = (now - ap._start_for(period, now)).days * 252 // 365 + 10
+        assert n >= 1 and (n * rows <= ap.ROWS_PER_PAGE or n == 1)
