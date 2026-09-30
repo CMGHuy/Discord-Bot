@@ -61,6 +61,50 @@ NOTICE_EVENTS = frozenset({"filled", "cancelled_expired", "cancelled_invalidated
                            "cancelled_risk_cap", "closed"})
 NOTICE_RESEND_DAYS = 5
 
+# v111: one INFO line per lifecycle transition, so a paper trade's life reads
+# from bot.log at INFO alone. transition -> (label, detail key of the price).
+# Feed-only events (stop_moved, pyramid_add) are absent on purpose.
+_TRANSITION_LOG = {
+    "filled": ("filled", "entry_price"),
+    "be_moved": ("break-even moved", "working_stop"),
+    "tp1_partial": ("TP1 hit", "exit_price"),
+    "closed": ("closed", "exit_price"),
+    "cancelled_expired": ("expired", None),
+    "cancelled_invalidated": ("invalidated", "live_price"),
+    "cancelled_risk_cap": ("risk cap hit", "entry_price"),
+}
+# Closes where a stop took the position out (initial, break-even, the
+# post-TP1 runner floor, or the chandelier trail), not a target or a time rule.
+_STOPPED_REASONS = frozenset({"loss", "scratch", "tp1_runner_be", "tp1_runner_trail"})
+
+
+def _fmt_price(value) -> str:
+    return "n/a" if value is None else f"{float(value):.2f}"
+
+
+def _plan_line(label: str, plan, price, suffix: str = "") -> None:
+    log.info("Plan %s: %s id=%s %s price=%s%s", label, plan.ticker,
+             str(plan.plan_id)[:8], plan.direction, _fmt_price(price), suffix)
+
+
+def log_plan_event(plan, event: PlanEvent) -> None:
+    """INFO line for one lifecycle transition; silent for feed-only events."""
+    entry = _TRANSITION_LOG.get(event.transition)
+    if entry is None:
+        return
+    label, price_key = entry
+    reason = event.detail.get("reason")
+    if event.transition == "closed" and reason in _STOPPED_REASONS:
+        label = "stopped"
+    price = event.detail.get(price_key) if price_key else None
+    _plan_line(label, plan, price, f" reason={reason}" if reason else "")
+
+
+def log_plan_armed(plan) -> None:
+    """INFO line when the scan persists a new plan (the plan is armed)."""
+    price = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+    _plan_line("armed", plan, price, f" status={plan.status}")
+
 
 def trail_notify_min_r() -> float:
     """config.TRAIL_NOTIFY_MIN_R clamped to its safe range."""
@@ -368,6 +412,7 @@ class PlanManager:
                     self.store.update(plan)
                 self._last_seen[plan.plan_id] = (session_date(now), price)
             for event in new_events:
+                log_plan_event(plan, event)
                 self._on_event(plan, event)
             events.extend(self._feed_bookkeeping(plan, new_events, regular, now))
         return events
@@ -735,6 +780,7 @@ class PlanManager:
         else:
             events = []
         for event in events:
+            log_plan_event(plan, event)
             self._on_event(plan, event)
         return events
 

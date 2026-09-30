@@ -29,6 +29,7 @@ from swingbot.core.marketdata import data_store, universe
 from swingbot.core.marketdata.watchlist import load_watchlist
 from swingbot.core.planning import account as account_module
 from swingbot.core.planning.account import compute_unrealized_pnl, load_account_config
+from swingbot.core.planning.plan_manager import log_plan_armed
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.scan_params import ScanParams
@@ -846,6 +847,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 # and the intraday manager's poll() had nothing to ever act on.
                 try:
                     PlanStore().add(plan_v2)
+                    log_plan_armed(plan_v2)
                 except Exception:
                     log.warning("Failed to persist plan_v2 %s to PlanStore",
                                 plan_v2.plan_id, exc_info=True)
