@@ -4,7 +4,8 @@ from typing import NamedTuple
 
 import discord
 
-from swingbot.core.presentation import ansi, tokens
+from swingbot.core.presentation import ansi, kinds, tokens
+from swingbot.core.presentation.kinds import Kind
 
 
 class EmbedField(NamedTuple):
@@ -60,12 +61,49 @@ def blocked_by_field(unmet: list[tuple[str, str]]) -> EmbedField | None:
     return EmbedField("⚠ Blocked by", body, False)
 
 
-def apply_chrome(embed: discord.Embed, *, accent: discord.Color,
-                 plan_id: str | None = None) -> None:
-    """Apply the required accent, footer, and timestamp in place."""
-    embed.color = accent
+def apply_chrome(embed: discord.Embed, *, accent: discord.Color | None = None,
+                 plan_id: str | None = None, kind: Kind | None = None,
+                 level: int | None = None, r: float | None = None,
+                 blocked: bool = False) -> None:
+    """Apply the stripe, footer and timestamp in place.
+
+    Pushed builders pass ``kind`` (v110): the stripe and footer come from the
+    registry. Command replies keep passing ``accent`` and the disclaimer
+    footer, so their look is unchanged."""
+    if kind is not None:
+        embed.color = discord.Color(kinds.stripe(kind, level=level, r=r, blocked=blocked))
+        text = kinds.footer(kind, plan_id)
+    elif accent is None:
+        raise ValueError("apply_chrome needs a kind (pushed message) or an accent (command reply)")
+    else:
+        embed.color = accent
+        text = f"{tokens.DISCLAIMER} · plan {plan_id[:8]}" if plan_id else tokens.DISCLAIMER
     embed.timestamp = discord.utils.utcnow()
-    text = tokens.DISCLAIMER
-    if plan_id:
-        text = f"{text} · plan {plan_id[:8]}"
     embed.set_footer(text=text)
+
+
+class PushEmbed(discord.Embed):
+    """A discord.Embed that also carries its push-preview line (v110 §4).
+
+    A phone push shows a message's ``content``, never the embed title, so every
+    pushed builder returns one of these and every sender passes
+    ``push_kwargs(embed)`` to ``send()``. Carrying the line on the embed keeps
+    the alert tuples' shape unchanged. ``kind`` is kept for v111's
+    "alert posted" log line and is never sent."""
+
+    __slots__ = ("push_text", "kind")
+
+
+def push_embed(kind: Kind, ticker: str = "", direction: str | None = None,
+               detail: str = "", *, description: str | None = None) -> PushEmbed:
+    """A PushEmbed whose title and push line both come from the registry."""
+    embed = PushEmbed(title=kinds.title(kind, ticker, direction, detail), description=description)
+    embed.push_text = kinds.content_line(kind, ticker, direction, detail)
+    embed.kind = kind
+    return embed
+
+
+def push_kwargs(embed) -> dict:
+    """send() kwargs for one pushed embed: the embed, plus its content line if it has one."""
+    text = getattr(embed, "push_text", None)
+    return {"embed": embed, "content": text} if text else {"embed": embed}

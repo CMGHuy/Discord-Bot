@@ -1,6 +1,7 @@
 from swingbot.core.presentation import components as c
 from swingbot.core.presentation import tokens as t
 import discord
+import pytest
 
 
 def test_plan_headline_is_a_fenced_ansi_block():
@@ -83,3 +84,56 @@ def test_result_headline_is_a_fenced_ansi_block():
     out = c.result_headline(direction="bearish", entry=100.0, exit_price=94.0,
                             stop=105.0, pct=6.0, r=1.2)
     assert out.startswith("```ansi\n") and "94.00" in out
+
+
+from swingbot.core.presentation import kinds
+from swingbot.core.presentation.kinds import Kind
+
+
+def test_apply_chrome_with_a_kind_takes_the_registry_stripe_and_footer():
+    embed = discord.Embed(title="x")
+    c.apply_chrome(embed, kind=Kind.CLOSED_TRADE, r=2.5, plan_id="a4f19c2233445566")
+    assert embed.color.value == kinds.RESULT_GREENS[2]
+    assert embed.footer.text == "RESULT · plan a4f19c22"
+    assert embed.timestamp is not None
+
+
+def test_apply_chrome_new_setup_keeps_the_disclaimer():
+    embed = discord.Embed(title="x")
+    c.apply_chrome(embed, kind=Kind.SETUP_ALERT, level=5, plan_id="a4f19c2233445566")
+    assert embed.color.value == kinds.SETUP_RAMP[5]
+    assert embed.footer.text == f"{t.DISCLAIMER} · plan a4f19c22"
+
+
+def test_apply_chrome_blocked_setup_is_the_muted_grey_blue():
+    embed = discord.Embed(title="x")
+    c.apply_chrome(embed, kind=Kind.SETUP_ALERT, level=5, blocked=True)
+    assert embed.color.value == kinds.SETUP_BLOCKED
+
+
+def test_apply_chrome_needs_a_kind_or_an_accent():
+    with pytest.raises(ValueError):
+        c.apply_chrome(discord.Embed(title="x"))
+
+
+def test_push_embed_carries_title_and_push_line():
+    embed = c.push_embed(Kind.SETUP_ALERT, "AAPL", "bullish", "Lv4 ⭐", description="body")
+    assert isinstance(embed, discord.Embed)
+    assert embed.title == "🆕 ▲ LONG AAPL · ALERT · Lv4 ⭐"
+    assert embed.push_text == "🆕 NEW SETUP · ▲ LONG AAPL · ALERT · Lv4 ⭐"
+    assert embed.kind is Kind.SETUP_ALERT
+    assert embed.description == "body"
+
+
+def test_push_kwargs_adds_content_only_when_the_embed_has_a_push_line():
+    pushed = c.push_embed(Kind.BOT_ONLINE)
+    assert c.push_kwargs(pushed) == {"embed": pushed, "content": "🤖 SYSTEM · ONLINE"}
+    plain = discord.Embed(title="x")
+    assert c.push_kwargs(plain) == {"embed": plain}
+    assert c.push_kwargs("EMBED") == {"embed": "EMBED"}
+
+
+def test_the_package_exports_the_push_helpers():
+    from swingbot.core import presentation as ui
+    assert ui.push_embed is c.push_embed and ui.push_kwargs is c.push_kwargs
+    assert ui.PushEmbed is c.PushEmbed
