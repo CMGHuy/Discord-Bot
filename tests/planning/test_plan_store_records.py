@@ -47,18 +47,3 @@ def test_db_stage_records_see_a_plan_only_in_the_database(db_fake):
 
 def test_db_stage_get_record_missing_is_none(db_fake):
     assert PlanStore().get_record("ghost") is None
-
-
-def test_version_at_db_stage_changes_when_a_db_plan_changes(db_fake):
-    store = PlanStore()
-    v0 = store.version()
-    db_fake.records["D1"] = {**plan_to_dict(_valid_plan(plan_id="D1")), "_v": 1}
-    v1 = store.version()
-    db_fake.records["D1"]["_v"] = 2
-    assert len({v0, v1, store.version()}) == 3
-
-
-def test_version_at_json_stage_is_none(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(config, "DB_STORES", "")
-    assert PlanStore().version() is None

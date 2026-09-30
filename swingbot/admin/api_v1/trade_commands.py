@@ -89,7 +89,7 @@ def _linked_trade(log_: TradeLog, plan_id: str) -> dict | None:
 
 def _plan_row(plan_id: str):
     """Re-read and render a plan-backed position after mutating it."""
-    plan = PlanStore()._plans.get(plan_id)
+    plan = PlanStore().get_record(plan_id)
     trade = _linked_trade(TradeLog(), plan_id)
     row = _row_from_plan(plan, trade, _noted_ids())
     _attach_current_prices([row])
@@ -202,7 +202,7 @@ def delete_trade(trade_id: str):
     this migration's remit. Left as an open question for sub-project 5.
     """
     if _looks_like_a_plan_id(trade_id):
-        if PlanStore()._plans.get(trade_id) is None:
+        if PlanStore().get_record(trade_id) is None:
             return error("not_found", f"No trade with id {trade_id!r}", 404)
         return error(
             "invalid",

@@ -600,7 +600,7 @@ def _attach_follow_scores(rows: list[dict], plans: list[dict]) -> None:
 
 def build_rows() -> list[dict]:
     """The join. Every row the collection can return, unfiltered."""
-    plans = list(PlanStore()._plans.values())
+    plans = PlanStore().records()
     trades = TradeLog().get_trades(status=None, limit=None, sort_by="opened_at") or []
     noted = _noted_ids()
 
@@ -728,7 +728,7 @@ def get_trade(trade_id: str):
     log = TradeLog()
 
     if _looks_like_a_plan_id(trade_id):
-        plan = PlanStore()._plans.get(trade_id)
+        plan = PlanStore().get_record(trade_id)
         if plan is None:
             return error("not_found", f"No trade with id {trade_id!r}", 404)
         trade = next(
@@ -742,7 +742,7 @@ def get_trade(trade_id: str):
         # does -- follow_score is a composite, so scoring this plan alone would
         # give a different number from the one the list shows for the same row.
         # `test_detail_row_fields_match_the_list_exactly` is what caught that.
-        _attach_follow_scores([row], list(PlanStore()._plans.values()))
+        _attach_follow_scores([row], PlanStore().records())
     else:
         trade = log.get_trade_by_id(trade_id)
         if trade is None:

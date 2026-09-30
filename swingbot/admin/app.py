@@ -282,7 +282,7 @@ def _trade_for_levels(trade_id: str):
     # its plan in `plan_id`; a legacy trade has none and simply keeps no
     # working-stop line, same as before this lookup existed.
     plan_id = trade.get("plan_id")
-    plan = PlanStore()._plans.get(plan_id) if plan_id else None
+    plan = PlanStore().get_record(plan_id) if plan_id else None
     if plan is not None:
         trade = {**trade, "working_stop": plan.get("working_stop")}
     return trade

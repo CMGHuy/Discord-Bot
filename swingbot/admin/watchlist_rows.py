@@ -62,7 +62,24 @@ _signal_cache: OrderedDict[tuple[tuple[str, ...], tuple[int, int, int]], dict[st
 _signal_cache_lock = threading.Lock()
 
 
-def _plans_signature() -> tuple[int, int, int] | None:
+def _db_plans_version() -> tuple | None:
+    """Stage-db version token, or None when reads still come from plans.json."""
+    from swingbot.core.db import stages
+    if not stages.reads_db("plans"):
+        return None
+    from swingbot.core.db.repositories.plans import plans_repo
+    return ("db", *plans_repo().version())
+
+
+def _plans_signature() -> tuple | None:
+    # At stage db plans.json no longer changes, so the version is derived from
+    # the database; at json/dual the file stat stays the cross-process signal.
+    try:
+        db_version = _db_plans_version()
+    except Exception:
+        return None  # DB unreachable: skip the cache rather than serve stale
+    if db_version is not None:
+        return db_version
     try:
         stat = os.stat(os.path.join(config.DATA_DIR, "plans.json"))
     except OSError:

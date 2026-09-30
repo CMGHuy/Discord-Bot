@@ -105,17 +105,6 @@ class PlanStore:
         """Every raw plan dict from the read backend."""
         return list(self._all().values())
 
-    def version(self):
-        """Cheap change token for cross-process caches, or None at json/dual.
-
-        At stage db plans.json stops changing, so a file stat can no longer
-        signal a change; the repository's (count, max updated_at) does."""
-        from swingbot.core.db import stages
-        if not stages.reads_db("plans"):
-            return None
-        from swingbot.core.db.repositories.plans import plans_repo
-        return plans_repo().version()
-
     def add(self, plan: TradePlanV2) -> None:
         with _LOCK:
             self._plans[plan.plan_id] = plan_to_dict(plan)
