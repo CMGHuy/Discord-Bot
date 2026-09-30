@@ -77,6 +77,37 @@ if [ -z "$IMAGE" ]; then
 fi
 export SWING_BOT_IMAGE="$IMAGE"
 
+# v116: the PITR Postgres image (Dockerfile.db). CI passes it; a manual deploy
+# falls back to the pin deploy.sh last wrote into .env.
+DB_IMAGE="${SWING_BOT_DB_IMAGE:-$(env_value SWING_BOT_DB_IMAGE)}"
+if [ -z "$DB_IMAGE" ]; then
+  echo "No db image to deploy. CI passes SWING_BOT_DB_IMAGE; for a manual" >&2
+  echo "deploy, take the last one recorded in backups/deploys.jsonl." >&2
+  exit 1
+fi
+export SWING_BOT_DB_IMAGE="$DB_IMAGE"
+
+# v116: host directories that are bind-mount sources or snapshot targets. They
+# must exist BEFORE env_set.py snapshots and before `docker compose up`:
+# Docker would otherwise create them root-owned, and then env snapshots (deploy
+# user) and pgbackrest archive-push (postgres uid 70 in the db image) fail.
+# Idempotent. backups/pitr needs uid 70; chown is tried directly, then via
+# passwordless sudo, and a failure is a loud warning (archiving would break),
+# not a silent skip.
+mkdir -p backups/env backups/pitr
+chmod 700 backups/env
+if [ "$(stat -c %u backups/pitr)" != "70" ]; then
+  chown 70:70 backups/pitr 2>/dev/null || sudo -n chown 70:70 backups/pitr 2>/dev/null     || echo "WARNING: could not chown backups/pitr to 70:70 -- WAL archiving will fail until it is." >&2
+fi
+
+# v116: .env is the record of what runs. Pinned in place (env_set.py never
+# renames the bind-mounted file) and snapshotted, so rollback_to.sh and any
+# later manual `docker compose up` see these exact tags -- never a stale pin
+# left behind by an earlier rollback.
+echo "==> Pinning the deployed images in .env"
+python3 scripts/ops/env_set.py SWING_BOT_IMAGE "$IMAGE"
+python3 scripts/ops/env_set.py SWING_BOT_DB_IMAGE "$DB_IMAGE"
+
 # Docker creates a DIRECTORY at any bind-mount source that does not exist,
 # which for a file mount produces a container that fails in a confusing way
 # (.env becomes an unreadable directory). Both files are mounted; make sure
@@ -118,6 +149,9 @@ fi
 echo "==> Pulling $IMAGE"
 docker pull "$IMAGE"
 
+echo "==> Pulling $DB_IMAGE"
+docker pull "$DB_IMAGE"
+
 # cloudflared is a stock, third-party image (cloudflare/cloudflared), not one
 # this pipeline builds or verifies -- it never runs the app image, so it's
 # deliberately absent from the digest check below. Its tag in
@@ -143,6 +177,14 @@ echo "==> Starting services"
 # retries window), so the SSH step in CI fails loudly instead of returning
 # while a container is still crash-looping.
 docker compose up -d --no-build --wait
+
+# v116: the rollback index. Written the moment the containers switched --
+# before verification, because a deploy that fails verification is still the
+# one running, and rollback_to.sh resolves "what ran at second T" from here.
+echo "==> Recording this deploy in backups/deploys.jsonl"
+mkdir -p backups
+printf '{"ts":"%s","git_sha":"%s","bot_image":"%s","db_image":"%s"}
+'   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(git rev-parse HEAD)" "$IMAGE" "$DB_IMAGE"   >> backups/deploys.jsonl
 
 echo "==> Pruning old, now-unused images (keeps disk usage in check on small instances)"
 docker image prune -f
