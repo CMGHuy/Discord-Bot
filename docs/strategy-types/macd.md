@@ -52,6 +52,8 @@ Stop `2 × ATR14`, capped at 2%. TP1 comes from the ATR ladder. Exits: trail
 The win rate sits exactly on the 50% floor. The bearish arm was re-derived in
 v93 and failed, so it stays masked.
 
+**v113 1w cells (Part B, TRAIN 2010-01-01..2025-12-31, universe 74, horizon 1w masked):** bullish N=435, WR 36.1%, ExpR +0.172, lower bound +0.072, cleared Tier 2 at Stage 1; Part B bar failing clauses: wr; folds 12 qualifying / 9 positive. bearish N=72, WR 22.2%, ExpR -0.148, lower bound -0.357, no tier; Part B bar failing clauses: wr, exp_r, lower_bound; folds 0 qualifying / 0 positive. Neither cell proceeds to the holdout (Part B's bar is Tier 1 plus a bootstrap lower bound > 0; every 1w cell fails Tier 1 on WR); no `cells` admission, no registry row. Source: `results/2026-09-30-v113-partB.md`.
+
 ## Pseudocode
 
 ```python

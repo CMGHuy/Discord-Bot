@@ -50,6 +50,8 @@ the registry. The pre-v31 VALIDATED badge described deleted arithmetic and was
 corrected on 2026-09-10. Reopening needs a new mechanism
 (`backtest-methodology.md`).
 
+**v113 1w cells (Part B, TRAIN 2010-01-01..2025-12-31, universe 74, horizon 1w masked):** bullish N=8, WR 37.5%, ExpR +0.066, lower bound -0.636, no tier; Part B bar failing clauses: wr, n, lower_bound; folds 0 qualifying / 0 positive. bearish N=1, WR 0.0%, ExpR -1.000, lower bound -1.000, no tier; Part B bar failing clauses: wr, exp_r, n, lower_bound; folds 0 qualifying / 0 positive. Neither cell proceeds to the holdout (Part B's bar is Tier 1 plus a bootstrap lower bound > 0; every 1w cell fails Tier 1 on WR); no `cells` admission, no registry row. Source: `results/2026-09-30-v113-partB.md`.
+
 ## Pseudocode
 
 ```python

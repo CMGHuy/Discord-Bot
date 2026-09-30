@@ -62,6 +62,8 @@ v84 context: the pooled TRAIN was N=298 WR 48.0%, but it splits by horizon
 (2m/3m/4m WR 53.1/57.1/51.4%, while 6m was WR 27.8% ExpR −0.157). The gate
 keeps the good horizons and both directions.
 
+**v113 1w cells (Part B, TRAIN 2010-01-01..2025-12-31, universe 74, horizon 1w masked):** bullish N=100, WR 31.0%, ExpR +0.138, lower bound -0.035, no tier; Part B bar failing clauses: wr, lower_bound; folds 0 qualifying / 0 positive. bearish N=7, WR 42.9%, ExpR +0.174, lower bound -0.417, no tier; Part B bar failing clauses: wr, n, scratch, lower_bound; folds 0 qualifying / 0 positive. Neither cell proceeds to the holdout (Part B's bar is Tier 1 plus a bootstrap lower bound > 0; every 1w cell fails Tier 1 on WR); no `cells` admission, no registry row. Source: `results/2026-09-30-v113-partB.md`.
+
 ## Pseudocode
 
 ```python

@@ -58,6 +58,8 @@ capped at 2.5R. Exits use the defaults: trail 2.5 × ATR, TP2 on.
 - v84: closed at fold stability. The problem is thin volume, not a blow-up.
   Reopening needs a new mechanism.
 
+**v113 1w cells (Part B, TRAIN 2010-01-01..2025-12-31, universe 74, horizon 1w masked):** bullish N=125, WR 35.2%, ExpR +0.141, lower bound -0.050, no tier; Part B bar failing clauses: wr, lower_bound; folds 0 qualifying / 0 positive. bearish N=19, WR 26.3%, ExpR -0.112, lower bound -0.514, no tier; Part B bar failing clauses: wr, exp_r, n, lower_bound; folds 0 qualifying / 0 positive. Neither cell proceeds to the holdout (Part B's bar is Tier 1 plus a bootstrap lower bound > 0; every 1w cell fails Tier 1 on WR); no `cells` admission, no registry row. Source: `results/2026-09-30-v113-partB.md`.
+
 ## Pseudocode
 
 ```python
