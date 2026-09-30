@@ -9,33 +9,24 @@ import datetime as dt
 import difflib
 import logging
 import signal
-from logging.handlers import RotatingFileHandler
 
 import discord
 from discord.ext import commands
 
 from swingbot import config
+from swingbot.core.infra.logsetup import apply_log_level, configure_logging
 from swingbot.core.market.session import BERLIN_TZ
 
-# Two handlers on the root logger: console (same as before -- `docker
-# compose logs -f bot` keeps working exactly as it did) and a rotating
-# file under logs/bot.log, which lives on the same bind-mounted project
-# directory the admin container shares -- that's what powers the admin
-# UI's live Logs page. 5MB x 3 backups is plenty for a bot that logs a
-# few lines per scan; older history simply rolls off rather than
-# growing forever.
-_log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+def configure_bot_logging() -> None:
+    """Console (`docker compose logs -f bot`) plus logs/bot.log, which the
+    admin container's Logs page reads off the shared bind mount. 5MB x 3
+    backups; older history rolls off. Format and handlers are shared with
+    the admin process (swingbot/core/infra/logsetup.py)."""
+    configure_logging(config.LOG_FILE, config.LOG_LEVEL,
+                      max_bytes=5 * 1024 * 1024, backups=3)
 
-_console_handler = logging.StreamHandler()
-_console_handler.setFormatter(_log_formatter)
 
-_file_handler = RotatingFileHandler(config.LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=3)
-_file_handler.setFormatter(_log_formatter)
-
-_root_logger = logging.getLogger()
-_root_logger.setLevel(getattr(logging, config.LOG_LEVEL, logging.INFO))
-_root_logger.addHandler(_console_handler)
-_root_logger.addHandler(_file_handler)
+configure_bot_logging()
 
 log = logging.getLogger("swing-bot")
 
@@ -293,8 +284,7 @@ def _handle_reload_signal():
         log.exception("SIGHUP reload failed -- config left unchanged; fix the .env and try again")
         return
     if "LOG_LEVEL" in changed:
-        new_level = getattr(logging, config.LOG_LEVEL, logging.INFO)
-        logging.getLogger().setLevel(new_level)
+        apply_log_level(config.LOG_LEVEL)
     for callback in _reload_callbacks:
         try:
             callback(changed)
