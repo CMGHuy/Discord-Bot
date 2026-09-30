@@ -98,3 +98,32 @@ def test_move_stop_events_split_into_break_even_tp1_and_move_stop():
     be = execution_embeds.build_instruction_embed(
         plan, PlanEvent(plan.plan_id, "be_moved", {"working_stop": 100.0}))
     assert be.title == "🛡️ ▲ LONG NVDA · BREAK-EVEN"
+    tp1 = execution_embeds.build_instruction_embed(plan, PlanEvent(plan.plan_id, "tp1_partial", {
+        "fraction": 0.5, "exit_price": 105.0, "r": 1.0, "working_stop": 100.0}))
+    assert tp1.title == "💰 ▲ LONG NVDA · TP1"
+    moved = execution_embeds.build_instruction_embed(plan, PlanEvent(plan.plan_id, "stop_moved", {
+        "new": 102.0, "r_moved": 0.4}))
+    assert moved.title == "✂️ ▲ LONG NVDA · MOVE STOP"
+
+
+def test_closed_loss_is_a_red_result():
+    plan = make_plan_v2()          # entry 100, stop 95
+    embed = execution_embeds.build_instruction_embed(plan, PlanEvent(
+        plan.plan_id, "closed", {"reason": "stop", "exit_price": 95.0, "session": "regular"}))
+    assert embed.title.startswith("🏁 ▲ LONG NVDA · EXITED · ❌ LOSS")
+    assert embed.color.value == kinds.RESULT_REDS[1]
+
+
+def test_extended_hours_close_is_close_at_market():
+    plan = make_plan_v2()
+    embed = execution_embeds.build_instruction_embed(plan, PlanEvent(
+        plan.plan_id, "closed", {"reason": "stop", "exit_price": 95.0, "session": "extended"}))
+    assert "CLOSE AT MARKET" in embed.title
+    assert embed.description.count("CLOSE AT MARKET now") == 1
+
+
+def test_invalidated_cancel_uses_the_cancel_kind():
+    plan = make_plan_v2()
+    embed = execution_embeds.build_instruction_embed(
+        plan, PlanEvent(plan.plan_id, "cancelled_invalidated", {}))
+    assert embed.title == "🚫 ▲ LONG NVDA · CANCEL"
