@@ -25,6 +25,20 @@ def plan_headline(*, direction: str, entry: float | None, target: float | None,
     ))
 
 
+def levels_block(*, direction: str, entry: float | None, stop: float | None,
+                 tp1: float | None, tp2: float | None = None) -> str:
+    """Fenced ANSI levels block for NEW SETUP and ENTRY embeds (v110 §3)."""
+    return ansi.block(ansi.levels_lines(direction=direction, entry=entry, stop=stop,
+                                        tp1=tp1, tp2=tp2))
+
+
+def result_headline(*, direction: str, entry: float | None, exit_price: float | None,
+                    stop: float | None, pct: float | None, r: float | None) -> str:
+    """Fenced ANSI result block for RESULT embeds: the realised R green or red."""
+    return ansi.block(ansi.result_lines(direction=direction, entry=entry,
+                                        exit_price=exit_price, stop=stop, pct=pct, r=r))
+
+
 def confidence_field(level: int | None, score: float | None) -> EmbedField:
     """Return the inline confidence field that pairs with follow score."""
     return EmbedField("Confidence", tokens.confidence_label(level, score), True)

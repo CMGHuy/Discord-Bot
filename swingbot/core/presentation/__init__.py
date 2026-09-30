@@ -25,7 +25,7 @@ this package touches discord.Color at all.
 
 from swingbot.core.presentation.components import (  # noqa: F401
     EmbedField, apply_chrome, blocked_by_field, confidence_field, follow_field,
-    plan_headline,
+    levels_block, plan_headline, result_headline,
 )
 from swingbot.core.presentation.tokens import (  # noqa: F401
     ABSENT, ACCENT_BLOCKED, ACCENT_RAMP, DISCLAIMER, SECTION_ORDER,

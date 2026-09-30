@@ -71,3 +71,15 @@ def test_apply_chrome_returns_none_so_call_sites_read_as_a_statement():
 def test_section_order_is_a_fixed_tuple_with_blocked_before_the_chart_fold():
     assert t.SECTION_ORDER[:4] == ("headline", "plan", "blocked", "quality")
     assert isinstance(t.SECTION_ORDER, tuple)
+
+
+def test_levels_block_is_a_fenced_ansi_block():
+    out = c.levels_block(direction="bullish", entry=100.0, stop=95.0, tp1=110.0)
+    assert out.startswith("```ansi\n") and out.endswith("\n```")
+    assert "100.00" in out and "110.00" in out
+
+
+def test_result_headline_is_a_fenced_ansi_block():
+    out = c.result_headline(direction="bearish", entry=100.0, exit_price=94.0,
+                            stop=105.0, pct=6.0, r=1.2)
+    assert out.startswith("```ansi\n") and "94.00" in out
