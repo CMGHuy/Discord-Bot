@@ -1,0 +1,609 @@
+{
+ "universe_n": 4,
+ "part": "D",
+ "strategy": "inverse-etf-longs",
+ "direction": "bullish",
+ "horizon": null,
+ "cells": [
+  [
+   "EMA Crossover",
+   "2w"
+  ],
+  [
+   "EMA Crossover",
+   "4w"
+  ],
+  [
+   "EMA Crossover",
+   "2m"
+  ],
+  [
+   "EMA Crossover",
+   "3m"
+  ],
+  [
+   "EMA Crossover",
+   "4m"
+  ],
+  [
+   "EMA Crossover",
+   "5m"
+  ],
+  [
+   "EMA Crossover",
+   "6m"
+  ],
+  [
+   "EMA Crossover",
+   "7m"
+  ],
+  [
+   "EMA Crossover",
+   "8m"
+  ],
+  [
+   "EMA Crossover",
+   "9m"
+  ],
+  [
+   "VWAP",
+   "4w"
+  ],
+  [
+   "Fibonacci",
+   "2w"
+  ],
+  [
+   "Fibonacci",
+   "4w"
+  ],
+  [
+   "Fibonacci",
+   "2m"
+  ],
+  [
+   "Fibonacci",
+   "3m"
+  ],
+  [
+   "Fibonacci",
+   "4m"
+  ],
+  [
+   "Fibonacci",
+   "5m"
+  ],
+  [
+   "Fibonacci",
+   "6m"
+  ],
+  [
+   "Fibonacci",
+   "7m"
+  ],
+  [
+   "Fibonacci",
+   "8m"
+  ],
+  [
+   "Fibonacci",
+   "9m"
+  ],
+  [
+   "Support/Resistance",
+   "2m"
+  ],
+  [
+   "Support/Resistance",
+   "3m"
+  ],
+  [
+   "RSI",
+   "2w"
+  ],
+  [
+   "RSI",
+   "4w"
+  ],
+  [
+   "RSI",
+   "2m"
+  ],
+  [
+   "RSI",
+   "3m"
+  ],
+  [
+   "RSI",
+   "4m"
+  ],
+  [
+   "RSI",
+   "5m"
+  ],
+  [
+   "RSI",
+   "6m"
+  ],
+  [
+   "RSI",
+   "7m"
+  ],
+  [
+   "RSI",
+   "8m"
+  ],
+  [
+   "RSI",
+   "9m"
+  ],
+  [
+   "MACD",
+   "3m"
+  ],
+  [
+   "MACD",
+   "4m"
+  ],
+  [
+   "MACD",
+   "7m"
+  ],
+  [
+   "MACD",
+   "8m"
+  ],
+  [
+   "MACD",
+   "9m"
+  ],
+  [
+   "Elliott Wave",
+   "2w"
+  ],
+  [
+   "Elliott Wave",
+   "4w"
+  ],
+  [
+   "Elliott Wave",
+   "2m"
+  ],
+  [
+   "Elliott Wave",
+   "3m"
+  ],
+  [
+   "Elliott Wave",
+   "4m"
+  ],
+  [
+   "Elliott Wave",
+   "5m"
+  ],
+  [
+   "Elliott Wave",
+   "6m"
+  ],
+  [
+   "Elliott Wave",
+   "7m"
+  ],
+  [
+   "Elliott Wave",
+   "8m"
+  ],
+  [
+   "Elliott Wave",
+   "9m"
+  ],
+  [
+   "MA Ribbon",
+   "2w"
+  ],
+  [
+   "MA Ribbon",
+   "4w"
+  ],
+  [
+   "MA Ribbon",
+   "2m"
+  ],
+  [
+   "MA Ribbon",
+   "3m"
+  ],
+  [
+   "MA Ribbon",
+   "4m"
+  ],
+  [
+   "MA Ribbon",
+   "5m"
+  ],
+  [
+   "MA Ribbon",
+   "6m"
+  ],
+  [
+   "MA Ribbon",
+   "7m"
+  ],
+  [
+   "MA Ribbon",
+   "8m"
+  ],
+  [
+   "MA Ribbon",
+   "9m"
+  ],
+  [
+   "Break & Retest",
+   "2m"
+  ],
+  [
+   "Break & Retest",
+   "3m"
+  ],
+  [
+   "Break & Retest",
+   "4m"
+  ],
+  [
+   "RSI Divergence",
+   "2w"
+  ],
+  [
+   "RSI Divergence",
+   "4w"
+  ],
+  [
+   "RSI Divergence",
+   "2m"
+  ],
+  [
+   "RSI Divergence",
+   "3m"
+  ],
+  [
+   "RSI Divergence",
+   "4m"
+  ],
+  [
+   "RSI Divergence",
+   "5m"
+  ],
+  [
+   "RSI Divergence",
+   "6m"
+  ],
+  [
+   "RSI Divergence",
+   "7m"
+  ],
+  [
+   "RSI Divergence",
+   "8m"
+  ],
+  [
+   "RSI Divergence",
+   "9m"
+  ],
+  [
+   "Volume Profile",
+   "7m"
+  ]
+ ],
+ "scored": {
+  "stats": {
+   "n": 109,
+   "wins": 37,
+   "losses": 72,
+   "win_rate": 33.94495412844037,
+   "expectancy_r": 0.07494666666666658,
+   "scratch_timeout_share": 0.2733333333333333
+  },
+  "lower_bound": -0.5448064516129032,
+  "tier1": {
+   "clears": false,
+   "clauses": {
+    "wr": false,
+    "exp_r": true,
+    "n": true,
+    "scratch": true
+   }
+  },
+  "tier2": {
+   "clears": false,
+   "clauses": {
+    "exp_r": true,
+    "lower_bound": false,
+    "n": true,
+    "scratch": true
+   }
+  },
+  "tier": null
+ },
+ "folds": [
+  {
+   "test_year": 2013,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2014,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2015,
+   "tol": "fixed",
+   "stats": {
+    "n": 11,
+    "wins": 7,
+    "losses": 4,
+    "win_rate": 63.63636363636363,
+    "expectancy_r": 2.081,
+    "scratch_timeout_share": 0.08333333333333333
+   }
+  },
+  {
+   "test_year": 2016,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": 0.0,
+    "scratch_timeout_share": 1.0
+   }
+  },
+  {
+   "test_year": 2017,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2018,
+   "tol": "fixed",
+   "stats": {
+    "n": 11,
+    "wins": 0,
+    "losses": 11,
+    "win_rate": 0.0,
+    "expectancy_r": -1.0,
+    "scratch_timeout_share": 0.0
+   }
+  },
+  {
+   "test_year": 2019,
+   "tol": "fixed",
+   "stats": {
+    "n": 2,
+    "wins": 1,
+    "losses": 1,
+    "win_rate": 50.0,
+    "expectancy_r": 0.03571428571428571,
+    "scratch_timeout_share": 0.7142857142857143
+   }
+  },
+  {
+   "test_year": 2020,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2021,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2022,
+   "tol": "fixed",
+   "stats": {
+    "n": 64,
+    "wins": 26,
+    "losses": 38,
+    "win_rate": 40.625,
+    "expectancy_r": 0.12767857142857145,
+    "scratch_timeout_share": 0.23809523809523808
+   }
+  },
+  {
+   "test_year": 2023,
+   "tol": "fixed",
+   "stats": {
+    "n": 16,
+    "wins": 1,
+    "losses": 15,
+    "win_rate": 6.25,
+    "expectancy_r": -0.4570666666666667,
+    "scratch_timeout_share": 0.4666666666666667
+   }
+  },
+  {
+   "test_year": 2024,
+   "tol": "fixed",
+   "stats": {
+    "n": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "expectancy_r": null,
+    "scratch_timeout_share": null
+   }
+  },
+  {
+   "test_year": 2025,
+   "tol": "fixed",
+   "stats": {
+    "n": 1,
+    "wins": 1,
+    "losses": 0,
+    "win_rate": 100.0,
+    "expectancy_r": 1.582,
+    "scratch_timeout_share": 0.0
+   }
+  }
+ ],
+ "stage2": {
+  "clears": false,
+  "qualifying": 2,
+  "positive": 1,
+  "unselected": 0
+ },
+ "by_strategy": {
+  "Break & Retest": {
+   "n": 3,
+   "wins": 1,
+   "losses": 2,
+   "win_rate": 33.33333333333333,
+   "expectancy_r": 0.3846,
+   "scratch_timeout_share": 0.4
+  },
+  "EMA Crossover": {
+   "n": 1,
+   "wins": 1,
+   "losses": 0,
+   "win_rate": 100.0,
+   "expectancy_r": 1.911,
+   "scratch_timeout_share": 0.0
+  },
+  "Elliott Wave": {
+   "n": 3,
+   "wins": 0,
+   "losses": 3,
+   "win_rate": 0.0,
+   "expectancy_r": -1.0,
+   "scratch_timeout_share": 0.0
+  },
+  "Fibonacci": {
+   "n": 39,
+   "wins": 18,
+   "losses": 21,
+   "win_rate": 46.15384615384615,
+   "expectancy_r": 0.50564,
+   "scratch_timeout_share": 0.22
+  },
+  "MA Ribbon": {
+   "n": 19,
+   "wins": 10,
+   "losses": 9,
+   "win_rate": 52.63157894736842,
+   "expectancy_r": 0.371,
+   "scratch_timeout_share": 0.20833333333333334
+  },
+  "MACD": {
+   "n": 3,
+   "wins": 0,
+   "losses": 3,
+   "win_rate": 0.0,
+   "expectancy_r": -1.0,
+   "scratch_timeout_share": 0.0
+  },
+  "RSI Divergence": {
+   "n": 20,
+   "wins": 0,
+   "losses": 20,
+   "win_rate": 0.0,
+   "expectancy_r": -0.5,
+   "scratch_timeout_share": 0.5
+  },
+  "Support/Resistance": {
+   "n": 12,
+   "wins": 0,
+   "losses": 12,
+   "win_rate": 0.0,
+   "expectancy_r": -0.8571428571428571,
+   "scratch_timeout_share": 0.14285714285714285
+  },
+  "VWAP": {
+   "n": 3,
+   "wins": 2,
+   "losses": 1,
+   "win_rate": 66.66666666666666,
+   "expectancy_r": 0.6233333333333334,
+   "scratch_timeout_share": 0.0
+  },
+  "Volume Profile": {
+   "n": 6,
+   "wins": 5,
+   "losses": 1,
+   "win_rate": 83.33333333333334,
+   "expectancy_r": 1.336,
+   "scratch_timeout_share": 0.14285714285714285
+  }
+ },
+ "by_ticker": {
+  "DOG": {
+   "n": 16,
+   "wins": 4,
+   "losses": 12,
+   "win_rate": 25.0,
+   "expectancy_r": -0.36806249999999996,
+   "scratch_timeout_share": 0.0
+  },
+  "PSQ": {
+   "n": 11,
+   "wins": 0,
+   "losses": 11,
+   "win_rate": 0.0,
+   "expectancy_r": -0.7333333333333333,
+   "scratch_timeout_share": 0.26666666666666666
+  },
+  "RWM": {
+   "n": 39,
+   "wins": 19,
+   "losses": 20,
+   "win_rate": 48.717948717948715,
+   "expectancy_r": 0.40156578947368415,
+   "scratch_timeout_share": 0.4868421052631579
+  },
+  "SH": {
+   "n": 43,
+   "wins": 14,
+   "losses": 29,
+   "win_rate": 32.55813953488372,
+   "expectancy_r": -0.05553488372093025,
+   "scratch_timeout_share": 0.0
+  }
+ },
+ "proceed_to_holdout": false,
+ "tier": null
+}
