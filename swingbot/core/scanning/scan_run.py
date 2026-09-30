@@ -196,6 +196,22 @@ def _reload_config_before_scan() -> dict:
     return changed
 
 
+def _earnings_in_window(ticker: str, max_holding_days: int):
+    """Earnings inside the holding window. INFO, not WARNING: it is routine on
+    alerts and the explanation already flags it (v111 §4)."""
+    try:
+        earnings_info = earnings_within_window(ticker, max_holding_days)
+    except Exception as e:
+        log.debug("Earnings check failed for %s: %s", ticker, e)
+        return None
+    if earnings_info:
+        log.info("%s has earnings %s (%dd away) inside this trade's holding window -- "
+                 "volatility spike risk, will flag in explanation", ticker, *earnings_info)
+    else:
+        log.debug("%s: no earnings inside the %dd holding window", ticker, max_holding_days)
+    return earnings_info
+
+
 def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "ScanProgress" = None,
                     min_confluence: int = None, params: ScanParams | None = None) -> tuple:
     """
@@ -734,16 +750,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
 
         h = HORIZONS[result.horizon_key]
 
-        earnings_info = None
-        try:
-            earnings_info = earnings_within_window(result.ticker, h["max_holding_days"])
-            if earnings_info:
-                log.warning("%s has earnings %s (%dd away) inside this trade's holding window -- "
-                             "volatility spike risk, will flag in explanation", result.ticker, *earnings_info)
-            else:
-                log.debug("%s: no earnings inside the %dd holding window", result.ticker, h["max_holding_days"])
-        except Exception as e:
-            log.debug("Earnings check failed for %s: %s", result.ticker, e)
+        earnings_info = _earnings_in_window(result.ticker, h["max_holding_days"])
 
         macro_events = get_market_events(h["max_holding_days"])
         if macro_events:

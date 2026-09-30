@@ -36,7 +36,7 @@ log = logging.getLogger(__name__)
 def build_embed(item, explanation, perf_stats, open_positions_warning, chart_filename,
                 htf_info: dict = None, layout: str = "detailed") -> discord.Embed:
     """
-    htf_info, when provided, is a dict from scan_engine.py's HTF check:
+    htf_info, when provided, is the dict analyze._scan_one builds from regime.get_htf_bias():
         {"htf_bias": "bullish"|"bearish", "counter_trend": bool, "ema_period": int, "horizon_key": str}
     Counter-trend setups get a ⚠️ warning field added to the embed.
 

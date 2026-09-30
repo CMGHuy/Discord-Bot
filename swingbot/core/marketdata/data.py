@@ -659,7 +659,7 @@ def prefetch_prices(tickers: list[str], max_workers: int = 10) -> None:
     try:
         prices = get_current_price_batch(unique)
     except Exception as exc:
-        log.debug("prefetch_prices batch failed: %s", exc)
+        log.warning("prefetch_prices batch failed: %s", exc, exc_info=True)
         return
     now = time.monotonic()
     for ticker, price in prices.items():

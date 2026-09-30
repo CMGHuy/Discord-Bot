@@ -411,7 +411,7 @@ async def config_watcher():
         runstate.clear_trigger()
         log.info("Admin UI triggered a manual !check scan.")
         if not config.DISCORD_CHANNEL_TRADES_ID:
-            log.warning("CHANNEL_ID not set; cannot post scan results.")
+            log.warning("DISCORD_CHANNEL_TRADES_ID not set; cannot post scan results.")
             return
         channel = silence(bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
         if channel is None:
@@ -546,6 +546,30 @@ async def _resend_plan_notices() -> None:
         await _post_plan_events(events)
 
 
+async def _live_price_batch(tickers: list) -> dict:
+    """Fresh-only live prices for the trade monitor, or {} on failure.
+
+    One Yahoo request for the whole open book avoids a serial minute-history
+    request per ticker. Fresh-only (allow_stale=False): acting on an old
+    print could falsely close a trade or satisfy an exit transition.
+    Routed through scanning.fetch._run_bounded, not a bare asyncio.to_thread
+    (2026-09-17 incident): a hung yfinance call would otherwise wedge this
+    @tasks.loop forever. A PROCESS, deliberately -- see _run_bounded.
+
+    A failure is a WARNING (was DEBUG until v111): while it lasts, no open
+    trade is checked against its stop or target."""
+    if not tickers:
+        return {}
+    try:
+        return await asyncio.to_thread(
+            _run_bounded, functools.partial(get_current_price_batch, allow_stale=False),
+            (tickers,), float(getattr(config, "LIVE_PRICE_TIMEOUT_SECONDS", 60)),
+            f"trade_monitor: live-price batch of {len(tickers)} ticker(s)") or {}
+    except Exception as exc:
+        log.warning("trade_monitor: batch price fetch failed: %s", exc, exc_info=True)
+        return {}
+
+
 @tasks.loop(seconds=60)
 async def trade_monitor():
     """
@@ -585,32 +609,7 @@ async def trade_monitor():
     tickers = list({t["ticker"] for t in open_trades})
     all_newly_closed = []
 
-    # One Yahoo request for the whole open book avoids a serial minute-history
-    # request per ticker.  The batch helper is explicitly fresh-only here:
-    # UI callers may show its last-known-good fallback, but acting on an old
-    # print could falsely close a trade or satisfy an exit transition.
-    #
-    # Routed through scanning.fetch._run_bounded, not a bare
-    # asyncio.to_thread (2026-09-17 incident): a hung yfinance call has no
-    # exception and no CPU use to signal it, and this loop's own
-    # @tasks.loop(seconds=60) does not schedule its next tick until this
-    # coroutine returns -- an unbounded hang here wedges the WHOLE loop,
-    # silently, forever, and it is one of the two places (this and
-    # plan_manager._price_batch_fn) responsible for ever closing a trade
-    # between full scans. _run_bounded reused as-is, deliberately a
-    # PROCESS rather than a thread -- see its own docstring for the
-    # production history this repeats and why a thread can't stand in.
-    if tickers:
-        try:
-            live_prices = await asyncio.to_thread(
-                _run_bounded, functools.partial(get_current_price_batch, allow_stale=False),
-                (tickers,), float(getattr(config, "LIVE_PRICE_TIMEOUT_SECONDS", 60)),
-                f"trade_monitor: live-price batch of {len(tickers)} ticker(s)") or {}
-        except Exception as exc:
-            log.debug("trade_monitor: batch price fetch failed: %s", exc)
-            live_prices = {}
-    else:
-        live_prices = {}
+    live_prices = await _live_price_batch(tickers)
 
     for ticker in tickers:
         live = live_prices.get(ticker)
