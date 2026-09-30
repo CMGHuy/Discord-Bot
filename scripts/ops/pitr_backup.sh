@@ -8,6 +8,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 trap 'echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) pitr_backup FAILED (line $LINENO) ===" >&2' ERR
 
+# Weekday is UTC-based (cron fires on VM local time); off-by-a-day is benign.
 TYPE=diff
 if [ "$(date -u +%u)" = "7" ]; then
   TYPE=full
