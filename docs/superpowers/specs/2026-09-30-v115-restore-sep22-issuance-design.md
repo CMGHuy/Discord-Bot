@@ -37,7 +37,7 @@ still issued, with its stop moved to exactly 2% from the entry.
 | 1 | `SIGNAL_CONFIRMATION_SCANS` | stays `1` (no change) | `755a61ca` |
 | 2 | `MIN_STOP_DISTANCE_PCT` | `2.0` in `.env.example` and production `.env` (code default already 2.0 — verify) | `9a3a8757` |
 | 3 | Clamp the stop to `HARD_MAX_PLANNED_LOSS_PCT` from the trigger in `build_confluence_plan`, before target selection | `CLAMP_STOP_TO_HARD_CAP` = `true` | new; supersedes the reject of `f01e87e2` |
-| 4 | Futures/FX/index exemption from the dollar-volume floor | `LIQUIDITY_EXEMPT_NON_EQUITY` = `false` | `4a649b36` |
+| 4 | Futures/FX/index exemption from the dollar-volume floor; v109 spot metals (`spot_metals.SPOT_PAIRS`) stay exempt regardless | `LIQUIDITY_EXEMPT_NON_EQUITY` = `false` | `4a649b36` (partner, 2026-09-30: spot metals kept) |
 | 5 | v92/v103/v104/v108/v113 strategy work guaranteed off: production `.env` verified, defaults pinned by a test | none new (existing flags/masks) | § Strategy work |
 
 The `f01e87e2` reject in `attach_plan_v2` stays as a safety net; after the
@@ -91,9 +91,14 @@ rejects, bringing back part of "posts nothing".
   claimed: the clamp applies to whatever calls `build_confluence_plan`; if
   the backtest harness does, parity is kept, otherwise this is a known
   live-vs-backtest gap to record in `known-traps.md`.
-- `universe.liquidity_reason(df, symbol=ticker)` ignores the symbol unless
-  flag 4 is on, so SI=F / GC=F etc. are again subject to the dollar-volume
-  floor.
+- `universe.liquidity_reason(df, symbol=ticker)`: futures, FX and indices
+  (SI=F, GC=F etc.) are exempt from the dollar-volume floor only while flag 4
+  is on, so by default they are filtered again, as on 09-22. The v109 spot
+  metals (every key of `spot_metals.SPOT_PAIRS`, today XAUUSD and XAGUSD) are
+  exempt whatever flag 4 says (partner decision 2026-09-30): they did not
+  exist on 09-22, and their bars carry the future's contract volume, so the
+  floor would silently drop the v109 feature. History and price floors still
+  apply to all.
 
 ## Production
 
@@ -111,7 +116,8 @@ Edit production `.env` **in place** (nano or `cat new > .env`, never `sed -i`;
   off restores the unclamped stop.
 - `attach_plan_v2` issues (not rejects) a scenario with a 4% stop.
 - `liquidity_reason` with a futures symbol: flag off returns the dollar-volume
-  reason, on returns `None`.
+  reason, on returns `None`. With flag off, XAUUSD and XAGUSD (every
+  `SPOT_PAIRS` key) return `None`, while SI=F and GC=F return the reason.
 - Config schema test for the two new fields; `.env.example` parity.
 - Guaranteed-off test: one test asserting every value in § Strategy work at
   code default *and* as parsed from `.env.example`, naming the spec in each
