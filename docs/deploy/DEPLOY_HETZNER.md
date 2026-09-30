@@ -297,6 +297,24 @@ The cron entry is installed on the VM as a separate step:
 The cron is installed on the VM (2026-09-30) and the restore drill is recorded
 in `DB_RESTORE.md`. Keep both true before any store reaches the `db` stage.
 
+**Rolling a store back from `db` to JSON.** Once a store is at stage `db` the
+JSON file is stale, so flipping the stage alone would resurrect old data. In
+order:
+
+1. Export: `docker compose exec -T bot python scripts/db/export_json.py --store <name>`
+   (or `--store all`; add `--dry-run` first). It prints per-store counts and a
+   checksum. A differing existing file is not overwritten unless `--force`; the
+   export is written beside it as `<name>.exported.json` instead.
+2. Restart the containers (`docker compose restart bot admin`). The in-memory
+   singletons (`TradeLog._trades`, `PlanStore._plans`, `StateStore._data`)
+   would otherwise overwrite the exported file on their next write.
+3. Set the store's stage back in `DB_STORES` (`name:json`). Edit `.env` **in
+   place** (an editor that writes in place, not `sed -i`): a rename-based edit
+   leaves the bind-mounted file invisible to the container, see
+   `docs/claude/known-traps.md` ("Editing production `.env` with `sed -i`").
+   Then `docker compose restart bot admin` again, or send SIGHUP.
+4. Verify with `parity_report.py --store <name>` against the exported file.
+
 ## Useful one-liners on the server
 
 ```bash
