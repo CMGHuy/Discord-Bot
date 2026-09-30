@@ -6,6 +6,7 @@ import pytest
 
 import swingbot.config as config
 from swingbot.core.planning import account as _account
+from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, planned_loss_pct
 from swingbot.core.edge import throttle
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.core.scanning import analyze, dedup, engine, fetch, runstate, scan_run
@@ -307,16 +308,50 @@ def test_attach_plan_v2_records_the_rejection_reason(monkeypatch):
     assert item.plan_v2_rejected == "no_qualifying_target"
 
 
-def test_attach_plan_v2_rejects_a_plan_whose_stop_is_beyond_the_hard_cap(monkeypatch):
+def _gc_scenario():
+    return SimpleNamespace(direction="bearish", entry=4194.30, stop_loss=4278.68,
+                           take_profit=4066.11, target_sources=["FVG (bullish)"],
+                           stop_sources=["Rolling resistance"])
+
+
+def test_attach_plan_v2_clamps_a_stop_beyond_the_hard_cap_and_issues(monkeypatch):
     # Production 2026-09-28: GC=F plans with a 2.01% trigger-to-stop loss were
-    # posted, then cancelled_risk_cap by PlanManager seconds later on fill. A
-    # plan the execution guard can never open must not be posted at all.
+    # posted, then cancelled_risk_cap on fill, and f01e87e2 then rejected them.
+    # v115: the stop is clamped to exactly 2% from the trigger and the plan issues.
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", True)
     item = _item()
-    scenario = SimpleNamespace(direction="bearish", entry=4194.30, stop_loss=4278.68,
-                               take_profit=4066.11, target_sources=["FVG (bullish)"],
-                               stop_sources=["Rolling resistance"])
-    engine.attach_plan_v2(item, scenario, make_ohlcv([4194.30] * 60),
+    engine.attach_plan_v2(item, _gc_scenario(), make_ohlcv([4194.30] * 60),
+                          "GC=F", "4w", level_map=None)
+    assert item.plan_v2 is not None
+    assert getattr(item, "plan_v2_rejected", None) is None
+    assert item.plan_v2.stop_loss == pytest.approx(4194.30 * 1.02)
+    assert planned_loss_pct(item.plan_v2.trigger_price,
+                            item.plan_v2.stop_loss) <= HARD_MAX_PLANNED_LOSS_PCT + 1e-9
+
+
+def test_attach_plan_v2_issues_a_four_percent_stop_at_two_percent(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", True)
+    item = _item()
+    scenario = SimpleNamespace(direction="bullish", entry=100.0, stop_loss=96.0,
+                               take_profit=104.0, target_sources=["EMA21"],
+                               stop_sources=["Rolling support"])
+    engine.attach_plan_v2(item, scenario, make_ohlcv([100.0] * 60),
+                          "AAPL", "4w", level_map=None)
+    assert item.plan_v2 is not None
+    assert getattr(item, "plan_v2_rejected", None) is None
+    assert item.plan_v2.stop_loss == pytest.approx(98.0)
+    assert item.plan_v2.tp1 == pytest.approx(104.0)
+
+
+def test_attach_plan_v2_still_rejects_beyond_the_cap_when_the_clamp_is_off(monkeypatch):
+    # The f01e87e2 safety net is unchanged: with the clamp off, the 2.01% GC=F
+    # plan builds (tp 4066.11 is 1.52R) and is rejected as risk_cap.
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", False)
+    item = _item()
+    engine.attach_plan_v2(item, _gc_scenario(), make_ohlcv([4194.30] * 60),
                           "GC=F", "4w", level_map=None)
     assert item.plan_v2 is None
     assert item.plan_v2_rejected == "risk_cap"

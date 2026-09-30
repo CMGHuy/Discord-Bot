@@ -6,9 +6,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from swingbot import config
 from swingbot.core.market import levels, opex
 from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION, HORIZONS, SHORT_STRATEGIES
-from swingbot.core.risk_limits import capped_planned_loss_pct, planned_loss_pct
+from swingbot.core.risk_limits import (HARD_MAX_PLANNED_LOSS_PCT, capped_planned_loss_pct,
+                                       planned_loss_pct)
 from .plan_types import PlanStatus, TradePlanV2, record_transition
 from . import params as plan_params
 from . import reward_floor
@@ -357,6 +359,20 @@ def primary_strategy_for(scenario) -> str:
     return _pick_primary_source(sources) or "S/R Confluence"
 
 
+def _clamp_stop_to_hard_cap(entry: float, stop_loss: float, is_bull: bool) -> float:
+    """v115: a confluence stop further than HARD_MAX_PLANNED_LOSS_PCT from the
+    trigger moves to exactly the cap (entry -/+ entry * cap / 100), so the setup
+    is issued at 2% risk instead of being rejected by attach_plan_v2's risk_cap
+    safety net. Gated by CLAMP_STOP_TO_HARD_CAP (default on). A stop within the
+    cap, or an invalid entry, is returned unchanged."""
+    if not config.CLAMP_STOP_TO_HARD_CAP or entry is None or entry <= 0:
+        return stop_loss
+    if planned_loss_pct(entry, stop_loss) <= HARD_MAX_PLANNED_LOSS_PCT:
+        return stop_loss
+    offset = entry * HARD_MAX_PLANNED_LOSS_PCT / 100.0
+    return entry - offset if is_bull else entry + offset
+
+
 def build_confluence_plan(scenario, df, *, ticker, horizon_key,
                           primary_strategy, level_map=None,
                           quality_inputs=None, params=None,
@@ -370,19 +386,22 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
     `primary_strategy` is the real per-scenario attribution (see
     primary_strategy_for). `level_map` is an optional (supports, resistances)
     pair from levels.build_level_map -- when absent, the only honest
-    candidate is the scenario's own real target."""
+    candidate is the scenario's own real target. v115: a stop beyond the 2% hard
+    cap is first clamped to it (_clamp_stop_to_hard_cap), so tp1/tp2 and the plan
+    use the clamped risk."""
     if params is None:
         from swingbot.scan_params import ScanParams
         params = ScanParams.from_config()
     entry = scenario.entry
     is_bull = scenario.direction == "bullish"
+    stop_loss = _clamp_stop_to_hard_cap(entry, scenario.stop_loss, is_bull)
 
     if level_map is not None:
         candidates = levels.target_candidates(*level_map, scenario.direction)
     else:
         candidates = [scenario.take_profit] if scenario.take_profit is not None else []
 
-    tp1 = select_structural_target(entry, scenario.stop_loss, is_bull, candidates,
+    tp1 = select_structural_target(entry, stop_loss, is_bull, candidates,
                                    params.min_risk_reward_ratio, params.max_risk_reward_ratio)
     if tp1 is None:
         return None
@@ -407,7 +426,7 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
         source="confluence", strategy=primary_strategy, horizon_key=horizon_key,
         direction=scenario.direction, entry_type=entry_type, trigger_price=entry,
         entry_price=entry if entry_type == "market" else None,
-        expiry_bars=DEFAULT_EXPIRY_BARS, stop_loss=scenario.stop_loss, tp1=tp1,
+        expiry_bars=DEFAULT_EXPIRY_BARS, stop_loss=stop_loss, tp1=tp1,
         tp1_fraction=TP1_FRACTION, tp2=tp2,
         breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
         trail_atr_mult=TRAIL_ATR_MULT, quality_score=0, quality_breakdown=[],
