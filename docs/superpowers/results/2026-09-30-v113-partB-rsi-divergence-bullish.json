@@ -1,0 +1,216 @@
+{
+ "universe_n": 74,
+ "part": "B",
+ "strategy": "RSI Divergence",
+ "direction": "bullish",
+ "horizon": "1w",
+ "scored": {
+  "stats": {
+   "n": 484,
+   "wins": 194,
+   "losses": 290,
+   "win_rate": 40.082644628099175,
+   "expectancy_r": 0.336913229018492,
+   "scratch_timeout_share": 0.31152204836415365
+  },
+  "lower_bound": 0.23058995682922598,
+  "tier1": {
+   "clears": false,
+   "clauses": {
+    "wr": false,
+    "exp_r": true,
+    "n": true,
+    "scratch": true
+   }
+  },
+  "tier2": {
+   "clears": true,
+   "clauses": {
+    "exp_r": true,
+    "lower_bound": true,
+    "n": true,
+    "scratch": true
+   }
+  },
+  "tier": 2
+ },
+ "clauses": {
+  "wr": false,
+  "exp_r": true,
+  "n": true,
+  "scratch": true,
+  "lower_bound": true
+ },
+ "folds": [
+  {
+   "test_year": 2013,
+   "tol": "fixed",
+   "stats": {
+    "n": 38,
+    "wins": 13,
+    "losses": 25,
+    "win_rate": 34.21052631578947,
+    "expectancy_r": 0.19379310344827588,
+    "scratch_timeout_share": 0.3448275862068966
+   }
+  },
+  {
+   "test_year": 2014,
+   "tol": "fixed",
+   "stats": {
+    "n": 30,
+    "wins": 5,
+    "losses": 25,
+    "win_rate": 16.666666666666664,
+    "expectancy_r": -0.24485714285714288,
+    "scratch_timeout_share": 0.2857142857142857
+   }
+  },
+  {
+   "test_year": 2015,
+   "tol": "fixed",
+   "stats": {
+    "n": 24,
+    "wins": 10,
+    "losses": 14,
+    "win_rate": 41.66666666666667,
+    "expectancy_r": 0.268547619047619,
+    "scratch_timeout_share": 0.42857142857142855
+   }
+  },
+  {
+   "test_year": 2016,
+   "tol": "fixed",
+   "stats": {
+    "n": 17,
+    "wins": 6,
+    "losses": 11,
+    "win_rate": 35.294117647058826,
+    "expectancy_r": 0.30112121212121223,
+    "scratch_timeout_share": 0.48484848484848486
+   }
+  },
+  {
+   "test_year": 2017,
+   "tol": "fixed",
+   "stats": {
+    "n": 36,
+    "wins": 15,
+    "losses": 21,
+    "win_rate": 41.66666666666667,
+    "expectancy_r": 0.3857758620689656,
+    "scratch_timeout_share": 0.3793103448275862
+   }
+  },
+  {
+   "test_year": 2018,
+   "tol": "fixed",
+   "stats": {
+    "n": 18,
+    "wins": 8,
+    "losses": 10,
+    "win_rate": 44.44444444444444,
+    "expectancy_r": 0.24655172413793106,
+    "scratch_timeout_share": 0.3793103448275862
+   }
+  },
+  {
+   "test_year": 2019,
+   "tol": "fixed",
+   "stats": {
+    "n": 30,
+    "wins": 9,
+    "losses": 21,
+    "win_rate": 30.0,
+    "expectancy_r": 0.07543999999999997,
+    "scratch_timeout_share": 0.4
+   }
+  },
+  {
+   "test_year": 2020,
+   "tol": "fixed",
+   "stats": {
+    "n": 28,
+    "wins": 13,
+    "losses": 15,
+    "win_rate": 46.42857142857143,
+    "expectancy_r": 0.3544047619047619,
+    "scratch_timeout_share": 0.3333333333333333
+   }
+  },
+  {
+   "test_year": 2021,
+   "tol": "fixed",
+   "stats": {
+    "n": 62,
+    "wins": 25,
+    "losses": 37,
+    "win_rate": 40.32258064516129,
+    "expectancy_r": 0.36238095238095236,
+    "scratch_timeout_share": 0.2619047619047619
+   }
+  },
+  {
+   "test_year": 2022,
+   "tol": "fixed",
+   "stats": {
+    "n": 6,
+    "wins": 1,
+    "losses": 5,
+    "win_rate": 16.666666666666664,
+    "expectancy_r": -0.27266666666666667,
+    "scratch_timeout_share": 0.6
+   }
+  },
+  {
+   "test_year": 2023,
+   "tol": "fixed",
+   "stats": {
+    "n": 29,
+    "wins": 18,
+    "losses": 11,
+    "win_rate": 62.06896551724138,
+    "expectancy_r": 0.9562432432432433,
+    "scratch_timeout_share": 0.21621621621621623
+   }
+  },
+  {
+   "test_year": 2024,
+   "tol": "fixed",
+   "stats": {
+    "n": 68,
+    "wins": 31,
+    "losses": 37,
+    "win_rate": 45.588235294117645,
+    "expectancy_r": 0.8094050632911393,
+    "scratch_timeout_share": 0.13924050632911392
+   }
+  },
+  {
+   "test_year": 2025,
+   "tol": "fixed",
+   "stats": {
+    "n": 43,
+    "wins": 19,
+    "losses": 24,
+    "win_rate": 44.18604651162791,
+    "expectancy_r": 0.35249180327868856,
+    "scratch_timeout_share": 0.29508196721311475
+   }
+  }
+ ],
+ "stage2": {
+  "clears": true,
+  "qualifying": 12,
+  "positive": 11,
+  "unselected": 0
+ },
+ "floor": {
+  "floor_drops": 0,
+  "floor_passes": 739,
+  "floor_drop_rate": 0.0
+ },
+ "cap_bind_rate": 0.9118065433854907,
+ "proceed_to_holdout": false,
+ "tier": null
+}
