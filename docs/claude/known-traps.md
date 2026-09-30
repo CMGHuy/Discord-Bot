@@ -293,3 +293,26 @@ with this gap in place. Detail: `docs/strategy-types/shared-mechanics.md` §4a.
 **Fixed by v104 Part 0 (V104-2):** the widening ceiling is now
 `stop_scope.stop_ceiling(...)` -- 2% out of scope. Numbers measured before
 this fix are not comparable to numbers after it.
+
+## Editing production `.env` with `sed -i` changes nothing live
+
+`docker-compose.yml` bind-mounts `.env` as a single file, which tracks the
+inode. `sed -i`, and any other tool that writes a temp file and renames it,
+leaves both containers reading the old inode. The admin UI then saves into
+that orphan, and the bot's reload never fires. Found 2026-09-30, when a
+`MIN_STOP_DISTANCE_PCT` edit showed on the host but read 2.0 in the container.
+
+- **Edit in place:** nano, or `cat new > .env`.
+- **Or recreate:** `SWING_BOT_IMAGE=<running sha- image> docker compose up -d
+  --force-recreate --no-build --wait bot admin`. Without `SWING_BOT_IMAGE`,
+  compose falls back to the non-existent `swing-bot:latest`.
+- **Verify:** `docker compose exec -T bot grep <KEY> /app/.env`.
+
+## Stop floor and 2% cap leave an empty band (2026-09-30)
+
+Since `f01e87e2` rejects any plan with a stop over 2%, `MIN_STOP_DISTANCE_PCT`
+>= 2.0 admits only a stop of exactly 2.0%. Production posted nothing from
+Sep 25 to Sep 30. A replay on live data gave 0 setups at a 2.0 or 1.5 floor
+and 10 at 1.0, so production now runs 1.0 as an unmeasured stopgap until
+v114 validates the band. A funnel of "N checked -> N no entry point" is this
+band, not a data fault.
