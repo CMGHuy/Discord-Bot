@@ -104,7 +104,7 @@ def _attempt(method: str, *args):
     except (AlpacaMiss, FutureTimeout, Exception) as exc:
         _stats["failures"] += 1
         _breaker.record(False, auth=isinstance(exc, AlpacaAuthError))
-        log.info("Alpaca %s miss: %s", method, exc)
+        log.debug("Alpaca %s miss: %s", method, exc)
         return None
     _breaker.record(True)
     return result
@@ -124,6 +124,13 @@ def _tag(frames: dict, source: str) -> dict:
     for df in frames.values():
         df.attrs["source"] = source
     return frames
+
+
+def _log_fallback(kind: str, symbols) -> None:
+    """DEBUG line for Alpaca-eligible symbols served by yfinance instead."""
+    if symbols:
+        log.debug("Alpaca %s fallback to yfinance for %d symbol(s): %s",
+                  kind, len(symbols), ", ".join(list(symbols)[:10]))
 
 
 def _merge(alpaca: dict, rest: list, misses: list, fetch) -> dict:
@@ -180,6 +187,7 @@ def daily_bars(tickers, period, yf_fetch):
     wanted, rest = _split(tickers)
     got = (_attempt("daily_bars", wanted, period) or {}) if wanted else {}
     misses = [t for t in wanted if t not in got]
+    _log_fallback("daily_bars", misses)
     out = _merge(got, rest, misses, lambda ts: yf_fetch(ts, period))
     out.update(_spot_daily(spot, out, lambda ts: yf_fetch(ts, period)))
     return out
@@ -191,6 +199,7 @@ def latest_prices(tickers, yf_fetch):
     got = (_attempt("latest_prices", wanted,
                     int(config.ALPACA_MAX_TRADE_AGE_SECONDS)) or {}) if wanted else {}
     misses = [t for t in wanted if t not in got]
+    _log_fallback("latest_prices", misses)
     out = dict(got)
     for group, source in ((rest, SOURCE_YF), (misses, SOURCE_FALLBACK)):
         fetched = yf_fetch(group) if group else {}
@@ -219,6 +228,7 @@ def intraday_bars(ticker, interval, yf_fetch):
         df = _attempt("intraday_bars", ticker, interval)
         source = SOURCE_ALPACA
         if df is None or df.empty:
+            _log_fallback("intraday_bars", [ticker])
             df, source = yf_fetch(ticker, interval), SOURCE_FALLBACK
     if df is not None:
         df.attrs["source"] = source
