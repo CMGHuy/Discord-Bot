@@ -163,7 +163,8 @@ FIELDS: list[Field] = [
           "Clamp wide confluence stops to the 2% cap",
           type="checkbox", default="true",
           help="v115. A confluence setup whose natural stop sits further than 2% from the entry "
-               "is still issued, with its stop moved to exactly 2% from the entry. The target is "
+               "is still issued, with its stop moved to 1.75% from the entry (0.25% inside the "
+               "cap, so a fill a little past the trigger is not cancelled). The target is "
                "then chosen against that tighter risk, and the setup is dropped if no level pays "
                "the min reward:risk ratio. Off: the stop stays where the levels put it and any plan "
                "beyond 2% is rejected (risk_cap), which at a 2.0% stop floor posts almost nothing. "
