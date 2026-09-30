@@ -137,7 +137,7 @@ def chunk_text(text: str, limit: int = RETRO_CHUNK) -> list[str]:
     chunks = []
     while len(text) > limit:
         split_at = text.rfind("\n", 0, limit)
-        if split_at == -1:
+        if split_at <= 0:
             split_at = limit
         chunks.append(text[:split_at])
         text = text[split_at:]

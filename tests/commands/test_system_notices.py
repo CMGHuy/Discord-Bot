@@ -150,3 +150,26 @@ def test_send_guarded_logs_the_traceback_and_returns_none(caplog):
     assert result is None
     record = next(r for r in caplog.records if "recovery notice" in r.getMessage())
     assert record.exc_info is not None
+
+
+def test_chunk_text_terminates_when_a_chunk_starts_with_a_newline():
+    # A regression would loop forever, so run it in a child process that the
+    # timeout kills (no unbounded growth in the test process).
+    import json
+    import pathlib
+    import subprocess
+    import sys
+    code = ("import json;from swingbot.commands.scanning import notices;"
+            "print(json.dumps(notices.chunk_text('a' + chr(10) + 'b' * 4000)))")
+    done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                          timeout=20, cwd=pathlib.Path(__file__).resolve().parents[2])
+    chunks = json.loads(done.stdout)
+    assert "".join(chunks) == "a\n" + "b" * 4000
+    assert all(len(c) <= 1990 for c in chunks)
+
+
+def test_healthcheck_names_min_confidence_without_a_confirmation_note():
+    funnel = dict(FUNNEL, failed_min_confidence=1, awaiting_confirmation=0)
+    text = notices.healthcheck_text("10:05", funnel, 2, 2)
+    assert "below min confidence" in text
+    assert "needs to reappear" not in text
