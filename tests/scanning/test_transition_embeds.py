@@ -1,7 +1,10 @@
+import pytest
+
 from swingbot.core.planning.plan_manager import PlanEvent
+from swingbot.core.presentation import ansi, kinds
+from swingbot.core.presentation.kinds import Kind
 from swingbot.core.scanning.embeds import build_plan_event_embed
-from swingbot.core.scanning.lifecycle_embeds import PLAN_EVENT_STYLES
-from swingbot.core.presentation import tokens
+from swingbot.core.scanning.lifecycle_embeds import CLOSE_REASON_STYLES, PLAN_EVENT_KINDS
 from swingbot.core.scanning import plan_table
 from tests.planning.test_plan_engine_model import _plan
 
@@ -13,17 +16,23 @@ def _embed(transition, detail=None, **plan_kw):
 
 def test_filled_embed():
     e = _embed("filled", {"entry_price": 106.0})
-    assert "ENTRY TRIGGERED" in e.title and "🎯" in e.title
+    assert "ENTRY TRIGGERED" in e.title and e.title.startswith("🎯")
     assert any("106" in (f.value or "") for f in e.fields)
+    assert e.color.value == kinds.ENTRY_TEAL
+    assert e.push_text.startswith("🎯 ENTRY · ▲ LONG AAPL")
+    assert e.footer.text == "ENTRY · plan p1"
+    assert "entry 106.00" in ansi._ESCAPE_RE.sub("", e.description)
 
 
 def test_expired_and_invalidated_embeds():
     expired = _embed("cancelled_expired", {"bars_waited": 6})
-    assert "⏱" in expired.title
+    assert expired.title.startswith("🏁") and "EXPIRED" in expired.title and "⏹️" in expired.title
     assert any("6 bar" in (f.value or "") for f in expired.fields)
+    assert expired.color.value == kinds.RESULT_GREY
 
     invalidated = _embed("cancelled_invalidated", {"live_price": 94.0})
-    assert "❌" in invalidated.title
+    assert "INVALIDATED" in invalidated.title and "⏹️" in invalidated.title
+    assert "❌" not in invalidated.title
     assert any("94.00" in (f.value or "") for f in invalidated.fields)
 
 
@@ -33,13 +42,15 @@ def test_risk_cap_cancellation_embed_explains_why():
     assert "🚫" in e.title and "risk cap" in e.title.lower()
     why = next(f.value for f in e.fields if f.name == "Why")
     assert "4.00%" in why and "2.0%" in why
-    assert PLAN_EVENT_STYLES["cancelled_risk_cap"][1].value == tokens.ACCENT_BLOCKED
+    assert PLAN_EVENT_KINDS["cancelled_risk_cap"] is Kind.RISK_CAP
+    assert e.color.value == kinds.MANAGE_AMBER
 
 
 def test_be_moved_embed():
     e = _embed("be_moved", {"working_stop": 100.0})
     assert "🛡" in e.title
     assert any("100" in (f.value or "") for f in e.fields)
+    assert e.color.value == kinds.MANAGE_AMBER
 
 
 def test_tp1_partial_embed_shows_banked_stats_and_partial_position(monkeypatch):
@@ -142,22 +153,37 @@ def test_close_reasons_have_distinct_copy():
     assert len(set(titles.values())) == 6
 
 
-def test_every_plan_event_uses_a_shared_ramp_colour():
-    allowed = {tokens.ACCENT_RAMP[1], tokens.ACCENT_RAMP[3], tokens.ACCENT_RAMP[5], tokens.ACCENT_BLOCKED}
-    assert all(colour.value in allowed for _, colour in PLAN_EVENT_STYLES.values())
+def test_close_reasons_map_to_result_kinds_with_their_outcome():
+    assert CLOSE_REASON_STYLES["loss"][:2] == (Kind.STOPPED, "loss")
+    assert CLOSE_REASON_STYLES["scratch"][:2] == (Kind.SCRATCHED, "scratch")
+    for reason in ("win", "tp1_runner_be", "tp1_runner_tp2", "tp1_runner_trail"):
+        assert CLOSE_REASON_STYLES[reason][:2] == (Kind.WIN, "win")
 
 
-def test_good_bad_and_neutral_plan_events_use_their_semantic_ramp_endpoints():
-    assert PLAN_EVENT_STYLES["tp1_partial"][1].value == tokens.ACCENT_RAMP[5]
-    assert PLAN_EVENT_STYLES["loss"][1].value == tokens.ACCENT_RAMP[1]
-    assert PLAN_EVENT_STYLES["filled"][1].value == tokens.ACCENT_RAMP[3]
-    assert PLAN_EVENT_STYLES["tp1_runner_tp2"][0].startswith("🟢")
+def test_a_stopped_close_is_red_and_says_loss():
+    e = _embed("closed", {"reason": "loss", "exit_price": 94.0}, entry_price=100.0)
+    assert e.title == "🏁 ▲ LONG AAPL · STOPPED · ❌ LOSS −1.2R"
+    assert e.color.value in kinds.RESULT_REDS
+    assert e.footer.text == "RESULT · plan p1"
 
 
 def test_a_terminal_target_close_reads_as_a_win():
-    """v70: an ACTIVE plan with no tp2 closes with reason 'win'. Without a
-    style row it would post the neutral 'Plan closed' fallback."""
-    e = _embed("closed", {"reason": "win", "exit_price": 111.0})
-    assert "Win" in e.title and "🟢" in e.title
+    """v70: an ACTIVE plan with no tp2 closes with reason 'win'."""
+    e = _embed("closed", {"reason": "win", "exit_price": 111.0}, entry_price=100.0)
+    assert "✅ WIN" in e.title and "target hit" in e.title
+    assert "🟢" not in e.title
     assert any("111" in (f.value or "") for f in e.fields)
-    assert PLAN_EVENT_STYLES["win"][1].value == tokens.ACCENT_RAMP[5]
+    assert e.color.value == kinds.RESULT_GREENS[2]        # (111 - 100) / 5 = +2.2R
+    assert e.push_text.startswith("🏁 RESULT · ▲ LONG AAPL · WIN")
+    assert ansi.paint("2.2R", "green") in e.description
+
+
+def test_an_unknown_transition_is_a_plan_update():
+    e = _embed("pyramid_add")
+    assert e.title == "🛡️ ▲ LONG AAPL · PLAN UPDATE"
+
+
+def test_the_plan_line_names_the_side_and_drops_the_check_mark():
+    e = _embed("be_moved", {"working_stop": 100.0}, badge="VALIDATED")
+    plan_field = next(f.value for f in e.fields if f.name == "Plan (v2)")
+    assert "LONG" in plan_field and "bullish" not in plan_field and "✅" not in plan_field

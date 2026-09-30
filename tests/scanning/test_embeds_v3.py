@@ -400,11 +400,19 @@ def _make_closed_trade(**overrides):
     return trade
 
 
-def test_closed_trade_outcomes_use_the_shared_ramp_endpoints():
-    from swingbot.core.presentation import tokens
-    assert build_closed_trade_embed(_make_closed_trade(status="win")).color.value == tokens.ACCENT_RAMP[5]
-    assert build_closed_trade_embed(_make_closed_trade(status="loss")).color.value == tokens.ACCENT_RAMP[1]
-    assert build_closed_trade_embed(_make_closed_trade(status="closed")).color.value == tokens.ACCENT_RAMP[3]
+def test_closed_trade_outcomes_take_the_result_ramp():
+    assert build_closed_trade_embed(_make_closed_trade(status="win")).color.value in kinds.RESULT_GREENS
+    assert build_closed_trade_embed(_make_closed_trade(status="loss")).color.value in kinds.RESULT_REDS
+    assert build_closed_trade_embed(_make_closed_trade(status="closed")).color.value == kinds.RESULT_GREY
+
+
+def test_closed_trade_title_and_push_line_come_from_the_registry():
+    embed = build_closed_trade_embed(_make_closed_trade(status="win"))
+    assert embed.title == "🏁 ▲ LONG NVDA · CLOSED · ✅ WIN +2.0R"
+    assert embed.push_text == "🏁 RESULT · ▲ LONG NVDA · CLOSED · ✅ WIN +2.0R"
+    assert ansi.paint("2.0R", "green") in embed.description
+    manual = build_closed_trade_embed(_make_closed_trade(status="closed"))
+    assert manual.title == "🏁 ▲ LONG NVDA · CLOSED · 🔒 MANUAL CLOSE"
 
 
 def test_closed_trade_headline_uses_the_actual_exit_and_realised_metrics():
@@ -426,7 +434,7 @@ def _make_near_close_warning(**trade_overrides):
     }
 
 
-def test_all_three_embeds_share_timestamp_and_disclaimer_and_preserve_ids(monkeypatch):
+def test_all_three_embeds_are_timestamped_with_family_footers_and_keep_ids(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
 
     scan_item = make_item(plan_v2=make_plan_v2(plan_id="12345678-abcd-efgh"))
@@ -443,17 +451,10 @@ def test_all_three_embeds_share_timestamp_and_disclaimer_and_preserve_ids(monkey
     assert closed_embed.timestamp is not None
     assert near_close_embed.timestamp is not None
 
-    # All three share the identical disclaimer prefix once the plan-id
-    # suffix is stripped off.
-    prefixes = {
-        scan_embed.footer.text.split(" · plan ")[0],
-        closed_embed.footer.text.split(" · plan ")[0],
-        near_close_embed.footer.text.split(" · plan ")[0],
-    }
-    assert len(prefixes) == 1
-
-    # Scan embed's footer carries the 8-char-truncated plan id.
-    assert "plan 12345678" in scan_embed.footer.text
+    # v110: each family owns its footer -- only NEW SETUP keeps the disclaimer.
+    assert scan_embed.footer.text == f"{tokens.DISCLAIMER} · plan 12345678"
+    assert closed_embed.footer.text == "RESULT"
+    assert near_close_embed.footer.text == "WATCH"
 
     # Closed-trade embed has no plan_id -- no " · plan " suffix at all.
     assert " · plan " not in closed_embed.footer.text

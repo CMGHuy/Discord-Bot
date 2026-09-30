@@ -52,6 +52,8 @@ def test_feed_pings_and_history_is_silent(wired):
     assert "silent" not in feed.sent[0]
     assert history.sent[0]["silent"] is True
     assert feed.sent[0]["embed"].title == history.sent[0]["embed"].title
+    assert feed.sent[0]["content"] == "🛡️ MANAGE · ▲ LONG AAPL · BREAK-EVEN"
+    assert history.sent[0]["content"] == feed.sent[0]["content"]
 
 
 def test_history_notifies_when_feed_missing_or_failing(wired, monkeypatch):
@@ -90,3 +92,4 @@ def test_non_feed_events_stay_history_only(wired):
     assert _post(bot, PlanEvent("p1", "pyramid_add", {})) == []
     assert feed.sent == []
     assert len(history.sent) == 1
+    assert history.sent[0]["content"] == "🛡️ MANAGE · ▲ LONG AAPL · PLAN UPDATE"
