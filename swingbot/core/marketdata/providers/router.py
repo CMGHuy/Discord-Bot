@@ -101,7 +101,7 @@ def _collect(future, method: str, deadline: float):
     except (AlpacaMiss, FutureTimeout, Exception) as exc:
         _stats["failures"] += 1
         _breaker.record(False, auth=isinstance(exc, AlpacaAuthError))
-        log.info("Alpaca %s miss: %s", method, str(exc) or type(exc).__name__)
+        log.debug("Alpaca %s miss: %s", method, str(exc) or type(exc).__name__)
         return None
     _breaker.record(True)
     return result

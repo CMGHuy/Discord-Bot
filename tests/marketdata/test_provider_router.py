@@ -155,6 +155,6 @@ def test_each_batch_takes_a_bucket_token(enabled, monkeypatch):
     assert {out[t].attrs["source"] for t in tickers[4:]} == {"yfinance-fallback"}
 
 def test_miss_log_names_timeout(enabled, monkeypatch, caplog):
-    _use(monkeypatch, FakeProvider(daily={"AAPL"}, sleep=2)); caplog.set_level("INFO")
+    _use(monkeypatch, FakeProvider(daily={"AAPL"}, sleep=2)); caplog.set_level("DEBUG")
     router.daily_bars(["AAPL"], "2y", yf_daily([]))
     assert "TimeoutError" in caplog.text
