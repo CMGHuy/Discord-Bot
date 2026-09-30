@@ -8,6 +8,8 @@
 > full-suite gate covers Part 7's code too. Tasks P7-07…P7-12 are in
 > `2026-08-29-v67-json-to-postgres_7b-datasets.md`.
 
+> **Status 2026-09-30 (re-examined against main `33ef5c2f`):** Part 7 is entirely unbuilt — no `profiles.py`, `datasets.py`, `scripts/db/query.py`, `pull_prod_db.sh`, `tunnel_prod_db.sh`, and no `db-*` Makefile targets (today's Makefile has `backup-db`, plus `tunnel`/`ssh`, which use raw `ssh deploy@...` and are not a model to copy). Preconditions only partly hold: Parts 4 and 5 are unbuilt, so `settings`, `scan_telemetry`, `shadow_plans` and `fold_trades` do not exist; the real `p6_000` merges only `p2_007`+`p3_006`, and the real `p6_001` is v91's float-money-columns revision, not the planned trigger sweep; stores cut over one at a time via `DB_STORES` (`swingbot/core/db/stages.py`), not with a single P6-07 switch. `backup_db.sh`/`restore_db.sh` exist, and their signatures match what this part uses. Production is `/opt/swing-bot`, reached only through `scripts/ops/ssh-hetzner.sh` (uncommitted; `wsl ssh -i ~/.ssh/id_rsa root@167.233.26.185 "$@"`). Everything after the host is the remote command, so the wrapper cannot take ssh options. Verdicts: P7-01 UPDATED, P7-02 UPDATED, P7-03 UPDATED (design change), P7-04 UPDATED, P7-05 UPDATED, P7-06 VALID.
+
 **Spec:** `docs/superpowers/specs/2026-08-29-v67-json-to-postgres-design.md`
 
 ## Why this part exists
@@ -51,6 +53,8 @@ part starts, so there is one head to hang from.
 |---|---|
 | `p7_001` | the `swingbot_ro` read-only role and its default privileges |
 
+> **2026-09-30 re-examination:** `p6_001` is today's single head, but it is v91's revision, and Parts 4–6 have yet to land and will move the head. Set `p7_001.down_revision` to whatever `alembic heads` prints when P7-01 starts, and never hard-code it. Also, `tests/db/test_migrations.py::ID_RE` is `^p[1-6]_\d{3}$`: P7-01 must widen it to `p[1-9]`, or `test_every_revision_id_is_part_prefixed` fails on `p7_001`.
+
 ## Parallelisation
 
 - **Sequential: P7-01 before P7-03 and P7-05** — both consume the read-only
@@ -84,9 +88,12 @@ Postgres refuses the write. Nothing in Python is trusted to.
 - Modify: `swingbot/config.py` (one field: `POSTGRES_RO_PASSWORD`)
 - Modify: `.env.example`
 - Test: `tests/db/test_readonly_role.py`
+- Modify: `tests/db/test_migrations.py` (widen `ID_RE` to `^p[1-9]_\d{3}$`)
+
+> **2026-09-30 re-examination:** (1) `DENIED = ("settings",)` assumes Part 4's table exists. If `settings` is missing, a bare `REVOKE ... ON TABLE settings` aborts the upgrade, so guard both the migration and the conftest mirror with `IF to_regclass('public.settings') IS NOT NULL`. Also make `test_the_role_cannot_read_the_settings_table` skip when the table is absent. (2) `migrations/env.py` ignores `sqlalchemy.url`: `alembic upgrade head` runs against `config.DATABASE_URL` (default `db:5432`), so Step 5 runs inside the container or with `DATABASE_URL` exported. (3) The first deploy that runs this revision creates a role on production, and that counts as a production change. Set `POSTGRES_RO_PASSWORD` in the production `.env` first, and follow the `mirror-prod` skill. `tests/test_env_example_sync.py` enforces the `.env.example` entry.
 
 **Interfaces:**
-- Consumes: `p6_001` (P6-02).
+- Consumes: the single Alembic head at start time (`p6_001` today — see the revision-id note above).
 - Produces: the Postgres role `swingbot_ro`, with `SELECT` on every table in
   `public` **and** default privileges so a table created later is covered
   without anyone remembering to re-grant.
@@ -356,6 +363,8 @@ production. This is the replacement for `scp data/*.json`.
 2. **It only ever reads production.** `pg_dump` and nothing else. No `psql -c`,
    no `docker compose restart`, no write of any kind over the SSH connection.
 
+> **2026-09-30 re-examination:** (1) The remote path was `/srv/swing-bot`; production is `/opt/swing-bot` (fixed below). (2) Passing the remote command as the wrapper's single argument does fit `ssh-hetzner.sh`. `SWINGBOT_SSH` stays an override for other machines only; on this one the default must remain the wrapper (CLAUDE.md forbids raw ssh/scp). (3) **Open gap:** the local `db` service publishes no port, so the printed `DATABASE_URL_SNAPSHOT=...@localhost:5432/swingbot_snapshot` cannot be reached from the host (and neither can `local`, whose default host is `db`). One fix is a committed dev-only compose override that publishes `127.0.0.1:55433:5432` and is never used on the VM. It keeps `tests/db/test_compose.py`'s `assert "ports" not in db` true for the base file. The printed URL and P7-04/P7-05 would then use 55433. Ask the partner before choosing.
+
 - [ ] **Step 1: Write the failing tests**
 
 Create `tests/scripts/test_pull_prod_db.py`:
@@ -472,7 +481,7 @@ mkdir -p "$SNAP_DIR"
 echo "pull_prod_db: dumping production (read-only)..."
 # The ONLY remote command. --no-owner --no-acl so the restore does not try to
 # recreate production's roles locally, which would fail and is not wanted.
-"$SSH" "cd /srv/swing-bot && docker compose exec -T db \
+"$SSH" "cd /opt/swing-bot && docker compose exec -T db \
   pg_dump -U swingbot -d swingbot --no-owner --no-acl --clean --if-exists -Fp" \
   | gzip -9 > "$DUMP"
 
@@ -562,6 +571,8 @@ new, and closes when the terminal does.
 **Port 55434**, not 5432 and not 55432: it must not collide with the local `db`
 container or the `db-test` one. Getting those confused means running a query
 against the wrong database and believing the answer.
+
+> **2026-09-30 re-examination (design change):** `exec "$SSH" -N -L ...` cannot work through `scripts/ops/ssh-hetzner.sh`: the wrapper puts every argument *after* `root@host`, so `-N -L` would become the remote command. Raw ssh is forbidden, so the wrapper has to grow an options hook. The proposal is an `SSH_HETZNER_OPTS` variable expanded before the host in both branches (`wsl ssh -i ~/.ssh/id_rsa $SSH_HETZNER_OPTS root@...`). The wrapper is uncommitted and machine-local, so the partner makes that edit; ask first. The script then runs `SSH_HETZNER_OPTS="-N -L ${LOCAL_PORT}:127.0.0.1:5432" exec "$SSH"` (code below updated). The listener binds inside WSL, and Windows reaches it through WSL2 localhost forwarding; confirm with `Test-NetConnection localhost -Port 55434`. For the VM-side target, prefer a loopback publish in a **VM-only** compose override over editing the shared `docker-compose.yml`. Editing the shared file would also publish 5432 on every dev machine. The override is a production change: mirror it into the repo (`mirror-prod` skill). The P1-03 assertion to revisit is `assert "ports" not in db` inside `test_db_service_is_a_pinned_postgres_18_with_a_named_volume`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -674,8 +685,9 @@ EOF
 # The container publishes no port, so forward to the container's address on the
 # compose network as seen from the VM. `docker compose port` would be cleaner
 # but the db service deliberately has no published port to report.
-exec "$SSH" -N -L "${LOCAL_PORT}:$(printf '%s' 'localhost'):5432" \
-  "docker compose -f /srv/swing-bot/docker-compose.yml exec -T db true"
+# ssh-hetzner.sh treats every argument as the REMOTE command, so ssh options go
+# through SSH_HETZNER_OPTS (see the 2026-09-30 note above), never as arguments.
+SSH_HETZNER_OPTS="-N -L ${LOCAL_PORT}:127.0.0.1:5432" exec "$SSH"
 ```
 
 **That last line will not work as written, and finding out how is part of this
@@ -746,6 +758,8 @@ by hand and no developer has to remember which port was which.
   - `engine_for(profile) -> sqlalchemy.Engine` — a **separate** engine from
     `get_engine()`, cached per profile
   - `config.DATABASE_URL_SNAPSHOT`, `config.DATABASE_URL_PROD_RO`
+
+> **2026-09-30 re-examination:** The symbols it consumes exist as named: `config.DATABASE_URL`, and `DatabaseUnavailable` in `swingbot/core/db/engine.py`. `Field(..., sensitive=True, hot_reloadable=False)` matches `swingbot/config.py:74`, and the new fields belong after `DB_STORES` in the `# --- Database ---` block. `tests/test_env_example_sync.py` requires the `.env.example` entries. The host-reachability gap in P7-02's note applies to `local` and `snapshot` URLs here too.
 
 **`engine_for` is deliberately not `get_engine`.** `get_engine()` is the
 application's single pool against its own database, and every store goes
@@ -1009,6 +1023,8 @@ way that takes a while to diagnose.
 **Interfaces:**
 - Consumes: `profiles` (P7-04).
 - Produces: `engine.assert_application_database() -> None`, called at startup.
+
+> **2026-09-30 re-examination:** (1) `_NOT_APPLICATION` substring-matches the **whole** URL, password included, so a production password containing `_test` or `_snapshot` would stop the bot from booting. Parse the URL with `sqlalchemy.engine.make_url` and test `username`, `port` and `database`. Keep the same test cases, and add one with such a password. (2) `bot.py` and `admin_ui.py` are thin entry points: put the call inside `if __name__ == "__main__":`, before `record_boot(...)`, not at import time. Tests and tooling import `bot.py`. In `admin_ui.py`, call it after `setup_logging()` so the refusal reaches `admin.log`.
 
 **Belt and braces on top of the role.** P7-01 makes Postgres refuse a
 `prod-ro` write. This makes the bot refuse to *start* against it, so the

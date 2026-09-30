@@ -917,11 +917,11 @@ Documentation only — no runtime code. Required by the standing rule that a
 parallel plan changing `data/` JSON updates v67 before it closes.
 
 **Files:**
-- Modify: `docs/superpowers/plans/2026-08-29-v67-json-to-postgres_3a-operational-flags.md`
+- Modify: `docs/superpowers/plans/implemented/2026-08-29-v67-json-to-postgres_3a-operational-flags.md`
 
 - [ ] **Step 1: Read the two table definitions**
 
-Run: `grep -n "bot_heartbeat\|runtime_flags" docs/superpowers/plans/2026-08-29-v67-json-to-postgres_3a-operational-flags.md`
+Run: `grep -n "bot_heartbeat\|runtime_flags" docs/superpowers/plans/implemented/2026-08-29-v67-json-to-postgres_3a-operational-flags.md`
 
 Confirm `bot_heartbeat` is the `(key, ts)` table at ~line 176 and that
 `runtime_flags` shares revision `p3_001`.
@@ -951,13 +951,13 @@ land while doing this migration.
 
 - [ ] **Step 3: Verify the part still fits its budget**
 
-Run: `wc -l docs/superpowers/plans/2026-08-29-v67-json-to-postgres_3a-operational-flags.md`
+Run: `wc -l docs/superpowers/plans/implemented/2026-08-29-v67-json-to-postgres_3a-operational-flags.md`
 Expected: under 1500. If it now exceeds, split per `document-conventions.md`
 (letter suffix, never compress) — do not shorten the note.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/superpowers/plans/2026-08-29-v67-json-to-postgres_3a-operational-flags.md
+git add docs/superpowers/plans/implemented/2026-08-29-v67-json-to-postgres_3a-operational-flags.md
 git commit -m "docs(v67): route v71's heartbeat outcome fields into part 3a"
 ```

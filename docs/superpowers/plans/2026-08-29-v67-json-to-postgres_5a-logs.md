@@ -3,11 +3,81 @@
 > Part of `2026-08-29-v67-json-to-postgres_0-index.md`. **Read the index's
 > Global Constraints before starting any task here.** Part 1 must be merged to
 > `main` before this part begins. Tasks P5-05…P5-07 are in
-> `2026-08-29-v67-json-to-postgres_5b-snapshots.md`; P5-08…P5-14 are in
+> `2026-08-29-v67-json-to-postgres_5b-snapshots.md` (which also holds P5-08
+> since 2026-09-30); P5-09…P5-14 are in
 > `2026-08-29-v67-json-to-postgres_5c-caches.md`.
 
 **Spec:** `docs/superpowers/specs/2026-08-29-v67-json-to-postgres-design.md`
 (section 3, "Append-only logs" and "Derived / cache").
+
+> **Status (2026-09-30 re-examination): NOT STARTED — every task P5-01…P5-14
+> is unbuilt.** Audited against `main` @ `33ef5c2f` (Parts 1–2 and P3-01…P3-09
+> merged) and the unmerged `2026-09-29-v67-p3-10-scheduled-jobs` branch
+> (P3-10…P3-17). Each task carries its own `> **2026-09-30 re-examination:**`
+> callout; the cross-cutting findings are:
+>
+> 1. **Alembic head.** `main` has a single head, `p6_001_float_money_columns`
+>    (after the `p6_000` merge of `p2_007`+`p3_006`). `p5_001` chains onto the
+>    head that exists *when P5-01 is implemented* — `p6_001` today, `p3_007` if
+>    P3-18 has landed first (P3-18 also chains onto `p6_001`). Never onto
+>    `p1_003`: that would open a second head and
+>    `tests/db/test_migrations.py::test_exactly_one_head` fails.
+> 2. **`swingbot/core/db/events.py` does not exist** on `main` or on the P3-10
+>    branch — `TABLE_CHANNELS` is created by **P3-18 (unbuilt)**. P5-01's
+>    `events.py` edit, P5-12's coverage test and `tests/db/test_trigger_coverage.py`
+>    all require P3-18 first. Until then, triggers go in the table-creating
+>    revisions inline (the Part 2 precedent: `p2_005` calls `trigger_ddl`
+>    directly) and `tests/db/conftest.py::db_engine`'s hard-coded tuple gets the
+>    three mapped tables.
+> 3. **v91 precedent — floats are `sa.Float(53)`, never `sa.Numeric`.**
+>    `p6_001` moved money columns to double precision because `numeric`
+>    round-tripped floats through ~14 significant digits and failed parity.
+>    `scan_telemetry.duration_s` and `rs_cache.rel` are corrected to
+>    `sa.Float(53)` below. The codec (`codec.sanitise_non_finite`) now narrows
+>    NaN/±Inf to `None` at write, so a parity check against a file holding
+>    `NaN`/`Infinity` (the analytics snapshot's `profit_factor`, a `rel` over a
+>    zero-price window) must treat file-`NaN` == row-`None` as equal.
+> 4. **Promoted `TIMESTAMP` columns come back as `datetime`, not `str`.**
+>    `merge_doc` returns the column value as-is. Every reader here compares or
+>    serialises these as ISO strings (`release_windows._in_window` does
+>    `at < window["from"]`), so each repository re-stringifies them — the
+>    `_iso()` helper precedent is `settings_audit.py` on the P3-10 branch and
+>    `killswitch.py:24` on `main`.
+> 5. **Reserved keys.** `codec.RESERVED_KEYS = {"id", "doc", "updated_at"}` and
+>    `split_doc` *raises* on them. `earnings_history.json` carries a top-level
+>    `updated_at` (see the uncovered-store list), so it cannot be stored as one
+>    blob.
+> 6. **Base-repository API names.** The record builder is `Repository._record`,
+>    not `_row_to_record`; `list_all(where=, order_by=, limit=)`, `count(where=)`,
+>    `upsert`, `patch`, `delete` exist as the plan assumes; `transaction` is in
+>    `swingbot/core/db/engine.py`.
+> 7. **v111 logger rule.** `tests/infra/test_logger_names.py` fails on any
+>    `getLogger("swing-bot…")` literal — use `logging.getLogger(__name__)`.
+> 8. **Test-file names drifted** — several "existing" test files the Run steps
+>    name do not exist; each task's callout names the real ones.
+>
+> **Store inventory vs `data/` today.** Every file the bot/admin writes under
+> `data/` was enumerated (`git grep` of `DATA_DIR`, `atomic_write_json`,
+> `open(..., "a")`, `json.dump`). Stores **not covered by any v67 part** and not
+> on the spec's "stays as files" list:
+>
+> | File | Writer | Decision |
+> |---|---|---|
+> | `data/earnings_history.json` | `core/market/earnings_history.py:20,70` (`weekly_earnings_refresh`, `commands/scanning/loops.py:708`) | **Migrate** — accumulates past earnings dates the provider later drops, so it is *not* regenerable. Folded into **P5-08** (per-symbol cache, same shape; P5-08 now sits at the end of `_5b`) — see its callout. |
+> | extra writers/readers of `scan_telemetry.jsonl` | `core/infra/deploy_marker.py` (`record_boot`, `read_markers`), `admin/release_windows.py:65` | **Migrate with P5-02** — see its callout. |
+> | `data/scan_progress.json` | `core/scanning/progress_store.py:26` | **Stays a file** — ephemeral (~1 write/s during a scan, deleted by `clear()` at the end), no history; P3-20's residual `FileWatcher` keeps its `scan` event. See P5-07's callout. |
+> | `data/market_data_state.json` | `core/marketdata/data_refresh.py:67` | **Stays a file** — per-(symbol,timeframe) bookkeeping *about* the `market_data/` CSV cache, which itself stays files; a row describing files on disk would drift from them the first time either is restored alone. |
+> | `data/universe/sp500_pit.json`, `sp500_membership.csv`, `sp500_raw.csv`, `inverse_etfs.json` | `scripts/data/build_pit_universe.py`, `build_universe.py`, hand-maintained | **Stay files** — static reference data, same rule as the spec's `sp500.json`/`etfs.json`. |
+> | `data/backtest_cache_ext/`, `data/fmp/`; v87's 15min/5min intraday archive | `core/marketdata/backtest_cache.py`, `scripts/data/fmp_crawl.py`; `data_refresh.py` (`MARKET_DATA_TIMEFRAMES`, into `market_data/`) | **Stay files** — bulk CSV/JSON read by pandas, same rule as `market_data/`. (v87's archive is not regenerable past Yahoo's ~60-day window, but it is bulk time-series, and its only DB-side trace — the plan field it added — is Part 2's.) |
+> | `data/v*_collect*.json`, `data/v82/`, `v88/`, `v90/`, `data/replay_r_sequence.json`, `*_folds.json` | `scripts/backtest/*` `--json/--out` | **Stay files** — operator-run research artefacts, not bot state. |
+> | `swingbot/core/backtesting/cohort_registry.json` | `scripts/backtest/emit_cohort_registry.py` | **Stays a file** — git-audited, same reasoning as `validation_registry.json`. |
+>
+> **`shadow_plans.jsonl` has no live producer on `main`.** `shadow_log.append`
+> has never had a call site (Task 86 added the function and a test only;
+> `git log -S shadow_log` shows no caller ever). P5-03/P5-04 stay valid — the
+> readers and `backfill_forward_returns` exist — but the importer will usually
+> find no file. Do not confuse it with v93's strategy-path *shadow soak*, which
+> lives in the `plans` store (Part 2) and is read by `core/edge/strategy_soak.py`.
 
 Two groups with genuinely different rules, and the difference is the reason
 this part exists as one part rather than two:
@@ -21,14 +91,17 @@ this part exists as one part rather than two:
   back silently; a write that cannot land is still logged.
 
 `_5a` covers the schema and the two append-only logs; `_5b` covers the
-retrospective history and the two snapshot stores; `_5c` covers the caches, the
-importers, retention and the verification.
+retrospective history, the two snapshot stores and (since 2026-09-30) the
+ticker-metadata cache + earnings ledger (P5-08); `_5c` covers the RS and
+fold-trade caches, the importers, retention and the verification.
 
 ## Alembic revision ids
 
-Part 5 owns `p5_*`, hanging off `p1_003`. Parts 2–5 run concurrently, so this
-chain does **not** hang off any of theirs; Part 6's merge revision resolves the
-multiple heads.
+Part 5 owns `p5_*`, chained onto **the single head that exists when P5-01 is
+implemented** — `p6_001` on `main` today, or `p3_007` if P3-18 lands first.
+*(2026-09-30: originally "hanging off `p1_003`" with Part 6 merging the heads;
+that merge already happened as `p6_000`, so a `p1_003` parent would reopen a
+second head. Check with `alembic heads` before writing `down_revision`.)*
 
 | Revision | Tables |
 |---|---|
@@ -42,8 +115,10 @@ multiple heads.
 - **Sequential: P5-01 before everything** — the only task that edits
   `schema.py`, for the same reason as P2-01 and P3-01.
 - **Group 5a (parallel):** telemetry (P5-02), shadow log (P5-03…P5-04),
-  retrospective (P5-05). Disjoint modules: `core/scanning/telemetry.py`,
-  `core/backtesting/shadow_log.py` + `scripts/reports/shadow_parity_report.py`,
+  retrospective (P5-05). Disjoint modules: `core/scanning/telemetry.py` +
+  `core/infra/deploy_marker.py` + `admin/release_windows.py`,
+  `core/backtesting/shadow_log.py` + `scripts/reports/shadow_parity_report.py`
+  + `scripts/reports/shadow_component_report.py`,
   `core/tracking/retrospective.py`.
 - **Group 5b (parallel):** snapshots (P5-06, P5-07 — **sequential with each
   other only if a task touches both**; they are separate modules, so they are
@@ -69,6 +144,24 @@ multiple heads.
 
 ### Task P5-01: Every Part 5 table
 
+> **2026-09-30 re-examination: UPDATED.** Corrections applied in place below:
+> (a) `duration_s` and `rs_cache.rel` are `sa.Float(53)` (v91/`p6_001`
+> precedent), not `sa.Numeric`; (b) `scan_telemetry` gains a promoted `type`
+> column — the JSONL now also holds `{"type": "deploy", ...}` boot markers
+> (`core/infra/deploy_marker.py`), and `read_markers()` / `recent_scan_telemetry()`
+> / `release_windows._scan_rows()` each split on it; (c) `retrospective_history`'s
+> key column is **`date`**, not `day` — the entries are
+> `{"date", "closed_count", "win_rate", "issues": {...}, "config_snapshot": {...}}`
+> (`retrospective.py:606-612`), and a promoted column must carry the record's own
+> field name; (d) a ninth table, `earnings_history` (one row per symbol), for the
+> uncovered store folded into P5-08; (e) the migration chain starts at the real
+> head, not `p1_003` (status block, finding 1); (f) `events.py` is created by
+> P3-18 — if P3-18 has not landed, skip the `events.py` edit and the
+> `test_the_analytics_channel_finally_has_a_table` test here, install the three
+> triggers inline in `p5_001`/`p5_002` as Part 2's revisions do, and leave
+> `p5_004` out (P3-18's sweep then picks the mapped tables up). `db_conn` /
+> `db_committed` exist in both `tests/conftest.py` and `tests/db/conftest.py`.
+
 **Files:**
 - Modify: `swingbot/core/db/schema.py`
 - Modify: `swingbot/core/db/events.py`
@@ -83,7 +176,8 @@ multiple heads.
 - Consumes: `register`, `standard_columns` (P1-04); `trigger_ddl` (P1-12).
 - Produces the tables `scan_telemetry`, `shadow_plans`,
   `retrospective_history`, `analytics_snapshot`, `scan_snapshots`,
-  `ticker_meta_cache`, `rs_cache`, `fold_trades`.
+  `ticker_meta_cache`, `rs_cache`, `fold_trades`, `earnings_history`
+  *(2026-09-30 addition)*.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -98,7 +192,7 @@ from swingbot.core.db import events, schema
 
 PART5_TABLES = ("scan_telemetry", "shadow_plans", "retrospective_history",
                 "analytics_snapshot", "scan_snapshots", "ticker_meta_cache",
-                "rs_cache", "fold_trades")
+                "rs_cache", "fold_trades", "earnings_history")
 
 
 @pytest.mark.parametrize("name", PART5_TABLES)
@@ -117,6 +211,17 @@ def test_scan_telemetry_is_append_only_shaped(db_conn):
     assert n == 2
 
 
+def test_float_columns_are_double_precision():
+    """v91: numeric round-tripped floats through ~14 digits and failed parity."""
+    assert isinstance(schema.scan_telemetry.c.duration_s.type, sa.Float)
+    assert isinstance(schema.rs_cache.c.rel.type, sa.Float)
+
+
+def test_a_deploy_marker_row_needs_no_duration(db_conn):
+    db_conn.execute(sa.insert(schema.scan_telemetry).values(
+        at="2026-01-02T15:00:00+00:00", type="deploy", doc={"component": "bot"}))
+
+
 def test_shadow_plans_is_append_only_shaped(db_conn):
     for _ in range(2):
         db_conn.execute(sa.insert(schema.shadow_plans).values(
@@ -128,11 +233,20 @@ def test_shadow_plans_is_append_only_shaped(db_conn):
 
 
 def test_retrospective_history_is_one_row_per_day(db_conn):
+    # Keyed on `date` -- the field name retrospective.py's entries actually use.
     db_conn.execute(sa.insert(schema.retrospective_history).values(
-        day="2026-01-02", doc={}))
+        date="2026-01-02", doc={}))
     with pytest.raises(sa.exc.IntegrityError):
         db_conn.execute(sa.insert(schema.retrospective_history).values(
-            day="2026-01-02", doc={}))
+            date="2026-01-02", doc={}))
+
+
+def test_earnings_history_is_one_row_per_symbol(db_conn):
+    db_conn.execute(sa.insert(schema.earnings_history).values(
+        symbol="AAPL", doc={"next": None, "past": []}))
+    with pytest.raises(sa.exc.IntegrityError):
+        db_conn.execute(sa.insert(schema.earnings_history).values(
+            symbol="AAPL", doc={}))
 
 
 def test_analytics_snapshot_is_a_singleton(db_conn):
@@ -169,19 +283,23 @@ Expected: `AttributeError: module 'swingbot.core.db.schema' has no attribute 'sc
 Append to `swingbot/core/db/schema.py`:
 
 ```python
-# One row per scan. Append-only: no natural key, because two scans with
-# identical stats are two scans. `duration_s` is promoted because
-# scan_slowdown() reads it and nothing else, on every scan.
+# One row per scan, plus one per process boot. Append-only: no natural key,
+# because two scans with identical stats are two scans. `duration_s` is
+# promoted because scan_slowdown() reads it and nothing else, on every scan;
+# `type` because deploy_marker.read_markers() wants only the "deploy" rows and
+# every scan reader wants everything else. Float(53), not Numeric: v91.
 scan_telemetry = register(
     sa.Table(
         "scan_telemetry", METADATA,
         sa.Column("id", sa.BigInteger, primary_key=True),
         sa.Column("at", sa.TIMESTAMP(timezone=True), nullable=False),
-        sa.Column("duration_s", sa.Numeric),
+        sa.Column("type", sa.Text),
+        sa.Column("duration_s", sa.Float(53)),
         *standard_columns(),
         sa.Index("scan_telemetry_at_idx", sa.text("at DESC")),
+        sa.Index("scan_telemetry_type_idx", "type"),
     ),
-    ("at", "duration_s"),
+    ("at", "type", "duration_s"),
 )
 
 # One row per shadow-mode scan item. shadow_parity_report.py reads this for
@@ -205,16 +323,18 @@ shadow_plans = register(
 )
 
 # One row per trading day. The escalation ladder asks "has this happened
-# before", which is a lookup by day.
+# before", which is a lookup by day. The column is `date` because that is the
+# entries' own field name (retrospective.py builds {"date": today.isoformat(),
+# ...}); ISO text, so ORDER BY sorts chronologically.
 retrospective_history = register(
     sa.Table(
         "retrospective_history", METADATA,
         sa.Column("id", sa.BigInteger, primary_key=True),
-        sa.Column("day", sa.Text, nullable=False, unique=True),
+        sa.Column("date", sa.Text, nullable=False, unique=True),
         *standard_columns(),
-        sa.Index("retrospective_history_day_idx", sa.text("day DESC")),
+        sa.Index("retrospective_history_date_idx", sa.text("date DESC")),
     ),
-    ("day",),
+    ("date",),
 )
 
 # Singleton, key='current'. The pre-built blob every UI reads instead of
@@ -260,7 +380,7 @@ rs_cache = register(
         sa.Column("id", sa.BigInteger, primary_key=True),
         sa.Column("symbol", sa.Text, nullable=False, unique=True),
         sa.Column("as_of", sa.Text, nullable=False),
-        sa.Column("rel", sa.Numeric),
+        sa.Column("rel", sa.Float(53)),     # v91: never Numeric for a float
         *standard_columns(),
     ),
     ("symbol", "as_of", "rel"),
@@ -276,6 +396,20 @@ fold_trades = register(
     ),
     ("strategy",),
 )
+
+# 2026-09-30 addition. The weekly earnings ledger (core/market/earnings_history.py):
+# {"next": iso|None, "past": [iso, ...]} per symbol. NOT regenerable -- it keeps
+# past dates the provider later drops. One row per symbol, not one blob: the
+# file's top-level `updated_at` is a codec RESERVED_KEY and split_doc raises on it.
+earnings_history = register(
+    sa.Table(
+        "earnings_history", METADATA,
+        sa.Column("id", sa.BigInteger, primary_key=True),
+        sa.Column("symbol", sa.Text, nullable=False, unique=True),
+        *standard_columns(),
+    ),
+    ("symbol",),
+)
 ```
 
 Add to `swingbot/core/db/events.py`'s `TABLE_CHANNELS`:
@@ -284,10 +418,14 @@ Add to `swingbot/core/db/events.py`'s `TABLE_CHANNELS`:
     "scan_telemetry": "scan",
     "scan_snapshots": "scan",
     "analytics_snapshot": "analytics",
-    # shadow_plans, retrospective_history and the three caches raise nothing:
-    # no admin panel renders them live, and a NOTIFY per shadow line would be
-    # one per scan item.
+    # shadow_plans, retrospective_history, the three caches and
+    # earnings_history raise nothing: no admin panel renders them live, and a
+    # NOTIFY per shadow line would be one per scan item.
 ```
+
+*(2026-09-30: `events.py` / `TABLE_CHANNELS` is created by P3-18, unbuilt on
+`main` and on the P3-10 branch. If it still does not exist, see this task's
+callout, item (f).)*
 
 That comment is load-bearing — `test_every_mapped_table_exists` in Part 3 only
 checks the tables that *are* mapped, so a table's absence from the map has to
@@ -296,18 +434,25 @@ be a stated decision rather than an oversight.
 - [ ] **Step 4: Write the four migrations**
 
 Same shape as `p2_001`: explicit `op.create_table` per table with a local
-`_standard()` helper, chained `p1_003 → p5_001 → p5_002 → p5_003 → p5_004`.
+`_standard()` helper, chained `<head> → p5_001 → p5_002 → p5_003 → p5_004`,
+where `<head>` is the output of `alembic heads` at implementation time
+(`p6_001` on `main` as of 2026-09-30; `p3_007` once P3-18 lands). `p5_003`
+also creates `earnings_history`.
 `p5_004` installs triggers for the three mapped tables only, using the same
 `existing = set(sa.inspect(conn).get_table_names())` guard Part 3's `p3_007`
-uses — Parts 3 and 5 may land in either order.
+uses — Parts 3 and 5 may land in either order. (If P3-18 has not landed, fold
+the three `trigger_ddl` calls into `p5_001`/`p5_002` instead and drop `p5_004`
+— the Part 2 precedent.)
 
-Add the three mapped tables to the trigger loop in `tests/db/conftest.py`.
+Add the three mapped tables to the trigger loop in `tests/db/conftest.py`
+(the hard-coded tuple in `db_engine`; if P3-18 has replaced it with
+`events.TABLE_CHANNELS.items()`, the `events.py` edit above is enough).
 
 - [ ] **Step 5: Migrate and run**
 
 ```bash
 alembic upgrade head
-alembic downgrade p1_003 && alembic upgrade head
+alembic downgrade <head-before-p5_001> && alembic upgrade head   # p6_001 today, not p1_003
 python scripts/dev/testrun.py file tests/db/test_part5_schema.py
 python scripts/dev/testrun.py file tests/db/test_migrations.py
 ```
@@ -331,15 +476,55 @@ git commit -m "feat(v67): declare every Part 5 table"
 whole file into memory to take the last N lines, which is fine at today's size
 and stops being fine eventually; as a table it is an `ORDER BY at DESC LIMIT n`.
 
+> **2026-09-30 re-examination: UPDATED — the store has grown two writers and
+> three readers outside `telemetry.py`.**
+> - `telemetry.py` now has **four** functions: `recent_scan_telemetry(n)` (new)
+>   filters to rows whose `duration_s` is a number, and **`scan_slowdown()` goes
+>   through it**, not through `recent_telemetry` directly — the file also carries
+>   `{"type": "deploy", "component": "bot"|"admin", "ui", "bot", "sha", "at"}`
+>   boot markers. `recent_scan_telemetry` needs no edit (it calls
+>   `recent_telemetry(n + 50)`), but the ordering contract below now protects it.
+> - **Second writer:** `core/infra/deploy_marker.py::_append` (`record_boot`,
+>   called at bot and admin start). Its failures are swallowed on purpose ("an
+>   unwritable telemetry volume can never prevent either process from
+>   starting") — keep that: a db write failure there is a debug log, the same
+>   documented exception P5-07 makes for presentation snapshots.
+> - **Extra readers, each opening the file directly:**
+>   `deploy_marker.read_markers()` (deploy rows only → `where type = 'deploy'`),
+>   `admin/release_windows.py::_scan_rows()` `:64` (every non-deploy row, **the
+>   whole history**, compared as strings against window bounds),
+>   `retrospective.py:688` (`recent_scan_telemetry(1)`), and
+>   `admin/api_v1/risk.py:121` (`recent_telemetry(50)` + `scan_slowdown()`).
+>   Add `TelemetryRepository.markers()` and `.scan_rows()` and branch the two
+>   direct readers on `stages.reads_db("telemetry")`.
+> - **`at` must come back as a string.** `at` is a promoted `TIMESTAMP`, so
+>   `merge_doc` returns a `datetime`; `release_windows._in_window` does
+>   `at < window["from"]` on strings and the admin API serialises rows. The
+>   repository re-stringifies with `_iso()` (the P3 `settings_audit.py`
+>   precedent). Deploy markers write `…Z`, scans `…+00:00`; after the round trip
+>   both come back `+00:00`, which sorts identically.
+> - Rows now carry `phases_s`, `normalized_frame_cache`, `data_sources` (v106)
+>   and the `fetch.fetch_stats()` keys — nested dicts, all in `doc`, no column
+>   change needed.
+> - The writer at `scan_run.py:1027` sits inside `try/except Exception:
+>   log.exception(...)`, so a db failure there is logged and never blocks the
+>   scan result — the fail-fast rule is satisfied by that log line.
+> - **Existing tests:** `tests/scanning/test_telemetry.py` does not exist. The
+>   telemetry tests live in `tests/marketdata/test_universe.py` (`:706-739`),
+>   `tests/admin/test_api_v1_risk.py`, `tests/infra/test_deploy_marker.py` and
+>   `tests/admin/test_release_windows.py`; Step 5 is corrected.
+
 **Files:**
 - Create: `swingbot/core/db/repositories/telemetry.py`
 - Modify: `swingbot/core/scanning/telemetry.py`
+- Modify: `swingbot/core/infra/deploy_marker.py` (`_append`, `read_markers`) *(2026-09-30)*
+- Modify: `swingbot/admin/release_windows.py` (`_scan_rows` `:64`) *(2026-09-30)*
 - Test: `tests/scanning/test_telemetry_db.py`
 
 **Interfaces:**
 - Consumes: `scan_telemetry` (P5-01), `stages`.
 - Produces: `TelemetryRepository` with `append(row)`, `recent(n=50)`,
-  `prune(before_ts)`; `telemetry_repo()`.
+  `markers()`, `scan_rows()`, `prune(before_ts)`; `telemetry_repo()`.
 
 **The contract that must not move:** `recent_telemetry(n)` returns rows
 **oldest-first**, because `scan_slowdown()` does `rows[:-1]` for the prior
@@ -426,6 +611,23 @@ def test_scan_slowdown_is_quiet_on_noise(any_stage):
     assert telemetry.scan_slowdown() is False
 
 
+def test_at_round_trips_as_an_iso_string(any_stage):
+    """release_windows compares `at` as a string; a datetime would raise."""
+    _log(1.0)
+    assert isinstance(telemetry.recent_telemetry()[0]["at"], str)
+
+
+def test_deploy_markers_share_the_store_but_not_the_slowdown(any_stage):
+    from swingbot.core.infra import deploy_marker
+    for _ in range(10):
+        _log(10.0)
+    deploy_marker.record_boot("bot")
+    _log(30.0)
+    assert telemetry.scan_slowdown() is True
+    markers = deploy_marker.read_markers()
+    assert len(markers) == 1 and markers[0]["component"] == "bot"
+
+
 def test_no_jsonl_at_the_db_stage(any_stage, tmp_path):
     if any_stage != "telemetry:db":
         pytest.skip("file absence is only asserted at the db stage")
@@ -455,6 +657,16 @@ from swingbot.core.db.repositories.base import Repository
 from swingbot.core.db.schema import scan_telemetry
 
 
+def _iso(row: dict) -> dict:
+    """`at` is a promoted TIMESTAMP, so merge_doc hands back a datetime. Every
+    reader compares or serialises it as an ISO string (release_windows does
+    `at < window["from"]`), so restore the file's shape here."""
+    at = row.get("at")
+    if hasattr(at, "isoformat"):
+        row["at"] = at.isoformat()
+    return row
+
+
 class TelemetryRepository(Repository):
     def __init__(self):
         super().__init__(scan_telemetry, key="id")
@@ -471,7 +683,21 @@ class TelemetryRepository(Repository):
         """
         newest = self.list_all(conn=conn,
                                order_by=scan_telemetry.c.at.desc(), limit=n)
-        return list(reversed(newest))
+        return [_iso(r) for r in reversed(newest)]
+
+    def markers(self, *, conn=None) -> list[dict]:
+        """deploy_marker.read_markers(): the boot rows only, oldest first."""
+        return [_iso(r) for r in self.list_all(
+            conn=conn, where=scan_telemetry.c.type == "deploy",
+            order_by=scan_telemetry.c.at.asc())]
+
+    def scan_rows(self, *, conn=None) -> list[dict]:
+        """release_windows._scan_rows(): every non-deploy row, oldest first."""
+        return [_iso(r) for r in self.list_all(
+            conn=conn,
+            where=sa.or_(scan_telemetry.c.type.is_(None),
+                         scan_telemetry.c.type != "deploy"),
+            order_by=scan_telemetry.c.at.asc())]
 
     def prune(self, before_ts: str, *, conn=None) -> int:
         stmt = sa.delete(scan_telemetry).where(scan_telemetry.c.at < before_ts)
@@ -524,22 +750,41 @@ def recent_telemetry(n: int = 50, path: str | None = None) -> list:
         return []
 ```
 
-`scan_slowdown` needs no edit — it goes through `recent_telemetry`.
+`scan_slowdown` needs no edit — it goes through `recent_scan_telemetry`, which
+goes through `recent_telemetry`.
+
+Keep the current `log_scan_telemetry` docstring (the `phases_s` one on `main`),
+not the E82 wording above — only the stage branch is new.
+
+*(2026-09-30)* Branch the two direct readers/writers the same way:
+
+- `deploy_marker._append(marker)`: write the file when
+  `stages.writes_json("telemetry")`, and `telemetry_repo().append(marker)` when
+  `stages.writes_db("telemetry")`. `record_boot`'s existing `except Exception:
+  log.debug(...)` already covers both — do not narrow it.
+- `deploy_marker.read_markers()`: `return telemetry_repo().markers()` when
+  `stages.reads_db("telemetry")`, inside the existing `try/except → []`.
+- `release_windows._scan_rows()`: `return telemetry_repo().scan_rows()` when
+  `stages.reads_db("telemetry")`; its file body stays below the branch.
 
 - [ ] **Step 5: Run the tests**
 
 ```bash
 python scripts/dev/testrun.py file tests/scanning/test_telemetry_db.py
-python scripts/dev/testrun.py file tests/scanning/test_telemetry.py
+python scripts/dev/testrun.py file tests/marketdata/test_universe.py
+python scripts/dev/testrun.py file tests/admin/test_api_v1_risk.py
+python scripts/dev/testrun.py file tests/infra/test_deploy_marker.py
+python scripts/dev/testrun.py file tests/admin/test_release_windows.py
 ```
 
-Expected: `0 failed` for both.
+Expected: `0 failed` for all five.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add swingbot/core/db/repositories/telemetry.py \
-        swingbot/core/scanning/telemetry.py tests/scanning/test_telemetry_db.py
+        swingbot/core/scanning/telemetry.py swingbot/core/infra/deploy_marker.py \
+        swingbot/admin/release_windows.py tests/scanning/test_telemetry_db.py
 git commit -m "feat(v67): move scan telemetry to postgres"
 ```
 
@@ -551,6 +796,28 @@ git commit -m "feat(v67): move scan telemetry to postgres"
 (`path + ".1"`), which means the second rotation destroys the first archive.
 Rows have no such limit, and P5-13 replaces the rotation with a real retention
 policy.
+
+> **2026-09-30 re-examination: UPDATED (paths/lines valid, two corrections).**
+> - `append` `:19`, `backfill_forward_returns` `:64`, `_default_path` `:15`,
+>   `MAX_BYTES` `:12` and the `plan_to_dict` import all match `main`.
+> - **`append` has no call site anywhere on `main`** — it never had one (status
+>   block). The live `PLAN_ENGINE_V2` default is `on`, and nothing in
+>   `core/scanning/` calls `shadow_log.append` even under `shadow`. The task is
+>   still worth doing (the readers and E40's backfill exist, and wiring a caller
+>   later should write rows), but it is `Edge: none (integrity)` with zero live
+>   volume — do not spend effort on throughput. Do **not** wire a caller here.
+> - v93's strategy-path "shadow soak" is unrelated: those are `plans`-store
+>   rows (Part 2) judged by `core/edge/strategy_soak.py`, not lines in this log.
+> - The repository's `pending_forward_returns` below called
+>   `self._row_to_record(r)`; the base-class method is **`self._record(r)`** —
+>   corrected in place.
+> - A second reader exists: `scripts/reports/shadow_component_report.py`
+>   (`--path` default `SHADOW_LOG`, `:66-67` reads the file, `--backfill` calls
+>   `backfill_forward_returns(args.path)`). Its explicit path always means the
+>   file; route its default-path read through P5-04's seam.
+> - `id` is a codec `RESERVED_KEY` — `split_doc` raises if a record carries it.
+>   Re-attaching `id` on the *output* of `pending_forward_returns` is fine; a
+>   caller must never pass such a dict back into `append`/`insert`.
 
 **Files:**
 - Create: `swingbot/core/db/repositories/shadow.py`
@@ -746,7 +1013,7 @@ class ShadowRepository(Repository):
                 .order_by(shadow_plans.c.id.asc()))
         with self._tx(conn) as c:
             rows = c.execute(stmt).all()
-        return [{**self._row_to_record(r), "id": r._mapping["id"]} for r in rows]
+        return [{**self._record(r), "id": r._mapping["id"]} for r in rows]
 
     def set_forward_return(self, row_id: int, value: float | None, *,
                            conn=None) -> None:
@@ -803,14 +1070,38 @@ git commit -m "feat(v67): move the shadow-plan log to postgres"
 is made on. Its output must be identical from either backend, and this task is
 where that is proven rather than assumed.
 
+> **2026-09-30 re-examination: UPDATED — the script's shape differs from what
+> this task assumed.**
+> - The seam already exists: **`_load_records()` at `:72`**, called once from
+>   `main()` `:100`. It reads `shadow_plans.jsonl.1` **first, then** the live
+>   file, and `json.loads` every non-blank line — a torn line currently
+>   **raises**. `load_lines(path=None)` below replaces `_load_records` (keep
+>   `_load_records = load_lines` as an alias so nothing else moves), and the
+>   file branch must keep the `.1`-then-live order.
+> - The script **does not import `swingbot`** and has no `sys.path` insert:
+>   `DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"` is a
+>   module-level `Path`, so monkeypatching `config.DATA_DIR` does nothing to it.
+>   Add the `sys.path.insert(0, <repo root>)` preamble `scripts/db/*.py` use,
+>   and resolve the default path from `config.DATA_DIR` **per call** (the
+>   module-level `DATA_DIR` becomes unused — delete it).
+> - `scripts/` and `scripts/reports/` have **no `__init__.py`**, so
+>   `from scripts.reports import shadow_parity_report` fails. The existing test
+>   `tests/test_shadow_parity_report.py` (not `tests/scripts/…`) loads it with
+>   `importlib.util.spec_from_file_location`; the new test does the same
+>   (corrected below).
+> - `scripts/reports/shadow_component_report.py` also reads the log (`:66-67`)
+>   — its default (no `--path`) read goes through `load_lines()` too, so E40's
+>   verdict is backend-independent as well.
+
 **Files:**
 - Modify: `scripts/reports/shadow_parity_report.py`
+- Modify: `scripts/reports/shadow_component_report.py` (default-path read `:66`) *(2026-09-30)*
 - Test: `tests/scripts/test_shadow_parity_report_db.py`
 
 **Interfaces:**
 - Consumes: `shadow_repo` (P5-03), `stages`.
-- Produces: `load_lines(path=None) -> list[dict]` — extracted from wherever the
-  script currently opens the file, so there is one read seam to branch.
+- Produces: `load_lines(path=None) -> list[dict]` — replacing `_load_records()`
+  (`:72`), so there is one read seam to branch.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -822,13 +1113,23 @@ Create `tests/scripts/test_shadow_parity_report_db.py`:
 This script is what a cutover decision gets made on. A report that differs by
 backend is a decision made on the storage layer.
 """
+import importlib.util
 import json
 import os
+import pathlib
 
 import pytest
 
 from swingbot import config
-from scripts.reports import shadow_parity_report as report
+
+# scripts/reports is not a package -- load it the way
+# tests/test_shadow_parity_report.py does.
+_spec = importlib.util.spec_from_file_location(
+    "shadow_parity_report",
+    pathlib.Path(__file__).resolve().parents[2] / "scripts" / "reports"
+    / "shadow_parity_report.py")
+report = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(report)
 
 
 def _line(i, component=None, variant=None):
@@ -916,20 +1217,30 @@ def load_lines(path: str | None = None) -> list[dict]:
     if path is None and stages.reads_db("shadow"):
         from swingbot.core.db.repositories.shadow import shadow_repo
         return shadow_repo().all_lines()
-    target = path or os.path.join(config.DATA_DIR, "shadow_plans.jsonl")
-    if not os.path.exists(target):
-        return []
+    if path is not None:
+        targets = [path]
+    else:
+        # Rotation slot first, then the live file -- the order _load_records()
+        # has always used, so the per-day grouping sees the archive first.
+        live = os.path.join(config.DATA_DIR, "shadow_plans.jsonl")
+        targets = [live + ".1", live]
     out = []
-    with open(target, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                out.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
+    for target in targets:
+        if not os.path.exists(target):
+            continue
+        with open(target, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    out.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
     return out
+
+
+_load_records = load_lines      # the name main() and older callers use
 ```
 
 Every existing read in the script routes through it. Confirm with
@@ -940,7 +1251,7 @@ that no other read remains.
 
 ```bash
 python scripts/dev/testrun.py file tests/scripts/test_shadow_parity_report_db.py
-python scripts/dev/testrun.py file tests/scripts/test_shadow_parity_report.py
+python scripts/dev/testrun.py file tests/test_shadow_parity_report.py
 python scripts/reports/shadow_parity_report.py
 ```
 
@@ -950,6 +1261,7 @@ Expected: `0 failed`, and the script running against local data without error.
 
 ```bash
 git add scripts/reports/shadow_parity_report.py \
+        scripts/reports/shadow_component_report.py \
         tests/scripts/test_shadow_parity_report_db.py
 git commit -m "feat(v67): read the shadow parity report from either backend"
 ```
@@ -957,5 +1269,5 @@ git commit -m "feat(v67): read the shadow parity report from either backend"
 ---
 
 **Continue with `2026-08-29-v67-json-to-postgres_5b-snapshots.md`**
-(P5-05…P5-07): retrospective history, the analytics snapshot, and the scan
-presentation snapshots.
+(P5-05…P5-08): retrospective history, the analytics snapshot, the scan
+presentation snapshots, and the ticker-metadata cache + earnings ledger.

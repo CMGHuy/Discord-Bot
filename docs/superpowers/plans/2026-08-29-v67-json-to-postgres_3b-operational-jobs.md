@@ -1,6 +1,6 @@
 # v67 — Part 3: Operational state (tasks P3-08…P3-15)
 
-> Continuation of `2026-08-29-v67-json-to-postgres_3a-operational-flags.md`. Part of
+> Continuation of `implemented/2026-08-29-v67-json-to-postgres_3a-operational-flags.md`. Part of
 > `2026-08-29-v67-json-to-postgres_0-index.md`. **Read the index's Global
 > Constraints and the first file of this part before starting any task here** —
 > the Parallelisation map, the Alembic revision-id table and the exit criteria

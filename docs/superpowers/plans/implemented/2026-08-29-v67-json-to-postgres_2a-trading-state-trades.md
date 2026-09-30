@@ -1,5 +1,7 @@
 # v67 — Part 2: Live trading state
 
+> **Closed 2026-09-30 (re-examination).** Every task in this file is built. P2-01…P2-05 are on `main` (`a74e87f4` … `15cabb6a`); v91 later fixed the trades importer (`a02fe16b`) and money columns (`02ff284b`). This file moved to `plans/implemented/` on its own; the rest of v67 is live at the top level of `docs/superpowers/plans/` — see the index's `## Status` section. Checkboxes below were never ticked; the verdict comes from the commits.
+
 > Part of `2026-08-29-v67-json-to-postgres_0-index.md`. **Read the index's
 > Global Constraints before starting any task here.** Part 1 must be merged to
 > `main` before this part begins — every task consumes `codec`, `schema`,

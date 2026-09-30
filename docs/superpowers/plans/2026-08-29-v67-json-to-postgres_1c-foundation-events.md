@@ -1,12 +1,16 @@
 # v67 — Part 1: Foundation (tasks P1-10…P1-14)
 
-> Continuation of `2026-08-29-v67-json-to-postgres_1b-foundation-harness.md`. Part of
+> Continuation of `implemented/2026-08-29-v67-json-to-postgres_1b-foundation-harness.md`. Part of
 > `2026-08-29-v67-json-to-postgres_0-index.md`. **Read the index's Global
 > Constraints and the first file of this part before starting any task here** —
 > the Parallelisation map, the Alembic revision-id table and the exit criteria
 > live there and are not repeated.
 
 **Spec:** `docs/superpowers/specs/2026-08-29-v67-json-to-postgres-design.md`
+
+> **Status (2026-09-30):** P1-10, P1-11, P1-12 and P1-14 are on `main` (squashed
+> into b77885e3). **P1-13 is outstanding** — built on a branch but never merged;
+> see the note under its heading. P3-19 cannot start until it lands.
 
 ---
 ### Task P1-10: The DB_STORES stage resolver
@@ -653,6 +657,20 @@ git commit -m "feat(v67): add NOTIFY trigger DDL and the shared function"
 ---
 
 ### Task P1-13: The listener, and the committing test tier
+
+> **Status (2026-09-30): built, NOT on `main`.** Implemented as commit
+> `fcae5b14` on branch `worktree-2026-09-01-v67-json-to-postgres` (adds
+> `listen` to `swingbot/core/db/notify.py`, `tests/db/test_notify_delivery.py`,
+> and a trigger-install block in `tests/db/conftest.py`), but the squash that
+> brought Part 1 to `main` (b77885e3) left it out. `main`'s `notify.py` has
+> `CHANNELS`/`trigger_ddl`/`drop_trigger_ddl`/`emit` but no `listen`; `main`
+> already has `db_committed` and installs every table's trigger in the
+> `db_engine` fixture, so the conftest hunk is redundant. **Cherry-pick
+> `fcae5b14` (or re-apply its `listen` + test by hand) before P3-19**, which
+> consumes `listen`. Expect a conflict in `notify.py` — `main`'s module header
+> and `emit` differ from the branch's (`main` binds `:channel`/`:payload`) —
+> and drop the conftest hunk; keep only the `logging`/`config` imports, the
+> `log = logging.getLogger(__name__)` line and `listen` itself.
 
 `NOTIFY` is delivered on commit, so this is the one thing rollback isolation
 cannot test. It gets the `slow` marker and the `db_committed` fixture.

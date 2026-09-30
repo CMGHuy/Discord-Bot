@@ -6,6 +6,16 @@
 > must exist. Tasks P9-05…P9-08 are in
 > `2026-08-29-v67-json-to-postgres_9b-data-migrations.md`.
 
+> **Status 2026-09-30 (re-examined against main `33ef5c2f`):** Part 9 is entirely unbuilt: there is no `push_prod_artifacts.py`, `data_migrations` package or table, `migrate_data.py`, reversibility test, or `db-push`/`db-check-downgrade` targets. What changed underneath it:
+> 1. **The push has no reader yet.** `tuning_results`/`tuning_proposals` tables exist (`p3_006`), but no repository reads them and `stages.py` has no `tuning` store; `fold_trades` (Part 5) does not exist. Today a push would land rows production never reads (P9-01 note).
+> 2. **The revision graph.** It has 18 revisions, not "thirty-odd", and includes one merge (`p6_000`, `down_revision = ("p2_007", "p3_006")`).
+> 3. **Empty downgrades.** `p1_001` and `p6_000` have `pass` downgrades, worded "intentionally empty" and "Merge".
+> 4. **`env.py` ignores `sqlalchemy.url`.** Tests must hand Alembic a connection via `cfg.attributes["connection"]`.
+> 5. **Doc-only writes and the strangler.** Stores cut over one at a time (`DB_STORES`), so value-level writes to the DB copy of a store that still reads JSON diverge the two.
+> 6. **Production access.** Production is `/opt/swing-bot`, reached only through `scripts/ops/ssh-hetzner.sh`.
+>
+> Verdicts: P9-01 UPDATED (blocked on a DB read path), P9-02 UPDATED, P9-03 UPDATED, P9-04 VALID; for `_9b`, see its notes.
+
 **Spec:** `docs/superpowers/specs/2026-08-29-v67-json-to-postgres-design.md`
 
 ## Why this part exists
@@ -56,6 +66,8 @@ Part 9 owns `p9_*`.
 |---|---|
 | `p9_001` | `data_migrations` — the applied-migrations ledger and its snapshots |
 
+> **2026-09-30:** `p9_001.down_revision` is whatever `alembic heads` prints at P9-03 time (`p6_001` today; `p8_001` only if P8-02's promotion actually shipped). `tests/db/test_migrations.py::ID_RE` must already accept `p9_` (widened in P7-01/Part 8).
+
 ## Parallelisation
 
 - **Group 9a (parallel):** P9-01 (push) and P9-02 (downgrade coverage) —
@@ -97,6 +109,13 @@ Part 9 owns `p9_*`.
   - `push(tables, *, dry_run=True, source="snapshot") -> dict[str, int]`
   - CLI: `python scripts/ops/push_prod_artifacts.py tuning_results --dry-run`
 
+> **2026-09-30 re-examination:**
+> 1. **Blocked: a push must reach something production reads.** No application code reads `tuning_results`/`tuning_proposals` from Postgres (there is no repository and no stage), and `fold_trades` does not exist yet. Add a **fifth property**: `push` refuses a table whose owning store is not at stage `db` **on production**. Ask production read-only through the wrapper: `bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python -c \"from swingbot.core.db import stages; print(stages.stage_for('<store>'))\""`. Until those stores have DB read paths, the only honest test target is a synthetic table.
+> 2. **Fixed below.** The remote path is `/opt/swing-bot`, not `/srv/`. `subprocess.run([ssh, ...])` cannot exec a `.sh` on Windows, so the call is `["bash", ssh, cmd]`.
+> 3. **Table names.** `REFUSED["journal"]` named no table; the table is `journal_entries` (renamed below and in the test). Also refuse every Part 3 table by name (`account_balance_history`, `runtime_flags`, `bot_heartbeat`, `admin_jobs`, `scheduled_jobs`, `ui_preferences`, `settings_audit`, `killswitch`, `manual_close_notify`), or P9-08's classification test fails. In the trading-state test, replace `"journal"` with `"journal_entries"`.
+> 4. **Conflict key.** Name the unique conflict column per table explicitly instead of `promoted[0]`. It happens to be right for `tuning_results` (`job_id`) and `tuning_proposals` (`filename`).
+> 5. **`prod-write`.** The profile runs over P7-03's tunnel as the owning role, so the owner password is on a dev machine. Export it per session and never write it into `.env`. Every `--apply` run is a production change: follow the `mirror-prod` skill.
+
 **Four properties, and a test for each.** This is the only tool in the plan
 that writes to production from a dev machine, so its guarantees are the
 deliverable rather than its convenience:
@@ -129,7 +148,7 @@ def test_the_allowlist_is_the_three_derived_artifacts():
 
 
 def test_every_trading_state_table_is_explicitly_refused():
-    for table in ("trades", "plans", "starred_plans", "account", "journal",
+    for table in ("trades", "plans", "starred_plans", "account", "journal_entries",
                   "signal_state", "watchlist"):
         assert table in REFUSED, f"{table} is not explicitly refused"
         assert REFUSED[table].strip(), f"{table}'s refusal has no reason"
@@ -275,7 +294,7 @@ REFUSED = {
     "plans": "same as trades -- live lifecycle state, owned by production",
     "starred_plans": "owned by whoever is using the admin UI, not by a checkout",
     "account": "balance and risk settings are live trading state",
-    "journal": "written from closed trades in production",
+    "journal_entries": "written from closed trades in production",
     "signal_state": "per-scan debounce state; meaningless outside its own process",
     "watchlist": "edit it in the admin UI, where the change is audited",
     "settings": "that is the admin UI's job. Pushing config from a dev checkout "
@@ -312,7 +331,7 @@ def _backup_production() -> None:
     """Run backup_db.sh against production before the first write."""
     ssh = os.getenv("SWINGBOT_SSH", "scripts/ops/ssh-hetzner.sh")
     print("push: backing production up first...", flush=True)
-    subprocess.run([ssh, "cd /srv/swing-bot && ./scripts/ops/backup_db.sh"],
+    subprocess.run(["bash", ssh, "cd /opt/swing-bot && ./scripts/ops/backup_db.sh"],
                    check=True)
 
 
@@ -438,6 +457,12 @@ written and never again.
 **Interfaces:**
 - Consumes: the full revision graph, `db_engine_empty` (P1-07).
 - Produces: `make db-check-downgrade`.
+
+> **2026-09-30 re-examination:**
+> 1. **Pass the connection.** `migrations/env.py` never reads `sqlalchemy.url`: it uses `cfg.attributes["connection"]`, else `get_engine()`. The `cfg` fixture's `set_main_option` is therefore ignored, and the walk would hit `config.DATABASE_URL`. Pass the connection the way `tests/db/test_migrations.py:45-48` does, holding one `db_engine_empty.begin()` connection per test.
+> 2. **The merge breaks the step-down walk.** `test_every_revision_steps_down_one_at_a_time` goes wrong at the merge `p6_000`. Its target `down[0]` (`p2_007`) unapplies the whole `p3_*` branch too, and the next iteration then targets `p3_005`, which is no longer applied. Step with `command.downgrade(cfg, "-1")` until `alembic current` is empty, and treat a merge point as one step per parent. Verify on the real graph before trusting the loop.
+> 3. **The empty-downgrade test fails on main today.** `p1_001` says "intentionally empty" and `p6_000` is a merge, and neither matches the test's phrases. Accept `intentionally empty` and any revision whose `down_revision` is a tuple.
+> 4. **Lossy downgrade.** `p6_001`'s downgrade back to `numeric` is legitimate but loses precision (~14 digits). Say so in the recipe.
 
 **Why this matters more than it looks.** A `downgrade()` is written in the same
 minute as its `upgrade()`, against an empty local database, and then never
@@ -602,6 +627,12 @@ that actually recurs.
     `transform(record) -> dict | None`
   - `run(name, *, profile=None, dry_run=True, batch=500) -> Result`
   - CLI: `python scripts/db/migrate_data.py list | run <name> [--apply]`
+
+> **2026-09-30 re-examination:**
+> 1. **A fifth property: the store stage.** `run()` refuses a table whose store is not at `db` stage (`stages.reads_db`), using the table→store map from P8-03's note. Transforming the Postgres copy of a store that still reads JSON is overwritten on the next save and logged as a dual-write diff on every record.
+> 2. **Imports.** `sa.insert(...)` has no `on_conflict_do_update`; the ledger write needs `from sqlalchemy.dialects.postgresql import insert as pg_insert` (as the note after Step 4 says). `sa.dialects.postgresql.JSONB` needs an explicit `from sqlalchemy.dialects.postgresql import JSONB`, as `repositories/base.py` does.
+> 3. **Test database.** Fixtures need the `DATABASE_URL` monkeypatch plus engine resets (see P8-02's note). Otherwise `runner._engine()` and `seeded.get(...)` resolve `db:5432`.
+> 4. **No NOTIFY trigger.** `data_migrations` needs none; the hard-coded channel list in `tests/db/conftest.py` stays as is.
 
 **Four properties the runner enforces, so each migration does not have to:**
 
@@ -990,6 +1021,8 @@ data — which makes the runner from P9-03 an ornament.
   - `run(..., snapshot: bool = True)` — records each changed row's **prior doc**
     into the ledger row's `doc.before`
   - `rollback(name, *, profile=None, dry_run=True) -> Result`
+
+> **2026-09-30 re-examination:** The design holds. It inherits P9-03's stage guard and fixture note. A restored `doc` passes through no codec, so values come back exactly as snapshotted, including any `null` the v91 codec wrote for a NaN.
 
 **The snapshot is the whole doc, not a diff.** A diff would be smaller and would
 also require the rollback to reason about how patches compose. Storing the prior

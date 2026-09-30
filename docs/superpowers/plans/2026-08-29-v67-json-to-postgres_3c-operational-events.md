@@ -8,8 +8,35 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-29-v67-json-to-postgres-design.md`
 
+> **Part 3 status (re-examined 2026-09-30 against `main` @ 33ef5c2f):**
+>
+> | Tasks | State |
+> |---|---|
+> | P3-01…P3-09 | **Done, on `main`.** Tables `p3_001`…`p3_006`; flags, heartbeat, jobs, killswitch, notify-queue stores. |
+> | P3-10…P3-17 | **Built, unmerged** on branch `2026-09-29-v67-p3-10-scheduled-jobs` (8 commits ahead of `main`; another session may own it — read it only via `git show`/`git diff main...<branch>`). Scheduled jobs, UI prefs, settings audit, ticker directory, tuning results/proposals, importers (P3-16, `92348af4`), parity (P3-17, `517ee345`). |
+> | P3-18…P3-24 | **Not started.** Blocked on P1-13's `notify.listen` reaching `main` (see `_1c`) and on the P3-10 branch merging. |
+>
+> Four things changed under this file since it was written, each flagged
+> inline where it bites: (1) the migration graph already has a single head
+> `p6_001` (the Part 2/3 merge `p6_000` and a float-column fix landed early), so
+> `p3_007` chains after `p6_001`, not `p3_006`; (2) Part 2's own revisions
+> already install their tables' triggers; (3) v111 bans literal logger names
+> (`tests/infra/test_logger_names.py`); (4) the file watcher gained
+> `scan_progress.json` (2026-09-16, the scan-progress strip), one of several
+> watched files with **no table in any landed part** — a pure
+> `DbEventListener` would silently stop those events (P3-19/P3-20 callouts).
+
 ---
 ### Task P3-16: Part 3 importers
+
+> **Status (2026-09-30): DONE-branch** — `92348af4` on
+> `2026-09-29-v67-p3-10-scheduled-jobs`, unmerged. As built it differs from the
+> text below in ways that are improvements, not drift to undo: row shaping lives
+> in a shared `scripts/db/part3_sources.py` (`jobs_rows`, `scheduled_rows`,
+> `preferences_rows`, `killswitch_rows`, `ticker_rows`, `audit_rows`,
+> `tuning_result_rows`, `proposal_rows`) reused by P3-17's loaders;
+> `scripts/db/import_common.py` was extended; and the test counts rows across
+> all eight target tables rather than only asserting the dry run exits 0.
 
 Eleven stores, one script each — except the flags, which have nothing worth
 importing (a flag's whole state is whether it exists right now, and a cutover
@@ -114,6 +141,14 @@ git commit -m "feat(v67): add Part 3 importers"
 
 ### Task P3-17: Part 3 parity registrations
 
+> **Status (2026-09-30): DONE-branch** — `517ee345` on
+> `2026-09-29-v67-p3-10-scheduled-jobs`, unmerged. As built: `tuning_proposals`
+> is registered as its own store (so `REGISTERED` has eight names, not seven);
+> the vacuous `assert REGISTERED | set(EXEMPT)` below was replaced by a real
+> `TABLE_OWNER` map (table → registered-or-exempt key) that fails on an
+> unanswered table; and the directory/JSONL stores use a `loader_takes_path`
+> flag on `StoreSpec`. Keep the branch's version, not the text below.
+
 **Files:**
 - Modify: `scripts/db/parity_report.py`
 - Test: `tests/db/test_part3_coverage.py`
@@ -208,6 +243,7 @@ refreshing.
 **Files:**
 - Create: `swingbot/core/db/migrations/versions/p3_007_notify_triggers.py`
 - Create: `swingbot/core/db/events.py`
+- Modify: `tests/db/conftest.py` (`db_engine` iterates `TABLE_CHANNELS`)
 - Test: `tests/db/test_trigger_coverage.py`
 
 **Interfaces:**
@@ -215,6 +251,31 @@ refreshing.
 - Produces: `swingbot/core/db/events.py::TABLE_CHANNELS: dict[str, str]` — the
   single source of truth for which table raises which SSE concern, consumed by
   the migration, the tests and Part 3's listener alike.
+
+> **2026-09-30 re-examination:** still needed — no Part 3 revision
+> (`p3_001`…`p3_006` on `main`, none on the P3-10 branch) installs a trigger;
+> only `p1_003` (trades) and `p2_001`…`p2_005` (every Part 2 table) do. Three
+> corrections: **(a)** `p3_007` must set `down_revision = "p6_001"` — the
+> current single head (`p6_000` already merged `p2_007`+`p3_006`; `p6_001` is
+> the float-money-column fix, *not* the trigger sweep `_6a` describes). Chaining
+> it after `p3_006` would reopen a second head. **(b)** Part 2 has landed and
+> already installed its triggers, so the "filtered by what exists" loop below is
+> no longer load-bearing — keep it (its `DROP TRIGGER IF EXISTS` makes the sweep
+> idempotent over Part 2's tables) but the "Parts 2 and 3 run concurrently"
+> reason and the "Part 6's `p6_001` re-runs this sweep" sentence are stale.
+> **(c)** `tests/db/conftest.py::db_engine` on `main` already hard-codes exactly
+> this 19-table mapping; replace that literal tuple with
+> `events.TABLE_CHANNELS.items()` in this task so the two cannot drift, and
+> drop "AND to the db_engine fixture" from the assertion message. Once the
+> fixture derives from the map, `test_every_mapped_table_has_an_installed_trigger`
+> on `db_conn` only proves the fixture; also assert it against an
+> `alembic upgrade head` database (`db_engine_empty` + `upgrade(cfg, "head")`,
+> as `tests/db/test_migrations.py::test_migrations_produce_exactly_the_declared_schema`
+> does) so the check covers `p3_007` itself. `test_exactly_one_head` in that file
+> is what fails if (a) is got wrong.
+> **No store added since 2026-08-29 has a table**, so the mapping below is
+> complete for tables; the new watched *file* `scan_progress.json` is handled in
+> P3-19/P3-20.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -254,7 +315,7 @@ def test_every_mapped_table_has_an_installed_trigger(db_conn):
     missing = expected - installed
     assert not missing, (
         f"tables with no NOTIFY trigger: {sorted(missing)}. Add them to "
-        f"p3_007 AND to the db_engine fixture in tests/db/conftest.py."
+        f"TABLE_CHANNELS and to a migration."
     )
 ```
 
@@ -313,6 +374,10 @@ migration below will fail on a missing table — so `p3_007` iterates
 `TABLE_CHANNELS` filtered by what actually exists:
 
 ```python
+revision = "p3_007"
+down_revision = "p6_001"      # the current single head -- see the callout above
+
+
 def upgrade() -> None:
     conn = op.get_bind()
     existing = set(sa.inspect(conn).get_table_names())
@@ -326,7 +391,10 @@ def upgrade() -> None:
 That is the one place in this plan where a migration is conditional, and the
 reason is specific: Parts 2 and 3 run concurrently and either may land first.
 Part 6's `p6_001` re-runs this sweep unconditionally, when every table exists,
-so nothing is left without a trigger.
+so nothing is left without a trigger. *(2026-09-30: both reasons are now
+historical — Part 2 landed first, and `p6_001` is already spent on the
+float-column fix. The loop stays for idempotence; `_6a`'s trigger-sweep
+revision needs a new id.)*
 
 - [ ] **Step 4: Migrate and run the tests**
 
@@ -344,7 +412,7 @@ Expected: one trigger per existing mapped table, and `0 failed`.
 ```bash
 git add swingbot/core/db/events.py \
         swingbot/core/db/migrations/versions/p3_007_notify_triggers.py \
-        tests/db/test_trigger_coverage.py
+        tests/db/test_trigger_coverage.py tests/db/conftest.py
 git commit -m "feat(v67): install NOTIFY triggers for every event-raising table"
 ```
 
@@ -363,9 +431,34 @@ injects: a callable taking `emit`, with `.start()` and `.stop()`.
 - Consumes: `notify.listen` (P1-13), `TABLE_CHANNELS` (P3-18),
   `WATCHED_EVENTS` (existing).
 - Produces:
-  - `DbEventListener(emit, *, channels=None, debounce=DEBOUNCE, clock=time.monotonic)`
+  - `DbEventListener(emit, *, channels=None, debounce=DEBOUNCE, clock=time.monotonic, dsn=None)`
     with `.start()`, `.stop()`, `.on_notification(channel)`, `.flush(now=None)`
   - `DEBOUNCE = 0.25` — the same constant, for the same reason
+
+> **2026-09-30 re-examination:**
+> - **`notify.listen` is not on `main`.** It exists only in `fcae5b14` (see the
+>   P1-13 status note in `_1c`). Land it first; this task's Step 3 then edits it
+>   (the `on_event(None)` tick), so the cherry-pick and this task touch the same
+>   function — do them in that order, not in parallel. Its signature there
+>   matches the one consumed below (`channels, on_event, stop, *, poll, dsn`).
+> - **Logger name.** v111 added `tests/infra/test_logger_names.py`, which fails
+>   on any `getLogger("swing-bot…")` literal under `swingbot/`; `watcher.py`,
+>   `broker.py` and `stream.py` all now use `logging.getLogger(__name__)`. The
+>   module below is corrected accordingly.
+> - **Ten event names, not nine.** `notify.CHANNELS` and `WATCHED_EVENTS` both
+>   hold ten (`settings` included); docstrings below corrected.
+> - **Design gap — file-backed concerns with no table.** `watcher._DATA_PATHS`
+>   still watches files that no landed part gives a table:
+>   `scan_progress.json` (added 2026-09-16 for the SPA's scan-progress strip;
+>   rewritten ~1/s during a scan — `ConnectionStore`, `ChartStore` and
+>   `MarketIndexStore` refetch on `scan`), `scan_snapshots.json`,
+>   `scan_telemetry.jsonl`, `analytics_snapshot.json` (Part 5), and
+>   `config.ENV_PATH` → `settings` (Part 4). A listener that only hears Postgres drops every one of those
+>   events at the `events:db` stage — the progress bar would freeze into its
+>   "stalled" state mid-scan. This task stays as written (the listener is
+>   correct for what it hears); **P3-20 must not replace the file watcher
+>   outright** — see its callout for the composite that keeps a residual
+>   `FileWatcher` over exactly the paths no `TABLE_CHANNELS` entry replaces.
 
 **What is kept and what goes.** `DEBOUNCE` is retained: a scan tick still writes
 several tables in a burst and the client should refetch once, when it settles.
@@ -495,7 +588,7 @@ Create `swingbot/admin/events/db_listener.py`:
 """LISTEN/NOTIFY in, named event types out.
 
 The replacement for FileWatcher. The SPA contract does not change: the same
-nine event names, the same semantics, the same trailing debounce. What changes
+ten event names, the same semantics, the same trailing debounce. What changes
 is the source -- Postgres pushes instead of the admin stat()ing 19 paths twice
 a second.
 
@@ -511,7 +604,7 @@ from typing import Callable
 
 from swingbot.core.db import notify
 
-log = logging.getLogger("swing-bot.admin.events")
+log = logging.getLogger(__name__)   # v111: no literal logger names
 
 #: Trailing debounce per event type. Retained from the file watcher for the
 #: same reason it existed there: a scan tick writes several tables in quick
@@ -654,6 +747,7 @@ git commit -m "feat(v67): add the LISTEN/NOTIFY event listener"
 
 **Files:**
 - Modify: `swingbot/admin/events/broker.py:39,168,236`
+- Modify: `swingbot/admin/events/watcher.py` (add `_TABLE_BACKED`, `residual_paths()` — 2026-09-30 callout)
 - Test: `tests/admin/test_broker_db_listener.py`
 
 **Interfaces:**
@@ -661,6 +755,33 @@ git commit -m "feat(v67): add the LISTEN/NOTIFY event listener"
 - Produces: no new public symbols. `EventBroker(watcher_factory=...)` keeps its
   signature — the injection point is what makes this swap a one-line default
   change rather than a rewrite.
+
+> **2026-09-30 re-examination:** line refs verified against `main` —
+> `broker.py:39` is still `from .watcher import FileWatcher`, `:168` is still
+> `self._watcher_factory = watcher_factory or (lambda emit: FileWatcher(emit))`,
+> `:236` is still the `_release` docstring's "A FileWatcher primes itself"
+> sentence (only change since authoring: v111's `getLogger(__name__)` at `:41`).
+> The existing broker test is `tests/admin/test_event_broker.py`, not
+> `test_events_broker.py` (fixed in Step 4).
+> **Design change — the db-stage default must be a composite, not a bare
+> `DbEventListener`** (see P3-19's callout: `scan_progress.json`,
+> `scan_snapshots.json`, `scan_telemetry.jsonl`, `analytics_snapshot.json` and
+> `config.ENV_PATH` have no table yet and would go silent). At `events:db`,
+> `_default_watcher` returns a small `CompositeWatcher(DbEventListener(emit),
+> FileWatcher(emit, paths=residual_paths()))` whose `start()`/`stop()` fan out
+> to both. `residual_paths()` lives in `watcher.py` beside `default_paths()`:
+> `default_paths()` minus every path whose store has a `TABLE_CHANNELS` table
+> — stated as an explicit `_TABLE_BACKED` set of `_DATA_PATHS` names (the flag
+> files, `trades.json`, `plans.json`, …, `ticker_directory.json`,
+> `tuning_results`) so a new watched file defaults to *residual* (still
+> watched), never to silently dropped. Parts 4/5 shrink the residual set as
+> their tables land; Part 6 deletes it with the watcher. Accordingly
+> `test_db_stage_builds_a_db_listener` asserts the composite holds a
+> `DbEventListener` **and** a `FileWatcher` whose paths include
+> `scan_progress.json` and exclude `trades.json`; add
+> `test_residual_paths_exclude_every_table_backed_file`. Whether to instead give
+> `scan_progress` a table (it is the one continuously-moving path) is the
+> partner's call — the composite is the smaller change and keeps criterion 5.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -748,7 +869,7 @@ def _default_watcher(emit):
     publish by hand); this makes the *default* stage-aware, so the swap from
     stat()-polling to LISTEN/NOTIFY is one decision in one place rather than a
     rewrite of everything downstream. Nothing about the events themselves
-    changes -- same nine names, same semantics, same debounce.
+    changes -- same ten names, same semantics, same debounce.
     """
     from swingbot.core.db import stages
     if stages.reads_db("events"):
@@ -768,7 +889,7 @@ say that, rather than leaving a comment that is now half wrong.
 
 ```bash
 python scripts/dev/testrun.py file tests/admin/test_broker_db_listener.py
-python scripts/dev/testrun.py file tests/admin/test_events_broker.py
+python scripts/dev/testrun.py file tests/admin/test_event_broker.py
 ```
 
 Expected: `0 failed` for both.
@@ -776,7 +897,8 @@ Expected: `0 failed` for both.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add swingbot/admin/events/broker.py tests/admin/test_broker_db_listener.py
+git add swingbot/admin/events/broker.py swingbot/admin/events/watcher.py \
+        tests/admin/test_broker_db_listener.py
 git commit -m "feat(v67): let the event broker build a db listener"
 ```
 
@@ -895,6 +1017,15 @@ Part 2 has not landed, replace the second insert with `starred_plans` — or ski
 the test with `pytest.importorskip`-style guard and a comment saying which part
 it waits for.
 
+> **2026-09-30 re-examination:** columns checked against `schema.py` — the
+> `trades` and `plans` inserts supply every NOT NULL column (`doc` and
+> `updated_at` have server defaults), and `FlagRepository().set(name, *, conn)`
+> matches `swingbot/core/db/repositories/flags.py`. Part 2 is on `main`, so the
+> fallback paragraph above no longer applies — use `plans` as written. Add one
+> test for the P3-20 composite: at `events:db`, writing
+> `tmp_path / "scan_progress.json"` still yields a `scan` event (the residual
+> file watcher), so the scan-progress strip keeps moving.
+
 - [ ] **Step 2: Run it**
 
 ```bash
@@ -924,6 +1055,15 @@ that is asserted rather than assumed.
 - Consumes: `WATCHED_EVENTS` (existing), `TABLE_CHANNELS` (P3-18), the SSE
   endpoint (`swingbot/admin/events/stream.py`).
 - Produces: nothing.
+
+> **2026-09-30 re-examination:** the `addEventListener` grep as originally
+> written would fail on `main` for the wrong reason — it catches
+> `document.addEventListener('visibilitychange', …)` in
+> `frontend/src/app/pwa/pwa-update.service.ts`, while the real subscriptions are
+> a loop (`source.addEventListener(name, …)` over `EVENT_NAMES`) the regex never
+> matches. The SPA's contract is now one literal:
+> `frontend/src/app/api/event-stream.ts::EVENT_NAMES` (ten names, identical to
+> `EXPECTED_EVENTS`). The last test below is rewritten to parse that array.
 
 - [ ] **Step 1: Write the test**
 
@@ -961,20 +1101,22 @@ def test_every_channel_a_trigger_can_raise_is_one_the_spa_knows():
 
 
 def test_the_spa_subscribes_to_no_event_this_backend_cannot_raise():
-    """Greps the built SPA source for event names it listens for. A name here
-    that no trigger raises is a panel that silently stops updating."""
-    sources = list(FRONTEND.rglob("*.ts")) if FRONTEND.exists() else []
-    if not sources:
+    """Parses the SPA's EVENT_NAMES literal -- the list event-stream.ts loops
+    over to subscribe. A name here that no trigger raises is a panel that
+    silently stops updating. (`resync` and `ping` are subscribed separately and
+    raised by the stream, not by storage.)"""
+    source = FRONTEND / "src" / "app" / "api" / "event-stream.ts"
+    if not source.exists():
         import pytest
         pytest.skip("frontend/ sources not present in this checkout")
-    listened = set()
-    pattern = re.compile(r"addEventListener\(\s*['\"]([a-z_]+)['\"]")
-    for path in sources:
-        listened |= set(pattern.findall(path.read_text(encoding="utf-8",
-                                                       errors="ignore")))
-    # `resync`, `ping` and `message` are raised by the stream, not by storage.
-    unknown = listened - EXPECTED_EVENTS - {"resync", "ping", "message", "error", "open"}
+    text = source.read_text(encoding="utf-8")
+    block = re.search(r"EVENT_NAMES[^=]*=\s*\[(.*?)\]", text, re.S)
+    assert block, "EVENT_NAMES literal not found in event-stream.ts"
+    listened = set(re.findall(r"'([a-z_]+)'", block.group(1)))
+    assert listened, "EVENT_NAMES parsed empty -- the regex, not the SPA, is wrong"
+    unknown = listened - EXPECTED_EVENTS
     assert not unknown, f"SPA listens for events nothing raises: {sorted(unknown)}"
+    assert listened == EXPECTED_EVENTS
 ```
 
 - [ ] **Step 2: Run it**
@@ -1011,21 +1153,31 @@ listener". This task makes the broker's choice exclusive and asserts it.
 - Consumes: `_default_watcher` (P3-20).
 - Produces: nothing.
 
+> **2026-09-30 re-examination:** with P3-20's composite, "nothing `stat()`s
+> `data/`" is no longer the right invariant — the residual `FileWatcher` must
+> keep `stat()`ing `scan_progress.json`, `scan_snapshots.json`,
+> `scan_telemetry.jsonl`, `analytics_snapshot.json` and `.env` until Parts 4/5
+> give them tables. The invariant becomes **nothing `stat()`s a table-backed
+> path** at the db stage. The first test and the docstring paragraph below are
+> amended to say so; exit criterion 5 is amended to match.
+
 - [ ] **Step 1: Write the test**
 
 Create `tests/admin/test_no_double_watcher.py`:
 
 ```python
-"""At the db stage nothing stat()s data/ any more."""
+"""At the db stage nothing stat()s a table-backed file in data/ any more."""
 import os
 
 import pytest
 
 from swingbot import config
+from swingbot.admin.events import watcher
 from swingbot.admin.events.broker import EventBroker
 
 
-def test_no_stat_calls_on_data_at_the_db_stage(monkeypatch, tmp_path, db_engine):
+def test_no_stat_calls_on_table_backed_paths_at_the_db_stage(monkeypatch, tmp_path,
+                                                              db_engine):
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
     monkeypatch.setattr(config, "DB_STORES", "events:db")
     monkeypatch.setattr(config, "DATABASE_URL",
@@ -1035,7 +1187,9 @@ def test_no_stat_calls_on_data_at_the_db_stage(monkeypatch, tmp_path, db_engine)
     real_stat = os.stat
 
     def spy(path, *a, **kw):
-        if str(tmp_path) in str(path):
+        # Residual (file-only) paths are allowed; see the P3-20 callout.
+        if (str(tmp_path) in str(path)
+                and os.path.basename(str(path)) in watcher._TABLE_BACKED):
             statted.append(str(path))
         return real_stat(path, *a, **kw)
 
@@ -1065,8 +1219,8 @@ def test_only_one_watcher_object_exists(monkeypatch, tmp_path, db_engine):
 python -m pytest tests/admin/test_no_double_watcher.py -q
 ```
 
-If `test_no_stat_calls_on_data_at_the_db_stage` fails, something outside the
-broker is still sweeping `data/` — find it with the paths the failure prints
+If `test_no_stat_calls_on_table_backed_paths_at_the_db_stage` fails, something
+outside the broker is still sweeping a table-backed file in `data/` — find it with the paths the failure prints
 rather than assuming. That is a real finding, not a test to loosen.
 
 - [ ] **Step 3: Update the watcher's docstring**
@@ -1076,18 +1230,20 @@ costume, and the spec says so out loud". Append one paragraph:
 
 ```
 As of v67 this is the FALLBACK, not the mechanism: at the db stage the admin
-subscribes to Postgres LISTEN/NOTIFY (admin/events/db_listener.py) and nothing
-here runs. This module survives only while any store is still on files, and
-Part 6 of that plan deletes it. Do not add paths to _DATA_PATHS -- add a table
-to swingbot/core/db/events.py's TABLE_CHANNELS instead, which is the mapping a
-test now asserts is complete.
+subscribes to Postgres LISTEN/NOTIFY (admin/events/db_listener.py) and this
+watcher runs only over residual_paths() -- the files no table replaces yet
+(scan progress/snapshots/telemetry, the analytics snapshot, .env). This module
+survives only while any watched file has no table, and Part 6 of that plan
+deletes it. Prefer a table in swingbot/core/db/events.py's TABLE_CHANNELS over
+a new _DATA_PATHS entry; a new entry here that is table-backed must also go in
+_TABLE_BACKED, or it is stat()ed and NOTIFYed twice.
 ```
 
 - [ ] **Step 4: Run the tests**
 
 ```bash
 python scripts/dev/testrun.py file tests/admin/test_no_double_watcher.py
-python scripts/dev/testrun.py file tests/admin/test_events_watcher.py
+python scripts/dev/testrun.py file tests/admin/test_event_watcher.py
 ```
 
 Expected: `0 failed` for both.
@@ -1096,7 +1252,7 @@ Expected: `0 failed` for both.
 
 ```bash
 git add swingbot/admin/events/watcher.py tests/admin/test_no_double_watcher.py
-git commit -m "test(v67): assert nothing polls data/ at the db stage"
+git commit -m "test(v67): assert nothing polls table-backed data/ files at the db stage"
 ```
 
 ---
@@ -1109,6 +1265,27 @@ git commit -m "test(v67): assert nothing polls data/ at the db stage"
 **Interfaces:**
 - Consumes: everything in Part 3.
 - Produces: nothing.
+
+> **2026-09-30 re-examination:**
+> - **The `.flag` owner test fails on `main` today, and for a real reason.**
+>   `swingbot/admin/app.py:54-55` defines `TRIGGER_FILE`/`PAUSE_FILE`
+>   (`trigger_check.flag`, `scan_paused.flag`); `swingbot/admin/api_v1/system.py`
+>   (~`:422-476`) writes/removes them with `open()`/`os.remove()` and
+>   `app.py:312` reads `TRIGGER_FILE` — bypassing both runstate modules'
+>   stage branch. At `flags:db` the admin's "trigger check" and "pause" would
+>   write files the bot no longer reads. Do **not** add `admin/app.py` to
+>   `allowed`; route those three sites through
+>   `swingbot/commands/scanning/runstate.py` (or `core/scanning/runstate.py`)
+>   first — a P3-02/P3-03 gap, fixed in this task or a task inserted before it.
+>   The P3-10 branch does not touch these sites.
+> - `test_no_part3_store_defaults_to_a_non_json_stage` asserts `... or True`
+>   and can never fail. Replace the body with a check that `.env.example`'s
+>   `DB_STORES=` line is empty (it is, `.env.example:638`), which is what exit
+>   criterion 7 actually means.
+> - The `analytics` exemption stands (no analytics table on `main`).
+>   `settings` needs no exemption — `settings_audit` raises it via
+>   `TABLE_CHANNELS` — but note that the `.env` edit itself (the event's
+>   original source) still comes only from P3-20's residual file watcher.
 
 - [ ] **Step 1: Write the exit test**
 
@@ -1185,6 +1362,8 @@ git commit -m "test(v67): pin Part 3 exit criteria"
 3. `alembic heads` returns one head from this part's chain: `p3_007`. (Two heads
    across Parts 2 and 3 is expected until Part 6's merge revision.)
 4. The SSE stream delivers the same ten event names — success criterion 5.
-5. Nothing `stat()`s `data/` at the db stage.
+5. Nothing `stat()`s a table-backed file in `data/` at the db stage; only
+   P3-20's `residual_paths()` (files no landed part gives a table) are still
+   watched. *(Amended 2026-09-30 — was "nothing `stat()`s `data/`".)*
 6. `python scripts/dev/testrun.py fast` is green, and the `slow` tier passes.
 7. `DB_STORES` is empty in every committed file.

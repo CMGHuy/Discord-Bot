@@ -1,5 +1,7 @@
 # v67 — Part 3: Operational state and live updates
 
+> **Closed 2026-09-30 (re-examination).** Every task in this file is built. P3-01…P3-07 are on `main` (`6a11aa1a` … `44717484`). The rest of Part 3 is still live in `_3b`/`_3c`, which rely on this file's Parallelisation map, revision-id table and exit criteria. This file moved to `plans/implemented/` on its own; the rest of v67 is live at the top level of `docs/superpowers/plans/` — see the index's `## Status` section. Checkboxes below were never ticked; the verdict comes from the commits.
+
 > Part of `2026-08-29-v67-json-to-postgres_0-index.md`. **Read the index's
 > Global Constraints before starting any task here.** Part 1 must be merged to
 > `main` before this part begins.

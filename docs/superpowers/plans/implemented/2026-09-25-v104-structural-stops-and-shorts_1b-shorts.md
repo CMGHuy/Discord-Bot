@@ -327,7 +327,7 @@ add
 
 Run: `python scripts/dev/testrun.py file tests/market/test_earnings_context.py` (PASS), `tests/planning/test_exit_sim_hold_cap.py` (PASS), then `tests/planning/test_plan_serialization.py`, `tests/planning/test_exit_sim_single.py` and `tests/planning/test_exit_sim_scaleout.py` (PASS, unchanged).
 
-If `test_plan_serialization.py` pins the exact field set of `TradePlanV2`, add `hold_cap_bars` to its expected set. That is a schema pin, not a loosened assertion. Then read v67's plans task (`grep -n "stall_exit_day" docs/superpowers/plans/2026-08-29-v67-json-to-postgres_2b-trading-state-plans.md`). If it lists plan columns, add `hold_cap_bars` beside `stall_exit_day` in that plan file in the same commit (memory: v67 parallel-plan rule).
+If `test_plan_serialization.py` pins the exact field set of `TradePlanV2`, add `hold_cap_bars` to its expected set. That is a schema pin, not a loosened assertion. Then read v67's plans task (`grep -n "stall_exit_day" docs/superpowers/plans/implemented/2026-08-29-v67-json-to-postgres_2b-trading-state-plans.md`). If it lists plan columns, add `hold_cap_bars` beside `stall_exit_day` in that plan file in the same commit (memory: v67 parallel-plan rule).
 
 - [ ] **Step 5: Complexity and commit**
 

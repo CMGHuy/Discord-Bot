@@ -1,5 +1,7 @@
 # v67 — Part 2: Live trading state (tasks P2-06…P2-12)
 
+> **Closed 2026-09-30 (re-examination).** Every task in this file is built. P2-06…P2-12 are on `main` (`99148166` … `ee19de86`); the admin/PlanStore db-stage fixes merged 2026-09-30 (`8420b047`). This file moved to `plans/implemented/` on its own; the rest of v67 is live at the top level of `docs/superpowers/plans/` — see the index's `## Status` section. Checkboxes below were never ticked; the verdict comes from the commits.
+
 > Continuation of `2026-08-29-v67-json-to-postgres_2a-trading-state-trades.md`. Part of
 > `2026-08-29-v67-json-to-postgres_0-index.md`. **Read the index's Global
 > Constraints and the first file of this part before starting any task here** —

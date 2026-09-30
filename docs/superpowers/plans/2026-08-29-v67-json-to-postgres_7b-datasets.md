@@ -41,6 +41,13 @@ private `json.load(...)` plus normalisation.
   - `telemetry_frame(days=90) -> pd.DataFrame`
   - `FRAMES: dict[str, Callable]` — name → accessor, for the export CLI
 
+> **2026-09-30 re-examination:**
+> 1. **Missing table.** `scan_telemetry` belongs to Part 5 (unbuilt), so the `schema` import fails today. Land `telemetry_frame` and its `FRAMES` entry with Part 5, or register it only when `schema.METADATA.tables` has the table.
+> 2. **Trade records do not store `r_multiple` or `exit_reason`.** R is computed by `swingbot.core.tracking.performance.closed_r_multiple(t)`, a fraction-weighted sum over `legs`. The accessor must *derive* the `r_multiple` column with that function and never reimplement it; two formulas for the same R is exactly what the module docstring warns against. The seeds should carry `exit_price`/`legs`, not an injected `r_multiple`. Drop `exit_reason` from `_TRADE_EXTRAS`.
+> 3. **Row shape.** Rows come back table-shaped (`trade_id`/`horizon`), but TradeLog and every analysis script use `id`/`horizon_key`. Build trade rows through `performance._json_record` (the live DB-read translator) so frames match TradeLog's public shape. Tests then index `id`, or both names.
+> 4. **Decimal.** v91's `p6_001` made `entry`/`stop_loss`/`balance` `double precision`, so Decimal only comes from a future `numeric` column. Keep the coercion as a guard.
+> 5. **Stage.** A frame reads Postgres whatever the store's `DB_STORES` stage is. For a store still at `json`/`dual` on production, the DB rows are the dual-write shadow, so confirm `scripts/db/parity_report.py` is clean before trusting one.
+
 **The doc column is expanded into real columns.** A DataFrame with a `doc`
 column of dicts is a DataFrame you cannot filter, group or plot — every caller
 would `pd.json_normalize` it and they would each do it slightly differently.
@@ -364,6 +371,8 @@ python scripts/db/export_dataset.py closed_trades --profile snapshot -o trades.c
 python scripts/db/export_dataset.py --all --profile snapshot -o exports/datasets/
 ```
 
+> **2026-09-30 re-examination:** `config.DATA_DIR` exists and `exports/` is gitignored (`.gitignore:30`), so both hold. The seed's `r_multiple=2.0` follows P7-07's note: seed `exit_price` and let the accessor derive R. `--all` covers only the `FRAMES` present, which excludes `telemetry` until Part 5.
+
 **Output goes to `exports/`, which the spec keeps as files** and which is
 already gitignored. An export written into `data/` would sit next to the
 database's own backups and be mistaken for one.
@@ -590,6 +599,11 @@ dev machine, without editing anything.
   - `apply_profile(args) -> str` — validates, and **refuses a write-mode run
     against `prod-ro`**
 
+> **2026-09-30 re-examination (design change):**
+> 1. **`shadow_parity_report.py`** has no argparse and no `load_lines()`. `main()` calls `_load_records()`, which reads `data/shadow_plans.jsonl[.1]` directly, and the `shadow_plans` table is Part 5 (unbuilt). Its `--db-profile` has nothing to read until Part 5 gives it a repository. Either defer this script or add argparse plus a DB branch in `_load_records()` when Part 5 lands.
+> 2. **The two backfills** already have argparse, so Step 4's "may not have one" caveat is moot. They reach data through `TradeLog()` / `JournalStore()`, not through an engine. Those stores pick JSON or DB via `stages.reads_db(...)` and use the process singleton `get_engine()`, so "use `profiles.engine_for(profile)`" is not a local edit. For standalone script processes only, add `profiles.use_profile(profile)`: it sets `config.DATABASE_URL = resolve_url(profile)` and calls `engine.reset_engine()` before any store is built. The bot never calls it, and P7-05 still guards the bot.
+> 3. **Stage check.** `apply_profile` must refuse (exit 2) when the script's store is not at `db` stage (`stages.reads_db("trades")` / `("journal")`). Otherwise `--db-profile snapshot` silently reads `data/trades.json`.
+
 **A backfill script is a write.** `backfill_manual_close_price.py` and
 `backfill_journal.py` modify records; pointing either at `prod-ro` would fail
 at the first write with a permission error, which is correct but obscure. The
@@ -764,13 +778,19 @@ watchlist by hand.
 
 **Files:**
 - Modify: `scripts/data/fetch_backtest_data.py`
-- Modify: `scripts/data/build_universe.py`
+- ~~Modify: `scripts/data/build_universe.py`~~ (dropped 2026-09-30 — it never reads the watchlist; see note)
 - Test: `tests/scripts/test_fetch_universe_source.py`
 
 **Interfaces:**
 - Consumes: `watchlist_repo` (P2-21), `profile_arg` (P7-09).
 - Produces: `--db-profile` on both scripts, and
   `resolve_universe(args) -> list[str]` in `fetch_backtest_data.py`.
+
+> **2026-09-30 re-examination:**
+> 1. **The resolver already exists.** `fetch_backtest_data.py` has `load_watchlist()` (reads `data/watchlist.json`) and `_tickers(args)`, which is the precedence logic this task describes. `--tickers` is a comma-separated **string**, not a list. `--universe NAME` updates `market_data/` for watchlist + universe, and `--training-universe` exists alongside it. There is no `_load_named_universe`.
+> 2. **So the change is smaller.** Give `load_watchlist()` a profile and read `WatchlistRepository().tickers(conn=...)` from `profiles.engine_for(profile)`. Keep `_tickers` as the public `resolve_universe` (rename or alias it). Tests pass `tickers="TSLA"`, and "a named universe" means `--training-universe sp500`.
+> 3. **`build_universe.py`** never reads the watchlist (it builds from `data/universe/sp500_raw.csv`). Drop it from Files and from the flag test.
+> 4. **Stage.** Reading the watchlist from a profile is only production's truth once the `watchlist` store is at `dual`/`db` on production.
 
 **The failure this prevents.** Today a local backtest runs against whatever
 `data/watchlist.json` this checkout happens to have — which drifts from
@@ -940,11 +960,17 @@ Six commands nobody should have to reconstruct from a plan file.
 **Files:**
 - Create: `docs/deploy/DB_LOCAL_DEV.md`
 - Modify: `docs/setup.md`, `README.md`, `CLAUDE.md`
-- Test: extend `tests/test_docs_consistency.py`
+- Test: create `tests/test_docs_consistency.py` (it does not exist as of 2026-09-30)
 
 **Interfaces:**
 - Consumes: everything in Part 7.
 - Produces: nothing in code.
+
+> **2026-09-30 re-examination:**
+> 1. **The consistency test does not exist yet.** `tests/test_docs_consistency.py` is missing, so Step 1 **creates** it, defining `REPO`, a `DOCS` list (e.g. `README.md`, `docs/setup.md`, `docs/deploy/*.md`) and the imports (`re`, `pytest`).
+> 2. **Budget.** `CLAUDE.md` is 159 lines, well under its 200-line budget, so the one line needs no displacement into `architecture.md`. Drop that file from the commit unless something moves.
+> 3. **Codex mirror.** Any `CLAUDE.md` edit must ship its condensed `AGENTS.md` mirror in the same commit (`tests/hooks/test_codex_mirror.py`).
+> 4. **Links.** `docs/deploy/DB_RESTORE.md` already exists; link it from the new guide.
 
 **`CLAUDE.md` is at its 200-line budget.** One line goes in — the `make db-pull`
 / `--db-profile snapshot` workflow, because that is the thing a session needs to
@@ -1053,6 +1079,12 @@ git commit -m "docs(v67): document the local snapshot and read-only prod workflo
 **Interfaces:**
 - Consumes: everything in Part 7.
 - Produces: nothing.
+
+> **2026-09-30 re-examination:**
+> 1. **Scan tracked files only.** `test_no_committed_file_points_at_production` walks `REPO.rglob("*")`, which crawls `market_data/`, `data/`, `.claude/worktrees/` and the untracked `ssh-hetzner.sh`. Iterate `git ls-files` instead: the test is about *committed* files, and ls-files is also fast.
+> 2. **`!performance`** exists (`swingbot/commands/trades.py:385`). Comparing per-strategy expectancy against it states a pooled number, so load the `pooled-numbers` skill first. Take `r_multiple` from P7-07's derived column.
+> 3. **`telemetry`.** The `FRAMES` name check must tolerate its absence until Part 5.
+
 
 - [ ] **Step 1: Write the exit test**
 

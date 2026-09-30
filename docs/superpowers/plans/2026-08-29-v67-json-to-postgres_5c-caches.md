@@ -1,251 +1,15 @@
-# v67 — Part 5: Caches and verification (tasks P5-08…P5-14)
+# v67 — Part 5: Caches and verification (tasks P5-09…P5-14)
 
 > Continuation of `2026-08-29-v67-json-to-postgres_5b-snapshots.md`. Part of
 > `2026-08-29-v67-json-to-postgres_0-index.md`. **Read the index's Global
 > Constraints and the `_5a`/`_5b` files before starting any task here** — the
 > Parallelisation map, the Alembic revision-id table and the exit criteria live
 > there and are not repeated.
+>
+> *(2026-09-30: P5-08, the ticker-metadata cache + earnings ledger, now lives
+> at the end of `_5b` — moved to keep this file under 1500 lines.)*
 
 **Spec:** `docs/superpowers/specs/2026-08-29-v67-json-to-postgres-design.md`
-
----
-
-### Task P5-08: The ticker metadata cache
-
-`data.py:153-186` holds two dicts (`currency_symbols`, `company_names`) in one
-file, rewritten whole on every new lookup, and **loaded at import time**
-(`data.py:186`). It is regenerable from Yahoo, so reads may fall back — this is
-the second of the spec's two named read-fallback stores.
-
-**Files:**
-- Create: `swingbot/core/db/repositories/meta_cache.py`
-- Modify: `swingbot/core/marketdata/data.py` (`_load_ticker_meta_cache` `:161`,
-  `_save_ticker_meta_cache` `:174`, and the import-time call at `:186`)
-- Test: `tests/marketdata/test_ticker_meta_cache_db.py`
-
-**Interfaces:**
-- Consumes: `ticker_meta_cache` (P5-01), `stages`.
-- Produces: `MetaCacheRepository` with `load_all() -> tuple[dict, dict]`,
-  `put(symbol, currency=None, name=None)`; `meta_cache_repo()`.
-
-**The import-time call is the hazard here**, and it is a real one: `data.py`
-calls `_load_ticker_meta_cache()` at module scope, so at the db stage importing
-`data.py` would open a database connection during import — in every process,
-including `scripts/` that never touch a ticker. The fix is to make the load
-**lazy**, triggered by the first lookup rather than by the import.
-
-- [ ] **Step 1: Write the failing tests**
-
-Create `tests/marketdata/test_ticker_meta_cache_db.py`:
-
-```python
-"""The metadata cache, and the import-time load that must become lazy."""
-import os
-
-import pytest
-
-from swingbot import config
-from swingbot.core.marketdata import data as mkt
-
-
-@pytest.fixture
-def db_stage(tmp_path, monkeypatch, db_committed):
-    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(config, "DB_STORES", "meta_cache:db")
-    monkeypatch.setattr(mkt, "_TICKER_META_CACHE_PATH",
-                        os.path.join(tmp_path, "ticker_meta_cache.json"))
-    monkeypatch.setattr(mkt, "_currency_cache", {})
-    monkeypatch.setattr(mkt, "_company_name_cache", {})
-    monkeypatch.setattr(mkt, "_meta_cache_loaded", False)
-
-
-def test_save_then_load(db_stage):
-    mkt._currency_cache["AAPL"] = "$"
-    mkt._company_name_cache["AAPL"] = "Apple Inc."
-    mkt._save_ticker_meta_cache()
-
-    mkt._currency_cache.clear()
-    mkt._company_name_cache.clear()
-    mkt._meta_cache_loaded = False
-    mkt._load_ticker_meta_cache()
-
-    assert mkt._currency_cache["AAPL"] == "$"
-    assert mkt._company_name_cache["AAPL"] == "Apple Inc."
-
-
-def test_a_symbol_with_only_one_half_round_trips(db_stage):
-    mkt._currency_cache["MSFT"] = "$"
-    mkt._save_ticker_meta_cache()
-    mkt._currency_cache.clear()
-    mkt._meta_cache_loaded = False
-    mkt._load_ticker_meta_cache()
-    assert mkt._currency_cache["MSFT"] == "$"
-    assert "MSFT" not in mkt._company_name_cache
-
-
-def test_saving_twice_keeps_one_row_per_symbol(db_stage):
-    from swingbot.core.db.repositories.meta_cache import MetaCacheRepository
-    mkt._currency_cache["AAPL"] = "$"
-    mkt._save_ticker_meta_cache()
-    mkt._company_name_cache["AAPL"] = "Apple Inc."
-    mkt._save_ticker_meta_cache()
-    assert MetaCacheRepository().count() == 1
-
-
-def test_an_unreachable_database_degrades_to_an_empty_cache(db_stage,
-                                                             monkeypatch):
-    """Regenerable from Yahoo: an empty cache costs a network call, not
-    correctness."""
-    monkeypatch.setattr(config, "DATABASE_URL", "")
-    from swingbot.core.db import engine as dbengine
-    dbengine.reset_engine()
-    mkt._meta_cache_loaded = False
-    mkt._load_ticker_meta_cache()            # must not raise
-    assert mkt._currency_cache == {}
-    dbengine.reset_engine()
-
-
-def test_importing_data_py_opens_no_connection(monkeypatch):
-    """The import-time load must be lazy. Every script that imports data.py
-    would otherwise connect to Postgres just to be imported."""
-    import importlib
-    import sys
-
-    monkeypatch.setattr(config, "DB_STORES", "meta_cache:db")
-    opened = []
-    from swingbot.core.db import engine as dbengine
-    monkeypatch.setattr(dbengine, "get_engine",
-                        lambda: opened.append(1) or (_ for _ in ()).throw(
-                            AssertionError("connected during import")))
-    sys.modules.pop("swingbot.core.marketdata.data", None)
-    importlib.import_module("swingbot.core.marketdata.data")
-    assert opened == []
-
-
-def test_no_meta_cache_json_at_the_db_stage(db_stage, tmp_path):
-    mkt._currency_cache["AAPL"] = "$"
-    mkt._save_ticker_meta_cache()
-    assert not os.path.exists(os.path.join(tmp_path, "ticker_meta_cache.json"))
-```
-
-- [ ] **Step 2: Run to verify failure**
-
-```bash
-python -m pytest tests/marketdata/test_ticker_meta_cache_db.py -q
-```
-
-Expected: `ModuleNotFoundError`, and — after the module exists —
-`test_importing_data_py_opens_no_connection` failing on the import-time call.
-
-- [ ] **Step 3: Write the repository**
-
-Create `swingbot/core/db/repositories/meta_cache.py`:
-
-```python
-"""Ticker currency symbols and company names.
-
-One row per symbol, not two dicts in one blob: the file was rewritten whole on
-every new lookup, and lookups happen one ticker at a time.
-"""
-from __future__ import annotations
-
-from swingbot.core.db.repositories.base import Repository
-from swingbot.core.db.schema import ticker_meta_cache
-
-
-class MetaCacheRepository(Repository):
-    def __init__(self):
-        super().__init__(ticker_meta_cache, key="symbol")
-
-    def load_all(self, *, conn=None) -> tuple[dict, dict]:
-        """(currency_symbols, company_names), each keyed by symbol."""
-        currencies, names = {}, {}
-        for row in self.list_all(conn=conn):
-            symbol = row["symbol"]
-            if row.get("currency") is not None:
-                currencies[symbol] = row["currency"]
-            if row.get("name") is not None:
-                names[symbol] = row["name"]
-        return currencies, names
-
-    def put(self, symbol: str, *, currency: str | None = None,
-            name: str | None = None, conn=None) -> None:
-        """Patch, not upsert: the two halves are learned at different times,
-        and a currency lookup must not erase a name already cached."""
-        changes = {}
-        if currency is not None:
-            changes["currency"] = currency
-        if name is not None:
-            changes["name"] = name
-        if not changes:
-            return
-        if self.get(symbol, conn=conn) is None:
-            self.insert({"symbol": symbol, **changes}, conn=conn)
-        else:
-            self.patch(symbol, changes, conn=conn)
-
-
-_repo: MetaCacheRepository | None = None
-
-
-def meta_cache_repo() -> MetaCacheRepository:
-    global _repo
-    if _repo is None:
-        _repo = MetaCacheRepository()
-    return _repo
-```
-
-- [ ] **Step 4: Make the load lazy and branch both functions**
-
-In `swingbot/core/marketdata/data.py`, replace the import-time call at `:186`:
-
-```python
-_meta_cache_loaded = False
-
-
-def _ensure_meta_cache_loaded() -> None:
-    """Load the metadata cache on first use, not at import.
-
-    This used to be a bare `_load_ticker_meta_cache()` at module scope. At the
-    db stage that would open a Postgres connection just to IMPORT this module
-    -- in every process, including the scripts that never look up a ticker.
-    """
-    global _meta_cache_loaded
-    if _meta_cache_loaded:
-        return
-    _meta_cache_loaded = True
-    _load_ticker_meta_cache()
-```
-
-Call `_ensure_meta_cache_loaded()` at the top of `get_company_name` and
-`get_currency_symbol` (and any other reader of the two dicts — find them with
-`grep -n "_currency_cache\|_company_name_cache" swingbot/core/marketdata/data.py`).
-
-`_load_ticker_meta_cache` gains a `reads_db("meta_cache")` branch calling
-`meta_cache_repo().load_all()` inside the existing `try/except Exception` —
-which already degrades to an empty cache and logs at debug, exactly the
-behaviour the fallback needs. `_save_ticker_meta_cache` writes per stage, using
-`put()` per symbol on the db side.
-
-- [ ] **Step 5: Run the tests**
-
-```bash
-python scripts/dev/testrun.py file tests/marketdata/test_ticker_meta_cache_db.py
-python scripts/dev/testrun.py file tests/marketdata/test_data.py
-python scripts/dev/testrun.py fast
-```
-
-Expected: `0 failed`. The fast tier because making the load lazy changes
-`data.py`'s import behaviour, and `data.py` is imported nearly everywhere.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add swingbot/core/db/repositories/meta_cache.py \
-        swingbot/core/marketdata/data.py \
-        tests/marketdata/test_ticker_meta_cache_db.py
-git commit -m "feat(v67): move the ticker metadata cache to postgres, load it lazily"
-```
 
 ---
 
@@ -254,6 +18,28 @@ git commit -m "feat(v67): move the ticker metadata cache to postgres, load it la
 `factors.py:17,41-50` — `{as_of, rels: {symbol: float}}`, refreshed once per
 scan over the whole universe and read by `rs_percentile`. It lives under
 `data/universe/`, which is the one migrated store not directly in `data/`.
+
+> **2026-09-30 re-examination: UPDATED (lines valid; three corrections).**
+> - `RS_CACHE_PATH` `:17`, `refresh_rs_cache` `:41`, `load_rs_cache` `:49`
+>   match `main`. Writer: `scan_run.py:328` (once per scan). Readers:
+>   `scan_run.py` (passes the returned dict on — v93's `_maybe_run_strategy_pass`
+>   reads `rs_cache.get("rels")`), `retrospective.py:674-676`, and the
+>   `rs_percentile(..., universe_rels=...)` callers. All go through the two
+>   functions, so no caller changes.
+> - **`rel` is `sa.Float(53)`** (P5-01 corrected; v91). A `Numeric` column
+>   would hand back `Decimal`, which `rs_percentile`'s `rel >= r` comparison
+>   against a float would accept but `np.mean` over mixed types would not; the
+>   `float(...)` in `load()` stays as a belt-and-braces cast. A `NaN` rel (zero
+>   close in the window) is narrowed to `None` by the codec, which
+>   `rs_percentile` already filters.
+> - **Logger:** `factors.py` still has no logger, but v111's
+>   `tests/infra/test_logger_names.py` fails on the literal
+>   `"swing-bot.factors"` the draft adds — use `logging.getLogger(__name__)`
+>   (corrected below).
+> - Existing tests: `tests/edge/test_factors.py` does not exist; the cache is
+>   exercised by `tests/edge/test_edge_factors.py`,
+>   `tests/edge/test_rs_value_path.py` and
+>   `tests/scanning/test_engine_quality_inputs.py`. Step 4 corrected.
 
 **Files:**
 - Create: `swingbot/core/db/repositories/rs_cache.py`
@@ -458,17 +244,21 @@ def load_rs_cache() -> dict:
     return read_json(RS_CACHE_PATH, {"as_of": None, "rels": {}})
 ```
 
-`factors.py` has no module logger today — add
-`log = logging.getLogger("swing-bot.factors")` beside the imports.
+`factors.py` has no module logger today — add `import logging` and
+`log = logging.getLogger(__name__)` beside the imports (v111: a
+`"swing-bot…"` literal fails `tests/infra/test_logger_names.py`).
 
 - [ ] **Step 4: Run the tests**
 
 ```bash
 python scripts/dev/testrun.py file tests/edge/test_rs_cache_db.py
-python scripts/dev/testrun.py file tests/edge/test_factors.py
+python scripts/dev/testrun.py file tests/edge/test_edge_factors.py
+python scripts/dev/testrun.py file tests/edge/test_rs_value_path.py
+python scripts/dev/testrun.py file tests/scanning/test_engine_quality_inputs.py
+python scripts/dev/testrun.py file tests/infra/test_logger_names.py
 ```
 
-Expected: `0 failed` for both.
+Expected: `0 failed` for all five.
 
 - [ ] **Step 5: Commit**
 
@@ -482,13 +272,26 @@ git commit -m "feat(v67): move the RS cache to postgres"
 
 ### Task P5-10: Fold trades
 
-`analyze.py:141` reads `data/fold_trades/<strategy>.json` for E39's fold
+`analyze.py:201` reads `data/fold_trades/<strategy>.json` for E39's fold
 outcomes. The code comment says plainly that **no producer exists yet** — the
 read is a documented no-op until E39 lands.
 
+> **2026-09-30 re-examination: UPDATED (line moved; premise still true).**
+> - The read moved from `:141` to the `try:` block at **`analyze.py:196-206`**
+>   (`fold_path = ...` at `:201`); `read_json` and `os` are already imported
+>   (`:25`, `:10`).
+> - Still **no producer** anywhere — `git grep fold_trades` hits only this read;
+>   no script under `scripts/backtest/` writes `data/fold_trades/` (the
+>   `*_folds.json` research outputs are different files). The measured-answer
+>   rule in `docs/claude/known-traps.md` (`:75`) still applies.
+> - Existing tests: `tests/scanning/test_analyze.py` does not exist. The
+>   `analyze` module is exercised by `tests/scanning/test_engine_quality_inputs.py`,
+>   `test_analyze_dcb_veto.py` and `test_live_context_stamp.py` (among others);
+>   Step 4 corrected.
+
 **Files:**
 - Create: `swingbot/core/db/repositories/fold_trades.py`
-- Modify: `swingbot/core/scanning/analyze.py:141`
+- Modify: `swingbot/core/scanning/analyze.py:201`
 - Test: `tests/scanning/test_fold_trades_db.py`
 
 **Interfaces:**
@@ -610,7 +413,7 @@ def fold_trades_repo() -> FoldTradesRepository:
     return _repo
 ```
 
-In `analyze.py`, extract the inline read at `:141` into a named function so
+In `analyze.py`, extract the inline read at `:201` into a named function so
 there is one seam:
 
 ```python
@@ -637,10 +440,11 @@ exactly as they are.
 
 ```bash
 python scripts/dev/testrun.py file tests/scanning/test_fold_trades_db.py
-python scripts/dev/testrun.py file tests/scanning/test_analyze.py
+python scripts/dev/testrun.py file tests/scanning/test_engine_quality_inputs.py
+python scripts/dev/testrun.py file tests/scanning/test_live_context_stamp.py
 ```
 
-Expected: `0 failed` for both.
+Expected: `0 failed` for all three.
 
 - [ ] **Step 5: Commit**
 
@@ -657,15 +461,40 @@ git commit -m "feat(v67): move the fold-trade cache seam to postgres"
 Three of these stores hold history worth keeping; the rest regenerate
 themselves within one scan.
 
+> **2026-09-30 re-examination: UPDATED.**
+> - Part 2 has landed: `scripts/db/import_common.py` exists on `main`
+>   (`record_checksum`, `ImportReport`, `compare`, `parity`,
+>   `run_import(argv, *, load_source, write_one, repo, key, name, prune=None)`).
+>   The "create it if absent" clause is obsolete.
+> - **Precedent for append-only JSONL with no natural key** (P3-16/P3-17 on the
+>   P3-10 branch, `92348af4`/`517ee345`): `scripts/db/part3_sources.py::audit_rows`
+>   gives each valid line a positional **`seq`**, skips torn/invalid lines, and
+>   the parity side reads the table back `ORDER BY id` and numbers it the same
+>   way (`_OrderedAuditRepo`). Use that shape for **both** telemetry and shadow
+>   — `at` is not unique (a deploy marker and a scan can share a second, and
+>   local data has 1-ticker `!check` scans microseconds apart), so it cannot be
+>   the key the table below gave it. Put the row shaping in a shared
+>   `scripts/db/part5_sources.py` if the P3 file has merged by then, mirroring
+>   it; `seq` is never written to the table (it is a `RESERVED`-safe name, but
+>   it is positional, not data).
+> - `import_retrospective.py`'s key is **`date`** (P5-05 correction).
+> - **Fourth importer: `import_earnings.py`** for the folded-in
+>   `earnings_history.json` (P5-08). It is history, not a cache: `past`
+>   accumulates dates the provider no longer returns, so a skipped import loses
+>   them for good. Source shape `{"updated_at", "symbols": {SYM: {...}}}` → one
+>   record per symbol, key `symbol`; `updated_at` is dropped (reserved key; the
+>   row stamps its own).
+> - `shadow_plans.jsonl` normally does not exist (no live producer — status
+>   block); the importer must treat both files absent as "0 records, exit 0".
+
 **Files:**
 - Create: `scripts/db/import_telemetry.py`, `import_shadow.py`,
-  `import_retrospective.py`
+  `import_retrospective.py`, `import_earnings.py` *(2026-09-30)*
 - Test: `tests/scripts/test_part5_importers.py`
 
 **Interfaces:**
-- Consumes: `run_import` (P2-02 — **if Part 2 has not landed, this task creates
-  `scripts/db/import_common.py`**).
-- Produces: the three scripts, each with `--dry-run`.
+- Consumes: `run_import` (P2-02, on `main`).
+- Produces: the four scripts, each with `--dry-run`.
 
 **What is deliberately not imported, and why.** `analytics_snapshot` is rebuilt
 from closed trades by `refresh_snapshot()`; `scan_snapshots` is rewritten by the
@@ -687,7 +516,7 @@ import pytest
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 
-IMPORTED = ["telemetry", "shadow", "retrospective"]
+IMPORTED = ["telemetry", "shadow", "retrospective", "earnings"]
 
 NOT_IMPORTED = {
     "analytics_snapshot": "rebuilt from closed trades by refresh_snapshot()",
@@ -722,10 +551,10 @@ def test_the_two_lists_together_cover_every_part5_store():
     from swingbot.core.db import schema
     part5 = {"scan_telemetry", "shadow_plans", "retrospective_history",
              "analytics_snapshot", "scan_snapshots", "ticker_meta_cache",
-             "rs_cache", "fold_trades"}
+             "rs_cache", "fold_trades", "earnings_history"}
     assert part5 <= set(schema.METADATA.tables)
-    covered = {"scan_telemetry", "shadow_plans", "retrospective_history"} \
-        | set(NOT_IMPORTED)
+    covered = {"scan_telemetry", "shadow_plans", "retrospective_history",
+               "earnings_history"} | set(NOT_IMPORTED)
     assert part5 == covered, f"unaccounted stores: {sorted(part5 ^ covered)}"
 ```
 
@@ -739,13 +568,14 @@ Expected: every `test_the_importer_exists` parametrisation fails.
 
 - [ ] **Step 3: Write them**
 
-All three take `run_import`'s shape:
+All four take `run_import`'s shape:
 
 | Script | Source | Key | Loader |
 |---|---|---|---|
-| `import_telemetry.py` | `scan_telemetry.jsonl` | `at` | one JSON object per line; **skip a torn trailing line** |
-| `import_shadow.py` | `shadow_plans.jsonl` **and `shadow_plans.jsonl.1`** | `id` | both files, `.1` first — it is the older half, and importing it second would put the archive after the live log |
-| `import_retrospective.py` | `retrospective_history.json` | `day` | a plain list |
+| `import_telemetry.py` | `scan_telemetry.jsonl` | `seq` *(was `at`; not unique)* | one JSON object per line, scan rows **and** `type: deploy` markers, in file order; **skip a torn/invalid line** (the `audit_rows` precedent) |
+| `import_shadow.py` | `shadow_plans.jsonl` **and `shadow_plans.jsonl.1`** | `seq` *(was `id`)* | both files, `.1` first — it is the older half, and importing it second would put the archive after the live log |
+| `import_retrospective.py` | `retrospective_history.json` | `date` *(was `day`)* | a plain list |
+| `import_earnings.py` *(2026-09-30)* | `earnings_history.json` | `symbol` | `doc["symbols"].items()` → `{"symbol": k, **v}`; drop the top-level `updated_at` |
 
 `import_shadow.py` needs a note about the rotation slot:
 
@@ -761,11 +591,16 @@ carry — so it cannot use `compare()`'s keyed comparison. Give it a `main()`
 that verifies by **count plus a checksum of the whole set**, and say in a
 comment why a per-record key is unavailable here.
 
+*(2026-09-30: superseded by the positional-`seq` precedent above — number the
+source lines and the `ORDER BY id` table rows identically and `compare()`
+works keyed on `seq`, for telemetry and shadow alike. Keep the whole-set
+checksum only if `seq` alignment is rejected in review.)*
+
 - [ ] **Step 4: Run the tests and dry runs**
 
 ```bash
 python scripts/dev/testrun.py file tests/scripts/test_part5_importers.py
-for s in telemetry shadow retrospective; do
+for s in telemetry shadow retrospective earnings; do
   python scripts/db/import_$s.py --dry-run || echo "FAILED: $s"
 done
 ```
@@ -776,7 +611,8 @@ Expected: `0 failed`, every dry run exiting 0.
 
 ```bash
 git add scripts/db/import_telemetry.py scripts/db/import_shadow.py \
-        scripts/db/import_retrospective.py tests/scripts/test_part5_importers.py
+        scripts/db/import_retrospective.py scripts/db/import_earnings.py \
+        tests/scripts/test_part5_importers.py
 git commit -m "feat(v67): add Part 5 importers"
 ```
 
@@ -784,13 +620,40 @@ git commit -m "feat(v67): add Part 5 importers"
 
 ### Task P5-12: Part 5 parity and channel coverage
 
+> **2026-09-30 re-examination: UPDATED — two dependencies are unbuilt and one
+> P3 hand-off lands here.**
+> - `STORES`/`StoreSpec` exist on `main` (`scripts/db/parity_report.py:19`,
+>   `:125`) with fields `filename, key, repo_factory, from_repo_shape, loader,
+>   ignore_fields`; `parity()` reads the source with `read_json`, which cannot
+>   read JSONL. The P3-10 branch adds a `loader_takes_path=True` flag for
+>   exactly this (`settings_audit.jsonl`, `tuning_results/`) — use it once that
+>   branch has merged; if it has not, add it here with the same name.
+> - **`events.TABLE_CHANNELS` and `tests/db/test_trigger_coverage.py` are both
+>   created by P3-18 (unbuilt).** The two `events` tests below and the Step 4
+>   trigger-coverage run wait for P3-18; the parity half does not.
+> - **P3-20 hand-off.** P3-20's composite listener keeps a residual
+>   `FileWatcher` over files with no table (`scan_telemetry.jsonl`,
+>   `scan_snapshots.json`, `analytics_snapshot.json`, `scan_progress.json`,
+>   `.env`). Once this part maps `scan_telemetry`/`scan_snapshots`/
+>   `analytics_snapshot` to channels, remove those three from the residual set
+>   **at their stores' db stage** and extend P3-20's
+>   `test_residual_paths_exclude_every_table_backed_file` to cover them;
+>   `scan_progress.json` stays residual (P5-07 callout). If P3-20 has not
+>   landed, note it in P3-20's callout instead.
+> - Four registrations, not three: `earnings` joins (P5-08/P5-11). Keys follow
+>   P5-11's corrections — `telemetry` and `shadow` on positional `seq` (the
+>   P3 `_OrderedAuditRepo` precedent), `retrospective` on `date`, `earnings` on
+>   `symbol`. `telemetry` needs `from_repo_shape` to re-stringify `at` so it
+>   compares equal to the file's string, and all four compare file-`NaN` as
+>   equal to row-`None` (codec, v91).
+
 **Files:**
 - Modify: `scripts/db/parity_report.py`
 - Test: `tests/db/test_part5_coverage.py`
 
 **Interfaces:**
 - Consumes: `STORES`, `StoreSpec` (P2-06), `TABLE_CHANNELS` (P3-18).
-- Produces: `STORES` entries for the three imported stores.
+- Produces: `STORES` entries for the four imported stores.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -803,7 +666,7 @@ import pytest
 from scripts.db.parity_report import STORES
 from swingbot.core.db import events, notify
 
-REGISTERED = {"telemetry", "shadow", "retrospective"}
+REGISTERED = {"telemetry", "shadow", "retrospective", "earnings"}
 
 
 def test_every_imported_part5_store_is_registered():
@@ -823,7 +686,7 @@ def test_every_notify_channel_has_at_least_one_table():
 
 @pytest.mark.parametrize("table", ["shadow_plans", "retrospective_history",
                                    "ticker_meta_cache", "rs_cache",
-                                   "fold_trades"])
+                                   "fold_trades", "earnings_history"])
 def test_a_store_with_no_live_ui_raises_no_event(table):
     """A NOTIFY per shadow line would be one per scan item. These are absent
     from the map on purpose, and this test is where that purpose is written
@@ -838,21 +701,24 @@ python -m pytest tests/db/test_part5_coverage.py -q
 ```
 
 Expected: `test_every_imported_part5_store_is_registered` fails, naming all
-three.
+four.
 
 - [ ] **Step 3: Register them**
 
-Append three `StoreSpec` entries to `scripts/db/parity_report.py`.
-`telemetry` and `retrospective` are straightforward (`at` and `day` keys);
-`shadow` needs `ignore_fields={"id"}` and a JSONL loader, and its comparison is
-count-based for the reason P5-11 records.
+Append four `StoreSpec` entries to `scripts/db/parity_report.py`.
+`retrospective` (`date` key) and `earnings` (`symbol` key, loader flattening
+`symbols`) are straightforward; `telemetry` and `shadow` use a path-taking
+JSONL loader that numbers valid lines `seq`, and a repo wrapper that numbers
+`ORDER BY id` rows the same way — the P3 `settings_audit` precedent — so the
+comparison is keyed rather than count-based. *(2026-09-30: was "`at` and
+`day` keys" and a count-based shadow check; see the callout.)*
 
 - [ ] **Step 4: Run the tests**
 
 ```bash
 python scripts/dev/testrun.py file tests/db/test_part5_coverage.py
 python scripts/dev/testrun.py file tests/scripts/test_parity_report.py
-python scripts/dev/testrun.py file tests/db/test_trigger_coverage.py
+python scripts/dev/testrun.py file tests/db/test_trigger_coverage.py   # exists only after P3-18
 ```
 
 Expected: `0 failed` for all three.
@@ -885,7 +751,29 @@ someone can see, not one that silently overwrites.
     `config.SHADOW_RETENTION_DAYS` (default `"180"`)
   - `prune(now=None, dry_run=False) -> dict[str, int]` — rows deleted per table
 
-**Why these defaults.** A year of scan telemetry is ~250 rows (one per scan day)
+> **2026-09-30 re-examination: UPDATED (rationale figures; scope unchanged).**
+> - **Row-count premise was wrong.** Telemetry is one row per *scan*, not per
+>   scan day, plus every `!check` and every process boot: the local
+>   `data/scan_telemetry.jsonl` holds ~5,400 rows over 54 days (~100/day, ~1.1
+>   MB). A year is therefore tens of thousands of rows — still trivial for an
+>   `at DESC` index, so the 365-day default stands; the help text below is
+>   corrected. Pruning by `at` also prunes old deploy markers, which bounds how
+>   far back `admin/release_windows.windows()` can reconstruct release windows
+>   (it falls back to git tags only when *no* marker exists at all) — say so in
+>   the help.
+> - `shadow_plans` has no live producer (status block), so its prune normally
+>   deletes 0 rows; keep it — it is the replacement for the rotation slot the
+>   moment a caller is wired.
+> - `retrospective_history` needs no entry here: `_save_history` already trims
+>   to `RETROSPECTIVE_HISTORY_DAYS` and P5-05's db branch now mirrors that.
+>   `earnings_history` is one row per symbol and bounded by the watchlist.
+> - The "Database" section already exists in `config.FIELDS` on `main`
+>   (`DATABASE_URL`, `POSTGRES_PASSWORD`, `DB_STORES`, `config.py:1043-1058`);
+>   append the two fields after `DB_STORES`. `Field.key` is the attribute the
+>   registration test reads (`config.py:74-75`).
+
+**Why these defaults.** A year of scan telemetry is tens of thousands of rows
+(~100/day on 2026-09-30 data — one per scan and `!check`, plus boot markers)
 and answers "was the scanner slower last quarter". Six months of shadow lines
 covers the forward-gate windows E40 measures over, with room for a cohort that
 took longer to mature than expected. Both are one `.env` edit away from
@@ -994,8 +882,8 @@ Expected: `ModuleNotFoundError: No module named 'scripts.db.prune_logs'`.
 
 - [ ] **Step 3: Add the fields and the script**
 
-Append to `FIELDS` in `swingbot/config.py`, in the Database section P4-02 added
-(or a new one if Part 4 has not landed):
+Append to `FIELDS` in `swingbot/config.py`, in the existing "Database" section
+(after `DB_STORES`, `config.py:1054`):
 
 ```python
     Field("LOG_RETENTION_DAYS", "LOG_RETENTION_DAYS", "Database",
@@ -1003,7 +891,9 @@ Append to `FIELDS` in `swingbot/config.py`, in the Database section P4-02 added
           type="number", default="365", min=0, step=1,
           help="How long scan_telemetry rows are kept by scripts/db/prune_logs.py. "
                "0 means keep everything -- NOT delete everything. A year is "
-               "~250 rows and answers 'was the scanner slower last quarter'."),
+               "tens of thousands of rows (one per scan) and answers 'was the "
+               "scanner slower last quarter'. Deploy markers older than this "
+               "go too, so release windows older than it are no longer listed."),
     Field("SHADOW_RETENTION_DAYS", "SHADOW_RETENTION_DAYS", "Database",
           "Shadow-log retention (days)",
           type="number", default="180", min=0, step=1,
@@ -1128,6 +1018,16 @@ git commit -m "feat(v67): replace shadow-log rotation with visible retention"
 
 ### Task P5-14: Part 5 verification
 
+> **2026-09-30 re-examination: UPDATED (lists extended).** The folded-in
+> `earnings` store (P5-08) joins every store list below: it is history, so it
+> goes with the log stores (a table must exist; it is *not* in the
+> read-fallback set — its read is not a cache), and it joins the
+> no-file-at-db-stage and not-promoted-in-checkout sets. Readers named in the
+> fallback test are unchanged and all exist on `main` except the new
+> `_fold_outcomes` (P5-10) and the lazy meta-cache load (P5-08). Step 2's
+> directory list gains `tests/market/`, `tests/admin/`, `tests/infra/` (P5-02's
+> deploy-marker and release-window readers, P5-08's earnings test).
+
 **Files:**
 - Create: `tests/db/test_part5_exit.py`
 
@@ -1151,7 +1051,8 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 
 CACHE_STORES = ["ticker_meta_cache", "rs_cache", "scan_snapshots",
                 "analytics_snapshot"]
-LOG_STORES = ["scan_telemetry", "shadow_plans", "retrospective_history"]
+LOG_STORES = ["scan_telemetry", "shadow_plans", "retrospective_history",
+              "earnings_history"]
 
 
 @pytest.mark.parametrize("store", ["meta_cache", "rs_cache", "scan_snapshots",
@@ -1197,7 +1098,7 @@ def test_no_part5_store_writes_a_file_at_the_db_stage(tmp_path, monkeypatch,
     monkeypatch.setattr(config, "DB_STORES", ",".join(
         f"{s}:db" for s in ("telemetry", "shadow", "retrospective",
                             "analytics", "scan_snapshots", "meta_cache",
-                            "rs_cache", "fold_trades")))
+                            "rs_cache", "fold_trades", "earnings")))
     from swingbot.core.analytics import snapshots as analytics_snaps
     from swingbot.core.scanning import telemetry
     telemetry.log_scan_telemetry({"duration_s": 1.0})
@@ -1210,7 +1111,8 @@ def test_db_stores_is_not_promoted_in_this_checkout():
     from swingbot.core.db import stages
     promoted = stages.parse(config.DB_STORES)
     part5 = {"telemetry", "shadow", "retrospective", "analytics",
-             "scan_snapshots", "meta_cache", "rs_cache", "fold_trades"}
+             "scan_snapshots", "meta_cache", "rs_cache", "fold_trades",
+             "earnings"}
     assert not (set(promoted) & part5), (
         "DB_STORES promotes a Part 5 store in this checkout; that is a local "
         "setting, not something to commit")
@@ -1222,7 +1124,8 @@ def test_db_stores_is_not_promoted_in_this_checkout():
 python scripts/dev/testrun.py file tests/db/test_part5_exit.py
 python scripts/dev/testrun.py fast
 python -m pytest tests/db/ tests/scanning/ tests/analytics/ tests/edge/ \
-                 tests/backtesting/ tests/marketdata/ tests/tracking/ -q
+                 tests/backtesting/ tests/marketdata/ tests/tracking/ \
+                 tests/market/ tests/admin/ tests/infra/ -q
 ```
 
 Expected: `0 failed`, `0 xfailed` on all three. **Not** `full` — that is P6-12.
@@ -1236,5 +1139,5 @@ git commit -m "test(v67): pin Part 5 exit criteria"
 
 ---
 
-**Part 5 exit criteria are in `2026-08-29-v67-json-to-postgres_5b-snapshots.md`.**
+**Part 5 exit criteria are in `2026-08-29-v67-json-to-postgres_5a-logs.md`.**
 Confirm all six before treating this part as done.

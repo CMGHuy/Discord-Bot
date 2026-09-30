@@ -1,5 +1,7 @@
 # v67 — Part 1: Foundation
 
+> **Closed 2026-09-30 (re-examination).** Every task in this file is built. P1-01…P1-04 are on `main` (Part 1 squashed as `b77885e3`). This file moved to `plans/implemented/` on its own; the rest of v67 is live at the top level of `docs/superpowers/plans/` — see the index's `## Status` section. Checkboxes below were never ticked; the verdict comes from the commits.
+
 > Part of `2026-08-29-v67-json-to-postgres_0-index.md`. **Read the index's
 > Global Constraints before starting any task here** — they are implicitly part
 > of every task's requirements and are not repeated below.

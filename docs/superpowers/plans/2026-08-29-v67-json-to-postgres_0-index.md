@@ -74,15 +74,53 @@ table and exit criteria for the whole part.
 
 | Part | Files | Content | Tasks |
 |---|---|---|---|
-| 1 | `_1a-foundation-core.md` (P1-01…04) · `_1b-foundation-harness.md` (P1-05…09) · `_1c-foundation-events.md` (P1-10…14) | `core/db/` package, codec, engine, Alembic, compose service, test harness, stages, NOTIFY | 14 |
-| 2 | `_2a-trading-state-trades.md` (P2-01…05) · `_2b-trading-state-plans.md` (P2-06…12) · `_2c-trading-state-account.md` (P2-13…18) · `_2d-trading-state-state.md` (P2-19…22) | trades, plans, starred_plans, account, journal, state, watchlist | 22 |
-| 3 | `_3a-operational-flags.md` (P3-01…07) · `_3b-operational-jobs.md` (P3-08…15) · `_3c-operational-events.md` (P3-16…24) | admin/scan jobs, flags, heartbeat, killswitch, LISTEN/NOTIFY watcher replacement | 24 |
-| 4 | `_4a-settings-resolution.md` (P4-01…07) · `_4b-settings-admin.md` (P4-08…14) | `settings` table, DB→`.env`→default resolution, admin settings page, NOTIFY reload | 14 |
-| 5 | `_5a-logs.md` (P5-01…04) · `_5b-snapshots.md` (P5-05…07) · `_5c-caches.md` (P5-08…14) | scan_telemetry, shadow_plans, retrospective, snapshots, caches, retention | 14 |
+| 1 | `implemented/…_1a-foundation-core.md` (P1-01…04) · `implemented/…_1b-foundation-harness.md` (P1-05…09) · `_1c-foundation-events.md` (P1-10…14) | `core/db/` package, codec, engine, Alembic, compose service, test harness, stages, NOTIFY | 14 |
+| 2 | `implemented/…_2a-trading-state-trades.md` (P2-01…05) · `implemented/…_2b-trading-state-plans.md` (P2-06…12) · `implemented/…_2c-trading-state-account.md` (P2-13…18) · `implemented/…_2d-trading-state-state.md` (P2-19…22) | trades, plans, starred_plans, account, journal, state, watchlist | 22 |
+| 3 | `implemented/…_3a-operational-flags.md` (P3-01…07) · `_3b-operational-jobs.md` (P3-08…15) · `_3c-operational-events.md` (P3-16…24) | admin/scan jobs, flags, heartbeat, killswitch, LISTEN/NOTIFY watcher replacement | 24 |
+| 4 | `_4a-settings-resolution.md` (P4-01…06) · `_4b-settings-admin.md` (P4-07…14) | `settings` table, DB→`.env`→default resolution, admin settings page, NOTIFY reload | 14 |
+| 5 | `_5a-logs.md` (P5-01…04) · `_5b-snapshots.md` (P5-05…08) · `_5c-caches.md` (P5-09…14) | scan_telemetry, shadow_plans, retrospective, snapshots, caches, retention | 14 |
 | 6 | `_6a-cutover.md` (P6-01…06) · `_6b-cleanup.md` (P6-07…12) | merge revision, backup/restore drill, production import, stage flip, dead-path deletion, docs, full-suite gate | 12 |
 | 7 | `_7a-data-access.md` (P7-01…06) · `_7b-datasets.md` (P7-07…12) | read-only role, production snapshot pull, SSH tunnel, database profiles, query tool, DataFrame accessors, dataset export | 12 |
 | 8 | `_8-schema-evolution.md` (P8-01…06) | the add/rename/drop/promote recipe, the promotion tool exercised end-to-end, codec property tests | 6 |
 | 9 | `_9a-round-trip.md` (P9-01…04) · `_9b-data-migrations.md` (P9-05…08) | allowlisted local→prod publish, downgrade coverage, the value-level data-migration runner and its rollback, reversible drop, the round-trip walk | 8 |
+
+`implemented/…` means `docs/superpowers/plans/implemented/2026-08-29-v67-json-to-postgres_<part>.md`
+— a part file whose every task is on `main` moves there on its own (2026-09-30
+re-examination); the rest of the plan stays live. `grep -rn "^### Task P2-07"
+docs/superpowers/plans/` still finds any task, moved or not.
+
+## Status (re-examined 2026-09-30)
+
+Every live part file was re-checked against `main` @ `33ef5c2f` on 2026-09-30:
+drifted paths, symbols, line refs and revision ids were fixed in place, and
+design changes carry a `> **2026-09-30 re-examination:**` callout. Each live
+part's first file opens with its own status block — read that before a task.
+
+| Part | State |
+|---|---|
+| 1 | P1-01…12, P1-14 on `main` (squashed as `b77885e3`). **P1-13 (`notify.listen`) is not on `main`** — built as `fcae5b14` on the stale branch `worktree-2026-09-01-v67-json-to-postgres` and dropped by the squash; cherry-pick before P3-19/P4-08. |
+| 2 | **Done** — all 22 tasks on `main`; v91 fixed the import defects the first production import found. |
+| 3 | P3-01…09 on `main`. **P3-10…17 built on unmerged branch `2026-09-29-v67-p3-10-scheduled-jobs`** (8 commits). P3-18…24 unbuilt; P3-24 records a real gap — admin writes the trigger/pause `.flag` files directly, so at `flags:db` those buttons would be silently ignored. |
+| 4 | Unbuilt. Blocked on P1-13 (P4-08) and the P3 branch merging (P4-05/07/12 edit the same audit helpers). |
+| 5 | Unbuilt. `earnings_history.json` (added off-plan 2026-09-14) routed into P5-08. |
+| 6 | P6-01, P6-03, P6-04 **done**; P6-06's Part 2 import done by v91 (`reimport_production.sh`). Planned ids renumbered: v91 took `p6_001`, so the trigger sweep is `p6_002`. `db-stage-blocker` fixes for P6-07 merged 2026-09-30. |
+| 7–9 | Unbuilt. `test_migrations.py::ID_RE` only accepts `p[1-6]` — P7-01 widens it. |
+
+**Production (measured 2026-09-30):** alembic at `p6_001`,
+`DB_STORES=watchlist:dual,state:dual`, nightly `backup_db.sh` cron at 03:00 UTC
+with dumps landing, v91's one-shot `v91_dual_check.sh` scheduled 2026-10-01
+21:00 UTC. Every other store is still JSON-only.
+
+**Open decisions for the partner** (raised by the re-examination, not yet answered):
+1. Flipping a store to `db` before P3-19's DB listener ships stops live SPA
+   updates for it — wait for P3-19, or accept refresh-only?
+2. `scan_progress.json` and `market_data_state.json` currently stay files
+   (P6-08 `KEEPS`), which is why P3-20 now runs a composite DB listener +
+   narrowed file watcher. Give `scan_progress` a table instead?
+3. P4-11: removing the Docker-socket mount disables the admin restart button on production.
+4. P7-02/P7-03: a dev-only published port for the local `db`, and an
+   `SSH_HETZNER_OPTS` hook in the uncommitted `ssh-hetzner.sh` so a tunnel can go through it.
+5. P8-02's promotion example field: `plan_id` (needs null normalisation first) or `ledger`.
 
 **Read one task, not one part** — `/task-brief P2-07`, or
 `grep -n "^### Task P2-07" -A 120 docs/superpowers/plans/2026-08-29-v67-*_2b-*.md`.
@@ -260,7 +298,8 @@ edit; a row with no change is still recorded, so nobody re-derives the same
 "no, it doesn't touch this" answer twice.
 
 Checked as of 2026-09-10 against every plan/spec numbered after v67 that
-exists at the top level or in `implemented/` (v68–v77):
+exists at the top level or in `implemented/` (v68–v77), and extended on
+2026-09-30 to v78–v114 (every number exists, including `no-lift/`):
 
 | Plan | Touches a migrated store? | Verdict |
 |---|---|---|
@@ -272,6 +311,34 @@ exists at the top level or in `implemented/` (v68–v77):
 | v73 plan-view-projection (implemented) | No — spec states "No new stored fields on plans.json — deriving keeps one authority"; verified no write path in either implemented part | No change |
 | v74 injectable-scan-params (open) | Adds `search_class` to `config.py`'s `Field` dataclass (Task A2), but Part 4's `settings` table stores values generically over every `config.FIELDS` entry keyed by `f.key` — a new `Field` attribute needs no DB column | No change |
 | v77 live-tape (open) | Persists only `tape.symbols` inside the **existing** `ui_preferences` doc; P3-01's `ui_preferences` table has no promoted columns beyond `owner`, so the generic `doc JSONB` column absorbs it. Its own spec reasons this through and states "no new file lands in `data/`, so v67's `_DATA_PATHS` enumeration is unchanged" | No change |
+| v78 exit-quality-analytics (implemented) | No — read-side analytics only | No change |
+| v79 scaled-out-leg-accounting (implemented) | Yes — `plans.legs_realized[]` items gain `closed_at` (`274098a9`) | **Absorbed** — nested key lives in plans `doc`; Part 2 is built and needs no column |
+| v80 terminal-foundation (implemented) | No — UI | No change |
+| v81 execution-feed (implemented) | Yes — `notified_stop`, `pending_notice` on plans | Already routed — P2-07 v81 note |
+| v82 earnings-measurement (implemented) | No — `market_data/earnings/` (stays a file) and `data/v82/` outputs | No change |
+| v83 mine-news-crawl (open) | No — in-memory TTL cache | No change |
+| v84 strategy-rescue (implemented) | No — `validation_registry.json` stays in git; `data/v84_*` are measurement outputs | No change |
+| v85 dashboard-shell-redesign (implemented) | Yes — `{"type":"deploy"}` rows in `scan_telemetry.jsonl`; `minSampleN` in `ui_preferences` | Routed — P5-02 callout; `ui_preferences` doc absorbs the key |
+| v86 cohort-risk-label (implemented) | Yes — `cohort_label`, `cohort_stats`, `risk_features` on plans, trades, journal | **Absorbed** — doc-only keys; `cohort_registry.json` added to P6-08 `KEEPS` |
+| v87 intraday-bar-archive (implemented) | Plans gain `issued_at`; the archive is `market_data/` | Already routed — P2-07 v87 note |
+| v88 / v90 / v100 armed entries (implemented) | No — backtest-only; live ARMED lifecycle never built; outputs under `data/v88/`, `data/v90/`, `data/arms/` | No change |
+| v89 ui-integrity-and-spacing (implemented) | No — API-only fields | No change |
+| v91 postgres-import-correctness (open) | This plan's own correctness follow-up; took revision id `p6_001` | Routed — Part 6 ids renumbered |
+| v92 exit-quality-harvest (implemented) | Yes — `TradePlanV2.stall_exit_day` | **Absorbed** — plans `doc` |
+| v93 strategy-path-live (implemented) | Yes — `ledger`, `first_seen_price`, `entry_context` on plans/trades/journal; `weak`, `by.ledger` in the analytics snapshot | **Absorbed** for Part 2 stores (`ledger` filtered in Python, no column; candidate for P8-02's promotion example); snapshot routed — P5-06 callout |
+| v94–v99 (v97/v98 no-lift, v99 open) | No — UI, tooling, research; `data/universe/etfs.json` is reference data | No change |
+| v101 / v102 / v105 (no-lift) | No — v102 adds the `data/backtest_cache_ext/` CSV cache, which stays a file | No change |
+| v103 fib-level-stop (implemented), v108 ema-rearm (implemented) | No | No change |
+| v104 structural-stops-and-shorts (implemented) | Yes — `TradePlanV2.hold_cap_bars` | **Absorbed** — plans `doc` |
+| v106 alpaca-data-provider (open, executed, in soak) | Yes — telemetry gains `data_sources`, `cold_fetch_s`, `price_sources`; `ALPACA_*` config fields | Routed — P5-02 callout; config fields go through Part 4's generic `settings` rows |
+| v107 / v109 / v110 / v111 | No — tooling, spot quotes (not persisted), in-code notification registry, log lines | No change |
+| v112 pit-training-universe (spec) / v113 bearish-day-coverage (implemented) | No — static `data/universe/*` reference files; v113 only adds an `entry_type` value | No change |
+| v114 scenario-stop-band (open) | No — config field and gating function | No change |
+
+**Off-plan `data/` files found 2026-09-30:** `earnings_history.json`
+(`core/market/earnings_history.py`, routed into P5-08), `scan_progress.json`
+(`core/scanning/progress_store.py`, stays a file, see P3-20/P6-09) and
+`market_data_state.json` (`core/marketdata/data_refresh.py`, stays a file).
 
 **Keep this table current.** A plan authored after 2026-09-10 that adds,
 moves or reshapes a field in a store this plan migrates gets a row here

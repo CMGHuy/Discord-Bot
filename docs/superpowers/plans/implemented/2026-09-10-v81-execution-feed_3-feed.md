@@ -837,7 +837,7 @@ git commit -m "feat(v81): route plan events to the execution feed and acknowledg
 
 **Files:**
 - Modify: `tests/presentation/test_surface_agreement.py` (append one test)
-- Modify: `docs/superpowers/plans/2026-08-29-v67-json-to-postgres_2b-trading-state-plans.md` (Task P2-07)
+- Modify: `docs/superpowers/plans/implemented/2026-08-29-v67-json-to-postgres_2b-trading-state-plans.md` (Task P2-07)
 - Create: `scripts/dev/preview_execution_feed.py`
 
 **Interfaces:**
@@ -870,7 +870,7 @@ Expected: PASS.
 
 - [ ] **Step 2: Record the ledger in v67's P2-07**
 
-In `docs/superpowers/plans/2026-08-29-v67-json-to-postgres_2b-trading-state-plans.md`,
+In `docs/superpowers/plans/implemented/2026-08-29-v67-json-to-postgres_2b-trading-state-plans.md`,
 replace the line:
 
 ```markdown
@@ -1034,7 +1034,7 @@ Paste the complete output to the human partner and **wait for them to read it**
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tests/presentation/test_surface_agreement.py docs/superpowers/plans/2026-08-29-v67-json-to-postgres_2b-trading-state-plans.md scripts/dev/preview_execution_feed.py
+git add tests/presentation/test_surface_agreement.py docs/superpowers/plans/implemented/2026-08-29-v67-json-to-postgres_2b-trading-state-plans.md scripts/dev/preview_execution_feed.py
 git commit -m "test(v81): feed stop agrees with plan_view; v67 ledger note; preview script"
 ```
 

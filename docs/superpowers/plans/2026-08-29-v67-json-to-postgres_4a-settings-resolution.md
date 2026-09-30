@@ -1,17 +1,44 @@
-# v67 — Part 4: Settings (tasks P4-01…P4-07)
+# v67 — Part 4: Settings (tasks P4-01…P4-06)
+
+> **Status (2026-09-30 re-examination): unbuilt — no P4 task has started.**
+> Parts 1–2 and P3-01…P3-09 are on `main`; P3-10…P3-17 sit on the unmerged
+> branch `2026-09-29-v67-p3-10-scheduled-jobs`. What changed since authoring:
+> the Alembic graph now ends at `p6_001` (after the `p6_000` merge), and
+> `tests/db/test_migrations.py::test_exactly_one_head` forbids a second head, so
+> `p4_001` chains off `p6_001` rather than `p1_003`. There is no
+> `swingbot/core/db/events.py`: channels live in `notify.CHANNELS` (which
+> already contains `settings`) and `trigger_ddl(table, channel)` takes the
+> channel directly. The settings **save** is no longer in `admin/helpers.py` — it
+> is the Flask route `save_settings()` in `swingbot/admin/api_v1/system.py` (the
+> Jinja settings routes are gone; the SPA settings workspace is
+> `frontend/src/app/workspaces/system/settings-tab.ts` and needs no change), and
+> every read the route makes (`_settings_document`, `_effective_form`,
+> `_diff_for`) goes through `_read_env_values()`. `DB_STORES` is itself a
+> non-sensitive `Field`, so it must be excluded from DB resolution (see P4-02).
+> The bot's reload side effects (log level, scan interval, v110 CONFIG notices)
+> run in `swingbot/commands/scanning/loops.py:config_watcher` and
+> `bot_core._handle_reload_signal`, not in `bot.py` (see P4-08/P4-09). Loggers
+> must be `logging.getLogger(__name__)` (v111, `tests/infra/test_logger_names.py`).
+> Several named regression test files no longer exist; substitutes are given
+> per task. **Blockers:** (1) P1-13's `notify.listen()` was never built —
+> P4-08 cannot start until it is; (2) merge the P3 branch first — P3-12 makes
+> `append_settings_audit`/`read_settings_audit` stage-aware in the same
+> `helpers.py` region P4-05/P4-07/P4-12 edit, and its `settings_audit` trigger
+> emits on the `settings` channel P4-08 listens to.
 
 > Part of `2026-08-29-v67-json-to-postgres_0-index.md`. **Read the index's
 > Global Constraints before starting any task here.** Part 1 must be merged to
-> `main` before this part begins. Tasks P4-08…P4-14 are in
+> `main` before this part begins. Tasks P4-07…P4-14 are in
 > `2026-08-29-v67-json-to-postgres_4b-settings-admin.md`.
 
 **Spec:** `docs/superpowers/specs/2026-08-29-v67-json-to-postgres-design.md`
 (section 4).
 
 `swingbot/config.py` already carries the split this part needs. `FIELDS`
-(`config.py:95`) is a declarative registry where each `Field` (`config.py:73`)
-knows whether it is `sensitive` and whether it is `hot_reloadable`, and
-`reload()` (`config.py:909`) updates module globals **in place** — so
+(`config.py:99`) is a declarative registry where each `Field` (`config.py:74`)
+knows whether it is `sensitive` and whether it is `hot_reloadable` (it also
+carries v74's `search_class`, irrelevant here), and
+`reload()` (`config.py:1209`) updates module globals **in place** — so
 `config.XXX` readers everywhere see new values without re-importing.
 
 The change is therefore confined to **where `reload()` sources values**:
@@ -28,6 +55,15 @@ Part 4 owns `p4_*`, hanging off `p1_003` — **not** off Parts 2 or 3, which run
 concurrently with this one. Two heads across parts is expected and Part 6's
 merge revision resolves it.
 
+> **2026-09-30 re-examination:** superseded. Parts 2 and 3 already merged via
+> `p6_000` and the head is `p6_001_float_money_columns`;
+> `tests/db/test_migrations.py::test_exactly_one_head` fails on a second head.
+> `p4_001` therefore uses `down_revision = "p6_001"` (re-check
+> `alembic heads` immediately before writing it — if another part lands a
+> revision first, chain off that instead). `test_every_revision_id_is_part_prefixed`
+> accepts `p4_001`, and `test_migrations_produce_exactly_the_declared_schema`
+> requires the migration to match `schema.py` column for column.
+
 | Revision | Content |
 |---|---|
 | `p4_001` | `settings` table + its NOTIFY trigger |
@@ -41,7 +77,10 @@ merge revision resolves it.
 - **Group 4a (parallel):** P4-06 and P4-07 — `_build_env_text`/`_write_env_text`
   and the export/import pair. Both live in `admin/helpers.py`, so they are
   **sequential with each other** despite being independent in subject. Named
-  here so nobody re-derives it.
+  here so nobody re-derives it. (2026-09-30: P4-05 now also edits
+  `admin/api_v1/system.py`; P4-06/P4-07 stay helpers-only, so the rule holds.
+  P4-07 now lives at the top of `_4b` to keep this file under 1500 lines; its
+  order is unchanged — after P4-06, before P4-08.)
 - **Sequential: the whole of `_4b` after `_4a`.** The listener, the SIGHUP
   path and the import-time-capture audit all assume DB resolution is live.
 
@@ -63,15 +102,19 @@ merge revision resolves it.
 
 **Files:**
 - Modify: `swingbot/core/db/schema.py`
-- Modify: `swingbot/core/db/events.py` (map `settings` → the `settings` channel)
+- ~~Modify: `swingbot/core/db/events.py`~~ — no such module (2026-09-30);
+  `notify.CHANNELS` already contains `settings`, nothing to add
 - Create: `swingbot/core/db/repositories/settings.py`
 - Create: `swingbot/core/db/migrations/versions/p4_001_settings.py`
 - Modify: `tests/db/conftest.py`
 - Test: `tests/db/test_settings_repository.py`
 
 **Interfaces:**
-- Consumes: `register`, `standard_columns` (P1-04); `Repository` (P1-09);
-  `trigger_ddl` (P1-12).
+- Consumes: `register`, `standard_columns` (P1-04); `Repository` (P1-09,
+  `swingbot/core/db/repositories/base.py` — `get`/`list_all`/`count`/`upsert`/
+  `delete` exist with the keyword-only `conn=` used below);
+  `trigger_ddl(table, channel)` and `CHANNELS` (P1-12, `swingbot/core/db/notify.py`);
+  `engine.transaction(conn=None)`.
 - Produces:
   - table `settings` — `key TEXT UNIQUE`, `value JSONB`, `updated_by TEXT`
   - `SettingsRepository` with `all_settings() -> dict[str, Any]`,
@@ -160,9 +203,12 @@ def test_removing_an_absent_key_reports_false(repo, db_conn):
     assert repo.remove("NOPE", conn=db_conn) is False
 
 
-def test_the_settings_table_maps_to_the_settings_channel():
-    from swingbot.core.db.events import TABLE_CHANNELS
-    assert TABLE_CHANNELS["settings"] == "settings"
+def test_the_settings_table_notifies_on_the_settings_channel():
+    # 2026-09-30: there is no events.TABLE_CHANNELS; the channel is the
+    # trigger_ddl argument and must be one of notify.CHANNELS.
+    from swingbot.core.db import notify
+    assert "settings" in notify.CHANNELS
+    assert "'settings'" in notify.trigger_ddl("settings", "settings")
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -196,11 +242,16 @@ settings = register(
 )
 ```
 
-Add to `swingbot/core/db/events.py`'s `TABLE_CHANNELS`:
+~~Add to `swingbot/core/db/events.py`'s `TABLE_CHANNELS`~~ — 2026-09-30: no
+such module. The channel is passed to `trigger_ddl("settings", "settings")` in
+the migration and the conftest loop; `notify.CHANNELS` already lists
+`settings`.
 
-```python
-    "settings": "settings",
-```
+> **2026-09-30 re-examination:** the `settings` channel is **shared** — the
+> Part 3 `settings_audit` table's trigger also emits on it (see the
+> `tests/db/conftest.py` loop). Every audited save therefore fires two
+> notifications. That is harmless because `reload_settings()` is idempotent,
+> but P4-08's listener must not assume one NOTIFY per row write.
 
 - [ ] **Step 4: Write the repository**
 
@@ -287,8 +338,10 @@ row's existence was already checked above.
 - [ ] **Step 5: Write the migration and extend the harness**
 
 Create `swingbot/core/db/migrations/versions/p4_001_settings.py` on `p2_001`'s
-shape: `down_revision = "p1_003"`, an explicit `op.create_table`, and
-`op.execute(trigger_ddl("settings", "settings"))`.
+shape: `down_revision = "p6_001"` (2026-09-30: was `"p1_003"`; the graph head is
+now `p6_001` and a second head fails `test_exactly_one_head`), an explicit
+`op.create_table`, and `op.execute(trigger_ddl("settings", "settings"))`;
+`downgrade()` runs `drop_trigger_ddl("settings")` then drops the table.
 
 Add `("settings", "settings")` to the trigger loop in `tests/db/conftest.py`.
 
@@ -296,18 +349,20 @@ Add `("settings", "settings")` to the trigger loop in `tests/db/conftest.py`.
 
 ```bash
 alembic upgrade head
-alembic downgrade p1_003 && alembic upgrade head
+alembic downgrade p6_001 && alembic upgrade head
 python scripts/dev/testrun.py file tests/db/test_settings_repository.py
-python scripts/dev/testrun.py file tests/db/test_trigger_coverage.py
+python scripts/dev/testrun.py file tests/db/test_migrations.py
+python scripts/dev/testrun.py file tests/db/test_notify_ddl.py
 ```
 
-Expected: `0 failed`. `test_trigger_coverage.py` is Part 3's; if that part has
-not landed, skip it.
+Expected: `0 failed`. (2026-09-30: `tests/db/test_trigger_coverage.py` never
+existed; `test_migrations.py` is the one that catches a second head or a
+schema/migration mismatch.)
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add swingbot/core/db/schema.py swingbot/core/db/events.py \
+git add swingbot/core/db/schema.py \
         swingbot/core/db/repositories/settings.py \
         swingbot/core/db/migrations/versions/p4_001_settings.py \
         tests/db/conftest.py tests/db/test_settings_repository.py
@@ -318,13 +373,48 @@ git commit -m "feat(v67): add the settings table and repository"
 
 ### Task P4-02: DB → .env → default resolution
 
-The one change that matters in this part. `_apply_env()` (`config.py:848`)
+The one change that matters in this part. `_apply_env()` (`config.py:1144`)
 reads every `FIELDS` entry from `os.environ` and sets the module global. It
 gains one source above that, for non-sensitive fields only.
 
 **Files:**
-- Modify: `swingbot/config.py` (`_apply_env` `:848`)
+- Modify: `swingbot/config.py` (`_apply_env` `:1144`)
 - Test: `tests/test_config_db_resolution.py`
+
+> **2026-09-30 re-examination — three design corrections, apply before Step 3:**
+>
+> 1. **Bootstrap fields are `.env`-only too.** `DB_STORES` (`config.py:1054`)
+>    is a non-sensitive `Field`, so as written a `DB_STORES` row would decide
+>    which stage the settings store is on — a self-referential switch that can
+>    move every other store off `json` from a table nobody audits. Add
+>    `_ENV_ONLY = frozenset({"DB_STORES"})` and make `_resolve` skip the DB for
+>    `f.sensitive or f.key in _ENV_ONLY`. (`DATABASE_URL` is already
+>    `sensitive=True`.) Extend `test_a_sensitive_field_ignores_the_database`
+>    with a `DB_STORES` row, and have P4-04/P4-05/P4-07 skip `_ENV_ONLY` keys
+>    exactly as they skip sensitive ones.
+> 2. **Import-time ordering.** `_apply_env()` first runs at module import
+>    (`config.py:1197`), when neither `config.DB_STORES` nor
+>    `config.DATABASE_URL` exists yet — `stages.stage_for()` and
+>    `engine.get_engine()` both read them off the module. Hoisting
+>    `_db_settings()` above the loop would therefore raise `AttributeError`,
+>    be swallowed, and log a traceback on **every** process start. Do it in two
+>    passes: first apply the sensitive + `_ENV_ONLY` fields from `os.environ`,
+>    then call `_db_settings()`, then resolve the rest. Add a test that a fresh
+>    `importlib.reload(config)` with `DB_STORES=""` logs no warning. Extract the
+existing per-field cast/fallback body into `_apply_field(f, raw, g, changed)`
+so the two-pass `_apply_env` stays under complexity 15.
+> 3. **Gate on `reads_db` only.** The strangler's `dual` stage means "write
+>    both, read files" (`stages.py`); resolving from the DB at `dual` breaks that
+>    contract. `_db_settings()` returns `{}` unless `stages.reads_db("settings")`.
+>
+> **Test fixtures:** `_apply_env()` re-assigns `config.DB_STORES` from the
+> environment, so `monkeypatch.setattr(config, "DB_STORES", ...)` alone is
+> undone by the first `_apply_env()` call (and
+> `test_apply_env_still_reports_what_changed` would then see the second call
+> at the `json` stage). Every `db_stage` fixture in Part 4 must also
+> `monkeypatch.setenv("DB_STORES", "settings:db")`. The regression files are
+> `tests/test_config_reload.py` and `tests/test_config_flags.py` —
+> `tests/test_config.py` does not exist.
 
 **Interfaces:**
 - Consumes: `settings_repo` (P4-01), `stages`.
@@ -342,7 +432,7 @@ is ignored rather than used.
 **Why `_db_settings()` degrades instead of raising.** This is the third
 documented exception to the fail-fast rule, alongside the heartbeat and the
 regenerable caches, and its reasoning is specific: `_apply_env()` runs at
-**module import time** (`config.py:901`). A raise there makes `import swingbot.config`
+**module import time** (`config.py:1197`). A raise there makes `import swingbot.config`
 fail, which makes every entry point fail, including the admin UI someone would
 use to fix the connection string. Falling back to `.env` and the field defaults
 leaves the bot running on its last-known-good configuration and logs loudly.
@@ -526,11 +616,13 @@ why this task adds no new error handling inside the loop.
 
 ```bash
 python scripts/dev/testrun.py file tests/test_config_db_resolution.py
-python scripts/dev/testrun.py file tests/test_config.py
+python scripts/dev/testrun.py file tests/test_config_reload.py
+python scripts/dev/testrun.py file tests/test_config_flags.py
 ```
 
-Expected: `0 failed` for both. The second is the regression check that the
-`json` stage — every existing test's stage — resolves exactly as before.
+Expected: `0 failed` for all. The last two are the regression check that the
+`json` stage — every existing test's stage — resolves exactly as before
+(2026-09-30: `tests/test_config.py` does not exist).
 
 - [ ] **Step 5: Commit**
 
@@ -543,14 +635,22 @@ git commit -m "feat(v67): resolve non-sensitive config DB -> .env -> default"
 
 ### Task P4-03: reload() picks up a database change
 
-`reload()` (`config.py:909`) re-reads `.env` and calls `_apply_env()`. Since
+`reload()` (`config.py:1209`) re-reads `.env` and calls `_apply_env()`. Since
 P4-02 made `_apply_env` read the DB too, `reload()` already works — this task
 adds the *entry point* the bot's listener will call, and the test that says
 reloading needs no `.env` write.
 
 **Files:**
-- Modify: `swingbot/config.py` (`reload` `:909`, `auto_reload_if_changed` `:934`)
+- Modify: `swingbot/config.py` (`reload` `:1209`, `auto_reload_if_changed` `:1232`)
 - Test: `tests/test_config_reload_db.py`
+
+> **2026-09-30 re-examination:** `reload()` and `reload_settings()` would share
+> the masked change-logging loop verbatim; extract it as
+> `_log_changes(changed, source)` rather than copying it. The `db_stage`
+> fixture below needs `monkeypatch.setenv("DB_STORES", "settings:db")` as well
+> as the `setattr` (see P4-02's callout). `ENV_PATH` is `config.py:53`. The
+> first non-sensitive, non-hot-reloadable field today is `ADMIN_USERNAME`
+> (text), so the last test's `"changed-value"` casts cleanly.
 
 **Interfaces:**
 - Consumes: `_db_settings` (P4-02).
@@ -687,10 +787,12 @@ extra because DB changes arrive by NOTIFY rather than by polling.
 
 ```bash
 python scripts/dev/testrun.py file tests/test_config_reload_db.py
-python scripts/dev/testrun.py file tests/test_config.py
+python scripts/dev/testrun.py file tests/test_config_reload.py
+python scripts/dev/testrun.py file tests/commands/test_config_watcher_reload.py
 ```
 
-Expected: `0 failed`.
+Expected: `0 failed`. (2026-09-30: `tests/test_config.py` does not exist; the
+watcher test guards `auto_reload_if_changed`, which stays untouched.)
 
 - [ ] **Step 5: Commit**
 
@@ -715,6 +817,19 @@ bot reads.
 - Consumes: `settings_repo` (P4-01), `config.FIELDS`, `dotenv_values`.
 - Produces: `load_env_settings(env_path=None) -> dict[str, Any]` and a CLI with
   `--dry-run`.
+
+> **2026-09-30 re-examination:** paths and symbols hold (`scripts/db/`,
+> `tests/scripts/` exist; `dotenv_values`, `config._cast`, `config.ENV_PATH`
+> exist). Changes: skip P4-02's `_ENV_ONLY` keys (`DB_STORES`) as well as
+> sensitive ones, and add a test for it. The other importers
+> (`scripts/db/import_*.py`) share `scripts/db/import_common.py`
+> (`ImportReport`, the `VERDICT` line) — reuse its verdict rendering rather
+> than a bespoke print. `scripts/db/parity_report.py`'s `STORES` is keyed on
+> JSON files and has no `.env` source; either register a `settings` spec with
+> a `.env` loader or add it to an exempt map with the reason "parity is P4-04's
+> before/after-globals test", in a Part 4 analogue of
+> `tests/db/test_part3_coverage.py` (on the P3 branch). The fixture needs
+> `monkeypatch.setenv("DB_STORES", "settings:db")` (P4-02 callout).
 
 **The property the import must have:** after it runs, `_apply_env()` must
 produce **exactly the same module globals** as before. That is what the test
@@ -899,21 +1014,58 @@ git commit -m "feat(v67): seed the settings table from .env"
 ### Task P4-05: The admin settings page writes rows
 
 `save_settings` currently rebuilds the whole `.env` from the submitted form via
-`_build_env_text` (`admin/helpers.py:66`) and rewrites it in place. At the db
+`_build_env_text` (`admin/helpers.py:59`) and rewrites it in place. At the db
 stage it writes rows for the non-sensitive fields and touches `.env` only for
 secrets.
 
 **Files:**
-- Modify: `swingbot/admin/helpers.py` (`save_settings` — find it with
-  `grep -n "def save_settings" swingbot/admin/helpers.py`)
+- Modify: `swingbot/admin/api_v1/system.py` (`save_settings` route `:231`,
+  `_settings_document` `:93`, `_effective_form` `:164`, `_diff_for` `:197`)
+- Modify: `swingbot/admin/helpers.py` (`split_form_values`, `current_values`,
+  `persist_settings` — new)
 - Test: `tests/admin/test_save_settings_db.py`
 
 **Interfaces:**
 - Consumes: `settings_repo` (P4-01), `stages`, `append_settings_audit`
-  (existing).
+  (existing; stage-aware once P3-12 merges).
 - Produces: `split_form_values(form) -> tuple[dict, dict]` — `(secrets,
   non_secrets)`, both keyed by `Field.key`, so the two destinations are decided
   in one place rather than at each write.
+  2026-09-30 additions: `current_values() -> dict` (the raw `KEY -> str`
+  mapping the settings UI should treat as "what is saved": `.env` values with
+  the settings table layered on top when `reads_db("settings")`), and
+  `persist_settings(form, existing) -> None` (the write half of the route).
+
+> **2026-09-30 re-examination — the save moved.** There is no
+> `helpers.save_settings`: the only save is the Flask route
+> `swingbot/admin/api_v1/system.py:save_settings()` (PUT
+> `/api/v1/system/settings`, body `{"settings": {...}}`), which reads a partial
+> body, overlays it on `_read_env_values()` in `_effective_form`, diffs with
+> `_diff_for`, then does `_write_env_text(_build_env_text(form, existing))`,
+> `append_settings_audit(diff)` and `_hot_reload_bot_container()`. The Jinja
+> routes are gone. So:
+>
+> - Put the branching write (Step 3's body) in a new
+>   `helpers.persist_settings(form, existing)` and have the route call it in
+>   place of its `_write_env_text(...)` line. The `form` it receives is the full
+>   effective form (checkboxes present as `"on"` or absent), so Step 3's
+>   checkbox handling is correct as written.
+> - Replace every `_read_env_values()` in `system.py`'s settings path
+>   (`_settings_document`, `_effective_form`, `_diff_for`, `save_settings`)
+>   with `helpers.current_values()`. Otherwise, at the db stage, the page shows
+>   `.env`'s stale copy, the diff's "old" side is wrong, and an omitted key is
+>   overlaid from `.env` and **written back over the DB row**.
+>   `current_values()` stringifies DB values exactly as P4-02's `_resolve`
+>   does, and never returns a sensitive/`_ENV_ONLY` key from the DB.
+> - Tests call the route, not a helper: use the `admin_app`/`client` fixtures
+>   in `tests/admin/conftest.py`, log in as `tests/admin/test_api_v1_system_settings.py`
+>   does, and PUT `{"settings": {...}}`. Read "`helpers.save_settings(X)`" in
+>   the tests below as `logged_in.put("/api/v1/system/settings", json={"settings": X})`.
+>   Keep the autouse `no_docker` stub from that file. `admin_app` reloads
+>   `helpers`, so patch `helpers.ENV_PATH` via the fixture, not by hand.
+> - The SPA's live "settings" event (`swingbot/admin/events/watcher.py:116`)
+>   is driven by `.env` mtime; a row-only save will not fire it. Acceptable
+>   until the admin-side LISTEN replaces the watcher, but note it in the commit.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1000,7 +1152,9 @@ def test_a_checkbox_round_trips_as_a_boolean(db_stage):
 
 `save_settings`'s real signature may differ from `save_settings(form)` — read
 it before writing these tests and match it exactly, including whether it
-returns a diff.
+returns a diff. (2026-09-30: it does — it is the zero-argument Flask route
+described in the callout above, returning `{"diff", "restart_required",
+"hot_reload"}`; `split_form_values` stays a plain helper test.)
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -1032,7 +1186,12 @@ def split_form_values(form) -> tuple[dict, dict]:
     return secrets, non_secrets
 ```
 
-and in `save_settings`, before the existing `_build_env_text` call:
+and in `save_settings`, before the existing `_build_env_text` call
+(2026-09-30: i.e. in the body of the new `helpers.persist_settings(form,
+existing)`, which the `system.py` route calls in place of its
+`_write_env_text(_build_env_text(form, existing))` line; `split_form_values`
+must also drop `_ENV_ONLY` keys from `non_secrets` — at the db stage they
+still go to `.env`):
 
 ```python
     from swingbot.core.db import stages
@@ -1068,16 +1227,19 @@ what a checkbox change looks like.
 
 ```bash
 python scripts/dev/testrun.py file tests/admin/test_save_settings_db.py
-python scripts/dev/testrun.py file tests/admin/test_helpers.py
-python scripts/dev/testrun.py file tests/admin/test_api_v1_system.py
+python scripts/dev/testrun.py file tests/admin/test_api_v1_system_settings.py
+python scripts/dev/testrun.py file tests/admin/test_settings_v2.py
 ```
 
-Expected: `0 failed` for all three.
+Expected: `0 failed` for all three. (2026-09-30: `tests/admin/test_helpers.py`
+and `tests/admin/test_api_v1_system.py` do not exist; the two above are the
+settings-endpoint and settings-page suites.)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add swingbot/admin/helpers.py tests/admin/test_save_settings_db.py
+git add swingbot/admin/helpers.py swingbot/admin/api_v1/system.py \
+        tests/admin/test_save_settings_db.py
 git commit -m "feat(v67): write settings rows from the admin page"
 ```
 
@@ -1085,13 +1247,23 @@ git commit -m "feat(v67): write settings rows from the admin page"
 
 ### Task P4-06: Narrow _build_env_text to secrets
 
-`_build_env_text` (`helpers.py:66`) reconstructs the **whole** `.env` from the
+`_build_env_text` (`helpers.py:59`) reconstructs the **whole** `.env` from the
 form on every save — which is why toggling one column used to rewrite every
 setting the bot has. At the db stage it emits only the sensitive fields, plus
 the hand-added custom variables it has always preserved.
 
+> **2026-09-30 re-examination:** signature `_build_env_text(form, existing: dict)`
+> and the body shown in Step 3 still match `main`. Two adjustments: "sensitive"
+> in `secrets_only` means `f.sensitive or f.key in config._ENV_ONLY` (P4-02) —
+> otherwise the db-stage rewrite drops `DB_STORES` from `.env` and the next
+> start silently falls back to `json` everywhere; and the call site is
+> `helpers.persist_settings` (P4-05), not a helpers-level `save_settings`.
+> Regression files: `tests/admin/test_api_v1_system_settings.py` (its
+> `test_custom_variables_survive_a_save` pins the leftover block), not the
+> non-existent `tests/admin/test_helpers.py`.
+
 **Files:**
-- Modify: `swingbot/admin/helpers.py` (`_build_env_text` `:66`)
+- Modify: `swingbot/admin/helpers.py` (`_build_env_text` `:59`)
 - Test: `tests/admin/test_build_env_text_narrowed.py`
 
 **Interfaces:**
@@ -1208,14 +1380,14 @@ def _build_env_text(form, existing: dict, *, secrets_only: bool = False) -> str:
     # ... existing leftover block, unchanged ...
 ```
 
-In `save_settings`'s `.env` branch (P4-05), pass
-`secrets_only=stages.reads_db("settings")`.
+In `save_settings`'s `.env` branch (P4-05 — i.e. `helpers.persist_settings`),
+pass `secrets_only=stages.reads_db("settings")`.
 
 - [ ] **Step 4: Run the tests**
 
 ```bash
 python scripts/dev/testrun.py file tests/admin/test_build_env_text_narrowed.py
-python scripts/dev/testrun.py file tests/admin/test_helpers.py
+python scripts/dev/testrun.py file tests/admin/test_api_v1_system_settings.py
 python scripts/dev/testrun.py file tests/admin/test_save_settings_db.py
 ```
 
@@ -1230,193 +1402,7 @@ git commit -m "feat(v67): narrow the .env rewrite to secrets at the db stage"
 
 ---
 
-### Task P4-07: Export and import still round-trip
-
-`build_settings_export_text` (`helpers.py:~225`) emits every non-sensitive field
-so someone can export, edit and re-import. `import_env_text` (`:232`) applies a
-pasted `.env`, sensitive keys included. Both must keep working when the
-non-sensitive half lives in a table — and NG15's acceptance check is a round
-trip, so this is where that check is re-established.
-
-**Files:**
-- Modify: `swingbot/admin/helpers.py` (`build_settings_export_text`,
-  `import_env_text`)
-- Test: `tests/admin/test_settings_export_import_db.py`
-
-**Interfaces:**
-- Consumes: `settings_repo` (P4-01), `stages`, `split_form_values` (P4-05).
-- Produces: no new public symbols. Both functions keep their signatures and
-  their return shapes (`import_env_text` still returns
-  `(applied_count, unknown_keys)`).
-
-- [ ] **Step 1: Write the failing tests**
-
-Create `tests/admin/test_settings_export_import_db.py`:
-
-```python
-"""NG15's round trip: export, edit, import, and the bot reads the change."""
-import io
-
-import pytest
-from dotenv import dotenv_values
-
-from swingbot import config
-from swingbot.admin import helpers
-
-
-@pytest.fixture
-def db_stage(monkeypatch, db_committed, tmp_path):
-    env = tmp_path / ".env"
-    env.write_text("DISCORD_TOKEN=secret\n", encoding="utf-8")
-    monkeypatch.setattr(config, "ENV_PATH", str(env))
-    monkeypatch.setattr(helpers, "ENV_PATH", str(env))
-    monkeypatch.setattr(config, "DB_STORES", "settings:db")
-    yield env
-    config._apply_env()
-
-
-def test_the_export_reads_current_values_from_the_database(db_stage):
-    from swingbot.core.db.repositories.settings import settings_repo
-    settings_repo().put("MIN_ALERT_CONFIDENCE_LEVEL", 5, updated_by="test")
-    text = helpers.build_settings_export_text()
-    assert "MIN_ALERT_CONFIDENCE_LEVEL=5" in text
-
-
-def test_the_export_still_omits_secrets(db_stage):
-    text = helpers.build_settings_export_text()
-    for f in config.FIELDS:
-        if f.sensitive:
-            assert f"{f.key}=" not in text, f.key
-
-
-def test_an_imported_non_secret_lands_in_the_database(db_stage):
-    from swingbot.core.db.repositories.settings import settings_repo
-    applied, unknown = helpers.import_env_text("MIN_ALERT_CONFIDENCE_LEVEL=5\n")
-    assert applied == 1 and unknown == []
-    assert settings_repo().get_value("MIN_ALERT_CONFIDENCE_LEVEL") == 5
-
-
-def test_an_imported_secret_still_lands_in_env(db_stage):
-    helpers.import_env_text("DISCORD_TOKEN=pasted-secret\n")
-    assert "pasted-secret" in db_stage.read_text(encoding="utf-8")
-
-
-def test_an_imported_secret_never_lands_in_the_database(db_stage):
-    from swingbot.core.db.repositories.settings import settings_repo
-    helpers.import_env_text("DISCORD_TOKEN=pasted-secret\n")
-    assert "DISCORD_TOKEN" not in settings_repo().all_settings()
-
-
-def test_an_unknown_key_is_reported_not_applied(db_stage):
-    applied, unknown = helpers.import_env_text("NOT_A_FIELD=x\n")
-    assert applied == 0 and unknown == ["NOT_A_FIELD"]
-
-
-def test_a_bad_numeric_is_skipped_rather_than_stored(db_stage):
-    from swingbot.core.db.repositories.settings import settings_repo
-    helpers.import_env_text("MIN_ALERT_CONFIDENCE_LEVEL=not-a-number\n")
-    from swingbot.core.db.repositories.settings import SENTINEL_MISSING
-    assert settings_repo().get_value("MIN_ALERT_CONFIDENCE_LEVEL") is SENTINEL_MISSING
-
-
-def test_the_full_round_trip(db_stage):
-    """Export, edit one value, re-import, and config resolves the new value."""
-    text = helpers.build_settings_export_text()
-    parsed = dotenv_values(stream=io.StringIO(text))
-    assert "MIN_ALERT_CONFIDENCE_LEVEL" in parsed
-    edited = text.replace(
-        f"MIN_ALERT_CONFIDENCE_LEVEL={parsed['MIN_ALERT_CONFIDENCE_LEVEL']}",
-        "MIN_ALERT_CONFIDENCE_LEVEL=5")
-    helpers.import_env_text(edited)
-    config.reload_settings()
-    assert config.MIN_ALERT_CONFIDENCE_LEVEL == 5
-```
-
-- [ ] **Step 2: Run to verify failure**
-
-```bash
-python -m pytest tests/admin/test_settings_export_import_db.py -q
-```
-
-Expected: `test_the_export_reads_current_values_from_the_database` fails — the
-export reads `_read_env_values()` only.
-
-- [ ] **Step 3: Branch both**
-
-`build_settings_export_text` resolves each field the same way `config` does,
-rather than reading `.env` directly:
-
-```python
-def build_settings_export_text() -> str:
-    """The exported .env body — one definition, two callers.
-
-    Sensitive fields are OMITTED, not masked: a masked line would import as the
-    literal mask and blank out a real secret, and an export is exactly the file
-    someone re-imports.
-
-    At the db stage the values come from the settings table layered over .env,
-    because that is what the bot is actually running on -- an export that
-    showed .env's stale copy would export a configuration nobody is using.
-    """
-    from swingbot.core.db import stages
-    existing = _read_env_values()
-    db = config._db_settings() if stages.reads_db("settings") else {}
-
-    def _value(f):
-        if f.key in db:
-            v = db[f.key]
-            if isinstance(v, bool):
-                return "true" if v else "false"
-            return "" if v is None else str(v)
-        return existing.get(f.key, f.default)
-
-    return "\n".join(f"{f.key}={_value(f)}"
-                     for f in config.FIELDS if not f.sensitive) + "\n"
-```
-
-`import_env_text` routes each accepted key by sensitivity, reusing the existing
-type-check loop and leaving its `(applied, unknown)` contract intact:
-
-```python
-    # ... existing parse + validation loop, unchanged, building new_values ...
-    from swingbot.core.db import stages
-    if stages.writes_db("settings"):
-        typed = {}
-        for key, raw in new_values.items():
-            f = FIELDS_BY_KEY.get(key)
-            if f is None or f.sensitive:
-                continue
-            try:
-                typed[key] = config._cast(f, raw)
-            except (ValueError, TypeError):
-                continue          # already counted as skipped above
-        settings_repo().put_many(typed, updated_by="import_env_text")
-        new_values = {k: v for k, v in new_values.items()
-                      if FIELDS_BY_KEY.get(k) and FIELDS_BY_KEY[k].sensitive}
-    _write_env_text(_build_env_text(new_values, existing,
-                                    secrets_only=stages.reads_db("settings")))
-```
-
-- [ ] **Step 4: Run the tests**
-
-```bash
-python scripts/dev/testrun.py file tests/admin/test_settings_export_import_db.py
-python scripts/dev/testrun.py file tests/admin/test_helpers.py
-python scripts/dev/testrun.py fast
-```
-
-Expected: `0 failed`. The fast tier because export/import has callers in both
-`app.py` and the v1 API.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add swingbot/admin/helpers.py tests/admin/test_settings_export_import_db.py
-git commit -m "feat(v67): keep the settings export/import round trip intact"
-```
-
----
-
 **Continue with `2026-08-29-v67-json-to-postgres_4b-settings-admin.md`**
-(P4-08…P4-14): the NOTIFY listener, SIGHUP, the import-time-capture audit, the
+(P4-07…P4-14): the export/import round trip (moved there 2026-09-30 to keep
+this file under 1500 lines), the NOTIFY listener, SIGHUP, the import-time-capture audit, the
 Docker-socket removal, and Part 4's verification.
