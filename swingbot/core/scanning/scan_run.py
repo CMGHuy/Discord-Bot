@@ -16,18 +16,20 @@ from swingbot.core.edge import heat as heat_mod
 from swingbot.core.edge import regime2
 from swingbot.core.edge import throttle
 from swingbot.core.edge.rs_gate import rs_verdict
+from swingbot.core.infra.logsetup import apply_log_level, new_scan_id, scan_context
 from swingbot.core.infra.notifier import notify_secondary
 from swingbot.core.market import market_context, opex
 from swingbot.core.market.events import earnings_within_window
 from swingbot.core.market.explain import build_explanation
 from swingbot.core.market.market_events import get_market_events
 from swingbot.core.market.reversal import evaluate_reversal, reversals_for_ticker
-from swingbot.core.market.strategy import HORIZONS
+from swingbot.core.market.strategy import HORIZONS, LEGACY_HORIZONS, live_horizons
 from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.core.marketdata import data_store, universe
 from swingbot.core.marketdata.watchlist import load_watchlist
 from swingbot.core.planning import account as account_module
 from swingbot.core.planning.account import compute_unrealized_pnl, load_account_config
+from swingbot.core.planning.plan_manager import log_plan_armed
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.scan_params import ScanParams
@@ -42,7 +44,7 @@ from .singletons import state, trade_log
 from .regime import get_market_regime
 
 
-log = logging.getLogger("swing-bot.scan_engine")
+log = logging.getLogger(__name__)
 
 _SOURCE_BUCKETS = ("alpaca", "yfinance", "yfinance-fallback")
 
@@ -58,7 +60,21 @@ def _count_sources(frames) -> dict:
     return counts
 
 
-def _maybe_run_strategy_pass(*, tickers, fresh_data, spy_df, regimes, rs_cache, sector_of_ticker,
+def _skip_rejected_plan(item, require_confirmation: bool) -> None:
+    """Log a confirmed setup whose plan was rejected at build, and revoke its
+    confirmation: nothing was posted, so the setup must stay able to confirm
+    and alert on a later scan (e.g. once its stop fits the 2% cap). Left
+    confirmed, it stayed silent for good (production, 2026-09-28/29)."""
+    scenario = item.plan
+    log.info("%s (%s, %s): plan rejected (%s, stop %.2f%% from entry) -- not posted",
+             item.result.ticker, item.result.horizon_key, item.result.trend,
+             item.plan_v2_rejected, getattr(scenario, "stop_distance_pct", float("nan")))
+    if require_confirmation:
+        state.revoke_confirmation(item.result.state_key, item.result.state_value,
+                                  item.previous_confirmed)
+
+
+def _maybe_run_strategy_pass(*,tickers, fresh_data, spy_df, regimes, rs_cache, sector_of_ticker,
                              etf_symbol_of_sector, sector_etf_frames, trade_log, alerts,
                              require_confirmation) -> dict:
     """Run v93's opt-in path; manual checks are strictly shadow-only."""
@@ -86,7 +102,7 @@ def _maybe_run_strategy_pass(*, tickers, fresh_data, spy_df, regimes, rs_cache, 
         return asof_of(ticker).get("rs_combined")
 
     result = strategy_pass.run_strategy_pass(
-        tickers, fresh_data, now=datetime.now(timezone.utc), horizons=list(HORIZONS), spy_df=spy_df,
+        tickers, fresh_data, now=datetime.now(timezone.utc), horizons=list(live_horizons()), spy_df=spy_df,
         regimes=regimes, rs_combined_of=rs_combined_of, mode=mode, live_allow=live_allow,
         trade_log=trade_log, plan_store=PlanStore(), asof_of=asof_of)
     alerts.extend(result.alerts)
@@ -130,7 +146,7 @@ def get_regime(regime_df=None):
             return None
         return get_market_regime(regime_df, ticker)
     except Exception as e:
-        log.warning("Could not fetch market regime: %s", e)
+        log.warning("Could not fetch market regime: %s", e, exc_info=True)
         return None
 
 def _logged_plan_fields(plan_v2, scenario, level_map, direction: str) -> tuple[list, float]:
@@ -167,6 +183,46 @@ def _hard_filters_snapshot(params: ScanParams | None = None) -> dict:
     }
 
 
+def _reload_config_before_scan() -> dict:
+    """Pick up .env edits saved since the last scan (e.g. via the admin UI).
+    This works even without Docker socket / SIGHUP -- settings saved in the
+    UI take effect on the next scan.
+
+    config.reload() already logs every changed value (masked for secrets),
+    so nothing is logged here; this only applies what a reload alone cannot."""
+    changed = auto_reload_if_changed()
+    if "LOG_LEVEL" in changed:
+        apply_log_level(config.LOG_LEVEL)
+    return changed
+
+
+def _earnings_in_window(ticker: str, max_holding_days: int):
+    """Earnings inside the holding window. INFO, not WARNING: it is routine on
+    alerts and the explanation already flags it (v111 §4)."""
+    try:
+        earnings_info = earnings_within_window(ticker, max_holding_days)
+    except Exception as e:
+        log.debug("Earnings check failed for %s: %s", ticker, e)
+        return None
+    if earnings_info:
+        log.info("%s has earnings %s (%dd away) inside this trade's holding window -- "
+                 "volatility spike risk, will flag in explanation", ticker, *earnings_info)
+    else:
+        log.debug("%s: no earnings inside the %dd holding window", ticker, max_holding_days)
+    return earnings_info
+
+
+def _persist_plan_v2(plan_v2) -> None:
+    """Add the plan to PlanStore; log it as armed only once that succeeded."""
+    try:
+        PlanStore().add(plan_v2)
+    except Exception:
+        log.warning("Failed to persist plan_v2 %s to PlanStore",
+                    plan_v2.plan_id, exc_info=True)
+        return
+    log_plan_armed(plan_v2)
+
+
 def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "ScanProgress" = None,
                     min_confluence: int = None, params: ScanParams | None = None) -> tuple:
     """
@@ -192,14 +248,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         phase_durations[name] = round(now - _phase_started, 3)
         _phase_started = now
 
-    # Auto-reload config if .env was changed on disk since last load
-    # (e.g. via the admin UI). This works even without Docker socket /
-    # SIGHUP -- settings saved in the UI take effect on the next scan.
-    changed = auto_reload_if_changed()
-    if changed:
-        log.info("Config auto-reloaded: %s", ", ".join(
-            f"{k}={v[1]!r}" for k, v in changed.items()
-        ))
+    _reload_config_before_scan()
     if params is None:
         params = ScanParams.from_config()
 
@@ -254,7 +303,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # ticker took to finish ALL its horizons -- which could be a long,
     # visually-stuck stretch on a big watchlist. Counting each horizon as
     # its own unit makes the % actually move within a single ticker.
-    horizons_to_scan = [hk for hk in HORIZONS if horizon_filter == "all" or hk == horizon_filter]
+    # v113: the confluence scan never runs a masked-by-default horizon (1w).
+    horizons_to_scan = [hk for hk in LEGACY_HORIZONS if horizon_filter == "all" or hk == horizon_filter]
     if progress is not None:
         progress.stage = "analyzing"
         progress.total = len(tickers) * max(1, len(horizons_to_scan))
@@ -277,7 +327,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         if spy_df is not None:
             rs_cache = rs_factors.refresh_rs_cache(fresh_data, spy_df)
     except Exception as e:
-        log.warning("Could not compute relative-strength cache: %s", e)
+        log.warning("Could not compute relative-strength cache: %s", e, exc_info=True)
         spy_df = None
         rs_cache = None
 
@@ -302,7 +352,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         if needed_sector_etfs:
             sector_etf_frames = fetch._fetch_frames(needed_sector_etfs)
     except Exception as e:
-        log.warning("Could not fetch sector ETFs for relative-strength: %s", e)
+        log.warning("Could not fetch sector ETFs for relative-strength: %s", e, exc_info=True)
         sector_of_ticker = {}
         etf_symbol_of_sector = {}
         sector_etf_frames = {}
@@ -438,6 +488,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 # the old inline loop, which never even built it.
                 if not item.all_requirements_met:
                     continue
+                item.previous_confirmed = state.confirmed_value(item.result.state_key)
                 confirmed = state.confirm_or_update(
                     item.result.state_key, item.result.state_value,
                     required_confirmations=config.SIGNAL_CONFIRMATION_SCANS,
@@ -522,9 +573,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 if (config.PLAN_ENGINE_V2 == "on"
                         and getattr(item, "plan_v2_rejected", None)):
                     filtered_by_rr += 1
-                    log.debug("%s (%s, %s): plan rejected (%s) -- skipped",
-                              item.result.ticker, item.result.horizon_key,
-                              item.result.trend, item.plan_v2_rejected)
+                    _skip_rejected_plan(item, require_confirmation)
                     continue          # never reaches scan_items -> never alerts
             scan_items.append(item)
 
@@ -701,7 +750,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 df = fetch.get_daily_data(result.ticker, period=config.DEFAULT_HISTORY_PERIOD)
             except Exception as exc:
                 log.warning("Could not fetch chart data for %s; posting without chart: %s",
-                            result.ticker, exc)
+                            result.ticker, exc, exc_info=True)
 
         log.info(
             "%s %s (%s): entry=%.2f stop=%.2f target1=%.2f (+%.1f%%)%s conf=Lv%d(%d/100) all_requirements_met=%s",
@@ -713,16 +762,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
 
         h = HORIZONS[result.horizon_key]
 
-        earnings_info = None
-        try:
-            earnings_info = earnings_within_window(result.ticker, h["max_holding_days"])
-            if earnings_info:
-                log.warning("%s has earnings %s (%dd away) inside this trade's holding window -- "
-                             "volatility spike risk, will flag in explanation", result.ticker, *earnings_info)
-            else:
-                log.debug("%s: no earnings inside the %dd holding window", result.ticker, h["max_holding_days"])
-        except Exception as e:
-            log.debug("Earnings check failed for %s: %s", result.ticker, e)
+        earnings_info = _earnings_in_window(result.ticker, h["max_holding_days"])
 
         macro_events = get_market_events(h["max_holding_days"])
         if macro_events:
@@ -824,11 +864,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 # (INTRADAY_MANAGER_V2) both read from. Without this, plans.json
                 # never gained an entry: the Plans page stayed at 0/0/0 forever
                 # and the intraday manager's poll() had nothing to ever act on.
-                try:
-                    PlanStore().add(plan_v2)
-                except Exception:
-                    log.warning("Failed to persist plan_v2 %s to PlanStore",
-                                plan_v2.plan_id, exc_info=True)
+                _persist_plan_v2(plan_v2)
         else:
             log.info("%s (%s) already has an open trade -- not logging a duplicate", result.ticker, result.horizon_key)
 
@@ -1016,7 +1052,20 @@ async def run_scan(horizon_filter: str = "all", require_confirmation: bool = Tru
     exclusive ownership of the scan, so it can't stomp on a still-running
     previous scan's own pending stop request), and always cleared again in a
     finally block so a scan that errors out doesn't leave "running" stuck on.
+
+    v111: every line this scan logs -- here, in the _sync_run_scan worker
+    thread (asyncio.to_thread copies the context) and in map_tickers' pool
+    (which submits through with_current_context) -- carries one scan id, so
+    `grep s-1405k3 logs/bot.log` shows the scan end to end.
     """
+    with scan_context(new_scan_id()):
+        return await _run_scan_in_context(horizon_filter, require_confirmation, bot,
+                                          progress, min_confluence)
+
+
+async def _run_scan_in_context(horizon_filter, require_confirmation, bot, progress,
+                               min_confluence) -> list:
+    """run_scan's body, run inside the scan id set by run_scan."""
     started = time.monotonic()
     async with _scan_lock:
         runstate._clear_stop()
@@ -1059,7 +1108,7 @@ def get_all_unrealized_pnl() -> list:
     try:
         price_cache = fetch.get_current_price_batch(tickers)
     except Exception as exc:
-        log.warning("get_all_unrealized_pnl: batch price fetch failed: %s", exc)
+        log.warning("get_all_unrealized_pnl: batch price fetch failed: %s", exc, exc_info=True)
         price_cache = {}
     for t in open_trades:
         ticker = t["ticker"]
@@ -1069,7 +1118,7 @@ def get_all_unrealized_pnl() -> list:
                 df = fetch.get_daily_data(ticker, period="5d")
                 price_cache[ticker] = float(df["Close"].iloc[-1]) if df is not None and not df.empty else None
             except Exception as exc:
-                log.warning("get_all_unrealized_pnl: could not fetch price for %s: %s", ticker, exc)
+                log.warning("get_all_unrealized_pnl: could not fetch price for %s: %s", ticker, exc, exc_info=True)
                 price_cache[ticker] = None
         current_price = price_cache[ticker]
         if current_price is None:

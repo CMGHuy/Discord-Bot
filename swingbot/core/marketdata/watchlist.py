@@ -7,6 +7,16 @@ from swingbot.core.infra.jsonio import atomic_write_json, read_json
 DEFAULT_PATH = os.path.join(config.DATA_DIR, "watchlist.json")
 
 
+def _canon(path: str | None) -> str | None:
+    """An explicit path equal to the configured default IS the default: it
+    takes the staged (dual/db) route. Any other explicit path stays JSON-only
+    (the test escape hatch). Compared per call against config.DATA_DIR."""
+    if path is not None and os.path.abspath(path) == os.path.abspath(
+            os.path.join(config.DATA_DIR, "watchlist.json")):
+        return None
+    return path
+
+
 def _resolve(path: str | None) -> tuple[bool, str]:
     from swingbot.core.db import stages
     if path is not None:
@@ -15,6 +25,7 @@ def _resolve(path: str | None) -> tuple[bool, str]:
 
 
 def load_watchlist(path: str | None = None) -> list[str]:
+    path = _canon(path)
     use_db, file_path = _resolve(path)
     if use_db:
         from swingbot.core.db.repositories.watchlist import watchlist_repo
@@ -46,6 +57,7 @@ def _seed(path: str) -> list[str]:
 
 def save_watchlist(tickers: list[str], path: str | None = None):
     from swingbot.core.db import stages
+    path = _canon(path)
     _, file_path = _resolve(path)
     result = sorted(set(t.upper() for t in tickers))
     if path is not None or stages.writes_json("watchlist"):
@@ -58,6 +70,7 @@ def save_watchlist(tickers: list[str], path: str | None = None):
 
 def add_ticker(ticker: str, path: str | None = None) -> list[str]:
     from swingbot.core.db import stages
+    path = _canon(path)
     if path is None and stages.reads_db("watchlist"):
         from swingbot.core.db.repositories.watchlist import watchlist_repo
         return watchlist_repo().add(ticker)
@@ -71,6 +84,7 @@ def add_ticker(ticker: str, path: str | None = None) -> list[str]:
 
 def remove_ticker(ticker: str, path: str | None = None) -> list[str]:
     from swingbot.core.db import stages
+    path = _canon(path)
     if path is None and stages.reads_db("watchlist"):
         from swingbot.core.db.repositories.watchlist import watchlist_repo
         return watchlist_repo().remove(ticker)

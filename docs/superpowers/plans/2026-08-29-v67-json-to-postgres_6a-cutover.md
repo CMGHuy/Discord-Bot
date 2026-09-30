@@ -7,6 +7,29 @@
 **Spec:** `docs/superpowers/specs/2026-08-29-v67-json-to-postgres-design.md`
 (sections 8 and 9).
 
+> **Part 6 status (re-examined 2026-09-30 against `main` @ 33ef5c2f):**
+>
+> | Task | State |
+> |---|---|
+> | P6-01 | **Done, on `main`** — `p6_000_merge_p2_p3.py` (`6a11aa1a`) joined `p2_007` + `p3_006`, run **early**, before Parts 4/5 existed. |
+> | P6-02 | **Not started. Blocked** on P3-18 (`swingbot/core/db/events.py::TABLE_CHANNELS` does not exist) and on Parts 3-rest/5 landing their tables. Its revision is renumbered `p6_002` (see the id table). |
+> | P6-03 | **Done, on `main`** — `b7ce6acd`, merged `a506fe93`. |
+> | P6-04 | **Done, on `main`** — scripts `b7ce6acd` (merge `a506fe93`); drill on the production VM recorded in `docs/deploy/DB_RESTORE.md`, nightly cron installed (`31f6284d`). |
+> | P6-05 | **Not started on `main`.** A worktree `2026-09-30-v67-db-to-json-export` was just created at `main` HEAD (clean) — likely another session starting this task; do not touch it, and check with the partner before starting P6-05 elsewhere. |
+> | P6-06 | **Partly superseded by v91.** `scripts/ops/reimport_production.sh` (P91-05, `0a842f78`) is the production import for the seven Part 2 stores, and the Postgres section of `docs/deploy/DEPLOY_HETZNER.md` is its runbook. `import_all.py`, `DB_CUTOVER.md` and the Part 3/5 importers are still open — see the task. |
+> | P6-07…P6-12 | In `_6b`. Not started; each carries its own re-examination note. P6-07's db-stage groundwork landed 2026-09-30. |
+>
+> Production today (`.env.example`, v91): `DB_STORES=watchlist:dual,state:dual`,
+> every other store on `json`; the database holds a v91 re-import of the seven
+> Part 2 stores and sits at `alembic_version` `p6_001` (DB_RESTORE.md).
+>
+> **The "Parts 2–5 all merged" gate below still governs P6-02 and P6-05…P6-12.**
+> P6-01/03/04 were pulled forward because they depend on nothing but the tables
+> already on `main` and the `db` service. On `main`: Part 2 done; Part 3
+> P3-01…P3-09 done, P3-10…P3-17 on unmerged branch
+> `2026-09-29-v67-p3-10-scheduled-jobs`, P3-18…P3-24 not started; Parts 4 and 5
+> have **no** revisions or stores on `main` yet.
+
 Parts 2–5 built every store's Postgres path and left every store on `json`.
 This part runs the migration for real: one revision graph, backups that have
 actually been restored from, the production import on irreplaceable data, and
@@ -24,9 +47,19 @@ Part 6 owns `p6_*` and is the only part that may create a **merge** revision.
 
 | Revision | Content |
 |---|---|
-| `p6_000` | merge revision joining every part's head |
-| `p6_001` | the complete NOTIFY trigger sweep, unconditional |
-| `p6_002` | drop nothing — reserved; see P6-08's note on why tables are not dropped |
+| `p6_000` | merge revision joining `p2_007` + `p3_006` — **exists** (`p6_000_merge_p2_p3.py`) |
+| `p6_001` | **taken by v91:** `p6_001_float_money_columns.py` (`02ff284b`) — `numeric` → `double precision` for trade prices and balances. Not a trigger sweep. |
+| `p6_002` | the complete NOTIFY trigger sweep, unconditional (was `p6_001`) |
+| `p6_003` | drop nothing — reserved; see P6-08's note on why tables are not dropped (was `p6_002`) |
+
+> **2026-09-30 re-examination:** `p6_001` was consumed by plan v91's
+> float-column fix, so every planned Part 6 revision moves up one. Because
+> `p6_000` merged early, the graph is **already single-headed at `p6_001`**, and
+> every later part's first revision (`p3_007`, Part 4's, Part 5's) chains off
+> the then-current head rather than `p1_003`. Two of those landing concurrently
+> off the same parent reopens a fork — if `alembic heads` shows more than one
+> when P6-02 starts, `p6_002` is the merge as well as the sweep (Part 6 is the
+> only part allowed to create merge revisions).
 
 ## Parallelisation
 
@@ -62,6 +95,18 @@ grep -rn "^### Task P[2-5]-" docs/superpowers/plans/ | wc -l   # expect 74
 # Phase 6 — Cutover
 
 ### Task P6-01: One revision graph
+
+> **Status (2026-09-30): DONE** — `6a11aa1a` (on `main`) added
+> `swingbot/core/db/migrations/versions/p6_000_merge_p2_p3.py`,
+> `down_revision = ("p2_007", "p3_006")`, empty `upgrade()`/`downgrade()`;
+> `tests/db/test_migrations.py::test_exactly_one_head` passes. It deviates from
+> the steps below on purpose: run before Parts 4/5 existed, it merges the **two**
+> heads that did (`p2_007`, `p3_006` — not the predicted `p2_006`/`p3_007`/
+> `p4_001`/`p5_004`), the file is `p6_000_merge_p2_p3.py`, and
+> `test_the_merge_revision_names_every_part` was not added (its expected set
+> would now be `{"p2_007", "p3_006"}`). Later parts chain linearly off the
+> current head, so no second whole-graph merge is planned — see the revision-id
+> note above. The steps are kept as the record of the original design.
 
 Parts 2–5 each hung off `p1_003`, so `alembic heads` now returns four. This is
 the expected outcome of the parallel design, and a merge revision is the only
@@ -166,6 +211,22 @@ git commit -m "feat(v67): merge the four migration heads"
 ---
 
 ### Task P6-02: The complete trigger sweep
+
+> **2026-09-30 re-examination:** still needed, **blocked**, and renumbered.
+> **(a)** The revision is `p6_002_trigger_sweep.py` with `revision = "p6_002"`
+> and `down_revision` = whatever `alembic heads` returns when this runs
+> (`p6_001` today; a tuple if Parts 3/5 forked it — then this is also the
+> merge). Read every `p6_001` below as `p6_002`, and `p6_000` in *Consumes* as
+> "the current head". **(b)** `swingbot/core/db/events.py` and `TABLE_CHANNELS`
+> do not exist on `main` — they are P3-18's deliverable (see `_3c`, P3-18
+> re-examination), so this task cannot start before P3-18 merges.
+> **(c)** `tests/db/test_trigger_coverage.py` does not exist either (P3-18
+> creates it); triggers are today installed per table inside `p1_003` (trades)
+> and `p2_001`…`p2_005` (every Part 2 table); no Part 3 table has one.
+> **(d)** `notify.drop_trigger_ddl(table)` exists and is the validated form of
+> the hand-built `DROP TRIGGER IF EXISTS ...` f-string below — use it.
+> **(e)** Production is at `p6_001`, so the runbook's "expect head" line in
+> P6-06 becomes `p6_002` (or later, if Parts 7–9 add revisions first).
 
 Parts 3 and 5 installed triggers **conditionally**, skipping tables another part
 had not created yet. Now every table exists, so the sweep runs unconditionally
@@ -289,6 +350,13 @@ git commit -m "feat(v67): sweep every NOTIFY trigger into place"
 ---
 
 ### Task P6-03: Nightly backups
+
+> **Status (2026-09-30): DONE** — `b7ce6acd` on branch
+> `2026-09-30-v67-p6-backups`, merged `a506fe93`: `scripts/ops/backup_db.sh`
+> (14-day age prune into `data/backups/db/`), `make backup-db`,
+> `tests/scripts/test_backup_db.py`, and the Postgres section of
+> `docs/deploy/DEPLOY_HETZNER.md`. Nightly cron (`0 3 * * *`) installed on the
+> VM 2026-09-30, recorded in `31f6284d`.
 
 A `pg_dump` into `./data/backups/db/`, beside the existing `data/backups/env/`,
 keeping **14 days** — enough for a bad change to survive a week unnoticed
@@ -485,6 +553,14 @@ git commit -m "feat(v67): add nightly postgres backups with 14-day retention"
 
 ### Task P6-04: Restore the backup, once, for real
 
+> **Status (2026-09-30): DONE** — `scripts/ops/restore_db.sh` +
+> `tests/scripts/test_restore_db.py` in `b7ce6acd` (merge `a506fe93`); the
+> drill ran 2026-09-30 on the production VM into the throwaway database
+> `swingbot_restore_drill` (exact row-count match across all 20 tables,
+> `alembic_version` `p6_001`), recorded in `docs/deploy/DB_RESTORE.md` and
+> pointed at from `DEPLOY_HETZNER.md` in `31f6284d`. Restoring into `swingbot`
+> itself requires `--i-mean-it`.
+
 Success criterion 6. **An unexercised restore is a hope, not a backup** — so
 this task is performed, not described, and its evidence is committed.
 
@@ -674,6 +750,28 @@ git commit -m "feat(v67): add and exercise the database restore drill"
 
 ### Task P6-05: Per-record JSON export
 
+> **2026-09-30 re-examination:** still needed; paths corrected. **(a)** There is
+> **no** `swingbot/admin/api_v1/plans.py`. Plans are served through
+> `GET /api/v1/trades/<trade_id>` in `swingbot/admin/api_v1/trades.py`, which
+> routes a plan id to `PlanStore().get_record(id)` via
+> `_looks_like_a_plan_id`. So the plan export is **one** endpoint,
+> `GET /api/v1/trades/<id>/export`, dispatching the same way: plan id →
+> `PlanStore().get_record(id)` (already the raw stored dict — no
+> `plan_to_dict` round-trip, which would drop unknown fields); otherwise
+> `TradeLog().get_trade_by_id(id)`. Drop the separate `/plans/<id>/export`
+> route and the `plans.py` edit, and make `test_plans_export_works_the_same_way`
+> hit `/api/v1/trades/<plan-id>/export` with an id `_looks_like_a_plan_id`
+> accepts. `trades.py` already imports `TradeLog` and `PlanStore` at module
+> level. **(b)** `tests/admin/conftest.py` has no `authed_client`/`anon_client`:
+> use its `client` fixture plus the `auth` header fixture
+> (`client.get(url, headers=auth)`), and a bare `client.get(url)` for the 401
+> case. `db_committed` is already usable from `tests/admin/` (see
+> `tests/admin/test_jobs_db.py`). **(c)** Don't confuse it with
+> `GET /api/v1/trades/export.csv` (`tests/admin/test_api_v1_trade_export.py`) —
+> make sure `/trades/<id>/export` cannot shadow `export.csv`, and keep that file
+> green. **(d)** The endpoint is stage-agnostic by construction: at
+> `json`/`dual` it exports the file record, at `db` the row.
+
 `cat data/trades.json` was how a single trade got inspected. Postgres takes that
 away, and the spec says to give it back — a per-record JSON export in the admin
 UI, so inspecting one trade does not need `psql`.
@@ -835,6 +933,45 @@ git commit -m "feat(v67): add per-record JSON export for trades and plans"
 ---
 
 ### Task P6-06: The production import runbook — TOUCHES PRODUCTION
+
+> **2026-09-30 re-examination:** partly done by v91, design narrowed.
+> **Done:** plan v91 (`2026-09-16-v91-postgres-import-correctness.md`) P91-05
+> shipped `scripts/ops/reimport_production.sh` (`0a842f78`) — the ordered,
+> idempotent re-import of the seven Part 2 stores (`watchlist state plans
+> starred trades account journal`), followed by `parity_report.py --all` and
+> row counts — and ran it on production; P91-06 flipped `watchlist,state` to
+> `dual` and added `scripts/ops/v91_dual_check.sh` + its one-shot cron
+> (`42ca598c`). The runbook lives in the "PostgreSQL" section of
+> `docs/deploy/DEPLOY_HETZNER.md`.
+> **Still open:** (1) `scripts/db/import_all.py` does not exist. Keep it, but
+> make it the **single** ordered list: `reimport_production.sh` then calls
+> `import_all.py` instead of its own hard-coded loop, so the two cannot
+> disagree (this task's own rule). (2) Part 3's importers (`import_jobs`,
+> `import_scheduled`, `import_preferences`, `import_settings_audit`,
+> `import_killswitch`, `import_ticker_directory`, `import_tuning`, sources in
+> `scripts/db/part3_sources.py`) exist only on the unmerged branch
+> `2026-09-29-v67-p3-10-scheduled-jobs`; Parts 4/5 importers do not exist. The
+> `ORDER` list below may only name importers present on `main` when this runs;
+> `test_every_importer_in_the_order_exists` enforces that. (3) `_run_one` as
+> written is wrong for today's importers: none has `main()`, `run_import` also
+> takes `prune=` (`import_watchlist.py`), and no `REPO_FACTORY`/`KEY`
+> constants exist. Either add those constants **plus a `PRUNE` hook** to every
+> importer, or run each as `python scripts/db/import_<name>.py [--dry-run]`
+> via `subprocess` — the latter matches `reimport_production.sh` and needs no
+> per-importer edits (recommended). (4) In
+> `test_the_order_covers_every_registered_parity_store`, parity keys are
+> `starred_plans`, `scheduled_jobs`, `tuning_proposals` (P3 branch) versus
+> importers `starred`, `scheduled`, `tuning` — use an explicit name map, not
+> `.replace("_plans", "")`. (5) `docs/deploy/DB_CUTOVER.md` does not exist;
+> create it for the flip sequence (P6-07 appends to it) and point at
+> `DEPLOY_HETZNER.md`'s section rather than duplicating the import commands.
+> (6) With the `dual` stage in play, "stop the bot" (step 5) matters at each
+> store's **json → dual** flip: import, flip to `dual` in the same window, then
+> `parity_report`. A store already at `dual` needs no re-import before `db` —
+> its rows are written live. (7) Runbook step 3's expected head is `p6_002`
+> (P6-02), not `p6_001`. (8) SSH goes through
+> `bash scripts/ops/ssh-hetzner.sh "<cmd>"` (CLAUDE.md), never a raw `ssh -i`
+> — `reimport_production.sh`'s header still shows the raw form; correct it here.
 
 The one-shot operation on irreplaceable data. A tarball first, then a dry run,
 then the real run with checksums.
@@ -1016,7 +1153,8 @@ numbered list of commands with the reason for each, not prose:
 2. **Bring up the database.** `docker compose up -d db` and confirm
    `pg_isready`.
 3. **Migrate.** `docker compose exec bot alembic upgrade head`, then
-   `alembic current` — expect `p6_001 (head)`.
+   `alembic current` — expect `p6_002 (head)` (the trigger sweep; `p6_001` is
+   v91's float-column fix).
 4. **Dry run.** `docker compose exec bot python scripts/db/import_all.py --dry-run`.
    Read every count against `wc -l` / `jq length` on the corresponding file.
    A count that disagrees is a stop, not a note.

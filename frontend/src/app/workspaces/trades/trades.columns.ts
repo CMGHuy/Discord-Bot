@@ -84,7 +84,7 @@ export const DASHBOARD_TABLE_ID = 'dashboard';
  * (strategy, horizon, tier) are not clickable: the server does not sort by
  * them, and offering a control that 400s would be worse than not offering it.
  */
-/* Column floors — v95 C2, amended 2026-09-23.
+/* Column floors — v95 C2, amended 2026-09-28.
  *
  * Measured at 390px before v95: the visible four were #, STATUS, TICKER and
  * CONFIDENCE, with NOW, PLAN, P&L %, R, HELD and OPENED pushed off the right
@@ -96,23 +96,21 @@ export const DASHBOARD_TABLE_ID = 'dashboard';
  * everything the picker adds beyond the default twelve demoted furthest.
  * Demoted means one tap into the row detail, never gone.
  *
- * Amendment: NOW, PLAN, HELD and CONFIDENCE are back inline at every
- * viewport, by explicit request, to match what desktop shows instead of
- * staying demoted below `sm`/`md`. This reopens the 390px budget measured
- * above — eight inline columns do not fit a phone row, so `.scroller`'s
- * horizontal scroll (data-table.ts) is the accepted fallback on a phone now,
- * not a bug. STATUS stays demoted; the progress bar's ~40% width is still
- * why. */
+ * Amendment 2026-09-28 (supersedes the 2026-09-23 one that pulled NOW,
+ * PLAN, HELD and CONFIDENCE inline everywhere and let `.scroller` take the
+ * overflow): on a phone only TICKER, PLAN and P&L % stay inline — what the
+ * desktop row leads with. Everything else, # and R included, is one tap on
+ * the row's expand arrow into the detail accordion. */
 export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDef<TradeRow>[] {
   return [
     // Rendered by the workspace as a link to the detail view — the keyboard
     // route into a row, since row clicks are mouse-only by design.
-    { key: 'num', header: '#', width: '3rem', inlineFrom: 'xs' },
+    { key: 'num', header: '#', width: '3rem', inlineFrom: 'sm' },
     { key: 'status', header: 'Status', sortable: true, inlineFrom: 'md' },
     { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, sortable: true, inlineFrom: 'xs' },
-    { key: 'now', header: 'Now', value: (row) => num(row.current_price), numeric: true },
+    { key: 'now', header: 'Now', value: (row) => num(row.current_price), numeric: true, inlineFrom: 'sm' },
     { key: 'pnl_pct', header: 'P&L %', numeric: true, sortable: true, inlineFrom: 'xs' },
-    { key: 'held', header: 'Held', value: (row) => held(row.closed_at ? row.held_hours : elapsedHours(row.opened_at, now())), numeric: true, sortable: true },
+    { key: 'held', header: 'Held', value: (row) => held(row.closed_at ? row.held_hours : elapsedHours(row.opened_at, now())), numeric: true, sortable: true, inlineFrom: 'sm' },
     { key: 'actions', header: '', width: '1px', inlineFrom: 'lg' },
 
     /* -- individually re-addable through the column picker ---------------- */
@@ -124,16 +122,16 @@ export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDe
     // is the fallback used wherever cell isn't wired up. v54 Task 28: signed()
     // not rMultiple() -- the header already names the unit ('R'), so the cell
     // does not repeat it down every row.
-    { key: 'r_multiple', header: 'R', value: (row) => signed(row.r_multiple), numeric: true, sortable: true, inlineFrom: 'xs' },
+    { key: 'r_multiple', header: 'R', value: (row) => signed(row.r_multiple), numeric: true, sortable: true, inlineFrom: 'sm' },
     { key: 'strategy', header: 'Strategy', value: (row) => text(row.strategy), inlineFrom: 'lg' },
     { key: 'horizon', header: 'Horizon', value: (row) => text(row.horizon), inlineFrom: 'lg' },
     { key: 'direction', header: 'Direction', width: '3.5rem', inlineFrom: 'sm' },
     // Entry, target and stop in one cell (SR8). Not sortable: there is no
     // single field behind it, and `sort=plan` is a 400 from the collection
     // endpoint. The three keys remain as separate columns for the picker.
-    { key: 'plan', header: 'Plan', width: '12rem' },
+    { key: 'plan', header: 'Plan', width: '12rem', inlineFrom: 'xs' },
     { key: 'tier', header: 'Tier', inlineFrom: 'lg' },
-    { key: 'confidence_level', header: 'Confidence' },
+    { key: 'confidence_level', header: 'Confidence', inlineFrom: 'md' },
     { key: 'shares', header: 'Shares', value: (row) => num(row.shares, 0), numeric: true, inlineFrom: 'lg' },
     { key: 'position_value', header: 'Deployed', value: (row) => num(row.position_value), numeric: true, inlineFrom: 'lg' },
     {

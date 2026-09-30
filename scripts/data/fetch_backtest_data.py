@@ -19,7 +19,16 @@ DIFFERENT cache location from the default data/backtest_cache/ path above
 (owned by swingbot.core.marketdata.backtest_cache) and the two are NOT unified: today's
 run_backtest_range.py / backtest_scenarios.py / this script's default mode
 still only read data/backtest_cache/, not market_data/.
-    python scripts/data/fetch_backtest_data.py --universe sp500"""
+    python scripts/data/fetch_backtest_data.py --universe sp500
+
+--training-universe NAME (v112) widens the DEFAULT mode instead: it caches
+watchlist + benchmark + the named universe into data/backtest_cache/ (or
+BACKTEST_CACHE_DIR), the cache every backtest script reads, so a later
+`run_backtest_range.py --universe NAME` finds the frames. Tickers Yahoo no
+longer serves (delisted names in `sp500_pit`) are listed in a coverage file
+next to the cache -- that list IS the residual survivorship bias.
+    BACKTEST_CACHE_DIR=data/backtest_cache_ext python scripts/data/fetch_backtest_data.py \
+        --start 2010-01-01 --end 2026-09-25 --training-universe sp500_pit"""
 import argparse
 import datetime as dt
 import json
@@ -69,6 +78,36 @@ def fetch(ticker: str, start: str, end: str) -> pd.DataFrame | None:
     return normalize_ohlcv(df)
 
 
+def training_tickers(watchlist: list[str], benchmark: str | None,
+                     training_universe: str | None) -> list[str]:
+    """Default-mode fetch list: watchlist, plus the regime benchmark, plus
+    every symbol of --training-universe when given. Deduped, sorted."""
+    tickers = set(watchlist)
+    if benchmark:
+        tickers.add(benchmark)
+    if training_universe:
+        from swingbot.core.marketdata import universe
+        tickers |= set(universe.universe_symbols(training_universe))
+    return sorted(tickers)
+
+
+def write_coverage(name: str, requested: list[str], failed: list[str]) -> Path:
+    """Record which universe symbols have no cached history. For a `_pit`
+    universe these are mostly delisted names Yahoo dropped -- the part of
+    the survivorship bias free data cannot remove, so it is written down
+    rather than silently shrinking N."""
+    from swingbot.core.marketdata.universe import universe_symbols
+    members = set(universe_symbols(name))
+    missing = sorted(t for t in failed if t in members)
+    have = sum(1 for t in members if cache_path(t).exists())
+    out = CACHE_DIR / f"_coverage_{name}.json"
+    out.write_text(json.dumps({"universe": name, "members": len(members), "cached": have,
+                               "missing": missing, "requested": len(requested)}, indent=1))
+    print(f"coverage: {have}/{len(members)} '{name}' symbols cached, "
+          f"{len(missing)} unavailable -> {out}")
+    return out
+
+
 def _resolve_end(end: str) -> str:
     if end.lower() in ("today", "now"):
         # yfinance end is exclusive; +1 day to include the latest complete bar
@@ -76,11 +115,26 @@ def _resolve_end(end: str) -> str:
     return end
 
 
+def _tickers(args) -> list[str]:
+    """--tickers wins outright (v113: the four inverse ETFs, never the
+    watchlist or benchmark). Otherwise the watchlist plus the market-context
+    benchmark (P0) -- not necessarily on the watchlist, but every backtest that
+    gates on regime needs its history cached -- plus --training-universe."""
+    if args.tickers:
+        return [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
+    from swingbot import config
+    return training_tickers(load_watchlist(), config.MARKET_REGIME_TICKER,
+                            getattr(args, "training_universe", None))
+
+
 def main():
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap =argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--start", default=START, help=f"start date YYYY-MM-DD (default {START})")
     ap.add_argument("--end", default=END, help=f"end date YYYY-MM-DD, or 'today' (default {END})")
     ap.add_argument("--force", action="store_true", help="re-fetch and overwrite already-cached tickers")
+    ap.add_argument("--tickers", default=None,
+                    help="comma-separated tickers to fetch INSTEAD of the watchlist "
+                         "(the market-context benchmark is not added)")
     # --universe is a SEPARATE, additive code path (Task E15). It does NOT
     # touch data/backtest_cache/ (owned by swingbot.core.marketdata.backtest_cache and
     # read by run_backtest_range.py / backtest_scenarios.py / this script's
@@ -95,6 +149,10 @@ def main():
                           "update_cache -- a SEPARATE cache from the default "
                           "data/backtest_cache/ path above; not read by "
                           "run_backtest_range.py or other grid scripts yet")
+    ap.add_argument("--training-universe", metavar="NAME", default=None,
+                    help="default mode: also cache every symbol of this named universe "
+                         "(e.g. 'sp500', 'sp500_pit', 'sp500+etfs') into the backtest "
+                         "cache and write a coverage report of unavailable symbols")
     args = ap.parse_args()
 
     if args.universe:
@@ -117,17 +175,8 @@ def main():
     start, end = args.start, _resolve_end(args.end)
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    tickers = load_watchlist()
 
-    # The market-context benchmark (P0) is not necessarily on the watchlist,
-    # but every backtest that gates on regime needs its history cached like
-    # any other ticker. Without this the whole context channel is silently
-    # unavailable in the one place that can actually measure it.
-    from swingbot import config
-    benchmark = config.MARKET_REGIME_TICKER
-    if benchmark and benchmark not in tickers:
-        tickers = list(tickers) + [benchmark]
-        print(f"(+ {benchmark}: market-context benchmark, not on the watchlist)")
+    tickers = _tickers(args)
 
     print(f"Fetching {len(tickers)} tickers | {start} -> {end} | force={args.force}\n")
     ok, skipped, failed = 0, 0, []
@@ -144,6 +193,8 @@ def main():
         ok += 1
         print(f"  + {t}: {len(df)} bars ({df.index[0].date()} -> {df.index[-1].date()})")
     print(f"\nDone: {ok} fetched, {skipped} already cached, {len(failed)} failed {failed or ''}")
+    if args.training_universe:
+        write_coverage(args.training_universe, tickers, failed)
 
 
 if __name__ == "__main__":

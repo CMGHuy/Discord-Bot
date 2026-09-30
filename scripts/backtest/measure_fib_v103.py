@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""v103 Fibonacci level-stop (A) and continuation (C) measurement funnel."""
+"""v103 Fibonacci level-stop (A) / continuation (C) and v108 EMA Crossover re-arm (E) measurement funnel."""
 from __future__ import annotations
 
 import argparse
 import collections
 import contextlib
+from fractions import Fraction
 import json
 import subprocess
 import sys
@@ -24,15 +25,21 @@ from swingbot import config
 from swingbot.core.backtesting.acceptance import BOOTSTRAP_RESAMPLES
 from swingbot.core.backtesting.backtest import run_backtest
 from swingbot.core.market.entry_filters import DEFAULT_PARAMS, entries_for, gate_override
-from swingbot.core.market.strategy_types import HORIZONS, STRATEGY_GATES
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS, STRATEGY_GATES
 
 DIRECTIONS = ("bullish", "bearish")
-ALL_HZ = tuple(HORIZONS)
+ALL_HZ = tuple(LEGACY_HORIZONS)
 _MISSING = object()
 MECHANISMS = {
-    "A": SimpleNamespace(strategy="Fibonacci", grid=(0.1, 0.25, 0.5), loosest=0.1, baseline=0.0),
-    "C": SimpleNamespace(strategy="Fibonacci Continuation", grid=(0.5, 0.618, 0.786), loosest=0.786, baseline=None),
+    "A": SimpleNamespace(strategy="Fibonacci", grid=(0.1, 0.25, 0.5), loosest=0.1, baseline=0.0, inert_ratio=None),
+    "C": SimpleNamespace(strategy="Fibonacci Continuation", grid=(0.5, 0.618, 0.786), loosest=0.786, baseline=None, inert_ratio=None),
+    # v108: K = pullback touch events taken per held cross. K=1 is today's
+    # entry -- the reference arm, reported, never a candidate. Stage 0 also
+    # closes a direction whose K=3 count is < 1.15x the K=1 count (inert).
+    "E": SimpleNamespace(strategy="EMA Crossover", grid=(2, 3), loosest=3, baseline=1, inert_ratio=Fraction(115, 100)),
 }
+# v108 scores one direction at a time and sets only that direction's knob.
+E_PARAMS = {"bullish": "max_touches_bull", "bearish": "max_touches_bear"}
 
 
 @contextlib.contextmanager
@@ -61,10 +68,14 @@ def _param_value(strategy, key, value):
         params[key] = previous
 
 
-def mechanism_cell(mech, value):
+def mechanism_cell(mech, value, direction=None):
     if mech == "A":
         enabled = float(value) > 0
         return _config_values(FIB_LEVEL_STOP_ATR=float(value), FIB_LEVEL_STOP_DIRECTIONS="bullish,bearish" if enabled else "")
+    if mech == "E":
+        if direction not in E_PARAMS:
+            raise ValueError(f"mechanism E sets one direction's knob; got direction={direction!r}")
+        return _param_value(MECHANISMS["E"].strategy, E_PARAMS[direction], int(value))
     return _param_value(MECHANISMS["C"].strategy, "d_max", float(value))
 
 
@@ -99,8 +110,8 @@ def collect_trades(mech, frames, asof_map, value, window, *, directions=DIRECTIO
     run_fn = run_fn or run_backtest
     progress = progress or Progress(len(frames) * len(directions))
     rows = []
-    with mechanism_cell(mech, value):
-        for direction in directions:
+    for direction in directions:
+        with mechanism_cell(mech, value, direction):
             rows.extend(_direction_pass(spec.strategy, frames, asof_map, direction, window, horizons, run_fn, progress, f"{mech} {cell_key(value)}"))
     return rows
 
@@ -126,15 +137,31 @@ def _count_direction(strategy, frames, direction, horizons):
 def count_signals(mech, frames, values, *, horizons=ALL_HZ):
     strategy, results = MECHANISMS[mech].strategy, {}
     for value in values:
-        with mechanism_cell(mech, value):
-            for direction in DIRECTIONS:
+        for direction in DIRECTIONS:
+            with mechanism_cell(mech, value, direction):
                 results[f"{cell_key(value)}|{direction}"] = _count_direction(strategy, frames, direction, horizons)
     return results
 
 
+def _stage0_reason(counts, spec, direction):
+    loosest = counts[f"{cell_key(spec.loosest)}|{direction}"]["total"]
+    if loosest < MIN_N_TRAIN:
+        return "min_n"
+    if spec.inert_ratio is not None:
+        reference = counts[f"{cell_key(spec.baseline)}|{direction}"]["total"]
+        if loosest < spec.inert_ratio * reference:
+            return "inert"
+    return None
+
+
+def stage0_reasons(counts, mech):
+    spec = MECHANISMS[mech]
+    return {direction: _stage0_reason(counts, spec, direction) for direction in DIRECTIONS}
+
+
 def stage0_closures(counts, mech):
-    key = cell_key(MECHANISMS[mech].loosest)
-    return [direction for direction in DIRECTIONS if counts[f"{key}|{direction}"]["total"] < MIN_N_TRAIN]
+    reasons = stage0_reasons(counts, mech)
+    return [direction for direction in DIRECTIONS if reasons[direction] is not None]
 
 
 def _evaluate_direction(spec, rows_by_cell, direction, n_resamples, seed):
@@ -190,7 +217,7 @@ def _cmd_count(args):
     frames = _load_frames(args.universe, args.tickers)
     values = ((spec.baseline,) if spec.baseline is not None else ()) + spec.grid
     counts = count_signals(args.mechanism, frames, values)
-    _write(args.out, {"mechanism": args.mechanism, "universe_n": len(frames), "counts": counts, "closed_at_stage0": stage0_closures(counts, args.mechanism)})
+    _write(args.out, {"mechanism": args.mechanism, "universe_n": len(frames), "counts": counts, "closed_at_stage0": stage0_closures(counts, args.mechanism), "stage0_reasons": stage0_reasons(counts, args.mechanism)})
 
 
 def _cmd_collect(args):

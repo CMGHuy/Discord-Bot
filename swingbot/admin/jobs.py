@@ -12,6 +12,7 @@ rather than permanently blocking every future job start.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import subprocess
@@ -160,6 +161,28 @@ _WATCHED: set[str] = set()
 _WATCHED_LOCK = threading.Lock()
 
 
+def _ingest_tuning_result(job_id: str, result_path: str | None) -> None:
+    """Copy the child's ``--json`` output into Postgres once the job is done.
+
+    The child process writes the file (tune_strategy.py owns that format), so
+    the database write happens here, in the parent, when the job finishes. At
+    the db stage the file was only a hand-off and is removed after ingest.
+    """
+    from swingbot.core.db import stages
+    if not result_path or not stages.writes_db("tuning"):
+        return
+    try:
+        with open(result_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        from swingbot.core.db.repositories.tuning import tuning_repo
+        tuning_repo().save_result(job_id, payload)
+        if not stages.writes_json("tuning"):
+            os.remove(result_path)
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "could not store tuning result for job %s", job_id)
+
+
 class JobManager:
     def __init__(self):
         self._lock = threading.Lock()
@@ -257,6 +280,8 @@ class JobManager:
                             j[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
                             j[job_id]["returncode"] = proc.returncode
                             _write_jobs(j)
+                    if kind == "tune" and proc.returncode == 0:
+                        _ingest_tuning_result(job_id, result_path)
                 finally:
                     # In a finally: if this thread dies unexpectedly the job
                     # must become reapable again, or it would sit "running"

@@ -27,6 +27,8 @@ been accumulating values for months — and the tool cannot tell the difference.
     the prior values before removing them
   - `restore_field(table, field) -> int` — puts them back
 
+> **2026-09-30 re-examination:** VALID. It inherits P8-03's store-stage guard (drop/restore only where `stages.reads_db` holds) and the `DATABASE_URL` fixture monkeypatch. `restore_field`'s `CAST(:v AS jsonb)` restores the stored JSON value verbatim.
+
 **Why this reuses the data-migration ledger rather than inventing a second
 one.** A drop *is* a value-level change with an undo; giving it its own storage
 would mean two places to look when someone asks "what happened to this field",
@@ -244,6 +246,11 @@ the task that finds the step somebody forgot.
 - Consumes: everything in Parts 7 and 9.
 - Produces: the walk's record, with real numbers.
 
+> **2026-09-30 re-examination:**
+> 1. **Blocked on Part 5 and a read path.** This depends on `schema.fold_trades` and a `FoldTradesRepository` (Part 5, both unbuilt), and on the pushed artifact having a production read path (P9-01 note).
+> 2. **Derive R.** The seeds inject `r_multiple`, which trades do not store. Seed `exit_price`/`legs` and let P7-07's accessor derive R via `closed_r_multiple`; the expected RSI mean then follows from those exits.
+> 3. **Step 3 touches production.** The pull and tunnel go only through `scripts/ops/ssh-hetzner.sh` (P7-02/P7-03 notes). `--apply` is a production change, so follow `mirror-prod`. The `!performance` comparison is a pooled-number claim, so load the `pooled-numbers` skill first.
+
 **The automated half is a smoke test against two local databases.** It cannot
 reach production, so it proves the *mechanics* — pull-shaped restore, compute,
 push-shaped upsert, verify — while Step 3 proves the real thing by hand.
@@ -409,6 +416,11 @@ which one to open, and they will not.
 - Consumes: everything in Parts 7, 8 and 9.
 - Produces: nothing in code.
 
+> **2026-09-30 re-examination:**
+> 1. **The test file comes from P7-11.** `tests/test_docs_consistency.py` does not exist on main; P7-11 creates it, and this task extends it.
+> 2. **No second line.** P7-11 already adds the `make db-pull` line to `CLAUDE.md` (159 lines today, with room to spare), so do not add a second one and nothing needs displacing. Any `CLAUDE.md`/`docs/claude/` edit ships its `AGENTS.md` mirror in the same commit.
+> 3. **Push table list.** The "only these can be pushed" wording must track P9-01's stage-gated allowlist.
+
 **Structure it by the question, not by the tool.** A reader arrives with "how do
 I train on real data", not with "tell me about profiles".
 
@@ -533,6 +545,8 @@ git commit -m "docs(v67): one page for train, publish, change and roll back"
 **Interfaces:**
 - Consumes: everything in Part 9.
 - Produces: nothing.
+
+> **2026-09-30 re-examination:** `test_every_schema_table_is_either_pushable_or_refused` fails unless `REFUSED` names every table in `METADATA`. On main that means all 19 current tables: the Part 2 trading-state tables plus `account_balance_history`, `journal_entries` and every Part 3 table (see P9-01's note), and later the Part 4/5 tables as they land. `fold_trades` stays in `PUSHABLE` only once it exists.
 
 - [ ] **Step 1: Write the exit test**
 

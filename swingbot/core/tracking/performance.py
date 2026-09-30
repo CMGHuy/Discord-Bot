@@ -15,6 +15,7 @@ since daily bars don't tell us the actual intraday order of events.
 This is a paper-trade tracker -- it does not know about slippage, fees,
 partial fills, or gaps beyond what the daily bar shows.
 """
+import logging
 import os
 import secrets
 import string
@@ -35,6 +36,8 @@ from swingbot.core.market.strategy_types import HORIZONS as _HORIZONS
 # settings are tuned for -- see check_near_tp_timeout()'s horizon-scaling below.
 _NEAR_TP_BASELINE_HORIZON_DAYS = _HORIZONS.get("2w", {}).get("max_holding_days", 14)
 
+log = logging.getLogger(__name__)
+
 _LOCK = Lock()
 
 
@@ -53,9 +56,40 @@ def _journal_close_safely(trade: dict) -> None:
         from swingbot.core.analytics.journal import journal_trade_close
         journal_trade_close(trade)
     except Exception:
-        import logging
-        logging.getLogger("swing-bot.performance").warning(
+        log.warning(
             "journal hook failed for trade %s", trade.get("id"), exc_info=True)
+
+
+def _hold_days(trade: dict) -> float | None:
+    """Calendar days from opened_at to closed_at, or None when either is
+    missing, unparseable, or the two cannot be subtracted (naive vs aware)."""
+    try:
+        opened = datetime.fromisoformat(trade["opened_at"])
+        closed = datetime.fromisoformat(trade["closed_at"])
+        return (closed - opened).total_seconds() / 86400
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _log_trade_closed(trade: dict) -> None:
+    r = closed_r_multiple(trade)
+    days = _hold_days(trade)
+    log.info("Trade closed: %s %s id=%s outcome=%s R=%s hold=%s",
+             trade.get("ticker") or "-", trade.get("direction") or "-",
+             str(trade.get("id") or "-")[:8], trade.get("status") or "-",
+             "n/a" if r is None else f"{r:+.2f}",
+             "n/a" if days is None else f"{days:.1f}d")
+
+
+def _after_close(trade: dict) -> None:
+    """Everything that follows a trade close once TradeLog's lock is released:
+    the v111 INFO line, then the journal hook. The line must never break a
+    close, so a formatting failure is logged at DEBUG and swallowed."""
+    try:
+        _log_trade_closed(trade)
+    except Exception:
+        log.debug("trade-closed log line failed for %s", trade.get("id"), exc_info=True)
+    _journal_close_safely(trade)
 
 
 def _close_linked_plan_safely(plan_id: str, reason: str) -> None:
@@ -79,8 +113,7 @@ def _close_linked_plan_safely(plan_id: str, reason: str) -> None:
                           at=datetime.now(timezone.utc).isoformat())
         store.update(plan)
     except Exception:
-        import logging
-        logging.getLogger("swing-bot.performance").warning(
+        log.warning(
             "could not close plan %s after its trade closed", plan_id, exc_info=True)
 
 
@@ -89,8 +122,7 @@ def _refresh_snapshot_safely() -> None:
         from swingbot.core.analytics.snapshots import refresh_snapshot
         refresh_snapshot()
     except Exception:
-        import logging
-        logging.getLogger("swing-bot.performance").warning(
+        log.warning(
             "post-close snapshot refresh failed", exc_info=True)
 
 
@@ -527,9 +559,43 @@ class TradeLog:
             return
         if trade is not None:
             self._db_upsert(trade, conn=conn)
-        else:
+        elif not stages.reads_db("trades"):
+            # At the db stage `self._trades` is a stale JSON-era snapshot, not
+            # the source of truth: re-upserting it would resurrect old rows.
             for row in self._trades:
                 self._db_upsert(row, conn=conn)
+
+    @staticmethod
+    def _reads_db() -> bool:
+        from swingbot.core.db import stages
+        return stages.reads_db("trades")
+
+    def _drop_local(self, trade: dict) -> None:
+        """Remove a trade from the in-memory JSON-era list. At the db stage
+        `trade` is a database copy and `_trades` is not the source of truth."""
+        if not self._reads_db():
+            self._trades.remove(trade)
+
+    def _db_delete_rows(self, status: str | None = None,
+                        trade_id: str | None = None) -> int:
+        """Delete straight from the trades table (db stage) and return how
+        many rows went. `trade_id` deletes one row, else `status` selects
+        "open"/"closed"/None(all) exactly as `TradeRepository.clear`."""
+        from swingbot.core.db.repositories.trades import trades_repo
+        if trade_id is not None:
+            return int(trades_repo().delete(trade_id))
+        return trades_repo().clear(status=status)
+
+    def _persist_changed(self, changed: list[dict]) -> None:
+        """Persist a bulk mutation. At the db stage that is one upsert per
+        mutated trade (by id, from the copies `_all()` returned); at json/dual
+        it is the whole-log write, exactly as before."""
+        from swingbot.core.db import stages
+        if not stages.reads_db("trades"):
+            self._persist()
+            return
+        for trade in changed:
+            self._db_upsert(trade)
 
     def _all(self) -> list[dict]:
         """Every trade from the active read backend, in TradeLog's API shape."""
@@ -746,7 +812,7 @@ class TradeLog:
                       if t.get("plan_id") == plan_id and t["status"] == "open"), None)
             if t is None:
                 return False
-            self._trades.remove(t)
+            self._drop_local(t)
             self._persist()
             self._db_delete(t["id"])
         return True
@@ -773,7 +839,7 @@ class TradeLog:
             self._settle_account_balance(t)
             closed_trade = dict(t)
             self._persist(t, conn=conn)
-        _journal_close_safely(closed_trade)
+        _after_close(closed_trade)
         _refresh_snapshot_safely()
 
     def _settle_account_balance(self, t: dict) -> None:
@@ -835,8 +901,7 @@ class TradeLog:
             # closing -- worst case the account balance simply doesn't
             # reflect this one trade yet. Logged, though: a silent miss here
             # leaves the balance wrong with nothing to say why.
-            import logging
-            logging.getLogger("swing-bot.performance").warning(
+            log.warning(
                 "account settlement failed for trade %s", t.get("id"), exc_info=True)
 
     def update_open_trades(self, ticker: str, df, live_price: float | None = None) -> list:
@@ -964,9 +1029,9 @@ class TradeLog:
                 self._settle_account_balance(t)
                 newly_closed.append(t)
             if newly_closed:
-                self._persist()
+                self._persist_changed(newly_closed)
         for t in newly_closed:
-            _journal_close_safely(t)
+            _after_close(t)
         if newly_closed:
             _refresh_snapshot_safely()
         return newly_closed
@@ -1240,7 +1305,7 @@ class TradeLog:
         if closed is not None:
             if closed.get("plan_id"):
                 _close_linked_plan_safely(closed["plan_id"], reason="reversed")
-            _journal_close_safely(closed)
+            _after_close(closed)
             _refresh_snapshot_safely()
         return closed
 
@@ -1371,7 +1436,7 @@ class TradeLog:
                     closed_trade = t
                     break
         if closed_trade is not None:
-            _journal_close_safely(closed_trade)
+            _after_close(closed_trade)
             _refresh_snapshot_safely()
             return True
         return False
@@ -1403,6 +1468,9 @@ class TradeLog:
 
     def delete_trade(self, trade_id: str) -> bool:
         """Remove a single trade record by id. Returns True if something was deleted."""
+        if self._reads_db():
+            with _LOCK:
+                return bool(self._db_delete_rows(trade_id=trade_id))
         with _LOCK:
             before = len(self._trades)
             self._trades = [t for t in self._trades if t["id"] != trade_id]
@@ -1414,6 +1482,9 @@ class TradeLog:
 
     def clear_history(self) -> int:
         """Delete all closed (win/loss/manually-closed) trade records, leaving open trades untouched."""
+        if self._reads_db():
+            with _LOCK:
+                return self._db_delete_rows("closed")
         with _LOCK:
             before = len(self._trades)
             self._trades = [t for t in self._trades if t["status"] == "open"]
@@ -1425,6 +1496,9 @@ class TradeLog:
 
     def clear_open(self) -> int:
         """Delete every trade currently in status='open', leaving closed win/loss history untouched."""
+        if self._reads_db():
+            with _LOCK:
+                return self._db_delete_rows("open")
         with _LOCK:
             before = len(self._trades)
             self._trades = [t for t in self._trades if t["status"] != "open"]
@@ -1436,6 +1510,9 @@ class TradeLog:
 
     def clear_all(self) -> int:
         """Delete every trade record. Returns how many were removed."""
+        if self._reads_db():
+            with _LOCK:
+                return self._db_delete_rows(None)
         with _LOCK:
             count = len(self._trades)
             self._trades = []
@@ -1490,6 +1567,7 @@ class TradeLog:
             return []
 
         newly_closed = []
+        changed = []
         closed_at = datetime.now(timezone.utc).isoformat()
         with _LOCK:
             id_map = {t["id"]: t for t in self._all()}
@@ -1503,10 +1581,11 @@ class TradeLog:
                 t["close_reason"] = "auto (price monitor)"
                 self._settle_account_balance(t)
                 newly_closed.append(dict(t))
+                changed.append(t)
             if newly_closed:
-                self._persist()
+                self._persist_changed(changed)
         for t in newly_closed:
-            _journal_close_safely(t)
+            _after_close(t)
         if newly_closed:
             _refresh_snapshot_safely()
         return newly_closed
@@ -1656,6 +1735,7 @@ class TradeLog:
             return []
 
         newly_closed = []
+        changed = []
         now_iso = now.isoformat()
         with _LOCK:
             id_map = {t["id"]: t for t in self._all()}
@@ -1663,6 +1743,7 @@ class TradeLog:
                 t = id_map.get(trade_id)
                 if t is None or t["status"] != "open":
                     continue   # already closed by a parallel call this tick
+                changed.append(t)
                 if action == "start":
                     t["near_tp_since"] = now_iso
                     t["near_tp_snapshots"] = [[now_iso, live_price]]
@@ -1682,9 +1763,9 @@ class TradeLog:
                     t["near_tp_snapshots"] = []
                     self._settle_account_balance(t)
                     newly_closed.append(dict(t))
-            self._persist()
+            self._persist_changed(changed)
         for t in newly_closed:
-            _journal_close_safely(t)
+            _after_close(t)
         if newly_closed:
             _refresh_snapshot_safely()
         return newly_closed

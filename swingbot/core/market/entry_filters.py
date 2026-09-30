@@ -22,7 +22,7 @@ import pandas as pd
 from swingbot.core.market.indicators import atr, ema, macd, rolling_vwap, rsi, elliott_wave3_entries
 from swingbot.core.market.strategy_types import (
     FIB_TOLERANCE_PCT, HORIZONS, MACD_PERIODS_BY_HORIZON, SR_VOLUME_MULTIPLE,
-    STRATEGY_GATES,
+    STRATEGY_GATES, admits,
 )
 from swingbot.core.risk_limits import capped_planned_loss_pct
 
@@ -128,8 +128,7 @@ def apply_regime_gate(bull: pd.Series, bear: pd.Series, strategy: str,
 def entries_for(strategy: str, df: pd.DataFrame, horizon_key: str,
                 params: dict | None = None,
                 regimes: "pd.Series | None" = None) -> tuple[pd.Series, pd.Series]:
-    """Dispatch to the strategy's entry function, then apply STRATEGY_GATES
-    (direction/horizon restrictions decided by train-window tuning).
+    """Dispatch to the strategy's entry function, then apply the mask (strategy_types.admits: STRATEGY_GATES' direction/horizon axes plus v113 "cells").
 
     `regimes` stays an explicit parameter for callers that already hold a
     series, but it no longer has to be passed: when it is None the regime is
@@ -145,20 +144,11 @@ def entries_for(strategy: str, df: pd.DataFrame, horizon_key: str,
         from swingbot.core.market import market_context
         regimes = market_context.get(df, "ctx_regime")
 
-    gates = STRATEGY_GATES.get(strategy)
-    if gates:
-        horizons = gates.get("horizons")
-        by_direction = gates.get("horizons_by_direction") or {}
-        directions = gates.get("directions")
-        def allowed(direction):
-            if directions is not None and direction not in directions:
-                return False
-            permitted = by_direction.get(direction, horizons)
-            return permitted is None or horizon_key in permitted
-        if not allowed("bullish"):
-            bullish = _off(df)
-        if not allowed("bearish"):
-            bearish = _off(df)
+    # v113 §2: strategy_types.admits is the mask rule (legacy axes + "cells").
+    if not admits(strategy, "bullish", horizon_key):
+        bullish = _off(df)
+    if not admits(strategy, "bearish", horizon_key):
+        bearish = _off(df)
 
     bullish, bearish = apply_regime_gate(bullish, bearish, strategy, regimes)
     return bullish, bearish
@@ -448,7 +438,46 @@ DEFAULT_PARAMS["EMA Crossover"] = {
     # Task 109 spends the single VALIDATION-window look against this exact
     # config, no retuning after.
     "entry_mode": "pullback", "pullback_max_bars": 15,
+    # v108 re-arm: pullback touch *events* taken per held cross, per direction.
+    # 1 = first touch only -- the pre-v108 entry, bit-for-bit. Changed only by
+    # a v108 funnel verdict (docs/superpowers/results/*-v108-*.md).
+    "max_touches_bull": 1, "max_touches_bear": 1,
 }
+
+
+def _touch_events_after(cross, touch, window, max_touches):
+    """Mark the first `max_touches` touch events in the `window` bars after each cross.
+
+    A touch event is a touching bar whose previous bar did not touch, so a run
+    of consecutive touching bars is one event. The first touching bar inside a
+    window always opens an event, even when the cross bar itself touched --
+    that keeps max_touches=1 identical to the pre-v108 first-touch rule. Each
+    cross counts independently. Bar j reads only the cross at ci < j and the
+    touch mask at j and j-1 (no lookahead).
+    """
+    if max_touches < 1:
+        raise ValueError(f"max_touches must be >= 1, got {max_touches}")
+    cross = np.asarray(cross, dtype=bool)
+    touch = np.asarray(touch, dtype=bool)
+    starts = touch & ~np.concatenate(([False], touch[:-1]))
+    out = np.zeros(len(touch), dtype=bool)
+    for ci in np.flatnonzero(cross):
+        taken = 0
+        for j in range(ci + 1, min(ci + 1 + window, len(touch))):
+            if touch[j] and (j == ci + 1 or starts[j]):
+                out[j] = True
+                taken += 1
+                if taken >= max_touches:
+                    break
+    return out
+
+
+def _pullback_entries(cross, touch, window, max_touches):
+    """Series wrapper: the touch-event bars that follow a held cross."""
+    marks = _touch_events_after(cross.fillna(False).to_numpy(dtype=bool),
+                                touch.fillna(False).to_numpy(dtype=bool),
+                                window, max_touches)
+    return pd.Series(marks, index=cross.index)
 
 
 def ema_cross_entries(df, horizon_key, params=None):
@@ -469,17 +498,11 @@ def ema_cross_entries(df, horizon_key, params=None):
         touched_bull = (df["Low"] <= fast) & (df["Close"] > fast)
         touched_bear = (df["High"] >= fast) & (df["Close"] < fast)
 
-        def _first_touch_after(cross_mask, touch_mask):
-            out = pd.Series(False, index=df.index)
-            for ci in np.where(cross_mask.values)[0]:
-                for j in range(ci + 1, min(ci + 1 + window, len(df))):
-                    if touch_mask.values[j]:
-                        out.iloc[j] = True
-                        break                     # first touch only
-            return out
-
-        held_bull = _first_touch_after(held_bull, touched_bull).fillna(False)
-        held_bear = _first_touch_after(held_bear, touched_bear).fillna(False)
+        # v108 re-arm: the first K touch events per held cross (K=1 = pre-v108).
+        held_bull = _pullback_entries(held_bull, touched_bull, window,
+                                      int(p.get("max_touches_bull", 1)))
+        held_bear = _pullback_entries(held_bear, touched_bear, window,
+                                      int(p.get("max_touches_bear", 1)))
 
     rsi14 = g["rsi14"]
     rsi_dipped = rsi14.rolling(5).min().shift(1) < p["rsi_dip"]          # real pullback preceded

@@ -25,7 +25,13 @@ plan building), see `docs/strategy/strategy.md`.
 | Elliott Wave | wave-3 breakout | both · 4w only | structural | WEAK (stale) | [elliott-wave.md](elliott-wave.md) |
 | RSI | oversold bounce in a range | bullish · all | ATR | WEAK, negative ExpR | [rsi.md](rsi.md) |
 | Fibonacci Continuation | break of the swing high after a held retracement | **masked** | structural | none (v103 NO-LIFT) | [fibonacci-continuation.md](fibonacci-continuation.md) |
+| Bull Trap | failed breakout, short-only | **masked** | structural (v104 stop scope) | none (v104 NO-LIFT) | [bull-trap.md](bull-trap.md) |
+| Vol Expansion Breakdown | breakdown in a falling, volatility-expanding market, short-only | **masked** | structural (v104 stop scope) | none (v104 NO-LIFT) | [vol-expansion-breakdown.md](vol-expansion-breakdown.md) |
+| Earnings Gap Drift | unrecovered post-earnings gap-down, short-only | **masked** | structural (v104 stop scope) | none (v104 NO-LIFT) | [earnings-gap-drift.md](earnings-gap-drift.md) |
+| Downtrend Overbought Fade | RSI(2) spike in a falling-SMA200 downtrend, short-only, `1w` limit entry | **masked** | fixed 2% stop, fixed-`m` target | none (v113 NO-LIFT) | [downtrend-overbought-fade.md](downtrend-overbought-fade.md) |
 
 "Stale" means the registry row's `run_date` (2026-07-18) predates v31's
 target arithmetic. No row post-dates the 2% cap (2026-09-21), and every figure
-is subject to the lifecycle finding in shared-mechanics §4a.
+is subject to the lifecycle finding in shared-mechanics §4a (fixed by v104
+for the strategies named in its own structural-stop scope list, currently
+empty — see §4b).

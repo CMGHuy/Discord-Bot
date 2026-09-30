@@ -106,10 +106,40 @@ risk. If no candidate still clears 1.5R, the widening is rolled back.
 > (`plan_manager.py`, `cancelled_risk_cap`). The backtest has no equivalent,
 > so it scores trades that live would cancel. That is a backtest ≠ live gap,
 > and it affects every strategy's post-cap badge and TRAIN figures, including
-> v101–v103. Not yet fixed; it needs its own plan (`Edge: none (integrity)`).
-> Script: scratch `cap_check.py` in the 2026-09-25 session, a
-> `run_backtest(..., exit_model="v2", scale_out=True, tp2_mode="levels",
-> frictions=True)` sweep comparing `|entry − stop_loss| / entry`.
+> v101–v103. **Fixed by v104 V104-2**: the level lifecycle now widens a stop
+> only up to the same ceiling the builder used, so backtest and live cannot
+> diverge on this axis again. Script: scratch `cap_check.py` in the
+> 2026-09-25 session, a `run_backtest(..., exit_model="v2", scale_out=True,
+> tp2_mode="levels", frictions=True)` sweep comparing
+> `|entry − stop_loss| / entry`.
+
+### 4b. Structural stops (v104)
+
+v104 (2026-09-25) let chosen strategy × direction pairs keep their own
+structural stop — up to the horizon's `max_risk_pct` — under fixed-dollar-risk
+sizing, instead of the flat 2% cap every strategy uses by default. One module,
+`swingbot/core/planning/stop_scope.py`, decides the regime:
+`stop_ceiling(strategy, direction, horizon)` returns `(pct, "cap"|"drop")`,
+and the builders, the level lifecycle (§4a) and the live fill check all read
+it, so backtest and live cannot diverge. A pair named in the structural-stop
+scope list gets `"drop"` (a stop beyond the ceiling builds no plan at all,
+never a capped one); every other pair still gets `"cap"` at exactly 2%,
+byte-identical to pre-v104 arithmetic.
+
+An in-scope plan is sized in dollars, not by a fixed price distance: it is
+not built unless `compute_position_size` returns `mode == "risk_pct"` with
+`0 < risk_amount ≤ balance × risk_pct / 100` (fail-closed — sizing
+unavailable means no plan, never a legacy fallback).
+
+**Current scope value: empty.** All 15 measured strategy × direction pairs
+(V104-16) and all three candidate short mechanisms (V104-17) were tested
+against this sizing regime on TRAIN 2010-2025 plus a 2026-01-01..2026-09-25
+holdout. Two pairs (MACD bullish, Support/Resistance bullish) reached the
+holdout and failed it; two (Break & Retest bullish, Volume Profile bullish)
+sealed thin and keep an unspent retry once the holdout reaches 12 months; the
+rest closed at Stage 1 or 2 on TRAIN. Nothing is in the scope list today.
+Detail and every figure: `docs/claude/backtest-methodology.md`'s v104 rows,
+`results/2026-09-28-v104-{partA,partB,holdout}.md`.
 
 ## 5. Exits (exit model v2)
 
@@ -169,3 +199,62 @@ subject to the §4a lifecycle finding.
 | `sr_lookback` | 10 | 30 | 60 | 90 | 120 | 150 | 180 | 210 | 240 | 270 |
 | `max_risk_pct` | 3.0 | 7.0 | 8.0 | 9.0 | 9.3 | 9.7 | 10.0 | 10.3 | 10.7 | 11.0 |
 | `max_holding_days` | 14 | 28 | 60 | 90 | 120 | 150 | 180 | 210 | 240 | 270 |
+
+## 8. The 1w horizon and `cells` (v113)
+
+v113 added an eleventh horizon, `1w`, and the machinery to admit strategies to
+it one `(direction, horizon)` cell at a time. **Every piece below is inert
+today**: no cell passed the pre-registered TRAIN funnel (Part A closed at
+Stage 1, Part B 0/22, Part D NO-LIFT; `backtest-methodology.md`'s v113 rows),
+so `1w` is admitted nowhere and no live behaviour changed. The ten legacy
+horizons are pinned byte-identical by `tests/market/test_v113_horizon_witness.py`.
+
+**Values** (`strategy_types.HORIZONS["1w"]`, fixed by the spec, never
+grid-searched): label "3-7 day swing"; `ema_fast`/`ema_slow` 5/8;
+`vwap_window` 5; `fib_lookback` 10; `sr_lookback` 5; `atr_stop_multiple` 1.5;
+`max_risk_pct` 2.0 (also `sr_stop_pct` 2.0); `sr_target_min_pct` 2.0 and
+`sr_target_max_pct` 5.0; `max_holding_days` 7; `rs_window` 10;
+`min_reward_pct` 2.0. `MIN_BARS["1w"]` is 20. The §7 table above covers the
+ten legacy horizons only.
+
+**Masked by default.** `MASKED_BY_DEFAULT_HORIZONS = ("1w",)` and
+`LEGACY_HORIZONS` is every other key in `HORIZONS` order. Confluence scans,
+scenario replays and every measurement script iterate `LEGACY_HORIZONS`, never
+`HORIZONS` (`tests/horizon_iteration.py` guards it).
+
+**`cells` and `admits`.** A `STRATEGY_GATES` entry may carry an optional
+`"cells"` set of `(direction, horizon)` pairs, admitted in addition to what the
+legacy `directions` / `horizons` / `horizons_by_direction` axes admit.
+`admits(strategy, direction, horizon_key)` is the one rule: True when the pair
+is in `cells`; otherwise False on a masked horizon; otherwise the legacy axes
+decide. `entry_filters.entries_for` reads it, so backtest and live signals
+both respect it. With no `cells` anywhere it equals the pre-v113 rule.
+
+**`live_horizons()`** returns `LEGACY_HORIZONS` plus any masked horizon at
+least one `cells` pair admits, in `HORIZONS` order, read at call time. With no
+`cells` shipped it is exactly the ten legacy horizons.
+
+**Reward floor** (`planning/reward_floor.py`). Only a horizon with
+`min_reward_pct` has one; today only `1w` (2.0% of entry). `clears(entry, tp1,
+strategy, horizon_key)` is True when TP1 sits at least that far from entry
+(either direction); a horizon without the key always clears. Both
+`build_strategy_plan` and `backtest._trade_plan_at` call it, so live and
+backtest cannot diverge. It gates strategy plans only; `config.MIN_REWARD_PCT`
+still gates confluence scenarios.
+
+**The `limit` entry type** (shared simulator, `planning/exit_sim.py`). A plan
+with `entry_type == "limit"` is a resting limit at `trigger_price`, live for
+`expiry_bars` bars after the signal bar. It fills on the first bar that trades
+through it: a sell limit when the high reaches it, a buy limit when the low
+does (touching counts). The fill is `limit_fill_price`: at the limit, or at
+the open when the bar gapped through it (a sell fills at `max(open, limit)`, a
+buy at `min(open, limit)`), so a limit never fills worse than its own price.
+The fill bar is then checked against the stop, stop first: a fill at or beyond
+the stop exits flat at 0R (scratch, reason `gap_through_stop`); a stop touch
+on the fill bar is a full -1R loss at the stop. Otherwise the normal exit walk
+runs from the fill bar, so the time stop counts bars after entry. A plan whose
+`tp1_fraction` is 1.0 takes the single-leg walk. If no bar fills within
+`expiry_bars`, the result is `not_triggered`. Only the masked Downtrend
+Overbought Fade has a `limit` shape (`planning/params.PLAN_SHAPES`);
+plan-level wiring beyond that shape table did not ship (the live
+resting-order tasks were skipped when the fade did not pass).

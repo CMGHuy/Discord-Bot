@@ -1,0 +1,14 @@
+{
+ "candidate": "a-volume-profile-bullish",
+ "part": "A",
+ "strategy": "Volume Profile",
+ "direction": "bullish",
+ "window": [
+  "2026-01-01",
+  "2026-09-25"
+ ],
+ "evaluate": "docs/superpowers/results/2026-09-28-v104-partA-volume-profile-bullish.json",
+ "preregistration": "docs/superpowers/results/2026-09-28-v104-preregistration.md",
+ "status": "sealed-thin",
+ "n": 9
+}

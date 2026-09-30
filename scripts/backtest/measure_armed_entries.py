@@ -34,7 +34,7 @@ import pandas as pd  # noqa: E402
 
 from swingbot.core.backtesting import armed_measurement as am  # noqa: E402
 from swingbot.core.backtesting.acceptance import ArmTrade, arm_trade_from_plan  # noqa: E402
-from swingbot.core.market.strategy_types import HORIZONS  # noqa: E402
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS  # noqa: E402
 
 CACHE_DIR = ROOT / "data" / "backtest_cache"
 OUT_ROOT = ROOT / "data" / "v90"
@@ -134,7 +134,7 @@ def cmd_replay(args) -> int:
                   f"{STAGE2_PASS_MARKER}", flush=True)
             return 3
     cache = Path(args.cache_dir)
-    horizons = args.horizons.split(",") if args.horizons else list(HORIZONS)
+    horizons = args.horizons.split(",") if args.horizons else list(LEGACY_HORIZONS)
     run_dir = Path(args.out_root) / args.run
     run_dir.mkdir(parents=True, exist_ok=True)
     meta = run_meta(cache, RUNS[args.run], horizons)

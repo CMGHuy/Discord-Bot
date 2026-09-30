@@ -36,11 +36,9 @@ import gzip
 import hashlib
 import hmac
 import json
-import logging
 import os
 from datetime import datetime, timedelta, timezone
 from functools import wraps
-from logging.handlers import RotatingFileHandler
 
 from flask import Flask, Response, redirect, request, session, url_for
 
@@ -85,16 +83,6 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=90)
 # often run over plain HTTP on a private network/localhost (see module
 # docstring), and Secure=True would silently break the cookie there.
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-
-# Wire Flask + Werkzeug request logs to admin.log so the Logs page can show
-# admin UI activity separately from the bot's own log stream.
-_admin_log_fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-_admin_file_handler = RotatingFileHandler(config.ADMIN_LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=2)
-_admin_file_handler.setFormatter(_admin_log_fmt)
-app.logger.addHandler(_admin_file_handler)
-app.logger.setLevel(logging.INFO)
-logging.getLogger("werkzeug").addHandler(_admin_file_handler)
-logging.getLogger("werkzeug").setLevel(logging.INFO)
 
 
 @app.after_request
@@ -294,7 +282,7 @@ def _trade_for_levels(trade_id: str):
     # its plan in `plan_id`; a legacy trade has none and simply keeps no
     # working-stop line, same as before this lookup existed.
     plan_id = trade.get("plan_id")
-    plan = PlanStore()._plans.get(plan_id) if plan_id else None
+    plan = PlanStore().get_record(plan_id) if plan_id else None
     if plan is not None:
         trade = {**trade, "working_stop": plan.get("working_stop")}
     return trade

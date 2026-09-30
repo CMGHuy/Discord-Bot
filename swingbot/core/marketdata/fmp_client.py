@@ -36,7 +36,7 @@ from typing import Any, Callable
 
 from swingbot import config
 
-log = logging.getLogger("swing-bot.fmp_client")
+log = logging.getLogger(__name__)
 
 STABLE_BASE = "https://financialmodelingprep.com/stable"
 

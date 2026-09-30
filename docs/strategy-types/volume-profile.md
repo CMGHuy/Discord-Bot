@@ -43,10 +43,15 @@ is not used for sizing. Exits: trail **3.0** × ATR, no TP2.
 | Source | Window | N | WR | ExpR | Note |
 |---|---|---|---|---|---|
 | Registry (run 2026-08-17) | VALIDATION 2024–25 | 32 | 53.1% | +0.547 | **VALIDATED** (v31 shot, pre-2% cap) |
+| v104 structural stop, out-of-scope arm | TRAIN 2010-2025, universe 74 | 354 | 42.7% | +0.334 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, in-scope arm | same | 300 | 54.3% | +0.372 | Tier 1, beats baseline, clears the fold check (11 qualifying, 8 positive) — **PROCEEDED to the 2026 holdout** |
+| v104 structural stop, in-scope arm | HOLDOUT 2026-01-01..2026-09-25 | 9 | — | — | **sealed-thin** (N=9 < 15); shot unspent, one retry when the holdout reaches 12 months. `results/2026-09-28-v104-holdout.md` |
 
 It has the best ExpR in the registry but the smallest N. N=32 barely clears
 the VALIDATION floor of 15, so treat the size of the edge with caution. The
 bearish arm failed in v93 and stays masked.
+
+**v113 1w cells (Part B, TRAIN 2010-01-01..2025-12-31, universe 74, horizon 1w masked):** bullish N=2161, WR 34.9%, ExpR +0.192, lower bound +0.141, cleared Tier 2 at Stage 1; Part B bar failing clauses: wr; folds 13 qualifying / 10 positive. bearish N=231, WR 31.6%, ExpR +0.044, lower bound -0.127, no tier; Part B bar failing clauses: wr, lower_bound; folds 6 qualifying / 4 positive. Neither cell proceeds to the holdout (Part B's bar is Tier 1 plus a bootstrap lower bound > 0; every 1w cell fails Tier 1 on WR); no `cells` admission, no registry row. Source: `results/2026-09-30-v113-partB.md`.
 
 ## Pseudocode
 

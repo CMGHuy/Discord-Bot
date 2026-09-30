@@ -17,7 +17,8 @@ from swingbot.core.market.chart_patterns import dead_cat_bounce
 from swingbot.core.planning.plan_engine import build_confluence_plan, primary_strategy_for, simulate_exit
 from swingbot.core.planning.params import stamp_entry_context
 from swingbot.core.backtesting.asof_context import asof_row
-from swingbot.core.market.strategy_types import HORIZONS, MIN_BARS
+from swingbot.core.marketdata.pit_membership import is_member
+from swingbot.core.market.strategy_types import HORIZONS, LEGACY_HORIZONS, MIN_BARS
 from swingbot.core.scanning.gating import passes_confluence, scenario_gate_inputs
 from swingbot.scan_params import ScanParams
 
@@ -198,17 +199,27 @@ def _replay_ticker(args) -> dict:
     """
     ticker, df, horizons, start, end, gates, scale_out, dcb_params = args[:8]
     asof_df = args[8] if len(args) > 8 else None
+    member_spans = args[9] if len(args) > 9 else None
     out = {hk: [] for hk in horizons}
     for hk in horizons:
         for i, plan in replay_scenarios(ticker, df, hk, gates=gates,
                                         dcb_params=dcb_params, asof=asof_df):
-            signal_date = str(df.index[i].date())
-            if start and signal_date < start:
-                continue
-            if end and signal_date > end:
+            if not _signal_in_scope(str(df.index[i].date()), start, end, member_spans):
                 continue
             out[hk].append(simulate_exit(df, i, plan, scale_out=scale_out))
     return out
+
+
+def _signal_in_scope(signal_date: str, start, end, member_spans) -> bool:
+    """Inside the [start, end] signal window AND, for a point-in-time
+    universe, on a date the ticker was actually an index member. The
+    membership check runs on the signal bar only -- the exit walk may
+    continue past a removal date, same as it may run past `end`."""
+    if start and signal_date < start:
+        return False
+    if end and signal_date > end:
+        return False
+    return is_member(signal_date, member_spans)
 
 
 def _resolve_replay_workers(workers: int | None) -> int:
@@ -222,7 +233,8 @@ def _resolve_replay_workers(workers: int | None) -> int:
 
 def run_scenario_backtest(frames: dict, start, end, *, gates,
                           scale_out=True, horizons=None, workers=None,
-                          dcb_params: dict | None = None, asof_map: dict | None = None) -> dict:
+                          dcb_params: dict | None = None, asof_map: dict | None = None,
+                          membership: dict | None = None) -> dict:
     """frames: {ticker: OHLCV df}. start/end (ISO or None) restrict SIGNAL
     dates -- the exit walk may run past `end`, same convention as
     run_backtest_daterange.
@@ -237,13 +249,18 @@ def run_scenario_backtest(frames: dict, start, end, *, gates,
     This is CPU-bound work on in-memory frames with no network and no yfinance
     involvement, so it carries none of the crawl's thread-safety constraints --
     processes are used here purely because the work is GIL-bound Python.
+
+    `membership` ({ticker: [(start, end_exclusive), ...]}, from
+    pit_membership.membership_map) masks signals to the dates each ticker was
+    an index member; None (every non-`_pit` universe) leaves them unmasked.
     """
-    horizons = horizons or list(HORIZONS)
+    horizons = horizons or list(LEGACY_HORIZONS)
     results_by_hz: dict = {hk: [] for hk in horizons}
 
     tasks = [
         (ticker, df, horizons, start, end, gates, scale_out, dcb_params,
-         asof_map.get(ticker) if asof_map else None)
+         asof_map.get(ticker) if asof_map else None,
+         membership.get(ticker, []) if membership is not None else None)
         for ticker, df in frames.items()
     ]
 

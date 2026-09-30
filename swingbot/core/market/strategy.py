@@ -62,8 +62,8 @@ import pandas as pd
 # strategy_types split still can. Do not "clean up" an unused-import warning
 # by deleting one -- check for importers first.
 from swingbot.core.market.strategy_types import (  # noqa: F401
-    FIB_TOLERANCE_PCT, HORIZONS, MACD_PERIODS_BY_HORIZON, MIN_BARS,
-    RSI_OVERBOUGHT, RSI_OVERSOLD, SR_VOLUME_MULTIPLE, SignalResult,
+    FIB_TOLERANCE_PCT, HORIZONS, LEGACY_HORIZONS, MACD_PERIODS_BY_HORIZON, MIN_BARS,
+    RSI_OVERBOUGHT, RSI_OVERSOLD, SR_VOLUME_MULTIPLE, SignalResult, live_horizons,
 )
 from swingbot.core.market.signals import (  # noqa: F401
     break_retest_signal, compute_hvn_level, compute_volume_profile,
@@ -95,7 +95,7 @@ def evaluate_all(ticker: str, df: pd.DataFrame) -> list[SignalResult]:
     results = []
     bars_available = len(df)
 
-    for horizon_key in HORIZONS:
+    for horizon_key in live_horizons():
         if bars_available < MIN_BARS[horizon_key]:
             continue
         for func in STRATEGY_FUNCS.values():

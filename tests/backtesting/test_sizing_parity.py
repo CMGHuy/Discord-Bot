@@ -21,44 +21,22 @@ is genuinely unchanged by v31 and remains a real, meaningful check. A bar
 where the new selector finds no qualifying target (`_trade_plan_at` returns
 None) is skipped, not compared -- the frozen side has no such concept.
 
-Runs on 3 fixed cached tickers x all 11 strategies x horizons {"4w", "3m"}
-for speed; `scripts/reports/parity_sizing.py` runs the same comparison over every
-cached ticker, every strategy, every horizon, every TRAIN-window entry bar.
-
-Skipped (not failed) when data/backtest_cache/ is absent, so CI without the
-(git-ignored) OHLCV cache stays green.
+Runs on the frozen fixture cases in tests/fixtures/ohlcv_parity.py -- every
+strategy x {"4w", "3m"} pair the scanner can emit, on committed OHLCV so CI
+runs it too; `scripts/reports/parity_sizing.py` runs the same comparison over
+every cached ticker, every strategy, every horizon, every TRAIN-window entry bar.
 """
-from pathlib import Path
-
 import numpy as np
-import pandas as pd
 import pytest
 
 from swingbot.core.backtesting import backtest
-from swingbot.core.backtesting.backtest import ALL_STRATEGIES
 from swingbot.core.market.strategy_types import HORIZONS, MIN_BARS
 from swingbot.core.risk_limits import capped_planned_loss_pct
 
 from tests.fixtures.legacy_trade_plan_at import legacy_trade_plan_at
+from tests.fixtures.ohlcv_parity import PARITY_CASES, load_ohlcv
 
-ROOT = Path(__file__).resolve().parent.parent.parent
-CACHE_DIR = ROOT / "data" / "backtest_cache"
 TOLERANCE = 1e-6
-HORIZON_KEYS = ["4w", "3m"]
-SAMPLE_TICKERS = ["AAPL", "MSFT", "TSLA"]
-
-pytestmark = pytest.mark.skipif(
-    not CACHE_DIR.is_dir(),
-    reason="data/backtest_cache/ not present -- no OHLCV cache to run parity against",
-)
-
-
-def _load_cached(ticker):
-    path = CACHE_DIR / f"{ticker}.csv"
-    if not path.exists():
-        return None
-    df = pd.read_csv(path, index_col="Date", parse_dates=True)
-    return df if len(df) else None
 
 
 @pytest.fixture(autouse=True)
@@ -88,17 +66,10 @@ def _lifecycle_off(monkeypatch):
                         raising=False)
 
 
-@pytest.mark.parametrize("horizon_key", HORIZON_KEYS)
-@pytest.mark.parametrize("strategy", ALL_STRATEGIES)
-@pytest.mark.parametrize("ticker", SAMPLE_TICKERS)
+@pytest.mark.parametrize(("ticker", "strategy", "horizon_key"), PARITY_CASES)
 def test_sizing_parity(ticker, strategy, horizon_key):
-    df = _load_cached(ticker)
-    if df is None:
-        pytest.skip(f"{ticker}.csv not present in data/backtest_cache/")
-
+    df = load_ohlcv(ticker)
     min_bars = MIN_BARS[horizon_key]
-    if len(df) < min_bars + 10:
-        pytest.skip(f"{ticker}: not enough bars for {horizon_key}")
 
     bullish, bearish = backtest._vectorized_entries(df, strategy, horizon_key)
     atr_series, swing_high_series, swing_low_series, volume_ratio_series, entry_levels = (
@@ -158,6 +129,7 @@ def test_sizing_parity(ticker, strategy, horizon_key):
         # assertion back.
         checked += 1
 
-    if checked == 0:
-        pytest.skip(f"no entry signals for {ticker}/{strategy}/{horizon_key} "
-                    f"({none_count} bar(s) had no qualifying v31 target)")
+    assert checked, (
+        f"no comparable entry bar for {ticker}/{strategy}/{horizon_key} "
+        f"({none_count} bar(s) had no qualifying v31 target); "
+        "swap in another ticker in tests/fixtures/ohlcv_parity.py")

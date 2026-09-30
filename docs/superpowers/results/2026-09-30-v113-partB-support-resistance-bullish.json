@@ -1,0 +1,216 @@
+{
+ "universe_n": 74,
+ "part": "B",
+ "strategy": "Support/Resistance",
+ "direction": "bullish",
+ "horizon": "1w",
+ "scored": {
+  "stats": {
+   "n": 921,
+   "wins": 284,
+   "losses": 637,
+   "win_rate": 30.836047774158526,
+   "expectancy_r": 0.17034085603112833,
+   "scratch_timeout_share": 0.28326848249027237
+  },
+  "lower_bound": 0.0866251923415106,
+  "tier1": {
+   "clears": false,
+   "clauses": {
+    "wr": false,
+    "exp_r": true,
+    "n": true,
+    "scratch": true
+   }
+  },
+  "tier2": {
+   "clears": true,
+   "clauses": {
+    "exp_r": true,
+    "lower_bound": true,
+    "n": true,
+    "scratch": true
+   }
+  },
+  "tier": 2
+ },
+ "clauses": {
+  "wr": false,
+  "exp_r": true,
+  "n": true,
+  "scratch": true,
+  "lower_bound": true
+ },
+ "folds": [
+  {
+   "test_year": 2013,
+   "tol": "fixed",
+   "stats": {
+    "n": 67,
+    "wins": 19,
+    "losses": 48,
+    "win_rate": 28.35820895522388,
+    "expectancy_r": 0.23148113207547172,
+    "scratch_timeout_share": 0.36792452830188677
+   }
+  },
+  {
+   "test_year": 2014,
+   "tol": "fixed",
+   "stats": {
+    "n": 76,
+    "wins": 23,
+    "losses": 53,
+    "win_rate": 30.263157894736842,
+    "expectancy_r": 0.12319827586206901,
+    "scratch_timeout_share": 0.3448275862068966
+   }
+  },
+  {
+   "test_year": 2015,
+   "tol": "fixed",
+   "stats": {
+    "n": 58,
+    "wins": 17,
+    "losses": 41,
+    "win_rate": 29.310344827586203,
+    "expectancy_r": 0.05648192771084338,
+    "scratch_timeout_share": 0.30120481927710846
+   }
+  },
+  {
+   "test_year": 2016,
+   "tol": "fixed",
+   "stats": {
+    "n": 36,
+    "wins": 13,
+    "losses": 23,
+    "win_rate": 36.11111111111111,
+    "expectancy_r": 0.3803636363636364,
+    "scratch_timeout_share": 0.34545454545454546
+   }
+  },
+  {
+   "test_year": 2017,
+   "tol": "fixed",
+   "stats": {
+    "n": 78,
+    "wins": 31,
+    "losses": 47,
+    "win_rate": 39.743589743589745,
+    "expectancy_r": 0.39128099173553715,
+    "scratch_timeout_share": 0.35537190082644626
+   }
+  },
+  {
+   "test_year": 2018,
+   "tol": "fixed",
+   "stats": {
+    "n": 52,
+    "wins": 18,
+    "losses": 34,
+    "win_rate": 34.61538461538461,
+    "expectancy_r": 0.2644583333333333,
+    "scratch_timeout_share": 0.2777777777777778
+   }
+  },
+  {
+   "test_year": 2019,
+   "tol": "fixed",
+   "stats": {
+    "n": 37,
+    "wins": 8,
+    "losses": 29,
+    "win_rate": 21.62162162162162,
+    "expectancy_r": -0.03250000000000001,
+    "scratch_timeout_share": 0.3620689655172414
+   }
+  },
+  {
+   "test_year": 2020,
+   "tol": "fixed",
+   "stats": {
+    "n": 79,
+    "wins": 22,
+    "losses": 57,
+    "win_rate": 27.848101265822784,
+    "expectancy_r": 0.08649514563106793,
+    "scratch_timeout_share": 0.23300970873786409
+   }
+  },
+  {
+   "test_year": 2021,
+   "tol": "fixed",
+   "stats": {
+    "n": 80,
+    "wins": 30,
+    "losses": 50,
+    "win_rate": 37.5,
+    "expectancy_r": 0.395039603960396,
+    "scratch_timeout_share": 0.2079207920792079
+   }
+  },
+  {
+   "test_year": 2022,
+   "tol": "fixed",
+   "stats": {
+    "n": 14,
+    "wins": 3,
+    "losses": 11,
+    "win_rate": 21.428571428571427,
+    "expectancy_r": -0.013529411764705882,
+    "scratch_timeout_share": 0.17647058823529413
+   }
+  },
+  {
+   "test_year": 2023,
+   "tol": "fixed",
+   "stats": {
+    "n": 65,
+    "wins": 30,
+    "losses": 35,
+    "win_rate": 46.15384615384615,
+    "expectancy_r": 0.46429670329670325,
+    "scratch_timeout_share": 0.2857142857142857
+   }
+  },
+  {
+   "test_year": 2024,
+   "tol": "fixed",
+   "stats": {
+    "n": 89,
+    "wins": 28,
+    "losses": 61,
+    "win_rate": 31.46067415730337,
+    "expectancy_r": 0.26295652173913037,
+    "scratch_timeout_share": 0.22608695652173913
+   }
+  },
+  {
+   "test_year": 2025,
+   "tol": "fixed",
+   "stats": {
+    "n": 80,
+    "wins": 24,
+    "losses": 56,
+    "win_rate": 30.0,
+    "expectancy_r": 0.07200000000000002,
+    "scratch_timeout_share": 0.13043478260869565
+   }
+  }
+ ],
+ "stage2": {
+  "clears": true,
+  "qualifying": 12,
+  "positive": 11,
+  "unselected": 0
+ },
+ "floor": {
+  "floor_drops": 0,
+  "floor_passes": 1347,
+  "floor_drop_rate": 0.0
+ },
+ "cap_bind_rate": 0.9859922178988327,
+ "proceed_to_holdout": false,
+ "tier": null
+}

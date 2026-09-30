@@ -239,6 +239,8 @@ beyond reading the named file.
 | v101 baseline, bullish (post-2% cap) | TRAIN 2020-01-01..2023-12-31 | 288 | 28.8% | +0.039 | `results/2026-09-24-v101-fib-diagnostic.md`; bearish N=94 WR 25.5% ExpR −0.091 |
 | v102/v103 TRAIN_EXT reference, bullish (swing stop, current arithmetic) | 2010-01-01..2023-12-31, universe 73 | 815 | 36.8% | +0.222 | `results/2026-09-24-v102-stage0.md`, `results/2026-09-25-v103-stage12.md` |
 | same, bearish (unmasked, laggard rule) | same | 169 | 23.7% | −0.127 | why the bearish side is gated off |
+| v104 structural stop, bullish, out-of-scope arm | TRAIN 2010-2025, universe 74 | 1119 | 36.9% | +0.259 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, bullish, in-scope arm | same | 120 | 31.7% | +0.332 | Tier 2 (lower bound +0.162), beats baseline, but only 1 of 3 anchored folds qualifies (needs ≥3) — **NO-LIFT at Stage 2**, holdout shot not spent |
 
 The strategy has **positive but weak expectancy on the bullish side and negative
 expectancy on the bearish side**. Win rate is far below 50%, so the edge relies
@@ -256,6 +258,7 @@ losses.
 | v102 | keep only levels in confluence with Rolling S/R | NO-LIFT, a de-facto 2w/4w mask |
 | v103 A | stop `b` ATR past the tested level (b ∈ 0.1/0.25/0.5), drop-don't-cap | bullish **FAILED VALIDATION** (2024-25: N=190, WR 23.2%, ExpR +0.313, lower bound −0.203). Shot spent |
 | v103 C | "Fibonacci Continuation": enter on the break of the swing extreme after a held 0.382–d_max retracement | NO-LIFT (bullish Stage 2: 6/11 folds; bearish Stage 1). Ships masked |
+| v104 | structural stop (drop, don't cap) instead of the flat 2% cap | bullish NO-LIFT at Stage 2 (1 of 3 folds qualifies); holdout shot not spent, remains available |
 
 **Main open problem:** because of the 2% cap, the plan's stop no longer reflects
 Fibonacci structure. It is a flat 2% stop, often *inside* the retracement zone
@@ -263,6 +266,8 @@ the setup relies on. Any reopening needs a mechanism different from those
 already closed above.
 
 ---
+
+**v113 1w cells (Part B, TRAIN 2010-01-01..2025-12-31, universe 74, horizon 1w masked):** bullish N=78, WR 34.6%, ExpR +0.289, lower bound +0.057, cleared Tier 2 at Stage 1; Part B bar failing clauses: wr; folds 0 qualifying / 0 positive. bearish N=13, WR 38.5%, ExpR +0.229, lower bound -0.493, no tier; Part B bar failing clauses: wr, n, lower_bound; folds 0 qualifying / 0 positive. Neither cell proceeds to the holdout (Part B's bar is Tier 1 plus a bootstrap lower bound > 0; every 1w cell fails Tier 1 on WR); no `cells` admission, no registry row. Source: `results/2026-09-30-v113-partB.md`.
 
 ## 8. Algorithm in one block (pseudocode)
 

@@ -69,3 +69,18 @@ def test_every_part2_table_exists_and_is_registered():
                  "journal_entries", "signal_state", "watchlist"):
         assert name in schema.METADATA.tables, name
         assert name in schema.PROMOTED, name
+
+
+def test_prices_round_trip_at_full_float_precision(db_conn):
+    """A numeric column kept ~14 digits and broke parity on every trade."""
+    repository = TradeRepository()
+    repository.insert({
+        "trade_id": "DB-T2", "ticker": "AAPL", "strategy": "RSI", "horizon": "2w",
+        "direction": "bullish", "status": "open", "opened_at": "2026-01-02T15:00:00+00:00",
+        "entry": 988.8404675292968, "stop_loss": 427.5574122222405,
+    }, conn=db_conn)
+
+    row = repository.get("DB-T2", conn=db_conn)
+
+    assert float(row["entry"]) == 988.8404675292968
+    assert float(row["stop_loss"]) == 427.5574122222405

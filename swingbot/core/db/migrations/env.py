@@ -9,7 +9,7 @@ from swingbot.core.db.schema import METADATA
 
 cfg = context.config
 if cfg.config_file_name is not None:
-    fileConfig(cfg.config_file_name)
+    fileConfig(cfg.config_file_name, disable_existing_loggers=False)
 
 target_metadata = METADATA
 

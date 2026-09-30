@@ -5,6 +5,13 @@
 > section before starting any task here.** Part 1 is the only hard dependency —
 > this part is about the codec, not about any store.
 
+> **Status 2026-09-30 (re-examined against main `33ef5c2f`):** Part 8 is entirely unbuilt: there is no `scripts/db/promote_field.py` or `edit_field.py`, no `docs/claude/schema-evolution.md`, and none of the test files. Three things changed since authoring:
+> 1. **The codec (v91).** `codec.split_doc` now runs `sanitise_non_finite`, so NaN/±Inf become `None` (one-way) and tuples become lists. `-0.0` comes back `0.0` from JSONB; only `scripts/db/import_common.py` folds that for parity, and the codec does not.
+> 2. **`numeric` was reverted.** `p6_001` changed the float columns to `double precision` because `numeric` kept only ~14 significant digits and broke parity. **`trades.r_multiple` is not a stored field**: R is computed by `performance.closed_r_multiple`, so the worked promotion needs a different field (P8-02 note).
+> 3. **The per-store strangler.** Stores sit at `json`/`dual`/`db` per `DB_STORES`. A doc-only edit on a store that still reads JSON diverges the two copies.
+>
+> A `schema-change` skill (`.claude/skills/schema-change/`) now exists, and the recipe should be linked from it (the skill change also needs `python scripts/dev/sync_codex.py`). `CLAUDE.md` is 159 lines, not at its 200-line budget, and any `CLAUDE.md`/`docs/claude/` edit ships its `AGENTS.md` mirror in the same commit. Verdicts: P8-01 UPDATED, P8-02 UPDATED (worked example must change), P8-03 UPDATED, P8-04 UPDATED, P8-05 VALID, P8-06 UPDATED.
+
 **Spec:** `docs/superpowers/specs/2026-08-29-v67-json-to-postgres-design.md`
 (section 1, "Schema strategy — the doc/column codec").
 
@@ -35,7 +42,9 @@ P8-02 and hangs off whatever head exists then.
 
 | Revision | Content |
 |---|---|
-| `p8_001` | promote `trades.r_multiple` — the worked example |
+| `p8_001` | promote `trades.r_multiple` — the worked example (**2026-09-30: field must change, see P8-02**) |
+
+> **2026-09-30:** The single head today is `p6_001`. `p8_001` hangs off whatever `alembic heads` prints at P8-02 time (`p7_001` only if Part 7 landed first). If Part 7 has not landed, this part widens `tests/db/test_migrations.py::ID_RE` from `p[1-6]` to `p[1-9]`.
 
 ## Parallelisation
 
@@ -54,7 +63,8 @@ P8-02 and hangs off whatever head exists then.
 2. Renaming and dropping a doc field each require no migration — one tool, one
    statement, demonstrated on real data.
 3. Promoting a doc field to a column changes **no call site** — demonstrated by
-   promoting `trades.r_multiple` for real and running the analytics parity test
+   promoting a real stored `trades` doc field for real (originally
+   `r_multiple`, which is not stored — see P8-02's 2026-09-30 note) and running the analytics parity test
    from P2-16 unchanged, before and after.
 4. The promotion tool refuses a field it would silently corrupt.
 5. `docs/claude/schema-evolution.md` exists and `docs/claude/architecture.md`
@@ -77,6 +87,12 @@ P8-02 and hangs off whatever head exists then.
 - Consumes: `split_doc`/`merge_doc` (P1-01), `Repository` (P1-09).
 - Produces: `docs/claude/schema-evolution.md` — the doc a session reads before
   changing a record's shape.
+
+> **2026-09-30 re-examination:**
+> 1. **Write-side constraints (v91).** The recipe's three constraints gain a fourth: NaN/±Infinity are written as `null`, one-way (`codec.sanitise_non_finite`); tuples come back as lists; and `-0.0` comes back `0.0`.
+> 2. **No displacement.** `CLAUDE.md` is 159 lines, so the reference-table row needs no displacement. It does need the `AGENTS.md` mirror in the same commit.
+> 3. **Skill link.** Also link the recipe from `.claude/skills/schema-change/SKILL.md` and run `python scripts/dev/sync_codex.py`.
+> 4. **Weak drift test.** `test_adding_a_field_does_not_move_the_declared_schema` runs on `db_conn`, whose schema came from `METADATA.create_all`, so the comparison is trivially clean. Use `db_engine_empty` plus `alembic upgrade head` through `cfg.attributes["connection"]` (the pattern in `tests/db/test_migrations.py:45`) if it should mean anything.
 
 **The doc is the deliverable here, and the test is what keeps it true.** A
 recipe nobody verifies drifts from the code within two plans; a test with no
@@ -286,6 +302,13 @@ gets run for real rather than demonstrated on a toy.
     inspects the data and returns what would happen
   - `render_migration(promotion, revision, down_revision) -> str`
   - CLI: `python scripts/db/promote_field.py trades r_multiple numeric --rev-id p8_001`
+
+> **2026-09-30 re-examination (worked example must change):**
+> 1. **`r_multiple` cannot be the example.** It is not in any trade record (see the field list at `performance.py:~670-715`): R is derived by `closed_r_multiple(t)`. Promoting it would promote an empty field.
+> 2. **Candidate fields.** `plan_id` is the true hot-path candidate, because `TradeRepository.by_plan_id` filters `doc->>'plan_id'` (`repositories/trades.py:52`). But v1/legacy trades store it as an explicit `None` (`performance.py:674`), so the explicit-null guard refuses it until those keys are normalised. `ledger` (`"main"`/`"weak"`, never null since v93) passes the guard as-is. **Ask the partner which one** before Step 4. The tests' seeds can keep using a synthetic numeric field; only the real promotion and P8-06's check name the chosen field.
+> 3. **Target type.** Map a float field to `double precision`, never `numeric`: `p6_001` reverted exactly that choice because `numeric` round-tripped floats to ~14 digits and broke parity. `_sa_type("double precision")` must be `Float(53)`, not `Float`.
+> 4. **Test files.** `tests/tracking/test_performance.py` does not exist. Use `tests/tracking/test_tradelog_db_reads.py` and `test_tradelog_dual.py`; `tests/analytics/test_analytics_backend_parity.py` exists.
+> 5. **Test database.** `plan_promotion` defaults to the `local` profile (`config.DATABASE_URL`), so these fixtures must point it at the test DB. Monkeypatch `DATABASE_URL`, then call `profiles.reset_engines()` and `engine.reset_engine()`, as in `tests/analytics/test_analytics_backend_parity.py:35`.
 
 **The tool does not strip the doc copy, and that is deliberate.** After
 promotion, `merge_doc` prefers the column over a stale doc key (pinned by
@@ -614,7 +637,7 @@ def downgrade() -> None:
 
 
 def _sa_type(sql_type: str) -> str:
-    return {"numeric": "Numeric", "double precision": "Float",
+    return {"numeric": "Numeric", "double precision": "Float(53)",
             "bigint": "BigInteger", "integer": "Integer",
             "boolean": "Boolean", "text": "Text",
             "timestamptz": "TIMESTAMP(timezone=True)"}[sql_type]
@@ -687,7 +710,7 @@ Expected: the drift guard clean — `schema.py` and the migration agree.
 ```bash
 git status --short          # expect ONLY schema.py and the new revision
 python scripts/dev/testrun.py file tests/analytics/test_analytics_backend_parity.py
-python scripts/dev/testrun.py file tests/tracking/test_performance.py
+python scripts/dev/testrun.py file tests/tracking/test_tradelog_db_reads.py   # was test_performance.py, which does not exist
 python scripts/dev/testrun.py file tests/db/test_datasets.py
 ```
 
@@ -726,6 +749,10 @@ constantly. Both are one statement and no migration.
   - `rename_field(table, old, new, *, dry_run=False) -> int` — rows changed
   - `drop_field(table, field, *, dry_run=False) -> int`
   - CLI: `python scripts/db/edit_field.py rename trades old_name new_name`
+
+> **2026-09-30 re-examination:**
+> 1. **Store-stage guard.** This tool edits the Postgres `doc` only. On a store still at `json` or `dual`, the JSON file is the read source: the next save rewrites the row from JSON, and every dual-write logs a diff for the record. `_check` must refuse unless `stages.reads_db(<store>)` holds for the table's store, overridable with an explicit `--force-db-only`. That needs a table→store map; `scripts/db/parity_report.py::STORES` is the nearest existing one (store → table via `repo_factory`).
+> 2. **Test database.** Fixtures need the same `DATABASE_URL` monkeypatch as P8-02, because `seeded.get("E1")` without `conn` goes through `get_engine()`.
 
 **Both refuse a promoted field.** Renaming or dropping a *column* is a
 migration and a `schema.py` change; this tool operates on `doc` only, and
@@ -1002,6 +1029,13 @@ plan. P1-01 tested its behaviour on hand-written examples; this tests its
 - Consumes: `split_doc`/`merge_doc` (P1-01), `Repository` (P1-09).
 - Produces: nothing.
 
+> **2026-09-30 re-examination (v91 codec):** `split_doc` now applies `sanitise_non_finite` to every value. The generator never emits NaN/±Inf or tuples, so the identity property still holds, but the properties must pin the new behaviour explicitly. Add these tests:
+> 1. **Non-finite floats.** A NaN/±Inf at any depth splits to `None`, and the change is one-way, so `merge_doc(split(...)) != record` for such a record by design.
+> 2. **Tuples.** A tuple comes back as a list.
+> 3. **Negative zero.** After a Postgres round trip, `-0.0` reads back as `0.0` (JSONB numeric has no negative zero). Assert value equality *and* `math.copysign(1, got) == 1`, so the sign loss is documented rather than accidental. `scripts/db/import_common.py::_fold_negative_zero` is where parity folds it.
+>
+> Promoted `entry`/`stop_loss` are `Float(53)` since `p6_001`, so `pytest.approx` on them stays right.
+
 **No new dependency.** `hypothesis` would be the obvious tool and is not worth
 adding one for — a deterministic generator over the shapes this repo actually
 stores covers the realistic space, and a seeded random walk covers the rest.
@@ -1173,6 +1207,8 @@ plausible-looking record rather than an error.
 - Consumes: `RESERVED_KEYS` (P1-01), `PROMOTED` (P1-04).
 - Produces: nothing in code.
 
+> **2026-09-30 re-examination:** Assumptions verified on main, so the verdict is VALID. `RESERVED_KEYS == {"id", "doc", "updated_at"}` equals `standard_columns()` plus `id`; every current table column is promoted or infrastructure (checked for all 19 tables); and `ReservedKeyError`'s message names the key and says "rename". The "guardrails" here are **tests**, and `.claude/hooks/guardrails.py` (the PreToolUse token-rule hook) is not touched. The `known-traps.md` edit needs its `AGENTS.md` mirror in the same commit. Add a fifth trap: NaN/±Inf are stored as `null` (v91), so a field whose NaN meant something different from `None` loses that distinction.
+
 **Trap one — a field named like an infrastructure column.** `id`, `doc` and
 `updated_at` are plausible field names (`doc` especially, for a plan's rationale
 text). `split_doc` raises, which is right, but the error has to be
@@ -1297,6 +1333,8 @@ git commit -m "test(v67): guard the codec's reserved names and promotion map"
 **Interfaces:**
 - Consumes: everything in Part 8.
 - Produces: nothing.
+
+> **2026-09-30 re-examination:** `test_r_multiple_was_actually_promoted` must name the field P8-02 actually promotes, and the revision glob `p8_*promote*.py` still holds. The Step 3 walk's `promote_field.py trades confidence_level integer --dry-run` may legitimately print an explicit-null refusal (`confidence_level` can be `None`), which is valid output for a dry run. `docs/claude/architecture.md` exists for the pointer check.
 
 - [ ] **Step 1: Write the exit test**
 

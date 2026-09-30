@@ -12,7 +12,7 @@ import logging
 
 from swingbot import config
 
-log = logging.getLogger("swing-bot.backtest_wf")
+log = logging.getLogger(__name__)
 
 #: Fold train windows start 2018-06-01 because that is where the OHLCV
 #: cache starts (scripts/data/fetch_backtest_data.py: START = "2018-06-01").
@@ -108,7 +108,7 @@ def _frame_for(symbol: str):
     try:
         return pd.read_csv(path, index_col=0, parse_dates=True)
     except Exception as exc:
-        log.warning("fold frame unreadable for %s: %s", symbol, exc)
+        log.warning("fold frame unreadable for %s: %s", symbol, exc, exc_info=True)
         return None
 
 
@@ -126,11 +126,11 @@ def _default_run(start: str, end: str, overrides: dict,
     """
     import numpy as np
     from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest_daterange
-    from swingbot.core.market.strategy_types import HORIZONS
+    from swingbot.core.market.strategy_types import LEGACY_HORIZONS
     from swingbot.core.marketdata.universe import liquidity_ok
 
     strategies = ALL_STRATEGIES if strategies is None else strategies
-    horizons = list(HORIZONS) if horizons is None else horizons
+    horizons = list(LEGACY_HORIZONS) if horizons is None else horizons
 
     rs = []
     for sym in (tickers if tickers is not None else _symbols_for_folds()):
@@ -472,11 +472,11 @@ def collect_portfolio_signals(start: str, end: str, strategies=None, horizons=No
     repeated automatic scanning over time, not a one-off `!check`.
     """
     from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest_daterange
-    from swingbot.core.market.strategy_types import HORIZONS
+    from swingbot.core.market.strategy_types import LEGACY_HORIZONS
     from swingbot.core.marketdata.universe import liquidity_ok, sector_map
 
     strategies = ALL_STRATEGIES if strategies is None else strategies
-    horizons = list(HORIZONS) if horizons is None else horizons
+    horizons = list(LEGACY_HORIZONS) if horizons is None else horizons
     sectors = sector_map(getattr(config, "SCAN_UNIVERSE", "watchlist") or "watchlist")
     tol_pct = getattr(config, "DEDUP_TOLERANCE_PCT", 2.0)
 

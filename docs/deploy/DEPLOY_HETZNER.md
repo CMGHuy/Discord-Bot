@@ -268,6 +268,53 @@ gives the admin UI a real public hostname via a Cloudflare Tunnel
 (`docker-compose.yml`'s `cloudflared` service, off by default behind the
 `tunnel` Compose profile).
 
+## PostgreSQL (v67 migration, in progress)
+
+The `db` service (`postgres:18-alpine`) keeps its data in the `pgdata` volume.
+The port is deliberately unpublished; reach it with
+`docker compose exec db psql -U swingbot -d swingbot`.
+
+- **Stages.** `DB_STORES` in `.env` selects a per-store stage
+  (`name:json|dual|db`). Empty means every store is JSON-only and nothing reads
+  the database. Stages are re-read on SIGHUP.
+- **Schema.** `docker compose exec bot alembic upgrade head`.
+- **Import.** `scripts/ops/reimport_production.sh` re-imports every migrated
+  store from JSON (idempotent upserts, JSON read-only) and prints counts. Run it
+  from WSL, piped over ssh; the header of the script has the exact command.
+- **Verification.** `docker compose exec -T bot python scripts/db/parity_report.py --all`
+  is the only verifier to trust; an import's own summary is not authoritative.
+
+**Nightly backups.** `scripts/ops/backup_db.sh` (`make backup-db`) streams a
+`pg_dump` from the db container into `data/backups/db/` and prunes dumps older
+than 14 days; `scripts/ops/restore_db.sh <dump.sql.gz> <target-db>` replays one
+into a throwaway database (no default target; `swingbot` needs `--i-mean-it`).
+The cron entry is installed on the VM as a separate step:
+
+```
+0 3 * * *  cd /opt/swing-bot && ./scripts/ops/backup_db.sh >> logs/backup.log 2>&1
+```
+
+The cron is installed on the VM (2026-09-30) and the restore drill is recorded
+in `DB_RESTORE.md`. Keep both true before any store reaches the `db` stage.
+
+**Rolling a store back from `db` to JSON.** Once a store is at stage `db` the
+JSON file is stale, so flipping the stage alone would resurrect old data. In
+order:
+
+1. Export: `docker compose exec -T bot python scripts/db/export_json.py --store <name>`
+   (or `--store all`; add `--dry-run` first). It prints per-store counts and a
+   checksum. A differing existing file is not overwritten unless `--force`; the
+   export is written beside it as `<name>.exported.json` instead.
+2. Restart the containers (`docker compose restart bot admin`). The in-memory
+   singletons (`TradeLog._trades`, `PlanStore._plans`, `StateStore._data`)
+   would otherwise overwrite the exported file on their next write.
+3. Set the store's stage back in `DB_STORES` (`name:json`). Edit `.env` **in
+   place** (an editor that writes in place, not `sed -i`): a rename-based edit
+   leaves the bind-mounted file invisible to the container, see
+   `docs/claude/known-traps.md` ("Editing production `.env` with `sed -i`").
+   Then `docker compose restart bot admin` again, or send SIGHUP.
+4. Verify with `parity_report.py --store <name>` against the exported file.
+
 ## Useful one-liners on the server
 
 ```bash

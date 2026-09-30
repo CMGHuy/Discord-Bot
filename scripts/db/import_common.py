@@ -2,14 +2,36 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 from dataclasses import dataclass, field
 
 
+def _fold_negative_zero(value):
+    """Replace ``-0.0`` with ``0.0``, recursively."""
+    if isinstance(value, float) and value == 0.0:
+        return 0.0
+    if isinstance(value, dict):
+        return {key: _fold_negative_zero(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_fold_negative_zero(item) for item in value]
+    return value
+
+
 def record_checksum(record: dict) -> str:
-    """Return a type-sensitive canonical checksum for one source record."""
-    blob = json.dumps(record, sort_keys=True, default=str, separators=(",", ":"))
+    """Return a type-sensitive canonical checksum for one source record.
+
+    Non-finite floats are folded to None first: the write path narrows NaN to
+    null at the codec boundary, so a source NaN and a stored null are the same
+    record and parity must not report them as a mismatch. Negative zero is
+    folded to zero for the same reason: JSONB stores a numeric, so a source
+    ``-0.0`` (a scratch exit's R) comes back ``0.0``; they compare equal and
+    no consumer divides by them.
+    """
+    from swingbot.core.db.codec import sanitise_non_finite
+    blob = json.dumps(_fold_negative_zero(sanitise_non_finite(record)),
+                      sort_keys=True, default=str, separators=(",", ":"))
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
@@ -67,8 +89,40 @@ def compare(source: list[dict], imported: list[dict], key: str,
     )
 
 
-def run_import(argv, *, load_source, write_one, repo, key: str, name: str) -> int:
-    """Run a reusable dry-run/import/verification CLI."""
+def parity(store: str, source_path: str | None = None) -> ImportReport:
+    """Authoritative per-store parity (lazy: parity_report imports this module)."""
+    from scripts.db.parity_report import parity as _parity
+    return _parity(store, source_path)
+
+
+def _write_all(source, write_one, repo, name: str, one_transaction: bool) -> None:
+    from swingbot.core.db.engine import transaction
+    with (transaction() if one_transaction else contextlib.nullcontext()) as conn:
+        for index, record in enumerate(source, 1):
+            if one_transaction:
+                write_one(repo, record, conn=conn)
+            else:
+                write_one(repo, record)
+            if index % 100 == 0 or index == len(source):
+                print(f"[{name}] {index}/{len(source)} written", flush=True)
+
+
+def run_import(argv, *, load_source, write_one, repo, key: str, name: str, prune=None,
+               prepare=None, one_transaction: bool = False) -> int:
+    """Run a reusable dry-run/import/verification CLI.
+
+    ``prune(repo, source)``, when given, runs after the writes and removes rows
+    the source no longer holds. Only for stores where the source is the whole
+    truth (an upsert alone never deletes, so a renamed key lingers).
+
+    ``prepare(repo)`` runs once before the first write. A store with no natural
+    key (the append-only settings audit) uses it to empty the table, so a rerun
+    converges on the file instead of appending a second copy.
+
+    ``one_transaction`` writes every record on one connection, passed to
+    ``write_one(repo, record, conn=...)`` and committed once. A per-record
+    commit is fine for hundreds of rows and minutes for ten thousand.
+    """
     parser = argparse.ArgumentParser(description=f"Import {name} into Postgres")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--source", help="path to the JSON file (default: data/)")
@@ -78,11 +132,16 @@ def run_import(argv, *, load_source, write_one, repo, key: str, name: str) -> in
     if args.dry_run:
         print(f"[{name}] DRY RUN -- would write {len(source)} row(s); table currently holds {repo.count()}")
         return 0
-    for index, record in enumerate(source, 1):
-        write_one(repo, record)
-        if index % 100 == 0 or index == len(source):
-            print(f"[{name}] {index}/{len(source)} written", flush=True)
-    report = compare(source, repo.list_all(), key=key)
+    if prepare is not None:
+        prepare(repo)
+    _write_all(source, write_one, repo, name, one_transaction)
+    if prune is not None:
+        print(f"[{name}] pruned {prune(repo, source)} row(s) absent from source", flush=True)
+    # One verifier. The ad-hoc comparison this replaced had neither the
+    # per-store from_repo_shape translation nor ignore_fields, so it reported
+    # watchlist FAILED on all 77 rows while authoritative parity reported OK,
+    # and passed stores whose shape it never translated.
+    report = parity(name, args.source)
     print(f"[{name}] verification:")
     print(report.render())
     return 0 if report.ok else 1

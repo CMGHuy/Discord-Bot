@@ -70,3 +70,12 @@ def test_add_returns_stamped_entry_and_missing_get_is_none(data_dir, monkeypatch
     out = JournalStore().add(_entry())
     assert "created_at" in out and out["trade_id"] == "T1"
     assert JournalStore().get("nope") is None
+
+
+def test_db_stage_set_note_on_db_only_entry(data_dir, monkeypatch, db_committed, db_url):
+    monkeypatch.setattr(config, "DB_STORES", "journal:db")
+    store = JournalStore()
+    store.add(_entry("T1"))
+    assert store.set_note("T1", "lesson") is True
+    assert store.get("T1")["note"] == "lesson"
+    assert store.set_note("MISSING", "x") is False

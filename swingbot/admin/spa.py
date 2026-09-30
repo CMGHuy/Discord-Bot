@@ -25,7 +25,7 @@ import os
 
 from flask import Blueprint, send_from_directory
 
-log = logging.getLogger("swing-bot.admin.spa")
+log = logging.getLogger(__name__)
 
 spa = Blueprint("spa", __name__)
 

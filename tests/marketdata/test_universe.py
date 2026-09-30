@@ -29,7 +29,7 @@ def test_explicit_thresholds_override_config():
     assert liquidity_ok(df, min_avg_dollar_vol=1_000_000, min_price=1.0) is True
 
 
-@pytest.mark.parametrize("symbol", ["SI=F", "XAGUSD", "GC=F", "EURUSD=X", "^GSPC"])
+@pytest.mark.parametrize("symbol", ["SI=F", "XAGUSD", "XAUUSD", "GC=F", "EURUSD=X", "^GSPC"])
 def test_non_share_symbols_skip_the_dollar_volume_floor(symbol):
     # Production 2026-09-28: SI=F read as $0.1M/day and was skipped every
     # scan. Yahoo reports futures volume in contracts (5,000 oz each) and FX
@@ -37,6 +37,16 @@ def test_non_share_symbols_skip_the_dollar_volume_floor(symbol):
     from swingbot.core.marketdata.universe import liquidity_reason
     df = make_ohlcv(np.full(60, 61.5), volumes=np.full(60, 1_400.0))
     assert liquidity_reason(df, symbol=symbol) is None
+
+
+def test_spot_metal_class_is_volume_exempt():
+    from swingbot.core.marketdata.universe import _VOLUME_NOT_SHARES
+    assert "spot_metal" in _VOLUME_NOT_SHARES
+
+
+def test_spot_metals_still_need_history_and_price():
+    from swingbot.core.marketdata.universe import liquidity_reason
+    assert liquidity_reason(make_ohlcv(np.full(10, 4150.0)), symbol="XAUUSD") is not None
 
 
 def test_symbol_aware_floor_still_applies_to_shares():

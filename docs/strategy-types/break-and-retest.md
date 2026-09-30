@@ -46,10 +46,23 @@ Stop `2 × ATR14`, capped at 2%. TP1 comes from the ATR ladder. Exits: trail
 |---|---|---|---|---|---|
 | Registry (run 2026-08-17) | VALIDATION 2024–25 | 112 | 49.1% | +0.195 | **WEAK**: v31's VALIDATION flipped it from VALIDATED |
 | v84 gated {2m, 3m, 4m} | TRAIN | 105 | 53.3% | +0.308 | gate shipped (it removes a proven-negative population), but 2022 blew up (WR 14.3%, ExpR −0.343), so the badge closed before VALIDATION |
+| v104 structural stop, bullish, out-of-scope arm | TRAIN 2010-2025, universe 74 | 482 | 40.2% | +0.214 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, bullish, in-scope arm | same | 405 | 52.3% | +0.319 | Tier 1, beats baseline, clears the fold check (11 qualifying, 10 positive) — **PROCEEDED to the 2026 holdout** |
+| v104 structural stop, bullish, in-scope arm | HOLDOUT 2026-01-01..2026-09-25 | 4 | — | — | **sealed-thin** (N=4 < 15); shot unspent, retry when the holdout reaches 12 months |
+| v104 structural stop, bearish, out-of-scope arm | TRAIN 2010-2025, universe 74 | 38 | 39.5% | +0.390 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, bearish, in-scope arm | same | 32 | 40.6% | +0.227 | bootstrap lower bound −0.275, no tier — **NO-LIFT at Stage 1** |
+
+Break & Retest is the one Part A strategy gated for both directions. Per the
+registry rule (a strategy's row is written only when every admitted direction
+passes), **the bearish NO-LIFT means no registry row is written for this
+strategy even if the bullish arm's pending holdout retry eventually passes** —
+its holdout is sealed-thin above, not a pass. `results/2026-09-28-v104-partA.md`, `results/2026-09-28-v104-holdout.md`.
 
 v84 context: the pooled TRAIN was N=298 WR 48.0%, but it splits by horizon
 (2m/3m/4m WR 53.1/57.1/51.4%, while 6m was WR 27.8% ExpR −0.157). The gate
 keeps the good horizons and both directions.
+
+**v113 1w cells (Part B, TRAIN 2010-01-01..2025-12-31, universe 74, horizon 1w masked):** bullish N=100, WR 31.0%, ExpR +0.138, lower bound -0.035, no tier; Part B bar failing clauses: wr, lower_bound; folds 0 qualifying / 0 positive. bearish N=7, WR 42.9%, ExpR +0.174, lower bound -0.417, no tier; Part B bar failing clauses: wr, n, scratch, lower_bound; folds 0 qualifying / 0 positive. Neither cell proceeds to the holdout (Part B's bar is Tier 1 plus a bootstrap lower bound > 0; every 1w cell fails Tier 1 on WR); no `cells` admission, no registry row. Source: `results/2026-09-30-v113-partB.md`.
 
 ## Pseudocode
 

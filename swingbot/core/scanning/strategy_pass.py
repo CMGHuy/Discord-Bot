@@ -12,7 +12,8 @@ from swingbot.core.planning.params import stamp_badge, stamp_cohort, stamp_entry
 from swingbot.core.planning.stop_scope import risk_sizing_ok
 from swingbot.core.tracking import ledger as ledger_mod
 from swingbot.core.edge.rs_gate import rs_verdict
-from swingbot.core.scanning.alert_embeds import build_strategy_alert_embed
+from swingbot.core.scanning.alert_embeds import (build_strategy_alert_embed,
+                                                 build_strategy_simple_embed)
 
 log = logging.getLogger(__name__)
 from swingbot.core.market.session import is_regular_session, session_date
@@ -69,12 +70,6 @@ def build_strategy_plan_at(df_completed: pd.DataFrame, *, ticker: str, strategy:
     stamp_entry_context(plan, df_completed, {**(asof or {}), "regime2_state": regime2_state})
     plan.ledger = ledger_mod.ledger_for(plan.source, plan.badge)
     return plan
-
-
-def simple_line(plan) -> str:
-    return (f"{plan.ticker} {plan.direction} · {plan.strategy} {plan.horizon_key} · "
-            f"entry {plan.trigger_price:.2f} stop {plan.stop_loss:.2f} TP1 {plan.tp1:.2f} · "
-            f"{plan.badge} · ledger {plan.ledger}")
 
 
 @dataclass
@@ -160,7 +155,9 @@ def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, hori
         return
     _open_trade(deps, plan, ticker=ticker, strategy=strategy, horizon=horizon, direction=direction)
     result.opened += 1
-    result.alerts.append((build_strategy_alert_embed(plan), None, plan, simple_line(plan)))
+    # v110 §6.1: the simple-channel mirror is an embed like every other alert's.
+    result.alerts.append((build_strategy_alert_embed(plan), None, plan,
+                          build_strategy_simple_embed(plan)))
 
 
 def run_strategy_pass(tickers, fresh_data, *, now, horizons, spy_df, regimes,

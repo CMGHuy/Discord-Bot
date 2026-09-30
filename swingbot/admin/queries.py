@@ -41,7 +41,7 @@ from swingbot.core.backtesting.backtest import ALL_STRATEGIES
 from swingbot.core.tracking.performance import TradeLog, primary_strategy_label
 from swingbot.core.planning.plan_engine import PlanStatus, plan_to_dict
 from swingbot.core.planning.plan_store import PlanStore
-from swingbot.core.market.strategy_types import HORIZONS, STRATEGY_GATES
+from swingbot.core.market.strategy_types import STRATEGY_GATES, live_horizons
 from swingbot.core.backtesting.registry import decay_for, load_registry
 
 from .dashboard import is_today_berlin as _is_today_berlin
@@ -161,26 +161,35 @@ def _plan_lifecycle(plans: list) -> dict:
     }
 
 
+def _cells_text(gate: dict) -> str:
+    """v113 §2: "bearish 1w, bullish 1w" for a gate's extra (direction, horizon) cells."""
+    return ", ".join(f"{direction} {horizon}" for direction, horizon in sorted(gate.get("cells", ())))
+
+
 def _gate_description(strategy: str) -> str:
     """Human-readable rendering of a STRATEGY_GATES entry -- e.g.
     Fibonacci's real current {"directions": ("bullish",)} becomes
     "bullish only"; VWAP's {"directions": ("bullish",),
     "horizons": ("4w","6m","7m","8m","9m")} becomes
     "bullish only {4w,6m,7m,8m,9m}". A missing key means no gate at all
-    (both directions, every horizon)."""
+    (both directions, every legacy horizon). v113 "cells" pairs are appended
+    ("+ bearish 1w"), or stand alone ("only bearish 1w") on a strategy whose
+    legacy directions are empty."""
     gate = STRATEGY_GATES.get(strategy)
     if not gate:
         return "no gate (all directions, all horizons)"
+    cells = _cells_text(gate)
     directions = gate.get("directions")
     if directions is not None and len(directions) == 0:
-        return "disabled (no direction allowed)"
+        return f"only {cells}" if cells else "disabled (no direction allowed)"
     parts = []
     if directions:
         parts.append(f"{'/'.join(directions)} only" if len(directions) == 1 else "/".join(directions))
     horizons = gate.get("horizons")
     if horizons:
         parts.append("{" + ",".join(horizons) + "}")
-    return " ".join(parts) if parts else "no gate (all directions, all horizons)"
+    base = " ".join(parts) if parts else "no gate (all directions, all horizons)"
+    return f"{base} + {cells}" if cells else base
 
 
 def _registry_rows() -> list[dict]:
@@ -235,7 +244,7 @@ def _strategy_horizon_heatmap() -> dict:
     other win-rate number in this cockpit, not reimplemented here."""
     tl = TradeLog()
     closed = [t for t in tl.get_trades(status=None, limit=None, ledger="main") if t["status"] in ("win", "loss", "closed")]
-    horizons = list(HORIZONS.keys())
+    horizons = list(live_horizons())
     buckets: dict[tuple[str, str], list[dict]] = {}
     for t in closed:
         strategy = primary_strategy_label(t)
@@ -263,13 +272,21 @@ def _rolling_win_rate_series(closed_trades: list[dict], window: int = 10) -> lis
     return points
 
 
-_JOB_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")  # no '/', '\', or '.' -- blocks path traversal
+_JOB_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")  # no '/', '\', or '.' -- see _load_result
 
 
 def _load_result(job_id: str) -> dict | None:
     if not _JOB_ID_RE.match(job_id):
-        return None  # reject anything that isn't a real job id -- job_id flows
-        # straight from the ?job_id= query param into a filesystem path below
+        # Input validation, not a traversal guard. It was a traversal guard
+        # when job_id was interpolated into a filesystem path (the file stage
+        # below still does); at the db stage it is a parameterised query and
+        # there is no path to escape. Kept because a client sending a
+        # malformed id is still a bug, and refusing it is cheaper than a lookup.
+        return None
+    from swingbot.core.db import stages
+    if stages.reads_db("tuning"):
+        from swingbot.core.db.repositories.tuning import tuning_repo
+        return tuning_repo().result(job_id)
     path = os.path.join(config.DATA_DIR, "tuning_results", f"{job_id}.json")
     if not os.path.exists(path):
         return None
@@ -293,6 +310,10 @@ TUNING_PROPOSALS_DIR_NAME = "tuning_proposals"
 
 
 def _list_proposals() -> list[dict]:
+    from swingbot.core.db import stages
+    if stages.reads_db("tuning"):
+        from swingbot.core.db.repositories.tuning import proposals_repo
+        return proposals_repo().all_proposals()
     proposals_dir = os.path.join(config.DATA_DIR, TUNING_PROPOSALS_DIR_NAME)
     if not os.path.exists(proposals_dir):
         return []

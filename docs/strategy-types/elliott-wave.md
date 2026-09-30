@@ -64,10 +64,16 @@ Exits use the defaults: trail 2.5 × ATR, TP2 on.
 | Source | Window | N | WR | ExpR | Note |
 |---|---|---|---|---|---|
 | Registry (run 2026-07-18) | VALIDATION 2024–25 | 75 | 77.3% | +0.064 | **WEAK**, pre-v31 arithmetic: stale |
+| v104 structural stop, bullish, out-of-scope arm | TRAIN 2010-2025, universe 74 | 295 | 41.0% | +0.418 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, bullish, in-scope arm | same | 0 | — | — | every structural stop for this strategy exceeds its horizon's `max_risk_pct` — the in-scope arm dropped every trade. **NO-LIFT at Stage 1 (N=0)** |
+| v104 structural stop, bearish, out-of-scope arm | TRAIN 2010-2025, universe 74 | 55 | 25.5% | −0.182 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, bearish, in-scope arm | same | 0 | — | — | same — **NO-LIFT at Stage 1 (N=0)** |
 
 - Tasks 104–106 (2026-07): TRAIN chose the strict wave-2 config (N=117,
   WR 83.8%, ExpR +0.094, pre-v31 arithmetic). Its VALIDATION shot FAILED.
 - v84: the proposed rescue was withdrawn, because it already shipped.
+
+**v113 1w cells (Part B, TRAIN 2010-01-01..2025-12-31, universe 74, horizon 1w masked):** bullish N=0 (no rows scored on 1w; the empty cell is arithmetic, not a market verdict). bearish N=0 (no rows scored on 1w; the empty cell is arithmetic, not a market verdict). Neither cell proceeds to the holdout (Part B's bar is Tier 1 plus a bootstrap lower bound > 0; every 1w cell fails Tier 1 on WR); no `cells` admission, no registry row. Source: `results/2026-09-30-v113-partB.md`.
 
 ## Pseudocode
 

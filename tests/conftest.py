@@ -147,3 +147,24 @@ def market_df():
     closes = 100 * np.cumprod(1 + rets)
     vols = rng.integers(500_000, 3_000_000, 1500).astype(float)
     return make_ohlcv(closes, spread_pct=2.0, volumes=vols)
+
+
+@pytest.fixture
+def restore_root_logging():
+    """Snapshot the root logger's handlers and level; restore both afterwards.
+
+    configure_logging() (swingbot/core/infra/logsetup.py) replaces the root
+    handlers it owns. A test calling it without this fixture would leave its
+    tmp-file handler on the process root for every later test in the worker.
+    """
+    root = logging.getLogger()
+    saved_handlers, saved_level = root.handlers[:], root.level
+    yield root
+    for handler in root.handlers[:]:
+        if handler not in saved_handlers:
+            root.removeHandler(handler)
+            handler.close()
+    for handler in saved_handlers:
+        if handler not in root.handlers:
+            root.addHandler(handler)
+    root.setLevel(saved_level)

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-28 12:18:59 UTC",
+  "generated_at": "2026-09-30 09:00:44 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.21.0",
-    "bot": "1.10.4"
+    "bot": "1.11.1"
   },
   "releases": [
     {
@@ -1288,6 +1288,58 @@
       "versions": {
         "ui": "1.21.0",
         "bot": "1.10.4"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-29",
+      "last_seen": "2026-09-29",
+      "commit": "f8435502",
+      "subject": "release(bot): 1.10.5 -- setups rejected at the 2% cap can still alert later; rejections logged",
+      "versions": {
+        "ui": "1.21.0",
+        "bot": "1.10.5"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-29",
+      "last_seen": "2026-09-29",
+      "commit": "3a51b0ce",
+      "subject": "release(bot): 1.10.6 -- spot gold/silver alerts priced on spot (XAUUSD/XAGUSD)",
+      "versions": {
+        "ui": "1.21.0",
+        "bot": "1.10.6"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-30",
+      "last_seen": "2026-09-30",
+      "commit": "5b3f34dc",
+      "subject": "release(bot): 1.11.0 -- distinct, colourful Discord notifications (one registry of kinds)",
+      "versions": {
+        "ui": "1.21.0",
+        "bot": "1.11.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-30",
+      "last_seen": "2026-09-30",
+      "commit": "cca04def",
+      "subject": "release(bot): 1.11.1 -- one logging setup, __name__ loggers, scan ids, lifecycle log lines",
+      "versions": {
+        "ui": "1.21.0",
+        "bot": "1.11.1"
       },
       "changed": [
         "bot"

@@ -1,4 +1,4 @@
-"""v104 Part B: three short-only strategies that are not mirrors of long rules.
+"""v104 Part B's three short-only strategies and v113 Part A's Downtrend Overbought Fade.
 
 Each strategy is a `*_frame(df, horizon_key, params)` returning per-bar
 columns -- `signal` plus the structure its sizing needs -- computed from bars
@@ -13,15 +13,27 @@ import pandas as pd
 
 from swingbot.core.market.entry_filters import (DEFAULT_PARAMS, ENTRY_FUNCS, _params,
                                                 compute_shared_gates)
-from swingbot.core.market.strategy_types import HORIZONS, SHORT_STRATEGIES, SR_VOLUME_MULTIPLE
+from swingbot.core.market.indicators import rsi
+from swingbot.core.market.strategy_types import (FADE_STRATEGY, HORIZONS, SR_VOLUME_MULTIPLE,
+                                                 V104_SHORTS)
 
-BULL_TRAP, VOL_BREAKDOWN, GAP_DRIFT = SHORT_STRATEGIES
+BULL_TRAP, VOL_BREAKDOWN, GAP_DRIFT = V104_SHORTS
+FADE = FADE_STRATEGY
 # Pinned to planning.params.STRUCTURE_BUFFER_ATR by a test (market never imports planning).
 STOP_ATR = 0.25
 
 DEFAULT_PARAMS[BULL_TRAP] = {"k": 3, "earnings": "hold"}
 DEFAULT_PARAMS[VOL_BREAKDOWN] = {"m": 1.0, "earnings": "hold"}
 DEFAULT_PARAMS[GAP_DRIFT] = {"g": 0.05}
+DEFAULT_PARAMS[FADE] = {"m": 1.0}   # v113 §3 grid m in {1.0, 1.25, 1.5}; frozen by the pre-registration
+
+# v113 §3 -- every value fixed by the spec, never grid-searched.
+FADE_SMA = 200
+FADE_SLOPE_BARS = 20
+FADE_RSI_PERIOD = 2
+FADE_RSI_MIN = 90.0
+FADE_STOP_PCT = 2.0
+FADE_EARNINGS_BARS = 7
 _SPY_COLUMNS = ("ctx_spy_down", "ctx_spy_ret63")
 
 _COLUMNS = ("signal", "level", "stop", "target_a", "target_b")
@@ -130,7 +142,34 @@ def gap_drift_frame(df: pd.DataFrame, horizon_key: str, params: dict | None = No
     return frame
 
 
-FRAMES = {BULL_TRAP: bull_trap_frame, VOL_BREAKDOWN: vol_breakdown_frame, GAP_DRIFT: gap_drift_frame}
+def fade_frame(df: pd.DataFrame, horizon_key: str, params: dict | None = None) -> pd.DataFrame:
+    """v113 A: at the close of bar t, a stock in a downtrend (close under a
+    falling SMA200) whose RSI(2) spikes to >= 90, with no earnings reaction in
+    the next 7 bars. level = close_t (the sell limit), stop = entry x 1.02,
+    target_a = entry - m x (stop - entry). Horizon-independent; the mask keeps
+    it on 1w. Reads bars <= t only, plus the scheduled next report date
+    (evt_bars_to_next, the v104 §3.4 exception). Without earnings context there
+    is no signal (silent while masked, like B3)."""
+    p = _params(FADE, params)
+    if "evt_bars_to_next" not in df.columns:
+        return _empty(df)
+    close = df["Close"]
+    sma = close.rolling(FADE_SMA).mean()
+    downtrend = (close < sma) & (sma < sma.shift(FADE_SLOPE_BARS))
+    spike = rsi(close, FADE_RSI_PERIOD) >= FADE_RSI_MIN
+    bars = df["evt_bars_to_next"]
+    clear = ~((bars >= 0) & (bars <= FADE_EARNINGS_BARS))
+    stop = close * (1.0 + FADE_STOP_PCT / 100.0)
+    frame = _empty(df)
+    frame["signal"] = (downtrend & spike & clear).fillna(False).astype(bool)
+    frame["level"] = close.to_numpy(dtype=float)
+    frame["stop"] = stop.to_numpy(dtype=float)
+    frame["target_a"] = (close - float(p["m"]) * (stop - close)).to_numpy(dtype=float)
+    return frame
+
+
+FRAMES = {BULL_TRAP: bull_trap_frame, VOL_BREAKDOWN: vol_breakdown_frame,
+          GAP_DRIFT: gap_drift_frame, FADE: fade_frame}
 
 
 def _short_only(frame_fn):

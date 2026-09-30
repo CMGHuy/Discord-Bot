@@ -20,7 +20,7 @@ from swingbot.core.scanning.embeds import (
     regenerate_chart_for_trade,
 )
 from swingbot.core.scanning import embeds as embeds_mod, plan_table, snapshots
-from swingbot.core.presentation import ansi
+from swingbot.core.presentation import ansi, kinds, tokens
 from swingbot.core import presentation as ui
 from swingbot.core.scanning.engine import ScanItem
 
@@ -124,8 +124,7 @@ def test_an_unmet_requirement_gets_its_own_field():
 
 
 def test_a_blocked_alert_takes_the_inert_accent_not_red():
-    from swingbot.core.presentation import tokens
-    assert _build(make_item(all_ok=False)).color.value == tokens.ACCENT_BLOCKED
+    assert _build(make_item(all_ok=False)).color.value == kinds.SETUP_BLOCKED
 
 
 def test_a_clean_alert_has_no_blocked_field():
@@ -141,7 +140,7 @@ def test_weak_plan_v2_uses_its_confidence_level_colour(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     item = make_item(plan_v2=make_plan_v2(badge="WEAK", confidence_level=1))
     embed = _build(item)
-    assert embed.color.value == 0x9ACD32
+    assert embed.color.value == kinds.SETUP_RAMP[4]
     assert "WEAK" not in embed.title
     assert "NVDA" in embed.title
 
@@ -150,7 +149,7 @@ def test_validated_plan_uses_the_confidence_level_colour_without_badge(monkeypat
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", confidence_level=3))
     embed = _build(item)
-    assert embed.color.value == 0x9ACD32
+    assert embed.color.value == kinds.SETUP_RAMP[4]
     assert "VALIDATED" not in embed.title
     assert "NVDA" in embed.title
 
@@ -159,7 +158,7 @@ def test_no_v2_plan_falls_back_to_the_shared_confidence_accent_and_plain_title(m
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     item = make_item(plan_v2=None, all_ok=True)
     embed = _build(item)
-    assert embed.color.value == ui.accent_for_level(item.conf.level).value
+    assert embed.color.value == kinds.SETUP_RAMP[item.conf.level]
     assert not embed.title.startswith(("1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"))
     assert "NVDA" in embed.title
 
@@ -401,11 +400,19 @@ def _make_closed_trade(**overrides):
     return trade
 
 
-def test_closed_trade_outcomes_use_the_shared_ramp_endpoints():
-    from swingbot.core.presentation import tokens
-    assert build_closed_trade_embed(_make_closed_trade(status="win")).color.value == tokens.ACCENT_RAMP[5]
-    assert build_closed_trade_embed(_make_closed_trade(status="loss")).color.value == tokens.ACCENT_RAMP[1]
-    assert build_closed_trade_embed(_make_closed_trade(status="closed")).color.value == tokens.ACCENT_RAMP[3]
+def test_closed_trade_outcomes_take_the_result_ramp():
+    assert build_closed_trade_embed(_make_closed_trade(status="win")).color.value in kinds.RESULT_GREENS
+    assert build_closed_trade_embed(_make_closed_trade(status="loss")).color.value in kinds.RESULT_REDS
+    assert build_closed_trade_embed(_make_closed_trade(status="closed")).color.value == kinds.RESULT_GREY
+
+
+def test_closed_trade_title_and_push_line_come_from_the_registry():
+    embed = build_closed_trade_embed(_make_closed_trade(status="win"))
+    assert embed.title == "🏁 ▲ LONG NVDA · CLOSED · ✅ WIN +2.0R"
+    assert embed.push_text == "🏁 RESULT · ▲ LONG NVDA · CLOSED · ✅ WIN +2.0R"
+    assert ansi.paint("2.0R", "green") in embed.description
+    manual = build_closed_trade_embed(_make_closed_trade(status="closed"))
+    assert manual.title == "🏁 ▲ LONG NVDA · CLOSED · 🔒 MANUAL CLOSE"
 
 
 def test_closed_trade_headline_uses_the_actual_exit_and_realised_metrics():
@@ -427,7 +434,7 @@ def _make_near_close_warning(**trade_overrides):
     }
 
 
-def test_all_three_embeds_share_timestamp_and_disclaimer_and_preserve_ids(monkeypatch):
+def test_all_three_embeds_are_timestamped_with_family_footers_and_keep_ids(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
 
     scan_item = make_item(plan_v2=make_plan_v2(plan_id="12345678-abcd-efgh"))
@@ -444,17 +451,10 @@ def test_all_three_embeds_share_timestamp_and_disclaimer_and_preserve_ids(monkey
     assert closed_embed.timestamp is not None
     assert near_close_embed.timestamp is not None
 
-    # All three share the identical disclaimer prefix once the plan-id
-    # suffix is stripped off.
-    prefixes = {
-        scan_embed.footer.text.split(" · plan ")[0],
-        closed_embed.footer.text.split(" · plan ")[0],
-        near_close_embed.footer.text.split(" · plan ")[0],
-    }
-    assert len(prefixes) == 1
-
-    # Scan embed's footer carries the 8-char-truncated plan id.
-    assert "plan 12345678" in scan_embed.footer.text
+    # v110: each family owns its footer -- only NEW SETUP keeps the disclaimer.
+    assert scan_embed.footer.text == f"{tokens.DISCLAIMER} · plan 12345678"
+    assert closed_embed.footer.text == "RESULT"
+    assert near_close_embed.footer.text == "WATCH"
 
     # Closed-trade embed has no plan_id -- no " · plan " suffix at all.
     assert " · plan " not in closed_embed.footer.text
@@ -690,3 +690,39 @@ def test_regenerate_chart_passes_none_without_a_stored_fit(monkeypatch):
 
     assert "trendline_fit" in captured
     assert captured["trendline_fit"] is None
+
+
+def test_full_alert_title_push_line_and_footer_come_from_the_registry(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    embed = _build(make_item(plan_v2=make_plan_v2(plan_id="12345678-abcd")))
+    assert embed.title == "🆕 ▲ LONG NVDA · ALERT · Lv4 ⭐"
+    assert embed.push_text == "🆕 NEW SETUP · ▲ LONG NVDA · ALERT · Lv4 ⭐"
+    assert embed.color.value == kinds.SETUP_RAMP[4]
+    assert embed.footer.text == f"{tokens.DISCLAIMER} · plan 12345678"
+
+
+def test_a_blocked_alert_says_review_instead_of_the_star():
+    assert _build(make_item(all_ok=False)).title == "🆕 ▲ LONG NVDA · ALERT · Lv4 ⚠️ review"
+
+
+def test_full_alert_never_uses_the_retired_circles():
+    for trend in ("bullish", "bearish"):
+        item = make_item()
+        item.result.trend = trend
+        title = _build(item).title
+        assert "🟢" not in title and "🔴" not in title
+
+
+def test_a_short_alert_leads_with_the_red_side_line():
+    item = make_item()
+    item.result.trend = "bearish"
+    embed = _build(item)
+    assert embed.title.startswith("🆕 ▼ SHORT NVDA")
+    assert ansi.paint("▼ SHORT", "red") in embed.description
+
+
+def test_intraday_confirmation_uses_a_plain_check_not_the_outcome_mark():
+    item = make_item()
+    item.intraday = True
+    field = next(f for f in _build(item).fields if f.name == "⏱ Intraday timing")
+    assert field.value.startswith("✔ confirms") and "✅" not in field.value

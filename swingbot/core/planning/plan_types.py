@@ -27,7 +27,7 @@ class TradePlanV2:
     strategy: str              # exact ALL_STRATEGIES string of the generating strategy
     horizon_key: str
     direction: str             # "bullish" | "bearish"
-    entry_type: str            # "stop_entry" | "market"
+    entry_type: str            # "stop_entry" | "market" | "limit" (v113)
     trigger_price: float
     entry_price: float | None
     expiry_bars: int

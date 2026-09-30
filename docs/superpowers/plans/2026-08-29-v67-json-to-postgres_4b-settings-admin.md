@@ -1,4 +1,4 @@
-# v67 — Part 4: Settings (tasks P4-08…P4-14)
+# v67 — Part 4: Settings (tasks P4-07…P4-14)
 
 > Continuation of `2026-08-29-v67-json-to-postgres_4a-settings-resolution.md`.
 > Part of `2026-08-29-v67-json-to-postgres_0-index.md`. **Read the index's
@@ -10,6 +10,213 @@
 
 ---
 
+> **2026-09-30:** P4-07 moved here from `_4a` unchanged, so `_4a` stays under
+> 1500 lines. It still runs after P4-06 (both edit `admin/helpers.py`) and
+> before P4-08; the index's part table row should read P4-01…06 / P4-07…14.
+
+### Task P4-07: Export and import still round-trip
+
+`build_settings_export_text` (`helpers.py:205`) emits every non-sensitive field
+so someone can export, edit and re-import. `import_env_text` (`:225`) applies a
+pasted `.env`, sensitive keys included.
+
+> **2026-09-30 re-examination:** both functions and their contracts match
+> `main`; their only callers are `api_v1/system.py:export_settings` /
+> `import_settings` (the Jinja `app.py` routes are gone). **Design fix to
+> Step 3:** `import_env_text` does **not** write through `_build_env_text` — it
+> has its own section/leftover line loop over `new_values`. Keep that loop and
+> filter it by `f.sensitive or f.key in config._ENV_ONLY` at the db stage;
+> do not swap in `_build_env_text(new_values, ...)` as the snippet shows,
+> because `_build_env_text`'s checkbox branch reads the form convention
+> (`form.get(key) == "on"`) and would write every pasted `true` checkbox as
+> `false`. The export's `db` read should use `helpers.current_values()`
+> (P4-05) rather than a second copy of the bool/None stringification. Tests:
+> the fixture needs `monkeypatch.setenv("DB_STORES", "settings:db")`, and the
+> regression suite is `tests/admin/test_api_v1_system_settings.py` (its
+> export/import round-trip tests), not `tests/admin/test_helpers.py`. Both must keep working when the
+non-sensitive half lives in a table — and NG15's acceptance check is a round
+trip, so this is where that check is re-established.
+
+**Files:**
+- Modify: `swingbot/admin/helpers.py` (`build_settings_export_text`,
+  `import_env_text`)
+- Test: `tests/admin/test_settings_export_import_db.py`
+
+**Interfaces:**
+- Consumes: `settings_repo` (P4-01), `stages`, `split_form_values` (P4-05).
+- Produces: no new public symbols. Both functions keep their signatures and
+  their return shapes (`import_env_text` still returns
+  `(applied_count, unknown_keys)`).
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `tests/admin/test_settings_export_import_db.py`:
+
+```python
+"""NG15's round trip: export, edit, import, and the bot reads the change."""
+import io
+
+import pytest
+from dotenv import dotenv_values
+
+from swingbot import config
+from swingbot.admin import helpers
+
+
+@pytest.fixture
+def db_stage(monkeypatch, db_committed, tmp_path):
+    env = tmp_path / ".env"
+    env.write_text("DISCORD_TOKEN=secret\n", encoding="utf-8")
+    monkeypatch.setattr(config, "ENV_PATH", str(env))
+    monkeypatch.setattr(helpers, "ENV_PATH", str(env))
+    monkeypatch.setattr(config, "DB_STORES", "settings:db")
+    yield env
+    config._apply_env()
+
+
+def test_the_export_reads_current_values_from_the_database(db_stage):
+    from swingbot.core.db.repositories.settings import settings_repo
+    settings_repo().put("MIN_ALERT_CONFIDENCE_LEVEL", 5, updated_by="test")
+    text = helpers.build_settings_export_text()
+    assert "MIN_ALERT_CONFIDENCE_LEVEL=5" in text
+
+
+def test_the_export_still_omits_secrets(db_stage):
+    text = helpers.build_settings_export_text()
+    for f in config.FIELDS:
+        if f.sensitive:
+            assert f"{f.key}=" not in text, f.key
+
+
+def test_an_imported_non_secret_lands_in_the_database(db_stage):
+    from swingbot.core.db.repositories.settings import settings_repo
+    applied, unknown = helpers.import_env_text("MIN_ALERT_CONFIDENCE_LEVEL=5\n")
+    assert applied == 1 and unknown == []
+    assert settings_repo().get_value("MIN_ALERT_CONFIDENCE_LEVEL") == 5
+
+
+def test_an_imported_secret_still_lands_in_env(db_stage):
+    helpers.import_env_text("DISCORD_TOKEN=pasted-secret\n")
+    assert "pasted-secret" in db_stage.read_text(encoding="utf-8")
+
+
+def test_an_imported_secret_never_lands_in_the_database(db_stage):
+    from swingbot.core.db.repositories.settings import settings_repo
+    helpers.import_env_text("DISCORD_TOKEN=pasted-secret\n")
+    assert "DISCORD_TOKEN" not in settings_repo().all_settings()
+
+
+def test_an_unknown_key_is_reported_not_applied(db_stage):
+    applied, unknown = helpers.import_env_text("NOT_A_FIELD=x\n")
+    assert applied == 0 and unknown == ["NOT_A_FIELD"]
+
+
+def test_a_bad_numeric_is_skipped_rather_than_stored(db_stage):
+    from swingbot.core.db.repositories.settings import settings_repo
+    helpers.import_env_text("MIN_ALERT_CONFIDENCE_LEVEL=not-a-number\n")
+    from swingbot.core.db.repositories.settings import SENTINEL_MISSING
+    assert settings_repo().get_value("MIN_ALERT_CONFIDENCE_LEVEL") is SENTINEL_MISSING
+
+
+def test_the_full_round_trip(db_stage):
+    """Export, edit one value, re-import, and config resolves the new value."""
+    text = helpers.build_settings_export_text()
+    parsed = dotenv_values(stream=io.StringIO(text))
+    assert "MIN_ALERT_CONFIDENCE_LEVEL" in parsed
+    edited = text.replace(
+        f"MIN_ALERT_CONFIDENCE_LEVEL={parsed['MIN_ALERT_CONFIDENCE_LEVEL']}",
+        "MIN_ALERT_CONFIDENCE_LEVEL=5")
+    helpers.import_env_text(edited)
+    config.reload_settings()
+    assert config.MIN_ALERT_CONFIDENCE_LEVEL == 5
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+```bash
+python -m pytest tests/admin/test_settings_export_import_db.py -q
+```
+
+Expected: `test_the_export_reads_current_values_from_the_database` fails — the
+export reads `_read_env_values()` only.
+
+- [ ] **Step 3: Branch both**
+
+`build_settings_export_text` resolves each field the same way `config` does,
+rather than reading `.env` directly:
+
+```python
+def build_settings_export_text() -> str:
+    """The exported .env body — one definition, two callers.
+
+    Sensitive fields are OMITTED, not masked: a masked line would import as the
+    literal mask and blank out a real secret, and an export is exactly the file
+    someone re-imports.
+
+    At the db stage the values come from the settings table layered over .env,
+    because that is what the bot is actually running on -- an export that
+    showed .env's stale copy would export a configuration nobody is using.
+    """
+    from swingbot.core.db import stages
+    existing = _read_env_values()
+    db = config._db_settings() if stages.reads_db("settings") else {}
+
+    def _value(f):
+        if f.key in db:
+            v = db[f.key]
+            if isinstance(v, bool):
+                return "true" if v else "false"
+            return "" if v is None else str(v)
+        return existing.get(f.key, f.default)
+
+    return "\n".join(f"{f.key}={_value(f)}"
+                     for f in config.FIELDS if not f.sensitive) + "\n"
+```
+
+`import_env_text` routes each accepted key by sensitivity, reusing the existing
+type-check loop and leaving its `(applied, unknown)` contract intact:
+
+```python
+    # ... existing parse + validation loop, unchanged, building new_values ...
+    from swingbot.core.db import stages
+    if stages.writes_db("settings"):
+        typed = {}
+        for key, raw in new_values.items():
+            f = FIELDS_BY_KEY.get(key)
+            if f is None or f.sensitive:
+                continue
+            try:
+                typed[key] = config._cast(f, raw)
+            except (ValueError, TypeError):
+                continue          # already counted as skipped above
+        settings_repo().put_many(typed, updated_by="import_env_text")
+        new_values = {k: v for k, v in new_values.items()
+                      if FIELDS_BY_KEY.get(k) and FIELDS_BY_KEY[k].sensitive}
+    _write_env_text(_build_env_text(new_values, existing,
+                                    secrets_only=stages.reads_db("settings")))
+```
+
+- [ ] **Step 4: Run the tests**
+
+```bash
+python scripts/dev/testrun.py file tests/admin/test_settings_export_import_db.py
+python scripts/dev/testrun.py file tests/admin/test_api_v1_system_settings.py
+python scripts/dev/testrun.py fast
+```
+
+Expected: `0 failed`. The fast tier because `helpers.py` is imported by most
+of the admin surface (2026-09-30: the `app.py` export/import callers are gone;
+the v1 API is the only caller).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add swingbot/admin/helpers.py tests/admin/test_settings_export_import_db.py
+git commit -m "feat(v67): keep the settings export/import round trip intact"
+```
+
+---
+
 ### Task P4-08: The bot reloads on NOTIFY
 
 A settings row changes, the trigger fires, the bot's listener calls
@@ -17,12 +224,52 @@ A settings row changes, the trigger fires, the bot's listener calls
 
 **Files:**
 - Create: `swingbot/core/infra/settings_listener.py`
-- Modify: `bot.py` (start it alongside the other background tasks)
+- Modify: ~~`bot.py`~~ `swingbot/commands/scanning/loops.py` (`on_ready` `:849`,
+  `config_watcher` `:283`) — 2026-09-30: `bot.py` has no startup hooks; the
+  background tasks start in `loops.on_ready`
 - Test: `tests/infra/test_settings_listener.py`
 
 **Interfaces:**
 - Consumes: `notify.listen` (P1-13), `config.reload_settings` (P4-03),
   `stages`.
+
+> **2026-09-30 re-examination — blocked, and the reload must go through the
+> bot's post-reload path.**
+>
+> - **Blocker:** `notify.listen()` (P1-13) does not exist on `main`
+>   (`swingbot/core/db/notify.py` has only the DDL helpers and `emit`). Build
+>   P1-13 first, to the signature in `_1c` (`listen(channels, on_event, stop,
+>   *, poll=0.5, dsn=None)`). As specified there it raises on a dropped
+>   connection, so `_run` below must loop with a capped backoff and re-LISTEN
+>   rather than log once and let the thread die — otherwise one Postgres
+>   restart silently ends hot-reload until the bot restarts. Add a test that
+>   kills the listening backend (`pg_terminate_backend`) and asserts a later
+>   write still reloads.
+> - **Side effects:** a reload is not just `config.reload_settings()`. After
+>   `.env` reloads, `config_watcher` applies `LOG_LEVEL`
+>   (`apply_log_level`), `_apply_scan_interval_change(changed)` and v110's
+>   `_post_config_notices(changed)`; SIGHUP runs `bot_core._reload_callbacks`.
+>   Calling `reload_settings()` bare from a thread skips all three, so an
+>   admin change to `SCAN_INTERVAL_MINUTES` or `LOG_LEVEL` would update the
+>   global and do nothing. Those also need the event loop, not the listener
+>   thread. Design: the listener thread only sets a `threading.Event`
+>   (`settings_dirty`) — no config work on that thread. `config_watcher`
+>   checks it every tick, clears it, runs `reload_settings` via
+>   `asyncio.to_thread`, and feeds the result into the **same** post-reload
+>   block it uses for `auto_reload_if_changed` (extract that block as
+>   `_after_reload(changed)`). Latency becomes ≤30 s (the watcher's interval),
+>   the same as `.env` today. If that is too slow, wake it with
+>   `loop.call_soon_threadsafe` — ask the partner before adding that.
+>   `SettingsListener(on_reload=...)` keeps its seam for tests; the default
+>   `on_reload` sets the event.
+> - **Logger:** `logging.getLogger(__name__)`, not `"swing-bot.settings"` —
+>   `tests/infra/test_logger_names.py` (v111) fails on a `swing-bot` literal.
+> - **Shared channel:** the `settings_audit` trigger also notifies on
+>   `settings`, so expect ≥2 events per audited save; the dirty-flag design
+>   collapses them for free.
+> - `tests/test_bot_startup.py` does not exist; use
+>   `tests/commands/test_config_watcher_task.py` and
+>   `tests/commands/test_config_watcher_reload.py` as the regression check.
 - Produces:
   - `SettingsListener(on_reload=config.reload_settings)` with `.start()`,
     `.stop()`
@@ -164,7 +411,7 @@ from typing import Callable
 from swingbot import config
 from swingbot.core.db import notify
 
-log = logging.getLogger("swing-bot.settings")
+log = logging.getLogger(__name__)   # v111: never a "swing-bot" literal
 
 CHANNEL = "settings"
 
@@ -225,8 +472,10 @@ def start_settings_listener() -> SettingsListener | None:
 
 - [ ] **Step 4: Start it from the bot**
 
-In `bot.py`, beside the other background startup (find the `on_ready` /
-`setup_hook` block with `grep -n "async def on_ready\|setup_hook" bot.py`):
+In ~~`bot.py`~~ `swingbot/commands/scanning/loops.py:on_ready` (2026-09-30:
+beside `config_watcher.start()`; guard against a second start on reconnect,
+since `on_ready` fires on every resume — mirror the `is_running()` guards
+there), and wire the dirty flag into `config_watcher` per the callout above:
 
 ```python
     from swingbot.core.infra.settings_listener import start_settings_listener
@@ -241,7 +490,9 @@ but if `bot.py` already has an explicit shutdown path, call `.stop()` there.
 
 ```bash
 python -m pytest tests/infra/test_settings_listener.py -q
-python scripts/dev/testrun.py file tests/test_bot_startup.py
+python scripts/dev/testrun.py file tests/commands/test_config_watcher_task.py
+python scripts/dev/testrun.py file tests/commands/test_config_watcher_reload.py
+python scripts/dev/testrun.py file tests/infra/test_logger_names.py
 ```
 
 Expected: `0 failed`. The listener tests are `slow` (they commit), so the fast
@@ -250,7 +501,8 @@ tier skips them and raw pytest is the right call here.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add swingbot/core/infra/settings_listener.py bot.py \
+git add swingbot/core/infra/settings_listener.py \
+        swingbot/commands/scanning/loops.py \
         tests/infra/test_settings_listener.py
 git commit -m "feat(v67): reload config when a settings row changes"
 ```
@@ -263,8 +515,20 @@ SIGHUP is retained for `.env` secret changes. This task is the test that says
 so, plus the one-line change that makes the handler call the right function.
 
 **Files:**
-- Modify: `bot.py` (the SIGHUP handler — `grep -n "SIGHUP" bot.py`)
+- Modify: ~~`bot.py`~~ `swingbot/bot_core.py` (`_handle_reload_signal` `:265`,
+  installed by `install_reload_signal_handler` `:298`) — 2026-09-30: the
+  handler moved; `bot.py` contains no `SIGHUP`
 - Test: `tests/test_sighup_reload.py`
+
+> **2026-09-30 re-examination:** the handler already calls `config.reload()`
+> (`bot_core.py:273`), then `apply_log_level` and `_reload_callbacks`; so this
+> task is expected to change no production code. The source-text test must
+> target `swingbot.bot_core._handle_reload_signal`, not `bot`. The DB-survives
+> test needs `monkeypatch.setenv("DB_STORES", "settings:db")` too (P4-02
+> callout) — and note the `.env` it writes lacks `DB_STORES`, so without the
+> setenv `reload()` would flip the stage back to `json` mid-test.
+> `config_watcher`'s 30 s `.env` mtime poll (`loops.py:283`) is a third path
+> that also calls `reload()`; it stays, and needs no change here.
 
 **Interfaces:**
 - Consumes: `config.reload` (unchanged), `config.reload_settings` (P4-03).
@@ -317,6 +581,7 @@ def test_a_db_settings_value_survives_a_sighup_reload(env, monkeypatch,
                                                       db_committed):
     """SIGHUP must not blow away a DB-resolved setting by re-reading .env."""
     monkeypatch.setattr(config, "DB_STORES", "settings:db")
+    monkeypatch.setenv("DB_STORES", "settings:db")   # 2026-09-30, see callout
     from swingbot.core.db.repositories.settings import settings_repo
     settings_repo().put("MIN_ALERT_CONFIDENCE_LEVEL", 5, updated_by="test")
     env.write_text("DISCORD_TOKEN=second\nMIN_ALERT_CONFIDENCE_LEVEL=2\n",
@@ -330,10 +595,10 @@ def test_the_sighup_handler_calls_reload_not_reload_settings():
     """A handler wired to reload_settings would stop picking up secrets --
     the exact regression this test exists to catch."""
     import inspect
-    import bot
-    source = inspect.getsource(bot)
-    handler = source[source.index("SIGHUP"):]
-    assert "config.reload()" in handler[:2000]
+    from swingbot import bot_core          # 2026-09-30: handler lives here
+    source = inspect.getsource(bot_core._handle_reload_signal)
+    assert "config.reload()" in source
+    assert "reload_settings" not in source
 ```
 
 `test_the_sighup_handler_calls_reload_not_reload_settings` reads source text,
@@ -353,7 +618,7 @@ fails, the layering is inverted; fix `_resolve`, not this test.
 - [ ] **Step 3: Confirm the handler**
 
 ```bash
-grep -n "SIGHUP" -A 8 bot.py
+git grep -n "def _handle_reload_signal" -A 20 swingbot/bot_core.py
 ```
 
 It must call `config.reload()`. If it does, this task changes no production
@@ -363,15 +628,15 @@ code — say so in the commit message rather than inventing an edit.
 
 ```bash
 python scripts/dev/testrun.py file tests/test_sighup_reload.py
-python scripts/dev/testrun.py file tests/test_config.py
+python scripts/dev/testrun.py file tests/test_config_reload.py
 ```
 
-Expected: `0 failed`.
+Expected: `0 failed`. (2026-09-30: `tests/test_config.py` does not exist.)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add bot.py tests/test_sighup_reload.py
+git add tests/test_sighup_reload.py   # + swingbot/bot_core.py only if it changed
 git commit -m "test(v67): pin SIGHUP as the secrets reload path"
 ```
 
@@ -392,6 +657,13 @@ value can now change without anyone touching a file.
 - Consumes: `config.FIELDS`.
 - Produces: `tests/test_no_import_time_config_capture.py` with an explicit
   allowlist of known, reviewed captures.
+
+> **2026-09-30 re-examination:** the scanner below, run against `main` today,
+> finds exactly one offender: `swingbot/core/scanning/regime.py:24` captures
+> `config.MARKET_REGIME_TICKER`. The worked example is
+> `swingbot/core/planning/account.py:67` `_default_config_path()` (not
+> `account.py:72`). Everything else in the task holds; `FIELDS` has 148 entries
+> today, so the parametrised `hasattr` test is 148 cases.
 
 **This is an audit, not a rewrite.** The deliverable is the test plus fixes for
 whatever it catches. If it catches nothing, the deliverable is the test — and
@@ -503,7 +775,7 @@ this test deliberately does not cover.
 - [ ] **Step 3: Fix each offender**
 
 The fix is always the same shape: move the read inside the function that uses
-it. `account.py:72`'s `_default_config_path()` is the worked example already in
+it. `swingbot/core/planning/account.py:67`'s `_default_config_path()` is the worked example already in
 the codebase, and its docstring explains the failure mode in detail — point at
 it in the commit rather than re-explaining.
 
@@ -538,8 +810,10 @@ the Docker socket mounted into the admin container, because it no longer needs
 a container restart.
 
 **Files:**
-- Modify: `docker-compose.yml` (the admin service's socket mount)
-- Modify: `docs/deploy/DOCKER.md`, `docs/deploy/DEPLOY_HETZNER.md`
+- Modify: `docker-compose.yml` (the admin service's socket mount, `:188`)
+- Modify: `swingbot/admin/api_v1/system.py` (`save_settings` hot-reload gate;
+  `restart_available`) — 2026-09-30
+- Modify: `docs/deploy/DOCKER.md` (`DEPLOY_HETZNER.md` has no socket text)
 - Test: `tests/admin/test_settings_needs_no_restart.py`
 
 **Interfaces:**
@@ -550,6 +824,38 @@ a container restart.
 dependency behind it, stay — they are a deliberate operator action, not part of
 the settings path. What changes is that saving a setting stops *needing* them.
 Removing the button would be a scope expansion this plan did not ask for.
+
+> **2026-09-30 re-examination — the socket is still on the save path, and
+> removing the mount has a user-visible cost.**
+>
+> - The committed `docker-compose.yml:188` **does** mount
+>   `/var/run/docker.sock:ro` on `admin`. `docs/deploy/DOCKER.md:127,135,196`
+>   describe it; `DEPLOY_HETZNER.md` does not mention it (no edit needed there).
+>   Also stale once this lands: the `swingbot/admin/app.py:26` and
+>   `swingbot/config.py:11-15` docstrings and `config_watcher`'s docstring
+>   (`loops.py:284`).
+> - The PUT route (`api_v1/system.py:save_settings`) calls
+>   `_hot_reload_bot_container()` (a Docker `kill(signal="SIGHUP")`) on
+>   **every** save. Removing the mount alone leaves every save returning
+>   `hot_reload.ok == false` with "needs the Docker socket mount". Gate it:
+>   when `stages.reads_db("settings")` and the diff has no sensitive /
+>   `_ENV_ONLY` key, skip Docker and return
+>   `{"ok": true, "message": "Saved; the bot applies it within 30 s."}` (or
+>   whatever P4-08's latency is). A secret change still needs SIGHUP or the
+>   30 s `.env` poll. The test below must drive the **route**
+>   (`logged_in.put("/api/v1/system/settings", json={"settings": {...}})`),
+>   not `helpers.save_settings`, which does not exist.
+> - `restart_available` (`system.py:114`) is `docker_sdk is not None` — true
+>   whenever the SDK is installed, socket or not — so without the mount the
+>   SPA would still offer "Restart bot" (`frontend/src/app/stores/system.store.ts:361`)
+>   and it would fail on click. The "degrades to disabled" claim in the compose
+>   comment below is false until `restart_available` also checks the socket
+>   (e.g. `os.path.exists("/var/run/docker.sock")`).
+> - **Partner decision before Step 3:** unmounting takes the restart button
+>   away on production. Ask (`AskUserQuestion`) whether to drop the mount now
+>   or keep it and only take it off the settings path (the gate above). The
+>   compose change reaches production on the next deploy — follow
+>   `mirror-prod` if it is applied there by hand.
 
 - [ ] **Step 1: Write the test**
 
@@ -651,7 +957,7 @@ Expected: `0 failed` for both.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docker-compose.yml docs/deploy/DOCKER.md docs/deploy/DEPLOY_HETZNER.md \
+git add docker-compose.yml docs/deploy/DOCKER.md swingbot/admin/api_v1/system.py \
         tests/admin/test_settings_needs_no_restart.py
 git commit -m "feat(v67): drop the docker socket from the settings path"
 ```
@@ -671,6 +977,35 @@ This task makes the audit a property of the write rather than of the caller.
 **Interfaces:**
 - Consumes: `append_settings_audit` (existing), `settings_repo` (P4-01).
 - Produces: no new symbols.
+
+> **2026-09-30 re-examination:**
+>
+> - **Depends on P3-12** (branch `2026-09-29-v67-p3-10-scheduled-jobs`,
+>   `swingbot/core/db/repositories/settings_audit.py`:
+>   `SettingsAuditRepository.append(changes, ts=None)`, `.recent(n)`,
+>   `settings_audit_repo()`), which makes `helpers.append_settings_audit` /
+>   `read_settings_audit` write/read by the `settings_audit` store's stage.
+>   Merge it before this task: both touch the same `helpers.py` lines. Keep
+>   calling the helpers, never the repository directly, so the stage switch
+>   stays in one place. The fixture should set both stores
+>   (`DB_STORES="settings:db,settings_audit:db"`, via `setenv` too) to prove the
+>   audit also lands in Postgres; the `DATA_DIR` patch still covers the
+>   `json`-stage JSONL.
+> - **Masking already exists on the PUT path:** `settings_diff` masks sensitive
+>   values as `•••` (`helpers.MASK` in `api_v1/system.py`), pinned by
+>   `tests/admin/test_api_v1_system_settings.py::test_sensitive_values_are_masked_in_the_audit_log`.
+>   So `test_a_secret_change_is_audited_without_its_value` is expected to pass,
+>   and the import diff below must mask with `•••`, not `***` — two masks for
+>   one meaning would split the UI. The simplest correct import diff is
+>   `settings_diff(form, existing)` over an effective form built from the
+>   applied keys, which gets the masking and "blank = no change" rule for free.
+> - Restrict the diff to `FIELDS_BY_KEY` keys: `new_values` starts as
+>   `dict(existing)` and includes custom variables. At the db stage the "old"
+>   side must come from `helpers.current_values()` (P4-05).
+> - `save_settings` is the `system.py` route (see P4-05); the tests drive it
+>   through the client. `tests/admin/test_helpers.py` does not exist — run
+>   `tests/admin/test_api_v1_system_settings.py` and, once merged,
+>   `tests/admin/test_settings_audit_db.py` (P3-12).
 
 **Why not audit inside the repository.** It would look tidier, and it is wrong:
 the seed script writes several hundred rows in one go from a file that is
@@ -785,7 +1120,8 @@ the other place a secret could land, and it is the one that persists.
 
 ```bash
 python scripts/dev/testrun.py file tests/admin/test_settings_audit_coverage.py
-python scripts/dev/testrun.py file tests/admin/test_helpers.py
+python scripts/dev/testrun.py file tests/admin/test_api_v1_system_settings.py
+python scripts/dev/testrun.py file tests/admin/test_settings_audit_db.py
 ```
 
 Expected: `0 failed` for both.
@@ -813,6 +1149,14 @@ that verified each half.
   swingbot/admin/api_v1/system.py`).
 - Produces: nothing.
 
+> **2026-09-30 re-examination:** the SPA settings workspace is
+> `frontend/src/app/workspaces/system/settings-tab.ts` (+ `settings-grouping.ts`,
+> store `frontend/src/app/stores/system.store.ts`, models
+> `frontend/src/app/api/models.ts:877-916`); it needs no change if this test
+> passes. The original test body used POST and an unwrapped payload and an
+> `authed_client` helper that never existed — it is rewritten below against
+> the real contract.
+
 - [ ] **Step 1: Write the test**
 
 Create `tests/admin/test_settings_api_parity.py`:
@@ -824,87 +1168,103 @@ The endpoint contract is what the SPA is written against; the storage swap is
 supposed to be invisible to it. Every assertion here compares the two stages
 against each other rather than against a hardcoded shape, so it keeps meaning
 something when the settings page grows a field.
+
+2026-09-30: rewritten against the real routes -- GET/PUT
+/api/v1/system/settings (PUT body {"settings": {...}}, a bad value is a 400),
+GET .../export, and the `admin_app`/`client` fixtures in tests/admin/conftest.py
+(there is no `authed_client` helper). DB_STORES is read live by `stages`, so one
+client can be flipped between stages mid-test.
 """
 import pytest
 
 from swingbot import config
 
+_LOGIN = {"username": "admin", "password": "admin"}
+STAGES = ("", "settings:db")
 
-def _client(monkeypatch, tmp_path, stage):
-    env = tmp_path / ".env"
-    if not env.exists():
-        env.write_text("DISCORD_TOKEN=secret\n"
-                       "MIN_ALERT_CONFIDENCE_LEVEL=3\n", encoding="utf-8")
-    monkeypatch.setattr(config, "ENV_PATH", str(env))
-    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(config, "DB_STORES", stage)
-    from tests.admin.conftest import authed_client      # existing helper
-    return authed_client()
+
+@pytest.fixture(autouse=True)
+def no_docker(monkeypatch):
+    monkeypatch.setattr("swingbot.admin.helpers._hot_reload_bot_container",
+                        lambda: (True, "reloaded"))
 
 
 @pytest.fixture
-def both(monkeypatch, tmp_path, db_committed):
-    def _make(stage):
-        return _client(monkeypatch, tmp_path / stage.replace(":", "_"), stage)
-    return _make
+def at(client, tmp_path, monkeypatch, db_committed):
+    (tmp_path / ".env").write_text("DISCORD_TOKEN=secret\n"
+                                   "MIN_ALERT_CONFIDENCE_LEVEL=3\n",
+                                   encoding="utf-8")
+    client.post("/api/v1/session", json=_LOGIN)
 
-
-def test_get_settings_returns_the_same_field_set(both):
-    a = both("").get("/api/v1/system/settings").get_json()
-    b = both("settings:db").get("/api/v1/system/settings").get_json()
-    assert set(_keys(a)) == set(_keys(b))
+    def _stage(stage):
+        monkeypatch.setattr(config, "DB_STORES", stage)
+        monkeypatch.setenv("DB_STORES", stage)
+        return client
+    yield _stage
+    config._apply_env()
 
 
 def _keys(payload):
-    """Field keys out of whatever shape the endpoint returns."""
-    if isinstance(payload, dict) and "fields" in payload:
-        return [f["key"] for f in payload["fields"]]
-    if isinstance(payload, dict):
-        return list(payload)
-    return [f["key"] for f in payload]
+    return [f["key"] for s in payload["sections"] for f in s["fields"]]
 
 
-def test_get_settings_masks_secrets_at_both_stages(both):
-    for stage in ("", "settings:db"):
-        body = both(stage).get("/api/v1/system/settings").get_data(as_text=True)
+def _value(payload, key):
+    return next(f["value"] for s in payload["sections"] for f in s["fields"]
+                if f["key"] == key)
+
+
+def test_get_settings_returns_the_same_field_set(at):
+    a = at("").get("/api/v1/system/settings").get_json()
+    b = at("settings:db").get("/api/v1/system/settings").get_json()
+    assert _keys(a) == _keys(b)
+
+
+def test_get_settings_masks_secrets_at_both_stages(at):
+    for stage in STAGES:
+        body = at(stage).get("/api/v1/system/settings").get_data(as_text=True)
         assert "secret" not in body
 
 
-def test_post_settings_returns_the_same_status(both):
-    payload = {"MIN_ALERT_CONFIDENCE_LEVEL": "5"}
-    a = both("").post("/api/v1/system/settings", json=payload)
-    b = both("settings:db").post("/api/v1/system/settings", json=payload)
-    assert a.status_code == b.status_code
+def test_put_settings_returns_the_same_status_and_shape(at):
+    payload = {"settings": {"MIN_ALERT_CONFIDENCE_LEVEL": "5"}}
+    a = at("").put("/api/v1/system/settings", json=payload)
+    b = at("settings:db").put("/api/v1/system/settings", json=payload)
+    assert a.status_code == b.status_code == 200
+    assert set(a.get_json()) == set(b.get_json())
 
 
-def test_a_saved_value_reads_back_at_both_stages(both):
-    for stage in ("", "settings:db"):
-        c = both(stage)
-        c.post("/api/v1/system/settings",
-               json={"MIN_ALERT_CONFIDENCE_LEVEL": "5"})
-        body = c.get("/api/v1/system/settings").get_data(as_text=True)
-        assert "5" in body
+def test_a_saved_value_reads_back_at_both_stages(at):
+    for stage in STAGES:
+        c = at(stage)
+        c.put("/api/v1/system/settings",
+              json={"settings": {"MIN_ALERT_CONFIDENCE_LEVEL": "5"}})
+        body = c.get("/api/v1/system/settings").get_json()
+        assert str(_value(body, "MIN_ALERT_CONFIDENCE_LEVEL")) == "5", stage
 
 
-def test_the_export_endpoint_returns_the_same_keys(both):
-    a = both("").get("/api/v1/system/settings/export").get_data(as_text=True)
-    b = both("settings:db").get(
+def test_the_export_endpoint_returns_the_same_keys(at):
+    a = at("").get("/api/v1/system/settings/export").get_data(as_text=True)
+    b = at("settings:db").get(
         "/api/v1/system/settings/export").get_data(as_text=True)
     assert sorted(l.split("=")[0] for l in a.splitlines() if l) == \
            sorted(l.split("=")[0] for l in b.splitlines() if l)
 
 
-def test_an_invalid_value_is_refused_the_same_way(both):
-    payload = {"MIN_ALERT_CONFIDENCE_LEVEL": "not-a-number"}
-    a = both("").post("/api/v1/system/settings", json=payload)
-    b = both("settings:db").post("/api/v1/system/settings", json=payload)
-    assert a.status_code == b.status_code
+def test_an_invalid_value_is_refused_the_same_way(at):
+    payload = {"settings": {"MIN_ALERT_CONFIDENCE_LEVEL": "not-a-number"}}
+    a = at("").put("/api/v1/system/settings", json=payload)
+    b = at("settings:db").put("/api/v1/system/settings", json=payload)
+    assert a.status_code == b.status_code == 400
 ```
 
 The endpoint paths and payload shape above are the plausible ones — **read
 `swingbot/admin/api_v1/system.py` and match the real routes and bodies before
 running this.** A parity test written against endpoints that do not exist tests
-nothing and passes for the wrong reason.
+nothing and passes for the wrong reason. (2026-09-30: matched against `main` —
+`get_settings` `:208`, `save_settings` `:231`, `export_settings`, and the
+document shape `{"sections": [{"fields": [...]}], "audit",
+"restart_available"}`. The `hot_reload` message legitimately differs between
+stages after P4-11, which is why the PUT test compares keys, not bodies.)
 
 - [ ] **Step 2: Run it**
 
@@ -932,6 +1292,19 @@ git commit -m "test(v67): pin settings API parity across storage backends"
 **Interfaces:**
 - Consumes: everything in Part 4.
 - Produces: nothing.
+
+> **2026-09-30 re-examination:** the first test calls `helpers.save_settings`,
+> which does not exist — drive the PUT route through the `admin_app`/`client`
+> fixtures instead (see P4-13's `at` fixture), wrapping the body as
+> `{"settings": {...}}` and sending only non-checkbox keys (the route's
+> `_validate` rejects `"y"` for number/select fields with a 400, which would
+> make the test pass vacuously — assert the PUT returns 200, using each field's
+> `default` or a valid option). `leaked` must also exclude `_ENV_ONLY` keys
+> (`DB_STORES`, P4-02). Every `monkeypatch.setattr(config, "DB_STORES", ...)`
+> needs a matching `setenv`. Add `tests/infra/test_logger_names.py` and
+> `tests/db/test_migrations.py` to Step 2's run (single head off `p6_001`).
+> Per CLAUDE.md the full suite runs once per plan as its final task; this
+> part's step stays `fast` plus the targeted slow files below.
 
 - [ ] **Step 1: Write the exit test**
 
@@ -1003,7 +1376,8 @@ def test_db_stores_is_not_promoted_in_this_checkout():
 ```bash
 python scripts/dev/testrun.py file tests/db/test_part4_exit.py
 python scripts/dev/testrun.py fast
-python -m pytest tests/db/ tests/admin/ tests/infra/ tests/test_config*.py -q
+python -m pytest tests/db/ tests/admin/ tests/infra/ tests/test_config*.py \
+    tests/commands/test_config_watcher_*.py tests/test_sighup_reload.py -q
 ```
 
 Expected: `0 failed`, `0 xfailed` on all three. The last covers the `slow`

@@ -52,7 +52,7 @@ _PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(_PACKAGE_DIR)
 ENV_PATH = os.path.join(_PROJECT_ROOT, ".env")
 
-log = logging.getLogger("swing-bot.config")
+log = logging.getLogger(__name__)
 
 # All runtime state (trades.json, state.json, account.json, watchlist.json)
 # and generated chart images live under the project root, not inside the
@@ -134,7 +134,7 @@ FIELDS: list[Field] = [
           type="number", default="5", min=1, max=120, step=1,
           help="Every scan both looks for new trades and checks all open trades for near-close proximity."),
     Field("SIGNAL_CONFIRMATION_SCANS", "SIGNAL_CONFIRMATION_SCANS", "Scanning & Session", "Confirmation scans",
-          type="number", default="2", min=1, max=10, step=1,
+          type="number", default="1", min=1, max=10, step=1,
           help="A signal must appear the same way this many consecutive scans before it's confirmed and alerted -- filters intraday flicker."),
     Field("LOG_LEVEL", "LOG_LEVEL", "Scanning & Session", "Log level",
           type="select", default="INFO", options=["DEBUG", "INFO", "WARNING", "ERROR"],
@@ -675,6 +675,13 @@ FIELDS: list[Field] = [
     Field("ALPACA_BREAKER_COOLDOWN_SECONDS", "ALPACA_BREAKER_COOLDOWN_SECONDS",
           "Data Sources", "Alpaca breaker cool-down (s)", type="number", default="300",
           min=30, max=3600, step=30, help="How long Alpaca is skipped once the breaker opens."),
+    Field("SPOT_QUOTE_MAX_AGE_SECONDS", "SPOT_QUOTE_MAX_AGE_SECONDS", "Data Sources",
+          "Max spot metals quote age (s)", type="number", default="900",
+          min=60, max=86400, step=60,
+          help="v109. XAUUSD/XAGUSD are priced off gold-api.com's spot quote. A quote whose "
+               "updatedAt is older than this is treated exactly like a missing one: the scan "
+               "skips new signals for that metal and open plans are not stepped until a fresh "
+               "quote arrives. Never falls back to unscaled futures prices."),
 
     # --- Admin UI (affects the admin container, not the bot -- see docstring) ---
     Field("ADMIN_USERNAME", "ADMIN_USERNAME", "Admin UI", "Admin username",
@@ -1119,14 +1126,14 @@ def _cast(f: Field, raw: str):
     if f.attr == "PLAN_ENGINE_V2":
         v = str(raw).lower()
         if v not in ("off", "shadow", "on"):
-            logging.getLogger("swingbot.config").warning(
+            log.warning(
                 "invalid PLAN_ENGINE_V2=%r, falling back to 'off'", raw)
             return "off"
         return v
     if f.attr == "STRATEGY_ALERTS_MODE":
         v = str(raw).lower()
         if v not in ("off", "shadow", "live"):
-            logging.getLogger("swingbot.config").warning(
+            log.warning(
                 "invalid STRATEGY_ALERTS_MODE=%r, falling back to 'off'", raw)
             return "off"
         return v

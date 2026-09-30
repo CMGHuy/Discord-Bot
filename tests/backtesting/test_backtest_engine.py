@@ -120,18 +120,16 @@ def test_vectorized_entries_delegates_to_entry_filters(market_df):
 
 
 # tests/test_backtest_engine.py (append)
-from pathlib import Path
 from swingbot.core.backtesting.backtest import run_backtest
 from swingbot.core.planning.plan_engine import TP1_FRACTION
 import swingbot.core.market.entry_filters as ef
 
-CACHE = Path(__file__).resolve().parent.parent.parent / "data" / "backtest_cache"
+from tests.fixtures.ohlcv_parity import OHLCV_DIR as CACHE
 
 # NOTE: MACD/4w produces zero raw entry signals on every cached ticker checked
 # on this branch (AAPL, MSFT, TSLA, NVDA, AMD, AMZN) -- a pre-existing
 # entry-filter gating condition unrelated to this task -- so these golden
 # fixtures use TSLA/Elliott Wave/4w, which produces a real win/loss/scratch mix.
-@pytest.mark.skipif(not CACHE.is_dir(), reason="no OHLCV cache")
 def test_v2_single_leg_reproduces_v1_exactly():
     df = pd.read_csv(CACHE / "TSLA.csv", index_col="Date", parse_dates=True)
     # frictions=False on the v1 side: this test asserts the v2 exit simulator
@@ -145,7 +143,6 @@ def test_v2_single_leg_reproduces_v1_exactly():
            (v2.wins, v2.losses, v2.scratches, v2.timeouts)
     assert v2.expectancy_r == pytest.approx(v1.expectancy_r, abs=1e-9)
 
-@pytest.mark.skipif(not CACHE.is_dir(), reason="no OHLCV cache")
 def test_v2_scale_out_keeps_classification_and_expectancy():
     # Pinned to the window these golden fixtures were authored against
     # (the original 2018-06..2025-12 cache span). The classification-parity
@@ -187,7 +184,6 @@ def test_v2_scale_out_keeps_classification_and_expectancy():
         elif v1_t.outcome == "win":
             assert v2_t.r_multiple >= v1_t.r_multiple * TP1_FRACTION - 0.02
 
-@pytest.mark.skipif(not CACHE.is_dir(), reason="no OHLCV cache")
 def test_v2_scale_out_return_pct_matches_r_multiple_not_just_runner_leg():
     # Regression pin (code review finding): return_pct must be derived from
     # the blended r_multiple, not from legs[-1]'s exit price alone -- a
@@ -245,7 +241,6 @@ def test_v2_scale_out_return_pct_matches_r_multiple_not_just_runner_leg():
     be_wins = [t for t in v2.trades if t.runner_outcome == "runner_be"]
     assert be_wins and all(t.return_pct != 0.0 for t in be_wins)
 
-@pytest.mark.skipif(not CACHE.is_dir(), reason="no OHLCV cache")
 def test_v2_scale_out_stamps_per_trade_runner_outcome():
     # Regression pin: scripts/backtest/run_backtest_range.py's runner_by_strategy
     # table must be built from a per-trade field so it can be filtered to

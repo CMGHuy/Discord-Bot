@@ -32,7 +32,8 @@ def liquidity_ok(df: pd.DataFrame, min_avg_dollar_vol: float | None = None,
 #: Asset classes whose Yahoo "Volume" is not a share count: futures report
 #: contracts (SI=F is 5,000 oz each), FX and indices report 0. Close x Volume
 #: is meaningless for them, so only the history and price floors apply.
-_VOLUME_NOT_SHARES = frozenset({"future", "fx", "index"})
+#: v109: spot metals carry their future's contract volume unchanged.
+_VOLUME_NOT_SHARES = frozenset({"future", "fx", "index", "spot_metal"})
 
 
 def liquidity_reason(df: pd.DataFrame, min_avg_dollar_vol: float | None = None,

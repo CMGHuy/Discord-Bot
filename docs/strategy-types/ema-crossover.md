@@ -44,6 +44,10 @@ capped at 2.5R. Exits use the defaults: trail 2.5 × ATR, TP2 on.
 |---|---|---|---|---|---|
 | Registry (run 2026-07-18) | VALIDATION 2024–25 | 36 | 75.0% | +0.061 | **WEAK**, pre-v31 arithmetic: stale |
 | v84 re-measurement | TRAIN | 55 | 61.8% | +0.494 | clears every badge clause, but only 1 of 3 fold years has N ≥ 15, so **CLOSED** before VALIDATION |
+| v104 structural stop, bullish, out-of-scope arm | TRAIN 2010-2025, universe 74 | 137 | 39.4% | +0.150 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, bullish, in-scope arm | same | 70 | 51.4% | +0.284 | Tier 1, beats baseline, but 0 of 13 folds qualify — **NO-LIFT at Stage 2** |
+| v104 structural stop, bearish, out-of-scope arm | TRAIN 2010-2025, universe 74 | 23 | 26.1% | −0.180 | `results/2026-09-28-v104-partA.md` |
+| v104 structural stop, bearish, in-scope arm | same | 3 | 33.3% | −0.107 | N=3, below the N ≥ 30 floor — **NO-LIFT at Stage 1** |
 
 ## History
 
@@ -53,6 +57,8 @@ capped at 2.5R. Exits use the defaults: trail 2.5 × ATR, TP2 on.
   VALIDATION shot, and the strategy stays WEAK.
 - v84: closed at fold stability. The problem is thin volume, not a blow-up.
   Reopening needs a new mechanism.
+
+**v113 1w cells (Part B, TRAIN 2010-01-01..2025-12-31, universe 74, horizon 1w masked):** bullish N=125, WR 35.2%, ExpR +0.141, lower bound -0.050, no tier; Part B bar failing clauses: wr, lower_bound; folds 0 qualifying / 0 positive. bearish N=19, WR 26.3%, ExpR -0.112, lower bound -0.514, no tier; Part B bar failing clauses: wr, exp_r, n, lower_bound; folds 0 qualifying / 0 positive. Neither cell proceeds to the holdout (Part B's bar is Tier 1 plus a bootstrap lower bound > 0; every 1w cell fails Tier 1 on WR); no `cells` admission, no registry row. Source: `results/2026-09-30-v113-partB.md`.
 
 ## Pseudocode
 

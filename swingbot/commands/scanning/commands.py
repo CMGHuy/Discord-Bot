@@ -1,16 +1,19 @@
 import asyncio
 import datetime as dt
+import logging
 import time
 
 import discord
 
 from swingbot import config
-from swingbot.bot_core import SESSION_TZ, bot, in_session, log
+from swingbot.bot_core import SESSION_TZ, bot, in_session
 from swingbot.core.scanning import engine as scan_engine
-from swingbot.core.market.strategy import HORIZONS
+from swingbot.core.market.strategy import LEGACY_HORIZONS
 from swingbot.core.marketdata.watchlist import load_watchlist
 from . import presence, recap, runstate
 from .alerts import _send_alerts
+
+log = logging.getLogger(__name__)
 
 trade_log = scan_engine.trade_log
 _HISTORICAL_CHECK_MAX_RESULTS = 90
@@ -38,7 +41,7 @@ async def recap_cmd(ctx, date_arg: str = ""):
     try:
         await recap._post_retrospective(channel_id_override=ctx.channel.id, today=today)
     except Exception as exc:
-        log.exception("!recap failed: %s", exc)
+        log.exception("!recap failed")
         await ctx.send(f"❌ Failed to build retrospective: {exc}")
 
 
@@ -66,7 +69,7 @@ async def check_cmd(ctx, *args: str):
 
     for token in args:
         tl = token.lower()
-        if tl in ("all", *HORIZONS.keys()):
+        if tl in ("all", *LEGACY_HORIZONS):
             horizon = tl
         elif tl.startswith("from:"):
             date_from = token[5:]

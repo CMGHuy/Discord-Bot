@@ -8,9 +8,59 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-29-v67-json-to-postgres-design.md`
 
+> **Status (re-examined 2026-09-30 against `main` @ 33ef5c2f):** P6-07…P6-12
+> are all **not started**; the Part 6 status table is at the top of `_6a`.
+> Every task below carries a `2026-09-30 re-examination` note — read it before
+> the steps, since several paths and store names have drifted.
+
 ---
 
 ### Task P6-07: Flip production to db, one group at a time — TOUCHES PRODUCTION
+
+> **2026-09-30 re-examination:** still needed; groundwork landed, store list
+> corrected, one new blocker.
+> **Groundwork done on `main` (2026-09-30):** the "db stage blockers" —
+> `TradeLog` bulk mutators and deletes act on DB rows at `db` (`e153e5b1`,
+> merge `fa659c7b`); admin reads plans through `PlanStore.records()`/
+> `get_record()` with a stage-aware change token (`3c3074ee`, `cd2b6320`,
+> merge `8420b047`); `JournalStore.set_note` and the watchlist's explicit-path
+> route honour the stage (`a1ff780a`, `431d3d0a`, merge `6b1f380c`). Those were
+> the code paths that still touched JSON or `_plans` at `db`.
+> **Stages today** (`.env.example`, mirroring production since v91):
+> `DB_STORES=watchlist:dual,state:dual`; every other store — `trades`, `plans`,
+> `starred_plans`, `account`, `journal`, `flags`, `heartbeat`, `jobs`,
+> `killswitch`, `notify_queue` — is on `json`. Nothing is at `db` yet.
+> **Store names on `main`** (the strings `stages.reads_db(...)` is called
+> with): `account flags heartbeat jobs journal killswitch notify_queue plans
+> starred_plans state trades watchlist`; the P3 branch adds `scheduled_jobs
+> preferences settings_audit ticker_directory tuning`. The table's groups 3,
+> 4, 7 and 8 (`telemetry`, `shadow`, `retrospective`, `scan_snapshots`,
+> `analytics`, `meta_cache`, `rs_cache`, `fold_trades`, `settings`, `events`)
+> name stores that **do not exist yet** (Parts 4/5, P3-19) — `stages.parse`
+> accepts any name, so a typo or a not-yet-built store is a silent no-op, not
+> an error. Before each flip, `git grep -n 'reads_db("<name>")'` every name in
+> the group. `notify_queue` was missing from the table: it joins group 1.
+> **New blocker — live updates.** The SSE stream is still `FileWatcher`
+> (`swingbot/admin/events/watcher.py`) statting `data/*.json`; the
+> `DbEventListener` (P3-19) does not exist. A store at `db` stops writing its
+> file, so its SPA events stop. Every group touches a watched file or event
+> (`trades/plans/starred_plans.json`, `account.json`, `state.json`,
+> `journal.json`, `watchlist.json`, `killswitch.json`, `bot_heartbeat.json`,
+> the `*.flag` files, `admin_jobs.json`, `ticker_directory.json`, the scan
+> snapshot/telemetry files, and the `settings` event). Either
+> P3-19/P3-20 is live before group 1 flips, or the partner explicitly accepts
+> manual-refresh-only for the flipped stores — ask, do not decide.
+> **Applying a flip on the VM:** edit `.env` in place (`nano`, or
+> `cat new > .env`) — `sed -i` swaps the inode and the bind-mounted `.env` in
+> both containers never sees it (`docs/claude/known-traps.md`, 2026-09-30).
+> Stages are re-read on SIGHUP, so a restart is not required but is harmless;
+> verify with `docker compose exec -T bot grep DB_STORES /app/.env`. Connect
+> only through `bash scripts/ops/ssh-hetzner.sh`. **Mirroring:** v91 mirrored
+> the live value into the `.env.example` comment ("the live value is ...");
+> update that line in the same commit as each group's `DB_CUTOVER.md` entry —
+> that, not "nothing is committed", is this repo's mirror for `DB_STORES`.
+> Precondition: nightly backups and the restore drill (P6-03/04) are done, as
+> `DEPLOY_HETZNER.md` requires before any store reaches `db`.
 
 The import has run and `parity_report --all` is clean. Now `DB_STORES` moves,
 in groups, with a soak between them. **Nothing in this task is committed to the
@@ -109,7 +159,7 @@ immediate.
 
 | Order | `DB_STORES` addition | Watch for |
 |---|---|---|
-| 1 | `flags:db,heartbeat:db,scheduled_jobs:db` | the admin dashboard dot, the pause toggle, a manual `!check` |
+| 1 | `flags:db,heartbeat:db,notify_queue:db,scheduled_jobs:db` | the admin dashboard dot, the pause toggle, a manual `!check` |
 | 2 | `jobs:db,preferences:db,settings_audit:db,tuning:db` | starting a tune job, its progress ticking, its result rendering |
 | 3 | `telemetry:db,shadow:db,retrospective:db,scan_snapshots:db,analytics:db` | the risk page sparkline, a retrospective posting |
 | 4 | `ticker_directory:db,meta_cache:db,rs_cache:db,fold_trades:db` | watchlist search, company names in alerts |
@@ -147,6 +197,28 @@ git commit -m "docs(v67): record the production stage flip"
 ---
 
 ### Task P6-08: Delete the JSON store paths
+
+> **2026-09-30 re-examination:** still valid; the inventory needs three
+> additions. All sixteen path constants named in Step 3 exist on `main`
+> (`_STOP_FILE` in `core/scanning/{analyze,fetch,runstate}.py`, `_PAUSE_FILE`/
+> `_HEARTBEAT_FILE` in `commands/scanning/`, `DEFAULT_PATH` in
+> `core/marketdata/watchlist.py`, `core/analytics/snapshots.py` **and**
+> `admin/api_v1/watchlist.py`, `_jobs_path`/`_audit_log_path` in
+> `admin/helpers.py`, etc.), as do `swingbot/core/infra/jsonio.py` and
+> `config.log_startup_config()`. **Data files the spec's inventory never
+> named**, written since 2026-08-29: `scan_progress.json`
+> (`core/scanning/progress_store.py`, the scan-progress strip, 2026-09-16),
+> `market_data_state.json` (`core/marketdata/data_refresh.py`) and
+> `earnings_history.json` (`core/market/earnings_history.py`). None is
+> migrated by any part. Before this task, decide per file (partner's call):
+> migrate it in its own part, or add it to `KEEPS` as a deliberately-file-backed
+> cache — `KEEPS` must name it either way so the test documents the choice.
+> Also add `cohort_registry.json` (package-shipped beside
+> `core/backtesting/cohort_registry.py`, like `validation_registry.json`) to
+> `KEEPS`. `MIGRATED` may only list files whose store actually reached `db`
+> in P6-07 — Parts 4/5 files (`scan_telemetry.jsonl`, `shadow_plans.jsonl`,
+> `retrospective_history.json`, `rs_cache.json`, `ticker_meta_cache.json`, ...)
+> have no DB path on `main` yet.
 
 Every store has run at `db` in production. The `json` and `dual` branches are
 now unreachable code that a reader still has to understand.
@@ -349,6 +421,34 @@ git commit -m "refactor(v67): delete the JSON store paths"
 
 ### Task P6-09: Delete the file watcher
 
+> **2026-09-30 re-examination:** still needed, **blocked on P3-19/P3-20**, and
+> most paths below have drifted. **(a)** `swingbot/admin/events/` holds
+> `broker.py`, `stream.py`, `watcher.py` only — **no `db_listener.py`**
+> (P3-19 creates it) and no `swingbot/core/db/events.py` (P3-18).
+> **(b)** Test files are `tests/admin/test_event_watcher.py` (not
+> `test_events_watcher.py`), `tests/admin/test_event_broker.py` (not
+> `test_events_broker.py`) and `tests/admin/test_event_stream.py`;
+> `tests/admin/test_sse_contract.py` and `tests/admin/test_no_double_watcher.py`
+> do not exist (Part 3 was to add them — if still absent, put Step 3's tests in
+> `test_event_stream.py` and drop Step 4's `test_no_double_watcher` sentence).
+> **(c)** `stream.py` does **not** import `WATCHED_EVENTS`; today its only
+> readers are `watcher.py` itself and `test_event_watcher.py`. Re-grep before
+> Step 2. **(d)** `broker.py` has no `_default_watcher`: the default is
+> `self._watcher_factory = watcher_factory or (lambda emit: FileWatcher(emit))`
+> in `EventBroker.__init__` (plus `from .watcher import FileWatcher`), and
+> `test_event_broker.py` asserts `isinstance(watcher, b.FileWatcher)` — that
+> test flips to `DbEventListener`. **(e)** `WATCHED_EVENTS` is
+> `{events of _DATA_PATHS} | {"settings"}`, so `frozenset(TABLE_CHANNELS.values())`
+> alone drops `settings` unless Part 4 maps a table to it — keep the union
+> explicit. **(f)** Coverage gap: `_DATA_PATHS` includes `scan_progress.json`
+> (the only continuously-moving path), the `*.flag` files, `analytics_snapshot.json`
+> and the `tuning_results/` directory; any of those still file-backed at this
+> point has **no** trigger to replace its stat, and deleting the watcher
+> silently stops its events. Resolve per P6-08's `KEEPS` decision (a retained
+> file needs an application-level `notify.emit` at its write site) before the
+> `git rm`. Also update the pointer comment in
+> `core/scanning/progress_store.py` that names `watcher.py`.
+
 `FileWatcher` has been the fallback since P3-23 and is now unreachable.
 
 **Files:**
@@ -455,6 +555,29 @@ git commit -m "refactor(v67): delete the file watcher, rehome WATCHED_EVENTS"
 ---
 
 ### Task P6-10: Delete reload(), refresh() and the stale-snapshot machinery
+
+> **2026-09-30 re-examination:** still valid; caller list and test paths
+> corrected. **Callers on `main`:** `plan_manager.py` calls
+> `self.store.reload()` at lines ~267, 352, 382 and `self.trade_log.reload()`
+> at ~354 (inside `PlanManager`), plus a module-level `store.reload()` at ~955;
+> `TradeLog.refresh()` is called only from inside `performance.py` itself (ten
+> `self.refresh()` sites: `get_trades`, `get_trade_by_id`, stats and mutators).
+> No hits in `bot.py`, `admin_ui.py` or `scripts/`; the scan engine no longer
+> calls either. Two comments cite them by name (`plan_manager.py:~351`,
+> `performance.py:~509`) — reword them, or `test_nothing_calls_them` stays
+> clean only by luck of its substring match. Both already no-op at `db`
+> (`if stages.reads_db(...): return`), which is the property this task
+> finalises. `_LOCK` is `threading.Lock()` in `plan_store.py:18` and `Lock()`
+> in `performance.py:41`. **`config.reload_settings` does not exist** — it is
+> Part 4's (`_4a`/`_4b`); until Part 4 lands, assert only
+> `config.reload` and `config.auto_reload_if_changed` in
+> `test_config_reload_survives`. **Tests:** there is no
+> `tests/tracking/test_performance.py` or `tests/planning/test_plan_manager.py`;
+> Step 4 runs `tests/tracking/` and `tests/planning/test_plan_manager_*.py`
+> (e.g. `..._concurrent_close.py`, `..._fills.py`, `..._pending.py`) instead,
+> each via `testrun.py file`, then `fast`. `DEFAULT_PATH` also lives in
+> `core/analytics/snapshots.py` and `admin/api_v1/watchlist.py`; only the
+> `core/marketdata/watchlist.py` one is this task's (the snapshot one is P6-08's).
 
 `TradeLog.reload()`, `TradeLog.refresh()` and `PlanStore.reload()` existed
 solely to narrow the whole-file clobber window. Parts 2 neutralised them; this
@@ -574,8 +697,9 @@ commit rather than leaving a lock nobody can explain.
 
 ```bash
 python scripts/dev/testrun.py file tests/db/test_no_stale_snapshot_machinery.py
-python scripts/dev/testrun.py file tests/tracking/test_performance.py
-python scripts/dev/testrun.py file tests/planning/test_plan_manager.py
+python scripts/dev/testrun.py file tests/tracking/
+python scripts/dev/testrun.py file tests/planning/test_plan_manager_concurrent_close.py
+python scripts/dev/testrun.py file tests/planning/test_plan_manager_fills.py
 python scripts/dev/testrun.py fast
 ```
 
@@ -594,6 +718,29 @@ that no longer exists, and row-level UPDATE ... WHERE is atomic server-side."
 ---
 
 ### Task P6-11: The documentation sweep
+
+> **2026-09-30 re-examination:** still needed; the doc list has drifted.
+> **(a)** The Codex mirror is **root `AGENTS.md`**, not `.codex/AGENTS.md` —
+> `CLAUDE.md` now says Codex never loads `.codex/AGENTS.md`, and
+> `tests/hooks/test_codex_mirror.py` fails on drift. Replace `.codex/AGENTS.md`
+> with `AGENTS.md` in *Files*, the test's `DOCS` list and Step 3, and run
+> `tests/hooks/test_codex_mirror.py` in Step 4. **(b)** `CLAUDE.md` is 159
+> lines, not "at its 200-line budget" — the rule is *stay under 200* (the
+> test's `<= 200` should be `< 200`). **(c)** `CLAUDE.md` already says
+> "Production" is the Hetzner VM and names the SSH helper; its "`swingbot/core/`
+> is eleven packages, no flat modules" is already wrong on `main` — `core/`
+> has twelve packages (`db/` included) **and** a flat `risk_limits.py`; fix
+> the sentence, don't just add one to the count. **(d)**
+> `docs/claude/architecture.md` already carries a `core/db/` paragraph (P1-14)
+> naming `DB_STORES` and the three stages; expand it, and drop `json`/`dual`
+> language only for stores that reached `db`. **(e)** Add
+> `docs/deploy/DB_RESTORE.md` (P6-04) and `docs/deploy/DB_CUTOVER.md` (P6-06)
+> to the deploy set; `DEPLOY_HETZNER.md`'s "PostgreSQL (v67 migration, in
+> progress)" section becomes the steady-state description.
+> `docs/deploy/DB_LOCAL_DEV.md` and `docs/claude/schema-evolution.md` do not
+> exist yet (Parts 7/8/9 name them) — index them only if they have landed.
+> **(f)** `docs/claude/known-traps.md` gained a `.env`/`sed -i` bind-mount
+> entry on 2026-09-30; keep it. `docs/setup.md` exists.
 
 Nine documents describe a system that no longer exists in the way they describe
 it. This is one task rather than nine because they must agree with each other,
@@ -748,6 +895,25 @@ git commit -m "docs(v67): describe the PostgreSQL persistence layer"
 
 ### Task P6-12: Full-suite verification and close-out
 
+> **2026-09-30 re-examination:** still needed; bump mechanics corrected.
+> **(a)** The generated file is **`swingbot/admin/version_history.json`**
+> (`scripts/dev/build_version_matrix.py`'s `OUT`), not
+> `frontend/src/assets/version_history.json` — fix *Files*, Step 5's `git diff`
+> and Step 8's `git add`. **(b)** Step 4's snippet hard-codes `1.6.0`/`1.9.3`,
+> contradicting its own rule; `VERSION.json` today reads `bot 1.11.1`,
+> `ui 1.21.0`. Compute the minor/patch increment from the file at run time,
+> and stamp `*_updated` in **UTC** (`dt.datetime.now(dt.timezone.utc)`),
+> per `working-conventions.md`. **(c)** After regenerating, run
+> `python scripts/dev/testrun.py file tests/scripts/test_build_version_matrix.py`
+> — `test_the_committed_file_matches_the_current_generator` is the one check
+> the pre-bump full run structurally cannot catch. **(d)** Commit subject
+> format per `working-conventions.md` is one `release(<line>): X -- title` per
+> line; with both lines bumping, name both (e.g. `release(bot,ui): ...`) with
+> the versions read from disk, never the ones in Step 8's sample message.
+> **(e)** Step 6 moves *every* `2026-08-29-v67-*` part file; with Parts 7–9
+> still open that is only correct once they are done — the Part 7/8 gate above
+> stands, and Part 9 (`_9a`/`_9b`) must be added to it.
+
 The plan verifies itself **once**, here. A red result is the start of the work,
 not a reason to re-litigate earlier tasks.
 
@@ -765,7 +931,7 @@ python -c "from swingbot.core.db.schema import promoted_for; \
 
 **Files:**
 - Modify: `VERSION.json`
-- Modify: `frontend/src/assets/version_history.json` (regenerated)
+- Modify: `swingbot/admin/version_history.json` (regenerated)
 - Move: every `2026-08-29-v67-*` file into `implemented/`
 
 **Interfaces:**
@@ -843,7 +1009,7 @@ PY
 
 ```bash
 python scripts/dev/build_version_matrix.py
-git diff --stat frontend/src/assets/version_history.json
+git diff --stat swingbot/admin/version_history.json
 ```
 
 Expected: a non-empty diff carrying `1.6.0` and `1.9.3`. An empty diff means the
@@ -889,7 +1055,7 @@ it.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add VERSION.json frontend/src/assets/version_history.json \
+git add VERSION.json swingbot/admin/version_history.json \
         docs/superpowers/specs docs/superpowers/plans
 git commit -m "release(v67): bot 1.6.0, ui 1.9.3 -- PostgreSQL persistence
 

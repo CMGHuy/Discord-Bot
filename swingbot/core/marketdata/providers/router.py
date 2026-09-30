@@ -12,10 +12,12 @@ import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
 from swingbot import config
+from swingbot.core.infra.logsetup import with_current_context
+from swingbot.core.marketdata import spot_metals
 from swingbot.core.marketdata.providers.alpaca_provider import (
     AlpacaAuthError, AlpacaMiss, AlpacaProvider, symbols_per_request)
 from swingbot.core.marketdata.providers.base import (
-    SOURCE_ALPACA, SOURCE_FALLBACK, SOURCE_YF, is_alpaca_eligible)
+    SOURCE_ALPACA, SOURCE_FALLBACK, SOURCE_SPOT, SOURCE_YF, is_alpaca_eligible)
 
 log = logging.getLogger(__name__)
 _provider_factory = AlpacaProvider
@@ -65,6 +67,7 @@ _breaker = _Breaker()
 _provider = None
 _provider_key = None
 _last_source: dict = {}
+_spot_miss: dict = {}
 _stats = {"alpaca": 0, "yfinance": 0, "fallback": 0, "failures": 0}
 
 
@@ -73,6 +76,7 @@ def reset() -> None:
     _provider, _provider_key = None, None
     _bucket, _breaker = _Bucket(), _Breaker()
     _last_source.clear()
+    _spot_miss.clear()
     for k in _stats:
         _stats[k] = 0
 
@@ -109,7 +113,7 @@ def _attempt(method: str, *args):
     if prov is None or not _bucket.take():
         return None
     deadline = time.monotonic() + float(config.ALPACA_TIMEOUT_SECONDS)
-    return _collect(_pool.submit(getattr(prov, method), *args), method, deadline)
+    return _collect(_pool.submit(with_current_context(getattr(prov, method)), *args), method, deadline)
 
 
 def _attempt_many(method: str, batches: list, *args) -> list:
@@ -119,7 +123,7 @@ def _attempt_many(method: str, batches: list, *args) -> list:
     if prov is None:
         return [None] * len(batches)
     deadline = time.monotonic() + float(config.ALPACA_TIMEOUT_SECONDS)
-    futures = [_pool.submit(getattr(prov, method), b, *args) if _bucket.take() else None
+    futures = [_pool.submit(with_current_context(getattr(prov, method)), b, *args) if _bucket.take() else None
                for b in batches]
     return [_collect(f, method, deadline) if f is not None else None for f in futures]
 
@@ -140,6 +144,13 @@ def _tag(frames: dict, source: str) -> dict:
     return frames
 
 
+def _log_fallback(kind: str, symbols) -> None:
+    """DEBUG line for Alpaca-eligible symbols served by yfinance instead."""
+    if symbols:
+        log.debug("Alpaca %s fallback to yfinance for %d symbol(s): %s",
+                  kind, len(symbols), ", ".join(list(symbols)[:10]))
+
+
 def _merge(alpaca: dict, rest: list, misses: list, fetch) -> dict:
     out = _tag(dict(alpaca), SOURCE_ALPACA)
     out.update(_tag(fetch(rest), SOURCE_YF) if rest else {})
@@ -150,7 +161,47 @@ def _merge(alpaca: dict, rest: list, misses: list, fetch) -> dict:
     return out
 
 
+def _scaled_or_miss(ticker, raw):
+    """v109: one spot symbol's scaled frame, or None with the reason recorded
+    for spot_miss_reason() (the scan crawl reads it back in its worker)."""
+    df, reason = spot_metals.scale_underlying(ticker, raw)
+    key = str(ticker).upper().strip()
+    if df is None:
+        _spot_miss[key] = reason
+        log.info("%s: no spot-scaled bars (%s)", key, reason)
+    else:
+        _spot_miss.pop(key, None)
+    return df
+
+
+def _spot_daily(spot, have: dict, fetch) -> dict:
+    """v109: spot symbols are never sent to Alpaca or to yfinance under their
+    own name -- their future is fetched under ITS name (reusing a frame this
+    call already has) and rescaled by the live spot ratio."""
+    if not spot:
+        return {}
+    unders = list(dict.fromkeys(spot_metals.underlying(t) for t in spot))
+    need = [u for u in unders if u not in have]
+    raw = {**have, **(fetch(need) if need else {})}
+    scaled = {t: _scaled_or_miss(t, raw.get(spot_metals.underlying(t))) for t in spot}
+    return {t: df for t, df in scaled.items() if df is not None}
+
+
+def _spot_prices(spot) -> dict:
+    """v109: a spot symbol's live price is its spot quote -- or nothing."""
+    out = {}
+    for ticker in spot:
+        quote, reason = spot_metals.quote_with_reason(ticker)
+        if quote is None:
+            _spot_miss[str(ticker).upper().strip()] = reason
+            continue
+        out[ticker] = quote.price
+        _last_source[ticker] = SOURCE_SPOT
+    return out
+
+
 def daily_bars(tickers, period, yf_fetch):
+    spot, tickers = spot_metals.split_spot(tickers)
     wanted, rest = _split(tickers)
     n = symbols_per_request(period)
     batches = [wanted[i:i + n] for i in range(0, len(wanted), n)]
@@ -158,14 +209,19 @@ def daily_bars(tickers, period, yf_fetch):
     for part in _attempt_many("daily_bars", batches, period):
         got.update(part or {})
     misses = [t for t in wanted if t not in got]
-    return _merge(got, rest, misses, lambda ts: yf_fetch(ts, period))
+    _log_fallback("daily_bars", misses)
+    out = _merge(got, rest, misses, lambda ts: yf_fetch(ts, period))
+    out.update(_spot_daily(spot, out, lambda ts: yf_fetch(ts, period)))
+    return out
 
 
 def latest_prices(tickers, yf_fetch):
+    spot, tickers = spot_metals.split_spot(tickers)
     wanted, rest = _split(tickers)
     got = (_attempt("latest_prices", wanted,
                     int(config.ALPACA_MAX_TRADE_AGE_SECONDS)) or {}) if wanted else {}
     misses = [t for t in wanted if t not in got]
+    _log_fallback("latest_prices", misses)
     out = dict(got)
     for group, source in ((rest, SOURCE_YF), (misses, SOURCE_FALLBACK)):
         fetched = yf_fetch(group) if group else {}
@@ -175,10 +231,16 @@ def latest_prices(tickers, yf_fetch):
     _stats["alpaca"] += len(got)
     _stats["yfinance"] += len(rest)
     _stats["fallback"] += len(misses)
+    out.update(_spot_prices(spot))
     return out
 
 
 def intraday_bars(ticker, interval, yf_fetch):
+    if spot_metals.is_spot_metal(ticker):
+        # v109: the future's bars under its own name, rescaled -- never the
+        # spot symbol itself, never unscaled.
+        return _scaled_or_miss(
+            ticker, intraday_bars(spot_metals.underlying(ticker), interval, yf_fetch))
     # Only 1h is served by Alpaca; any other interval is plain yfinance,
     # not a fallback.
     if interval != "1h" or not is_alpaca_eligible(ticker) or _active_provider() is None:
@@ -188,6 +250,7 @@ def intraday_bars(ticker, interval, yf_fetch):
         df = _attempt("intraday_bars", ticker, interval)
         source = SOURCE_ALPACA
         if df is None or df.empty:
+            _log_fallback("intraday_bars", [ticker])
             df, source = yf_fetch(ticker, interval), SOURCE_FALLBACK
     if df is not None:
         df.attrs["source"] = source
@@ -196,6 +259,11 @@ def intraday_bars(ticker, interval, yf_fetch):
 
 def last_source(ticker: str):
     return _last_source.get(str(ticker).upper().strip())
+
+
+def spot_miss_reason(ticker: str):
+    """v109: why this process last served a spot symbol no frame/price, or None."""
+    return _spot_miss.get(str(ticker).upper().strip())
 
 
 def stats() -> dict:

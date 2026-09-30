@@ -10,6 +10,7 @@ this codebase before this file existed -- so a user who has learned
 gets the identical mental model here.
 """
 import asyncio
+import logging
 import os
 
 import discord
@@ -23,6 +24,8 @@ from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.market.strategy import HORIZONS
 from swingbot.core.market.session import market_today
+
+log = logging.getLogger(__name__)
 
 _plan_store = PlanStore()
 
@@ -101,6 +104,7 @@ class PlanActionView(discord.ui.View):
         try:
             df = await asyncio.to_thread(get_daily_data, plan.ticker)
         except Exception as exc:
+            log.warning("plan panel %s: could not fetch price data for %s", self.plan_id, plan.ticker, exc_info=True)
             await interaction.followup.send(f"Could not fetch price data for {plan.ticker}: {exc}", ephemeral=True)
             return
         h = HORIZONS.get(plan.horizon_key, {})
@@ -115,6 +119,7 @@ class PlanActionView(discord.ui.View):
                 horizon=h, plan_v2=plan,
             )
         except Exception as exc:
+            log.warning("plan panel %s: chart render failed", self.plan_id, exc_info=True)
             await interaction.followup.send(f"Chart render failed: {exc}", ephemeral=True)
             return
         await interaction.followup.send(

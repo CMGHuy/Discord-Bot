@@ -34,6 +34,8 @@ def with_retry(fn, *args, attempts: int = None, base_delay: float = None,
             if i < attempts - 1:
                 delay = base_delay * (2 ** i)
                 log.info("retry %s in %.1fs (attempt %d/%d): %s",
-                         label, delay, i + 1, attempts, str(exc)[:120])
+                         label, delay, i + 1, attempts, exc)
                 time.sleep(delay)
+    log.warning("giving up on %s after %d attempt(s): %s", label, attempts, last,
+                exc_info=last)
     raise last

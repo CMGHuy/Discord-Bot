@@ -12,6 +12,8 @@ NY = ZoneInfo("America/New_York")
 SOURCE_ALPACA = "alpaca"
 SOURCE_YF = "yfinance"
 SOURCE_FALLBACK = "yfinance-fallback"
+SOURCE_SPOT = "spot"                 # v109: gold-api.com live spot quote
+SOURCE_SPOT_SCALED = "spot-scaled"   # v109: futures bars x live spot ratio
 
 _US_SHAPE = re.compile(r"^[A-Z]{1,5}(-[A-Z])?$")
 _COLS = {"open": "Open", "high": "High", "low": "Low", "close": "Close", "volume": "Volume"}

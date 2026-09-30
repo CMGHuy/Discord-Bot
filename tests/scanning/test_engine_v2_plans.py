@@ -890,7 +890,7 @@ def test_regime_at_logs_a_warning_on_a_real_lookup_miss():
 
 
 def test_regime_at_stays_silent_on_no_regimes_at_all(caplog):
-    with caplog.at_level("WARNING", logger="swing-bot.scan_engine"):
+    with caplog.at_level("WARNING", logger="swingbot.core.scanning.analyze"):
         result = analyze._regime_at(None, None)
     assert result is None
     assert not caplog.records  # nothing to diagnose -- there was no series to miss on
@@ -900,7 +900,7 @@ def test_regime_at_returns_the_matching_regime_without_logging(caplog):
     import pandas as pd
 
     regimes = pd.Series(["bull_quiet"], index=pd.to_datetime(["2026-01-02"]))
-    with caplog.at_level("WARNING", logger="swing-bot.scan_engine"):
+    with caplog.at_level("WARNING", logger="swingbot.core.scanning.analyze"):
         result = analyze._regime_at(regimes, pd.Timestamp("2026-01-02"))
     assert result == "bull_quiet"
     assert not caplog.records
@@ -918,3 +918,35 @@ def test_attach_plan_v2_stamps_issued_at_in_utc(monkeypatch):
     stamped = datetime.fromisoformat(item.plan_v2.issued_at)
     assert stamped.tzinfo is not None and stamped.utcoffset().total_seconds() == 0
     assert before <= stamped <= after
+
+
+def test_a_setup_rejected_at_plan_build_can_alert_once_its_plan_qualifies(
+        monkeypatch, tmp_path, stub_batch_fetch):
+    """2026-09-29 production: a confirmed setup whose plan was rejected at
+    build (risk_cap / no_qualifying_target) stayed marked confirmed in
+    state, so it never alerted later even once its plan fit. The rejection
+    must revoke the confirmation so the setup re-confirms and posts."""
+    from swingbot.core.infra.state import StateStore
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    monkeypatch.setattr(config, "SIGNAL_CONFIRMATION_SCANS", 2)
+    _setup_minimal_scan(monkeypatch, tmp_path)
+    monkeypatch.setattr(scan_run, "state", StateStore(path=str(tmp_path / "state.json")))
+
+    captured = []
+
+    def _capture_and_shortcircuit(items):
+        captured.append(list(items))
+        return []
+
+    monkeypatch.setattr(dedup, "dedup_scan_items", _capture_and_shortcircuit)
+    real_builder = analyze.build_confluence_plan
+
+    monkeypatch.setattr(analyze, "build_confluence_plan", lambda *a, **k: None)
+    for _ in range(2):          # pending, then confirmed -> rejected at build
+        engine._sync_run_scan("4w", require_confirmation=True, progress=None, min_confluence=0)
+    assert captured[-1] == []
+
+    monkeypatch.setattr(analyze, "build_confluence_plan", real_builder)
+    for _ in range(2):          # the same setup re-confirms, now with a plan
+        engine._sync_run_scan("4w", require_confirmation=True, progress=None, min_confluence=0)
+    assert captured[-1], "a revoked confirmation must be able to confirm and post again"

@@ -1,7 +1,13 @@
+import logging
+
 from swingbot import config
-from swingbot.bot_core import bot, log
+from swingbot.bot_core import bot
 from swingbot.core.scanning import engine as scan_engine
+from swingbot.core import presentation as ui
+from . import notices
 from .alerts import deep_scan_report
+
+log = logging.getLogger(__name__)
 
 trade_log = scan_engine.trade_log
 
@@ -33,7 +39,7 @@ async def _resolve_retrospective_channel(channel_id_override: int | None = None,
         try:
             channel = await bot.fetch_channel(cid)
         except Exception as exc:
-            log.warning("%s: cannot resolve channel %s: %s", caller, cid, exc)
+            log.warning("%s: cannot resolve channel %s: %s", caller, cid, exc, exc_info=True)
             return None
     return channel
 
@@ -50,18 +56,11 @@ async def _post_retrospective(channel_id_override: int | None = None, today=None
     if channel is None:
         return
 
-    for msg in messages:
-        if not msg.strip():
-            continue
-        # Discord message limit is 2000 chars; chunk if needed
-        while len(msg) > 1990:
-            split_at = msg.rfind("\n", 0, 1990)
-            if split_at == -1:
-                split_at = 1990
-            await channel.send(msg[:split_at])
-            msg = msg[split_at:]
-        if msg.strip():
-            await channel.send(msg)
+    # v110 §5/§6.3: one SYSTEM embed per chunk (chunks still sized for the
+    # old 2000-char limit, well inside an embed's 4096), each send guarded
+    # so one failed chunk never drops the rest of the recap.
+    for embed in notices.retrospective_embeds(messages):
+        await notices.send_guarded(channel, embed, what="retrospective chunk")
 
 
 async def weekend_deep_scan() -> str:
@@ -136,5 +135,6 @@ async def weekend_deep_scan() -> str:
     report = deep_scan_report(items)
     channel = await _resolve_retrospective_channel(caller="weekend_deep_scan")
     if channel is not None:
-        await channel.send(report)
+        # v110 §5: the 🔭 header is the SYSTEM embed's title; the body is the report.
+        await channel.send(**ui.push_kwargs(notices.deep_scan_embed(report, len(items))))
     return report

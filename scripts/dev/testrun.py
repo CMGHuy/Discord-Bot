@@ -45,9 +45,11 @@ LOG = REPO / ".pytest-last-run.log"
 
 WORKERS = "4"
 
+# 127.0.0.1, not localhost: docker publishes the port on IPv4 only, and on Windows
+# "localhost" tries IPv6 first and stalls ~5s per connection before falling back.
 # Kept aligned with tests/db/conftest.py by tests/dev/test_testrun_db_preflight.py.
 # Scripts must not import test modules just to discover this value.
-TEST_DB_URL_DEFAULT = "postgresql+psycopg://swingbot:swingbot@localhost:55432/swingbot_test"
+TEST_DB_URL_DEFAULT = "postgresql+psycopg://swingbot:swingbot@127.0.0.1:55432/swingbot_test"
 
 # Neutralise pytest.ini's `addopts = -q`: under -q, pytest 9.1.1 prints no
 # summary counts line at all, and a parser that sees no counts must never

@@ -273,6 +273,23 @@ deleted once the subagent's final report lands — the controller answers a
 mid-run progress question from this file's percentage, never by reading the
 subagent's own transcript.
 
+## Scheduling far-off work
+
+Anything that must run well after the current session (the next trading day, a
+week-long soak check) is scheduled **on the Hetzner VM**, not on the dev laptop
+(`CronCreate`/`/loop`/`/schedule` sessions die when it sleeps or shuts down).
+
+- Write the job as a script under `scripts/ops/` plus an idempotent
+  `install_<name>_cron.sh`; pattern: `install_intraday_coverage_cron.sh`.
+  One-shot jobs remove their own crontab line when they finish.
+- Install it through `ssh-hetzner.sh` after the scripts have deployed (push to
+  `main`), and commit the scripts — a cron only on the box is an unmirrored
+  live change (§ Production changes).
+- The job logs to `logs/<name>.log` on the VM. It is read-only checks only; work
+  that needs Claude (suite, commits, moving a plan) is picked up by the next
+  session, which reads that log first.
+- Tell the partner when it will run and where the log is.
+
 ## Codex mirror
 
 Moved from the root `CLAUDE.md` verbatim by v107.

@@ -29,7 +29,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 from swingbot.core.market.volatility import (
     adx_trend_strength, macd_momentum_aligned, rsi_trend_aligned,
 )
@@ -86,7 +86,7 @@ def collect_samples() -> list[dict]:
     for ticker, df in frames.items():
         date_to_idx = {str(d.date()): k for k, d in enumerate(df.index)}
         ticker_rows = 0
-        for hk in HORIZONS:
+        for hk in LEGACY_HORIZONS:
             for strategy in ALL_STRATEGIES:
                 s = run_backtest(ticker, df, strategy, hk, exit_model="v2", scale_out=True)
                 for t in s.trades:

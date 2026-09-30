@@ -10,6 +10,7 @@ is not wired up here; run it via
 instead of an interactive command.
 """
 import asyncio
+import logging
 
 from swingbot.core.backtesting.backtest import (
     ALL_STRATEGIES, run_backtest, run_backtest_daterange, run_full_backtest,
@@ -17,8 +18,10 @@ from swingbot.core.backtesting.backtest import (
 from swingbot.bot_core import bot
 from swingbot.core import presentation as ui
 from swingbot.core.marketdata.data import get_daily_data
-from swingbot.core.market.strategy import HORIZONS
+from swingbot.core.market.strategy import live_horizons
 from swingbot.core.marketdata.watchlist import load_watchlist
+
+log = logging.getLogger(__name__)
 
 STRATEGY_MAP = {
     # legacy
@@ -44,7 +47,7 @@ def _run_backtest_combo(ticker, df, horizon, strategy_norm, date_from=None, date
             return [run_backtest_daterange(ticker, df, strategy_norm, horizon, date_from, date_to)]
         return [run_backtest(ticker, df, strategy_norm, horizon)]
     elif strategy_norm != "all":
-        horizons = list(HORIZONS.keys())
+        horizons = list(live_horizons())
         if use_range:
             return [run_backtest_daterange(ticker, df, strategy_norm, h, date_from, date_to) for h in horizons]
         return [run_backtest(ticker, df, strategy_norm, h) for h in horizons]
@@ -73,6 +76,7 @@ def _sync_backtest_watchlist(tickers, horizon, strategy_norm, date_from, date_to
         try:
             df = get_daily_data(t, period="max")
         except Exception as e:
+            log.warning("!backtestwatchlist: could not fetch %s", t, exc_info=True)
             errors.append((t, str(e)))
             continue
         all_summaries.extend(_run_backtest_combo(t, df, horizon, strategy_norm, date_from, date_to))
@@ -193,7 +197,7 @@ def _parse_backtest_args(args: tuple):
     date_from = date_to = None
     list_setups = False
 
-    valid_horizons = {"all", *HORIZONS.keys()}
+    valid_horizons = {"all", *live_horizons()}
 
     for token in args:
         tl = token.lower().replace(" ", "").replace("_", "")
@@ -229,6 +233,7 @@ async def backtest_cmd(ctx, ticker: str, *args):
             _sync_backtest_one, ticker, horizon, strategy_norm, date_from, date_to
         )
     except Exception as e:
+        log.warning("!backtest %s: could not fetch data", ticker, exc_info=True)
         await ctx.send(f"⚠️ Could not fetch data for {ticker}: {e}")
         return
 

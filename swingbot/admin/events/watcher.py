@@ -38,7 +38,7 @@ from typing import Callable, Mapping
 
 from swingbot import config
 
-log = logging.getLogger("swing-bot.admin.events")
+log = logging.getLogger(__name__)
 
 #: Seconds between `stat()` sweeps. Deliberately not configurable -- spec
 #: Decision 1: a knob here is a decision deferred to the user, which is the
@@ -184,7 +184,7 @@ class FileWatcher:
         last = self._complained_at.get(path)
         if last is None or now - last >= LOG_INTERVAL:
             self._complained_at[path] = now
-            log.warning("event watcher could not stat %s: %s", path, exc)
+            log.warning("event watcher could not stat %s: %s", path, exc, exc_info=exc)
 
     # -- the two halves of a tick ----------------------------------------
 

@@ -474,12 +474,12 @@ def analytics_heat_grid():
     from swingbot.core.analytics import metrics as m
     from swingbot.core.analytics.aggregate import MIN_CELL_N
     from swingbot.core.analytics.scope import closed_only, echo, select
-    from swingbot.core.market.strategy_types import HORIZONS
+    from swingbot.core.market.strategy_types import HORIZONS, live_horizons
     from swingbot.core.tracking.performance import primary_strategy_label
 
     scope = _scope()
     scoped = select(closed_only(_all_trades(TradeLog())), scope)
-    cols = list(HORIZONS)
+    cols = list(live_horizons())
     by_strategy: dict[str, list[dict]] = {}
     for trade in scoped:
         if trade.get("horizon_key") in HORIZONS:

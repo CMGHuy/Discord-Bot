@@ -7,10 +7,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 
 VALIDATION_START = "2024-01-01"
-ALL_HORIZONS: tuple[str, ...] = tuple(HORIZONS)
+ALL_HORIZONS: tuple[str, ...] = LEGACY_HORIZONS
 PILOT_TICKERS = 10
 
 

@@ -8,7 +8,7 @@ import pytest
 
 from swingbot.core.backtesting import backtest_scenarios
 from swingbot.core.backtesting.backtest_scenarios import run_scenario_backtest
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 from tests.helpers import make_ohlcv
 
 # Every test here runs real replay_scenarios work over 400-bar frames: ~11s for
@@ -40,7 +40,7 @@ def test_parallel_matches_sequential(frames):
     second. It is still worth having exactly once: a fake pool proves the
     aggregation is order-independent, but only a real one proves the tasks are
     picklable and the workers produce the same numbers."""
-    horizons = list(HORIZONS)[:3]
+    horizons = list(LEGACY_HORIZONS)[:3]
     gates = backtest_scenarios.CONFLUENCE_GATES
 
     sequential = run_scenario_backtest(frames, None, None, gates=gates,
@@ -58,7 +58,7 @@ def test_parallel_matches_sequential(frames):
 def test_worker_completion_order_cannot_change_the_result(frames, monkeypatch):
     """Results are grouped by the horizon carried in each task's RESULT, so a
     pool whose workers finish out of order still aggregates identically."""
-    horizons = list(HORIZONS)[:3]
+    horizons = list(LEGACY_HORIZONS)[:3]
     gates = backtest_scenarios.CONFLUENCE_GATES
 
     expected = run_scenario_backtest(frames, None, None, gates=gates,
@@ -94,7 +94,7 @@ def test_worker_completion_order_cannot_change_the_result(frames, monkeypatch):
 
 def test_date_window_still_filters_signals(frames):
     gates = backtest_scenarios.CONFLUENCE_GATES
-    horizons = list(HORIZONS)[:2]
+    horizons = list(LEGACY_HORIZONS)[:2]
 
     # workers=1: this test is about the date window, not the pool, and two
     # real pool spawns would cost ~90s to prove nothing about filtering.
@@ -114,6 +114,6 @@ def test_single_worker_never_builds_a_pool(frames, monkeypatch):
 
     result = run_scenario_backtest(frames, None, None,
                                    gates=backtest_scenarios.CONFLUENCE_GATES,
-                                   horizons=list(HORIZONS)[:2], workers=1)
+                                   horizons=list(LEGACY_HORIZONS)[:2], workers=1)
 
     assert "pooled" in result

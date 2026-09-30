@@ -13,6 +13,13 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   78 hourly, what the edge-engine tasks depend on -- and, since v47, what
   the live scan reads first). Both are gitignored.
   Check which one a script reads before pointing it at a path.
+- **Spot metals are never cached under their own name (v109).** `XAUUSD` /
+  `XAGUSD` bars are `GC=F` / `SI=F` bars × a live spot ratio
+  (`marketdata/spot_metals.py`). Only the raw future is cached (`GC_F.csv`);
+  `save_to_disk` and `data_refresh._merge_save` raise on a spot name, and
+  `refresh_all`, `update_cache` and `backtest_cache.ensure_cached` map it to
+  the future. A cached scaled frame would freeze one day's ratio into later
+  levels. The scan crawl skips the disk cache for spot symbols entirely.
 - **`market_data/` is timeframe-first, not ticker-first.** Folders are the
   semantic names in `data_store.TIMEFRAMES` (`monthly`, `weekly`, `daily`,
   `hourly`, `15min`, …); filenames are sanitized (`GC=F` → `GC_F.csv`, same
@@ -42,13 +49,23 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   real module directly — `from swingbot.core.scanning import engine as
   scan_engine` is the live equivalent of the old `scan_engine.py` shim import,
   keeping the `scan_engine.*` vocabulary at usage sites unchanged.
-- **Sizing and embed-building happen in `core/scanning/engine.py`'s
-  alert-building loop**, right before `build_embed()` — *not* in
-  `commands/scanning.py::_send_alerts`, which only posts already-built
-  tuples. Wiring sizing there is a silent no-op.
-- **Add embed fields through the `sections["headline"]` accumulator** in
-  `embeds.py`, never a raw `embed.add_field()` — the latter breaks
-  `embed_theme.SECTION_ORDER`.
+- **Sizing and embed-building happen in `core/scanning/scan_run.py`'s
+  alert-building loop** (inside `_sync_run_scan`: the heat / cluster /
+  kill-switch stamps, then `build_embed()` and `build_simple_alert()`) —
+  *not* in `commands/scanning/alerts.py::_send_alerts`, which only posts
+  already-built tuples. Wiring sizing there is a silent no-op. The v2
+  ticket's share count comes from `plan_table._sizing_snapshot`, called by
+  `execution_embeds.build_ticket_embed`.
+- **Add embed fields through the `sections[...]` accumulator** in
+  `core/scanning/alert_embeds.py::build_embed`, never a raw
+  `embed.add_field()` — the latter breaks `presentation.SECTION_ORDER`
+  (`core/presentation/tokens.py`).
+- **Every pushed message is styled by `core/presentation/kinds.py` (v110)
+  and built as a `PushEmbed`.** Send it with
+  `channel.send(**ui.push_kwargs(embed))`. A bare `send(embed=embed)` still
+  posts, but silently drops the push-preview `content` line, which is the only
+  text a phone notification shows. Command replies call
+  `apply_chrome(accent=…)` and are deliberately not registry-styled.
 - **Scan-loop ordering invariant:** ticker screens (liquidity, data quality)
   go *after* `update_open_trades`/`_check_near_close` and *before* the
   new-signal horizon loop, so an already-open paper trade keeps being
@@ -158,7 +175,7 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   (`core/analytics/journal.py:32`), `killswitch.json`
   (`core/edge/throttle.py:94`). **Plain `open(path, "w")` + `json.dump`**
   — truncate first, then fill, so a reader inside that window gets a
-  truncated document: `scan_snapshots.json` (`core/scanning/embeds.py:58`),
+  truncated document: `scan_snapshots.json` (`core/scanning/snapshots.py:22`),
   `bot_heartbeat.json` (`commands/scanning.py:172`), `watchlist.json`
   (`core/marketdata/watchlist.py:21`), `ticker_directory.json`
   (`core/marketdata/ticker_directory.py:108`), `admin_jobs.json`
@@ -276,3 +293,26 @@ with this gap in place. Detail: `docs/strategy-types/shared-mechanics.md` §4a.
 **Fixed by v104 Part 0 (V104-2):** the widening ceiling is now
 `stop_scope.stop_ceiling(...)` -- 2% out of scope. Numbers measured before
 this fix are not comparable to numbers after it.
+
+## Editing production `.env` with `sed -i` changes nothing live
+
+`docker-compose.yml` bind-mounts `.env` as a single file, which tracks the
+inode. `sed -i`, and any other tool that writes a temp file and renames it,
+leaves both containers reading the old inode. The admin UI then saves into
+that orphan, and the bot's reload never fires. Found 2026-09-30, when a
+`MIN_STOP_DISTANCE_PCT` edit showed on the host but read 2.0 in the container.
+
+- **Edit in place:** nano, or `cat new > .env`.
+- **Or recreate:** `SWING_BOT_IMAGE=<running sha- image> docker compose up -d
+  --force-recreate --no-build --wait bot admin`. Without `SWING_BOT_IMAGE`,
+  compose falls back to the non-existent `swing-bot:latest`.
+- **Verify:** `docker compose exec -T bot grep <KEY> /app/.env`.
+
+## Stop floor and 2% cap leave an empty band (2026-09-30)
+
+Since `f01e87e2` rejects any plan with a stop over 2%, `MIN_STOP_DISTANCE_PCT`
+>= 2.0 admits only a stop of exactly 2.0%. Production posted nothing from
+Sep 25 to Sep 30. A replay on live data gave 0 setups at a 2.0 or 1.5 floor
+and 10 at 1.0, so production now runs 1.0 as an unmeasured stopgap until
+v114 validates the band. A funnel of "N checked -> N no entry point" is this
+band, not a data fault.

@@ -17,6 +17,10 @@ so were never exempted. `classify()` now walks
 verdict among the candidates it produces (the symbol as given, its known
 alias, and an "=X" FX guess, in that order) -- so it is correct whether it's
 handed a raw watchlist entry or an already-resolved Yahoo symbol.
+
+v109: XAUUSD / XAGUSD are the exception -- they are spot-priced instruments
+(core/marketdata/spot_metals.py), classified "spot_metal" before the alias
+walk. RS-exempt like futures; volume-exempt (universe._VOLUME_NOT_SHARES).
 """
 from __future__ import annotations
 
@@ -90,6 +94,12 @@ def classify(symbol: str) -> str:
 
     if sym in _OVERRIDES:
         return _OVERRIDES[sym]
+
+    # v109: spot metals are their own instrument -- checked before the alias
+    # walk, which would read XAUUSD as its GC=F alias ("future").
+    from swingbot.core.marketdata.spot_metals import is_spot_metal
+    if is_spot_metal(sym):
+        return "spot_metal"
 
     from swingbot.core.marketdata.ticker_utils import candidate_symbols
     for candidate in candidate_symbols(sym):

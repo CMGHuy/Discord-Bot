@@ -30,7 +30,7 @@ from swingbot import config
 from swingbot.core.market import market_context
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.backtesting.backtest_scenarios import CONFLUENCE_GATES, run_scenario_backtest
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason
 
 _SPY_CACHE: dict = {}
@@ -166,6 +166,7 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
     instead of a named strategy, and print per-horizon + pooled rows in the
     standard table with strategy column `confluence/<horizon>`."""
     tickers = _tickers_for_run(universe)
+    membership = _membership_for_run(universe, tickers)
     frames = {}
     excluded_illiquid = []   # [(ticker, reason), ...] -- printed as a header block below
     excluded_bad_data = []   # [(ticker, "; ".join(issues)), ...] -- Task E16, same pattern
@@ -173,13 +174,10 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
         df = _with_context(load_cached(ticker))
         if df is None:
             continue
-        reason = liquidity_reason(df)
-        if reason is not None:
-            excluded_illiquid.append((ticker, reason))
-            continue
-        issues = data_quality_issues(df, ticker)
-        if issues:
-            excluded_bad_data.append((ticker, "; ".join(issues)))
+        excluded = _exclusion_reason(df, ticker, pit=membership is not None)
+        if excluded is not None:
+            target = excluded_illiquid if excluded[0] == "illiquid" else excluded_bad_data
+            target.append((ticker, excluded[1]))
             continue
         frames[ticker] = df
     print(f"loaded {len(frames)}/{len(tickers)} cached tickers "
@@ -188,7 +186,7 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
 
     stats = run_scenario_backtest(frames, date_from, date_to,
                                   gates=CONFLUENCE_GATES, scale_out=scale_out,
-                                  horizons=list(HORIZONS))
+                                  horizons=list(LEGACY_HORIZONS), membership=membership)
 
     header = f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s} {'Scr':>5s} {'TO':>5s} {'Excl%':>6s}  PASS"
     lines = []
@@ -203,7 +201,7 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
     lines.append(f"== {label} {date_from} .. {date_to} | confluence scenario replay | "
                  f"pass: WR>=80, ExpR>0, N>={min_n}, excl<=50% ==")
     lines.append(header)
-    for hk in HORIZONS:
+    for hk in LEGACY_HORIZONS:
         st = _scenario_row_stats(stats["by_horizon"][hk])
         if st["n_eval"] == 0 and st["scratches"] == 0 and st["timeouts"] == 0:
             continue
@@ -234,6 +232,49 @@ def _tickers_for_run(universe: str | None) -> list:
         from swingbot.core.marketdata.universe import universe_symbols
         return sorted(universe_symbols(universe))
     return sorted(load_watchlist())
+
+
+def _membership_for_run(universe: str | None, tickers: list) -> dict | None:
+    """{ticker: spans} for a point-in-time `*_pit` universe, else None
+    (unmasked -- every existing universe name behaves exactly as before)."""
+    from swingbot.core.marketdata.pit_membership import membership_map
+    membership = membership_map(universe, tickers)
+    if membership is not None:
+        print(f"point-in-time membership mask ON for universe '{universe}': "
+              f"{sum(1 for s in membership.values() if s)}/{len(tickers)} tickers "
+              f"have membership rows", flush=True)
+    return membership
+
+
+def _exclusion_reason(df, ticker, pit: bool) -> tuple[str, str] | None:
+    """(kind, reason) when a frame is excluded from the run, else None.
+
+    The liquidity floor reads the LAST 20 bars of the whole cached history.
+    For a point-in-time universe that is lookahead: a name that later
+    collapsed and left the index fails it, and dropping it re-introduces
+    exactly the survivorship bias the mask removes. Index membership on the
+    signal date is the point-in-time liquidity screen there, so the floor is
+    skipped for `_pit` runs only; data-quality checks still apply."""
+    if not pit:
+        reason = liquidity_reason(df)
+        if reason is not None:
+            return "illiquid", reason
+    issues = data_quality_issues(df, ticker)
+    return ("bad data", "; ".join(issues)) if issues else None
+
+
+def _spans_for(membership: dict | None, ticker: str):
+    """The ticker's spans in a PIT run ([] = never a member), None otherwise."""
+    return None if membership is None else membership.get(ticker, [])
+
+
+def member_trades(trades, spans) -> list:
+    """Trades whose entry date falls inside the ticker's membership spans.
+    `spans=None` (non-PIT run) keeps every trade."""
+    from swingbot.core.marketdata.pit_membership import is_member
+    if spans is None:
+        return list(trades)
+    return [t for t in trades if is_member(t.entry_date, spans)]
 
 
 # Hard gates on the registry emit path. A run that fails any of these produces
@@ -414,24 +455,22 @@ def main():
     frames = {ticker: _with_context(load_cached(ticker)) for ticker in tickers}
     frames = {ticker: frame for ticker, frame in frames.items() if frame is not None}
     asof_map = _build_asof_map(tickers, frames, args.universe) if args.context == "on" else {}
+    membership = _membership_for_run(args.universe, tickers)
     excluded_illiquid = []   # [(ticker, reason), ...] -- printed as a header block in the final report
     excluded_bad_data = []   # [(ticker, "; ".join(issues)), ...] -- Task E16, same pattern
     for ti, ticker in enumerate(tickers, 1):
         df = frames.get(ticker)
         if df is None:
             continue
-        reason = liquidity_reason(df)
-        if reason is not None:
-            excluded_illiquid.append((ticker, reason))
-            print(f"[{ti}/{len(tickers)}] {ticker}: excluded (illiquid) -- {reason}", flush=True)
+        excluded = _exclusion_reason(df, ticker, pit=membership is not None)
+        if excluded is not None:
+            kind, reason = excluded
+            (excluded_illiquid if kind == "illiquid" else excluded_bad_data).append((ticker, reason))
+            print(f"[{ti}/{len(tickers)}] {ticker}: excluded ({kind}) -- {reason}", flush=True)
             continue
-        issues = data_quality_issues(df, ticker)
-        if issues:
-            excluded_bad_data.append((ticker, "; ".join(issues)))
-            print(f"[{ti}/{len(tickers)}] {ticker}: excluded (bad data) -- {'; '.join(issues)}", flush=True)
-            continue
+        spans = _spans_for(membership, ticker)
         print(f"[{ti}/{len(tickers)}] {ticker}", flush=True)
-        for hk in HORIZONS:
+        for hk in LEGACY_HORIZONS:
             for strat in strategies:
                 try:
                     s = run_backtest(ticker, df, strat, hk, one_at_a_time=True,
@@ -441,7 +480,7 @@ def main():
                 except Exception as e:
                     print(f"    ! {strat}/{hk}: {e}")
                     continue
-                tr = window_trades(s, date_from, date_to)
+                tr = member_trades(window_trades(s, date_from, date_to), spans)
                 by_strategy[strat].extend(tr)
                 by_combo[(strat, hk)].extend(tr)
                 trade_rows.extend((ticker, strat, hk, trade) for trade in tr)

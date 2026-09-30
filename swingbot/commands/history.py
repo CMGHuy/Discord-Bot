@@ -13,6 +13,7 @@ Usage:
   !plans TSLA from:2024-06-01 4w bnr
 """
 import asyncio
+import logging
 from collections import defaultdict
 
 from swingbot.bot_core import bot
@@ -20,8 +21,10 @@ from swingbot.core import presentation as ui
 from swingbot.core.scanning import engine as scan_engine
 from swingbot.core.marketdata.data import get_daily_data, get_currency_symbol
 from swingbot import config
-from swingbot.core.market.strategy import HORIZONS
+from swingbot.core.market.strategy import live_horizons
 from swingbot.commands.backtest import _parse_backtest_args
+
+log = logging.getLogger(__name__)
 
 trade_log = scan_engine.trade_log
 
@@ -205,7 +208,7 @@ def _sync_generate_plans(ticker: str, horizon: str, strategy_norm: str,
     from swingbot.core.backtesting.backtest import run_backtest_daterange, ALL_STRATEGIES as _ALL
 
     strategies = [strategy_norm] if strategy_norm != "all" else list(_ALL)
-    horizons   = [horizon] if horizon != "all" else list(HORIZONS.keys())
+    horizons   = [horizon] if horizon != "all" else list(live_horizons())
 
     raw = []
     for h in horizons:
@@ -299,6 +302,7 @@ async def plans_cmd(ctx, ticker: str = None, *args):
             _sync_generate_plans, ticker, horizon, strategy_norm, date_from, date_to
         )
     except Exception as e:
+        log.warning("!plans %s: could not generate plans", ticker, exc_info=True)
         await status_msg.edit(content=f"⚠️ Could not fetch data for **{ticker}**: {e}")
         return
 

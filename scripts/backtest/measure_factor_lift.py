@@ -24,7 +24,7 @@ from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.backtesting.registry import get_badge
 from swingbot.core.edge import factors as rs_factors
 from swingbot.core.market import levels
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import HORIZONS, LEGACY_HORIZONS
 from swingbot.core.planning import quality
 from swingbot.core.scanning.confidence import level_for_score
 from swingbot.core.scanning.factors import FACTORS, FactorContext, run_factors
@@ -156,7 +156,7 @@ def collect_train_trades() -> list:
         vol_ratio_series = df["Volume"] / df["Volume"].rolling(20).mean()
         date_to_idx = {str(d.date()): k for k, d in enumerate(df.index)}
         ticker_rows = 0
-        for hk in HORIZONS:
+        for hk in LEGACY_HORIZONS:
             h = HORIZONS[hk]
             for strategy in ALL_STRATEGIES:
                 s = run_backtest(ticker, df, strategy, hk, exit_model="v2", scale_out=True)

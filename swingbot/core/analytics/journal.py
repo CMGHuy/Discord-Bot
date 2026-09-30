@@ -16,7 +16,7 @@ from swingbot.core.analytics import metrics
 from swingbot.core.analytics.mfe_mae import compute_mfe_mae
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 
-log = logging.getLogger("swing-bot.journal")
+log = logging.getLogger(__name__)
 
 _LOCK = threading.Lock()
 
@@ -90,6 +90,15 @@ class JournalStore:
         """Attach/replace a free-text note on an existing entry. False (no
         exception) when `trade_id` isn't journaled -- most likely a trade
         that hasn't closed yet, or predates the journal existing at all."""
+        from swingbot.core.db import stages
+        json_ok = self._set_note_json(trade_id, note) if stages.writes_json("journal") else False
+        db_ok = False
+        if stages.writes_db("journal"):
+            from swingbot.core.db.repositories.journal import journal_repo
+            db_ok = journal_repo().patch(trade_id, {"note": note}) is not None
+        return db_ok if stages.reads_db("journal") else json_ok
+
+    def _set_note_json(self, trade_id: str, note: str) -> bool:
         with _LOCK:
             entries = self._load()
             for e in entries:

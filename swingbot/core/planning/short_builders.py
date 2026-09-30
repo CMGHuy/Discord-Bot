@@ -9,7 +9,7 @@ import pandas as pd
 
 from swingbot.core.market.entry_filters import DEFAULT_PARAMS
 from swingbot.core.market.indicators import zigzag_pivots
-from swingbot.core.market.short_entries import BULL_TRAP, structure_at
+from swingbot.core.market.short_entries import BULL_TRAP, FADE, structure_at
 from swingbot.core.market.strategy_types import HORIZONS, SHORT_STRATEGIES
 from swingbot.core.risk_limits import planned_loss_pct
 from .stop_scope import stop_ceiling
@@ -35,10 +35,24 @@ def _valid_stop(strategy, horizon_key, entry, stop):
     return planned_loss_pct(entry, stop) <= ceiling_pct + 1e-9
 
 
+def _fade_plan(df, index, horizon_key, entry):
+    """v113 A: the fade's fixed geometry, read from the signal bar's frame row --
+    stop = entry x 1.02, TP1 = entry - m x (stop - entry). No target selection:
+    the spec fixes m (grid {1.0, 1.25, 1.5}, frozen by the pre-registration).
+    A stop beyond the horizon's ceiling drops the plan (never capped)."""
+    structure = structure_at(FADE, df, index, horizon_key)
+    if structure is None or not _valid_stop(FADE, horizon_key, entry, structure["stop"]):
+        return None
+    tp1 = structure["target_a"]
+    return structure["stop"], tp1, [tp1]
+
+
 def plan_short(df, index, strategy, horizon_key, direction, *, entry, atr_val, scan_params=None):
-    """(stop, tp1, candidates) for a v104 short at `index`, else None."""
+    """(stop, tp1, candidates) for a v104 short or the v113 fade at `index`, else None."""
     if direction != "bearish" or strategy not in SHORT_STRATEGIES:
         return None
+    if strategy == FADE:
+        return _fade_plan(df, index, horizon_key, entry)
     structure = structure_at(strategy, df, index, horizon_key)
     if structure is None or not _valid_stop(strategy, horizon_key, entry, structure["stop"]):
         return None

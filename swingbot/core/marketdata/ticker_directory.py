@@ -96,21 +96,61 @@ def _build_directory() -> list[dict]:
                 seen.add(row["symbol"])
                 rows.append(row)
         except Exception as exc:
-            log.warning("Could not download ticker directory from %s: %s", url, exc)
+            log.warning("Could not download ticker directory from %s: %s", url, exc, exc_info=True)
     return rows
 
 
 def _save_cache(rows: list[dict]) -> None:
+    from swingbot.core.db import stages
+    if stages.writes_json("ticker_directory"):
+        _save_cache_file(rows)
+    if stages.writes_db("ticker_directory"):
+        _save_cache_db(rows)
+
+
+def _save_cache_db(rows: list[dict]) -> None:
+    # A regenerable cache: failing to persist it costs one re-download, so
+    # like the file write below it logs instead of raising.
+    try:
+        from swingbot.core.db.repositories.ticker_directory import ticker_directory_repo
+        ticker_directory_repo().replace(rows)
+    except Exception:
+        log.warning("Could not write ticker directory cache to the database",
+                    exc_info=True)
+
+
+def _save_cache_file(rows: list[dict]) -> None:
     import json
     try:
         os.makedirs(config.DATA_DIR, exist_ok=True)
         with open(_CACHE_PATH, "w") as f:
             json.dump({"fetched_at": time.time(), "rows": rows}, f)
     except OSError as exc:
-        log.warning("Could not write ticker directory cache: %s", exc)
+        log.warning("Could not write ticker directory cache: %s", exc, exc_info=True)
 
 
 def _load_cache() -> tuple[list[dict], float]:
+    """Returns (rows, loaded_at).
+
+    One of the TWO stores whose read may fall back (the other is rs_cache).
+    The fail-fast rule protects trading state; a directory of listed symbols
+    is regenerable from the exchange in seconds, and refusing to start
+    because a cache was unreachable would be worse than re-downloading it.
+    """
+    from swingbot.core.db import stages
+    if stages.reads_db("ticker_directory"):
+        try:
+            from swingbot.core.db.repositories.ticker_directory import ticker_directory_repo
+            repo = ticker_directory_repo()
+            return repo.all_rows(), repo.loaded_at()
+        except Exception:
+            log.warning("ticker directory cache unreadable from the database; "
+                        "will re-download", exc_info=True)
+            return [], 0.0
+    return _load_cache_file()
+
+
+def _load_cache_file() -> tuple[list[dict], float]:
     import json
     if not os.path.exists(_CACHE_PATH):
         return [], 0.0
@@ -179,6 +219,9 @@ def search_tickers(query: str, limit: int = 15) -> list[dict]:
     _ensure_loaded()
     if not _directory:
         return []
+    rows = _search_db(query, limit)
+    if rows is not None:
+        return rows
 
     starts_with = []
     contains = []
@@ -194,3 +237,17 @@ def search_tickers(query: str, limit: int = 15) -> list[dict]:
 
     results = (starts_with + contains)[:limit]
     return results
+
+
+def _search_db(query: str, limit: int) -> list[dict] | None:
+    """Indexed search at the db stage; None means "use the in-memory scan"."""
+    from swingbot.core.db import stages
+    if not stages.reads_db("ticker_directory"):
+        return None
+    try:
+        from swingbot.core.db.repositories.ticker_directory import ticker_directory_repo
+        return ticker_directory_repo().search(query, limit)
+    except Exception:
+        log.warning("ticker directory search failed in the database; "
+                    "using the in-memory copy", exc_info=True)
+        return None

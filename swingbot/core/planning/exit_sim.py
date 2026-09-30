@@ -12,7 +12,8 @@ from swingbot import config
 from swingbot.core.market.strategy_types import HORIZONS
 from .plan_types import TradePlanV2
 from .params import RUNNER_FLOOR_FRACTION
-from .lifecycle import trigger_hit, fill_price, pending_expired, pending_invalidated
+from .lifecycle import (at_or_beyond_stop, fill_price, limit_fill_price, limit_hit,
+                        pending_expired, pending_invalidated, stop_touched, trigger_hit)
 from .targets import _safe_atr_value
 @dataclass
 class ExitResult:
@@ -319,6 +320,54 @@ def _scale_out_exit_walk(
                       legs=[leg1, leg2])
 
 
+def _walk_for(plan: TradePlanV2, scale_out: bool):
+    """The exit walk for this plan. A whole-position target (tp1_fraction 1.0,
+    v113 Part A) has no runner leg, so it always takes the single-leg walk --
+    the scale-out walk's pre-TP1 phase, then out at TP1."""
+    if scale_out and plan.tp1_fraction < 1.0:
+        return _scale_out_exit_walk
+    return _single_leg_exit_walk
+
+
+def _fill_bar_exit(df, j: int, entry_price: float, plan: TradePlanV2) -> ExitResult | None:
+    """v113 amendment 3: the bar that fills a limit can also reach the stop.
+    Stop first, as everywhere in this engine. A fill at or through the stop (the
+    bar gapped past it) exits flat at the fill -- a scratch, 0R, because the
+    bracket stop triggers at once; otherwise a stop touch on the fill bar is a
+    full loss at the stop. None when the fill bar is clean."""
+    if at_or_beyond_stop(plan, entry_price):
+        return ExitResult(outcome="scratch", runner_outcome=None, entry_index=j, exit_index=j,
+                          entry_price=entry_price, r_total=0.0,
+                          legs=[{"fraction": 1.0, "exit_price": entry_price, "r": 0.0,
+                                 "reason": "gap_through_stop"}])
+    if stop_touched(plan, float(df["High"].values[j]), float(df["Low"].values[j])):
+        return ExitResult(outcome="loss", runner_outcome=None, entry_index=j, exit_index=j,
+                          entry_price=entry_price, r_total=-1.0,
+                          legs=[{"fraction": 1.0, "exit_price": plan.stop_loss, "r": -1.0,
+                                 "reason": "stop"}])
+    return None
+
+
+def _limit_entry_exit(df, signal_index: int, plan: TradePlanV2, scale_out: bool,
+                      max_holding_days: int) -> ExitResult:
+    """v113 §3: a resting limit at trigger_price, live for the plan's
+    expiry_bars bars after the signal bar (Part A: 1, so bar t+1 only). Fills on
+    the first bar that trades through it, at limit_fill_price; the fill bar is
+    checked against the stop (_fill_bar_exit), then the normal exit walk runs
+    from the fill bar, so the time stop counts bars after ENTRY."""
+    high, low, open_ = df["High"].values, df["Low"].values, df["Open"].values
+    last = min(signal_index + plan.expiry_bars, len(df) - 1)
+    for j in range(signal_index + 1, last + 1):
+        if not limit_hit(plan, float(high[j]), float(low[j])):
+            continue
+        entry_price = limit_fill_price(plan, float(open_[j]))
+        early = _fill_bar_exit(df, j, entry_price, plan)
+        if early is not None:
+            return early
+        return _walk_for(plan, scale_out)(df, j, entry_price, plan, max_holding_days)
+    return _not_triggered()
+
+
 def simulate_exit(
     df,
     signal_index: int,
@@ -346,6 +395,9 @@ def simulate_exit(
     v39 runner floor (runner_floor: entry + 2/3 of the entry->TP1 move),
     ratchets via a chandelier ATR trail (Task 26), and can also
     exit at an optional TP2 (Task 25).
+
+    ``limit`` entries (v113) are resting limits: see _limit_entry_exit. A plan
+    whose tp1_fraction is 1.0 always takes the single-leg walk.
     """
     # Resolved eagerly per the interface contract -- both the single-leg
     # (Task 21) and scale-out (Task 24+) exit walks use it to bound the
@@ -357,12 +409,13 @@ def simulate_exit(
     if hold_cap is not None:
         max_holding_days = min(max_holding_days, int(hold_cap))
 
+    if plan.entry_type == "limit":
+        return _limit_entry_exit(df, signal_index, plan, scale_out, max_holding_days)
+
     if plan.entry_type == "market":
         entry_index = signal_index
         entry_price = float(df["Close"].values[signal_index])
-        if not scale_out:
-            return _single_leg_exit_walk(df, entry_index, entry_price, plan, max_holding_days)
-        return _scale_out_exit_walk(df, entry_index, entry_price, plan, max_holding_days)
+        return _walk_for(plan, scale_out)(df, entry_index, entry_price, plan, max_holding_days)
 
     # stop_entry: scan signal_index+1 .. signal_index+plan.expiry_bars for a
     # trigger touch, watching for pre-fill invalidation along the way.
@@ -380,9 +433,7 @@ def simulate_exit(
         if trigger_hit(plan, float(high[j]), float(low[j])):
             entry_index = j
             entry_price = fill_price(plan, float(open_[j]))
-            if not scale_out:
-                return _single_leg_exit_walk(df, entry_index, entry_price, plan, max_holding_days)
-            return _scale_out_exit_walk(df, entry_index, entry_price, plan, max_holding_days)
+            return _walk_for(plan, scale_out)(df, entry_index, entry_price, plan, max_holding_days)
         if pending_invalidated(plan, float(close[j])):
             return _not_triggered()
         j += 1
