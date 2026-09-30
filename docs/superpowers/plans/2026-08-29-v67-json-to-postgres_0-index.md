@@ -74,9 +74,9 @@ table and exit criteria for the whole part.
 
 | Part | Files | Content | Tasks |
 |---|---|---|---|
-| 1 | `implemented/…_1a-foundation-core.md` (P1-01…04) · `implemented/…_1b-foundation-harness.md` (P1-05…09) · `_1c-foundation-events.md` (P1-10…14) | `core/db/` package, codec, engine, Alembic, compose service, test harness, stages, NOTIFY | 14 |
+| 1 | `implemented/…_1a-foundation-core.md` (P1-01…04) · `implemented/…_1b-foundation-harness.md` (P1-05…09) · `implemented/…_1c-foundation-events.md` (P1-10…14) | `core/db/` package, codec, engine, Alembic, compose service, test harness, stages, NOTIFY | 14 |
 | 2 | `implemented/…_2a-trading-state-trades.md` (P2-01…05) · `implemented/…_2b-trading-state-plans.md` (P2-06…12) · `implemented/…_2c-trading-state-account.md` (P2-13…18) · `implemented/…_2d-trading-state-state.md` (P2-19…22) | trades, plans, starred_plans, account, journal, state, watchlist | 22 |
-| 3 | `implemented/…_3a-operational-flags.md` (P3-01…07) · `_3b-operational-jobs.md` (P3-08…15) · `_3c-operational-events.md` (P3-16…24) | admin/scan jobs, flags, heartbeat, killswitch, LISTEN/NOTIFY watcher replacement | 24 |
+| 3 | `implemented/…_3a-operational-flags.md` (P3-01…07) · `implemented/…_3b-operational-jobs.md` (P3-08…15) · `_3c-operational-events.md` (P3-16…24) | admin/scan jobs, flags, heartbeat, killswitch, LISTEN/NOTIFY watcher replacement | 24 |
 | 4 | `_4a-settings-resolution.md` (P4-01…06) · `_4b-settings-admin.md` (P4-07…14) | `settings` table, DB→`.env`→default resolution, admin settings page, NOTIFY reload | 14 |
 | 5 | `_5a-logs.md` (P5-01…04) · `_5b-snapshots.md` (P5-05…08) · `_5c-caches.md` (P5-09…14) | scan_telemetry, shadow_plans, retrospective, snapshots, caches, retention | 14 |
 | 6 | `_6a-cutover.md` (P6-01…06) · `_6b-cleanup.md` (P6-07…12) | merge revision, backup/restore drill, production import, stage flip, dead-path deletion, docs, full-suite gate | 12 |
@@ -98,13 +98,18 @@ part's first file opens with its own status block — read that before a task.
 
 | Part | State |
 |---|---|
-| 1 | P1-01…12, P1-14 on `main` (squashed as `b77885e3`). **P1-13 (`notify.listen`) is not on `main`** — built as `fcae5b14` on the stale branch `worktree-2026-09-01-v67-json-to-postgres` and dropped by the squash; cherry-pick before P3-19/P4-08. |
+| 1 | **Done** — all 14 tasks on `main`. P1-13 (`notify.listen`) was re-landed 2026-09-30 (`03fabd02`) after the Part 1 squash dropped it. |
 | 2 | **Done** — all 22 tasks on `main`; v91 fixed the import defects the first production import found. |
-| 3 | P3-01…09 on `main`. **P3-10…17 built on unmerged branch `2026-09-29-v67-p3-10-scheduled-jobs`** (8 commits). P3-18…24 unbuilt; P3-24 records a real gap — admin writes the trigger/pause `.flag` files directly, so at `flags:db` those buttons would be silently ignored. |
-| 4 | Unbuilt. Blocked on P1-13 (P4-08) and the P3 branch merging (P4-05/07/12 edit the same audit helpers). |
+| 3 | P3-01…17 on `main` (P3-10…17 merged 2026-09-30, `b0fb40cd`). P3-18…24 unbuilt — **the next work**. P3-24 records a real gap: admin writes the trigger/pause `.flag` files directly, so at `flags:db` those buttons would be silently ignored. `export_json.py` has no shapers for the Part 3 stores, so they cannot yet be rolled back to JSON by it. |
+| 4 | Unbuilt. Its earlier blockers (listener, P3 branch) are cleared; P4-08 still wants P3-19's DB event listener. |
 | 5 | Unbuilt. `earnings_history.json` (added off-plan 2026-09-14) routed into P5-08. |
 | 6 | P6-01, P6-03, P6-04 **done**; P6-06's Part 2 import done by v91 (`reimport_production.sh`). Planned ids renumbered: v91 took `p6_001`, so the trigger sweep is `p6_002`. `db-stage-blocker` fixes for P6-07 merged 2026-09-30. |
 | 7–9 | Unbuilt. `test_migrations.py::ID_RE` only accepts `p[1-6]` — P7-01 widens it. |
+
+> **Stale-reference note (2026-09-30, later the same day):** the part files written
+> earlier today still say P3-10…P3-17 are "on the unmerged branch
+> `2026-09-29-v67-p3-10-scheduled-jobs`" and that P1-13's `notify.listen` is missing.
+> Both are now on `main` (`b0fb40cd`, `03fabd02`); read those sentences as resolved.
 
 **Production (measured 2026-09-30):** alembic at `p6_001`,
 `DB_STORES=watchlist:dual,state:dual`, nightly `backup_db.sh` cron at 03:00 UTC

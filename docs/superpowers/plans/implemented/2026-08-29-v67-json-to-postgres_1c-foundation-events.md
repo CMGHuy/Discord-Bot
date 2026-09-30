@@ -1,5 +1,7 @@
 # v67 — Part 1: Foundation (tasks P1-10…P1-14)
 
+> **Closed 2026-09-30.** Every task in this file is built. P1-10…P1-14 are on `main`; P1-13 (`notify.listen`) landed 2026-09-30 as `03fabd02`, cherry-picked from the stale 2026-09-01 branch. Part 1 is complete. This file moved to `plans/implemented/`; the rest of v67 stays live — see the index's `## Status` section. Checkboxes were never ticked; the verdict comes from the commits.
+
 > Continuation of `implemented/2026-08-29-v67-json-to-postgres_1b-foundation-harness.md`. Part of
 > `2026-08-29-v67-json-to-postgres_0-index.md`. **Read the index's Global
 > Constraints and the first file of this part before starting any task here** —

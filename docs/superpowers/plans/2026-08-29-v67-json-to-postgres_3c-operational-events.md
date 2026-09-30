@@ -13,8 +13,8 @@
 > | Tasks | State |
 > |---|---|
 > | P3-01…P3-09 | **Done, on `main`.** Tables `p3_001`…`p3_006`; flags, heartbeat, jobs, killswitch, notify-queue stores. |
-> | P3-10…P3-17 | **Built, unmerged** on branch `2026-09-29-v67-p3-10-scheduled-jobs` (8 commits ahead of `main`; another session may own it — read it only via `git show`/`git diff main...<branch>`). Scheduled jobs, UI prefs, settings audit, ticker directory, tuning results/proposals, importers (P3-16, `92348af4`), parity (P3-17, `517ee345`). |
-> | P3-18…P3-24 | **Not started.** Blocked on P1-13's `notify.listen` reaching `main` (see `_1c`) and on the P3-10 branch merging. |
+> | P3-10…P3-17 | **Built and merged to `main` 2026-09-30** (`b0fb40cd`, from branch `2026-09-29-v67-p3-10-scheduled-jobs`). Scheduled jobs, UI prefs, settings audit, ticker directory, tuning results/proposals, importers (P3-16, `92348af4`), parity (P3-17, `517ee345`). |
+> | P3-18…P3-24 | **Not started — unblocked.** `notify.listen` landed as `03fabd02` and the P3 branch merged as `b0fb40cd`. |
 >
 > Four things changed under this file since it was written, each flagged
 > inline where it bites: (1) the migration graph already has a single head

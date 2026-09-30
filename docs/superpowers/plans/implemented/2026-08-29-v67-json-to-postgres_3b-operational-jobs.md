@@ -1,5 +1,7 @@
 # v67 — Part 3: Operational state (tasks P3-08…P3-15)
 
+> **Closed 2026-09-30.** Every task in this file is built. P3-08…P3-15 are on `main`: P3-08/09 earlier, P3-10…15 via the merge `b0fb40cd` of branch `2026-09-29-v67-p3-10-scheduled-jobs` (2026-09-30). This file moved to `plans/implemented/`; the rest of v67 stays live — see the index's `## Status` section. Checkboxes were never ticked; the verdict comes from the commits.
+
 > Continuation of `implemented/2026-08-29-v67-json-to-postgres_3a-operational-flags.md`. Part of
 > `2026-08-29-v67-json-to-postgres_0-index.md`. **Read the index's Global
 > Constraints and the first file of this part before starting any task here** —
