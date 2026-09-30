@@ -35,7 +35,16 @@ ticker/horizon frames, both directions):
 | none | 182 |
 
 With every filter relaxed there are 1,638 scenarios, so levels exist
-everywhere; the floor is the binding gate.
+everywhere.
+
+**Correction (same day).** The floor is not the only binding gate. With the
+reward and risk:reward filters off, 482 scenarios have a stop of 2% or more
+(382 of them 2-3%), so a stop that far away is findable. They are rejected
+because the nearest target is too close: a 2% stop needs a target at least 3%
+away for risk:reward 1.5, plus the per-horizon reward floor. The floor and the
+risk:reward ratio interact, so lowering the floor to 1.0% works by also
+lowering the target distance the ratio demands. Any plan built from this spec
+must measure the floor and the ratio together, not the floor alone.
 
 ## Decision taken with the partner (2026-09-30)
 
