@@ -325,7 +325,7 @@ deploys). The `risk_cap` reject in `attach_plan_v2` stays as a safety net.
 - **Why 1.75, not 2.0.** `plan_manager._step_pending` cancels a stop-entry
   fill `risk_cap` when `planned_loss_pct(fill, stop) > 2.0`, with no
   tolerance. A stop at exactly 2% is cancelled on any fill past the trigger,
-  and float rounding alone tips about half of such stops over the cap.
+  and float rounding can tip a stop at exactly 2% over the cap.
   0.25% of headroom absorbs a small gap. A fill more than about 0.25% past
   the trigger is still cancelled `risk_cap`: that is the 2% policy working,
   not a bug.
@@ -343,8 +343,11 @@ deploys). The `risk_cap` reject in `attach_plan_v2` stays as a safety net.
   `stop_distance_pct` while its plan carries the clamped stop. Read the stop
   off the plan, never off that field. This is known and deliberately left
   unchanged.
-- A clamped stop sits at no structural level, and embeds show it as-is. It
-  reaches an alert only with `PLAN_ENGINE_V2=on`. In `shadow`, the scenario's
+- A clamped stop sits at no structural level. It reaches an alert only with
+  `PLAN_ENGINE_V2=on`, and then every stop figure shows the clamped stop: the
+  plan table, chart, ticket, the headline (price, % and R, via
+  `plan_table.stop_figures_for_display`) and the explanation. Target text and
+  target % still come from the scenario. In `shadow`, the scenario's
   unclamped stop is what posts.
 - v114 (a 1.5-2.0 band, measured before shipping) was abandoned before any
   build on 2026-09-30 (`no-lift/`), with its VALIDATION shot unspent. It is
