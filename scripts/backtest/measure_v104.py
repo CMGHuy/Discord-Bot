@@ -30,7 +30,7 @@ from swingbot.core.backtesting.acceptance import BOOTSTRAP_RESAMPLES  # noqa: E4
 from swingbot.core.backtesting.backtest import run_backtest  # noqa: E402
 from swingbot.core.market import earnings_context  # noqa: E402
 from swingbot.core.market.entry_filters import DEFAULT_PARAMS, entries_for, gate_override  # noqa: E402
-from swingbot.core.market.strategy_types import LEGACY_HORIZONS, SHORT_STRATEGIES, STRATEGY_GATES  # noqa: E402
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS, STRATEGY_GATES, V104_SHORTS  # noqa: E402
 
 # --- pre-registered constants (spec §5.1) ---
 TRAIN = ("2010-01-01", "2025-12-31")
@@ -49,7 +49,7 @@ PART_A = (
     ("RSI Divergence", "bullish"), ("RSI Divergence", "bearish"),
     ("Elliott Wave", "bullish"), ("Elliott Wave", "bearish"),
 )
-BULL_TRAP, VOL_BREAKDOWN, GAP_DRIFT = SHORT_STRATEGIES
+BULL_TRAP, VOL_BREAKDOWN, GAP_DRIFT = V104_SHORTS
 MECHANISMS = {
     "B1": SimpleNamespace(strategy=BULL_TRAP, knob="k", grid=(1, 2, 3), loosest=3,
                           earnings=("hold", "exit_before")),

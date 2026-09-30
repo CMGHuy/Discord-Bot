@@ -17,7 +17,10 @@ SR_VOLUME_MULTIPLE = 1.5  # breakout day volume must exceed this x the 20-day av
 # v104 Part B: short-only strategies. Named here (market layer) so both
 # market/short_entries.py and planning/stop_scope.py can import them without
 # market ever importing planning.
-SHORT_STRATEGIES = ("Bull Trap", "Vol Expansion Breakdown", "Earnings Gap Drift")
+V104_SHORTS = ("Bull Trap", "Vol Expansion Breakdown", "Earnings Gap Drift")
+# v113 Part A: short-only and 1w only; masked until its 2026 holdout shot passes.
+FADE_STRATEGY = "Downtrend Overbought Fade"
+SHORT_STRATEGIES = V104_SHORTS + (FADE_STRATEGY,)
 
 # MACD (fast, slow, signal) periods scaled by horizon -- module-level so
 # trade_plan.py can recompute the same fast EMA of price as a pullback
@@ -257,6 +260,9 @@ STRATEGY_GATES: dict[str, dict] = {
     "Bull Trap": {"directions": ()},
     "Vol Expansion Breakdown": {"directions": ()},
     "Earnings Gap Drift": {"directions": ()},
+    # v113 Part A ships masked; a holdout pass would admit it as
+    # "cells": {("bearish", "1w")} -- see the v113 plan's V113-24.
+    "Downtrend Overbought Fade": {"directions": ()},
     # bullish-only: N=608 WR=85.2 ExpR=+0.140 excl=28% (train, PRE-v31 -- stale)
     "RSI": {"directions": ("bullish",)},
     # bullish-only: N=259 WR=81.1 ExpR=+0.071 excl=25% (train, PRE-v31 -- stale)
