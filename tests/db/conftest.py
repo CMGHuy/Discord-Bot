@@ -6,7 +6,7 @@ import sqlalchemy as sa
 
 from swingbot.core.db.schema import METADATA
 
-DEFAULT_TEST_URL = "postgresql+psycopg://swingbot:swingbot@localhost:55432/swingbot_test"
+DEFAULT_TEST_URL = "postgresql+psycopg://swingbot:swingbot@127.0.0.1:55432/swingbot_test"
 
 
 def test_database_url() -> str:
