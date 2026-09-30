@@ -4,6 +4,7 @@ import os
 import pytest
 import sqlalchemy as sa
 
+from swingbot.core.db.events import TABLE_CHANNELS
 from swingbot.core.db.schema import METADATA
 
 DEFAULT_TEST_URL = "postgresql+psycopg://swingbot:swingbot@127.0.0.1:55432/swingbot_test"
@@ -83,18 +84,7 @@ def db_engine():
     from swingbot.core.db.notify import NOTIFY_FUNCTION_SQL, trigger_ddl
     with engine.begin() as connection:
         connection.execute(sa.text(NOTIFY_FUNCTION_SQL))
-        for table, channel in (
-            ("trades", "trades"), ("plans", "trades"), ("starred_plans", "trades"),
-            ("account", "account"), ("account_balance_history", "account"),
-            ("journal_entries", "journal"), ("signal_state", "account"),
-            ("watchlist", "watchlist"),
-            ("runtime_flags", "scan"), ("bot_heartbeat", "bot"),
-            ("admin_jobs", "jobs"), ("scheduled_jobs", "jobs"),
-            ("ui_preferences", "jobs"), ("settings_audit", "settings"),
-            ("killswitch", "risk"), ("manual_close_notify", "trades"),
-            ("ticker_directory", "watchlist"), ("tuning_results", "jobs"),
-            ("tuning_proposals", "jobs"),
-        ):
+        for table, channel in TABLE_CHANNELS.items():
             connection.execute(sa.text(trigger_ddl(table, channel)))
     yield engine
     engine.dispose()
