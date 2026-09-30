@@ -318,6 +318,7 @@ def _legacy_simple_alert(item) -> discord.Embed:
     nums = plan_numbers_for_display(plan_v2, {
         "entry": plan.entry, "stop_loss": plan.stop_loss,
         "take_profit": plan.take_profit, "target2": plan.target2_price})
+    stop_pct, stop_r = stop_figures_for_display(plan_v2, nums, plan)
 
     # "Setup" is the full embed's Setup field (the generating strategy) plus
     # the confluence methods that confirmed the target -- Fib, VWAP, EMA,
@@ -343,7 +344,7 @@ def _legacy_simple_alert(item) -> discord.Embed:
     headline = ui.plan_headline(
         direction=result.trend, entry=nums["entry"], target=nums["take_profit"],
         stop=nums["stop_loss"], target_pct=plan.target_distance_pct,
-        stop_pct=-abs(plan.stop_distance_pct), r=plan.risk_reward_ratio,
+        stop_pct=-abs(stop_pct), r=stop_r,
     )
     embed = ui.push_embed(
         Kind.SETUP_SIMPLE, result.ticker, result.trend, f"Lv{conf.level}",

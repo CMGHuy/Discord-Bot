@@ -17,9 +17,9 @@ from swingbot.core.market.explain import build_explanation
 from swingbot.core.planning.plan_engine import TradePlanV2
 from swingbot.core.scanning.embeds import (
     RequirementCheck, build_closed_trade_embed, build_embed, build_near_close_embed,
-    regenerate_chart_for_trade,
+    build_simple_alert, regenerate_chart_for_trade,
 )
-from swingbot.core.scanning import embeds as embeds_mod, plan_table, snapshots
+from swingbot.core.scanning import alert_embeds, embeds as embeds_mod, plan_table, snapshots
 from swingbot.core.presentation import ansi, kinds, tokens
 from swingbot.core import presentation as ui
 from swingbot.core.scanning.engine import ScanItem
@@ -763,6 +763,17 @@ def test_a_clamped_stop_reads_the_same_everywhere_in_the_alert(monkeypatch):
     assert "98.25 (1.8%)" in branches.value
     assert "Stop at **98.25** (-1.8%)" in explanation
     assert "reverses → stop 98.25." in explanation
+
+
+def test_a_clamped_stop_reads_the_same_in_the_simple_channel(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = _clamped_item()
+    # build_simple_alert routes a priced v2 plan to the ticket; the legacy
+    # mirror is reached only off that route, but must agree if it ever is.
+    for embed in (build_simple_alert(item), alert_embeds._legacy_simple_alert(item)):
+        text = _all_embed_text(embed)
+        assert "96.00" not in text and "4.0%" not in text and "2.5R" not in text
+        assert "98.25" in text
 
 
 def test_an_unclamped_stop_renders_as_before(monkeypatch):
