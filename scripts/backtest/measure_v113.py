@@ -223,6 +223,13 @@ def check_shot_allowed(candidate: str, out_path) -> None:
         raise SystemExit(f"{candidate} is sealed-thin; its one retry waits for HOLDOUT_END >= {THIN_REOPEN}")
 
 
+def _check_out_path(candidate: str, out_path) -> None:
+    """The one-shot ledger is the results directory: --out must land there under the candidate's name."""
+    out = Path(out_path)
+    if out.parent != Path(RESULTS) or not out.match(f"*-v113-holdout-{candidate}.json"):
+        raise SystemExit(f"--out must be {RESULTS}/<date>-v113-holdout-{candidate}.json so the one-shot rule sees it")
+
+
 def holdout_clauses(scored, part, tier) -> dict:
     """Part B keeps its strict bar on the holdout; A and D use their assigned tier."""
     if part == "B":
@@ -324,6 +331,7 @@ def _cmd_holdout(args):
     candidate = candidate_slug(evaluated)
     if not evaluated.get("proceed_to_holdout"):
         raise SystemExit(f"{candidate} did not proceed to the holdout")
+    _check_out_path(candidate, args.out)
     check_shot_allowed(candidate, args.out)
     frames, asof_map = _d_frames(args) if evaluated["part"] == "D" else _ab_frames(args)
     rows = holdout_rows(evaluated, frames, asof_map, window)
@@ -338,8 +346,14 @@ def _cmd_holdout(args):
 
 
 def _cmd_emit(args):
+    for path in args.holdout_json:
+        require_committed(path)
     payloads = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.holdout_json]
     strategy = _validate_emit(payloads)
+    for payload in payloads:
+        require_committed(payload["preregistration"])
+        if tuple(payload["window"]) != holdout_window():
+            raise SystemExit(f"holdout window {payload['window']} is not the frozen {list(holdout_window())}")
     merge_registry(args.registry, [_registry_row(strategy, payloads, args.run_date)])
 
 

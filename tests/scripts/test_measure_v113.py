@@ -233,11 +233,19 @@ def test_verdict_tier_2_has_no_win_rate_clause():
 
 def _payload(tmp_path, name, **kw):
     base = {"status": "scored", "passes": True, "part": "B", "strategy": "MACD", "direction": "bearish",
-            "tier": 1, "window": ["2026-01-01", "2026-09-25"], "rows": _rows((2026,), 20, 0.75)}
+            "tier": 1, "window": ["2026-01-01", "2026-09-25"], "rows": _rows((2026,), 20, 0.75),
+            "preregistration": "prereg.md"}
     base.update(kw)
     path = tmp_path / name
     path.write_text(json.dumps(base), encoding="utf-8")
     return str(path)
+
+
+@pytest.fixture(autouse=True)
+def committed(monkeypatch):
+    seen = []
+    monkeypatch.setattr(mv, "require_committed", seen.append)
+    return seen
 
 
 def _emit(tmp_path, *paths):
@@ -259,3 +267,29 @@ def test_emit_refuses_part_d_a_failure_and_an_unshipped_direction(tmp_path, monk
                 {"direction": "bullish"}):
         with pytest.raises(SystemExit):
             _emit(tmp_path, _payload(tmp_path, "bad.json", **bad))
+
+
+def test_a_spent_shot_does_not_block_another_candidate(results):
+    _prior(results, "2026-09-30-v113-holdout-a-fade.json", "scored")
+    mv.check_shot_allowed("b-macd-bearish", results / "2026-10-01-v113-holdout-b-macd-bearish.json")
+
+
+def test_holdout_out_must_sit_in_results_under_the_candidate_name(results):
+    mv._check_out_path("a-fade", results / "2026-09-30-v113-holdout-a-fade.json")
+    for bad in (results / "elsewhere.json", results.parent / "2026-09-30-v113-holdout-a-fade.json",
+                results / "2026-09-30-v113-holdout-b-macd-bearish.json"):
+        with pytest.raises(SystemExit):
+            mv._check_out_path("a-fade", bad)
+
+
+def test_emit_requires_holdout_json_and_preregistration_committed(tmp_path, monkeypatch, committed):
+    monkeypatch.setitem(STRATEGY_GATES, "MACD", {**STRATEGY_GATES["MACD"], "cells": {("bearish", "1w")}})
+    path = _payload(tmp_path, "h.json")
+    _emit(tmp_path, path)
+    assert path in committed and "prereg.md" in committed
+
+
+def test_emit_refuses_a_payload_with_a_foreign_window(tmp_path, monkeypatch):
+    monkeypatch.setitem(STRATEGY_GATES, "MACD", {**STRATEGY_GATES["MACD"], "cells": {("bearish", "1w")}})
+    with pytest.raises(SystemExit):
+        _emit(tmp_path, _payload(tmp_path, "w.json", window=["2026-01-01", "2026-06-30"]))
