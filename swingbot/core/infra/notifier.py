@@ -93,6 +93,23 @@ def _push_priority(conf_level: int) -> str:
     return {5: "max", 4: "high", 3: "default", 2: "low", 1: "min"}.get(conf_level, "default")
 
 
+def _clamped_stop_figures(item, plan):
+    """(stop price, stop %, R) when v115's clamp moved the priced v2 stop,
+    else None. Same funnel as the Discord alert, so the two agree."""
+    from swingbot.core.market.explain import v2_stop_was_moved
+    from swingbot.core.scanning.plan_table import (
+        plan_numbers_for_display, stop_figures_for_display)
+    plan_v2 = getattr(item, "plan_v2", None)
+    nums = plan_numbers_for_display(plan_v2, {
+        "entry": plan.entry, "stop_loss": plan.stop_loss,
+        "take_profit": plan.take_profit, "target2": plan.target2_price})
+    if (config.PLAN_ENGINE_V2 != "on" or plan_v2 is None
+            or not v2_stop_was_moved(plan, nums["entry"], nums["stop_loss"])):
+        return None
+    pct, r = stop_figures_for_display(plan_v2, nums, plan)
+    return nums["stop_loss"], pct, r
+
+
 def _build_alert_texts(item, plan, conf) -> tuple[str, str]:
     """
     Build (subject, body) for the secondary alert.
@@ -112,7 +129,14 @@ def _build_alert_texts(item, plan, conf) -> tuple[str, str]:
     )
 
     # Compute pct distances (not stored on TradePlan — derive them here)
+    stop_price = plan.stop_loss
     stop_distance_pct = abs(plan.entry - plan.stop_loss) / plan.entry * 100
+    rr_text = f"{plan.risk_reward_ratio}"
+    clamped = _clamped_stop_figures(item, plan)
+    if clamped is not None:
+        stop_price, stop_distance_pct, r = clamped
+        if r is not None:
+            rr_text = f"{r:.1f}"
     target_distance_pct = abs(plan.take_profit - plan.entry) / plan.entry * 100
     stop_sign = "-" if is_bull else "+"
 
@@ -126,9 +150,9 @@ def _build_alert_texts(item, plan, conf) -> tuple[str, str]:
         f"Confidence: {conf.label} (Lv{conf.level}/5, {conf.score}/100)",
         "",
         f"Entry    : {cur}{plan.entry:.2f}",
-        f"Stop-loss: {cur}{plan.stop_loss:.2f}  ({stop_sign}{stop_distance_pct:.1f}%)",
+        f"Stop-loss: {cur}{stop_price:.2f}  ({stop_sign}{stop_distance_pct:.1f}%)",
         f"Target 1 : {cur}{plan.take_profit:.2f}  (+{target_distance_pct:.1f}%)",
-        f"R:R      : {plan.risk_reward_ratio}:1",
+        f"R:R      : {rr_text}:1",
         "",
         f"Confirmed by: {sources_str}",
         "",
