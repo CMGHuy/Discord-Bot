@@ -359,17 +359,27 @@ def primary_strategy_for(scenario) -> str:
     return _pick_primary_source(sources) or "S/R Confluence"
 
 
+# v115: the clamp lands this far inside the hard cap, so a stop-entry fill a
+# little past the trigger (plan_manager._step_pending checks the FILL price
+# against the cap with no tolerance) still passes the risk_cap guard.
+CLAMP_HEADROOM_PCT = 0.25
+
+
 def _clamp_stop_to_hard_cap(entry: float, stop_loss: float, is_bull: bool) -> float:
     """v115: a confluence stop further than HARD_MAX_PLANNED_LOSS_PCT from the
-    trigger moves to exactly the cap (entry -/+ entry * cap / 100), so the setup
-    is issued at 2% risk instead of being rejected by attach_plan_v2's risk_cap
-    safety net. Gated by CLAMP_STOP_TO_HARD_CAP (default on). A stop within the
-    cap, or an invalid entry, is returned unchanged."""
-    if not config.CLAMP_STOP_TO_HARD_CAP or entry is None or entry <= 0:
+    trigger moves to HARD_MAX_PLANNED_LOSS_PCT - CLAMP_HEADROOM_PCT from it
+    (entry -/+ entry * 1.75 / 100), so the setup is issued instead of being
+    rejected by attach_plan_v2's risk_cap safety net, with headroom for a fill
+    slightly past the trigger. Gated by CLAMP_STOP_TO_HARD_CAP (default on). A
+    stop within the cap, a missing stop, a stop on the wrong side of the entry
+    or an invalid entry is returned unchanged."""
+    if not config.CLAMP_STOP_TO_HARD_CAP or stop_loss is None:
+        return stop_loss
+    if entry is None or entry <= 0 or (stop_loss >= entry if is_bull else stop_loss <= entry):
         return stop_loss
     if planned_loss_pct(entry, stop_loss) <= HARD_MAX_PLANNED_LOSS_PCT:
         return stop_loss
-    offset = entry * HARD_MAX_PLANNED_LOSS_PCT / 100.0
+    offset = entry * (HARD_MAX_PLANNED_LOSS_PCT - CLAMP_HEADROOM_PCT) / 100.0
     return entry - offset if is_bull else entry + offset
 
 
@@ -387,7 +397,7 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
     primary_strategy_for). `level_map` is an optional (supports, resistances)
     pair from levels.build_level_map -- when absent, the only honest
     candidate is the scenario's own real target. v115: a stop beyond the 2% hard
-    cap is first clamped to it (_clamp_stop_to_hard_cap), so tp1/tp2 and the plan
+    cap is first clamped to 1.75% (_clamp_stop_to_hard_cap), so tp1/tp2 and the plan
     use the clamped risk."""
     if params is None:
         from swingbot.scan_params import ScanParams

@@ -317,7 +317,7 @@ def _gc_scenario():
 def test_attach_plan_v2_clamps_a_stop_beyond_the_hard_cap_and_issues(monkeypatch):
     # Production 2026-09-28: GC=F plans with a 2.01% trigger-to-stop loss were
     # posted, then cancelled_risk_cap on fill, and f01e87e2 then rejected them.
-    # v115: the stop is clamped to exactly 2% from the trigger and the plan issues.
+    # v115: the stop is clamped to 1.75% from the trigger and the plan issues.
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", True)
     item = _item()
@@ -325,12 +325,12 @@ def test_attach_plan_v2_clamps_a_stop_beyond_the_hard_cap_and_issues(monkeypatch
                           "GC=F", "4w", level_map=None)
     assert item.plan_v2 is not None
     assert getattr(item, "plan_v2_rejected", None) is None
-    assert item.plan_v2.stop_loss == pytest.approx(4194.30 * 1.02)
+    assert item.plan_v2.stop_loss == pytest.approx(4194.30 * 1.0175)
     assert planned_loss_pct(item.plan_v2.trigger_price,
-                            item.plan_v2.stop_loss) <= HARD_MAX_PLANNED_LOSS_PCT + 1e-9
+                            item.plan_v2.stop_loss) <= HARD_MAX_PLANNED_LOSS_PCT
 
 
-def test_attach_plan_v2_issues_a_four_percent_stop_at_two_percent(monkeypatch):
+def test_attach_plan_v2_issues_a_four_percent_stop_at_one_point_75(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", True)
     item = _item()
@@ -341,7 +341,7 @@ def test_attach_plan_v2_issues_a_four_percent_stop_at_two_percent(monkeypatch):
                           "AAPL", "4w", level_map=None)
     assert item.plan_v2 is not None
     assert getattr(item, "plan_v2_rejected", None) is None
-    assert item.plan_v2.stop_loss == pytest.approx(98.0)
+    assert item.plan_v2.stop_loss == pytest.approx(98.25)
     assert item.plan_v2.tp1 == pytest.approx(104.0)
 
 
