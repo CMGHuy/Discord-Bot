@@ -3,7 +3,7 @@
 > Part of the v109 plan. Header, goal, **Global Constraints**, **Parallelisation** and **Conventions for every task** live in
 > `docs/superpowers/plans/2026-09-28-v109-spot-metals-pricing_0-index.md`; every task here implicitly includes them.
 
-**Spec:** [`docs/superpowers/specs/2026-09-28-v109-spot-metals-pricing-design.md`](../specs/2026-09-28-v109-spot-metals-pricing-design.md)
+**Spec:** [`docs/superpowers/specs/2026-09-28-v109-spot-metals-pricing-design.md`](../../specs/implemented/2026-09-28-v109-spot-metals-pricing-design.md)
 
 ---
 

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** [`docs/superpowers/specs/2026-09-28-v109-spot-metals-pricing-design.md`](../specs/2026-09-28-v109-spot-metals-pricing-design.md)
+**Spec:** [`docs/superpowers/specs/2026-09-28-v109-spot-metals-pricing-design.md`](../../specs/implemented/2026-09-28-v109-spot-metals-pricing-design.md)
 **Bump:** bot patch
 **Edge:** volume
 
