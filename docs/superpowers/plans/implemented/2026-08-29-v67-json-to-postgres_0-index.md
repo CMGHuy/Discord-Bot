@@ -5,8 +5,31 @@
 > `superpowers:executing-plans` to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-**Bump:** bot minor · ui patch — resolved at close-out from VERSION.json.
+**Bump:** none — amended at close-out: the delivered parts (foundation, dual-write) change nothing a user sees and already shipped inside later bot releases; the predicted minor was for the cutover, which this plan did not reach.
 **Edge:** none (integrity)
+
+> **Closed 2026-09-30 — abandoned part-way, superseded.** By partner decision,
+> the unbuilt remainder (Parts 3c–9) is retired, not executed. It is replaced
+> by a leaner successor: cut every store over to `db` and delete the JSON paths,
+> plus whole-bot point-in-time rollback (Postgres PITR, code, `.env`,
+> `market_data`) landing before any `db` flip. Settings-in-DB, data-access
+> tooling, round-trip publish and moving the logs and caches are out of scope.
+>
+> - **On `main`:** Parts 1 and 2, and P3-01…17.
+> - **Built but not merged:** P3-18…P3-24 (NOTIFY triggers, the LISTEN/NOTIFY
+>   listener, the broker wiring, admin flags routed through `runstate`, and the
+>   SSE, live-path and exit-criteria tests). They are on branch
+>   `2026-09-30-v67-p3-18-notify-events` (worktree of the same name, tip
+>   `b31835b9`), which is **deliberately kept**: the successor plan reviews and
+>   merges it rather than rebuilding it.
+> - **Never built:** Parts 4, 5, 7, 8 and 9, and Part 6 except P6-01, P6-03,
+>   P6-04 and v91's Part 2 import.
+> - **Production at close:** `DB_STORES=watchlist:dual,state:dual`, alembic
+>   `p6_001`, and the nightly `pg_dump`.
+>
+> Why the successor sits outside this plan: the partner judged the ~70
+> remaining tasks too large, and added a point-in-time rollback requirement
+> that this plan did not have.
 
 **Goal:** Replace the `data/*.json` persistence layer with PostgreSQL while
 keeping schema change as cheap as editing a Python dict.
