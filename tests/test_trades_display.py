@@ -74,3 +74,30 @@ def test_legacy_trade_row_unchanged():
          "take_profit": 52.0, "realized_pnl_amount": 40.0,
          "horizon_key": "4w", "confidence_level": 4}
     assert "legs" not in format_trade_row(t, currency="$").lower()
+
+
+import pytest  # noqa: E402
+
+from swingbot.commands.trades import _status_style  # noqa: E402
+from swingbot.core.presentation import kinds  # noqa: E402
+
+
+@pytest.mark.parametrize("status,icon,accent,word", [
+    ("open", "🔵", "scratch", "OPEN"),
+    ("win", "✅", "win", "WIN ✅"),
+    ("loss", "❌", "loss", "LOSS ❌"),
+    ("closed", "🔒", "scratch", "MANUALLY CLOSED"),
+])
+def test_status_styles_read_the_registry_marks(status, icon, accent, word):
+    assert _status_style(status) == (icon, accent, word)
+
+
+def test_closed_trade_marks_are_the_registrys_not_a_local_copy():
+    source = MODULE.read_text(encoding="utf-8")
+    assert '"✅"' not in source and '"❌"' not in source and '"🔒"' not in source
+    assert _status_style("win")[0] == kinds.OUTCOME_MARKS["win"]
+
+
+def test_trade_detail_title_shape_is_unchanged():
+    embed = _build_trade_detail_embed(_winning_trade())
+    assert embed.title == "✅ Trade trade-win — PENNY"

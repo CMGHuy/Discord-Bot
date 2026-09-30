@@ -17,8 +17,9 @@ from swingbot.core.scanning.fetch import _run_bounded
 from swingbot.core.infra.silent_channel import silence
 from swingbot.core.infra.logsetup import apply_log_level
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
+from swingbot.core import presentation as ui
 from swingbot.core.marketdata.watchlist import load_watchlist
-from . import presence, recap, runstate
+from . import notices, presence, recap, runstate
 from .alerts import _send_alerts
 
 log = logging.getLogger(__name__)
@@ -68,12 +69,9 @@ async def _maybe_escalate_health(failures: int, exc: Exception) -> None:
     if channel is None:
         return
     last = runstate.last_success_iso() or "never"
-    await channel.send(
-        f"🚨 **Bot health alert** — the scan tick has failed {failures} time(s) in a row.\n"
-        f"• Last successful tick: {last}\n"
-        f"• Latest error: `{type(exc).__name__}: {str(exc)[:400]}`\n"
-        f"No alerts are being produced until this clears."
-    )
+    # Unguarded on purpose: a failed send must leave the alert inactive so the
+    # next failing tick retries it (session_scan logs the exception).
+    await channel.send(**ui.push_kwargs(notices.health_alert_embed(failures, last, exc)))
     runstate.set_alert_active(True)
 
 
@@ -81,7 +79,7 @@ async def _post_health_recovered() -> None:
     channel = _ops_channel()
     if channel is None:
         return
-    await channel.send("✅ **Bot health recovered** — the scan tick completed successfully again.")
+    await channel.send(**ui.push_kwargs(notices.health_recovered_embed()))
 
 
 @tasks.loop(minutes=config.SCAN_INTERVAL_MINUTES)
@@ -173,34 +171,12 @@ async def _session_scan_tick():
     if alerts:
         log.info("Posted %d new confirmed signal(s).", len(alerts))
         if f:
-            # "qualifying" and "alerts posted" can legitimately differ:
-            # qualifying scenarios found for the same ticker+trend with a
-            # near-identical entry/stop/target get merged into one alert by
-            # dedup_scan_items() (same real setup, confirmed by more than one
-            # strategy/horizon), and a qualifying scenario for a ticker that
-            # already has an open trade is skipped rather than re-alerted.
-            # Spelling that out here so "why did qualifying=2 but alerts=1"
-            # is answerable at a glance instead of looking like a bug.
-            gap_parts = []
-            merged = max(0, f.get("fully_qualifying", 0) - f.get("deduped", f.get("fully_qualifying", 0)))
-            if merged:
-                gap_parts.append(f"{merged} merged as duplicate setup(s)")
-            if f.get("skipped_already_open", 0):
-                gap_parts.append(f"{f['skipped_already_open']} already open")
-            gap_str = f" ({', '.join(gap_parts)})" if gap_parts else ""
-            # A little more visual variety than a single 🔍 -- a quick
-            # traffic-light-style read (🟢 several new alerts, 🟡 just one,
-            # plus a ✨ sparkle when at least one is a priority ⭐ setup) so
-            # the channel doesn't read as one flat wall of identical emoji.
-            n = len(alerts)
-            headline_icon = "🟢" if n >= 3 else "🟡" if n >= 1 else "⚪"
-            sparkle = " ✨" if any("⭐" in (a[0].title or "") for a in alerts) else ""
-            summary = (
-                f"{headline_icon} 🔍 **Scan** ({now_str}) — 📡 {f['tickers']} tickers, {f['checked']} combos checked → "
-                f"🧮 {f['scenarios_found']} scenario(s) found (✅ {f['fully_qualifying']} qualifying) → "
-                f"**🚨 {n} new alert(s) posted above**{sparkle}{gap_str}"
-            )
-            await channel.send(summary)
+            # v110 §5: a SYSTEM embed. "qualifying" and "alerts posted" can
+            # legitimately differ (merged duplicates, already-open tickers);
+            # scan_gap_note spells that out. ✨ = a ⭐ priority setup posted.
+            summary = notices.scan_summary_embed(
+                now_str, f, len(alerts), notices.scan_gap_note(f), notices.has_priority(alerts))
+            await channel.send(**ui.push_kwargs(summary))
     else:
         log.info("Session scan complete at %s — nothing new to post.", now_str)
         not_ready_parts = []
@@ -229,54 +205,8 @@ async def _session_scan_tick():
         # chart) specifically so it doesn't turn into the same noise problem
         # that got this removed the first time.
         open_count = trade_log.get_stats()["open"]
-        if f:
-            # Rewritten for clarity -- the old one-line version packed
-            # "qualifying" and "awaiting confirmation" next to each other
-            # with no explanation, which reads as a contradiction ("if it
-            # qualified, why wasn't it shown?"). They're not mutually
-            # exclusive: "qualifying" = passed every hard requirement
-            # (min strategies confirmed, min confidence, min reward:risk,
-            # etc.); "awaiting confirmation" is a SUBSET of qualifying --
-            # a scenario that passed everything but hasn't yet reappeared
-            # for SIGNAL_CONFIRMATION_SCANS consecutive scans in a row
-            # (the automatic scan's debounce filter, meant to skip
-            # intraday flicker -- see engine.py's module docstring).
-            # "below min strategies"/"below min confidence" are separate
-            # FAILURE tallies, not a partition of scenarios_found -- one
-            # scenario can fail more than one requirement at once, so
-            # those numbers can (and often do) add up to more than the
-            # total scenario count. Spelling all of this out in the
-            # message itself so the numbers don't need a code-read to make
-            # sense of.
-            awaiting = f.get("awaiting_confirmation", 0)
-            confirm_note = (
-                f" (needs to reappear {config.SIGNAL_CONFIRMATION_SCANS} scan(s) in a row before it posts)"
-                if awaiting else ""
-            )
-            fail_bits = []
-            if f.get("failed_min_confluence", 0):
-                fail_bits.append(f"{f['failed_min_confluence']} below min strategies")
-            if f.get("failed_min_confidence", 0):
-                fail_bits.append(f"{f['failed_min_confidence']} below min confidence")
-            if f.get("rs_blocked", 0):
-                fail_bits.append(f"{f['rs_blocked']} blocked by RS gate")
-            bullets = [
-                f"📡 {f['tickers']} tickers scanned",
-                f"🧮 {f['scenarios_found']} scenario(s) found",
-                f"✅ {f['fully_qualifying']} fully qualifying (⏳ {awaiting} still awaiting confirmation{confirm_note})",
-            ]
-            if fail_bits:
-                bullets.append(f"❌ failed a requirement: {', '.join(fail_bits)}")
-            bullets.append(f"📂 {open_count} open trade(s)")
-            healthcheck = (
-                f"💓 **Healthcheck** ({now_str}) — nothing new this tick\n"
-                + "\n".join(f"• {b}" for b in bullets)
-            )
-        else:
-            healthcheck = (
-                f"💓 **Healthcheck** ({now_str}) — scan complete, nothing new\n"
-                f"• 📂 {open_count} open trade(s)"
-            )
+        healthcheck = notices.healthcheck_text(now_str, f, open_count,
+                                               config.SIGNAL_CONFIRMATION_SCANS)
         await presence._post_healthcheck(channel, healthcheck)
 
     # Refresh again now that this tick's own scan may have changed the open-
@@ -322,6 +252,34 @@ async def heartbeat():
         latency_ms if latency_ms is not None else "n/a",
     )
 
+#: Settings whose hot-reload is announced in Discord -> (detail, note) for the
+#: CONFIG embed (v110 §5).
+_CONFIG_NOTICES = {
+    "MIN_ALERT_CONFIDENCE_LEVEL": lambda old, new: (
+        f"Min confidence level Lv{old} → Lv{new}",
+        f"Next `!check` and scheduled scans will use Lv{new}+."),
+    "MIN_TARGET_CONFLUENCE_COUNT": lambda old, new: (
+        f"Min strategies confirmed {old} → {new}", ""),
+    "SCAN_INTERVAL_MINUTES": lambda old, new: (
+        f"Scan interval every {old} min → every {new} min", ""),
+    "MIN_RISK_REWARD_RATIO": lambda old, new: (f"Min R:R ratio {old} → {new}", ""),
+}
+
+
+async def _post_config_notices(changed: dict) -> None:
+    """One CONFIG embed per announced key that changed; each send guarded."""
+    if not config.DISCORD_CHANNEL_TRADES_ID:
+        return
+    channel = silence(bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
+    if not channel:
+        return
+    for key, describe in _CONFIG_NOTICES.items():
+        if key in changed:
+            detail, note = describe(*changed[key])
+            await notices.send_guarded(channel, notices.config_notice_embed(detail, note),
+                                       what=f"config-change notice for {key}")
+
+
 @tasks.loop(seconds=30)
 async def config_watcher():
     """
@@ -344,41 +302,8 @@ async def config_watcher():
             apply_log_level(config.LOG_LEVEL)
         _apply_scan_interval_change(changed)
 
-        # Notify Discord channel about key setting changes so the user can
-        # confirm the new value is live without needing to check the logs.
-        _notify_keys = {
-            "MIN_ALERT_CONFIDENCE_LEVEL": (
-                lambda old, new: (
-                    f"⚙️ **Min confidence level** updated: Lv{old} → Lv{new}  "
-                    f"(next `!check` and scheduled scans will use Lv{new}+)"
-                )
-            ),
-            "MIN_TARGET_CONFLUENCE_COUNT": (
-                lambda old, new: (
-                    f"⚙️ **Min strategies confirmed** updated: {old} → {new}"
-                )
-            ),
-            "SCAN_INTERVAL_MINUTES": (
-                lambda old, new: (
-                    f"⚙️ **Scan interval** updated: every {old} min → every {new} min"
-                )
-            ),
-            "MIN_RISK_REWARD_RATIO": (
-                lambda old, new: (
-                    f"⚙️ **Min R:R ratio** updated: {old} → {new}"
-                )
-            ),
-        }
-        if config.DISCORD_CHANNEL_TRADES_ID:
-            channel = silence(bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
-            if channel:
-                for attr_key, fmt_fn in _notify_keys.items():
-                    if attr_key in changed:
-                        old_val, new_val = changed[attr_key]
-                        try:
-                            await channel.send(fmt_fn(old_val, new_val))
-                        except Exception as _e:
-                            log.warning("Could not post config-change notice to Discord: %s", _e, exc_info=True)
+        # Notify Discord about key setting changes (v110: CONFIG embeds).
+        await _post_config_notices(changed)
 
     # --- Admin UI manual-close notification queue ---
     from swingbot.core.db import stages
@@ -904,6 +829,22 @@ def _apply_scan_interval_change(changed: dict):
     _apply_market_data_refresh_config(changed)
 
 
+async def _post_bot_online(wl_size: int) -> None:
+    """Startup notice (v110 §5): a SYSTEM embed, send guarded (§6.3)."""
+    if not config.DISCORD_CHANNEL_TRADES_ID:
+        return
+    channel = silence(bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
+    if not channel:
+        return
+    embed = notices.bot_online_embed(
+        now_text=dt.datetime.now(SESSION_TZ).strftime("%Y-%m-%d %H:%M %Z"),
+        session_start=config.SESSION_START_HOUR, session_end=config.SESSION_END_HOUR,
+        interval=config.SCAN_INTERVAL_MINUTES, watchlist_size=wl_size,
+        open_count=trade_log.get_stats()["open"],
+        min_level=config.MIN_ALERT_CONFIDENCE_LEVEL)
+    await notices.send_guarded(channel, embed, what="bot-online notice")
+
+
 @bot.event
 async def on_ready():
     global _ready_announcement_sent
@@ -948,15 +889,5 @@ async def on_ready():
     except Exception as e:
         log.warning("Failed to sync slash commands: %s", e, exc_info=True)
 
-    # Post a startup notice to the alerts channel so there's a visible
-    # timestamp in Discord for when the bot came (back) online.
-    if config.DISCORD_CHANNEL_TRADES_ID:
-        channel = silence(bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
-        if channel:
-            open_count = trade_log.get_stats()["open"]
-            await channel.send(
-                f"🤖 **Bot online** — {dt.datetime.now(SESSION_TZ).strftime('%Y-%m-%d %H:%M %Z')}\n"
-                f"Session: {config.SESSION_START_HOUR:02d}:00–{config.SESSION_END_HOUR:02d}:00 Berlin · "
-                f"scan every {config.SCAN_INTERVAL_MINUTES} min · watchlist: {wl_size} ticker(s) · "
-                f"open trades: {open_count} · min confidence: Lv{config.MIN_ALERT_CONFIDENCE_LEVEL}"
-            )
+    # A visible timestamp in Discord for when the bot came (back) online.
+    await _post_bot_online(wl_size)

@@ -11,8 +11,13 @@ from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, ge
 from swingbot.core.market.strategy import HORIZONS
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
 from swingbot.core import presentation as ui
+from swingbot.core.presentation import kinds
+from swingbot.core.presentation.instructions import total_r
+from swingbot.core.presentation.kinds import Kind
 from swingbot.core.tracking.performance import closed_pnl_pct, closed_r_multiple
 from .snapshots import _format_duration_hms
+from .alert_embeds import strategy_plan_line
+from .execution_embeds import plan_levels_block, plan_result_block
 from .plan_table import banked_leg_pct_and_amount, partial_position_line, signed_money
 
 log = logging.getLogger(__name__)
@@ -80,21 +85,19 @@ def regenerate_chart_for_trade(trade: dict) -> str | None:
         return None
 
 
+_STATUS_OUTCOME = {"win": "win", "loss": "loss", "closed": "manual"}
+_RESULT_FIELD_WORD = {
+    "win": f"WIN {kinds.outcome_mark('win')}",
+    "loss": f"LOSS {kinds.outcome_mark('loss')}",
+    "manual": "MANUALLY CLOSED",
+}
+
+
 def build_closed_trade_embed(trade: dict) -> discord.Embed:
     """Build a rich embed for a trade that just closed (win, loss, or manual close)."""
-    status   = trade["status"]   # "win" | "loss" | "closed"
-    won      = status == "win"
-    manual   = status == "closed"
-
-    if manual:
-        outcome_word = "MANUALLY CLOSED"
-        icon  = "🔒"
-    elif won:
-        outcome_word = "WIN ✅"
-        icon  = "✅"
-    else:
-        outcome_word = "LOSS ❌"
-        icon  = "❌"
+    # "win" | "loss" | "closed" (manual) -> the registry's outcome (v110).
+    outcome = _STATUS_OUTCOME.get(trade["status"], "manual")
+    outcome_word = _RESULT_FIELD_WORD[outcome]
 
     cur        = get_currency_symbol(trade["ticker"], config.CURRENCY_SYMBOL)
     exit_price = trade.get("exit_price")
@@ -117,14 +120,13 @@ def build_closed_trade_embed(trade: dict) -> discord.Embed:
     r = closed_r_multiple(trade)
     r_str = ui.fmt_r(r)
 
-    title = f"{icon} {trade['ticker']} — {outcome_word}"
-    outcome = "win" if won else "loss" if not manual else "scratch"
-    embed = discord.Embed(title=title)
-    embed.description = ui.plan_headline(
-        direction=trade.get("direction", ""), entry=entry, target=exit_price,
-        stop=trade.get("stop_loss"), target_pct=pct, stop_pct=None, r=r,
-    )
-    ui.apply_chrome(embed, accent=ui.accent_for_outcome(outcome),
+    detail = kinds.outcome_detail(outcome, None if outcome == "manual" else r)
+    embed = ui.push_embed(
+        Kind.CLOSED_TRADE, trade["ticker"], trade.get("direction"), detail,
+        description=ui.result_headline(direction=trade.get("direction", ""), entry=entry,
+                                       exit_price=exit_price, stop=trade.get("stop_loss"),
+                                       pct=pct, r=r))
+    ui.apply_chrome(embed, kind=Kind.CLOSED_TRADE, r=kinds.result_r(outcome, r),
                     plan_id=trade.get("plan_id"))
 
     # Realized $/€ gain/loss -- computed from the share count snapshotted
@@ -231,11 +233,8 @@ async def notify_closed_trades(bot, newly_closed: list):
         if status not in ("win", "loss", "closed"):
             continue   # skip anything unexpected (still-open, etc.)
         try:
-            embed = build_closed_trade_embed(trade)
-            # Compact header line so the embed title stands out
-            header_map = {"win": "✅ WIN", "loss": "❌ LOSS", "closed": "🔒 CLOSED"}
-            header = f"{header_map.get(status, status.upper())} — **{trade['ticker']}**"
-            await channel.send(content=header, embed=embed)
+            # v110: the registry push line replaces the old ✅ WIN — **TICK** header.
+            await channel.send(**ui.push_kwargs(build_closed_trade_embed(trade)))
         except Exception as e:
             log.warning("Could not post closed-trade notification for %s: %s", trade.get("id"), e, exc_info=True)
 
@@ -245,10 +244,10 @@ def build_near_close_embed(warning: dict) -> discord.Embed:
     is_sl = warning["near_which"] == "stop-loss"
     approaching_word = "STOP-LOSS" if is_sl else "TAKE-PROFIT"
     cur = get_currency_symbol(t["ticker"], config.CURRENCY_SYMBOL)
-    title = f"⚠️ APPROACHING {approaching_word} — {t['ticker']}"
-    embed = discord.Embed(title=title)
-    ui.apply_chrome(embed, accent=ui.accent_for_outcome("loss" if is_sl else "win"),
-                    plan_id=t.get("plan_id"))
+    kind = Kind.NEAR_STOP if is_sl else Kind.NEAR_TP
+    distance = warning["sl_dist_pct" if is_sl else "tp_dist_pct"]
+    embed = ui.push_embed(kind, t["ticker"], t.get("direction"), f"{distance:.1f}% away")
+    ui.apply_chrome(embed, kind=kind, plan_id=t.get("plan_id"))
     embed.add_field(
         name="Approaching",
         value=f"**{approaching_word}** ({warning['sl_dist_pct' if is_sl else 'tp_dist_pct']:.1f}% away)",
@@ -277,82 +276,120 @@ async def notify_near_close(bot, warnings: list):
             return
     for warning in warnings:
         try:
-            await channel.send(embed=build_near_close_embed(warning))
+            await channel.send(**ui.push_kwargs(build_near_close_embed(warning)))
         except Exception as e:
             log.warning("Could not post near-close warning for %s: %s", warning["trade"].get("id"), e, exc_info=True)
 
 
-_GOOD = ui.accent_for_outcome("win")
-_BAD = ui.accent_for_outcome("loss")
-_NEUTRAL = ui.accent_for_outcome("scratch")
-_INERT = ui.accent_blocked()
+#: v2 plan transition -> registry kind (v110 §2). "closed" is keyed by reason below.
+PLAN_EVENT_KINDS = {
+    "filled": Kind.ENTRY_TRIGGERED,
+    "cancelled_expired": Kind.EXPIRED,
+    "cancelled_invalidated": Kind.INVALIDATED,
+    "cancelled_risk_cap": Kind.RISK_CAP,
+    "be_moved": Kind.BE_MOVED,
+    "tp1_partial": Kind.TP1_HIT,
+}
 
-PLAN_EVENT_STYLES = {
-    "filled":                ("🎯 ENTRY TRIGGERED — {ticker}", _NEUTRAL),
-    "cancelled_expired":     ("⏱ Plan expired — {ticker}", _INERT),
-    "cancelled_invalidated": ("❌ Plan invalidated — {ticker}", _INERT),
-    "cancelled_risk_cap":    ("🚫 Plan cancelled — risk cap — {ticker}", _INERT),
-    "be_moved":              ("🛡 Stop moved to break-even — {ticker}", _NEUTRAL),
-    "tp1_partial":           ("💰 TP1 banked — {ticker}", _GOOD),
-    "loss":                  ("🔴 Stopped out — {ticker}", _BAD),
-    "scratch":               ("⚪ Scratched at break-even — {ticker}", _NEUTRAL),
-    "win":                   ("🟢 Win — target hit — {ticker}", _GOOD),
-    "tp1_runner_be":         ("🟢 Win — runner closed at its floor — {ticker}", _GOOD),
-    "tp1_runner_tp2":        ("🟢 Win — runner hit TP2 — {ticker}", _GOOD),
-    "tp1_runner_trail":      ("🟢 Win — trail locked profit — {ticker}", _GOOD),
+#: close reason -> (kind, outcome, phrase). STOPPED and SCRATCHED already say
+#: it in their label; the phrases keep the four WIN closes distinct.
+CLOSE_REASON_STYLES = {
+    "loss": (Kind.STOPPED, "loss", ""),
+    "scratch": (Kind.SCRATCHED, "scratch", ""),
+    "win": (Kind.WIN, "win", "target hit"),
+    "tp1_runner_be": (Kind.WIN, "win", "runner closed at its floor"),
+    "tp1_runner_tp2": (Kind.WIN, "win", "runner hit TP2"),
+    "tp1_runner_trail": (Kind.WIN, "win", "trail locked profit"),
+}
+
+_ENDED_OUTCOME = {Kind.EXPIRED: "expired", Kind.INVALIDATED: "invalidated"}
+
+
+def _event_style(plan, event) -> tuple:
+    """(kind, title detail, stripe R) for one plan event."""
+    if event.transition == "closed":
+        kind, outcome, phrase = CLOSE_REASON_STYLES.get(
+            event.detail.get("reason"), (Kind.EXITED, None, "closed"))
+        r = total_r(plan, event.detail.get("exit_price"))
+        outcome = outcome or kinds.outcome_for_r(r)
+        detail = kinds.outcome_detail(outcome, r)
+        return kind, (f"{detail} · {phrase}" if phrase else detail), kinds.result_r(outcome, r)
+    kind = PLAN_EVENT_KINDS.get(event.transition, Kind.PLAN_UPDATE)
+    ended = _ENDED_OUTCOME.get(kind)
+    return kind, (kinds.outcome_detail(ended) if ended else ""), None
+
+
+def _filled_fields(embed, plan, d) -> None:
+    embed.description = plan_levels_block(plan, d["entry_price"])
+    embed.add_field(name="Entry", value=f"{d['entry_price']:.2f}")
+    embed.add_field(name="Stop", value=f"{plan.stop_loss:.2f}")
+    embed.add_field(name="TP1", value=f"{plan.tp1:.2f}")
+
+
+def _be_moved_fields(embed, plan, d) -> None:
+    embed.add_field(name="New stop", value=f"{d['working_stop']:.2f} (entry)")
+
+
+def _tp1_partial_fields(embed, plan, d) -> None:
+    pct, amount = banked_leg_pct_and_amount(plan, d["exit_price"], d["fraction"])
+    banked = f"{d['fraction']:.0%} @ {d['exit_price']:.2f} ({d['r']:+.2f}R"
+    if pct is not None:
+        banked += f" · {pct:+.1f}%"
+    if amount is not None:
+        banked += f" · {signed_money(amount, config.CURRENCY_SYMBOL)}"
+    embed.add_field(name="Banked", value=banked + ")")
+    embed.add_field(name="Partial position", value=partial_position_line(plan), inline=False)
+
+
+def _closed_fields(embed, plan, d) -> None:
+    exit_price = d.get("exit_price")
+    embed.description = plan_result_block(plan, exit_price, total_r(plan, exit_price))
+    embed.add_field(name="Exit", value=f"{d.get('exit_price', 0):.2f}")
+
+
+def _expired_fields(embed, plan, d) -> None:
+    embed.description = plan_levels_block(plan, plan.trigger_price)
+    embed.add_field(name="Why", value=(
+        f"Never triggered — {d['bars_waited']} bar(s) waited, past the "
+        f"{plan.expiry_bars}-bar window (trigger {plan.trigger_price:.2f})"), inline=False)
+
+
+def _invalidated_fields(embed, plan, d) -> None:
+    embed.description = plan_levels_block(plan, plan.trigger_price)
+    embed.add_field(name="Why", value=(
+        f"Price closed through the stop before entry triggered: "
+        f"{d['live_price']:.2f} vs stop {plan.stop_loss:.2f}"), inline=False)
+
+
+def _risk_cap_fields(embed, plan, d) -> None:
+    embed.add_field(name="Why", value=(
+        f"Trigger filled at {d['entry_price']:.2f} against stop {d['stop_loss']:.2f} — "
+        f"{d['planned_loss_pct']:.2f}% planned risk, above the "
+        f"{d['max_planned_loss_pct']:.1f}% hard cap. Never opened; no position, no P&L."),
+        inline=False)
+
+
+_EVENT_FIELDS = {
+    "filled": _filled_fields,
+    "be_moved": _be_moved_fields,
+    "tp1_partial": _tp1_partial_fields,
+    "closed": _closed_fields,
+    "cancelled_expired": _expired_fields,
+    "cancelled_invalidated": _invalidated_fields,
+    "cancelled_risk_cap": _risk_cap_fields,
 }
 
 
 def build_plan_event_embed(plan, event) -> discord.Embed:
-    """Per-transition Discord embed for the v2 plan lifecycle (Task 72)."""
-    if event.transition == "closed":
-        template, color = PLAN_EVENT_STYLES.get(
-            event.detail.get("reason"), ("Plan closed — {ticker}", _NEUTRAL))
-    else:
-        template, color = PLAN_EVENT_STYLES.get(
-            event.transition, ("Plan update — {ticker}", _NEUTRAL))
-    embed = discord.Embed(title=template.format(ticker=plan.ticker))
-    ui.apply_chrome(embed, accent=color, plan_id=plan.plan_id)
-    embed.add_field(name="Plan (v2)", value=(
-        f"{plan.strategy} · {plan.horizon_key} · {plan.direction} · "
-        f"{'✅' if plan.badge == 'VALIDATED' else '⚠️'} {plan.badge}"), inline=False)
-    d = event.detail
-    if event.transition == "filled":
-        embed.add_field(name="Entry", value=f"{d['entry_price']:.2f}")
-        embed.add_field(name="Stop", value=f"{plan.stop_loss:.2f}")
-        embed.add_field(name="TP1", value=f"{plan.tp1:.2f}")
-    elif event.transition == "be_moved":
-        embed.add_field(name="New stop", value=f"{d['working_stop']:.2f} (entry)")
-    elif event.transition == "tp1_partial":
-        pct, amount = banked_leg_pct_and_amount(plan, d["exit_price"], d["fraction"])
-        cur = config.CURRENCY_SYMBOL
-        banked = (f"{d['fraction']:.0%} @ {d['exit_price']:.2f} "
-                 f"({d['r']:+.2f}R")
-        if pct is not None:
-            banked += f" · {pct:+.1f}%"
-        if amount is not None:
-            banked += f" · {signed_money(amount, cur)}"
-        banked += ")"
-        embed.add_field(name="Banked", value=banked)
-        embed.add_field(name="Partial position", value=partial_position_line(plan),
-                        inline=False)
-    elif event.transition == "closed":
-        embed.add_field(name="Exit", value=f"{d.get('exit_price', 0):.2f}")
-    elif event.transition == "cancelled_expired":
-        embed.add_field(name="Why", value=(
-            f"Never triggered — {d['bars_waited']} bar(s) waited, past the "
-            f"{plan.expiry_bars}-bar window (trigger {plan.trigger_price:.2f})"),
-            inline=False)
-    elif event.transition == "cancelled_invalidated":
-        embed.add_field(name="Why", value=(
-            f"Price closed through the stop before entry triggered: "
-            f"{d['live_price']:.2f} vs stop {plan.stop_loss:.2f}"), inline=False)
-    elif event.transition == "cancelled_risk_cap":
-        embed.add_field(name="Why", value=(
-            f"Trigger filled at {d['entry_price']:.2f} against stop {d['stop_loss']:.2f} — "
-            f"{d['planned_loss_pct']:.2f}% planned risk, above the "
-            f"{d['max_planned_loss_pct']:.1f}% hard cap. Never opened; no position, no P&L."),
-            inline=False)
+    """Per-transition Discord embed for the v2 plan lifecycle (Task 72), styled
+    by the v110 registry. Field text is unchanged from the pre-v110 builder."""
+    kind, detail, stripe_r = _event_style(plan, event)
+    embed = ui.push_embed(kind, plan.ticker, plan.direction, detail)
+    ui.apply_chrome(embed, kind=kind, r=stripe_r, plan_id=plan.plan_id)
+    embed.add_field(name="Plan (v2)", value=strategy_plan_line(plan), inline=False)
+    fields = _EVENT_FIELDS.get(event.transition)
+    if fields is not None:
+        fields(embed, plan, event.detail)
     return embed
 
 
@@ -410,13 +447,13 @@ async def notify_plan_events(bot, events) -> list:
                 continue
             if event.transition not in STOP_EVENTS | NOTICE_EVENTS:
                 if history is not None:
-                    await history.send(embed=build_plan_event_embed(plan, event))
+                    await history.send(**ui.push_kwargs(build_plan_event_embed(plan, event)))
                 continue
             embed = build_instruction_embed(plan, event)
             pinged = False
             if feed is not None:
                 try:
-                    await feed.send(embed=embed)
+                    await feed.send(**ui.push_kwargs(embed))
                     pinged = True
                 except Exception as exc:
                     _warn_throttled(plan.plan_id, "execution feed: %s for plan %s failed "
@@ -424,7 +461,7 @@ async def notify_plan_events(bot, events) -> list:
                                     event.transition, plan.plan_id, exc)
             if history is not None:
                 try:
-                    await (silence(history) if pinged else history).send(embed=embed)
+                    await (silence(history) if pinged else history).send(**ui.push_kwargs(embed))
                     pinged = True
                 except Exception as exc:
                     _warn_throttled(plan.plan_id, "execution feed: history copy of %s for "
