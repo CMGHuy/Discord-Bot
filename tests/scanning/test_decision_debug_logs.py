@@ -67,3 +67,14 @@ def test_a_plan_rejection_is_logged_with_its_reason(monkeypatch, caplog):
         engine.attach_plan_v2(item, _scenario(), make_ohlcv([100.0] * 60), "AAPL", "4w", level_map=None)
     assert item.plan_v2_rejected == "no_qualifying_target"
     assert "gate: AAPL (4w) plan rejected -- no_qualifying_target" in _messages(caplog, analyze.log)
+
+
+def test_a_risk_cap_rejection_is_logged_with_its_reason(monkeypatch, caplog):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
+    too_wide = SimpleNamespace(trigger_price=100.0, stop_loss=50.0)  # 50% planned loss
+    monkeypatch.setattr(analyze, "build_confluence_plan", lambda *a, **k: too_wide)
+    item = _item()
+    with caplog.at_level(logging.DEBUG, logger=analyze.log.name):
+        engine.attach_plan_v2(item, _scenario(), make_ohlcv([100.0] * 60), "AAPL", "4w", level_map=None)
+    assert item.plan_v2_rejected == "risk_cap"
+    assert "gate: AAPL (4w) plan rejected -- risk_cap" in _messages(caplog, analyze.log)
