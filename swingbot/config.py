@@ -134,7 +134,7 @@ FIELDS: list[Field] = [
           type="number", default="5", min=1, max=120, step=1,
           help="Every scan both looks for new trades and checks all open trades for near-close proximity."),
     Field("SIGNAL_CONFIRMATION_SCANS", "SIGNAL_CONFIRMATION_SCANS", "Scanning & Session", "Confirmation scans",
-          type="number", default="2", min=1, max=10, step=1,
+          type="number", default="1", min=1, max=10, step=1,
           help="A signal must appear the same way this many consecutive scans before it's confirmed and alerted -- filters intraday flicker."),
     Field("LOG_LEVEL", "LOG_LEVEL", "Scanning & Session", "Log level",
           type="select", default="INFO", options=["DEBUG", "INFO", "WARNING", "ERROR"],
