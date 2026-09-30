@@ -16,7 +16,7 @@ BOT     = swing-bot
 ADMIN   = swing-bot-admin
 SERVER  = deploy@167.233.26.185
 
-.PHONY: up down logs logs-admin restart shell status deploy check clean tunnel
+.PHONY: up down logs logs-admin restart shell status deploy check clean tunnel backup-db
 
 up:
 	$(COMPOSE) up -d --build
@@ -68,3 +68,6 @@ tunnel:
 # SSH into the Hetzner server
 ssh:
 	ssh $(SERVER)
+
+backup-db:
+	./scripts/ops/backup_db.sh
