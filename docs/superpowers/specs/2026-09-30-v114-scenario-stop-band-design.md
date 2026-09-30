@@ -54,12 +54,12 @@ must measure the floor and the ratio together, not the floor alone.
 - The stop **must not be too near the entry**: floor **1.0%**.
 - Stops stay at **real support/resistance levels**. The scan never places a
   stop at an arbitrary distance to hit a percentage.
-- Reward rule: target **at least 2.5% away and at least as far as the stop**
-  (risk:reward >= 1.0).
+- Reward rule: target **at least 2.5% away**, and risk:reward **at least 2.0**
+  (partner revision the same day, replacing the earlier "reward >= stop").
 
 ## Design
 
-Band: **stop 1.0% to 2.5% from entry**; **reward >= 2.5% and >= stop**.
+Band: **stop 1.0% to 2.5% from entry**; **reward >= 2.5% and risk:reward >= 2.0**.
 
 1. `MIN_STOP_DISTANCE_PCT` default 2.0 -> **1.0**.
 2. `HARD_MAX_PLANNED_LOSS_PCT` (`swingbot/core/risk_limits.py`) 2.0 -> **2.5**.
@@ -69,7 +69,8 @@ Band: **stop 1.0% to 2.5% from entry**; **reward >= 2.5% and >= stop**.
    by the plan's first task and made to read the constant.
 3. Scenario admission ceiling stops being the horizon's 7-11% and becomes the
    same constant, so scenarios that can never be issued are no longer built.
-4. `MIN_REWARD_PCT` 2.0 -> **2.5** and `MIN_RISK_REWARD_RATIO` 1.5 -> **1.0**.
+4. `MIN_REWARD_PCT` 2.0 -> **2.5** and `MIN_RISK_REWARD_RATIO` 1.5 -> **2.0**.
+   A 2.5% stop therefore needs a 5% target; a 1.0% stop needs 2.5%.
    The per-horizon reward floor (`sr_target_min_pct * 0.15`, 3.3% for the
    longest horizons) still applies on top, so long horizons need more than 2.5%.
 5. Backtest replay uses the same admission code (`backtest_scenarios.py`
@@ -88,10 +89,11 @@ sit. Nothing is moved to a fixed percentage.
 ## What the measurement says (2026-09-30, production cache, 820 frames)
 
 Real-level stops of 2.0-2.5% do not exist today: floor 2.0% gives 0 scenarios
-at a 2.0% or a 2.5% cap, even with risk:reward 1.0 and a 2.5% reward floor.
-Floor 1.0% gives 23 (RR 1.5) or 25 (RR 1.0), and the cap value does not change
-that. So on today's data **raising the cap is not what brings alerts back; the
-1.0% floor is.** The 2.5% cap is a risk-limit decision the partner made on its
+at a 2.0% or a 2.5% cap, whatever the ratio. With the 2.5% reward floor and the
+cap at 2.5%: floor 1.0% gives **18 scenarios at RR 2.0** (23 at RR 1.5, 25 at
+RR 1.0); floor 1.5% gives 1 at RR 2.0. The cap value (2.0 vs 2.5) changes
+nothing today. So **the 1.0% floor is what brings alerts back; raising the
+cap does not.** The 2.5% cap is a risk-limit decision the partner made on its
 merits; its cost is measured in validation, not assumed free.
 
 ## Integrity requirement (not subject to validation)
@@ -108,11 +110,11 @@ updated in the release commit so no document still says 2%.
 - A 1.0% stop is inside ordinary daily range for volatile tickers, so stops may
   be hit by noise and win rate may fall. The `tight_stop` flag (stop below the
   horizon's ATR cushion) stratifies the validation.
-- **Risk:reward 1.5 -> 1.0 will likely trip the geometry-lock clause** of the
-  v72 acceptance gate (median planned RR and mean win R must not fall more than
-  2%). That clause is not relaxed to fit this spec. If it fails, the outcome is
-  NO-LIFT for the RR change, and the plan falls back to measuring the band
-  with RR left at 1.5 (23 scenarios today).
+- Risk:reward rises 1.5 -> 2.0, so the geometry-lock clause (median planned RR
+  and mean win R must not fall more than 2%) should pass. The cost falls on the
+  other side: a target twice the stop is reached less often, so **win rate
+  will fall** and volume drops (18 scenarios today against 23 at RR 1.5). The
+  win-rate and expectancy clauses decide; none is relaxed.
 - A 2.5% cap raises the worst-case loss per trade by 25% against the same
   account size; sizing reads the cap, so position size per trade falls in
   proportion for stops at the cap.
