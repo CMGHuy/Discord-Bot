@@ -3,6 +3,7 @@
 **Version:** ui 1.21.0 · bot 1.10.4 (at writing)
 **Bump:** none until wiring; bot minor if any cell ships
 **Edge:** volume
+**Status:** Closed no-lift 2026-09-30; holdout spent: none; sealed-thin: none; A: NO-LIFT at Stage 1 (no `m` cleared a tier); B: 0/22 proceed (all fail the Tier 1 WR floor); D: NO-LIFT on TRAIN. Shipped inert on `main`: the masked `1w` horizon, the `cells` mask key, the `1w` reward floor, the `limit` entry type, the masked fade, `measure_v113.py`. Live-parity tasks V113-20 … V113-24 and the Part D wiring (V113-25) skipped; nothing went live. Results: `docs/superpowers/results/2026-09-30-v113-*.md`.
 
 ## Why this, and the honest prior
 

@@ -5,6 +5,7 @@
 **Spec:** `docs/superpowers/specs/2026-09-28-v113-bearish-day-coverage-design.md`
 **Bump:** none until Phase C wiring; `bot minor` only if a cell ships (V113-18, V113-24 or V113-25)
 **Edge:** volume
+**Progress:** Closed 2026-09-30. V113-1 … V113-17 executed (Phase A merged to `main`; measurements on `main`). V113-18 no-op, V113-19 gate closed, V113-20 … V113-25 skipped (fade and Part D did not pass; no Part B cell passed), V113-26 done, V113-27 closed out with no release (nothing shipped live). Full suite on `main`: 4938 passed, 2 failed — both the Windows CRLF line-ending checks in `tests/scripts/test_backup_db.py` / `test_restore_db.py`, unrelated to v113 (not a green suite by the repo's bar).
 
 **Goal:** Add a masked-by-default `1w` horizon with its own reward floor, a `cells` mask key, the short-only Downtrend Overbought Fade (Part A), and measure A, every legacy strategy × direction on `1w` (Part B) and the live bullish masks on SH/PSQ/RWM/DOG (Part D) through TRAIN → folds → one 2026 holdout shot, shipping only what passes — and, if the fade passes, give it live parity (earnings context, limit entry, whole-position target, enforced time stop) before unmasking it.
 
