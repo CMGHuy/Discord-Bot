@@ -152,3 +152,110 @@ def test_part_d_refuses_any_other_universe():
 
 def test_every_part_has_an_evaluator():
     assert set(mv.EVALUATORS) == {"A", "B", "D"}
+
+
+# --- V113-11: holdout and registry ---------------------------------------------
+
+import json  # noqa: E402
+
+
+@pytest.fixture
+def results(tmp_path, monkeypatch):
+    monkeypatch.setattr(mv, "RESULTS", tmp_path)
+    monkeypatch.setattr(mv, "HOLDOUT_END", "2026-09-25")
+    return tmp_path
+
+
+def _prior(results, name, status):
+    (results / name).write_text(json.dumps({"status": status}), encoding="utf-8")
+
+
+def test_candidate_slugs():
+    assert mv.candidate_slug({"part": "A"}) == "a-fade"
+    assert mv.candidate_slug({"part": "B", "strategy": "Break & Retest", "direction": "bearish"}) == \
+        "b-break-and-retest-bearish"
+    assert mv.candidate_slug({"part": "D"}) == "d-inverse-etfs"
+
+
+def test_holdout_first_shot_is_allowed(results):
+    mv.check_shot_allowed("a-fade", results / "2026-09-30-v113-holdout-a-fade.json")
+
+
+def test_holdout_refuses_a_spent_shot_under_any_date(results):
+    _prior(results, "2026-09-30-v113-holdout-a-fade.json", "scored")
+    with pytest.raises(SystemExit):
+        mv.check_shot_allowed("a-fade", results / "2027-03-01-v113-holdout-a-fade.json")
+
+
+def test_holdout_refuses_the_thin_retry_before_twelve_months(results):
+    _prior(results, "2026-09-30-v113-holdout-d-inverse-etfs.json", "sealed-thin")
+    with pytest.raises(SystemExit):
+        mv.check_shot_allowed("d-inverse-etfs", results / "2026-10-30-v113-holdout-d-inverse-etfs.json")
+
+
+def test_holdout_allows_exactly_one_thin_retry_after_twelve_months(results, monkeypatch):
+    _prior(results, "2026-09-30-v113-holdout-d-inverse-etfs.json", "sealed-thin")
+    monkeypatch.setattr(mv, "HOLDOUT_END", "2026-12-31")
+    mv.check_shot_allowed("d-inverse-etfs", results / "2027-01-05-v113-holdout-d-inverse-etfs.json")
+    _prior(results, "2027-01-05-v113-holdout-d-inverse-etfs.json", "sealed-thin")
+    with pytest.raises(SystemExit):
+        mv.check_shot_allowed("d-inverse-etfs", results / "2027-02-01-v113-holdout-d-inverse-etfs.json")
+
+
+def test_holdout_refuses_an_existing_output(results):
+    out = results / "2026-09-30-v113-holdout-a-fade.json"
+    out.write_text("{}", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        mv.check_shot_allowed("a-fade", out)
+
+
+def test_holdout_window_refuses_until_frozen(monkeypatch):
+    monkeypatch.setattr(mv, "HOLDOUT_END", None)
+    with pytest.raises(SystemExit):
+        mv.holdout_window()
+    monkeypatch.setattr(mv, "HOLDOUT_END", "2026-09-25")
+    assert mv.holdout_window() == ("2026-01-01", "2026-09-25")
+
+
+def test_verdict_seals_a_thin_holdout_with_n_only():
+    assert mv.verdict(_rows((2026,), 10, 0.9), "A", 1, **FAST) == {"status": "sealed-thin", "n": 10}
+
+
+def test_verdict_part_b_keeps_the_lower_bound_clause():
+    out = mv.verdict(_rows((2026,), 20, 0.75), "B", 1, **FAST)
+    assert out["status"] == "scored" and "lower_bound" in out["clauses"] and "wr" in out["clauses"]
+
+
+def test_verdict_tier_2_has_no_win_rate_clause():
+    out = mv.verdict(_rows((2026,), 20, 0.75, direction="bullish"), "D", 2, **FAST)
+    assert "wr" not in out["clauses"] and "lower_bound" in out["clauses"]
+
+
+def _payload(tmp_path, name, **kw):
+    base = {"status": "scored", "passes": True, "part": "B", "strategy": "MACD", "direction": "bearish",
+            "tier": 1, "window": ["2026-01-01", "2026-09-25"], "rows": _rows((2026,), 20, 0.75)}
+    base.update(kw)
+    path = tmp_path / name
+    path.write_text(json.dumps(base), encoding="utf-8")
+    return str(path)
+
+
+def _emit(tmp_path, *paths):
+    registry = tmp_path / "reg.json"
+    mv._cmd_emit(SimpleNamespace(holdout_json=list(paths), registry=str(registry), run_date="2026-10-01"))
+    return json.loads(registry.read_text(encoding="utf-8"))
+
+
+def test_emit_writes_a_1w_row_for_the_shipped_cells(tmp_path, monkeypatch):
+    monkeypatch.setitem(STRATEGY_GATES, "MACD", {**STRATEGY_GATES["MACD"], "cells": {("bearish", "1w")}})
+    (row,) = _emit(tmp_path, _payload(tmp_path, "h.json"))
+    assert (row["source"], row["strategy"], row["horizon"], row["n"]) == ("strategy", "MACD", "1w", 20)
+    assert row["status"] == "VALIDATED" and row["window"] == "2026-01-01..2026-09-25"
+
+
+def test_emit_refuses_part_d_a_failure_and_an_unshipped_direction(tmp_path, monkeypatch):
+    monkeypatch.setitem(STRATEGY_GATES, "MACD", {**STRATEGY_GATES["MACD"], "cells": {("bearish", "1w")}})
+    for bad in ({"part": "D", "strategy": "inverse-etf-longs"}, {"passes": False},
+                {"direction": "bullish"}):
+        with pytest.raises(SystemExit):
+            _emit(tmp_path, _payload(tmp_path, "bad.json", **bad))

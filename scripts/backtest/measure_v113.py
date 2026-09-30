@@ -21,9 +21,12 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(Path(__file__).resolve().parent)]
 
 import funnel  # noqa: E402
-from funnel import BOOTSTRAP_SEED, MIN_N_TRAIN, cell_key  # noqa: E402
+from funnel import BOOTSTRAP_SEED, MIN_N_TRAIN, MIN_N_VALIDATION, cell_key  # noqa: E402
 from measure_fib_confluence import Progress, _write  # noqa: E402
-from measure_v104 import FOLD_YEARS, TRAIN, _frames, params, trade_rows  # noqa: E402
+from measure_fib_v103 import require_committed  # noqa: E402
+from measure_v104 import (FOLD_YEARS, HOLDOUT_START, THIN_REOPEN, TRAIN, _frames,  # noqa: E402
+                          params, slug, trade_rows)
+from run_backtest_range import merge_registry  # noqa: E402
 from swingbot.core.backtesting.acceptance import BOOTSTRAP_RESAMPLES  # noqa: E402
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES  # noqa: E402
 from swingbot.core.market.entry_filters import gate_override  # noqa: E402
@@ -186,6 +189,99 @@ EVALUATORS = {
 }
 
 
+# --- Stage 3: holdout -------------------------------------------------------------
+
+def holdout_window() -> tuple:
+    if HOLDOUT_END is None:
+        raise SystemExit("HOLDOUT_END is not frozen -- the pre-registration commit freezes it")
+    return HOLDOUT_START, HOLDOUT_END
+
+
+_SLUGS = {
+    "A": lambda evaluated: "a-fade",
+    "B": lambda evaluated: f"b-{slug(evaluated['strategy'])}-{evaluated['direction']}",
+    "D": lambda evaluated: "d-inverse-etfs",
+}
+
+
+def candidate_slug(evaluated: dict) -> str:
+    return _SLUGS[evaluated["part"]](evaluated)
+
+
+def check_shot_allowed(candidate: str, out_path) -> None:
+    """One shot per cell under ANY date; a single sealed-thin shot may be
+    retried once, and only when the holdout reaches 12 months."""
+    if Path(out_path).exists():
+        raise SystemExit(f"holdout output already exists: {out_path}")
+    prior = sorted(Path(RESULTS).glob(f"*-v113-holdout-{candidate}.json"))
+    if not prior:
+        return
+    statuses = [json.loads(path.read_text(encoding="utf-8")).get("status") for path in prior]
+    if statuses != ["sealed-thin"]:
+        raise SystemExit(f"holdout shot for {candidate} is spent ({prior[-1].name})")
+    if (HOLDOUT_END or "") < THIN_REOPEN:
+        raise SystemExit(f"{candidate} is sealed-thin; its one retry waits for HOLDOUT_END >= {THIN_REOPEN}")
+
+
+def holdout_clauses(scored, part, tier) -> dict:
+    """Part B keeps its strict bar on the holdout; A and D use their assigned tier."""
+    if part == "B":
+        return strict_clauses(scored)
+    return dict(scored["tier1" if tier == 1 else "tier2"]["clauses"])
+
+
+def verdict(rows, part, tier, *, n_resamples=BOOTSTRAP_RESAMPLES, seed=BOOTSTRAP_SEED) -> dict:
+    """N < 15 writes N only (sealed-thin, shot unspent); otherwise the cell's clauses."""
+    n = funnel.pooled(rows)["n"]
+    if n < MIN_N_VALIDATION:
+        return {"status": "sealed-thin", "n": n}
+    scored = funnel.score_cell(rows, MIN_N_VALIDATION, n_resamples=n_resamples, seed=seed)
+    clauses = holdout_clauses(scored, part, tier)
+    return {"status": "scored", "tier": tier, "stats": scored["stats"], "lower_bound": scored["lower_bound"],
+            "clauses": clauses, "passes": all(clauses.values())}
+
+
+def holdout_rows(evaluated, frames, asof_map, window) -> list:
+    part = evaluated["part"]
+    if part == "A":
+        value = evaluated["validation_cell"]["value"]
+        return collect_a(frames, asof_map, window, values=(value,))["rows_by_cell"][cell_key(value)]
+    if part == "B":
+        return collect_b(evaluated["strategy"], evaluated["direction"], frames, asof_map, window)["rows"]
+    return collect_d(frames, asof_map, window)
+
+
+# --- registry ---------------------------------------------------------------------
+
+def _validate_emit(payloads) -> str:
+    """Raise unless every payload scored and passed, none is Part D (amendment 5),
+    they share one strategy, and their directions are exactly that strategy's
+    shipped 1w cells (a row ships only when every admitted direction passed)."""
+    if not all(p.get("status") == "scored" and p.get("passes") for p in payloads):
+        raise SystemExit("refusing to emit a failing or sealed holdout")
+    if any(p["part"] == "D" for p in payloads):
+        raise SystemExit("Part D pools strategies on four tickers -- it writes no registry row")
+    strategies = {p["strategy"] for p in payloads}
+    if len(strategies) != 1:
+        raise SystemExit("one strategy per registry row")
+    strategy = strategies.pop()
+    shipped = {d for d, hk in (STRATEGY_GATES.get(strategy) or {}).get("cells", ()) if hk == HZ}
+    if {p["direction"] for p in payloads} != shipped:
+        raise SystemExit(f"{strategy}: a 1w row needs exactly its shipped 1w cells {sorted(shipped)}")
+    return strategy
+
+
+def _registry_row(strategy, payloads, run_date) -> dict:
+    rows = [row for p in payloads for row in p["rows"]]
+    stats = funnel.pooled(rows)
+    badge = funnel.badge_verdict(stats, MIN_N_VALIDATION)["clears"]
+    status = "VALIDATED" if {p["tier"] for p in payloads} == {1} and badge else "WEAK"
+    return {"source": "strategy", "strategy": strategy, "horizon": HZ, "status": status, "n": stats["n"],
+            "win_rate": None if stats["win_rate"] is None else round(stats["win_rate"], 1),
+            "expectancy_r": None if stats["expectancy_r"] is None else round(stats["expectancy_r"], 3),
+            "window": f"{HOLDOUT_START}..{payloads[0]['window'][1]}", "run_date": run_date}
+
+
 # --- commands -------------------------------------------------------------------
 
 def _cmd_collect_a(args):
@@ -220,24 +316,57 @@ def _cmd_evaluate(args):
     _write(args.out, {"universe_n": collected["universe_n"], **EVALUATORS[collected["part"]](collected)})
 
 
+def _cmd_holdout(args):
+    window = holdout_window()
+    require_committed(args.preregistration)
+    require_committed(args.evaluate)
+    evaluated = json.loads(Path(args.evaluate).read_text(encoding="utf-8"))
+    candidate = candidate_slug(evaluated)
+    if not evaluated.get("proceed_to_holdout"):
+        raise SystemExit(f"{candidate} did not proceed to the holdout")
+    check_shot_allowed(candidate, args.out)
+    frames, asof_map = _d_frames(args) if evaluated["part"] == "D" else _ab_frames(args)
+    rows = holdout_rows(evaluated, frames, asof_map, window)
+    result = verdict(rows, evaluated["part"], evaluated["tier"])
+    payload = {"candidate": candidate, "part": evaluated["part"], "strategy": evaluated["strategy"],
+               "direction": evaluated["direction"], "horizon": evaluated.get("horizon"),
+               "window": list(window), "universe_n": len(frames), "evaluate": str(args.evaluate),
+               "preregistration": str(args.preregistration), **result}
+    if result["status"] == "scored":
+        payload["rows"] = rows
+    _write(args.out, payload)
+
+
+def _cmd_emit(args):
+    payloads = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.holdout_json]
+    strategy = _validate_emit(payloads)
+    merge_registry(args.registry, [_registry_row(strategy, payloads, args.run_date)])
+
+
 def _parser():
     parser = argparse.ArgumentParser(description="v113 1w horizon, fade and inverse-ETF funnel")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    for name in ("collect-a", "collect-b", "collect-d"):
+    for name in ("collect-a", "collect-b", "collect-d", "holdout"):
         command = sub.add_parser(name)
         command.add_argument("--out", required=True)
         command.add_argument("--universe")
         command.add_argument("--tickers", help="comma-separated; Part D requires exactly SH,PSQ,RWM,DOG")
     sub.choices["collect-b"].add_argument("--strategy", required=True)
     sub.choices["collect-b"].add_argument("--direction", required=True, choices=("bullish", "bearish"))
+    sub.choices["holdout"].add_argument("--evaluate", required=True)
+    sub.choices["holdout"].add_argument("--preregistration", required=True)
     evaluate_parser = sub.add_parser("evaluate")
     evaluate_parser.add_argument("--rows", required=True)
     evaluate_parser.add_argument("--out", required=True)
+    emit = sub.add_parser("emit-registry")
+    emit.add_argument("--holdout-json", nargs="+", required=True)
+    emit.add_argument("--registry", required=True)
+    emit.add_argument("--run-date", required=True)
     return parser
 
 
 COMMANDS = {"collect-a": _cmd_collect_a, "collect-b": _cmd_collect_b, "collect-d": _cmd_collect_d,
-            "evaluate": _cmd_evaluate}
+            "evaluate": _cmd_evaluate, "holdout": _cmd_holdout, "emit-registry": _cmd_emit}
 
 
 def main(argv=None) -> int:
