@@ -12,7 +12,7 @@ import logging
 
 from swingbot import config
 
-log = logging.getLogger("swing-bot.backtest_wf")
+log = logging.getLogger(__name__)
 
 #: Fold train windows start 2018-06-01 because that is where the OHLCV
 #: cache starts (scripts/data/fetch_backtest_data.py: START = "2018-06-01").

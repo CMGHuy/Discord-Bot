@@ -30,7 +30,7 @@ from .plan_table import (_v2_plan, plan_numbers_for_display, leg_rows, cohort_li
 from .execution_embeds import build_ticket_embed
 
 
-log = logging.getLogger("swing-bot.scan_engine")
+log = logging.getLogger(__name__)
 
 
 def build_embed(item, explanation, perf_stats, open_positions_warning, chart_filename,

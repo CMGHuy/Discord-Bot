@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 
 from swingbot import config
 
-log = logging.getLogger("swing-bot.deploy-marker")
+log = logging.getLogger(__name__)
 
 
 def _path() -> str:

@@ -133,7 +133,7 @@ def test_bad_payloads_are_none_never_raised(monkeypatch, body):
 def test_http_error_logged_once_per_failure_streak(monkeypatch, caplog, _clean):
     clock = _clean
     _serve(monkeypatch, OSError("boom"), OSError("boom"), _body())
-    caplog.set_level(logging.INFO, logger="swing-bot.spot_metals")
+    caplog.set_level(logging.INFO, logger="swingbot.core.marketdata.spot_metals")
     assert sm.spot_quote("XAUUSD", now=NOW) is None
     clock[0] += 20
     assert sm.spot_quote("XAUUSD", now=NOW) is None
@@ -196,7 +196,7 @@ def test_missing_future_is_none(monkeypatch, futures):
 def test_ratio_outside_the_sanity_band_is_rejected_and_logged(monkeypatch, caplog, futures):
     _serve(monkeypatch, _body())
     monkeypatch.setattr(sm, "_futures_price", lambda s: futures)
-    caplog.set_level(logging.WARNING, logger="swing-bot.spot_metals")
+    caplog.set_level(logging.WARNING, logger="swingbot.core.marketdata.spot_metals")
     reading, reason = sm.spot_ratio_detail("XAUUSD", now=NOW)
     assert reading is None and "outside" in reason
     assert any("outside" in r.getMessage() for r in caplog.records)

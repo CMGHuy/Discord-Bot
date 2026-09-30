@@ -32,7 +32,7 @@ from swingbot.core.analytics.journal import JournalStore
 from swingbot.core.presentation import tokens
 from swingbot.core.market.session import BERLIN_TZ as _BERLIN_TZ
 
-log = logging.getLogger("swing-bot.retrospective")
+log = logging.getLogger(__name__)
 
 _DOW_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 

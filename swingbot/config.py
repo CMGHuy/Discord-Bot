@@ -52,7 +52,7 @@ _PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(_PACKAGE_DIR)
 ENV_PATH = os.path.join(_PROJECT_ROOT, ".env")
 
-log = logging.getLogger("swing-bot.config")
+log = logging.getLogger(__name__)
 
 # All runtime state (trades.json, state.json, account.json, watchlist.json)
 # and generated chart images live under the project root, not inside the
@@ -1126,14 +1126,14 @@ def _cast(f: Field, raw: str):
     if f.attr == "PLAN_ENGINE_V2":
         v = str(raw).lower()
         if v not in ("off", "shadow", "on"):
-            logging.getLogger("swingbot.config").warning(
+            log.warning(
                 "invalid PLAN_ENGINE_V2=%r, falling back to 'off'", raw)
             return "off"
         return v
     if f.attr == "STRATEGY_ALERTS_MODE":
         v = str(raw).lower()
         if v not in ("off", "shadow", "live"):
-            logging.getLogger("swingbot.config").warning(
+            log.warning(
                 "invalid STRATEGY_ALERTS_MODE=%r, falling back to 'off'", raw)
             return "off"
         return v

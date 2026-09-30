@@ -36,7 +36,7 @@ from swingbot.core.marketdata.data_store import (
     timeframe_name,
 )
 
-log = logging.getLogger("swing-bot.data_refresh")
+log = logging.getLogger(__name__)
 
 # How often each timeframe is worth re-fetching. A new monthly candle only
 # closes twelve times a year; an hourly one closes every session hour.

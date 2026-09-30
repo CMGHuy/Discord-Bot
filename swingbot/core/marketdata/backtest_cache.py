@@ -26,7 +26,7 @@ from swingbot import config
 from swingbot.core.marketdata.spot_metals import cache_symbol
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
-log = logging.getLogger("swing-bot.backtest_cache")
+log = logging.getLogger(__name__)
 
 
 def _cache_dir() -> Path:

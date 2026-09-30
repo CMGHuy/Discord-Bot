@@ -13,7 +13,7 @@ import os
 import tempfile
 import time
 
-log = logging.getLogger("swing-bot.jsonio")
+log = logging.getLogger(__name__)
 
 #: `os.replace` is atomic, but on Windows it can still fail transiently with
 #: PermissionError (WinError 5 / 32) when something else holds a handle on

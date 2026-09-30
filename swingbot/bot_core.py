@@ -28,7 +28,7 @@ def configure_bot_logging() -> None:
 
 configure_bot_logging()
 
-log = logging.getLogger("swing-bot")
+log = logging.getLogger(__name__)
 
 SESSION_TZ = BERLIN_TZ
 

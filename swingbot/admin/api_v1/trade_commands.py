@@ -43,7 +43,7 @@ from .trades import (
     _row_from_trade,
 )
 
-log = logging.getLogger("swing-bot.admin.api_v1")
+log = logging.getLogger(__name__)
 
 _CLOSEABLE_PLAN = (PlanStatus.ACTIVE, PlanStatus.PARTIAL)
 _OPEN_LEGACY = "open"

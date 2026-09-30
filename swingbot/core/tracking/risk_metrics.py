@@ -35,7 +35,7 @@ import pandas as pd
 
 from swingbot.core.analytics.metrics import trade_return_pct
 
-log = logging.getLogger("swing-bot.risk_metrics")
+log = logging.getLogger(__name__)
 
 try:
     import quantstats as qs

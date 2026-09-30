@@ -96,7 +96,7 @@ from .chart_geometry import _pick_primary_source
 from .chart_strategy_overlay import _draw_confirmed_strategy, _draw_confirmed_strategy_secondary
 from .chart_volume_profile import _draw_volume_profile_overlay
 
-log = logging.getLogger("swing-bot.trade_chart")
+log = logging.getLogger(__name__)
 
 
 def _fmt_note_date(d) -> str:

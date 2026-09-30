@@ -15,6 +15,7 @@ since daily bars don't tell us the actual intraday order of events.
 This is a paper-trade tracker -- it does not know about slippage, fees,
 partial fills, or gaps beyond what the daily bar shows.
 """
+import logging
 import os
 import secrets
 import string
@@ -35,6 +36,8 @@ from swingbot.core.market.strategy_types import HORIZONS as _HORIZONS
 # settings are tuned for -- see check_near_tp_timeout()'s horizon-scaling below.
 _NEAR_TP_BASELINE_HORIZON_DAYS = _HORIZONS.get("2w", {}).get("max_holding_days", 14)
 
+log = logging.getLogger(__name__)
+
 _LOCK = Lock()
 
 
@@ -53,8 +56,7 @@ def _journal_close_safely(trade: dict) -> None:
         from swingbot.core.analytics.journal import journal_trade_close
         journal_trade_close(trade)
     except Exception:
-        import logging
-        logging.getLogger("swing-bot.performance").warning(
+        log.warning(
             "journal hook failed for trade %s", trade.get("id"), exc_info=True)
 
 
@@ -79,8 +81,7 @@ def _close_linked_plan_safely(plan_id: str, reason: str) -> None:
                           at=datetime.now(timezone.utc).isoformat())
         store.update(plan)
     except Exception:
-        import logging
-        logging.getLogger("swing-bot.performance").warning(
+        log.warning(
             "could not close plan %s after its trade closed", plan_id, exc_info=True)
 
 
@@ -89,8 +90,7 @@ def _refresh_snapshot_safely() -> None:
         from swingbot.core.analytics.snapshots import refresh_snapshot
         refresh_snapshot()
     except Exception:
-        import logging
-        logging.getLogger("swing-bot.performance").warning(
+        log.warning(
             "post-close snapshot refresh failed", exc_info=True)
 
 
@@ -835,8 +835,7 @@ class TradeLog:
             # closing -- worst case the account balance simply doesn't
             # reflect this one trade yet. Logged, though: a silent miss here
             # leaves the balance wrong with nothing to say why.
-            import logging
-            logging.getLogger("swing-bot.performance").warning(
+            log.warning(
                 "account settlement failed for trade %s", t.get("id"), exc_info=True)
 
     def update_open_trades(self, ticker: str, df, live_price: float | None = None) -> list:

@@ -19,7 +19,7 @@ from swingbot.core.infra.jsonio import atomic_write_json, read_json
 
 DEFAULT_PATH = os.path.join(config.DATA_DIR, "analytics_snapshot.json")
 
-log = logging.getLogger("swing-bot.snapshots")
+log = logging.getLogger(__name__)
 
 
 def build_snapshot(closed: list[dict], starting_balance: float, registry_entries: list[dict], *, weak_closed=()) -> dict:

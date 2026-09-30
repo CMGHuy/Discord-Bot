@@ -45,7 +45,7 @@ from .singletons import trade_log
 from . import risk_features
 
 
-log = logging.getLogger("swing-bot.scan_engine")
+log = logging.getLogger(__name__)
 
 
 def veto_bullish_for(df) -> bool:

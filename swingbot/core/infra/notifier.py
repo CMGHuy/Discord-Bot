@@ -30,7 +30,7 @@ from email.message import EmailMessage
 
 from swingbot import config
 
-log = logging.getLogger("swing-bot.notifier")
+log = logging.getLogger(__name__)
 
 
 def _send_email(subject: str, body: str) -> bool:

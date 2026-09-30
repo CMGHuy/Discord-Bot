@@ -23,7 +23,7 @@ from swingbot.core.marketdata import data_refresh, data_store, spot_metals, univ
 from . import runstate
 
 
-log = logging.getLogger("swing-bot.scan_engine")
+log = logging.getLogger(__name__)
 
 #: v106 soak telemetry for the current scan, reset by reset_fetch_stats()
 #: at scan start and read into the telemetry row at scan end.

@@ -38,7 +38,7 @@ from typing import Callable, Mapping
 
 from swingbot import config
 
-log = logging.getLogger("swing-bot.admin.events")
+log = logging.getLogger(__name__)
 
 #: Seconds between `stat()` sweeps. Deliberately not configurable -- spec
 #: Decision 1: a knob here is a decision deferred to the user, which is the

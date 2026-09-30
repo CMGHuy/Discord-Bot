@@ -43,7 +43,7 @@ from .singletons import state, trade_log
 from .regime import get_market_regime
 
 
-log = logging.getLogger("swing-bot.scan_engine")
+log = logging.getLogger(__name__)
 
 _SOURCE_BUCKETS = ("alpaca", "yfinance", "yfinance-fallback")
 

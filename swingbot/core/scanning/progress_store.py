@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 
 from swingbot import config
 
-log = logging.getLogger("swing-bot.scan_engine")
+log = logging.getLogger(__name__)
 
 #: The published record's filename under `config.DATA_DIR`. Watched by
 #: `swingbot/admin/events/watcher.py`, which turns each write into the `scan`

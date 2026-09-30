@@ -15,7 +15,7 @@ from swingbot.core.tracking.performance import closed_pnl_pct, closed_r_multiple
 from .snapshots import _format_duration_hms
 from .plan_table import banked_leg_pct_and_amount, partial_position_line, signed_money
 
-log = logging.getLogger("swing-bot.scan_engine")
+log = logging.getLogger(__name__)
 def regenerate_chart_for_trade(trade: dict) -> str | None:
     # A closed trade's chart never changes once closed (same OHLCV window,
     # same levels) -- if the deterministic file from a prior regen already

@@ -7,7 +7,7 @@ from swingbot import config
 from swingbot.core.backtesting.registry import Badge, decay_note, get_badge
 from .plan_types import TradePlanV2
 
-log = logging.getLogger("swing-bot.plan_engine")
+log = logging.getLogger(__name__)
 # Same numbers backtest.py used before the extraction (parity-critical).
 STRUCTURE_BUFFER_ATR = 0.25   # cushion beyond swing high/low, in ATR units
 SR_VOLUME_STRENGTH_CEILING = 3.0

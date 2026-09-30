@@ -38,7 +38,7 @@ from swingbot.core.marketdata.providers import router
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 from swingbot.core.marketdata.adjustments import merge_adjusted
 
-log = logging.getLogger("swing-bot.data_store")
+log = logging.getLogger(__name__)
 
 DATA_DIR = "market_data"
 

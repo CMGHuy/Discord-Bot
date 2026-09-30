@@ -10,7 +10,7 @@ from .params import STRUCTURE_BUFFER_ATR
 from .stop_scope import stop_ceiling
 from .targets import select_structural_target
 
-log = logging.getLogger("swing-bot.plan_engine")
+log = logging.getLogger(__name__)
 def _lifecycle_levels(df, index, horizon_key, entry, level_map=None):
     """Classified levels at `index`, from the caller's level_map when it has
     one (live already builds it) or built on the spot (the backtest does not).

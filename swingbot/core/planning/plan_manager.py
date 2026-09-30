@@ -25,7 +25,7 @@ from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.planning.stop_scope import plan_stop_ceiling
 from swingbot.core.planning.plan_types import breakeven_trigger, effective_stop
 
-log = logging.getLogger("swing-bot.plan_manager")
+log = logging.getLogger(__name__)
 
 
 def gap_stop_fill(bar_open: float, level: float, direction: str) -> float:
