@@ -1,10 +1,13 @@
 """!watchlist and its subcommands."""
 import asyncio
+import logging
 
 from swingbot.bot_core import bot
 from swingbot.core.marketdata.backtest_cache import ensure_cached_background
 from swingbot.core.marketdata.data import get_daily_data
 from swingbot.core.marketdata.watchlist import add_ticker, clear_watchlist, load_watchlist, remove_ticker
+
+log = logging.getLogger(__name__)
 
 
 @bot.group(name="watchlist", invoke_without_command=True)
@@ -24,6 +27,7 @@ async def watchlist_add(ctx, ticker: str):
     try:
         await asyncio.to_thread(get_daily_data, ticker, "5d")
     except Exception as e:
+        log.warning("!watchlist add %s: could not fetch data", ticker.upper(), exc_info=True)
         await ctx.send(
             f"⚠️ Heads up: couldn't fetch data for **{ticker.upper()}** ({e}). "
             f"It's still in your watchlist, but scans will skip it until this resolves. "

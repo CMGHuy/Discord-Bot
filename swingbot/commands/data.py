@@ -1,5 +1,6 @@
 """!charts, !download, !cached, !scrapeall."""
 import asyncio
+import logging
 import os
 import shutil
 
@@ -11,6 +12,8 @@ from swingbot.core.marketdata import export_data
 from swingbot.core.marketdata.data_store import DATA_DIR as CACHE_DIR, INTERVAL_CONFIG, download_and_cache
 from swingbot.core.marketdata.export_data import export_ticker
 from swingbot.core.marketdata.watchlist import load_watchlist
+
+log = logging.getLogger(__name__)
 
 
 @bot.command(name="charts")
@@ -26,6 +29,7 @@ async def charts_cmd(ctx):
         try:
             result = await asyncio.to_thread(export_ticker, ticker, config.EXPORT_DIR)
         except Exception as e:
+            log.warning("!charts: could not export %s", ticker, exc_info=True)
             await ctx.send(f"⚠️ Could not export {ticker}: {e}")
             continue
 
@@ -68,6 +72,7 @@ async def download_cmd(ctx, interval: str, ticker: str = None):
             info = await asyncio.to_thread(download_and_cache, t, interval)
             results.append(info)
         except Exception as e:
+            log.warning("!download: %s failed", t, exc_info=True)
             await ctx.send(f"⚠️ {t}: {e}")
 
     if not results:

@@ -10,6 +10,7 @@ is not wired up here; run it via
 instead of an interactive command.
 """
 import asyncio
+import logging
 
 from swingbot.core.backtesting.backtest import (
     ALL_STRATEGIES, run_backtest, run_backtest_daterange, run_full_backtest,
@@ -19,6 +20,8 @@ from swingbot.core import presentation as ui
 from swingbot.core.marketdata.data import get_daily_data
 from swingbot.core.market.strategy import HORIZONS
 from swingbot.core.marketdata.watchlist import load_watchlist
+
+log = logging.getLogger(__name__)
 
 STRATEGY_MAP = {
     # legacy
@@ -73,6 +76,7 @@ def _sync_backtest_watchlist(tickers, horizon, strategy_norm, date_from, date_to
         try:
             df = get_daily_data(t, period="max")
         except Exception as e:
+            log.warning("!backtestwatchlist: could not fetch %s", t, exc_info=True)
             errors.append((t, str(e)))
             continue
         all_summaries.extend(_run_backtest_combo(t, df, horizon, strategy_norm, date_from, date_to))
@@ -229,6 +233,7 @@ async def backtest_cmd(ctx, ticker: str, *args):
             _sync_backtest_one, ticker, horizon, strategy_norm, date_from, date_to
         )
     except Exception as e:
+        log.warning("!backtest %s: could not fetch data", ticker, exc_info=True)
         await ctx.send(f"⚠️ Could not fetch data for {ticker}: {e}")
         return
 
