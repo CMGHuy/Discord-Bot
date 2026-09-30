@@ -14,6 +14,7 @@ from swingbot.bot_core import bot, in_session, log, SESSION_TZ, install_reload_s
 from swingbot.core.marketdata.data import get_current_price_batch
 from swingbot.core.scanning.fetch import _run_bounded
 from swingbot.core.infra.silent_channel import silence
+from swingbot.core.infra.logsetup import apply_log_level
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.marketdata.watchlist import load_watchlist
 from . import presence, recap, runstate
@@ -334,18 +335,11 @@ async def config_watcher():
     """
     changed = await asyncio.to_thread(auto_reload_if_changed)
     if changed:
-        # LOG_LEVEL change needs the Python logging level updated too
+        # config.reload() already logged what changed (masked); SIGHUP and
+        # this watcher share the one interval/market-data path below.
         if "LOG_LEVEL" in changed:
-            import logging
-            logging.getLogger().setLevel(getattr(logging, config.LOG_LEVEL, logging.INFO))
-        if "SCAN_INTERVAL_MINUTES" in changed and session_scan.is_running():
-            session_scan.change_interval(minutes=config.SCAN_INTERVAL_MINUTES)
-            log.info("Scan interval hot-reloaded to every %d min (takes effect next tick).",
-                     config.SCAN_INTERVAL_MINUTES)
-        _apply_market_data_refresh_config(changed)
-
-        log.info("Config auto-reloaded from .env -- %d setting(s) changed: %s",
-                 len(changed), ", ".join(f"{k}={v[1]!r}" for k, v in changed.items()))
+            apply_log_level(config.LOG_LEVEL)
+        _apply_scan_interval_change(changed)
 
         # Notify Discord channel about key setting changes so the user can
         # confirm the new value is live without needing to check the logs.

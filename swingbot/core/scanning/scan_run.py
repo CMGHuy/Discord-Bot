@@ -16,7 +16,7 @@ from swingbot.core.edge import heat as heat_mod
 from swingbot.core.edge import regime2
 from swingbot.core.edge import throttle
 from swingbot.core.edge.rs_gate import rs_verdict
-from swingbot.core.infra.logsetup import new_scan_id, scan_context
+from swingbot.core.infra.logsetup import apply_log_level, new_scan_id, scan_context
 from swingbot.core.infra.notifier import notify_secondary
 from swingbot.core.market import market_context, opex
 from swingbot.core.market.events import earnings_within_window
@@ -182,6 +182,19 @@ def _hard_filters_snapshot(params: ScanParams | None = None) -> dict:
     }
 
 
+def _reload_config_before_scan() -> dict:
+    """Pick up .env edits saved since the last scan (e.g. via the admin UI).
+    This works even without Docker socket / SIGHUP -- settings saved in the
+    UI take effect on the next scan.
+
+    config.reload() already logs every changed value (masked for secrets),
+    so nothing is logged here; this only applies what a reload alone cannot."""
+    changed = auto_reload_if_changed()
+    if "LOG_LEVEL" in changed:
+        apply_log_level(config.LOG_LEVEL)
+    return changed
+
+
 def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "ScanProgress" = None,
                     min_confluence: int = None, params: ScanParams | None = None) -> tuple:
     """
@@ -207,14 +220,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         phase_durations[name] = round(now - _phase_started, 3)
         _phase_started = now
 
-    # Auto-reload config if .env was changed on disk since last load
-    # (e.g. via the admin UI). This works even without Docker socket /
-    # SIGHUP -- settings saved in the UI take effect on the next scan.
-    changed = auto_reload_if_changed()
-    if changed:
-        log.info("Config auto-reloaded: %s", ", ".join(
-            f"{k}={v[1]!r}" for k, v in changed.items()
-        ))
+    _reload_config_before_scan()
     if params is None:
         params = ScanParams.from_config()
 
