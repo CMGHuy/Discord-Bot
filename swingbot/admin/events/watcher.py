@@ -27,6 +27,15 @@ Two writes inside one granule would otherwise look like none.
 
 `inotify`/`watchdog` were rejected for that same bind-mount reason -- see
 the spec. Do not "upgrade" this to them without re-reading Decision 1.
+
+As of v67 this is the FALLBACK, not the mechanism: at the db stage the admin
+subscribes to Postgres LISTEN/NOTIFY (admin/events/db_listener.py) and this
+watcher runs only over residual_paths() -- the files no table replaces yet
+(scan progress/snapshots/telemetry, the analytics snapshot, .env). This module
+survives only while any watched file has no table, and Part 6 of that plan
+deletes it. Prefer a table in swingbot/core/db/events.py's TABLE_CHANNELS over
+a new _DATA_PATHS entry; a new entry here that is table-backed must also go in
+_TABLE_BACKED, or it is stat()ed and NOTIFYed twice.
 """
 from __future__ import annotations
 
