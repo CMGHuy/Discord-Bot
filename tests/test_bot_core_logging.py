@@ -47,3 +47,28 @@ def test_sighup_without_a_level_change_leaves_the_level_alone(monkeypatch):
     bot_core._handle_reload_signal()
 
     assert applied == []
+
+
+def _root_log_files(tmp_path, statements):
+    import pathlib
+    import subprocess
+    import sys
+    script = (
+        "import logging\n"
+        "from logging.handlers import RotatingFileHandler\n"
+        f"{statements}\n"
+        "print('|'.join(h.baseFilename for h in logging.getLogger().handlers"
+        " if isinstance(h, RotatingFileHandler)))\n"
+    )
+    root = str(pathlib.Path(__file__).resolve().parents[1])
+    out = subprocess.run([sys.executable, "-c", script], cwd=root,
+                         capture_output=True, text=True, check=True).stdout
+    return out.strip().splitlines()[-1] if out.strip() else ""
+
+
+def test_importing_bot_core_installs_no_handlers(tmp_path):
+    assert _root_log_files(tmp_path, "import swingbot.bot_core") == ""
+
+
+def test_the_bot_entry_point_configures_bot_logging(tmp_path):
+    assert _root_log_files(tmp_path, "import bot").endswith("bot.log")

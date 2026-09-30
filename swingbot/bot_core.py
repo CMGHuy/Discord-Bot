@@ -26,8 +26,6 @@ def configure_bot_logging() -> None:
                       max_bytes=5 * 1024 * 1024, backups=3)
 
 
-configure_bot_logging()
-
 log = logging.getLogger(__name__)
 
 SESSION_TZ = BERLIN_TZ

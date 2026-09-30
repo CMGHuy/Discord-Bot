@@ -47,3 +47,26 @@ def test_importing_the_app_attaches_no_handlers_of_its_own():
     assert not hasattr(app_mod, "_admin_file_handler")
     assert not any(isinstance(h, RotatingFileHandler)
                    for h in logging.getLogger("werkzeug").handlers)
+
+
+def test_lazy_bot_core_import_leaves_the_admin_handler_alone(tmp_path):
+    """The admin process lazily imports swingbot.commands.growth (-> bot_core)."""
+    import subprocess
+    import sys
+    script = (
+        "import logging\n"
+        "from logging.handlers import RotatingFileHandler\n"
+        "import admin_ui\n"
+        "from swingbot import config\n"
+        f"config.ADMIN_LOG_FILE = {str(tmp_path / 'admin.log')!r}\n"
+        f"config.LOG_FILE = {str(tmp_path / 'bot.log')!r}\n"
+        "admin_ui.setup_logging()\n"
+        "import swingbot.commands.growth\n"
+        "names = [h.baseFilename for h in logging.getLogger().handlers"
+        " if isinstance(h, RotatingFileHandler)]\n"
+        "print('|'.join(names))\n"
+    )
+    root = str(__import__("pathlib").Path(__file__).resolve().parents[2])
+    out = subprocess.run([sys.executable, "-c", script], cwd=root, capture_output=True,
+                         text=True, check=True).stdout.strip().splitlines()[-1]
+    assert out.endswith("admin.log") and "bot.log" not in out
