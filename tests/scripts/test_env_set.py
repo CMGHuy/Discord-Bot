@@ -45,3 +45,23 @@ def test_main_get_prints_the_value(tmp_path, capsys):
     env.write_text("RESTIC_PASSWORD=s3cret\n", encoding="utf-8")
     assert env_set.main(["--env", str(env), "--get", "RESTIC_PASSWORD"]) == 0
     assert capsys.readouterr().out == "s3cret\n"
+
+
+def test_main_warns_on_stderr_when_the_snapshot_fails(tmp_path, monkeypatch, capsys):
+    env = tmp_path / ".env"
+    env.write_text("A=1\n", encoding="utf-8")
+
+    def boom(*_a, **_k):
+        raise PermissionError("backups/env is root-owned")
+
+    monkeypatch.setattr(env_set.env_snapshot, "take_snapshot", boom)
+    assert env_set.main(["--env", str(env), "A", "2"]) == 0
+    assert env.read_text(encoding="utf-8") == "A=2\n"
+    assert "snapshot FAILED" in capsys.readouterr().err
+
+
+def test_main_preserves_crlf_bytes(tmp_path):
+    env = tmp_path / ".env"
+    env.write_bytes(b"A=1\r\nB=2\r\n")
+    assert env_set.main(["--env", str(env), "B", "3"]) == 0
+    assert env.read_bytes() == b"A=1\r\nB=3\r\n"

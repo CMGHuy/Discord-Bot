@@ -5,6 +5,8 @@ import os
 import pathlib
 import sys
 
+import pytest
+
 from swingbot.core.infra import env_snapshot as es
 
 UTC = dt.timezone.utc
@@ -78,3 +80,50 @@ def test_the_module_is_stdlib_only():
     roots |= {node.module.split(".")[0] for node in ast.walk(tree)
               if isinstance(node, ast.ImportFrom) and node.module}
     assert roots <= set(sys.stdlib_module_names) | {"__future__"}, roots
+
+
+def test_prune_keeps_a_snapshot_exactly_at_the_cutoff(tmp_path):
+    directory = tmp_path / "backups" / "env"
+    directory.mkdir(parents=True)
+    names = ["2026-08-01T00-00-00-000000Z.env", "2026-09-01T00-00-00-000000Z.env"]
+    for name in names:
+        (directory / name).write_text(name, encoding="utf-8")
+    now = dt.datetime(2026, 10, 1, tzinfo=UTC)
+    assert es.prune(str(directory), keep_days=30, now=now) == []
+    assert es.snapshot_names(str(directory)) == names
+
+
+def test_prune_of_a_missing_or_empty_directory_removes_nothing(tmp_path):
+    assert es.prune(str(tmp_path / "nope"), 30, T0) == []
+    (tmp_path / "empty").mkdir()
+    assert es.prune(str(tmp_path / "empty"), 30, T0) == []
+
+
+def test_prune_keeps_a_single_old_snapshot(tmp_path):
+    directory = tmp_path / "backups" / "env"
+    directory.mkdir(parents=True)
+    (directory / "2026-01-01T00-00-00-000000Z.env").write_text("x", encoding="utf-8")
+    assert es.prune(str(directory), 30, T0) == []
+    assert len(es.snapshot_names(str(directory))) == 1
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX modes")
+def test_snapshot_file_is_0600_and_directory_0700_even_if_precreated(tmp_path):
+    directory = tmp_path / "backups" / "env"
+    directory.mkdir(parents=True, mode=0o755)
+    os.chmod(directory, 0o755)
+    out = es.take_snapshot(str(_env(tmp_path)), now=T0)
+    assert os.stat(out).st_mode & 0o777 == 0o600
+    assert os.stat(directory).st_mode & 0o777 == 0o700
+
+
+def test_snapshot_quietly_reports_failure(tmp_path, monkeypatch):
+    env = _env(tmp_path)
+
+    def boom(*_a, **_k):
+        raise OSError("denied")
+
+    monkeypatch.setattr(es, "take_snapshot", boom)
+    assert es.snapshot_quietly(str(env)) is False
+    monkeypatch.undo()
+    assert es.snapshot_quietly(str(env)) is True

@@ -54,31 +54,41 @@ def _digest(path: str) -> str:
         return hashlib.sha256(handle.read()).hexdigest()
 
 
+def _copy_private(source: str, target: str) -> None:
+    """Copy created 0600 from the first byte: the file holds credentials."""
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb") as out, open(source, "rb") as src:
+        shutil.copyfileobj(src, out)
+
+
 def take_snapshot(env_path: str, *, now: dt.datetime | None = None) -> str | None:
     """Copy ``env_path`` if it differs from the newest copy; return the new path."""
     if not os.path.isfile(env_path):
         return None
     directory = snapshot_dir(env_path)
     os.makedirs(directory, mode=0o700, exist_ok=True)
+    os.chmod(directory, 0o700)  # a Docker-created or older directory may be looser
     names = snapshot_names(directory)
     if names and _digest(os.path.join(directory, names[-1])) == _digest(env_path):
         return None
     stamp = (now or dt.datetime.now(dt.timezone.utc)).strftime(STAMP_FORMAT)
     target = os.path.join(directory, stamp + SUFFIX)
-    shutil.copyfile(env_path, target)
-    os.chmod(target, 0o600)
+    _copy_private(env_path, target)
     return target
 
 
-def snapshot_quietly(env_path: str) -> None:
-    """take_snapshot for callers that must not fail: a save beats its history."""
+def snapshot_quietly(env_path: str) -> bool:
+    """take_snapshot for callers that must not fail: a save beats its history.
+    Returns False when the snapshot could not be taken, so a caller with a
+    terminal can say so."""
     try:
         path = take_snapshot(env_path)
     except OSError:
         log.warning("could not snapshot %s", env_path, exc_info=True)
-        return
+        return False
     if path:
         log.info("snapshotted .env to %s", path)
+    return True
 
 
 def prune(directory: str, keep_days: int = 30, now: dt.datetime | None = None) -> list[str]:
