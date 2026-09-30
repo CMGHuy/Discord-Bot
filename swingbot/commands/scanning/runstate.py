@@ -133,6 +133,31 @@ def set_scan_paused(paused: bool) -> None:
         repo.set("scan_paused") if paused else repo.clear("scan_paused")
 
 
+def _flag_set_at(name: str, path: str) -> str | None:
+    """When a flag was raised, as an ISO string, or None when it is not set.
+
+    The json stage answers with the file's mtime -- what the admin's status
+    payload has always reported -- and the db stage with the row's set_at.
+    """
+    from swingbot.core.db import stages
+    if stages.reads_db("flags"):
+        from swingbot.core.db.repositories.flags import flags_repo
+        return flags_repo().set_at(name)
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return None
+    return dt.datetime.fromtimestamp(mtime, tz=dt.timezone.utc).isoformat()
+
+
+def scan_paused_at() -> str | None:
+    return _flag_set_at("scan_paused", _PAUSE_FILE)
+
+
+def trigger_requested_at() -> str | None:
+    return _flag_set_at("trigger_check", _TRIGGER_FILE)
+
+
 def is_trigger_requested() -> bool:
     from swingbot.core.db import stages
     if stages.reads_db("flags"):
@@ -141,12 +166,16 @@ def is_trigger_requested() -> bool:
     return os.path.exists(_TRIGGER_FILE)
 
 
-def request_trigger() -> None:
+def request_trigger(payload: str | None = None) -> None:
+    """Queue a manual scan. `payload` is the flag file's body at the json
+    stage (the admin writes a small JSON record); the default is a bare
+    timestamp. The db stage stores only the flag and its set_at."""
     from swingbot.core.db import stages
     if stages.writes_json("flags"):
         os.makedirs(config.DATA_DIR, exist_ok=True)
         with open(_TRIGGER_FILE, "w") as file:
-            file.write(dt.datetime.now(dt.timezone.utc).isoformat())
+            file.write(payload if payload is not None
+                       else dt.datetime.now(dt.timezone.utc).isoformat())
     if stages.writes_db("flags"):
         from swingbot.core.db.repositories.flags import flags_repo
         flags_repo().set("trigger_check")
