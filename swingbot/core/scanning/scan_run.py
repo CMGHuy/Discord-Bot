@@ -23,7 +23,7 @@ from swingbot.core.market.events import earnings_within_window
 from swingbot.core.market.explain import build_explanation
 from swingbot.core.market.market_events import get_market_events
 from swingbot.core.market.reversal import evaluate_reversal, reversals_for_ticker
-from swingbot.core.market.strategy import HORIZONS
+from swingbot.core.market.strategy import HORIZONS, LEGACY_HORIZONS, live_horizons
 from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.core.marketdata import data_store, universe
 from swingbot.core.marketdata.watchlist import load_watchlist
@@ -102,7 +102,7 @@ def _maybe_run_strategy_pass(*,tickers, fresh_data, spy_df, regimes, rs_cache, s
         return asof_of(ticker).get("rs_combined")
 
     result = strategy_pass.run_strategy_pass(
-        tickers, fresh_data, now=datetime.now(timezone.utc), horizons=list(HORIZONS), spy_df=spy_df,
+        tickers, fresh_data, now=datetime.now(timezone.utc), horizons=list(live_horizons()), spy_df=spy_df,
         regimes=regimes, rs_combined_of=rs_combined_of, mode=mode, live_allow=live_allow,
         trade_log=trade_log, plan_store=PlanStore(), asof_of=asof_of)
     alerts.extend(result.alerts)
@@ -303,7 +303,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # ticker took to finish ALL its horizons -- which could be a long,
     # visually-stuck stretch on a big watchlist. Counting each horizon as
     # its own unit makes the % actually move within a single ticker.
-    horizons_to_scan = [hk for hk in HORIZONS if horizon_filter == "all" or hk == horizon_filter]
+    # v113: the confluence scan never runs a masked-by-default horizon (1w).
+    horizons_to_scan = [hk for hk in LEGACY_HORIZONS if horizon_filter == "all" or hk == horizon_filter]
     if progress is not None:
         progress.stage = "analyzing"
         progress.total = len(tickers) * max(1, len(horizons_to_scan))

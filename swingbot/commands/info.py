@@ -10,7 +10,7 @@ from swingbot.core import presentation as ui
 from swingbot.core.scanning import engine as scan_engine
 from swingbot.bot_core import bot, CONFIDENCE_EXPLAINER, COMMANDS_BY_CATEGORY
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
-from swingbot.core.market.strategy import HORIZONS, MIN_BARS, evaluate_all
+from swingbot.core.market.strategy import HORIZONS, MIN_BARS, evaluate_all, live_horizons
 from swingbot.core.charts.trade_chart import generate_all_strategy_charts
 
 log = logging.getLogger(__name__)
@@ -44,7 +44,8 @@ async def strategies_cmd(ctx):
         "RSI mean-reversion, Elliott Wave (simplified)",
         "", "**Swing horizons:**",
     ]
-    for key, h in HORIZONS.items():
+    for key in live_horizons():
+        h = HORIZONS[key]
         lines.append(f"`{key}` — {h['label']} (needs {MIN_BARS[key]}+ trading days of history)")
     await ctx.send("\n".join(lines))
 
@@ -139,8 +140,8 @@ async def strategycharts_cmd(ctx, ticker: str, horizon: str = "4w", direction: s
     ticker = ticker.upper()
     horizon = horizon.lower()
     direction = direction.lower()
-    if horizon not in HORIZONS:
-        await ctx.send(f"Unknown horizon '{horizon}'. Use one of: {', '.join(HORIZONS.keys())}")
+    if horizon not in live_horizons():
+        await ctx.send(f"Unknown horizon '{horizon}'. Use one of: {', '.join(live_horizons())}")
         return
     if direction not in ("bullish", "bearish"):
         await ctx.send("Direction must be 'bullish' or 'bearish'.")

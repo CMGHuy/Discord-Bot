@@ -525,8 +525,9 @@ ALL_STRATEGIES = (
 
 def run_full_backtest(ticker: str, df: pd.DataFrame, frictions: bool = True) -> list[BacktestSummary]:
     """Backtest all strategies x all horizons for one ticker."""
+    from swingbot.core.market.strategy_types import live_horizons
     results = []
-    for horizon_key in HORIZONS:
+    for horizon_key in live_horizons():
         for strategy in ALL_STRATEGIES:
             results.append(run_backtest(ticker, df, strategy, horizon_key, frictions=frictions))
     return results
