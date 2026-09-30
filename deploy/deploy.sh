@@ -91,22 +91,23 @@ export SWING_BOT_DB_IMAGE="$DB_IMAGE"
 # must exist BEFORE env_set.py snapshots and before `docker compose up`:
 # Docker would otherwise create them root-owned, and then env snapshots (deploy
 # user) and pgbackrest archive-push (postgres uid 70 in the db image) fail.
-# Idempotent. backups/pitr needs uid 70; chown is tried directly, then via
-# passwordless sudo, and a failure is a loud warning (archiving would break),
-# not a silent skip.
+# Idempotent. backups/pitr needs uid 70: chown directly, then via passwordless
+# sudo. If both fail, archiving cannot work -- fatal when PG_ARCHIVE_MODE is
+# on (the exported var wins over .env, like compose), a loud warning otherwise.
 mkdir -p backups/env backups/pitr
 chmod 700 backups/env
 if [ "$(stat -c %u backups/pitr)" != "70" ]; then
-  chown 70:70 backups/pitr 2>/dev/null || sudo -n chown 70:70 backups/pitr 2>/dev/null     || echo "WARNING: could not chown backups/pitr to 70:70 -- WAL archiving will fail until it is." >&2
+  if ! chown 70:70 backups/pitr && ! sudo -n chown 70:70 backups/pitr; then
+    if [ "${PG_ARCHIVE_MODE:-$(env_value PG_ARCHIVE_MODE)}" = "on" ]; then
+      echo "backups/pitr is not owned by uid 70 and could not be chowned;" >&2
+      echo "PG_ARCHIVE_MODE=on, so WAL archiving would fail. Run once as root:" >&2
+      echo "  chown 70:70 $(pwd)/backups/pitr" >&2
+      exit 1
+    fi
+    echo "WARNING: could not chown backups/pitr to 70:70 -- WAL archiving" >&2
+    echo "(PG_ARCHIVE_MODE is not on yet) will fail once it is enabled." >&2
+  fi
 fi
-
-# v116: .env is the record of what runs. Pinned in place (env_set.py never
-# renames the bind-mounted file) and snapshotted, so rollback_to.sh and any
-# later manual `docker compose up` see these exact tags -- never a stale pin
-# left behind by an earlier rollback.
-echo "==> Pinning the deployed images in .env"
-python3 scripts/ops/env_set.py SWING_BOT_IMAGE "$IMAGE"
-python3 scripts/ops/env_set.py SWING_BOT_DB_IMAGE "$DB_IMAGE"
 
 # Docker creates a DIRECTORY at any bind-mount source that does not exist,
 # which for a file mount produces a container that fails in a confusing way
@@ -178,13 +179,25 @@ echo "==> Starting services"
 # while a container is still crash-looping.
 docker compose up -d --no-build --wait
 
-# v116: the rollback index. Written the moment the containers switched --
-# before verification, because a deploy that fails verification is still the
-# one running, and rollback_to.sh resolves "what ran at second T" from here.
+# v116: .env is the record of what runs, so it is pinned only now that the
+# containers have switched -- a failed pull or `up` under set -e leaves the
+# previous pin in place. Pinned in place (env_set.py never renames the
+# bind-mounted file) and snapshotted, so rollback_to.sh and any later manual
+# `docker compose up` see these exact tags, never a stale pin left behind by
+# an earlier rollback. Compose got the images from the exported variables.
+echo "==> Pinning the deployed images in .env"
+python3 scripts/ops/env_set.py SWING_BOT_IMAGE "$IMAGE"
+python3 scripts/ops/env_set.py SWING_BOT_DB_IMAGE "$DB_IMAGE"
+
+# v116: the rollback index. Written the moment the containers switched, before
+# verification: a deploy whose verification then fails is still the one
+# running, so rollback_to.sh must see it. An append failure only warns, so it
+# cannot abort the verification and prune that follow.
 echo "==> Recording this deploy in backups/deploys.jsonl"
 mkdir -p backups
-printf '{"ts":"%s","git_sha":"%s","bot_image":"%s","db_image":"%s"}
-'   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(git rev-parse HEAD)" "$IMAGE" "$DB_IMAGE"   >> backups/deploys.jsonl
+printf '{"ts":"%s","git_sha":"%s","bot_image":"%s","db_image":"%s"}\n' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(git rev-parse HEAD)" "$IMAGE" "$DB_IMAGE" \
+  >> backups/deploys.jsonl || echo "WARNING: could not append deploys.jsonl" >&2
 
 echo "==> Pruning old, now-unused images (keeps disk usage in check on small instances)"
 docker image prune -f
