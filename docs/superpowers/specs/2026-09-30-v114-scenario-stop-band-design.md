@@ -1,7 +1,7 @@
-# v114 — Scenario stop band: admit stops between a floor and the 2% hard cap
+# v114 — Scenario stop band: 1.0-2.5% stops at real levels, 2.5% maximum loss
 
 **Version:** ui 1.21.0 · bot 1.11.1 (at writing)
-**Bump:** bot minor if it ships (the alert stream visibly changes)
+**Bump:** bot minor if it ships (the alert stream and the risk limit visibly change)
 **Edge:** volume
 
 ## Why this
@@ -48,42 +48,74 @@ must measure the floor and the ratio together, not the floor alone.
 
 ## Decision taken with the partner (2026-09-30)
 
-- The **maximum loss per trade is 2%**. A planned loss below 2% is fine.
-- The stop **must not be too near the entry**.
-- Floor chosen: **1.0%**. Band = **1.0% to 2.0%**.
+- The **maximum planned loss per trade is 2.5%** (was 2.0%). A smaller loss is
+  fine. A stop of 2.0-2.5% is acceptable provided the profit target is at
+  least 2.5%.
+- The stop **must not be too near the entry**: floor **1.0%**.
+- Stops stay at **real support/resistance levels**. The scan never places a
+  stop at an arbitrary distance to hit a percentage.
+- Reward rule: target **at least 2.5% away and at least as far as the stop**
+  (risk:reward >= 1.0).
 
 ## Design
 
-1. `MIN_STOP_DISTANCE_PCT` default becomes **1.0**.
-2. The scenario admission ceiling stops being the horizon's 7-11% and becomes
-   the same 2% hard cap that issue time enforces, read from one place
-   (`HARD_MAX_PLANNED_LOSS_PCT`) rather than a second copy of the number.
-   Scenarios that can never be issued are no longer built.
-3. The backtest replay uses the same admission code
-   (`backtest_scenarios.py` default `min_stop_distance_pct: 2.0`,
-   `armed_replay.py`, `scan_params.py`, `gating.py`,
-   `arms/reachability.py`). All move together so replay parity holds.
-   `armed_replay` already relaxes the floor to 0 at arm time; that stays.
-4. The requirement check text (`requirements.py`, "needs N%+") states the band.
-5. Strategy plans whose builder chooses its own stop (`builders.py`,
-   `short_builders.py`) are unchanged: they already cap at the stop ceiling.
+Band: **stop 1.0% to 2.5% from entry**; **reward >= 2.5% and >= stop**.
 
-**Non-goals.** No change to the 2% cap itself, to position sizing, to
-structural-stop scope (`STRUCTURAL_STOP_SCOPE` stays empty), to targets or
-reward floors, or to any strategy's entry logic.
+1. `MIN_STOP_DISTANCE_PCT` default 2.0 -> **1.0**.
+2. `HARD_MAX_PLANNED_LOSS_PCT` (`swingbot/core/risk_limits.py`) 2.0 -> **2.5**.
+   It is the single source of the cap: `attach_plan_v2` reject,
+   `stop_scope.stop_ceiling` / `capped_planned_loss_pct`, `PlanManager`, and
+   sizing all read it. Any place that hard-codes 2 or 2.0 as the cap is found
+   by the plan's first task and made to read the constant.
+3. Scenario admission ceiling stops being the horizon's 7-11% and becomes the
+   same constant, so scenarios that can never be issued are no longer built.
+4. `MIN_REWARD_PCT` 2.0 -> **2.5** and `MIN_RISK_REWARD_RATIO` 1.5 -> **1.0**.
+   The per-horizon reward floor (`sr_target_min_pct * 0.15`, 3.3% for the
+   longest horizons) still applies on top, so long horizons need more than 2.5%.
+5. Backtest replay uses the same admission code (`backtest_scenarios.py`
+   default `min_stop_distance_pct: 2.0`, `armed_replay.py`, `scan_params.py`,
+   `gating.py`, `arms/reachability.py`); all move together so parity holds.
+   `armed_replay` already relaxes the floor to 0 at arm time; that stays.
+6. Requirement-check text (`requirements.py`) states the band and reward rule.
+7. Strategy plans whose builder chooses its own stop (`builders.py`,
+   `short_builders.py`) already cap at the stop ceiling and follow the new
+   constant automatically.
+
+**Non-goals.** No change to sizing rules, structural-stop scope
+(`STRUCTURAL_STOP_SCOPE` stays empty), strategy entry logic, or where stops
+sit. Nothing is moved to a fixed percentage.
+
+## What the measurement says (2026-09-30, production cache, 820 frames)
+
+Real-level stops of 2.0-2.5% do not exist today: floor 2.0% gives 0 scenarios
+at a 2.0% or a 2.5% cap, even with risk:reward 1.0 and a 2.5% reward floor.
+Floor 1.0% gives 23 (RR 1.5) or 25 (RR 1.0), and the cap value does not change
+that. So on today's data **raising the cap is not what brings alerts back; the
+1.0% floor is.** The 2.5% cap is a risk-limit decision the partner made on its
+merits; its cost is measured in validation, not assumed free.
 
 ## Integrity requirement (not subject to validation)
 
-No plan may be issued with a planned loss above 2%. A test asserts this across
-every horizon and both directions after the change, and the existing
-`risk_cap` rejection stays as the backstop.
+No plan may be issued with a planned loss above the cap, and the cap has one
+source. A test asserts this across every horizon and both directions, and the
+`risk_cap` rejection stays as the backstop. Existing open positions and plans
+keep the stop they were issued with. Docs that state the 2% rule (`CLAUDE.md`
+and `docs/claude/`, the Codex mirror `AGENTS.md`, strategy-type pages) are
+updated in the release commit so no document still says 2%.
 
 ## Risk
 
-A 1.0% stop is inside ordinary daily range for volatile tickers, so stops may
-be hit by noise. Win rate can fall while volume rises. The existing
-`tight_stop` flag (stop below the horizon's ATR cushion) is already logged and
-is the natural stratifier: the validation reports results split by it.
+- A 1.0% stop is inside ordinary daily range for volatile tickers, so stops may
+  be hit by noise and win rate may fall. The `tight_stop` flag (stop below the
+  horizon's ATR cushion) stratifies the validation.
+- **Risk:reward 1.5 -> 1.0 will likely trip the geometry-lock clause** of the
+  v72 acceptance gate (median planned RR and mean win R must not fall more than
+  2%). That clause is not relaxed to fit this spec. If it fails, the outcome is
+  NO-LIFT for the RR change, and the plan falls back to measuring the band
+  with RR left at 1.5 (23 scenarios today).
+- A 2.5% cap raises the worst-case loss per trade by 25% against the same
+  account size; sizing reads the cap, so position size per trade falls in
+  proportion for stops at the cap.
 
 ## Validation
 
@@ -94,7 +126,7 @@ gates, chosen by the plan's first task from `acceptance.py` /
 so the volume clause is read as a floor on gain, and the win-rate and
 expectancy clauses are the non-inferiority constraints. TRAIN and walk-forward
 first, then one shot on VALIDATION. A NO-LIFT result closes this spec and
-production stays at the current behaviour, with the 2% cap unchanged.
+production stays at the current behaviour, with the 2.0% cap unchanged.
 
 Until validation passes, production keeps rejecting everything the current
 band rejects; the flag/default flip ships only on a pass.
