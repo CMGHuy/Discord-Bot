@@ -94,8 +94,13 @@ rejects, bringing back part of "posts nothing".
 - Scenario building and the admission gate (`MIN_STOP_DISTANCE_PCT`,
   `MAX_STOP_LOSS_PCT`) are untouched, so the scan funnel counts are unchanged
   and the floor of 2.0 admits every scenario with a stop of 2.0% or more.
-- The plan may carry a stop that is not at a structural level; embeds show
-  the stop as-is.
+- The plan may carry a stop that is not at a structural level.
+- **One stop per alert.** With `PLAN_ENGINE_V2=on` and a priced v2 plan,
+  every stop number in the alert comes from the clamped plan: the plan
+  table, chart, ticket, headline (stop price, stop %, R), the "If it gets
+  there" line and the explanation (`explain.py`). So an alert never shows
+  two different stops. Target text and target percentages are unchanged;
+  they have diverged from the v2 tp1 since v31.
 - **Replay clamps by default.** The backtest harness calls
   `build_confluence_plan` (`backtest_scenarios.replay_scenarios`,
   `armed_replay.plan_at`), so confluence replay output changes against
@@ -152,6 +157,10 @@ Edit production `.env` **in place** (nano or `cat new > .env`, never `sed -i`;
   failure message, so a later change cannot silently switch one on.
 - Existing `f01e87e2` tests that build wide-stop plans are updated for the
   clamp (they now expect an issued 1.75% plan).
+- Embed regression: for a clamped plan, the embed (headline stop and R,
+  plan table, "If it gets there" line) and the explanation agree on the stop
+  price and stop percent everywhere. An unclamped alert renders exactly as
+  before.
 - Complexity < 15 on every touched function.
 
 ## Out of scope

@@ -931,9 +931,13 @@ deploys). The `risk_cap` reject in `attach_plan_v2` stays as a safety net.
   `stop_distance_pct` while its plan carries the clamped stop. Read the stop
   off the plan, never off that field. This is known and deliberately left
   unchanged.
-- A clamped stop sits at no structural level, and embeds show it as-is. It
-  reaches an alert only with `PLAN_ENGINE_V2=on`. In `shadow`, the scenario's
-  unclamped stop is what posts.
+- A clamped stop sits at no structural level. It reaches an alert only with
+  `PLAN_ENGINE_V2=on`; in `shadow`, the scenario's unclamped stop is what
+  posts. With `on` and a priced v2 plan, every stop number in the alert comes
+  from the clamped plan: plan table, chart, ticket, headline stop % and R,
+  the "If it gets there" line and `explain.py`. An alert showing two
+  different stops is a regression. Target text and target % still come from
+  the scenario, as they have since v31.
 - v114 (a 1.5-2.0 band, measured before shipping) was abandoned before any
   build on 2026-09-30 (`no-lift/`), with its VALIDATION shot unspent. It is
   still the measured route if the partner later wants the band instead of
@@ -1109,7 +1113,7 @@ Expected: `MIN_STOP_DISTANCE_PCT = 2.0`, `SIGNAL_CONFIRMATION_SCANS = 1`, `CLAMP
 bash E:/Documents/Private/Projects/Discord-Bot/scripts/ops/ssh-hetzner.sh "grep -nE 'plan rejected -- risk_cap|no_qualifying_target|skipping new-signal scan' /opt/swing-bot/logs/bot.log | tail -20"
 ```
 
-Expected: no new `risk_cap` rejections after the reload time. Some `no_qualifying_target` lines are normal. For each alert posted after the reload, check its stop against its entry: a clamped plan's stop is **1.75%** from the trigger (`abs(entry - stop) / entry * 100` rounds to 1.75), not 2.0%. An unclamped plan is one whose natural stop was already within the cap; at floor 2.0, that stop is about 2.0%. Any stop above 2.0% means the clamp is not live (re-check Step 6). A `cancelled_risk_cap` on a clamped plan is expected only for a fill more than about 0.25% past the trigger; report any that occur with their `planned_loss_pct`. Illiquid-skip lines for thin futures (for example `SI=F`) are now expected. None should appear for `XAUUSD` or `XAGUSD`. Report what you see to the partner. Tell them it is an unmeasured live change (`Edge: volume`); give no win-rate or expectancy claim.
+Expected: no new `risk_cap` rejections after the reload time. Some `no_qualifying_target` lines are normal. For each alert posted after the reload, check its stop against its entry: a clamped plan's stop is **1.75%** from the trigger (`abs(entry - stop) / entry * 100` rounds to 1.75), not 2.0%. An unclamped plan is one whose natural stop was already within the cap; at floor 2.0, that stop is about 2.0%. Any stop above 2.0% means the clamp is not live (re-check Step 6). Open at least one posted alert in Discord and check that it shows **one stop only**: the headline SL price and stop %, the R, the plan table, the "If it gets there" line and the explanation must all agree. Two different stops in one alert is a regression; report it. A `cancelled_risk_cap` on a clamped plan is expected only for a fill more than about 0.25% past the trigger; report any that occur with their `planned_loss_pct`. Illiquid-skip lines for thin futures (for example `SI=F`) are now expected. None should appear for `XAUUSD` or `XAGUSD`. Report what you see to the partner. Tell them it is an unmeasured live change (`Edge: volume`); give no win-rate or expectancy claim.
 
 - [ ] **Step 12: Mirror the production change into the repo and commit** (on `main`; `mirror-prod` skill)
 
