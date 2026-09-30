@@ -265,7 +265,8 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     if not _geometry_ok(close, stop, tp1, strategy, horizon_key):
         return None
 
-    entry_type = entry_type_for(strategy, "strategy")
+    shape = plan_shape_for(strategy)
+    entry_type = shape["entry_type"]
     created_at = df.index[index].date().isoformat()
     exit_params = plan_params.exit_params_for(strategy)
     tp2 = None
@@ -292,9 +293,9 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         source="strategy", strategy=strategy, horizon_key=horizon_key,
         direction=direction, entry_type=entry_type, trigger_price=close,
         entry_price=close if entry_type == "market" else None,
-        expiry_bars=DEFAULT_EXPIRY_BARS, stop_loss=stop, tp1=tp1,
-        tp1_fraction=TP1_FRACTION, tp2=tp2,
-        breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
+        expiry_bars=shape["expiry_bars"], stop_loss=stop, tp1=tp1,
+        tp1_fraction=shape["tp1_fraction"], tp2=tp2,
+        breakeven_trigger_fraction=shape["breakeven_trigger_fraction"],
         trail_atr_mult=exit_params["trail_atr_mult"],
         quality_score=0, quality_breakdown=[],
         badge="WEAK", badge_stats={}, status=PlanStatus.PENDING,
@@ -437,6 +438,17 @@ def entry_type_for(strategy: str, source: str) -> str:
     if source == "confluence":
         return "stop_entry"
     return STRATEGY_ENTRY_TYPE.get(strategy, "market")
+
+
+def plan_shape_for(strategy: str) -> dict:
+    """Entry type, entry-order life, TP1 fraction and break-even trigger for a
+    strategy-source plan. build_strategy_plan and backtest._bt_plan both read
+    this, so the two cannot diverge. Unlisted strategies get today's shape."""
+    shape = {"entry_type": entry_type_for(strategy, "strategy"),
+             "expiry_bars": DEFAULT_EXPIRY_BARS, "tp1_fraction": TP1_FRACTION,
+             "breakeven_trigger_fraction": BREAKEVEN_TRIGGER_FRACTION}
+    shape.update(plan_params.PLAN_SHAPES.get(strategy, {}))
+    return shape
 
 
 def _level_stop_or_none(entry, level_stop, is_bull, horizon):
