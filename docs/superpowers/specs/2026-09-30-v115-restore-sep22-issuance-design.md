@@ -8,7 +8,10 @@
 
 The partner wants the bot to issue trades the way it did before 2026-09-23
 (baseline `d64c03d2`), keeping everything shipped since for Alpaca (v106),
-Discord messages (v110), the frontend and backend logging (v111).
+XAUUSD / spot-metal pricing (v109), Discord messages (v110), the frontend and
+backend logging (v111). The post-09-22 strategy work (v92, v103, v104, v108,
+v113) is reverted in the sense of *guaranteed off* (§ Strategy work), not
+deleted.
 
 Production posted nothing 2026-09-25..30. Cause (`known-traps.md` § Stop floor
 and 2% cap): `f01e87e2` rejects any plan whose stop is beyond the 2% hard cap,
@@ -21,7 +24,7 @@ always-on changes must be switchable too. The v114 spec (band 1.0-2.0) is the
 measured alternative and is **not** superseded by this one; it is a different
 behaviour from the pre-09-23 path.
 
-## Decision (partner-approved 2026-09-30, revised same day)
+## Decision (partner-approved 2026-09-30, revised twice same day)
 
 Flags, default = pre-09-23 issuance; no `git revert` (conflicts with v111,
 v113, `1eb9a194` in `analyze.py` / `scan_run.py`). Revision: the partner
@@ -35,14 +38,40 @@ still issued, with its stop moved to exactly 2% from the entry.
 | 2 | `MIN_STOP_DISTANCE_PCT` | `2.0` in `.env.example` and production `.env` (code default already 2.0 — verify) | `9a3a8757` |
 | 3 | Clamp the stop to `HARD_MAX_PLANNED_LOSS_PCT` from the trigger in `build_confluence_plan`, before target selection | `CLAMP_STOP_TO_HARD_CAP` = `true` | new; supersedes the reject of `f01e87e2` |
 | 4 | Futures/FX/index exemption from the dollar-volume floor | `LIQUIDITY_EXEMPT_NON_EQUITY` = `false` | `4a649b36` |
+| 5 | v92/v103/v104/v108/v113 strategy work guaranteed off: production `.env` verified, defaults pinned by a test | none new (existing flags/masks) | § Strategy work |
 
 The `f01e87e2` reject in `attach_plan_v2` stays as a safety net; after the
 clamp it can only fire on a float edge. `a356c7f2` (lifecycle ceiling at the
 2% cap) stays: it agrees with the clamp. `1eb9a194` stays.
 
-Left untouched (masked / default-off / inert / out of scope): v92, v102, v103,
-v104 stop scope and masked shorts, v108, v113, v109 spot metals, the ET-date
-fix, Alpaca, v110 embeds, v111 logging, UI.
+Kept as-is: v109 spot metals / XAUUSD conversion, Alpaca (v106), the ET-date
+fix, v110 embeds, v111 logging, UI (v94, v95 and the row fixes), v67 Postgres,
+CI. Not in scope: v101, v102, v105 (closed no-lift, research only).
+
+## Strategy work (revision 2, partner-approved 2026-09-30)
+
+Every one of these closed no-lift or ships default-off, so "revert" means
+**guarantee off**. No strategy code is deleted (a large diff that changes
+nothing live, and today's dead-feature cleanup deliberately excluded
+failed-measurement strategies).
+
+| Spec | Must hold in production | Where |
+|---|---|---|
+| v92 | `ADAPTIVE_RUNNER_TRAIL_ENABLED=false`, `DATA_DRIVEN_STOPS_ENABLED=false`, `STALL_EXIT_ENABLED=false` | `config.py`, `.env` |
+| v103 | `FIB_LEVEL_STOP_ATR=0.0`, `FIB_LEVEL_STOP_DIRECTIONS=` (empty); `STRATEGY_GATES["Fibonacci Continuation"]` admits no direction | `config.py`, `strategy_types.py` |
+| v104 | `STRUCTURAL_STOP_SCOPE=` (empty); the three v104 short strategies masked | `config.py`, `strategy_types.py` |
+| v108 | `DEFAULT_PARAMS["EMA Crossover"]` `max_touches_bull == max_touches_bear == 1` | `entry_filters.py` |
+| v113 | `1w` in `MASKED_BY_DEFAULT_HORIZONS`; confluence scan skips `1w`; v113 strategies masked | `strategy_types.py` |
+
+Production: read the effective values inside the container
+(`docker compose exec -T bot python -` printing the loaded config, not
+`grep` alone, so a missing key resolves to its code default). Any value that
+differs is set to the table's value in the same in-place `.env` edit as flag 2,
+and the change mirrored into `.env.example`.
+
+`a356c7f2` (v104's lifecycle ceiling at 2%) is **kept**: reverting it would
+let lifecycle widen stops past 2% again, which the `f01e87e2` safety net then
+rejects, bringing back part of "posts nothing".
 
 ## Behaviour
 
@@ -84,6 +113,9 @@ Edit production `.env` **in place** (nano or `cat new > .env`, never `sed -i`;
 - `liquidity_reason` with a futures symbol: flag off returns the dollar-volume
   reason, on returns `None`.
 - Config schema test for the two new fields; `.env.example` parity.
+- Guaranteed-off test: one test asserting every value in § Strategy work at
+  code default *and* as parsed from `.env.example`, naming the spec in each
+  failure message, so a later change cannot silently switch one on.
 - Existing `f01e87e2` tests that build wide-stop plans are updated for the
   clamp (they now expect an issued 2% plan).
 - Complexity < 15 on every touched function.
