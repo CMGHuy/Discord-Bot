@@ -284,8 +284,18 @@ The port is deliberately unpublished; reach it with
 - **Verification.** `docker compose exec -T bot python scripts/db/parity_report.py --all`
   is the only verifier to trust; an import's own summary is not authoritative.
 
-**Nightly backups do not exist yet** (v67 P6-03/P6-04 are unbuilt). No store may
-reach the `db` stage until they do.
+**Nightly backups.** `scripts/ops/backup_db.sh` (`make backup-db`) streams a
+`pg_dump` from the db container into `data/backups/db/` and prunes dumps older
+than 14 days; `scripts/ops/restore_db.sh <dump.sql.gz> <target-db>` replays one
+into a throwaway database (no default target; `swingbot` needs `--i-mean-it`).
+The cron entry is installed on the VM as a separate step:
+
+```
+0 3 * * *  cd /opt/swing-bot && ./scripts/ops/backup_db.sh >> logs/backup.log 2>&1
+```
+
+No store may reach the `db` stage until the cron is installed and a restore
+drill has been recorded.
 
 ## Useful one-liners on the server
 
