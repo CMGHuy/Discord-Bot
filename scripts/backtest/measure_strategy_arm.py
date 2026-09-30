@@ -26,7 +26,7 @@ from swingbot.core.backtesting.backtest import run_backtest_daterange  # noqa: E
 from swingbot.core.backtesting.backtest_wf import (  # noqa: E402
     ANCHORED_FOLDS, _apply_overrides, _frame_for, _symbols_for_folds,
 )
-from swingbot.core.market.strategy_types import HORIZONS  # noqa: E402
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS  # noqa: E402
 from swingbot.core.marketdata.universe import liquidity_ok  # noqa: E402
 
 DECIDED_OR_NOT = ("win", "loss", "scratch", "timeout")
@@ -119,7 +119,7 @@ def main() -> int:
 
     symbols = [s for s in _symbols_for_folds()
                if (_frame_for(s) is not None and liquidity_ok(_frame_for(s)))]
-    arms = build_fold_arms(args.strategy, overrides, symbols, list(HORIZONS))
+    arms = build_fold_arms(args.strategy, overrides, symbols, list(LEGACY_HORIZONS))
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(arms, indent=1), encoding="utf-8")

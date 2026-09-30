@@ -348,7 +348,7 @@ def test_summarise_partitions_capped_and_structural():
     assert bull["structural_only"]["pooled"]["win_rate"] == pytest.approx(100.0)
     assert bull["capped_only"]["pooled"]["win_rate"] == pytest.approx(0.0)
     assert out["bearish"]["n_rows"] == 0
-    assert set(bull["horizons"]) == set(mfd.HORIZONS)
+    assert set(bull["horizons"]) == set(mfd.LEGACY_HORIZONS)
 
 
 def test_summarise_reports_exact_lifecycle_and_over_hard_cap_rates():

@@ -39,7 +39,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(Path(__file__).resolve().parent)]
 
-from swingbot.core.market.strategy_types import HORIZONS  # noqa: E402
+from swingbot.core.market.strategy_types import HORIZONS, LEGACY_HORIZONS  # noqa: E402
 from swingbot.core.planning.params import STRUCTURE_BUFFER_ATR  # noqa: E402
 from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, capped_planned_loss_pct, planned_loss_pct  # noqa: E402
 from swingbot.core.backtesting import arm_rule  # noqa: E402
@@ -139,7 +139,7 @@ def reclaim_bar(high, low, close, i, direction, window=RECLAIM_WINDOW):
 
 
 DIRECTIONS = ("bullish", "bearish")
-ALL_HZ = tuple(HORIZONS)
+ALL_HZ = tuple(LEGACY_HORIZONS)
 
 
 def _lifecycle_arm(frame, idx, entry, stop, target, atr_val, direction, horizon_key, candidates):

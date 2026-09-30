@@ -39,7 +39,7 @@ from run_backtest_range import (  # noqa: E402
 )
 from swingbot.core.backtesting.backtest import run_backtest  # noqa: E402
 from swingbot.core.market.entry_filters import entries_for, gate_override  # noqa: E402
-from swingbot.core.market.strategy_types import HORIZONS, STRATEGY_GATES  # noqa: E402
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS, STRATEGY_GATES  # noqa: E402
 from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason  # noqa: E402
 from funnel import FOLD_YEARS, MIN_N_TRAIN, MIN_N_VALIDATION  # noqa: E402
 from funnel import badge_verdict, fold_verdict, plateau_ok, pooled  # noqa: E402
@@ -49,7 +49,7 @@ from funnel import fold_pick as _fold_pick_on  # noqa: E402
 
 STRATEGY = "Fibonacci"
 DIRECTIONS = ("bullish", "bearish")
-ALL_HZ = tuple(HORIZONS)
+ALL_HZ = tuple(LEGACY_HORIZONS)
 EXT_CACHE_NAME = "backtest_cache_ext"
 
 # --- pre-registered constants (spec "Windows and funnel") ---

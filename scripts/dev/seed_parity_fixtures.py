@@ -38,7 +38,7 @@ from swingbot import config  # noqa: E402  (needs the path above)
 # the Analytics heatmap silently had nothing to draw. A fixture using keys the
 # product does not know produces a plausible-looking screen that proves
 # nothing.
-from swingbot.core.market.strategy_types import HORIZONS  # noqa: E402
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS  # noqa: E402
 
 # --- ids ------------------------------------------------------------------
 # Plan ids are UUID4-shaped because trade_commands.py routes a note by
@@ -108,7 +108,7 @@ def _journal(trade_id, *, ticker, strategy, outcome, r_realized, note,
     }
 
 
-_HORIZON_KEYS = list(HORIZONS)
+_HORIZON_KEYS = list(LEGACY_HORIZONS)
 
 PLANS = [
     _plan(P_PENDING, ticker="AAPL", status="PENDING", strategy="RSI Divergence"),

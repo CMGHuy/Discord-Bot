@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from swingbot.core.planning import plan_engine
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
-from swingbot.core.market.strategy_types import HORIZONS, STRATEGY_GATES
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS, STRATEGY_GATES
 
 CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "backtest_cache"
 TRAIN = ("2020-01-01", "2023-12-31")
@@ -29,7 +29,7 @@ RULE = "WR>=80 and ExpR>0 and N>=30 and excl<=50%; max ExpR wins; else keep defa
 
 def _gated_horizons(strategy):
     gates = STRATEGY_GATES.get(strategy, {})
-    return list(gates.get("horizons", HORIZONS.keys()))
+    return list(gates.get("horizons", LEGACY_HORIZONS))
 
 
 def _pool(summaries):

@@ -50,7 +50,7 @@ from fetch_backtest_data import load_cached, load_watchlist
 from run_backtest_range import build_registry_records, merge_registry
 from swingbot.core.backtesting.backtest_scenarios import CONFLUENCE_GATES, replay_scenarios
 from swingbot.core.planning.plan_engine import simulate_exit
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 
 VALIDATION = ("2024-01-01", "2025-12-31")
 MIN_N = 15
@@ -175,7 +175,7 @@ def main():
             frames[ticker] = df
     print(f"loaded {len(frames)}/{len(tickers)} cached tickers", flush=True)
     print(f"VALIDATION {VALIDATION} gates={CONFLUENCE_GATES} "
-          f"horizons={list(HORIZONS)}", flush=True)
+          f"horizons={list(LEGACY_HORIZONS)}", flush=True)
 
     existing = {p.stem for p in CHUNK_DIR.glob("*.json")}
     remaining = [t for t in sorted(frames) if t not in existing]
@@ -184,7 +184,7 @@ def main():
 
     if remaining:
         jobs = [(t, frames[t], VALIDATION[0], VALIDATION[1], CONFLUENCE_GATES,
-                 True, list(HORIZONS)) for t in remaining]
+                 True, list(LEGACY_HORIZONS)) for t in remaining]
         with ProcessPoolExecutor() as ex:
             futures = [ex.submit(_ticker_worker, job) for job in jobs]
             for fut in as_completed(futures):
@@ -193,12 +193,12 @@ def main():
                 print(f"chunk done: {ticker}", flush=True)
 
     # Aggregate ALL chunk files (existing + newly computed).
-    by_horizon_records = {hk: [] for hk in HORIZONS}
+    by_horizon_records = {hk: [] for hk in LEGACY_HORIZONS}
     n_tickers = 0
     for p in sorted(CHUNK_DIR.glob("*.json")):
         data = json.loads(p.read_text(encoding="utf-8"))
         n_tickers += 1
-        for hk in HORIZONS:
+        for hk in LEGACY_HORIZONS:
             by_horizon_records[hk].extend(data.get(hk, []))
 
     print(f"\naggregated {n_tickers} ticker chunk file(s)\n")
@@ -207,7 +207,7 @@ def main():
              f"pass: WR>=80, ExpR>0, N>={MIN_N}, excl<=50% ==", header]
     all_records = []
     per_horizon_stats = {}
-    for hk in HORIZONS:
+    for hk in LEGACY_HORIZONS:
         recs = by_horizon_records[hk]
         all_records.extend(recs)
         agg = _aggregate_records(recs)
@@ -236,7 +236,7 @@ def main():
         "window": list(VALIDATION), "gates": CONFLUENCE_GATES,
         "n_tickers": n_tickers, "min_n": MIN_N,
         "by_horizon": {hk: {**per_horizon_stats[hk], "pass": passes(per_horizon_stats[hk], MIN_N)}
-                       for hk in HORIZONS},
+                       for hk in LEGACY_HORIZONS},
         "pooled": {**pooled, "pass": passes(pooled, MIN_N)},
     }
     out_path = RESULTS_PATH

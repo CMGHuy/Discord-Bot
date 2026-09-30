@@ -37,7 +37,7 @@ from fetch_backtest_data import load_cached, load_watchlist
 from swingbot.core.backtesting.backtest import (ALL_STRATEGIES, _plan_series,
                                                _trade_plan_at, run_backtest)
 from swingbot.core.planning.plan_engine import PlanStatus, TradePlanV2, simulate_exit
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 
 TRAIN = ("2020-01-01", "2023-12-31")
 R_TOL = 1e-6  # both sides round(r, 3) from the same unrounded inputs
@@ -80,7 +80,7 @@ def main():
             continue
         date_to_idx = {str(d.date()): i for i, d in enumerate(df.index)}
         print(f"[{ti}/{len(tickers)}] {ticker}", flush=True)
-        for horizon_key in HORIZONS:
+        for horizon_key in LEGACY_HORIZONS:
             for strategy in ALL_STRATEGIES:
                 try:
                     summary = run_backtest(ticker, df, strategy, horizon_key)

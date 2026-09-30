@@ -12,10 +12,10 @@ from swingbot.core.backtesting.backtest import run_backtest
 from swingbot.core.backtesting.backtest_wf import ANCHORED_FOLDS
 from swingbot.core.edge.rs_gate import rs_verdict
 from swingbot.core.market.entry_filters import gate_override
-from swingbot.core.market.strategy_types import HORIZONS, STRATEGY_GATES
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS, STRATEGY_GATES
 from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason
 
-ALL_HZ = tuple(HORIZONS)
+ALL_HZ = tuple(LEGACY_HORIZONS)
 
 def _unmasked_gates(strategy):
     gates = dict(STRATEGY_GATES.get(strategy) or {})
