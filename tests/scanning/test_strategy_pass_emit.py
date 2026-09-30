@@ -60,3 +60,19 @@ def test_sizing_failure_blocks_store_trade_and_alert(deps, monkeypatch):
 def test_sizing_ok_opens_the_trade_and_alerts(deps, monkeypatch):
     result = _emit(deps, monkeypatch, sizing_ok=True)
     assert result.opened == 1 and len(result.alerts) == 1 and len(deps.plan_store.plans) == 1
+
+
+def test_the_simple_mirror_is_an_embed_never_a_str(deps, monkeypatch):
+    """v110 §6.1 regression: the 4th tuple element was simple_line(plan), a
+    str that _send_alerts sent as embed= -- it failed on every strategy alert,
+    logged a warning, and the full alert pinged instead of the mirror."""
+    import discord
+
+    result = _emit(deps, monkeypatch, sizing_ok=True)
+    simple = result.alerts[0][3]
+    assert isinstance(simple, discord.Embed)
+    assert simple.push_text.startswith("🆕 NEW SETUP · ▲ LONG AAPL · STRATEGY")
+
+
+def test_simple_line_is_gone():
+    assert not hasattr(sp, "simple_line")
