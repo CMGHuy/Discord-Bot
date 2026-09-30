@@ -60,6 +60,38 @@ def _journal_close_safely(trade: dict) -> None:
             "journal hook failed for trade %s", trade.get("id"), exc_info=True)
 
 
+def _hold_days(trade: dict) -> float | None:
+    """Calendar days from opened_at to closed_at, or None when either is
+    missing, unparseable, or the two cannot be subtracted (naive vs aware)."""
+    try:
+        opened = datetime.fromisoformat(trade["opened_at"])
+        closed = datetime.fromisoformat(trade["closed_at"])
+        return (closed - opened).total_seconds() / 86400
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _log_trade_closed(trade: dict) -> None:
+    r = closed_r_multiple(trade)
+    days = _hold_days(trade)
+    log.info("Trade closed: %s %s id=%s outcome=%s R=%s hold=%s",
+             trade.get("ticker") or "-", trade.get("direction") or "-",
+             str(trade.get("id") or "-")[:8], trade.get("status") or "-",
+             "n/a" if r is None else f"{r:+.2f}",
+             "n/a" if days is None else f"{days:.1f}d")
+
+
+def _after_close(trade: dict) -> None:
+    """Everything that follows a trade close once TradeLog's lock is released:
+    the v111 INFO line, then the journal hook. The line must never break a
+    close, so a formatting failure is logged at DEBUG and swallowed."""
+    try:
+        _log_trade_closed(trade)
+    except Exception:
+        log.debug("trade-closed log line failed for %s", trade.get("id"), exc_info=True)
+    _journal_close_safely(trade)
+
+
 def _close_linked_plan_safely(plan_id: str, reason: str) -> None:
     """Close the v2 plan behind a trade row that was closed OUTSIDE the plan
     manager (today: a reversal). The row is only half the position; left
@@ -773,7 +805,7 @@ class TradeLog:
             self._settle_account_balance(t)
             closed_trade = dict(t)
             self._persist(t, conn=conn)
-        _journal_close_safely(closed_trade)
+        _after_close(closed_trade)
         _refresh_snapshot_safely()
 
     def _settle_account_balance(self, t: dict) -> None:
@@ -965,7 +997,7 @@ class TradeLog:
             if newly_closed:
                 self._persist()
         for t in newly_closed:
-            _journal_close_safely(t)
+            _after_close(t)
         if newly_closed:
             _refresh_snapshot_safely()
         return newly_closed
@@ -1239,7 +1271,7 @@ class TradeLog:
         if closed is not None:
             if closed.get("plan_id"):
                 _close_linked_plan_safely(closed["plan_id"], reason="reversed")
-            _journal_close_safely(closed)
+            _after_close(closed)
             _refresh_snapshot_safely()
         return closed
 
@@ -1370,7 +1402,7 @@ class TradeLog:
                     closed_trade = t
                     break
         if closed_trade is not None:
-            _journal_close_safely(closed_trade)
+            _after_close(closed_trade)
             _refresh_snapshot_safely()
             return True
         return False
@@ -1505,7 +1537,7 @@ class TradeLog:
             if newly_closed:
                 self._persist()
         for t in newly_closed:
-            _journal_close_safely(t)
+            _after_close(t)
         if newly_closed:
             _refresh_snapshot_safely()
         return newly_closed
@@ -1683,7 +1715,7 @@ class TradeLog:
                     newly_closed.append(dict(t))
             self._persist()
         for t in newly_closed:
-            _journal_close_safely(t)
+            _after_close(t)
         if newly_closed:
             _refresh_snapshot_safely()
         return newly_closed
