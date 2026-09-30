@@ -29,7 +29,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    existing = set(sa.inspect(op.get_bind()).get_table_names())
-    for table in TABLE_CHANNELS:
-        if table in existing:
-            op.execute(f"DROP TRIGGER IF EXISTS {trigger_name(table)} ON {table}")
+    # No-op: upgrade() is an idempotent sweep that re-asserts triggers which
+    # p1_003 and p2_001..p2_005 own; dropping them here would strip those
+    # revisions' triggers too.
+    pass
