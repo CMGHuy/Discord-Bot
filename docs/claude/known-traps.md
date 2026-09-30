@@ -49,13 +49,23 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   real module directly — `from swingbot.core.scanning import engine as
   scan_engine` is the live equivalent of the old `scan_engine.py` shim import,
   keeping the `scan_engine.*` vocabulary at usage sites unchanged.
-- **Sizing and embed-building happen in `core/scanning/engine.py`'s
-  alert-building loop**, right before `build_embed()` — *not* in
-  `commands/scanning.py::_send_alerts`, which only posts already-built
-  tuples. Wiring sizing there is a silent no-op.
-- **Add embed fields through the `sections["headline"]` accumulator** in
-  `embeds.py`, never a raw `embed.add_field()` — the latter breaks
-  `embed_theme.SECTION_ORDER`.
+- **Sizing and embed-building happen in `core/scanning/scan_run.py`'s
+  alert-building loop** (inside `_sync_run_scan`: the heat / cluster /
+  kill-switch stamps, then `build_embed()` and `build_simple_alert()`) —
+  *not* in `commands/scanning/alerts.py::_send_alerts`, which only posts
+  already-built tuples. Wiring sizing there is a silent no-op. The v2
+  ticket's share count comes from `plan_table._sizing_snapshot`, called by
+  `execution_embeds.build_ticket_embed`.
+- **Add embed fields through the `sections[...]` accumulator** in
+  `core/scanning/alert_embeds.py::build_embed`, never a raw
+  `embed.add_field()` — the latter breaks `presentation.SECTION_ORDER`
+  (`core/presentation/tokens.py`).
+- **Every pushed message is styled by `core/presentation/kinds.py` (v110)
+  and built as a `PushEmbed`.** Send it with
+  `channel.send(**ui.push_kwargs(embed))`. A bare `send(embed=embed)` still
+  posts, but silently drops the push-preview `content` line, which is the only
+  text a phone notification shows. Command replies call
+  `apply_chrome(accent=…)` and are deliberately not registry-styled.
 - **Scan-loop ordering invariant:** ticker screens (liquidity, data quality)
   go *after* `update_open_trades`/`_check_near_close` and *before* the
   new-signal horizon loop, so an already-open paper trade keeps being
@@ -165,7 +175,7 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   (`core/analytics/journal.py:32`), `killswitch.json`
   (`core/edge/throttle.py:94`). **Plain `open(path, "w")` + `json.dump`**
   — truncate first, then fill, so a reader inside that window gets a
-  truncated document: `scan_snapshots.json` (`core/scanning/embeds.py:58`),
+  truncated document: `scan_snapshots.json` (`core/scanning/snapshots.py:22`),
   `bot_heartbeat.json` (`commands/scanning.py:172`), `watchlist.json`
   (`core/marketdata/watchlist.py:21`), `ticker_directory.json`
   (`core/marketdata/ticker_directory.py:108`), `admin_jobs.json`
