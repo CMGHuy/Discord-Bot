@@ -108,3 +108,41 @@ def test_a_real_difference_still_changes_the_checksum():
     from scripts.db.import_common import record_checksum
     assert record_checksum({"r": 0.0}) != record_checksum({"r": 0.1})
     assert record_checksum({"r": 0}) != record_checksum({"r": None})
+
+
+def test_watchlist_prune_removes_only_tickers_the_source_dropped():
+    """An upsert never deletes, so GC=F would outlive the XAUUSD rename."""
+    from scripts.db.import_watchlist import prune
+
+    class FakeRepo:
+        def __init__(self):
+            self.rows = ["AAPL", "GC=F", "SI=F", "XAUUSD"]
+
+        def tickers(self):
+            return sorted(self.rows)
+
+        def remove(self, ticker):
+            self.rows.remove(ticker)
+
+    repo = FakeRepo()
+    n = prune(repo, [{"ticker": "AAPL"}, {"ticker": "XAUUSD"}])
+    assert n == 2 and repo.rows == ["AAPL", "XAUUSD"]
+
+
+def test_run_import_calls_prune_after_writes_but_not_on_dry_run(monkeypatch):
+    import scripts.db.import_common as mod
+    from scripts.db.import_common import ImportReport
+
+    monkeypatch.setattr(mod, "parity", lambda name, source_path=None: ImportReport(
+        source_count=1, imported_count=1))
+    calls = []
+
+    class FakeRepo:
+        def count(self):
+            return 0
+
+    kw = dict(load_source=lambda p: [{"k": 1}], write_one=lambda r, rec: calls.append("w"),
+              repo=FakeRepo(), key="k", name="watchlist",
+              prune=lambda r, s: calls.append("p") or 0)
+    assert mod.run_import(["--dry-run"], **kw) == 0 and calls == []
+    assert mod.run_import([], **kw) == 0 and calls == ["w", "p"]

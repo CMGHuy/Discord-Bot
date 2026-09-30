@@ -24,6 +24,16 @@ def write_one(repo, record: dict) -> None:
     repo.upsert(record)
 
 
+def prune(repo, source: list[dict]) -> int:
+    """Delete tickers the JSON dropped (e.g. GC=F/SI=F after the spot rename)."""
+    keep = {record["ticker"] for record in source}
+    stale = [ticker for ticker in repo.tickers() if ticker not in keep]
+    for ticker in stale:
+        repo.remove(ticker)
+    return len(stale)
+
+
 if __name__ == "__main__":
     raise SystemExit(run_import(sys.argv[1:], load_source=load_source, write_one=write_one,
-                                repo=WatchlistRepository(), key="ticker", name="watchlist"))
+                                repo=WatchlistRepository(), key="ticker", name="watchlist",
+                                prune=prune))

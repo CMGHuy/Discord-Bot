@@ -94,8 +94,13 @@ def parity(store: str, source_path: str | None = None) -> ImportReport:
     return _parity(store, source_path)
 
 
-def run_import(argv, *, load_source, write_one, repo, key: str, name: str) -> int:
-    """Run a reusable dry-run/import/verification CLI."""
+def run_import(argv, *, load_source, write_one, repo, key: str, name: str, prune=None) -> int:
+    """Run a reusable dry-run/import/verification CLI.
+
+    ``prune(repo, source)``, when given, runs after the writes and removes rows
+    the source no longer holds. Only for stores where the source is the whole
+    truth (an upsert alone never deletes, so a renamed key lingers).
+    """
     parser = argparse.ArgumentParser(description=f"Import {name} into Postgres")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--source", help="path to the JSON file (default: data/)")
@@ -109,6 +114,8 @@ def run_import(argv, *, load_source, write_one, repo, key: str, name: str) -> in
         write_one(repo, record)
         if index % 100 == 0 or index == len(source):
             print(f"[{name}] {index}/{len(source)} written", flush=True)
+    if prune is not None:
+        print(f"[{name}] pruned {prune(repo, source)} row(s) absent from source", flush=True)
     # One verifier. The ad-hoc comparison this replaced had neither the
     # per-store from_repo_shape translation nor ignore_fields, so it reported
     # watchlist FAILED on all 77 rows while authoritative parity reported OK,
