@@ -21,6 +21,10 @@ def _channel_name(destination) -> str:
 
 
 def log_posted(embed, ticker, destination, kind=None) -> None:
-    kind = kind or getattr(embed, "kind", None)
-    log.info("alert posted kind=%s ticker=%s channel=%s",
-             getattr(kind, "name", "UNKNOWN"), ticker or "-", _channel_name(destination))
+    """Never raises: a logging failure must not abort a send or a batch."""
+    try:
+        kind = kind or getattr(embed, "kind", None)
+        log.info("alert posted kind=%s ticker=%s channel=%s",
+                 getattr(kind, "name", "UNKNOWN"), ticker or "-", _channel_name(destination))
+    except Exception:
+        log.debug("could not write the alert-posted line", exc_info=True)

@@ -173,3 +173,30 @@ def test_a_history_only_event_logs_one_line(monkeypatch, caplog):
     with caplog.at_level(logging.INFO, logger=posted_log.log.name):
         asyncio.run(life.notify_plan_events(bot, [event]))
     assert _lines(caplog) == ["alert posted kind=EXPIRED ticker=AMD channel=history"]
+
+
+class _Exploding:
+    @property
+    def kind(self):
+        raise RuntimeError("boom")
+
+    @property
+    def name(self):
+        raise RuntimeError("boom")
+
+
+def test_a_broken_embed_or_destination_never_raises():
+    log_posted(_Exploding(), "AAPL", _Exploding())
+
+
+def test_a_broken_embed_does_not_change_the_mirror_result():
+    ok = asyncio.run(alerts._mirror(_Chan("simple"), _Exploding(), SimpleNamespace(ticker="X")))
+    assert ok is True
+
+
+def test_a_failed_feed_send_logs_only_the_history_copy(monkeypatch, caplog):
+    event = _plan_events_env(monkeypatch, "be_moved")
+    bot = _bot(**{"1": _Chan("feed", fail=True), "2": _Chan("history")})
+    with caplog.at_level(logging.INFO, logger=posted_log.log.name):
+        asyncio.run(life.notify_plan_events(bot, [event]))
+    assert _lines(caplog) == ["alert posted kind=BE_MOVED ticker=AMD channel=history"]
