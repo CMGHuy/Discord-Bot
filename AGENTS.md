@@ -155,8 +155,9 @@ Read before acting:
 
 - `docs/claude/architecture.md` before changing `swingbot/core`, plan engine or
   scan pipeline.
-- `docs/claude/known-traps.md` before changing data caching, scan output or
-  embeds.
+- `docs/claude/known-traps.md` before changing data caching, scan output,
+  embeds, the 2% stop cap/clamp or the liquidity floor, or editing production
+  `.env` (edit in place, never `sed -i`).
 - `docs/claude/backtest-methodology.md` before running or interpreting a
   backtest, grid or validation.
 - `docs/claude/edge-priorities.md` before choosing strategy work.

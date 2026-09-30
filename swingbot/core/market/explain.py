@@ -12,6 +12,8 @@ Format (3-5 lines max):
   Line 4: earnings warning, if applicable
 """
 
+import math
+
 from swingbot.core.market.levels import strategy_family
 
 # One very short phrase per strategy family -- just enough to say WHAT
@@ -36,6 +38,32 @@ _STRATEGY_SHORT = {
 def _family_list(families: list) -> str:
     """'EMA, VWAP, Fib retracement' — short names, comma-separated."""
     return ", ".join(_STRATEGY_SHORT.get(f, f) for f in families) if families else "n/a"
+
+
+def stop_distance_pct(entry, stop):
+    """Unsigned percent from entry to stop; None when either is missing or
+    entry is zero."""
+    if not entry or stop is None:
+        return None
+    return abs(entry - stop) / entry * 100
+
+
+def v2_stop_was_moved(scenario, entry, stop) -> bool:
+    """True when a priced v2 stop differs from the scenario's (v115's clamp)
+    and its distance from ``entry`` is computable. Only then do alerts print
+    v2 stop figures; otherwise every message stays on the scenario's."""
+    if stop is None or not entry:
+        return False
+    return not math.isclose(stop, scenario.stop_loss, abs_tol=1e-9)
+
+
+def _stop_figures(scenario, plan):
+    """(stop price, unsigned stop %) to print: the priced v2 plan's when its
+    stop was clamped inside the scenario's -- measured from the trigger, the
+    price the plan enters at -- else the scenario's own."""
+    if plan is None or not v2_stop_was_moved(scenario, plan.trigger_price, plan.stop_loss):
+        return scenario.stop_loss, scenario.stop_distance_pct
+    return plan.stop_loss, stop_distance_pct(plan.trigger_price, plan.stop_loss)
 
 
 def build_explanation(result, earnings_info=None,
@@ -71,6 +99,7 @@ def build_explanation(result, earnings_info=None,
     plural = "" if t_count == 1 else "s"
 
     lines = []
+    stop, stop_pct = _stop_figures(scenario, plan)
 
     # Line 0: trigger-aware entry wording -- makes clear whether this trade
     # is already live at market or still waiting on a stop trigger to hit.
@@ -91,8 +120,8 @@ def build_explanation(result, earnings_info=None,
 
     # Line 2: stop basis
     lines.append(
-        f"🛑 Stop at **{scenario.stop_loss:.2f}** "
-        f"({'-' if is_bull else '+'}{scenario.stop_distance_pct:.1f}%) "
+        f"🛑 Stop at **{stop:.2f}** "
+        f"({'-' if is_bull else '+'}{stop_pct:.1f}%) "
         f"— {s_str}."
     )
 
@@ -134,7 +163,7 @@ def build_explanation(result, earnings_info=None,
         t2_str = "continues → no further level"
     lines.append(
         f"🔀 At {scenario.take_profit:.2f}: {t2_str} "
-        f"| reverses → stop {scenario.stop_loss:.2f}."
+        f"| reverses → stop {stop:.2f}."
     )
 
     # Line 4: earnings warning

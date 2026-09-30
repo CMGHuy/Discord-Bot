@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 
+from swingbot import config
 from swingbot.core.backtesting.backtest_scenarios import replay_scenarios
 from swingbot.scan_params import ScanParams
 
@@ -14,7 +15,10 @@ def _round(value):
     return None if value is None else round(float(value), 6)
 
 
-def test_from_config_reproduces_pre_v74_golden_plans():
+def test_from_config_reproduces_pre_v74_golden_plans(monkeypatch):
+    # The golden file is pre-v74 replay output, which predates v115's stop
+    # clamp; the clamp is covered by tests/planning/test_confluence_stop_clamp.py.
+    monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", False)
     rows = []
     for symbol, frame in load_v74_fixture().items():
         for horizon in ("4w", "3m"):

@@ -308,11 +308,60 @@ that orphan, and the bot's reload never fires. Found 2026-09-30, when a
   compose falls back to the non-existent `swing-bot:latest`.
 - **Verify:** `docker compose exec -T bot grep <KEY> /app/.env`.
 
-## Stop floor and 2% cap leave an empty band (2026-09-30)
+## Stop floor and 2% cap: the empty band, and the v115 clamp
 
-Since `f01e87e2` rejects any plan with a stop over 2%, `MIN_STOP_DISTANCE_PCT`
->= 2.0 admits only a stop of exactly 2.0%. Production posted nothing from
-Sep 25 to Sep 30. A replay on live data gave 0 setups at a 2.0 or 1.5 floor
-and 10 at 1.0, so production now runs 1.0 as an unmeasured stopgap until
-v114 validates the band. A funnel of "N checked -> N no entry point" is this
-band, not a data fault.
+`f01e87e2` rejects any plan with a stop over 2% (`risk_cap` in
+`attach_plan_v2`). With `MIN_STOP_DISTANCE_PCT` >= 2.0, only a stop of exactly
+2.0% survived, and production posted nothing from Sep 25 to Sep 30. A replay
+on live data gave 0 setups at a 2.0 or 1.5 floor and 10 at 1.0, so production
+ran 1.0 as a stopgap on 2026-09-30.
+
+**v115 (`CLAMP_STOP_TO_HARD_CAP`, default on)** moves a wider confluence stop
+to **1.75%** from the trigger inside `build_confluence_plan`, before target
+selection. That is the 2% cap minus `CLAMP_HEADROOM_PCT` (0.25, a constant in
+`builders.py`). The floor is back at 2.0 (production returns to it when v115
+deploys). The `risk_cap` reject in `attach_plan_v2` stays as a safety net.
+
+- **Why 1.75, not 2.0.** `plan_manager._step_pending` cancels a stop-entry
+  fill `risk_cap` when `planned_loss_pct(fill, stop) > 2.0`, with no
+  tolerance. A stop at exactly 2% is cancelled on any fill past the trigger,
+  and float rounding can tip a stop at exactly 2% over the cap.
+  0.25% of headroom absorbs a small gap. A fill more than about 0.25% past
+  the trigger is still cancelled `risk_cap`: that is the 2% policy working,
+  not a bug.
+
+- **With the clamp off, the empty band comes back.** A funnel of "N checked ->
+  N no entry point" or a run of `risk_cap` rejects is this band, not a data
+  fault.
+- **Replay clamps by default.** `replay_scenarios` and `armed_replay.plan_at`
+  call `build_confluence_plan`. Confluence replay numbers produced before
+  v115 used the unclamped stop and are not comparable to later ones. To
+  reproduce them, set `CLAMP_STOP_TO_HARD_CAP=false`. The backtest has no
+  fill guard, so it never models a gap cancel: live can cancel a clamped
+  plan that replay fills.
+- `armed_replay.plan_at` stores the scenario's **unclamped**
+  `stop_distance_pct` while its plan carries the clamped stop. Read the stop
+  off the plan, never off that field. This is known and deliberately left
+  unchanged.
+- A clamped stop sits at no structural level. It reaches an alert only with
+  `PLAN_ENGINE_V2=on`, and then the clamped stop shows everywhere in the
+  alert: plan table, chart, ticket, headline, simple mirror and explanation.
+  The stop % and R come from the v2 plan **only when the stop was clamped**
+  (`explain.v2_stop_was_moved`, used by `plan_table.stop_figures_for_display`);
+  every other alert, and every target figure, is unchanged. In `shadow`, the
+  scenario's unclamped stop is what posts.
+- v114 (a 1.5-2.0 band, measured before shipping) was abandoned before any
+  build on 2026-09-30 (`no-lift/`), with its VALIDATION shot unspent. It is
+  still the measured route if the partner later wants the band instead of
+  the clamp.
+
+## Futures skipped for dollar volume is deliberate (v115)
+
+`SI=F: skipping new-signal scan -- avg dollar vol $0.1M < $20M floor` is the
+configured behaviour, not a bug. Yahoo reports futures volume in contracts and
+FX/index volume as 0. `4a649b36` exempted those classes. v115 put that
+exemption behind `LIQUIDITY_EXEMPT_NON_EQUITY`, default **off**, to restore
+the 09-22 scan. Turn it on to scan thin-contract futures again. The v109 spot
+metals (`spot_metals.SPOT_PAIRS`: XAUUSD, XAGUSD) stay exempt either way
+(partner, 2026-09-30). They carry their future's contract volume, so XAGUSD
+scans while SI=F, on the same bars, is skipped. That is by design.

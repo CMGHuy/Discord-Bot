@@ -24,6 +24,20 @@ def _volume_is_not_shares(symbol: str) -> bool:
     return classify(symbol) in _VOLUME_NOT_SHARES
 
 
+def _dollar_volume_exempt(symbol: str | None) -> bool:
+    """v115: which symbols skip the dollar-volume floor. v109 spot metals
+    (spot_metals.SPOT_PAIRS, the single source of truth) always do: their bars
+    carry the future's contract volume, and the partner kept them scanning
+    (2026-09-30). 4a649b36's futures/FX/index exemption applies only while
+    LIQUIDITY_EXEMPT_NON_EQUITY is on (default off = the 09-22 floor)."""
+    if symbol is None:
+        return False
+    from swingbot.core.marketdata.spot_metals import is_spot_metal
+    if is_spot_metal(symbol):
+        return True
+    return bool(config.LIQUIDITY_EXEMPT_NON_EQUITY) and _volume_is_not_shares(symbol)
+
+
 def liquidity_ok(df: pd.DataFrame, min_avg_dollar_vol: float | None = None,
                   min_price: float | None = None) -> bool:
     return liquidity_reason(df, min_avg_dollar_vol, min_price) is None
@@ -40,7 +54,9 @@ def liquidity_reason(df: pd.DataFrame, min_avg_dollar_vol: float | None = None,
                       min_price: float | None = None,
                       symbol: str | None = None) -> str | None:
     """None when liquid; else a loggable reason string. Passing `symbol`
-    exempts futures/FX/indices from the dollar-volume floor."""
+    always exempts v109 spot metals from the dollar-volume floor, and exempts
+    futures/FX/indices only while LIQUIDITY_EXEMPT_NON_EQUITY is on (v115;
+    default off)."""
     if df is None or len(df) < 20:
         return "insufficient history (<20 bars)"
     floor_dv = min_avg_dollar_vol if min_avg_dollar_vol is not None else \
@@ -50,7 +66,7 @@ def liquidity_reason(df: pd.DataFrame, min_avg_dollar_vol: float | None = None,
     last_close = float(df["Close"].iloc[-1])
     if last_close < floor_px:
         return f"price {last_close:.2f} < {floor_px:.2f} floor"
-    if symbol is not None and _volume_is_not_shares(symbol):
+    if _dollar_volume_exempt(symbol):
         return None
     dv = _avg_dollar_vol(df)
     if dv < floor_dv:

@@ -159,6 +159,16 @@ FIELDS: list[Field] = [
           type="float", default="2.0", min=0, max=2.0, step=0.5,
           help="Hard filter: a plan may never carry more than 2% price risk from entry to its initial stop. "
                "A market gap can still execute beyond that stop; realised fills remain reported honestly."),
+    Field("CLAMP_STOP_TO_HARD_CAP", "CLAMP_STOP_TO_HARD_CAP", "Trade Filters & Risk",
+          "Clamp wide confluence stops to the 2% cap",
+          type="checkbox", default="true",
+          help="v115. A confluence setup whose natural stop sits further than 2% from the entry "
+               "is still issued, with its stop moved to 1.75% from the entry (0.25% inside the "
+               "cap, so a fill a little past the trigger is not cancelled). The target is "
+               "then chosen against that tighter risk, and the setup is dropped if no level pays "
+               "the min reward:risk ratio. Off: the stop stays where the levels put it and any plan "
+               "beyond 2% is rejected (risk_cap), which at a 2.0% stop floor posts almost nothing. "
+               "Historical replay clamps too. An unmeasured live change (v115, Edge: volume)."),
     Field("MIN_RISK_REWARD_RATIO", "MIN_RISK_REWARD_RATIO", "Trade Filters & Risk", "Min reward:risk ratio",
           type="float", default="1.5", min=0, step=0.1,
           help="Hard filter, enforced exactly as set: dropped entirely unless the reward:risk to target 1 "
@@ -751,6 +761,14 @@ FIELDS: list[Field] = [
           help="Last close below this floor skips the ticker for new signals this scan -- filters penny "
                "stocks, whose price action/spreads behave differently from the swing-trade universe this "
                "bot is tuned for."),
+    Field("LIQUIDITY_EXEMPT_NON_EQUITY", "LIQUIDITY_EXEMPT_NON_EQUITY", "Universe & Scanning",
+          "Exempt futures/FX/indices from the dollar-volume floor",
+          type="checkbox", default="false",
+          help="v115. On: futures, FX and indices skip the average dollar-volume floor, because "
+               "Yahoo reports their volume in contracts or as 0, so Close x Volume understates "
+               "them. Off (default, the 09-22 behaviour): they must clear UNIVERSE_MIN_DOLLAR_VOL, "
+               "so a thin-contract future such as SI=F is skipped for new signals. Spot metals "
+               "(XAUUSD, XAGUSD) are exempt either way. History and price floors always apply."),
     # SR5 renamed the admin UI's Universe workspace to Watchlist, end to end.
     # This key and its section are deliberately NOT part of that rename, and
     # this note exists so nobody "finishes the job" later: *watchlist* is the

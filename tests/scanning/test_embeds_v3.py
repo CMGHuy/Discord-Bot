@@ -17,9 +17,9 @@ from swingbot.core.market.explain import build_explanation
 from swingbot.core.planning.plan_engine import TradePlanV2
 from swingbot.core.scanning.embeds import (
     RequirementCheck, build_closed_trade_embed, build_embed, build_near_close_embed,
-    regenerate_chart_for_trade,
+    build_simple_alert, regenerate_chart_for_trade,
 )
-from swingbot.core.scanning import embeds as embeds_mod, plan_table, snapshots
+from swingbot.core.scanning import alert_embeds, embeds as embeds_mod, plan_table, snapshots
 from swingbot.core.presentation import ansi, kinds, tokens
 from swingbot.core import presentation as ui
 from swingbot.core.scanning.engine import ScanItem
@@ -726,3 +726,94 @@ def test_intraday_confirmation_uses_a_plain_check_not_the_outcome_mark():
     item.intraday = True
     field = next(f for f in _build(item).fields if f.name == "⏱ Intraday timing")
     assert field.value.startswith("✔ confirms") and "✅" not in field.value
+
+
+# --- v115: a clamped v2 stop must not contradict itself in the alert -------
+
+def _clamped_item():
+    """The scenario wants a 4% stop (96.00); v115's clamp priced the v2 plan
+    at 98.25, 1.75% below the 100.00 trigger."""
+    import dataclasses
+    item = make_item(plan_v2=dataclasses.replace(make_plan_v2(), stop_loss=98.25))
+    item.plan = make_legacy_plan(stop_loss=96.0)
+    item.plan.stop_distance_pct = 4.0
+    item.plan.risk_reward_ratio = 2.5
+    return item
+
+
+def _clamped_scenario_result():
+    result = _fake_scenario_result()
+    result.scenario.stop_loss, result.scenario.stop_distance_pct = 96.0, 4.0
+    return result
+
+
+def _all_embed_text(embed):
+    plain = ansi._ESCAPE_RE.sub("", embed.description)
+    return "\n".join([plain] + [f"{f.name}\n{f.value}" for f in embed.fields])
+
+
+def test_a_clamped_stop_reads_the_same_everywhere_in_the_alert(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = _clamped_item()
+    scenario_result = _fake_scenario_result()
+    scenario_result.scenario.stop_loss, scenario_result.scenario.stop_distance_pct = 96.0, 4.0
+    explanation = build_explanation(scenario_result, plan=item.plan_v2)
+    embed = build_embed(item, explanation=explanation, perf_stats=PERF_STATS_EMPTY,
+                        open_positions_warning=None, chart_filename=None, layout="detailed")
+    text = _all_embed_text(embed)
+    assert "96.00" not in text and "4.0%" not in text
+    assert "98.25" in text
+    assert "−1.8%" in text  # headline magnitude, typographic minus
+    assert "5.7R" in text and "2.5R" not in text  # 10.00 reward over 1.75 risk
+    branches = next(f for f in embed.fields if f.name == "🔀 If it gets there")
+    assert "98.25 (1.8%)" in branches.value
+    assert "Stop at **98.25** (-1.8%)" in explanation
+    assert "reverses → stop 98.25." in explanation
+
+
+def test_a_clamped_stop_reads_the_same_in_the_simple_channel(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = _clamped_item()
+    # build_simple_alert routes a priced v2 plan to the ticket; the legacy
+    # mirror is reached only off that route, but must agree if it ever is.
+    for embed in (build_simple_alert(item), alert_embeds._legacy_simple_alert(item)):
+        text = _all_embed_text(embed)
+        assert "96.00" not in text and "4.0%" not in text and "2.5R" not in text
+        assert "98.25" in text
+
+
+def test_an_unclamped_v2_plan_keeps_the_scenario_r_even_when_tp1_differs(monkeypatch):
+    import dataclasses
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = make_item(plan_v2=dataclasses.replace(make_plan_v2(), tp1=120.0))
+    text = _all_embed_text(_build(item))
+    assert "100.00 → 120.00 / 95.00" in text
+    assert "−5.0% 2.0R" in text  # scenario's R, not 20/5 = 4.0R off the v2 TP1
+    stop_entry = dataclasses.replace(item.plan_v2, entry_type="stop_entry", trigger_price=102.0)
+    explanation = build_explanation(_fake_scenario_result(), plan=stop_entry)
+    assert "Stop at **95.00** (-5.0%)" in explanation  # not 6.9% from the trigger
+
+
+def test_an_uncomputable_v2_stop_distance_falls_back_to_the_scenario(monkeypatch):
+    import dataclasses
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = _clamped_item()
+    zero_entry = dataclasses.replace(item.plan_v2, trigger_price=0.0)
+    nums = {"entry": 0.0, "stop_loss": 98.25, "take_profit": 110.0}
+    assert plan_table.stop_figures_for_display(zero_entry, nums, item.plan) == (4.0, 2.5)
+    assert "Stop at **96.00** (-4.0%)" in build_explanation(
+        _clamped_scenario_result(), plan=zero_entry)
+
+
+def test_an_unclamped_stop_renders_as_before(monkeypatch):
+    for flag, plan_v2 in (("off", None), ("on", make_plan_v2())):
+        monkeypatch.setattr(config, "PLAN_ENGINE_V2", flag)
+        embed = _build(make_item(plan_v2=plan_v2))
+        text = _all_embed_text(embed)
+        assert "100.00 → 110.00 / 95.00" in text
+        assert "+10.0% −5.0% 2.0R" in text
+        branches = next(f for f in embed.fields if f.name == "🔀 If it gets there")
+        assert "support at 95.00 (5.0%)" in branches.value
+        explanation = build_explanation(_fake_scenario_result(), plan=plan_v2)
+        assert "Stop at **95.00** (-5.0%)" in explanation
+        assert "reverses → stop 95.00." in explanation

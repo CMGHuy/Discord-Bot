@@ -6,8 +6,10 @@ scrolled off a phone. The replacement is the two-line presentation headline.
 """
 from swingbot import config
 from swingbot.core.backtesting.registry import Badge, decay_for
+from swingbot.core.market.explain import stop_distance_pct, v2_stop_was_moved
 from swingbot.core.planning import account
 from swingbot.core.planning.plan_engine import WEAK_CAUTION_TEXT, badge_stats_line
+from swingbot.core.presentation.ansi import r_multiple
 
 
 def plan_numbers_for_display(plan, legacy: dict) -> dict:
@@ -18,6 +20,18 @@ def plan_numbers_for_display(plan, legacy: dict) -> dict:
         return dict(legacy)
     return {"entry": plan.trigger_price, "stop_loss": plan.stop_loss,
             "take_profit": plan.tp1, "target2": plan.tp2}
+
+
+def stop_figures_for_display(plan, nums: dict, scenario) -> tuple:
+    """(stop %, R) that agree with ``nums["stop_loss"]`` from
+    plan_numbers_for_display. Only a v115-clamped v2 stop (one that differs
+    from the scenario's) gets figures measured off the v2 entry, stop and
+    TP1; every other alert keeps the scenario's own, exactly as before."""
+    entry, stop = nums["entry"], nums["stop_loss"]
+    if (config.PLAN_ENGINE_V2 != "on" or plan is None
+            or not v2_stop_was_moved(scenario, entry, stop)):
+        return scenario.stop_distance_pct, scenario.risk_reward_ratio
+    return stop_distance_pct(entry, stop), r_multiple(entry, stop, nums["take_profit"])
 
 
 def badge_field_for(plan) -> tuple[str, str] | None:
