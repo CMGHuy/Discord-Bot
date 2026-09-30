@@ -7,10 +7,13 @@ size. Constants are FROZEN by the plan's Global Constraints."""
 from __future__ import annotations
 
 import datetime as _dt
+import logging
 import os
 
 from swingbot import config
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
+
+log = logging.getLogger(__name__)
 
 DD_LADDER = ((8.0, 0.75), (12.0, 0.50), (16.0, 0.25), (20.0, 0.0))
 RESUME_DD_PCT = 15.0   # once paused, entries resume only below this
@@ -94,6 +97,16 @@ def kill_state() -> dict:
                        "manual_release": False})
 
 
+def _log_kill_flip(prior: dict, after: dict, reason: str) -> None:
+    """INFO line only when the switch actually changed state."""
+    if bool(prior.get("on")) == bool(after.get("on")):
+        return
+    if after.get("on"):
+        log.info("Kill switch ON: %s", after.get("reason") or reason)
+    else:
+        log.info("Kill switch OFF (released, was: %s)", prior.get("reason"))
+
+
 def set_kill(on: bool, reason: str = "manual") -> dict:
     from swingbot.core.db import stages
     prior = kill_state()
@@ -111,7 +124,9 @@ def set_kill(on: bool, reason: str = "manual") -> dict:
             repository.engage(reason)
         else:
             repository.release()
-    return kill_state()
+    after = kill_state()
+    _log_kill_flip(prior, after, reason)
+    return after
 
 
 def check_kill_triggers(dd_pct: float, spy_move_pct: float,
