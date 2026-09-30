@@ -1,7 +1,7 @@
-# v114 — Scenario stop band: 1.0-2.5% stops at real levels, 2.5% maximum loss
+# v114 — Scenario stop band: 1.5-2.0% stops at real levels, 2% maximum loss unchanged
 
 **Version:** ui 1.21.0 · bot 1.11.1 (at writing)
-**Bump:** bot minor if it ships (the alert stream and the risk limit visibly change)
+**Bump:** bot minor if it ships (the alert stream visibly changes)
 **Edge:** volume
 
 ## Why this
@@ -42,82 +42,75 @@ reward and risk:reward filters off, 482 scenarios have a stop of 2% or more
 (382 of them 2-3%), so a stop that far away is findable. They are rejected
 because the nearest target is too close: a 2% stop needs a target at least 3%
 away for risk:reward 1.5, plus the per-horizon reward floor. The floor and the
-risk:reward ratio interact, so lowering the floor to 1.0% works by also
-lowering the target distance the ratio demands. Any plan built from this spec
+risk:reward ratio interact, so lowering the floor works by also lowering the
+target distance the ratio demands. Any plan built from this spec
 must measure the floor and the ratio together, not the floor alone.
 
-## Decision taken with the partner (2026-09-30)
+## Decision taken with the partner (2026-09-30, final)
 
-- The **maximum planned loss per trade is 2.5%** (was 2.0%). A smaller loss is
-  fine. A stop of 2.0-2.5% is acceptable provided the profit target is at
-  least 2.5%.
-- The stop **must not be too near the entry**: floor **1.0%**.
+After several same-day revisions (a 1.0% floor, a 2.5% cap, RR 1.0 then 2.0,
+a 2.5% reward floor were each proposed and withdrawn), the partner settled on
+**one threshold change**:
+
+- **`MIN_STOP_DISTANCE_PCT` 2.0 -> 1.5.**
+- **`MIN_RISK_REWARD_RATIO` stays 1.5.**
+- **`MIN_REWARD_PCT` stays 2.0.**
+- **Maximum planned loss stays 2.0%** (`HARD_MAX_PLANNED_LOSS_PCT`).
 - Stops stay at **real support/resistance levels**. The scan never places a
   stop at an arbitrary distance to hit a percentage.
-- Reward rule: target **at least 2.5% away**, and risk:reward **at least 2.0**
-  (partner revision the same day, replacing the earlier "reward >= stop").
 
 ## Design
 
-Band: **stop 1.0% to 2.5% from entry**; **reward >= 2.5% and risk:reward >= 2.0**.
+Band: **stop 1.5% to 2.0% from entry**; reward and risk:reward rules unchanged.
 
-1. `MIN_STOP_DISTANCE_PCT` default 2.0 -> **1.0**.
-2. `HARD_MAX_PLANNED_LOSS_PCT` (`swingbot/core/risk_limits.py`) 2.0 -> **2.5**.
-   It is the single source of the cap: `attach_plan_v2` reject,
-   `stop_scope.stop_ceiling` / `capped_planned_loss_pct`, `PlanManager`, and
-   sizing all read it. Any place that hard-codes 2 or 2.0 as the cap is found
-   by the plan's first task and made to read the constant.
-3. Scenario admission ceiling stops being the horizon's 7-11% and becomes the
-   same constant, so scenarios that can never be issued are no longer built.
-4. `MIN_REWARD_PCT` 2.0 -> **2.5** and `MIN_RISK_REWARD_RATIO` 1.5 -> **2.0**.
-   A 2.5% stop therefore needs a 5% target; a 1.0% stop needs 2.5%.
-   The per-horizon reward floor (`sr_target_min_pct * 0.15`, 3.3% for the
-   longest horizons) still applies on top, so long horizons need more than 2.5%.
-5. Backtest replay uses the same admission code (`backtest_scenarios.py`
+1. `MIN_STOP_DISTANCE_PCT` default 2.0 -> **1.5** (`swingbot/config.py`), and
+   the production `.env`, which sets `MIN_STOP_DISTANCE_PCT=2.0` explicitly,
+   so a default change alone does not reach production.
+2. Scenario admission ceiling (`analyze._scan_one`, currently
+   `max(MAX_STOP_LOSS_PCT, h["max_risk_pct"])`, 7-11%) becomes the planned-loss
+   cap read from `HARD_MAX_PLANNED_LOSS_PCT`, so scenarios that can never be
+   issued are no longer built. The cap's value does not change.
+3. Backtest replay uses the same admission code (`backtest_scenarios.py`
    default `min_stop_distance_pct: 2.0`, `armed_replay.py`, `scan_params.py`,
    `gating.py`, `arms/reachability.py`); all move together so parity holds.
    `armed_replay` already relaxes the floor to 0 at arm time; that stays.
-6. Requirement-check text (`requirements.py`) states the band and reward rule.
-7. Strategy plans whose builder chooses its own stop (`builders.py`,
-   `short_builders.py`) already cap at the stop ceiling and follow the new
-   constant automatically.
+4. Requirement-check text (`requirements.py`) states the band.
+5. Strategy plans whose builder chooses its own stop (`builders.py`,
+   `short_builders.py`) are unchanged.
 
-**Non-goals.** No change to sizing rules, structural-stop scope
-(`STRUCTURAL_STOP_SCOPE` stays empty), strategy entry logic, or where stops
-sit. Nothing is moved to a fixed percentage.
+**Non-goals.** No change to the 2% cap, sizing, reward floor, risk:reward,
+structural-stop scope (`STRUCTURAL_STOP_SCOPE` stays empty), strategy entry
+logic, or where stops sit.
 
 ## What the measurement says (2026-09-30, production cache, 820 frames)
 
-Real-level stops of 2.0-2.5% do not exist today: floor 2.0% gives 0 scenarios
-at a 2.0% or a 2.5% cap, whatever the ratio. With the 2.5% reward floor and the
-cap at 2.5%: floor 1.0% gives **18 scenarios at RR 2.0** (23 at RR 1.5, 25 at
-RR 1.0); floor 1.5% gives 1 at RR 2.0. The cap value (2.0 vs 2.5) changes
-nothing today. So **the 1.0% floor is what brings alerts back; raising the
-cap does not.** The 2.5% cap is a risk-limit decision the partner made on its
-merits; its cost is measured in validation, not assumed free.
+With the live per-horizon reward floor, RR 1.5 and the 2.0% cap:
+
+| Minimum stop distance | Scenarios today |
+|---|---|
+| 2.0% (current) | 0 |
+| **1.5% (chosen)** | **1** (one bearish 7m) |
+| 1.0% | 24 |
+
+The admission ceiling (2.0% vs the horizon's 7-11%) gives the same counts
+today; it matters for correctness, not volume. **On today's data this change
+barely restores alerts.** Whether it restores them on ordinary days is what
+the backtest's volume measurement answers; the spec does not assume it.
 
 ## Integrity requirement (not subject to validation)
 
-No plan may be issued with a planned loss above the cap, and the cap has one
-source. A test asserts this across every horizon and both directions, and the
-`risk_cap` rejection stays as the backstop. Existing open positions and plans
-keep the stop they were issued with. Docs that state the 2% rule (`CLAUDE.md`
-and `docs/claude/`, the Codex mirror `AGENTS.md`, strategy-type pages) are
-updated in the release commit so no document still says 2%.
+No plan may be issued with a planned loss above 2.0%. A test asserts this
+across every horizon and both directions, and the `risk_cap` rejection stays
+as the backstop. Existing open positions and plans keep the stop they were
+issued with.
 
 ## Risk
 
-- A 1.0% stop is inside ordinary daily range for volatile tickers, so stops may
-  be hit by noise and win rate may fall. The `tight_stop` flag (stop below the
-  horizon's ATR cushion) stratifies the validation.
-- Risk:reward rises 1.5 -> 2.0, so the geometry-lock clause (median planned RR
-  and mean win R must not fall more than 2%) should pass. The cost falls on the
-  other side: a target twice the stop is reached less often, so **win rate
-  will fall** and volume drops (18 scenarios today against 23 at RR 1.5). The
-  win-rate and expectancy clauses decide; none is relaxed.
-- A 2.5% cap raises the worst-case loss per trade by 25% against the same
-  account size; sizing reads the cap, so position size per trade falls in
-  proportion for stops at the cap.
+- A 1.5% stop sits closer to ordinary daily noise than 2.0%, so win rate may
+  fall. The `tight_stop` flag (stop below the horizon's ATR cushion) stratifies
+  the validation.
+- Volume gain may be too small to matter (1 scenario today). A result that
+  passes the quality clauses but adds almost no alerts is reported as such.
 
 ## Validation
 
