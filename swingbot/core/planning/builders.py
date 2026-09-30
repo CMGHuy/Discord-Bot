@@ -11,6 +11,7 @@ from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION, HORI
 from swingbot.core.risk_limits import capped_planned_loss_pct, planned_loss_pct
 from .plan_types import PlanStatus, TradePlanV2, record_transition
 from . import params as plan_params
+from . import reward_floor
 from .lifecycle import apply_level_lifecycle
 from .stop_scope import DROP, stop_ceiling
 from .params import (DEFAULT_EXPIRY_BARS, STRUCTURE_BUFFER_ATR, TP1_FRACTION,
@@ -220,6 +221,12 @@ _STRUCTURAL_BRANCHES = {
 _STRUCTURAL_BRANCHES.update({name: _short_branch for name in SHORT_STRATEGIES})
 
 
+def _geometry_ok(close, stop, tp1, strategy, horizon_key) -> bool:
+    """A plan needs a real stop distance and (v113 §1) must clear its horizon's
+    strategy-plan reward floor -- the same check backtest._trade_plan_at runs."""
+    return abs(close - stop) > 0 and reward_floor.clears(close, tp1, strategy, horizon_key)
+
+
 def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
                         direction, level_map=None, quality_inputs=None,
                         stop_mult=None, tp2_r=None,
@@ -255,7 +262,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         direction=direction, strategy=strategy, horizon_key=horizon_key,
         level_map=level_map, candidate_levels=candidates)
 
-    if abs(close - stop) <= 0:
+    if not _geometry_ok(close, stop, tp1, strategy, horizon_key):
         return None
 
     entry_type = entry_type_for(strategy, "strategy")

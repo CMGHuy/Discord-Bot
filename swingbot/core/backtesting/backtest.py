@@ -167,6 +167,15 @@ def _short_plan_at(df, i, strategy, horizon_key, direction, entry, atr_val):
     return picked[:2], picked[2]
 
 
+def _floored(entry, stop_loss, take_profit, strategy, horizon_key):
+    """(entry, stop, target), or None when the plan misses its horizon's v113
+    reward floor -- the same planning/reward_floor check build_strategy_plan runs."""
+    from swingbot.core.planning.reward_floor import clears
+    if not clears(entry, take_profit, strategy, horizon_key):
+        return None
+    return entry, stop_loss, take_profit
+
+
 def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_high_series=None, swing_low_series=None, volume_ratio_series=None, entry_levels=None):
     """Sizing lives in plan_engine (single source of truth shared with live
     plans); this wrapper only picks the branch from the precomputed series.
@@ -242,7 +251,7 @@ def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_hi
         direction=direction, strategy=strategy, horizon_key=horizon_key,
         candidate_levels=candidates)
 
-    return entry, stop_loss, take_profit
+    return _floored(entry, stop_loss, take_profit, strategy, horizon_key)
 
 
 def run_backtest(
