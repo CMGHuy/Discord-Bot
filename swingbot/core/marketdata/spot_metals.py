@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from swingbot import config
 from swingbot.core.marketdata.providers.base import SOURCE_SPOT_SCALED
 
-log = logging.getLogger("swing-bot.spot_metals")
+log = logging.getLogger(__name__)
 
 #: spot symbol -> (gold-api.com metal code, Yahoo futures symbol). The single
 #: source of truth: another spot metal is one line here.

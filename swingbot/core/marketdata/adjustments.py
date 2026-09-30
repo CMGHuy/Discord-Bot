@@ -3,7 +3,7 @@ import logging
 
 import pandas as pd
 
-log = logging.getLogger("swing-bot.data_refresh")
+log = logging.getLogger(__name__)
 
 _ADJUSTMENT_MISMATCH_TOLERANCE = 0.01
 _MIN_OVERLAP_BARS = 3

@@ -43,7 +43,7 @@ from .trades import (
     _row_from_trade,
 )
 
-log = logging.getLogger("swing-bot.admin.api_v1")
+log = logging.getLogger(__name__)
 
 _CLOSEABLE_PLAN = (PlanStatus.ACTIVE, PlanStatus.PARTIAL)
 _OPEN_LEGACY = "open"
@@ -76,7 +76,7 @@ def _queue_notify(record: dict) -> None:
             from swingbot.core.db.repositories.notify_queue import notify_queue_repo
             notify_queue_repo().enqueue(record)
     except Exception as exc:
-        log.warning("could not queue manual-close notification: %s", exc)
+        log.warning("could not queue manual-close notification: %s", exc, exc_info=True)
 
 
 def _linked_trade(log_: TradeLog, plan_id: str) -> dict | None:

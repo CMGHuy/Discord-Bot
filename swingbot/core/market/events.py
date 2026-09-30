@@ -24,7 +24,7 @@ from swingbot.core.marketdata.ticker_utils import candidate_symbols
 from swingbot.core.marketdata.universe import is_etf
 from swingbot.core.market.session import market_today
 
-log = logging.getLogger("swing-bot.events")
+log = logging.getLogger(__name__)
 
 # An earnings date is essentially static for weeks at a time -- nothing like
 # get_current_price's 15s TTL is warranted, and the cost of NOT caching this

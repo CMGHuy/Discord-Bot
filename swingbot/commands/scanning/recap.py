@@ -1,9 +1,13 @@
+import logging
+
 from swingbot import config
-from swingbot.bot_core import bot, log
+from swingbot.bot_core import bot
 from swingbot.core.scanning import engine as scan_engine
 from swingbot.core import presentation as ui
 from . import notices
 from .alerts import deep_scan_report
+
+log = logging.getLogger(__name__)
 
 trade_log = scan_engine.trade_log
 
@@ -35,7 +39,7 @@ async def _resolve_retrospective_channel(channel_id_override: int | None = None,
         try:
             channel = await bot.fetch_channel(cid)
         except Exception as exc:
-            log.warning("%s: cannot resolve channel %s: %s", caller, cid, exc)
+            log.warning("%s: cannot resolve channel %s: %s", caller, cid, exc, exc_info=True)
             return None
     return channel
 

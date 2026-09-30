@@ -16,7 +16,7 @@ from swingbot.core.analytics import metrics
 from swingbot.core.analytics.mfe_mae import compute_mfe_mae
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 
-log = logging.getLogger("swing-bot.journal")
+log = logging.getLogger(__name__)
 
 _LOCK = threading.Lock()
 

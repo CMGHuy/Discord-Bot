@@ -14,7 +14,7 @@ from swingbot.core.infra.jsonio import atomic_write_json
 from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
                                        plan_from_dict, plan_to_dict)
 
-log = logging.getLogger("swing-bot.plan_store")
+log = logging.getLogger(__name__)
 _LOCK = threading.Lock()
 
 _OPEN_STATUSES = {PlanStatus.PENDING, PlanStatus.ACTIVE, PlanStatus.PARTIAL}
@@ -33,7 +33,7 @@ class PlanStore:
         except FileNotFoundError:
             return {}
         except (json.JSONDecodeError, KeyError, OSError) as exc:
-            log.warning("plans.json unreadable (%s); starting empty", exc)
+            log.warning("plans.json unreadable (%s); starting empty", exc, exc_info=True)
             return {}
 
     def reload(self) -> None:

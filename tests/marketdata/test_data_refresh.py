@@ -50,7 +50,7 @@ def test_record_does_not_repeat_the_same_regression_forever(tmp_path, caplog):
     _write_frame(tmp_path, "AAA", "daily", "2024-01-01", "2024-01-10")
     state = {"AAA|daily": {"earliest": "2016-01-01"}}
 
-    with caplog.at_level(logging.ERROR, logger="swing-bot.data_refresh"):
+    with caplog.at_level(logging.ERROR, logger=refresh_mod.log.name):
         _record(state, "AAA", "daily", {"status": "fresh", "rows": 10}, str(tmp_path))
         first_pass_errors = len(caplog.records)
         _record(state, "AAA", "daily", {"status": "fresh", "rows": 10}, str(tmp_path))
@@ -63,7 +63,7 @@ def test_record_no_regression_when_earliest_holds_or_deepens(tmp_path, caplog):
     _write_frame(tmp_path, "AAA", "daily", "2015-01-01", "2015-01-10")
     state = {"AAA|daily": {"earliest": "2016-01-01"}}
 
-    with caplog.at_level(logging.ERROR, logger="swing-bot.data_refresh"):
+    with caplog.at_level(logging.ERROR, logger=refresh_mod.log.name):
         _record(state, "AAA", "daily", {"status": "fresh", "rows": 10}, str(tmp_path))
 
     assert "COVERAGE REGRESSION" not in caplog.text

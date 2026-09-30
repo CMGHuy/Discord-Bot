@@ -35,7 +35,7 @@ import pandas as pd
 
 from swingbot.core.analytics.metrics import trade_return_pct
 
-log = logging.getLogger("swing-bot.risk_metrics")
+log = logging.getLogger(__name__)
 
 try:
     import quantstats as qs
@@ -91,7 +91,7 @@ def compute_risk_metrics(closed_trades: list) -> dict | None:
         calmar = (total_return_pct / abs(max_dd)) if max_dd else None
         profit_factor = float(qs.stats.profit_factor(returns, prepare_returns=False))
     except Exception as e:
-        log.warning("Risk metrics computation failed: %s", e)
+        log.warning("Risk metrics computation failed: %s", e, exc_info=True)
         return None
 
     def _clean(x):

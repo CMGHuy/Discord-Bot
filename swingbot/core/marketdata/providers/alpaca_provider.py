@@ -1,6 +1,7 @@
 """v106 Alpaca market-data provider (alpaca-py). Bars: SIP, >=16 min old,
 fully adjusted. Live: last trade on the configured feed, never its volume.
 Every failure is an AlpacaMiss so the router can fall back per symbol."""
+import logging
 from datetime import datetime, time as dtime, timedelta, timezone
 
 import pandas as pd
@@ -11,6 +12,8 @@ from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
 from swingbot.core.marketdata.providers.base import (
     NY, to_alpaca_symbol, to_yf_daily, to_yf_hourly)
+
+log = logging.getLogger(__name__)
 
 SIP_DELAY = timedelta(minutes=16)
 HISTORY_FLOOR = datetime(2016, 1, 1, tzinfo=timezone.utc)
@@ -94,4 +97,7 @@ class AlpacaProvider:
             price = self._fresh_price(snap, now, max_trade_age_s) if sym in by_symbol else None
             if price is not None:
                 out[by_symbol[sym]] = price
+        missing = [t for t in tickers if t not in out]
+        if missing:
+            log.debug("Alpaca snapshot: no fresh price for %s", ", ".join(missing[:10]))
         return out

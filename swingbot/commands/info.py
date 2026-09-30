@@ -1,5 +1,6 @@
 """!strategies, !confidence, !regime, !ticker, !strategycharts, !commands/!help, !ping."""
 import asyncio
+import logging
 import os
 
 import discord
@@ -11,6 +12,8 @@ from swingbot.bot_core import bot, CONFIDENCE_EXPLAINER, COMMANDS_BY_CATEGORY
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS, evaluate_all
 from swingbot.core.charts.trade_chart import generate_all_strategy_charts
+
+log = logging.getLogger(__name__)
 
 
 def format_signal_plan_line(plan) -> str:
@@ -59,6 +62,7 @@ async def ticker_cmd(ctx, ticker: str):
     try:
         df, results, regime = await asyncio.to_thread(_sync_ticker_snapshot, ticker)
     except Exception as e:
+        log.warning("!ticker %s: could not fetch data", ticker, exc_info=True)
         await ctx.send(f"⚠️ Could not fetch data for {ticker}: {e}")
         return
 
@@ -147,6 +151,7 @@ async def strategycharts_cmd(ctx, ticker: str, horizon: str = "4w", direction: s
     try:
         df = await asyncio.to_thread(get_daily_data, ticker, config.DEFAULT_HISTORY_PERIOD)
     except Exception as e:
+        log.warning("!strategycharts %s: could not fetch data", ticker, exc_info=True)
         await ctx.send(f"⚠️ Could not fetch data for {ticker}: {e}")
         return
     if len(df) < MIN_BARS.get(horizon, 0):

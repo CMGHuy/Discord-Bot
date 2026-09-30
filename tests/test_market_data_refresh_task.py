@@ -70,7 +70,7 @@ def test_market_data_refresh_stays_quiet_when_the_budget_is_not_hit(monkeypatch,
     monkeypatch.setattr(scanning_mod, "load_watchlist", lambda: ["AAPL"], raising=False)
     monkeypatch.setattr("swingbot.core.marketdata.data_refresh.refresh_all", fake_refresh_all)
 
-    with caplog.at_level("WARNING", logger="swing-bot"):
+    with caplog.at_level("WARNING"):
         _run(scanning_mod.market_data_refresh.coro())
 
     assert not any("time budget" in r.message for r in caplog.records)

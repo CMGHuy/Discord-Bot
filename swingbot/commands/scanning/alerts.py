@@ -1,14 +1,18 @@
+import logging
 import os
 
 import discord
 
 from swingbot import config
-from swingbot.bot_core import bot, log
+from swingbot.bot_core import bot
 from swingbot.core import presentation as ui
+from swingbot.core.infra.posted_log import log_posted
 from swingbot.core.presentation import kinds
 from swingbot.core.presentation.kinds import Kind
 from swingbot.core.analytics.rank import rank_plans
 from swingbot.core.market.session import market_today
+
+log = logging.getLogger(__name__)
 
 def _ordered_alerts(alerts: list, today=None) -> list:
     """Splits `alerts` (each a (embed, chart_path, plan_or_none) tuple)
@@ -76,6 +80,7 @@ async def _post_daily_digest(channel) -> None:
         if index == 0:
             kwargs["content"] = header
         view.message = await channel.send(**kwargs)
+        log_posted(embed, getattr(plan, "ticker", None), channel, kind=Kind.DIGEST)
 
 
 def cap_alerts(items: list, max_alerts: int | None = None) -> tuple:
@@ -184,11 +189,13 @@ async def _mirror(simple_channel, simple_embed, plan) -> bool:
         return False
     try:
         await simple_channel.send(**ui.push_kwargs(simple_embed))
+        log_posted(simple_embed, getattr(plan, "ticker", None), simple_channel)
     except Exception as exc:
         log.warning("Could not post simple alert for %s to channel %s: %s "
                     "-- full alert will notify instead.",
                     getattr(plan, "ticker", "?"),
-                    getattr(config, "DISCORD_CHANNEL_TRADES_SIMPLE_ID", ""), exc)
+                    getattr(config, "DISCORD_CHANNEL_TRADES_SIMPLE_ID", ""), exc,
+                    exc_info=True)
         return False
     return True
 
@@ -203,6 +210,7 @@ async def _post_alert(send_to, embed, chart_path, plan, mirrored: bool, view_cls
     if view is not None:
         kwargs["view"] = view
     msg = await send_to.send(**kwargs)
+    log_posted(embed, getattr(plan, "ticker", None), send_to)
     if view is not None:
         view.message = msg
 

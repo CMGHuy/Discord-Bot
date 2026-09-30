@@ -13,7 +13,7 @@ import os
 import tempfile
 import time
 
-log = logging.getLogger("swing-bot.jsonio")
+log = logging.getLogger(__name__)
 
 #: `os.replace` is atomic, but on Windows it can still fail transiently with
 #: PermissionError (WinError 5 / 32) when something else holds a handle on
@@ -89,5 +89,5 @@ def read_json(path: str, default):
     except FileNotFoundError:
         return default
     except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
-        log.warning("read_json(%s) failed (%s); returning default", path, exc)
+        log.warning("read_json(%s) failed (%s); returning default", path, exc, exc_info=True)
         return default

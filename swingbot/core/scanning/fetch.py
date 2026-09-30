@@ -11,6 +11,7 @@ from collections import OrderedDict
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait as _futures_wait
 
 from swingbot import config
+from swingbot.core.infra.logsetup import with_current_context
 # `get_current_price` is re-exported: scan_run.py calls it as
 # `fetch.get_current_price`, so it is used even though nothing here calls it.
 from swingbot.core.marketdata.data import get_current_price  # noqa: F401
@@ -22,7 +23,7 @@ from swingbot.core.marketdata import data_refresh, data_store, spot_metals, univ
 from . import runstate
 
 
-log = logging.getLogger("swing-bot.scan_engine")
+log = logging.getLogger(__name__)
 
 #: v106 soak telemetry for the current scan, reset by reset_fetch_stats()
 #: at scan start and read into the telemetry row at scan end.
@@ -177,7 +178,7 @@ def _run_bounded(fn, args: tuple, timeout_seconds: float, label: str):
             try:
                 return future.result()
             except Exception as exc:
-                log.error("%s failed: %s", label, exc)
+                log.error("%s failed: %s", label, exc, exc_info=True)
                 return None
         log.error(
             "%s did not finish within %ss -- killing the worker process and "
@@ -221,7 +222,7 @@ def _fetch_one_ticker(ticker: str) -> tuple:
     try:
         return ticker, get_daily_data(ticker, period=config.DEFAULT_HISTORY_PERIOD)
     except Exception as exc:
-        log.error("Crawl: error fetching data for %s: %s", ticker, exc)
+        log.error("Crawl: error fetching data for %s: %s", ticker, exc, exc_info=True)
         return ticker, None
 
 
@@ -548,7 +549,7 @@ def _daily_frame_for(symbol: str):
     try:
         return get_daily_data(symbol, period=config.DEFAULT_HISTORY_PERIOD)
     except Exception as exc:
-        log.warning("Could not resolve daily frame for %s: %s", symbol, exc)
+        log.warning("Could not resolve daily frame for %s: %s", symbol, exc, exc_info=True)
         return None
 
 
@@ -573,8 +574,12 @@ def map_tickers(fn, tickers: list, workers: int | None = None) -> list:
 
     if n <= 1 or len(tickers) <= 1:
         return [safe(t) for t in tickers]
+    # v111 audit: ThreadPoolExecutor threads start in an empty context, so
+    # without the wrap every worker line would log scan id "-". Spawned
+    # ProcessPoolExecutor children (_run_bounded, the cold fetch) cannot
+    # inherit a ContextVar at all; their outcome is logged by this process.
     with ThreadPoolExecutor(max_workers=n) as pool:
-        return list(pool.map(safe, tickers))
+        return list(pool.map(with_current_context(safe), tickers))
 
 
 

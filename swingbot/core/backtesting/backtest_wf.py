@@ -12,7 +12,7 @@ import logging
 
 from swingbot import config
 
-log = logging.getLogger("swing-bot.backtest_wf")
+log = logging.getLogger(__name__)
 
 #: Fold train windows start 2018-06-01 because that is where the OHLCV
 #: cache starts (scripts/data/fetch_backtest_data.py: START = "2018-06-01").
@@ -108,7 +108,7 @@ def _frame_for(symbol: str):
     try:
         return pd.read_csv(path, index_col=0, parse_dates=True)
     except Exception as exc:
-        log.warning("fold frame unreadable for %s: %s", symbol, exc)
+        log.warning("fold frame unreadable for %s: %s", symbol, exc, exc_info=True)
         return None
 
 

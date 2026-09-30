@@ -890,7 +890,7 @@ def test_regime_at_logs_a_warning_on_a_real_lookup_miss():
 
 
 def test_regime_at_stays_silent_on_no_regimes_at_all(caplog):
-    with caplog.at_level("WARNING", logger="swing-bot.scan_engine"):
+    with caplog.at_level("WARNING", logger="swingbot.core.scanning.analyze"):
         result = analyze._regime_at(None, None)
     assert result is None
     assert not caplog.records  # nothing to diagnose -- there was no series to miss on
@@ -900,7 +900,7 @@ def test_regime_at_returns_the_matching_regime_without_logging(caplog):
     import pandas as pd
 
     regimes = pd.Series(["bull_quiet"], index=pd.to_datetime(["2026-01-02"]))
-    with caplog.at_level("WARNING", logger="swing-bot.scan_engine"):
+    with caplog.at_level("WARNING", logger="swingbot.core.scanning.analyze"):
         result = analyze._regime_at(regimes, pd.Timestamp("2026-01-02"))
     assert result == "bull_quiet"
     assert not caplog.records

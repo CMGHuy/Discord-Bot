@@ -1,7 +1,10 @@
 """Intra-scan and sector-level candidate deduplication."""
+import logging
 from collections import defaultdict
 
 from swingbot import config
+
+log = logging.getLogger(__name__)
 
 
 def _plans_similar(plan_a, plan_b, tol_pct: float = config.DEDUP_TOLERANCE_PCT) -> bool:
@@ -39,6 +42,10 @@ def dedup_scan_items(items: list) -> list:
                 {"strategy": it.result.strategy, "horizon_key": it.result.horizon_key, "level": it.conf.level}
                 for it in cluster
             ]
+            if len(cluster) > 1:
+                log.debug("dedup: %s %s merged %d scenario(s) into %s/%s",
+                          rep.result.ticker, rep.result.trend, len(cluster),
+                          rep.result.strategy, rep.result.horizon_key)
             deduped.append(rep)
 
     return dedup_sector_items(deduped)
@@ -67,10 +74,13 @@ def dedup_sector_items(items: list) -> list:
         sec = getattr(it, "sector", None)
         (by_sector.setdefault(sec, []) if sec else passthrough).append(it)
     out = list(passthrough)
-    for group in by_sector.values():
+    for sector, group in by_sector.items():
         group.sort(key=lambda i: getattr(i, "follow_score", 0) or 0, reverse=True)
         best = group[0]
         best.also_qualifying = [_item_ticker(g) for g in group[1:]]
+        if best.also_qualifying:
+            log.debug("dedup: sector %s kept %s over %s", sector, _item_ticker(best),
+                      ", ".join(best.also_qualifying))
         out.append(best)
     out.sort(key=lambda i: getattr(i, "follow_score", 0) or 0, reverse=True)
     return out

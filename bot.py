@@ -30,8 +30,14 @@ lives under swingbot/:
 
 Run `!commands` in Discord for the full command list.
 """
+import logging
+
 from swingbot import config
-from swingbot.bot_core import bot, log
+from swingbot.bot_core import bot, configure_bot_logging
+
+configure_bot_logging()
+
+log = logging.getLogger(__name__)
 
 # Import each command module so its @bot.command()/@bot.group() decorators
 # register on the shared bot instance. Order doesn't matter functionally,

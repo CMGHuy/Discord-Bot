@@ -38,7 +38,7 @@ from swingbot.core.marketdata.providers import router
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 from swingbot.core.marketdata.adjustments import merge_adjusted
 
-log = logging.getLogger("swing-bot.data_store")
+log = logging.getLogger(__name__)
 
 DATA_DIR = "market_data"
 
@@ -308,7 +308,7 @@ def load_normalized(ticker: str, interval: str, base_dir: str = DATA_DIR) -> pd.
     try:
         df = load_from_disk(ticker, interval, base_dir=base_dir)
     except Exception as exc:
-        log.warning("cache read failed for %s/%s: %s", ticker, interval, exc)
+        log.warning("cache read failed for %s/%s: %s", ticker, interval, exc, exc_info=True)
         return None
     if df is None or df.empty:
         return None
@@ -325,7 +325,7 @@ def load_normalized(ticker: str, interval: str, base_dir: str = DATA_DIR) -> pd.
             df.index = pd.to_datetime(df.index)
         except Exception as exc:
             log.warning("cached frame for %s/%s has an unparseable index: %s",
-                        ticker, interval, exc)
+                        ticker, interval, exc, exc_info=True)
             return None
     if df.index.tz is not None:
         df.index = df.index.tz_localize(None)
@@ -379,7 +379,7 @@ def _default_ranged_fetch(symbol: str, start, interval: str = "1d") -> "pd.DataF
             return None
         return _normalize_columns(df)
     except Exception as exc:  # network flake: skip symbol this run
-        log.warning("ranged fetch %s failed: %s", symbol, exc)
+        log.warning("ranged fetch %s failed: %s", symbol, exc, exc_info=True)
         return None
 
 
@@ -472,7 +472,7 @@ def get_intraday(symbol: str, interval: str = "1h", base_dir: str = DATA_DIR,
     try:
         df = (fetch_fn or _default_fetch)(symbol, interval)
     except Exception as exc:
-        log.warning("intraday fetch %s failed: %s", symbol, exc)
+        log.warning("intraday fetch %s failed: %s", symbol, exc, exc_info=True)
         df = None
     if df is None or df.empty:
         return load_from_disk(symbol, interval, base_dir=base_dir)  # stale > nothing

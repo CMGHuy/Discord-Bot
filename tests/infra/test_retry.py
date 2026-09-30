@@ -61,3 +61,39 @@ def test_does_not_sleep_after_final_attempt(monkeypatch):
         with_retry(always_fails, attempts=3, base_delay=1.0)
 
     assert sleeps == [1.0, 2.0]   # 2 sleeps between 3 attempts, none after the last
+
+import logging
+
+from swingbot.core.infra import retry as retry_mod
+
+
+def test_retry_line_carries_the_full_exception(monkeypatch, caplog):
+    monkeypatch.setattr("swingbot.core.infra.retry.time.sleep", lambda s: None)
+    long_message = "x" * 300
+    attempts = {"n": 0}
+
+    def flaky():
+        attempts["n"] += 1
+        if attempts["n"] < 2:
+            raise ValueError(long_message)
+        return "ok"
+
+    with caplog.at_level(logging.INFO, logger=retry_mod.log.name):
+        assert with_retry(flaky, attempts=3, base_delay=0.0, label="fetch AAPL") == "ok"
+    [line] = [r.getMessage() for r in caplog.records if r.name == retry_mod.log.name]
+    assert line.endswith(long_message)          # no 120-character truncation
+
+
+def test_giving_up_is_a_warning_with_the_traceback(monkeypatch, caplog):
+    monkeypatch.setattr("swingbot.core.infra.retry.time.sleep", lambda s: None)
+
+    def always_fails():
+        raise ConnectionError("curl 28 timeout")
+
+    with caplog.at_level(logging.INFO, logger=retry_mod.log.name):
+        with pytest.raises(ConnectionError):
+            with_retry(always_fails, attempts=2, base_delay=0.0, label="fetch MSFT")
+    [give_up] = [r for r in caplog.records
+                 if r.name == retry_mod.log.name and r.levelno == logging.WARNING]
+    assert "fetch MSFT" in give_up.getMessage() and "2 attempt" in give_up.getMessage()
+    assert give_up.exc_info is not None and give_up.exc_info[0] is ConnectionError

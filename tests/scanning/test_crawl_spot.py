@@ -42,7 +42,7 @@ def _frame(close=4000.0):
 @pytest.fixture
 def crawl(monkeypatch, caplog):
     monkeypatch.setattr(fetch, "ProcessPoolExecutor", _InlinePool)
-    caplog.set_level(logging.INFO, logger="swing-bot.scan_engine")
+    caplog.set_level(logging.INFO, logger=fetch.log.name)
     seen = {"cache": [], "cold": [], "batch": []}
 
     def cached(t):

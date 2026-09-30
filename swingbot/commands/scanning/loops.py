@@ -2,6 +2,7 @@ import asyncio
 import datetime as dt
 import functools
 import json
+import logging
 import os
 
 import discord
@@ -10,15 +11,18 @@ from discord.ext import tasks
 from swingbot import config
 from swingbot.config import auto_reload_if_changed
 from swingbot.core.scanning import engine as scan_engine
-from swingbot.bot_core import bot, in_session, log, SESSION_TZ, install_reload_signal_handler, on_config_reload
+from swingbot.bot_core import bot, in_session, SESSION_TZ, install_reload_signal_handler, on_config_reload
 from swingbot.core.marketdata.data import get_current_price_batch
 from swingbot.core.scanning.fetch import _run_bounded
 from swingbot.core.infra.silent_channel import silence
+from swingbot.core.infra.logsetup import apply_log_level
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core import presentation as ui
 from swingbot.core.marketdata.watchlist import load_watchlist
 from . import notices, presence, recap, runstate
 from .alerts import _send_alerts
+
+log = logging.getLogger(__name__)
 
 trade_log = scan_engine.trade_log
 _ready_announcement_sent = False
@@ -292,18 +296,11 @@ async def config_watcher():
     """
     changed = await asyncio.to_thread(auto_reload_if_changed)
     if changed:
-        # LOG_LEVEL change needs the Python logging level updated too
+        # config.reload() already logged what changed (masked); SIGHUP and
+        # this watcher share the one interval/market-data path below.
         if "LOG_LEVEL" in changed:
-            import logging
-            logging.getLogger().setLevel(getattr(logging, config.LOG_LEVEL, logging.INFO))
-        if "SCAN_INTERVAL_MINUTES" in changed and session_scan.is_running():
-            session_scan.change_interval(minutes=config.SCAN_INTERVAL_MINUTES)
-            log.info("Scan interval hot-reloaded to every %d min (takes effect next tick).",
-                     config.SCAN_INTERVAL_MINUTES)
-        _apply_market_data_refresh_config(changed)
-
-        log.info("Config auto-reloaded from .env -- %d setting(s) changed: %s",
-                 len(changed), ", ".join(f"{k}={v[1]!r}" for k, v in changed.items()))
+            apply_log_level(config.LOG_LEVEL)
+        _apply_scan_interval_change(changed)
 
         # Notify Discord about key setting changes (v110: CONFIG embeds).
         await _post_config_notices(changed)
@@ -318,7 +315,7 @@ async def config_watcher():
             with open(runstate._MANUAL_CLOSE_QUEUE, "r") as _qf:
                 _queued = json.load(_qf)
         except Exception as _qe:
-            log.warning("Could not read manual_close_notify queue: %s", _qe)
+            log.warning("Could not read manual_close_notify queue: %s", _qe, exc_info=True)
             _queued = []
     else:
         _queued = []
@@ -332,21 +329,21 @@ async def config_watcher():
                 await notify_closed_trades(bot, _queued)
                 log.info("Posted %d manually-closed trade notification(s) to Discord.", len(_queued))
             except Exception as _ne:
-                log.warning("Failed to post manual-close notifications: %s", _ne)
+                log.warning("Failed to post manual-close notifications: %s", _ne, exc_info=True)
 
     # --- Admin UI "Run !check now" trigger ---
     if runstate.is_trigger_requested():
         runstate.clear_trigger()
         log.info("Admin UI triggered a manual !check scan.")
         if not config.DISCORD_CHANNEL_TRADES_ID:
-            log.warning("CHANNEL_ID not set; cannot post scan results.")
+            log.warning("DISCORD_CHANNEL_TRADES_ID not set; cannot post scan results.")
             return
         channel = silence(bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
         if channel is None:
             try:
                 channel = silence(await bot.fetch_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
             except Exception as _ce:
-                log.warning("Could not resolve channel %s for triggered scan: %s", config.DISCORD_CHANNEL_TRADES_ID, _ce)
+                log.warning("Could not resolve channel %s for triggered scan: %s", config.DISCORD_CHANNEL_TRADES_ID, _ce, exc_info=True)
                 return
         min_lv = config.MIN_ALERT_CONFIDENCE_LEVEL
         # Post a live-updating progress message — same UX as the Discord
@@ -452,14 +449,14 @@ async def _post_plan_events(plan_events) -> None:
     try:
         deliveries = await notify_plan_events(bot, plan_events)
     except Exception as exc:
-        log.warning("trade_monitor: failed to post plan events: %s", exc)
+        log.warning("trade_monitor: failed to post plan events: %s", exc, exc_info=True)
         return
     if not deliveries:
         return
     try:
         await asyncio.to_thread(plan_manager.ack_notified, deliveries)
     except Exception as exc:
-        log.warning("trade_monitor: could not record feed deliveries (they will be re-sent): %s", exc)
+        log.warning("trade_monitor: could not record feed deliveries (they will be re-sent): %s", exc, exc_info=True)
 
 
 async def _resend_plan_notices() -> None:
@@ -468,10 +465,34 @@ async def _resend_plan_notices() -> None:
     try:
         events = await asyncio.to_thread(plan_manager.run_notice_sweep)
     except Exception as exc:
-        log.warning("trade_monitor: notice sweep failed: %s", exc)
+        log.warning("trade_monitor: notice sweep failed: %s", exc, exc_info=True)
         return
     if events:
         await _post_plan_events(events)
+
+
+async def _live_price_batch(tickers: list) -> dict:
+    """Fresh-only live prices for the trade monitor, or {} on failure.
+
+    One Yahoo request for the whole open book avoids a serial minute-history
+    request per ticker. Fresh-only (allow_stale=False): acting on an old
+    print could falsely close a trade or satisfy an exit transition.
+    Routed through scanning.fetch._run_bounded, not a bare asyncio.to_thread
+    (2026-09-17 incident): a hung yfinance call would otherwise wedge this
+    @tasks.loop forever. A PROCESS, deliberately -- see _run_bounded.
+
+    A failure is a WARNING (was DEBUG until v111): while it lasts, no open
+    trade is checked against its stop or target."""
+    if not tickers:
+        return {}
+    try:
+        return await asyncio.to_thread(
+            _run_bounded, functools.partial(get_current_price_batch, allow_stale=False),
+            (tickers,), float(getattr(config, "LIVE_PRICE_TIMEOUT_SECONDS", 60)),
+            f"trade_monitor: live-price batch of {len(tickers)} ticker(s)") or {}
+    except Exception as exc:
+        log.warning("trade_monitor: batch price fetch failed: %s", exc, exc_info=True)
+        return {}
 
 
 @tasks.loop(seconds=60)
@@ -513,32 +534,7 @@ async def trade_monitor():
     tickers = list({t["ticker"] for t in open_trades})
     all_newly_closed = []
 
-    # One Yahoo request for the whole open book avoids a serial minute-history
-    # request per ticker.  The batch helper is explicitly fresh-only here:
-    # UI callers may show its last-known-good fallback, but acting on an old
-    # print could falsely close a trade or satisfy an exit transition.
-    #
-    # Routed through scanning.fetch._run_bounded, not a bare
-    # asyncio.to_thread (2026-09-17 incident): a hung yfinance call has no
-    # exception and no CPU use to signal it, and this loop's own
-    # @tasks.loop(seconds=60) does not schedule its next tick until this
-    # coroutine returns -- an unbounded hang here wedges the WHOLE loop,
-    # silently, forever, and it is one of the two places (this and
-    # plan_manager._price_batch_fn) responsible for ever closing a trade
-    # between full scans. _run_bounded reused as-is, deliberately a
-    # PROCESS rather than a thread -- see its own docstring for the
-    # production history this repeats and why a thread can't stand in.
-    if tickers:
-        try:
-            live_prices = await asyncio.to_thread(
-                _run_bounded, functools.partial(get_current_price_batch, allow_stale=False),
-                (tickers,), float(getattr(config, "LIVE_PRICE_TIMEOUT_SECONDS", 60)),
-                f"trade_monitor: live-price batch of {len(tickers)} ticker(s)") or {}
-        except Exception as exc:
-            log.debug("trade_monitor: batch price fetch failed: %s", exc)
-            live_prices = {}
-    else:
-        live_prices = {}
+    live_prices = await _live_price_batch(tickers)
 
     for ticker in tickers:
         live = live_prices.get(ticker)
@@ -547,7 +543,7 @@ async def trade_monitor():
         try:
             closed = await asyncio.to_thread(trade_log.close_if_live_price_hit, ticker, live)
         except Exception as exc:
-            log.warning("trade_monitor: close_if_live_price_hit failed for %s: %s", ticker, exc)
+            log.warning("trade_monitor: close_if_live_price_hit failed for %s: %s", ticker, exc, exc_info=True)
             continue
         if closed:
             log.info("trade_monitor: %d trade(s) closed for %s (live=%.4f)", len(closed), ticker, live)
@@ -563,7 +559,7 @@ async def trade_monitor():
         try:
             near_tp_closed = await asyncio.to_thread(trade_log.check_near_tp_timeout, ticker, live)
         except Exception as exc:
-            log.warning("trade_monitor: check_near_tp_timeout failed for %s: %s", ticker, exc)
+            log.warning("trade_monitor: check_near_tp_timeout failed for %s: %s", ticker, exc, exc_info=True)
             continue
         if near_tp_closed:
             log.info("trade_monitor: %d trade(s) closed for %s via near-TP timeout (live=%.4f)",
@@ -575,7 +571,7 @@ async def trade_monitor():
     try:
         plan_events = await asyncio.to_thread(plan_manager.run_manager_tick)
     except Exception as exc:
-        log.warning("trade_monitor: plan manager tick failed: %s", exc)
+        log.warning("trade_monitor: plan manager tick failed: %s", exc, exc_info=True)
         plan_events = []
     if plan_events:
         await _post_plan_events(plan_events)
@@ -585,7 +581,7 @@ async def trade_monitor():
         try:
             await notify_closed_trades(bot, all_newly_closed)
         except Exception as exc:
-            log.warning("trade_monitor: failed to post close notifications: %s", exc)
+            log.warning("trade_monitor: failed to post close notifications: %s", exc, exc_info=True)
         await presence._refresh_presence()
 
 
@@ -656,8 +652,8 @@ async def daily_recap():
     _mark_scheduled_job_fired('daily_recap', today)
     try:
         await recap._post_retrospective()
-    except Exception as exc:
-        log.exception("daily_recap: failed to post retrospective: %s", exc)
+    except Exception:
+        log.exception("daily_recap: failed to post retrospective")
 
 
 
@@ -766,8 +762,8 @@ async def market_data_refresh():
             refresh_all, symbols, timeframes, sleep_seconds=0.3,
             deadline_seconds=config.MARKET_DATA_REFRESH_BUDGET_SECONDS,
         )
-    except Exception as exc:
-        log.exception("market_data_refresh: refresh failed: %s", exc)
+    except Exception:
+        log.exception("market_data_refresh: refresh failed")
         return
 
     line = summary_line(result)
@@ -891,7 +887,7 @@ async def on_ready():
         synced = await bot.tree.sync()
         log.info("Synced %d slash command(s) to Discord.", len(synced))
     except Exception as e:
-        log.warning("Failed to sync slash commands: %s", e)
+        log.warning("Failed to sync slash commands: %s", e, exc_info=True)
 
     # A visible timestamp in Discord for when the bot came (back) online.
     await _post_bot_online(wl_size)

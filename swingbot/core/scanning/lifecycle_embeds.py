@@ -11,6 +11,7 @@ from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, ge
 from swingbot.core.market.strategy import HORIZONS
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
 from swingbot.core import presentation as ui
+from swingbot.core.infra.posted_log import log_posted
 from swingbot.core.presentation import kinds
 from swingbot.core.presentation.instructions import total_r
 from swingbot.core.presentation.kinds import Kind
@@ -20,7 +21,7 @@ from .alert_embeds import strategy_plan_line
 from .execution_embeds import plan_levels_block, plan_result_block
 from .plan_table import banked_leg_pct_and_amount, partial_position_line, signed_money
 
-log = logging.getLogger("swing-bot.scan_engine")
+log = logging.getLogger(__name__)
 def regenerate_chart_for_trade(trade: dict) -> str | None:
     # A closed trade's chart never changes once closed (same OHLCV window,
     # same levels) -- if the deterministic file from a prior regen already
@@ -81,7 +82,7 @@ def regenerate_chart_for_trade(trade: dict) -> str | None:
             trendline_fit=trade.get("trendline_fit"),
         )
     except Exception as e:
-        log.warning("Could not regenerate chart for trade %s: %s", trade.get("id"), e)
+        log.warning("Could not regenerate chart for trade %s: %s", trade.get("id"), e, exc_info=True)
         return None
 
 
@@ -226,7 +227,7 @@ async def notify_closed_trades(bot, newly_closed: list):
         try:
             channel = await bot.fetch_channel(int(config.DISCORD_CHANNEL_TRADES_HISTORY_ID))
         except Exception as _ce:
-            log.warning("Could not resolve closed-trades channel %s: %s", config.DISCORD_CHANNEL_TRADES_HISTORY_ID, _ce)
+            log.warning("Could not resolve closed-trades channel %s: %s", config.DISCORD_CHANNEL_TRADES_HISTORY_ID, _ce, exc_info=True)
             return
     for trade in newly_closed:
         status = trade.get("status", "")
@@ -234,9 +235,11 @@ async def notify_closed_trades(bot, newly_closed: list):
             continue   # skip anything unexpected (still-open, etc.)
         try:
             # v110: the registry push line replaces the old ✅ WIN — **TICK** header.
-            await channel.send(**ui.push_kwargs(build_closed_trade_embed(trade)))
+            embed = build_closed_trade_embed(trade)
+            await channel.send(**ui.push_kwargs(embed))
+            log_posted(embed, trade.get("ticker"), channel)
         except Exception as e:
-            log.warning("Could not post closed-trade notification for %s: %s", trade.get("id"), e)
+            log.warning("Could not post closed-trade notification for %s: %s", trade.get("id"), e, exc_info=True)
 
 
 def build_near_close_embed(warning: dict) -> discord.Embed:
@@ -272,13 +275,15 @@ async def notify_near_close(bot, warnings: list):
         try:
             channel = await bot.fetch_channel(int(config.DISCORD_CHANNEL_TRADES_HISTORY_ID))
         except Exception as _ce:
-            log.warning("Could not resolve closed-trades channel %s: %s", config.DISCORD_CHANNEL_TRADES_HISTORY_ID, _ce)
+            log.warning("Could not resolve closed-trades channel %s: %s", config.DISCORD_CHANNEL_TRADES_HISTORY_ID, _ce, exc_info=True)
             return
     for warning in warnings:
         try:
-            await channel.send(**ui.push_kwargs(build_near_close_embed(warning)))
+            embed = build_near_close_embed(warning)
+            await channel.send(**ui.push_kwargs(embed))
+            log_posted(embed, warning["trade"].get("ticker"), channel)
         except Exception as e:
-            log.warning("Could not post near-close warning for %s: %s", warning["trade"].get("id"), e)
+            log.warning("Could not post near-close warning for %s: %s", warning["trade"].get("id"), e, exc_info=True)
 
 
 #: v2 plan transition -> registry kind (v110 §2). "closed" is keyed by reason below.
@@ -447,13 +452,16 @@ async def notify_plan_events(bot, events) -> list:
                 continue
             if event.transition not in STOP_EVENTS | NOTICE_EVENTS:
                 if history is not None:
-                    await history.send(**ui.push_kwargs(build_plan_event_embed(plan, event)))
+                    status_embed = build_plan_event_embed(plan, event)
+                    await history.send(**ui.push_kwargs(status_embed))
+                    log_posted(status_embed, plan.ticker, history)
                 continue
             embed = build_instruction_embed(plan, event)
             pinged = False
             if feed is not None:
                 try:
                     await feed.send(**ui.push_kwargs(embed))
+                    log_posted(embed, plan.ticker, feed)
                     pinged = True
                 except Exception as exc:
                     _warn_throttled(plan.plan_id, "execution feed: %s for plan %s failed "
@@ -462,6 +470,7 @@ async def notify_plan_events(bot, events) -> list:
             if history is not None:
                 try:
                     await (silence(history) if pinged else history).send(**ui.push_kwargs(embed))
+                    log_posted(embed, plan.ticker, history)
                     pinged = True
                 except Exception as exc:
                     _warn_throttled(plan.plan_id, "execution feed: history copy of %s for "

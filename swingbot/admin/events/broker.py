@@ -38,7 +38,7 @@ from swingbot.admin.api_v1 import ApiError, iso
 
 from .watcher import FileWatcher
 
-log = logging.getLogger("swing-bot.admin.events")
+log = logging.getLogger(__name__)
 
 #: Concurrent event connections. Spec Decision 5: the cap exists so that a
 #: reconnect bug in the client leaks visibly and boundedly instead of

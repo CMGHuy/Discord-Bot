@@ -96,7 +96,7 @@ def _build_directory() -> list[dict]:
                 seen.add(row["symbol"])
                 rows.append(row)
         except Exception as exc:
-            log.warning("Could not download ticker directory from %s: %s", url, exc)
+            log.warning("Could not download ticker directory from %s: %s", url, exc, exc_info=True)
     return rows
 
 
@@ -107,7 +107,7 @@ def _save_cache(rows: list[dict]) -> None:
         with open(_CACHE_PATH, "w") as f:
             json.dump({"fetched_at": time.time(), "rows": rows}, f)
     except OSError as exc:
-        log.warning("Could not write ticker directory cache: %s", exc)
+        log.warning("Could not write ticker directory cache: %s", exc, exc_info=True)
 
 
 def _load_cache() -> tuple[list[dict], float]:

@@ -45,7 +45,7 @@ from .singletons import trade_log
 from . import risk_features
 
 
-log = logging.getLogger("swing-bot.scan_engine")
+log = logging.getLogger(__name__)
 
 
 def veto_bullish_for(df) -> bool:
@@ -99,8 +99,7 @@ class ScanItem:
         return all(r.passed for r in self.requirements) if self.requirements else True
 
 
-def paper_trade_decision(item: ScanItem, already_open: bool) -> tuple[bool, str | None]:
-    """Whether this item is logged, and the ticket's explanation when not."""
+def _decision_for(item: ScanItem, already_open: bool) -> tuple[bool, str | None]:
     if already_open:
         return False, "already open"
     unmet = [f"{requirement.label}: {requirement.detail}"
@@ -108,6 +107,21 @@ def paper_trade_decision(item: ScanItem, already_open: bool) -> tuple[bool, str 
     if unmet:
         return False, "unmet: " + "; ".join(unmet)
     return True, None
+
+
+def paper_trade_decision(item: ScanItem, already_open: bool) -> tuple[bool, str | None]:
+    """Whether this item is logged, and the ticket's explanation when not."""
+    allowed, reason = _decision_for(item, already_open)
+    if not allowed:
+        log.debug("gate: %s (%s) not logged -- %s", getattr(item.result, "ticker", "?"),
+                  getattr(item.result, "horizon_key", "?"), reason)
+    return allowed, reason
+
+
+def _reject_plan(item, reason: str, ticker: str, horizon_key: str) -> None:
+    """Record why no v2 plan was attached; say so at DEBUG (per symbol, per scan)."""
+    item.plan_v2_rejected = reason
+    log.debug("gate: %s (%s) plan rejected -- %s", ticker, horizon_key, reason)
 
 
 # Points-per-component ceiling for the decision chart's quality box (E66),
@@ -356,7 +370,7 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             # the legacy scenario numbers (which is what plan_numbers_for_display
             # does for plan=None, and would silently re-post the very prices
             # this change exists to stop posting).
-            item.plan_v2_rejected = "no_qualifying_target"
+            _reject_plan(item, "no_qualifying_target", ticker, horizon_key)
             return
         if planned_loss_pct(plan.trigger_price, plan.stop_loss) > HARD_MAX_PLANNED_LOSS_PCT + 1e-9:
             # Scenario building keeps the horizon's wider stop ceiling so
@@ -365,7 +379,7 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             # stop_entry plan is cancelled_risk_cap on fill and a market plan
             # would open in breach of the 2% rule. Posting it only issues an
             # alert the bot then cancels seconds later (GC=F, 2026-09-28).
-            item.plan_v2_rejected = "risk_cap"
+            _reject_plan(item, "risk_cap", ticker, horizon_key)
             return
         # item.plan_v2 is set BEFORE risk_features stamping (below) is even
         # attempted -- a render-only feature's stamping failure must never
