@@ -22,7 +22,6 @@ DAY = dt.datetime(2026, 8, 27, 12, 0, tzinfo=US_MARKET_TZ)
 @pytest.fixture(autouse=True)
 def _pinned_flags(monkeypatch):
     monkeypatch.setattr(config, "INTRADAY_RTH_ONLY", True)
-    monkeypatch.setattr(config, "EXTENDED_HOURS_EXIT_CHECK", True)
     monkeypatch.setattr(config, "TRAIL_NOTIFY_MIN_R", 0.25)
     monkeypatch.setattr(config, "PYRAMIDING_ENABLED", False)
 

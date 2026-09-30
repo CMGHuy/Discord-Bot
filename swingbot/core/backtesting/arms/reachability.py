@@ -68,7 +68,6 @@ REGISTRY: dict[str, Reach] = {
     "OPEX_SIZE_REDUCTION_PCT": _outside("Position sizing; replay records plan prices and exits only."),
     "PYRAMIDING_ENABLED": _outside("Live portfolio decision after a plan is open."),
     "PLAN_ENGINE_V2": _outside("Replay is the v2 plan path by construction."),
-    "SCALE_OUT_ENABLED": _outside("Engines always simulate scale_out=True; switch is not a replay dimension."),
     "DEAD_CAT_BOUNCE_VETO": _outside(_DCB), "DCB_DECLINE_PCT": _outside(_DCB),
     "DCB_GAP_REQUIRED": _outside(_DCB), "DCB_VOLUME_RATIO": _outside(_DCB),
 }

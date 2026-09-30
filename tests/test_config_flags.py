@@ -3,7 +3,6 @@ from swingbot import config
 
 def test_flags_default_to_fully_live():
     assert config.PLAN_ENGINE_V2 == "on"
-    assert config.SCALE_OUT_ENABLED is True
     assert config.INTRADAY_MANAGER_V2 is True
 
 
@@ -57,23 +56,18 @@ def test_intraday_rth_only_defaults_on():
     assert config.INTRADAY_RTH_ONLY is True
 
 
-def test_v70_extended_hours_fields_exist_with_documented_defaults():
-    """v70: the extended-hours exit check ships on, the quiet window is
-    23:00-08:00 Berlin time (the operator's own clock, not the market's),
-    and a breach needs two consecutive polls to confirm."""
+def test_quiet_window_fields_exist_with_documented_defaults():
+    """The quiet window is 23:00-08:00 Berlin time (the operator's own clock,
+    not the market's). The v70 extended-hours exit mode and its debounce
+    were removed with the plan manager's extended-hours step."""
     by_key = {f.key: f for f in config.FIELDS}
 
-    assert by_key["EXTENDED_HOURS_EXIT_CHECK"].default == "true"
     assert by_key["QUIET_HOURS_START_BERLIN"].default == "23"
     assert by_key["QUIET_HOURS_END_BERLIN"].default == "8"
-    assert by_key["EXTENDED_HOURS_DEBOUNCE_TICKS"].default == "2"
-
-    assert isinstance(config.EXTENDED_HOURS_EXIT_CHECK, bool)
     assert isinstance(config.QUIET_HOURS_START_BERLIN, int)
     assert isinstance(config.QUIET_HOURS_END_BERLIN, int)
-    assert isinstance(config.EXTENDED_HOURS_DEBOUNCE_TICKS, int)
-
-    assert by_key["EXTENDED_HOURS_EXIT_CHECK"].section == "Plan Engine v2"
+    assert "EXTENDED_HOURS_EXIT_CHECK" not in by_key
+    assert "EXTENDED_HOURS_DEBOUNCE_TICKS" not in by_key
 
 
 def test_health_config_fields_exist_with_documented_defaults():

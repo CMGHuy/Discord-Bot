@@ -71,7 +71,7 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   scale_out=True)` uses the same simulator, so live behavior equals
   backtested behavior. That is an **invariant this repo maintains, not one the code structure guarantees**: the live path polls a tape every 60s while the simulator walks daily bars, and v64 fixed extended-hours prints and sampled-tick stop fills. Any new live-path exit rule must name the simulator line it matches.
   **Exception, by explicit trader decision (2026-09-10):** the runner's stop
-  and TP2 checks in `_step_partial`/`_extended_candidate_partial` no longer
+  and TP2 checks in `_step_partial` no longer
   wait for the session after TP1 fires (v64's `runner_floor_session` guard,
   "same-session moved stops") — they fire the instant price crosses, same
   session or not. A production runner (NBIS, 2026-09-08) spiked through TP2
@@ -81,13 +81,11 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   simulator (`plan_engine._scale_out_exit_walk`) was deliberately NOT
   changed to match — re-measuring its numbers is a backtest re-registration,
   not a quick edit; see `backtest-methodology.md`.
-  v70 then reopened exactly one capability outside those hours: `poll()` gates
-  three ways (quiet window → nothing; regular → the full `_step()`; otherwise
-  → `_step_extended()`), and the extended branch may only close a plan that
-  has finished — a confirmed stop breach, or the last remaining target — after
-  `EXTENDED_HOURS_DEBOUNCE_TICKS` consecutive polls agree. Break-even arming,
-  TP1 partials, the chandelier ratchet and pending fills stay regular-hours
-  only, so the simulator still has nothing to match outside 09:30–16:00 ET.
+  Since 2026-09-14 `poll()` has exactly one gate, the operator's Berlin-local
+  quiet window (`is_quiet_hours`): outside it the full `_step()` runs on every
+  tick, extended hours included. v70's narrower debounced, terminal-closes-only
+  `_step_extended` mode (and its `EXTENDED_HOURS_*` settings) is gone, so
+  extended-hours prints can move plans the daily-bar simulator never modelled.
   `planning/plan_manager.py` +
   `planning/plan_store.py` drive the live lifecycle from the 60s monitor;
   `backtesting/backtest_scenarios.py` replays the confluence scan
@@ -103,8 +101,8 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   `plan_numbers_for_display()` in embeds.py is THE cutover switch deciding
   whether alerts show legacy scenario numbers or v2 plan numbers — route any
   new consumer of plan prices through it. Rollout flags (`PLAN_ENGINE_V2`
-  off/shadow/on, `SCALE_OUT_ENABLED`, `INTRADAY_MANAGER_V2`) are documented in
-  the README; `shadow` mode logs to `data/shadow_plans.jsonl` via
+  off/shadow/on, `INTRADAY_MANAGER_V2`) are documented in
+  `docs/features/features-plan-engine.md`; scale-out is always on; `shadow` mode logs to `data/shadow_plans.jsonl` via
   `backtesting/shadow_log.py`.
 - **Opex-day caution (v44):** `swingbot/core/market/opex.py` holds both the
   US options-expiration calendar (`opex_tier` -> `"monthly"`/`"weekly"`/None,

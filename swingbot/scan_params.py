@@ -51,7 +51,6 @@ class ScanParams:
     regime_gates_enabled: bool
     pyramiding_enabled: bool
     plan_engine_v2: bool
-    scale_out_enabled: bool
     universe_min_dollar_vol: float
     universe_min_price: float
     dead_cat_bounce_veto: bool
@@ -104,7 +103,6 @@ class ScanParams:
             regime_gates_enabled=config.REGIME_GATES_ENABLED,
             pyramiding_enabled=config.PYRAMIDING_ENABLED,
             plan_engine_v2=config.PLAN_ENGINE_V2,
-            scale_out_enabled=config.SCALE_OUT_ENABLED,
             universe_min_dollar_vol=config.UNIVERSE_MIN_DOLLAR_VOL,
             universe_min_price=config.UNIVERSE_MIN_PRICE,
             dead_cat_bounce_veto=config.DEAD_CAT_BOUNCE_VETO,

@@ -23,16 +23,16 @@ to every command that fetches data or renders a chart: `!check`,
 Every trade plan the bot emits can be produced by one shared engine
 (`swingbot/core/planning/plan_engine.py`) whose exit behavior was backtested under a
 train/validation split — so live behavior equals backtested behavior by
-construction. Rollout is gated by three flags (all in `.env` / the admin
+construction. Rollout is gated by two flags (all in `.env` / the admin
 UI's "Plan Engine v2" section, hot-reloadable):
 
 | Flag | Values | Meaning |
 |---|---|---|
 | `PLAN_ENGINE_V2` | `off` / `shadow` / `on` | `off` = legacy behavior. `shadow` = v2 plans are computed and logged to `data/shadow_plans.jsonl` during scans but not posted (parity evidence for the cutover — compare with `python scripts/reports/shadow_parity_report.py`). `on` = alerts price and emit v2 plans. |
-| `SCALE_OUT_ENABLED` | `true`/`false` | At TP1, close 50% and move the stop to the **runner floor** — entry plus 2/3 of the entry→TP1 move (v39; it was plain break-even before) — while the runner rides toward TP2 with a chandelier ATR trail that only ratchets that floor further into profit. Enable only after `PLAN_ENGINE_V2=on` has run cleanly. |
+| *(always on)* | — | Scale-out: at TP1, close 50% and move the stop to the **runner floor** — entry plus 2/3 of the entry→TP1 move (v39; it was plain break-even before) — while the runner rides toward TP2 with a chandelier ATR trail that only ratchets that floor further into profit. Its `SCALE_OUT_ENABLED` switch was removed: nothing read it. |
 | `INTRADAY_MANAGER_V2` | `true`/`false` | The 60s monitor manages the full plan lifecycle (PENDING → ACTIVE → PARTIAL → CLOSED): entry triggers, break-even moves, TP1 partials, runner trail, invalidation — with a Discord alert per transition. `!plans` shows the live board. |
 
-**Defaults ship fully live** (`PLAN_ENGINE_V2=on`, `SCALE_OUT_ENABLED=true`,
+**Defaults ship fully live** (`PLAN_ENGINE_V2=on`,
 `INTRADAY_MANAGER_V2=true`) so a fresh deployment runs the validated engine
 immediately with no staged rollout required. If you'd rather stage it
 yourself: `shadow` for ≥5 scan sessions (compare against legacy numbers via

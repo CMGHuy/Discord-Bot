@@ -99,8 +99,8 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   age. Anything that acts on the answer (the plan manager's `_price_fn`,
   `trade_monitor`, reversal and manual-close fills) passes
   `allow_stale=False` and skips on None: a repeated cached print counts as a
-  fresh confirming tick for `EXTENDED_HOURS_DEBOUNCE_TICKS` (2) and fills at a
-  price that stopped being current an unknown time ago (fixed 2026-09-11).
+  fresh confirming tick (under v70's since-removed extended-hours debounce) and
+  fills at a price that stopped being current an unknown time ago (fixed 2026-09-11).
 - **A trade row and its v2 plan close together, or the plan manager keeps
   managing a position that no longer exists.** `PlanManager.poll()` re-reads
   each plan after its price fetch (the admin closes plans from another

@@ -35,10 +35,10 @@ docker compose up -d --build
 
 ### Plan Engine v2 rollout flags
 
-Three hot-reloadable `.env` flags stage the v2 plan engine rollout
-(details in the README's "Plan Engine v2" section): `PLAN_ENGINE_V2`
-(`off`/`shadow`/`on`), `SCALE_OUT_ENABLED`, `INTRADAY_MANAGER_V2`. All
-three **default to fully live** (`on`/`true`/`true`) so a fresh deployment
+Two hot-reloadable `.env` flags stage the v2 plan engine rollout
+(details in `docs/features/features-plan-engine.md`): `PLAN_ENGINE_V2`
+(`off`/`shadow`/`on`) and `INTRADAY_MANAGER_V2`; scale-out at TP1 is always
+on. Both **default to fully live** (`on`/`true`) so a fresh deployment
 runs the validated engine immediately — flipping them requires no
 container restart (hot reload picks them up). If you'd rather stage the
 rollout yourself: run `shadow` for ≥5 scan sessions and check

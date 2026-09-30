@@ -513,13 +513,6 @@ FIELDS: list[Field] = [
                "balance. This is what actually guarantees a fixed max loss per trade -- a %-only risk setting "
                "silently stops meaning that the moment the balance changes. Set to 0 to disable. Live-editable "
                "with `!account maxrisk <amount>`."),
-    Field("DD_THROTTLE_ENABLED", "DD_THROTTLE_ENABLED", "Account Defaults",
-          "Drawdown throttle ladder enabled",
-          type="checkbox", default="false",
-          help="Enable a mechanical drawdown-based risk multiplier that cuts position size as equity "
-               "drawdown deepens: no cut at 0-8% DD, 0.75x at 8-12%, 0.50x at 12-16%, 0.25x at 16-20%, "
-               "and 0.0x (new entries paused) above 20%. Once paused, entries resume only after DD recovers "
-               "below 15% (hysteresis prevents flapping at the 20% line)."),
     Field("KILLSWITCH_DEFAULT_ON", "KILLSWITCH_DEFAULT_ON", "Account Defaults",
           "Kill switch engaged by default",
           type="checkbox", default="false",
@@ -586,16 +579,6 @@ FIELDS: list[Field] = [
                "on = scan alerts price and emit v2 plans (badges, TP1/TP2, entry triggers). "
                "Defaults to 'on' for immediate deployment; set to 'shadow' first if you'd rather "
                "compare against legacy numbers for a few sessions before trusting it live."),
-    Field("SCALE_OUT_ENABLED", "SCALE_OUT_ENABLED", "Plan Engine v2", "Scale-out exits enabled",
-          type="checkbox", default="true",
-          help="At TP1, close 50% and move the stop to the runner floor -- entry plus 2/3 of "
-               "the entry-to-TP1 move (v39, was plain break-even) -- while the runner rides "
-               "toward TP2 behind a chandelier ATR trail that only ever ratchets that floor "
-               "further into profit. STALE NUMBERS: the win-rate/expectancy figures in README's "
-               "Plan Engine v2 section were measured under the pre-v39 break-even floor and have "
-               "not been re-measured against this one. v39 is strictly more protective of realized "
-               "gains, never less, so it shipped without a fresh pre-registration; a TRAIN/"
-               "VALIDATION run against the new floor is future work, not a gate this shipped behind."),
     Field("INTRADAY_MANAGER_V2", "INTRADAY_MANAGER_V2", "Plan Engine v2", "Intraday plan manager enabled",
           type="checkbox", default="true",
           help="The 60s monitor manages the full plan lifecycle: pending entry triggers, break-even "
@@ -604,14 +587,6 @@ FIELDS: list[Field] = [
           "Manage plans only during regular US trading hours", type="checkbox", default="true",
           help="The 60s plan manager ticks only Mon-Fri 09:30-16:00 America/New_York. "
                "Set false only to reproduce pre-v64 24/7 behaviour."),
-    Field("EXTENDED_HOURS_EXIT_CHECK", "EXTENDED_HOURS_EXIT_CHECK", "Plan Engine v2",
-          "Close on stop/target hits during premarket and after-hours", type="checkbox",
-          default="true",
-          help="Outside regular hours but outside the quiet window below, check open plans "
-               "for a confirmed stop-loss or final-target hit and close immediately -- no "
-               "break-even arming, TP1 partial-banking or trailing-stop updates outside "
-               "regular hours, only a terminal close. Set false to reproduce pre-v70 "
-               "behaviour (fully dark outside 09:30-16:00 ET)."),
     Field("QUIET_HOURS_START_BERLIN", "QUIET_HOURS_START_BERLIN", "Plan Engine v2",
           "Quiet hours start (Berlin time, 24h)", type="number", default="23", min=0, max=23, step=1,
           help="No plan monitoring at all from this hour (Europe/Berlin) through "
@@ -621,11 +596,6 @@ FIELDS: list[Field] = [
     Field("QUIET_HOURS_END_BERLIN", "QUIET_HOURS_END_BERLIN", "Plan Engine v2",
           "Quiet hours end (Berlin time, 24h)", type="number", default="8", min=0, max=23, step=1,
           help="Extended-hours exit checks resume at this hour (Europe/Berlin)."),
-    Field("EXTENDED_HOURS_DEBOUNCE_TICKS", "EXTENDED_HOURS_DEBOUNCE_TICKS", "Plan Engine v2",
-          "Extended-hours confirmation ticks", type="number", default="2", min=1, max=5, step=1,
-          help="Consecutive 60s extended-hours polls that must confirm a stop/target breach "
-               "before closing -- guards against a single thin premarket/after-hours print "
-               "(see v64's Divergence B) triggering a close a liquid market never would have."),
     Field("TRAIL_NOTIFY_MIN_R", "TRAIL_NOTIFY_MIN_R", "Plan Engine v2",
           "Stop-move ping threshold (R)", type="float", default="0.25",
           min=0.01, max=1.0, step=0.05,
@@ -693,14 +663,6 @@ FIELDS: list[Field] = [
     Field("ADMIN_PORT", "ADMIN_PORT", "Admin UI", "Admin UI port",
           type="number", default="1234", min=1, max=65535, step=1, hot_reloadable=False,
           help="Requires restarting the ADMIN container (Flask can't rebind its own port live)."),
-    Field("DASHBOARD_REFRESH_SECONDS", "DASHBOARD_REFRESH_SECONDS", "Admin UI", "Dashboard auto-refresh (seconds)",
-          type="number", default="15", min=2, max=300, step=1,
-          help="How often the Dashboard page's open-trades table auto-refreshes while the 'Auto-refresh' "
-               "checkbox is on. Takes effect on your next Dashboard page load -- no restart needed."),
-    Field("LOGS_REFRESH_SECONDS", "LOGS_REFRESH_SECONDS", "Admin UI", "Logs auto-refresh (seconds)",
-          type="number", default="10", min=2, max=300, step=1,
-          help="How often the Logs page auto-refreshes while its own 'Auto-refresh' checkbox is on. "
-               "Takes effect on your next Logs page load -- no restart needed."),
 
     # --- Discord Alerts (Cockpit v3 / Plan B) ---
     Field("ALERT_EMBED_LAYOUT", "ALERT_EMBED_LAYOUT", "Discord Alerts", "Alert embed layout",
@@ -1068,7 +1030,7 @@ _SEARCH_CLASSES = {
         "OPEX_MONTHLY_CONFIDENCE_BUMP", "OPEX_MONTHLY_CONFLUENCE_BUMP",
         "OPEX_WEEKLY_CONFLUENCE_BUMP", "OPEX_STOP_WIDEN_PCT",
         "OPEX_SIZE_REDUCTION_PCT", "HTF_CONFLUENCE_ENABLED",
-        "MTF_ADJACENT_GATE", "PLAN_ENGINE_V2", "SCALE_OUT_ENABLED",
+        "MTF_ADJACENT_GATE", "PLAN_ENGINE_V2",
         "UNIVERSE_MIN_DOLLAR_VOL", "UNIVERSE_MIN_PRICE",
         "REGIME_GATES_ENABLED",
         "LEVEL_LIFECYCLE_STOPS_ENABLED", "AVWAP_LEVELS_ENABLED",
@@ -1091,9 +1053,8 @@ _SEARCH_CLASSES = {
         "NEAR_TP_TIMEOUT_THRESHOLD_PCT", "NEAR_TP_TIMEOUT_MINUTES",
         "NEAR_TP_STALL_CHECK_MINUTES", "NEAR_TP_STALL_MAX_FLUCTUATION_PCT",
         "OPEX_NEAR_CLOSE_SUPPRESS_MINUTES", "INTRADAY_MANAGER_V2",
-        "INTRADAY_RTH_ONLY", "EXTENDED_HOURS_EXIT_CHECK",
+        "INTRADAY_RTH_ONLY",
         "QUIET_HOURS_START_BERLIN", "QUIET_HOURS_END_BERLIN",
-        "EXTENDED_HOURS_DEBOUNCE_TICKS",
     },
     "never": {"SLIPPAGE_BPS", "COMMISSION_PER_TRADE", "COMMISSION_RISK_BASIS"},
 }
