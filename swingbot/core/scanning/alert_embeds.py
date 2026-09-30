@@ -8,14 +8,29 @@ from swingbot import config
 from swingbot.core.analytics.rank import follow_breakdown, follow_score
 from swingbot.core.market import opex
 from swingbot.core import presentation as ui
+from swingbot.core.presentation import kinds
+from swingbot.core.presentation.kinds import Kind
+
+
+def strategy_plan_line(plan) -> str:
+    """``Fibonacci · 4w · LONG · VALIDATED`` -- a v2 plan in one line, no raw
+    ``bullish`` and no ✅ (outcome-only glyph)."""
+    return (f"{plan.strategy} · {plan.horizon_key} · {kinds.side_word(plan.direction)} · "
+            f"{kinds.plan_badge_text(plan.badge)}")
+
+
+def _strategy_levels(plan) -> str:
+    return ui.levels_block(direction=plan.direction, entry=plan.trigger_price,
+                           stop=plan.stop_loss, tp1=plan.tp1, tp2=plan.tp2)
 
 
 def build_strategy_alert_embed(plan) -> "discord.Embed":
     """Render a strategy-sourced plan with its frozen badge and ledger."""
-    embed = discord.Embed(title=f"Strategy signal — {plan.ticker} {plan.direction}")
-    ui.apply_chrome(embed, accent=ui.accent_for_outcome("scratch"), plan_id=plan.plan_id)
-    embed.add_field(name="Plan (v2)", value=(f"{plan.strategy} · {plan.horizon_key} · {plan.direction} · "
-                    f"{'✅' if plan.badge == 'VALIDATED' else '⚠️'} {plan.badge}"), inline=False)
+    embed = ui.push_embed(Kind.STRATEGY_SIGNAL, plan.ticker, plan.direction, plan.strategy,
+                          description=_strategy_levels(plan))
+    ui.apply_chrome(embed, kind=Kind.STRATEGY_SIGNAL,
+                    level=getattr(plan, "confidence_level", None), plan_id=plan.plan_id)
+    embed.add_field(name="Plan (v2)", value=strategy_plan_line(plan), inline=False)
     for name, value in (("Entry", plan.trigger_price), ("Stop", plan.stop_loss), ("TP1", plan.tp1)):
         embed.add_field(name=name, value=f"{value:.2f}")
     if plan.tp2 is not None:
@@ -23,6 +38,27 @@ def build_strategy_alert_embed(plan) -> "discord.Embed":
     embed.add_field(name="Ledger", value=("main" if plan.ledger == "main" else
                     "weak — P&L tracked separately, never summed into main"), inline=False)
     return embed
+
+
+def build_strategy_simple_embed(plan) -> "discord.Embed":
+    """The simple-channel mirror of a strategy signal (v110 §6.1): the same
+    identity as the full embed, with the levels block and one context line,
+    and no fields, so it reads on a phone. Replaces the plain ``str`` that
+    `_send_alerts` could never send as ``embed=``."""
+    embed = ui.push_embed(
+        Kind.STRATEGY_SIGNAL, plan.ticker, plan.direction, plan.strategy,
+        description=f"{_strategy_levels(plan)}\n{strategy_plan_line(plan)} · ledger {plan.ledger}")
+    ui.apply_chrome(embed, kind=Kind.STRATEGY_SIGNAL,
+                    level=getattr(plan, "confidence_level", None), plan_id=plan.plan_id)
+    return embed
+
+
+def _alert_detail(level: int, all_ok: bool) -> str:
+    """``Lv4 ⭐`` for a clean top setup, ``Lv3 ⚠️ review`` when a gate failed."""
+    if not all_ok:
+        return f"Lv{level} ⚠️ review"
+    return f"Lv{level} ⭐" if level >= 4 else f"Lv{level}"
+
 
 from .snapshots import _snapshot_and_diff
 from .requirements import _sources_str
@@ -56,15 +92,13 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     """
     result, plan, conf = item.result, item.plan, item.conf
     is_bull = result.trend == "bullish"
-    direction = "LONG (buy)" if is_bull else "SHORT (sell)"
     all_ok = item.all_requirements_met
     compact = layout == "compact"
-    priority_marker = "⭐ " if (conf.level >= 4 and all_ok) else ""
-    needs_review_marker = "⚠️ " if not all_ok else ""
     plan_v2 = _v2_plan(item)
-    title = f"{needs_review_marker}{priority_marker}{'🟢' if is_bull else '🔴'} {direction} — {result.ticker}"
-    embed = discord.Embed(title=title)
-    embed.color = ui.accent_for_level(conf.level)
+    # v110: title, push line, stripe and footer all come from the registry.
+    # The ⭐ stays in the title: the scan summary's ✨ looks for it.
+    embed = ui.push_embed(Kind.SETUP_ALERT, result.ticker, result.trend,
+                          _alert_detail(conf.level, all_ok))
 
     sections: dict[str, list[tuple]] = {k: [] for k in ui.SECTION_ORDER}
 
@@ -73,7 +107,6 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     blocked = ui.blocked_by_field(unmet)
     if blocked is not None:
         sections["blocked"].append(blocked)
-        embed.color = ui.accent_blocked()
 
     heat_blocked = getattr(item, "heat_blocked", None)
     if heat_blocked is not None:
@@ -128,7 +161,7 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
         # renders nothing at all rather than a misleading "against".
         sections["headline"].append((
             "⏱ Intraday timing",
-            ("✅ confirms — last 1h close is on the plan's side of today's VWAP"
+            ("✔ confirms — last 1h close is on the plan's side of today's VWAP"
              if intraday else
              "⚠️ against — last 1h close is on the wrong side of today's VWAP; "
              "the daily trigger is unchanged, but entering now fights the tape"),
@@ -237,7 +270,8 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     embed.description = f"{headline}\n{explanation[:3500]}"
     if chart_filename:
         embed.set_image(url=f"attachment://{chart_filename}")
-    ui.apply_chrome(embed, accent=embed.color, plan_id=plan_v2.plan_id if plan_v2 else None)
+    ui.apply_chrome(embed, kind=Kind.SETUP_ALERT, level=conf.level, blocked=blocked is not None,
+                    plan_id=plan_v2.plan_id if plan_v2 else None)
     return embed
 
 
@@ -269,9 +303,6 @@ def _legacy_simple_alert(item) -> discord.Embed:
     """
     result, plan, conf = item.result, item.plan, item.conf
     plan_v2 = _v2_plan(item)
-    is_bull = result.trend == "bullish"
-    direction = "LONG" if is_bull else "SHORT"
-    arrow = "▲" if is_bull else "▼"
 
     nums = plan_numbers_for_display(plan_v2, {
         "entry": plan.entry, "stop_loss": plan.stop_loss,
@@ -303,8 +334,8 @@ def _legacy_simple_alert(item) -> discord.Embed:
         stop=nums["stop_loss"], target_pct=plan.target_distance_pct,
         stop_pct=-abs(plan.stop_distance_pct), r=plan.risk_reward_ratio,
     )
-    embed = discord.Embed(
-        title=f"{arrow} {direction} — {result.ticker}",
+    embed = ui.push_embed(
+        Kind.SETUP_SIMPLE, result.ticker, result.trend, f"Lv{conf.level}",
         description=(
             f"{headline}\n"
             f"Confidence: {ui.confidence_label(conf.level, conf.score)}\n"
@@ -313,6 +344,6 @@ def _legacy_simple_alert(item) -> discord.Embed:
             f"{plan_line}"
         ),
     )
-    ui.apply_chrome(embed, accent=ui.accent_for_level(conf.level),
+    ui.apply_chrome(embed, kind=Kind.SETUP_SIMPLE, level=conf.level,
                     plan_id=plan_v2.plan_id if plan_v2 else None)
     return embed

@@ -27,7 +27,7 @@ from swingbot.commands.scanning import alerts
 from swingbot.core.scanning import embeds as embeds_mod
 from swingbot.core.scanning import execution_embeds
 from swingbot.core.scanning.embeds import build_simple_alert
-from swingbot.core.presentation import tokens
+from swingbot.core.presentation import kinds, tokens
 
 from tests.scanning.test_embeds_v3 import make_item, make_plan_v2
 
@@ -77,7 +77,7 @@ def test_simple_alert_marks_a_bearish_signal_short_with_down_triangle_and_red():
     embed = build_simple_alert(item)
     assert "SHORT" in embed.title and "LONG" not in embed.title
     assert "▼" in embed.title
-    assert embed.color.value == tokens.ACCENT_RAMP[item.conf.level]
+    assert embed.color.value == kinds.SETUP_RAMP[item.conf.level]
     # The triangle itself is colored too (Discord embed titles can't carry
     # color -- an ```ansi code block in the description is the only place
     # that can), red = short, matching the SPA table's convention.
@@ -88,7 +88,7 @@ def test_simple_alert_marks_a_bullish_signal_long_with_up_triangle_and_green():
     embed = build_simple_alert(make_item())
     assert "LONG" in embed.title
     assert "▲" in embed.title
-    assert embed.color.value == tokens.ACCENT_RAMP[make_item().conf.level]
+    assert embed.color.value == kinds.SETUP_RAMP[make_item().conf.level]
     assert "▲" in embed.description
 
 
@@ -176,8 +176,17 @@ def test_unlogged_v2_alert_says_do_not_place(monkeypatch, unsized):
     item = make_item(plan_v2=make_plan_v2())
     item.not_logged_reason = "already open"
     embed = build_simple_alert(item)
-    assert embed.title.endswith("— DO NOT PLACE")
+    assert embed.title == "🆕 ▲ LONG NVDA · DO NOT PLACE"
+    assert embed.color.value == kinds.SETUP_BLOCKED
     assert "**DO NOT PLACE — already open**" in embed.description
+
+
+def test_legacy_simple_mirror_is_a_new_setup_push(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "off")
+    embed = build_simple_alert(make_item())
+    assert embed.title == "🆕 ▲ LONG NVDA · SIMPLE · Lv4"
+    assert embed.push_text == "🆕 NEW SETUP · ▲ LONG NVDA · SIMPLE · Lv4"
+    assert embed.footer.text == tokens.DISCLAIMER
 
 
 # --------------------------------------------------------------------------

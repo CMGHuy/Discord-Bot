@@ -92,7 +92,7 @@ class _FakeChannel:
         self.sent = []
 
     async def send(self, content=None, **kw):
-        self.sent.append(content)
+        self.sent.append({"content": content, **kw})
 
 
 def test_escalates_once_at_the_threshold_then_stays_quiet(tmp_path, monkeypatch):
@@ -112,8 +112,9 @@ def test_escalates_once_at_the_threshold_then_stays_quiet(tmp_path, monkeypatch)
         asyncio.run(loops.session_scan.coro())
 
     assert len(channel.sent) == 1, "one alert per outage, not one per tick"
-    assert "3" in channel.sent[0]
-    assert "RuntimeError" in channel.sent[0]
+    assert channel.sent[0]["content"].startswith("🚨 SYSTEM · HEALTH ALERT")
+    assert "3" in channel.sent[0]["embed"].title
+    assert "RuntimeError" in channel.sent[0]["embed"].description
 
 
 def test_recovery_posts_exactly_one_notice(tmp_path, monkeypatch):
@@ -140,7 +141,7 @@ def test_recovery_posts_exactly_one_notice(tmp_path, monkeypatch):
     asyncio.run(loops.session_scan.coro())
 
     assert len(channel.sent) == 2
-    assert "recover" in channel.sent[1].lower()
+    assert channel.sent[1]["content"].startswith("✅ SYSTEM · RECOVERED")
 
 
 def test_below_threshold_posts_nothing(tmp_path, monkeypatch):

@@ -26,7 +26,10 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   restructure: `core/edge/`, `core/scanning/`, `core/analytics/`,
   `core/charts/`, and `core/presentation/`. `presentation/` owns every
   Discord colour, glyph, number format and embed part: pure `tokens.py`,
-  phone-safe `ansi.py`, then whole embed parts in `components.py`. Nothing
+  the v110 notification registry `kinds.py` (six families, one `Kind` per
+  pushed event, the stripe ramps — the only styling path for pushed
+  messages), phone-safe `ansi.py`, then whole embed parts in `components.py`
+  (including `PushEmbed`, whose push line every sender passes as `content`). Nothing
   outside it may touch `discord.Color`; its AST guard enforces that boundary.
 - **Frontend (`frontend/`, the admin SPA).** **Spacing between panels (v89):**
   one token, `--section-gap`; workspaces stack panels in `.sb-stack`/host
