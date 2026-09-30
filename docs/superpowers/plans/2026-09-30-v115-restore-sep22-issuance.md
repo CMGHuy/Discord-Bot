@@ -1,4 +1,4 @@
-# v115 — Restore pre-09-23 issuance (clamp wide stops to 2%, floor back to 2.0) Implementation Plan
+# v115 — Restore pre-09-23 issuance (clamp wide stops to 1.75%, floor back to 2.0) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -6,9 +6,9 @@
 **Bump:** bot minor
 **Edge:** volume
 
-**Goal:** Issue trades the way the bot did before 2026-09-23. A confluence setup whose natural stop is wider than 2% is issued with its stop moved to exactly 2% from the trigger. The stop floor goes back to 2.0. The futures/FX/index dollar-volume exemption and the post-09-22 strategy work (v92/v103/v104/v108/v113) are switched off, and a test keeps them off.
+**Goal:** Issue trades the way the bot did before 2026-09-23. A confluence setup whose natural stop is wider than 2% is issued with its stop moved to 1.75% from the trigger, 0.25% inside the cap, so a fill a little past the trigger is not cancelled `risk_cap`. The stop floor goes back to 2.0. The futures/FX/index dollar-volume exemption and the post-09-22 strategy work (v92/v103/v104/v108/v113) are switched off, and a test keeps them off.
 
-**Architecture:** Two new `.env` flags in `swingbot/config.py`. `CLAMP_STOP_TO_HARD_CAP` (default `true`) is read by a new helper `_clamp_stop_to_hard_cap` in `swingbot/core/planning/builders.py`. `build_confluence_plan` calls the helper before target selection, so the target, TP2 and the plan all use the clamped stop. `LIQUIDITY_EXEMPT_NON_EQUITY` (default `false`) is read by a new helper `_dollar_volume_exempt` in `swingbot/core/marketdata/universe.py`. The helper decides whether `liquidity_reason` skips the dollar-volume floor. v109 spot metals (from `spot_metals.is_spot_metal`) always skip it, and futures/FX/indices skip it only while the flag is on (partner decision 2026-09-30). A guaranteed-off test pins every value in the spec's § Strategy work table, at the code default and as parsed from `.env.example`. The last task runs the suite and ships the release. Then it edits the production `.env` in place, sets `MIN_STOP_DISTANCE_PCT=2.0` and mirrors the change back.
+**Architecture:** Two new `.env` flags in `swingbot/config.py`. `CLAMP_STOP_TO_HARD_CAP` (default `true`) is read by a new helper `_clamp_stop_to_hard_cap` in `swingbot/core/planning/builders.py`. `build_confluence_plan` calls the helper before target selection, so the target, TP2 and the plan all use the clamped stop. The clamp lands at `HARD_MAX_PLANNED_LOSS_PCT - CLAMP_HEADROOM_PCT` (a 0.25 module constant) because `plan_manager._step_pending` cancels a fill past 2.0% with no tolerance. Replay calls the same builder, so it clamps by default. `LIQUIDITY_EXEMPT_NON_EQUITY` (default `false`) is read by a new helper `_dollar_volume_exempt` in `swingbot/core/marketdata/universe.py`. The helper decides whether `liquidity_reason` skips the dollar-volume floor. v109 spot metals (from `spot_metals.is_spot_metal`) always skip it, and futures/FX/indices skip it only while the flag is on (partner decision 2026-09-30). A guaranteed-off test pins every value in the spec's § Strategy work table, at the code default and as parsed from `.env.example`. The last task runs the suite and ships the release. Then it edits the production `.env` in place, sets `MIN_STOP_DISTANCE_PCT=2.0` and mirrors the change back.
 
 **Tech Stack:** Python 3.11, pytest, python-dotenv, radon, Docker Compose on the Hetzner VM (`scripts/ops/ssh-hetzner.sh`).
 
@@ -18,7 +18,8 @@
 - No `git revert`. No strategy code is deleted. `a356c7f2` (lifecycle ceiling at 2%) and `1eb9a194` stay.
 - The `f01e87e2` `risk_cap` reject in `attach_plan_v2` (`swingbot/core/scanning/analyze.py:375`) **stays as a safety net**. Do not edit it.
 - Only the confluence builder clamps. Scenario building, the admission gate (`MIN_STOP_DISTANCE_PCT`, `MAX_STOP_LOSS_PCT`), `gating.scenario_gate_inputs` and the scan funnel counts are untouched.
-- Clamp formula (spec § Behaviour): when on and `planned_loss_pct(entry, stop) > HARD_MAX_PLANNED_LOSS_PCT`, the stop becomes `entry - entry * cap / 100` (long) or `entry + entry * cap / 100` (short), where `entry = scenario.entry` (the trigger). A stop already within 2% is untouched.
+- Clamp formula (spec § Behaviour and § Headroom, revision 3): when on and `planned_loss_pct(entry, stop) > HARD_MAX_PLANNED_LOSS_PCT` (2.0), the stop becomes `entry -/+ entry * (2.0 - CLAMP_HEADROOM_PCT) / 100` (long/short), i.e. **1.75%** from `entry = scenario.entry` (the trigger). `CLAMP_HEADROOM_PCT = 0.25` is a module constant in `builders.py`, not a flag. The following are returned unchanged: a stop already within 2.0% (including 1.75-2.0), a `None` stop, a stop on the wrong side of the entry, and any stop when the entry is invalid.
+- `plan_manager._step_pending`'s fill check, `analyze.py` and `lifecycle.py` are **not edited**. A fill more than about 0.25% past the trigger is still cancelled `risk_cap`. That is the 2% policy working as designed.
 - Every function written or changed ends at radon cyclomatic complexity **< 15** (`python -m radon cc -s <file>`). `build_confluence_plan` is **already C (14)**. The clamp must live in the helper. Adding any `if`, `and`, `or` or conditional expression to `build_confluence_plan` itself takes it to 15.
 - New config fields keep the default `search_class="excluded"`. Do not add them to `ScanParams` or `_SEARCH_CLASSES` (`tests/test_scan_params_coverage.py` requires ScanParams to cover exactly the searchable/frozen/never fields).
 - Production `.env` is edited **in place** (`cat new > .env`), never with `sed -i` (`docs/claude/known-traps.md` § "Editing production `.env` with `sed -i` changes nothing live"). Always go through `scripts/ops/ssh-hetzner.sh`. It is uncommitted, so it exists only in the main tree at `E:/Documents/Private/Projects/Discord-Bot/scripts/ops/ssh-hetzner.sh`, not in the worktree.
@@ -30,7 +31,7 @@
 
 - **Sequential:** V115-01 before everything. It creates the worktree every other task works in, and its production read decides whether V115-07's `.env` edit touches any key besides `MIN_STOP_DISTANCE_PCT`.
 - **Group 1 (parallel):** V115-02, V115-05. They touch different files. V115-02 edits `swingbot/config.py` and `.env.example` and creates `tests/test_v115_flags.py`. V115-05 creates `tests/test_v115_strategy_work_off.py`. V115-05 only *reads* `.env.example` keys that V115-02 does not change. Neither task uses a symbol the other one introduces.
-- **Group 2 (parallel, after V115-02):** V115-03, V115-04, V115-06. They touch different files. V115-03 edits `builders.py` and four existing test files, and creates `tests/planning/test_confluence_stop_clamp.py`. V115-04 edits `universe.py` and `tests/marketdata/test_universe.py`. V115-06 edits `docs/claude/known-traps.md` and `AGENTS.md`. All three come after V115-02: V115-03 and V115-04 read `config.CLAMP_STOP_TO_HARD_CAP` / `config.LIQUIDITY_EXEMPT_NON_EQUITY`, which V115-02 creates, and V115-06 documents those flag names.
+- **Group 2 (parallel, after V115-02):** V115-03, V115-04, V115-06. They touch different files. V115-03 edits `builders.py`, the `CLAMP_STOP_TO_HARD_CAP` help text in `config.py`, two `.env.example` comments and four existing test files, and creates `tests/planning/test_confluence_stop_clamp.py`. V115-04 edits `universe.py` and `tests/marketdata/test_universe.py`. V115-06 edits `docs/claude/known-traps.md` and `AGENTS.md`. All three come after V115-02: V115-03 and V115-04 read `config.CLAMP_STOP_TO_HARD_CAP` / `config.LIQUIDITY_EXEMPT_NON_EQUITY`, which V115-02 creates, and V115-06 documents those flag names.
 - **Sequential:** V115-07 runs last. It runs the full suite over everything above, then does the release, the deploy and the production edit, in that order. The production edit needs the deployed image, the deploy needs a green `main`, and `main` needs the suite.
 
 ---
@@ -261,34 +262,46 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-### Task V115-03: Clamp the confluence stop to the 2% cap before target selection
+### Task V115-03: Clamp a confluence stop beyond the 2% cap to 1.75% before target selection
 
 **Files:**
-- Modify: `swingbot/core/planning/builders.py` (imports at lines 1-20; new helper directly above `def build_confluence_plan`, line 360; the body of `build_confluence_plan`, lines 376-409)
+- Modify: `swingbot/core/planning/builders.py` (imports at lines 1-20; new constant and helpers directly above `def build_confluence_plan`, line 360; the body of `build_confluence_plan`, lines 376-409)
+- Modify: `swingbot/config.py` (the `CLAMP_STOP_TO_HARD_CAP` help text V115-02 added) and `.env.example` (the two comments V115-02 wrote that say "exactly 2%")
 - Test: `tests/planning/test_confluence_stop_clamp.py` (create)
 - Modify: `tests/scanning/test_engine_v2_plans.py` (the `f01e87e2` test at lines 310-322, plus imports)
 - Modify: `tests/planning/test_build_confluence_plan.py` (add an autouse fixture)
 - Modify: `tests/backtesting/test_v74_no_behaviour_change.py` (pin the flag off)
-- Modify: `tests/backtesting/test_armed_replay.py` (pin the flag off in `test_m1_issues_a_stop_entry_above_the_reaction_high`, line 187)
+- Modify: `tests/backtesting/test_armed_replay.py` (a module-level autouse fixture pinning the flag off)
 
 **Interfaces:**
 - Consumes: `config.CLAMP_STOP_TO_HARD_CAP: bool` (V115-02). `swingbot.core.risk_limits.HARD_MAX_PLANNED_LOSS_PCT: float` (= 2.0). `planned_loss_pct(entry_price, stop_loss) -> float`.
-- Produces: `builders._clamp_stop_to_hard_cap(entry: float, stop_loss: float, is_bull: bool) -> float`. `build_confluence_plan` returns plans whose `stop_loss` is the clamped stop, with `tp1`/`tp2` chosen against it.
+- Produces: `builders.CLAMP_HEADROOM_PCT: float = 0.25` (a module constant, not a flag). `builders._stop_is_clampable(entry, stop_loss, is_bull) -> bool`. `builders._clamp_stop_to_hard_cap(entry: float, stop_loss: float | None, is_bull: bool) -> float | None`. `build_confluence_plan` returns plans whose `stop_loss` is the clamped stop, with `tp1`/`tp2` chosen against it.
 
-Why the four existing test files change: this was measured before writing the plan. A pytest plugin wrapped `build_confluence_plan` with the clamp and was run over `tests/backtesting`, `tests/planning/test_build_confluence_plan.py`, `tests/planning/test_plan_engine_structure.py`, `tests/scanning/test_engine_v2_plans.py`, `tests/scanning/test_decision_debug_logs.py`, `tests/scanning/test_live_context_stamp.py`, `tests/scripts/test_training_universe.py` and `tests/edge/test_edge_stops.py`. It failed exactly these tests:
-- `test_build_confluence_plan.py`: `test_tp1_is_the_scenarios_own_target_when_it_sits_in_the_band`, `test_tp1_is_capped_when_the_nearest_level_is_beyond_max_rr`, all six `test_reward_always_at_least_min_times_risk` cases. They pin target selection against a 4% scenario risk.
+**Rule (spec § Behaviour and § Headroom, revision 3, partner 2026-09-30).** With the flag on and `planned_loss_pct(entry, stop) > HARD_MAX_PLANNED_LOSS_PCT` (2.0), the stop becomes `entry -/+ entry * (2.0 - CLAMP_HEADROOM_PCT) / 100`, i.e. **1.75% from the trigger**. The following are returned unchanged:
+- a stop already within 2.0% (including 1.75-2.0%);
+- a `None` stop;
+- a stop on the wrong side of the entry;
+- any stop when the entry is invalid.
+
+Why not exactly 2%: `plan_manager._step_pending` (`swingbot/core/planning/plan_manager.py:564-570`) cancels a stop-entry fill `risk_cap` when `planned_loss_pct(fill, stop) > HARD_MAX_PLANNED_LOSS_PCT`, with **no tolerance**. A 2.0% stop is cancelled on any fill past the trigger, and float rounding alone puts about half of such plans over by an ulp. With 0.25% of headroom, a fill can land about 0.25% past the trigger. A worse gap is still cancelled, as the 2% policy intends. **Do not edit** the fill check, `analyze.py` or `lifecycle.py`.
+
+Why the four existing test files change: this was measured before writing the plan. A pytest plugin wrapped `build_confluence_plan` with a clamp that fires on the same `> 2.0%` condition. It was run over `tests/backtesting`, `tests/planning/test_build_confluence_plan.py`, `tests/planning/test_plan_engine_structure.py`, `tests/scanning/test_engine_v2_plans.py`, `tests/scanning/test_decision_debug_logs.py`, `tests/scanning/test_live_context_stamp.py`, `tests/scripts/test_training_universe.py` and `tests/edge/test_edge_stops.py`. It failed exactly these tests:
+- `test_build_confluence_plan.py`: `test_tp1_is_the_scenarios_own_target_when_it_sits_in_the_band`, `test_tp1_is_capped_when_the_nearest_level_is_beyond_max_rr` and all six `test_reward_always_at_least_min_times_risk` cases. They pin target selection against a 4% scenario risk.
 - `test_v74_no_behaviour_change.py::test_from_config_reproduces_pre_v74_golden_plans`. It pins pre-v74 replay plans, which were unclamped.
 - `test_armed_replay.py::test_m1_issues_a_stop_entry_above_the_reaction_high`. Its stop is 2.11% from a 99.6 trigger.
+- `test_armed_replay.py::test_the_widened_scenario_issues_once_its_stop_is_re_anchored`. This one fails only with the 1.75% clamp: the 2% clamp would have left a 2.0% stop, while the 1.75% clamp gives 1.743%, below the test's `>= 2.0` assertion (found in the dry run of this revision). It asserts the armed stop clears the 2.0 floor. Under v115, a clamped plan's stop sits **below** `MIN_STOP_DISTANCE_PCT` by design: admission checks the scenario, and the clamp then tightens the plan.
 - `test_engine_v2_plans.py::test_attach_plan_v2_rejects_a_plan_whose_stop_is_beyond_the_hard_cap` (the `f01e87e2` test).
 
-The first three pin pre-v115 geometry on purpose, so they get the flag pinned off. The clamp has its own tests. The `f01e87e2` test is rewritten for the clamp, as the spec requires.
+The first three pin pre-v115 geometry on purpose, so they get the flag pinned off; the clamp has its own tests. The `f01e87e2` test is rewritten for the clamp, as the spec requires. Replay output changes by default (known-traps note, V115-06). `armed_replay.plan_at` keeps the scenario's unclamped `stop_distance_pct` while its plan carries the clamped stop. The spec records this as known, and this task does not change it.
 
 - [ ] **Step 1: Write the failing clamp tests** at `tests/planning/test_confluence_stop_clamp.py`
 
 ```python
-"""v115: build_confluence_plan clamps a stop beyond the 2% hard cap to exactly
-2% from the trigger, BEFORE target selection, so tp1 pays the min R:R against
-the clamped risk. Spec: docs/superpowers/specs/2026-09-30-v115-restore-sep22-issuance-design.md"""
+"""v115: build_confluence_plan clamps a stop beyond the 2% hard cap to 1.75%
+from the trigger (cap minus CLAMP_HEADROOM_PCT), BEFORE target selection, so
+tp1 pays the min R:R against the clamped risk, and a fill a little past the
+trigger still clears plan_manager's no-tolerance fill guard.
+Spec: docs/superpowers/specs/2026-09-30-v115-restore-sep22-issuance-design.md"""
 import dataclasses
 import types
 
@@ -325,45 +338,46 @@ def clamp_on(monkeypatch):
     monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", True)
 
 
-def test_long_four_percent_stop_is_clamped_to_two_percent(clamp_on):
+def test_headroom_is_a_quarter_percent_inside_the_cap():
+    assert builders.CLAMP_HEADROOM_PCT == 0.25
+    assert HARD_MAX_PLANNED_LOSS_PCT - builders.CLAMP_HEADROOM_PCT == pytest.approx(1.75)
+
+
+def test_long_four_percent_stop_is_clamped_to_one_seventy_five(clamp_on):
     plan = _build(_scenario("bullish", 100.0, 96.0, 104.0))
     assert plan is not None
-    assert plan.stop_loss == pytest.approx(98.0)
-    assert plan.tp1 == pytest.approx(104.0)
+    assert plan.stop_loss == pytest.approx(98.25)
+    assert plan.tp1 == pytest.approx(104.0)                        # 2.29R
     assert (plan.tp1 - 100.0) / (100.0 - plan.stop_loss) >= 1.5 - 1e-9
 
 
-def test_short_four_percent_stop_is_clamped_to_two_percent(clamp_on):
+def test_short_four_percent_stop_is_clamped_to_one_seventy_five(clamp_on):
     plan = _build(_scenario("bearish", 100.0, 104.0, 96.0))
     assert plan is not None
-    assert plan.stop_loss == pytest.approx(102.0)
+    assert plan.stop_loss == pytest.approx(101.75)
     assert plan.tp1 == pytest.approx(96.0)
     assert (100.0 - plan.tp1) / (plan.stop_loss - 100.0) >= 1.5 - 1e-9
 
 
 def test_target_is_chosen_against_the_clamped_risk(clamp_on):
-    # Clamped risk 2 -> band [103, 105]: the nearest qualifying level is 103.
-    # Unclamped (risk 5) the floor would be 107.5 and tp1 would be 112.
+    # Clamped risk 1.75 -> band [102.625, 104.375]: the nearest qualifying level
+    # is 103. Unclamped (risk 5) the floor would be 107.5 and tp1 would be 112.
     resistances = [levels.Level(p, ["Fibonacci"]) for p in (103.0, 104.5, 112.0)]
     supports = [levels.Level(90.0, ["Rolling S/R"])]
     plan = _build(_scenario("bullish", 100.0, 95.0, 112.0), level_map=(supports, resistances))
-    assert plan.stop_loss == pytest.approx(98.0)
+    assert plan.stop_loss == pytest.approx(98.25)
     assert plan.tp1 == pytest.approx(103.0)
 
 
-def test_no_target_paying_min_rr_at_two_percent_returns_none(clamp_on):
-    # 102.5 is 1.25R against the clamped 2% risk: the existing no_qualifying_target path.
+def test_no_target_paying_min_rr_at_the_clamped_risk_returns_none(clamp_on):
+    # 102.5 is 1.43R against the clamped 1.75% risk: the no_qualifying_target path.
     assert _build(_scenario("bullish", 100.0, 96.0, 102.5)) is None
 
 
-def test_a_stop_within_the_cap_is_untouched(clamp_on):
-    plan = _build(_scenario("bullish", 100.0, 98.5, 103.0))
-    assert plan.stop_loss == 98.5
-
-
-def test_a_stop_exactly_at_the_cap_is_untouched(clamp_on):
-    plan = _build(_scenario("bullish", 100.0, 98.0, 104.0))
-    assert plan.stop_loss == 98.0
+@pytest.mark.parametrize("stop", [98.5, 98.1, 98.0])   # 1.5%, 1.9%, exactly the cap
+def test_a_stop_within_the_cap_is_untouched(clamp_on, stop):
+    plan = _build(_scenario("bullish", 100.0, stop, 104.0))
+    assert plan.stop_loss == stop
 
 
 def test_flag_off_restores_the_unclamped_stop(monkeypatch):
@@ -373,24 +387,34 @@ def test_flag_off_restores_the_unclamped_stop(monkeypatch):
     assert plan.tp1 == pytest.approx(108.0)
 
 
-def test_clamped_plan_never_exceeds_the_attach_safety_net(clamp_on):
-    # GC=F 2026-09-28 prices: the f01e87e2 reject uses a 1e-9 tolerance, and a
-    # clamped plan must never trip it on a float edge.
+def test_a_clamped_plan_survives_a_small_gap_past_the_trigger(clamp_on):
+    # GC=F 2026-09-28 prices. plan_manager._step_pending cancels risk_cap when
+    # planned_loss_pct(fill, stop) > HARD_MAX_PLANNED_LOSS_PCT, no tolerance.
     plan = _build(_scenario("bearish", 4194.30, 4278.68, 4066.11))
     assert plan is not None
-    assert planned_loss_pct(plan.trigger_price, plan.stop_loss) <= HARD_MAX_PLANNED_LOSS_PCT + 1e-9
+    assert planned_loss_pct(plan.trigger_price, plan.stop_loss) == pytest.approx(1.75)
+    fill_0_2 = plan.trigger_price * (1 - 0.002)     # a short fills below its trigger
+    assert planned_loss_pct(fill_0_2, plan.stop_loss) <= HARD_MAX_PLANNED_LOSS_PCT
+    fill_0_3 = plan.trigger_price * (1 - 0.003)     # past the headroom: still cancelled
+    assert planned_loss_pct(fill_0_3, plan.stop_loss) > HARD_MAX_PLANNED_LOSS_PCT
 
 
-def test_helper_leaves_an_invalid_entry_alone(clamp_on):
-    assert builders._clamp_stop_to_hard_cap(0.0, 5.0, True) == 5.0
+@pytest.mark.parametrize("entry,stop,is_bull", [
+    (0.0, 5.0, True),        # invalid entry
+    (100.0, None, True),     # no stop
+    (100.0, 105.0, True),    # long stop above entry (wrong side)
+    (100.0, 95.0, False),    # short stop below entry (wrong side)
+])
+def test_helper_leaves_an_unclampable_stop_alone(clamp_on, entry, stop, is_bull):
+    assert builders._clamp_stop_to_hard_cap(entry, stop, is_bull) == stop
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/planning/test_confluence_stop_clamp.py`
-Expected: FAIL, 5 failed / 4 passed (checked in a dry run). The long, short and target-choice tests fail on `stop_loss`/`tp1` (for example `96.0 != 98.0`). `test_clamped_plan_never_exceeds_the_attach_safety_net` fails on 2.01%. `test_helper_...` fails with `AttributeError: ... '_clamp_stop_to_hard_cap'`. The no-target, within-cap, exactly-at-cap and flag-off tests already pass: they pin behaviour the clamp must not change.
+Expected: FAIL. `test_headroom_...` and the four `test_helper_...` cases fail with `AttributeError` (no `CLAMP_HEADROOM_PCT` / `_clamp_stop_to_hard_cap`). The long, short, target-choice and gap tests fail on `stop_loss`/`tp1` (for example `96.0 != 98.25`). The no-target, within-cap and flag-off tests already pass: they pin behaviour the clamp must not change.
 
-- [ ] **Step 3: Implement the helper** in `swingbot/core/planning/builders.py`
+- [ ] **Step 3: Implement the constant and helpers** in `swingbot/core/planning/builders.py`
 
 Add `from swingbot import config` to the imports (after `import numpy as np`). Change line 11 to:
 
@@ -402,17 +426,33 @@ from swingbot.core.risk_limits import (HARD_MAX_PLANNED_LOSS_PCT, capped_planned
 Insert directly above `def build_confluence_plan(`:
 
 ```python
-def _clamp_stop_to_hard_cap(entry: float, stop_loss: float, is_bull: bool) -> float:
+# v115 rev 3: a clamped confluence stop sits this far INSIDE the 2% hard cap.
+# plan_manager._step_pending cancels a stop-entry fill risk_cap when
+# planned_loss_pct(fill, stop) > HARD_MAX_PLANNED_LOSS_PCT with no tolerance,
+# so a stop at exactly 2% is cancelled on any fill past the trigger (and float
+# rounding alone tips half of them over). Not a flag: the partner fixed it.
+CLAMP_HEADROOM_PCT = 0.25
+
+
+def _stop_is_clampable(entry, stop_loss, is_bull) -> bool:
+    """True when the v115 clamp may move this stop: the flag is on, the entry
+    is valid, and the stop sits on the loss side of it."""
+    if not config.CLAMP_STOP_TO_HARD_CAP or entry is None or stop_loss is None or entry <= 0:
+        return False
+    return stop_loss < entry if is_bull else stop_loss > entry
+
+
+def _clamp_stop_to_hard_cap(entry, stop_loss, is_bull):
     """v115: a confluence stop further than HARD_MAX_PLANNED_LOSS_PCT from the
-    trigger moves to exactly the cap (entry -/+ entry * cap / 100), so the setup
-    is issued at 2% risk instead of being rejected by attach_plan_v2's risk_cap
-    safety net. Gated by CLAMP_STOP_TO_HARD_CAP (default on). A stop within the
-    cap, or an invalid entry, is returned unchanged."""
-    if not config.CLAMP_STOP_TO_HARD_CAP or entry is None or entry <= 0:
+    trigger moves to cap - CLAMP_HEADROOM_PCT (1.75%) from it, so the setup is
+    issued instead of rejected by attach_plan_v2's risk_cap safety net, and a
+    fill a little past the trigger is not cancelled risk_cap. A stop within
+    the cap, or one _stop_is_clampable refuses, is returned unchanged."""
+    if not _stop_is_clampable(entry, stop_loss, is_bull):
         return stop_loss
     if planned_loss_pct(entry, stop_loss) <= HARD_MAX_PLANNED_LOSS_PCT:
         return stop_loss
-    offset = entry * HARD_MAX_PLANNED_LOSS_PCT / 100.0
+    offset = entry * (HARD_MAX_PLANNED_LOSS_PCT - CLAMP_HEADROOM_PCT) / 100.0
     return entry - offset if is_bull else entry + offset
 ```
 
@@ -431,14 +471,31 @@ Change the target call from `select_structural_target(entry, scenario.stop_loss,
                                    params.min_risk_reward_ratio, params.max_risk_reward_ratio)
 ```
 
-In the `TradePlanV2(...)` constructor, change `stop_loss=scenario.stop_loss,` to `stop_loss=stop_loss,`. Add one sentence to the docstring: `v115: a stop beyond the 2% hard cap is first clamped to it (_clamp_stop_to_hard_cap), so tp1/tp2 and the plan use the clamped risk.`
+In the `TradePlanV2(...)` constructor, change `stop_loss=scenario.stop_loss,` to `stop_loss=stop_loss,`. Add one sentence to the docstring: `v115: a stop beyond the 2% hard cap is first clamped to 1.75% (_clamp_stop_to_hard_cap), so tp1/tp2 and the plan use the clamped risk.`
 
-- [ ] **Step 5: Run the clamp tests**
+- [ ] **Step 5: Correct the "exactly 2%" wording V115-02 shipped.** In `swingbot/config.py`, in the `CLAMP_STOP_TO_HARD_CAP` Field, replace
+
+```python
+          help="v115. A confluence setup whose natural stop sits further than 2% from the entry "
+               "is still issued, with its stop moved to exactly 2% from the entry. The target is "
+```
+
+with
+
+```python
+          help="v115. A confluence setup whose natural stop sits further than 2% from the entry "
+               "is still issued, with its stop moved to 1.75% from the entry (0.25% inside the "
+               "cap, so a fill a little past the trigger is not cancelled). The target is "
+```
+
+In `.env.example`, replace `# 2.0 again since v115: CLAMP_STOP_TO_HARD_CAP (below) moves a wider stop to\n# exactly 2%, so this floor` with `# 2.0 again since v115: CLAMP_STOP_TO_HARD_CAP (below) moves a wider stop to\n# 1.75%, so this floor`. Also replace `# v115: a confluence stop wider than 2% is moved to exactly 2% from the\n# entry` with `# v115: a confluence stop wider than 2% is moved to 1.75% from the entry\n# (0.25% headroom under the cap)`. Leave every other line of those comments unchanged.
+
+- [ ] **Step 6: Run the clamp tests**
 
 Run: `python scripts/dev/testrun.py file tests/planning/test_confluence_stop_clamp.py`
-Expected: PASS (9 tests).
+Expected: PASS (14 tests).
 
-- [ ] **Step 6: Rewrite the `f01e87e2` attach test** in `tests/scanning/test_engine_v2_plans.py`
+- [ ] **Step 7: Rewrite the `f01e87e2` attach test** in `tests/scanning/test_engine_v2_plans.py`
 
 Add to the imports: `from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, planned_loss_pct`. Replace the whole of `test_attach_plan_v2_rejects_a_plan_whose_stop_is_beyond_the_hard_cap` (lines 310-322) with:
 
@@ -452,7 +509,7 @@ def _gc_scenario():
 def test_attach_plan_v2_clamps_a_stop_beyond_the_hard_cap_and_issues(monkeypatch):
     # Production 2026-09-28: GC=F plans with a 2.01% trigger-to-stop loss were
     # posted, then cancelled_risk_cap on fill, and f01e87e2 then rejected them.
-    # v115: the stop is clamped to exactly 2% from the trigger and the plan issues.
+    # v115: the stop is clamped to 1.75% from the trigger and the plan issues.
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", True)
     item = _item()
@@ -460,12 +517,12 @@ def test_attach_plan_v2_clamps_a_stop_beyond_the_hard_cap_and_issues(monkeypatch
                           "GC=F", "4w", level_map=None)
     assert item.plan_v2 is not None
     assert getattr(item, "plan_v2_rejected", None) is None
-    assert item.plan_v2.stop_loss == pytest.approx(4194.30 * 1.02)
+    assert item.plan_v2.stop_loss == pytest.approx(4194.30 * 1.0175)
     assert planned_loss_pct(item.plan_v2.trigger_price,
-                            item.plan_v2.stop_loss) <= HARD_MAX_PLANNED_LOSS_PCT + 1e-9
+                            item.plan_v2.stop_loss) < HARD_MAX_PLANNED_LOSS_PCT
 
 
-def test_attach_plan_v2_issues_a_four_percent_stop_at_two_percent(monkeypatch):
+def test_attach_plan_v2_issues_a_four_percent_stop_at_one_seventy_five(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", True)
     item = _item()
@@ -476,7 +533,7 @@ def test_attach_plan_v2_issues_a_four_percent_stop_at_two_percent(monkeypatch):
                           "AAPL", "4w", level_map=None)
     assert item.plan_v2 is not None
     assert getattr(item, "plan_v2_rejected", None) is None
-    assert item.plan_v2.stop_loss == pytest.approx(98.0)
+    assert item.plan_v2.stop_loss == pytest.approx(98.25)
     assert item.plan_v2.tp1 == pytest.approx(104.0)
 
 
@@ -492,9 +549,9 @@ def test_attach_plan_v2_still_rejects_beyond_the_cap_when_the_clamp_is_off(monke
     assert item.plan_v2_rejected == "risk_cap"
 ```
 
-Leave `test_attach_plan_v2_keeps_a_plan_exactly_at_the_hard_cap` as it is.
+Leave `test_attach_plan_v2_keeps_a_plan_exactly_at_the_hard_cap` as it is. Its 2.0% stop is within the cap, so it is untouched.
 
-- [ ] **Step 7: Pin the flag off in the three pre-v115-geometry tests**
+- [ ] **Step 8: Pin the flag off in the three pre-v115-geometry tests**
 
 In `tests/planning/test_build_confluence_plan.py`, add `from swingbot import config` to the imports and this fixture right after the imports:
 
@@ -502,8 +559,8 @@ In `tests/planning/test_build_confluence_plan.py`, add `from swingbot import con
 @pytest.fixture(autouse=True)
 def _unclamped_stops(monkeypatch):
     # These tests pin target selection against the scenario's OWN risk (4%
-    # stops). v115's CLAMP_STOP_TO_HARD_CAP would first move those stops to 2%;
-    # the clamp has its own tests in tests/planning/test_confluence_stop_clamp.py.
+    # stops). v115's CLAMP_STOP_TO_HARD_CAP would first move those stops to
+    # 1.75%; the clamp has its own tests in tests/planning/test_confluence_stop_clamp.py.
     monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", False)
 ```
 
@@ -518,15 +575,18 @@ def test_from_config_reproduces_pre_v74_golden_plans(monkeypatch):
 
 (the rest of the body is unchanged).
 
-In `tests/backtesting/test_armed_replay.py`, add `from swingbot import config` to the imports. Change `def test_m1_issues_a_stop_entry_above_the_reaction_high():` to take `monkeypatch`, and add as its first statement:
+In `tests/backtesting/test_armed_replay.py`, add `from swingbot import config` to the imports and this fixture right after `CELL = ar.Cell(5, 0.25, 0.10)`:
 
 ```python
-    # Pins the arm geometry (stop 97.5 = 2.11% from the 99.6 trigger) that
-    # v115's CLAMP_STOP_TO_HARD_CAP would move to 2%; the clamp has its own tests.
+@pytest.fixture(autouse=True)
+def _unclamped_arm_stops(monkeypatch):
+    # The arm tests pin pre-v115 stop geometry (97.5 = 2.11% from a 99.6
+    # trigger; a re-anchored stop >= the 2.0 floor). v115's CLAMP_STOP_TO_HARD_CAP
+    # would move those stops to 1.75%; the clamp has its own tests.
     monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", False)
 ```
 
-- [ ] **Step 8: Run every file that calls the builder**
+- [ ] **Step 9: Run every file that calls the builder, plus the config parity tests**
 
 ```bash
 python scripts/dev/testrun.py file tests/planning/test_confluence_stop_clamp.py
@@ -534,20 +594,26 @@ python scripts/dev/testrun.py file tests/planning/test_build_confluence_plan.py
 python scripts/dev/testrun.py file tests/scanning/test_engine_v2_plans.py
 python scripts/dev/testrun.py file tests/scanning/test_decision_debug_logs.py
 python scripts/dev/testrun.py file tests/backtesting
+python scripts/dev/testrun.py file tests/test_v115_flags.py
+python scripts/dev/testrun.py file tests/test_env_example_sync.py
 ```
 
-Expected: all PASS. `test_decision_debug_logs.py::test_a_risk_cap_rejection_is_logged_with_its_reason` stubs the builder with a 50% plan, so it still exercises the safety net unchanged. If any other `tests/backtesting` test fails, check whether the diff is a stop moved to exactly 2% from the trigger. If so, the test pins pre-v115 replay numbers: pin the flag off in that test with the same comment pattern. Report it in the task's review note. Otherwise debug it as a real regression.
+Expected: all PASS. `test_decision_debug_logs.py::test_a_risk_cap_rejection_is_logged_with_its_reason` stubs the builder with a 50% plan, so it still exercises the safety net unchanged. If any other `tests/backtesting` test fails, check whether the diff is a stop moved to 1.75% from the trigger. If it is, the test pins pre-v115 replay numbers: pin the flag off in that test with the same comment pattern, and report it in the task's review note. Otherwise, debug it as a real regression.
 
-- [ ] **Step 9: Complexity check**
+- [ ] **Step 10: Complexity check**
 
-Run: `python -m radon cc -s swingbot/core/planning/builders.py | grep -E "build_confluence_plan|_clamp_stop_to_hard_cap"`
-Expected: `build_confluence_plan - C (14)` (unchanged) and `_clamp_stop_to_hard_cap - B (6)` (the dry-run figure; anything < 15 passes). If `build_confluence_plan` shows 15, a branch was added inline: move it into the helper.
+Run: `python -m radon cc -s swingbot/core/planning/builders.py | grep -E "build_confluence_plan|_clamp_stop_to_hard_cap|_stop_is_clampable"`
+Expected (dry-run figures): `build_confluence_plan - C (14)`, unchanged. `_stop_is_clampable - B (6)`. `_clamp_stop_to_hard_cap - A (4)`. Anything under 15 passes. If `build_confluence_plan` shows 15, a branch was added inline: move it into a helper.
 
-- [ ] **Step 10: Commit** (two commits: the behaviour, then the pre-v115 pins)
+- [ ] **Step 11: Commit** (three commits: the behaviour, the wording fix, then the pre-v115 pins)
 
 ```bash
 git add swingbot/core/planning/builders.py tests/planning/test_confluence_stop_clamp.py tests/scanning/test_engine_v2_plans.py
-git commit -m "feat(v115): clamp a confluence stop beyond the 2% cap to exactly 2% before target selection
+git commit -m "feat(v115): clamp a confluence stop beyond the 2% cap to 1.75% (0.25% headroom) before target selection
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git add swingbot/config.py .env.example
+git commit -m "docs(v115): CLAMP_STOP_TO_HARD_CAP help and .env.example say 1.75%, not exactly 2%
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git add tests/planning/test_build_confluence_plan.py tests/backtesting/test_v74_no_behaviour_change.py tests/backtesting/test_armed_replay.py
@@ -839,18 +905,32 @@ on live data gave 0 setups at a 2.0 or 1.5 floor and 10 at 1.0, so production
 ran 1.0 as a stopgap on 2026-09-30.
 
 **v115 (`CLAMP_STOP_TO_HARD_CAP`, default on)** moves a wider confluence stop
-to exactly 2% from the trigger inside `build_confluence_plan`, before target
-selection. The floor is back at 2.0 (production returns to it when v115
-deploys). The `risk_cap` reject stays as a float-edge safety net.
+to **1.75%** from the trigger inside `build_confluence_plan`, before target
+selection. That is the 2% cap minus `CLAMP_HEADROOM_PCT` (0.25, a constant in
+`builders.py`). The floor is back at 2.0 (production returns to it when v115
+deploys). The `risk_cap` reject in `attach_plan_v2` stays as a safety net.
+
+- **Why 1.75, not 2.0.** `plan_manager._step_pending` cancels a stop-entry
+  fill `risk_cap` when `planned_loss_pct(fill, stop) > 2.0`, with no
+  tolerance. A stop at exactly 2% is cancelled on any fill past the trigger,
+  and float rounding alone tips about half of such stops over the cap.
+  0.25% of headroom absorbs a small gap. A fill more than about 0.25% past
+  the trigger is still cancelled `risk_cap`: that is the 2% policy working,
+  not a bug.
 
 - **With the clamp off, the empty band comes back.** A funnel of "N checked ->
   N no entry point" or a run of `risk_cap` rejects is this band, not a data
   fault.
-- **Replay clamps too.** `replay_scenarios` and `armed_replay.plan_at` call
-  `build_confluence_plan`, so there is no live-versus-backtest gap. But
-  confluence replay numbers produced before v115 used the unclamped stop and
-  are not comparable to later ones. To reproduce them, set
-  `CLAMP_STOP_TO_HARD_CAP=false`.
+- **Replay clamps by default.** `replay_scenarios` and `armed_replay.plan_at`
+  call `build_confluence_plan`. Confluence replay numbers produced before
+  v115 used the unclamped stop and are not comparable to later ones. To
+  reproduce them, set `CLAMP_STOP_TO_HARD_CAP=false`. The backtest has no
+  fill guard, so it never models a gap cancel: live can cancel a clamped
+  plan that replay fills.
+- `armed_replay.plan_at` stores the scenario's **unclamped**
+  `stop_distance_pct` while its plan carries the clamped stop. Read the stop
+  off the plan, never off that field. This is known and deliberately left
+  unchanged.
 - A clamped stop sits at no structural level, and embeds show it as-is. It
   reaches an alert only with `PLAN_ENGINE_V2=on`. In `shadow`, the scenario's
   unclamped stop is what posts.
@@ -935,7 +1015,7 @@ Expected: `build_confluence_plan` still at `C (14)`. No other function that this
 ```bash
 cd E:/Documents/Private/Projects/Discord-Bot
 git fetch origin && git status -sb && git log --oneline -5
-git merge --no-ff 2026-09-30-v115-restore-sep22-issuance -m "merge(v115): restore pre-09-23 issuance -- clamp wide stops to 2%, floor 2.0
+git merge --no-ff 2026-09-30-v115-restore-sep22-issuance -m "merge(v115): restore pre-09-23 issuance -- clamp wide stops to 1.75%, floor 2.0
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -948,13 +1028,13 @@ Read `VERSION.json` from disk now (not from this plan). Increment `bot` at **min
 
 ```bash
 git add VERSION.json
-git commit -m "release(bot): <new version> -- setups with a stop wider than 2% issue again, clamped to 2%; stop floor back to 2.0
+git commit -m "release(bot): <new version> -- setups with a stop wider than 2% issue again, clamped to 1.75%; stop floor back to 2.0
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 python scripts/dev/build_version_matrix.py
 python scripts/dev/testrun.py file tests/scripts/test_build_version_matrix.py
 git add swingbot/admin/version_history.json
-git commit -m "chore(bot): <new version> -- setups with a stop wider than 2% issue again, clamped to 2%; stop floor back to 2.0
+git commit -m "chore(bot): <new version> -- setups with a stop wider than 2% issue again, clamped to 1.75%; stop floor back to 2.0
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -1029,7 +1109,7 @@ Expected: `MIN_STOP_DISTANCE_PCT = 2.0`, `SIGNAL_CONFIRMATION_SCANS = 1`, `CLAMP
 bash E:/Documents/Private/Projects/Discord-Bot/scripts/ops/ssh-hetzner.sh "grep -nE 'plan rejected -- risk_cap|no_qualifying_target|skipping new-signal scan' /opt/swing-bot/logs/bot.log | tail -20"
 ```
 
-Expected: no new `risk_cap` rejections after the reload time. Some `no_qualifying_target` lines are normal. Illiquid-skip lines for thin futures (for example `SI=F`) are now expected. None should appear for `XAUUSD` or `XAGUSD`. Report what you see to the partner. Tell them it is an unmeasured live change (`Edge: volume`); give no win-rate or expectancy claim.
+Expected: no new `risk_cap` rejections after the reload time. Some `no_qualifying_target` lines are normal. For each alert posted after the reload, check its stop against its entry: a clamped plan's stop is **1.75%** from the trigger (`abs(entry - stop) / entry * 100` rounds to 1.75), not 2.0%. An unclamped plan is one whose natural stop was already within the cap; at floor 2.0, that stop is about 2.0%. Any stop above 2.0% means the clamp is not live (re-check Step 6). A `cancelled_risk_cap` on a clamped plan is expected only for a fill more than about 0.25% past the trigger; report any that occur with their `planned_loss_pct`. Illiquid-skip lines for thin futures (for example `SI=F`) are now expected. None should appear for `XAUUSD` or `XAGUSD`. Report what you see to the partner. Tell them it is an unmeasured live change (`Edge: volume`); give no win-rate or expectancy claim.
 
 - [ ] **Step 12: Mirror the production change into the repo and commit** (on `main`; `mirror-prod` skill)
 
