@@ -63,7 +63,7 @@ def test_ticket_and_event_embeds():
     assert ticket.footer.text.startswith(tokens.DISCLAIMER)
     event = execution_embeds.build_instruction_embed(
         item.plan_v2, PlanEvent(item.plan_v2.plan_id, "cancelled_expired", {"bars_waited": 6}))
-    assert event.title == "🚫 ▲ LONG NVDA · CANCEL"
+    assert event.title == "🏁 ▲ LONG NVDA · EXPIRED · ⏹️"
 
 
 def test_risk_cap_cancel_is_its_own_manage_kind():
@@ -122,8 +122,12 @@ def test_extended_hours_close_is_close_at_market():
     assert embed.description.count("CLOSE AT MARKET now") == 1
 
 
-def test_invalidated_cancel_uses_the_cancel_kind():
+@pytest.mark.parametrize("transition,word", [("cancelled_invalidated", "INVALIDATED"),
+                                              ("cancelled_expired", "EXPIRED")])
+def test_expired_and_invalidated_post_as_grey_result_never_scratch(transition, word):
     plan = make_plan_v2()
-    embed = execution_embeds.build_instruction_embed(
-        plan, PlanEvent(plan.plan_id, "cancelled_invalidated", {}))
-    assert embed.title == "🚫 ▲ LONG NVDA · CANCEL"
+    embed = execution_embeds.build_instruction_embed(plan, PlanEvent(plan.plan_id, transition, {}))
+    assert embed.title == f"🏁 ▲ LONG NVDA · {word} · ⏹️"
+    assert "SCRATCH" not in embed.title and "⚪" not in embed.title
+    assert "SCRATCH" not in embed.push_text
+    assert embed.color.value == kinds.RESULT_GREY

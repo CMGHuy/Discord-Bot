@@ -1,5 +1,7 @@
 from swingbot.core.presentation import components as c
 from swingbot.core.presentation import tokens as t
+import re
+
 import discord
 import pytest
 
@@ -137,3 +139,12 @@ def test_the_package_exports_the_push_helpers():
     from swingbot.core import presentation as ui
     assert ui.push_embed is c.push_embed and ui.push_kwargs is c.push_kwargs
     assert ui.PushEmbed is c.PushEmbed
+
+
+def test_result_headline_never_raises_on_six_digit_prices():
+    text = c.result_headline(direction="bullish", entry=150000.0, exit_price=160000.0,
+                                      stop=140000.0, pct=6.7, r=1.5)
+    assert text.startswith("```ansi")
+    plain = re.sub(r"\[[0-9;]*m", "", text)
+    assert "150000" in plain and "160000" in plain
+    assert all(len(line) <= 32 for line in plain.splitlines())

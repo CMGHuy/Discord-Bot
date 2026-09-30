@@ -99,7 +99,7 @@ def _fake_item_from_plan(plan):
                                      strategy=plan.strategy, horizon_key=plan.horizon_key,
                                      horizon_label=plan.horizon_key),
         plan=legacy_plan, plan_v2=plan,
-        conf=types.SimpleNamespace(level=3, label="n/a", score=0),
+        conf=types.SimpleNamespace(level=getattr(plan, "confidence_level", None) or 3, label="n/a", score=0),
         requirements=[], combined_from=[{"strategy": plan.strategy, "horizon_key": plan.horizon_key}],
         all_requirements_met=True, htf_info=None,
     )

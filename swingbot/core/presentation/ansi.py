@@ -109,9 +109,12 @@ def _realised_colour(r: float | None) -> str:
 def result_lines(*, direction: str, entry: float | None, exit_price: float | None,
                  stop: float | None, pct: float | None, r: float | None) -> list[str]:
     """The RESULT price block: side, entry → exit / stop, and the realised move."""
+    price_line = (f"{paint(tokens.fmt_price(entry), 'cyan')} → {tokens.fmt_price(exit_price)} / "
+                  f"{paint(tokens.fmt_price(stop), 'red')}")
+    if visible_width(price_line) > MAX_LINE_WIDTH:  # six-digit prices: drop the stop, never abort a send
+        price_line = f"{paint(tokens.fmt_price(entry), 'cyan')} → {tokens.fmt_price(exit_price)}"
     return [
         direction_line(direction),
-        (f"{paint(tokens.fmt_price(entry), 'cyan')} → {tokens.fmt_price(exit_price)} / "
-         f"{paint(tokens.fmt_price(stop), 'red')}"),
+        price_line,
         f"  {tokens.fmt_pct(pct)} {paint(tokens.fmt_r(r), _realised_colour(r))}",
     ]

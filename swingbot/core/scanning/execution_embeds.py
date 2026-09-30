@@ -23,18 +23,25 @@ _EVENT_KINDS = {
     "be_moved": Kind.BE_MOVED,
     "tp1_partial": Kind.TP1_HIT,
     "stop_moved": Kind.MOVE_STOP,
-    "cancelled_expired": Kind.CANCEL,
-    "cancelled_invalidated": Kind.CANCEL,
+    "cancelled_expired": Kind.EXPIRED,
+    "cancelled_invalidated": Kind.INVALIDATED,
     "cancelled_risk_cap": Kind.RISK_CAP,
 }
+
+
+def _result_detail(kind: Kind, r: float | None) -> str:
+    """Expired / invalidated carry only their grey ⏹️ mark (the label names them);
+    a closed trade reads its outcome from R."""
+    if kind in (Kind.EXPIRED, Kind.INVALIDATED):
+        return kinds.outcome_mark(kind.name.lower())
+    return kinds.outcome_detail(kinds.outcome_for_r(r), r)
 
 
 def render(instruction: Instruction, kind: Kind, *, block: str | None = None,
            r: float | None = None) -> discord.Embed:
     """Registry title and push line; body = ANSI block (if any), warnings,
     bold headline, instruction lines."""
-    detail = (kinds.outcome_detail(kinds.outcome_for_r(r), r)
-              if kind.family is Family.RESULT else "")
+    detail = _result_detail(kind, r) if kind.family is Family.RESULT else ""
     embed = ui.push_embed(kind, instruction.ticker, instruction.direction, detail)
     body = [*instruction.warnings, f"**{instruction.headline}**", *instruction.lines]
     embed.description = "\n".join([block, *body] if block else body)
