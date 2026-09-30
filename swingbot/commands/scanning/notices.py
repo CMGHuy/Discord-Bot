@@ -53,6 +53,12 @@ def health_recovered_embed():
                         "The scan tick completed successfully again.")
 
 
+def pitr_notice_embed(notice):
+    """v116: a PITR alarm or its recovery, in the existing HEALTH kinds."""
+    kind = Kind.HEALTH_RECOVERED if notice.recovered else Kind.HEALTH_ALERT
+    return system_embed(kind, notice.detail, notice.description)
+
+
 def bot_online_embed(*, now_text: str, session_start: int, session_end: int, interval: int,
                      watchlist_size: int, open_count: int, min_level: int):
     return system_embed(Kind.BOT_ONLINE, now_text, (

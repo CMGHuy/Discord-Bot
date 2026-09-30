@@ -16,6 +16,7 @@ from swingbot.core.marketdata.data import get_current_price_batch
 from swingbot.core.scanning.fetch import _run_bounded
 from swingbot.core.infra.silent_channel import silence
 from swingbot.core.infra.logsetup import apply_log_level
+from swingbot.core.infra import pitr_watch
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core import presentation as ui
 from swingbot.core.marketdata.watchlist import load_watchlist
@@ -813,6 +814,39 @@ async def _before_market_data_refresh():
     await asyncio.sleep(60)
 
 
+_PITR_WATCH = pitr_watch.PitrWatch()
+
+
+@tasks.loop(minutes=15)
+async def pitr_watch_loop():
+    """v116: WAL-archiver and backups-disk alarms, once per episode, to ops."""
+    try:
+        sample = await asyncio.to_thread(pitr_watch.read_archiver)
+        due = _PITR_WATCH.tick(sample, pitr_watch.disk_used_pct(config.DATA_DIR))
+    except Exception:
+        log.exception("pitr watch tick failed")
+        return
+    channel = _ops_channel()
+    if channel is None:
+        return
+    for notice in due:
+        await notices.send_guarded(channel, notices.pitr_notice_embed(notice), what="PITR alarm")
+
+
+def _always_on_loops() -> tuple:
+    """Loops on_ready starts unconditionally, in start order."""
+    return (session_scan, heartbeat, config_watcher, trade_monitor, daily_recap,
+            weekend_deep_scan_task, weekly_earnings_refresh, pitr_watch_loop)
+
+
+def _start_background_loops() -> None:
+    for loop in _always_on_loops():
+        if not loop.is_running():
+            loop.start()
+    if config.MARKET_DATA_AUTO_REFRESH and not market_data_refresh.is_running():
+        market_data_refresh.start()
+
+
 def _apply_market_data_refresh_config(changed: dict) -> None:
     if "MARKET_DATA_REFRESH_MINUTES" in changed and market_data_refresh.is_running():
         market_data_refresh.change_interval(minutes=config.MARKET_DATA_REFRESH_MINUTES)
@@ -870,22 +904,7 @@ async def on_ready():
         config.CONFLUENCE_DEVIATION_PCT, wl_size,
     )
     install_reload_signal_handler()
-    if not session_scan.is_running():
-        session_scan.start()
-    if not heartbeat.is_running():
-        heartbeat.start()
-    if not config_watcher.is_running():
-        config_watcher.start()
-    if not trade_monitor.is_running():
-        trade_monitor.start()
-    if not daily_recap.is_running():
-        daily_recap.start()
-    if not weekend_deep_scan_task.is_running():
-        weekend_deep_scan_task.start()
-    if not weekly_earnings_refresh.is_running():
-        weekly_earnings_refresh.start()
-    if config.MARKET_DATA_AUTO_REFRESH and not market_data_refresh.is_running():
-        market_data_refresh.start()
+    _start_background_loops()
     await presence._refresh_presence()
 
     if _ready_announcement_sent:
