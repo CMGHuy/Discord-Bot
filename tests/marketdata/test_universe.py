@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from swingbot import config
+from swingbot.core.marketdata.spot_metals import SPOT_PAIRS
 from tests.conftest import make_ohlcv
 from swingbot.core.marketdata.universe import liquidity_ok
 
@@ -30,13 +32,57 @@ def test_explicit_thresholds_override_config():
 
 
 @pytest.mark.parametrize("symbol", ["SI=F", "XAGUSD", "XAUUSD", "GC=F", "EURUSD=X", "^GSPC"])
-def test_non_share_symbols_skip_the_dollar_volume_floor(symbol):
+def test_non_share_symbols_skip_the_dollar_volume_floor(symbol, monkeypatch):
     # Production 2026-09-28: SI=F read as $0.1M/day and was skipped every
     # scan. Yahoo reports futures volume in contracts (5,000 oz each) and FX
     # volume as 0, so Close x Volume says nothing about these markets.
+    # v115: futures/FX/indices are exempt only while LIQUIDITY_EXEMPT_NON_EQUITY is on.
+    monkeypatch.setattr(config, "LIQUIDITY_EXEMPT_NON_EQUITY", True)
     from swingbot.core.marketdata.universe import liquidity_reason
     df = make_ohlcv(np.full(60, 61.5), volumes=np.full(60, 1_400.0))
     assert liquidity_reason(df, symbol=symbol) is None
+
+
+@pytest.mark.parametrize("symbol", ["SI=F", "GC=F", "EURUSD=X", "^GSPC"])
+def test_flag_off_puts_futures_fx_and_indices_back_under_the_floor(symbol, monkeypatch):
+    # v115 default: the 09-22 behaviour for futures/FX/indices.
+    monkeypatch.setattr(config, "LIQUIDITY_EXEMPT_NON_EQUITY", False)
+    from swingbot.core.marketdata.universe import liquidity_reason
+    df = make_ohlcv(np.full(60, 61.5), volumes=np.full(60, 1_400.0))
+    assert "avg dollar vol" in liquidity_reason(df, symbol=symbol)
+
+
+def test_the_spot_metal_set_is_v109s_and_holds_gold_and_silver():
+    assert {"XAUUSD", "XAGUSD"} <= set(SPOT_PAIRS)
+
+
+@pytest.mark.parametrize("symbol", sorted(SPOT_PAIRS))
+def test_flag_off_keeps_every_v109_spot_metal_exempt(symbol, monkeypatch):
+    # Partner decision 2026-09-30: spot metals carry their future's contract
+    # volume, so the floor would silently drop the v109 feature. Derived from
+    # spot_metals.SPOT_PAIRS, v109's single source of truth.
+    monkeypatch.setattr(config, "LIQUIDITY_EXEMPT_NON_EQUITY", False)
+    from swingbot.core.marketdata.universe import liquidity_reason
+    df = make_ohlcv(np.full(60, 61.5), volumes=np.full(60, 1_400.0))
+    assert liquidity_reason(df, symbol=symbol) is None
+
+
+def test_flag_off_spot_metals_pass_where_their_futures_do_not(monkeypatch):
+    # The same thin volume: XAUUSD/XAGUSD pass, GC=F/SI=F (their underlyings) do not.
+    monkeypatch.setattr(config, "LIQUIDITY_EXEMPT_NON_EQUITY", False)
+    from swingbot.core.marketdata.universe import liquidity_reason
+    df = make_ohlcv(np.full(60, 61.5), volumes=np.full(60, 1_400.0))
+    assert liquidity_reason(df, symbol="XAUUSD") is None
+    assert liquidity_reason(df, symbol="XAGUSD") is None
+    assert "avg dollar vol" in liquidity_reason(df, symbol="GC=F")
+    assert "avg dollar vol" in liquidity_reason(df, symbol="SI=F")
+
+
+def test_flag_on_still_floors_shares(monkeypatch):
+    monkeypatch.setattr(config, "LIQUIDITY_EXEMPT_NON_EQUITY", True)
+    from swingbot.core.marketdata.universe import liquidity_reason
+    df = make_ohlcv(np.full(60, 30.0), volumes=np.full(60, 100_000.0))
+    assert "avg dollar vol" in liquidity_reason(df, symbol="THIN")
 
 
 def test_spot_metal_class_is_volume_exempt():
