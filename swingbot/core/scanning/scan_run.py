@@ -16,6 +16,7 @@ from swingbot.core.edge import heat as heat_mod
 from swingbot.core.edge import regime2
 from swingbot.core.edge import throttle
 from swingbot.core.edge.rs_gate import rs_verdict
+from swingbot.core.infra.logsetup import new_scan_id, scan_context
 from swingbot.core.infra.notifier import notify_secondary
 from swingbot.core.market import market_context, opex
 from swingbot.core.market.events import earnings_within_window
@@ -1029,7 +1030,20 @@ async def run_scan(horizon_filter: str = "all", require_confirmation: bool = Tru
     exclusive ownership of the scan, so it can't stomp on a still-running
     previous scan's own pending stop request), and always cleared again in a
     finally block so a scan that errors out doesn't leave "running" stuck on.
+
+    v111: every line this scan logs -- here, in the _sync_run_scan worker
+    thread (asyncio.to_thread copies the context) and in map_tickers' pool
+    (which submits through with_current_context) -- carries one scan id, so
+    `grep s-1405k3 logs/bot.log` shows the scan end to end.
     """
+    with scan_context(new_scan_id()):
+        return await _run_scan_in_context(horizon_filter, require_confirmation, bot,
+                                          progress, min_confluence)
+
+
+async def _run_scan_in_context(horizon_filter, require_confirmation, bot, progress,
+                               min_confluence) -> list:
+    """run_scan's body, run inside the scan id set by run_scan."""
     started = time.monotonic()
     async with _scan_lock:
         runstate._clear_stop()

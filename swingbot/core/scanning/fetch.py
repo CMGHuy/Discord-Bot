@@ -11,6 +11,7 @@ from collections import OrderedDict
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait as _futures_wait
 
 from swingbot import config
+from swingbot.core.infra.logsetup import with_current_context
 # `get_current_price` is re-exported: scan_run.py calls it as
 # `fetch.get_current_price`, so it is used even though nothing here calls it.
 from swingbot.core.marketdata.data import get_current_price  # noqa: F401
@@ -573,8 +574,12 @@ def map_tickers(fn, tickers: list, workers: int | None = None) -> list:
 
     if n <= 1 or len(tickers) <= 1:
         return [safe(t) for t in tickers]
+    # v111 audit: ThreadPoolExecutor threads start in an empty context, so
+    # without the wrap every worker line would log scan id "-". Spawned
+    # ProcessPoolExecutor children (_run_bounded, the cold fetch) cannot
+    # inherit a ContextVar at all; their outcome is logged by this process.
     with ThreadPoolExecutor(max_workers=n) as pool:
-        return list(pool.map(safe, tickers))
+        return list(pool.map(with_current_context(safe), tickers))
 
 
 

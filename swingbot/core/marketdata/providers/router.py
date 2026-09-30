@@ -12,6 +12,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
 from swingbot import config
+from swingbot.core.infra.logsetup import with_current_context
 from swingbot.core.marketdata import spot_metals
 from swingbot.core.marketdata.providers.alpaca_provider import (
     AlpacaAuthError, AlpacaMiss, AlpacaProvider)
@@ -98,7 +99,7 @@ def _attempt(method: str, *args):
     if prov is None or not _bucket.take():
         return None
     try:
-        result = _pool.submit(getattr(prov, method), *args).result(
+        result = _pool.submit(with_current_context(getattr(prov, method)), *args).result(
             timeout=float(config.ALPACA_TIMEOUT_SECONDS))
     except (AlpacaMiss, FutureTimeout, Exception) as exc:
         _stats["failures"] += 1
