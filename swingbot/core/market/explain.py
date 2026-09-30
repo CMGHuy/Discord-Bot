@@ -49,9 +49,11 @@ def stop_distance_pct(entry, stop):
 
 
 def v2_stop_was_moved(scenario, entry, stop) -> bool:
-    """True when a priced v2 stop differs from the scenario's (v115's clamp).
-    Only then do alerts print v2 stop figures; otherwise every message stays
-    on the scenario's."""
+    """True when a priced v2 stop differs from the scenario's (v115's clamp)
+    and its distance from ``entry`` is computable. Only then do alerts print
+    v2 stop figures; otherwise every message stays on the scenario's."""
+    if stop is None or not entry:
+        return False
     return not math.isclose(stop, scenario.stop_loss, abs_tol=1e-9)
 
 

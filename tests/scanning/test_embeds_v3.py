@@ -741,6 +741,12 @@ def _clamped_item():
     return item
 
 
+def _clamped_scenario_result():
+    result = _fake_scenario_result()
+    result.scenario.stop_loss, result.scenario.stop_distance_pct = 96.0, 4.0
+    return result
+
+
 def _all_embed_text(embed):
     plain = ansi._ESCAPE_RE.sub("", embed.description)
     return "\n".join([plain] + [f"{f.name}\n{f.value}" for f in embed.fields])
@@ -786,6 +792,17 @@ def test_an_unclamped_v2_plan_keeps_the_scenario_r_even_when_tp1_differs(monkeyp
     stop_entry = dataclasses.replace(item.plan_v2, entry_type="stop_entry", trigger_price=102.0)
     explanation = build_explanation(_fake_scenario_result(), plan=stop_entry)
     assert "Stop at **95.00** (-5.0%)" in explanation  # not 6.9% from the trigger
+
+
+def test_an_uncomputable_v2_stop_distance_falls_back_to_the_scenario(monkeypatch):
+    import dataclasses
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = _clamped_item()
+    zero_entry = dataclasses.replace(item.plan_v2, trigger_price=0.0)
+    nums = {"entry": 0.0, "stop_loss": 98.25, "take_profit": 110.0}
+    assert plan_table.stop_figures_for_display(zero_entry, nums, item.plan) == (4.0, 2.5)
+    assert "Stop at **96.00** (-4.0%)" in build_explanation(
+        _clamped_scenario_result(), plan=zero_entry)
 
 
 def test_an_unclamped_stop_renders_as_before(monkeypatch):
