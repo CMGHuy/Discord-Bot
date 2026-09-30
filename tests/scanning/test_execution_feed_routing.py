@@ -79,7 +79,7 @@ def test_fill_uses_feed_not_alerts_and_close_is_notice(wired):
     fill = PlanEvent("p1", "filled", {"entry_price": 100.0})
     assert _post(bot, fill) == [Delivery("p1", "notice", "filled")]
     assert alerts.sent == []
-    assert feed.sent[0]["embed"].title.endswith("— FILLED")
+    assert feed.sent[0]["embed"].title.endswith("· FILLED")
     close = PlanEvent("p1", "closed", {"reason": "loss", "exit_price": 94.5,
                        "session": "regular", "notified_stop": 95.0, "bot_stop": 95.0})
     assert _post(bot, close) == [Delivery("p1", "notice", "closed")]

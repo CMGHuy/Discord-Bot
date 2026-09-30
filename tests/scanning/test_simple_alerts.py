@@ -176,7 +176,8 @@ def test_unlogged_v2_alert_says_do_not_place(monkeypatch, unsized):
     item = make_item(plan_v2=make_plan_v2())
     item.not_logged_reason = "already open"
     embed = build_simple_alert(item)
-    assert embed.title.endswith("— DO NOT PLACE")
+    assert embed.title == "🆕 ▲ LONG NVDA · DO NOT PLACE"
+    assert embed.color.value == kinds.SETUP_BLOCKED
     assert "**DO NOT PLACE — already open**" in embed.description
 
 
