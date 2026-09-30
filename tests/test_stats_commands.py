@@ -11,6 +11,7 @@ from swingbot.core.planning.plan_engine import TradePlanV2
 from swingbot.core.scanning import snapshots
 from swingbot.core.scanning.embeds import build_embed
 from swingbot.core import presentation as ui
+from swingbot.core.presentation import kinds
 
 TODAY = dt.date(2026, 7, 11)
 
@@ -82,8 +83,8 @@ def test_fake_item_from_plan_builds_embed_without_crashing_and_uses_the_shared_a
     assert isinstance(embed, discord.Embed)
     # Direction remains explicit in the title while confidence is expressed
     # through the shared accent, not a numbered or badge chip.
-    assert embed.title.startswith("🟢 LONG")
-    assert embed.color.value == ui.accent_for_level(item.conf.level).value
+    assert embed.title.startswith("🆕 ▲ LONG NVDA")
+    assert embed.color.value == kinds.SETUP_RAMP[item.conf.level]
     assert "VALIDATED" not in embed.title
     assert "NVDA" in embed.title
 
