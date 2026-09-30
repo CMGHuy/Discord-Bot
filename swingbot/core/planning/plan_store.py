@@ -94,6 +94,17 @@ class PlanStore:
                 record["created_at"] = record["created_at"].isoformat()
         return {record["plan_id"]: record for record in records}
 
+    def get_record(self, plan_id: str) -> dict | None:
+        """The raw plan dict for a plan id from the read backend, or None.
+
+        Public replacement for reaching into the private snapshot (which is the JSON
+        snapshot and goes stale once reads move to PostgreSQL)."""
+        return self._all().get(plan_id)
+
+    def records(self) -> list[dict]:
+        """Every raw plan dict from the read backend."""
+        return list(self._all().values())
+
     def add(self, plan: TradePlanV2) -> None:
         with _LOCK:
             self._plans[plan.plan_id] = plan_to_dict(plan)

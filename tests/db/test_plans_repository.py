@@ -44,3 +44,15 @@ def test_full_plan_document_round_trips(repo, db_conn):
                    pending_notice={"transition": "closed", "detail": {"reason": "loss"}})
     repo.insert(record, conn=db_conn)
     assert diff_records(record, repo.get("P1", conn=db_conn)) == []
+
+
+def test_version_moves_on_insert_update_and_delete(repo, db_conn):
+    empty = repo.version(conn=db_conn)
+    assert empty == (0, None)
+    repo.insert(_plan("P1"), conn=db_conn)
+    inserted = repo.version(conn=db_conn)
+    repo.upsert(_plan("P1", status=PlanStatus.ACTIVE), conn=db_conn)
+    updated = repo.version(conn=db_conn)
+    repo.delete("P1", conn=db_conn)
+    assert len({empty, inserted, updated, repo.version(conn=db_conn)}) >= 3
+    assert inserted != updated
