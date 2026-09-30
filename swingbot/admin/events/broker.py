@@ -36,9 +36,48 @@ from datetime import datetime, timezone
 
 from swingbot.admin.api_v1 import ApiError, iso
 
-from .watcher import FileWatcher
+from .db_listener import DbEventListener
+from .watcher import FileWatcher, residual_paths
 
 log = logging.getLogger(__name__)
+
+
+class _CompositeWatcher:
+    """Several watchers behind the one `start()`/`stop()` the broker drives.
+
+    Exists for the `events:db` stage while some watched files still have no
+    table: the `DbEventListener` covers every table-backed concern and a
+    `FileWatcher` over `residual_paths()` covers the rest, so nothing the
+    SPA listens for goes silent mid-migration.
+    """
+
+    def __init__(self, *watchers):
+        self.watchers = watchers
+
+    def start(self) -> None:
+        for watcher in self.watchers:
+            watcher.start()
+
+    def stop(self) -> None:
+        for watcher in self.watchers:
+            watcher.stop()
+
+
+def _default_watcher(emit):
+    """Build whichever watcher this stage's storage needs.
+
+    The broker has always taken an injectable factory (for tests that drive
+    publish by hand); this makes the *default* stage-aware, so the swap from
+    stat()-polling to LISTEN/NOTIFY is one decision in one place rather than a
+    rewrite of everything downstream. Nothing about the events themselves
+    changes -- same ten names, same semantics, same debounce.
+    """
+    from swingbot.core.db import stages
+    if stages.reads_db("events"):
+        return _CompositeWatcher(
+            DbEventListener(emit), FileWatcher(emit, paths=residual_paths())
+        )
+    return FileWatcher(emit)
 
 #: Concurrent event connections. Spec Decision 5: the cap exists so that a
 #: reconnect bug in the client leaks visibly and boundedly instead of
@@ -165,7 +204,7 @@ class EventBroker:
         max_connections: int = MAX_CONNECTIONS,
         queue_limit: int = QUEUE_LIMIT,
     ):
-        self._watcher_factory = watcher_factory or (lambda emit: FileWatcher(emit))
+        self._watcher_factory = watcher_factory or _default_watcher
         self._max_connections = max_connections
         self._queue_limit = queue_limit
 
@@ -232,10 +271,13 @@ class EventBroker:
     def _release(self, subscription: Subscription) -> None:
         """Drop a connection, stopping the watcher if it was the last.
 
-        Restarting builds a *new* watcher rather than reviving this one.
-        A FileWatcher primes itself in `__init__`, so a fresh instance both
-        re-reads the disk state that moved while nobody was connected, and
-        avoids racing a thread that is still winding down from `stop()`.
+        Restarting builds a *new* watcher rather than reviving this one, so
+        the restart never races a thread still winding down from `stop()` --
+        true of a FileWatcher and a DbEventListener alike. A FileWatcher also
+        primes itself in `__init__`, so a fresh one re-reads the disk state
+        that moved while nobody was connected; a DbEventListener has nothing
+        to prime from (a notification sent while nobody listened is gone), and
+        the resync every new connection receives covers that gap instead.
         """
         with self._lock:
             self._subscriptions.discard(subscription)

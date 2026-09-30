@@ -117,6 +117,46 @@ def default_paths() -> dict[str, str]:
     return paths
 
 
+#: `_DATA_PATHS` names whose store has a `TABLE_CHANNELS` table, so at the
+#: `events:db` stage a NOTIFY trigger raises their concern and stat()-ing the
+#: file would only duplicate it. Listed explicitly -- not derived -- so a file
+#: added to `_DATA_PATHS` later defaults to *residual* (still watched), never
+#: to silently dropped. Parts 4/5 shrink the residual set as their tables
+#: land; Part 6 deletes it along with this watcher.
+_TABLE_BACKED: frozenset[str] = frozenset({
+    "trades.json",            # trades
+    "plans.json",             # plans
+    "starred_plans.json",     # starred_plans
+    "account.json",           # account
+    "state.json",             # signal_state
+    "journal.json",           # journal_entries
+    "scan_running.flag",      # runtime_flags
+    "scan_paused.flag",       # runtime_flags
+    "trigger_check.flag",     # runtime_flags
+    "stop_scan.flag",         # runtime_flags
+    "bot_heartbeat.json",     # bot_heartbeat
+    "killswitch.json",        # killswitch
+    "watchlist.json",         # watchlist
+    "ticker_directory.json",  # ticker_directory
+    "admin_jobs.json",        # admin_jobs
+    "tuning_results",         # tuning_results
+})
+
+
+def residual_paths() -> dict[str, str]:
+    """`default_paths()` minus every path a NOTIFY trigger already covers.
+
+    What the file watcher still has to watch beside a `DbEventListener`:
+    scan progress/snapshots/telemetry, the analytics snapshot and `.env`,
+    none of which has a table yet.
+    """
+    table_backed = {os.path.join(config.DATA_DIR, name) for name in _TABLE_BACKED}
+    return {
+        path: event for path, event in default_paths().items()
+        if path not in table_backed
+    }
+
+
 class FileWatcher:
     """Watch a fixed set of paths and emit an event type when one moves.
 
