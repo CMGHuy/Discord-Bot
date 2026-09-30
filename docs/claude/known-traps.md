@@ -319,8 +319,8 @@ ran 1.0 as a stopgap on 2026-09-30.
 **v115 (`CLAMP_STOP_TO_HARD_CAP`, default on)** moves a wider confluence stop
 to **1.75%** from the trigger inside `build_confluence_plan`, before target
 selection. That is the 2% cap minus `CLAMP_HEADROOM_PCT` (0.25, a constant in
-`builders.py`). The floor is back at 2.0 (production returns to it when v115
-deploys). The `risk_cap` reject in `attach_plan_v2` stays as a safety net.
+`builders.py`). The floor is back at 2.0 (production back on 2.0 since
+2026-09-30 20:44 UTC, when the v115 image was live). The `risk_cap` reject in `attach_plan_v2` stays as a safety net.
 
 - **Why 1.75, not 2.0.** `plan_manager._step_pending` cancels a stop-entry
   fill `risk_cap` when `planned_loss_pct(fill, stop) > 2.0`, with no
