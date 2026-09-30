@@ -1,12 +1,15 @@
+import logging
 import os
 
 import discord
 
 from swingbot import config
-from swingbot.bot_core import bot, log
+from swingbot.bot_core import bot
 from swingbot.core import presentation as ui
 from swingbot.core.analytics.rank import rank_plans
 from swingbot.core.market.session import market_today
+
+log = logging.getLogger(__name__)
 
 def _ordered_alerts(alerts: list, today=None) -> list:
     """Splits `alerts` (each a (embed, chart_path, plan_or_none) tuple)

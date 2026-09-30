@@ -1,12 +1,15 @@
 import datetime as dt
+import logging
 import random
 
 import discord
 
 from swingbot import config
-from swingbot.bot_core import SESSION_TZ, bot, in_session, log
+from swingbot.bot_core import SESSION_TZ, bot, in_session
 from swingbot.core.scanning import engine as scan_engine
 from . import alerts, runstate
+
+log = logging.getLogger(__name__)
 
 _WELCOME_MESSAGES = (
     "☀️ **Rise and grind!** The trading session is open ({start:02d}:00–{end:02d}:00 Europe/Berlin), "

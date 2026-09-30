@@ -1,16 +1,19 @@
 import asyncio
 import datetime as dt
+import logging
 import time
 
 import discord
 
 from swingbot import config
-from swingbot.bot_core import SESSION_TZ, bot, in_session, log
+from swingbot.bot_core import SESSION_TZ, bot, in_session
 from swingbot.core.scanning import engine as scan_engine
 from swingbot.core.market.strategy import HORIZONS
 from swingbot.core.marketdata.watchlist import load_watchlist
 from . import presence, recap, runstate
 from .alerts import _send_alerts
+
+log = logging.getLogger(__name__)
 
 trade_log = scan_engine.trade_log
 _HISTORICAL_CHECK_MAX_RESULTS = 90

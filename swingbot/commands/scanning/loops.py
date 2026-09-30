@@ -2,6 +2,7 @@ import asyncio
 import datetime as dt
 import functools
 import json
+import logging
 import os
 
 import discord
@@ -10,7 +11,7 @@ from discord.ext import tasks
 from swingbot import config
 from swingbot.config import auto_reload_if_changed
 from swingbot.core.scanning import engine as scan_engine
-from swingbot.bot_core import bot, in_session, log, SESSION_TZ, install_reload_signal_handler, on_config_reload
+from swingbot.bot_core import bot, in_session, SESSION_TZ, install_reload_signal_handler, on_config_reload
 from swingbot.core.marketdata.data import get_current_price_batch
 from swingbot.core.scanning.fetch import _run_bounded
 from swingbot.core.infra.silent_channel import silence
@@ -19,6 +20,8 @@ from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.marketdata.watchlist import load_watchlist
 from . import presence, recap, runstate
 from .alerts import _send_alerts
+
+log = logging.getLogger(__name__)
 
 trade_log = scan_engine.trade_log
 _ready_announcement_sent = False

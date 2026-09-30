@@ -1,7 +1,11 @@
+import logging
+
 from swingbot import config
-from swingbot.bot_core import bot, log
+from swingbot.bot_core import bot
 from swingbot.core.scanning import engine as scan_engine
 from .alerts import deep_scan_report
+
+log = logging.getLogger(__name__)
 
 trade_log = scan_engine.trade_log
 

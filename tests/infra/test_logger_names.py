@@ -29,3 +29,16 @@ def test_no_module_names_its_logger_with_a_swing_bot_literal():
                  for line, name in _literal_logger_names(path)
                  if name.startswith(("swing-bot", "swingbot"))]
     assert offenders == [], "use logging.getLogger(__name__):\n" + "\n".join(offenders)
+
+
+def _borrows_bot_core_log(path):
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    return [node.lineno for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.module == "swingbot.bot_core"
+            and any(alias.name == "log" for alias in node.names)]
+
+
+def test_no_module_borrows_the_bot_core_logger():
+    offenders = [f"{path.relative_to(ROOT.parent).as_posix()}:{line}"
+                 for path in _python_files() for line in _borrows_bot_core_log(path)]
+    assert offenders == [], "give the module its own logging.getLogger(__name__):\n" + "\n".join(offenders)
