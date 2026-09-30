@@ -776,6 +776,18 @@ def test_a_clamped_stop_reads_the_same_in_the_simple_channel(monkeypatch):
         assert "98.25" in text
 
 
+def test_an_unclamped_v2_plan_keeps_the_scenario_r_even_when_tp1_differs(monkeypatch):
+    import dataclasses
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = make_item(plan_v2=dataclasses.replace(make_plan_v2(), tp1=120.0))
+    text = _all_embed_text(_build(item))
+    assert "100.00 → 120.00 / 95.00" in text
+    assert "−5.0% 2.0R" in text  # scenario's R, not 20/5 = 4.0R off the v2 TP1
+    stop_entry = dataclasses.replace(item.plan_v2, entry_type="stop_entry", trigger_price=102.0)
+    explanation = build_explanation(_fake_scenario_result(), plan=stop_entry)
+    assert "Stop at **95.00** (-5.0%)" in explanation  # not 6.9% from the trigger
+
+
 def test_an_unclamped_stop_renders_as_before(monkeypatch):
     for flag, plan_v2 in (("off", None), ("on", make_plan_v2())):
         monkeypatch.setattr(config, "PLAN_ENGINE_V2", flag)

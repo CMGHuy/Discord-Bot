@@ -12,6 +12,8 @@ Format (3-5 lines max):
   Line 4: earnings warning, if applicable
 """
 
+import math
+
 from swingbot.core.market.levels import strategy_family
 
 # One very short phrase per strategy family -- just enough to say WHAT
@@ -46,11 +48,18 @@ def stop_distance_pct(entry, stop):
     return abs(entry - stop) / entry * 100
 
 
+def v2_stop_was_moved(scenario, entry, stop) -> bool:
+    """True when a priced v2 stop differs from the scenario's (v115's clamp).
+    Only then do alerts print v2 stop figures; otherwise every message stays
+    on the scenario's."""
+    return not math.isclose(stop, scenario.stop_loss, abs_tol=1e-9)
+
+
 def _stop_figures(scenario, plan):
-    """(stop price, unsigned stop %) to print: the priced v2 plan's when one
-    is given -- v115 may have clamped its stop inside the scenario's -- else
-    the scenario's own. Measured from the trigger, the price the plan enters at."""
-    if plan is None:
+    """(stop price, unsigned stop %) to print: the priced v2 plan's when its
+    stop was clamped inside the scenario's -- measured from the trigger, the
+    price the plan enters at -- else the scenario's own."""
+    if plan is None or not v2_stop_was_moved(scenario, plan.trigger_price, plan.stop_loss):
         return scenario.stop_loss, scenario.stop_distance_pct
     return plan.stop_loss, stop_distance_pct(plan.trigger_price, plan.stop_loss)
 
