@@ -63,6 +63,12 @@ def test_a_rolled_back_write_delivers_nothing(listener, db_conn):
     assert "trades" not in listener
 
 
+def test_a_quiet_poll_window_ticks_on_event_with_none(listener):
+    """A burst that ends in silence must still get flushed downstream, so an
+    empty poll window calls on_event(None)."""
+    assert _wait_for(listener, None), f"no idle tick; saw {listener}"
+
+
 def test_listen_rejects_an_unknown_channel(db_engine):
     with pytest.raises(ValueError, match="not a known channel"):
         notify.listen(["made_up"], lambda _c: None, threading.Event(),
