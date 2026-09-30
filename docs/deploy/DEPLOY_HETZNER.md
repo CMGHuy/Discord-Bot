@@ -294,8 +294,8 @@ The cron entry is installed on the VM as a separate step:
 0 3 * * *  cd /opt/swing-bot && ./scripts/ops/backup_db.sh >> logs/backup.log 2>&1
 ```
 
-No store may reach the `db` stage until the cron is installed and a restore
-drill has been recorded.
+The cron is installed on the VM (2026-09-30) and the restore drill is recorded
+in `DB_RESTORE.md`. Keep both true before any store reaches the `db` stage.
 
 ## Useful one-liners on the server
 
