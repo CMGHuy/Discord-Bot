@@ -8,7 +8,7 @@
 
 **Goal:** Issue trades the way the bot did before 2026-09-23. A confluence setup whose natural stop is wider than 2% is issued with its stop moved to exactly 2% from the trigger. The stop floor goes back to 2.0. The futures/FX/index dollar-volume exemption and the post-09-22 strategy work (v92/v103/v104/v108/v113) are switched off, and a test keeps them off.
 
-**Architecture:** Two new `.env` flags in `swingbot/config.py`. `CLAMP_STOP_TO_HARD_CAP` (default `true`) is read by a new helper `_clamp_stop_to_hard_cap` in `swingbot/core/planning/builders.py`. `build_confluence_plan` calls the helper before target selection, so the target, TP2 and the plan all use the clamped stop. `LIQUIDITY_EXEMPT_NON_EQUITY` (default `false`) is read by a new helper `_dollar_volume_exempt` in `swingbot/core/marketdata/universe.py`. The helper decides whether `liquidity_reason` skips the dollar-volume floor for a non-share symbol. A guaranteed-off test pins every value in the spec's § Strategy work table, at the code default and as parsed from `.env.example`. The last task runs the suite and ships the release. Then it edits the production `.env` in place, sets `MIN_STOP_DISTANCE_PCT=2.0` and mirrors the change back.
+**Architecture:** Two new `.env` flags in `swingbot/config.py`. `CLAMP_STOP_TO_HARD_CAP` (default `true`) is read by a new helper `_clamp_stop_to_hard_cap` in `swingbot/core/planning/builders.py`. `build_confluence_plan` calls the helper before target selection, so the target, TP2 and the plan all use the clamped stop. `LIQUIDITY_EXEMPT_NON_EQUITY` (default `false`) is read by a new helper `_dollar_volume_exempt` in `swingbot/core/marketdata/universe.py`. The helper decides whether `liquidity_reason` skips the dollar-volume floor. v109 spot metals (from `spot_metals.is_spot_metal`) always skip it, and futures/FX/indices skip it only while the flag is on (partner decision 2026-09-30). A guaranteed-off test pins every value in the spec's § Strategy work table, at the code default and as parsed from `.env.example`. The last task runs the suite and ships the release. Then it edits the production `.env` in place, sets `MIN_STOP_DISTANCE_PCT=2.0` and mirrors the change back.
 
 **Tech Stack:** Python 3.11, pytest, python-dotenv, radon, Docker Compose on the Hetzner VM (`scripts/ops/ssh-hetzner.sh`).
 
@@ -191,11 +191,11 @@ Expected: FAIL. The first two tests fail with `StopIteration` (field not defined
     Field("LIQUIDITY_EXEMPT_NON_EQUITY", "LIQUIDITY_EXEMPT_NON_EQUITY", "Universe & Scanning",
           "Exempt futures/FX/indices from the dollar-volume floor",
           type="checkbox", default="false",
-          help="v115. On: futures, FX, indices and spot metals skip the average dollar-volume "
-               "floor, because Yahoo reports their volume in contracts or as 0, so Close x Volume "
-               "understates them. The history and price floors still apply. Off (default, the "
-               "pre-2026-09-28 behaviour): every symbol must clear UNIVERSE_MIN_DOLLAR_VOL, so a "
-               "thin-contract future such as SI=F is skipped for new signals."),
+          help="v115. On: futures, FX and indices skip the average dollar-volume floor, because "
+               "Yahoo reports their volume in contracts or as 0, so Close x Volume understates "
+               "them. Off (default, the 09-22 behaviour): they must clear UNIVERSE_MIN_DOLLAR_VOL, "
+               "so a thin-contract future such as SI=F is skipped for new signals. Spot metals "
+               "(XAUUSD, XAGUSD) are exempt either way. History and price floors always apply."),
 ```
 
 - [ ] **Step 5: Edit `.env.example`.** Replace the `MIN_STOP_DISTANCE_PCT` block:
@@ -235,9 +235,9 @@ Directly after the line `UNIVERSE_MIN_PRICE=5.0`, insert:
 
 ```
 
-# v115: true exempts futures/FX/indices/spot metals from the dollar-volume
-# floor above (their Yahoo volume is contracts or 0). false = every symbol
-# must clear it, the pre-2026-09-28 behaviour.
+# v115: true exempts futures/FX/indices from the dollar-volume floor above
+# (their Yahoo volume is contracts or 0). false = they must clear it, the
+# 09-22 behaviour. Spot metals (XAUUSD, XAGUSD) are exempt either way.
 LIQUIDITY_EXEMPT_NON_EQUITY=false
 ```
 
@@ -558,17 +558,19 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-### Task V115-04: Gate the futures/FX/index liquidity exemption behind `LIQUIDITY_EXEMPT_NON_EQUITY`
+### Task V115-04: Futures/FX/index liquidity exemption behind `LIQUIDITY_EXEMPT_NON_EQUITY`; v109 spot metals always exempt
 
 **Files:**
-- Modify: `swingbot/core/marketdata/universe.py:22-24` (next to `_volume_is_not_shares`) and `:39-57` (`liquidity_reason`)
-- Test: `tests/marketdata/test_universe.py:32-39` (the parametrized exemption test), plus new tests
+- Modify: `swingbot/core/marketdata/universe.py` (new helper after `_volume_is_not_shares`, lines 22-24; `liquidity_reason`, lines 39-57)
+- Test: `tests/marketdata/test_universe.py` (the parametrized exemption test at lines 32-39, plus new tests)
 
 **Interfaces:**
-- Consumes: `config.LIQUIDITY_EXEMPT_NON_EQUITY: bool` (V115-02).
-- Produces: `universe._dollar_volume_exempt(symbol: str | None) -> bool`. `liquidity_reason(df, min_avg_dollar_vol=None, min_price=None, symbol=None)` keeps its signature. With the flag off, it applies the dollar-volume floor to every symbol.
+- Consumes: `config.LIQUIDITY_EXEMPT_NON_EQUITY: bool` (V115-02). `swingbot.core.marketdata.spot_metals.is_spot_metal(symbol) -> bool` and `SPOT_PAIRS: dict[str, tuple[str, str]]` (today `{"XAUUSD": ("XAU", "GC=F"), "XAGUSD": ("XAG", "SI=F")}`). v109 names `SPOT_PAIRS` "the single source of truth", and `asset_class.classify` returns `"spot_metal"` through `is_spot_metal`.
+- Produces: `universe._dollar_volume_exempt(symbol: str | None) -> bool`. `liquidity_reason(df, min_avg_dollar_vol=None, min_price=None, symbol=None)` keeps its signature. A spot metal skips the dollar-volume floor whatever the flag says. Futures, FX and indices skip it only while the flag is on.
 
-- [ ] **Step 1: Write the failing tests.** In `tests/marketdata/test_universe.py`, add `from swingbot import config` to the imports. Change the existing parametrized test to set the flag on:
+Partner decision (2026-09-30, after the spec's first approval): keep the v109 spot metals exempt with the flag off, and filter futures, FX and indices again, as on 09-22. The spot-metal set comes from `spot_metals.is_spot_metal`, never a hand-written list. A new `SPOT_PAIRS` entry is exempt without touching this code.
+
+- [ ] **Step 1: Write the failing tests.** In `tests/marketdata/test_universe.py`, add `from swingbot import config` and `from swingbot.core.marketdata.spot_metals import SPOT_PAIRS` to the imports. Change the existing parametrized test so that it sets the flag on:
 
 ```python
 @pytest.mark.parametrize("symbol", ["SI=F", "XAGUSD", "XAUUSD", "GC=F", "EURUSD=X", "^GSPC"])
@@ -576,7 +578,7 @@ def test_non_share_symbols_skip_the_dollar_volume_floor(symbol, monkeypatch):
     # Production 2026-09-28: SI=F read as $0.1M/day and was skipped every
     # scan. Yahoo reports futures volume in contracts (5,000 oz each) and FX
     # volume as 0, so Close x Volume says nothing about these markets.
-    # v115: the exemption only applies while LIQUIDITY_EXEMPT_NON_EQUITY is on.
+    # v115: futures/FX/indices are exempt only while LIQUIDITY_EXEMPT_NON_EQUITY is on.
     monkeypatch.setattr(config, "LIQUIDITY_EXEMPT_NON_EQUITY", True)
     from swingbot.core.marketdata.universe import liquidity_reason
     df = make_ohlcv(np.full(60, 61.5), volumes=np.full(60, 1_400.0))
@@ -586,13 +588,39 @@ def test_non_share_symbols_skip_the_dollar_volume_floor(symbol, monkeypatch):
 Add after it:
 
 ```python
-@pytest.mark.parametrize("symbol", ["SI=F", "XAGUSD", "GC=F", "EURUSD=X", "^GSPC"])
-def test_flag_off_puts_non_share_symbols_back_under_the_floor(symbol, monkeypatch):
-    # v115 default: the pre-2026-09-28 behaviour, every symbol clears the floor.
+@pytest.mark.parametrize("symbol", ["SI=F", "GC=F", "EURUSD=X", "^GSPC"])
+def test_flag_off_puts_futures_fx_and_indices_back_under_the_floor(symbol, monkeypatch):
+    # v115 default: the 09-22 behaviour for futures/FX/indices.
     monkeypatch.setattr(config, "LIQUIDITY_EXEMPT_NON_EQUITY", False)
     from swingbot.core.marketdata.universe import liquidity_reason
     df = make_ohlcv(np.full(60, 61.5), volumes=np.full(60, 1_400.0))
     assert "avg dollar vol" in liquidity_reason(df, symbol=symbol)
+
+
+def test_the_spot_metal_set_is_v109s_and_holds_gold_and_silver():
+    assert {"XAUUSD", "XAGUSD"} <= set(SPOT_PAIRS)
+
+
+@pytest.mark.parametrize("symbol", sorted(SPOT_PAIRS))
+def test_flag_off_keeps_every_v109_spot_metal_exempt(symbol, monkeypatch):
+    # Partner decision 2026-09-30: spot metals carry their future's contract
+    # volume, so the floor would silently drop the v109 feature. Derived from
+    # spot_metals.SPOT_PAIRS, v109's single source of truth.
+    monkeypatch.setattr(config, "LIQUIDITY_EXEMPT_NON_EQUITY", False)
+    from swingbot.core.marketdata.universe import liquidity_reason
+    df = make_ohlcv(np.full(60, 61.5), volumes=np.full(60, 1_400.0))
+    assert liquidity_reason(df, symbol=symbol) is None
+
+
+def test_flag_off_spot_metals_pass_where_their_futures_do_not(monkeypatch):
+    # The same thin volume: XAUUSD/XAGUSD pass, GC=F/SI=F (their underlyings) do not.
+    monkeypatch.setattr(config, "LIQUIDITY_EXEMPT_NON_EQUITY", False)
+    from swingbot.core.marketdata.universe import liquidity_reason
+    df = make_ohlcv(np.full(60, 61.5), volumes=np.full(60, 1_400.0))
+    assert liquidity_reason(df, symbol="XAUUSD") is None
+    assert liquidity_reason(df, symbol="XAGUSD") is None
+    assert "avg dollar vol" in liquidity_reason(df, symbol="GC=F")
+    assert "avg dollar vol" in liquidity_reason(df, symbol="SI=F")
 
 
 def test_flag_on_still_floors_shares(monkeypatch):
@@ -602,23 +630,28 @@ def test_flag_on_still_floors_shares(monkeypatch):
     assert "avg dollar vol" in liquidity_reason(df, symbol="THIN")
 ```
 
-Leave `test_spot_metal_class_is_volume_exempt`, `test_spot_metals_still_need_history_and_price`, `test_symbol_aware_floor_still_applies_to_shares` and `test_non_share_symbols_still_need_history_and_price` unchanged. They hold under either flag value.
+Leave `test_spot_metal_class_is_volume_exempt`, `test_spot_metals_still_need_history_and_price`, `test_symbol_aware_floor_still_applies_to_shares` and `test_non_share_symbols_still_need_history_and_price` unchanged. They hold under either flag value. `_VOLUME_NOT_SHARES` keeps `"spot_metal"`, and the flag-on path still uses it.
 
-- [ ] **Step 2: Run to verify the new test fails**
+- [ ] **Step 2: Run to verify the right tests fail**
 
 Run: `python scripts/dev/testrun.py file tests/marketdata/test_universe.py`
-Expected: FAIL. The five `test_flag_off_puts_non_share_symbols_back_under_the_floor` cases fail with `TypeError: argument of type 'NoneType' is not iterable`, because the exemption is still unconditional. Every other test in the file passes.
+Expected: FAIL, 5 failed (checked in a dry run). The four `test_flag_off_puts_futures_fx_and_indices_back_under_the_floor` cases fail with `TypeError: argument of type 'NoneType' is not iterable`, and `test_flag_off_spot_metals_pass_where_their_futures_do_not` fails on its `GC=F` line. The exemption is still unconditional. The `test_flag_off_keeps_every_v109_spot_metal_exempt` cases already pass: they pin behaviour this task must not break.
 
 - [ ] **Step 3: Implement.** In `swingbot/core/marketdata/universe.py`, add directly after `_volume_is_not_shares`:
 
 ```python
 def _dollar_volume_exempt(symbol: str | None) -> bool:
-    """v115: 4a649b36's futures/FX/index/spot-metal exemption from the
-    dollar-volume floor, applied only while LIQUIDITY_EXEMPT_NON_EQUITY is on
-    (default off = the pre-2026-09-28 floor for every symbol)."""
-    if symbol is None or not config.LIQUIDITY_EXEMPT_NON_EQUITY:
+    """v115: which symbols skip the dollar-volume floor. v109 spot metals
+    (spot_metals.SPOT_PAIRS, the single source of truth) always do: their bars
+    carry the future's contract volume, and the partner kept them scanning
+    (2026-09-30). 4a649b36's futures/FX/index exemption applies only while
+    LIQUIDITY_EXEMPT_NON_EQUITY is on (default off = the 09-22 floor)."""
+    if symbol is None:
         return False
-    return _volume_is_not_shares(symbol)
+    from swingbot.core.marketdata.spot_metals import is_spot_metal
+    if is_spot_metal(symbol):
+        return True
+    return bool(config.LIQUIDITY_EXEMPT_NON_EQUITY) and _volume_is_not_shares(symbol)
 ```
 
 In `liquidity_reason`, replace
@@ -635,7 +668,7 @@ with
         return None
 ```
 
-and change its docstring's second sentence to: `Passing `symbol` exempts futures/FX/indices/spot metals from the dollar-volume floor only while LIQUIDITY_EXEMPT_NON_EQUITY is on (v115; default off).`
+and change its docstring's second sentence to: `Passing `symbol` always exempts v109 spot metals from the dollar-volume floor, and exempts futures/FX/indices only while LIQUIDITY_EXEMPT_NON_EQUITY is on (v115; default off).`
 
 - [ ] **Step 4: Run the tests**
 
@@ -645,13 +678,13 @@ Expected: PASS.
 - [ ] **Step 5: Complexity check**
 
 Run: `python -m radon cc -s swingbot/core/marketdata/universe.py | grep -E "liquidity_reason|_dollar_volume_exempt"`
-Expected: `liquidity_reason` at B (8) or lower (it was 9, and one `and` moved out). `_dollar_volume_exempt` at A (3).
+Expected (dry-run figures): `liquidity_reason - B (8)` (it was 9, and one `and` moved out) and `_dollar_volume_exempt - A (4)`. Anything under 15 passes.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add swingbot/core/marketdata/universe.py tests/marketdata/test_universe.py
-git commit -m "feat(v115): futures/FX/index dollar-volume exemption only behind LIQUIDITY_EXEMPT_NON_EQUITY (default off)
+git commit -m "feat(v115): futures/FX/index dollar-volume exemption behind LIQUIDITY_EXEMPT_NON_EQUITY (default off); v109 spot metals stay exempt
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -834,10 +867,12 @@ deploys). The `risk_cap` reject stays as a float-edge safety net.
 
 `SI=F: skipping new-signal scan -- avg dollar vol $0.1M < $20M floor` is the
 configured behaviour, not a bug. Yahoo reports futures volume in contracts and
-FX/index volume as 0. `4a649b36` exempted those classes (and the v109 spot
-metals, which carry their future's volume). v115 put that exemption behind
-`LIQUIDITY_EXEMPT_NON_EQUITY`, default **off**, to restore the pre-09-28 scan.
-Turn it on to scan thin-contract futures and spot silver again.
+FX/index volume as 0. `4a649b36` exempted those classes. v115 put that
+exemption behind `LIQUIDITY_EXEMPT_NON_EQUITY`, default **off**, to restore
+the 09-22 scan. Turn it on to scan thin-contract futures again. The v109 spot
+metals (`spot_metals.SPOT_PAIRS`: XAUUSD, XAGUSD) stay exempt either way
+(partner, 2026-09-30). They carry their future's contract volume, so XAGUSD
+scans while SI=F, on the same bars, is skipped. That is by design.
 ```
 
 - [ ] **Step 3: Update the Codex mirror.** In `AGENTS.md`, replace
@@ -994,7 +1029,7 @@ Expected: `MIN_STOP_DISTANCE_PCT = 2.0`, `SIGNAL_CONFIRMATION_SCANS = 1`, `CLAMP
 bash E:/Documents/Private/Projects/Discord-Bot/scripts/ops/ssh-hetzner.sh "grep -nE 'plan rejected -- risk_cap|no_qualifying_target|skipping new-signal scan' /opt/swing-bot/logs/bot.log | tail -20"
 ```
 
-Expected: no new `risk_cap` rejections after the reload time. Some `no_qualifying_target` lines are normal. Illiquid-skip lines for thin futures (for example `SI=F`) are now expected. Report what you see to the partner. Tell them it is an unmeasured live change (`Edge: volume`); give no win-rate or expectancy claim.
+Expected: no new `risk_cap` rejections after the reload time. Some `no_qualifying_target` lines are normal. Illiquid-skip lines for thin futures (for example `SI=F`) are now expected. None should appear for `XAUUSD` or `XAGUSD`. Report what you see to the partner. Tell them it is an unmeasured live change (`Edge: volume`); give no win-rate or expectancy claim.
 
 - [ ] **Step 12: Mirror the production change into the repo and commit** (on `main`; `mirror-prod` skill)
 
