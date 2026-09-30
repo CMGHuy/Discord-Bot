@@ -191,7 +191,8 @@ async def _mirror(simple_channel, simple_embed, plan) -> bool:
         log.warning("Could not post simple alert for %s to channel %s: %s "
                     "-- full alert will notify instead.",
                     getattr(plan, "ticker", "?"),
-                    getattr(config, "DISCORD_CHANNEL_TRADES_SIMPLE_ID", ""), exc)
+                    getattr(config, "DISCORD_CHANNEL_TRADES_SIMPLE_ID", ""), exc,
+                    exc_info=True)
         return False
     return True
 

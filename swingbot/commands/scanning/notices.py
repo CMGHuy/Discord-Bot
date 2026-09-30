@@ -11,7 +11,7 @@ from swingbot.core import presentation as ui
 from swingbot.core.presentation import kinds
 from swingbot.core.presentation.kinds import Kind
 
-log = logging.getLogger("swing-bot")
+log = logging.getLogger(__name__)
 
 #: The old 2000-char message chunk size. Each chunk is now an embed
 #: description (4096 limit), so the same split still fits.
