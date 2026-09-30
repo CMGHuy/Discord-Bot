@@ -821,8 +821,10 @@ deploys). The `risk_cap` reject stays as a float-edge safety net.
 - A clamped stop sits at no structural level, and embeds show it as-is. It
   reaches an alert only with `PLAN_ENGINE_V2=on`. In `shadow`, the scenario's
   unclamped stop is what posts.
-- v114's 1.0-2.0 band is a separate, measured alternative. v115 does not
-  supersede it.
+- v114 (a 1.5-2.0 band, measured before shipping) was abandoned before any
+  build on 2026-09-30 (`no-lift/`), with its VALIDATION shot unspent. It is
+  still the measured route if the partner later wants the band instead of
+  the clamp.
 ```
 
 - [ ] **Step 2: Append a new section** at the end of `docs/claude/known-traps.md`:
