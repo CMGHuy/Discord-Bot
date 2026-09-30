@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** `docs/superpowers/specs/implemented/2026-09-30-v114-scenario-stop-band-design.md` (final partner decision, commit `fa8288a0`)
+**Spec:** `docs/superpowers/specs/no-lift/2026-09-30-v114-scenario-stop-band-design.md` (final partner decision, commit `fa8288a0`)
 **Bump:** bot minor if it ships; none on a NO-LIFT
 **Edge:** volume
 
@@ -45,4 +45,4 @@
 | `2026-09-30-v114-scenario-stop-band_1-build.md` | A — integrity and the shared admission band; B — the instrument | V114-01 … V114-08 |
 | `2026-09-30-v114-scenario-stop-band_2-measure-ship.md` | C — pre-registration and measurement; D — NO-LIFT or ship | V114-09 … V114-15 |
 
-Pull one task at a time: `grep -n "^### Task V114-03" -A 120 docs/superpowers/plans/implemented/2026-09-30-v114-scenario-stop-band_*.md`.
+Pull one task at a time: `grep -n "^### Task V114-03" -A 120 docs/superpowers/plans/no-lift/2026-09-30-v114-scenario-stop-band_*.md`.
