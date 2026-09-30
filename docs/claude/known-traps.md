@@ -344,11 +344,12 @@ deploys). The `risk_cap` reject in `attach_plan_v2` stays as a safety net.
   off the plan, never off that field. This is known and deliberately left
   unchanged.
 - A clamped stop sits at no structural level. It reaches an alert only with
-  `PLAN_ENGINE_V2=on`, and then every stop figure shows the clamped stop: the
-  plan table, chart, ticket, the headline (price, % and R, via
-  `plan_table.stop_figures_for_display`) and the explanation. Target text and
-  target % still come from the scenario. In `shadow`, the scenario's
-  unclamped stop is what posts.
+  `PLAN_ENGINE_V2=on`, and then the clamped stop shows everywhere in the
+  alert: plan table, chart, ticket, headline, simple mirror and explanation.
+  The stop % and R come from the v2 plan **only when the stop was clamped**
+  (`explain.v2_stop_was_moved`, used by `plan_table.stop_figures_for_display`);
+  every other alert, and every target figure, is unchanged. In `shadow`, the
+  scenario's unclamped stop is what posts.
 - v114 (a 1.5-2.0 band, measured before shipping) was abandoned before any
   build on 2026-09-30 (`no-lift/`), with its VALIDATION shot unspent. It is
   still the measured route if the partner later wants the band instead of
