@@ -90,3 +90,35 @@ def test_the_watcher_stops_when_the_last_connection_leaves(monkeypatch,
     assert broker._watcher is None
     for part in composite.watchers:
         assert part._stop.is_set()
+
+
+class _Part:
+    def __init__(self, *, fail_start=False, fail_stop=False):
+        self.fail_start, self.fail_stop = fail_start, fail_stop
+        self.started = self.stopped = False
+
+    def start(self):
+        if self.fail_start:
+            raise RuntimeError("start boom")
+        self.started = True
+
+    def stop(self):
+        self.stopped = True
+        if self.fail_stop:
+            raise RuntimeError("stop boom")
+
+
+def test_a_failing_stop_still_stops_the_other_part():
+    from swingbot.admin.events.broker import _CompositeWatcher
+    first, second = _Part(fail_stop=True), _Part()
+    _CompositeWatcher(first, second).stop()
+    assert first.stopped and second.stopped
+
+
+def test_a_failing_start_stops_the_parts_already_started():
+    import pytest
+    from swingbot.admin.events.broker import _CompositeWatcher
+    first, second = _Part(), _Part(fail_start=True)
+    with pytest.raises(RuntimeError, match="start boom"):
+        _CompositeWatcher(first, second).start()
+    assert first.started and first.stopped

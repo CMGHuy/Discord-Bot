@@ -55,12 +55,28 @@ class _CompositeWatcher:
         self.watchers = watchers
 
     def start(self) -> None:
+        """Start every part, or none: a later failure stops the earlier ones
+        so a half-started composite never leaks a running thread."""
+        started = []
         for watcher in self.watchers:
-            watcher.start()
+            try:
+                watcher.start()
+            except Exception:
+                _stop_all(started)
+                raise
+            started.append(watcher)
 
     def stop(self) -> None:
-        for watcher in self.watchers:
+        """Stop every part; one raising never keeps the others running."""
+        _stop_all(self.watchers)
+
+
+def _stop_all(watchers) -> None:
+    for watcher in watchers:
+        try:
             watcher.stop()
+        except Exception:
+            log.exception("event watcher part %r failed to stop", watcher)
 
 
 def _default_watcher(emit):
@@ -71,6 +87,12 @@ def _default_watcher(emit):
     stat()-polling to LISTEN/NOTIFY is one decision in one place rather than a
     rewrite of everything downstream. Nothing about the events themselves
     changes -- same ten names, same semantics, same debounce.
+
+    Ordering constraint: set `events:db` only once every table-backed store
+    (see `watcher._TABLE_BACKED`) is itself at `db`. The residual file
+    watcher stops stat()-ing those files regardless of each store's own
+    stage, so e.g. `events:db` with `trades:json` would silence "trades" --
+    the JSON writes raise no NOTIFY and the file is no longer watched.
     """
     from swingbot.core.db import stages
     if stages.reads_db("events"):

@@ -149,6 +149,12 @@ def residual_paths() -> dict[str, str]:
     What the file watcher still has to watch beside a `DbEventListener`:
     scan progress/snapshots/telemetry, the analytics snapshot and `.env`,
     none of which has a table yet.
+
+    Drops every `_TABLE_BACKED` file unconditionally -- it does not consult
+    each store's own stage. So it is only correct once all those stores are
+    at `db`; a store still writing JSON only (e.g. `trades:json`) raises no
+    NOTIFY and would go silent. The broker's `_default_watcher` states the
+    same ordering constraint for `events:db`.
     """
     table_backed = {os.path.join(config.DATA_DIR, name) for name in _TABLE_BACKED}
     return {
