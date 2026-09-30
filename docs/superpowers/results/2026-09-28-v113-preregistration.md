@@ -53,6 +53,7 @@ v2 exits, scale-out on (a whole-position target takes the single leg), TP2 level
 
 - Tier 1: WR >= `WR_FLOOR` 50.0, ExpR > 0, decided N >= `MIN_N_TRAIN` 30 on TRAIN (`MIN_N_VALIDATION` 15 on the holdout), scratch+timeout share <= `MAX_SCRATCH_SHARE` 0.5.
 - Tier 2: ExpR > 0 and ticker-cluster bootstrap lower bound on ExpR > 0 (`BOOTSTRAP_RESAMPLES` 10,000, `BOOTSTRAP_SEED` 42, 2.5th percentile), same N and scratch floors, no WR floor.
+- Part B adds the bootstrap lower bound > 0 to Tier 1; `funnel.badge_verdict` alone has none.
 - Fold rule: `FOLD_MIN_N` 15, `FOLD_POSITIVE_SHARE` 2/3, `MIN_QUALIFYING_FOLDS` 3.
 
 ## Stage 3 (holdout)
@@ -65,7 +66,7 @@ One shot per cell, ever. Holdout N < 15 -> write N only, `status: "sealed-thin"`
 
 ## Ship rules (spec §7; amendments 2, 5, 6)
 
-- Part B pass: that (strategy, direction) is admitted on `1w` via `cells`, with a registry row.
+- Part B pass: each passing (strategy, direction) is admitted on `1w` via `cells`; one `(strategy, 1w)` registry row is emitted per strategy, covering exactly its admitted 1w directions (spec §7: a strategy's row ships only when every admitted direction passes; a `1w` pass gets its own row). Status VALIDATED only if all emitted payloads are Tier 1 and the pooled badge clears, else WEAK (`measure_v113._validate_emit`, `_registry_row`).
 - Part A pass: does **not** ship on the measurement alone. Live execution cannot yet match the backtest (no live `evt_*` columns, no `limit` fill, no whole-position TP1 close, no enforced time-stop exit in `PlanManager`), so the fade ships only with live parity (earnings context, limit entry, whole-position target, enforced time stop, resting-order alert line) and is unmasked last, on `(bearish, 1w)`. If the holdout fails, the parity tasks are recorded as skipped.
 - Part D pass: no registry row; the partner is asked whether the confluence scan and bearish strategy signals on the four tickers (unmeasured populations) ship, recommending "measured population only".
 - Alerts stay behind soak: `STRATEGY_ALERTS_MODE` and `STRATEGY_ALERTS_LIVE_STRATEGIES` are never changed by this plan.
