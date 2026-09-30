@@ -289,6 +289,41 @@ def test_emit_requires_holdout_json_and_preregistration_committed(tmp_path, monk
     assert path in committed and "prereg.md" in committed
 
 
+def test_emit_refuses_when_the_preregistration_is_uncommitted(tmp_path, monkeypatch):
+    monkeypatch.setitem(STRATEGY_GATES, "MACD", {**STRATEGY_GATES["MACD"], "cells": {("bearish", "1w")}})
+
+    def refuse(path):
+        if path == "prereg.md":
+            raise SystemExit("must be committed")
+    monkeypatch.setattr(mv, "require_committed", refuse)
+    with pytest.raises(SystemExit, match="must be committed"):
+        _emit(tmp_path, _payload(tmp_path, "h.json"))
+
+
+def test_emit_refuses_a_payload_without_a_preregistration(tmp_path, monkeypatch):
+    monkeypatch.setitem(STRATEGY_GATES, "MACD", {**STRATEGY_GATES["MACD"], "cells": {("bearish", "1w")}})
+    path = _payload(tmp_path, "h.json")
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    del data["preregistration"]
+    Path(path).write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(SystemExit, match="preregistration"):
+        _emit(tmp_path, path)
+
+
+def test_cmd_holdout_refuses_an_out_outside_results_before_any_collection(tmp_path, results, monkeypatch):
+    evaluated = tmp_path / "eval.json"
+    evaluated.write_text(json.dumps({"part": "A", "proceed_to_holdout": True, "tier": 1}), encoding="utf-8")
+
+    def boom(*args, **kwargs):
+        raise AssertionError("collection ran")
+    monkeypatch.setattr(mv, "_ab_frames", boom)
+    monkeypatch.setattr(mv, "holdout_rows", boom)
+    args = SimpleNamespace(evaluate=str(evaluated), preregistration="prereg.md", universe=None, tickers=None,
+                           out=str(tmp_path / "elsewhere" / "2026-09-30-v113-holdout-a-fade.json"))
+    with pytest.raises(SystemExit, match="--out"):
+        mv._cmd_holdout(args)
+
+
 def test_emit_refuses_a_payload_with_a_foreign_window(tmp_path, monkeypatch):
     monkeypatch.setitem(STRATEGY_GATES, "MACD", {**STRATEGY_GATES["MACD"], "cells": {("bearish", "1w")}})
     with pytest.raises(SystemExit):

@@ -351,6 +351,8 @@ def _cmd_emit(args):
     payloads = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.holdout_json]
     strategy = _validate_emit(payloads)
     for payload in payloads:
+        if not payload.get("preregistration"):
+            raise SystemExit("holdout JSON names no preregistration; refusing to emit")
         require_committed(payload["preregistration"])
         if tuple(payload["window"]) != holdout_window():
             raise SystemExit(f"holdout window {payload['window']} is not the frozen {list(holdout_window())}")
