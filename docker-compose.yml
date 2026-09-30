@@ -37,7 +37,23 @@ services:
     # A pinned major is load-bearing: a PostgreSQL major upgrade changes the
     # on-disk format and needs an explicit dump/restore, never an incidental
     # image pull.
-    image: postgres:18-alpine
+    # v116: postgres:18-alpine + pgBackRest (Dockerfile.db). Production pins
+    # the GHCR tag in .env (deploy.sh writes it); locally `make up` builds it.
+    image: ${SWING_BOT_DB_IMAGE:-swing-bot-db:local}
+    build:
+      context: .
+      dockerfile: Dockerfile.db
+    # WAL archiving for point-in-time recovery. PG_ARCHIVE_MODE is `on` only
+    # in production's .env; anywhere without a pgBackRest stanza, archiving
+    # would fail and WAL would pile up on the local disk.
+    command:
+      - postgres
+      - -c
+      - archive_mode=${PG_ARCHIVE_MODE:-off}
+      - -c
+      - archive_command=pgbackrest --stanza=swingbot archive-push %p
+      - -c
+      - archive_timeout=300
     container_name: swing-db
     restart: unless-stopped
     environment:
@@ -54,6 +70,7 @@ services:
       # the parent is also what a future major bump needs for
       # `pg_upgrade --link` to work across the mount boundary.
       - pgdata:/var/lib/postgresql
+      - ./backups/pitr:/var/lib/pgbackrest   # pgBackRest repo, outside pgdata (v116)
     # Intentionally unpublished: bot and admin use the internal Compose
     # network; maintenance uses `docker compose exec db psql ...`.
     healthcheck:
