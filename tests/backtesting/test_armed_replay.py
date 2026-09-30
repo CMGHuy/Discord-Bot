@@ -201,7 +201,10 @@ def test_m1_issues_a_stop_entry_above_the_reaction_high(monkeypatch):
     assert plan.created_at == df.index[26].date().isoformat()
 
 
-def test_the_widened_scenario_issues_once_its_stop_is_re_anchored():
+def test_the_widened_scenario_issues_once_its_stop_is_re_anchored(monkeypatch):
+    # Pins the armed path's own >= 2% re-anchored stop; v115's CLAMP_STOP_TO_HARD_CAP
+    # would move a stop beyond the cap to 1.75%. The clamp has its own tests.
+    monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", False)
     """Today's gates refuse this scenario (1.5% stop); the armed path
     issues it with a stop >= 2% from the entry."""
     assert [s for s in levels.build_scenarios(

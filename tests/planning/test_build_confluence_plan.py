@@ -14,7 +14,7 @@ from swingbot.core.planning.plan_engine import (
 DEFAULT_STRATEGY = "S/R Confluence"
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def _unclamped_stops(monkeypatch):
     # These tests pin target selection against the scenario's OWN risk (4%
     # stops). v115's CLAMP_STOP_TO_HARD_CAP would first move those stops to 2%;
@@ -83,6 +83,7 @@ _WIDE_RANGE_HIGHS[10] = 115.0
 _WIDE_RANGE_DF = _make_df(highs=_WIDE_RANGE_HIGHS, lows=[h - 1 for h in _WIDE_RANGE_HIGHS])
 
 
+@pytest.mark.usefixtures("_unclamped_stops")
 def test_tp1_is_the_scenarios_own_target_when_it_sits_in_the_band():
     # entry 100, stop 96 (risk 4), min 1.5/max 2.5 -> band [106, 110].
     # take_profit 108 is 2.0R -- squarely inside the band.
@@ -96,6 +97,7 @@ def test_tp1_is_the_scenarios_own_target_when_it_sits_in_the_band():
     assert plan.tp1 == 108.0
 
 
+@pytest.mark.usefixtures("_unclamped_stops")
 def test_tp1_is_capped_when_the_nearest_level_is_beyond_max_rr():
     # Same band [106, 110]; take_profit 130 is way beyond max_rr, so tp1 is
     # synthesized at exactly the cap and the declined level becomes tp2 --
@@ -149,6 +151,7 @@ _REWARD_BAND_CASES = [
 ]
 
 
+@pytest.mark.usefixtures("_unclamped_stops")
 @pytest.mark.parametrize("direction,entry,stop_loss,take_profit", _REWARD_BAND_CASES)
 def test_reward_always_at_least_min_times_risk(direction, entry, stop_loss, take_profit):
     # This is the assertion that names the bug: every plan's target must pay
