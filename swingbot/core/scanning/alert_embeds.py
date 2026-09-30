@@ -62,11 +62,27 @@ def _alert_detail(level: int, all_ok: bool) -> str:
 
 from .snapshots import _snapshot_and_diff
 from .requirements import _sources_str
-from .plan_table import (_v2_plan, plan_numbers_for_display, leg_rows, cohort_line)
+from .plan_table import (_v2_plan, plan_numbers_for_display, leg_rows, cohort_line,
+                         stop_figures_for_display)
 from .execution_embeds import build_ticket_embed
 
 
 log = logging.getLogger(__name__)
+
+
+def _branches_field(plan, is_bull: bool, stop: float, stop_pct: float) -> tuple:
+    """The "If it gets there" field: the stretch target from the scenario
+    (target text is out of v115's scope), the stop from the display funnel."""
+    level_word = "resistance" if is_bull else "support"
+    opposite_word = "support" if is_bull else "resistance"
+    if plan.target2_price is not None:
+        first = (f"Continues past {level_word} 1 → next stop {plan.target2_price:.2f} "
+                 f"(+{plan.target2_distance_pct:.1f}%)")
+    else:
+        first = f"Continues past {level_word} 1 → no further level found for a stretch target"
+    second = (f"Reverses at {level_word} 1 → pulls back toward {opposite_word} at "
+              f"{stop:.2f} ({stop_pct:.1f}%)")
+    return ("🔀 If it gets there", f"{first}\n{second}", False)
 
 
 def build_embed(item, explanation, perf_stats, open_positions_warning, chart_filename,
@@ -101,6 +117,17 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
                           _alert_detail(conf.level, all_ok))
 
     sections: dict[str, list[tuple]] = {k: [] for k in ui.SECTION_ORDER}
+    # v62 D4: the plan is the first thing on the first screenful.  Keep all
+    # price selection behind the established legacy/v2 cutover funnel, and
+    # every stop figure with it -- a v115-clamped v2 stop must read the same
+    # in the headline and the branches.
+    nums = plan_numbers_for_display(plan_v2, {
+        "entry": plan.entry,
+        "stop_loss": plan.stop_loss,
+        "take_profit": plan.take_profit,
+        "target2": plan.target2_price,
+    })
+    stop_pct, stop_r = stop_figures_for_display(plan_v2, nums, plan)
 
     unmet = [(requirement.label, requirement.detail)
              for requirement in item.requirements if not requirement.passed]
@@ -223,15 +250,7 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
         sections["changes"].append(("🔄 What changed since last scan", what_changed, False))
 
     if not compact:
-        level_word = "Resistance" if is_bull else "Support"
-        opposite_word = "Support" if is_bull else "Resistance"
-        branch_lines = []
-        if plan.target2_price is not None:
-            branch_lines.append(f"Continues past {level_word.lower()} 1 → next stop {plan.target2_price:.2f} (+{plan.target2_distance_pct:.1f}%)")
-        else:
-            branch_lines.append(f"Continues past {level_word.lower()} 1 → no further level found for a stretch target")
-        branch_lines.append(f"Reverses at {level_word.lower()} 1 → pulls back toward {opposite_word.lower()} at {plan.stop_loss:.2f} ({plan.stop_distance_pct:.1f}%)")
-        sections["branches"].append(("🔀 If it gets there", "\n".join(branch_lines), False))
+        sections["branches"].append(_branches_field(plan, is_bull, nums["stop_loss"], stop_pct))
 
         if perf_stats["closed"] > 0:
             wr = perf_stats["win_rate"]
@@ -250,22 +269,14 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
         for name, value, inline in sections[key]:
             embed.add_field(name=name, value=value, inline=inline)
 
-    # v62 D4: the plan is the first thing on the first screenful.  Keep all
-    # price selection behind the established legacy/v2 cutover funnel.
-    nums = plan_numbers_for_display(plan_v2, {
-        "entry": plan.entry,
-        "stop_loss": plan.stop_loss,
-        "take_profit": plan.take_profit,
-        "target2": plan.target2_price,
-    })
     headline = ui.plan_headline(
         direction=result.trend,
         entry=nums["entry"],
         target=nums["take_profit"],
         stop=nums["stop_loss"],
         target_pct=plan.target_distance_pct,
-        stop_pct=-abs(plan.stop_distance_pct),
-        r=plan.risk_reward_ratio,
+        stop_pct=-abs(stop_pct),
+        r=stop_r,
     )
     embed.description = f"{headline}\n{explanation[:3500]}"
     if chart_filename:

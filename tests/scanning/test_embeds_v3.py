@@ -726,3 +726,54 @@ def test_intraday_confirmation_uses_a_plain_check_not_the_outcome_mark():
     item.intraday = True
     field = next(f for f in _build(item).fields if f.name == "⏱ Intraday timing")
     assert field.value.startswith("✔ confirms") and "✅" not in field.value
+
+
+# --- v115: a clamped v2 stop must not contradict itself in the alert -------
+
+def _clamped_item():
+    """The scenario wants a 4% stop (96.00); v115's clamp priced the v2 plan
+    at 98.25, 1.75% below the 100.00 trigger."""
+    import dataclasses
+    item = make_item(plan_v2=dataclasses.replace(make_plan_v2(), stop_loss=98.25))
+    item.plan = make_legacy_plan(stop_loss=96.0)
+    item.plan.stop_distance_pct = 4.0
+    item.plan.risk_reward_ratio = 2.5
+    return item
+
+
+def _all_embed_text(embed):
+    plain = ansi._ESCAPE_RE.sub("", embed.description)
+    return "\n".join([plain] + [f"{f.name}\n{f.value}" for f in embed.fields])
+
+
+def test_a_clamped_stop_reads_the_same_everywhere_in_the_alert(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = _clamped_item()
+    scenario_result = _fake_scenario_result()
+    scenario_result.scenario.stop_loss, scenario_result.scenario.stop_distance_pct = 96.0, 4.0
+    explanation = build_explanation(scenario_result, plan=item.plan_v2)
+    embed = build_embed(item, explanation=explanation, perf_stats=PERF_STATS_EMPTY,
+                        open_positions_warning=None, chart_filename=None, layout="detailed")
+    text = _all_embed_text(embed)
+    assert "96.00" not in text and "4.0%" not in text
+    assert "98.25" in text
+    assert "−1.8%" in text  # headline magnitude, typographic minus
+    assert "5.7R" in text and "2.5R" not in text  # 10.00 reward over 1.75 risk
+    branches = next(f for f in embed.fields if f.name == "🔀 If it gets there")
+    assert "98.25 (1.8%)" in branches.value
+    assert "Stop at **98.25** (-1.8%)" in explanation
+    assert "reverses → stop 98.25." in explanation
+
+
+def test_an_unclamped_stop_renders_as_before(monkeypatch):
+    for flag, plan_v2 in (("off", None), ("on", make_plan_v2())):
+        monkeypatch.setattr(config, "PLAN_ENGINE_V2", flag)
+        embed = _build(make_item(plan_v2=plan_v2))
+        text = _all_embed_text(embed)
+        assert "100.00 → 110.00 / 95.00" in text
+        assert "+10.0% −5.0% 2.0R" in text
+        branches = next(f for f in embed.fields if f.name == "🔀 If it gets there")
+        assert "support at 95.00 (5.0%)" in branches.value
+        explanation = build_explanation(_fake_scenario_result(), plan=plan_v2)
+        assert "Stop at **95.00** (-5.0%)" in explanation
+        assert "reverses → stop 95.00." in explanation
