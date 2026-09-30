@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. The header, Global Constraints and Parallelisation in `2026-09-30-v114-scenario-stop-band_0-index.md` bind every task here.
 
-**Spec:** `docs/superpowers/specs/2026-09-30-v114-scenario-stop-band-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-09-30-v114-scenario-stop-band-design.md`
 
 ---
 
@@ -229,7 +229,7 @@ python scripts/backtest/validate_component.py --stage validation --gate volume -
 - [ ] **Step 3: Spec status.** Add `**Status:** Closed NO-LIFT <date> at <stage>; VALIDATION <spent | not spent>; integrity half <landed | on branch>.` under the spec's header. Commit Steps 1 and 3 on `main`:
 
 ```bash
-git add docs/claude/backtest-methodology.md docs/superpowers/specs/2026-09-30-v114-scenario-stop-band-design.md
+git add docs/claude/backtest-methodology.md docs/superpowers/specs/implemented/2026-09-30-v114-scenario-stop-band-design.md
 git commit -m "docs(v114): NO-LIFT at <stage> -- closed pre-registration row
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -281,7 +281,7 @@ git add docs/strategy/strategy-plans.md
 git commit -m "docs(v114): strategy plans state the 1.5-2.0% stop band
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-git add docs/claude/backtest-methodology.md docs/superpowers/specs/2026-09-30-v114-scenario-stop-band-design.md
+git add docs/claude/backtest-methodology.md docs/superpowers/specs/implemented/2026-09-30-v114-scenario-stop-band-design.md
 git commit -m "docs(v114): VALIDATION PASS -- closed pre-registration row, spec status
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. The header, Global Constraints and Parallelisation in `2026-09-30-v114-scenario-stop-band_0-index.md` bind every task here.
 
-**Spec:** `docs/superpowers/specs/2026-09-30-v114-scenario-stop-band-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-09-30-v114-scenario-stop-band-design.md`
 
 ---
 
@@ -66,8 +66,8 @@ python -m radon cc -s swingbot/core/scanning/analyze.py | grep -E "_scan_one|att
 ````markdown
 # v114 pre-registration — scenario stop floor 2.0% -> 1.5%
 
-**Spec:** `docs/superpowers/specs/2026-09-30-v114-scenario-stop-band-design.md`
-**Plan:** `docs/superpowers/plans/2026-09-30-v114-scenario-stop-band_0-index.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-09-30-v114-scenario-stop-band-design.md`
+**Plan:** `docs/superpowers/plans/implemented/2026-09-30-v114-scenario-stop-band_0-index.md`
 **Status:** §1 written (V114-01). §2-§7 are written by V114-09 **before any run**.
 
 ## 1. Code inventory (verified by `git grep`, V114-01)

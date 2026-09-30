@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** `docs/superpowers/specs/2026-09-30-v114-scenario-stop-band-design.md` (final partner decision, commit `fa8288a0`)
+**Spec:** `docs/superpowers/specs/implemented/2026-09-30-v114-scenario-stop-band-design.md` (final partner decision, commit `fa8288a0`)
 **Bump:** bot minor if it ships; none on a NO-LIFT
 **Edge:** volume
+
+**Closed 2026-09-30 -- abandoned before any build (partner's call, `/close-out v114`).** No branch, worktree, code or test was written; no task below was started, so every box is open by design, and no TRAIN, walk-forward or VALIDATION run was made -- the one VALIDATION shot is unspent and no pre-registration row is owed. `Bump:` resolved to none: no release commit. Unrelated to this plan, production's `MIN_STOP_DISTANCE_PCT` was set to 1.0 by `9a3a8757`, mirrored in `.env.example`; this plan's 1.5 floor was never applied.
 
 **Goal:** Lower the scenario stop floor from 2.0% to 1.5%, so the admission band becomes 1.5-2.0% at real support/resistance levels. Admission is capped at the 2.0% planned-loss cap, identically in the live scan and in replay. The flip ships to production only if a pre-registered TRAIN, walk-forward and one-shot VALIDATION run passes.
 
@@ -43,4 +45,4 @@
 | `2026-09-30-v114-scenario-stop-band_1-build.md` | A — integrity and the shared admission band; B — the instrument | V114-01 … V114-08 |
 | `2026-09-30-v114-scenario-stop-band_2-measure-ship.md` | C — pre-registration and measurement; D — NO-LIFT or ship | V114-09 … V114-15 |
 
-Pull one task at a time: `grep -n "^### Task V114-03" -A 120 docs/superpowers/plans/2026-09-30-v114-scenario-stop-band_*.md`.
+Pull one task at a time: `grep -n "^### Task V114-03" -A 120 docs/superpowers/plans/implemented/2026-09-30-v114-scenario-stop-band_*.md`.
