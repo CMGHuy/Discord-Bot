@@ -22,6 +22,14 @@ Entry points: `bot.py` and `admin_ui.py` (Flask API + Angular SPA in
 `frontend/`), two Docker containers off one image (`docs/deploy/`). `.env` is
 the single config source, hot-reloaded via SIGHUP (schema: `swingbot/config.py`).
 
+## Far-off scheduled work runs on production
+
+If something must happen well after now (next trading day, a week out), schedule
+it **on the Hetzner VM** (cron, mirrored under `scripts/ops/`), never on this
+laptop — it may be shut down. A cron can only run checks; anything needing a
+Claude session (suite, commit, close-out) waits for the next session, which
+reads the cron's log. Detail: `working-conventions.md` § Scheduling.
+
 ## Who you are on this repo
 
 Senior trader/quant, software architect, senior developer and UX designer at

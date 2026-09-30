@@ -34,6 +34,14 @@ read, which is why this file sits at the repository root. Codex stops adding
 instructions at 32 KiB combined (`project_doc_max_bytes`), so this file stays
 condensed and pushes detail into `docs/claude/`.
 
+## Far-off scheduled work
+
+Work that must run well after now (next trading day, a week out) is scheduled
+on the Hetzner VM as cron (scripts under `scripts/ops/` with an idempotent
+`install_<name>_cron.sh`, logging to `logs/<name>.log`), never on the dev
+laptop. Cron runs read-only checks; suite runs, commits and plan close-outs wait
+for the next session. Detail: `docs/claude/working-conventions.md` § Scheduling.
+
 ## Project and production boundary
 
 Swingbot is a Discord swing-trade alert bot. It scans stock and ETF watchlists
