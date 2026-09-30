@@ -235,6 +235,19 @@ async def _check_session_transition(channel) -> None:
     _session_was_active = active
 
 
+async def _delete_healthcheck(msg) -> None:
+    """Delete one of last hour's healthcheck lines. Already gone (404) is
+    routine; any other Discord refusal is worth a warning. A non-HTTP error
+    is a bug and propagates to the tick's own error handling."""
+    try:
+        await msg.delete()
+    except discord.NotFound:
+        log.debug("Healthcheck message %s already gone", getattr(msg, "id", "?"))
+    except discord.HTTPException:
+        log.warning("Could not delete healthcheck message %s", getattr(msg, "id", "?"),
+                    exc_info=True)
+
+
 async def _post_healthcheck(channel, text: str) -> None:
     """
     Posts the per-tick healthcheck message and keeps the channel from
@@ -258,10 +271,7 @@ async def _post_healthcheck(channel, text: str) -> None:
 
     if _healthcheck_hour_bucket is not None and hour_bucket != _healthcheck_hour_bucket:
         for old_msg in _healthcheck_msgs:
-            try:
-                await old_msg.delete()
-            except Exception:
-                pass  # already gone, or too old/no permission -- not worth failing the tick over
+            await _delete_healthcheck(old_msg)
         _healthcheck_msgs = []
     _healthcheck_hour_bucket = hour_bucket
 
