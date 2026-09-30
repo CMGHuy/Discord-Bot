@@ -10,10 +10,12 @@ BASE="${BASE:-/opt/swing-bot}"
 mkdir -p "$BASE/logs"
 # One lock per repo: restic_hourly and pitr_verify share the restic repo (its
 # own lock would make an overlap fail); pgbackrest gets a separate one.
-# flock -n -E 99 skips an overlapping run and exits 99, which is logged.
-skip() { echo "[ \$? -eq 99 ] && echo \"\$(date -u) skipped: previous run still holding lock\" >> $1"; }
+# flock -n -E 199 skips an overlapping run and exits 199, which is logged. 199 is
+# a code the wrapped scripts never produce (they exit 0/1), so a real failure
+# can never be mistaken for a lock skip.
+skip() { echo "[ \$? -eq 199 ] && echo \"\$(date -u) skipped: previous run still holding lock\" >> $1"; }
 cronline() {  # schedule script lock log
-  echo "$1 flock -n -E 99 $BASE/logs/$3.lock $BASE/scripts/ops/$2 >> $BASE/logs/$4 2>&1; $(skip "$BASE/logs/$4")"
+  echo "$1 flock -n -E 199 $BASE/logs/$3.lock $BASE/scripts/ops/$2 >> $BASE/logs/$4 2>&1; $(skip "$BASE/logs/$4")"
 }
 chmod +x "$BASE/scripts/ops/pitr_backup.sh" "$BASE/scripts/ops/restic_hourly.sh" \
          "$BASE/scripts/ops/pitr_verify.sh"

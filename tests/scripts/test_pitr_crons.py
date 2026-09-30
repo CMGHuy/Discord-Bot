@@ -63,7 +63,7 @@ def test_the_vm_setup_installs_restic_and_python3():
 
 def test_installer_wraps_each_cron_in_flock_with_shared_restic_lock():
     text = _text("install_pitr_crons.sh")
-    assert "flock -n -E 99" in text and "mkdir -p" in text
+    assert "flock -n -E 199" in text and "mkdir -p" in text
     assert 'cronline "7 * * * *" restic_hourly.sh restic ' in text
     assert 'cronline "0 4 1 * *" pitr_verify.sh restic ' in text
     assert "cronline \"30 2 * * *\" pitr_backup.sh pitr_backup " in text
@@ -102,6 +102,15 @@ def _working_bash(*paths):
         except OSError:
             continue
     return None
+
+
+def test_wrapped_scripts_never_exit_with_the_flock_skip_code():
+    """The cron wrapper treats exit 199 as 'lock held, skipped'; a script that
+    could exit 199 would have a real failure logged as a skip."""
+    import re
+    for name in ("pitr_backup.sh", "restic_hourly.sh", "pitr_verify.sh"):
+        codes = re.findall(r"exit\s+(\S+)", _text(name))
+        assert all(c in ("0", "1", '"$rc"') for c in codes), (name, codes)
 
 
 def _assert_flock_lines(cron):
