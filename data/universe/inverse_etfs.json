@@ -1,0 +1,6 @@
+[
+  {"symbol": "SH",  "name": "ProShares Short S&P500",      "sector": "Inverse Index", "etf": true, "inverse": true, "tracks": "S&P 500"},
+  {"symbol": "PSQ", "name": "ProShares Short QQQ",         "sector": "Inverse Index", "etf": true, "inverse": true, "tracks": "Nasdaq-100"},
+  {"symbol": "RWM", "name": "ProShares Short Russell2000", "sector": "Inverse Index", "etf": true, "inverse": true, "tracks": "Russell 2000"},
+  {"symbol": "DOG", "name": "ProShares Short Dow30",       "sector": "Inverse Index", "etf": true, "inverse": true, "tracks": "Dow Jones 30"}
+]
