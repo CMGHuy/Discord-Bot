@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
+from swingbot import config
 from swingbot.core.planning.plan_engine import (
     PlanStatus,
     build_confluence_plan,
@@ -11,6 +12,14 @@ from swingbot.core.planning.plan_engine import (
 )
 
 DEFAULT_STRATEGY = "S/R Confluence"
+
+
+@pytest.fixture(autouse=True)
+def _unclamped_stops(monkeypatch):
+    # These tests pin target selection against the scenario's OWN risk (4%
+    # stops). v115's CLAMP_STOP_TO_HARD_CAP would first move those stops to 2%;
+    # the clamp has its own tests in tests/planning/test_confluence_stop_clamp.py.
+    monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", False)
 
 
 def _make_scenario(**overrides):

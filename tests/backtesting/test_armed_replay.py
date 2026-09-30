@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from swingbot import config
 from swingbot.core.backtesting import armed_replay as ar
 from swingbot.core.backtesting import backtest_scenarios as bs
 from swingbot.core.market import levels, reaction as rx
@@ -184,7 +185,10 @@ def _build(df, outcome, cell=CELL, *, resistances=(T1,), confluence=3, params=No
 REJECTION = (99.0, 99.6, 97.6, 99.4)
 
 
-def test_m1_issues_a_stop_entry_above_the_reaction_high():
+def test_m1_issues_a_stop_entry_above_the_reaction_high(monkeypatch):
+    # Pins the arm geometry (stop 97.5 = 2.11% from the 99.6 trigger) that
+    # v115's CLAMP_STOP_TO_HARD_CAP would move to 2%; the clamp has its own tests.
+    monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", False)
     df = _frame({26: REJECTION})
     plan, reason = _build(df, ar.ArmOutcome("confirmed", 26, rx.R1, 26))
     assert reason == "issued"
