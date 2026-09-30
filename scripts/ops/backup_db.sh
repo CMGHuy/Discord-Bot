@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Nightly Postgres backup: one timestamped dump into data/backups/db/,
-# pruning anything older than 14 days.
+# pruning anything older than 90 days.
 #
-# 14 days, by age and not by count: it covers a bad change surviving a week
-# unnoticed, and a day with three manual dumps must not evict two weeks of
+# 90 days, by age and not by count (v116): day-level restores beyond the 30-day
+# point-in-time window, and a day with three manual dumps must not evict older
 # nightly ones.
 #
 # The dump streams over stdout from the db container to the host, so no
@@ -36,4 +36,4 @@ fi
 mv "$TMP" "$OUT"
 echo "backup_db: wrote $OUT ($(du -h "$OUT" | cut -f1))"
 
-find "$BACKUP_DIR" -name 'swingbot_*.sql.gz' -type f -mtime +14 -print -delete
+find "$BACKUP_DIR" -name 'swingbot_*.sql.gz' -type f -mtime +90 -print -delete

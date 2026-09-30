@@ -31,10 +31,9 @@ def test_it_writes_into_the_backups_directory(source):
 
 
 def test_it_prunes_by_age_not_by_count(source):
-    """14 DAYS, not 14 files: a day with three manual dumps must not evict
-    two weeks of nightly ones."""
-    assert "-mtime" in source or "--older-than" in source
-    assert "14" in source
+    """90 DAYS (v116: day-level restores beyond the 30-day PITR window), not
+    90 files: a day with three manual dumps must not evict older nightly ones."""
+    assert "-mtime +90" in source
 
 
 def test_it_verifies_the_dump_is_non_empty_before_pruning(source):
