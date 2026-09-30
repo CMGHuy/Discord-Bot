@@ -74,6 +74,13 @@ def test_a_stop_within_the_cap_is_untouched(clamp_on):
     assert plan.stop_loss == 98.5
 
 
+def test_a_stop_between_the_clamp_target_and_the_cap_is_untouched(clamp_on):
+    """1.9% is past the 1.75% the clamp lands on but inside the 2% cap, so
+    the clamp never fires -- it only pulls in stops that break the cap."""
+    plan = _build(_scenario("bullish", 100.0, 98.1, 104.0))
+    assert plan.stop_loss == 98.1
+
+
 def test_a_stop_exactly_at_the_cap_is_untouched(clamp_on):
     plan = _build(_scenario("bullish", 100.0, 98.0, 104.0))
     assert plan.stop_loss == 98.0

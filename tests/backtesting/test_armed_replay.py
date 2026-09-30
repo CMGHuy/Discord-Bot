@@ -187,7 +187,7 @@ REJECTION = (99.0, 99.6, 97.6, 99.4)
 
 def test_m1_issues_a_stop_entry_above_the_reaction_high(monkeypatch):
     # Pins the arm geometry (stop 97.5 = 2.11% from the 99.6 trigger) that
-    # v115's CLAMP_STOP_TO_HARD_CAP would move to 2%; the clamp has its own tests.
+    # v115's CLAMP_STOP_TO_HARD_CAP would move to 1.75%; the clamp has its own tests.
     monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", False)
     df = _frame({26: REJECTION})
     plan, reason = _build(df, ar.ArmOutcome("confirmed", 26, rx.R1, 26))
@@ -202,11 +202,11 @@ def test_m1_issues_a_stop_entry_above_the_reaction_high(monkeypatch):
 
 
 def test_the_widened_scenario_issues_once_its_stop_is_re_anchored(monkeypatch):
+    """Today's gates refuse this scenario (1.5% stop); the armed path
+    issues it with a stop >= 2% from the entry."""
     # Pins the armed path's own >= 2% re-anchored stop; v115's CLAMP_STOP_TO_HARD_CAP
     # would move a stop beyond the cap to 1.75%. The clamp has its own tests.
     monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", False)
-    """Today's gates refuse this scenario (1.5% stop); the armed path
-    issues it with a stop >= 2% from the entry."""
     assert [s for s in levels.build_scenarios(
         100.0, [levels.Level(L, ["Rolling S/R"])], [levels.Level(T1, ["Fibonacci"])], 3.0,
         min_stop_distance_pct=2.0, max_stop_distance_pct=7.0, min_risk_reward=1.5)

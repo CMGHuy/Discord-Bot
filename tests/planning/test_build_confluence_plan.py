@@ -17,7 +17,7 @@ DEFAULT_STRATEGY = "S/R Confluence"
 @pytest.fixture
 def _unclamped_stops(monkeypatch):
     # These tests pin target selection against the scenario's OWN risk (4%
-    # stops). v115's CLAMP_STOP_TO_HARD_CAP would first move those stops to 2%;
+    # stops). v115's CLAMP_STOP_TO_HARD_CAP would first move those stops to 1.75%;
     # the clamp has its own tests in tests/planning/test_confluence_stop_clamp.py.
     monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", False)
 
