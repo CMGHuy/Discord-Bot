@@ -224,13 +224,13 @@ async def _check_session_transition(channel) -> None:
     try:
         await channel.send(message)
     except Exception as e:
-        log.warning("Could not post session welcome/goodbye message: %s", e)
+        log.warning("Could not post session welcome/goodbye message: %s", e, exc_info=True)
 
     if not active and config.DAILY_DIGEST_ENABLED:
         try:
             await _post_daily_digest(channel)
         except Exception as e:
-            log.warning("Could not post daily top-plans digest: %s", e)
+            log.warning("Could not post daily top-plans digest: %s", e, exc_info=True)
 
     _session_was_active = active
 
@@ -284,4 +284,4 @@ async def _post_healthcheck(channel, text: str) -> None:
         msg = await channel.send(text, silent=True)
         _healthcheck_msgs.append(msg)
     except Exception as e:
-        log.warning("Could not post healthcheck message: %s", e)
+        log.warning("Could not post healthcheck message: %s", e, exc_info=True)

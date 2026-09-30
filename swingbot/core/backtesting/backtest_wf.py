@@ -108,7 +108,7 @@ def _frame_for(symbol: str):
     try:
         return pd.read_csv(path, index_col=0, parse_dates=True)
     except Exception as exc:
-        log.warning("fold frame unreadable for %s: %s", symbol, exc)
+        log.warning("fold frame unreadable for %s: %s", symbol, exc, exc_info=True)
         return None
 
 

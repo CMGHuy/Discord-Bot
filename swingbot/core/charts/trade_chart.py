@@ -1181,7 +1181,7 @@ def generate_all_strategy_charts(
             )
             result[family] = path
         except Exception as exc:
-            log.warning("generate_all_strategy_charts: %s/%s failed: %s", ticker, family, exc)
+            log.warning("generate_all_strategy_charts: %s/%s failed: %s", ticker, family, exc, exc_info=True)
             result[family] = None
 
     return result

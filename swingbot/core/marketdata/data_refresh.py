@@ -100,7 +100,7 @@ def save_state(state: dict) -> None:
     try:
         atomic_write_json(STATE_FILE, state)
     except Exception as exc:            # never let bookkeeping break a refresh
-        log.warning("could not write %s: %s", STATE_FILE, exc)
+        log.warning("could not write %s: %s", STATE_FILE, exc, exc_info=True)
 
 
 def _key(symbol: str, timeframe: str) -> str:
@@ -271,7 +271,7 @@ def refresh_symbol(symbol: str, timeframe: str, base_dir: str = DATA_DIR,
                             attempts=RETRY_ATTEMPTS, base_delay=RETRY_BASE_DELAY,
                             label=f"{symbol}/{tf} full")
         except Exception as exc:
-            log.warning("refresh %s/%s failed after retries: %s", symbol, tf, exc)
+            log.warning("refresh %s/%s failed after retries: %s", symbol, tf, exc, exc_info=True)
             return {**out, "status": "failed", "rows": have, "error": str(exc)[:200]}
         merged, added = _merge_save(existing, df, symbol, tf, base_dir)
         return {**out, "status": "full" if have == 0 else "incremental",
@@ -284,7 +284,7 @@ def refresh_symbol(symbol: str, timeframe: str, base_dir: str = DATA_DIR,
                            attempts=RETRY_ATTEMPTS, base_delay=RETRY_BASE_DELAY,
                            label=f"{symbol}/{tf} incremental")
     except Exception as exc:
-        log.warning("incremental %s/%s failed after retries: %s", symbol, tf, exc)
+        log.warning("incremental %s/%s failed after retries: %s", symbol, tf, exc, exc_info=True)
         return {**out, "status": "failed", "rows": have, "error": str(exc)[:200]}
 
     if fresh is None or len(fresh) == 0:
@@ -387,7 +387,7 @@ def refresh_all(symbols, timeframes=TRAINING_TIMEFRAMES, base_dir: str = DATA_DI
                 r = refresh_symbol(symbol, tf, base_dir=base_dir, force=force,
                                    state=state)
             except Exception as exc:      # belt-and-braces: loop must survive
-                log.warning("refresh %s/%s crashed: %s", symbol, tf, exc)
+                log.warning("refresh %s/%s crashed: %s", symbol, tf, exc, exc_info=True)
                 r = {"symbol": symbol, "timeframe": tf, "status": "failed",
                      "rows": 0, "added": 0, "error": str(exc)[:200]}
             bucket = summary[tf]

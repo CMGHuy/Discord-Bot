@@ -41,7 +41,7 @@ async def recap_cmd(ctx, date_arg: str = ""):
     try:
         await recap._post_retrospective(channel_id_override=ctx.channel.id, today=today)
     except Exception as exc:
-        log.exception("!recap failed: %s", exc)
+        log.exception("!recap failed")
         await ctx.send(f"❌ Failed to build retrospective: {exc}")
 
 

@@ -378,7 +378,7 @@ async def config_watcher():
                         try:
                             await channel.send(fmt_fn(old_val, new_val))
                         except Exception as _e:
-                            log.warning("Could not post config-change notice to Discord: %s", _e)
+                            log.warning("Could not post config-change notice to Discord: %s", _e, exc_info=True)
 
     # --- Admin UI manual-close notification queue ---
     from swingbot.core.db import stages
@@ -390,7 +390,7 @@ async def config_watcher():
             with open(runstate._MANUAL_CLOSE_QUEUE, "r") as _qf:
                 _queued = json.load(_qf)
         except Exception as _qe:
-            log.warning("Could not read manual_close_notify queue: %s", _qe)
+            log.warning("Could not read manual_close_notify queue: %s", _qe, exc_info=True)
             _queued = []
     else:
         _queued = []
@@ -404,7 +404,7 @@ async def config_watcher():
                 await notify_closed_trades(bot, _queued)
                 log.info("Posted %d manually-closed trade notification(s) to Discord.", len(_queued))
             except Exception as _ne:
-                log.warning("Failed to post manual-close notifications: %s", _ne)
+                log.warning("Failed to post manual-close notifications: %s", _ne, exc_info=True)
 
     # --- Admin UI "Run !check now" trigger ---
     if runstate.is_trigger_requested():
@@ -418,7 +418,7 @@ async def config_watcher():
             try:
                 channel = silence(await bot.fetch_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
             except Exception as _ce:
-                log.warning("Could not resolve channel %s for triggered scan: %s", config.DISCORD_CHANNEL_TRADES_ID, _ce)
+                log.warning("Could not resolve channel %s for triggered scan: %s", config.DISCORD_CHANNEL_TRADES_ID, _ce, exc_info=True)
                 return
         min_lv = config.MIN_ALERT_CONFIDENCE_LEVEL
         # Post a live-updating progress message — same UX as the Discord
@@ -524,14 +524,14 @@ async def _post_plan_events(plan_events) -> None:
     try:
         deliveries = await notify_plan_events(bot, plan_events)
     except Exception as exc:
-        log.warning("trade_monitor: failed to post plan events: %s", exc)
+        log.warning("trade_monitor: failed to post plan events: %s", exc, exc_info=True)
         return
     if not deliveries:
         return
     try:
         await asyncio.to_thread(plan_manager.ack_notified, deliveries)
     except Exception as exc:
-        log.warning("trade_monitor: could not record feed deliveries (they will be re-sent): %s", exc)
+        log.warning("trade_monitor: could not record feed deliveries (they will be re-sent): %s", exc, exc_info=True)
 
 
 async def _resend_plan_notices() -> None:
@@ -540,7 +540,7 @@ async def _resend_plan_notices() -> None:
     try:
         events = await asyncio.to_thread(plan_manager.run_notice_sweep)
     except Exception as exc:
-        log.warning("trade_monitor: notice sweep failed: %s", exc)
+        log.warning("trade_monitor: notice sweep failed: %s", exc, exc_info=True)
         return
     if events:
         await _post_plan_events(events)
@@ -619,7 +619,7 @@ async def trade_monitor():
         try:
             closed = await asyncio.to_thread(trade_log.close_if_live_price_hit, ticker, live)
         except Exception as exc:
-            log.warning("trade_monitor: close_if_live_price_hit failed for %s: %s", ticker, exc)
+            log.warning("trade_monitor: close_if_live_price_hit failed for %s: %s", ticker, exc, exc_info=True)
             continue
         if closed:
             log.info("trade_monitor: %d trade(s) closed for %s (live=%.4f)", len(closed), ticker, live)
@@ -635,7 +635,7 @@ async def trade_monitor():
         try:
             near_tp_closed = await asyncio.to_thread(trade_log.check_near_tp_timeout, ticker, live)
         except Exception as exc:
-            log.warning("trade_monitor: check_near_tp_timeout failed for %s: %s", ticker, exc)
+            log.warning("trade_monitor: check_near_tp_timeout failed for %s: %s", ticker, exc, exc_info=True)
             continue
         if near_tp_closed:
             log.info("trade_monitor: %d trade(s) closed for %s via near-TP timeout (live=%.4f)",
@@ -647,7 +647,7 @@ async def trade_monitor():
     try:
         plan_events = await asyncio.to_thread(plan_manager.run_manager_tick)
     except Exception as exc:
-        log.warning("trade_monitor: plan manager tick failed: %s", exc)
+        log.warning("trade_monitor: plan manager tick failed: %s", exc, exc_info=True)
         plan_events = []
     if plan_events:
         await _post_plan_events(plan_events)
@@ -657,7 +657,7 @@ async def trade_monitor():
         try:
             await notify_closed_trades(bot, all_newly_closed)
         except Exception as exc:
-            log.warning("trade_monitor: failed to post close notifications: %s", exc)
+            log.warning("trade_monitor: failed to post close notifications: %s", exc, exc_info=True)
         await presence._refresh_presence()
 
 
@@ -728,8 +728,8 @@ async def daily_recap():
     _mark_scheduled_job_fired('daily_recap', today)
     try:
         await recap._post_retrospective()
-    except Exception as exc:
-        log.exception("daily_recap: failed to post retrospective: %s", exc)
+    except Exception:
+        log.exception("daily_recap: failed to post retrospective")
 
 
 
@@ -838,8 +838,8 @@ async def market_data_refresh():
             refresh_all, symbols, timeframes, sleep_seconds=0.3,
             deadline_seconds=config.MARKET_DATA_REFRESH_BUDGET_SECONDS,
         )
-    except Exception as exc:
-        log.exception("market_data_refresh: refresh failed: %s", exc)
+    except Exception:
+        log.exception("market_data_refresh: refresh failed")
         return
 
     line = summary_line(result)
@@ -947,7 +947,7 @@ async def on_ready():
         synced = await bot.tree.sync()
         log.info("Synced %d slash command(s) to Discord.", len(synced))
     except Exception as e:
-        log.warning("Failed to sync slash commands: %s", e)
+        log.warning("Failed to sync slash commands: %s", e, exc_info=True)
 
     # Post a startup notice to the alerts channel so there's a visible
     # timestamp in Discord for when the bot came (back) online.

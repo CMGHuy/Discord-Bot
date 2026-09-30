@@ -76,7 +76,7 @@ def regenerate_chart_for_trade(trade: dict) -> str | None:
             trendline_fit=trade.get("trendline_fit"),
         )
     except Exception as e:
-        log.warning("Could not regenerate chart for trade %s: %s", trade.get("id"), e)
+        log.warning("Could not regenerate chart for trade %s: %s", trade.get("id"), e, exc_info=True)
         return None
 
 
@@ -224,7 +224,7 @@ async def notify_closed_trades(bot, newly_closed: list):
         try:
             channel = await bot.fetch_channel(int(config.DISCORD_CHANNEL_TRADES_HISTORY_ID))
         except Exception as _ce:
-            log.warning("Could not resolve closed-trades channel %s: %s", config.DISCORD_CHANNEL_TRADES_HISTORY_ID, _ce)
+            log.warning("Could not resolve closed-trades channel %s: %s", config.DISCORD_CHANNEL_TRADES_HISTORY_ID, _ce, exc_info=True)
             return
     for trade in newly_closed:
         status = trade.get("status", "")
@@ -237,7 +237,7 @@ async def notify_closed_trades(bot, newly_closed: list):
             header = f"{header_map.get(status, status.upper())} — **{trade['ticker']}**"
             await channel.send(content=header, embed=embed)
         except Exception as e:
-            log.warning("Could not post closed-trade notification for %s: %s", trade.get("id"), e)
+            log.warning("Could not post closed-trade notification for %s: %s", trade.get("id"), e, exc_info=True)
 
 
 def build_near_close_embed(warning: dict) -> discord.Embed:
@@ -273,13 +273,13 @@ async def notify_near_close(bot, warnings: list):
         try:
             channel = await bot.fetch_channel(int(config.DISCORD_CHANNEL_TRADES_HISTORY_ID))
         except Exception as _ce:
-            log.warning("Could not resolve closed-trades channel %s: %s", config.DISCORD_CHANNEL_TRADES_HISTORY_ID, _ce)
+            log.warning("Could not resolve closed-trades channel %s: %s", config.DISCORD_CHANNEL_TRADES_HISTORY_ID, _ce, exc_info=True)
             return
     for warning in warnings:
         try:
             await channel.send(embed=build_near_close_embed(warning))
         except Exception as e:
-            log.warning("Could not post near-close warning for %s: %s", warning["trade"].get("id"), e)
+            log.warning("Could not post near-close warning for %s: %s", warning["trade"].get("id"), e, exc_info=True)
 
 
 _GOOD = ui.accent_for_outcome("win")

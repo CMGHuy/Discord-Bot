@@ -120,7 +120,7 @@ def _yf_daily_batch(tickers: list, period: str) -> dict:
                          label=f"get_daily_data_batch({len(tickers)} tickers)")
     except Exception as exc:
         log.error("get_daily_data_batch failed for %d ticker(s) after %d attempt(s): %s",
-                   len(tickers), FETCH_RETRY_ATTEMPTS, exc)
+                   len(tickers), FETCH_RETRY_ATTEMPTS, exc, exc_info=True)
         return {}
     if raw is None or raw.empty:
         return {}
@@ -227,7 +227,7 @@ def _yf_batch_prices(tickers: list) -> dict:
         raw = yf_safe.download(" ".join(tickers), period="1d", interval="1m",
                           group_by="ticker", prepost=True, progress=False)
     except Exception as exc:
-        log.error("get_current_price_batch failed for %d ticker(s): %s", len(tickers), exc)
+        log.error("get_current_price_batch failed for %d ticker(s): %s", len(tickers), exc, exc_info=True)
         return {}
     if raw is None or raw.empty:
         return {}

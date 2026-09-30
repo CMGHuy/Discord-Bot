@@ -178,7 +178,7 @@ def _run_bounded(fn, args: tuple, timeout_seconds: float, label: str):
             try:
                 return future.result()
             except Exception as exc:
-                log.error("%s failed: %s", label, exc)
+                log.error("%s failed: %s", label, exc, exc_info=True)
                 return None
         log.error(
             "%s did not finish within %ss -- killing the worker process and "
@@ -222,7 +222,7 @@ def _fetch_one_ticker(ticker: str) -> tuple:
     try:
         return ticker, get_daily_data(ticker, period=config.DEFAULT_HISTORY_PERIOD)
     except Exception as exc:
-        log.error("Crawl: error fetching data for %s: %s", ticker, exc)
+        log.error("Crawl: error fetching data for %s: %s", ticker, exc, exc_info=True)
         return ticker, None
 
 
@@ -549,7 +549,7 @@ def _daily_frame_for(symbol: str):
     try:
         return get_daily_data(symbol, period=config.DEFAULT_HISTORY_PERIOD)
     except Exception as exc:
-        log.warning("Could not resolve daily frame for %s: %s", symbol, exc)
+        log.warning("Could not resolve daily frame for %s: %s", symbol, exc, exc_info=True)
         return None
 
 

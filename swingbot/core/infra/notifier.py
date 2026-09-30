@@ -54,7 +54,7 @@ def _send_email(subject: str, body: str) -> bool:
                     "(Gmail users: use an App Password, not your account password)")
         return False
     except Exception as exc:
-        log.warning("Email alert failed: %s", exc)
+        log.warning("Email alert failed: %s", exc, exc_info=True)
         return False
 
 
@@ -81,10 +81,10 @@ def _send_push(title: str, message: str, tags: str = "chart_with_upwards_trend",
                 log.warning("Push alert: ntfy.sh returned status %d", resp.status)
             return ok
     except urllib.error.URLError as exc:
-        log.warning("Push alert (ntfy.sh) network error: %s", exc)
+        log.warning("Push alert (ntfy.sh) network error: %s", exc, exc_info=True)
         return False
     except Exception as exc:
-        log.warning("Push alert (ntfy.sh) failed: %s", exc)
+        log.warning("Push alert (ntfy.sh) failed: %s", exc, exc_info=True)
         return False
 
 

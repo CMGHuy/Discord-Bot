@@ -146,7 +146,7 @@ def get_regime(regime_df=None):
             return None
         return get_market_regime(regime_df, ticker)
     except Exception as e:
-        log.warning("Could not fetch market regime: %s", e)
+        log.warning("Could not fetch market regime: %s", e, exc_info=True)
         return None
 
 def _logged_plan_fields(plan_v2, scenario, level_map, direction: str) -> tuple[list, float]:
@@ -299,7 +299,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         if spy_df is not None:
             rs_cache = rs_factors.refresh_rs_cache(fresh_data, spy_df)
     except Exception as e:
-        log.warning("Could not compute relative-strength cache: %s", e)
+        log.warning("Could not compute relative-strength cache: %s", e, exc_info=True)
         spy_df = None
         rs_cache = None
 
@@ -324,7 +324,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         if needed_sector_etfs:
             sector_etf_frames = fetch._fetch_frames(needed_sector_etfs)
     except Exception as e:
-        log.warning("Could not fetch sector ETFs for relative-strength: %s", e)
+        log.warning("Could not fetch sector ETFs for relative-strength: %s", e, exc_info=True)
         sector_of_ticker = {}
         etf_symbol_of_sector = {}
         sector_etf_frames = {}
@@ -722,7 +722,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 df = fetch.get_daily_data(result.ticker, period=config.DEFAULT_HISTORY_PERIOD)
             except Exception as exc:
                 log.warning("Could not fetch chart data for %s; posting without chart: %s",
-                            result.ticker, exc)
+                            result.ticker, exc, exc_info=True)
 
         log.info(
             "%s %s (%s): entry=%.2f stop=%.2f target1=%.2f (+%.1f%%)%s conf=Lv%d(%d/100) all_requirements_met=%s",
@@ -1094,7 +1094,7 @@ def get_all_unrealized_pnl() -> list:
     try:
         price_cache = fetch.get_current_price_batch(tickers)
     except Exception as exc:
-        log.warning("get_all_unrealized_pnl: batch price fetch failed: %s", exc)
+        log.warning("get_all_unrealized_pnl: batch price fetch failed: %s", exc, exc_info=True)
         price_cache = {}
     for t in open_trades:
         ticker = t["ticker"]
@@ -1104,7 +1104,7 @@ def get_all_unrealized_pnl() -> list:
                 df = fetch.get_daily_data(ticker, period="5d")
                 price_cache[ticker] = float(df["Close"].iloc[-1]) if df is not None and not df.empty else None
             except Exception as exc:
-                log.warning("get_all_unrealized_pnl: could not fetch price for %s: %s", ticker, exc)
+                log.warning("get_all_unrealized_pnl: could not fetch price for %s: %s", ticker, exc, exc_info=True)
                 price_cache[ticker] = None
         current_price = price_cache[ticker]
         if current_price is None:

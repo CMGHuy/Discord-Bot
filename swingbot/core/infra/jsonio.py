@@ -89,5 +89,5 @@ def read_json(path: str, default):
     except FileNotFoundError:
         return default
     except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
-        log.warning("read_json(%s) failed (%s); returning default", path, exc)
+        log.warning("read_json(%s) failed (%s); returning default", path, exc, exc_info=True)
         return default

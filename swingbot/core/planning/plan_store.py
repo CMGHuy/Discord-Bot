@@ -33,7 +33,7 @@ class PlanStore:
         except FileNotFoundError:
             return {}
         except (json.JSONDecodeError, KeyError, OSError) as exc:
-            log.warning("plans.json unreadable (%s); starting empty", exc)
+            log.warning("plans.json unreadable (%s); starting empty", exc, exc_info=True)
             return {}
 
     def reload(self) -> None:

@@ -240,7 +240,7 @@ async def _send_alerts(destination, alerts, route_by_confidence: bool = False):
                 log.warning("Could not post simple alert for %s to channel %s: %s "
                             "-- full alert will notify instead.",
                             getattr(plan, "ticker", "?"),
-                            getattr(config, "DISCORD_CHANNEL_TRADES_SIMPLE_ID", ""), _se)
+                            getattr(config, "DISCORD_CHANNEL_TRADES_SIMPLE_ID", ""), _se, exc_info=True)
 
         view = PlanActionView(plan.plan_id, author_id=None) if plan is not None else None
         # silent=True sets Discord's SUPPRESS_NOTIFICATIONS flag (the `@silent`

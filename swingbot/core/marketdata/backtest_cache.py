@@ -93,7 +93,7 @@ def fetch(ticker: str) -> pd.DataFrame | None:
                 warnings.simplefilter("ignore")
                 df = yf_safe.download(candidate, period="max", auto_adjust=True, progress=False)
         except Exception as e:
-            log.warning("backtest cache: candidate %s failed for %s: %s", candidate, ticker, e)
+            log.warning("backtest cache: candidate %s failed for %s: %s", candidate, ticker, e, exc_info=True)
             continue
         normalized = normalize_ohlcv(df)
         if normalized is not None:
@@ -112,7 +112,7 @@ def ensure_cached(ticker: str, force: bool = False) -> CacheResult:
     try:
         df = fetch(ticker)
     except Exception as e:  # network / bad symbol / yfinance internals
-        log.warning("backtest cache fetch failed for %s: %s", ticker, e)
+        log.warning("backtest cache fetch failed for %s: %s", ticker, e, exc_info=True)
         return CacheResult(ticker, "failed", note=str(e))
     if df is None or df.empty:
         log.warning("backtest cache: no data for %s (empty response)", ticker)
