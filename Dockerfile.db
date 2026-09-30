@@ -6,6 +6,9 @@
 # backups/deploys.jsonl always names the same bytes. To pick up a new
 # postgres:18 patch release, change REBUILD.
 FROM postgres:18-alpine
+# Links the GHCR package to this repo so the GITHUB_TOKEN in
+# registry-retention.yml may delete its old versions.
+LABEL org.opencontainers.image.source="https://github.com/CMGHuy/Discord-Bot"
 ARG REBUILD=2026-09-30
 RUN apk add --no-cache pgbackrest \
  && mkdir -p /var/lib/pgbackrest /var/log/pgbackrest /var/spool/pgbackrest \

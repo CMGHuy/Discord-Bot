@@ -50,7 +50,9 @@ jobs:
           # second, up to 30 days back, and that image may itself be older than
           # the target. 45 days covers the window plus that age; rollback_to.sh
           # still refuses a tag GHCR no longer has.
-          image-names: "${{ github.event.repository.name }}, ${{ github.event.repository.name }}-db"
+          image-names: |
+            ${{ github.event.repository.name }}
+            ${{ github.event.repository.name }}-db
           cut-off: 45d
           keep-n-most-recent: 10
           # Never the moving tag, and never an untagged version that a

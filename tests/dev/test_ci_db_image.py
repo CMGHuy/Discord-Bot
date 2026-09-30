@@ -34,4 +34,13 @@ def test_ghcr_retention_covers_the_rollback_window_for_both_images():
     step = _load("registry-retention.yml")["jobs"]["prune"]["steps"][0]
     cut = step["with"]["cut-off"]
     assert cut.endswith("d") and int(cut[:-1]) >= 30
-    assert "-db" in step["with"]["image-names"]
+    raw = step["with"]["image-names"].replace(",", chr(10))
+    names = [n.strip() for n in raw.splitlines() if n.strip()]
+    assert len(names) == 2
+    assert "${{ github.event.repository.name }}" in names
+    assert "${{ github.event.repository.name }}-db" in names
+
+
+def test_the_db_image_is_linked_to_the_repo_so_ghcr_can_prune_it():
+    text = (WORKFLOWS.parents[1] / "Dockerfile.db").read_text(encoding="utf-8")
+    assert "org.opencontainers.image.source=" in text
