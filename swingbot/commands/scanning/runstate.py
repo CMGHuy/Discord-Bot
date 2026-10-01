@@ -112,6 +112,14 @@ def last_success_iso() -> str | None:
     return _read_heartbeat().get("last_success")
 
 
+def record_store_write_failure(exc: Exception) -> None:
+    """v116: mark the heartbeat so the admin shows the halt until unpaused."""
+    _update_heartbeat({"store_write_failure": {
+        "at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "error": f"{type(exc).__name__}: {str(exc)[:300]}",
+    }})
+
+
 def is_scan_paused() -> bool:
     """Whether the automatic background scan loop is currently paused
     (via the admin UI toggle or the !pause command). Manual scans
@@ -140,6 +148,9 @@ def set_scan_paused(paused: bool) -> None:
         from swingbot.core.db.repositories.flags import flags_repo
         repo = flags_repo()
         repo.set("scan_paused") if paused else repo.clear("scan_paused")
+    if not paused:
+        # Unpausing is the partner's acknowledgement of a store-write halt.
+        _update_heartbeat({"store_write_failure": None})
 
 
 def _flag_set_at(name: str, path: str) -> str | None:

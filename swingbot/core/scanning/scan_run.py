@@ -10,6 +10,7 @@ from swingbot.config import auto_reload_if_changed
 from swingbot.core.charts.decision_chart import render_decision_chart
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
 from swingbot.core.charts.trendline_fit import fit_trendline
+from swingbot.core.db import write_failure
 from swingbot.core.edge import correlation as corr_mod
 from swingbot.core.edge import factors as rs_factors
 from swingbot.core.edge import heat as heat_mod
@@ -213,10 +214,18 @@ def _earnings_in_window(ticker: str, max_holding_days: int):
 
 
 def _persist_plan_v2(plan_v2) -> None:
-    """Add the plan to PlanStore; log it as armed only once that succeeded."""
+    """Add the plan to PlanStore; log it as armed only once that succeeded.
+
+    v116: at a trading store's db stage a failed write is not swallowed. The
+    alert for this plan would otherwise post with no plan behind it, so the
+    whole scan stops before anything is sent (session_scan then pauses).
+    """
     try:
         PlanStore().add(plan_v2)
-    except Exception:
+    except Exception as exc:
+        if write_failure.halts_issuance(exc):
+            raise write_failure.StoreWriteHalt(
+                f"plan {plan_v2.plan_id} could not be stored") from exc
         log.warning("Failed to persist plan_v2 %s to PlanStore",
                     plan_v2.plan_id, exc_info=True)
         return

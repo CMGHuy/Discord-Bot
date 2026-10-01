@@ -59,6 +59,15 @@ def pitr_notice_embed(notice):
     return system_embed(kind, notice.detail, notice.description)
 
 
+def store_write_halt_embed(exc: Exception):
+    """v116: issuance stopped because the book could not store a record."""
+    return system_embed(Kind.HEALTH_ALERT, "alerting paused: a record could not be stored", (
+        f"• Error: `{type(exc).__name__}: {str(exc)[:400]}`\n"
+        "• The scan stopped before posting, so no alert went out for a trade or plan "
+        "the book did not record.\n"
+        "Scheduled scanning is paused. Fix the database, then unpause from the admin UI."))
+
+
 def bot_online_embed(*, now_text: str, session_start: int, session_end: int, interval: int,
                      watchlist_size: int, open_count: int, min_level: int):
     return system_embed(Kind.BOT_ONLINE, now_text, (

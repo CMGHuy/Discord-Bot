@@ -97,6 +97,7 @@ def test_scan_status_shape(logged_in, scan_files):
         "bot_healthy": (bool, type(None)),
         "bot_last_success": NULLABLE_STR,
         "bot_consecutive_failures": int,
+        "bot_store_write_failure": (dict, type(None)),
         "progress": (dict, type(None)),
     })
 

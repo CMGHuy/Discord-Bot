@@ -337,14 +337,18 @@ def _heartbeat_status(hb: dict, seen: datetime | None, threshold: float) -> dict
     now = datetime.now(timezone.utc)
     last_success = hb.get("last_success")
     success_at = _parse_iso(last_success)
+    healthy = None if success_at is None else (now - success_at).total_seconds() < threshold
+    halted = hb.get("store_write_failure")
     return {
         "bot_alive": seen is not None and (now - seen).total_seconds() < threshold,
         "bot_last_seen": seen.isoformat() if seen else None,
         "bot_session_active": hb.get("session_active"),
         "bot_scan_paused": hb.get("scan_paused"),
-        "bot_healthy": None if success_at is None else (now - success_at).total_seconds() < threshold,
+        # v116: a store-write halt is unhealthy until the partner unpauses.
+        "bot_healthy": False if halted else healthy,
         "bot_last_success": last_success,
         "bot_consecutive_failures": int(hb.get("consecutive_failures") or 0),
+        "bot_store_write_failure": halted,
     }
 
 

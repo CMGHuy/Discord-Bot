@@ -16,6 +16,7 @@ from swingbot.core.marketdata.data import get_current_price_batch
 from swingbot.core.scanning.fetch import _run_bounded
 from swingbot.core.infra.silent_channel import silence
 from swingbot.core.infra.logsetup import apply_log_level
+from swingbot.core.db import write_failure
 from swingbot.core.infra import pitr_watch
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core import presentation as ui
@@ -83,6 +84,23 @@ async def _post_health_recovered() -> None:
     await channel.send(**ui.push_kwargs(notices.health_recovered_embed()))
 
 
+async def _halt_on_store_failure(exc: Exception) -> None:
+    """v116: the book could not record what the scan was issuing. Pause the
+    scheduled scan (the partner unpauses from the admin UI), tell ops now --
+    not after HEALTH_ALERT_AFTER_FAILURES ticks -- and mark the heartbeat so
+    the admin's health signal shows it."""
+    try:
+        runstate.set_scan_paused(True)
+    except Exception:
+        log.exception("store-write halt: could not set the pause flag; the database is "
+                      "likely down, and every tick fails until it is back")
+    runstate.record_store_write_failure(exc)
+    channel = _ops_channel()
+    if channel is not None:
+        await notices.send_guarded(channel, notices.store_write_halt_embed(exc),
+                                   what="store-write halt notice")
+
+
 @tasks.loop(minutes=config.SCAN_INTERVAL_MINUTES)
 async def session_scan():
     # The entire tick's real work is wrapped in a try/except (see below) so
@@ -102,6 +120,8 @@ async def session_scan():
         log.exception("session_scan tick failed -- will retry on the next scheduled tick "
                        "(every %d min) instead of stopping the loop entirely", config.SCAN_INTERVAL_MINUTES)
         failures = runstate.record_tick_failure()
+        if write_failure.halts_issuance(exc):
+            await _halt_on_store_failure(exc)
         try:
             await _maybe_escalate_health(failures, exc)
         except Exception:
