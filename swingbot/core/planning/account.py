@@ -375,7 +375,7 @@ def get_daily_summary(path: str = None) -> dict:
     """
     cfg = load_account_config(path)
     balance = float(cfg.get("balance", 0))
-    history = cfg.get("balance_history", [])
+    history = get_balance_history(path)
     if not history:
         return {
             "balance": balance, "balance_start_of_day": None, "pct_change_today": None,
