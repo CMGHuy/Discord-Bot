@@ -416,19 +416,12 @@ def get_scan():
 @api_v1.route("/system/scan/trigger", methods=["POST"])
 @require_auth
 def scan_trigger():
-    import json
-
-    # The bot's own runstate module owns the flag and its storage stage;
-    # writing the file here would be invisible to a bot at `flags:db`.
     from swingbot.commands.scanning import runstate
 
     try:
-        runstate.request_trigger(json.dumps({
-            "triggered_at": datetime.now(timezone.utc).isoformat(),
-            "source": "admin_ui",
-        }))
+        runstate.request_trigger()
     except OSError as exc:
-        return error("unavailable", f"Could not write the trigger file: {exc}", 503)
+        return error("unavailable", f"Could not queue the scan trigger: {exc}", 503)
     return _scan_result(True, "Scan queued — the bot picks it up within 30 seconds.")
 
 

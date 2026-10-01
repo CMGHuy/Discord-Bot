@@ -16,9 +16,6 @@ the running flag set and the last record frozen; the age is what lets the
 UI say "stalled" rather than showing a live-looking bar that will never
 move again.
 """
-import json
-import os
-
 import pytest
 
 from swingbot import config
@@ -28,7 +25,7 @@ from swingbot.core.scanning.scan_run import ScanProgress
 
 @pytest.fixture
 def data_dir(tmp_path, monkeypatch):
-    """`progress_store` must read `config.DATA_DIR` per call, not at import."""
+    """A per-test data dir; the record itself lives in the scan_progress table."""
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
     return tmp_path
 
@@ -105,28 +102,15 @@ def test_clear_removes_the_record_and_tolerates_a_second_call(data_dir):
     progress_store.clear()
 
 
-def test_a_corrupt_record_reads_as_absent_rather_than_raising(data_dir):
-    # The admin reads this file on a request thread while the bot writes it.
+def test_an_unreadable_record_reads_as_absent_rather_than_raising(data_dir, monkeypatch):
     # A progress bar is never worth a 500 on the scan-status endpoint.
-    (data_dir / "scan_progress.json").write_text("{not json")
+    import swingbot.core.db.repositories.scan_progress as repo_module
+
+    def _unreadable():
+        raise RuntimeError("the progress row cannot be read")
+
+    monkeypatch.setattr(repo_module, "scan_progress_repo", _unreadable)
     assert progress_store.read() is None
-
-
-def test_publishing_never_leaves_a_half_written_file_behind(data_dir):
-    # Atomic replace, not a truncating write: the admin's watcher fires on
-    # mtime and the very next read must see a whole record.
-    progress_store.publish(_progress(stage="crawling data", total=8, done=8))
-    on_disk = json.loads((data_dir / "scan_progress.json").read_text())
-    assert on_disk["pct"] == 40
-    assert not [p for p in os.listdir(data_dir) if p.endswith(".tmp")]
-
-
-def test_the_path_follows_data_dir_reassignment_after_import(tmp_path, monkeypatch):
-    # Resolved per call, the way `watcher.default_paths()` does it. A path
-    # baked at import time is how a test ends up writing to the real data/.
-    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path / "elsewhere"))
-    progress_store.publish(_progress(stage="analyzing", total=4, done=1))
-    assert (tmp_path / "elsewhere" / "scan_progress.json").exists()
 
 
 def _wait_for(predicate, timeout=3.0):

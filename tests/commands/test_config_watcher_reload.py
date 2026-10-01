@@ -9,8 +9,6 @@ from swingbot.commands.scanning import loops
 
 def _quiet_watcher(monkeypatch, tmp_path, changed):
     monkeypatch.setattr(loops, "auto_reload_if_changed", lambda: changed, raising=False)
-    monkeypatch.setattr(loops.runstate, "_MANUAL_CLOSE_QUEUE", str(tmp_path / "manual_close_notify.json"))
-    monkeypatch.setattr(loops.runstate, "_TRIGGER_FILE", str(tmp_path / "trigger_check.flag"))
     monkeypatch.setattr(config, "DISCORD_CHANNEL_TRADES_ID", "")
 
 

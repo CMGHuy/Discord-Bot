@@ -13,22 +13,17 @@ enforced here by the same preconditions `pages.plan_cancel`,
     close    ACTIVE / PARTIAL plan, or an `open` legacy trade
     delete   legacy trade only -- see delete_trade() for why
 
-Every state change also appends to data/manual_close_notify.json. The bot
-is a separate process; that file is the only way it learns a human closed
-something, and the trade-history channel goes quiet without it.
+Every state change also enqueues a notify_queue row. The bot is a separate
+process; that queue is the only way it learns a human closed something, and
+the trade-history channel goes quiet without it.
 """
 from __future__ import annotations
 
 import logging
-import os
-import threading
 from datetime import datetime, timezone
-
-from swingbot.core.infra.jsonio import atomic_write_json, read_json
 
 from flask import jsonify, request
 
-from swingbot import config
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.core.planning.plan_engine import PlanStatus, record_transition
 from swingbot.core.planning.plan_store import PlanStore
@@ -47,15 +42,6 @@ log = logging.getLogger(__name__)
 
 _CLOSEABLE_PLAN = (PlanStatus.ACTIVE, PlanStatus.PARTIAL)
 _OPEN_LEGACY = "open"
-_QUEUE_LOCK = threading.Lock()
-
-
-def _queue_path() -> str:
-    """Resolved per call, not at import: config.DATA_DIR is monkeypatched
-    per test, and a module-level constant would point at the real data/."""
-    return os.path.join(config.DATA_DIR, "manual_close_notify.json")
-
-
 def _queue_notify(record: dict) -> None:
     """Append to the bot's manual-close queue. Never raises.
 
@@ -63,18 +49,13 @@ def _queue_notify(record: dict) -> None:
     the time this runs, and turning a successful close into a 500 because a
     notification could not be queued would be strictly worse.
     """
-    from swingbot.core.db import stages
     try:
-        if stages.writes_json("notify_queue"):
-            path = _queue_path()
-            with _QUEUE_LOCK:
-                existing = read_json(path, [])
-                existing = existing if isinstance(existing, list) else []
-                existing.append(record)
-                atomic_write_json(path, existing)
-        if stages.writes_db("notify_queue"):
-            from swingbot.core.db.repositories.notify_queue import notify_queue_repo
-            notify_queue_repo().enqueue(record)
+        from swingbot.core.db.repositories.notify_queue import notify_queue_repo
+        # A trade record's own `id` is a reserved infrastructure column name in
+        # the table: queued as-is, the insert is rejected and the close is
+        # never announced.
+        notify_queue_repo().enqueue(
+            {("trade_id" if key == "id" else key): value for key, value in record.items()})
     except Exception as exc:
         log.warning("could not queue manual-close notification: %s", exc, exc_info=True)
 

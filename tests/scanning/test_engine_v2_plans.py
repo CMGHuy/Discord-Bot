@@ -737,7 +737,6 @@ def test_mass_fetch_failure_raises_data_fail_frac_and_engages_kill_switch(monkey
     kill-switch computation happens before the alert-building loop and
     doesn't need it to run.
     """
-    monkeypatch.setattr(throttle, "KILLSWITCH_PATH", str(tmp_path / "killswitch.json"))
     assert throttle.kill_state()["on"] is False   # sanity: off before the scan
 
     good_df = _structured_df()

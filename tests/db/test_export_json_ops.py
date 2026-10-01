@@ -36,10 +36,6 @@ def test_every_ops_store_exports_and_reads_back_at_the_json_stage(store_db, tmp_
 
     monkeypatch.setattr(config, "DB_STORES", "")
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(runstate, "_PAUSE_FILE", str(tmp_path / "scan_paused.flag"))
-    monkeypatch.setattr(runstate, "_TRIGGER_FILE", str(tmp_path / "trigger_check.flag"))
-    monkeypatch.setattr(runstate, "_HEARTBEAT_FILE", str(tmp_path / "bot_heartbeat.json"))
-    monkeypatch.setattr(data_refresh, "STATE_FILE", str(tmp_path / "market_data_state.json"))
     assert runstate.is_scan_paused() is True
     assert runstate.is_trigger_requested() is False        # the stale flag was removed
     assert runstate._read_heartbeat()["consecutive_failures"] == 2

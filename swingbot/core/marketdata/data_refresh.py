@@ -20,8 +20,6 @@ import logging
 import os
 import time
 
-from swingbot import config
-from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.infra.retry import with_retry
 from swingbot.core.marketdata.adjustments import merge_adjusted
 from swingbot.core.marketdata import spot_metals
@@ -64,8 +62,6 @@ RETRY_BASE_DELAY = 2.0
 # genuine gaps for as long as it runs.
 FAILED_RETRY_HOURS = 0.5
 
-STATE_FILE = os.path.join(config.DATA_DIR, "market_data_state.json")
-
 
 def load_state() -> dict:
     """Per-(symbol,timeframe) coverage + failure record. Survives restarts so
@@ -73,9 +69,6 @@ def load_state() -> dict:
     `market_data_state:db` it lives in its table, which starts empty (v116:
     ephemeral, no import) -- an empty map only means every gap is retried on
     its normal staleness window once."""
-    from swingbot.core.db import stages
-    if not stages.reads_db("market_data_state"):
-        return read_json(STATE_FILE, {}) or {}
     try:
         from swingbot.core.db.repositories.market_data_state import market_data_state_repo
         return market_data_state_repo().load()
@@ -108,13 +101,9 @@ def prioritise_symbols(symbols, priority_symbols=()) -> list[str]:
 
 
 def save_state(state: dict) -> None:
-    from swingbot.core.db import stages
     try:
-        if stages.writes_json("market_data_state"):
-            atomic_write_json(STATE_FILE, state)
-        if stages.writes_db("market_data_state"):
-            from swingbot.core.db.repositories.market_data_state import market_data_state_repo
-            market_data_state_repo().save(state)
+        from swingbot.core.db.repositories.market_data_state import market_data_state_repo
+        market_data_state_repo().save(state)
     except Exception as exc:            # never let bookkeeping break a refresh
         log.warning("could not save market-data state: %s", exc, exc_info=True)
 

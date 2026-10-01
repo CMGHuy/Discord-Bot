@@ -3,7 +3,7 @@ TRAIN-window strategy tuning grids via scripts/backtest/tune_strategy.py). At mo
 ONE job runs at a time -- tuning is deliberately serialized, both because
 concurrent grid sweeps would contend for the same OHLCV cache/CPU and
 because the workbench UI (Task C33+) only has room to show one running
-job's progress. State persisted to data/admin_jobs.json so a restart of
+job's progress. State persisted to the admin_jobs table so a restart of
 the admin process doesn't lose job history; a job found "running" at
 startup whose pid is actually dead (the admin process or the subprocess
 itself died mid-job -- e.g. a container restart) is reaped to "failed"
@@ -94,10 +94,6 @@ def build_tune_args(strategy: str, params: dict | None) -> list[str]:
     return args
 
 
-def _jobs_path() -> str:
-    return os.path.join(config.DATA_DIR, "admin_jobs.json")
-
-
 def _log_dir() -> str:
     d = os.path.join(config._PROJECT_ROOT, "logs", "jobs")
     os.makedirs(d, exist_ok=True)
@@ -105,32 +101,15 @@ def _log_dir() -> str:
 
 
 def _read_jobs() -> dict:
-    from swingbot.core.db import stages
-    if stages.reads_db("jobs"):
-        from swingbot.core.db.repositories.jobs import jobs_repo
-        return jobs_repo().all_jobs()
-    path = _jobs_path()
-    if not os.path.exists(path):
-        return {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return {}
+    from swingbot.core.db.repositories.jobs import jobs_repo
+    return jobs_repo().all_jobs()
 
 
 def _write_jobs(jobs: dict) -> None:
-    from swingbot.core.db import stages
-    if stages.writes_json("jobs"):
-        path = _jobs_path()
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(jobs, f, indent=2)
-    if stages.writes_db("jobs"):
-        from swingbot.core.db.repositories.jobs import jobs_repo
-        repository = jobs_repo()
-        for record in jobs.values():
-            repository.put(record)
+    from swingbot.core.db.repositories.jobs import jobs_repo
+    repository = jobs_repo()
+    for record in jobs.values():
+        repository.put(record)
 
 
 def _pid_alive(pid: int) -> bool:

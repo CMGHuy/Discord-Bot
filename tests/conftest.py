@@ -87,18 +87,6 @@ TEST_DPI = 30
 
 
 @pytest.fixture(autouse=True)
-def _heartbeat_file_in_tmp(monkeypatch, tmp_path_factory):
-    """Keep runstate's baked heartbeat path out of the real data/ directory.
-
-    set_scan_paused(False) acknowledges a store-write halt by writing
-    bot_heartbeat.json; without this a test that unpauses leaves one behind.
-    """
-    from swingbot.commands.scanning import runstate
-    monkeypatch.setattr(runstate, "_HEARTBEAT_FILE",
-                        str(tmp_path_factory.mktemp("hb") / "bot_heartbeat.json"))
-
-
-@pytest.fixture(autouse=True)
 def _low_dpi_renders(monkeypatch):
     """Render test charts at a low DPI -- the tier's dominant cost is raster
     resolution, which nothing asserts on.

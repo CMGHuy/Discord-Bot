@@ -61,7 +61,6 @@ def test_prefetch_batch_failure_is_a_warning(monkeypatch, caplog):
 
 def test_admin_trigger_names_the_real_setting(monkeypatch, tmp_path, caplog):
     monkeypatch.setattr(loops, "auto_reload_if_changed", lambda: {}, raising=False)
-    monkeypatch.setattr(loops.runstate, "_MANUAL_CLOSE_QUEUE", str(tmp_path / "manual_close_notify.json"))
     monkeypatch.setattr(loops.runstate, "is_trigger_requested", lambda: True)
     monkeypatch.setattr(loops.runstate, "clear_trigger", lambda: None)
     monkeypatch.setattr(config, "DISCORD_CHANNEL_TRADES_ID", "")

@@ -1,14 +1,7 @@
 """NG14 — /api/v1/risk and /api/v1/risk/killswitch.
 
-**Every test that touches the killswitch must patch
-`throttle.KILLSWITCH_PATH`.** That constant is computed at import time from
-`config.DATA_DIR` and `swingbot.core.edge.throttle` is deliberately absent
-from conftest's reload list, so it keeps pointing at the real project's
-data/killswitch.json whatever `admin_app` does. Writing through it from a
-test would ENGAGE THE REAL BOT'S KILLSWITCH -- it never releases itself, so
-the next live session would take no new entries and nothing would say why.
-tests/admin/test_risk_panel.py patches the same constant for the Jinja
-route; `killswitch_file` below is that precedent as a fixture.
+The killswitch is a row in the test database (truncated after every test),
+so no test here can engage the real bot's killswitch.
 
 The payload is broader than spec v14 Decision 7's three items. See risk.py:
 sector heat, clusters, throttle and scan health are on today's page and the
@@ -29,20 +22,6 @@ _LOGIN = {"username": "admin", "password": "admin"}
 def logged_in(client):
     client.post("/api/v1/session", json=_LOGIN)
     return client
-
-
-@pytest.fixture
-def killswitch_file(admin_app, tmp_path, monkeypatch):
-    """Redirect the killswitch away from the real data/ directory.
-
-    See this module's docstring -- without it these tests pause the actual
-    bot.
-    """
-    from swingbot.core.edge import throttle
-
-    path = tmp_path / "killswitch.json"
-    monkeypatch.setattr(throttle, "KILLSWITCH_PATH", str(path))
-    return path
 
 
 @pytest.fixture(autouse=True)
@@ -132,7 +111,7 @@ def test_requires_auth(client):
     assert_error(client.get("/api/v1/risk"), "auth", 401)
 
 
-def test_risk_shape(logged_in, killswitch_file):
+def test_risk_shape(logged_in):
     body = logged_in.get("/api/v1/risk").get_json()
     assert_shape(body, {
         "heat": dict, "positions": list, "sector_heat": list,
@@ -174,14 +153,14 @@ def test_risk_shape(logged_in, killswitch_file):
     }, where="correlation")
 
 
-def test_heat_carries_the_cap_it_is_measured_against(logged_in, killswitch_file):
+def test_heat_carries_the_cap_it_is_measured_against(logged_in):
     """A heat figure without its cap says nothing about whether you are near
     the limit -- the same reason the Dashboard ships risk_cap_pct."""
     heat = logged_in.get("/api/v1/risk").get_json()["heat"]
     assert heat["cap_pct"] > 0
 
 
-def test_position_rows_sum_to_open_heat(logged_in, killswitch_file, tmp_path):
+def test_position_rows_sum_to_open_heat(logged_in, tmp_path):
     """The guard against a second definition of risk. These rows come from
     heat.trade_risk_pct, which is exactly what open_heat sums; if either side
     ever recomputes risk from entry and stop, the two drift and this fails."""
@@ -202,7 +181,7 @@ def test_position_rows_sum_to_open_heat(logged_in, killswitch_file, tmp_path):
     assert total == pytest.approx(body["heat"]["open_pct"], abs=0.01)
 
 
-def test_positions_are_ordered_by_risk(logged_in, killswitch_file, tmp_path):
+def test_positions_are_ordered_by_risk(logged_in, tmp_path):
     """Largest exposure first: the row that matters is the one at the top."""
     (tmp_path / "trades.json").write_text(json.dumps([
         _open_trade("a" * 16, "AAPL", entry=100.0, stop=99.0, shares=1),
@@ -213,7 +192,7 @@ def test_positions_are_ordered_by_risk(logged_in, killswitch_file, tmp_path):
     assert [r["ticker"] for r in rows] == ["MSFT", "AAPL"]
 
 
-def test_utilisation_is_not_clamped_at_100(logged_in, killswitch_file, tmp_path):
+def test_utilisation_is_not_clamped_at_100(logged_in, tmp_path):
     """An over-cap portfolio must report the true figure. The Jinja page
     clamps the WIDTH of its bar so it cannot paint past its track; clamping
     the number would hide exactly the situation the reader needs to see.
@@ -277,7 +256,7 @@ def test_the_correlation_labels_match_the_open_positions(client, open_book):
 
 
 def test_json_is_parseable_with_a_flat_price_position_in_the_book(
-        logged_in, killswitch_file, tmp_path, monkeypatch):
+        logged_in, tmp_path, monkeypatch):
     """C1: a zero-variance leg (a halted ticker, a stale cache entry) makes
     the correlation step's `.corr()` return NaN. Flask has no custom JSON
     provider registered anywhere in this repo, so its `DefaultJSONProvider`
@@ -435,7 +414,7 @@ def test_beta_tile_carries_the_actual_configured_benchmark(client, open_book):
     assert metrics["benchmark_symbol"] == "SPY"
 
 
-def test_killswitch_roundtrip(logged_in, killswitch_file):
+def test_killswitch_roundtrip(logged_in):
     from swingbot.core.edge import throttle
 
     body = logged_in.post("/api/v1/risk/killswitch", json={"on": True}).get_json()
@@ -448,7 +427,7 @@ def test_killswitch_roundtrip(logged_in, killswitch_file):
     assert throttle.kill_state()["on"] is False
 
 
-def test_engaging_records_a_reason(logged_in, killswitch_file):
+def test_engaging_records_a_reason(logged_in):
     """The Risk page shows the reason beside the state. An engaged killswitch
     with no explanation is the thing whoever finds it has to reconstruct."""
     body = logged_in.post("/api/v1/risk/killswitch",
@@ -457,14 +436,14 @@ def test_engaging_records_a_reason(logged_in, killswitch_file):
 
 
 def test_engaging_without_a_reason_still_records_where_it_came_from(
-        logged_in, killswitch_file):
+        logged_in):
     assert logged_in.post("/api/v1/risk/killswitch",
                           json={"on": True}).get_json()["killswitch"]["reason"]
 
 
 @pytest.mark.parametrize("payload", [{}, {"on": "false"}, {"on": 0},
                                      {"on": None}, {"action": "off"}])
-def test_an_unclear_toggle_is_rejected(logged_in, killswitch_file, payload):
+def test_an_unclear_toggle_is_rejected(logged_in, payload):
     """`on` is required and required to BE a bool.
 
     The Jinja form treats anything that is not the string "on" as off, which
@@ -477,7 +456,7 @@ def test_an_unclear_toggle_is_rejected(logged_in, killswitch_file, payload):
                  "invalid", 400)
 
 
-def test_a_rejected_toggle_does_not_change_state(logged_in, killswitch_file):
+def test_a_rejected_toggle_does_not_change_state(logged_in):
     from swingbot.core.edge import throttle
 
     logged_in.post("/api/v1/risk/killswitch", json={"on": True})
@@ -487,12 +466,12 @@ def test_a_rejected_toggle_does_not_change_state(logged_in, killswitch_file):
     )
 
 
-def test_killswitch_requires_auth(client, killswitch_file):
+def test_killswitch_requires_auth(client):
     assert_error(client.post("/api/v1/risk/killswitch", json={"on": True}),
                  "auth", 401)
 
 
-def test_sector_heat_is_a_sorted_list_not_a_map(logged_in, killswitch_file):
+def test_sector_heat_is_a_sorted_list_not_a_map(logged_in):
     """A JSON object has no guaranteed order, and the page ranks sectors by
     heat. Ordering that in the client means re-deriving a decision the server
     already made."""
@@ -504,7 +483,7 @@ def test_sector_heat_is_a_sorted_list_not_a_map(logged_in, killswitch_file):
                      where="sector_heat row")
 
 
-def test_scan_health_ships_numbers_not_svg(logged_in, killswitch_file, tmp_path, monkeypatch):
+def test_scan_health_ships_numbers_not_svg(logged_in, tmp_path, monkeypatch):
     """The Jinja page renders a sparkline server-side because Jinja needs
     one. Sub-project 3 owns how a sparkline looks in the SPA, and markup from
     the server takes that decision away from it."""
@@ -522,7 +501,7 @@ def test_scan_health_ships_numbers_not_svg(logged_in, killswitch_file, tmp_path,
     assert all(isinstance(d, (int, float)) for d in health["durations_s"])
 
 
-def test_scan_health_summarises_data_sources(logged_in, killswitch_file, tmp_path, monkeypatch):
+def test_scan_health_summarises_data_sources(logged_in, tmp_path, monkeypatch):
     """v106: the fallback rate is yfinance-fallback over everything Alpaca was
     asked for (hits + misses), across the recent rows that carry the key."""
     from swingbot import config
@@ -546,7 +525,7 @@ def test_scan_health_summarises_data_sources(logged_in, killswitch_file, tmp_pat
 
 
 def test_fallback_rate_pools_daily_frames_and_live_prices(
-        logged_in, killswitch_file, tmp_path, monkeypatch):
+        logged_in, tmp_path, monkeypatch):
     from swingbot.core.scanning import engine
     from swingbot.core.scanning import telemetry
 
@@ -559,7 +538,7 @@ def test_fallback_rate_pools_daily_frames_and_live_prices(
 
 
 def test_data_sources_fallback_rate_is_null_without_alpaca_traffic(
-        logged_in, killswitch_file, tmp_path, monkeypatch):
+        logged_in, tmp_path, monkeypatch):
     from swingbot.core.scanning import engine
     from swingbot.core.scanning import telemetry
 

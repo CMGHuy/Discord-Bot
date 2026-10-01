@@ -12,9 +12,9 @@ handlers already enforce:
   close   only an ACTIVE/PARTIAL plan,   (pages.plan_close)
           or an `open` legacy trade      (app.close_trade)
 
-Both existing paths also queue a Discord notification through
-data/manual_close_notify.json, because the bot is a separate process and
-that file is how it learns a human closed something. Dropping that would
+Both existing paths also queue a Discord notification through the
+notify_queue table, because the bot is a separate process and that queue
+is how it learns a human closed something. Dropping that would
 silently stop the trade-history channel posting, so it is pinned here.
 """
 import json
@@ -44,12 +44,10 @@ def logged_in(client):
 
 
 @pytest.fixture
-def notify_queue(tmp_path):
-    """The bot's manual-close notification queue."""
-    def _read():
-        p = tmp_path / "manual_close_notify.json"
-        return json.loads(p.read_text()) if p.exists() else []
-    return _read
+def notify_queue():
+    """The bot's manual-close notification queue (reading it drains it)."""
+    from swingbot.core.db.repositories.notify_queue import notify_queue_repo
+    return notify_queue_repo().drain
 
 
 # --- auth ----------------------------------------------------------------
@@ -81,7 +79,7 @@ def test_close_an_active_plan(seed, logged_in, notify_queue):
     assert row["status"] == "CLOSED"
     assert row["closed_at"] is not None
 
-    assert notify_queue(), "the bot learns about a manual close via the queue file"
+    assert notify_queue(), "the bot learns about a manual close via the queue"
 
 
 def test_closing_a_plan_queues_a_notify_record_for_that_plan(seed, logged_in, notify_queue):
@@ -124,7 +122,10 @@ def test_close_an_open_legacy_trade(seed, logged_in, notify_queue):
     r = logged_in.post(f"/api/v1/trades/{_TRADE_ID}/close")
     assert r.status_code == 200
     assert r.get_json()["status"] == "CLOSED"
-    assert notify_queue()
+    # The record's own `id` is a reserved column name in the queue table, so
+    # it is queued as `trade_id`; queued as `id` the insert is rejected and the
+    # trade-history channel never hears about the close.
+    assert any(r.get("trade_id") == _TRADE_ID for r in notify_queue())
 
 
 def test_close_an_already_closed_legacy_trade_is_rejected(seed, logged_in):

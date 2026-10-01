@@ -35,7 +35,6 @@ the `_reload_env_if_changed` before-request hook further down.
 import gzip
 import hashlib
 import hmac
-import json
 import os
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -312,25 +311,10 @@ def _parse_iso(value) -> datetime | None:
 
 
 def _heartbeat_snapshot() -> tuple[dict, datetime | None]:
-    """(heartbeat fields, when last seen) from the current stage's store.
-    json/dual: the file and its mtime, exactly as before. db: the row and
-    its `timestamp` field (v116)."""
-    from swingbot.core.db import stages
-    if stages.reads_db("heartbeat"):
-        from swingbot.commands.scanning import runstate
-        fields = runstate._read_heartbeat()
-        return fields, _parse_iso(fields.get("timestamp"))
-    path = os.path.join(config.DATA_DIR, "bot_heartbeat.json")
-    try:
-        seen = datetime.fromtimestamp(os.path.getmtime(path), tz=timezone.utc)
-    except OSError:
-        return {}, None
-    try:
-        with open(path) as handle:
-            fields = json.load(handle)
-    except (OSError, json.JSONDecodeError):
-        return {}, seen
-    return (fields if isinstance(fields, dict) else {}), seen
+    """(heartbeat fields, when last seen): the row and its `timestamp` field."""
+    from swingbot.commands.scanning import runstate
+    fields = runstate._read_heartbeat()
+    return fields, _parse_iso(fields.get("timestamp"))
 
 
 def _heartbeat_status(hb: dict, seen: datetime | None, threshold: float) -> dict:

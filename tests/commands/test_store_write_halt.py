@@ -27,8 +27,6 @@ class _FakeChannel:
 @pytest.fixture
 def files(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(runstate, "_HEARTBEAT_FILE", str(tmp_path / "bot_heartbeat.json"))
-    monkeypatch.setattr(runstate, "_PAUSE_FILE", str(tmp_path / "scan_paused.flag"))
     monkeypatch.setattr(loops.config, "HEALTH_ALERT_AFTER_FAILURES", 3)
     return tmp_path
 

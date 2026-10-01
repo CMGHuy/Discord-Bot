@@ -56,9 +56,8 @@ def test_kill_triggers():
     assert check_kill_triggers(10.0, 2.0, 0.05) is None
 
 
-def test_kill_state_roundtrip(tmp_path, monkeypatch):
+def test_kill_state_roundtrip():
     from swingbot.core.edge import throttle
-    monkeypatch.setattr(throttle, "KILLSWITCH_PATH", str(tmp_path / "killswitch.json"))
     assert throttle.kill_state()["on"] is False              # default off
     throttle.set_kill(True, reason="manual")
     st = throttle.kill_state()
@@ -67,17 +66,16 @@ def test_kill_state_roundtrip(tmp_path, monkeypatch):
     assert throttle.kill_state()["on"] is False
 
 
-def test_kill_state_falls_back_to_config_default_when_no_file(tmp_path, monkeypatch):
-    """Before data/killswitch.json exists (fresh install), the effective
+def test_kill_state_falls_back_to_config_default_when_no_row(monkeypatch):
+    """Before the killswitch row exists (fresh install), the effective
     'on' value comes from KILLSWITCH_DEFAULT_ON, not a bare hardcoded False --
     so an operator who deliberately ships a pre-paused install gets that
-    without having to seed the JSON file by hand."""
+    without having to seed the table by hand."""
+    from swingbot import config
     from swingbot.core.edge import throttle
-    missing_path = str(tmp_path / "killswitch.json")
-    monkeypatch.setattr(throttle, "KILLSWITCH_PATH", missing_path)
 
-    monkeypatch.setattr(throttle.config, "KILLSWITCH_DEFAULT_ON", False)
+    monkeypatch.setattr(config, "KILLSWITCH_DEFAULT_ON", False)
     assert throttle.kill_state()["on"] is False
 
-    monkeypatch.setattr(throttle.config, "KILLSWITCH_DEFAULT_ON", True)
+    monkeypatch.setattr(config, "KILLSWITCH_DEFAULT_ON", True)
     assert throttle.kill_state()["on"] is True

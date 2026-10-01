@@ -109,8 +109,6 @@ def admin_app(tmp_path, monkeypatch):
     # not reloaded: a reload would leave this test's tmp_path in the module
     # for every later test in the worker.
     from swingbot.commands.scanning import runstate
-    monkeypatch.setattr(runstate, "_TRIGGER_FILE", str(tmp_path / "trigger_check.flag"))
-    monkeypatch.setattr(runstate, "_PAUSE_FILE", str(tmp_path / "scan_paused.flag"))
 
     mod = None
     for name in _RELOAD_MODULES:
