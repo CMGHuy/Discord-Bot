@@ -36,6 +36,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# git runs as the checkout's owner (deploy): root gets "dubious ownership", and a
+# failing command substitution inside an argument would not trip set -e, so the
+# manifest would silently record an empty sha. Read it first and fail loudly.
+GIT_SHA="$(runuser -u deploy -- git rev-parse HEAD)"
+[ -n "$GIT_SHA" ] || { echo "stable_snapshot: could not read the git sha as deploy" >&2; exit 1; }
+
 rm -rf "$DIR.partial"
 mkdir -p "$DIR.partial" logs
 chmod 700 "$DIR.partial"
@@ -65,10 +71,29 @@ if [ -z "$RESTIC_PASSWORD" ]; then
 fi
 export RESTIC_PASSWORD
 export RESTIC_REPOSITORY="$PWD/backups/restic"
-restic backup --host swing-bot --tag market_data --tag stable --tag "$NAME" --json "$PWD/market_data" > "$WORK/restic.jsonl"
-SNAP_ID="$(tail -n 1 "$WORK/restic.jsonl" | python3 -c 'import json,sys; print(json.load(sys.stdin)["snapshot_id"])')"
+# Same lock as the hourly cron, so this cannot collide with its forget --prune.
+RESTIC_RC=0
+flock logs/restic.lock restic backup --host swing-bot --tag market_data --tag stable --tag "$NAME" --json "$PWD/market_data" > "$WORK/restic.jsonl" || RESTIC_RC=$?
+# Parse the snapshot id BEFORE acting on the status, so cleanup can forget it.
+SNAP_ID="$(python3 -c 'import json,sys
+for line in open(sys.argv[1]):
+    try:
+        m = json.loads(line)
+    except ValueError:
+        continue
+    if m.get("message_type") == "summary" and m.get("snapshot_id"):
+        print(m["snapshot_id"])' "$WORK/restic.jsonl")" || SNAP_ID=""
+case "$RESTIC_RC" in
+  0) ;;
+  3) echo "stable_snapshot: WARNING restic exit 3 (a file vanished while read); the snapshot $SNAP_ID exists, continuing" >&2 ;;
+  *) echo "stable_snapshot: restic backup failed with status $RESTIC_RC" >&2; exit 1 ;;
+esac
+if [ -z "$SNAP_ID" ]; then
+  echo "stable_snapshot: restic printed no snapshot id" >&2
+  exit 1
+fi
 
-python3 scripts/ops/backup_manifest.py build "$DIR.partial" --git-sha "$(git rev-parse HEAD)" --deploy-json "$DIR.partial/deploy.json" --restic-id "$SNAP_ID" --row-counts "$WORK/rows.json" --pg-version "$PGV" --vm-epoch "$(date +%s)" > "$WORK/manifest.json"
+python3 scripts/ops/backup_manifest.py build "$DIR.partial" --git-sha "$GIT_SHA" --deploy-json "$DIR.partial/deploy.json" --restic-id "$SNAP_ID" --row-counts "$WORK/rows.json" --pg-version "$PGV" --vm-epoch "$(date +%s)" > "$WORK/manifest.json"
 python3 scripts/ops/backup_manifest.py verify "$DIR.partial"
 mv -T "$DIR.partial" "$DIR"
 DONE=1

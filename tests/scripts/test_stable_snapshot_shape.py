@@ -76,3 +76,45 @@ def test_stale_partial_removed_before_mkdir_and_mv_is_hardened(src):
 def test_dump_path_comes_from_backup_db_output(src):
     assert "ls -t" not in src
     assert "backup_db: wrote" in src
+
+
+# ---- v120 final-review fixes -------------------------------------------------
+import re  # noqa: E402
+
+GIT_CMD = re.compile(r"(?<![\w./-])git\s+(rev-parse|checkout|status|log|diff|fetch|reset|describe|pull|clone)\b")
+
+
+def bare_git_lines(text):
+    bad = []
+    for ln in text.splitlines():
+        if ln.lstrip().startswith("#"):
+            continue
+        for m in GIT_CMD.finditer(ln):
+            if not ln[:m.start()].endswith("runuser -u deploy -- "):
+                bad.append(ln)
+    return bad
+
+
+def test_git_runs_as_the_deploy_user_and_an_empty_sha_fails_first(src):
+    assert "runuser -u deploy -- git rev-parse HEAD" in src
+    assert bare_git_lines(src) == []
+    guard = src.index('[ -n "$GIT_SHA" ]')
+    assert src.index("runuser -u deploy -- git rev-parse HEAD") < guard
+    assert guard < src.index("backup_manifest.py build")
+    assert guard < src.index("./scripts/ops/backup_db.sh")
+    assert '--git-sha "$GIT_SHA"' in src
+
+
+def test_restic_backup_takes_the_cron_lock(src):
+    assert "flock logs/restic.lock restic backup" in src
+
+
+def test_snapshot_id_is_parsed_before_the_exit_status_is_acted_on(src):
+    run = src.index("flock logs/restic.lock restic backup")
+    assert "|| RESTIC_RC=$?" in src[run:run + 400]
+    parse = src.index('SNAP_ID="$(')
+    act = src.index('"$RESTIC_RC"', parse)
+    assert run < parse < act
+    tail = src[act:act + 900]
+    assert "3)" in tail and "WARNING" in tail      # exit 3: files vanished, snapshot exists
+    assert "exit 1" in tail                        # anything else fails; cleanup forgets SNAP_ID

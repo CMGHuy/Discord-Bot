@@ -78,3 +78,35 @@ def test_the_name_is_validated_before_dir_is_built(src):
 def test_an_aborted_run_is_logged_without_masking_the_status(src):
     assert "restore_stable failed at line" in src
     assert " ERR" in src and "exit $rc" in src and "set -Eeuo pipefail" in src
+
+
+# ---- v120 final-review fixes -------------------------------------------------
+import re  # noqa: E402
+
+GIT_CMD = re.compile(r"(?<![\w./-])git\s+(rev-parse|checkout|status|log|diff|fetch|reset|describe|pull|clone)\b")
+
+
+def bare_git_lines(text):
+    bad = []
+    for ln in text.splitlines():
+        if ln.lstrip().startswith("#"):
+            continue
+        for m in GIT_CMD.finditer(ln):
+            if not ln[:m.start()].endswith("runuser -u deploy -- "):
+                bad.append(ln)
+    return bad
+
+
+def test_every_git_command_runs_as_the_deploy_user(src):
+    assert "runuser -u deploy -- git status --porcelain --untracked-files=no" in src
+    assert "runuser -u deploy -- git checkout --detach" in src
+    assert bare_git_lines(src) == []
+
+
+def test_an_empty_git_sha_is_refused_in_the_plan_stage_even_for_a_dry_run(src):
+    guard = src.index('"$git_sha" = "None"')
+    assert guard > src.index('git_sha="$(read_field git_sha)"')
+    assert guard < src.index("docker manifest inspect")
+    assert guard < src.index('if [ "$DRY_RUN" = 1 ]')
+    assert guard < src.index("docker compose stop bot admin")
+    assert "exit 2" in src[guard:guard + 300]

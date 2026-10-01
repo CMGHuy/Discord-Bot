@@ -46,6 +46,12 @@ main() {
   bot_image="$(read_field bot_image)"
   db_image="$(read_field db_image)"
   restic_id="$(read_field restic_id)"
+  # An empty sha would only fail at the code checkout in step 7, after the live
+  # system was stopped: refuse now, in the plan stage (also under --dry-run).
+  if [ -z "$git_sha" ] || [ "$git_sha" = "None" ]; then
+    echo "REFUSE: $DIR/manifest.json has no git_sha (cannot restore the code of this point)" >&2
+    exit 2
+  fi
 
   echo "Stable point $NAME resolves to:"
   echo "  dump       $DIR/db.sql.gz"
@@ -68,9 +74,11 @@ main() {
   fi
 
   # The checkout in step 7 rewrites tracked files: refuse a tree with local edits.
-  DIRTY="$(git status --porcelain --untracked-files=no)"
+  # Git runs as deploy (the checkout's owner): root hits "dubious ownership" and
+  # would leave root-owned files a later deploy.sh cannot reset.
+  DIRTY="$(runuser -u deploy -- git status --porcelain --untracked-files=no)"
   if [ -n "$DIRTY" ]; then
-    echo "REFUSE: tracked files have local changes (git checkout would clobber them):" >&2
+    echo "REFUSE: tracked files have local changes (the code checkout would clobber them):" >&2
     echo "$DIRTY" >&2
     exit 2
   fi
@@ -106,7 +114,7 @@ main() {
 
   # 7. Postgres (db recreated on the pinned image above) from the dump, then the code of the point.
   ./scripts/ops/restore_db.sh "$DIR/db.sql.gz" swingbot --i-mean-it
-  git checkout --detach "$git_sha"
+  runuser -u deploy -- git checkout --detach "$git_sha"
 
   # 8. Pause scanning BEFORE the bot starts, so it does not re-post old alerts.
   touch data/scan_paused.flag
