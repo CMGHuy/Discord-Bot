@@ -42,6 +42,10 @@ but v118's result cannot validate v119's signal.
 - The current named S&P 500 file is a manually refreshed live list. Historical
   testing must use point-in-time membership rather than today's constituents
   on earlier bars.
+- Historical isolated-weakness tests also require sector classification as
+  known on each signal date. Today's `sp500.json` sector field cannot be
+  projected backward; an unavailable dated mapping excludes that candidate
+  with a count.
 
 **Hypothesis:** a liquid, point-in-time S&P 500 candidate pool, restricted to
 weak stocks and bearish scenarios, adds qualified SHORT opportunities during
