@@ -1,8 +1,7 @@
-"""At stage db the admin must read plans from the DB, never PlanStore()._plans."""
+"""The admin reads plans from the plans repository."""
 import pytest
 
 import swingbot.admin.app  # noqa: F401  (initialises api_v1 routes)
-from swingbot import config
 from swingbot.admin import watchlist_rows
 from swingbot.admin.api_v1 import trades, trade_commands
 from swingbot.core.planning.plan_engine import plan_to_dict
@@ -11,9 +10,7 @@ from tests.planning.test_plan_store_records import FakePlansRepo
 
 
 @pytest.fixture
-def db_only(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(config, "DB_STORES", "plans:db")
+def db_only(monkeypatch):
     repo = FakePlansRepo([plan_to_dict(_valid_plan(plan_id="DBONLY"))])
     monkeypatch.setattr("swingbot.core.db.repositories.plans.plans_repo", lambda: repo)
     watchlist_rows.clear_signal_cache()
@@ -50,11 +47,3 @@ def test_signature_changes_when_a_db_plan_changes(db_only):
     first = watchlist_rows._plans_signature()
     db_only.records["DBONLY"]["_v"] = 5
     assert first is not None and watchlist_rows._plans_signature() != first
-
-
-def test_signature_at_json_stage_still_stats_the_file(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(config, "DB_STORES", "")
-    assert watchlist_rows._plans_signature() is None
-    (tmp_path / "plans.json").write_text("[]")
-    assert len(watchlist_rows._plans_signature()) == 3

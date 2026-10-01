@@ -21,7 +21,6 @@ run a scan (minutes of work) -- it reads the plan set PlanStore already holds
 from __future__ import annotations
 
 import copy
-import os
 import threading
 from collections import OrderedDict
 
@@ -53,41 +52,23 @@ _WINDOWS = {"change_1d_pct": 1, "change_1w_pct": 5, "change_1m_pct": 21}
 _SPARK_BARS = 30
 
 # Watchlist refreshes arrive more often than a scan changes its plan set.  The
-# plans file is the cross-process version source: a bot write atomically
-# replaces it, producing a new signature and invalidating this admin-local
+# plans table is the cross-process version source: a bot write changes its
+# version, producing a new signature and invalidating this admin-local
 # projection without a second signalling channel.  Keep the cache deliberately
 # small because each value is only a lightweight JSON-ready read model.
 _SIGNAL_CACHE_MAX = 32
-_signal_cache: OrderedDict[tuple[tuple[str, ...], tuple[int, int, int]], dict[str, dict]] = OrderedDict()
+_signal_cache: OrderedDict[tuple[tuple[str, ...], tuple], dict[str, dict]] = OrderedDict()
 _signal_cache_lock = threading.Lock()
 
 
-def _db_plans_version() -> tuple | None:
-    """Stage-db version token, or None when reads still come from plans.json."""
-    from swingbot.core.db import stages
-    if not stages.reads_db("plans"):
-        return None
-    from swingbot.core.db.repositories.plans import plans_repo
-    return ("db", *plans_repo().version())
-
-
 def _plans_signature() -> tuple | None:
-    # At stage db plans.json no longer changes, so the version is derived from
-    # the database; at json/dual the file stat stays the cross-process signal.
+    """Cross-process version token for the plans table (None when the
+    database is unreachable, so the cache is skipped rather than stale)."""
     try:
-        db_version = _db_plans_version()
+        from swingbot.core.db.repositories.plans import plans_repo
+        return ("db", *plans_repo().version())
     except Exception:
-        return None  # DB unreachable: skip the cache rather than serve stale
-    if db_version is not None:
-        return db_version
-    try:
-        stat = os.stat(os.path.join(config.DATA_DIR, "plans.json"))
-    except OSError:
-        # A missing plans file is inexpensive to read and common on a fresh
-        # install.  More importantly, avoiding a cache here keeps injected
-        # stores in isolated tests and admin tools from sharing a false version.
         return None
-    return (stat.st_mtime_ns, stat.st_size, stat.st_ctime_ns)
 
 
 def clear_signal_cache() -> None:
@@ -96,7 +77,7 @@ def clear_signal_cache() -> None:
         _signal_cache.clear()
 
 
-def _cached_signals(tickers: tuple[str, ...], signature: tuple[int, int, int]) -> dict[str, dict] | None:
+def _cached_signals(tickers: tuple[str, ...], signature: tuple) -> dict[str, dict] | None:
     key = (tickers, signature)
     with _signal_cache_lock:
         result = _signal_cache.get(key)
@@ -106,7 +87,7 @@ def _cached_signals(tickers: tuple[str, ...], signature: tuple[int, int, int]) -
         return copy.deepcopy(result)
 
 
-def _remember_signals(tickers: tuple[str, ...], signature: tuple[int, int, int], result: dict[str, dict]) -> None:
+def _remember_signals(tickers: tuple[str, ...], signature: tuple, result: dict[str, dict]) -> None:
     key = (tickers, signature)
     with _signal_cache_lock:
         _signal_cache[key] = copy.deepcopy(result)

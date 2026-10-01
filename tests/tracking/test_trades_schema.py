@@ -1,6 +1,7 @@
 import pytest
 
 from swingbot.core.tracking.performance import TradeLog, settle_legs
+from tests.store_seed import seed_store
 
 
 def _trade(**kw):
@@ -11,12 +12,13 @@ def _trade(**kw):
     return base
 
 
-def test_legacy_record_loads_untouched(tmp_path):
-    path = tmp_path / "trades.json"
-    path.write_text('[{"id": "old1", "ticker": "AAPL", "status": "win", '
-                    '"entry": 100, "stop_loss": 95, "take_profit": 110, '
-                    '"direction": "bullish", "exit_price": 110}]')
-    log = TradeLog(path=str(path))
+def test_legacy_record_loads_untouched():
+    seed_store("trades", [{"id": "old1", "ticker": "AAPL", "status": "win",
+                           "entry": 100, "stop_loss": 95, "take_profit": 110,
+                           "direction": "bullish", "exit_price": 110,
+                           "strategy": "RSI", "horizon_key": "2w",
+                           "opened_at": "2026-07-01T10:00:00+00:00"}])
+    log = TradeLog()
     stats = log.get_stats()
     assert stats["wins"] == 1        # no KeyError on missing legs/plan_id
 

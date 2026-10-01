@@ -59,7 +59,7 @@ def test_confidence_expectancy_factor_is_unchanged_by_leg_expansion(tmp_path):
             {"fraction": 0.5, "exit_price": 90.0, "r": -0.5, "reason": "manual"},
         ],
     }
-    log = TradeLog(path=str(tmp_path / "trades.json"))
+    log = TradeLog()
 
     stats = log.get_stats(3, trades=[trade], expand=False)
     track_record = (stats["win_rate"], stats["closed"])

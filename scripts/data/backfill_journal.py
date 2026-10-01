@@ -1,5 +1,5 @@
 """One-time (or re-runnable) backfill: journal every already-closed trade
-in trades.json that predates the auto-journal hook (Task A22), or that the
+in the trades table that predates the auto-journal hook (Task A22), or that the
 hook itself failed to journal for any reason. Idempotent -- JournalStore.add
 replaces by trade_id, so re-running this after Task A22 is live is always
 safe and simply does nothing for trades already journaled.
@@ -64,26 +64,32 @@ def backfill(trades: list[dict], store: JournalStore, fetch_fn) -> tuple[int, in
     return backfilled, skipped
 
 
+class DryRunStore:
+    """Reads through to the real JournalStore; `add` reports but never writes."""
+
+    def __init__(self, store: JournalStore):
+        self._store = store
+
+    def get(self, trade_id: str):
+        return self._store.get(trade_id)
+
+    def add(self, entry: dict) -> dict:
+        return entry
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true",
-                        help="Report what would be backfilled without writing journal.json")
+                        help="Report what would be backfilled without writing to the journal table")
     args = parser.parse_args()
 
     trades = TradeLog().get_trades(status="all", limit=None)
     store = JournalStore()
 
-    if args.dry_run:
-        # A dry run must never touch disk -- back it with a throwaway
-        # in-memory-only store pointed at a path that doesn't exist yet,
-        # so JournalStore's own _load()/_save() calls are harmless no-ops
-        # on a scratch file, never the real journal.json.
-        import tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            scratch = JournalStore(path=os.path.join(tmp, "scratch_journal.json"))
-            backfilled, skipped = backfill(trades, scratch, _fetch_with_cache_fallback)
-    else:
-        backfilled, skipped = backfill(trades, store, _fetch_with_cache_fallback)
+    # A dry run reads the real journal (to skip what is already there) but
+    # never writes to it.
+    target = DryRunStore(store) if args.dry_run else store
+    backfilled, skipped = backfill(trades, target, _fetch_with_cache_fallback)
 
     print(f"backfilled {backfilled}, skipped {skipped}")
 

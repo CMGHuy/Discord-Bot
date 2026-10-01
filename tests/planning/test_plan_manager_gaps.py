@@ -7,7 +7,7 @@ from tests.planning.test_plan_manager_active import _active
 
 
 def _env(tmp_path):
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_active())          # entry 100, stop 95, tp1 110
     return store, PlanManager(store, FakePriceFeed([("AAPL", 100.0)]).get_price)
 

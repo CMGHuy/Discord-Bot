@@ -84,7 +84,7 @@ def test_armed_line_uses_the_entry_once_there_is_one(caplog):
 def test_poll_logs_the_fill_it_performs(tmp_path, monkeypatch, caplog):
     monkeypatch.setattr(config, "INTRADAY_RTH_ONLY", False)
     feed = FakePriceFeed([("AAPL", 106.0)])
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_pending(stop_loss=104.0))
     mgr = PlanManager(store, feed.get_price)
     with caplog.at_level(logging.INFO, logger=pm.log.name):
@@ -101,7 +101,7 @@ def test_a_malformed_event_detail_does_not_raise(caplog):
 def test_a_logging_failure_does_not_skip_the_event_handler(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "INTRADAY_RTH_ONLY", False)
     feed = FakePriceFeed([("AAPL", 106.0)])
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_pending(stop_loss=104.0))
     mgr = PlanManager(store, feed.get_price)
     handled = []

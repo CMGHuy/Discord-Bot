@@ -261,10 +261,8 @@ class PlanManager:
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def resend_notices(self, *, reload: bool = True) -> list[PlanEvent]:
+    def resend_notices(self) -> list[PlanEvent]:
         """Re-emit unacknowledged notices, dropping ones older than five days."""
-        if reload:
-            self.store.reload()
         cutoff = datetime.now(timezone.utc) - timedelta(days=NOTICE_RESEND_DAYS)
         events: list[PlanEvent] = []
         for plan in self.store.all():
@@ -341,18 +339,7 @@ class PlanManager:
         # INTRADAY_RTH_ONLY=false is still the pre-v64 escape hatch: no RTH
         # distinction at all, so this is unconditionally "regular" there too.
         regular = is_regular_session(now) if config.INTRADAY_RTH_ONLY else True
-        # `self.store` (and `self.trade_log`) can be long-lived instances --
-        # the module singleton `_MANAGER` below keeps both for the
-        # process's whole life -- so reload each from disk first. Otherwise
-        # a plan added by some OTHER PlanStore instance since our last tick
-        # is invisible here AND any write this tick performs (on either
-        # store) clobbers the file with a stale snapshot, erasing whatever
-        # a different instance wrote elsewhere in the meantime. See
-        # PlanStore.reload() / TradeLog.reload()'s docstrings.
-        self.store.reload()
-        if self.trade_log is not None:
-            self.trade_log.reload()
-        events: list[PlanEvent] = self.resend_notices(reload=False)
+        events: list[PlanEvent] = self.resend_notices()
         open_plans = self.store.open_plans()
         prices: dict[str, float] | None = None
         if self.price_batch_fn is not None and open_plans:
@@ -376,10 +363,6 @@ class PlanManager:
                     continue
             if not price or price <= 0:
                 continue
-            # price_fn may block long enough for the scan loop to persist a new
-            # plan. Reload before any _step() write so update() merges with that
-            # current on-disk store instead of serializing a stale snapshot.
-            self.store.reload()
             # Step the plan as it is NOW, not the copy open_plans() handed out
             # before this and every earlier plan's price fetch. The admin UI
             # closes and cancels plans from its own process; stepping the stale
@@ -522,9 +505,7 @@ class PlanManager:
 
     def _persist_terminal(self, plan: TradePlanV2, leg: dict, status: str) -> bool:
         """Persist a terminal plan and its linked trade as one DB transaction."""
-        from swingbot.core.db import stages
-        if (self.trade_log is not None and stages.reads_db("plans")
-                and stages.reads_db("trades")):
+        if self.trade_log is not None:
             from swingbot.core.db.engine import transaction
             with transaction() as conn:
                 self.store.update(plan, conn=conn)
@@ -952,7 +933,6 @@ def ack_notified(deliveries) -> None:
     if not deliveries:
         return
     store = _MANAGER.store if _MANAGER is not None else PlanStore()
-    store.reload()
     for delivery in deliveries:
         plan = store.get(delivery.plan_id)
         if plan is None:

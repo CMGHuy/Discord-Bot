@@ -274,10 +274,10 @@ def test_removing_an_absent_ticker_is_404(watchlist, logged_in):
 def test_trade_counts_are_attached(watchlist, logged_in, tmp_path):
     from tests.admin.test_api_v1_trades import _trade
     watchlist(["AAPL"])
-    (tmp_path / "trades.json").write_text(json.dumps([
+    seed_store("trades", [
         _trade("aaaaaaaaaaaaaaaa", plan_id=None, status="open"),
         _trade("bbbbbbbbbbbbbbbb", plan_id=None, status="win"),
-    ]), encoding="utf-8")
+    ])
     row = logged_in.get("/api/v1/watchlist/tickers").get_json()["tickers"][0]
     assert row["open_trades"] == 1
     assert row["closed_trades"] == 1

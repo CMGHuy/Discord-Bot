@@ -9,24 +9,24 @@ def _entry(trade_id, strategy="Fibonacci", tags=None, outcome="win", closed_at="
             "outcome": outcome, "tags": tags or [], "note": "", "closed_at": closed_at}
 
 
-def test_add_stamps_created_at_and_get_roundtrips(tmp_path):
-    store = JournalStore(path=str(tmp_path / "journal.json"))
+def test_add_stamps_created_at_and_get_roundtrips():
+    store = JournalStore()
     saved = store.add(_entry("t1"))
     assert "created_at" in saved
     assert store.get("t1")["ticker"] == "AAPL"
     assert store.get("nope") is None
 
 
-def test_re_add_same_trade_id_replaces_not_duplicates(tmp_path):
-    store = JournalStore(path=str(tmp_path / "journal.json"))
+def test_re_add_same_trade_id_replaces_not_duplicates():
+    store = JournalStore()
     store.add(_entry("t1", outcome="win"))
     store.add(_entry("t1", outcome="loss"))
     all_entries = store.entries()
     assert len(all_entries) == 1 and all_entries[0]["outcome"] == "loss"
 
 
-def test_entries_filters_by_strategy_and_tag_newest_first(tmp_path):
-    store = JournalStore(path=str(tmp_path / "journal.json"))
+def test_entries_filters_by_strategy_and_tag_newest_first():
+    store = JournalStore()
     store.add(_entry("t1", strategy="Fibonacci", tags=["fast_win"], closed_at="2026-03-01T00:00:00+00:00"))
     store.add(_entry("t2", strategy="EMA Crossover", tags=["slow_burn"], closed_at="2026-03-02T00:00:00+00:00"))
     store.add(_entry("t3", strategy="Fibonacci", tags=["fast_win"], closed_at="2026-03-03T00:00:00+00:00"))
@@ -38,21 +38,20 @@ def test_entries_filters_by_strategy_and_tag_newest_first(tmp_path):
     assert [e["trade_id"] for e in by_tag] == ["t2"]
 
 
-def test_entries_filters_by_outcome_and_since(tmp_path):
-    store = JournalStore(path=str(tmp_path / "journal.json"))
+def test_entries_filters_by_outcome_and_since():
+    store = JournalStore()
     store.add(_entry("t1", outcome="win", closed_at="2026-03-01T00:00:00+00:00"))
     store.add(_entry("t2", outcome="loss", closed_at="2026-03-05T00:00:00+00:00"))
     assert [e["trade_id"] for e in store.entries(outcome="loss")] == ["t2"]
     assert [e["trade_id"] for e in store.entries(since="2026-03-03")] == ["t2"]
 
 
-def test_set_note_roundtrips_through_a_fresh_store_instance(tmp_path):
-    path = str(tmp_path / "journal.json")
-    store = JournalStore(path=path)
+def test_set_note_roundtrips_through_a_fresh_store_instance():
+    store = JournalStore()
     store.add(_entry("t1"))
     assert store.set_note("t1", "Should have trailed further.") is True
 
-    fresh = JournalStore(path=path)  # forces a real disk read, not shared in-memory state
+    fresh = JournalStore()  # a new instance reads the table, not shared in-memory state
     assert fresh.get("t1")["note"] == "Should have trailed further."
 
 
@@ -111,33 +110,31 @@ def _closed_trade():
             "closed_at": "2026-03-05T15:00:00+00:00"}
 
 
-def test_journal_trade_close_adds_entry(tmp_path, monkeypatch):
-    monkeypatch.setattr("swingbot.core.analytics.journal.config.DATA_DIR", str(tmp_path))
+def test_journal_trade_close_adds_entry():
     df = make_ohlcv([100, 108, 98, 104], spread_pct=0.0, start="2026-03-02")
     with patch("swingbot.core.marketdata.data.get_daily_data", return_value=df):
         journal_trade_close(_closed_trade())
-    store = JournalStore(path=str(tmp_path / "journal.json"))
+    store = JournalStore()
     assert store.get("t1") is not None
 
 
-def test_journal_trade_close_never_raises_on_fetch_failure(tmp_path, monkeypatch):
-    monkeypatch.setattr("swingbot.core.analytics.journal.config.DATA_DIR", str(tmp_path))
+def test_journal_trade_close_never_raises_on_fetch_failure():
     with patch("swingbot.core.marketdata.data.get_daily_data", side_effect=ValueError("no data")):
         journal_trade_close(_closed_trade())  # must not raise
-    store = JournalStore(path=str(tmp_path / "journal.json"))
+    store = JournalStore()
     # Entry still gets added -- just with df=None (all MFE/MAE fields None) --
     # a data-fetch failure degrades the entry, it does not skip it.
     assert store.get("t1") is not None
     assert store.get("t1")["mfe_r"] is None
 
 
-def test_set_note_false_for_missing_trade_id(tmp_path):
-    store = JournalStore(path=str(tmp_path / "journal.json"))
+def test_set_note_false_for_missing_trade_id():
+    store = JournalStore()
     assert store.set_note("missing", "x") is False
 
 
-def test_has_note_filter(tmp_path):
-    store = JournalStore(path=str(tmp_path / "journal.json"))
+def test_has_note_filter():
+    store = JournalStore()
     store.add(_entry("t1"))
     store.add(_entry("t2"))
     store.set_note("t1", "worth remembering")
@@ -149,8 +146,8 @@ def test_has_note_filter(tmp_path):
 from scripts.data.backfill_journal import backfill
 
 
-def test_backfill_skips_already_journaled(tmp_path):
-    store = JournalStore(path=str(tmp_path / "journal.json"))
+def test_backfill_skips_already_journaled():
+    store = JournalStore()
     store.add(_entry("already"))
     trades = [
         {"id": "already", "ticker": "AAPL", "status": "win", "entry": 100.0, "stop_loss": 96.0,
@@ -171,3 +168,18 @@ def test_backfill_skips_already_journaled(tmp_path):
     # logic matches its documented contract; the draft assertion was the miscount.
     assert skipped == 2
     assert store.get("new1") is not None
+
+
+def test_backfill_dry_run_store_reports_without_writing():
+    from scripts.data.backfill_journal import DryRunStore
+    real = JournalStore()
+    real.add(_entry("already"))
+    trades = [
+        {"id": "already", "ticker": "AAPL", "status": "win", "entry": 100.0, "stop_loss": 96.0,
+         "exit_price": 104.0, "opened_at": "2026-03-01T00:00:00+00:00", "closed_at": "2026-03-02T00:00:00+00:00"},
+        {"id": "new1", "ticker": "MSFT", "status": "loss", "entry": 50.0, "stop_loss": 52.0,
+         "exit_price": 52.0, "opened_at": "2026-03-01T00:00:00+00:00", "closed_at": "2026-03-02T00:00:00+00:00"},
+    ]
+    backfilled, skipped = backfill(trades, DryRunStore(real), lambda ticker: None)
+    assert (backfilled, skipped) == (1, 1)
+    assert real.get("new1") is None

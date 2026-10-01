@@ -14,6 +14,7 @@ import pytest
 
 from tests.admin.api_v1_contract import (NULLABLE_NUMBER, NULLABLE_STR,
                                          assert_error, assert_shape)
+from tests.store_seed import seed_store
 
 _LOGIN = {"username": "admin", "password": "admin"}
 
@@ -40,8 +41,8 @@ def no_network(monkeypatch):
 
 def _open_trade(trade_id, ticker="AAPL", entry=100.0, stop=95.0, shares=10):
     return {
-        "id": trade_id, "ticker": ticker, "status": "open",
-        "strategy": "VWAP", "horizon": "1m",
+        "id": trade_id, "ticker": ticker, "status": "open", "direction": "bullish",
+        "strategy": "VWAP", "horizon_key": "1m",
         "entry": entry, "stop_loss": stop, "take_profit": 120.0,
         "shares": shares, "opened_at": "2026-08-01T12:00:00+00:00",
     }
@@ -53,7 +54,7 @@ def _closed_trade(trade_id, ticker="AAPL", win=True):
     fixture is never a flat line of identical R."""
     return {
         "id": trade_id, "ticker": ticker, "status": "closed",
-        "strategy": "VWAP", "horizon": "1m", "direction": "bullish",
+        "strategy": "VWAP", "horizon_key": "1m", "direction": "bullish",
         "entry": 100.0, "stop_loss": 95.0,
         "exit_price": 110.0 if win else 90.0,
         "opened_at": "2026-01-01T00:00:00+00:00",
@@ -84,7 +85,7 @@ def open_book(client, tmp_path, monkeypatch):
             _closed_trade(f"c{i:015d}", tickers[0] if tickers else "AAPL", win=(i % 2 == 0))
             for i in range(closed_trades)
         ]
-        (tmp_path / "trades.json").write_text(json.dumps(trades), encoding="utf-8")
+        seed_store("trades", trades)
 
         # A gently oscillating close series -- flat would make every
         # variance-based metric (vol, VaR, beta, correlation) None by
@@ -164,10 +165,10 @@ def test_position_rows_sum_to_open_heat(logged_in, tmp_path):
     """The guard against a second definition of risk. These rows come from
     heat.trade_risk_pct, which is exactly what open_heat sums; if either side
     ever recomputes risk from entry and stop, the two drift and this fails."""
-    (tmp_path / "trades.json").write_text(json.dumps([
+    seed_store("trades", [
         _open_trade("a" * 16, "AAPL", entry=100.0, stop=95.0, shares=10),
         _open_trade("b" * 16, "MSFT", entry=200.0, stop=190.0, shares=5),
-    ]), encoding="utf-8")
+    ])
 
     body = logged_in.get("/api/v1/risk").get_json()
     assert len(body["positions"]) == 2
@@ -183,10 +184,10 @@ def test_position_rows_sum_to_open_heat(logged_in, tmp_path):
 
 def test_positions_are_ordered_by_risk(logged_in, tmp_path):
     """Largest exposure first: the row that matters is the one at the top."""
-    (tmp_path / "trades.json").write_text(json.dumps([
+    seed_store("trades", [
         _open_trade("a" * 16, "AAPL", entry=100.0, stop=99.0, shares=1),
         _open_trade("b" * 16, "MSFT", entry=200.0, stop=150.0, shares=20),
-    ]), encoding="utf-8")
+    ])
 
     rows = logged_in.get("/api/v1/risk").get_json()["positions"]
     assert [r["ticker"] for r in rows] == ["MSFT", "AAPL"]
@@ -207,10 +208,10 @@ def test_utilisation_is_not_clamped_at_100(logged_in, tmp_path):
     imported it first. An earlier version of this test asserted against the
     seeded 10,000 balance and passed alone while failing in a full run.
     """
-    (tmp_path / "trades.json").write_text(json.dumps([
+    seed_store("trades", [
         # 20% of the account at risk against the 6% default cap -> 333%.
         {**_open_trade("a" * 16, "AAPL"), "risk_pct": 20.0},
-    ]), encoding="utf-8")
+    ])
 
     heat = logged_in.get("/api/v1/risk").get_json()["heat"]
     assert heat["open_pct"] == pytest.approx(20.0)
@@ -272,9 +273,9 @@ def test_json_is_parseable_with_a_flat_price_position_in_the_book(
     or not the NaN-in-correlation-matrix bug is present. The raw bytes must
     be checked directly instead.
     """
-    (tmp_path / "trades.json").write_text(json.dumps([
+    seed_store("trades", [
         _open_trade("a" * 16, "FLAT"), _open_trade("b" * 16, "AAPL"),
-    ]), encoding="utf-8")
+    ])
 
     bars = 40
     flat = pd.DataFrame(
@@ -357,7 +358,7 @@ def test_a_market_data_failure_degrades_the_metrics_not_the_page(
 
 
 def test_a_malformed_closed_trade_degrades_only_the_trade_derived_metrics(
-        client, open_book, tmp_path):
+        client, open_book, monkeypatch):
     """Round 3: `r_series = trade_metrics.r_multiples(closed)` and the
     `sharpe_r`/`max_drawdown_r` computation run entirely OUTSIDE the
     market-data try/except (that separation was round 2's fix, for the
@@ -373,15 +374,18 @@ def test_a_malformed_closed_trade_degrades_only_the_trade_derived_metrics(
     """
     open_book(["AAPL"], closed_trades=5)
 
-    trades = json.loads((tmp_path / "trades.json").read_text(encoding="utf-8"))
-    trades.append({
-        "id": "m" * 16, "ticker": "AAPL", "status": "closed",
-        "strategy": "VWAP", "horizon": "1m", "direction": "bullish",
-        "entry": "not-a-number", "stop_loss": 95.0, "exit_price": 110.0,
-        "opened_at": "2026-01-01T00:00:00+00:00",
-        "closed_at": "2026-01-02T00:00:00+00:00",
-    })
-    (tmp_path / "trades.json").write_text(json.dumps(trades), encoding="utf-8")
+    # A numeric column cannot hold a string `entry`, so the malformed record is
+    # simulated: r_multiple() raises the same TypeError for one trade.
+    seed_store("trades", [_closed_trade("m" * 16)])
+    from swingbot.core.analytics import metrics as trade_metrics
+    real_r_multiple = trade_metrics.r_multiple
+
+    def flaky_r_multiple(trade):
+        if trade["id"].startswith("m"):
+            raise TypeError("unsupported operand type(s) for -: 'str' and 'float'")
+        return real_r_multiple(trade)
+
+    monkeypatch.setattr(trade_metrics, "r_multiple", flaky_r_multiple)
 
     response = client.get("/api/v1/risk")
     assert response.status_code == 200

@@ -32,6 +32,7 @@ from swingbot.core.scanning.engine import ScanProgress
 from swingbot.core.tracking.performance import TradeLog
 from tests.helpers import make_ohlcv
 from tests.scanning.conftest import _InlineProcessPool
+from tests.store_seed import seed_store
 
 _UNSET = object()
 
@@ -42,13 +43,11 @@ def isolate_data_dir(tmp_path, monkeypatch):
     -- _sync_run_scan reads account config and writes scan telemetry, both
     of which must not touch the real data/."""
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    (tmp_path / "trades.json").write_text("[]", encoding="utf-8")
-    (tmp_path / "plans.json").write_text("[]", encoding="utf-8")
-    (tmp_path / "account.json").write_text(json.dumps({
+    seed_store("account", {
         "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
         "sizing_mode": "risk_pct",
         "balance_history": [{"ts": "2026-08-01T00:00:00+00:00", "balance": 10000.0}],
-    }), encoding="utf-8")
+    })
 
 
 def _structured_df(trend_len=120, box_len=60, seed=7):
@@ -105,7 +104,7 @@ def _scan_with_funnel(direction, next_horizon_trend=_UNSET, horizon="4w"):
         mp.setattr(fetch, "get_daily_data_batch", lambda tickers, period=None: {})
         mp.setattr(fetch, "get_current_price_batch", lambda tickers: {})
         mp.setattr(fetch, "ProcessPoolExecutor", _InlineProcessPool)
-        test_log = TradeLog(path=os.path.join(config.DATA_DIR, "trades.json"))
+        test_log = TradeLog()
         mp.setattr(engine, "trade_log", test_log)
         mp.setattr(scan_run, "trade_log", test_log)
         mp.setattr(analyze, "trade_log", test_log)

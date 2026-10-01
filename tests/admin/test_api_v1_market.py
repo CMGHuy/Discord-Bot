@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 
 from tests.admin.api_v1_contract import NULLABLE_NUMBER, assert_error, assert_shape
+from tests.store_seed import seed_store
 
 _LOGIN = {"username": "admin", "password": "admin"}
 
@@ -187,12 +188,13 @@ def test_working_stop_is_read_from_the_trades_own_plan(logged_in, frame, seed_tr
     (`plan_manager.py` only ever writes `plan.working_stop`; the trade record
     never carries one), so `_trade_for_levels` has to cross to the plan the
     trade names in `plan_id` rather than read a key that is never there."""
-    import json
     import uuid
+    from swingbot.core.planning.plan_engine import plan_to_dict
+    from tests.planning.test_plan_engine_model import _plan
     plan_id = str(uuid.uuid4())
-    (tmp_path / "plans.json").write_text(json.dumps([
-        {"plan_id": plan_id, "working_stop": 165.0},
-    ]), encoding="utf-8")
+    seed_store("plans", [
+        plan_to_dict(_plan(plan_id=plan_id, ticker="AAPL", working_stop=165.0)),
+    ])
     trade_id = seed_trade(plan_id=plan_id, entry=160.0, stop_loss=150.0, take_profit=180.0)
 
     body = logged_in.get(f"/api/v1/market/chart/AAPL?trade_id={trade_id}").get_json()

@@ -22,7 +22,7 @@ def _rth_on(monkeypatch):
 
 def _env(tmp_path, prices):
     feed = FakePriceFeed(); feed.set_series("AAPL", prices)
-    store = PlanStore(path=str(tmp_path / "plans.json")); store.add(_active())
+    store = PlanStore(); store.add(_active())
     return store, PlanManager(store, feed.get_price)
 
 

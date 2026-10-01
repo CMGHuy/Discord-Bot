@@ -1,42 +1,17 @@
-import json
-
 import pytest
 
 from swingbot import config
 from swingbot.core.planning import account
+from tests.store_seed import seed_store
 
 
-def test_account_functions_use_data_dir_at_call_time_not_import_time(tmp_path, monkeypatch):
-    """account.py's path defaults used to bake in whatever config.DATA_DIR
-    was at MODULE IMPORT time (a module-level `path: str = CONFIG_PATH`
-    constant) -- monkeypatching config.DATA_DIR afterwards, the normal test
-    isolation pattern, had no effect on any caller that omits `path`
-    (e.g. performance.py's _settle_account_balance -> apply_realized_pnl
-    with no path= at all). Confirmed live: tests/tracking/
-    test_one_trade_per_ticker.py's manual-close/reversal tests passed
-    serially (the real data/account.json happened to exist and be valid)
-    but failed under xdist parallel workers, which all raced writes to
-    that SAME real file at once. Every account.py function must resolve
-    DATA_DIR fresh on each call instead."""
-    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-
-    result = account.apply_realized_pnl(50.0, {"trade_id": "t1"})
-
-    # The write must land at tmp_path/account.json -- not wherever a stale,
-    # import-time-bound default would have pointed -- with the balance this
-    # call actually computed (base_balance + 50), not left at the default.
-    on_disk = json.loads((tmp_path / "account.json").read_text())
-    assert on_disk["balance"] == pytest.approx(result["balance"])
-    assert result["balance"] == pytest.approx(config.ACCOUNT_BALANCE + 50.0)
-
-
-def test_self_healing_recompute_sums_legs(tmp_path):
+def test_self_healing_recompute_sums_legs():
     # A two-leg closed trade whose realized_pnl_amount was written by
     # settle_legs: base 10_000, 100 risked, rr=0.35, TP1 on 50% -> +17.50,
     # runner BE -> +0. The self-healing recompute must reproduce +17.50
     # from the record itself.
     trades = [{
-        "id": "t1", "ticker": "AAPL", "direction": "bullish", "status": "win",
+        "id": "t1", "strategy": "RSI", "horizon_key": "2w", "opened_at": "2026-07-01T10:00:00+00:00", "ticker": "AAPL", "direction": "bullish", "status": "win",
         "entry": 100.0, "stop_loss": 99.0, "take_profit": 100.35,
         "shares": 100.0,                       # risk 100 @ 1.0/share
         "realized_pnl_amount": 17.50,
@@ -46,16 +21,15 @@ def test_self_healing_recompute_sums_legs(tmp_path):
              "reason": "tp1_runner_be"},
         ],
     }]
-    path = tmp_path / "trades.json"
-    path.write_text(json.dumps(trades))
-    assert account._sum_realized_pnl(trades_path=str(path)) == pytest.approx(17.50)
+    seed_store("trades", trades)
+    assert account._sum_realized_pnl() == pytest.approx(17.50)
 
 
-def test_recompute_falls_back_to_settle_legs_when_amount_missing(tmp_path):
+def test_recompute_falls_back_to_settle_legs_when_amount_missing():
     # Older v2 rows might carry legs but no realized_pnl_amount (e.g. a crash
     # between leg append and settle) -- the recompute derives it from legs.
     trades = [{
-        "id": "t2", "ticker": "AAPL", "direction": "bullish", "status": "win",
+        "id": "t2", "strategy": "RSI", "horizon_key": "2w", "opened_at": "2026-07-01T10:00:00+00:00", "ticker": "AAPL", "direction": "bullish", "status": "win",
         "entry": 100.0, "stop_loss": 99.0, "shares": 100.0,
         "realized_pnl_amount": None,
         "legs": [{"fraction": 0.5, "exit_price": 100.35, "r": 0.35,
@@ -63,12 +37,11 @@ def test_recompute_falls_back_to_settle_legs_when_amount_missing(tmp_path):
                  {"fraction": 0.5, "exit_price": 100.0, "r": 0.0,
                   "reason": "tp1_runner_be"}],
     }]
-    path = tmp_path / "trades.json"
-    path.write_text(json.dumps(trades))
-    assert account._sum_realized_pnl(trades_path=str(path)) == pytest.approx(17.50)
+    seed_store("trades", trades)
+    assert account._sum_realized_pnl() == pytest.approx(17.50)
 
 
-def test_get_balance_history_points_adapts_to_date_balance_tuples(tmp_path):
+def test_get_balance_history_points_adapts_to_date_balance_tuples():
     # get_balance_history_points() feeds growth_path(), which expects
     # [(date_str, balance), ...] with the date truncated to YYYY-MM-DD.
     cfg = {
@@ -96,33 +69,30 @@ def test_get_balance_history_points_adapts_to_date_balance_tuples(tmp_path):
             },
         ],
     }
-    path = tmp_path / "account.json"
-    path.write_text(json.dumps(cfg))
-    points = account.get_balance_history_points(path=str(path))
+    seed_store("account", cfg)
+    points = account.get_balance_history_points()
     assert points == [("2025-07-12", 10_000.0), ("2026-07-12", 15_000.0)]
 
-def test_open_partial_legs_do_not_pre_settle_account_history(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    trades_path = tmp_path / "trades.json"
+def test_open_partial_legs_do_not_pre_settle_account_history():
     trades = [{
-        "id": "t3", "ticker": "AAPL", "direction": "bullish", "status": "open",
+        "id": "t3", "strategy": "RSI", "horizon_key": "2w", "opened_at": "2026-07-01T10:00:00+00:00", "ticker": "AAPL", "direction": "bullish", "status": "open",
         "entry": 100.0, "stop_loss": 99.0, "shares": 100.0,
         "realized_pnl_amount": None,
         "legs": [{"fraction": 0.5, "exit_price": 100.35, "r": 0.35,
                   "reason": "tp1"}],
     }]
-    trades_path.write_text(json.dumps(trades))
+    seed_store("trades", trades)
 
     # TP1 is banked on the still-open runner, not yet account-settled.
-    assert account._sum_realized_pnl(trades_path=str(trades_path)) == 0.0
+    assert account._sum_realized_pnl() == 0.0
 
     account.apply_realized_pnl(17.50, {"trade_id": "t3"})
     trades[0]["status"] = "win"
     trades[0]["realized_pnl_amount"] = 17.50
-    trades_path.write_text(json.dumps(trades))
+    seed_store("trades", trades)
 
     cfg = account.load_account_config()
-    assert cfg["balance_history"][-1]["balance"] == pytest.approx(
+    assert account.get_balance_history()[-1]["balance"] == pytest.approx(
         config.ACCOUNT_BALANCE + 17.50
     )
     assert cfg["balance"] == pytest.approx(config.ACCOUNT_BALANCE + 17.50)

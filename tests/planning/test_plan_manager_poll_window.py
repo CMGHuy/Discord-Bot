@@ -57,7 +57,7 @@ def _env(tmp_path, prices=(), plan=None):
     is 5.00 and runner_floor(100, 110) is 106.67."""
     feed = FakePriceFeed()
     feed.set_series("AAPL", list(prices))
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(plan if plan is not None else _active())
     return store, PlanManager(store, feed.get_price)
 
@@ -69,7 +69,7 @@ def _partial_env(tmp_path, tp2=None, floor_session="2026-08-26"):
     pass floor_session="today" to test same-session behaviour explicitly."""
     feed = FakePriceFeed()
     feed.set_series("AAPL", [110.5])
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_active(tp2=tp2))
     mgr = PlanManager(store, feed.get_price)
     assert [e.transition for e in mgr.poll(now=RTH)] == ["tp1_partial"]
@@ -191,7 +191,7 @@ def test_a_price_failure_on_one_plan_does_not_stop_the_others(tmp_path):
     """poll()'s existing per-plan isolation still holds."""
     feed = FakePriceFeed()
     feed.set_series("MSFT", [94.0])
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_active())                                  # AAPL: no ticks queued
     store.add(_active(plan_id="p2", ticker="MSFT"))
     mgr = PlanManager(store, feed.get_price)
@@ -201,15 +201,12 @@ def test_a_price_failure_on_one_plan_does_not_stop_the_others(tmp_path):
 
 class _RecordingLog:
     """Minimal TradeLog stand-in: PlanManager._on_event only ever calls
-    reload() and close_plan_trade() on a terminal close."""
+    close_plan_trade() on a terminal close."""
 
     def __init__(self):
         self.closed = []
 
-    def reload(self):
-        pass
-
-    def close_plan_trade(self, plan_id, leg, status):
+    def close_plan_trade(self, plan_id, leg, status, *, conn=None):
         self.closed.append((plan_id, leg, status))
 
 
@@ -223,7 +220,7 @@ def test_a_terminal_target_close_reaches_the_trade_log_as_a_win(tmp_path):
     status mapping treats every "tp1_..." reason as a win)."""
     feed = FakePriceFeed()
     feed.set_series("AAPL", [111.0, 106.0])
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_active(tp2=None))
     trade_log = _RecordingLog()
     mgr = PlanManager(store, feed.get_price, trade_log=trade_log)
@@ -239,7 +236,7 @@ def test_a_terminal_target_close_reaches_the_trade_log_as_a_win(tmp_path):
 def test_a_terminal_stop_close_still_reaches_the_trade_log_as_a_loss(tmp_path):
     feed = FakePriceFeed()
     feed.set_series("AAPL", [94.0])
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_active())
     trade_log = _RecordingLog()
     mgr = PlanManager(store, feed.get_price, trade_log=trade_log)

@@ -6,7 +6,7 @@ def test_get_trades_sort_by_confidence_handles_none_level(tmp_path):
     (see plan_manager.py's `_on_event`, transition == "filled"). Sorting
     by confidence must not crash when it's mixed with trades that do
     have a numeric level."""
-    log = TradeLog(path=str(tmp_path / "trades.json"))
+    log = TradeLog()
     log.log_trade(ticker="AAPL", strategy="RSI", horizon_key="4w",
                    direction="bullish", confidence_level=None,
                    confidence_label=None, entry=100.0, stop_loss=95.0,

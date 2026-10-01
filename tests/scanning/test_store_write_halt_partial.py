@@ -36,7 +36,7 @@ def test_a_halt_on_the_second_plan_keeps_book_and_alerts_consistent(
     monkeypatch.setattr(scan_run, "load_watchlist", lambda: ["T0", "T1"])
     monkeypatch.setattr(fetch, "get_daily_data",
                         lambda ticker, period=None: df.copy() if ticker in ("T0", "T1") else None)
-    log = TradeLog(path=str(tmp_path / "trades.json"))
+    log = TradeLog()
     monkeypatch.setattr(scan_run, "trade_log", log)
     monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
     monkeypatch.setattr(scan_run, "earnings_within_window", lambda t, d: None)

@@ -14,7 +14,7 @@ AFTER_HOURS = dt.datetime(2026, 8, 27, 19, 30, tzinfo=US_MARKET_TZ)
 def _env(tmp_path, prices):
     feed = FakePriceFeed()
     feed.set_series("AAPL", prices)
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_active())
     return store, PlanManager(store, feed.get_price)
 

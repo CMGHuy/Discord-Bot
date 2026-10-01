@@ -13,6 +13,7 @@ import importlib
 import json
 
 import pytest
+from tests.store_seed import seed_store
 
 # Modules (in dependency order) that compute a path from config.DATA_DIR at
 # import time and therefore must be reloaded AFTER config.DATA_DIR is
@@ -93,16 +94,13 @@ def admin_app(tmp_path, monkeypatch):
     # the same way monkeypatch already protects ENV_PATH/DATA_DIR.
     monkeypatch.setattr(config, "_ENV_MTIME", config._ENV_MTIME)
 
-    # Seed the three JSON files every admin route touches at least
-    # indirectly (TradeLog(), load_account_config(), and — from Task C7
-    # onward — PlanStore()) so a fresh empty tmp_path never trips a
-    # FileNotFoundError deep inside core code that assumes the file exists.
-    (tmp_path / "trades.json").write_text("[]", encoding="utf-8")
-    (tmp_path / "account.json").write_text(json.dumps({
+    # Seed the account row every admin route touches at least indirectly
+    # (load_account_config()) so a fresh empty database never seeds a
+    # default one mid-request.
+    seed_store("account", {
         "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
         "sizing_mode": "risk_pct", "balance_history": [],
-    }), encoding="utf-8")
-    (tmp_path / "plans.json").write_text("[]", encoding="utf-8")
+    })
 
     # The scan trigger/pause flags belong to the bot's runstate module, which
     # the admin calls into and which bakes its paths at import time. Patched,

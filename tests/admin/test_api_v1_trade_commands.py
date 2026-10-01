@@ -23,6 +23,7 @@ import pytest
 
 from tests.admin.api_v1_contract import assert_error
 from tests.admin.test_api_v1_trades import _plan, _trade
+from tests.store_seed import seed_store
 
 _LOGIN = {"username": "admin", "password": "admin"}
 _PLAN_ID = "55555555-5555-4555-8555-555555555555"
@@ -32,8 +33,8 @@ _TRADE_ID = "bbbbbbbbbbbbbbbb"
 @pytest.fixture
 def seed(admin_app, tmp_path):
     def _seed(plans=(), trades=()):
-        (tmp_path / "plans.json").write_text(json.dumps(list(plans)), encoding="utf-8")
-        (tmp_path / "trades.json").write_text(json.dumps(list(trades)), encoding="utf-8")
+        seed_store("plans", list(plans))
+        seed_store("trades", list(trades))
     return _seed
 
 

@@ -14,7 +14,7 @@ def _partial_env(tmp_path, prices, tp2=None, atr_fn=None):
     then feed `prices` to the runner."""
     feed = FakePriceFeed()
     feed.set_series("AAPL", [110.5] + list(prices))
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_active(tp2=tp2))
     mgr = PlanManager(store, feed.get_price, atr_fn=atr_fn)
     assert [e.transition for e in mgr.poll()] == ["tp1_partial"]
@@ -86,7 +86,7 @@ def _bear_active(**kw):
 def _bear_partial_env(tmp_path, prices):
     feed = FakePriceFeed()
     feed.set_series("AAPL", [89.5] + list(prices))
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_bear_active())
     mgr = PlanManager(store, feed.get_price)
     assert [e.transition for e in mgr.poll()] == ["tp1_partial"]
@@ -143,7 +143,7 @@ def test_price_just_above_the_floor_keeps_the_runner_open(tmp_path):
 def test_check_bar_tp1_sets_the_runner_floor_and_closes_at_it(tmp_path):
     # Overnight bar-check path (_check_bar_active / _check_bar_partial) must
     # mirror the poll path exactly.
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_active())
     mgr = PlanManager(store, lambda t: 100.0)
     events = mgr.check_bar("p1", bar_open=109.0, bar_high=111.0, bar_low=108.0)
@@ -159,7 +159,7 @@ def test_check_bar_tp1_sets_the_runner_floor_and_closes_at_it(tmp_path):
 
 
 def test_check_bar_bearish_tp1_sets_the_runner_floor_and_closes_at_it(tmp_path):
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_bear_active())
     mgr = PlanManager(store, lambda t: 100.0)
     events = mgr.check_bar("p1", bar_open=91.0, bar_high=92.0, bar_low=89.0)
@@ -180,7 +180,7 @@ def test_legacy_partial_without_a_working_stop_falls_back_to_the_floor(tmp_path)
     # correct rather than mislabelling a floor exit as "trail".
     feed = FakePriceFeed()
     feed.set_series("AAPL", [103.0])
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_plan(direction="bullish", entry_type="market",
                     trigger_price=100.0, entry_price=100.0, stop_loss=95.0,
                     tp1=110.0, tp2=None, status=PlanStatus.PARTIAL,

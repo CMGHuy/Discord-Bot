@@ -303,7 +303,7 @@ from swingbot.commands.stats import _journal_note_result
 
 def test_journal_note_result_success(tmp_path, monkeypatch):
     from swingbot.core.analytics.journal import JournalStore
-    store = JournalStore(path=str(tmp_path / "journal.json"))
+    store = JournalStore()
     store.add({"trade_id": "T1", "ticker": "NVDA", "outcome": "win", "r_realized": 1.0,
               "auto_lesson": "lesson", "tags": []})
     msg = _journal_note_result(store, "T1", "watch the gap next time")
@@ -313,7 +313,7 @@ def test_journal_note_result_success(tmp_path, monkeypatch):
 
 def test_journal_note_result_missing_id(tmp_path):
     from swingbot.core.analytics.journal import JournalStore
-    store = JournalStore(path=str(tmp_path / "journal.json"))
+    store = JournalStore()
     msg = _journal_note_result(store, "missing", "x")
     assert "no journal entry" in msg.lower()
 

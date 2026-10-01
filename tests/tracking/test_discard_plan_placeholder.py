@@ -18,16 +18,16 @@ import pytest
 
 from swingbot import config
 from swingbot.core.tracking.performance import TradeLog
+from tests.store_seed import seed_store
 
 
 @pytest.fixture
 def tlog(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    (tmp_path / "trades.json").write_text("[]", encoding="utf-8")
-    (tmp_path / "account.json").write_text(json.dumps({
+    seed_store("account", {
         "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
         "sizing_mode": "risk_pct", "balance_history": [],
-    }), encoding="utf-8")
+    })
     return TradeLog()
 
 

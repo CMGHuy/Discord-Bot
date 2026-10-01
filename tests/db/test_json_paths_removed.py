@@ -29,6 +29,14 @@ FORBIDDEN = [
     ("swingbot/admin/jobs.py", r"stages\.|tuning_results", "tuning is a table"),
     ("swingbot/admin/api_v1/jobs.py", r"stages\.|tuning_results", "tuning is a table"),
     ("swingbot/admin/queries.py", r"stages\.|TUNING_PROPOSALS_DIR_NAME", "tuning_proposals is a table"),
+    # trading group (V116-37)
+    ("swingbot/core/tracking/performance.py", r"stages\.|trades\.json|def reload|def refresh|\.refresh\(\)|self\._trades", "trades is a table; no snapshot to refresh"),
+    ("swingbot/core/planning/plan_store.py", r"stages\.|plans\.json|def reload|self\._plans", "plans is a table; no snapshot to reload"),
+    ("swingbot/core/planning/plan_manager.py", r"stages\.|\.reload\(\)", "no snapshot to reload"),
+    ("swingbot/core/planning/account.py", r"stages\.|account\.json|trades\.json|_read_trades_file", "account and trades are tables"),
+    ("swingbot/core/analytics/journal.py", r"stages\.|journal\.json", "journal is a table"),
+    ("swingbot/commands/views.py", r"stages\.|starred_plans\.json", "starred_plans is a table"),
+    ("swingbot/admin/watchlist_rows.py", r"stages\.", "plans is a table"),
 ]
 
 

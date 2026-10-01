@@ -21,6 +21,7 @@ import pytest
 
 from tests.admin.api_v1_contract import assert_shape
 from tests.admin.test_api_v1_trades import TRADE_ROW, _plan, _trade
+from tests.store_seed import seed_store
 
 _LOGIN = {"username": "admin", "password": "admin"}
 
@@ -34,8 +35,8 @@ DETAIL_ROW = {**TRADE_ROW, "detail": dict}
 @pytest.fixture
 def seed(admin_app, tmp_path):
     def _seed(plans=(), trades=()):
-        (tmp_path / "plans.json").write_text(json.dumps(list(plans)), encoding="utf-8")
-        (tmp_path / "trades.json").write_text(json.dumps(list(trades)), encoding="utf-8")
+        seed_store("plans", list(plans))
+        seed_store("trades", list(trades))
     return _seed
 
 
