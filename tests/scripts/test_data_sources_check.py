@@ -76,3 +76,45 @@ def test_decide_exit_codes_and_messages():
 def test_format_probe_shows_latency_rows_and_verdict():
     line = dsc.format_probe("AAPL", dsc.Probe("alpaca", "daily", True, 1.234, 500, 190.0))
     assert "1.23s" in line and "rows=500" in line and line.endswith("OK")
+
+
+def test_compare_frames_normalises_intraday_stamped_tz_aware_index():
+    alp = _frame()
+    alp.index = alp.index.tz_localize("UTC") + pd.Timedelta(hours=5)
+    ok, detail = dsc.compare_frames(alp, _frame())
+    assert ok, detail
+
+
+def test_compare_frames_tz_mismatch_has_overlap():
+    alp = _frame()
+    alp.index = alp.index.tz_localize("America/New_York")
+    ok, detail = dsc.compare_frames(alp, _frame())
+    assert ok, detail
+
+
+def test_glue_exception_becomes_a_fail_line_and_other_tickers_still_run(monkeypatch, capsys):
+    good = _frame()
+    monkeypatch.setattr(dsc, "_alpaca_provider", lambda: object())
+    monkeypatch.setattr(dsc, "_probe_ticker",
+                        lambda t, alp: ({"alpaca": good, "yf": good}, [dsc.Probe("alpaca", "daily", True, 1.0, 5, 1.0)]))
+
+    def depth(ticker):
+        if ticker == "AAPL":
+            raise ValueError("cache corrupt")
+        return True, "ok"
+    monkeypatch.setattr(dsc, "_router_depth", depth)
+    code = dsc.run(("AAPL", "MSFT"))
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "ValueError: cache corrupt" in out and "MSFT   depth     OK" in out
+
+
+def test_probe_ticker_exception_is_a_fail_and_the_summary_still_prints(monkeypatch, capsys):
+    monkeypatch.setattr(dsc, "_alpaca_provider", lambda: object())
+
+    def boom(t, alp):
+        raise RuntimeError("no network")
+    monkeypatch.setattr(dsc, "_probe_ticker", boom)
+    monkeypatch.setattr(dsc, "_router_depth", lambda t: (True, "ok"))
+    assert dsc.run(("AAPL",)) == 1
+    assert "RuntimeError: no network" in capsys.readouterr().out

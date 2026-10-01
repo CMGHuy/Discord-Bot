@@ -69,11 +69,23 @@ def format_probe(ticker: str, p: Probe) -> str:
             f"last={close:<10} {'OK' if p.ok else 'FAIL'}{note}")
 
 
+def _date_indexed(frame):
+    """Copy of `frame` indexed by tz-naive midnight dates, so sources that stamp
+    bars differently (tz-aware, 04:00 / 05:00 UTC) still line up."""
+    idx = frame.index
+    if getattr(idx, "tz", None) is not None:
+        idx = idx.tz_localize(None)
+    out = frame.copy()
+    out.index = idx.normalize()
+    return out
+
+
 def compare_frames(alpaca, yf, tolerance: float = TOLERANCE, bars: int = OVERLAP_BARS):
     """(ok, detail): last close of both frames and the median close ratio over
     the most recent `bars` shared dates must each be within `tolerance`."""
     if alpaca is None or yf is None or alpaca.empty or yf.empty:
         return False, "a frame is missing"
+    alpaca, yf = _date_indexed(alpaca), _date_indexed(yf)
     common = alpaca.index.intersection(yf.index)[-bars:]
     if len(common) < MIN_OVERLAP:
         return False, f"only {len(common)} overlapping bars"
@@ -94,8 +106,8 @@ def depth_ok(router_frame, cached_frame):
 
 
 def decide(probes: list, comparisons: list, depths: list):
-    """(exit_code, messages). 0 only if every probe passed (except Alpaca-only
-    intraday, which is still required) and every comparison/depth agrees."""
+    """(exit_code, messages). 0 only if every probe passed (the Alpaca-only 1h
+    probe included) and every comparison/depth agrees."""
     messages = [f"FAIL {p.source} {p.what}: {p.error}" for p in probes if not p.ok]
     messages += [f"FAIL compare {name}: {detail}" for name, ok, detail in comparisons if not ok]
     messages += [f"FAIL depth {name}: {detail}" for name, ok, detail in depths if not ok]
@@ -138,6 +150,29 @@ def _router_depth(ticker: str):
     return depth_ok(fetch._with_cached_depth(ticker, live), cached)
 
 
+def _guarded(fn, *args):
+    """(ok, detail) from a glue step that returns that pair; an exception is a
+    FAIL line `<ExcType>: msg`, never a raise."""
+    try:
+        return fn(*args)
+    except Exception as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+
+
+def _check_ticker(ticker: str, alp):
+    """(probes, comparison, depth) for one ticker; no step can abort the run."""
+    try:
+        frames, probes = _probe_ticker(ticker, alp)
+    except Exception as exc:
+        frames = {}
+        probes = [Probe("glue", "probe", False, 0.0, error=f"{type(exc).__name__}: {exc}")]
+    ok, detail = _guarded(compare_frames, frames.get("alpaca"), frames.get("yf"))
+    print(f"{ticker:<6} compare   {'OK' if ok else 'FAIL'}  {detail}")
+    d_ok, d_detail = _guarded(_router_depth, ticker)
+    print(f"{ticker:<6} depth     {'OK' if d_ok else 'FAIL'}  {d_detail}")
+    return probes, (ticker, ok, detail), (ticker, d_ok, d_detail)
+
+
 def run(tickers) -> int:
     probes, comparisons, depths = [], [], []
     try:
@@ -146,14 +181,10 @@ def run(tickers) -> int:
         print(f"FAIL alpaca provider: {exc}")
         return 1
     for ticker in tickers:
-        frames, got = _probe_ticker(ticker, alp)
+        got, comparison, depth = _check_ticker(ticker, alp)
         probes += got
-        ok, detail = compare_frames(frames.get("alpaca"), frames.get("yf"))
-        comparisons.append((ticker, ok, detail))
-        print(f"{ticker:<6} compare   {'OK' if ok else 'FAIL'}  {detail}")
-        ok, detail = _router_depth(ticker)
-        depths.append((ticker, ok, detail))
-        print(f"{ticker:<6} depth     {'OK' if ok else 'FAIL'}  {detail}")
+        comparisons.append(comparison)
+        depths.append(depth)
     code, messages = decide(probes, comparisons, depths)
     print("\n".join(messages) if messages else "OK: both sources retrievable and in agreement")
     return code
