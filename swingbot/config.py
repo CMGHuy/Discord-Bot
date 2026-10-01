@@ -1069,11 +1069,6 @@ FIELDS: list[Field] = [
           help="Consumed only when the Postgres container first initializes. "
                "It must match DATABASE_URL; changing it later requires ALTER ROLE "
                "or a controlled database rebuild."),
-    Field("DB_STORES", "DB_STORES", "Database", "Per-store migration stages",
-          default="",
-          help="Comma-separated name:stage pairs: json (files only), dual "
-               "(write both/read files), or db (Postgres only). Stores not "
-               "listed remain json. Example: trades:db,plans:dual."),
 ]
 
 _SEARCH_CLASSES = {

@@ -83,7 +83,7 @@ def _sum_realized_pnl() -> float:
     banked scale-out leg.
     """
     from swingbot.core.db.repositories.trades import trades_repo
-    from swingbot.core.db.dual import normalise
+    from swingbot.core.db.codec import normalise
     trades = normalise(trades_repo().list_all())
     total = 0.0
     for t in trades:
@@ -268,7 +268,7 @@ def get_balance_history() -> list:
     entries -- one per closed trade settlement plus any manual `!account
     balance` overrides -- for the admin Performance page's balance-over-time
     chart."""
-    from swingbot.core.db.dual import normalise
+    from swingbot.core.db.codec import normalise
     from swingbot.core.db.repositories.account import account_repo
     return normalise(account_repo().history())
 

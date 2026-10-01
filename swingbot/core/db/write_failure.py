@@ -1,15 +1,11 @@
-"""A database write failure at the db stage stops issuance (v116 Phase 3).
+"""A database write failure stops issuance (v116 Phase 3).
 
 Writes already raise (the fail-fast rule). This decides which raises mean
 "the book can no longer record what the scan is issuing", so the scan loop
 pauses alerting instead of posting an alert whose trade or plan was never
-stored. Only once a trading store is at `db`: before that the JSON file is
-still the truth, and a database hiccup during a soak must not pause alerts.
+stored. Every trading store is at db, so any database failure counts.
 """
 from __future__ import annotations
-
-#: The stores an issued alert writes to.
-TRADING_STORES = ("plans", "trades", "account", "journal")
 
 
 class StoreWriteHalt(RuntimeError):
@@ -47,10 +43,6 @@ def is_store_write_failure(exc: BaseException | None) -> bool:
     return False
 
 
-def trading_store_at_db() -> bool:
-    from swingbot.core.db import stages
-    return any(stages.reads_db(store) for store in TRADING_STORES)
-
-
 def halts_issuance(exc: BaseException) -> bool:
-    return trading_store_at_db() and is_store_write_failure(exc)
+    """Every trading store is at db: any database failure halts issuance."""
+    return is_store_write_failure(exc)

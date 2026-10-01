@@ -2,8 +2,9 @@
 # Re-import every migrated store from JSON into PostgreSQL, then verify.
 #
 # Safe to re-run: every importer is an idempotent upsert and is read-only
-# against its JSON source. DB_STORES is not touched, so nothing reads the
-# database and JSON remains the source of truth throughout.
+# against its JSON source. Postgres is the only store since v116 Phase 4, so
+# this OVERWRITES live table rows from whatever data/*.json holds: run it only
+# to deliberately re-seed from a known-good JSON export, never as a routine.
 #
 # Order is a correctness requirement: starred_plans.plan_id is a foreign key
 # into plans (revision p2_006), and account's balance is derived from realised

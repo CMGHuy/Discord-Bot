@@ -483,7 +483,7 @@ def _json_record(row: dict) -> dict:
     # The JSON backend exposes ISO timestamps and floats.  Keep that public
     # shape at the database boundary too, rather than leaking PostgreSQL's
     # datetime/Decimal values into analytics and command consumers.
-    from swingbot.core.db.dual import normalise
+    from swingbot.core.db.codec import normalise
     return normalise(result)
 
 

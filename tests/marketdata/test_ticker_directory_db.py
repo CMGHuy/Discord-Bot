@@ -10,7 +10,6 @@ from swingbot.core.marketdata import ticker_directory as td
 @pytest.fixture
 def db_stage(tmp_path, monkeypatch, db_committed):
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(config, "DB_STORES", "ticker_directory:db")
     from swingbot.core.db.engine import reset_engine
     monkeypatch.setattr(
         config, "DATABASE_URL",

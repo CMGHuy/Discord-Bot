@@ -38,6 +38,12 @@ FORBIDDEN = [
     ("swingbot/commands/views.py", r"stages\.|starred_plans\.json", "starred_plans is a table"),
     ("swingbot/admin/watchlist_rows.py", r"stages\.", "plans is a table"),
     ("swingbot/admin/events/broker.py", r"FileWatcher|residual_paths|_CompositeWatcher|stages\.", "the admin listens to Postgres only"),
+    # global (V116-39)
+    ("swingbot/core/db/codec.py", r"from swingbot\.core\.db import stages", "no stages module"),
+    ("swingbot/config.py", r"\"DB_STORES\"", "no per-store stages"),
+    (".env.example", r"^DB_STORES=", "no per-store stages"),
+    ("scripts/ops/rollback_to.sh", r"parity_report|DB_STORES", "rollback is PITR only"),
+    ("swingbot/core/db/write_failure.py", r"stages", "every trading store is at db"),
 ]
 
 
@@ -47,3 +53,14 @@ def test_no_json_path_remains(path, pattern, why):
     hits = [f"{n}: {line.strip()}" for n, line in enumerate(text.splitlines(), 1)
             if re.search(pattern, line)]
     assert not hits, f"{path} still has a JSON path ({why}):\n" + "\n".join(hits)
+
+
+def test_no_module_imports_stages_or_dual():
+    hits = []
+    for path in list((REPO / "swingbot").rglob("*.py")) + list((REPO / "scripts").rglob("*.py")):
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        if re.search(r"core\.db import stages|core\.db\.stages|core\.db\.dual|core\.db import dual", text):
+            hits.append(path.relative_to(REPO).as_posix())
+    assert hits == [], hits
+    assert not (REPO / "swingbot/core/db/stages.py").exists()
+    assert not (REPO / "swingbot/core/db/dual.py").exists()

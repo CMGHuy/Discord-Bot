@@ -39,7 +39,7 @@ def _trades_from_repo_shape(row: dict) -> dict:
     result = _json_record(row)
     for key in ("closed_at", "entry", "stop_loss"):
         result.setdefault(key, None)
-    from swingbot.core.db.dual import normalise
+    from swingbot.core.db.codec import normalise
     return normalise(result)
 
 
@@ -61,7 +61,7 @@ def _plans_from_repo_shape(row: dict) -> dict:
     """
     import datetime as dt
 
-    from swingbot.core.db.dual import normalise
+    from swingbot.core.db.codec import normalise
 
     out = dict(row)
     created = out.get("created_at")
@@ -98,7 +98,7 @@ def _journal_repo():
 
 
 def _journal_from_repo_shape(row: dict) -> dict:
-    from swingbot.core.db.dual import normalise
+    from swingbot.core.db.codec import normalise
     return normalise(row)
 
 
@@ -121,7 +121,7 @@ def _watchlist_rows(raw: object) -> list[dict]:
 
 
 def _watchlist_from_repo_shape(row: dict) -> dict:
-    from swingbot.core.db.dual import normalise
+    from swingbot.core.db.codec import normalise
     return normalise(row)
 
 
@@ -280,30 +280,6 @@ STORES: dict[str, StoreSpec] = {
 }
 
 
-#: Stage name (a `config.DB_STORES` key) -> the parity stores it governs.
-#: `tuning` governs both tuning tables; five ops stages (flags, heartbeat,
-#: notify_queue, scan_progress, market_data_state) are ephemeral and have no
-#: parity spec, so they are absent here on purpose.
-STAGE_STORES: dict[str, tuple[str, ...]] = {
-    "watchlist": ("watchlist",), "state": ("state",),
-    "plans": ("plans",), "starred_plans": ("starred_plans",), "trades": ("trades",),
-    "account": ("account",), "journal": ("journal",),
-    "jobs": ("jobs",), "scheduled_jobs": ("scheduled_jobs",),
-    "preferences": ("preferences",), "settings_audit": ("settings_audit",),
-    "killswitch": ("killswitch",), "ticker_directory": ("ticker_directory",),
-    "tuning": ("tuning", "tuning_proposals"),
-}
-
-
-def dual_stores() -> list[str]:
-    """Parity stores whose stage is `dual` now -- the only ones where the JSON
-    file and the table are both written and so must agree. At `db` the file
-    is stale by design, so comparing it would report noise."""
-    from swingbot.core.db import stages
-    return sorted(store for stage_name, stores in STAGE_STORES.items()
-                  if stages.stage_for(stage_name) == stages.DUAL for store in stores)
-
-
 def parity(store: str, source_path: str | None = None) -> ImportReport:
     """Return a strict whole-store JSON-to-Postgres parity report.
 
@@ -322,8 +298,6 @@ def parity(store: str, source_path: str | None = None) -> ImportReport:
 
 
 def _selected(args) -> list[str]:
-    if args.dual:
-        return dual_stores()
     return sorted(STORES) if args.all else [args.store]
 
 
@@ -331,15 +305,10 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--store", choices=sorted(STORES))
     parser.add_argument("--all", action="store_true")
-    parser.add_argument("--dual", action="store_true",
-                        help="only the stores whose stage is dual right now")
     args = parser.parse_args(argv)
-    if not (args.store or args.all or args.dual):
-        parser.error("pass --store <name>, --all or --dual")
+    if not (args.store or args.all):
+        parser.error("pass --store <name> or --all")
     names = _selected(args)
-    if not names:
-        print("parity: no store is at dual -- nothing to compare (no-op)")
-        return 0
     failures = 0
     for name in names:
         report = parity(name)

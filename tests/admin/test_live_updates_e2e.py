@@ -17,7 +17,6 @@ pytestmark = pytest.mark.slow
 @pytest.fixture
 def broker(monkeypatch, db_engine, tmp_path):
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(config, "DB_STORES", "events:db")
     monkeypatch.setattr(config, "DATABASE_URL",
                         db_engine.url.render_as_string(hide_password=False))
     from swingbot.core.db.engine import reset_engine

@@ -15,11 +15,10 @@ from swingbot.core.tracking.performance import _db_record  # noqa: E402
 def load_source(path: str | None) -> list[dict]:
     """Return repo-shaped trade records.
 
-    Deliberately the same translator the live dual-write path uses
+    Deliberately the same translator the live write path uses
     (performance.py): it maps the JSON store's `id`/`horizon_key` onto the
     table's `trade_id`/`horizon`. An importer that shaped records differently
-    from the live writer would produce a database that passes import and then
-    diverges the moment dual-write starts.
+    from the live writer would produce rows the live reader shapes differently.
     """
     raw = read_json(path or os.path.join(config.DATA_DIR, "trades.json"), [])
     return [_db_record(trade) for trade in raw]

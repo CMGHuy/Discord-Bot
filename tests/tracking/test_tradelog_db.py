@@ -18,7 +18,7 @@ def test_log_trade_round_trips_through_the_table():
     trade_id = _log_one(log)
     stored = TradeRepository().get(trade_id)
     assert stored is not None and stored["ticker"] == "AAPL"
-    from swingbot.core.db.dual import diff_records
+    from tests.db_diff import diff_records
     trade = log.get_trade_by_id(trade_id)
     assert diff_records(_db_record(trade), stored) == []
 

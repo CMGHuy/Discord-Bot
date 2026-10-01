@@ -19,7 +19,6 @@ def db_url(db_engine, monkeypatch):
 
 
 def test_db_stage_crud(data_dir, monkeypatch, db_committed, db_url):
-    monkeypatch.setattr(config, "DB_STORES", "watchlist:db")
     wl.add_ticker("MSFT")
     wl.add_ticker("AAPL")
     wl.add_ticker("AAPL")
@@ -30,7 +29,6 @@ def test_db_stage_crud(data_dir, monkeypatch, db_committed, db_url):
 
 
 def test_save_replaces_whole_db_set(data_dir, monkeypatch, db_committed, db_url):
-    monkeypatch.setattr(config, "DB_STORES", "watchlist:db")
     wl.save_watchlist(["AAPL", "MSFT"])
     wl.save_watchlist(["NVDA"])
     assert wl.load_watchlist() == ["NVDA"]

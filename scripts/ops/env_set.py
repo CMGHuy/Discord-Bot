@@ -5,8 +5,8 @@ In place means the same inode. .env is a single-file bind mount; a rename
 (sed -i, most editors) leaves the running containers reading the old file
 (docs/claude/known-traps.md). Stdlib only: it runs on the VM host.
 
-    python3 scripts/ops/env_set.py DB_STORES 'flags:dual,heartbeat:dual'
-    python3 scripts/ops/env_set.py --get DB_STORES
+    python3 scripts/ops/env_set.py SCAN_INTERVAL_MINUTES 20
+    python3 scripts/ops/env_set.py --get SCAN_INTERVAL_MINUTES
 
 Then restart and verify inside the containers -- this script only edits.
 """

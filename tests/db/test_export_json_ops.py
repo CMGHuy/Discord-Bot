@@ -34,7 +34,6 @@ def test_every_ops_store_exports_and_reads_back_at_the_json_stage(store_db, tmp_
     results = export_json.run_export(names, str(tmp_path), dry_run=False, force=False)
     assert {r.name: r.status for r in results} == {name: "written" for name in names}
 
-    monkeypatch.setattr(config, "DB_STORES", "")
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
     assert runstate.is_scan_paused() is True
     assert runstate.is_trigger_requested() is False        # the stale flag was removed

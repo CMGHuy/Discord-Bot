@@ -1,16 +1,14 @@
-"""At the db stage the balance history lives in its own table, not in the
+"""The balance history lives in its own table, not in the
 account config blob, so get_daily_summary() must read it from there."""
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from swingbot import config
 from swingbot.core.planning import account
 from tests.store_seed import seed_store
 
 
-def test_daily_summary_reads_history_from_the_history_table(monkeypatch):
-    monkeypatch.setattr(config, "DB_STORES", "account:db", raising=False)
+def test_daily_summary_reads_history_from_the_history_table():
     now = datetime.now(timezone.utc)
     seed_store("account", {
         "base_balance": 10_100.0, "risk_pct": 1.0,

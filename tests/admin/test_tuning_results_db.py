@@ -14,7 +14,6 @@ from swingbot.core.db.repositories.tuning import TuningRepository
 def db_stage(tmp_path, monkeypatch, db_committed):
     from swingbot.core.db.engine import reset_engine
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(config, "DB_STORES", "tuning:db")
     monkeypatch.setattr(
         config, "DATABASE_URL",
         db_committed.engine.url.render_as_string(hide_password=False))

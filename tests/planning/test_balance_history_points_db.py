@@ -1,13 +1,11 @@
-"""At the db stage balance history comes from timestamptz/numeric columns;
+"""Balance history comes from timestamptz/numeric columns;
 get_balance_history_points() must still hand growth_path() and the scan
 kill-switch (date_str, float) pairs."""
-from swingbot import config
 from swingbot.core.planning import account
 from tests.store_seed import seed_store
 
 
-def test_history_points_are_date_string_float_pairs(monkeypatch):
-    monkeypatch.setattr(config, "DB_STORES", "account:db", raising=False)
+def test_history_points_are_date_string_float_pairs():
     seed_store("account", {
         "base_balance": 10_000.0, "risk_pct": 1.0, "balance": 15_000.0,
         "balance_history": [

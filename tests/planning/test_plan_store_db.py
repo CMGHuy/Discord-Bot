@@ -34,5 +34,5 @@ def test_update_of_an_unknown_plan_still_raises_keyerror():
 def test_plan_document_round_trips_through_the_row():
     plan = _plan()
     PlanStore().add(plan)
-    from swingbot.core.db.dual import diff_records
+    from tests.db_diff import diff_records
     assert diff_records(plan_to_dict(plan), PlanRepository().get("P1")) == []

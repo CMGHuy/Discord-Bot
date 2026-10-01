@@ -1,7 +1,9 @@
 """Split a flat record into promoted columns plus a JSONB document, and back."""
 from __future__ import annotations
 
+import datetime as dt
 import math
+from decimal import Decimal
 from typing import Any, Mapping, Sequence
 
 # Infrastructure columns are not part of a store record's public shape.  A
@@ -70,3 +72,16 @@ def merge_doc(row: Mapping[str, Any], promoted: Sequence[str]) -> dict:
     for key in RESERVED_KEYS:
         out.pop(key, None)
     return out
+
+
+def normalise(value: Any) -> Any:
+    """Return a representation-safe value without hiding semantic changes."""
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, (dt.datetime, dt.date)):
+        return value.isoformat()
+    if isinstance(value, (list, tuple)):
+        return [normalise(item) for item in value]
+    if isinstance(value, dict):
+        return {key: normalise(item) for key, item in value.items()}
+    return value

@@ -28,7 +28,7 @@ class JournalStore:
         return stamped
 
     def get(self, trade_id: str) -> dict | None:
-        from swingbot.core.db.dual import normalise
+        from swingbot.core.db.codec import normalise
         from swingbot.core.db.repositories.journal import journal_repo
         entry = journal_repo().get(trade_id)
         return None if entry is None else normalise(entry)
@@ -39,7 +39,7 @@ class JournalStore:
         """Every matching entry, newest first (by `closed_at`, falling back
         to `created_at` for an entry that somehow lacks it). All filters
         are AND-combined; omit a filter (leave it None) to not apply it."""
-        from swingbot.core.db.dual import normalise
+        from swingbot.core.db.codec import normalise
         from swingbot.core.db.repositories.journal import journal_repo
         return normalise(journal_repo().entries(
             strategy=strategy, tag=tag, outcome=outcome, since=since, has_note=has_note

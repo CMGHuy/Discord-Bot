@@ -1,9 +1,8 @@
-"""Dual-stage comparisons suppress representation noise, not real changes."""
+"""The round-trip test helper suppresses representation noise, not real changes."""
 import datetime as dt
-import logging
 from decimal import Decimal
 
-from swingbot.core.db import dual
+from tests import db_diff as dual
 
 
 def test_identical_records_differ_in_nothing():
@@ -44,27 +43,7 @@ def test_float_comparison_tolerates_round_trip_precision():
     assert dual.diff_records({"entry": 1.0}, {"entry": 1.000001}) == ["entry"]
 
 
-def test_compare_and_log_reports_differences(caplog):
-    with caplog.at_level(logging.WARNING):
-        actual = dual.compare_and_log("trades", "T1", {"entry": 1.5}, {"entry": 1.6})
-    assert actual == ["entry"]
-    assert all(text in caplog.text for text in ("trades", "T1", "entry"))
-
-
-def test_compare_and_log_is_quiet_for_a_match(caplog):
-    with caplog.at_level(logging.WARNING):
-        assert dual.compare_and_log("trades", "T1", {"a": 1}, {"a": 1}) == []
-    assert caplog.text == ""
-
-
-def test_missing_db_record_is_reported_not_raised(caplog):
-    with caplog.at_level(logging.WARNING):
-        actual = dual.compare_and_log("trades", "T1", {"a": 1}, None)
-    assert actual == [dual.MISSING]
-    assert "T1" in caplog.text
-
-
-def test_comparison_never_raises_for_an_unusual_value(caplog):
+def test_comparison_never_raises_for_an_unusual_value():
     class Weird:
         def __eq__(self, other):
             raise RuntimeError("boom")
@@ -72,6 +51,4 @@ def test_comparison_never_raises_for_an_unusual_value(caplog):
         def __hash__(self):
             return 0
 
-    with caplog.at_level(logging.WARNING):
-        actual = dual.compare_and_log("trades", "T1", {"x": Weird()}, {"x": 1})
-    assert actual == ["x"]
+    assert dual.diff_records({"x": Weird()}, {"x": 1}) == ["x"]

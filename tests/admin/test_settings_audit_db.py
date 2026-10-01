@@ -8,16 +8,15 @@ from swingbot.admin import helpers
 from swingbot.core.db.repositories.settings_audit import SettingsAuditRepository
 
 
-@pytest.fixture(params=["", "settings_audit:dual", "settings_audit:db"])
-def any_stage(request, tmp_path, monkeypatch, db_committed):
+@pytest.fixture
+def any_stage(tmp_path, monkeypatch, db_committed):
     from swingbot.core.db.engine import reset_engine
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(config, "DB_STORES", request.param)
     monkeypatch.setattr(
         config, "DATABASE_URL",
         db_committed.engine.url.render_as_string(hide_password=False))
     reset_engine()
-    yield request.param
+    yield
     reset_engine()
 
 
@@ -55,8 +54,6 @@ def test_two_identical_changes_are_two_entries(any_stage):
     assert len(helpers.read_settings_audit()) == 2
 
 
-def test_no_jsonl_at_the_db_stage(any_stage, tmp_path):
-    if any_stage != "settings_audit:db":
-        pytest.skip("file absence is only asserted at the db stage")
+def test_no_jsonl_is_written(any_stage, tmp_path):
     helpers.append_settings_audit(DIFF)
     assert not os.path.exists(os.path.join(tmp_path, "settings_audit.jsonl"))
