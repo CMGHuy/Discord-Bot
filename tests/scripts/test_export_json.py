@@ -101,6 +101,10 @@ def _import_store(name, source_path):
     for record in module.load_source(source_path):
         module.write_one(repo, record)
 
+#: "all" now also covers the Part 3 stores, which need real Postgres (see
+#: tests/db/test_export_json_part3.py); this fake_db file exercises Parts 1-2.
+PART12 = ["trades", "plans", "journal", "state", "watchlist", "starred_plans", "account"]
+
 
 @pytest.fixture
 def imported(fake_db, tmp_path):
@@ -142,7 +146,7 @@ def test_export_account_is_config_plus_balance_history(imported, tmp_path):
 
 def test_shapes_match_the_on_disk_json_types(imported, tmp_path):
     out = tmp_path / "out"
-    export_json.run_export(["all"], str(out), dry_run=False, force=False)
+    export_json.run_export(PART12, str(out), dry_run=False, force=False)
     assert isinstance(_read(out / "trades.json"), list)
     assert isinstance(_read(out / "plans.json"), list)
     assert isinstance(_read(out / "journal.json"), list)
@@ -154,7 +158,7 @@ def test_shapes_match_the_on_disk_json_types(imported, tmp_path):
 
 def test_rows_are_sorted_because_the_db_returns_no_order(imported, tmp_path):
     out = tmp_path / "out"
-    export_json.run_export(["all"], str(out), dry_run=False, force=False)
+    export_json.run_export(PART12, str(out), dry_run=False, force=False)
     assert [t["id"] for t in _read(out / "trades.json")] == ["T1", "T2", "T3"]
     assert [p["plan_id"] for p in _read(out / "plans.json")] == ["P1", "P2"]
     assert [j["trade_id"] for j in _read(out / "journal.json")] == ["T1", "T2"]
