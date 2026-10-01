@@ -78,6 +78,36 @@ try {
 
     $wt = @(git worktree list 2>$null)
     if ($wt.Count -gt 1) { Emit "WORKTREES: $($wt.Count - 1) extra (excluded from search by .ignore; never edit from here)" }
+
+    # --- off-VM backup: age of the last good pull (spec v120 s2) ---
+    # Own try/catch: a bad file prints the warning and never throws.
+    try {
+        $bdir = if ($env:SWINGBOT_BACKUPS_DIR) { $env:SWINGBOT_BACKUPS_DIR } else { 'backups' }
+        $goodFile = Join-Path $bdir 'LAST_GOOD_PULL'
+        $days = $null
+        if (Test-Path -LiteralPath $goodFile) {
+            $first = ((Get-Content -LiteralPath $goodFile -TotalCount 1) -split '\s+')[0]
+            $when = [DateTimeOffset]::Parse($first, [Globalization.CultureInfo]::InvariantCulture,
+                                            [Globalization.DateTimeStyles]::AssumeUniversal)
+            $days = [int][Math]::Max(0, [Math]::Floor(([DateTimeOffset]::UtcNow - $when).TotalDays))
+        }
+        if ($null -eq $days) {
+            Emit "BACKUP   : WARNING no good pull yet -- run /backup-pull"
+        }
+        elseif ($days -gt 7) {
+            Emit "BACKUP   : WARNING no good pull for ${days}d -- run /backup-pull"
+        }
+        else {
+            $stable = Get-ChildItem -LiteralPath (Join-Path $bdir 'stable') -Directory -ErrorAction SilentlyContinue |
+                      Where-Object { $_.Name -notlike '*.partial' } |
+                      Sort-Object Name | Select-Object -Last 1
+            $sname = if ($stable) { $stable.Name } else { 'none' }
+            Emit "BACKUP   : last good pull ${days}d ago $([char]0xB7) newest stable $sname"
+        }
+    }
+    catch {
+        Emit "BACKUP   : WARNING no good pull yet (unreadable LAST_GOOD_PULL) -- run /backup-pull"
+    }
 }
 catch {
     Emit "(session-cursor hook error: $($_.Exception.Message))"
