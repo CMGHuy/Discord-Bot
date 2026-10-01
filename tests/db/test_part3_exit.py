@@ -30,12 +30,16 @@ def test_every_channel_has_at_least_one_table_or_a_stated_reason():
     assert not unraised, f"channels nothing raises: {sorted(unraised)}"
 
 
-def test_the_committed_env_example_promotes_no_store():
-    """Exit criterion 7: DB_STORES is empty in every committed file. A
-    promotion is a per-deployment setting, never a committed default."""
+def test_the_committed_env_example_mirrors_the_all_db_production_value():
+    """Exit criterion 7 used to say DB_STORES is empty in every committed file.
+    Since the 2026-10-01 cutover (v116) production runs every store at db and
+    .env.example mirrors it: no store may be left at json or dual, and `events`
+    is on. A partial list would silently put the missing stores back on json."""
     text = (REPO / ".env.example").read_text(encoding="utf-8")
     lines = re.findall(r"^DB_STORES=(.*)$", text, flags=re.MULTILINE)
-    assert lines, ".env.example has no DB_STORES= line"
-    assert all(value.strip() == "" for value in lines), (
-        f".env.example promotes a store: DB_STORES={lines}"
+    assert len(lines) == 1, ".env.example needs exactly one DB_STORES= line"
+    pairs = [item.split(":") for item in lines[0].strip().split(",") if item]
+    assert pairs and all(stage == "db" for _, stage in pairs), (
+        f".env.example leaves a store off db: DB_STORES={lines[0]}"
     )
+    assert "events" in {name for name, _ in pairs}
