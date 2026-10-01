@@ -7,7 +7,12 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
-ID_RE = re.compile(r"^p[1-6]_\d{3}$")
+ID_RE = re.compile(r"^(p[1-6]|v\d+)_\d{3}$")
+
+
+def test_plan_prefixed_ids_are_accepted_and_malformed_ones_are_not():
+    assert ID_RE.match("v116_001") and ID_RE.match("p3_007")
+    assert not ID_RE.match("v116_1") and not ID_RE.match("x1_001") and not ID_RE.match("v_001")
 
 
 @pytest.fixture(scope="module")

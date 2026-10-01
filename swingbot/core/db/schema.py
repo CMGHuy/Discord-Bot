@@ -161,3 +161,13 @@ tuning_proposals = register(sa.Table("tuning_proposals", METADATA,
     sa.Column("id", sa.BigInteger, primary_key=True), sa.Column("filename", sa.Text, nullable=False, unique=True),
     sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False), *standard_columns(),
     sa.Index("tuning_proposals_created_idx", "created_at")), ("filename", "created_at"))
+
+
+# v116 Phase 1: the last two files that drove live updates. Ephemeral state --
+# nothing is imported, and at the db stage both start empty.
+scan_progress = register(sa.Table("scan_progress", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("key", sa.Text, nullable=False, unique=True), *standard_columns()), ("key",))
+market_data_state = register(sa.Table("market_data_state", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("key", sa.Text, nullable=False, unique=True), *standard_columns()), ("key",))

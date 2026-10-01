@@ -115,3 +115,17 @@ def db_committed(db_engine):
             with connection.begin():
                 connection.execute(sa.text(f"TRUNCATE {names} RESTART IDENTITY CASCADE"))
         connection.close()
+
+
+@pytest.fixture
+def store_db(db_committed, db_engine, monkeypatch):
+    """Stage-aware code under test reaches the test database through the
+    app's own engine (config.DATABASE_URL); every table is truncated after
+    the test by db_committed. Yields the committing connection for asserts."""
+    from swingbot import config
+    from swingbot.core.db.engine import reset_engine
+    monkeypatch.setattr(config, "DATABASE_URL",
+                        db_engine.url.render_as_string(hide_password=False))
+    reset_engine()
+    yield db_committed
+    reset_engine()

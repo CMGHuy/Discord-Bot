@@ -28,5 +28,9 @@ TABLE_CHANNELS: dict[str, str] = {
     "tuning_proposals": "jobs",
     "ticker_directory": "watchlist",
     "settings_audit": "settings",
+    # v116 Phase 1. market_data_state drove no event as a file; its trigger
+    # raises `watchlist`, the concern whose rows show data freshness.
+    "scan_progress": "scan",
+    "market_data_state": "watchlist",
     # `analytics` and Part 5's tables are added by that part.
 }
