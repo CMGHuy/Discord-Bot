@@ -8,7 +8,54 @@
 **Spec:** `docs/superpowers/specs/2026-10-01-v120-stable-snapshots-offsite-pull-design.md`
 **Bump:** none
 **Edge:** none (integrity)
-**Progress:** planning complete; implementation not started.
+**Progress:** V120-1 to V120-7 implemented and reviewed on branch `2026-10-01-v120-stable-snapshots-offsite-pull` (17 commits, rebased onto `origin/main` 33580cbc on 2026-10-01 night; not pushed, not merged). V120-10's full-suite gate has not passed yet (see "Status as built"). V120-8 and V120-9 are live production tasks and wait for the partner.
+
+## Status as built (2026-10-01 night) -- read before V120-8, V120-9 and V120-10
+
+**Branch.** `2026-10-01-v120-stable-snapshots-offsite-pull`, 17 commits replayed with `git rebase --onto origin/main 8490329c`
+(old pre-rebase tip `537623e0`), 0 behind and 17 ahead of `origin/main`. Every v120 test file passes on it. Reviews: one task review
+per task, a whole-branch review on the most capable model, and two targeted re-reviews. Nothing is merged, pushed or deployed.
+
+**Deviations from the task text below** (the text is the original argument; the code is the truth; rulings are in the SDD ledger
+`.superpowers/sdd/2026-10-01-v120-stable-snapshots-offsite-pull/progress.md` while that workspace exists):
+- Row counts are derived from the dump by `backup_manifest.py count-dump` (COPY blocks), not a live `count(*)`. Keys are schema-qualified
+  (`public.trades`, quotes stripped). Other new subcommands: `report-market`; `build` also takes `--pg-version`.
+- `market_data.tar` is KEPT in each pull folder (the manifest lists it, so a retained pull must still verify); it goes with the folder on prune.
+- `prune --keep` below 1 is rejected. Incremental market_data selection uses ctime (`-newerct`) and reports files absent locally or with
+  a different size, report only.
+- `pull_backups.sh` keeps `backups/` in the MAIN tree (`git rev-parse --git-common-dir`), `SWINGBOT_BACKUPS_DIR` overrides it; any abort
+  after a pull folder exists renames it `<stamp>.FAILED` and writes `LAST_PULL ... FAIL`; local `tar` uses `--force-local` (a drive-letter
+  path is read as `host:file` otherwise); a stale VM outbox is swept after two hours.
+- VM-side git runs as `runuser -u deploy -- git`; `stable_snapshot.sh` and `restore_stable.sh` refuse an empty git sha before any mutation;
+  `restore_stable.sh` runs from `main()`, refuses a dirty tree, recreates db on the pinned image before `restore_db.sh`; the restic
+  snapshot is taken under `flock logs/restic.lock`, and a failed run forgets its own restic snapshot.
+- The BACKUP hook line uses ` | ` (ASCII), not a middle dot, and warns when the pull folder named in `LAST_GOOD_PULL` is missing.
+
+**Spec statements now stale -- amend the spec at close-out** (`docs/superpowers/specs/2026-10-01-v120-stable-snapshots-offsite-pull-design.md`):
+(1) section 3 row_counts and the subcommand/flag lists; (2) section 2 pull folder also holds `market_data.tar`; (3) section 2 overdue line:
+warns from 8 whole days, no-pull wording, ASCII separator; (4) section 1 order: the restic snapshot is taken before the manifest, the folder is
+built as `<name>.partial` and renamed last, a failed run forgets its restic snapshot; (5) section 1 restore: no flag prints the plan and exits 2,
+dirty-tree refusal, checkpoint of now, db recreated on the pinned image, logged to `logs/rollback.log`; (6) manifest holds image
+REFERENCES (immutable `sha-` tags), not digests (also in the stable-snapshot skill's old wording); (7) section 2 the outbox trap is client-side
+only; (8) failure bookkeeping and the extra `stream-stable` mode; (9) the drill compares schema-qualified keys; (10) `backups/` lives in the main tree.
+
+**Deferred on purpose:** atomic claim of the pull stamp (two sessions pulling in the same UTC minute); `flock -w` plus a locked cleanup forget in
+`stable_snapshot.sh`; first-pull progress output; a rotated DB password inside a pinned env; `DROP DATABASE` in `restore_db.sh` blocked by a cron
+connection; small leftovers (hook on git older than 2.31 in the main tree, one heuristic test regex, an unguarded `mkdir` in the trap).
+
+**Production on 2026-10-01 21:43 UTC (read-only inspection, re-check before every live step -- it moves):** `33580cbc` "docs(v116): close out",
+bot image `sha-33580cbc3368`, two deploys 7 minutes apart that evening; containers healthy; checkout clean; bot 2.0.0 (stores are Postgres-only),
+Postgres 18.6, 2 open trades. VM tools: python3 3.14.4, runuser, flock, restic 0.18.1, GNU tar 1.35, Docker Compose v5. `runuser -u deploy -- git`
+and root git both work; root can `docker manifest inspect` the deployed image. `/` is 65% used with 13 GB free; `market_data` is 183 MB in 520 files
+with no Windows-unsafe names; `logs/` is root-owned, so v120 scripts must run as root (the ssh wrapper is root). No v120 script is on the VM
+and the deployed `restic_hourly.sh` has no `--keep-tag` yet. Crons: `backup_db.sh` 03:00, `pitr_backup.sh` 02:30 (no `logs/pitr_backup.log` yet: that
+cron was installed after today's 02:30, so its first run is 2026-10-02 02:30 UTC), `restic_hourly.sh` at :07, `pitr_verify.sh` monthly. The nightly-dump
+retention in `DEPLOY_HETZNER.md` already says 90 days (corrected upstream). Any v120 script piped to `ssh ... "bash -s"` must give every
+`docker compose exec` a `</dev/null`, or the exec swallows the rest of the script (the shipped stage script does).
+
+**Test database.** `origin/main` now carries `be3ec50f` (the schema-free fixture gets its own database) and the autouse store-truncation fixture.
+Three full runs on 2026-10-01 each failed on a different unrelated shared-database or timing test, `main` included; the follow-up branch
+`2026-10-01-db-test-isolation-followup` makes database names unique per checkout so concurrent sessions stop colliding.
 
 ## Global constraints
 
@@ -308,23 +355,23 @@ Frontmatter like `deploy`: `name`, a description of at least 40 characters endin
 
 ### Task V120-8: Deploy, first pull, local restore drill
 
-**Precondition:** V120-1…7 merged to `main` and deployed (the scripts reach the VM only through `deploy.sh`; follow `/deploy`). Invoke `mirror-prod`.
+**Precondition:** V120-10's full-suite gate has passed on the rebased branch; the partner has approved the merge to `main` and the push (outward actions, never assumed); V120-1…7 are on `origin/main` and deployed (the scripts reach the VM only through the normal deploy; follow `/deploy`). Invoke `mirror-prod`. Immediately before the first live step re-read the `backups/deploys.jsonl` tail and `runuser -u deploy -- git -C /opt/swing-bot rev-parse --short HEAD` on the VM: production moved twice in 7 minutes on 2026-10-01. Confirm `python3 scripts/ops/backup_manifest.py --help` runs on the VM's python3 (3.14.4 today).
 
-- [ ] **Step 1:** On the VM confirm the new scripts are present and the deployed `restic_hourly.sh` carries `--keep-tag stable` (`grep`).
-- [ ] **Step 2:** `bash scripts/ops/pull_backups.sh` → PASS (first pull: full `market_data/`). Record bytes and duration.
-- [ ] **Step 3: Restore drill.** `docker run -d --name v120-drill -e POSTGRES_PASSWORD=drill -e POSTGRES_USER=swingbot -e POSTGRES_DB=swingbot -p 127.0.0.1:55434:5432 postgres:<major of pg_server_version>`; wait for ready; `gunzip -c backups/pulls/<stamp>/db.sql.gz | docker exec -i v120-drill psql -U swingbot -d swingbot -v ON_ERROR_STOP=1`; exact `count(*)` per table equals the manifest's `row_counts` for every table. `docker rm -f v120-drill` (no named volume is created; confirm `docker volume ls` shows no leftover anonymous volume, prune it if so).
+- [ ] **Step 1:** On the VM confirm the new scripts are present and the deployed `restic_hourly.sh` carries `--keep-tag stable` (`grep -c keep-tag` must be 1 or more; it was 0 before the deploy).
+- [ ] **Step 2:** `bash scripts/ops/pull_backups.sh` from the MAIN tree → PASS (first pull: full `market_data/`, about 183 MB in 520 files plus a dump of about 0.5 MB; the VM has 13 GB free; the script prints no progress, so run it in the background and expect minutes). Record bytes and duration. No `FAIL`/`.FAILED` folder may result.
+- [ ] **Step 3: Restore drill.** `docker run -d --name v120-drill -e POSTGRES_PASSWORD=drill -e POSTGRES_USER=swingbot -e POSTGRES_DB=swingbot -p 127.0.0.1:55434:5432 postgres:<major>`; the major comes from the manifest's `pg_server_version`, a full string such as `18.6 (Debian ...)` (production is Postgres 18, so use `postgres:18`, not 15); wait for ready; `gunzip -c backups/pulls/<stamp>/db.sql.gz | docker exec -i v120-drill psql -U swingbot -d swingbot -v ON_ERROR_STOP=1`; exact `count(*)` per table equals the manifest's `row_counts` for every key. The keys are schema-qualified (`public.trades`, quotes stripped): split at the first dot and quote both parts (`SELECT count(*) FROM "public"."Odd Name"`); never compare against `pg_stat_user_tables.n_live_tup`, which is approximate. `docker rm -f v120-drill` (no named volume is created; confirm `docker volume ls` shows no leftover anonymous volume, prune it if so).
 - [ ] **Step 4:** Run `bash scripts/ops/pull_backups.sh` again → PASS with a small incremental `market_data.tar`.
-- [ ] **Step 5:** Append the "Off-VM copy" section to `docs/deploy/DB_RESTORE.md`: commands, the per-table count table (pull vs restored), first/second pull bytes, VERDICT. Commit `docs(v120): off-VM pull and local restore drill`.
+- [ ] **Step 5:** Append the "Off-VM copy" section to `docs/deploy/DB_RESTORE.md` (after its "Point-in-time recovery (v116)" section): commands, the per-table count table (pull vs restored), first/second pull bytes, VERDICT. Commit `docs(v120): off-VM pull and local restore drill`.
 
 ### Task V120-9: First stable snapshot and dry-run restore; docs
 
-- [ ] **Step 1:** `/stable-snapshot` with the note "first v120 stable point" (ask the partner to type it — Tier 2 skills are slash-only). Expect a new tag, `backups/stable/<name>/` on the VM and locally, both verifying.
-- [ ] **Step 2:** On the VM: `bash scripts/ops/restore_stable.sh <name> --dry-run` → prints the dump, restic id, both images, git SHA; changes nothing (`docker compose ps` unchanged). Also run `restic snapshots --tag stable` and confirm the id.
-- [ ] **Step 3:** Docs: `DEPLOY_HETZNER.md` — the nightly-dump retention sentence says 90 days (matches `backup_db.sh`), plus an "Off-VM copy and stable snapshots" paragraph pointing at `DB_RESTORE.md` and the two skills; v116 spec Honest limits — the "Losing the VM" bullet now reads that losing the VM loses what changed since the last good `/backup-pull` and all point-in-time history; `DB_RESTORE.md` — add the stable snapshot result (name, tag, manifest summary, dry-run output excerpt).
-- [ ] **Step 4: Commit** `docs(v120): first stable snapshot, dry-run restore, retention corrected`
+- [ ] **Step 1:** Re-check the production head (as in V120-8), then `/stable-snapshot` with the note "first v120 stable point" (ask the partner to type it — Tier 2 skills are slash-only). Start between minute :10 and :55: the hourly restic job holds `logs/restic.lock` at :07 and `stable_snapshot.sh` waits on that lock without a timeout. Expect a new tag, `backups/stable/<name>/` on the VM and in the main tree's `backups/`, both verifying.
+- [ ] **Step 2:** On the VM: `bash scripts/ops/restore_stable.sh <name> --dry-run` → prints the dump, restic id, both images, git SHA; changes nothing (`docker compose ps` unchanged). Also run `restic snapshots --tag stable` and confirm the id. Registry access as root was verified on 2026-10-01 (`docker manifest inspect` rc 0). Do NOT run a real `--i-mean-it` restore as part of this task: its open questions (a rotated DB password in the pinned env, `DROP DATABASE` blocked by a cron connection) are not exercised by a dry run.
+- [ ] **Step 3:** Docs: `DEPLOY_HETZNER.md` — the nightly-dump retention sentence already says 90 days (corrected upstream; leave it), so only add an "Off-VM copy and stable snapshots" paragraph pointing at `DB_RESTORE.md` and the two skills; v116 spec Honest limits — the "Losing the VM" bullet now reads that losing the VM loses what changed since the last good `/backup-pull` and all point-in-time history; `DB_RESTORE.md` — add the stable snapshot result (name, tag, manifest summary, dry-run output excerpt).
+- [ ] **Step 4:** Amend the ten stale spec statements listed in "Status as built" in the same close-out. **Commit** `docs(v120): first stable snapshot, dry-run restore, spec amended`
 
 ### Task V120-10: Full-suite verification
 
-- [ ] **Step 1:** Dispatch `test-runner` for `python scripts/dev/testrun.py full`. Green means `0 failed` and `0 xfailed`.
+- [ ] **Step 1:** Dispatch `test-runner` for `python scripts/dev/testrun.py full` on the rebased branch. Green means `0 failed` and `0 xfailed`. Run it while no other session's suite is running against the shared test database, or give it a private base database through `TEST_DATABASE_URL=postgresql+psycopg://swingbot:swingbot@127.0.0.1:55432/<private name>` (create that database first; the conftest appends `_gwN`). If the only failure is `tests/admin/test_api_v1_watchlist.py` (a 1.0 s timing assertion that failed on `main` under load with `can't start new thread`), report it with the measured number and do not loosen it.
 - [ ] **Step 2:** `python -m radon cc -s -n C scripts/ops/backup_manifest.py` → no output.
 - [ ] **Step 3:** Update **Progress:** to "implemented"; close out per `document-lifecycle.md` (`/close-out`).
