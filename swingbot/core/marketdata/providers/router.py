@@ -129,8 +129,14 @@ def _active_provider():
     return _provider if _breaker.allows() else None
 
 
+def _label(exc) -> str:
+    """Log name of a failure: a deadline expiry reads as a timeout, a
+    provider-raised error keeps its own type."""
+    return "TimeoutError(deadline)" if isinstance(exc, DeadlineExpired) else type(exc).__name__
+
+
 def _reason(exc) -> str:
-    return f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+    return f"{_label(exc)}: {exc}" if str(exc) else _label(exc)
 
 
 def _wait(future, deadline: float):
@@ -231,7 +237,7 @@ def _account(method: str, batches: list, outcomes: list) -> None:
 def _warn_miss_summary(method: str, batches: list, failed: list) -> None:
     if not _warn_gate.ready():
         return
-    kinds = Counter(type(exc).__name__ for _, exc in failed)
+    kinds = Counter(_label(exc) for _, exc in failed)
     log.warning("Alpaca %s: %d/%d batch(es) missed (%s); %d symbol(s) fall back to yfinance",
                 method, len(failed), len(batches),
                 ", ".join(f"{k} x{n}" for k, n in kinds.items()),
