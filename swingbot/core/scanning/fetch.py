@@ -19,6 +19,7 @@ from swingbot.core.marketdata.data import (
     get_current_price_batch, get_daily_data, get_daily_data_batch,
 )
 from swingbot.core.marketdata import data_refresh, data_store, spot_metals, universe
+from swingbot.core.marketdata.history_splice import splice_cached_history
 
 from . import runstate
 
@@ -226,6 +227,23 @@ def _fetch_one_ticker(ticker: str) -> tuple:
         return ticker, None
 
 
+def _with_cached_depth(ticker: str, live):
+    """A cold ticker's live frame is shallow (Alpaca reaches back to 2016, a
+    2y period to 2y) while its STALE cache file still holds the full archive.
+    Splice the cache's older bars under the live frame (live wins on overlap,
+    nothing after the live frame's first bar is taken from the cache, the
+    partial today bar stays last) so levels/long-horizon strategies see the
+    same depth as the cache-first path. Any cache problem -> the live frame."""
+    if live is None:
+        return None
+    try:
+        cached = data_store.load_normalized(ticker, "daily")
+        return splice_cached_history(live, cached, ticker)
+    except Exception as exc:
+        log.debug("Crawl: cache splice skipped for %s (%s)", ticker, exc)
+        return live
+
+
 def _fetch_cold_frames(tickers: list, progress: "ScanProgress" = None) -> list:
     """v55: fetch the cache misses via batched, chunked, bounded calls.
 
@@ -280,7 +298,7 @@ def _fetch_cold_frames(tickers: list, progress: "ScanProgress" = None) -> list:
             label=f"Crawl: cold-fetch fallback for {ticker}") or (ticker, None)
         resolved[ticker] = df
 
-    return [(t, resolved.get(t)) for t in tickers]
+    return [(t, _with_cached_depth(t, resolved.get(t))) for t in tickers]
 
 
 def _spot_daily_worker(ticker: str, period: str) -> tuple:
@@ -547,7 +565,7 @@ def _daily_frame_for(symbol: str):
     if df is not None:
         return df
     try:
-        return get_daily_data(symbol, period=config.DEFAULT_HISTORY_PERIOD)
+        return _with_cached_depth(symbol, get_daily_data(symbol, period=config.DEFAULT_HISTORY_PERIOD))
     except Exception as exc:
         log.warning("Could not resolve daily frame for %s: %s", symbol, exc, exc_info=True)
         return None
