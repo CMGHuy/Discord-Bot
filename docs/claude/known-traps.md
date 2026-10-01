@@ -347,3 +347,23 @@ the 09-22 scan. Turn it on to scan thin-contract futures again. The v109 spot
 metals (`spot_metals.SPOT_PAIRS`: XAUUSD, XAGUSD) stay exempt either way
 (partner, 2026-09-30). They carry their future's contract volume, so XAGUSD
 scans while SI=F, on the same bars, is skipped. That is by design.
+
+## The market_data cache never self-heals (v116 follow-up)
+
+`data_refresh._merge_save` is a UNION that never overwrites bars already on disk, and a warm
+refresh fetches only bars newer than the last cached one; `refresh_symbol(force=True)` merges
+too. So a single bad full fetch is permanent: around 2026-08-05 16 daily and 5 hourly files
+(PLTR, SNOW, SOFI, SBUX, TSLA, ... AVGO, AXON, BA, BKNG, CRM) ended up with another
+instrument's older history (SOFI started in 2000, TSLA in 1992, SNOW and PLTR shared one
+row count and start date), with correct recent bars appended on top for two months. The
+signs: the scan found almost nothing for those tickers, and `history_splice` refused to
+splice them ("overlap closes disagree").
+
+- **Audit and repair with `scripts/ops/market_cache_repair.py`** (`plan` is read-only;
+  `apply` quarantines each bad file under `market_data/_quarantine/<stamp>/` and refetches it
+  cold, only when the fresh frame agrees with Alpaca). Re-run `plan` after any suspicious
+  refresh or provider change; it should print only `OK`.
+- **Never "fix" one by deleting rows or forcing a refresh**: a forced refresh merges, so the
+  wrong older bars survive. Move the file away first, then refetch.
+- Weekly/monthly files differ from a fresh yfinance download by a small uniform offset
+  (adjustment basis); that is not this problem and is deliberately not repaired.

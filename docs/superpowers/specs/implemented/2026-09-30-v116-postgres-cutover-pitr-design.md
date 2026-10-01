@@ -364,6 +364,9 @@ but **not shipped**: the JSON paths and `DB_STORES` still exist on `main`, so ro
 | 16:23 | trading | dual -> db, `events:db` | OVERRIDE (soak ~60 min, 12 scans, 0 errors); checkpoint `16:23:23Z` |
 | 16:56 | settings | `SCAN_CACHE_MAX_AGE_HOURS` 6 -> 13 | mitigation for a theory that did not hold (live Alpaca daily frames are 502 rows) |
 | 17:15 | settings | `SCAN_CACHE_MAX_AGE_HOURS` back to 6; `MIN_STOP_DISTANCE_PCT` 2.0 -> 1.75 | partner decision; documented in `.env.example` (shipped default stays 2.0) |
+| 18:23 | settings | `SCAN_WORKERS` 4 -> 1 in the admin earlier, then 4 (partner request), then back to 1 (measured: median scan 108 s at 4 workers vs 92 s at 1) | net unchanged: 1 is the schema default (v56) |
+| 20:30 | market_data | cache repair: 16 daily + 5 hourly files replaced after quarantine | `scripts/ops/market_cache_repair.py`; old files in `market_data/_quarantine/20261001-203019/`; re-audit 160/160 OK |
+| 21:32 | all | Phase 4 deployed (`a0da07a7`, `bot 2.0.0`) | CI green; 0 database error lines; new trades issued at `db` afterwards (860 trades / 515 plans) |
 
 Live `DB_STORES` after 16:23: `plans, starred_plans, trades, account, journal, watchlist, state,
 ticker_directory, preferences, settings_audit, tuning, flags, heartbeat, jobs, scheduled_jobs, killswitch,
