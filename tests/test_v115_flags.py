@@ -1,4 +1,4 @@
-"""v115: the two issuance flags and the 2.0 stop floor, in the schema and in .env.example."""
+"""v115: the two issuance flags and the stop floor (2.0 at v115, 1.75 since 2026-10-01), in the schema and in .env.example."""
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -28,13 +28,14 @@ def test_liquidity_flag_is_a_default_off_checkbox_outside_the_search():
     assert config._cast(f, f.default) is False
 
 
-def test_stop_floor_code_default_is_two():
-    assert _field("MIN_STOP_DISTANCE_PCT").default == "2.0"
+def test_stop_floor_code_default_is_1_75():
+    # 2.0 at v115; the partner moved it to 1.75 on 2026-10-01 and made that the code default.
+    assert _field("MIN_STOP_DISTANCE_PCT").default == "1.75"
 
 
 def test_env_example_ships_the_v115_values():
     values = dotenv_values(ENV_EXAMPLE)
-    # .env.example mirrors production (1.75 since 2026-10-01); the schema default stays 2.0.
+    # .env.example and the schema default both say 1.75 since 2026-10-01.
     assert values.get("MIN_STOP_DISTANCE_PCT") == "1.75"
     assert values.get("CLAMP_STOP_TO_HARD_CAP") == "true"
     assert values.get("LIQUIDITY_EXEMPT_NON_EQUITY") == "false"

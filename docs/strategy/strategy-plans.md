@@ -38,7 +38,7 @@ fraction of risk.
 
 ## Minimum stop distance: hard filter, not just a warning
 
-A scenario is dropped entirely (`MIN_STOP_DISTANCE_PCT`, default **2%**)
+A scenario is dropped entirely (`MIN_STOP_DISTANCE_PCT`, default **1.75%**)
 if its stop sits closer than that to the entry — too exposed to
 ordinary daily noise to be worth showing at all, regardless of how good
 the target side looks. This is separate from, and on top of, the softer

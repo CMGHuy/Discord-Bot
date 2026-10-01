@@ -152,7 +152,7 @@ FIELDS: list[Field] = [
           help="Hard filter, enforced exactly as set: a scenario is dropped entirely (not shown, not scored) "
                "unless its target is at least this far from today's price. No exceptions for a close miss."),
     Field("MIN_STOP_DISTANCE_PCT", "MIN_STOP_DISTANCE_PCT", "Trade Filters & Risk", "Min stop distance %",
-          type="float", default="2.0", min=0, step=0.5,
+          type="float", default="1.75", min=0, step=0.25,
           help="Hard filter, enforced exactly as set: dropped entirely if the stop sits closer than this -- "
                "too exposed to ordinary daily noise. No exceptions for a close miss."),
     Field("MAX_STOP_LOSS_PCT", "MAX_STOP_LOSS_PCT", "Trade Filters & Risk", "Max stop-loss %",
