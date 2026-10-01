@@ -85,3 +85,10 @@ def test_symbols_per_request_fits_one_page():
         n = ap.symbols_per_request(period, now)
         rows = (now - ap._start_for(period, now)).days * 252 // 365 + 10
         assert n >= 1 and (n * rows <= ap.ROWS_PER_PAGE or n == 1)
+
+
+def test_max_period_requests_from_the_2016_floor_in_one_page_of_few_symbols():
+    c = FakeClient(bars=_barset(["AAPL"]))
+    _prov(c).daily_bars(["AAPL"], "max")
+    assert c.requests[0].start == ap.HISTORY_FLOOR.replace(tzinfo=None)
+    assert ap.symbols_per_request("max", NOW) == 3     # ~2.7k rows/symbol under the 10k page

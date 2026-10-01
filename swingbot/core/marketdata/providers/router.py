@@ -15,13 +15,16 @@ from swingbot import config
 from swingbot.core.infra.logsetup import with_current_context
 from swingbot.core.marketdata import spot_metals
 from swingbot.core.marketdata.providers.alpaca_provider import (
-    AlpacaAuthError, AlpacaMiss, AlpacaProvider, symbols_per_request)
+    AlpacaAuthError, AlpacaMiss, AlpacaProvider, _PERIOD_DAYS, symbols_per_request)
 from swingbot.core.marketdata.providers.base import (
     SOURCE_ALPACA, SOURCE_FALLBACK, SOURCE_SPOT, SOURCE_YF, is_alpaca_eligible)
 
 log = logging.getLogger(__name__)
 _provider_factory = AlpacaProvider
-_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="alpaca")
+DEEP_PERIOD = "max"          # Alpaca's deepest daily window (HISTORY_FLOOR)
+_DEEP_FROM_DAYS = 731        # a request for >= 2y is deepened
+_POOL_WORKERS = 4
+_pool = ThreadPoolExecutor(max_workers=_POOL_WORKERS, thread_name_prefix="alpaca")
 _lock = threading.Lock()
 
 
@@ -122,7 +125,10 @@ def _attempt_many(method: str, batches: list, *args) -> list:
     prov = _active_provider()
     if prov is None:
         return [None] * len(batches)
-    deadline = time.monotonic() + float(config.ALPACA_TIMEOUT_SECONDS)
+    # The pool runs _POOL_WORKERS calls at once; a deep (many-batch) request
+    # needs one timeout per serial round, or its tail batches would be dropped.
+    rounds = max(1, -(-len(batches) // _POOL_WORKERS))
+    deadline = time.monotonic() + float(config.ALPACA_TIMEOUT_SECONDS) * rounds
     futures = [_pool.submit(with_current_context(getattr(prov, method)), b, *args) if _bucket.take() else None
                for b in batches]
     return [_collect(f, method, deadline) if f is not None else None for f in futures]
@@ -200,13 +206,22 @@ def _spot_prices(spot) -> dict:
     return out
 
 
+def alpaca_daily_period(period: str) -> str:
+    """The window Alpaca is asked for. A caller wanting >= 2y of daily bars
+    gets Alpaca's deepest ("max" = its 2016 floor, ~2.7k rows) -- the cache-first
+    path already serves decades, and a 2y live frame starves the long-horizon
+    levels. yfinance keeps the caller's own period."""
+    return DEEP_PERIOD if _PERIOD_DAYS.get(period, 10**9) >= _DEEP_FROM_DAYS else period
+
+
 def daily_bars(tickers, period, yf_fetch):
     spot, tickers = spot_metals.split_spot(tickers)
     wanted, rest = _split(tickers)
-    n = symbols_per_request(period)
+    alpaca_period = alpaca_daily_period(period)
+    n = symbols_per_request(alpaca_period)
     batches = [wanted[i:i + n] for i in range(0, len(wanted), n)]
     got = {}
-    for part in _attempt_many("daily_bars", batches, period):
+    for part in _attempt_many("daily_bars", batches, alpaca_period):
         got.update(part or {})
     misses = [t for t in wanted if t not in got]
     _log_fallback("daily_bars", misses)
