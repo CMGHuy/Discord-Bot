@@ -140,6 +140,11 @@ cleanup_outbox() {
   fi
   if [ "$PULL_STARTED" = 1 ] && [ "$PULL_OK" != 1 ] && [ -d "$B/pulls/$STAMP" ]; then
     mark_pull_failed "status $rc" || echo "pull_backups: WARNING could not mark $B/pulls/$STAMP failed" >&2
+  elif [ "$PULL_STARTED" = 1 ] && [ "$PULL_OK" != 1 ]; then
+    # Failed before any local folder existed (VM unreachable, stage failed): still say so.
+    mkdir -p "$B"
+    echo "$(iso_now) FAIL nothing-pulled" > "$B/LAST_PULL"
+    echo "pull_backups: FAIL status $rc (nothing pulled)" >&2
   fi
   exit "$rc"
 }
@@ -216,8 +221,9 @@ pull_normal() {
     exit 1
   fi
 
-  added="$(tar tf "$pull_dir/market_data.tar" | wc -l | tr -d ' ')"
-  tar xf "$pull_dir/market_data.tar" -C "$B/market_data"
+  # --force-local: an absolute drive path (E:/...) would be read as host:file.
+  added="$(tar --force-local -tf "$pull_dir/market_data.tar" | wc -l | tr -d ' ')"
+  tar --force-local -xf "$pull_dir/market_data.tar" -C "$B/market_data"
   vm_epoch="$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["vm_epoch"])' "$pull_dir/manifest.json")"
   missing_out="$(report_market "$pull_dir")"
   missing_count="$(printf '%s\n' "$missing_out" | sed -n 's/^MISSING_COUNT=//p')"

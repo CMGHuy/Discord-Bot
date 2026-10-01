@@ -331,3 +331,81 @@ def test_failed_normal_pull_prints_the_fail_line(tmp_path):
     assert r.returncode != 0
     assert "pull_backups: FAIL" in r.stderr and "pulls/" + stamp + ".FAILED" in r.stderr
     assert (root / "backups" / "pulls" / (stamp + ".FAILED")).is_dir()
+
+
+def _complete_pull_shim():
+    return [
+        "cat >/dev/null",
+        'case "$1" in',
+        # $1 is "bash -s -- stream <STAMP> <SINCE>": the 5th word is the stamp.
+        '  *"stream "*) set -- $1; d="$(mktemp -d)"; o="$d/$5"; mkdir -p "$o" "$d/md/daily"; '
+        'echo hello > "$d/md/daily/A.csv"; '
+        'gzip -c "$d/md/daily/A.csv" > "$o/db.sql.gz"; echo T=x > "$o/env"; echo "{}" > "$o/deploys.jsonl"; '
+        'tar -C "$d/md" -cf "$o/market_data.tar" daily; '
+        'printf "6\tdaily/A.csv\n" > "$d/mf.tsv"; '
+        '"$PY" "$ROOT/scripts/ops/backup_manifest.py" build "$o" --vm-epoch 1790000000 '
+        '--market-files "$d/mf.tsv" >/dev/null; '
+        'tar czf - -C "$d" "$5" | base64 -w0; exit 0 ;;',
+        "  *) exit 0 ;;",
+        "esac",
+    ]
+
+
+@pytest.mark.skipif(_bash() is None, reason="needs bash")
+def test_a_complete_pull_with_an_absolute_drive_path_passes(tmp_path):
+    """The absolute SWINGBOT_BACKUPS_DIR (E:/... on Windows) must survive every tar call."""
+    import os
+    import subprocess
+    import sys
+    stamp = "2026-10-01T18-06Z"
+    root = tmp_path / "repo"
+    (root / "scripts" / "ops").mkdir(parents=True)
+    for n in ("pull_backups.sh", "backup_manifest.py"):
+        (root / "scripts" / "ops" / n).write_bytes((SCRIPT.parent / n).read_bytes())
+    shim = tmp_path / "shim.sh"
+    shim.write_text(chr(10).join(_complete_pull_shim()) + chr(10), encoding="utf-8", newline=chr(10))
+    backups = tmp_path / "off vm" / "backups"
+    env = {**os.environ, "SSH_HETZNER": shim.as_posix(), "PULL_STAMP": stamp, "PY": sys.executable.replace(chr(92), "/"),
+           "ROOT": root.as_posix(), "SWINGBOT_BACKUPS_DIR": backups.as_posix()}
+    r = subprocess.run([_bash(), (root / "scripts/ops/pull_backups.sh").as_posix()],
+                       cwd=root, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "pull_backups: PASS" in r.stdout
+    assert (backups / "LAST_GOOD_PULL").read_text(encoding="utf-8").split()[1] == "pulls/" + stamp
+    assert (backups / "market_data" / "daily" / "A.csv").read_text(encoding="utf-8").strip() == "hello"
+    assert (backups / "pulls" / stamp / "market_data.tar").is_file()
+    assert not list((backups / "pulls").glob("*.FAILED"))
+
+
+def test_every_local_tar_archive_read_forces_local(src):
+    for ln in src.splitlines():
+        if ln.lstrip().startswith("#") or "tar " not in ln:
+            continue
+        if re.search(r"tar [^|]*-?[tx]f ", ln) and "xzf -" not in ln:
+            assert "--force-local" in ln, ln
+    assert "--force-local" in src
+
+
+@pytest.mark.skipif(_bash() is None, reason="needs bash")
+def test_stage_failure_writes_fail_nothing_pulled(tmp_path):
+    stamp = "2026-10-01T18-07Z"
+    good = tmp_path / "repo" / "backups"
+    good.mkdir(parents=True)
+    (good / "LAST_GOOD_PULL").write_text("T pulls/old 1", encoding="utf-8")
+    root, r = _run_script(tmp_path, [], stamp, ["cat >/dev/null", "exit 1"])
+    assert r.returncode != 0
+    assert "pull_backups: FAIL status" in r.stderr and "(nothing pulled)" in r.stderr
+    last = (root / "backups" / "LAST_PULL").read_text(encoding="utf-8")
+    assert " FAIL nothing-pulled" in last
+    assert (root / "backups" / "LAST_GOOD_PULL").read_text(encoding="utf-8") == "T pulls/old 1"
+
+
+@pytest.mark.skipif(_bash() is None, reason="needs bash")
+def test_refused_and_stable_runs_never_write_nothing_pulled(tmp_path):
+    stamp = "2026-10-01T18-08Z"
+    _good_folder(tmp_path, stamp)
+    root, r = _run_script(tmp_path, [], stamp, ["cat >/dev/null", "exit 1"])
+    assert r.returncode == 2
+    assert not (root / "backups" / "LAST_PULL").exists()
+    root, r = _run_script(tmp_path, ["--stable", "stable-2026-10-01"], stamp, ["cat >/dev/null", "exit 1"])
+    assert not (root / "backups" / "LAST_PULL").exists()

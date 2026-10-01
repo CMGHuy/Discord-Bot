@@ -85,8 +85,9 @@ try {
         # The off-VM copy lives in the MAIN worktree's backups/, so a session in a
         # worktree sees the same pulls (and removing the worktree cannot delete them).
         $bdir = 'backups'
-        $common = (git rev-parse --path-format=absolute --git-common-dir 2>$null)
-        if ($common -and (Test-Path -LiteralPath $common -PathType Container)) {
+        # git older than 2.31 rejects --path-format and prints extra lines: take the last.
+        $common = (git rev-parse --path-format=absolute --git-common-dir 2>$null) | Select-Object -Last 1
+        if (($common -is [string]) -and $common -and (Test-Path -LiteralPath $common -PathType Container)) {
             $bdir = Join-Path (Split-Path -Parent $common) 'backups'
         }
         if ($env:SWINGBOT_BACKUPS_DIR) { $bdir = $env:SWINGBOT_BACKUPS_DIR }
