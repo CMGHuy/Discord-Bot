@@ -342,3 +342,41 @@ a group of one.
 - **Posted Discord alerts cannot be recalled.** After a rollback the book
   matches the target second, but the channel still shows later messages.
 - **The worst case loses five minutes.** It is bounded by `archive_timeout`.
+
+## Status (Phase 3)
+
+All times UTC, 2026-10-01. The partner asked for the whole cutover on one day, so **every five-trading-day
+soak gate was skipped** (rows marked OVERRIDE); each group got a short soak instead and nothing else about
+the plan's order changed: the PITR drill passed before any store left `json`, and the trading flip took a
+backup checkpoint first. Phase 4 (V116-34 to V116-42) is implemented on branch `2026-10-01-v116-phase4`
+but **not shipped**: the JSON paths and `DB_STORES` still exist on `main`, so rollback to JSON stays possible.
+
+| Time | Group | Change | Evidence |
+|---|---|---|---|
+| 12:21 | all | Phase 0-3 merged to `main` (`14551c3c`) and deployed | CI green except the pin step: `.env` was `root:root`; fixed with `chown deploy:deploy`, deploy rerun green |
+| 12:46-13:05 | PITR | archiving on, stanza `swingbot`, full backup `20261001-124820F`, restic repo + snapshot `de4bdb0b`, crons installed, `alembic upgrade head` to `v116_002` | `docs/deploy/DB_RESTORE.md` |
+| 13:51 | PITR | drill | PASS (a 13:50 attempt failed on `DRILL_TARGET`, fixed) |
+| 14:04 | ops | json -> dual | parity clean: jobs 0/0, killswitch 1/1, scheduled_jobs 3/3 (+ state 1616, watchlist 77) |
+| 14:29 | ops | dual -> db | OVERRIDE (soak ~25 min, 4 scans, 0 database error lines) |
+| 14:39 | reference | json -> dual | parity clean: preferences 1/1, settings_audit 1/1, ticker_directory 0/0, tuning 0/0, tuning_proposals 0/0 |
+| ~14:50 | reference | dual -> db | OVERRIDE (soak ~10 min, 2 scans, 0 errors) |
+| 15:21 | trading | json -> dual | checkpoint `15:21:27Z`; imported plans 513, starred_plans 0, trades 858, account 872 balance points, journal 666; parity clean |
+| 16:23 | trading | dual -> db, `events:db` | OVERRIDE (soak ~60 min, 12 scans, 0 errors); checkpoint `16:23:23Z` |
+| 16:56 | settings | `SCAN_CACHE_MAX_AGE_HOURS` 6 -> 13 | mitigation for a theory that did not hold (live Alpaca daily frames are 502 rows) |
+| 17:15 | settings | `SCAN_CACHE_MAX_AGE_HOURS` back to 6; `MIN_STOP_DISTANCE_PCT` 2.0 -> 1.75 | partner decision; documented in `.env.example` (shipped default stays 2.0) |
+
+Live `DB_STORES` after 16:23: `plans, starred_plans, trades, account, journal, watchlist, state,
+ticker_directory, preferences, settings_audit, tuning, flags, heartbeat, jobs, scheduled_jobs, killswitch,
+notify_queue, scan_progress, market_data_state, events`, all at `db`.
+
+What the day found (all fixed before or at the flip, each test-first):
+- At `db`, `get_balance_history_points` raised on datetimes (kill-switch drawdown on every scan) and
+  `get_daily_summary` read an always-empty history.
+- At `db`, closing a legacy trade in the admin never queued its Discord notice (`id` is a reserved column),
+  and the bot's embed code read `id`; job state lost to the stored status.
+- A store-write halt could leave already-logged trades without alerts (`_persist_plan_v2` now runs first).
+- The wrapper `scripts/ops/ssh-hetzner.sh` expands `$(...)` on the dev machine; pipe scripts over stdin.
+
+Known limits after the day: the JSON files stopped being updated at each group's `db` stage (rollback is
+PITR via `scripts/ops/rollback_to.sh` or `scripts/db/export_json.py`); the nightly soak cron
+(`install_v116_soak_cron.sh`) was not installed because the gates were overridden.
