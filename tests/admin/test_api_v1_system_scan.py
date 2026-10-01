@@ -43,6 +43,8 @@ def scan_files(admin_app, tmp_path, monkeypatch):
 
     monkeypatch.setattr(runstate, "_STOP_FILE", str(tmp_path / "stop_scan.flag"))
     monkeypatch.setattr(runstate, "_RUNNING_FILE", str(tmp_path / "scan_running.flag"))
+    # set_scan_paused(False) acknowledges a store-write halt in the heartbeat file.
+    monkeypatch.setattr(bot_runstate, "_HEARTBEAT_FILE", str(tmp_path / "bot_heartbeat.json"))
     assert bot_runstate._TRIGGER_FILE.startswith(str(tmp_path)), (
         "the bot runstate's flag paths did not follow the test DATA_DIR"
     )
