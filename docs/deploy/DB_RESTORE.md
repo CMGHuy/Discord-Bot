@@ -40,3 +40,23 @@ drill before trusting any backup.
 
 Cron on the VM: `0 3 * * *  cd /opt/swing-bot && ./scripts/ops/backup_db.sh >> logs/backup.log 2>&1`
 (installed 2026-09-30). Dumps are pruned after 14 days.
+
+## Point-in-time recovery (v116)
+
+Set up on production on 2026-10-01 (UTC), by hand through `scripts/ops/ssh-hetzner.sh`:
+
+- Database image `ghcr.io/cmghuy/discord-bot-db:pgcfg-aae12c7a4b74` (pgBackRest 2.58.0), pinned in
+  the VM `.env` by `deploy.sh` together with the bot image; `backups/deploys.jsonl` has one line per deploy.
+- `.env` keys set in place with `env_set.py`: `PG_ARCHIVE_MODE=on`, `RESTIC_PASSWORD` (value only on the VM).
+  Archiving needs a database restart: `archive_mode=on`, `archive_command=pgbackrest --stanza=swingbot archive-push %p`.
+- pgBackRest stanza `swingbot` created and checked; first full backup `20261001-124820F`
+  (46.6 MB database, 7.4 MB in the repository, repository `backups/pitr/`, retention 30 days).
+- restic repository `/opt/swing-bot/backups/restic` (market data), first snapshot `de4bdb0b` (171 MiB).
+- Host packages: `restic`, `python3` (apt).
+- Migrations applied by hand: `alembic upgrade head`, `p6_001 -> p3_007 -> v116_001 -> v116_002`.
+- Crons, installed with `scripts/ops/install_pitr_crons.sh` (idempotent): pgBackRest nightly 02:30
+  (full on Sundays, differential otherwise), restic hourly at :07, monthly verify on the 1st at 04:00,
+  next to the existing `backup_db.sh` 03:00 line.
+- Disk after setup: `/` 62% used (alarm threshold 80%).
+- `.env` on the VM must be owned by the CI deploy user: `chown deploy:deploy /opt/swing-bot/.env`
+  (it was `root:root`, so `deploy.sh`'s image-pin step failed with `PermissionError`).

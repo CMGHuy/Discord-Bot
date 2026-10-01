@@ -399,3 +399,13 @@ to keep a single-server setup simple, but the pieces are all reusable.
   code any more, and `deploy.sh` fails the deploy if either container is
   not running the digest it just pulled. If you see it, check that nobody
   has re-added a `.:/app` mount to `docker-compose.yml`.
+
+**`.env` ownership.** `deploy.sh` runs as the `deploy` user and rewrites `/opt/swing-bot/.env` in
+place (it pins both image tags). If an edit as `root` leaves the file `root:root`, the deploy's
+pin step fails with `PermissionError` after the containers are already up. Keep it
+`deploy:deploy` (`chown deploy:deploy /opt/swing-bot/.env`). `env_set.py` keeps the owner, because
+it rewrites in place.
+
+**Remote commands through `ssh-hetzner.sh`.** The wrapper runs `wsl ssh "<cmd>"`, so `$(...)` and
+`$VAR` inside the quoted command expand on the dev machine, not the VM. Pipe a script on stdin
+(`... "bash -s" < script.sh`) whenever the command needs the VM's own values.
