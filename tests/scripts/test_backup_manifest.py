@@ -111,9 +111,12 @@ def test_cli_build_reads_market_files(folder, tmp_path):
 DUMP = (
     "SET statement_timeout = 0;\nSET client_encoding = 'UTF8';\n"
     "CREATE TABLE public.trades (id integer);\n"
-    "COPY public.trades (id, sym) FROM stdin;\n1\tAAPL\n2\tMSFT\n3\tNVDA\n\.\n\n"
-    "COPY public.empty_t (id) FROM stdin;\n\.\n\n"
-    'COPY public."Odd Name" (a) FROM stdin;\nx\n\.\n'
+    "COPY public.trades (id, sym) FROM stdin;\n1\tAAPL\n2\tMSFT\n3\tNVDA\n\\.\n\n"
+    "COPY public.empty_t (id) FROM stdin;\n\\.\n\n"
+    'COPY public."Odd Name" (a) FROM stdin;\nx\n\\.\n\n'
+    "COPY audit.events (id, note) FROM stdin;\n1\tfirst\n2\tsecond\n\\.\n\n"
+    # COPY text escapes a data backslash as two, so a value line may hold "\\\\."
+    "COPY public.notes (txt) FROM stdin;\nab\\\\.cd\n\\\\.\nlast\n\\.\n"
 )
 
 
@@ -127,11 +130,63 @@ def dump(tmp_path):
 
 def test_count_dump_counts_rows_per_copy_block(dump):
     assert bm.count_dump(dump) == {
-        "public.Odd Name": 1, "public.empty_t": 0, "public.trades": 3}
+        "audit.events": 2, "public.Odd Name": 1, "public.empty_t": 0,
+        "public.notes": 3, "public.trades": 3}
 
 
 def test_cli_count_dump_prints_sorted_json(dump):
     out = subprocess.run([sys.executable, str(REPO / "scripts" / "ops" / "backup_manifest.py"),
                           "count-dump", str(dump)], capture_output=True, text=True, check=True)
     assert out.stdout.strip() == json.dumps(
-        {"public.Odd Name": 1, "public.empty_t": 0, "public.trades": 3}, sort_keys=True)
+        {"audit.events": 2, "public.Odd Name": 1, "public.empty_t": 0,
+         "public.notes": 3, "public.trades": 3}, sort_keys=True)
+
+
+
+
+def test_size_only_mismatch_is_reported(folder):
+    bm.build_manifest(folder)
+    mpath = folder / "manifest.json"
+    data = json.loads(mpath.read_text(encoding="utf-8"))
+    data["files"]["env"]["bytes"] += 1               # the hash still matches
+    mpath.write_text(json.dumps(data), encoding="utf-8")
+    assert bm.verify_folder(folder) == ["size mismatch: env"]
+
+
+@pytest.mark.parametrize("keep", [0, -1, -5])
+def test_prune_rejects_keep_below_one(tmp_path, keep):
+    _pull(tmp_path, "2026-10-01T00-00Z")
+    with pytest.raises(ValueError):
+        bm.prune_pulls(tmp_path, keep=keep)
+    assert (tmp_path / "pulls" / "2026-10-01T00-00Z").exists()
+
+
+@pytest.mark.parametrize("keep", ["0", "-3"])
+def test_cli_prune_rejects_keep_below_one(tmp_path, keep):
+    _pull(tmp_path, "2026-10-01T00-00Z")
+    r = subprocess.run([sys.executable, str(REPO / "scripts" / "ops" / "backup_manifest.py"),
+                        "prune", str(tmp_path), "--keep", keep], capture_output=True, text=True)
+    assert r.returncode == 2
+    assert (tmp_path / "pulls" / "2026-10-01T00-00Z").exists()
+
+
+def test_prune_refuses_pulls_resolving_outside_backups(tmp_path):
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    backups = tmp_path / "backups"
+    backups.mkdir()
+    try:
+        (backups / "pulls").symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation not permitted here")
+    with pytest.raises(ValueError):
+        bm.prune_pulls(backups, keep=10)
+
+
+def test_this_module_compiles_without_warnings():
+    import ast
+    import warnings
+    src = (REPO / "tests" / "scripts" / "test_backup_manifest.py").read_text(encoding="utf-8")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        ast.parse(src)

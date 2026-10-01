@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Backup manifest helper (v120 section 3). Standard library only: it runs under
 the VM host's python3 and on Windows. Subcommands: build, verify, prune, next-name, count-dump."""
+from __future__ import annotations
+
 import argparse
 import gzip
 import hashlib
@@ -104,6 +106,8 @@ def _good_and_failed(pulls: Path) -> tuple[list[Path], list[Path]]:
 
 
 def prune_pulls(backups: Path, keep: int = 10) -> list[Path]:
+    if keep < 1:
+        raise ValueError(f"keep must be at least 1, got {keep}")
     backups = Path(backups).resolve()
     pulls = (backups / "pulls").resolve()
     if pulls.parent != backups:
@@ -111,7 +115,7 @@ def prune_pulls(backups: Path, keep: int = 10) -> list[Path]:
     if not pulls.is_dir():
         return []
     good, failed = _good_and_failed(pulls)
-    doomed = good[:-keep] if keep > 0 else list(good)
+    doomed = good[:-keep]
     if good:
         newest = good[-1].name
         doomed += [p for p in failed if p.name[: -len(".FAILED")] < newest]
@@ -197,6 +201,8 @@ def _cmd_count_dump(args) -> int:
 
 
 def _cmd_prune(args) -> int:
+    if args.keep < 1:
+        _parser().error("--keep must be at least 1")
     for p in prune_pulls(Path(args.backups), keep=args.keep):
         print(f"removed {p}")
     return 0
