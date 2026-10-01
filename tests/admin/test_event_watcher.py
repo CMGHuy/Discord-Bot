@@ -428,7 +428,10 @@ def test_a_failing_subscriber_does_not_stop_later_events(tmp_path, clock):
 
     atomic_write(target, '[{"id": 1}]')
     settle(watcher, clock, delivered)
-    atomic_write(target, '[{"id": 2}]')
+    # Different length on purpose: the signature is (mtime_ns, size), and on a
+    # coarse-mtime/loaded box two same-size writes can share an mtime and look
+    # unchanged (Decision 2) -- that made this test flaky under xdist.
+    atomic_write(target, '[{"id": 22}]')
     settle(watcher, clock, delivered)
 
     assert delivered == ["trades", "trades"]
