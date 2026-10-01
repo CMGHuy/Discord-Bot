@@ -82,7 +82,14 @@ try {
     # --- off-VM backup: age of the last good pull (spec v120 s2) ---
     # Own try/catch: a bad file prints the warning and never throws.
     try {
-        $bdir = if ($env:SWINGBOT_BACKUPS_DIR) { $env:SWINGBOT_BACKUPS_DIR } else { 'backups' }
+        # The off-VM copy lives in the MAIN worktree's backups/, so a session in a
+        # worktree sees the same pulls (and removing the worktree cannot delete them).
+        $bdir = 'backups'
+        $common = (git rev-parse --path-format=absolute --git-common-dir 2>$null)
+        if ($common -and (Test-Path -LiteralPath $common -PathType Container)) {
+            $bdir = Join-Path (Split-Path -Parent $common) 'backups'
+        }
+        if ($env:SWINGBOT_BACKUPS_DIR) { $bdir = $env:SWINGBOT_BACKUPS_DIR }
         $goodFile = Join-Path $bdir 'LAST_GOOD_PULL'
         $days = $null
         if (Test-Path -LiteralPath $goodFile) {
@@ -90,9 +97,14 @@ try {
             $when = [DateTimeOffset]::Parse($first, [Globalization.CultureInfo]::InvariantCulture,
                                             [Globalization.DateTimeStyles]::AssumeUniversal)
             $days = [int][Math]::Max(0, [Math]::Floor(([DateTimeOffset]::UtcNow - $when).TotalDays))
+            $folder = ((Get-Content -LiteralPath $goodFile -TotalCount 1) -split '\s+')[1]
+            $folderMissing = (-not $folder) -or -not (Test-Path -LiteralPath (Join-Path $bdir $folder) -PathType Container)
         }
         if ($null -eq $days) {
             Emit "BACKUP   : WARNING no good pull yet -- run /backup-pull"
+        }
+        elseif ($folderMissing) {
+            Emit "BACKUP   : WARNING last good pull folder is missing -- run /backup-pull"
         }
         elseif ($days -gt 7) {
             Emit "BACKUP   : WARNING no good pull for ${days}d -- run /backup-pull"
@@ -102,7 +114,7 @@ try {
                       Where-Object { $_.Name -notlike '*.partial' } |
                       Sort-Object Name | Select-Object -Last 1
             $sname = if ($stable) { $stable.Name } else { 'none' }
-            Emit "BACKUP   : last good pull ${days}d ago $([char]0xB7) newest stable $sname"
+            Emit "BACKUP   : last good pull ${days}d ago | newest stable $sname"
         }
     }
     catch {
