@@ -19,6 +19,9 @@ def test_from_config_reproduces_pre_v74_golden_plans(monkeypatch):
     # The golden file is pre-v74 replay output, which predates v115's stop
     # clamp; the clamp is covered by tests/planning/test_confluence_stop_clamp.py.
     monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", False)
+    # Likewise the golden was generated at the 2.0 stop floor; the code default is 1.75 since
+    # 2026-10-01 (a scenario near the floor is admitted at 1.75 and not at 2.0).
+    monkeypatch.setattr(config, "MIN_STOP_DISTANCE_PCT", 2.0)
     rows = []
     for symbol, frame in load_v74_fixture().items():
         for horizon in ("4w", "3m"):

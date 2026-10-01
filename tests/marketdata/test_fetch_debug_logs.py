@@ -38,12 +38,14 @@ def test_nonempty_yfinance_download_is_silent(monkeypatch, caplog):
     assert not _records(caplog, yf_safe.log)
 
 
-def test_alpaca_miss_is_debug_not_info(enabled, monkeypatch, caplog):
+def test_alpaca_miss_detail_is_debug_with_one_warning_summary(enabled, monkeypatch, caplog):
     _use(monkeypatch, FakeProvider(exc=AlpacaMiss("boom")))
     with caplog.at_level(logging.DEBUG, logger=router.log.name):
         router.daily_bars(["AAPL"], "2y", lambda tickers, period: {})
     misses = [r for r in _records(caplog, router.log) if "miss" in r.getMessage()]
-    assert misses and all(r.levelno == logging.DEBUG for r in misses)
+    assert {r.levelno for r in misses} == {logging.DEBUG, logging.WARNING}
+    assert sum(r.levelno == logging.WARNING and "batch(es) missed" in r.getMessage()
+               for r in misses) == 1
 
 
 def test_per_symbol_fallback_names_the_symbols(enabled, monkeypatch, caplog):
