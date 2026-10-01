@@ -674,6 +674,12 @@ FIELDS: list[Field] = [
     Field("ALPACA_TIMEOUT_SECONDS", "ALPACA_TIMEOUT_SECONDS", "Data Sources",
           "Alpaca call timeout (s)", type="number", default="5", min=1, max=30, step=1,
           help="Past this an Alpaca call is abandoned and the symbols fall back to yfinance."),
+    Field("ALPACA_BARS_TIMEOUT_SECONDS", "ALPACA_BARS_TIMEOUT_SECONDS", "Data Sources",
+          "Alpaca bulk-bars timeout (s)", type="number", default="20", min=1, max=120, step=1,
+          help="Shared deadline for one bulk bars call (daily bars across all batches, 1h bars). "
+               "A 19-symbol 2y daily batch takes ~2 s, so the 5 s quote timeout is far too tight "
+               "for it. ALPACA_TIMEOUT_SECONDS stays the deadline for quotes. Past this the "
+               "missed symbols fall back to yfinance."),
     Field("ALPACA_MAX_TRADE_AGE_SECONDS", "ALPACA_MAX_TRADE_AGE_SECONDS", "Data Sources",
           "Max IEX last-trade age in session (s)", type="number", default="300",
           min=30, max=3600, step=30,

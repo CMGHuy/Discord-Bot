@@ -28,6 +28,7 @@ def enabled(monkeypatch):
     monkeypatch.setattr(config, "ALPACA_API_KEY_ID", "k")
     monkeypatch.setattr(config, "ALPACA_API_SECRET_KEY", "s")
     monkeypatch.setattr(config, "ALPACA_TIMEOUT_SECONDS", 0.5)
+    monkeypatch.setattr(config, "ALPACA_BARS_TIMEOUT_SECONDS", 0.5)
     monkeypatch.setattr(config, "ALPACA_BREAKER_FAILURES", 2)
     monkeypatch.setattr(config, "ALPACA_BREAKER_COOLDOWN_SECONDS", 60)
     router.reset()
@@ -73,10 +74,10 @@ def test_breaker_opens_then_cools_down(enabled, monkeypatch):
     prov = FakeProvider(exc=AlpacaMiss("500")); _use(monkeypatch, prov)
     for _ in range(3):
         router.daily_bars(["AAPL"], "2y", yf_daily([]))
-    assert prov.calls == 2 and router.stats()["breaker_open"] is True
+    assert prov.calls == 4 and router.stats()["breaker_open"] is True  # 2 calls x (try + 1 retry)
     monkeypatch.setattr(router._breaker, "open_until", 0.0)
     router.daily_bars(["AAPL"], "2y", yf_daily([]))
-    assert prov.calls == 3
+    assert prov.calls == 6
 
 def test_auth_error_latches_until_keys_change(enabled, monkeypatch):
     prov = FakeProvider(exc=AlpacaAuthError("401")); _use(monkeypatch, prov)

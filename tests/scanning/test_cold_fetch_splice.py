@@ -78,3 +78,32 @@ def test_daily_frame_for_splices_the_benchmark_too(monkeypatch):
     monkeypatch.setattr(fetch, "_load_cached_daily", lambda t: None)
     monkeypatch.setattr(fetch, "get_daily_data", lambda t, period=None: live)
     assert len(fetch._daily_frame_for("SPY")) == 302
+
+
+def test_yfinance_fallback_frame_gets_the_same_cached_depth(monkeypatch):
+    """Alpaca down -> the router tags the yfinance frames 'yfinance-fallback';
+    the cold scan still splices the cached archive under them."""
+    from swingbot import config
+    from swingbot.core.marketdata.providers import router
+    from swingbot.core.marketdata.providers.alpaca_provider import AlpacaMiss
+
+    class Down:
+        def daily_bars(self, tickers, period):
+            raise AlpacaMiss("down")
+
+    full, live = _setup(monkeypatch, lambda f: f.iloc[:300])
+    for key, val in (("ALPACA_ENABLED", True), ("ALPACA_API_KEY_ID", "k"),
+                     ("ALPACA_API_SECRET_KEY", "s")):
+        monkeypatch.setattr(config, key, val)
+    monkeypatch.setattr(router, "_provider_factory", lambda *a: Down())
+    router.reset()
+    try:
+        monkeypatch.setattr(
+            fetch, "get_daily_data_batch",
+            lambda tickers, period: router.daily_bars(
+                tickers, period, lambda ts, p: {t: live.copy() for t in ts}))
+        [(_, df)] = fetch._fetch_cold_frames(["AAPL"])
+    finally:
+        router.reset()
+    assert df.attrs["source"] == "yfinance-fallback"
+    assert len(df) == 302 and df.index[0] == full.index[0]
