@@ -1,5 +1,6 @@
 """At the db stage nothing stat()s a table-backed file in data/ any more."""
 import os
+import threading
 import time
 
 from swingbot import config
@@ -19,8 +20,14 @@ def test_no_stat_calls_on_table_backed_paths_at_the_db_stage(monkeypatch, tmp_pa
     _db_stage(monkeypatch, tmp_path, db_engine)
     table_backed, residual = [], []
     real_stat = os.stat
+    # Threads leaked by earlier tests (an admin job's _watch poller reads
+    # admin_jobs.json under whatever DATA_DIR is patched now) are not this
+    # broker's doing; only threads born during the test count.
+    preexisting = set(threading.enumerate())
 
     def spy(path, *a, **kw):
+        if threading.current_thread() in preexisting:
+            return real_stat(path, *a, **kw)
         # _TABLE_BACKED holds the same basenames as _DATA_PATHS, so matching
         # on the basename inside tmp_path is exact, not vacuous.
         if str(tmp_path) in str(path):
