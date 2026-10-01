@@ -9,6 +9,7 @@ container has no on_config_reload hook."""
 import logging
 import threading
 import time
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
 from swingbot import config
@@ -42,28 +43,55 @@ class _Bucket:
         return True
 
 
+class _WarnGate:
+    """At most one WARNING per `every` seconds (monotonic) for a persistent
+    outage's per-call summary."""
+    def __init__(self, every: float = 60.0):
+        self.every, self.last = every, None
+
+    def ready(self) -> bool:
+        now = time.monotonic()
+        if self.last is not None and now - self.last < self.every:
+            return False
+        self.last = now
+        return True
+
+
+class _NotSent(Exception):
+    """A batch that never left (no rate-limit token) -- not an Alpaca failure."""
+
+
 class _Breaker:
     def __init__(self):
         self.fails, self.open_until, self.auth_latched = 0, 0.0, False
+        self.last_reason = ""
 
     def allows(self) -> bool:
         return not self.auth_latched and time.monotonic() >= self.open_until
 
-    def record(self, ok: bool, auth: bool = False) -> None:
+    def record(self, ok: bool, auth: bool = False, reason: str = "") -> None:
         was_open = not self.allows()
         if ok:
             self.fails = 0
         else:
             self.fails += 1
+            self.last_reason = reason or self.last_reason
             self.auth_latched = self.auth_latched or auth
             if self.fails >= int(config.ALPACA_BREAKER_FAILURES):
                 self.open_until = time.monotonic() + float(config.ALPACA_BREAKER_COOLDOWN_SECONDS)
         if was_open != (not self.allows()):
-            log.warning("Alpaca breaker %s", "OPEN" if not self.allows() else "closed")
+            self._log_transition()
+
+    def _log_transition(self) -> None:
+        if self.allows():
+            log.warning("Alpaca breaker closed")
+        else:
+            log.warning("Alpaca breaker OPEN (last miss: %s)", self.last_reason or "unknown")
 
 
 _bucket = _Bucket()
 _breaker = _Breaker()
+_warn_gate = _WarnGate()
 _provider = None
 _provider_key = None
 _last_source: dict = {}
@@ -72,9 +100,9 @@ _stats = {"alpaca": 0, "yfinance": 0, "fallback": 0, "failures": 0}
 
 
 def reset() -> None:
-    global _provider, _provider_key, _bucket, _breaker
+    global _provider, _provider_key, _bucket, _breaker, _warn_gate
     _provider, _provider_key = None, None
-    _bucket, _breaker = _Bucket(), _Breaker()
+    _bucket, _breaker, _warn_gate = _Bucket(), _Breaker(), _WarnGate()
     _last_source.clear()
     _spot_miss.clear()
     for k in _stats:
@@ -93,39 +121,116 @@ def _active_provider():
     return _provider if _breaker.allows() else None
 
 
-def _collect(future, method: str, deadline: float):
-    """Result of one submitted call before `deadline` (monotonic), else None.
-    Records the breaker/stats outcome; runs in the calling thread."""
+def _reason(exc) -> str:
+    return f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+
+
+def _wait(future, deadline: float):
+    """(result, None) or (None, exc) for one submitted call, waiting at most
+    until `deadline` (monotonic). No breaker/stat side effects."""
     try:
-        result = future.result(timeout=max(0.0, deadline - time.monotonic()))
-    except (AlpacaMiss, FutureTimeout, Exception) as exc:
+        return future.result(timeout=max(0.0, deadline - time.monotonic())), None
+    except Exception as exc:  # AlpacaMiss, FutureTimeout, anything the provider raised
+        return None, exc
+
+
+def _collect(future, method: str, deadline: float):
+    """Single-call path: result of one submitted call before `deadline`, else
+    None. Records the breaker/stats outcome; runs in the calling thread."""
+    result, exc = _wait(future, deadline)
+    if exc is not None:
         _stats["failures"] += 1
-        _breaker.record(False, auth=isinstance(exc, AlpacaAuthError))
+        _breaker.record(False, auth=isinstance(exc, AlpacaAuthError), reason=_reason(exc))
         log.debug("Alpaca %s miss: %s", method, str(exc) or type(exc).__name__)
         return None
     _breaker.record(True)
     return result
 
 
-def _attempt(method: str, *args):
-    """One bounded Alpaca call. Returns its result, or None on any miss."""
+def _bars_timeout() -> float:
+    return float(config.ALPACA_BARS_TIMEOUT_SECONDS)
+
+
+def _attempt(method: str, *args, timeout: float = None):
+    """One bounded Alpaca call. Returns its result, or None on any miss.
+    `timeout` defaults to the quote deadline (ALPACA_TIMEOUT_SECONDS)."""
     prov = _active_provider()
     if prov is None or not _bucket.take():
         return None
-    deadline = time.monotonic() + float(config.ALPACA_TIMEOUT_SECONDS)
+    deadline = time.monotonic() + float(config.ALPACA_TIMEOUT_SECONDS if timeout is None else timeout)
     return _collect(_pool.submit(with_current_context(getattr(prov, method)), *args), method, deadline)
+
+
+def _round(prov, method: str, batches: list, args: tuple, deadline: float) -> list:
+    """(result, exc) per batch, all in flight together. A batch without a
+    bucket token is not submitted (exc is a _NotSent)."""
+    futures = [_pool.submit(with_current_context(getattr(prov, method)), b, *args)
+               if _bucket.take() else None for b in batches]
+    return [(None, _NotSent()) if f is None else _wait(f, deadline) for f in futures]
+
+
+def _retryable(exc, deadline: float) -> bool:
+    """A real failure with deadline budget left. Auth errors, an expired
+    deadline and an open breaker are never retried."""
+    if exc is None or isinstance(exc, (AlpacaAuthError, FutureTimeout, _NotSent)):
+        return False
+    return time.monotonic() < deadline and _breaker.allows()
+
+
+def _retry_failed(prov, method: str, batches: list, args: tuple, deadline: float, outcomes: list) -> list:
+    """One in-call retry of the batches that failed; a retry that cannot be
+    sent keeps the original failure."""
+    idx = [i for i, (_, exc) in enumerate(outcomes) if _retryable(exc, deadline)]
+    if not idx:
+        return outcomes
+    again = _round(prov, method, [batches[i] for i in idx], args, deadline)
+    out = list(outcomes)
+    for i, outcome in zip(idx, again):
+        if not isinstance(outcome[1], _NotSent):
+            out[i] = outcome
+    return out
+
+
+def _account(method: str, batches: list, outcomes: list) -> None:
+    """One breaker verdict per call: any failure is ONE incident, a call whose
+    sent batches all succeeded is a success. Then one rate-limited summary."""
+    failed = [(i, exc) for i, (_, exc) in enumerate(outcomes)
+              if exc is not None and not isinstance(exc, _NotSent)]
+    if not failed:
+        if any(exc is None for _, exc in outcomes):
+            _breaker.record(True)
+        return
+    _stats["failures"] += len(failed)
+    for i, exc in failed:
+        log.debug("Alpaca %s batch %d miss: %s", method, i, _reason(exc))
+    _breaker.record(False, auth=any(isinstance(e, AlpacaAuthError) for _, e in failed),
+                    reason=_reason(failed[-1][1]))
+    _warn_miss_summary(method, batches, failed)
+
+
+def _warn_miss_summary(method: str, batches: list, failed: list) -> None:
+    if not _warn_gate.ready():
+        return
+    kinds = Counter(type(exc).__name__ for _, exc in failed)
+    log.warning("Alpaca %s: %d/%d batch(es) missed (%s); %d symbol(s) fall back to yfinance",
+                method, len(failed), len(batches),
+                ", ".join(f"{k} x{n}" for k, n in kinds.items()),
+                sum(len(batches[i]) for i, _ in failed))
 
 
 def _attempt_many(method: str, batches: list, *args) -> list:
     """One result per batch (None on miss), all in flight together under one
-    shared deadline. A batch without a bucket token is not submitted."""
+    shared bulk deadline (ALPACA_BARS_TIMEOUT_SECONDS). Failed batches get one
+    retry while the deadline has time left; the call records at most one
+    breaker failure however many batches missed."""
     prov = _active_provider()
     if prov is None:
         return [None] * len(batches)
-    deadline = time.monotonic() + float(config.ALPACA_TIMEOUT_SECONDS)
-    futures = [_pool.submit(with_current_context(getattr(prov, method)), b, *args) if _bucket.take() else None
-               for b in batches]
-    return [_collect(f, method, deadline) if f is not None else None for f in futures]
+    deadline = time.monotonic() + _bars_timeout()
+    outcomes = _round(prov, method, batches, args, deadline)
+    outcomes = _retry_failed(prov, method, batches, args, deadline, outcomes)
+    _account(method, batches, outcomes)
+    return [result for result, _ in outcomes]
 
 
 def _split(tickers):
@@ -247,7 +352,7 @@ def intraday_bars(ticker, interval, yf_fetch):
         df = yf_fetch(ticker, interval)
         source = SOURCE_YF
     else:
-        df = _attempt("intraday_bars", ticker, interval)
+        df = _attempt("intraday_bars", ticker, interval, timeout=_bars_timeout())
         source = SOURCE_ALPACA
         if df is None or df.empty:
             _log_fallback("intraday_bars", [ticker])
