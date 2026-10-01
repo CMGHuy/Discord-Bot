@@ -1,6 +1,7 @@
 """Provider robustness: bulk-bars deadline, one breaker incident per call,
 one in-call retry, one rate-limited WARNING summary."""
 import logging
+import threading
 import time
 
 import pytest
@@ -39,6 +40,8 @@ class Scripted(FakeProvider):
             raise AlpacaMiss("boom")
         if step == "auth":
             raise AlpacaAuthError("401")
+        if step == "timeout":
+            raise TimeoutError("socket timed out")
         if step == "slow":
             time.sleep(self.slow)
         return {t: _df() for t in tickers}
@@ -99,12 +102,98 @@ def test_fully_successful_call_resets_the_failure_count(cfg, monkeypatch):
     assert router._breaker.fails == 0
 
 
-def test_partial_failure_is_one_failure_not_a_success(cfg, monkeypatch):
+def test_partial_failure_with_a_success_counts_as_a_success(cfg, monkeypatch):
     tickers = _syms(4)
     _size(monkeypatch, 2)
     _use(monkeypatch, Scripted({tickers[2]: ["miss", "miss"]}))
+    router._active_provider()
+    router._breaker.fails = 1
     router.daily_bars(tickers, "2y", yf_daily([]))
-    assert router._breaker.fails == 1
+    assert router._breaker.fails == 0
+
+
+def test_poison_batch_never_opens_the_breaker(cfg, monkeypatch):
+    tickers = _syms(4)
+    _size(monkeypatch, 2)
+    _use(monkeypatch, Scripted({tickers[2]: ["miss"] * 40}))
+    calls = []
+    for _ in range(5):
+        out = router.daily_bars(tickers, "2y", yf_daily(calls))
+        assert out[tickers[2]].attrs["source"] == "yfinance-fallback"
+        assert out[tickers[0]].attrs["source"] == "alpaca"
+    assert router.stats()["breaker_open"] is False
+    assert calls == [tickers[2:]] * 5
+
+
+def test_provider_socket_timeout_before_the_deadline_is_retried(cfg, monkeypatch):
+    prov = Scripted({"AAA": ["timeout"]})
+    _use(monkeypatch, prov)
+    out = router.daily_bars(["AAA"], "2y", yf_daily([]))
+    assert _tries(prov, "AAA") == 2 and out["AAA"].attrs["source"] == "alpaca"
+
+
+def test_batch_without_a_token_falls_back_per_symbol(cfg, monkeypatch):
+    tickers = _syms(4)
+    _size(monkeypatch, 2)
+    prov = Scripted({})
+    _use(monkeypatch, prov)
+    router._bucket.tokens, router._bucket.refill_per_s = 1.0, 0.0
+    calls = []
+    out = router.daily_bars(tickers, "2y", yf_daily(calls))
+    assert len(prov.seen) == 1 and calls == [tickers[2:]]
+    assert out[tickers[0]].attrs["source"] == "alpaca"
+    assert out[tickers[2]].attrs["source"] == "yfinance-fallback"
+
+
+def test_call_where_nothing_was_sent_records_neither_success_nor_failure(cfg, monkeypatch):
+    prov = Scripted({})
+    _use(monkeypatch, prov)
+    router._active_provider()
+    router._breaker.fails = 1
+    router._bucket.tokens, router._bucket.refill_per_s = 0.0, 0.0
+    out = router.daily_bars(_syms(2), "2y", yf_daily([]))
+    assert prov.seen == [] and router._breaker.fails == 1
+    assert {df.attrs["source"] for df in out.values()} == {"yfinance-fallback"}
+
+
+def test_retry_without_a_token_keeps_the_original_failure(cfg, monkeypatch):
+    prov = Scripted({"AAA": ["miss"]})
+    _use(monkeypatch, prov)
+    router._bucket.tokens, router._bucket.refill_per_s = 1.0, 0.0
+    out = router.daily_bars(["AAA"], "2y", yf_daily([]))
+    assert _tries(prov, "AAA") == 1 and router._breaker.fails == 1
+    assert out["AAA"].attrs["source"] == "yfinance-fallback"
+
+
+def test_breaker_half_open_probe_reopens_on_failure_and_closes_on_success(cfg, monkeypatch):
+    prov = Scripted({"AAA": ["miss"] * 6})
+    _use(monkeypatch, prov)
+    for _ in range(2):
+        router.daily_bars(["AAA"], "2y", yf_daily([]))
+    assert router.stats()["breaker_open"] is True and _tries(prov, "AAA") == 4
+    router.daily_bars(["AAA"], "2y", yf_daily([]))
+    assert _tries(prov, "AAA") == 4                    # open: provider not touched
+    router._breaker.open_until = time.monotonic() - 1  # cooldown elapsed
+    router.daily_bars(["AAA"], "2y", yf_daily([]))
+    assert _tries(prov, "AAA") == 6                    # one probe (try + retry) got through
+    assert router.stats()["breaker_open"] is True      # its failure reopened it
+    router.daily_bars(["AAA"], "2y", yf_daily([]))
+    assert _tries(prov, "AAA") == 6
+    router._breaker.open_until = time.monotonic() - 1
+    prov.script["AAA"].clear()
+    router.daily_bars(["AAA"], "2y", yf_daily([]))
+    assert router.stats()["breaker_open"] is False and router._breaker.fails == 0
+
+
+def test_quotes_are_not_starved_by_a_saturated_bulk_pool(cfg, monkeypatch):
+    _use(monkeypatch, FakeProvider(prices={"AAPL": 1.0}))
+    release = threading.Event()
+    blockers = [router._pool.submit(release.wait, 10) for _ in range(8)]
+    try:
+        out = router.latest_prices(["AAPL"], lambda ts: {t: 2.0 for t in ts})
+    finally:
+        release.set()
+    assert out == {"AAPL": 1.0} and router.last_source("AAPL") == "alpaca"
 
 
 def test_auth_error_still_latches_at_once_and_is_not_retried(cfg, monkeypatch):

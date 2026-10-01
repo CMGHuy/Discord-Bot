@@ -23,6 +23,10 @@ from swingbot.core.marketdata.providers.base import (
 log = logging.getLogger(__name__)
 _provider_factory = AlpacaProvider
 _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="alpaca")
+# Quotes get their own workers: a slow bulk-bars call must never starve the
+# short-deadline quote path (a timed-out call keeps its worker until the SDK
+# returns, so sharing one pool would silently push quotes onto yfinance).
+_quote_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="alpaca-quote")
 _lock = threading.Lock()
 
 
@@ -59,6 +63,10 @@ class _WarnGate:
 
 class _NotSent(Exception):
     """A batch that never left (no rate-limit token) -- not an Alpaca failure."""
+
+
+class DeadlineExpired(TimeoutError):
+    """The shared call deadline passed before the provider returned."""
 
 
 class _Breaker:
@@ -130,7 +138,11 @@ def _wait(future, deadline: float):
     until `deadline` (monotonic). No breaker/stat side effects."""
     try:
         return future.result(timeout=max(0.0, deadline - time.monotonic())), None
-    except Exception as exc:  # AlpacaMiss, FutureTimeout, anything the provider raised
+    except FutureTimeout as exc:
+        if future.done():  # the provider itself raised a timeout before the deadline
+            return None, exc
+        return None, DeadlineExpired(str(exc) or "deadline expired")
+    except Exception as exc:  # AlpacaMiss, anything the provider raised
         return None, exc
 
 
@@ -158,7 +170,8 @@ def _attempt(method: str, *args, timeout: float = None):
     if prov is None or not _bucket.take():
         return None
     deadline = time.monotonic() + float(config.ALPACA_TIMEOUT_SECONDS if timeout is None else timeout)
-    return _collect(_pool.submit(with_current_context(getattr(prov, method)), *args), method, deadline)
+    pool = _quote_pool if method == "latest_prices" else _pool
+    return _collect(pool.submit(with_current_context(getattr(prov, method)), *args), method, deadline)
 
 
 def _round(prov, method: str, batches: list, args: tuple, deadline: float) -> list:
@@ -171,8 +184,9 @@ def _round(prov, method: str, batches: list, args: tuple, deadline: float) -> li
 
 def _retryable(exc, deadline: float) -> bool:
     """A real failure with deadline budget left. Auth errors, an expired
-    deadline and an open breaker are never retried."""
-    if exc is None or isinstance(exc, (AlpacaAuthError, FutureTimeout, _NotSent)):
+    deadline and an open breaker are never retried; a provider-raised timeout
+    that fired before the deadline is an ordinary failure and is retried."""
+    if exc is None or isinstance(exc, (AlpacaAuthError, DeadlineExpired, _NotSent)):
         return False
     return time.monotonic() < deadline and _breaker.allows()
 
@@ -192,19 +206,25 @@ def _retry_failed(prov, method: str, batches: list, args: tuple, deadline: float
 
 
 def _account(method: str, batches: list, outcomes: list) -> None:
-    """One breaker verdict per call: any failure is ONE incident, a call whose
-    sent batches all succeeded is a success. Then one rate-limited summary."""
+    """One breaker verdict per call: a success if any sent batch succeeded (a
+    deterministic poison batch must not trip the breaker for every symbol), one
+    failure only when every sent batch failed, nothing when none was sent.
+    Failed batches still get one rate-limited summary."""
     failed = [(i, exc) for i, (_, exc) in enumerate(outcomes)
               if exc is not None and not isinstance(exc, _NotSent)]
+    succeeded = any(exc is None for _, exc in outcomes)
     if not failed:
-        if any(exc is None for _, exc in outcomes):
+        if succeeded:
             _breaker.record(True)
         return
     _stats["failures"] += len(failed)
     for i, exc in failed:
         log.debug("Alpaca %s batch %d miss: %s", method, i, _reason(exc))
-    _breaker.record(False, auth=any(isinstance(e, AlpacaAuthError) for _, e in failed),
-                    reason=_reason(failed[-1][1]))
+    auth = any(isinstance(e, AlpacaAuthError) for _, e in failed)
+    if succeeded and not auth:
+        _breaker.record(True)
+    else:
+        _breaker.record(False, auth=auth, reason=_reason(failed[-1][1]))
     _warn_miss_summary(method, batches, failed)
 
 
