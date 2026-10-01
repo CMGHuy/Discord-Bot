@@ -51,8 +51,10 @@ from .helpers import docker_sdk, _load_or_create_secret_key  # noqa: F401
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
-TRIGGER_FILE = os.path.join(config.DATA_DIR, "trigger_check.flag")
-PAUSE_FILE = os.path.join(config.DATA_DIR, "scan_paused.flag")
+# The scan trigger and pause flags are owned by
+# swingbot.commands.scanning.runstate, which stage-branches them between
+# data/ files and the runtime_flags table. This module keeps no paths of its
+# own: a second definition is a flag the bot stops reading at `flags:db`.
 
 # Section headings for the Settings screen, keyed by the section name in
 # swingbot.config.FIELDS. Consumed by api_v1/system.py, which imports this
@@ -304,25 +306,17 @@ def scan_status_payload() -> dict:
     every tick -- see commands/scanning.py).
 
     A plain dict rather than a Response so /api/v1/system/scan can serve the
-    same payload (NG16). The flag-file names this reads must match the ones
-    the BOT reads; a mismatch is invisible in the UI, which simply shows
-    "not paused" forever. tests/admin/test_api_v1_system_scan.py pins
-    these constants against commands/scanning.py's.
+    same payload (NG16). The trigger and pause state come from the bot's own
+    runstate module, so the admin and the bot read the same flag at every
+    storage stage; a second copy of the paths here once meant a UI showing
+    "not paused" forever. tests/admin/test_scan_flags_stage.py pins it.
     """
-    pending = os.path.exists(TRIGGER_FILE)
-    mtime = None
-    if pending:
-        try:
-            mtime = datetime.fromtimestamp(os.path.getmtime(TRIGGER_FILE), tz=timezone.utc).isoformat()
-        except OSError:
-            pass
-    paused = os.path.exists(PAUSE_FILE)
-    paused_at = None
-    if paused:
-        try:
-            paused_at = datetime.fromtimestamp(os.path.getmtime(PAUSE_FILE), tz=timezone.utc).isoformat()
-        except OSError:
-            pass
+    from swingbot.commands.scanning import runstate
+
+    pending = runstate.is_trigger_requested()
+    mtime = runstate.trigger_requested_at() if pending else None
+    paused = runstate.is_scan_paused()
+    paused_at = runstate.scan_paused_at() if paused else None
     running = is_scan_running()
 
     # Bot liveness: the heartbeat file is written on every session_scan tick
