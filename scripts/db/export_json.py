@@ -7,9 +7,9 @@ stage ``db`` real. Reuses ``parity_report.STORES`` (file name, repository,
 already treats as equal to the source.
 
 After exporting, the bot and admin containers MUST be restarted: the
-``TradeLog._trades`` / ``PlanStore._plans`` / ``StateStore._data`` singletons
-hold copies from before the export and would overwrite the file on their next
-write.
+store singletons (``TradeLog._trades``, ``PlanStore._plans``,
+``StateStore._data`` and every other store singleton) hold copies from before
+the export and would overwrite the file on their next write.
 """
 from __future__ import annotations
 
@@ -180,6 +180,88 @@ WRITERS: dict[str, Callable[[str, Any], None]] = {
 }
 
 
+@dataclass(frozen=True)
+class ExtraSpec:
+    """An ephemeral ops store: no parity spec, and at `db` its file is stale
+    by definition, so an export always writes it."""
+    filename: str
+    build: Callable[[], Any]
+    kind: str              # "file" | "flags" | "optional"
+
+
+def _build_flags() -> dict:
+    from swingbot.core.db.repositories.flags import FLAGS, flags_repo
+    repo = flags_repo()
+    return {name: normalise(repo.set_at(name)) for name in FLAGS if repo.is_set(name)}
+
+
+def _build_heartbeat() -> dict:
+    from swingbot.core.db.repositories.heartbeat import heartbeat_repo
+    return normalise(heartbeat_repo().last() or {})
+
+
+def _build_notify_queue() -> list:
+    from swingbot.core.db.repositories.notify_queue import NotifyQueueRepository
+    rows = sorted(NotifyQueueRepository().list_all(), key=lambda row: str(row.get("queued_at")))
+    return [normalise(_without(row, "queued_at")) for row in rows]
+
+
+def _build_scan_progress() -> dict | None:
+    from swingbot.core.db.repositories.scan_progress import scan_progress_repo
+    record = scan_progress_repo().read()
+    return None if record is None else normalise(record)
+
+
+def _build_market_data_state() -> dict:
+    from swingbot.core.db.repositories.market_data_state import market_data_state_repo
+    return normalise(market_data_state_repo().load())
+
+
+def _write_flags(out_dir: str, payload: dict) -> None:
+    from swingbot.core.db.repositories.flags import FLAGS
+    for name in FLAGS:
+        path = os.path.join(out_dir, f"{name}.flag")
+        if name in payload:
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(str(payload[name]))
+        elif os.path.exists(path):
+            os.remove(path)
+
+
+def _write_optional(path: str, payload: Any) -> None:
+    if payload is None:
+        if os.path.exists(path):
+            os.remove(path)
+        return
+    atomic_write_json(path, payload)
+
+
+EXTRA: dict[str, ExtraSpec] = {
+    "flags": ExtraSpec("", _build_flags, "flags"),
+    "heartbeat": ExtraSpec("bot_heartbeat.json", _build_heartbeat, "file"),
+    "notify_queue": ExtraSpec("manual_close_notify.json", _build_notify_queue, "file"),
+    "scan_progress": ExtraSpec("scan_progress.json", _build_scan_progress, "optional"),
+    "market_data_state": ExtraSpec("market_data_state.json", _build_market_data_state, "file"),
+}
+
+
+def _export_extra(name: str, out_dir: str, *, dry_run: bool) -> ExportResult:
+    spec = EXTRA[name]
+    payload = spec.build()
+    checksum = record_checksum({"v": payload})
+    target = out_dir if spec.kind == "flags" else os.path.join(out_dir, spec.filename)
+    count = 0 if payload is None else len(payload)
+    if dry_run:
+        return ExportResult(name, count, checksum, target, "dry-run")
+    if spec.kind == "flags":
+        _write_flags(out_dir, payload)
+    elif spec.kind == "optional":
+        _write_optional(target, payload)
+    else:
+        atomic_write_json(target, payload)
+    return ExportResult(name, count, checksum, target, "written")
+
+
 def _read_jsonl(path: str) -> list | None:
     entries = []
     with open(path, encoding="utf-8") as handle:
@@ -231,6 +313,8 @@ def _decide(path: str, kind: str, checksum: str, force: bool) -> tuple[str, str]
 
 
 def export_one(name: str, out_dir: str, *, dry_run: bool, force: bool) -> ExportResult:
+    if name in EXTRA:
+        return _export_extra(name, out_dir, dry_run=dry_run)
     payload = build_payload(name)
     checksum = record_checksum({"v": payload})
     kind = _kind(name)
@@ -244,7 +328,8 @@ def export_one(name: str, out_dir: str, *, dry_run: bool, force: bool) -> Export
 
 
 def exportable_names() -> list[str]:
-    return sorted(name for name in STORES if name in BUILDERS or name in SHAPERS)
+    shaped = [name for name in STORES if name in BUILDERS or name in SHAPERS]
+    return sorted(shaped + list(EXTRA))
 
 
 def run_export(names: list[str], out_dir: str, *, dry_run: bool, force: bool) -> list[ExportResult]:
@@ -267,7 +352,7 @@ def _print_result(result: ExportResult) -> None:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Export Postgres stores back to JSON")
-    parser.add_argument("--store", required=True, choices=sorted(STORES) + ["all"])
+    parser.add_argument("--store", required=True, choices=exportable_names() + ["all"])
     parser.add_argument("--out-dir", default=None, help="default: config.DATA_DIR")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--force", action="store_true",
