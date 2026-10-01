@@ -60,6 +60,6 @@ def test_the_makefile_exposes_it():
 def test_the_deploy_doc_carries_the_cron_line():
     doc = (REPO / "docs" / "deploy" / "DEPLOY_HETZNER.md").read_text(
         encoding="utf-8")
-    assert ("0 3 * * *  cd /opt/swing-bot && ./scripts/ops/backup_db.sh"
-            " >> logs/backup.log 2>&1") in doc
+    # v116 moved the cron lines into the Backups table of the PITR section.
+    assert "| `0 3 * * *` | `backup_db.sh` |" in doc
     assert "Nightly backups do not exist yet" not in doc
