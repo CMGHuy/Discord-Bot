@@ -42,7 +42,7 @@ def test_no_stat_calls_on_table_backed_paths_at_the_db_stage(monkeypatch, tmp_pa
         time.sleep(1.5)          # three file-watcher intervals' worth
     assert table_backed == [], f"something still polls data/: {table_backed[:5]}"
     # The spy is live: the residual FileWatcher legitimately stats these.
-    assert any(p.endswith("scan_progress.json") for p in residual), residual
+    assert any(p.endswith("scan_snapshots.json") for p in residual), residual
 
 
 def test_only_one_watcher_object_exists(monkeypatch, tmp_path, db_engine):

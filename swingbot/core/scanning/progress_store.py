@@ -2,8 +2,9 @@
 
 The bot and the admin are separate containers sharing only `data/`, exactly
 as `runstate.py` describes -- so a progress bar in the SPA needs the scan's
-in-memory `ScanProgress` written to a file the admin's watcher already
-`stat()`s. Nothing here is authoritative: the record is a display artefact,
+in-memory `ScanProgress` written where the admin can see it:
+`data/scan_progress.json`, or at stage `scan_progress:db` the `scan_progress`
+table, whose trigger raises the same `scan` event. Nothing here is authoritative: the record is a display artefact,
 deleted when the scan ends, and losing it costs a progress bar and nothing
 else.
 """
@@ -94,32 +95,42 @@ def path() -> str:
     return os.path.join(config.DATA_DIR, FILENAME)
 
 
-def publish(progress) -> None:
-    """Write `progress`'s record atomically, or log and carry on.
-
-    Never raises: this is called from a background thread beside a scan
-    that matters, and a failed progress write must not end that scan.
-    """
+def _write_file(record: dict) -> None:
     target = path()
     tmp = target + ".tmp"
     try:
         os.makedirs(os.path.dirname(target), exist_ok=True)
         with open(tmp, "w") as handle:
-            json.dump(snapshot(progress), handle)
+            json.dump(record, handle)
         # Atomic on both platforms: the admin reads this on a request thread
-        # while the bot rewrites it roughly once a second, and a truncating
-        # write would give it an empty file to parse.
+        # while the bot rewrites it roughly once a second.
         os.replace(tmp, target)
     except OSError:
         log.debug("Could not publish scan progress", exc_info=True)
 
 
-def read() -> dict | None:
-    """The current record, or None when no scan is publishing one.
+def _write_row(record: dict) -> None:
+    # The one store besides the heartbeat allowed to swallow a DB write
+    # failure: it is a progress bar, and the fail-fast rule exists to protect
+    # trading state, not a display artefact.
+    try:
+        from swingbot.core.db.repositories.scan_progress import scan_progress_repo
+        scan_progress_repo().publish(record)
+    except Exception:  # noqa: BLE001
+        log.debug("Could not publish scan progress to the database", exc_info=True)
 
-    A corrupt file reads as absent rather than raising -- the caller is the
-    admin's scan-status endpoint, and a progress bar is never worth a 500.
-    """
+
+def publish(progress) -> None:
+    """Write `progress`'s record to the stage's backend(s). Never raises."""
+    from swingbot.core.db import stages
+    record = snapshot(progress)
+    if stages.writes_json("scan_progress"):
+        _write_file(record)
+    if stages.writes_db("scan_progress"):
+        _write_row(record)
+
+
+def _read_file() -> dict | None:
     try:
         with open(path()) as handle:
             return json.load(handle)
@@ -127,13 +138,40 @@ def read() -> dict | None:
         return None
 
 
+def _read_row() -> dict | None:
+    try:
+        from swingbot.core.db.repositories.scan_progress import scan_progress_repo
+        return scan_progress_repo().read()
+    except Exception:  # noqa: BLE001
+        log.debug("Could not read scan progress from the database", exc_info=True)
+        return None
+
+
+def read() -> dict | None:
+    """The current record, or None when no scan is publishing one.
+
+    Unreadable reads as absent rather than raising -- the caller is the
+    admin's scan-status endpoint, and a progress bar is never worth a 500.
+    """
+    from swingbot.core.db import stages
+    return _read_row() if stages.reads_db("scan_progress") else _read_file()
+
+
 def clear() -> None:
     """Remove the record. Idempotent -- a scan that never published is normal."""
-    for candidate in (path(), path() + ".tmp"):
+    from swingbot.core.db import stages
+    if stages.writes_json("scan_progress"):
+        for candidate in (path(), path() + ".tmp"):
+            try:
+                os.remove(candidate)
+            except OSError:
+                pass
+    if stages.writes_db("scan_progress"):
         try:
-            os.remove(candidate)
-        except OSError:
-            pass
+            from swingbot.core.db.repositories.scan_progress import scan_progress_repo
+            scan_progress_repo().clear()
+        except Exception:  # noqa: BLE001
+            log.debug("Could not clear scan progress in the database", exc_info=True)
 
 
 @contextlib.contextmanager

@@ -31,7 +31,7 @@ the spec. Do not "upgrade" this to them without re-reading Decision 1.
 As of v67 this is the FALLBACK, not the mechanism: at the db stage the admin
 subscribes to Postgres LISTEN/NOTIFY (admin/events/db_listener.py) and this
 watcher runs only over residual_paths() -- the files no table replaces yet
-(scan progress/snapshots/telemetry, the analytics snapshot, .env). This module
+(scan snapshots/telemetry, the analytics snapshot, .env). This module
 survives only while any watched file has no table, and Part 6 of that plan
 deletes it. Prefer a table in swingbot/core/db/events.py's TABLE_CHANNELS over
 a new _DATA_PATHS entry; a new entry here that is table-backed must also go in
@@ -149,6 +149,7 @@ _TABLE_BACKED: frozenset[str] = frozenset({
     "ticker_directory.json",  # ticker_directory
     "admin_jobs.json",        # admin_jobs
     "tuning_results",         # tuning_results
+    "scan_progress.json",     # scan_progress (v116)
 })
 
 
@@ -156,7 +157,7 @@ def residual_paths() -> dict[str, str]:
     """`default_paths()` minus every path a NOTIFY trigger already covers.
 
     What the file watcher still has to watch beside a `DbEventListener`:
-    scan progress/snapshots/telemetry, the analytics snapshot and `.env`,
+    scan snapshots/telemetry, the analytics snapshot and `.env`,
     none of which has a table yet.
 
     Drops every `_TABLE_BACKED` file unconditionally -- it does not consult
