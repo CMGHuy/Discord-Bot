@@ -37,7 +37,7 @@ def test_env_versions_are_pruned_after_the_backup():
 def test_restic_snapshots_market_data_and_keeps_thirty_days():
     text = _text("restic_hourly.sh")
     assert "restic backup" in text and "market_data" in text
-    assert "--keep-within 30d" in text and "--prune" in text
+    assert "--keep-within 30d --keep-tag stable --prune" in text
     assert "env_set.py --get RESTIC_PASSWORD" in text
 
 

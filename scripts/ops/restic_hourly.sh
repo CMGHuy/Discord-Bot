@@ -17,5 +17,5 @@ export RESTIC_REPOSITORY="$PWD/backups/restic"
 
 echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) restic backup market_data ==="
 restic backup --host swing-bot --tag market_data "$PWD/market_data"
-# v120: preserve any snapshot tagged stable past the 30-day window (different keep policies AND'd together)
+# v120: restic keeps a snapshot if ANY keep policy matches, so snapshots tagged stable outlive the 30d window
 restic forget --host swing-bot --tag market_data --keep-within 30d --keep-tag stable --prune
