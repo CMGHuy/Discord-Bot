@@ -330,6 +330,16 @@ def _read_queue_file() -> list:
     return data if isinstance(data, list) else []
 
 
+def _with_trade_id_as_id(record: dict) -> dict:
+    """The table keeps a trade's `id` as `trade_id` (`id` is a reserved
+    column); the embeds read the trade as `id`."""
+    if "trade_id" not in record:
+        return record
+    restored = dict(record)
+    restored["id"] = restored.pop("trade_id")
+    return restored
+
+
 def _take_manual_close_queue() -> list:
     """Remove and return the queued manual-close records.
 
@@ -341,7 +351,7 @@ def _take_manual_close_queue() -> list:
     from swingbot.core.db import stages
     if stages.reads_db("notify_queue"):
         from swingbot.core.db.repositories.notify_queue import notify_queue_repo
-        return notify_queue_repo().drain()
+        return [_with_trade_id_as_id(record) for record in notify_queue_repo().drain()]
     queued = _read_queue_file()
     if stages.writes_db("notify_queue"):
         from swingbot.core.db.repositories.notify_queue import notify_queue_repo

@@ -74,7 +74,11 @@ def _queue_notify(record: dict) -> None:
                 atomic_write_json(path, existing)
         if stages.writes_db("notify_queue"):
             from swingbot.core.db.repositories.notify_queue import notify_queue_repo
-            notify_queue_repo().enqueue(record)
+            # A trade record's own `id` is a reserved column name in the
+            # table: queued as-is the insert is rejected and the close is
+            # never announced. drain() hands it back as `id`.
+            notify_queue_repo().enqueue(
+                {("trade_id" if key == "id" else key): value for key, value in record.items()})
     except Exception as exc:
         log.warning("could not queue manual-close notification: %s", exc, exc_info=True)
 

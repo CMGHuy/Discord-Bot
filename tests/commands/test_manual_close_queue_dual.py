@@ -52,4 +52,5 @@ def test_the_db_stage_drains_the_table(posted, monkeypatch):
     monkeypatch.setattr(config, "DB_STORES", "notify_queue:db")
     NotifyQueueRepository().enqueue(dict(RECORD))
     asyncio.run(loops._post_manual_close_queue())
-    assert posted == [RECORD]
+    # The embeds read the trade as `id`; the table stores it as `trade_id`.
+    assert posted == [{"id": "T1", "ticker": "AAPL"}]
