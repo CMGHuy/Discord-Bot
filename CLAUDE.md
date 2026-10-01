@@ -155,5 +155,6 @@ Not auto-loaded — read the relevant one before starting work in that area.
 | `git-safety.md` | any branch deletion or force push |
 | `testing-cost.md` | optimising or timing tests, or reacting to a changed pass count |
 | `code-complexity.md` | writing or changing any function — the < 15 limit, how to measure it, how to split without changing behaviour |
+| `schema-evolution.md` | changing a table's shape or a stored record's fields — add, rename, drop, promote; no read-time upcasting |
 | `persona.md` | deciding how to question the partner, or what bar a change must meet |
 | `skills-tools.md` | picking a skill or agent, dispatching subagents, disabled plugins, driving a browser |

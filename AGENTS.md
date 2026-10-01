@@ -169,6 +169,8 @@ Read before acting:
 - `docs/claude/testing-cost.md` before optimizing, timing or interpreting a
   changed test count.
 - `docs/claude/code-complexity.md` before writing or changing any function.
+- `docs/claude/schema-evolution.md` before changing a table's shape or the
+  fields a stored record carries (add, rename, drop, promote).
 - `docs/claude/skills-tools.md` before choosing repo-specific skills or
   automation.
 
