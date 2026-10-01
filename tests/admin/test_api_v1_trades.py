@@ -877,6 +877,24 @@ def test_today_filters_a_cancelled_plan_by_its_status_history(seed, logged_in):
     assert [r["id"] for r in items] == [fresh_plan["plan_id"]]
 
 
+def test_cancelled_plan_row_reports_its_lifetime_and_confidence(seed, logged_in):
+    """An unfilled plan has no trade, so closed_at / held_hours come from the
+    plan's own created_at -> cancel transition, and confidence from the plan."""
+    plan = _plan("33333333-3333-4333-8333-333333333333", status="CANCELLED")
+    plan["created_at"] = "2026-09-01T10:00:00+00:00"
+    plan["status_history"] = [
+        {"status": "CANCELLED", "reason": "expired", "at": "2026-09-03T10:00:00+00:00"}
+    ]
+    plan["confidence_level"] = 3
+    seed(plans=[plan])
+
+    row = logged_in.get("/api/v1/trades?status=CANCELLED").get_json()["items"][0]
+    assert row["opened_at"] is None
+    assert row["closed_at"] == "2026-09-03T10:00:00+00:00"
+    assert row["held_hours"] == 48.0
+    assert row["confidence_level"] == 3
+
+
 def test_today_includes_a_still_open_legacy_trade_no_matter_how_old(seed, logged_in):
     trade = _trade("aaaaaaaaaaaaaaaa", status="open")
     trade["opened_at"] = _OLD_ISO
