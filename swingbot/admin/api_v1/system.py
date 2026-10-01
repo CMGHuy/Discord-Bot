@@ -417,17 +417,16 @@ def get_scan():
 @require_auth
 def scan_trigger():
     import json
-    import os
 
-    from swingbot.admin.app import TRIGGER_FILE
+    # The bot's own runstate module owns the flag and its storage stage;
+    # writing the file here would be invisible to a bot at `flags:db`.
+    from swingbot.commands.scanning import runstate
 
     try:
-        os.makedirs(config.DATA_DIR, exist_ok=True)
-        with open(TRIGGER_FILE, "w") as f:
-            f.write(json.dumps({
-                "triggered_at": datetime.now(timezone.utc).isoformat(),
-                "source": "admin_ui",
-            }))
+        runstate.request_trigger(json.dumps({
+            "triggered_at": datetime.now(timezone.utc).isoformat(),
+            "source": "admin_ui",
+        }))
     except OSError as exc:
         return error("unavailable", f"Could not write the trigger file: {exc}", 503)
     return _scan_result(True, "Scan queued — the bot picks it up within 30 seconds.")
@@ -451,14 +450,10 @@ def scan_stop():
 @api_v1.route("/system/scan/pause", methods=["POST"])
 @require_auth
 def scan_pause():
-    import os
-
-    from swingbot.admin.app import PAUSE_FILE
+    from swingbot.commands.scanning import runstate
 
     try:
-        os.makedirs(config.DATA_DIR, exist_ok=True)
-        with open(PAUSE_FILE, "w") as f:
-            f.write(datetime.now(timezone.utc).isoformat())
+        runstate.set_scan_paused(True)
     except OSError as exc:
         return error("unavailable", f"Could not write the pause file: {exc}", 503)
     return _scan_result(True, "Automatic scanning paused — manual !check still works.")
@@ -467,13 +462,10 @@ def scan_pause():
 @api_v1.route("/system/scan/resume", methods=["POST"])
 @require_auth
 def scan_resume():
-    import os
-
-    from swingbot.admin.app import PAUSE_FILE
+    from swingbot.commands.scanning import runstate
 
     try:
-        if os.path.exists(PAUSE_FILE):
-            os.remove(PAUSE_FILE)
+        runstate.set_scan_paused(False)
     except OSError as exc:
         return error("unavailable", f"Could not remove the pause file: {exc}", 503)
     return _scan_result(True, "Automatic scanning resumed.")

@@ -10,6 +10,7 @@ from swingbot.config import auto_reload_if_changed
 from swingbot.core.charts.decision_chart import render_decision_chart
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
 from swingbot.core.charts.trendline_fit import fit_trendline
+from swingbot.core.db import write_failure
 from swingbot.core.edge import correlation as corr_mod
 from swingbot.core.edge import factors as rs_factors
 from swingbot.core.edge import heat as heat_mod
@@ -212,11 +213,22 @@ def _earnings_in_window(ticker: str, max_holding_days: int):
     return earnings_info
 
 
-def _persist_plan_v2(plan_v2) -> None:
-    """Add the plan to PlanStore; log it as armed only once that succeeded."""
+def _persist_plan_v2(plan_v2, alerts=()) -> None:
+    """Add the plan to PlanStore; log it as armed only once that succeeded.
+
+    v116: at a trading store's db stage a failed write is not swallowed. The
+    alert for this plan would otherwise post with no plan behind it, so the
+    scan stops (session_scan then pauses). Called BEFORE the trade is logged,
+    so the halting result has neither a trade nor an alert; `alerts` (those
+    already built, each with its trade and plan stored) ride on the halt so
+    the caller still posts them.
+    """
     try:
         PlanStore().add(plan_v2)
-    except Exception:
+    except Exception as exc:
+        if write_failure.halts_issuance(exc):
+            raise write_failure.StoreWriteHalt(
+                f"plan {plan_v2.plan_id} could not be stored", alerts=alerts) from exc
         log.warning("Failed to persist plan_v2 %s to PlanStore",
                     plan_v2.plan_id, exc_info=True)
         return
@@ -833,6 +845,18 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                     log.warning("Trendline fit failed for %s (%s) -- trade stores no fit",
                                 result.ticker, result.horizon_key, exc_info=True)
 
+            if plan_v2 is not None:
+                # Task-review fix: attach_plan_v2() builds the plan and the
+                # scanning loop uses it for the alert/chart/trade-log row below,
+                # but nothing previously persisted it into PlanStore -- the one
+                # store the admin Plans page and the intraday PlanManager
+                # (INTRADAY_MANAGER_V2) both read from. Without this, plans.json
+                # never gained an entry: the Plans page stayed at 0/0/0 forever
+                # and the intraday manager's poll() had nothing to ever act on.
+                # v116: BEFORE log_trade, so a halting plan write leaves no
+                # trade without an alert (earlier results ride on the halt).
+                _persist_plan_v2(plan_v2, alerts)
+
             trade_id = trade_log.log_trade(
                 ticker=result.ticker, strategy=result.strategy, horizon_key=result.horizon_key,
                 direction=result.trend, confidence_level=conf.level, confidence_label=conf.label,
@@ -856,15 +880,6 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 entry_context=plan_v2.entry_context if plan_v2 is not None else None,
             )
             log.info("Logged new paper trade %s for %s", trade_id, result.ticker)
-            if plan_v2 is not None:
-                # Task-review fix: attach_plan_v2() builds the plan and the
-                # scanning loop uses it for the alert/chart/trade-log row above,
-                # but nothing previously persisted it into PlanStore -- the one
-                # store the admin Plans page and the intraday PlanManager
-                # (INTRADAY_MANAGER_V2) both read from. Without this, plans.json
-                # never gained an entry: the Plans page stayed at 0/0/0 forever
-                # and the intraday manager's poll() had nothing to ever act on.
-                _persist_plan_v2(plan_v2)
         else:
             log.info("%s (%s) already has an open trade -- not logging a duplicate", result.ticker, result.horizon_key)
 

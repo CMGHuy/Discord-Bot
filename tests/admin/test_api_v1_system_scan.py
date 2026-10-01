@@ -1,13 +1,12 @@
 """NG16 — /api/v1/system/{logs,scan,bot} .
 
-**`test_admin_and_bot_agree_on_the_flag_file_names` is the point of this
-file.** Scan control is entirely file-based: the admin writes a flag and the
-bot polls for it. The two sides define those paths as SEPARATE constants
-(`app.py`'s TRIGGER_FILE/PAUSE_FILE vs `commands/scanning.py`'s
-_TRIGGER_FILE/_PAUSE_FILE/_HEARTBEAT_FILE), and nothing but that test makes
-them agree. A rename on one side raises nothing, logs nothing, and produces
-a UI that cheerfully reports "not paused" forever while the bot stays
-paused -- which is exactly the failure NG16 names.
+**`test_the_admin_keeps_no_flag_paths_of_its_own` is the point of this
+file.** The admin raises a flag and the bot polls for it. The two sides once
+defined those paths as SEPARATE constants, and a rename on one side raised
+nothing, logged nothing, and produced a UI that cheerfully reported "not
+paused" forever while the bot stayed paused -- exactly the failure NG16
+names. The admin now goes through `commands/scanning/runstate.py`, the
+module the bot reads, so there is one definition at every storage stage.
 
 `engine._STOP_FILE` and `engine._RUNNING_FILE` are baked from config.DATA_DIR
 at import time and `swingbot.core.scanning.engine` is not in conftest's
@@ -35,21 +34,23 @@ def logged_in(client):
 def scan_files(admin_app, tmp_path, monkeypatch):
     """Every scan flag pointed at the test's own directory.
 
-    admin_app's reload covers app.py's TRIGGER_FILE/PAUSE_FILE; engine's two
-    are patched here because that module is deliberately not reloaded.
+    admin_app patches the bot runstate's trigger/pause paths; the core
+    runstate's stop/running two are patched here because that module is
+    deliberately not reloaded.
     """
-    from swingbot.admin import app as admin_module
-    from swingbot.core.scanning import engine
+    from swingbot.commands.scanning import runstate as bot_runstate
     from swingbot.core.scanning import runstate
 
     monkeypatch.setattr(runstate, "_STOP_FILE", str(tmp_path / "stop_scan.flag"))
     monkeypatch.setattr(runstate, "_RUNNING_FILE", str(tmp_path / "scan_running.flag"))
-    assert admin_module.TRIGGER_FILE.startswith(str(tmp_path)), (
-        "app.py's flag paths did not follow the test DATA_DIR"
+    # set_scan_paused(False) acknowledges a store-write halt in the heartbeat file.
+    monkeypatch.setattr(bot_runstate, "_HEARTBEAT_FILE", str(tmp_path / "bot_heartbeat.json"))
+    assert bot_runstate._TRIGGER_FILE.startswith(str(tmp_path)), (
+        "the bot runstate's flag paths did not follow the test DATA_DIR"
     )
     return {
-        "trigger": admin_module.TRIGGER_FILE,
-        "pause": admin_module.PAUSE_FILE,
+        "trigger": bot_runstate._TRIGGER_FILE,
+        "pause": bot_runstate._PAUSE_FILE,
         "stop": runstate._STOP_FILE,
         "running": runstate._RUNNING_FILE,
     }
@@ -67,18 +68,16 @@ def log_files(admin_app, tmp_path, monkeypatch):
 
 # --- the flag-name contract --------------------------------------------
 
-def test_admin_and_bot_agree_on_the_flag_file_names():
-    """The one that matters. Scan control is a file the admin writes and the
-    bot polls; the two define those paths independently, and a mismatch is
-    silent on both sides -- no error, no log line, just a UI that reports
-    "not paused" while the bot stays paused."""
+def test_the_admin_keeps_no_flag_paths_of_its_own():
+    """The one that matters. A second definition of the trigger/pause paths
+    is silent on both sides when it drifts -- no error, no log line, just a
+    UI that reports "not paused" while the bot stays paused -- and at
+    `flags:db` it is a file the bot no longer reads at all."""
     from swingbot.admin import app as admin_module
     from swingbot.commands import scanning as bot_module
 
-    assert (os.path.basename(admin_module.TRIGGER_FILE)
-            == os.path.basename(bot_module._TRIGGER_FILE))
-    assert (os.path.basename(admin_module.PAUSE_FILE)
-            == os.path.basename(bot_module._PAUSE_FILE))
+    assert not hasattr(admin_module, "TRIGGER_FILE")
+    assert not hasattr(admin_module, "PAUSE_FILE")
     assert os.path.basename(bot_module._HEARTBEAT_FILE) == "bot_heartbeat.json", (
         "app.py's scan_status_payload reads this name literally"
     )
@@ -100,6 +99,7 @@ def test_scan_status_shape(logged_in, scan_files):
         "bot_healthy": (bool, type(None)),
         "bot_last_success": NULLABLE_STR,
         "bot_consecutive_failures": int,
+        "bot_store_write_failure": (dict, type(None)),
         "progress": (dict, type(None)),
     })
 

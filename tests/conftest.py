@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tests.db.conftest import db_committed, db_conn, db_engine, db_engine_empty  # noqa: F401
+from tests.db.conftest import db_committed, db_conn, db_engine, db_engine_empty, store_db  # noqa: F401
 
 
 @pytest.hookimpl(trylast=True)
@@ -84,6 +84,18 @@ def assert_entry_invariants(bull, bear, df):
 
 
 TEST_DPI = 30
+
+
+@pytest.fixture(autouse=True)
+def _heartbeat_file_in_tmp(monkeypatch, tmp_path_factory):
+    """Keep runstate's baked heartbeat path out of the real data/ directory.
+
+    set_scan_paused(False) acknowledges a store-write halt by writing
+    bot_heartbeat.json; without this a test that unpauses leaves one behind.
+    """
+    from swingbot.commands.scanning import runstate
+    monkeypatch.setattr(runstate, "_HEARTBEAT_FILE",
+                        str(tmp_path_factory.mktemp("hb") / "bot_heartbeat.json"))
 
 
 @pytest.fixture(autouse=True)

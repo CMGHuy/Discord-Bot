@@ -323,8 +323,9 @@ def get_balance_history(path: str = None) -> list:
     balance` overrides -- for the admin Performance page's balance-over-time
     chart."""
     if _use_db(path):
+        from swingbot.core.db.dual import normalise
         from swingbot.core.db.repositories.account import account_repo
-        return account_repo().history()
+        return normalise(account_repo().history())
     return load_account_config(path).get("balance_history", [])
 
 
@@ -374,7 +375,9 @@ def get_daily_summary(path: str = None) -> dict:
     """
     cfg = load_account_config(path)
     balance = float(cfg.get("balance", 0))
-    history = cfg.get("balance_history", [])
+    # At the db stage load_account_config() has no balance_history (the
+    # repository keeps it in its own table), so read it via the accessor.
+    history = get_balance_history(path)
     if not history:
         return {
             "balance": balance, "balance_start_of_day": None, "pct_change_today": None,

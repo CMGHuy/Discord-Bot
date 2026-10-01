@@ -127,6 +127,21 @@ def test_close_an_open_legacy_trade(seed, logged_in, notify_queue):
     assert notify_queue()
 
 
+def test_closing_a_legacy_trade_reaches_the_db_queue_under_its_trade_id(
+        seed, logged_in, store_db, monkeypatch):
+    """A legacy trade's own `id` is a reserved column in manual_close_notify:
+    queued as `id` the insert is rejected (and swallowed) and the trade-history
+    channel never hears about the close."""
+    from swingbot import config
+    from swingbot.core.db.repositories.notify_queue import notify_queue_repo
+    monkeypatch.setattr(config, "DB_STORES", "notify_queue:db")
+    seed(trades=[_trade(_TRADE_ID, plan_id=None, status="open")])
+
+    assert logged_in.post(f"/api/v1/trades/{_TRADE_ID}/close").status_code == 200
+
+    assert [r.get("trade_id") for r in notify_queue_repo().drain()] == [_TRADE_ID]
+
+
 def test_close_an_already_closed_legacy_trade_is_rejected(seed, logged_in):
     seed(trades=[_trade(_TRADE_ID, plan_id=None, status="win")])
     assert_error(logged_in.post(f"/api/v1/trades/{_TRADE_ID}/close"), "invalid", 422)

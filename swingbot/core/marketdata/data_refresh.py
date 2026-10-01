@@ -69,8 +69,19 @@ STATE_FILE = os.path.join(config.DATA_DIR, "market_data_state.json")
 
 def load_state() -> dict:
     """Per-(symbol,timeframe) coverage + failure record. Survives restarts so
-    an unresolved gap keeps being retried across bot sessions."""
-    return read_json(STATE_FILE, {}) or {}
+    an unresolved gap keeps being retried across bot sessions. At stage
+    `market_data_state:db` it lives in its table, which starts empty (v116:
+    ephemeral, no import) -- an empty map only means every gap is retried on
+    its normal staleness window once."""
+    from swingbot.core.db import stages
+    if not stages.reads_db("market_data_state"):
+        return read_json(STATE_FILE, {}) or {}
+    try:
+        from swingbot.core.db.repositories.market_data_state import market_data_state_repo
+        return market_data_state_repo().load()
+    except Exception as exc:            # never let bookkeeping break a refresh
+        log.warning("could not read market-data state: %s", exc, exc_info=True)
+        return {}
 
 
 def prioritise_symbols(symbols, priority_symbols=()) -> list[str]:
@@ -97,10 +108,15 @@ def prioritise_symbols(symbols, priority_symbols=()) -> list[str]:
 
 
 def save_state(state: dict) -> None:
+    from swingbot.core.db import stages
     try:
-        atomic_write_json(STATE_FILE, state)
+        if stages.writes_json("market_data_state"):
+            atomic_write_json(STATE_FILE, state)
+        if stages.writes_db("market_data_state"):
+            from swingbot.core.db.repositories.market_data_state import market_data_state_repo
+            market_data_state_repo().save(state)
     except Exception as exc:            # never let bookkeeping break a refresh
-        log.warning("could not write %s: %s", STATE_FILE, exc, exc_info=True)
+        log.warning("could not save market-data state: %s", exc, exc_info=True)
 
 
 def _key(symbol: str, timeframe: str) -> str:

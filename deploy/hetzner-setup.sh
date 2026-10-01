@@ -37,7 +37,7 @@ fi
 
 echo "==> Updating apt and installing prerequisites"
 apt-get update -y
-apt-get install -y ca-certificates curl gnupg git ufw
+apt-get install -y ca-certificates curl gnupg git ufw restic python3
 
 echo "==> Installing Docker Engine + Compose plugin"
 install -m 0755 -d /etc/apt/keyrings

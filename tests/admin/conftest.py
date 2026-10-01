@@ -104,6 +104,14 @@ def admin_app(tmp_path, monkeypatch):
     }), encoding="utf-8")
     (tmp_path / "plans.json").write_text("[]", encoding="utf-8")
 
+    # The scan trigger/pause flags belong to the bot's runstate module, which
+    # the admin calls into and which bakes its paths at import time. Patched,
+    # not reloaded: a reload would leave this test's tmp_path in the module
+    # for every later test in the worker.
+    from swingbot.commands.scanning import runstate
+    monkeypatch.setattr(runstate, "_TRIGGER_FILE", str(tmp_path / "trigger_check.flag"))
+    monkeypatch.setattr(runstate, "_PAUSE_FILE", str(tmp_path / "scan_paused.flag"))
+
     mod = None
     for name in _RELOAD_MODULES:
         mod = importlib.reload(importlib.import_module(name))

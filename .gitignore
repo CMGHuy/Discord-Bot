@@ -34,6 +34,9 @@ data/backtest_cache/
 # scripts/data/fetch_backtest_data.py --start 2010-01-01 --end 2025-12-31.
 data/backtest_cache_ext/
 data/backups/
+# v116 point-in-time recovery: pgBackRest repo, .env versions, restic repo,
+# deploys.jsonl. VM-only; never committed.
+/backups/
 # Runtime relative-strength cache, rebuilt from the configured universe.
 data/universe/rs_cache.json
 
@@ -147,3 +150,6 @@ data/v90/
 
 # claude plugin eval run artefacts (HTML reports, aggregate json) -- never committed
 .claude/skills/*/evals/results/
+
+# v116 production snapshot (scripts/ops/pull_prod_snapshot.sh); never commit
+data/v116_snapshot/

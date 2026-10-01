@@ -69,14 +69,21 @@ def emit(conn: sa.Connection, channel: str, payload: str = "") -> None:
                  {"channel": channel, "payload": payload})
 
 
-def listen(channels: "Sequence[str]", on_event: "Callable[[str], None]",
+def listen(channels: "Sequence[str]", on_event: "Callable[[str | None], None]",
            stop: "threading.Event", *, poll: float = 0.5,
-           dsn: str | None = None) -> None:
+           dsn: str | None = None,
+           on_listening: "Callable[[], None] | None" = None) -> None:
     """Block, calling `on_event(channel)` for every notification received.
+
+    A poll window that passes with no notification calls `on_event(None)` --
+    a tick, so a debouncing consumer can flush a burst that ended in silence.
 
     Uses a raw psycopg connection rather than the SQLAlchemy pool: LISTEN is
     session state, and a pooled connection that gets recycled silently stops
     listening. Returns when `stop` is set.
+
+    `on_listening()` is called once per connection, as soon as LISTEN is
+    active -- the moment from which no notification can be missed.
     """
     import psycopg
     from psycopg import sql
@@ -93,13 +100,23 @@ def listen(channels: "Sequence[str]", on_event: "Callable[[str], None]",
         for channel in channels:
             conn.execute(sql.SQL("LISTEN {}").format(sql.Identifier(channel)))
         log.info("Listening on %s", ", ".join(channels))
+        if on_listening is not None:
+            on_listening()
         while not stop.is_set():
             # Yields notifications as they arrive and returns when `poll`
             # elapses, so `stop` is checked at least that often.
+            got_any = False
             for note in conn.notifies(timeout=poll):
-                try:
-                    on_event(note.channel)
-                except Exception:  # noqa: BLE001
-                    log.exception("notify handler raised for channel %s", note.channel)
+                got_any = True
+                _deliver(on_event, note.channel)
                 if stop.is_set():
                     break
+            if not got_any and not stop.is_set():
+                _deliver(on_event, None)   # a tick with nothing to deliver
+
+
+def _deliver(on_event: "Callable[[str | None], None]", channel: str | None) -> None:
+    try:
+        on_event(channel)
+    except Exception:  # noqa: BLE001
+        log.exception("notify handler raised for channel %s", channel)

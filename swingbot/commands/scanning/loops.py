@@ -16,6 +16,8 @@ from swingbot.core.marketdata.data import get_current_price_batch
 from swingbot.core.scanning.fetch import _run_bounded
 from swingbot.core.infra.silent_channel import silence
 from swingbot.core.infra.logsetup import apply_log_level
+from swingbot.core.db import write_failure
+from swingbot.core.infra import pitr_watch
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core import presentation as ui
 from swingbot.core.marketdata.watchlist import load_watchlist
@@ -82,6 +84,39 @@ async def _post_health_recovered() -> None:
     await channel.send(**ui.push_kwargs(notices.health_recovered_embed()))
 
 
+async def _halt_on_store_failure(exc: Exception) -> None:
+    """v116: the book could not record what the scan was issuing. Pause the
+    scheduled scan (the partner unpauses from the admin UI), tell ops now --
+    not after HEALTH_ALERT_AFTER_FAILURES ticks -- and mark the heartbeat so
+    the admin's health signal shows it."""
+    try:
+        runstate.set_scan_paused(True)
+    except Exception:
+        log.exception("store-write halt: could not set the pause flag; the database is "
+                      "likely down, and every tick fails until it is back")
+    runstate.record_store_write_failure(exc)
+    channel = _ops_channel()
+    if channel is not None:
+        await notices.send_guarded(channel, notices.store_write_halt_embed(exc),
+                                   what="store-write halt notice")
+
+
+async def _run_scan_posting_partial(channel, **scan_kwargs) -> list:
+    """run_scan + post its alerts; a store-write halt still posts what it built.
+
+    Trades logged before the halting plan write are in the book, and the next
+    scan would skip them as already open -- so their alerts go out now, then
+    the halt propagates to pause scanning. On success the alerts are
+    returned for the caller to post, as before.
+    """
+    try:
+        return await scan_engine.run_scan(**scan_kwargs)
+    except write_failure.StoreWriteHalt as halt:
+        if halt.alerts:
+            await _send_alerts(channel, halt.alerts, route_by_confidence=True)
+        raise
+
+
 @tasks.loop(minutes=config.SCAN_INTERVAL_MINUTES)
 async def session_scan():
     # The entire tick's real work is wrapped in a try/except (see below) so
@@ -101,6 +136,8 @@ async def session_scan():
         log.exception("session_scan tick failed -- will retry on the next scheduled tick "
                        "(every %d min) instead of stopping the loop entirely", config.SCAN_INTERVAL_MINUTES)
         failures = runstate.record_tick_failure()
+        if write_failure.halts_issuance(exc):
+            await _halt_on_store_failure(exc)
         try:
             await _maybe_escalate_health(failures, exc)
         except Exception:
@@ -159,7 +196,8 @@ async def _session_scan_tick():
     now_str = dt.datetime.now(SESSION_TZ).strftime("%H:%M")
     log.info("Running session scan at %s…", now_str)
     progress = scan_engine.ScanProgress()
-    alerts = await scan_engine.run_scan(require_confirmation=True, bot=bot, progress=progress)
+    alerts = await _run_scan_posting_partial(
+        channel, require_confirmation=True, bot=bot, progress=progress)
     await _send_alerts(channel, alerts, route_by_confidence=True)
 
     from swingbot.core.charts.cache import purge
@@ -280,6 +318,64 @@ async def _post_config_notices(changed: dict) -> None:
                                        what=f"config-change notice for {key}")
 
 
+def _read_queue_file() -> list:
+    if not os.path.exists(runstate._MANUAL_CLOSE_QUEUE):
+        return []
+    try:
+        with open(runstate._MANUAL_CLOSE_QUEUE, "r") as handle:
+            data = json.load(handle)
+    except Exception as exc:
+        log.warning("Could not read manual_close_notify queue: %s", exc, exc_info=True)
+        return []
+    return data if isinstance(data, list) else []
+
+
+def _with_trade_id_as_id(record: dict) -> dict:
+    """The table keeps a trade's `id` as `trade_id` (`id` is a reserved
+    column); the embeds read the trade as `id`."""
+    if "trade_id" not in record:
+        return record
+    restored = dict(record)
+    restored["id"] = restored.pop("trade_id")
+    return restored
+
+
+def _take_manual_close_queue() -> list:
+    """Remove and return the queued manual-close records.
+
+    At notify_queue:db the table is the queue. At dual the file is the truth
+    and the table its shadow: both are drained together, or the table keeps
+    every close queued during the soak and replays them all at the db flip
+    (v116). At json only the file exists.
+    """
+    from swingbot.core.db import stages
+    if stages.reads_db("notify_queue"):
+        from swingbot.core.db.repositories.notify_queue import notify_queue_repo
+        return [_with_trade_id_as_id(record) for record in notify_queue_repo().drain()]
+    queued = _read_queue_file()
+    if stages.writes_db("notify_queue"):
+        from swingbot.core.db.repositories.notify_queue import notify_queue_repo
+        notify_queue_repo().drain()
+    if queued:
+        try:
+            os.remove(runstate._MANUAL_CLOSE_QUEUE)
+        except OSError:
+            pass
+    return queued
+
+
+async def _post_manual_close_queue() -> None:
+    queued = _take_manual_close_queue()
+    if not queued:
+        return
+    from swingbot.core.scanning.embeds import notify_closed_trades
+    try:
+        await notify_closed_trades(bot, queued)
+        log.info("Posted %d manually-closed trade notification(s) to Discord.", len(queued))
+    except Exception as exc:
+        log.warning("Failed to post manual-close notifications: %s", exc, exc_info=True)
+
+
 @tasks.loop(seconds=30)
 async def config_watcher():
     """
@@ -306,30 +402,7 @@ async def config_watcher():
         await _post_config_notices(changed)
 
     # --- Admin UI manual-close notification queue ---
-    from swingbot.core.db import stages
-    if stages.reads_db("notify_queue"):
-        from swingbot.core.db.repositories.notify_queue import notify_queue_repo
-        _queued = notify_queue_repo().drain()
-    elif os.path.exists(runstate._MANUAL_CLOSE_QUEUE):
-        try:
-            with open(runstate._MANUAL_CLOSE_QUEUE, "r") as _qf:
-                _queued = json.load(_qf)
-        except Exception as _qe:
-            log.warning("Could not read manual_close_notify queue: %s", _qe, exc_info=True)
-            _queued = []
-    else:
-        _queued = []
-    if _queued:
-            try:
-                os.remove(runstate._MANUAL_CLOSE_QUEUE)
-            except OSError:
-                pass
-            from swingbot.core.scanning.embeds import notify_closed_trades
-            try:
-                await notify_closed_trades(bot, _queued)
-                log.info("Posted %d manually-closed trade notification(s) to Discord.", len(_queued))
-            except Exception as _ne:
-                log.warning("Failed to post manual-close notifications: %s", _ne, exc_info=True)
+    await _post_manual_close_queue()
 
     # --- Admin UI "Run !check now" trigger ---
     if runstate.is_trigger_requested():
@@ -404,7 +477,8 @@ async def config_watcher():
 
         poller = asyncio.create_task(_ui_poll_progress())
         try:
-            alerts = await scan_engine.run_scan(require_confirmation=False, bot=bot, progress=progress)
+            alerts = await _run_scan_posting_partial(
+                channel, require_confirmation=False, bot=bot, progress=progress)
         finally:
             poller.cancel()
 
@@ -813,6 +887,39 @@ async def _before_market_data_refresh():
     await asyncio.sleep(60)
 
 
+_PITR_WATCH = pitr_watch.PitrWatch()
+
+
+@tasks.loop(minutes=15)
+async def pitr_watch_loop():
+    """v116: WAL-archiver and backups-disk alarms, once per episode, to ops."""
+    try:
+        sample = await asyncio.to_thread(pitr_watch.read_archiver)
+        due = _PITR_WATCH.tick(sample, pitr_watch.disk_used_pct(config.DATA_DIR))
+    except Exception:
+        log.exception("pitr watch tick failed")
+        return
+    channel = _ops_channel()
+    if channel is None:
+        return
+    for notice in due:
+        await notices.send_guarded(channel, notices.pitr_notice_embed(notice), what="PITR alarm")
+
+
+def _always_on_loops() -> tuple:
+    """Loops on_ready starts unconditionally, in start order."""
+    return (session_scan, heartbeat, config_watcher, trade_monitor, daily_recap,
+            weekend_deep_scan_task, weekly_earnings_refresh, pitr_watch_loop)
+
+
+def _start_background_loops() -> None:
+    for loop in _always_on_loops():
+        if not loop.is_running():
+            loop.start()
+    if config.MARKET_DATA_AUTO_REFRESH and not market_data_refresh.is_running():
+        market_data_refresh.start()
+
+
 def _apply_market_data_refresh_config(changed: dict) -> None:
     if "MARKET_DATA_REFRESH_MINUTES" in changed and market_data_refresh.is_running():
         market_data_refresh.change_interval(minutes=config.MARKET_DATA_REFRESH_MINUTES)
@@ -870,22 +977,7 @@ async def on_ready():
         config.CONFLUENCE_DEVIATION_PCT, wl_size,
     )
     install_reload_signal_handler()
-    if not session_scan.is_running():
-        session_scan.start()
-    if not heartbeat.is_running():
-        heartbeat.start()
-    if not config_watcher.is_running():
-        config_watcher.start()
-    if not trade_monitor.is_running():
-        trade_monitor.start()
-    if not daily_recap.is_running():
-        daily_recap.start()
-    if not weekend_deep_scan_task.is_running():
-        weekend_deep_scan_task.start()
-    if not weekly_earnings_refresh.is_running():
-        weekly_earnings_refresh.start()
-    if config.MARKET_DATA_AUTO_REFRESH and not market_data_refresh.is_running():
-        market_data_refresh.start()
+    _start_background_loops()
     await presence._refresh_presence()
 
     if _ready_announcement_sent:

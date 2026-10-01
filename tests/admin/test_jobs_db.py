@@ -44,3 +44,15 @@ def test_db_stage_reads_rows(data_dir, monkeypatch, db_committed, db_url):
     JobRepository().put(_job("J1", "running"))
     assert jobs_mod._read_jobs()["J1"]["state"] == "running"
     assert not os.path.exists(data_dir / "admin_jobs.json")
+
+
+def test_changing_state_on_a_record_read_back_persists(data_dir, monkeypatch, db_committed, db_url):
+    """The watcher reads every job, flips `state` on one and writes them all
+    back. The record read from the table carries both `state` and the stored
+    `status`; the flip must win, or a finished job is read back as running."""
+    monkeypatch.setattr(config, "DB_STORES", "jobs:db")
+    jobs_mod._write_jobs({"J1": _job("J1", "running")})
+    jobs = jobs_mod._read_jobs()
+    jobs["J1"]["state"] = "done"
+    jobs_mod._write_jobs(jobs)
+    assert jobs_mod._read_jobs()["J1"]["state"] == "done"

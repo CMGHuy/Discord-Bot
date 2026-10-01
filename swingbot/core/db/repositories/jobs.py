@@ -26,7 +26,9 @@ class JobRepository(Repository):
         legacy_id = record.pop("id", None)
         if legacy_id is not None:
             record.setdefault("job_id", legacy_id)
-        if "state" in record and "status" not in record:
+        if "state" in record:
+            # `state` is the field callers edit; a record read back from the table
+            # carries both, and the edited `state` must win.
             record["status"] = record["state"]
         return record
 
