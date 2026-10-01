@@ -108,9 +108,15 @@ masked until its own evidence and live parity gates clear.
 ## Hard 10-session exit and broker action
 
 Once filled, stop and target remain active. If neither closes the position,
-the 10th regular trading session after fill ends with a buy-to-cover at the
-official closing-auction price. Replay already has a bar-based hold cap; the
-live plan manager needs the same hard cap for ACTIVE plans. This strategy has
+the 10th regular trading session of the position (fill session is session 1)
+ends with a buy-to-cover at the
+official closing-auction price. A generic daily OHLCV `Close` is only a
+research proxy for that price, never proof of an auction execution. Live paper
+closure requires a confirmed close source; if it is unavailable, retain an
+unresolved exit and resend an actionable notice rather than invent a fill.
+Historical results disclose the proxy and cannot by themselves clear the
+broker-workflow or live-price parity gates. Replay already has a bar-based
+hold cap; the live plan manager needs the same hard cap for ACTIVE plans. This strategy has
 no PARTIAL state by design, but the manager's generic hard-cap helper must
 handle a persisted PARTIAL plan safely rather than strand a runner. The
 session counter is based on fill time, not signal time, and respects holidays
@@ -155,10 +161,13 @@ precheck and TRAIN/fold stages before spending any one-shot holdout or
 VALIDATION budget. The v104/v113 closed rows are not rerun. The broad and
 isolated arms must each stand on their own; no pooled success can mask a
 failing arm. A new strategy's badge is earned from the registry's own tier
-rules, and shipping on by default additionally follows the applicable
-feature gate. A single-target and time-stop exit changes geometry, so the
-pre-registration must name the applicable harvest/strategy gate rather than
-silently using the feature geometry-lock clause to score an exit change.
+rules. Default-on admission also requires the standard additive feature gate
+for the incremental alert population, including its geometry clause where
+applicable. The proposed single-target and time-stop plan is part of that
+population; this is not a paired exit-only harvest test. If the standard
+instrument cannot represent the additive arm faithfully, freeze an acceptance
+amendment before selection runs and keep the live mask closed. A later isolated
+exit comparison would need its own paired harvest pre-registration.
 
 The live strategy pass stays globally off by default. The new strategy stays
 masked after implementation until all measurement gates, live/replay parity,
