@@ -1,0 +1,35 @@
+# Scratch Postgres for the v116 PITR drill (scripts/ops/pitr_drill.sh).
+# Its own project, volume and port, and archive_mode OFF: a restored cluster
+# must never push its new timeline into production's pgBackRest repo, which
+# is mounted read-only here for the same reason.
+name: swingbot-drill
+services:
+  restore:
+    image: ${SWING_BOT_DB_IMAGE:?set SWING_BOT_DB_IMAGE to the production db image}
+    profiles: ["restore"]
+    user: postgres
+    entrypoint: ["pgbackrest"]
+    command: ["--stanza=swingbot", "--type=time", "--target=${DRILL_TARGET:?set DRILL_TARGET}",
+              "--target-action=promote", "restore"]
+    volumes:
+      - drill_pgdata:/var/lib/postgresql
+      - /opt/swing-bot/backups/pitr:/var/lib/pgbackrest:ro
+  db:
+    image: ${SWING_BOT_DB_IMAGE:?set SWING_BOT_DB_IMAGE to the production db image}
+    command: ["postgres", "-c", "archive_mode=off"]
+    environment:
+      POSTGRES_USER: swingbot
+      POSTGRES_DB: swingbot
+      POSTGRES_PASSWORD: drill-only
+    ports:
+      - "127.0.0.1:55433:5432"
+    volumes:
+      - drill_pgdata:/var/lib/postgresql
+      - /opt/swing-bot/backups/pitr:/var/lib/pgbackrest:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U swingbot -d swingbot"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+volumes:
+  drill_pgdata:
