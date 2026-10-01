@@ -19,8 +19,17 @@ def _read_heartbeat() -> dict:
     """Current heartbeat state, or {} when absent or unreadable.
 
     Absent is "unknown", never "failing" -- an upgraded admin container reads
-    files written by a bot that has not restarted yet.
+    files written by a bot that has not restarted yet. At heartbeat:db the
+    row is the only copy (v116: this read was file-only, which reset the
+    failure counter every tick at db).
     """
+    from swingbot.core.db import stages
+    if stages.reads_db("heartbeat"):
+        try:
+            from swingbot.core.db.repositories.heartbeat import heartbeat_repo
+            return heartbeat_repo().last() or {}
+        except Exception:
+            return {}
     try:
         with open(_HEARTBEAT_FILE) as fh:
             data = json.load(fh)

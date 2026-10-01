@@ -299,6 +299,55 @@ def _trade_for_levels(trade_id: str):
 # picked up by mistake, which is the exact failure they were written against.
 
 
+def _parse_iso(value) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    try:
+        parsed = datetime.fromisoformat(value) if value else None
+    except (TypeError, ValueError):
+        return None
+    if parsed is not None and parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _heartbeat_snapshot() -> tuple[dict, datetime | None]:
+    """(heartbeat fields, when last seen) from the current stage's store.
+    json/dual: the file and its mtime, exactly as before. db: the row and
+    its `timestamp` field (v116)."""
+    from swingbot.core.db import stages
+    if stages.reads_db("heartbeat"):
+        from swingbot.commands.scanning import runstate
+        fields = runstate._read_heartbeat()
+        return fields, _parse_iso(fields.get("timestamp"))
+    path = os.path.join(config.DATA_DIR, "bot_heartbeat.json")
+    try:
+        seen = datetime.fromtimestamp(os.path.getmtime(path), tz=timezone.utc)
+    except OSError:
+        return {}, None
+    try:
+        with open(path) as handle:
+            fields = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return {}, seen
+    return (fields if isinstance(fields, dict) else {}), seen
+
+
+def _heartbeat_status(hb: dict, seen: datetime | None, threshold: float) -> dict:
+    now = datetime.now(timezone.utc)
+    last_success = hb.get("last_success")
+    success_at = _parse_iso(last_success)
+    return {
+        "bot_alive": seen is not None and (now - seen).total_seconds() < threshold,
+        "bot_last_seen": seen.isoformat() if seen else None,
+        "bot_session_active": hb.get("session_active"),
+        "bot_scan_paused": hb.get("scan_paused"),
+        "bot_healthy": None if success_at is None else (now - success_at).total_seconds() < threshold,
+        "bot_last_success": last_success,
+        "bot_consecutive_failures": int(hb.get("consecutive_failures") or 0),
+    }
+
+
 def scan_status_payload() -> dict:
     """Whether a scan trigger is pending, whether the automatic background
     scan loop is paused, whether a scan is running right now, and whether the
@@ -319,43 +368,11 @@ def scan_status_payload() -> dict:
     paused_at = runstate.scan_paused_at() if paused else None
     running = is_scan_running()
 
-    # Bot liveness: the heartbeat file is written on every session_scan tick
-    # (every SCAN_INTERVAL_MINUTES). If it's older than 2× that interval the
-    # bot process is likely hung or offline.
-    heartbeat_file = os.path.join(config.DATA_DIR, "bot_heartbeat.json")
-    bot_alive = False
-    bot_last_seen = None
-    bot_session_active = None
-    bot_scan_paused = None
-    bot_healthy = None
-    bot_last_success = None
-    bot_consecutive_failures = 0
-    if os.path.exists(heartbeat_file):
-        try:
-            age_seconds = datetime.now(timezone.utc).timestamp() - os.path.getmtime(heartbeat_file)
-            threshold = config.SCAN_INTERVAL_MINUTES * 60 * 2  # 2× interval
-            bot_alive = age_seconds < threshold
-            bot_last_seen = datetime.fromtimestamp(
-                os.path.getmtime(heartbeat_file), tz=timezone.utc
-            ).isoformat()
-            with open(heartbeat_file) as hf:
-                hb = json.load(hf)
-                bot_session_active = hb.get("session_active")
-                bot_scan_paused = hb.get("scan_paused")
-                bot_last_success = hb.get("last_success")
-                bot_consecutive_failures = int(hb.get("consecutive_failures") or 0)
-                if bot_last_success:
-                    try:
-                        success_age = (
-                            datetime.now(timezone.utc)
-                            - datetime.fromisoformat(bot_last_success)
-                        ).total_seconds()
-                        bot_healthy = success_age < threshold
-                    except ValueError:
-                        bot_healthy = None
-        except (OSError, json.JSONDecodeError):
-            pass
-
+    # Bot liveness: written on every session_scan tick (every
+    # SCAN_INTERVAL_MINUTES). Older than 2x that interval means the bot
+    # process is likely hung or offline.
+    threshold = config.SCAN_INTERVAL_MINUTES * 60 * 2
+    hb, seen = _heartbeat_snapshot()
     return {
         "pending": pending, "triggered_at": mtime, "paused": paused, "paused_at": paused_at,
         "running": running,
@@ -363,13 +380,7 @@ def scan_status_payload() -> dict:
         # "no bar" rather than as 0% -- see progress_store for why the
         # percentage in here is not ScanProgress.pct.
         "progress": progress_store.read(),
-        "bot_alive": bot_alive,
-        "bot_last_seen": bot_last_seen,
-        "bot_session_active": bot_session_active,
-        "bot_scan_paused": bot_scan_paused,
-        "bot_healthy": bot_healthy,
-        "bot_last_success": bot_last_success,
-        "bot_consecutive_failures": bot_consecutive_failures,
+        **_heartbeat_status(hb, seen, threshold),
     }
 
 
