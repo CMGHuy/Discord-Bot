@@ -71,7 +71,8 @@ def emit(conn: sa.Connection, channel: str, payload: str = "") -> None:
 
 def listen(channels: "Sequence[str]", on_event: "Callable[[str | None], None]",
            stop: "threading.Event", *, poll: float = 0.5,
-           dsn: str | None = None) -> None:
+           dsn: str | None = None,
+           on_listening: "Callable[[], None] | None" = None) -> None:
     """Block, calling `on_event(channel)` for every notification received.
 
     A poll window that passes with no notification calls `on_event(None)` --
@@ -80,6 +81,9 @@ def listen(channels: "Sequence[str]", on_event: "Callable[[str | None], None]",
     Uses a raw psycopg connection rather than the SQLAlchemy pool: LISTEN is
     session state, and a pooled connection that gets recycled silently stops
     listening. Returns when `stop` is set.
+
+    `on_listening()` is called once per connection, as soon as LISTEN is
+    active -- the moment from which no notification can be missed.
     """
     import psycopg
     from psycopg import sql
@@ -96,6 +100,8 @@ def listen(channels: "Sequence[str]", on_event: "Callable[[str | None], None]",
         for channel in channels:
             conn.execute(sql.SQL("LISTEN {}").format(sql.Identifier(channel)))
         log.info("Listening on %s", ", ".join(channels))
+        if on_listening is not None:
+            on_listening()
         while not stop.is_set():
             # Yields notifications as they arrive and returns when `poll`
             # elapses, so `stop` is checked at least that often.
