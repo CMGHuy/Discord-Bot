@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Backup manifest helper (v120 section 3). Standard library only: it runs under
-the VM host's python3 and on Windows. Subcommands: build, verify, prune, next-name."""
+the VM host's python3 and on Windows. Subcommands: build, verify, prune, next-name, count-dump."""
 import argparse
 import gzip
 import hashlib
 import json
+import re
 import shutil
 import sys
 from datetime import datetime, timezone
@@ -167,6 +168,34 @@ def _cmd_verify(args) -> int:
     return 0
 
 
+COPY_RE = re.compile(r"^COPY (.+?) \(.*\) FROM stdin;$")
+
+
+def count_dump(path) -> dict:
+    """Rows per table in a plain pg_dump (.sql.gz): COPY block lines up to the
+    terminator. Counts come from the dump itself, so they cannot drift from it."""
+    counts: dict = {}
+    table = None
+    with gzip.open(path, "rt", encoding="utf-8", errors="replace", newline="") as fh:
+        for raw in fh:
+            line = raw.rstrip("\r\n")
+            if table is None:
+                m = COPY_RE.match(line)
+                if m:
+                    table = m.group(1).replace('"', "")
+                    counts[table] = 0
+            elif line == "\\.":
+                table = None
+            else:
+                counts[table] += 1
+    return counts
+
+
+def _cmd_count_dump(args) -> int:
+    print(json.dumps(count_dump(args.dump), sort_keys=True))
+    return 0
+
+
 def _cmd_prune(args) -> int:
     for p in prune_pulls(Path(args.backups), keep=args.keep):
         print(f"removed {p}")
@@ -196,6 +225,8 @@ def _parser() -> argparse.ArgumentParser:
     p = sub.add_parser("prune")
     p.add_argument("backups")
     p.add_argument("--keep", type=int, default=10)
+    c = sub.add_parser("count-dump")
+    c.add_argument("dump")
     n = sub.add_parser("next-name")
     n.add_argument("date")
     n.add_argument("--existing", required=True)
@@ -203,7 +234,8 @@ def _parser() -> argparse.ArgumentParser:
 
 
 HANDLERS = {"build": _cmd_build, "verify": _cmd_verify,
-            "prune": _cmd_prune, "next-name": _cmd_next_name}
+            "prune": _cmd_prune, "next-name": _cmd_next_name,
+            "count-dump": _cmd_count_dump}
 
 
 def main(argv=None) -> int:

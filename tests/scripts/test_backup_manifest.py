@@ -106,3 +106,32 @@ def test_cli_build_reads_market_files(folder, tmp_path):
     out = subprocess.run(cli + ["build", str(folder), "--market-files", str(listing)],
                          capture_output=True, text=True, check=True)
     assert json.loads(out.stdout)["market_files"]["daily/AAPL.csv"] == 120
+
+
+DUMP = (
+    "SET statement_timeout = 0;\nSET client_encoding = 'UTF8';\n"
+    "CREATE TABLE public.trades (id integer);\n"
+    "COPY public.trades (id, sym) FROM stdin;\n1\tAAPL\n2\tMSFT\n3\tNVDA\n\.\n\n"
+    "COPY public.empty_t (id) FROM stdin;\n\.\n\n"
+    'COPY public."Odd Name" (a) FROM stdin;\nx\n\.\n'
+)
+
+
+@pytest.fixture
+def dump(tmp_path):
+    p = tmp_path / "db.sql.gz"
+    with gzip.open(p, "wb") as fh:
+        fh.write(DUMP.encode())
+    return p
+
+
+def test_count_dump_counts_rows_per_copy_block(dump):
+    assert bm.count_dump(dump) == {
+        "public.Odd Name": 1, "public.empty_t": 0, "public.trades": 3}
+
+
+def test_cli_count_dump_prints_sorted_json(dump):
+    out = subprocess.run([sys.executable, str(REPO / "scripts" / "ops" / "backup_manifest.py"),
+                          "count-dump", str(dump)], capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == json.dumps(
+        {"public.Odd Name": 1, "public.empty_t": 0, "public.trades": 3}, sort_keys=True)
