@@ -34,7 +34,8 @@ def test_db_stage_builds_a_db_listener(monkeypatch, tmp_path, db_engine):
         files = [w for w in parts if isinstance(w, FileWatcher)]
         assert len(listeners) == 1 and len(files) == 1
         watched = set(files[0]._paths)
-        assert os.path.join(str(tmp_path), "scan_progress.json") in watched
+        assert os.path.join(str(tmp_path), "scan_snapshots.json") in watched
+        assert os.path.join(str(tmp_path), "scan_progress.json") not in watched
         assert os.path.join(str(tmp_path), "trades.json") not in watched
 
 
@@ -50,7 +51,7 @@ def test_residual_paths_exclude_every_table_backed_file(monkeypatch, tmp_path):
                 or p == config.ENV_PATH}
     assert residual == expected
     assert config.ENV_PATH in residual
-    for name in ("scan_progress.json", "scan_snapshots.json",
+    for name in ("scan_snapshots.json",
                  "scan_telemetry.jsonl", "analytics_snapshot.json"):
         assert os.path.join(str(tmp_path), name) in residual
 
