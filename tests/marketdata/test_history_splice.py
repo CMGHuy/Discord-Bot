@@ -97,3 +97,44 @@ def test_live_attrs_survive():
     cached, live = _pair()
     live.attrs["source"] = "alpaca"
     assert splice_cached_history(live, cached, "AAPL").attrs["source"] == "alpaca"
+
+def test_duplicate_and_unsorted_cache_index_is_normalised():
+    cached, live = _pair()
+    older = cached[cached.index < live.index.min()]
+    dup = older.iloc[[10]].copy()
+    dup["Close"] = dup["Close"] + 5.0                   # later duplicate row wins
+    messy = pd.concat([cached.iloc[::-1], dup])         # reversed + a duplicate date
+    out = splice_cached_history(live, messy, "AAPL")
+    assert out.index.is_monotonic_increasing and not out.index.has_duplicates
+    assert len(out) == 302
+    assert out.loc[older.index[10], "Close"] == dup["Close"].iloc[0]
+
+
+def test_mixed_dtype_volume_is_coerced_to_the_live_dtypes():
+    cached, live = _pair()
+    cached["Volume"] = cached["Volume"].astype("int64").astype(object)
+    out = splice_cached_history(live, cached, "AAPL")
+    assert (out.dtypes == live.dtypes).all()
+    assert out["Volume"].dtype == "float64"
+
+
+def test_truncating_live_never_changes_earlier_spliced_rows():
+    """NO-LOOKAHEAD: the older slice depends only on live.index.min(), so for
+    any cut k (keeping >= the overlap minimum) splice(live[:k]) equals the
+    first len(older)+k rows of splice(live) -- later live bars cannot reach
+    back and alter anything a bar at index <= k already saw."""
+    cached, live = _pair()
+    full = splice_cached_history(live, cached, "AAPL")
+    n_older = len(cached[cached.index < live.index.min()])
+    for k in (40, 77, 100):
+        cut = splice_cached_history(live.iloc[:k], cached, "AAPL")
+        pd.testing.assert_frame_equal(cut, full.iloc[:n_older + k])
+
+
+def test_stale_cache_after_a_split_returns_live_unchanged_and_logs(caplog):
+    cached, live = _pair()
+    cached[["Open", "High", "Low", "Close"]] *= 2.0     # overlap close ratio ~0.5 live/cached
+    with caplog.at_level(logging.INFO):
+        out = splice_cached_history(live, cached, "SPLT")
+    pd.testing.assert_frame_equal(out, live)
+    assert any("SPLT" in r.message and "disagree" in r.message for r in caplog.records)

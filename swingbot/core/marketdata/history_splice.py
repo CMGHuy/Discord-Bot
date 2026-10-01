@@ -64,7 +64,8 @@ def splice_cached_history(live, cached, symbol: str):
         log.info("%s: not splicing cached history under the live frame (%s)", symbol, reason)
         return live
     older = cached.loc[cached.index < live.index.min(), list(live.columns)]
-    out = pd.concat([older, live])
+    older = older[~older.index.duplicated(keep="last")].sort_index()
+    out = pd.concat([older.astype(live.dtypes.to_dict()), live])
     out.index.name = live.index.name
     out.attrs = dict(live.attrs)
     return out
