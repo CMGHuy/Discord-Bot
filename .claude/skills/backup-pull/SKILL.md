@@ -19,16 +19,20 @@ bash scripts/ops/pull_backups.sh
 ```
 
 It reaches the VM only through `scripts/ops/ssh-hetzner.sh`; never run a raw
-`ssh` or `scp` instead.
+`ssh` or `scp` instead. The copy lands in the main tree's `backups/`, even when
+this session runs in a worktree.
 
 ## Step 3 — Report
 
-Read the final `pull_backups: PASS` or `FAIL` line and report: PASS or FAIL,
-the pull folder, bytes, files added, and any `missing on VM:` lines (say those
-files were kept locally; the pull never deletes under `backups/market_data/`).
+Read the final `pull_backups: PASS` or `pull_backups: FAIL <reason>
+pulls/<stamp>.FAILED` line (every abort path prints one) and report: PASS or
+FAIL, the pull folder, bytes, files added, and any `missing on VM:`,
+`absent locally:` or `size differs:` lines (report only: the pull never
+deletes or re-fetches those; `backups/market_data/` is never pruned).
 
-On FAIL, show the verifier's problem lines and stop. Never delete a `.FAILED`
-folder by hand; the partner decides.
+On FAIL, show the verifier's problem lines and stop. A refusal (exit 2, the
+folder for this minute already exists) changed nothing: wait a minute and
+rerun. Never delete a `.FAILED` folder by hand; the partner decides.
 
 ## The gate
 

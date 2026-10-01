@@ -106,8 +106,9 @@ pooled numbers, unmirrored prod changes), Tier 3 briefs an architectural seam
 before it's crossed (edge module boundaries, the alert surface, a schema
 change, worktree lifecycle). Tier 2 skills carry
 `disable-model-invocation: true` and no Trigger table — they are checklists
-for an explicit slash command (`/close-out`, `/new-doc`, `/deploy`, `/stable-snapshot`, `/backup-pull`), not
-things the model should decide to run on its own.
+for an explicit slash command (`/close-out`, `/new-doc`, `/deploy`,
+`/stable-snapshot`, `/backup-pull`), not things the model should decide to run
+on its own.
 
 ## Proving a skill fires: the eval suites
 

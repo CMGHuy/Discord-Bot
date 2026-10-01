@@ -20,8 +20,9 @@ raw `ssh`.
 
 - Local: branch is `main`, `git status --porcelain` prints nothing, and after
   `git fetch` `git rev-parse HEAD` equals `git rev-parse origin/main`.
-- VM: `git -C /opt/swing-bot rev-parse HEAD` and the `git_sha` of the last line
-  of `backups/deploys.jsonl` both equal local HEAD.
+- VM: `runuser -u deploy -- git -C /opt/swing-bot rev-parse HEAD` (git always
+  runs as `deploy`, the checkout's owner; as root it refuses) and the
+  `git_sha` of the last line of `backups/deploys.jsonl` both equal local HEAD.
 - VM: `cd /opt/swing-bot && docker compose ps` shows `bot` and `admin` running.
 
 Any miss: stop and tell the partner which one.
@@ -41,20 +42,25 @@ python scripts/ops/backup_manifest.py next-name <UTC date> --existing <that file
 bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && bash scripts/ops/stable_snapshot.sh <name>"
 ```
 
-The manifest JSON is its last output; keep it for Steps 5 and 7.
+The manifest JSON is its last output; keep it for Steps 5 and 7. If the ssh
+snapshot fails, stop -- do NOT tag, and report the failure.
 
 ## Step 5 — Tag, then push
 
 `git tag -a <name>` with a message of: the partner's note, `ui` and `bot` from
-`VERSION.json`, and both image digests from the manifest. Then
+`VERSION.json`, and the manifest's `bot_image` and `db_image`. They are
+image references (the immutable `sha-` tags from `deploys.jsonl`). Then
 `git push origin <name>`. If the push fails, retry only the push; the VM folder
 stays. Never `git branch` for a stable point, and never touch the three
 existing `stable-*` branches.
 
 ## Step 6 — Pull it off the VM
 
-`bash scripts/ops/pull_backups.sh --stable <name>`. A failure here leaves a
-`.partial` folder: report it, do not delete it.
+`bash scripts/ops/pull_backups.sh --stable <name>`. It lands in the main
+tree's `backups/stable/`. A failure here leaves a `backups/stable/<name>.partial`
+folder: report it, do not delete it. Recovery: the partner inspects it,
+deletes the .partial by hand, then re-runs Step 6 only (the VM folder and the
+tag stay).
 
 ## Step 7 — Report
 
@@ -64,4 +70,4 @@ a real restore needs `--i-mean-it`; this skill never runs one.
 
 ## The gate
 
-The VM folder, the pushed tag and the local `backups/stable/<name>/` all exist.
+The VM folder, the pushed tag and the main tree's `backups/stable/<name>/` all exist.
