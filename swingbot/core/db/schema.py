@@ -195,6 +195,18 @@ market_data_state = register(sa.Table("market_data_state", METADATA,
     sa.Column("key", sa.Text, nullable=False, unique=True), *standard_columns()), ("key",))
 
 
+# v116 Phase 2: where doc_fields.drop_doc_field keeps what it removed, so the
+# revision's downgrade can put it back. Written only inside Alembic revisions.
+dropped_doc_fields = register(sa.Table("dropped_doc_fields", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("table_name", sa.Text, nullable=False),
+    sa.Column("field", sa.Text, nullable=False),
+    sa.Column("row_id", sa.BigInteger, nullable=False),
+    *standard_columns(),
+    sa.UniqueConstraint("table_name", "field", "row_id", name="dropped_doc_fields_row_uq")),
+    ("table_name", "field", "row_id"))
+
+
 #: Why each promoted column is a column and not a `doc` field. A promotion
 #: costs a migration forever after, so each names what needs it: identity,
 #: a foreign key, an index a hot query uses, or a NOT NULL the database must
@@ -268,4 +280,9 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
     },
     "scan_progress": {"key": "singleton key ('current')"},
     "market_data_state": {"key": "natural key 'SYMBOL|timeframe'"},
+    "dropped_doc_fields": {
+        "table_name": "which table a dropped value came from; restore filter",
+        "field": "which doc field was dropped; restore filter",
+        "row_id": "the source row's id; restore join key",
+    },
 }
