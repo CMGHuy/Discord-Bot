@@ -186,6 +186,17 @@ export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDe
 }
 
 /**
+ * The "Opened" instant for a row. A plan that was cancelled or expired never
+ * filled, so it has no `opened_at`; its lifetime starts when it was posted, so
+ * `created_at` stands in (the API already measures Held from the same point).
+ */
+export function openedAt(row: Pick<TradeRow, 'opened_at' | 'created_at' | 'status'>): string | null {
+  if (row.opened_at) return row.opened_at;
+  const status = row.status?.toUpperCase();
+  return status === 'CANCELLED' || status === 'EXPIRED' ? (row.created_at ?? null) : null;
+}
+
+/**
  * Status filters, as a chip row.
  *
  * **Chips, not tabs.** Tabs would reintroduce the "separate page per state"
