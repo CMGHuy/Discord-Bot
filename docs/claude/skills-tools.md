@@ -93,6 +93,8 @@ heading).
 | `close-out` | 2 | slash-only (`/close-out`) | `document-lifecycle.md`, `working-conventions.md` |
 | `new-doc` | 2 | slash-only (`/new-doc`) | `document-conventions.md` |
 | `deploy` | 2 | slash-only (`/deploy`) | none — Step 1 reads `docs/deploy/DEPLOY_HETZNER.md` and `docs/deploy/DOCKER.md`, not `docs/claude/` |
+| `stable-snapshot` | 2 | slash-only (`/stable-snapshot`) | none — Step 1 reads the v120 spec and `docs/deploy/DB_RESTORE.md`, not `docs/claude/` |
+| `backup-pull` | 2 | slash-only (`/backup-pull`) | none — Step 1 reads the v120 spec and `docs/deploy/DB_RESTORE.md`, not `docs/claude/` |
 
 Tier 1 (integrity gates) and Tier 3 (seam briefings) are both
 model-invocable and share one mechanical shape contract — a `Trigger table`
@@ -104,7 +106,7 @@ pooled numbers, unmirrored prod changes), Tier 3 briefs an architectural seam
 before it's crossed (edge module boundaries, the alert surface, a schema
 change, worktree lifecycle). Tier 2 skills carry
 `disable-model-invocation: true` and no Trigger table — they are checklists
-for an explicit slash command (`/close-out`, `/new-doc`, `/deploy`), not
+for an explicit slash command (`/close-out`, `/new-doc`, `/deploy`, `/stable-snapshot`, `/backup-pull`), not
 things the model should decide to run on its own.
 
 ## Proving a skill fires: the eval suites

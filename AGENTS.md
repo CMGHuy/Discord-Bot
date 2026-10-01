@@ -202,7 +202,8 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
 whenever Claude would run `/<name>`: `gate` (pre-commit gate), `task-brief`
 (extract one plan task with its trap preflight), `new-doc` (new spec or plan),
-`close-out` (plan close-out) and `deploy` (Hetzner deploy sequence). Skill text
+`close-out` (plan close-out), `deploy` (Hetzner deploy sequence),
+`stable-snapshot` (pin a known-good point) and `backup-pull` (off-VM backup pull). Skill text
 names Claude tools (`AskUserQuestion`, `Agent`, `Grep`); use your equivalent.
 
 ## Efficient repository navigation
