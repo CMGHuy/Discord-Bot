@@ -1,6 +1,6 @@
 # v116 — Part 2: Phase 1, live events
 
-Header, global constraints, revision ids and the full parallelisation map: `_0-index.md`. Spec: `docs/superpowers/specs/2026-09-30-v116-postgres-cutover-pitr-design.md` § Phase 1.
+Header, global constraints, revision ids and the full parallelisation map: `_0-index.md`. Spec: `docs/superpowers/specs/implemented/2026-09-30-v116-postgres-cutover-pitr-design.md` § Phase 1.
 
 **Parallelisation (Phase 1):**
 - **Sequential:** V116-11 first — the merge every other task in this phase builds on (`swingbot/core/db/events.py`, `db_listener.py` and `p3_007` exist only after it). V116-12 next — it creates the two tables, their repositories and the `store_db` fixture that V116-13 and V116-14 consume.

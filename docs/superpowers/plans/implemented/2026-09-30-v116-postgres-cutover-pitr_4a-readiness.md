@@ -1,6 +1,6 @@
 # v116 — Part 4a: Phase 3 readiness (V116-20 … V116-22)
 
-Header, global constraints, revision ids and the full parallelisation map: `_0-index.md`. Spec: `docs/superpowers/specs/2026-09-30-v116-postgres-cutover-pitr-design.md` § Phase 3. V116-23 … V116-26 are `_4b-readiness.md`; the flips are `_4c-flips.md`.
+Header, global constraints, revision ids and the full parallelisation map: `_0-index.md`. Spec: `docs/superpowers/specs/implemented/2026-09-30-v116-postgres-cutover-pitr-design.md` § Phase 3. V116-23 … V116-26 are `_4b-readiness.md`; the flips are `_4c-flips.md`.
 
 **Parallelisation (Phase 3 readiness, group D — after Phase 1):**
 - **Chain 1:** V116-20 → V116-21. Same file (`scripts/db/export_json.py`); V116-21 extends the writer table V116-20 introduces.

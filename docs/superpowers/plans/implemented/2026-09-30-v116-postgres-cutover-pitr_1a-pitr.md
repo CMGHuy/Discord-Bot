@@ -1,6 +1,6 @@
 # v116 — Part 1a: Phase 0, point-in-time rollback (V116-01 … V116-05)
 
-Header, global constraints, revision ids and the full parallelisation map: `_0-index.md`. Spec: `docs/superpowers/specs/2026-09-30-v116-postgres-cutover-pitr-design.md` § Phase 0.
+Header, global constraints, revision ids and the full parallelisation map: `_0-index.md`. Spec: `docs/superpowers/specs/implemented/2026-09-30-v116-postgres-cutover-pitr-design.md` § Phase 0.
 
 **This phase lands and is drilled before any store flips to `db`.**
 

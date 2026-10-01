@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this plan whole.** Pull one task: `grep -n "^### Task V116-12" -A 200 docs/superpowers/plans/2026-09-30-v116-postgres-cutover-pitr_*.md`.
 
-**Spec:** [`docs/superpowers/specs/2026-09-30-v116-postgres-cutover-pitr-design.md`](../specs/2026-09-30-v116-postgres-cutover-pitr-design.md) (partner-approved 2026-09-30, committed at `b742c062`)
+**Spec:** [`docs/superpowers/specs/implemented/2026-09-30-v116-postgres-cutover-pitr-design.md`](../../specs/implemented/2026-09-30-v116-postgres-cutover-pitr-design.md) (partner-approved 2026-09-30, committed at `b742c062`)
 **Bump:** bot major · ui none
 **Edge:** none (integrity)
 
@@ -11,6 +11,16 @@
 **Architecture:** Phase 0 builds point-in-time recovery first: a `Dockerfile.db` image with pgBackRest archives WAL into `/opt/swing-bot/backups/pitr`, `deploy.sh` records every deploy in `backups/deploys.jsonl`, every `.env` change path snapshots `.env`, restic snapshots `market_data/` hourly, and `scripts/ops/rollback_to.sh` puts all four back. Phase 1 merges the unmerged v67 LISTEN/NOTIFY branch and adds the last two live-update tables. Phase 2 pins the hybrid `doc JSONB` contract with tests and ships rename/drop helpers. Phase 3 flips three store groups `json → dual → db` on production behind a nightly VM soak check. Phase 4 deletes `stages`, `DB_STORES`, the dual guard, the file watcher and every JSON read/write path.
 
 **Tech Stack:** Python 3.11, SQLAlchemy Core 2 + psycopg 3, Alembic, PostgreSQL 18 (`postgres:18-alpine` + pgBackRest), restic, Flask SSE, discord.py, pytest (+ `db-test` compose profile), GitHub Actions + GHCR, Docker Compose on the Hetzner VM.
+
+## Progress
+
+> Closed 2026-10-01. The plan's goal is met: every store reads and writes Postgres only (`bot 2.0.0`, `a0da07a7`), the JSON persistence paths, `stages`, `dual`, `DB_STORES` and the file watcher are deleted, and the whole bot can be rolled back to a past second (`scripts/ops/rollback_to.sh`, drill PASS 2026-10-01).
+>
+> - **Phases 0-3 shipped 2026-10-01** (merge `14551c3c`, then fixes through `275f6bb0`); **Phase 4 shipped the same day** (merge `a0da07a7`). The staged flips ran on production in one sitting, with every group's five-trading-day soak **overridden at the partner's request** (rows in the spec's Status section). The nightly soak cron (`install_v116_soak_cron.sh`) was never installed and V116-33's gate was not formally passed; Phase 4 was deployed with 0 database error lines and a green CI instead.
+> - **Cut or changed on the way:** `scripts/ops/v116_soak.py`, `v116_parity_check.sh`, `install_v116_soak_cron.sh`, `pull_prod_snapshot.sh`, `reimport_production.sh` and `v116_flip_stage.sh` were deleted in Phase 4 (they existed to compare JSON with Postgres). `V116-26`'s soak cron step was skipped. `.env` on the VM still carries an ignored `DB_STORES=` line (remove it through the admin Settings page; never `sed -i`).
+> - **Found and fixed on the way** (each test-first): balance-history rows at `db` (kill-switch drawdown crash), the empty daily summary, the legacy-trade close notice (`id` is a reserved column; the bot-side embed also read `id`), job state losing to the stored status, a store-write halt dropping already-logged trades' alerts, the PITR drill's `DRILL_TARGET`, `.env` ownership for CI's pin step, and the wrapper's `$(...)` expansion.
+> - **Not part of the plan but found by it** (production data, fixed 2026-10-01): the `market_data/` cache held a different instrument's older history for 16 daily and 5 hourly files; the repair is recorded in the spec's Status section and the old files sit in `market_data/_quarantine/20261001-203019/`.
+> - **Known local flake:** the full suite on a Windows checkout under `-n 4` fails different admin tests each run (missing tables, `can't start new thread`); every failing test passes alone and CI is green. `be3ec50f` fixed one real cause (the schema-free fixture dropping the shared database's tables).
 
 ## Parts
 

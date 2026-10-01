@@ -1,6 +1,6 @@
 # v116 — Part 5: Phase 4, delete; full suite; release (V116-34 … V116-42)
 
-Header, global constraints and revision ids: `_0-index.md`. Spec: `docs/superpowers/specs/2026-09-30-v116-postgres-cutover-pitr-design.md` § Phase 4.
+Header, global constraints and revision ids: `_0-index.md`. Spec: `docs/superpowers/specs/implemented/2026-09-30-v116-postgres-cutover-pitr-design.md` § Phase 4.
 
 **Start only after V116-33 recorded PASS**, and within seven days of its drill.
 
@@ -726,4 +726,4 @@ bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && grep -n '^DB_STORES=' .env
 
 Expected: `v116_002 (head)`, all services healthy, `0` error lines; the crontab keeps the PITR and `backup_db.sh` lines only. `DB_STORES` in the VM `.env` is now ignored; remove the line through the admin Settings page (it rewrites the file and snapshots it) or leave it and note it — never `sed -i`. Check the admin Dashboard, Trades, Plans and live updates, and that a new alert's trade appears in Postgres (`docker compose exec -T db psql -U swingbot -d swingbot -tAc "select max(opened_at) from trades"`).
 
-- [ ] **Step 4: Close out** — use the `close-out` skill (`document-lifecycle.md`): move `docs/superpowers/specs/2026-09-30-v116-postgres-cutover-pitr-design.md` and the six `docs/superpowers/plans/2026-09-30-v116-postgres-cutover-pitr_*.md` parts to their `implemented/` directories, fix links, commit `docs(v116): close out -- implemented`, push. Do not delete the v116 or v67 branches or worktrees; report them to the partner for a decision.
+- [ ] **Step 4: Close out** — use the `close-out` skill (`document-lifecycle.md`): move `docs/superpowers/specs/implemented/2026-09-30-v116-postgres-cutover-pitr-design.md` and the six `docs/superpowers/plans/2026-09-30-v116-postgres-cutover-pitr_*.md` parts to their `implemented/` directories, fix links, commit `docs(v116): close out -- implemented`, push. Do not delete the v116 or v67 branches or worktrees; report them to the partner for a decision.

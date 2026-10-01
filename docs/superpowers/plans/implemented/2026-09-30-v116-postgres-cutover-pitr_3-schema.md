@@ -1,6 +1,6 @@
 # v116 — Part 3: Phase 2, schema-change guarantees
 
-Header, global constraints, revision ids and the full parallelisation map: `_0-index.md`. Spec: `docs/superpowers/specs/2026-09-30-v116-postgres-cutover-pitr-design.md` § Phase 2.
+Header, global constraints, revision ids and the full parallelisation map: `_0-index.md`. Spec: `docs/superpowers/specs/implemented/2026-09-30-v116-postgres-cutover-pitr-design.md` § Phase 2.
 
 The codec (`split_doc`/`merge_doc`) already makes "add a field" a code-only change. This phase stops that eroding.
 

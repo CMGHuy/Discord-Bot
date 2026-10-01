@@ -1,6 +1,6 @@
 # v116 — Part 4c: Phase 3 flips (V116-27 … V116-33)
 
-Header, global constraints (stage names, groups, the `.env` rule) and revision ids: `_0-index.md`. Readiness: `_4a-readiness.md`, `_4b-readiness.md`. Spec: `docs/superpowers/specs/2026-09-30-v116-postgres-cutover-pitr-design.md` § Phase 3.
+Header, global constraints (stage names, groups, the `.env` rule) and revision ids: `_0-index.md`. Readiness: `_4a-readiness.md`, `_4b-readiness.md`. Spec: `docs/superpowers/specs/implemented/2026-09-30-v116-postgres-cutover-pitr-design.md` § Phase 3.
 
 **Parallelisation (Phase 3 flips, group E):** sequential throughout — a chain of calendar soaks. V116-27 needs V116-10 (a passed drill: no store reaches `db` before the rollback is proven) and V116-26 (readiness deployed, soak cron live). Each later task needs the one before it: the spec orders the groups ops → reference → trading, and every `dual → db` gate needs five trading days of the state the previous task created.
 
@@ -30,7 +30,7 @@ Export writes the tables back to `data/` while nothing writes (bot and admin sto
 
 **Files:**
 - Modify: `.env.example` (the comment line "the live value is DB_STORES=…")
-- Modify: `docs/superpowers/specs/2026-09-30-v116-postgres-cutover-pitr-design.md` (new `## Status (Phase 3)` section)
+- Modify: `docs/superpowers/specs/implemented/2026-09-30-v116-postgres-cutover-pitr-design.md` (new `## Status (Phase 3)` section)
 
 **Interfaces:**
 - Consumes: V116-10 PASS in `docs/deploy/DB_RESTORE.md`; V116-26 deployed (head `v116_002`, soak cron); importers `import_jobs.py`, `import_scheduled.py`, `import_killswitch.py`.
@@ -82,7 +82,7 @@ In `.env.example`, the comment line `# all-JSON; the live value is DB_STORES=wat
 ```
 
 ```bash
-git -C E:/Documents/Private/Projects/Discord-Bot add .env.example docs/superpowers/specs/2026-09-30-v116-postgres-cutover-pitr-design.md
+git -C E:/Documents/Private/Projects/Discord-Bot add .env.example docs/superpowers/specs/implemented/2026-09-30-v116-postgres-cutover-pitr-design.md
 git -C E:/Documents/Private/Projects/Discord-Bot commit -m "ops(v116): ops group to dual on production
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
