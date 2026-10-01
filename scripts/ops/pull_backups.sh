@@ -27,7 +27,8 @@ case "$MODE" in
     mkdir -p backups/outbox
     chmod 700 backups/outbox
     mkdir "$OUT"
-    BACKUP_OUT="$(./scripts/ops/backup_db.sh)"
+    # </dev/null: this script itself arrives on stdin, so no child may read it.
+    BACKUP_OUT="$(./scripts/ops/backup_db.sh </dev/null)"
     DUMP="$(printf '%s\n' "$BACKUP_OUT" | sed -n 's/^backup_db: wrote \(.*\) (.*)$/\1/p' | tail -n 1)"
     if [ -z "$DUMP" ] || [ ! -f "$DUMP" ]; then
       echo "pull_backups: could not find the dump backup_db.sh wrote ('$DUMP')" >&2
@@ -37,21 +38,33 @@ case "$MODE" in
     install -m 600 .env "$OUT/env"
     cp backups/deploys.jsonl "$OUT/deploys.jsonl"
     tail -n 1 backups/deploys.jsonl > "$WORK/deploy.json"
-    find market_data -type f -newermt "@$SINCE" -printf '%P\0' | tar --null -C market_data -T - -cf "$OUT/market_data.tar"
+    # market_data is live: GNU tar exits 1 when a file changed while it was read.
+    # Tolerate 1 only (verify hashes the finished tar); anything else fails.
+    tar_rc=0
+    find market_data -type f -newermt "@$SINCE" -printf '%P\0' | tar --null -C market_data -T - -cf "$OUT/market_data.tar" || tar_rc=$?
+    if [ "$tar_rc" -le 1 ]; then
+      [ "$tar_rc" -eq 0 ] || echo "pull_backups: tar exit 1 tolerated (a market_data file changed while read)" >&2
+    else
+      echo "pull_backups: tar failed with status $tar_rc" >&2
+      exit "$tar_rc"
+    fi
     find market_data -type f -printf '%s\t%P\n' > "$WORK/market_files.tsv"
     python3 scripts/ops/backup_manifest.py count-dump "$OUT/db.sql.gz" > "$WORK/rows.json"
-    PGV="$(docker compose exec -T db psql -U swingbot -d swingbot -At -c 'SHOW server_version' | tr -d '\r')"
+    PGV="$(docker compose exec -T db psql -U swingbot -d swingbot -At -c 'SHOW server_version' </dev/null | tr -d '\r')"
     python3 scripts/ops/backup_manifest.py build "$OUT" --git-sha "$(git rev-parse HEAD)" \
       --deploy-json "$WORK/deploy.json" --row-counts "$WORK/rows.json" --pg-version "$PGV" \
       --market-files "$WORK/market_files.tsv" --vm-epoch "$(date +%s)" >&2
     ;;
   stream)
+    [ -n "$ARG" ] || exit 2
     tar czf - -C backups/outbox "$ARG" | base64 -w0
     ;;
   clean)
+    [ -n "$ARG" ] || exit 2
     rm -rf "backups/outbox/$ARG"
     ;;
   stream-stable)
+    [ -n "$ARG" ] || exit 2
     tar czf - -C "backups/stable/$ARG" . | base64 -w0
     ;;
   *)
@@ -70,13 +83,27 @@ remote() {
 iso_now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 OUTBOX_DIRTY=0
+PULL_OK=0
+
+# Record the local pull folder as failed: LAST_PULL first, then the rename
+# (copy fallback for a Windows indexer lock). LAST_GOOD_PULL is never touched.
+mark_pull_failed() {
+  local d="$B/pulls/$STAMP"
+  echo "$(iso_now) FAIL pulls/$STAMP.FAILED" > "$B/LAST_PULL"
+  mv "$d" "$d.FAILED" 2>/dev/null || { mkdir -p "$d.FAILED" && cp -r "$d/." "$d.FAILED/" && rm -rf "$d"; }
+}
+
 # Runs on every exit: a failed stream must never leave a copy of .env in the
-# VM's outbox. Re-raises the original status.
+# VM's outbox, and an unfinished local pull must never look like a good one.
+# Re-raises the original status.
 cleanup_outbox() {
   rc=$?
   if [ "$OUTBOX_DIRTY" = 1 ]; then
     remote clean "$STAMP" >/dev/null 2>&1 || echo "pull_backups: WARNING outbox/$STAMP may remain on the VM" >&2
     OUTBOX_DIRTY=0
+  fi
+  if [ "$PULL_OK" != 1 ] && [ -d "$B/pulls/$STAMP" ]; then
+    mark_pull_failed || echo "pull_backups: WARNING could not mark $B/pulls/$STAMP failed" >&2
   fi
   exit "$rc"
 }
@@ -114,11 +141,14 @@ pull_stable() {
   fi
   local dest="$B/stable/$name"
   if [ -e "$dest" ] || [ -e "$dest.partial" ]; then
-    echo "pull_backups: $dest (or its .partial) already exists, refusing to overwrite" >&2
+    echo "pull_backups: $dest (or its .partial) already exists, refusing to overwrite; inspect it, then delete the .partial by hand" >&2
     exit 2
   fi
   mkdir -p "$dest.partial"
-  remote stream-stable "$name" | base64 -d | tar xzf - -C "$dest.partial"
+  if ! remote stream-stable "$name" | base64 -d | tar xzf - -C "$dest.partial"; then
+    echo "pull_backups: stream failed, left $dest.partial; inspect it, then delete the .partial by hand" >&2
+    exit 1
+  fi
   if ! python scripts/ops/backup_manifest.py verify "$dest.partial"; then
     echo "pull_backups: verify failed, left $dest.partial for inspection" >&2
     exit 1
@@ -138,8 +168,7 @@ pull_normal() {
   remote clean "$STAMP" >/dev/null && OUTBOX_DIRTY=0
 
   if ! python scripts/ops/backup_manifest.py verify backups/pulls/$STAMP; then
-    mv "$pull_dir" "$pull_dir.FAILED"
-    echo "$(iso_now) FAIL pulls/$STAMP.FAILED" > "$B/LAST_PULL"
+    mark_pull_failed
     echo "pull_backups: verify FAILED, moved to $pull_dir.FAILED" >&2
     exit 1
   fi
@@ -152,6 +181,7 @@ pull_normal() {
   printf '%s\n' "$missing_out" | grep '^missing on VM: ' || true
   echo "$(iso_now) PASS pulls/$STAMP" > "$B/LAST_PULL"
   echo "$(iso_now) pulls/$STAMP $vm_epoch" > backups/LAST_GOOD_PULL
+  PULL_OK=1
   python scripts/ops/backup_manifest.py prune backups --keep 10
   bytes="$(du -sb "$pull_dir" | cut -f1)"
   echo "pull_backups: PASS $pull_dir bytes=$bytes files_added=$added missing_on_vm=$missing_count"
