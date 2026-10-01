@@ -88,7 +88,7 @@ heading).
 | `mirror-prod` | 1 | model-invocable | `working-conventions.md` |
 | `edge-module` | 3 | model-invocable | `architecture.md` |
 | `alert-surface` | 3 | model-invocable | `known-traps.md` |
-| `schema-change` | 3 | model-invocable | none — Step 1 reads code (`swingbot/core/db/repositories/`, `scripts/db/parity_report.py`), not a doc |
+| `schema-change` | 3 | model-invocable | `schema-evolution.md` — Step 1 reads it to pick add/rename/drop/promote |
 | `worktree-lifecycle` | 3 | model-invocable | `document-lifecycle.md`, `working-conventions.md` |
 | `close-out` | 2 | slash-only (`/close-out`) | `document-lifecycle.md`, `working-conventions.md` |
 | `new-doc` | 2 | slash-only (`/new-doc`) | `document-conventions.md` |
