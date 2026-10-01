@@ -12,13 +12,18 @@ Two questions, deliberately answered by two functions:
   feature_separation()  exploratory. Free to run, free to slice, and its
                         output may NOT be used to revise the verdict above.
 
-Run: python scripts/reports/cohort_separation_report.py --journal data/journal.json
+Run: python scripts/reports/cohort_separation_report.py
+Reads the journal table; --journal <file> reads a JSON export instead
+(scripts/db/export_json.py --store journal).
 """
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 MIN_N_PER_GROUP = 150        # frozen 2026-09-14, spec §6
 PASS_SEPARATION_R = -0.20    # ExpR(POOR) - ExpR(non-POOR) must be <= this
@@ -83,14 +88,23 @@ FEATURES = ("regime2_state", "confidence_level", "htf_agree", "confluence_count"
             "session_bucket", "days_to_earnings")
 
 
+def load_entries(path: str | None) -> list[dict]:
+    """Journal entries from the table, or from an exported JSON file."""
+    if path:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    from swingbot.core.analytics.journal import JournalStore
+    return JournalStore().entries()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--journal", default="data/journal.json")
+    ap.add_argument("--journal", default=None,
+                    help="JSON export to read instead of the journal table")
     ap.add_argument("--run-date", default=None,
                     help="registry freeze date; default: the cohort_run_date on the entries")
     args = ap.parse_args()
 
-    entries = json.loads(Path(args.journal).read_text(encoding="utf-8"))
+    entries = load_entries(args.journal)
     run_date = args.run_date or next(
         (e["cohort_run_date"] for e in entries if e.get("cohort_run_date")), "")
     if not run_date:

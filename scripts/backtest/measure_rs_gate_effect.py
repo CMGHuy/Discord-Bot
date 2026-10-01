@@ -445,13 +445,8 @@ def main() -> int:
 
     # Scenario universe = the WATCHLIST, not every CSV in the cache: SPY and
     # the sector ETFs now live there too and are inputs, not subjects.
-    wl_path = ROOT / "data" / "watchlist.json"
-    if not wl_path.exists():
-        # `data/` is gitignored, so a worktree has its own near-empty copy.
-        # Fall back to the checkout the cache belongs to (same reason
-        # --cache-dir exists at all).
-        wl_path = Path(cache).parent / "watchlist.json"
-    watchlist = json.loads(wl_path.read_text())
+    from swingbot.core.marketdata.watchlist import load_watchlist
+    watchlist = load_watchlist()
     frames = {}
     for sym in sorted(watchlist):
         df = load(sym)
