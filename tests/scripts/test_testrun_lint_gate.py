@@ -158,3 +158,22 @@ def test_full_profile_defaults_to_tests_dir_with_no_target():
     import testrun
 
     assert testrun.build_args("full", [])[-1] == "tests/"
+
+
+def test_undefined_names_chunks_a_path_list_past_the_windows_command_limit(tmp_path):
+    """The tracked-file list outgrew Windows' ~32k command line; it is chunked."""
+    import testrun
+
+    paths = []
+    for i in range(400):
+        mod = tmp_path / f"{'long_directory_name_' * 4}{i:04d}.py"
+        mod.write_text("import os\n\n\ndef go():\n    return os.getcwd()\n")
+        paths.append(str(mod))
+    bad = tmp_path / "bad_module_last.py"
+    bad.write_text("def go():\n    return not_a_real_name\n")
+    paths.append(str(bad))
+    assert sum(len(p) + 1 for p in paths) > 32767
+
+    found = testrun.undefined_names(paths)
+
+    assert len(found) == 1 and "not_a_real_name" in found[0]
