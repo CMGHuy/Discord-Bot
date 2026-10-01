@@ -15,18 +15,19 @@ def test_database_url() -> str:
     return os.getenv("TEST_DATABASE_URL", DEFAULT_TEST_URL)
 
 
-def _worker_database(url: str) -> str:
-    """One database per xdist worker.
+def _worker_database(url: str, suffix: str = "") -> str:
+    """One database per xdist worker (plus an optional purpose suffix).
 
     Every session drops and recreates ``public``; workers sharing a database
     race on the catalog (``pg_type_typname_nsp_index`` unique violations), so
     under ``-n 4`` each gets ``<db>_gw<N>``, created on first use.
     """
     worker = os.getenv("PYTEST_XDIST_WORKER")
-    if not worker:
+    if not worker and not suffix:
         return url
     base = sa.engine.make_url(url)
-    name = f"{base.database}_{worker}"
+    name = f"{base.database}_{worker}" if worker else base.database
+    name += suffix
     admin = sa.create_engine(base, isolation_level="AUTOCOMMIT", connect_args={"connect_timeout": 2})
     try:
         with admin.connect() as connection:
@@ -40,14 +41,14 @@ def _worker_database(url: str) -> str:
     return base.set(database=name).render_as_string(hide_password=False)
 
 
-def _connect_or_skip(url: str) -> sa.Engine:
+def _connect_or_skip(url: str, suffix: str = "") -> sa.Engine:
     # A developer who has not started the optional service must not pay the
     # driver default TCP timeout for every database test.  The runner already
     # gives the exact start command; this is only its fast safety net.
     engine = None
     try:
         engine = sa.create_engine(
-            _worker_database(url),
+            _worker_database(url, suffix),
             future=True,
             pool_pre_ping=True,
             connect_args={"connect_timeout": 2},
@@ -66,8 +67,12 @@ def _connect_or_skip(url: str) -> sa.Engine:
 
 @pytest.fixture(scope="session")
 def db_engine_empty():
-    """A schema-free engine for migration tests that create the schema themselves."""
-    engine = _connect_or_skip(test_database_url())
+    """A schema-free engine for migration tests that create the schema themselves.
+
+    It gets its OWN database (``..._empty``): dropping ``public`` in the database the
+    store tests share would delete the tables the session-scoped ``db_engine`` created
+    once, and every later store test on that worker would fail on a missing relation."""
+    engine = _connect_or_skip(test_database_url(), "_empty")
     with engine.begin() as connection:
         connection.execute(sa.text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
     yield engine

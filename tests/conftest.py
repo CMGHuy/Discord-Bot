@@ -193,6 +193,13 @@ def _store_database(request, monkeypatch):
 
     monkeypatch.setattr(engine_module, "get_engine", lazy)
     monkeypatch.setattr(base_module, "get_engine", lazy)
+    # scripts/db/import_settings_audit.py binds the name at import time, so the two
+    # patches above do not reach it; without this it talks to the shared base database.
+    import importlib
+    try:
+        monkeypatch.setattr(importlib.import_module("scripts.db.import_settings_audit"), "get_engine", lazy)
+    except ImportError:
+        pass
     yield
     if used:
         names = ", ".join(table.name for table in METADATA.sorted_tables)
