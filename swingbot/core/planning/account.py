@@ -323,8 +323,9 @@ def get_balance_history(path: str = None) -> list:
     balance` overrides -- for the admin Performance page's balance-over-time
     chart."""
     if _use_db(path):
+        from swingbot.core.db.dual import normalise
         from swingbot.core.db.repositories.account import account_repo
-        return account_repo().history()
+        return normalise(account_repo().history())
     return load_account_config(path).get("balance_history", [])
 
 
