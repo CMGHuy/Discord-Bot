@@ -37,7 +37,7 @@ def test_env_versions_are_pruned_after_the_backup():
 def test_restic_snapshots_market_data_and_keeps_thirty_days():
     text = _text("restic_hourly.sh")
     assert "restic backup" in text and "market_data" in text
-    assert "--keep-within 30d --prune" in text
+    assert "--keep-within 30d" in text and "--prune" in text
     assert "env_set.py --get RESTIC_PASSWORD" in text
 
 
@@ -133,3 +133,11 @@ def test_installer_really_is_idempotent_and_replaces_old_lines(tmp_path):
     assert not any("/old/" in l for l in lines)
     _assert_flock_lines([l for l in lines if "flock" in l])
     assert (tmp_path / "logs").is_dir()
+
+
+def test_restic_forget_keeps_stable_snapshots_forever():
+    """v120: a stable point's market_data must outlive the 30-day window.
+    restic keeps a snapshot when ANY keep policy matches."""
+    text = _text("restic_hourly.sh")
+    forget = next(l for l in text.splitlines() if "restic forget" in l)
+    assert "--keep-within 30d" in forget and "--keep-tag stable" in forget
