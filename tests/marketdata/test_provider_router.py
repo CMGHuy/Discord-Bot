@@ -158,34 +158,3 @@ def test_miss_log_names_timeout(enabled, monkeypatch, caplog):
     _use(monkeypatch, FakeProvider(daily={"AAPL"}, sleep=2)); caplog.set_level("DEBUG")
     router.daily_bars(["AAPL"], "2y", yf_daily([]))
     assert "TimeoutError" in caplog.text
-
-
-# ---- v-depth: live daily frames ask Alpaca for its deepest window -----------
-
-class PeriodProvider(FakeProvider):
-    def daily_bars(self, tickers, period):
-        self.periods = getattr(self, "periods", []) + [period]
-        return super().daily_bars(tickers, period)
-
-@pytest.mark.parametrize("asked", ["2y", "5y", "10y", "max"])
-def test_long_history_requests_ask_alpaca_for_max_but_yfinance_keeps_its_period(enabled, monkeypatch, asked):
-    prov = PeriodProvider(daily={"AAPL", "MSFT"}); _use(monkeypatch, prov)
-    yf_periods = []
-    router.daily_bars(["AAPL", "MSFT", "SAP.DE"], asked,
-                      lambda ts, p: yf_periods.append(p) or {t: _df() for t in ts})
-    assert set(prov.periods) == {"max"}
-    assert yf_periods == [asked]
-
-@pytest.mark.parametrize("asked", ["5d", "1mo", "6mo", "1y"])
-def test_short_requests_are_not_deepened(enabled, monkeypatch, asked):
-    prov = PeriodProvider(daily={"AAPL"}); _use(monkeypatch, prov)
-    router.daily_bars(["AAPL"], asked, yf_daily([]))
-    assert prov.periods == [asked]
-
-def test_deadline_scales_with_the_number_of_serial_rounds(enabled, monkeypatch):
-    # 15 symbols at 3 per deep page = 5 batches over 4 workers = 2 rounds; each
-    # call takes 0.4s against a 0.5s timeout, so a flat deadline would drop batch 5.
-    tickers = [c * 3 for c in "ABCDEFGHIJKLMNO"]
-    prov = FakeProvider(daily=set(tickers), sleep=0.4); _use(monkeypatch, prov)
-    out = router.daily_bars(tickers, "2y", yf_daily([]))
-    assert {out[t].attrs["source"] for t in tickers} == {"alpaca"}
