@@ -20,6 +20,15 @@ FORBIDDEN = [
     ("swingbot/core/scanning/progress_store.py", r"stages\.|scan_progress\.json", "scan_progress is a table"),
     ("swingbot/core/marketdata/data_refresh.py", r"stages\.|market_data_state\.json|STATE_FILE", "market_data_state is a table"),
     ("swingbot/admin/app.py", r"stages\.\w+\(\"heartbeat\"\)|bot_heartbeat\.json", "heartbeat is a table"),
+    # reference group (V116-36)
+    ("swingbot/core/marketdata/watchlist.py", r"stages\.|watchlist\.json", "watchlist is a table"),
+    ("swingbot/core/marketdata/ticker_directory.py", r"stages\.|ticker_directory\.json", "ticker_directory is a table"),
+    ("swingbot/core/infra/state.py", r"stages\.|state\.json|_save\(", "signal_state is a table"),
+    ("swingbot/admin/helpers.py", r"stages\.|settings_audit\.jsonl", "settings_audit is a table"),
+    ("swingbot/admin/api_v1/system.py", r"stages\.|ui_preferences\.json", "preferences is a table"),
+    ("swingbot/admin/jobs.py", r"stages\.|tuning_results", "tuning is a table"),
+    ("swingbot/admin/api_v1/jobs.py", r"stages\.|tuning_results", "tuning is a table"),
+    ("swingbot/admin/queries.py", r"stages\.|TUNING_PROPOSALS_DIR_NAME", "tuning_proposals is a table"),
 ]
 
 

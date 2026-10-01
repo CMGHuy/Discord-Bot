@@ -27,13 +27,10 @@ projects the matrix without one, and no colour crosses the wire.
 """
 from __future__ import annotations
 
-import json
-import os
 import re
 from datetime import datetime
 from statistics import median
 
-from swingbot import config
 from swingbot.core.analytics.metrics import win_rate
 from swingbot.core.analytics.snapshots import load_snapshot, refresh_snapshot
 from swingbot.core.analytics.rank import follow_score, rank_plans
@@ -277,24 +274,13 @@ _JOB_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")  # no '/', '\', or '.' -- see _load
 
 def _load_result(job_id: str) -> dict | None:
     if not _JOB_ID_RE.match(job_id):
-        # Input validation, not a traversal guard. It was a traversal guard
-        # when job_id was interpolated into a filesystem path (the file stage
-        # below still does); at the db stage it is a parameterised query and
-        # there is no path to escape. Kept because a client sending a
-        # malformed id is still a bug, and refusing it is cheaper than a lookup.
+        # Input validation, not a traversal guard: the lookup is a
+        # parameterised query, so there is no path to escape. Kept because a client
+        # sending a malformed id is still a bug, and refusing it is cheaper
+        # than a lookup.
         return None
-    from swingbot.core.db import stages
-    if stages.reads_db("tuning"):
-        from swingbot.core.db.repositories.tuning import tuning_repo
-        return tuning_repo().result(job_id)
-    path = os.path.join(config.DATA_DIR, "tuning_results", f"{job_id}.json")
-    if not os.path.exists(path):
-        return None
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return None
+    from swingbot.core.db.repositories.tuning import tuning_repo
+    return tuning_repo().result(job_id)
 
 
 def _grid_row_passes(stats: dict) -> bool:
@@ -306,28 +292,9 @@ def _grid_row_passes(stats: dict) -> bool:
     )
 
 
-TUNING_PROPOSALS_DIR_NAME = "tuning_proposals"
-
-
 def _list_proposals() -> list[dict]:
-    from swingbot.core.db import stages
-    if stages.reads_db("tuning"):
-        from swingbot.core.db.repositories.tuning import proposals_repo
-        return proposals_repo().all_proposals()
-    proposals_dir = os.path.join(config.DATA_DIR, TUNING_PROPOSALS_DIR_NAME)
-    if not os.path.exists(proposals_dir):
-        return []
-    rows = []
-    for fname in sorted(os.listdir(proposals_dir), reverse=True):
-        if not fname.endswith(".json"):
-            continue
-        try:
-            with open(os.path.join(proposals_dir, fname), "r", encoding="utf-8") as f:
-                data = json.load(f)
-            rows.append({"filename": fname, **data})
-        except (OSError, json.JSONDecodeError):
-            continue
-    return rows
+    from swingbot.core.db.repositories.tuning import proposals_repo
+    return proposals_repo().all_proposals()
 
 
 _PROPOSAL_FILENAME_RE = re.compile(r"^[A-Za-z0-9_-]+\.json$")

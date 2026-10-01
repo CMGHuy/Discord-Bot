@@ -1,5 +1,5 @@
 """
-Tiny JSON-file persistence for signal state per ticker+strategy+horizon.
+Tiny Postgres-backed persistence for signal state per ticker+strategy+horizon.
 
 Two jobs:
   1. Don't re-alert every scan while a signal is still the same as last
@@ -10,42 +10,19 @@ Two jobs:
      triggers an alert) after it's seen the same way on N consecutive
      scans -- filtering out noise from a single volatile tick.
 """
-import os
 from threading import Lock
-
-from swingbot import config
-from swingbot.core.infra.jsonio import atomic_write_json, read_json
 
 _LOCK = Lock()
 
 
 class StateStore:
-    def __init__(self, path: str = None):
-        self.path = path or os.path.join(config.DATA_DIR, "state.json")
-        from swingbot.core.db import stages
-        self._data = {} if stages.reads_db("state") else self._load()
-
-    def _load(self) -> dict:
-        return read_json(self.path, {})
-
-    def _save(self):
-        atomic_write_json(self.path, self._data)
-
     def _read(self, key: str) -> dict:
-        from swingbot.core.db import stages
-        if stages.reads_db("state"):
-            from swingbot.core.db.repositories.signal_state import signal_state_repo
-            return signal_state_repo().entry(key)
-        return self._data.setdefault(key, {})
+        from swingbot.core.db.repositories.signal_state import signal_state_repo
+        return signal_state_repo().entry(key)
 
     def _write(self, key: str, entry: dict) -> None:
-        from swingbot.core.db import stages
-        if stages.writes_json("state"):
-            self._data[key] = entry
-            self._save()
-        if stages.writes_db("state"):
-            from swingbot.core.db.repositories.signal_state import signal_state_repo
-            signal_state_repo().put(key, entry)
+        from swingbot.core.db.repositories.signal_state import signal_state_repo
+        signal_state_repo().put(key, entry)
 
     def confirm_or_update(self, key: str, new_value: str, required_confirmations: int = 2) -> bool:
         """

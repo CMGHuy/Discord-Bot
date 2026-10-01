@@ -63,12 +63,3 @@ def test_a_finished_job_is_ingested_and_its_handoff_file_removed(db_stage):
     jobs_mod._ingest_tuning_result("job-done01", str(path))
     assert queries._load_result("job-done01")["strategy"] == "RSI"
     assert not os.path.exists(path)
-
-
-def test_ingest_is_a_noop_at_the_json_stage(db_stage, monkeypatch):
-    monkeypatch.setattr(config, "DB_STORES", "")
-    path = db_stage / "handoff.json"
-    path.write_text(json.dumps(PAYLOAD), encoding="utf-8")
-    jobs_mod._ingest_tuning_result("job-json01", str(path))
-    assert os.path.exists(path)
-    assert TuningRepository().count() == 0

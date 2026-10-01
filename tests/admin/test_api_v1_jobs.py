@@ -13,7 +13,9 @@ import os
 
 import pytest
 
+from swingbot.core.db.repositories.tuning import proposals_repo
 from tests.admin.api_v1_contract import assert_error, assert_shape
+from tests.store_seed import seed_store
 
 _LOGIN = {"username": "admin", "password": "admin"}
 
@@ -22,13 +24,6 @@ _LOGIN = {"username": "admin", "password": "admin"}
 def logged_in(client):
     client.post("/api/v1/session", json=_LOGIN)
     return client
-
-
-@pytest.fixture
-def proposals_dir(admin_app, tmp_path):
-    d = tmp_path / "tuning_proposals"
-    d.mkdir(exist_ok=True)
-    return d
 
 
 def test_jobs_require_auth(client):
@@ -142,16 +137,8 @@ def test_job_detail_carries_a_log_tail(logged_in, monkeypatch):
 # takes a job_id and a row_index, unreachable by any normal route.
 
 
-@pytest.fixture
-def results_dir(admin_app, tmp_path):
-    d = tmp_path / "tuning_results"
-    d.mkdir(exist_ok=True)
-    return d
-
-
-def _write_grid(results_dir, rows, strategy="RSI Divergence"):
-    (results_dir / "job1.json").write_text(
-        json.dumps({"strategy": strategy, "grid": rows}), encoding="utf-8")
+def _write_grid(rows, strategy="RSI Divergence"):
+    seed_store("tuning", {"job1.json": {"strategy": strategy, "grid": rows}})
 
 
 def test_job_result_requires_auth(client):
@@ -164,7 +151,7 @@ def test_job_result_rejects_a_traversal_id(logged_in, bad):
     assert_error(logged_in.get(f"/api/v1/jobs/{bad}/result"), "invalid", 400)
 
 
-def test_job_result_is_empty_not_404_while_a_job_is_still_running(logged_in, results_dir):
+def test_job_result_is_empty_not_404_while_a_job_is_still_running(logged_in):
     """A running job has written no result yet, and that is the ordinary case.
 
     A 404 would have the UI report a failure for "it has not finished",
@@ -177,8 +164,8 @@ def test_job_result_is_empty_not_404_while_a_job_is_still_running(logged_in, res
     assert body["grid"] == []
 
 
-def test_job_result_returns_the_grid(logged_in, results_dir):
-    _write_grid(results_dir, [
+def test_job_result_returns_the_grid(logged_in):
+    _write_grid([
         {"params": {"rsi_reclaim": 30}, "n_eval": 40, "win_rate": 82.0,
          "expectancy_r": 0.4, "excluded_share": 0.2},
         {"params": {"rsi_reclaim": 35}, "n_eval": 12, "win_rate": 90.0,
@@ -191,7 +178,7 @@ def test_job_result_returns_the_grid(logged_in, results_dir):
     assert body["grid"][0]["params"] == {"rsi_reclaim": 30}
 
 
-def test_job_result_marks_which_rows_cleared_the_bar(logged_in, results_dir):
+def test_job_result_marks_which_rows_cleared_the_bar(logged_in):
     """`passes` is computed server-side on purpose.
 
     The bar is four conditions -- n_eval >= 30, win rate >= 80, positive
@@ -199,7 +186,7 @@ def test_job_result_marks_which_rows_cleared_the_bar(logged_in, results_dir):
     scripts/backtest/tune_strategy.py prints. A second copy of it in TypeScript is how
     the two would come to disagree about which rows are worth taking.
     """
-    _write_grid(results_dir, [
+    _write_grid([
         # Clears everything.
         {"params": {"a": 1}, "n_eval": 40, "win_rate": 82.0,
          "expectancy_r": 0.4, "excluded_share": 0.2},
@@ -218,10 +205,10 @@ def test_job_result_marks_which_rows_cleared_the_bar(logged_in, results_dir):
     assert [row["passes"] for row in grid] == [True, False, False, False]
 
 
-def test_job_result_carries_each_row_index(logged_in, results_dir):
+def test_job_result_carries_each_row_index(logged_in):
     """POST /proposals identifies a row by index. Carrying it on the row means
     a client that sorts or filters the grid still proposes the right one."""
-    _write_grid(results_dir, [
+    _write_grid([
         {"params": {"a": 1}, "n_eval": 40, "win_rate": 82.0,
          "expectancy_r": 0.4, "excluded_share": 0.2},
         {"params": {"a": 2}, "n_eval": 40, "win_rate": 83.0,
@@ -232,14 +219,14 @@ def test_job_result_carries_each_row_index(logged_in, results_dir):
     assert [row["row_index"] for row in grid] == [0, 1]
 
 
-def test_a_row_from_the_result_can_be_proposed(logged_in, results_dir, proposals_dir):
+def test_a_row_from_the_result_can_be_proposed(logged_in):
     """The whole point of the endpoint: the loop closes.
 
     Before SR51 a grid could be launched and proposals could be deleted, but
     nothing could create one -- the Propose button lived in the results table
     that never migrated.
     """
-    _write_grid(results_dir, [
+    _write_grid([
         {"params": {"rsi_reclaim": 30}, "n_eval": 40, "win_rate": 82.0,
          "expectancy_r": 0.4, "excluded_share": 0.2},
     ])
@@ -256,22 +243,22 @@ def test_list_proposals_empty(logged_in):
                  {"proposals": list})
 
 
-def test_delete_a_proposal(logged_in, proposals_dir):
-    (proposals_dir / "20260808120000-rsi.json").write_text(
-        json.dumps({"strategy": "RSI"}), encoding="utf-8")
+def test_delete_a_proposal(logged_in):
+    seed_store("tuning_proposals", {"20260808120000-rsi.json": {
+        "strategy": "RSI", "created_at": "2026-08-08T12:00:00+00:00"}})
     r = logged_in.delete("/api/v1/analytics/tuning/proposals/20260808120000-rsi.json")
     assert r.status_code == 200
-    assert not (proposals_dir / "20260808120000-rsi.json").exists()
+    assert not proposals_repo().all_proposals()
 
 
-def test_delete_unknown_proposal_is_404(logged_in, proposals_dir):
+def test_delete_unknown_proposal_is_404(logged_in):
     assert_error(
         logged_in.delete("/api/v1/analytics/tuning/proposals/nope.json"),
         "not_found", 404)
 
 
 @pytest.mark.parametrize("bad", ["..\..\evil.json", "sub/evil.json", "evil.txt"])
-def test_proposal_filename_traversal_is_rejected(logged_in, proposals_dir, bad, tmp_path):
+def test_proposal_filename_traversal_is_rejected(logged_in, bad, tmp_path):
     victim = tmp_path / "evil.json"
     victim.write_text("do not delete me", encoding="utf-8")
     r = logged_in.delete(f"/api/v1/analytics/tuning/proposals/{bad}")
@@ -293,13 +280,11 @@ def test_create_proposal_rejects_a_non_integer_row(logged_in):
         "invalid", 400)
 
 
-def test_create_proposal_from_a_finished_job(logged_in, admin_app, tmp_path, proposals_dir):
-    results = tmp_path / "tuning_results"
-    results.mkdir(exist_ok=True)
-    (results / "job1.json").write_text(json.dumps({
+def test_create_proposal_from_a_finished_job(logged_in, admin_app):
+    seed_store("tuning", {"job1.json": {
         "strategy": "RSI Divergence",
         "grid": [{"params": {"rsi_reclaim": 30}, "win_rate": 55.0, "n": 40}],
-    }), encoding="utf-8")
+    }})
 
     r = logged_in.post("/api/v1/analytics/tuning/proposals",
                        json={"job_id": "job1", "row_index": 0})
@@ -310,11 +295,11 @@ def test_create_proposal_from_a_finished_job(logged_in, admin_app, tmp_path, pro
     assert "validation" in body["proposal"]["note"].lower(), (
         "the note is what stops a proposal being mistaken for an applied change"
     )
-    assert (proposals_dir / body["filename"]).exists()
+    assert [p["filename"] for p in proposals_repo().all_proposals()] == [body["filename"]]
 
 
-def test_create_proposal_from_a_malformed_result_returns_api_error(logged_in, results_dir):
-    (results_dir / "job1.json").write_text('{"strategy": "RSI", "grid": [{}]}', encoding="utf-8")
+def test_create_proposal_from_a_malformed_result_returns_api_error(logged_in):
+    seed_store("tuning", {"job1.json": {"strategy": "RSI", "grid": [{}]}})
     response = logged_in.post("/api/v1/analytics/tuning/proposals",
                               json={"job_id": "job1", "row_index": 0})
     assert_error(response, "invalid", 400)

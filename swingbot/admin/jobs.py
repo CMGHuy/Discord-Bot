@@ -144,19 +144,17 @@ def _ingest_tuning_result(job_id: str, result_path: str | None) -> None:
     """Copy the child's ``--json`` output into Postgres once the job is done.
 
     The child process writes the file (tune_strategy.py owns that format), so
-    the database write happens here, in the parent, when the job finishes. At
-    the db stage the file was only a hand-off and is removed after ingest.
+    the database write happens here, in the parent, when the job finishes. The
+    file is only a hand-off and is removed after ingest.
     """
-    from swingbot.core.db import stages
-    if not result_path or not stages.writes_db("tuning"):
+    if not result_path:
         return
     try:
         with open(result_path, "r", encoding="utf-8") as f:
             payload = json.load(f)
         from swingbot.core.db.repositories.tuning import tuning_repo
         tuning_repo().save_result(job_id, payload)
-        if not stages.writes_json("tuning"):
-            os.remove(result_path)
+        os.remove(result_path)
     except Exception:
         logging.getLogger(__name__).exception(
             "could not store tuning result for job %s", job_id)
@@ -217,7 +215,7 @@ class JobManager:
             result_path = None
             if kind == "tune":
                 script = os.path.join(config._PROJECT_ROOT, "scripts", "backtest", "tune_strategy.py")
-                results_dir = os.path.join(config.DATA_DIR, "tuning_results")
+                results_dir = os.path.join(config.DATA_DIR, "tuning_handoff")
                 os.makedirs(results_dir, exist_ok=True)
                 result_path = os.path.join(results_dir, f"{job_id}.json")
                 argv = [sys.executable, script, *args, "--json", result_path]

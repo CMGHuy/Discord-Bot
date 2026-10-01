@@ -4,39 +4,26 @@ Spec v11 Decision 4 collapses the Jinja UI's separate `/watchlist/add` and
 `/watchlist/bulk_add` into one endpoint taking a list. Those two only exist
 because an HTML form cannot post an array, which stops mattering once the
 client speaks JSON.
-
-**These are the first tests in the repo that WRITE to the watchlist**, which
-turned up a live hazard: `swingbot.core.marketdata.watchlist.DEFAULT_PATH` is computed
-at import time from `config.DATA_DIR`, so it ignores the per-test
-monkeypatch and points at the real project's data/watchlist.json. Reading
-through it is merely wrong; writing through it would edit the user's actual
-watchlist from a test run. The endpoints therefore pass an explicit path
-resolved per call -- `test_writes_land_in_the_isolated_data_dir` is the
-guard that keeps it that way.
 """
 import json
 
 import pytest
 
 from tests.admin.api_v1_contract import assert_error, assert_shape
+from tests.store_seed import seed_store
 
 _LOGIN = {"username": "admin", "password": "admin"}
 
 
 @pytest.fixture
-def watchlist(admin_app, tmp_path):
-    """The isolated watchlist file, seeded and readable."""
-    path = tmp_path / "watchlist.json"
+def watchlist(admin_app):
+    """The isolated watchlist table, seeded and readable."""
+    from swingbot.core.marketdata.watchlist import load_watchlist
 
     def _set(tickers):
-        path.write_text(json.dumps(list(tickers)), encoding="utf-8")
+        seed_store("watchlist", list(tickers))
 
-    def _get():
-        return json.loads(path.read_text()) if path.exists() else []
-
-    _set([])
-    _set.read = _get
-    _set.path = path
+    _set.read = load_watchlist
     return _set
 
 
@@ -225,17 +212,6 @@ def test_add_a_single_ticker(watchlist, logged_in):
     assert r.status_code == 200
     assert r.get_json()["added"] == ["AAPL"]
     assert watchlist.read() == ["AAPL"]
-
-
-def test_writes_land_in_the_isolated_data_dir(watchlist, logged_in):
-    """The guard for the hazard in this module's docstring. If the endpoint
-    ever goes back to watchlist.DEFAULT_PATH, this file stays empty and the
-    REAL watchlist grows a ticker."""
-    logged_in.post("/api/v1/watchlist/tickers", json={"tickers": ["ZZZZ"]})
-    assert "ZZZZ" in watchlist.read(), (
-        "the write went somewhere other than the test's DATA_DIR -- most "
-        "likely the real data/watchlist.json"
-    )
 
 
 def test_one_endpoint_handles_bulk(watchlist, logged_in):

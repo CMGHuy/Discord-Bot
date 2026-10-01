@@ -20,13 +20,10 @@ reasoning applies here unchanged.
 """
 from __future__ import annotations
 
-import json
-import os
 from datetime import datetime, timezone
 
 from flask import jsonify, request
 
-from swingbot import config
 from swingbot.admin.jobs import build_tune_args
 from swingbot.admin.jobs import manager as job_manager
 
@@ -34,36 +31,15 @@ from . import api_v1, error
 from .auth import require_auth
 
 
-def _proposals_dir() -> str:
-    from swingbot.admin.queries import TUNING_PROPOSALS_DIR_NAME
-    return os.path.join(config.DATA_DIR, TUNING_PROPOSALS_DIR_NAME)
-
-
 def _store_proposal(filename: str, proposal: dict) -> None:
-    from swingbot.core.db import stages
-    if stages.writes_json("tuning"):
-        directory = _proposals_dir()
-        os.makedirs(directory, exist_ok=True)
-        with open(os.path.join(directory, filename), "w", encoding="utf-8") as f:
-            json.dump(proposal, f, indent=2)
-    if stages.writes_db("tuning"):
-        from swingbot.core.db.repositories.tuning import proposals_repo
-        proposals_repo().save(filename, proposal, created_at=proposal["created_at"])
+    from swingbot.core.db.repositories.tuning import proposals_repo
+    proposals_repo().save(filename, proposal, created_at=proposal["created_at"])
 
 
 def _remove_proposal(filename: str) -> bool:
-    """Delete from every store the stage writes; False when none had it."""
-    from swingbot.core.db import stages
-    found = False
-    if stages.writes_json("tuning"):
-        path = os.path.join(_proposals_dir(), filename)
-        if os.path.exists(path):
-            os.remove(path)
-            found = True
-    if stages.writes_db("tuning"):
-        from swingbot.core.db.repositories.tuning import proposals_repo
-        found = proposals_repo().delete(filename) or found
-    return found
+    """Delete the proposal; False when it did not exist."""
+    from swingbot.core.db.repositories.tuning import proposals_repo
+    return proposals_repo().delete(filename)
 
 
 # --- jobs ----------------------------------------------------------------

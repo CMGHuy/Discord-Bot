@@ -140,7 +140,7 @@ def _validate(values: Mapping) -> tuple[str, str] | None:
         f = fields[key]
         # _build_env_text writes one `KEY=value` line per field, so a value
         # carrying a line break forges an extra setting -- and the audit log
-        # records only the field the client named, leaving settings_audit.jsonl
+        # records only the field the client named, leaving the settings audit
         # and .env permanently disagreeing. Every field type is checked: the
         # type-specific rules below never reach `text`/`password`, which is
         # exactly where an arbitrary string can arrive.
@@ -500,29 +500,14 @@ _PREFERENCES_MAX_BYTES = 64 * 1024
 _DEFAULT_MIN_SAMPLE_N = 30
 
 
-def _preferences_path() -> str:
-    import os
-
-    return os.path.join(config.DATA_DIR, "ui_preferences.json")
-
-
 def _load_preferences() -> dict:
-    from swingbot.core.db import stages
-    if stages.reads_db("preferences"):
-        from swingbot.core.db.repositories.preferences import preferences_repo
-        return preferences_repo().load()
-    from swingbot.core.infra.jsonio import read_json
-    return read_json(_preferences_path(), {}) or {}
+    from swingbot.core.db.repositories.preferences import preferences_repo
+    return preferences_repo().load()
 
 
 def _store_preferences(saved: dict) -> None:
-    from swingbot.core.db import stages
-    if stages.writes_json("preferences"):
-        from swingbot.core.infra.jsonio import atomic_write_json
-        atomic_write_json(_preferences_path(), saved)
-    if stages.writes_db("preferences"):
-        from swingbot.core.db.repositories.preferences import preferences_repo
-        preferences_repo().save(saved)
+    from swingbot.core.db.repositories.preferences import preferences_repo
+    preferences_repo().save(saved)
 
 
 @api_v1.route("/system/preferences", methods=["GET"])

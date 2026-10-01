@@ -964,7 +964,7 @@ def test_a_setup_rejected_at_plan_build_can_alert_once_its_plan_qualifies(
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     monkeypatch.setattr(config, "SIGNAL_CONFIRMATION_SCANS", 2)
     _setup_minimal_scan(monkeypatch, tmp_path)
-    monkeypatch.setattr(scan_run, "state", StateStore(path=str(tmp_path / "state.json")))
+    monkeypatch.setattr(scan_run, "state", StateStore())
 
     captured = []
 
