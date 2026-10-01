@@ -23,5 +23,6 @@ def posted(store_db, monkeypatch):
 def test_the_queue_is_drained_from_the_table(posted):
     NotifyQueueRepository().enqueue(dict(RECORD))
     asyncio.run(loops._post_manual_close_queue())
-    assert posted == [RECORD]
+    # The embeds read the trade as `id`; the table stores it as `trade_id`.
+    assert posted == [{"id": "T1", "ticker": "AAPL"}]
     assert NotifyQueueRepository().pending() == 0

@@ -50,10 +50,12 @@ export function deriveOpenVisible(base: readonly string[]): string[] {
  *  `now`, `pnl_pct`, `r_multiple` and `hold` all describe an execution, and a
  *  plan that never filled has none — they would render an em dash on every
  *  row, which is a column's worth of width spent saying "not applicable".
- *  `closed_at` survives and reads as when it was cancelled. */
+ *  `closed_at` survives and reads as when it was cancelled; `held` and
+ *  `opened_at` survive as the plan's lifetime (created -> cancelled).
+ *  Direction folds into the Confidence cell here too, as in every other tab. */
 export function deriveCancelledVisible(visible: string[]): string[] {
   const dead = new Set(['now', 'pnl_pct', 'r_multiple', 'hold']);
-  return visible.filter((column) => !dead.has(column));
+  return visible.filter((column) => !dead.has(column)).filter(DASHBOARD_OMITS_DIRECTION);
 }
 
 /** The column set for one lifecycle tab — v85 D11/D12. Order comes from the

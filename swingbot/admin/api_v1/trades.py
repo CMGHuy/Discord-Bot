@@ -56,6 +56,7 @@ _LEGACY_STATUS = {
 
 # Statuses where a live price is meaningless -- the position is over.
 _TERMINAL = {"CLOSED", "CANCELLED"}
+_UNFILLED_TERMINAL = {"CANCELLED", "EXPIRED"}
 
 FILTERS = frozenset({"status", "outcome", "ticker", "strategy", "horizon", "tier",
                      "direction", "origin", "has_note",
@@ -178,6 +179,11 @@ def _held_hours(opened_at, closed_at) -> float | None:
         return None
 
 
+def _first_set(*values):
+    """First value that is not None -- 0 is a real confidence level."""
+    return next((v for v in values if v is not None), None)
+
+
 def _open_shares(shares: float | None, legs_realized: list) -> float | None:
     """The share count still exposed to price movement right now.
 
@@ -242,6 +248,13 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
     t = trade or {}
     opened_at = t.get("opened_at")
     closed_at = t.get("closed_at")
+    # A plan that died unfilled has no trade, so the plan's own lifetime stands
+    # in for the execution span: created_at -> the cancel/expiry transition.
+    # opened_at stays null (nothing was opened); the SPA reads created_at.
+    held_from = opened_at
+    if not trade and plan.get("status") in _UNFILLED_TERMINAL:
+        closed_at = _terminal_at(plan, None)
+        held_from = plan.get("created_at")
     # v73 keeps every surface on the same answer for a partial runner. In
     # particular TP1 is banked history, not a current target, and a missing
     # working stop falls back to its locked-in runner floor, never risk stop.
@@ -266,8 +279,8 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "cohort_label": plan.get("cohort_label") or "COHORT_UNKNOWN",
         "cohort_stats": plan.get("cohort_stats") or {},
         "tier": t.get("tier") or plan.get("tier"),
-        "confidence_level": t.get("confidence_level"),
-        "confidence_score": t.get("confidence_score"),
+        "confidence_level": _first_set(t.get("confidence_level"), plan.get("confidence_level")),
+        "confidence_score": _first_set(t.get("confidence_score"), plan.get("confidence_score")),
         "quality_score": plan.get("quality_score"),
         # Execution P&L remains based on the position's original fill. The
         # projection's runner entry is carried through the banked-leg facts.
@@ -301,7 +314,7 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         # realized_pnl_amount for a row that hasn't closed yet.
         "_legs": plan.get("legs_realized") or [],
         "_risk_stop": plan.get("stop_loss"),
-        "held_hours": _held_hours(opened_at, closed_at),
+        "held_hours": _held_hours(held_from, closed_at),
         "opened_at": opened_at,
         "closed_at": closed_at,
         "has_note": plan["plan_id"] in noted or t.get("id") in noted,

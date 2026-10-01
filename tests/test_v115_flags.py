@@ -34,7 +34,8 @@ def test_stop_floor_code_default_is_two():
 
 def test_env_example_ships_the_v115_values():
     values = dotenv_values(ENV_EXAMPLE)
-    assert values.get("MIN_STOP_DISTANCE_PCT") == "2.0"
+    # .env.example mirrors production (1.75 since 2026-10-01); the schema default stays 2.0.
+    assert values.get("MIN_STOP_DISTANCE_PCT") == "1.75"
     assert values.get("CLAMP_STOP_TO_HARD_CAP") == "true"
     assert values.get("LIQUIDITY_EXEMPT_NON_EQUITY") == "false"
     assert values.get("SIGNAL_CONFIRMATION_SCANS") == "1"   # spec: stays 1

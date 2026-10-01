@@ -1,2 +1,6 @@
 # Shell scripts run on the Linux VM and in containers: CRLF breaks the shebang.
 *.sh text eol=lf
+# The Postgres image build inputs are read inside Linux containers too.
+Dockerfile.db text eol=lf
+deploy/db/*.conf text eol=lf
+deploy/db/*.yml text eol=lf

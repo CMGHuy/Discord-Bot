@@ -53,7 +53,7 @@ def _queue_notify(record: dict) -> None:
         from swingbot.core.db.repositories.notify_queue import notify_queue_repo
         # A trade record's own `id` is a reserved infrastructure column name in
         # the table: queued as-is, the insert is rejected and the close is
-        # never announced.
+        # never announced. drain() hands it back as `id`.
         notify_queue_repo().enqueue(
             {("trade_id" if key == "id" else key): value for key, value in record.items()})
     except Exception as exc:

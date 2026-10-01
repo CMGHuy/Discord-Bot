@@ -44,3 +44,12 @@ def test_the_drill_brackets_the_target_with_two_marks_and_checks_both():
     assert "VERDICT" in src and "logs/pitr_drill.log" in src
     assert "down -v" in src
     assert b"\r" not in SCRIPT.read_bytes()
+
+
+def test_drill_target_is_exported_before_any_compose_call_on_the_scratch_project():
+    # The compose file requires DRILL_TARGET at parse time, so every `$DRILL ...`
+    # call (down, run, up, exec) needs it in the environment, not only `run restore`.
+    src = SCRIPT.read_text(encoding="utf-8")
+    export = src.index('export DRILL_TARGET="$TARGET"')
+    first_use = src.index("$DRILL --profile restore down")
+    assert src.index('TARGET="$(psql_prod') < export < first_use
