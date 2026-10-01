@@ -44,8 +44,8 @@ OUT = ROOT / "tests" / "backtesting" / "fixtures" / "v68_validation_arms.json"
 
 
 def main() -> int:
-    frames = load_frames(CACHE_DIR, ROOT / "data" / "watchlist.json",
-                         None, SAMPLE_EVERY)
+    from swingbot.core.marketdata.watchlist import load_watchlist
+    frames = load_frames(CACHE_DIR, load_watchlist(), None, SAMPLE_EVERY)
     print(f"{len(frames)} tickers | horizons {HORIZONS_TO_TEST} | "
           f"window {VALIDATION}", flush=True)
     baseline, component = [], []

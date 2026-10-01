@@ -1,5 +1,10 @@
 # Database restore drill
 
+**Rollback is `scripts/ops/rollback_to.sh "<UTC>"`** (point-in-time, last 30
+days, see `DEPLOY_HETZNER.md` "Point-in-time rollback"). The `pg_dump` described
+here (kept 90 days) is the second, day-level method for anything older.
+
+
 An unexercised restore is a hope, not a backup. This is the record of the drill
 (v67 P6-04), run against **production** on 2026-09-30.
 
@@ -39,7 +44,7 @@ drill before trusting any backup.
 ## Scheduling
 
 Cron on the VM: `0 3 * * *  cd /opt/swing-bot && ./scripts/ops/backup_db.sh >> logs/backup.log 2>&1`
-(installed 2026-09-30). Dumps are pruned after 14 days.
+(installed 2026-09-30). Dumps are pruned after 90 days.
 
 ## Point-in-time recovery (v116)
 

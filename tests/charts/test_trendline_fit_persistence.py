@@ -50,7 +50,7 @@ def test_log_trade_stores_the_fit_it_is_given(tmp_path):
     """The real writer: swingbot.core.tracking.performance.TradeLog.log_trade."""
     from swingbot.core.tracking.performance import TradeLog
 
-    log = TradeLog(path=str(tmp_path / "trades.json"))
+    log = TradeLog()
     fit = fit_trendline(_frame(), lookback=120, current_price=160.0, is_bull=True)
     assert fit is not None
 
@@ -71,7 +71,7 @@ def test_log_trade_omits_the_key_entirely_when_there_is_no_fit(tmp_path):
     rather than two."""
     from swingbot.core.tracking.performance import TradeLog
 
-    log = TradeLog(path=str(tmp_path / "trades.json"))
+    log = TradeLog()
     trade_id = log.log_trade(
         ticker="AAPL", strategy="RSI", horizon_key="4w", direction="bullish",
         confidence_level=4, confidence_label="Strong", entry=160.0,

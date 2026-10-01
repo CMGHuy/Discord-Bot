@@ -37,7 +37,7 @@ The project is laid out as a proper package:
 ```
 bot.py                 entry point: python bot.py
 admin_ui.py             entry point: python admin_ui.py (admin web UI)
-data/                   runtime state -- trades.json, state.json, account.json, watchlist.json
+data/                   runtime caches and snapshots (the stores themselves live in Postgres)
 logs/                   bot.log (rotating), read by the admin UI's Logs page
 exports/                generated chart images
 deploy/                 hetzner-setup.sh (one-time server bootstrap), deploy.sh (pull + restart, used by CI and manually)
@@ -86,8 +86,9 @@ swingbot/
 **`swingbot/admin/`:**
 - `app.py` — the admin web UI (see [DOCKER.md](docs/deploy/DOCKER.md)), three pages via a sidebar: **Dashboard** (open trades, auto-refreshing every 5s so trades logged by `!check` show up without a manual reload, click any for full detail with chart + confidence breakdown, clear all open trades), **Settings** (every `.env` variable as a compact input field, hot-reloads the bot on save), **Logs** (live-updating tail of the bot's log file).
 
-**Data files (created on first run, under `data/`):** `watchlist.json`, `state.json`,
-`trades.json`, `account.json`. Chart images go under `exports/`; the bot's rotating log file goes under `logs/`.
+**Data files (created on first run, under `data/`):** `analytics_snapshot.json`,
+`scan_snapshots.json`, `scan_telemetry.jsonl`; trades, plans, state, account and the
+watchlist are Postgres tables. Chart images go under `exports/`; the bot's rotating log file goes under `logs/`.
 
 ## Customizing
 

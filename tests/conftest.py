@@ -87,18 +87,6 @@ TEST_DPI = 30
 
 
 @pytest.fixture(autouse=True)
-def _heartbeat_file_in_tmp(monkeypatch, tmp_path_factory):
-    """Keep runstate's baked heartbeat path out of the real data/ directory.
-
-    set_scan_paused(False) acknowledges a store-write halt by writing
-    bot_heartbeat.json; without this a test that unpauses leaves one behind.
-    """
-    from swingbot.commands.scanning import runstate
-    monkeypatch.setattr(runstate, "_HEARTBEAT_FILE",
-                        str(tmp_path_factory.mktemp("hb") / "bot_heartbeat.json"))
-
-
-@pytest.fixture(autouse=True)
 def _low_dpi_renders(monkeypatch):
     """Render test charts at a low DPI -- the tier's dominant cost is raster
     resolution, which nothing asserts on.
@@ -180,3 +168,40 @@ def restore_root_logging():
         if handler not in root.handlers:
             root.addHandler(handler)
     root.setLevel(saved_level)
+
+
+@pytest.fixture(autouse=True)
+def _store_database(request, monkeypatch):
+    """v116 Phase 4: every store is Postgres. A test that reaches get_engine()
+    gets this worker's test database -- lazily, so a test that never touches
+    a store opens nothing -- and the tables it touched are truncated after it.
+    With db-test down, such a test skips with the start command."""
+    import sqlalchemy as sa
+
+    from swingbot.core.db import engine as engine_module
+    from swingbot.core.db.repositories import base as base_module
+    from swingbot.core.db.schema import METADATA
+    used = {}
+    if request.node.get_closest_marker("real_engine"):
+        yield
+        return
+
+    def lazy():
+        if "engine" not in used:
+            used["engine"] = request.getfixturevalue("db_engine")
+        return used["engine"]
+
+    monkeypatch.setattr(engine_module, "get_engine", lazy)
+    monkeypatch.setattr(base_module, "get_engine", lazy)
+    # scripts/db/import_settings_audit.py binds the name at import time, so the two
+    # patches above do not reach it; without this it talks to the shared base database.
+    import importlib
+    try:
+        monkeypatch.setattr(importlib.import_module("scripts.db.import_settings_audit"), "get_engine", lazy)
+    except ImportError:
+        pass
+    yield
+    if used:
+        names = ", ".join(table.name for table in METADATA.sorted_tables)
+        with used["engine"].begin() as conn:
+            conn.execute(sa.text(f"TRUNCATE {names} RESTART IDENTITY CASCADE"))

@@ -30,18 +30,6 @@ def test_every_channel_is_a_known_channel():
     assert not bad, f"unknown channels: {bad}"
 
 
-def test_every_watched_event_has_at_least_one_table():
-    """WATCHED_EVENTS is the SPA's contract. A concern with no table behind it
-    is an event the client waits for and never receives."""
-    from swingbot.admin.events.watcher import WATCHED_EVENTS
-    covered = set(events.TABLE_CHANNELS.values())
-    # `settings` is raised by Part 4's settings table, not by data/ at all;
-    # `analytics` by Part 5's tables (events.py: "added by that part").
-    deferred = {"settings", "analytics"}
-    missing = set(WATCHED_EVENTS) - covered - deferred
-    assert not missing, f"no table raises: {sorted(missing)}"
-
-
 def test_every_mapped_table_has_an_installed_trigger(db_conn):
     expected = {notify.trigger_name(t) for t in events.TABLE_CHANNELS}
     missing = expected - _installed_triggers(db_conn)

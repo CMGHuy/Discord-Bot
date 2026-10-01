@@ -16,7 +16,6 @@ This is a paper-trade tracker -- it does not know about slippage, fees,
 partial fills, or gaps beyond what the daily bar shows.
 """
 import logging
-import os
 import secrets
 import string
 from datetime import datetime, timezone, timedelta
@@ -29,7 +28,6 @@ _TRADE_ID_ALPHABET = string.ascii_letters + string.digits
 from swingbot import config
 from swingbot.core.planning import account as account_module
 from swingbot.core.charts.trendline_fit import TRENDLINE_FIT_KEY
-from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.market.strategy_types import HORIZONS as _HORIZONS
 
 # Baseline horizon the raw NEAR_TP_TIMEOUT_MINUTES/NEAR_TP_STALL_CHECK_MINUTES
@@ -216,7 +214,7 @@ def primary_strategy_label(t: dict) -> str:
     t["strategy"] itself -- which, for every trade produced by the live
     confluence engine, is just ScenarioSignal's hardcoded default
     ("S/R Confluence", see levels.ScenarioSignal) and is never actually
-    overridden per-trade. Every trade in trades.json ends up with that
+    overridden per-trade. Every trade in the trades table ends up with that
     exact same literal string, which is why any view that reads
     t["strategy"] directly (the admin Performance page's Trade Log table
     and By-Strategy breakdown, before this function existed) showed the
@@ -485,101 +483,30 @@ def _json_record(row: dict) -> dict:
     # The JSON backend exposes ISO timestamps and floats.  Keep that public
     # shape at the database boundary too, rather than leaking PostgreSQL's
     # datetime/Decimal values into analytics and command consumers.
-    from swingbot.core.db.dual import normalise
+    from swingbot.core.db.codec import normalise
     return normalise(result)
 
 
 class TradeLog:
-    def __init__(self, path: str = None):
-        self.path = path or os.path.join(config.DATA_DIR, "trades.json")
-        self._trades = self._load()
+    """The trade ledger. Every read goes to the `trades` table and every write
+    is a row-level upsert/delete, so an instance holds no snapshot."""
 
-    def _load(self) -> list:
-        return read_json(self.path, [])
-
-    def reload(self) -> None:
-        """Re-read trades.json from disk into `self._trades`.
-
-        Every other call site makes a fresh `TradeLog()` per use (the
-        module singleton in `core/scanning/engine.py` is the sole
-        exception, and it never diverges from disk because it is the only
-        writer that touches it). `plan_manager.PlanManager` is handed its
-        OWN separate `TradeLog()` instance by `run_manager_tick()`'s
-        module-level `_MANAGER` singleton, kept for the life of the
-        process -- see PlanStore.reload()'s docstring for the identical
-        pattern on the plans-side store. Without this, any trade the
-        shared `engine.trade_log` singleton logs (every legacy/v1 alert)
-        after `_MANAGER` was first built is invisible to this instance's
-        `self._trades`, and the next v2 plan-lifecycle write here
-        (`log_trade`/`append_leg_by_plan`/`close_plan_trade`, all of which
-        call `_save()`) serializes that stale list and clobbers
-        trades.json, erasing every trade logged elsewhere in the meantime.
-        Call this before using `self._trades` when this instance is
-        long-lived.
-
-        At the database stage this is intentionally a no-op: row-level writes
-        cannot overwrite another process's whole-file snapshot, which was the
-        only race this method existed to narrow.
-        """
-        from swingbot.core.db import stages
-        if stages.reads_db("trades"):
-            return
-        with _LOCK:
-            self._trades = self._load()
-
-    def _save(self):
-        atomic_write_json(self.path, self._trades)
-
-    def _db_upsert(self, trade: dict, *, conn=None) -> None:
-        """Mirror one changed trade when the store is at the dual/db stage."""
-        from swingbot.core.db import stages
-        if not stages.writes_db("trades"):
-            return
+    @staticmethod
+    def _db_upsert(trade: dict, *, conn=None) -> None:
+        """Write one changed trade to the trades table."""
         from swingbot.core.db.repositories.trades import trades_repo
         trades_repo().upsert(_db_record(trade), conn=conn)
 
-    def _db_delete(self, trade_id: str) -> None:
-        from swingbot.core.db import stages
-        if stages.writes_db("trades"):
-            from swingbot.core.db.repositories.trades import trades_repo
-            trades_repo().delete(trade_id)
-
-    def _db_clear(self, status: str | None) -> None:
-        from swingbot.core.db import stages
-        if stages.writes_db("trades"):
-            from swingbot.core.db.repositories.trades import trades_repo
-            trades_repo().clear(status=status)
-
-    def _persist(self, trade: dict | None = None, *, conn=None) -> None:
-        """Persist to the configured backend(s), without hiding DB failures."""
-        from swingbot.core.db import stages
-        if stages.writes_json("trades"):
-            self._save()
-        if not stages.writes_db("trades"):
-            return
-        if trade is not None:
-            self._db_upsert(trade, conn=conn)
-        elif not stages.reads_db("trades"):
-            # At the db stage `self._trades` is a stale JSON-era snapshot, not
-            # the source of truth: re-upserting it would resurrect old rows.
-            for row in self._trades:
-                self._db_upsert(row, conn=conn)
+    @staticmethod
+    def _db_delete(trade_id: str) -> None:
+        from swingbot.core.db.repositories.trades import trades_repo
+        trades_repo().delete(trade_id)
 
     @staticmethod
-    def _reads_db() -> bool:
-        from swingbot.core.db import stages
-        return stages.reads_db("trades")
-
-    def _drop_local(self, trade: dict) -> None:
-        """Remove a trade from the in-memory JSON-era list. At the db stage
-        `trade` is a database copy and `_trades` is not the source of truth."""
-        if not self._reads_db():
-            self._trades.remove(trade)
-
-    def _db_delete_rows(self, status: str | None = None,
+    def _db_delete_rows(status: str | None = None,
                         trade_id: str | None = None) -> int:
-        """Delete straight from the trades table (db stage) and return how
-        many rows went. `trade_id` deletes one row, else `status` selects
+        """Delete straight from the trades table and return how many rows
+        went. `trade_id` deletes one row, else `status` selects
         "open"/"closed"/None(all) exactly as `TradeRepository.clear`."""
         from swingbot.core.db.repositories.trades import trades_repo
         if trade_id is not None:
@@ -587,21 +514,13 @@ class TradeLog:
         return trades_repo().clear(status=status)
 
     def _persist_changed(self, changed: list[dict]) -> None:
-        """Persist a bulk mutation. At the db stage that is one upsert per
-        mutated trade (by id, from the copies `_all()` returned); at json/dual
-        it is the whole-log write, exactly as before."""
-        from swingbot.core.db import stages
-        if not stages.reads_db("trades"):
-            self._persist()
-            return
+        """Persist a bulk mutation: one upsert per mutated trade (by id, from
+        the copies `_all()` returned)."""
         for trade in changed:
             self._db_upsert(trade)
 
     def _all(self) -> list[dict]:
-        """Every trade from the active read backend, in TradeLog's API shape."""
-        from swingbot.core.db import stages
-        if not stages.reads_db("trades"):
-            return self._trades
+        """Every trade, in TradeLog's API shape."""
         from swingbot.core.db.repositories.trades import trades_repo
         return [_json_record(row) for row in trades_repo().list_all()]
 
@@ -746,8 +665,7 @@ class TradeLog:
         record["shadow_sizing"] = self._shadow_sizing(strategy)
 
         with _LOCK:
-            self._trades.append(record)
-            self._persist(record)
+            self._db_upsert(record)
         return trade_id
 
     def append_leg_by_plan(self, plan_id: str, leg: dict) -> None:
@@ -760,7 +678,7 @@ class TradeLog:
             if t is None:
                 return
             append_leg(t, leg)
-            self._persist(t)
+            self._db_upsert(t)
 
     def record_plan_fill(self, plan_id: str, fill_price: float) -> str | None:
         """Move the placeholder trade a stop_entry plan_v2 got at scan-detection
@@ -793,7 +711,7 @@ class TradeLog:
                 t["shares"] = sizing["shares"]
                 t["position_value"] = sizing["position_value"]
                 t["sizing_mode"] = sizing["mode"]
-            self._persist(t)
+            self._db_upsert(t)
             return t["id"]
 
     def discard_plan_placeholder(self, plan_id: str) -> bool:
@@ -812,8 +730,6 @@ class TradeLog:
                       if t.get("plan_id") == plan_id and t["status"] == "open"), None)
             if t is None:
                 return False
-            self._drop_local(t)
-            self._persist()
             self._db_delete(t["id"])
         return True
 
@@ -838,7 +754,7 @@ class TradeLog:
             t["closed_at"] = datetime.now(timezone.utc).isoformat()
             self._settle_account_balance(t)
             closed_trade = dict(t)
-            self._persist(t, conn=conn)
+            self._db_upsert(t, conn=conn)
         _after_close(closed_trade)
         _refresh_snapshot_safely()
 
@@ -915,9 +831,8 @@ class TradeLog:
         Returns the list of trades that were newly closed this call.
         """
         # Compute outcomes WITHOUT the lock first (pure pandas work, no writes).
-        # Re-acquire it to actually apply the mutations and save, so a concurrent
-        # refresh() between the computation and the write can't cause us to save
-        # stale data or lose the status updates.
+        # Re-acquire it to actually apply the mutations and save, so the
+        # status updates are written as one unit.
         #
         # `plan_id`-linked trades are excluded: this loop only ever knows the
         # trade's ORIGINAL stop_loss/take_profit (snapshotted once at
@@ -1013,8 +928,8 @@ class TradeLog:
         if not updates:
             return []
 
-        # Apply mutations and persist atomically under the lock so no concurrent
-        # refresh() can race between the dict mutation and self._persist().
+        # Apply mutations and persist under the lock so concurrent writers
+        # cannot interleave between the dict mutation and the upsert.
         newly_closed = []
         closed_at = datetime.now(timezone.utc).isoformat()
         with _LOCK:
@@ -1062,7 +977,6 @@ class TradeLog:
         alerts. Anything that only DISPLAYS or ranks results should keep the
         default.
         """
-        self.refresh()
         base = self._all() if trades is None else trades
         from swingbot.core.tracking import ledger as _ledger
         if ledger == _ledger.MAIN:
@@ -1101,7 +1015,6 @@ class TradeLog:
         """Return the weak ledger's separate, never-summed performance block."""
         from swingbot.core.analytics import metrics as m
         from swingbot.core.tracking import ledger as _ledger
-        self.refresh()
         closed = [trade for trade in self._all()
                   if _ledger.is_weak(trade) and trade.get("status") in ("win", "loss", "closed")]
         wins = [trade for trade in closed if trade["status"] == "win"]
@@ -1141,7 +1054,6 @@ class TradeLog:
         as its own R, `expand=False` restores the pre-v79 single blended R
         per position. See `get_stats` for who is allowed to pass False.
         """
-        self.refresh()
         base = self._all() if trades is None else trades
         trades = base if confidence_level is None else [
             t for t in base if t["confidence_level"] == confidence_level
@@ -1193,18 +1105,6 @@ class TradeLog:
             "avg_open_confidence": (sum(open_confidences) / len(open_confidences)) if open_confidences else None,
         }
 
-    def refresh(self):
-        """Re-read trades from disk.  Called automatically by get_trades() /
-        get_stats() / has_open_trade() so the bot always reflects the latest
-        state even when a separate process (the admin UI) has modified the file
-        since this instance was constructed. At the database stage it is a
-        no-op; see reload()."""
-        from swingbot.core.db import stages
-        if stages.reads_db("trades"):
-            return
-        with _LOCK:
-            self._trades = self._load()
-
     def get_trades(self, status: str = None, ticker: str = None, limit: int | None = 20,
                     sort_by: str = "opened_at", ledger: str | None = None) -> list:
         """
@@ -1219,10 +1119,9 @@ class TradeLog:
         `limit=None` returns every matching trade (used for pagination,
         where the caller slices pages out of the full sorted list).
 
-        Always re-reads from disk so the bot reflects changes made by the
-        admin UI (or any other process that writes trades.json).
+        Always reads the trades table, so it reflects changes made by the
+        admin UI (or any other process).
         """
-        self.refresh()
         trades = list(self._all())
         from swingbot.core.tracking import ledger as _ledger
         if ledger == _ledger.MAIN:
@@ -1242,7 +1141,6 @@ class TradeLog:
         return trades[:limit] if limit is not None else trades
 
     def get_trade_by_id(self, trade_id: str) -> dict | None:
-        self.refresh()   # always read fresh — admin UI may have modified the file
         return next((t for t in self._all() if t["id"] == trade_id), None)
 
     def open_trade_for_ticker(self, ticker: str) -> dict | None:
@@ -1261,7 +1159,6 @@ class TradeLog:
         opposite-direction one only via the reversal path (core/reversal.py),
         which closes this trade first.
         """
-        self.refresh()
         return next(
             (t for t in self._all()
              if t["ticker"] == ticker and t["status"] == "open"),
@@ -1300,7 +1197,7 @@ class TradeLog:
                     t["close_reason"] = "reversed"
                     self._settle_account_balance(t)
                     closed = dict(t)
-                    self._persist(t)
+                    self._db_upsert(t)
                     break
         if closed is not None:
             if closed.get("plan_id"):
@@ -1313,7 +1210,6 @@ class TradeLog:
         """True if this exact setup is already being tracked as an open trade --
         used to avoid logging duplicate positions when a snapshot scan re-surfaces
         a still-active signal that was already recommended."""
-        self.refresh()
         return any(
             t["ticker"] == ticker and t["strategy"] == strategy and t["horizon_key"] == horizon_key
             and t["direction"] == direction and t["status"] == "open"
@@ -1341,7 +1237,6 @@ class TradeLog:
         %" setting the same way a single scan's own internal dedup already
         does, just extended across separate !check invocations over time.
         """
-        self.refresh()
 
         def _close(a, b):
             ref = max(abs(a), abs(b))
@@ -1363,7 +1258,7 @@ class TradeLog:
             for t in self._all():
                 if t["id"] == trade_id:
                     t["near_close_alerted"] = alerted
-                    self._persist(t)
+                    self._db_upsert(t)
                     return
 
     def store_trendline_fit(self, trade_id: str, fit: dict) -> bool:
@@ -1376,7 +1271,7 @@ class TradeLog:
         is the one its PNG was drawn from.
 
         Locked like every other mutator here -- the bot's scan loop writes
-        the same trades.json from a different process.
+        the same trades table from a different process.
         """
         if not fit:
             return False
@@ -1386,7 +1281,7 @@ class TradeLog:
                     if t.get("trendline_fit"):
                         return False
                     t["trendline_fit"] = fit
-                    self._persist(t)
+                    self._db_upsert(t)
                     return True
         return False
 
@@ -1406,7 +1301,7 @@ class TradeLog:
 
         Locked the same way as every other mutator here so a concurrent
         write from the bot's own scan loop (a different process, same
-        trades.json) can't race with it and corrupt or lose data. The
+        trades table) can't race with it and corrupt or lose data. The
         price fetch itself happens OUTSIDE the lock (it's a network call)
         and is re-validated against the trade's live status once inside.
         Returns True if a matching OPEN trade was found and closed.
@@ -1432,7 +1327,7 @@ class TradeLog:
                     t["closed_at"] = datetime.now(timezone.utc).isoformat()
                     t["close_reason"] = reason
                     self._settle_account_balance(t)
-                    self._persist(t)
+                    self._db_upsert(t)
                     closed_trade = t
                     break
         if closed_trade is not None:
@@ -1462,63 +1357,29 @@ class TradeLog:
                         return False
                     _apply_exit_price(t, price, reason="manual")
                     self._settle_account_balance(t)
-                    self._persist(t)
+                    self._db_upsert(t)
                     return True
         return False
 
     def delete_trade(self, trade_id: str) -> bool:
         """Remove a single trade record by id. Returns True if something was deleted."""
-        if self._reads_db():
-            with _LOCK:
-                return bool(self._db_delete_rows(trade_id=trade_id))
         with _LOCK:
-            before = len(self._trades)
-            self._trades = [t for t in self._trades if t["id"] != trade_id]
-            deleted = len(self._trades) != before
-            if deleted:
-                self._persist()
-                self._db_delete(trade_id)
-        return deleted
+            return bool(self._db_delete_rows(trade_id=trade_id))
 
     def clear_history(self) -> int:
         """Delete all closed (win/loss/manually-closed) trade records, leaving open trades untouched."""
-        if self._reads_db():
-            with _LOCK:
-                return self._db_delete_rows("closed")
         with _LOCK:
-            before = len(self._trades)
-            self._trades = [t for t in self._trades if t["status"] == "open"]
-            removed = before - len(self._trades)
-            if removed:
-                self._persist()
-                self._db_clear("closed")
-        return removed
+            return self._db_delete_rows("closed")
 
     def clear_open(self) -> int:
         """Delete every trade currently in status='open', leaving closed win/loss history untouched."""
-        if self._reads_db():
-            with _LOCK:
-                return self._db_delete_rows("open")
         with _LOCK:
-            before = len(self._trades)
-            self._trades = [t for t in self._trades if t["status"] != "open"]
-            removed = before - len(self._trades)
-            if removed:
-                self._persist()
-                self._db_clear("open")
-        return removed
+            return self._db_delete_rows("open")
 
     def clear_all(self) -> int:
         """Delete every trade record. Returns how many were removed."""
-        if self._reads_db():
-            with _LOCK:
-                return self._db_delete_rows(None)
         with _LOCK:
-            count = len(self._trades)
-            self._trades = []
-            self._persist()
-            self._db_clear(None)
-        return count
+            return self._db_delete_rows(None)
 
     def close_if_live_price_hit(self, ticker: str, live_price: float) -> list:
         """
@@ -1527,7 +1388,6 @@ class TradeLog:
         hits immediately between full scan cycles.
         Returns the list of newly-closed trade records (already saved to disk).
         """
-        self.refresh()
         # `plan_id`-linked trades are excluded for the same reason
         # update_open_trades (see its filter) and check_near_tp_timeout skip
         # them: a v2 trade record's take_profit/stop_loss are frozen at
@@ -1536,7 +1396,7 @@ class TradeLog:
         # position at TP1 and cleared `legs`, after which the tp1_partial
         # event and the eventual close_plan_trade both found no open trade and
         # silently did nothing -- the entire scale-out mechanism never reached
-        # trades.json or the account for any plan-linked trade.
+        # the trades table or the account for any plan-linked trade.
         open_trades = [t for t in self._all()
                        if t["ticker"] == ticker and t["status"] == "open"
                        and not t.get("plan_id")]
@@ -1633,7 +1493,6 @@ class TradeLog:
         if not config.NEAR_TP_TIMEOUT_ENABLED:
             return []
 
-        self.refresh()
         open_trades = [t for t in self._all()
                        if t["ticker"] == ticker and t["status"] == "open"]
         if not open_trades:

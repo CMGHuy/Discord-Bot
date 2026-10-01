@@ -77,7 +77,9 @@ def build_snapshot(closed: list[dict], starting_balance: float, registry_entries
 
 
 def save_snapshot(snap: dict, path: str | None = None) -> None:
+    from swingbot.core.db import notify
     atomic_write_json(path or DEFAULT_PATH, snap)
+    notify.publish("analytics")
 
 
 def load_snapshot(path: str | None = None, max_age_seconds: int = 3600) -> dict | None:

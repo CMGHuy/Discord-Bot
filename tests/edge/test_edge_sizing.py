@@ -122,14 +122,13 @@ def test_new_modes_without_inputs_fall_back_to_config_risk():
     assert out["shares"] == 50
 
 
-def test_set_sizing_mode_accepts_the_three_edge_modes(tmp_path):
+def test_set_sizing_mode_accepts_the_three_edge_modes():
     from swingbot.core.planning.account import set_sizing_mode
-    path = str(tmp_path / "account.json")
-    assert set_sizing_mode("kelly", path=path)["sizing_mode"] == "kelly"
-    assert set_sizing_mode("vol_target", path=path)["sizing_mode"] == "vol_target"
-    assert set_sizing_mode("min_of_all", path=path)["sizing_mode"] == "min_of_all"
+    assert set_sizing_mode("kelly")["sizing_mode"] == "kelly"
+    assert set_sizing_mode("vol_target")["sizing_mode"] == "vol_target"
+    assert set_sizing_mode("min_of_all")["sizing_mode"] == "min_of_all"
     with pytest.raises(ValueError):
-        set_sizing_mode("not_a_real_mode", path=path)
+        set_sizing_mode("not_a_real_mode")
 
 
 def test_sizing_shadow_report_compares_modes():
@@ -156,19 +155,21 @@ def test_sizing_shadow_report_ignores_trades_without_shadow_data():
         assert rep[mode]["multiple"] == 1.0
 
 
-def test_log_trade_stamps_shadow_sizing_from_own_history(tmp_path):
+def test_log_trade_stamps_shadow_sizing_from_own_history():
     from swingbot.core.tracking.performance import TradeLog
-    log = TradeLog(path=str(tmp_path / "trades.json"))
+    log = TradeLog()
     # seed one closed trade for the strategy so kelly has real R history to
     # work with -- n=1 is well below KELLY_MIN_SAMPLE (30) so this exercises
     # the floor path, not a golden Kelly number (that's covered above).
-    log.log_trade(
+    first_id = log.log_trade(
         ticker="AAPL", strategy="RSI", horizon_key="4w", direction="bullish",
         confidence_level=4, confidence_label="Strong", entry=100.0, stop_loss=95.0,
         take_profit=110.0,
     )
-    log._trades[0]["status"] = "win"
-    log._trades[0]["exit_price"] = 110.0
+    first = log.get_trade_by_id(first_id)
+    first["status"] = "win"
+    first["exit_price"] = 110.0
+    log._db_upsert(first)
 
     trade_id = log.log_trade(
         ticker="MSFT", strategy="RSI", horizon_key="4w", direction="bullish",
@@ -185,7 +186,7 @@ def test_log_trade_stamps_shadow_sizing_from_own_history(tmp_path):
 
 def test_log_trade_shadow_sizing_none_with_no_strategy_history(tmp_path):
     from swingbot.core.tracking.performance import TradeLog
-    log = TradeLog(path=str(tmp_path / "trades.json"))
+    log = TradeLog()
     trade_id = log.log_trade(
         ticker="AAPL", strategy="Brand New Strategy", horizon_key="4w", direction="bullish",
         confidence_level=4, confidence_label="Strong", entry=100.0, stop_loss=95.0,

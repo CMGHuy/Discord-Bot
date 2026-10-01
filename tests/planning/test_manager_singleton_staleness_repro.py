@@ -115,12 +115,12 @@ def test_legacy_trade_logged_between_ticks_is_not_erased_from_disk(tmp_path, mon
     # Between ticks, a plain scan alert logs a legacy trade through what is,
     # in production, the shared `engine.trade_log` singleton -- a fresh
     # instance here, same file.
-    TradeLog(path=str(tmp_path / "trades.json")).log_trade(
+    TradeLog().log_trade(
         ticker="ZZZ", strategy="RSI", horizon_key="2w", direction="bullish",
         confidence_level=1, confidence_label="A", entry=10.0, stop_loss=9.0,
         take_profit=11.0,
     )
-    assert len(TradeLog(path=str(tmp_path / "trades.json")).get_trades(limit=None)) == 2
+    assert len(TradeLog().get_trades(limit=None)) == 2
 
     # Tick 2: "old" taps TP1 -- _MANAGER.trade_log.append_leg_by_plan() fires
     # and saves. Without a reload first, this save serializes only the
@@ -131,7 +131,7 @@ def test_legacy_trade_logged_between_ticks_is_not_erased_from_disk(tmp_path, mon
     # lifecycle event; the trade-log assertion below remains the regression.
     assert [e.transition for e in events] == ["filled", "tp1_partial"]
 
-    trades = TradeLog(path=str(tmp_path / "trades.json")).get_trades(limit=None)
+    trades = TradeLog().get_trades(limit=None)
     assert any(t["ticker"] == "ZZZ" for t in trades), (
         "a legacy trade logged between manager ticks was erased from "
         "trades.json by the manager's own next write -- exactly the "

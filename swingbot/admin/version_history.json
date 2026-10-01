@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-30 21:08:26 UTC",
+  "generated_at": "2026-10-01 21:23:29 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.21.0",
-    "bot": "1.12.1"
+    "bot": "2.0.0"
   },
   "releases": [
     {
@@ -1366,6 +1366,19 @@
       "versions": {
         "ui": "1.21.0",
         "bot": "1.12.1"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-01",
+      "last_seen": "2026-10-01",
+      "commit": "104a9b88",
+      "subject": "release(bot): 2.0.0 -- stores are Postgres-only; whole-bot point-in-time rollback",
+      "versions": {
+        "ui": "1.21.0",
+        "bot": "2.0.0"
       },
       "changed": [
         "bot"

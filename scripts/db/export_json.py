@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
 """Export Postgres-backed stores back to their JSON files (v67 rollback).
 
-The inverse of the ``import_*.py`` scripts: it makes rolling a store back from
-stage ``db`` real. Reuses ``parity_report.STORES`` (file name, repository,
+The inverse of the ``import_*.py`` scripts: a data-out utility for a Postgres
+table. Postgres is the only store, so nothing reads the exported file back and
+no restart is needed. Reuses ``parity_report.STORES`` (file name, repository,
 ``from_repo_shape``) so the JSON produced here is exactly the shape parity
 already treats as equal to the source.
-
-After exporting, the bot and admin containers MUST be restarted: the
-store singletons (``TradeLog._trades``, ``PlanStore._plans``,
-``StateStore._data`` and every other store singleton) hold copies from before
-the export and would overwrite the file on their next write.
 """
 from __future__ import annotations
 
@@ -23,16 +19,10 @@ from typing import Any, Callable
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from swingbot import config  # noqa: E402
-from swingbot.core.db.dual import normalise  # noqa: E402
+from swingbot.core.db.codec import normalise  # noqa: E402
 from swingbot.core.infra.jsonio import atomic_write_json, read_json  # noqa: E402
 from scripts.db.import_common import record_checksum  # noqa: E402
 from scripts.db.parity_report import STORES  # noqa: E402
-
-RESTART_WARNING = (
-    "!! RESTART the bot and admin containers NOW, before anything else writes.\n"
-    "!! TradeLog._trades, PlanStore._plans and StateStore._data hold stale copies\n"
-    "!! in memory and would overwrite the exported file on their next write."
-)
 
 
 @dataclass
@@ -362,8 +352,6 @@ def main(argv=None) -> int:
                          dry_run=args.dry_run, force=args.force)
     for result in results:
         _print_result(result)
-    if not args.dry_run:
-        print(RESTART_WARNING)
     return int(any(result.status == "refused" for result in results))
 
 

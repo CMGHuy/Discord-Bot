@@ -1,9 +1,8 @@
 """Which table raises which SSE concern.
 
 One event type per *concern*, not per table -- several tables raise the same
-event and the client never learns the storage layout. This is the same taxonomy
-swingbot/admin/events/watcher.py's _DATA_PATHS encodes today, restated against
-tables so the SPA contract survives the storage change untouched.
+event and the client never learns the storage layout. This is the taxonomy the
+former file watcher encoded, restated against tables so the SPA contract survives the storage change untouched.
 """
 
 TABLE_CHANNELS: dict[str, str] = {
@@ -32,5 +31,19 @@ TABLE_CHANNELS: dict[str, str] = {
     # raises `watchlist`, the concern whose rows show data freshness.
     "scan_progress": "scan",
     "market_data_state": "watchlist",
-    # `analytics` and Part 5's tables are added by that part.
+}
+
+from swingbot.core.db.notify import CHANNELS  # noqa: E402
+
+#: The SPA's event contract: every name the stream can send besides `resync`
+#: and `ping`. Formerly the file watcher's WATCHED_EVENTS.
+SSE_EVENTS = frozenset(CHANNELS)
+
+#: Sources that stay files (spec § Out) and raise their concern themselves
+#: through notify.publish -- the watcher that stat()ed them is gone (v116).
+FILE_PUBLISHERS: dict[str, str] = {
+    "data/analytics_snapshot.json (analytics.snapshots.save_snapshot)": "analytics",
+    "data/scan_snapshots.json (scanning.snapshots._save_scan_snapshots)": "scan",
+    "data/scan_telemetry.jsonl (scanning.telemetry.log_scan_telemetry)": "scan",
+    ".env (admin.helpers._write_env_text, scripts/ops/env_set.py)": "settings",
 }

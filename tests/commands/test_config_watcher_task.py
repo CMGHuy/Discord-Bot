@@ -28,7 +28,5 @@ def test_config_watcher_tick_completes_without_a_nameerror(monkeypatch, tmp_path
     # Point both queue/trigger files at a directory guaranteed not to contain
     # them, so the tick takes the "nothing queued" path either way -- the bug
     # is a NameError on the bare name, which fires regardless of file state.
-    monkeypatch.setattr(loops.runstate, "_MANUAL_CLOSE_QUEUE", str(tmp_path / "manual_close_notify.json"))
-    monkeypatch.setattr(loops.runstate, "_TRIGGER_FILE", str(tmp_path / "trigger_check.flag"))
 
     _run(loops.config_watcher.coro())

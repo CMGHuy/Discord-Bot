@@ -215,12 +215,12 @@ def test_force_overwrites_a_differing_file(imported, tmp_path):
     assert _read(target) == WATCHLIST
 
 
-def test_main_prints_counts_checksum_and_restart_warning(imported, tmp_path, capsys):
+def test_main_prints_counts_and_checksum_with_no_restart_warning(imported, tmp_path, capsys):
     code = export_json.main(["--store", "watchlist", "--out-dir", str(tmp_path)])
     out = capsys.readouterr().out
     assert code == 0
     assert "watchlist" in out and "3 record" in out
-    assert "RESTART" in out
+    assert "RESTART" not in out      # no store keeps an in-memory copy to go stale
 
 
 def test_main_exits_nonzero_when_a_store_was_refused(imported, tmp_path):

@@ -16,7 +16,6 @@ from tests.planning.test_plan_engine_model import _plan as _valid_plan
 def db_stage(tmp_path, monkeypatch, db_engine):
     from swingbot.core.db import engine as db_engine_module
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(config, "DB_STORES", "plans:db")
     monkeypatch.setattr(config, "DATABASE_URL", db_engine.url.render_as_string(hide_password=False))
     db_engine_module.reset_engine()
     with db_engine.begin() as connection:

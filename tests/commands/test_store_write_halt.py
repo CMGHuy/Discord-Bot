@@ -1,4 +1,4 @@
-"""A DB write failure at a trading store's db stage pauses alerting instead
+"""A DB write failure pauses alerting instead
 of issuing a trade the book cannot record (v116 Phase 3)."""
 import asyncio
 import datetime as dt
@@ -27,8 +27,6 @@ class _FakeChannel:
 @pytest.fixture
 def files(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(runstate, "_HEARTBEAT_FILE", str(tmp_path / "bot_heartbeat.json"))
-    monkeypatch.setattr(runstate, "_PAUSE_FILE", str(tmp_path / "scan_paused.flag"))
     monkeypatch.setattr(loops.config, "HEALTH_ALERT_AFTER_FAILURES", 3)
     return tmp_path
 
@@ -44,14 +42,12 @@ def test_a_wrapped_database_error_is_a_store_write_failure():
     assert write_failure.is_store_write_failure(ValueError("bad price")) is False
 
 
-def test_only_a_trading_store_at_db_halts(monkeypatch):
-    monkeypatch.setattr(config, "DB_STORES", "plans:dual,flags:db")
-    assert write_failure.halts_issuance(_db_error()) is False
-    monkeypatch.setattr(config, "DB_STORES", "plans:db")
+def test_any_database_write_failure_halts():
     assert write_failure.halts_issuance(_db_error()) is True
+    assert write_failure.halts_issuance(ValueError("bad price")) is False
 
 
-def test_persist_plan_raises_at_db_and_still_swallows_at_json(monkeypatch):
+def test_persist_plan_raises_on_a_database_failure(monkeypatch):
     class Boom:
         def add(self, _plan):
             raise _db_error()
@@ -60,15 +56,11 @@ def test_persist_plan_raises_at_db_and_still_swallows_at_json(monkeypatch):
         plan_id = "P1"
 
     monkeypatch.setattr(scan_run, "PlanStore", Boom)
-    monkeypatch.setattr(config, "DB_STORES", "")
-    scan_run._persist_plan_v2(Plan())                       # logged, swallowed
-    monkeypatch.setattr(config, "DB_STORES", "plans:db")
     with pytest.raises(write_failure.StoreWriteHalt):
         scan_run._persist_plan_v2(Plan())
 
 
 def test_the_scan_loop_pauses_posts_to_ops_and_marks_health(files, monkeypatch):
-    monkeypatch.setattr(config, "DB_STORES", "plans:db")
     channel = _FakeChannel()
     monkeypatch.setattr(loops, "_ops_channel", lambda: channel)
 
@@ -85,16 +77,14 @@ def test_the_scan_loop_pauses_posts_to_ops_and_marks_health(files, monkeypatch):
     assert runstate._read_heartbeat()["store_write_failure"]["error"].startswith("StoreWriteHalt")
 
 
-def test_unpausing_clears_the_health_mark(files, monkeypatch):
-    monkeypatch.setattr(config, "DB_STORES", "")
+def test_unpausing_clears_the_health_mark(files):
     runstate.record_store_write_failure(write_failure.StoreWriteHalt("x"))
     runstate.set_scan_paused(False)
     assert runstate._read_heartbeat().get("store_write_failure") is None
 
 
-def test_the_admin_reports_unhealthy_while_marked(files, monkeypatch):
+def test_the_admin_reports_unhealthy_while_marked(files):
     from swingbot.admin import app as admin_app
-    monkeypatch.setattr(config, "DB_STORES", "")
     now = dt.datetime.now(dt.timezone.utc).isoformat()
     runstate._update_heartbeat({"timestamp": now, "last_success": now})
     runstate.record_store_write_failure(write_failure.StoreWriteHalt("plan P1"))

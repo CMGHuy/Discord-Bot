@@ -4,6 +4,7 @@ import re
 
 from swingbot.core.tracking import performance as perf
 from swingbot.core.tracking.performance import TradeLog
+from tests.store_seed import seed_store
 
 
 def _closed_lines(caplog):
@@ -11,14 +12,14 @@ def _closed_lines(caplog):
             if r.name == perf.log.name and r.getMessage().startswith("Trade closed:")]
 
 
-def test_close_plan_trade_logs_outcome_r_and_hold(tmp_path, monkeypatch, caplog):
-    trades = TradeLog(path=str(tmp_path / "trades.json"))
-    trades._trades = [{
+def test_close_plan_trade_logs_outcome_r_and_hold(monkeypatch, caplog):
+    trades = TradeLog()
+    seed_store("trades", [{
         "id": "t-close-123456789", "plan_id": "p-close", "ticker": "AAPL",
         "status": "open", "direction": "bullish", "entry": 100.0,
-        "stop_loss": 95.0, "shares": None, "legs": [],
+        "stop_loss": 95.0, "shares": None, "legs": [], "horizon_key": "2w", "strategy": "RSI",
         "opened_at": "2026-09-20T14:00:00+00:00",
-    }]
+    }])
     monkeypatch.setattr(perf, "_journal_close_safely", lambda trade: None)
     monkeypatch.setattr(perf, "_refresh_snapshot_safely", lambda: None)
 
@@ -29,12 +30,13 @@ def test_close_plan_trade_logs_outcome_r_and_hold(tmp_path, monkeypatch, caplog)
     assert re.fullmatch(r"Trade closed: AAPL bullish id=t-close- outcome=win R=\+1\.00 hold=\d+\.\dd", line)
 
 
-def test_the_journal_hook_still_runs_after_the_line(tmp_path, monkeypatch):
+def test_the_journal_hook_still_runs_after_the_line(monkeypatch):
     journaled = []
-    trades = TradeLog(path=str(tmp_path / "trades.json"))
-    trades._trades = [{"id": "t1", "plan_id": "p1", "ticker": "MSFT", "status": "open",
-                       "direction": "bearish", "entry": 100.0, "stop_loss": 105.0,
-                       "shares": None, "legs": []}]
+    trades = TradeLog()
+    seed_store("trades", [{"id": "t1", "plan_id": "p1", "ticker": "MSFT", "status": "open",
+                           "direction": "bearish", "entry": 100.0, "stop_loss": 105.0,
+                           "shares": None, "legs": [], "horizon_key": "2w", "strategy": "RSI",
+                           "opened_at": "2026-09-20T14:00:00+00:00"}])
     monkeypatch.setattr(perf, "_journal_close_safely", journaled.append)
     monkeypatch.setattr(perf, "_refresh_snapshot_safely", lambda: None)
 

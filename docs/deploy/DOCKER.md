@@ -8,8 +8,8 @@ Two containers, one image (see `Dockerfile`):
   access to the container
 
 Both containers bind-mount the whole project directory to `/app`, so the
-`swingbot/` source, `data/` (`trades.json`, `state.json`, `account.json`,
-`watchlist.json`), `logs/` (`bot.log`), `.env`, and `exports/` are all
+`swingbot/` source, `data/` (snapshots and caches; trades, plans and the rest
+live in the Postgres `db` service), `logs/` (`bot.log`), `.env`, and `exports/` are all
 shared between them and persisted on your host — nothing extra to
 configure there.
 

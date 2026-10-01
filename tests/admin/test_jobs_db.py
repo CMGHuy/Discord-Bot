@@ -1,6 +1,4 @@
-"""JobManager persistence at each migration stage."""
-import os
-
+"""JobManager persistence: the admin_jobs table."""
 import pytest
 
 from swingbot import config
@@ -26,31 +24,20 @@ def _job(job_id="J1", state="done"):
             "started_at": "2026-01-02T15:00:00+00:00"}
 
 
-def test_json_stage_is_unchanged(data_dir, monkeypatch):
-    monkeypatch.setattr(config, "DB_STORES", "")
+def test_write_jobs_writes_rows(data_dir, db_committed, db_url):
     jobs_mod._write_jobs({"J1": _job()})
-    assert os.path.exists(data_dir / "admin_jobs.json")
-
-
-def test_dual_stage_writes_both(data_dir, monkeypatch, db_committed, db_url):
-    monkeypatch.setattr(config, "DB_STORES", "jobs:dual")
-    jobs_mod._write_jobs({"J1": _job()})
-    assert os.path.exists(data_dir / "admin_jobs.json")
     assert JobRepository().get_job("J1", conn=db_committed) is not None
 
 
-def test_db_stage_reads_rows(data_dir, monkeypatch, db_committed, db_url):
-    monkeypatch.setattr(config, "DB_STORES", "jobs:db")
+def test_read_jobs_reads_rows(data_dir, db_committed, db_url):
     JobRepository().put(_job("J1", "running"))
     assert jobs_mod._read_jobs()["J1"]["state"] == "running"
-    assert not os.path.exists(data_dir / "admin_jobs.json")
 
 
-def test_changing_state_on_a_record_read_back_persists(data_dir, monkeypatch, db_committed, db_url):
+def test_changing_state_on_a_record_read_back_persists(data_dir, db_committed, db_url):
     """The watcher reads every job, flips `state` on one and writes them all
     back. The record read from the table carries both `state` and the stored
     `status`; the flip must win, or a finished job is read back as running."""
-    monkeypatch.setattr(config, "DB_STORES", "jobs:db")
     jobs_mod._write_jobs({"J1": _job("J1", "running")})
     jobs = jobs_mod._read_jobs()
     jobs["J1"]["state"] = "done"

@@ -1,14 +1,7 @@
 """NG14 — /api/v1/risk and /api/v1/risk/killswitch.
 
-**Every test that touches the killswitch must patch
-`throttle.KILLSWITCH_PATH`.** That constant is computed at import time from
-`config.DATA_DIR` and `swingbot.core.edge.throttle` is deliberately absent
-from conftest's reload list, so it keeps pointing at the real project's
-data/killswitch.json whatever `admin_app` does. Writing through it from a
-test would ENGAGE THE REAL BOT'S KILLSWITCH -- it never releases itself, so
-the next live session would take no new entries and nothing would say why.
-tests/admin/test_risk_panel.py patches the same constant for the Jinja
-route; `killswitch_file` below is that precedent as a fixture.
+The killswitch is a row in the test database (truncated after every test),
+so no test here can engage the real bot's killswitch.
 
 The payload is broader than spec v14 Decision 7's three items. See risk.py:
 sector heat, clusters, throttle and scan health are on today's page and the
@@ -21,6 +14,7 @@ import pytest
 
 from tests.admin.api_v1_contract import (NULLABLE_NUMBER, NULLABLE_STR,
                                          assert_error, assert_shape)
+from tests.store_seed import seed_store
 
 _LOGIN = {"username": "admin", "password": "admin"}
 
@@ -29,20 +23,6 @@ _LOGIN = {"username": "admin", "password": "admin"}
 def logged_in(client):
     client.post("/api/v1/session", json=_LOGIN)
     return client
-
-
-@pytest.fixture
-def killswitch_file(admin_app, tmp_path, monkeypatch):
-    """Redirect the killswitch away from the real data/ directory.
-
-    See this module's docstring -- without it these tests pause the actual
-    bot.
-    """
-    from swingbot.core.edge import throttle
-
-    path = tmp_path / "killswitch.json"
-    monkeypatch.setattr(throttle, "KILLSWITCH_PATH", str(path))
-    return path
 
 
 @pytest.fixture(autouse=True)
@@ -61,8 +41,8 @@ def no_network(monkeypatch):
 
 def _open_trade(trade_id, ticker="AAPL", entry=100.0, stop=95.0, shares=10):
     return {
-        "id": trade_id, "ticker": ticker, "status": "open",
-        "strategy": "VWAP", "horizon": "1m",
+        "id": trade_id, "ticker": ticker, "status": "open", "direction": "bullish",
+        "strategy": "VWAP", "horizon_key": "1m",
         "entry": entry, "stop_loss": stop, "take_profit": 120.0,
         "shares": shares, "opened_at": "2026-08-01T12:00:00+00:00",
     }
@@ -74,7 +54,7 @@ def _closed_trade(trade_id, ticker="AAPL", win=True):
     fixture is never a flat line of identical R."""
     return {
         "id": trade_id, "ticker": ticker, "status": "closed",
-        "strategy": "VWAP", "horizon": "1m", "direction": "bullish",
+        "strategy": "VWAP", "horizon_key": "1m", "direction": "bullish",
         "entry": 100.0, "stop_loss": 95.0,
         "exit_price": 110.0 if win else 90.0,
         "opened_at": "2026-01-01T00:00:00+00:00",
@@ -105,7 +85,7 @@ def open_book(client, tmp_path, monkeypatch):
             _closed_trade(f"c{i:015d}", tickers[0] if tickers else "AAPL", win=(i % 2 == 0))
             for i in range(closed_trades)
         ]
-        (tmp_path / "trades.json").write_text(json.dumps(trades), encoding="utf-8")
+        seed_store("trades", trades)
 
         # A gently oscillating close series -- flat would make every
         # variance-based metric (vol, VaR, beta, correlation) None by
@@ -132,7 +112,7 @@ def test_requires_auth(client):
     assert_error(client.get("/api/v1/risk"), "auth", 401)
 
 
-def test_risk_shape(logged_in, killswitch_file):
+def test_risk_shape(logged_in):
     body = logged_in.get("/api/v1/risk").get_json()
     assert_shape(body, {
         "heat": dict, "positions": list, "sector_heat": list,
@@ -174,21 +154,21 @@ def test_risk_shape(logged_in, killswitch_file):
     }, where="correlation")
 
 
-def test_heat_carries_the_cap_it_is_measured_against(logged_in, killswitch_file):
+def test_heat_carries_the_cap_it_is_measured_against(logged_in):
     """A heat figure without its cap says nothing about whether you are near
     the limit -- the same reason the Dashboard ships risk_cap_pct."""
     heat = logged_in.get("/api/v1/risk").get_json()["heat"]
     assert heat["cap_pct"] > 0
 
 
-def test_position_rows_sum_to_open_heat(logged_in, killswitch_file, tmp_path):
+def test_position_rows_sum_to_open_heat(logged_in, tmp_path):
     """The guard against a second definition of risk. These rows come from
     heat.trade_risk_pct, which is exactly what open_heat sums; if either side
     ever recomputes risk from entry and stop, the two drift and this fails."""
-    (tmp_path / "trades.json").write_text(json.dumps([
+    seed_store("trades", [
         _open_trade("a" * 16, "AAPL", entry=100.0, stop=95.0, shares=10),
         _open_trade("b" * 16, "MSFT", entry=200.0, stop=190.0, shares=5),
-    ]), encoding="utf-8")
+    ])
 
     body = logged_in.get("/api/v1/risk").get_json()
     assert len(body["positions"]) == 2
@@ -202,18 +182,18 @@ def test_position_rows_sum_to_open_heat(logged_in, killswitch_file, tmp_path):
     assert total == pytest.approx(body["heat"]["open_pct"], abs=0.01)
 
 
-def test_positions_are_ordered_by_risk(logged_in, killswitch_file, tmp_path):
+def test_positions_are_ordered_by_risk(logged_in, tmp_path):
     """Largest exposure first: the row that matters is the one at the top."""
-    (tmp_path / "trades.json").write_text(json.dumps([
+    seed_store("trades", [
         _open_trade("a" * 16, "AAPL", entry=100.0, stop=99.0, shares=1),
         _open_trade("b" * 16, "MSFT", entry=200.0, stop=150.0, shares=20),
-    ]), encoding="utf-8")
+    ])
 
     rows = logged_in.get("/api/v1/risk").get_json()["positions"]
     assert [r["ticker"] for r in rows] == ["MSFT", "AAPL"]
 
 
-def test_utilisation_is_not_clamped_at_100(logged_in, killswitch_file, tmp_path):
+def test_utilisation_is_not_clamped_at_100(logged_in, tmp_path):
     """An over-cap portfolio must report the true figure. The Jinja page
     clamps the WIDTH of its bar so it cannot paint past its track; clamping
     the number would hide exactly the situation the reader needs to see.
@@ -228,10 +208,10 @@ def test_utilisation_is_not_clamped_at_100(logged_in, killswitch_file, tmp_path)
     imported it first. An earlier version of this test asserted against the
     seeded 10,000 balance and passed alone while failing in a full run.
     """
-    (tmp_path / "trades.json").write_text(json.dumps([
+    seed_store("trades", [
         # 20% of the account at risk against the 6% default cap -> 333%.
         {**_open_trade("a" * 16, "AAPL"), "risk_pct": 20.0},
-    ]), encoding="utf-8")
+    ])
 
     heat = logged_in.get("/api/v1/risk").get_json()["heat"]
     assert heat["open_pct"] == pytest.approx(20.0)
@@ -277,7 +257,7 @@ def test_the_correlation_labels_match_the_open_positions(client, open_book):
 
 
 def test_json_is_parseable_with_a_flat_price_position_in_the_book(
-        logged_in, killswitch_file, tmp_path, monkeypatch):
+        logged_in, tmp_path, monkeypatch):
     """C1: a zero-variance leg (a halted ticker, a stale cache entry) makes
     the correlation step's `.corr()` return NaN. Flask has no custom JSON
     provider registered anywhere in this repo, so its `DefaultJSONProvider`
@@ -293,9 +273,9 @@ def test_json_is_parseable_with_a_flat_price_position_in_the_book(
     or not the NaN-in-correlation-matrix bug is present. The raw bytes must
     be checked directly instead.
     """
-    (tmp_path / "trades.json").write_text(json.dumps([
+    seed_store("trades", [
         _open_trade("a" * 16, "FLAT"), _open_trade("b" * 16, "AAPL"),
-    ]), encoding="utf-8")
+    ])
 
     bars = 40
     flat = pd.DataFrame(
@@ -378,7 +358,7 @@ def test_a_market_data_failure_degrades_the_metrics_not_the_page(
 
 
 def test_a_malformed_closed_trade_degrades_only_the_trade_derived_metrics(
-        client, open_book, tmp_path):
+        client, open_book, monkeypatch):
     """Round 3: `r_series = trade_metrics.r_multiples(closed)` and the
     `sharpe_r`/`max_drawdown_r` computation run entirely OUTSIDE the
     market-data try/except (that separation was round 2's fix, for the
@@ -394,15 +374,18 @@ def test_a_malformed_closed_trade_degrades_only_the_trade_derived_metrics(
     """
     open_book(["AAPL"], closed_trades=5)
 
-    trades = json.loads((tmp_path / "trades.json").read_text(encoding="utf-8"))
-    trades.append({
-        "id": "m" * 16, "ticker": "AAPL", "status": "closed",
-        "strategy": "VWAP", "horizon": "1m", "direction": "bullish",
-        "entry": "not-a-number", "stop_loss": 95.0, "exit_price": 110.0,
-        "opened_at": "2026-01-01T00:00:00+00:00",
-        "closed_at": "2026-01-02T00:00:00+00:00",
-    })
-    (tmp_path / "trades.json").write_text(json.dumps(trades), encoding="utf-8")
+    # A numeric column cannot hold a string `entry`, so the malformed record is
+    # simulated: r_multiple() raises the same TypeError for one trade.
+    seed_store("trades", [_closed_trade("m" * 16)])
+    from swingbot.core.analytics import metrics as trade_metrics
+    real_r_multiple = trade_metrics.r_multiple
+
+    def flaky_r_multiple(trade):
+        if trade["id"].startswith("m"):
+            raise TypeError("unsupported operand type(s) for -: 'str' and 'float'")
+        return real_r_multiple(trade)
+
+    monkeypatch.setattr(trade_metrics, "r_multiple", flaky_r_multiple)
 
     response = client.get("/api/v1/risk")
     assert response.status_code == 200
@@ -435,7 +418,7 @@ def test_beta_tile_carries_the_actual_configured_benchmark(client, open_book):
     assert metrics["benchmark_symbol"] == "SPY"
 
 
-def test_killswitch_roundtrip(logged_in, killswitch_file):
+def test_killswitch_roundtrip(logged_in):
     from swingbot.core.edge import throttle
 
     body = logged_in.post("/api/v1/risk/killswitch", json={"on": True}).get_json()
@@ -448,7 +431,7 @@ def test_killswitch_roundtrip(logged_in, killswitch_file):
     assert throttle.kill_state()["on"] is False
 
 
-def test_engaging_records_a_reason(logged_in, killswitch_file):
+def test_engaging_records_a_reason(logged_in):
     """The Risk page shows the reason beside the state. An engaged killswitch
     with no explanation is the thing whoever finds it has to reconstruct."""
     body = logged_in.post("/api/v1/risk/killswitch",
@@ -457,14 +440,14 @@ def test_engaging_records_a_reason(logged_in, killswitch_file):
 
 
 def test_engaging_without_a_reason_still_records_where_it_came_from(
-        logged_in, killswitch_file):
+        logged_in):
     assert logged_in.post("/api/v1/risk/killswitch",
                           json={"on": True}).get_json()["killswitch"]["reason"]
 
 
 @pytest.mark.parametrize("payload", [{}, {"on": "false"}, {"on": 0},
                                      {"on": None}, {"action": "off"}])
-def test_an_unclear_toggle_is_rejected(logged_in, killswitch_file, payload):
+def test_an_unclear_toggle_is_rejected(logged_in, payload):
     """`on` is required and required to BE a bool.
 
     The Jinja form treats anything that is not the string "on" as off, which
@@ -477,7 +460,7 @@ def test_an_unclear_toggle_is_rejected(logged_in, killswitch_file, payload):
                  "invalid", 400)
 
 
-def test_a_rejected_toggle_does_not_change_state(logged_in, killswitch_file):
+def test_a_rejected_toggle_does_not_change_state(logged_in):
     from swingbot.core.edge import throttle
 
     logged_in.post("/api/v1/risk/killswitch", json={"on": True})
@@ -487,12 +470,12 @@ def test_a_rejected_toggle_does_not_change_state(logged_in, killswitch_file):
     )
 
 
-def test_killswitch_requires_auth(client, killswitch_file):
+def test_killswitch_requires_auth(client):
     assert_error(client.post("/api/v1/risk/killswitch", json={"on": True}),
                  "auth", 401)
 
 
-def test_sector_heat_is_a_sorted_list_not_a_map(logged_in, killswitch_file):
+def test_sector_heat_is_a_sorted_list_not_a_map(logged_in):
     """A JSON object has no guaranteed order, and the page ranks sectors by
     heat. Ordering that in the client means re-deriving a decision the server
     already made."""
@@ -504,7 +487,7 @@ def test_sector_heat_is_a_sorted_list_not_a_map(logged_in, killswitch_file):
                      where="sector_heat row")
 
 
-def test_scan_health_ships_numbers_not_svg(logged_in, killswitch_file, tmp_path, monkeypatch):
+def test_scan_health_ships_numbers_not_svg(logged_in, tmp_path, monkeypatch):
     """The Jinja page renders a sparkline server-side because Jinja needs
     one. Sub-project 3 owns how a sparkline looks in the SPA, and markup from
     the server takes that decision away from it."""
@@ -522,7 +505,7 @@ def test_scan_health_ships_numbers_not_svg(logged_in, killswitch_file, tmp_path,
     assert all(isinstance(d, (int, float)) for d in health["durations_s"])
 
 
-def test_scan_health_summarises_data_sources(logged_in, killswitch_file, tmp_path, monkeypatch):
+def test_scan_health_summarises_data_sources(logged_in, tmp_path, monkeypatch):
     """v106: the fallback rate is yfinance-fallback over everything Alpaca was
     asked for (hits + misses), across the recent rows that carry the key."""
     from swingbot import config
@@ -546,7 +529,7 @@ def test_scan_health_summarises_data_sources(logged_in, killswitch_file, tmp_pat
 
 
 def test_fallback_rate_pools_daily_frames_and_live_prices(
-        logged_in, killswitch_file, tmp_path, monkeypatch):
+        logged_in, tmp_path, monkeypatch):
     from swingbot.core.scanning import engine
     from swingbot.core.scanning import telemetry
 
@@ -559,7 +542,7 @@ def test_fallback_rate_pools_daily_frames_and_live_prices(
 
 
 def test_data_sources_fallback_rate_is_null_without_alpaca_traffic(
-        logged_in, killswitch_file, tmp_path, monkeypatch):
+        logged_in, tmp_path, monkeypatch):
     from swingbot.core.scanning import engine
     from swingbot.core.scanning import telemetry
 

@@ -216,7 +216,7 @@ def _earnings_in_window(ticker: str, max_holding_days: int):
 def _persist_plan_v2(plan_v2, alerts=()) -> None:
     """Add the plan to PlanStore; log it as armed only once that succeeded.
 
-    v116: at a trading store's db stage a failed write is not swallowed. The
+    v116: a failed database write is not swallowed. The
     alert for this plan would otherwise post with no plan behind it, so the
     scan stops (session_scan then pauses). Called BEFORE the trade is logged,
     so the halting result has neither a trade nor an alert; `alerts` (those

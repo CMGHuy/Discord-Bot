@@ -9,7 +9,7 @@ came back None forever, the account balance never saw the P&L, and the
 Dashboard's Closed table fell back to its "still open, projecting toward
 target/stop" view for a position that was actually over.
 
-This scans data/trades.json for exactly that gap (status is terminal,
+This scans the trades table for exactly that gap (status is terminal,
 exit_price is null) and prices each one off the DAILY CLOSE on the date
 it actually closed -- the same daily-bar convention the rest of this
 paper-trade tracker already uses for its stop/target checks. Nothing is

@@ -198,13 +198,13 @@ half-written work.
 
 ## Investigating production (read-only)
 
-- **The real book lives on the VM, not here.** `data/journal.json`,
-  `trades.json` and `plans.json` in this checkout are dev fixture data (tells:
-  every entry bullish, `holding_days` of 0, `opened_at`/`closed_at` a fraction
-  of a second apart). **Never derive a pooled figure — ExpR, win rate, N —
-  from them.** The specs that did drew a wrong conclusion. Read the real files
-  at `/opt/swing-bot/data/` via `scripts/ops/ssh-hetzner.sh "<cmd>"`, and when
-  a document cites a book figure, check which file it came from.
+- **The real book lives on the VM, not here.** The `journal_entries`, `trades` and `plans` tables of a dev database are
+  fixture data (tells: every entry bullish, `holding_days` of 0,
+  `opened_at`/`closed_at` a fraction of a second apart). **Never derive a pooled figure — ExpR, win rate, N —
+  from them.** The specs that did drew a wrong conclusion. Query the real
+  tables with `scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose
+  exec -T db psql -U swingbot -d swingbot -c '<read-only SQL>'"`, and when a
+  document cites a book figure, check which table it came from.
 - **Use the bind-mounted logs, not `docker logs`.** A deploy recreates the
   containers, so `docker logs` shows only minutes of history after any release
   and looks like "no errors" while a multi-day outage sits in the rotated

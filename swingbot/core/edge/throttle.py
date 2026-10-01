@@ -6,12 +6,7 @@ neither compounding nor judgment has to survive a deep hole at full
 size. Constants are FROZEN by the plan's Global Constraints."""
 from __future__ import annotations
 
-import datetime as _dt
 import logging
-import os
-
-from swingbot import config
-from swingbot.core.infra.jsonio import atomic_write_json, read_json
 
 log = logging.getLogger(__name__)
 
@@ -81,20 +76,14 @@ def combined_throttle(dd_mult: float, streak_mult: float) -> float:
 # off`, on purpose: these are exactly the moments judgment is least
 # trustworthy, so the system stays paused until someone looks.
 
-KILLSWITCH_PATH = os.path.join(config.DATA_DIR, "killswitch.json")
 KILL_DD_PCT = 20.0
 KILL_SPY_MOVE_PCT = 5.0
 KILL_DATA_FAIL_FRAC = 0.20
 
 
 def kill_state() -> dict:
-    from swingbot.core.db import stages
-    if stages.reads_db("killswitch"):
-        from swingbot.core.db.repositories.killswitch import killswitch_repo
-        return killswitch_repo().state()
-    return read_json(KILLSWITCH_PATH,
-                      {"on": config.KILLSWITCH_DEFAULT_ON, "reason": None, "at": None,
-                       "manual_release": False})
+    from swingbot.core.db.repositories.killswitch import killswitch_repo
+    return killswitch_repo().state()
 
 
 def _log_kill_flip(prior: dict, after: dict, reason: str) -> None:
@@ -108,22 +97,15 @@ def _log_kill_flip(prior: dict, after: dict, reason: str) -> None:
 
 
 def set_kill(on: bool, reason: str = "manual") -> dict:
-    from swingbot.core.db import stages
     prior = kill_state()
     if on and (prior.get("on") or (reason != "manual" and prior.get("manual_release"))):
         return prior
-    if stages.writes_json("killswitch"):
-        state = {"on": on, "reason": reason if on else None,
-                 "at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
-                 "manual_release": not on}
-        atomic_write_json(KILLSWITCH_PATH, state)
-    if stages.writes_db("killswitch"):
-        from swingbot.core.db.repositories.killswitch import killswitch_repo
-        repository = killswitch_repo()
-        if on:
-            repository.engage(reason)
-        else:
-            repository.release()
+    from swingbot.core.db.repositories.killswitch import killswitch_repo
+    repository = killswitch_repo()
+    if on:
+        repository.engage(reason)
+    else:
+        repository.release()
     after = kill_state()
     _log_kill_flip(prior, after, reason)
     return after

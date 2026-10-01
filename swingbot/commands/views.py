@@ -20,7 +20,6 @@ from swingbot.core import presentation as ui
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
 from swingbot.core.backtesting.registry import decay_for, decay_note
-from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.market.strategy import HORIZONS
 from swingbot.core.market.session import market_today
@@ -29,37 +28,19 @@ log = logging.getLogger(__name__)
 
 _plan_store = PlanStore()
 
-_STARRED_PATH = os.path.join(config.DATA_DIR, "starred_plans.json")
-
-
 def starred_ids() -> set:
-    from swingbot.core.db import stages
-    if stages.reads_db("starred_plans"):
-        from swingbot.core.db.repositories.starred import starred_repo
-        return starred_repo().ids()
-    return set(read_json(_STARRED_PATH, []))
+    from swingbot.core.db.repositories.starred import starred_repo
+    return starred_repo().ids()
 
 
 def star_plan(plan_id: str) -> None:
-    from swingbot.core.db import stages
-    if stages.writes_json("starred_plans"):
-        ids = set(read_json(_STARRED_PATH, []))
-        ids.add(plan_id)
-        atomic_write_json(_STARRED_PATH, sorted(ids))
-    if stages.writes_db("starred_plans"):
-        from swingbot.core.db.repositories.starred import starred_repo
-        starred_repo().star(plan_id)
+    from swingbot.core.db.repositories.starred import starred_repo
+    starred_repo().star(plan_id)
 
 
 def unstar_plan(plan_id: str) -> None:
-    from swingbot.core.db import stages
-    if stages.writes_json("starred_plans"):
-        ids = set(read_json(_STARRED_PATH, []))
-        ids.discard(plan_id)
-        atomic_write_json(_STARRED_PATH, sorted(ids))
-    if stages.writes_db("starred_plans"):
-        from swingbot.core.db.repositories.starred import starred_repo
-        starred_repo().unstar(plan_id)
+    from swingbot.core.db.repositories.starred import starred_repo
+    starred_repo().unstar(plan_id)
 
 
 class PlanActionView(discord.ui.View):

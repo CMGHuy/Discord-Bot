@@ -1,6 +1,6 @@
 """LISTEN/NOTIFY in, named event types out.
 
-The replacement for FileWatcher. The SPA contract does not change: the same
+The replacement for the file watcher. The SPA contract does not change: the same
 ten event names, the same semantics, the same trailing debounce. What changes
 is the source -- Postgres pushes instead of the admin stat()ing 19 paths twice
 a second.

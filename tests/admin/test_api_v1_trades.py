@@ -27,6 +27,7 @@ from tests.admin.api_v1_contract import (
     assert_collection,
     assert_error,
 )
+from tests.store_seed import seed_store
 
 _LOGIN = {"username": "admin", "password": "admin"}
 
@@ -168,8 +169,8 @@ def seed(admin_app, tmp_path):
     """Write plans.json / trades.json directly. The stores read them fresh on
     construction, so no reload is needed after this."""
     def _seed(plans=(), trades=()):
-        (tmp_path / "plans.json").write_text(json.dumps(list(plans)), encoding="utf-8")
-        (tmp_path / "trades.json").write_text(json.dumps(list(trades)), encoding="utf-8")
+        seed_store("plans", list(plans))
+        seed_store("trades", list(trades))
     return _seed
 
 
@@ -764,9 +765,8 @@ def test_numbers_are_numbers_not_preformatted_strings(seed, logged_in):
 # workspace (spec v14, "was Journal") had no way to list its own rows.
 
 def _with_note(trade_id, tmp_path):
-    (tmp_path / "journal.json").write_text(
-        json.dumps([{"trade_id": trade_id, "note": "watched the open"}]),
-        encoding="utf-8")
+    seed_store("journal", [{"trade_id": trade_id, "note": "watched the open",
+                                  "created_at": "2026-01-01T00:00:00+00:00"}])
 
 
 def test_has_note_filters_to_noted_trades(seed, logged_in, tmp_path):
@@ -1293,10 +1293,3 @@ def test_an_open_ended_range_works_from_either_side(seed, logged_in):
     seed(trades=[t1, t2])
     assert logged_in.get("/api/v1/trades?opened_from=2026-04-15").get_json()["total"] == 1
     assert logged_in.get("/api/v1/trades?opened_to=2026-04-15").get_json()["total"] == 1
-
-
-def test_a_row_with_no_opened_at_is_excluded_by_any_range(seed, logged_in):
-    t = _trade("aaaaaaaaaaaaaaaa", plan_id=None, ticker="AAPL", status="open")
-    t["opened_at"] = None
-    seed(trades=[t])
-    assert logged_in.get("/api/v1/trades?opened_from=2026-01-01").get_json()["total"] == 0

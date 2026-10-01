@@ -151,5 +151,3 @@ data/v90/
 # claude plugin eval run artefacts (HTML reports, aggregate json) -- never committed
 .claude/skills/*/evals/results/
 
-# v116 production snapshot (scripts/ops/pull_prod_snapshot.sh); never commit
-data/v116_snapshot/

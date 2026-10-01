@@ -35,7 +35,7 @@ def log(tmp_path, monkeypatch):
     # account.json with no path=, and parallel workers racing the real file
     # is a documented past failure (tests/planning/test_account_legs.py).
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    return TradeLog(path=str(tmp_path / "trades.json"))
+    return TradeLog()
 
 
 def test_plan_linked_trades_are_left_to_the_plan_manager(log):

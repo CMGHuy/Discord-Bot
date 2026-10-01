@@ -18,6 +18,7 @@ from swingbot.core.scanning import analyze, dedup, engine, fetch, runstate, scan
 from swingbot.core.scanning.confidence import ConfidenceResult
 from swingbot.core.tracking.performance import TradeLog
 from tests.helpers import make_ohlcv
+from tests.store_seed import seed_store
 
 
 @pytest.fixture(autouse=True)
@@ -26,13 +27,11 @@ def isolate_data_dir(tmp_path, monkeypatch):
     -- _sync_run_scan reads account config and writes scan telemetry, both
     of which must not touch the real data/."""
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    (tmp_path / "trades.json").write_text("[]", encoding="utf-8")
-    (tmp_path / "plans.json").write_text("[]", encoding="utf-8")
-    (tmp_path / "account.json").write_text(json.dumps({
+    seed_store("account", {
         "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
         "sizing_mode": "risk_pct",
         "balance_history": [{"ts": "2026-08-01T00:00:00+00:00", "balance": 10000.0}],
-    }), encoding="utf-8")
+    })
 
 
 def _structured_df():
@@ -63,7 +62,7 @@ def test_score_confidence_receives_rs_breadth(monkeypatch, tmp_path, stub_batch_
         fetch, "get_daily_data",
         lambda ticker, period=None: df.copy() if ticker in ("TEST", "SPY") else None,
     )
-    test_log = TradeLog(path=str(tmp_path / "trades.json"))
+    test_log = TradeLog()
     monkeypatch.setattr(engine, "trade_log", test_log)
     monkeypatch.setattr(scan_run, "trade_log", test_log)
     monkeypatch.setattr(analyze, "trade_log", test_log)

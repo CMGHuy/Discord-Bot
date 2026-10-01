@@ -8,6 +8,7 @@ from swingbot.core.planning.plan_manager import PlanManager
 from swingbot.core.planning.plan_store import PlanStore
 from tests.fake_feed import FakePriceFeed
 from tests.planning.test_plan_manager_pending import _pending
+from tests.store_seed import seed_store
 
 
 def test_full_lifecycle_writes_two_leg_win(tmp_path):
@@ -18,8 +19,8 @@ def test_full_lifecycle_writes_two_leg_win(tmp_path):
         140.0,    # runner ratchets trail well above entry
         118.0,    # pierces trail -> tp1_runner_trail close
     ])
-    store = PlanStore(path=str(tmp_path / "plans.json"))
-    log = TradeLog(path=str(tmp_path / "trades.json"))
+    store = PlanStore()
+    log = TradeLog()
     store.add(_pending(stop_loss=104.0, tp1=110.0, tp2=None))
     mgr = PlanManager(store, feed.get_price, atr_fn=lambda t: 2.0,
                       trade_log=log)
@@ -33,7 +34,6 @@ def test_full_lifecycle_writes_two_leg_win(tmp_path):
     assert transitions[0] == "filled"
     assert "tp1_partial" in transitions and transitions[-1] == "closed"
 
-    log.refresh()
     [t] = [t for t in log.get_trades(limit=10) if t.get("plan_id") == "p1"]
     assert t["status"] == "win"
     assert len(t["legs"]) == 2
@@ -54,7 +54,7 @@ def test_extended_stats_uses_leg_aware_closed_r_multiple(tmp_path):
             {"fraction": 0.5, "r": 0.05, "exit_price": 100.25},
         ],
     }
-    log = TradeLog(path=str(tmp_path / "trades.json"))
+    log = TradeLog()
 
     # With leg expansion, each leg is counted as its own outcome, so expectancy_r
     # becomes the average of individual leg R-multiples (2.0 and 0.05), which is 1.025.
@@ -78,7 +78,7 @@ def _closed(r_target: float, status: str) -> dict:
 
 
 def test_extended_stats_reports_payoff_ratio_over_the_same_legs_as_expectancy(tmp_path):
-    log = TradeLog(path=str(tmp_path / "trades.json"))
+    log = TradeLog()
     # Two wins at +2R and +4R, two losses at -1R and -1R.
     # expectancy_r = (2 + 4 - 1 - 1) / 4 = 1.0
     # payoff_ratio = mean(2, 4) / |mean(-1, -1)| = 3.0
@@ -95,17 +95,18 @@ def test_extended_stats_reports_payoff_ratio_over_the_same_legs_as_expectancy(tm
 
 
 def test_extended_stats_payoff_ratio_is_none_with_no_losses(tmp_path):
-    log = TradeLog(path=str(tmp_path / "trades.json"))
+    log = TradeLog()
     assert log.get_extended_stats(trades=[_closed(2.0, "win")])["payoff_ratio"] is None
 
 
-def test_close_plan_trade_journals_and_refreshes_snapshot(tmp_path, monkeypatch):
-    log = TradeLog(path=str(tmp_path / "trades.json"))
-    log._trades = [{
+def test_close_plan_trade_journals_and_refreshes_snapshot(monkeypatch):
+    log = TradeLog()
+    seed_store("trades", [{
         "id": "t-close", "plan_id": "p-close", "ticker": "AAPL",
         "status": "open", "direction": "bullish", "entry": 100.0,
-        "stop_loss": 95.0, "shares": None, "legs": [],
-    }]
+        "stop_loss": 95.0, "shares": None, "legs": [], "horizon_key": "2w",
+        "strategy": "RSI", "opened_at": "2026-09-20T14:00:00+00:00",
+    }])
     journaled = []
     refreshed = []
     monkeypatch.setattr("swingbot.core.tracking.performance._journal_close_safely", journaled.append)
@@ -173,7 +174,7 @@ def test_get_extended_stats_counts_each_leg_as_its_own_outcome(tmp_path):
             {"fraction": 0.5, "exit_price": 90.0, "r": -0.5, "reason": "manual"},
         ],
     }
-    log = TradeLog(path=str(tmp_path / "trades.json"))
+    log = TradeLog()
     stats = log.get_stats(trades=[trade])
     assert stats["total"] == 2 and stats["wins"] == 1 and stats["losses"] == 1
 
@@ -239,7 +240,7 @@ def test_get_stats_expand_false_keeps_the_pre_v79_blended_outcome(tmp_path):
     outcome per position, at the blended 100% win rate -- not two legs at
     50%. The confidence formula pays every counted win the scenario's full
     reward:risk, which a ~1R TP1 leg does not earn."""
-    log = TradeLog(path=str(tmp_path / "trades.json"))
+    log = TradeLog()
     trade = _scaled_out_win_then_loss_trade()
 
     unexpanded = log.get_stats(trades=[trade], expand=False)
@@ -258,7 +259,7 @@ def test_get_stats_expand_false_keeps_the_pre_v79_blended_outcome(tmp_path):
 def test_get_stats_expand_false_honours_the_confidence_filter(tmp_path):
     """The live call site passes a base level positionally; `expand=False`
     must not disturb that filter."""
-    log = TradeLog(path=str(tmp_path / "trades.json"))
+    log = TradeLog()
     trade = _scaled_out_win_then_loss_trade()
 
     assert log.get_stats(3, trades=[trade], expand=False)["closed"] == 1
@@ -268,7 +269,7 @@ def test_get_stats_expand_false_honours_the_confidence_filter(tmp_path):
 def test_get_extended_stats_expand_false_uses_the_blended_r(tmp_path):
     """Unexpanded, expectancy is the position's own fraction-weighted R
     (0.5*2.0 + 0.5*-0.5 = 0.75), one value -- not one per leg."""
-    log = TradeLog(path=str(tmp_path / "trades.json"))
+    log = TradeLog()
     stats = log.get_extended_stats(trades=[_scaled_out_win_then_loss_trade()], expand=False)
     assert stats["r_multiples_count"] == 1
     assert stats["expectancy_r"] == pytest.approx(0.75)
@@ -288,7 +289,7 @@ def test_get_extended_stats_avg_holding_days_position_accurate_not_leg_doubled(t
             {"fraction": 0.5, "exit_price": 118.0, "r": 3.6, "reason": "tp1_runner_tp2"},
         ],
     }
-    log = TradeLog(path=str(tmp_path / "trades.json"))
+    log = TradeLog()
     stats = log.get_extended_stats(trades=[trade])
     # The position was open for 4 days + 6.5 hours = ~4.27 days
     # avg_holding_days should be ~4.27, not ~8.54 (which would result from each leg contributing ~4.27)

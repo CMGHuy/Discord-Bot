@@ -9,9 +9,6 @@ to deliver. The blob itself is opaque to the server -- it is UI state, and a
 server that validated its shape would need editing every time the SPA
 remembered one more thing.
 """
-import json
-import os
-
 import pytest
 
 from swingbot import config
@@ -19,14 +16,6 @@ from swingbot import config
 from .api_v1_contract import assert_error, assert_shape
 
 ENDPOINT = "/api/v1/system/preferences"
-
-
-def stored(app) -> dict:
-    path = os.path.join(config.DATA_DIR, "ui_preferences.json")
-    if not os.path.exists(path):
-        return {}
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
 
 
 def test_requires_auth(client):
@@ -61,14 +50,6 @@ def test_a_put_replaces_rather_than_merges(client, auth):
     client.put(ENDPOINT, headers=auth, json={"preferences": {"a": 9}})
 
     assert client.get(ENDPOINT, headers=auth).get_json()["preferences"] == {"a": 9, "minSampleN": 30}
-
-
-def test_it_is_written_atomically(client, auth, admin_app):
-    """Through jsonio, like every other data/ file that matters -- NG23
-    found six that are not, and this is not going to be a seventh."""
-    client.put(ENDPOINT, headers=auth, json={"preferences": {"tables": {"x": ["a"]}}})
-
-    assert stored(admin_app) == {"tables": {"x": ["a"]}, "minSampleN": 30}
 
 
 def test_it_does_not_touch_env(client, auth, admin_app):
@@ -119,7 +100,7 @@ def test_minimum_sample_round_trips_and_rejects_non_positive_values(client, auth
 
 # --- watchlist tags (v85 R7-03) ------------------------------------------
 #
-# Tags are a pure UI/view concern (spec D35): `data/watchlist.json` is read
+# Tags are a pure UI/view concern (spec D35): the watchlist is read
 # by the bot on every scan, and a tag must never reach it. The blob this
 # endpoint serves is deliberately opaque (see `get_preferences`'s docstring
 # above) -- there is no per-key schema to extend, so `watchlistTags` already
@@ -133,23 +114,14 @@ def test_watchlist_tags_round_trip_through_preferences(client, auth):
     assert response.get_json()["preferences"]["watchlistTags"] == {"AAPL": ["Tech"]}
 
 
-def test_watchlist_tags_do_not_reach_the_watchlist_file(client, auth):
-    """`swingbot.core.marketdata.watchlist.DEFAULT_PATH` is computed from
-    `config.DATA_DIR` at IMPORT time, and `swingbot.core.marketdata.watchlist`
-    is deliberately absent from this module's `conftest.py`'s
-    `_RELOAD_MODULES` list -- so it does NOT track this test's per-test
-    `DATA_DIR` monkeypatch (`tests/admin/test_api_v1_watchlist.py`'s module
-    docstring documents this exact trap). That makes `DEFAULT_PATH` the
-    bot's real, frozen load path rather than an isolated per-test one --
-    which is precisely the file D35 says a tag must never reach, so it is
-    the file this test has to check, not a fresh tmp_path stand-in. Reading
-    it (never writing) is safe regardless of what it is bound to."""
-    from swingbot.core.marketdata import watchlist as watchlist_module
+def test_watchlist_tags_do_not_reach_the_watchlist(client, auth):
+    """The watchlist table is read by the bot on every scan; a tag must never
+    reach it."""
+    from swingbot.core.marketdata.watchlist import load_watchlist, save_watchlist
 
-    path = watchlist_module.DEFAULT_PATH
-    before = open(path, encoding="utf-8").read() if os.path.exists(path) else None
+    save_watchlist(["AAPL", "MSFT"])
+    before = load_watchlist()
 
     client.put(ENDPOINT, headers=auth, json={"preferences": {"watchlistTags": {"AAPL": ["Tech"]}}})
 
-    after = open(path, encoding="utf-8").read() if os.path.exists(path) else None
-    assert before == after
+    assert load_watchlist() == before

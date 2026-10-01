@@ -64,35 +64,6 @@ def test_read_invalid_utf8_returns_default(tmp_path):
     assert read_json(p, {"fallback": True}) == {"fallback": True}
 
 
-def test_statestore_atomic(tmp_path):
-    from swingbot.core.infra.state import StateStore
-
-    path = str(tmp_path / "state.json")
-    store = StateStore(path=path)
-    assert store.confirm_or_update("AAPL|Fibonacci|4w", "bullish", required_confirmations=1) is True
-    assert not os.path.exists(path + ".tmp")
-
-    reloaded = StateStore(path=path)
-    # Matches the already-confirmed value -> no pending flip -> False.
-    # If persistence were broken, `confirmed` would reload as None, the
-    # first-confirmation branch would fire again, and this would wrongly
-    # return True -- so this assertion still proves the reload worked.
-    assert reloaded.confirm_or_update("AAPL|Fibonacci|4w", "bullish", required_confirmations=1) is False
-
-
-def test_account_config_atomic(tmp_path):
-    from swingbot.core.planning import account as account_module
-
-    path = str(tmp_path / "account.json")
-    cfg = account_module.load_account_config(path)  # seeds a fresh file
-    assert not os.path.exists(path + ".tmp")
-    account_module.set_balance(50_000.0, path)
-    assert not os.path.exists(path + ".tmp")
-
-    reloaded = account_module.load_account_config(path)
-    assert reloaded["base_balance"] == 50_000.0
-
-
 # --- Windows transient lock on os.replace ---------------------------------
 # `os.replace` is atomic, but on Windows it fails transiently with
 # PermissionError when something else briefly holds a handle on either file --

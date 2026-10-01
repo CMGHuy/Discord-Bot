@@ -1,58 +1,26 @@
 import datetime as dt
-import json
-import os
 
-from swingbot import config
 from swingbot.bot_core import in_session
-
-
-_TRIGGER_FILE         = os.path.join(config.DATA_DIR, "trigger_check.flag")
-# Queue file written by the admin UI when a trade is manually closed.
-# Each line is a JSON-encoded trade record; the bot drains it and posts
-# to DISCORD_CHANNEL_TRADES_HISTORY_ID, then deletes the file.
-_MANUAL_CLOSE_QUEUE   = os.path.join(config.DATA_DIR, "manual_close_notify.json")
-_PAUSE_FILE = os.path.join(config.DATA_DIR, "scan_paused.flag")
-_HEARTBEAT_FILE = os.path.join(config.DATA_DIR, "bot_heartbeat.json")
 
 
 def _read_heartbeat() -> dict:
     """Current heartbeat state, or {} when absent or unreadable.
 
-    Absent is "unknown", never "failing" -- an upgraded admin container reads
-    files written by a bot that has not restarted yet. At heartbeat:db the
-    row is the only copy (v116: this read was file-only, which reset the
-    failure counter every tick at db).
-    """
-    from swingbot.core.db import stages
-    if stages.reads_db("heartbeat"):
-        try:
-            from swingbot.core.db.repositories.heartbeat import heartbeat_repo
-            return heartbeat_repo().last() or {}
-        except Exception:
-            return {}
+    Absent is "unknown", never "failing"."""
     try:
-        with open(_HEARTBEAT_FILE) as fh:
-            data = json.load(fh)
-        return data if isinstance(data, dict) else {}
-    except (OSError, json.JSONDecodeError):
+        from swingbot.core.db.repositories.heartbeat import heartbeat_repo
+        return heartbeat_repo().last() or {}
+    except Exception:
         return {}
 
 
 def _update_heartbeat(fields: dict) -> None:
-    """Merge `fields` into the heartbeat file, preserving everything else."""
+    """Merge `fields` into the heartbeat row, preserving everything else."""
     try:
-        from swingbot.core.db import stages
-        if stages.writes_json("heartbeat"):
-            state = _read_heartbeat()
-            state.update(fields)
-            os.makedirs(config.DATA_DIR, exist_ok=True)
-            with open(_HEARTBEAT_FILE, "w") as fh:
-                json.dump(state, fh)
-        if stages.writes_db("heartbeat"):
-            from swingbot.core.db.repositories.heartbeat import heartbeat_repo
-            current = heartbeat_repo().last() or {}
-            current.update(fields)
-            heartbeat_repo().beat(current)
+        from swingbot.core.db.repositories.heartbeat import heartbeat_repo
+        current = heartbeat_repo().last() or {}
+        current.update(fields)
+        heartbeat_repo().beat(current)
     except Exception:
         pass
 
@@ -126,88 +94,41 @@ def is_scan_paused() -> bool:
     (!check, and the admin UI's "Run !check now" trigger) are NOT
     affected by this -- pausing only stops the unattended, scheduled
     scanning so the user can still check on demand."""
-    from swingbot.core.db import stages
-    if stages.reads_db("flags"):
-        from swingbot.core.db.repositories.flags import flags_repo
-        return flags_repo().is_set("scan_paused")
-    return os.path.exists(_PAUSE_FILE)
+    from swingbot.core.db.repositories.flags import flags_repo
+    return flags_repo().is_set("scan_paused")
 
 
 def set_scan_paused(paused: bool) -> None:
-    from swingbot.core.db import stages
-    if stages.writes_json("flags") and paused:
-        os.makedirs(config.DATA_DIR, exist_ok=True)
-        with open(_PAUSE_FILE, "w") as f:
-            f.write(dt.datetime.now(dt.timezone.utc).isoformat())
-    elif stages.writes_json("flags"):
-        try:
-            os.remove(_PAUSE_FILE)
-        except OSError:
-            pass
-    if stages.writes_db("flags"):
-        from swingbot.core.db.repositories.flags import flags_repo
-        repo = flags_repo()
-        repo.set("scan_paused") if paused else repo.clear("scan_paused")
+    from swingbot.core.db.repositories.flags import flags_repo
+    repo = flags_repo()
+    repo.set("scan_paused") if paused else repo.clear("scan_paused")
     if not paused:
         # Unpausing is the partner's acknowledgement of a store-write halt.
         _update_heartbeat({"store_write_failure": None})
 
 
-def _flag_set_at(name: str, path: str) -> str | None:
-    """When a flag was raised, as an ISO string, or None when it is not set.
-
-    The json stage answers with the file's mtime -- what the admin's status
-    payload has always reported -- and the db stage with the row's set_at.
-    """
-    from swingbot.core.db import stages
-    if stages.reads_db("flags"):
-        from swingbot.core.db.repositories.flags import flags_repo
-        return flags_repo().set_at(name)
-    try:
-        mtime = os.path.getmtime(path)
-    except OSError:
-        return None
-    return dt.datetime.fromtimestamp(mtime, tz=dt.timezone.utc).isoformat()
-
-
 def scan_paused_at() -> str | None:
-    return _flag_set_at("scan_paused", _PAUSE_FILE)
+    """When the scan pause was raised (the row's set_at), or None."""
+    from swingbot.core.db.repositories.flags import flags_repo
+    return flags_repo().set_at("scan_paused")
 
 
 def trigger_requested_at() -> str | None:
-    return _flag_set_at("trigger_check", _TRIGGER_FILE)
+    from swingbot.core.db.repositories.flags import flags_repo
+    return flags_repo().set_at("trigger_check")
 
 
 def is_trigger_requested() -> bool:
-    from swingbot.core.db import stages
-    if stages.reads_db("flags"):
-        from swingbot.core.db.repositories.flags import flags_repo
-        return flags_repo().is_set("trigger_check")
-    return os.path.exists(_TRIGGER_FILE)
+    from swingbot.core.db.repositories.flags import flags_repo
+    return flags_repo().is_set("trigger_check")
 
 
-def request_trigger(payload: str | None = None) -> None:
-    """Queue a manual scan. `payload` is the flag file's body at the json
-    stage (the admin writes a small JSON record); the default is a bare
-    timestamp. The db stage stores only the flag and its set_at."""
-    from swingbot.core.db import stages
-    if stages.writes_json("flags"):
-        os.makedirs(config.DATA_DIR, exist_ok=True)
-        with open(_TRIGGER_FILE, "w") as file:
-            file.write(payload if payload is not None
-                       else dt.datetime.now(dt.timezone.utc).isoformat())
-    if stages.writes_db("flags"):
-        from swingbot.core.db.repositories.flags import flags_repo
-        flags_repo().set("trigger_check")
+def request_trigger() -> None:
+    """Queue a manual scan. The row stores only the flag and its set_at."""
+    from swingbot.core.db.repositories.flags import flags_repo
+    flags_repo().set("trigger_check")
 
 
 def clear_trigger() -> None:
-    from swingbot.core.db import stages
-    if stages.writes_json("flags"):
-        try:
-            os.remove(_TRIGGER_FILE)
-        except OSError:
-            pass
-    if stages.writes_db("flags"):
-        from swingbot.core.db.repositories.flags import flags_repo
-        flags_repo().clear("trigger_check")
+    from swingbot.core.db.repositories.flags import flags_repo
+    flags_repo().clear("trigger_check")

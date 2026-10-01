@@ -1,9 +1,7 @@
 import asyncio
 import datetime as dt
 import functools
-import json
 import logging
-import os
 
 import discord
 from discord.ext import tasks
@@ -18,7 +16,6 @@ from swingbot.core.infra.silent_channel import silence
 from swingbot.core.infra.logsetup import apply_log_level
 from swingbot.core.db import write_failure
 from swingbot.core.infra import pitr_watch
-from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core import presentation as ui
 from swingbot.core.marketdata.watchlist import load_watchlist
 from . import notices, presence, recap, runstate
@@ -318,18 +315,6 @@ async def _post_config_notices(changed: dict) -> None:
                                        what=f"config-change notice for {key}")
 
 
-def _read_queue_file() -> list:
-    if not os.path.exists(runstate._MANUAL_CLOSE_QUEUE):
-        return []
-    try:
-        with open(runstate._MANUAL_CLOSE_QUEUE, "r") as handle:
-            data = json.load(handle)
-    except Exception as exc:
-        log.warning("Could not read manual_close_notify queue: %s", exc, exc_info=True)
-        return []
-    return data if isinstance(data, list) else []
-
-
 def _with_trade_id_as_id(record: dict) -> dict:
     """The table keeps a trade's `id` as `trade_id` (`id` is a reserved
     column); the embeds read the trade as `id`."""
@@ -341,27 +326,9 @@ def _with_trade_id_as_id(record: dict) -> dict:
 
 
 def _take_manual_close_queue() -> list:
-    """Remove and return the queued manual-close records.
-
-    At notify_queue:db the table is the queue. At dual the file is the truth
-    and the table its shadow: both are drained together, or the table keeps
-    every close queued during the soak and replays them all at the db flip
-    (v116). At json only the file exists.
-    """
-    from swingbot.core.db import stages
-    if stages.reads_db("notify_queue"):
-        from swingbot.core.db.repositories.notify_queue import notify_queue_repo
-        return [_with_trade_id_as_id(record) for record in notify_queue_repo().drain()]
-    queued = _read_queue_file()
-    if stages.writes_db("notify_queue"):
-        from swingbot.core.db.repositories.notify_queue import notify_queue_repo
-        notify_queue_repo().drain()
-    if queued:
-        try:
-            os.remove(runstate._MANUAL_CLOSE_QUEUE)
-        except OSError:
-            pass
-    return queued
+    """Remove and return the queued manual-close records (the table is the queue)."""
+    from swingbot.core.db.repositories.notify_queue import notify_queue_repo
+    return [_with_trade_id_as_id(record) for record in notify_queue_repo().drain()]
 
 
 async def _post_manual_close_queue() -> None:
@@ -671,31 +638,14 @@ _weekend_scan_fired_date: dt.date | None = None
 _earnings_refresh_fired_date: dt.date | None = None
 
 
-def _scheduled_jobs_path() -> str:
-    """Resolve at call time so config/test data directories remain respected."""
-    return os.path.join(config.DATA_DIR, "scheduled_jobs.json")
-
-
 def _scheduled_job_already_fired(job: str, today: dt.date) -> bool:
-    from swingbot.core.db import stages
-    if stages.reads_db("scheduled_jobs"):
-        from swingbot.core.db.repositories.scheduled import scheduled_repo
-        return scheduled_repo().fired_on(job) == today.isoformat()
-    data = read_json(_scheduled_jobs_path(), {})
-    return isinstance(data, dict) and data.get(job) == today.isoformat()
+    from swingbot.core.db.repositories.scheduled import scheduled_repo
+    return scheduled_repo().fired_on(job) == today.isoformat()
 
 
 def _mark_scheduled_job_fired(job: str, today: dt.date) -> None:
-    from swingbot.core.db import stages
-    if stages.writes_json("scheduled_jobs"):
-        data = read_json(_scheduled_jobs_path(), {})
-        if not isinstance(data, dict):
-            data = {}
-        data[job] = today.isoformat()
-        atomic_write_json(_scheduled_jobs_path(), data)
-    if stages.writes_db("scheduled_jobs"):
-        from swingbot.core.db.repositories.scheduled import scheduled_repo
-        scheduled_repo().mark(job, today.isoformat())
+    from swingbot.core.db.repositories.scheduled import scheduled_repo
+    scheduled_repo().mark(job, today.isoformat())
 
 
 @tasks.loop(minutes=1)

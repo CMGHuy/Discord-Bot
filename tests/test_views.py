@@ -252,9 +252,15 @@ def test_breakdown_button_sends_ephemeral():
     assert "embed" in kwargs
 
 
-def test_star_unstar_roundtrip(tmp_path, monkeypatch):
-    star_path = str(tmp_path / "starred_plans.json")
-    monkeypatch.setattr("swingbot.commands.views._STARRED_PATH", star_path)
+def _seed_plans(*plan_ids):
+    from swingbot.core.planning.plan_engine import plan_to_dict
+    from tests.store_seed import seed_store
+    from tests.planning.test_plan_engine_model import _plan
+    seed_store("plans", [plan_to_dict(_plan(plan_id=plan_id)) for plan_id in plan_ids])
+
+
+def test_star_unstar_roundtrip():
+    _seed_plans("p1", "p2")
     assert starred_ids() == set()
     star_plan("p1")
     star_plan("p2")
@@ -264,9 +270,8 @@ def test_star_unstar_roundtrip(tmp_path, monkeypatch):
     assert starred_ids() == {"p2"}
 
 
-def test_watch_button_toggles_star(tmp_path, monkeypatch):
-    star_path = str(tmp_path / "starred_plans.json")
-    monkeypatch.setattr("swingbot.commands.views._STARRED_PATH", star_path)
+def test_watch_button_toggles_star():
+    _seed_plans("plan-x")
     view = PlanActionView("plan-x", author_id=1)
     interaction = _fake_interaction(user_id=1)
     asyncio.run(view.watch_button.callback(interaction))

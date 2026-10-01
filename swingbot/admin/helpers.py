@@ -119,6 +119,8 @@ def _write_env_text(text: str) -> None:
     # v116: a version per save, so rollback_to.sh can restore the .env that
     # was live at any second. Never fails the save.
     env_snapshot.snapshot_quietly(ENV_PATH)
+    from swingbot.core.db import notify
+    notify.publish("settings")
 
 
 def _changed_non_hot_reloadable_fields(old_values: dict, form) -> list:
@@ -172,13 +174,6 @@ def settings_diff(form, existing: dict) -> list[dict]:
     return changed
 
 
-def _audit_log_path() -> str:
-    # Resolved at call time (not module-import time) so tests that
-    # monkeypatch config.DATA_DIR per-test are honored -- same reasoning
-    # as PlanStore._path() and JobManager's _jobs_path().
-    return os.path.join(config.DATA_DIR, "settings_audit.jsonl")
-
-
 def append_settings_audit(diff: list) -> None:
     if not diff:
         return
@@ -186,34 +181,13 @@ def append_settings_audit(diff: list) -> None:
         "ts": datetime.now(timezone.utc).isoformat(),
         "changes": [{"key": d["key"], "old": d["old"], "new": d["new"]} for d in diff],
     }
-    from swingbot.core.db import stages
-    if stages.writes_json("settings_audit"):
-        path = _audit_log_path()
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry) + "\n")
-    if stages.writes_db("settings_audit"):
-        from swingbot.core.db.repositories.settings_audit import settings_audit_repo
-        settings_audit_repo().append(entry["changes"], ts=entry["ts"])
+    from swingbot.core.db.repositories.settings_audit import settings_audit_repo
+    settings_audit_repo().append(entry["changes"], ts=entry["ts"])
 
 
 def read_settings_audit(n: int = 20) -> list[dict]:
-    from swingbot.core.db import stages
-    if stages.reads_db("settings_audit"):
-        from swingbot.core.db.repositories.settings_audit import settings_audit_repo
-        return settings_audit_repo().recent(n)
-    path = _audit_log_path()
-    if not os.path.exists(path):
-        return []
-    with open(path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-    rows = []
-    for line in lines[-n:]:
-        try:
-            rows.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return list(reversed(rows))
+    from swingbot.core.db.repositories.settings_audit import settings_audit_repo
+    return settings_audit_repo().recent(n)
 
 
 def build_settings_export_text() -> str:

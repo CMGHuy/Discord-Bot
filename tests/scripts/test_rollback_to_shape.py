@@ -25,7 +25,6 @@ def test_the_steps_run_in_the_spec_order(src):
         "--type=time",                                     # 7
         "scan_paused",                                     # 8 pause before start
         "docker compose up -d --no-build --wait bot admin",  # 9
-        "parity_report.py --dual",
     ]
     positions = [src.index(marker) for marker in markers]
     assert positions == sorted(positions)

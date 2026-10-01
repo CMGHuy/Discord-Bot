@@ -7,8 +7,6 @@
 # .env (backups/env) and the bot + db images (backups/deploys.jsonl), then
 # starts with scanning PAUSED -- unpause from the admin UI. Not rolled back, by
 # design: Discord messages already posted, logs, telemetry, caches.
-# While a store is still at json/dual its data/*.json file is the source of
-# truth and is NOT rolled back; the dry run lists those stores.
 # Runs ON the VM as root. Spec: 2026-09-30-v116 section rollback_to.sh.
 set -euo pipefail
 cd /opt/swing-bot
@@ -44,8 +42,6 @@ if ! docker manifest inspect "$bot_image" >/dev/null || ! docker manifest inspec
   echo "REFUSE: an image recorded for the target is no longer on GHCR"
   exit 2
 fi
-echo "Stores whose JSON file stays as it is now (not at db at the target):"
-grep -E '^[[:space:]]*DB_STORES[[:space:]]*=' "$env_file" | tail -1 || echo "  DB_STORES unset: every store is json"
 if [ "$DRY_RUN" = 1 ]; then
   echo "Dry run: nothing changed."
   exit 0
@@ -92,8 +88,6 @@ docker compose up -d --no-build --wait bot admin
 echo "--- alembic (current must equal heads) ---"
 docker compose exec -T bot alembic current </dev/null
 docker compose exec -T bot alembic heads </dev/null
-echo "--- parity (dual stores only; a no-op when none is dual) ---"
-docker compose exec -T bot python scripts/db/parity_report.py --dual </dev/null || true
 docker compose ps
 echo "Restored: Postgres to $TARGET, market_data to $restic_time, .env $env_file, images of git $git_sha."
 echo "Scanning is PAUSED. Unpause from the admin UI once the book looks right."

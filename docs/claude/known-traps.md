@@ -163,42 +163,23 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   after Release B and was deleted on 2026-08-14. **If you ever reintroduce an
   enumerated filter dropdown, build its options from the full history
   server-side** — deriving them from the loaded page is the original bug.
-- **Not every `data/` JSON file is written atomically — six are not.** Spec
-  v12 Decision 2 asserted the whole directory was; the NG23 audit found
-  otherwise, which is why that task existed. Atomic, via
-  `jsonio.atomic_write_json` (`<path>.tmp` → fsync → `os.replace`):
-  `trades.json` (`core/tracking/performance.py:225`), `plans.json`
-  (`planning/plan_store.py`), `starred_plans.json` (`commands/views.py:36`),
-  `account.json` (`core/planning/account.py:174`), `state.json`
-  (`core/infra/state.py:31`), `analytics_snapshot.json`
-  (`core/analytics/snapshots.py:71`), `journal.json`
-  (`core/analytics/journal.py:32`), `killswitch.json`
-  (`core/edge/throttle.py:94`). **Plain `open(path, "w")` + `json.dump`**
-  — truncate first, then fill, so a reader inside that window gets a
-  truncated document: `scan_snapshots.json` (`core/scanning/snapshots.py:22`),
-  `bot_heartbeat.json` (`commands/scanning.py:172`), `watchlist.json`
-  (`core/marketdata/watchlist.py:21`), `ticker_directory.json`
-  (`core/marketdata/ticker_directory.py:108`), `admin_jobs.json`
-  (`admin/jobs.py:120`),
-  and `.env` (`admin/helpers.py:114`). `tuning_results/<job>.json` uses
-  `Path.write_text` (`scripts/backtest/tune_strategy.py:171`) — a fresh file per job,
-  so nothing is truncated, but it is listed in the directory before it is
-  complete. **The event watcher is not the exposure** — it compares
-  `(mtime, size)` and never opens a watched file. The exposure is the SPA,
-  which refetches through the v1 API on the event, and the API does parse.
-  The 250ms trailing debounce puts that refetch at least a debounce after
-  the last observed write, which covers all of these in practice (they are
-  small), so this is a narrow race and not a live bug — but note that push
-  *correlates* it where polling did not: the 5-second poll hit a write
-  window by luck, an event fires precisely because of the write. Use
-  `atomic_write_json` for any new file under `data/`, and before growing any
-  of the six.
-- **The non-parsed watched paths are deliberate, not an oversight.** The four
-  `*.flag` files carry their whole meaning in existence + mtime, and
-  `scan_telemetry.jsonl` is append-only, so a torn trailing line is the
-  reader's problem and the API owns tolerating it (spec v12 Decision 2).
-  Do not "fix" either by adding a parse to the watcher — that would trade
-  away the property that makes it immune to schema changes.
+- **Only four sources are still files, and only one is written atomically.**
+  Every trading and operational store is a Postgres table (v116), so there is
+  no `data/trades.json` to tear. The four file sources raise their SSE event
+  themselves through `notify.publish` (`core/db/events.py` `FILE_PUBLISHERS`):
+  `analytics_snapshot.json` (`jsonio.atomic_write_json`, temp file + fsync +
+  `os.replace`), `scan_snapshots.json` (`core/scanning/snapshots.py`, plain
+  `open(path, "w")` + `json.dump`: truncate, then fill, so a reader inside
+  that window sees a torn document), `scan_telemetry.jsonl` (append-only; a
+  torn trailing line is the reader's problem) and `.env` (`admin/helpers.py`
+  `_write_env_text`, temp file + rename). The SPA refetches through the v1 API
+  on the event, which parses; the 250ms trailing debounce puts that refetch
+  after the write in practice, so the `scan_snapshots.json` race is narrow, not
+  a live bug. Use `atomic_write_json` for any new file under `data/`.
+- **A database write failure at issuance pauses scanning (`StoreWriteHalt`).**
+  `core/db/write_failure.py` halts the scan loop rather than alert on a plan
+  that was never recorded. Unpause from the admin UI after fixing the
+  database; the unpause is the acknowledgement.
 
 ## `PlanManager.check_bar()` is unwired — do not "fix" it
 
@@ -212,7 +193,7 @@ Do not silently unify them: v68 deliberately measured `min_confluence=1` and
 that population. `tests/backtesting/test_knob_observability.py` documents the
 replay harness blind spots explicitly.
 
-`check_bar` / `_check_bar_active` / `_check_bar_partial` model overnight gap fills and are tested, but production never calls them. The live bot exits exclusively through `poll()`. Keep the path inert: wiring it would create a second authority for `plans.json`. Change `_step_active` / `_step_partial` for live exits; mirror bar checks only to keep their tests honest.
+`check_bar` / `_check_bar_active` / `_check_bar_partial` model overnight gap fills and are tested, but production never calls them. The live bot exits exclusively through `poll()`. Keep the path inert: wiring it would create a second authority for the `plans` table. Change `_step_active` / `_step_partial` for live exits; mirror bar checks only to keep their tests honest.
 
 ## The full state machine now runs across the whole Berlin-local active window
 
@@ -302,7 +283,8 @@ leaves both containers reading the old inode. The admin UI then saves into
 that orphan, and the bot's reload never fires. Found 2026-09-30, when a
 `MIN_STOP_DISTANCE_PCT` edit showed on the host but read 2.0 in the container.
 
-- **Edit in place:** nano, or `cat new > .env`.
+- **Edit in place:** `python3 scripts/ops/env_set.py KEY value` (edits in
+  place, then snapshots the file), nano, or `cat new > .env`.
 - **Or recreate:** `SWING_BOT_IMAGE=<running sha- image> docker compose up -d
   --force-recreate --no-build --wait bot admin`. Without `SWING_BOT_IMAGE`,
   compose falls back to the non-existent `swing-bot:latest`.

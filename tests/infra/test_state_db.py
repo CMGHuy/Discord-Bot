@@ -7,16 +7,15 @@ from swingbot import config
 from swingbot.core.infra.state import StateStore
 
 
-@pytest.fixture(params=["", "state:dual", "state:db"])
-def any_stage(request, tmp_path, monkeypatch, db_committed, db_engine):
+@pytest.fixture
+def any_stage(tmp_path, monkeypatch, db_committed, db_engine):
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(config, "DB_STORES", request.param)
     monkeypatch.setattr(
         config, "DATABASE_URL", db_engine.url.render_as_string(hide_password=False)
     )
     from swingbot.core.db.engine import reset_engine
     reset_engine()
-    return request.param
+    return None
 
 
 def test_first_sighting_does_not_fire(any_stage):
@@ -59,16 +58,12 @@ def test_keys_are_independent(any_stage):
     assert store.confirm_or_update("B", "bullish") is False
 
 
-def test_a_second_instance_sees_confirmed_state_at_the_db_stage(any_stage):
-    if any_stage != "state:db":
-        pytest.skip("cross-instance visibility is the db stage's property")
+def test_a_second_instance_sees_confirmed_state(any_stage):
     StateStore().confirm_or_update("K", "bullish")
     assert StateStore().confirm_or_update("K", "bullish") is True
 
 
-def test_no_state_json_at_the_db_stage(any_stage, tmp_path):
-    if any_stage != "state:db":
-        pytest.skip("file absence is only asserted at the db stage")
+def test_no_state_json_is_written(any_stage, tmp_path):
     StateStore().confirm_or_update("K", "bullish")
     assert not os.path.exists(os.path.join(tmp_path, "state.json"))
 

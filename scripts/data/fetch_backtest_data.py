@@ -60,7 +60,9 @@ def load_universe_symbols(name: str) -> list[str]:
 
 
 def load_watchlist() -> list[str]:
-    return json.loads((ROOT / "data" / "watchlist.json").read_text())
+    """The watchlist table: Postgres is the only store."""
+    from swingbot.core.marketdata.watchlist import load_watchlist as repo_watchlist
+    return repo_watchlist()
 
 
 def load_cached(ticker: str) -> pd.DataFrame | None:
