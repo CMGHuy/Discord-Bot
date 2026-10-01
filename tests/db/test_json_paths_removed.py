@@ -37,6 +37,7 @@ FORBIDDEN = [
     ("swingbot/core/analytics/journal.py", r"stages\.|journal\.json", "journal is a table"),
     ("swingbot/commands/views.py", r"stages\.|starred_plans\.json", "starred_plans is a table"),
     ("swingbot/admin/watchlist_rows.py", r"stages\.", "plans is a table"),
+    ("swingbot/admin/events/broker.py", r"FileWatcher|residual_paths|_CompositeWatcher|stages\.", "the admin listens to Postgres only"),
 ]
 
 

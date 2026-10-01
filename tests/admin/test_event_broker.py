@@ -21,7 +21,7 @@ from swingbot.admin.events import broker as b
 
 
 class FakeWatcher:
-    """Stands in for FileWatcher: records lifecycle, emits on demand."""
+    """Stands in for the listener: records lifecycle, emits on demand."""
 
     def __init__(self, emit):
         self.emit = emit
@@ -115,9 +115,7 @@ def test_the_watcher_stops_when_the_last_connection_closes(broker, watchers):
 def test_a_later_connection_starts_a_fresh_watcher(broker, watchers):
     """Restart builds a new watcher rather than reviving the stopped one.
 
-    A FileWatcher primes itself in __init__, so a fresh instance both
-    re-reads the current state of disk -- which moved while nobody was
-    connected -- and sidesteps the restart race in reusing a thread that is
+    A fresh instance sidesteps the restart race in reusing a thread that is
     still winding down from stop().
     """
     broker.subscribe().close()
@@ -376,16 +374,16 @@ def test_get_broker_returns_the_same_broker(monkeypatch):
     assert b.get_broker() is first
 
 
-def test_the_default_broker_watches_real_files(monkeypatch):
-    """The factory default must be the real FileWatcher -- a broker wired to
-    nothing would pass every test above and push no events in production."""
+def test_the_default_broker_listens_to_postgres(monkeypatch):
+    """The factory default must be the real DbEventListener -- a broker wired
+    to nothing would pass every test above and push no events in production."""
     monkeypatch.setattr(b, "_BROKER", None)
 
     broker = b.get_broker()
     with broker.subscribe():
         watcher = broker._watcher
         try:
-            assert isinstance(watcher, b.FileWatcher)
+            assert isinstance(watcher, b.DbEventListener)
         finally:
             pass
     assert broker.connection_count == 0

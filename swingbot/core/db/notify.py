@@ -13,7 +13,7 @@ from swingbot import config
 log = logging.getLogger(__name__)
 
 # These names are the existing SPA event contract.  Keep core/db independent
-# from admin/ by copying the contract rather than importing the watcher.
+# from admin/ by copying the contract rather than importing from admin/.
 CHANNELS: tuple[str, ...] = (
     "trades", "account", "analytics", "scan",
     "journal", "bot", "risk", "watchlist", "jobs", "settings",
@@ -67,6 +67,20 @@ def emit(conn: sa.Connection, channel: str, payload: str = "") -> None:
         raise ValueError(f"{channel!r} is not a known channel")
     conn.execute(sa.text("SELECT pg_notify(:channel, :payload)"),
                  {"channel": channel, "payload": payload})
+
+
+def publish(channel: str) -> None:
+    """One NOTIFY outside any store write, for a concern whose source stays a
+    file (events.FILE_PUBLISHERS). Never raises: a missed refresh costs one
+    stale screen until the next event, a raised one would fail the write."""
+    if channel not in CHANNELS:
+        raise ValueError(f"{channel!r} is not a known channel")
+    try:
+        from swingbot.core.db.engine import get_engine
+        with get_engine().begin() as conn:
+            emit(conn, channel)
+    except Exception:  # noqa: BLE001
+        log.debug("could not publish %s", channel, exc_info=True)
 
 
 def listen(channels: "Sequence[str]", on_event: "Callable[[str | None], None]",

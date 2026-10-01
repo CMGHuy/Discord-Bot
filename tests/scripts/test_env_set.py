@@ -65,3 +65,21 @@ def test_main_preserves_crlf_bytes(tmp_path):
     env.write_bytes(b"A=1\r\nB=2\r\n")
     assert env_set.main(["--env", str(env), "B", "3"]) == 0
     assert env.read_bytes() == b"A=1\r\nB=3\r\n"
+
+
+def test_main_sends_notify_settings_once_after_a_set(tmp_path, monkeypatch):
+    env = tmp_path / ".env"
+    env.write_text("A=1\n", encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(env_set.subprocess, "run", lambda argv, **_k: calls.append(argv))
+    assert env_set.main(["--env", str(env), "A", "2"]) == 0
+    assert len(calls) == 1 and "NOTIFY settings" in calls[0]
+
+
+def test_main_get_sends_no_notify(tmp_path, monkeypatch):
+    env = tmp_path / ".env"
+    env.write_text("A=1\n", encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(env_set.subprocess, "run", lambda argv, **_k: calls.append(argv))
+    assert env_set.main(["--env", str(env), "--get", "A"]) == 0
+    assert calls == []

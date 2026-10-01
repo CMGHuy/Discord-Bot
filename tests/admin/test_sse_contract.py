@@ -1,4 +1,4 @@
-"""The SPA's event contract, pinned against both watcher implementations.
+"""The SPA's event contract, pinned against the listener's channel set.
 
 Success criterion 5: the stream delivers the same event names with no SPA
 change. The frontend is not in this test's blast radius precisely because it is
@@ -7,7 +7,6 @@ not supposed to be in the change's blast radius either.
 import pathlib
 import re
 
-from swingbot.admin.events.watcher import WATCHED_EVENTS
 from swingbot.core.db import events, notify
 
 FRONTEND = pathlib.Path(__file__).resolve().parents[2] / "frontend"
@@ -17,7 +16,7 @@ EXPECTED_EVENTS = {"trades", "account", "analytics", "scan", "journal",
 
 
 def test_the_event_names_are_exactly_what_they_were():
-    assert set(WATCHED_EVENTS) == EXPECTED_EVENTS
+    assert set(events.SSE_EVENTS) == EXPECTED_EVENTS
 
 
 def test_notify_channels_match_the_event_names():

@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -60,6 +61,14 @@ def _snapshot_or_warn(path: str, when: str) -> None:
               "by this user", file=sys.stderr)
 
 
+def _notify_settings() -> None:
+    """Best-effort NOTIFY through the db container (the host has no psql), so a
+    live admin refreshes; a missed one costs one stale screen."""
+    subprocess.run(["docker", "compose", "exec", "-T", "db", "psql", "-U", "swingbot",
+                    "-d", "swingbot", "-c", "NOTIFY settings"],
+                   cwd=ROOT, stdin=subprocess.DEVNULL, capture_output=True, check=False)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--env", default=os.path.join(ROOT, ".env"))
@@ -81,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
         print("env_set: .env changed inode; restart the containers", file=sys.stderr)
         return 1
     _snapshot_or_warn(args.env, "after")
+    _notify_settings()
     print(f"env_set: {args.key} updated in place in {args.env}")
     return 0
 

@@ -92,11 +92,12 @@ def test_two_tables_in_one_burst_emit_one_event(broker, db_committed):
         assert extra is None or extra.event != "trades"
 
 
-def test_scan_snapshots_file_still_raises_scan_at_the_db_stage(broker, tmp_path):
-    """The P3-20 composite: scan_snapshots.json has no table, so the residual
-    file watcher must keep the scan strip moving at events:db (scan_progress
-    has had a table since v116 and is covered by its trigger)."""
+def test_scan_snapshots_writer_raises_scan(broker, tmp_path, monkeypatch):
+    """scan_snapshots.json has no table, so its writer publishes the event
+    itself (events.FILE_PUBLISHERS)."""
+    from swingbot.core.scanning import snapshots
+    monkeypatch.setattr(snapshots, "_SNAPSHOT_PATH", str(tmp_path / "scan_snapshots.json"))
     with broker.subscribe() as sub:
         time.sleep(0.5)
-        (tmp_path / "scan_snapshots.json").write_text("{}")
+        snapshots._save_scan_snapshots({})
         assert _wait_for(sub, "scan")

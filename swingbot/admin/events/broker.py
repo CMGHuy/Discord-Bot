@@ -1,15 +1,15 @@
-"""One watcher, many browsers — fan-out, sequencing, and the connection cap.
+"""One listener, many browsers — fan-out, sequencing, and the connection cap.
 
 Spec: `docs/superpowers/specs/implemented/2026-08-08-v12-realtime-push-design.md`,
 Decisions 4 and 5.
 
-The watcher (NG20) knows how to turn a file modification into an event
-type. This module is what stands between it and the SSE endpoint (NG22),
-and it exists for one structural reason: **the stat() load must not scale
-with the number of open tabs.** A watcher per connection would be the
-obvious wiring and would multiply the sweep by every tab the user left
-open. So there is one watcher for the process, started lazily on the first
-connection, fanning out to a queue per connection.
+The listener (`DbEventListener`) turns Postgres NOTIFYs into event types.
+This module is what stands between it and the SSE endpoint (NG22), and it
+exists for one structural reason: **the database load must not scale with
+the number of open tabs.** A listener per connection would be the obvious
+wiring and would hold a Postgres connection per tab. So there is one
+listener for the process, started lazily on the first connection, fanning
+out to a queue per connection.
 
 The three responsibilities, none of which belong in either neighbour:
 
@@ -37,69 +37,20 @@ from datetime import datetime, timezone
 from swingbot.admin.api_v1 import ApiError, iso
 
 from .db_listener import DbEventListener
-from .watcher import FileWatcher, residual_paths
 
 log = logging.getLogger(__name__)
 
 
-class _CompositeWatcher:
-    """Several watchers behind the one `start()`/`stop()` the broker drives.
-
-    Exists for the `events:db` stage while some watched files still have no
-    table: the `DbEventListener` covers every table-backed concern and a
-    `FileWatcher` over `residual_paths()` covers the rest, so nothing the
-    SPA listens for goes silent mid-migration.
-    """
-
-    def __init__(self, *watchers):
-        self.watchers = watchers
-
-    def start(self) -> None:
-        """Start every part, or none: a later failure stops the earlier ones
-        so a half-started composite never leaks a running thread."""
-        started = []
-        for watcher in self.watchers:
-            try:
-                watcher.start()
-            except Exception:
-                _stop_all(started)
-                raise
-            started.append(watcher)
-
-    def stop(self) -> None:
-        """Stop every part; one raising never keeps the others running."""
-        _stop_all(self.watchers)
-
-
-def _stop_all(watchers) -> None:
-    for watcher in watchers:
-        try:
-            watcher.stop()
-        except Exception:
-            log.exception("event watcher part %r failed to stop", watcher)
-
-
 def _default_watcher(emit):
-    """Build whichever watcher this stage's storage needs.
+    """One listener per process: LISTEN/NOTIFY for every concern (v116).
 
     The broker has always taken an injectable factory (for tests that drive
-    publish by hand); this makes the *default* stage-aware, so the swap from
-    stat()-polling to LISTEN/NOTIFY is one decision in one place rather than a
-    rewrite of everything downstream. Nothing about the events themselves
-    changes -- same ten names, same semantics, same debounce.
-
-    Ordering constraint: set `events:db` only once every table-backed store
-    (see `watcher._TABLE_BACKED`) is itself at `db`. The residual file
-    watcher stops stat()-ing those files regardless of each store's own
-    stage, so e.g. `events:db` with `trades:json` would silence "trades" --
-    the JSON writes raise no NOTIFY and the file is no longer watched.
+    publish by hand); this is the default. The four sources that stay files
+    raise their own NOTIFY (`events.FILE_PUBLISHERS`), so nothing stat()s
+    `data/` any more.
     """
-    from swingbot.core.db import stages
-    if stages.reads_db("events"):
-        return _CompositeWatcher(
-            DbEventListener(emit), FileWatcher(emit, paths=residual_paths())
-        )
-    return FileWatcher(emit)
+    return DbEventListener(emit)
+
 
 #: Concurrent event connections. Spec Decision 5: the cap exists so that a
 #: reconnect bug in the client leaks visibly and boundedly instead of
@@ -294,12 +245,10 @@ class EventBroker:
         """Drop a connection, stopping the watcher if it was the last.
 
         Restarting builds a *new* watcher rather than reviving this one, so
-        the restart never races a thread still winding down from `stop()` --
-        true of a FileWatcher and a DbEventListener alike. A FileWatcher also
-        primes itself in `__init__`, so a fresh one re-reads the disk state
-        that moved while nobody was connected; a DbEventListener has nothing
-        to prime from (a notification sent while nobody listened is gone), and
-        the resync every new connection receives covers that gap instead.
+        the restart never races a thread still winding down from `stop()`.
+        A DbEventListener has nothing to prime from (a notification sent while
+        nobody listened is gone), and the resync every new connection
+        receives covers that gap instead.
         """
         with self._lock:
             self._subscriptions.discard(subscription)

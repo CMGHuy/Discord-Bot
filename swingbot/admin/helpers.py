@@ -119,6 +119,8 @@ def _write_env_text(text: str) -> None:
     # v116: a version per save, so rollback_to.sh can restore the .env that
     # was live at any second. Never fails the save.
     env_snapshot.snapshot_quietly(ENV_PATH)
+    from swingbot.core.db import notify
+    notify.publish("settings")
 
 
 def _changed_non_hot_reloadable_fields(old_values: dict, form) -> list:
