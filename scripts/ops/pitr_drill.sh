@@ -27,6 +27,8 @@ RUN="drill-$(date -u +%Y%m%dT%H%M%SZ)"
 psql_prod "INSERT INTO pitr_drill.marks (note) VALUES ('${RUN}-before')"
 sleep 2
 TARGET="$(psql_prod "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') || '+00'")"
+# The scratch compose file requires DRILL_TARGET whenever it is parsed (run, up, exec, down).
+export DRILL_TARGET="$TARGET"
 TRADE_AT="$(psql_prod "$TRADE_SQL")"
 STATE_AT="$(psql_prod "$STATE_SQL")"
 sleep 2
@@ -41,7 +43,7 @@ echo "target=$TARGET trade_md5=$TRADE_AT state_md5=$STATE_AT"
 $DRILL --profile restore down -v --remove-orphans >/dev/null 2>&1 || true
 $DRILL --profile restore run --rm --entrypoint sh restore \
   -c 'mkdir -p /var/lib/postgresql/18/docker && chmod 700 /var/lib/postgresql/18/docker'
-DRILL_TARGET="$TARGET" $DRILL --profile restore run --rm restore
+$DRILL --profile restore run --rm restore
 $DRILL up -d --wait db
 for _ in $(seq 1 60); do
   [ "$(psql_drill "SELECT NOT pg_is_in_recovery()")" = "t" ] && break
