@@ -5,11 +5,28 @@
 #   bash scripts/ops/pull_backups.sh                  # normal pull
 #   bash scripts/ops/pull_backups.sh --stable <name>  # fetch one pinned stable point
 # Nothing here ever deletes under backups/market_data/ or backups/stable/.
+# backups/ is the MAIN worktree's, so a pull made from a worktree session
+# survives that worktree being removed (SWINGBOT_BACKUPS_DIR overrides it).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 SSH_HETZNER="${SSH_HETZNER:-E:/Documents/Private/Projects/Discord-Bot/scripts/ops/ssh-hetzner.sh}"
-B=backups
-STAMP="$(date -u +%Y-%m-%dT%H-%MZ)"
+
+# The main worktree's root: the parent of git's common dir. Falls back to this
+# checkout when git is unavailable or the result is not a directory.
+resolve_main_root() {
+  local m
+  MAIN_ROOT="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")" || MAIN_ROOT=""
+  if [ -n "$MAIN_ROOT" ] && [ "$MAIN_ROOT" != "." ] && [ -d "$MAIN_ROOT" ]; then
+    m="$MAIN_ROOT"
+  else
+    m="$PWD"
+  fi
+  MAIN_ROOT="$m"
+}
+resolve_main_root
+B="${SWINGBOT_BACKUPS_DIR:-$MAIN_ROOT/backups}"
+# PULL_STAMP is a test seam; a real run takes the UTC minute.
+STAMP="${PULL_STAMP:-$(date -u +%Y-%m-%dT%H-%MZ)}"
 
 # The VM-side script. Quoted heredoc: nothing expands locally. Arguments (mode,
 # stamp or name, since) are plain words after `bash -s --`.
@@ -24,6 +41,13 @@ case "$MODE" in
     OUT="backups/outbox/$ARG"
     WORK="$(mktemp -d)"
     trap 'rm -rf "$WORK"' EXIT
+    # An aborted earlier pull may have left an outbox folder (it holds a copy of .env).
+    if [ -d backups/outbox ]; then
+      find backups/outbox -mindepth 1 -maxdepth 1 -mmin +120 -exec rm -rf {} +
+    fi
+    # git runs as the checkout's owner: root gets "dubious ownership" and an empty sha.
+    GIT_SHA="$(runuser -u deploy -- git rev-parse HEAD)"
+    [ -n "$GIT_SHA" ] || { echo "pull_backups: could not read the git sha as deploy" >&2; exit 1; }
     mkdir -p backups/outbox
     chmod 700 backups/outbox
     mkdir "$OUT"
@@ -41,7 +65,7 @@ case "$MODE" in
     # market_data is live: GNU tar exits 1 when a file changed while it was read.
     # Tolerate 1 only (verify hashes the finished tar); anything else fails.
     tar_rc=0
-    find market_data -type f -newermt "@$SINCE" -printf '%P\0' | tar --null -C market_data -T - -cf "$OUT/market_data.tar" || tar_rc=$?
+    find market_data -type f -newerct "@$SINCE" -printf '%P\0' | tar --null -C market_data -T - -cf "$OUT/market_data.tar" || tar_rc=$?
     if [ "$tar_rc" -le 1 ]; then
       [ "$tar_rc" -eq 0 ] || echo "pull_backups: tar exit 1 tolerated (a market_data file changed while read)" >&2
     else
@@ -51,7 +75,7 @@ case "$MODE" in
     find market_data -type f -printf '%s\t%P\n' > "$WORK/market_files.tsv"
     python3 scripts/ops/backup_manifest.py count-dump "$OUT/db.sql.gz" > "$WORK/rows.json"
     PGV="$(docker compose exec -T db psql -U swingbot -d swingbot -At -c 'SHOW server_version' </dev/null | tr -d '\r')"
-    python3 scripts/ops/backup_manifest.py build "$OUT" --git-sha "$(git rev-parse HEAD)" \
+    python3 scripts/ops/backup_manifest.py build "$OUT" --git-sha "$GIT_SHA" \
       --deploy-json "$WORK/deploy.json" --row-counts "$WORK/rows.json" --pg-version "$PGV" \
       --market-files "$WORK/market_files.tsv" --vm-epoch "$(date +%s)" >&2
     ;;
@@ -83,18 +107,30 @@ remote() {
 iso_now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 OUTBOX_DIRTY=0
+PULL_STARTED=0
 PULL_OK=0
 
 # Record the local pull folder as failed: LAST_PULL first, then the rename
 # (copy fallback for a Windows indexer lock). LAST_GOOD_PULL is never touched.
+# $1 is the reason; the FAIL line goes to stderr so every abort path ends on one.
 mark_pull_failed() {
   local d="$B/pulls/$STAMP"
   echo "$(iso_now) FAIL pulls/$STAMP.FAILED" > "$B/LAST_PULL"
-  mv "$d" "$d.FAILED" 2>/dev/null || { mkdir -p "$d.FAILED" && cp -r "$d/." "$d.FAILED/" && rm -rf "$d"; }
+  echo "pull_backups: FAIL ${1:-unknown} pulls/$STAMP.FAILED" >&2
+  if mv "$d" "$d.FAILED" 2>/dev/null; then
+    return 0
+  fi
+  if [ -e "$d.FAILED" ]; then
+    echo "pull_backups: $d.FAILED already exists, not copying over it; inspect $d by hand" >&2
+    return 1
+  fi
+  mkdir -p "$d.FAILED" && cp -r "$d/." "$d.FAILED/" && rm -rf "$d"
 }
 
 # Runs on every exit: a failed stream must never leave a copy of .env in the
 # VM's outbox, and an unfinished local pull must never look like a good one.
+# Only a normal pull that actually started may mark its own folder failed: a
+# --stable run or a refused rerun never touches an earlier pull of the same minute.
 # Re-raises the original status.
 cleanup_outbox() {
   rc=$?
@@ -102,8 +138,8 @@ cleanup_outbox() {
     remote clean "$STAMP" >/dev/null 2>&1 || echo "pull_backups: WARNING outbox/$STAMP may remain on the VM" >&2
     OUTBOX_DIRTY=0
   fi
-  if [ "$PULL_OK" != 1 ] && [ -d "$B/pulls/$STAMP" ]; then
-    mark_pull_failed || echo "pull_backups: WARNING could not mark $B/pulls/$STAMP failed" >&2
+  if [ "$PULL_STARTED" = 1 ] && [ "$PULL_OK" != 1 ] && [ -d "$B/pulls/$STAMP" ]; then
+    mark_pull_failed "status $rc" || echo "pull_backups: WARNING could not mark $B/pulls/$STAMP failed" >&2
   fi
   exit "$rc"
 }
@@ -118,19 +154,10 @@ since_epoch() {
   if [ "$last" -gt 3600 ]; then echo $((last - 3600)); else echo 0; fi
 }
 
-# List local mirror files the VM no longer has (report only, never delete).
-report_missing_on_vm() {
-  python - "$1/manifest.json" "$B/market_data" <<'PY'
-import json, pathlib, sys
-manifest = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
-vm = set(manifest.get("market_files") or {})
-root = pathlib.Path(sys.argv[2])
-missing = sorted(p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()) if root.is_dir() else []
-missing = [m for m in missing if m not in vm]
-for m in missing:
-    print("missing on VM: " + m)
-print("MISSING_COUNT=" + str(len(missing)))
-PY
+# Report (never delete or fetch): local files the VM no longer has, VM files
+# absent locally and VM files whose size differs from the local copy.
+report_market() {
+  python scripts/ops/backup_manifest.py report-market "$1/manifest.json" "$B/market_data"
 }
 
 pull_stable() {
@@ -153,7 +180,19 @@ pull_stable() {
     echo "pull_backups: verify failed, left $dest.partial for inspection" >&2
     exit 1
   fi
-  mv "$dest.partial" "$dest"
+  if ! mv "$dest.partial" "$dest" 2>/dev/null; then
+    # A Windows indexer/AV lock can block the rename: copy, then verify the copy.
+    # The .partial is left in place (nothing is ever removed under backups/stable).
+    if ! { mkdir -p "$dest" && cp -r "$dest.partial/." "$dest/"; }; then
+      echo "pull_backups: could not move or copy $dest.partial; inspect $dest and the .partial, delete the .partial by hand" >&2
+      exit 1
+    fi
+    if ! python scripts/ops/backup_manifest.py verify "$dest"; then
+      echo "pull_backups: the copy at $dest failed verify; inspect it, delete the .partial by hand" >&2
+      exit 1
+    fi
+    echo "pull_backups: rename blocked, copied instead; $dest.partial left in place, delete the .partial by hand"
+  fi
   echo "pull_backups: stable point stored at $dest"
 }
 
@@ -161,28 +200,32 @@ pull_normal() {
   local since pull_dir vm_epoch added missing_out missing_count bytes
   since="$(since_epoch)"
   pull_dir="$B/pulls/$STAMP"
+  if [ -e "$pull_dir" ] || [ -e "$pull_dir.FAILED" ]; then
+    echo "pull_backups: $pull_dir (or its .FAILED) already exists for this minute, refusing; wait a minute and rerun" >&2
+    exit 2
+  fi
   mkdir -p "$B/pulls" "$B/market_data"
+  PULL_STARTED=1
   OUTBOX_DIRTY=1
   remote stage "$STAMP" "$since"
   remote stream "$STAMP" | base64 -d | tar xzf - -C "$B/pulls/"
   remote clean "$STAMP" >/dev/null && OUTBOX_DIRTY=0
 
-  if ! python scripts/ops/backup_manifest.py verify backups/pulls/$STAMP; then
-    mark_pull_failed
-    echo "pull_backups: verify FAILED, moved to $pull_dir.FAILED" >&2
+  if ! python scripts/ops/backup_manifest.py verify "$pull_dir"; then
+    mark_pull_failed "verify failed"
     exit 1
   fi
 
   added="$(tar tf "$pull_dir/market_data.tar" | wc -l | tr -d ' ')"
-  tar xf backups/pulls/$STAMP/market_data.tar -C "$B/market_data"
+  tar xf "$pull_dir/market_data.tar" -C "$B/market_data"
   vm_epoch="$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["vm_epoch"])' "$pull_dir/manifest.json")"
-  missing_out="$(report_missing_on_vm "$pull_dir")"
+  missing_out="$(report_market "$pull_dir")"
   missing_count="$(printf '%s\n' "$missing_out" | sed -n 's/^MISSING_COUNT=//p')"
-  printf '%s\n' "$missing_out" | grep '^missing on VM: ' || true
+  printf '%s\n' "$missing_out" | grep -v '^MISSING_COUNT=' || true
   echo "$(iso_now) PASS pulls/$STAMP" > "$B/LAST_PULL"
-  echo "$(iso_now) pulls/$STAMP $vm_epoch" > backups/LAST_GOOD_PULL
+  echo "$(iso_now) pulls/$STAMP $vm_epoch" > "$B/LAST_GOOD_PULL"
   PULL_OK=1
-  python scripts/ops/backup_manifest.py prune backups --keep 10
+  python scripts/ops/backup_manifest.py prune "$B" --keep 10
   bytes="$(du -sb "$pull_dir" | cut -f1)"
   echo "pull_backups: PASS $pull_dir bytes=$bytes files_added=$added missing_on_vm=$missing_count"
 }

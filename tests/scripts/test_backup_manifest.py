@@ -190,3 +190,39 @@ def test_this_module_compiles_without_warnings():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         ast.parse(src)
+
+
+def _mirror(tmp_path):
+    root = tmp_path / "market_data"
+    (root / "daily").mkdir(parents=True)
+    (root / "daily" / "same.csv").write_bytes(b"12345")
+    (root / "daily" / "grew.csv").write_bytes(b"123")
+    (root / "daily" / "gone_on_vm.csv").write_bytes(b"1")
+    return root
+
+
+def test_market_report_names_absent_differing_and_missing(tmp_path):
+    root = _mirror(tmp_path)
+    vm = {"daily/same.csv": 5, "daily/grew.csv": 9, "daily/never_pulled.csv": 4}
+    lines, missing = bm.market_report(vm, root)
+    assert lines == ["missing on VM: daily/gone_on_vm.csv",
+                     "absent locally: daily/never_pulled.csv",
+                     "size differs: daily/grew.csv"]
+    assert missing == 1
+
+
+def test_market_report_with_no_local_mirror_lists_everything_absent(tmp_path):
+    lines, missing = bm.market_report({"a.csv": 1}, tmp_path / "nope")
+    assert lines == ["absent locally: a.csv"] and missing == 0
+
+
+def test_cli_report_market_prints_lines_and_the_count(tmp_path):
+    root = _mirror(tmp_path)
+    mpath = tmp_path / "manifest.json"
+    mpath.write_text(json.dumps({"market_files": {"daily/same.csv": 5, "x.csv": 2}}), encoding="utf-8")
+    out = subprocess.run([sys.executable, str(REPO / "scripts" / "ops" / "backup_manifest.py"),
+                          "report-market", str(mpath), str(root)],
+                         capture_output=True, text=True, check=True).stdout.splitlines()
+    assert "absent locally: x.csv" in out
+    assert "missing on VM: daily/grew.csv" in out
+    assert out[-1] == "MISSING_COUNT=2"

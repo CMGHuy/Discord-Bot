@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Backup manifest helper (v120 section 3). Standard library only: it runs under
-the VM host's python3 and on Windows. Subcommands: build, verify, prune, next-name, count-dump."""
+the VM host's python3 and on Windows. Subcommands: build, verify, prune, next-name, count-dump, report-market."""
 from __future__ import annotations
 
 import argparse
@@ -200,6 +200,35 @@ def _cmd_count_dump(args) -> int:
     return 0
 
 
+def _local_sizes(root: Path) -> dict:
+    if not root.is_dir():
+        return {}
+    return {p.relative_to(root).as_posix(): p.stat().st_size
+            for p in root.rglob("*") if p.is_file()}
+
+
+def market_report(vm_files: dict, root: Path) -> tuple[list[str], int]:
+    """Compare the local market_data mirror with the VM's file list (report only,
+    nothing is deleted or fetched). Returns (lines, count of files only local)."""
+    local = _local_sizes(Path(root))
+    only_local = sorted(set(local) - set(vm_files))
+    absent = sorted(set(vm_files) - set(local))
+    differs = sorted(n for n in set(vm_files) & set(local) if local[n] != vm_files[n])
+    lines = [f"missing on VM: {n}" for n in only_local]
+    lines += [f"absent locally: {n}" for n in absent]
+    lines += [f"size differs: {n}" for n in differs]
+    return lines, len(only_local)
+
+
+def _cmd_report_market(args) -> int:
+    manifest = json.loads(Path(args.manifest).read_text(encoding="utf-8"))
+    lines, missing = market_report(manifest.get("market_files") or {}, Path(args.root))
+    for ln in lines:
+        print(ln)
+    print(f"MISSING_COUNT={missing}")
+    return 0
+
+
 def _cmd_prune(args) -> int:
     if args.keep < 1:
         _parser().error("--keep must be at least 1")
@@ -233,6 +262,9 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--keep", type=int, default=10)
     c = sub.add_parser("count-dump")
     c.add_argument("dump")
+    r = sub.add_parser("report-market")
+    r.add_argument("manifest")
+    r.add_argument("root")
     n = sub.add_parser("next-name")
     n.add_argument("date")
     n.add_argument("--existing", required=True)
@@ -241,7 +273,7 @@ def _parser() -> argparse.ArgumentParser:
 
 HANDLERS = {"build": _cmd_build, "verify": _cmd_verify,
             "prune": _cmd_prune, "next-name": _cmd_next_name,
-            "count-dump": _cmd_count_dump}
+            "count-dump": _cmd_count_dump, "report-market": _cmd_report_market}
 
 
 def main(argv=None) -> int:
