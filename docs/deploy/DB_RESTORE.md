@@ -60,3 +60,25 @@ Set up on production on 2026-10-01 (UTC), by hand through `scripts/ops/ssh-hetzn
 - Disk after setup: `/` 62% used (alarm threshold 80%).
 - `.env` on the VM must be owned by the CI deploy user: `chown deploy:deploy /opt/swing-bot/.env`
   (it was `root:root`, so `deploy.sh`'s image-pin step failed with `PermissionError`).
+
+### Drill 2026-10-01 (v116 V116-10)
+
+`scripts/ops/pitr_drill.sh` restored `2026-10-01 13:51:42+00` into the `swingbot-drill` scratch
+project (127.0.0.1:55433, volume `drill_pgdata`, `archive_mode=off`, repository mounted read-only)
+from the full backup `20261001-124820F`.
+
+| check | at target (production) | restored |
+|---|---|---|
+| mark written 2 s before | present | 1 |
+| mark written 2 s after | present in production | 0 |
+| first trade record md5 | 20adb1fc92347842f5211ae5eeabc09b | 20adb1fc92347842f5211ae5eeabc09b |
+| signal_state md5 | 29a9aa7c3f80d2c4d2cc9b8464914d5a | 29a9aa7c3f80d2c4d2cc9b8464914d5a |
+
+VERDICT: PASS. Scratch project and volume removed afterwards (0 containers, 0 volumes left).
+
+An earlier attempt at 13:50 UTC FAILED before restoring anything: the scratch compose file requires
+`DRILL_TARGET` whenever it is parsed, and the script set it only inline on one command, so the
+`run`, `up` and `exec` calls aborted (`required variable DRILL_TARGET is missing a value`). It left
+only its two mark rows in the `pitr_drill` schema in production, which is by design. The script now
+exports `DRILL_TARGET` once the target second is known (commit `fix(v116): the PITR drill exports
+DRILL_TARGET ...`); the passing run used that fixed copy, run from `/tmp` on the VM.
