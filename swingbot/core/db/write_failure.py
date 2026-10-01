@@ -13,10 +13,27 @@ TRADING_STORES = ("plans", "trades", "account", "journal")
 
 
 class StoreWriteHalt(RuntimeError):
-    """Raised in place of a swallowed store write during issuance."""
+    """Raised in place of a swallowed store write during issuance.
+
+    `alerts` carries the alerts the scan had already built (trade logged and
+    plan stored) before the halt, so the caller can still post them: a trade
+    in the book with no alert is never silently lost.
+    """
+
+    def __init__(self, *args, alerts=None):
+        super().__init__(*args)
+        self.alerts = list(alerts or [])
 
 
 def is_store_write_failure(exc: BaseException | None) -> bool:
+    """True if `exc` or anything in its cause chain is a database failure.
+
+    Deliberately conservative: it cannot tell a write from a read, so it
+    matches ANY SQLAlchemyError / DatabaseUnavailable. Every caller sits on a
+    write path (`_persist_plan_v2`, the scan tick's failure handler), and a
+    failing read at a db-stage store means the book is unreachable, so
+    pausing until a human unpauses is the safe side to err on.
+    """
     import sqlalchemy.exc as sa_exc
 
     from swingbot.core.db.engine import DatabaseUnavailable

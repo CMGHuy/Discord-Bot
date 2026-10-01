@@ -101,3 +101,28 @@ def test_the_admin_reports_unhealthy_while_marked(files, monkeypatch):
     payload = admin_app.scan_status_payload()
     assert payload["bot_healthy"] is False
     assert payload["bot_store_write_failure"]["error"].startswith("StoreWriteHalt")
+
+
+def test_alerts_built_before_a_halt_are_still_posted_then_the_halt_propagates(monkeypatch):
+    sent = []
+
+    async def _fake_send(channel, alerts, route_by_confidence=False):
+        sent.append(list(alerts))
+
+    async def _run_scan(**kw):
+        raise write_failure.StoreWriteHalt("plan P2", alerts=["alert-1"])
+
+    monkeypatch.setattr(loops, "_send_alerts", _fake_send)
+    monkeypatch.setattr(loops.scan_engine, "run_scan", _run_scan)
+    with pytest.raises(write_failure.StoreWriteHalt):
+        asyncio.run(loops._run_scan_posting_partial("chan", require_confirmation=True))
+    assert sent == [["alert-1"]]
+
+
+def test_the_classifier_is_conservative_a_read_shaped_db_error_also_counts():
+    """Pinned on purpose: it cannot tell reads from writes, so any database
+    error in the chain at a db-stage store halts (the book is unreachable)."""
+    from swingbot.core.db.engine import DatabaseUnavailable
+    read_err = sa_exc.OperationalError("SELECT * FROM plans", {}, Exception("timeout"))
+    assert write_failure.is_store_write_failure(read_err) is True
+    assert write_failure.is_store_write_failure(DatabaseUnavailable("down")) is True

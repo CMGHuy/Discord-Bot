@@ -101,6 +101,22 @@ async def _halt_on_store_failure(exc: Exception) -> None:
                                    what="store-write halt notice")
 
 
+async def _run_scan_posting_partial(channel, **scan_kwargs) -> list:
+    """run_scan + post its alerts; a store-write halt still posts what it built.
+
+    Trades logged before the halting plan write are in the book, and the next
+    scan would skip them as already open -- so their alerts go out now, then
+    the halt propagates to pause scanning. On success the alerts are
+    returned for the caller to post, as before.
+    """
+    try:
+        return await scan_engine.run_scan(**scan_kwargs)
+    except write_failure.StoreWriteHalt as halt:
+        if halt.alerts:
+            await _send_alerts(channel, halt.alerts, route_by_confidence=True)
+        raise
+
+
 @tasks.loop(minutes=config.SCAN_INTERVAL_MINUTES)
 async def session_scan():
     # The entire tick's real work is wrapped in a try/except (see below) so
@@ -180,7 +196,8 @@ async def _session_scan_tick():
     now_str = dt.datetime.now(SESSION_TZ).strftime("%H:%M")
     log.info("Running session scan at %s…", now_str)
     progress = scan_engine.ScanProgress()
-    alerts = await scan_engine.run_scan(require_confirmation=True, bot=bot, progress=progress)
+    alerts = await _run_scan_posting_partial(
+        channel, require_confirmation=True, bot=bot, progress=progress)
     await _send_alerts(channel, alerts, route_by_confidence=True)
 
     from swingbot.core.charts.cache import purge
@@ -450,7 +467,8 @@ async def config_watcher():
 
         poller = asyncio.create_task(_ui_poll_progress())
         try:
-            alerts = await scan_engine.run_scan(require_confirmation=False, bot=bot, progress=progress)
+            alerts = await _run_scan_posting_partial(
+                channel, require_confirmation=False, bot=bot, progress=progress)
         finally:
             poller.cancel()
 
