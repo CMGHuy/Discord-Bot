@@ -46,6 +46,7 @@ def test_db_stage_starts_empty_without_an_import(state_file, store_db, monkeypat
     assert data_refresh.load_state() == {}
 
 
+@pytest.mark.real_engine
 def test_an_unreachable_database_never_breaks_a_refresh(state_file, monkeypatch):
     from swingbot.core.db.engine import reset_engine
     monkeypatch.setattr(config, "DB_STORES", "market_data_state:db")

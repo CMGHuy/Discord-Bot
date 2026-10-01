@@ -44,3 +44,11 @@ def test_ghcr_retention_covers_the_rollback_window_for_both_images():
 def test_the_db_image_is_linked_to_the_repo_so_ghcr_can_prune_it():
     text = (WORKFLOWS.parents[1] / "Dockerfile.db").read_text(encoding="utf-8")
     assert "org.opencontainers.image.source=" in text
+
+
+def test_every_backend_shard_runs_the_test_database():
+    jobs = _load("deploy.yml")["jobs"]
+    shards = [name for name in jobs if name.startswith("backend-test-")]
+    assert len(shards) == 5
+    for name in shards:
+        assert jobs[name]["services"]["db-test"]["image"] == "postgres:18-alpine", name

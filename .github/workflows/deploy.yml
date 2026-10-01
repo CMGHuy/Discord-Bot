@@ -59,6 +59,19 @@ jobs:
   # this is alone.
   backend-test-charts:
     runs-on: ubuntu-latest
+    # v116 Phase 4: every store is Postgres; store tests need the database in every shard.
+    services:
+      db-test:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: swingbot
+          POSTGRES_DB: swingbot_test
+          POSTGRES_PASSWORD: swingbot
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U swingbot -d swingbot_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
       - uses: actions/checkout@v7
 
@@ -96,6 +109,19 @@ jobs:
   # engine -> trade-plan construction and lifecycle.
   backend-test-pipeline:
     runs-on: ubuntu-latest
+    # v116 Phase 4: every store is Postgres; store tests need the database in every shard.
+    services:
+      db-test:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: swingbot
+          POSTGRES_DB: swingbot_test
+          POSTGRES_PASSWORD: swingbot
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U swingbot -d swingbot_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
       - uses: actions/checkout@v7
 
@@ -191,6 +217,19 @@ jobs:
   # and shared infra (jsonio etc.).
   backend-test-admin:
     runs-on: ubuntu-latest
+    # v116 Phase 4: every store is Postgres; store tests need the database in every shard.
+    services:
+      db-test:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: swingbot
+          POSTGRES_DB: swingbot_test
+          POSTGRES_PASSWORD: swingbot
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U swingbot -d swingbot_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
       - uses: actions/checkout@v7
 
@@ -239,6 +278,19 @@ jobs:
   # which pytest does not glob-expand itself.
   backend-test-misc:
     runs-on: ubuntu-latest
+    # v116 Phase 4: every store is Postgres; store tests need the database in every shard.
+    services:
+      db-test:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: swingbot
+          POSTGRES_DB: swingbot_test
+          POSTGRES_PASSWORD: swingbot
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U swingbot -d swingbot_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
       - uses: actions/checkout@v7
 

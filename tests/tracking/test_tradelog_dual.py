@@ -67,6 +67,7 @@ def test_dual_stage_still_reads_from_the_file(data_dir, monkeypatch, db_committe
     assert len(TradeLog().get_trades(status="open", limit=None)) == 1
 
 
+@pytest.mark.real_engine
 def test_database_failure_at_dual_stage_raises(data_dir, monkeypatch):
     monkeypatch.setattr(config, "DB_STORES", "trades:dual")
     monkeypatch.setattr(config, "DATABASE_URL", "")

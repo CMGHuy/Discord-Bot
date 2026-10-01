@@ -48,6 +48,7 @@ def test_db_stage_writes_and_reads_only_the_row(data_dir, store_db, monkeypatch)
     assert progress_store.read() is None
 
 
+@pytest.mark.real_engine
 def test_an_unreachable_database_never_raises(data_dir, monkeypatch):
     from swingbot.core.db.engine import reset_engine
     monkeypatch.setattr(config, "DB_STORES", "scan_progress:db")

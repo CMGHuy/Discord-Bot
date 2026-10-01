@@ -4,6 +4,8 @@ import pytest
 from swingbot import config
 from swingbot.core.db import engine as dbengine
 
+pytestmark = pytest.mark.real_engine
+
 
 @pytest.fixture(autouse=True)
 def _clean_engine():
