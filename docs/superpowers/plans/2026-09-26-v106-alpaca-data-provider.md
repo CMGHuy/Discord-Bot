@@ -1419,6 +1419,27 @@ token now pays for exactly one HTTP call, where today one token covers 4.
   starting the first full trading day after the deploy; record the window
   here, then run T13 Step 6 unchanged.
 
+  *Recorded 2026-10-02 (the boxes above were never ticked at the time).
+  Steps 1-3 verified on main: the six named tests exist and
+  `test_provider_router.py` passes; radon prints only `router._account`
+  C (11), under the repo's < 15 limit. Merged d541f482 2026-09-30 19:03
+  UTC; **production first checked out T13a at 2026-09-30 20:43 UTC**
+  (`ce7bb09d`, host reflog), after the close. The Step 5 first-scan check
+  was not recorded at the time; read afterwards: 0 `Alpaca daily_bars
+  miss` lines and 0 Alpaca exceptions since the deploy. **Soak attempt 2
+  window = 2026-10-01, 10-02, 10-05, 10-06, 10-07.** Evaluated by
+  `scripts/ops/v106_soak_check.py` (T13 Step 6 definitions, unchanged),
+  run each weekday 21:15 UTC by the one-shot cron
+  `scripts/ops/install_v106_soak_cron.sh` → `logs/v106_soak_cron.log` on the VM.
+  **Interim, 2026-10-02 13:31 UTC (day 2 before its session):** 275 scans;
+  (a) p95 `cold_fetch_s` **4.70 s** (429 timings, max 18.84) -- FAIL so
+  far; (b) fallback **1.53 %** (489 / 31871) -- PASS; (c) 0.01299 -- PASS.
+  The fallback fix worked; (a) does not yet. Timings of 18 s sit far past
+  the 5 s router deadline, so something other than the Alpaca call is now
+  dominating the chunk -- not diagnosed. The user chose to run the full 5
+  days as pre-registered rather than call it early; the verdict is the
+  FINAL line after the 2026-10-07 run.*
+
 ### Task T14: Close-out
 
 The user runs `/close-out`; the Skill tool blocks it for Claude. It follows
