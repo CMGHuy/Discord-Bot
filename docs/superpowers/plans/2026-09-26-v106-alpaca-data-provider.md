@@ -1458,10 +1458,14 @@ session, so CPU saved is wall time saved.
 - [x] Tests: four provider tests, two router-spot tests; radon unchanged.
   Prod A/B (same box, alternating): old 4.0-8.3 s, new 1.9-3.96 s per call.
   8×10 batches were tried and dropped (no first-call gain).
-- [ ] Full suite; deploy; the deploy ends soak attempt 2 -- record it as
-  *superseded by T13b at <deploy time>* with its numbers to that point, start
-  attempt 3 (5 trading days from the first full day after deploy) and re-run
-  `install_v106_soak_cron.sh` with the new window.
+- [x] Full suite 5747 passed, 1 failed (`test_restore_db` LF check on a stale
+  CRLF working copy; index is LF). Deployed cfe75a6d **2026-10-02 15:26:27
+  UTC**; first two scans: `cold_fetch_s` 0.81-1.69 s, fallback 0, errors 0.
+- **Soak attempt 2 -- superseded by T13b at 15:26:27 UTC, never judged.**
+  298 scans to then: (a) p95 4.69 s FAIL; (b) 1.48 % PASS; (c) 0.01299 PASS.
+  Also mixed: v118 went live 14:39 UTC the same day (another session).
+- [ ] **Soak attempt 3 = 2026-10-05 .. 2026-10-09**, T13 Step 6 unchanged;
+  cron installed with that window; verdict = FINAL line of the cron log.
 
 ### Task T14: Close-out
 
