@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import math
+import hashlib
 import time
 from datetime import datetime, timezone
 
@@ -24,6 +25,7 @@ from swingbot.core.market.events import earnings_within_window
 from swingbot.core.market.explain import build_explanation
 from swingbot.core.market.market_events import get_market_events
 from swingbot.core.market.reversal import evaluate_reversal, reversals_for_ticker
+from swingbot.core.market.session import session_date as _session_day
 from swingbot.core.market.strategy import HORIZONS, LEGACY_HORIZONS, live_horizons
 from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.core.marketdata import data_store, universe
@@ -36,6 +38,9 @@ from swingbot.core.tracking.performance import TradeLog
 from swingbot.scan_params import ScanParams
 
 from . import analyze, dedup, fetch, progress_store, runstate, strategy_pass, telemetry
+from .short_candidates import (ShortReference, build_reference_rels,
+                               extra_candidates, extra_symbols)
+from .short_reference import completed_frame as _completed, etf_for_sector
 from .analyze import paper_trade_decision
 from .embeds import (
     build_embed, build_simple_alert, notify_closed_trades, notify_near_close,
@@ -108,6 +113,63 @@ def _maybe_run_strategy_pass(*,tickers, fresh_data, spy_df, regimes, rs_cache, s
         trade_log=trade_log, plan_store=PlanStore(), asof_of=asof_of)
     alerts.extend(result.alerts)
     return {"strategy_plans": len(result.plans), "strategy_opened": result.opened}
+
+def _short_now():
+    return datetime.now(timezone.utc)
+
+
+def build_extra_candidates(base_tickers, *, decision_date, snapshot, reference) -> list:
+    """SHORT extra-lane candidates for `decision_date`, or [] with a logged reason.
+
+    Pure over its arguments: base_tickers is only read (a symbol the base lane
+    scans is never an extra candidate) and no base structure is touched.
+    """
+    found, reason = extra_candidates(base_tickers, snapshot, reference)
+    if reason is not None:
+        log.info("SHORT extra lane skipped for %s: %s", decision_date, reason)
+    return found
+
+
+def _short_reference_id(day, snapshot, rels) -> str:
+    digest = hashlib.sha1(
+        f"{day}|{snapshot.membership_asof}|{[round(r, 6) for r in rels]}".encode()).hexdigest()
+    return f"short-{day}-{digest[:8]}"
+
+
+def _short_reference(day, snapshot, extra_frames, base_frames, spy_df, now):
+    """Immutable context for the extra lane; the regime is the completed SPY bar's."""
+    spy_done = _completed(spy_df, now)
+    etfs = sorted({etf_for_sector(snapshot.sector_of.get(s)) for s in extra_frames} - {None})
+    rels = tuple(build_reference_rels({**base_frames, **extra_frames}, spy_df, now))
+    return ShortReference(
+        frames=extra_frames, spy=spy_df, sector_frames=fetch._fetch_frames(etfs),
+        spy_regime=get_regime(spy_done), reference_rels=rels, now=now,
+        reference_id=_short_reference_id(day, snapshot, rels))
+
+
+def _build_short_lane(enabled, base_tickers, base_frames, spy_df) -> tuple:
+    """Extra candidates, built after the base crawl and kept apart from it.
+
+    Failure here never reaches the base scan.
+    """
+    if not enabled:
+        return ()
+    try:
+        now = _short_now()
+        day = _session_day(now)
+        snapshot = universe.short_snapshot(day, live=True)
+        queue = [] if snapshot is None else list(extra_symbols(snapshot, base_tickers))
+        extra_frames = fetch._crawl_latest_data(queue, None) if queue else {}
+        reference = None if spy_df is None else _short_reference(
+            day, snapshot, extra_frames, base_frames, spy_df, now)
+        found = build_extra_candidates(
+            base_tickers, decision_date=day, snapshot=snapshot, reference=reference)
+    except Exception:
+        log.warning("SHORT extra lane failed -- base scan unaffected", exc_info=True)
+        return ()
+    log.info("SHORT extra lane: %d candidate(s)", len(found))
+    return tuple(found)
+
 
 # Ensures only one scan (automatic or !check) runs its heavy work at a time --
 # without this, an automatic scan and a manual !check could both write to
@@ -264,6 +326,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     if params is None:
         params = ScanParams.from_config()
 
+    short_enabled = config.SHORT_UNIVERSE_ENABLED   # snapshotted once, at scan start
     tickers = load_watchlist()
     if config.SCAN_UNIVERSE != "watchlist":
         extra = [s for s in universe.universe_symbols(config.SCAN_UNIVERSE)
@@ -407,6 +470,9 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             log.debug("regime_series computation failed", exc_info=True)
 
     account_cfg = load_account_config()
+    # V118-3: the extra lane is built from references to the finished base
+    # inputs and kept in its own object -- never merged into tickers/fresh_data.
+    short_candidates = _build_short_lane(short_enabled, tuple(tickers), fresh_data, spy_df)
     _finish_phase("enrichment")
 
     scan_items = []

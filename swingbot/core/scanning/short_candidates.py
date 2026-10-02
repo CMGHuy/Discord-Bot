@@ -6,11 +6,16 @@ isolated weakness) the sector ETF.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Literal, Mapping, Sequence
+
 import numpy as np
 
 from swingbot import config
+from swingbot.core.marketdata.universe import ShortSnapshot
 from swingbot.core.scanning.short_reference import (align_completed,
-                                                    completed_frame, return_63)
+                                                    completed_frame,
+                                                    etf_for_sector, return_63)
 
 MIN_PANEL_SYMBOLS = 5
 
@@ -90,3 +95,73 @@ def select_mode(stock, spy, sector, *, spy_regime, reference_rels, now=None):
     if bearish:
         return _broad(stock_a, spy_a, reference_rels)
     return _isolated(stock_a, sector_a)
+
+
+# --- V118-3: candidate contract ------------------------------------------------
+SOURCE = "short_universe"
+
+
+@dataclass(frozen=True)
+class ShortCandidate:
+    ticker: str
+    mode: Literal["broad", "isolated"]
+    source: str
+    decision_bar_date: str
+    membership_asof: str
+    reference_id: str
+
+
+@dataclass(frozen=True)
+class ShortReference:
+    """Everything the extra lane reads, frozen at scan start.
+
+    `frames` holds the extra symbols' completed-bar frames only; the base
+    frames dict is never merged into it or mutated.
+    """
+    frames: Mapping[str, object]
+    spy: object
+    sector_frames: Mapping[str, object]
+    spy_regime: object | None
+    reference_rels: tuple[float, ...]
+    now: object
+    reference_id: str
+
+
+def extra_symbols(snapshot: ShortSnapshot, base_tickers: Sequence[str]) -> tuple[str, ...]:
+    """Snapshot members not already scanned by the base lane (base wins ties)."""
+    base = set(base_tickers)
+    return tuple(symbol for symbol in snapshot.symbols if symbol not in base)
+
+
+def _input_failure(snapshot, reference) -> str | None:
+    if snapshot is None:
+        return "no_snapshot"
+    if reference is None or reference.spy is None:
+        return "no_reference"
+    if reference.spy_regime is None:
+        return "missing_regime"
+    return None
+
+
+def _candidate_for(symbol, snapshot, reference) -> ShortCandidate | None:
+    frame = reference.frames.get(symbol)
+    sector_etf = etf_for_sector(snapshot.sector_of.get(symbol))
+    mode, _reason = select_mode(
+        frame, reference.spy, reference.sector_frames.get(sector_etf),
+        spy_regime=reference.spy_regime, reference_rels=reference.reference_rels,
+        now=reference.now)
+    if mode is None:
+        return None
+    bar_date = completed_frame(frame, reference.now).index[-1].date().isoformat()
+    return ShortCandidate(symbol, mode, SOURCE, bar_date, snapshot.membership_asof,
+                          reference.reference_id)
+
+
+def extra_candidates(base_tickers, snapshot, reference):
+    """([ShortCandidate, ...], None) or ([], stable_reason)."""
+    reason = _input_failure(snapshot, reference)
+    if reason is not None:
+        return [], reason
+    found = (_candidate_for(s, snapshot, reference)
+             for s in extra_symbols(snapshot, base_tickers))
+    return [c for c in found if c is not None], None

@@ -788,6 +788,15 @@ FIELDS: list[Field] = [
           options=["watchlist", "sp500", "sp500_top150", "etfs", "sp500+etfs"],
           help="What the scanner covers. The watchlist is ALWAYS included on top of any "
                "universe. Flip beyond watchlist only after the E77 rollout checklist."),
+    Field("SHORT_UNIVERSE_ENABLED", "SHORT_UNIVERSE_ENABLED", "Universe & Scanning",
+          "SHORT extra-universe lane (v118)",
+          type="checkbox", default="false",
+          help="v118. On: S&P 500 members outside the base universe are scanned for BEARISH "
+               "confluence only (broad weakness in a bearish SPY regime, isolated weakness "
+               "otherwise). Extra symbols never enter base breadth, the base RS cache, the base "
+               "strategy pass or a bullish alert. No broker order is ever placed and borrow "
+               "availability is not checked -- confirm a borrow before acting on an alert. "
+               "Off (default): the scan is unchanged."),
     Field("EARNINGS_BLACKOUT_SESSIONS", "EARNINGS_BLACKOUT_SESSIONS", "Universe & Scanning",
           "Earnings blackout (sessions before the reaction)", type="number", default="0", min=0, max=5, step=1,
           help="Blocks a setup when the next earnings reaction is 1 to this many trading sessions away (0 = off). "
