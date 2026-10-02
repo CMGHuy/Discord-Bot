@@ -1,4 +1,4 @@
-# v126 — Structure-break armed entries: wait for a minor break (or a higher low) after the zone test
+# v127 — Structure-break armed entries: wait for a minor break (or a higher low) after the zone test
 
 **Version:** ui 1.21.1 · bot 2.0.0 (at writing)
 **Bump:** none (measurement only, as v88/v90 were). A live lifecycle, if it is
@@ -192,7 +192,7 @@ beyond simply waiting.
   12-cell grid and scoring, reusing `CellScore` / selection / plateau code
   without changing v90's grid.
 - `scripts/backtest/measure_structure_arm.py` — run / select / stage
-  subcommands mirroring `measure_armed_entries.py`; `OUT_ROOT = data/v126`.
+  subcommands mirroring `measure_armed_entries.py`; `OUT_ROOT = data/v127`.
 - Results under `docs/superpowers/results/`: Stage 1 selection (full
   12-cell table, plateau reports on `N` and `k`, the rule quoted, the
   population disclosure), then each later stage reached.

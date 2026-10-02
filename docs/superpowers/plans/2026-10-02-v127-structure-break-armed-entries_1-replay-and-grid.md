@@ -1,10 +1,10 @@
-# v126 Structure-Break Armed Entries — Part 1: the walk, the replay and the grid
+# v127 Structure-Break Armed Entries — Part 1: the walk, the replay and the grid
 
-> Part of `2026-10-02-v126-structure-break-armed-entries`. Header, global constraints, spec readings, review focus, parallelisation and outcomes live in `_0-index.md` — read its **Global Constraints** and **Spec readings fixed by this plan** before any task here.
+> Part of `2026-10-02-v127-structure-break-armed-entries`. Header, global constraints, spec readings, review focus, parallelisation and outcomes live in `_0-index.md` — read its **Global Constraints** and **Spec readings fixed by this plan** before any task here.
 
 # Phase 1 — The walk, the replay and the grid (worktree branch)
 
-### Task V126-1: The structure-break walk
+### Task V127-1: The structure-break walk
 
 **Files:**
 - Create: `swingbot/core/backtesting/structure_arm.py`
@@ -25,14 +25,14 @@ Expected: three lines — `PIVOT_K = 3`, `PIVOT_COLUMNS = ("last_sh_pos", "last_
 
 - [ ] **Step 2: Create the worktree**
 
-Via the `superpowers:using-git-worktrees` skill: `.claude/worktrees/2026-10-02-v126-structure-break-armed-entries/`, branch `2026-10-02-v126-structure-break-armed-entries`, from `main`. Every later path in Phases 1–2 is inside it.
+Via the `superpowers:using-git-worktrees` skill: `.claude/worktrees/2026-10-02-v127-structure-break-armed-entries/`, branch `2026-10-02-v127-structure-break-armed-entries`, from `main`. Every later path in Phases 1–2 is inside it.
 
 - [ ] **Step 3: Write the shared fixtures**
 
 Create `tests/backtesting/structure_arm_fixtures.py`:
 
 ```python
-"""Hand-built frames with known swing structure for the v126 walk (spec §7).
+"""Hand-built frames with known swing structure for the v127 walk (spec §7).
 
 Every frame is flat (100, 101, 99, 100) bars with overrides. Flat highs and
 lows are never pivots (a swing high must be STRICTLY above the 3 highs
@@ -261,7 +261,7 @@ Expected: FAIL — `ImportError: cannot import name 'structure_arm' from 'swingb
 Create `swingbot/core/backtesting/structure_arm.py`:
 
 ```python
-"""v126: the structure-break armed replay (spec §3).
+"""v127: the structure-break armed replay (spec §3).
 
 A confluence scenario's level ARMS at its first test (v88's is_test rule)
 and becomes a plan only when price breaks minor swing structure after the
@@ -403,19 +403,19 @@ Expected: no output (every function A or B).
 
 ```bash
 git add swingbot/core/backtesting/structure_arm.py tests/backtesting/structure_arm_fixtures.py tests/backtesting/test_structure_arm_walk.py
-git commit -m "feat(v126): structure-break armed walk (MSB / HL, zone-failed cancel)"
+git commit -m "feat(v127): structure-break armed walk (MSB / HL, zone-failed cancel)"
 ```
 
 ---
 
-### Task V126-2: Touch episodes and the per-cell replay
+### Task V127-2: Touch episodes and the per-cell replay
 
 **Files:**
 - Modify: `swingbot/core/backtesting/structure_arm.py` (import block; append after `walk_structure_arm`)
 - Test: `tests/backtesting/test_structure_arm_replay.py`
 
 **Interfaces:**
-- Consumes: V126-1's `StructCell`, `Pivots`, `walk_structure_arm`, `TRIGGERED`; `armed_replay.arm_candidates(ticker, df, horizon_key, *, params, level_cache) -> dict[int, list[ArmCandidate]]`, `armed_replay.plan_at(ticker, df, horizon_key, cand, *, j, first_test_index, cell, bars, atr_values, params, level_map_at, confluence_at) -> (plan | None, reason)`, `armed_replay.make_confluence_at(df, horizon_key)`, `backtest_scenarios.levels_asof`, `reaction.is_test` — existing, unchanged. **No change to `armed_replay.py`:** `plan_at` reads only `cell.b` from the `Cell` it is handed, so `StructCell.plan_cell()` supplies `Cell(n, k, 0.10)`.
+- Consumes: V127-1's `StructCell`, `Pivots`, `walk_structure_arm`, `TRIGGERED`; `armed_replay.arm_candidates(ticker, df, horizon_key, *, params, level_cache) -> dict[int, list[ArmCandidate]]`, `armed_replay.plan_at(ticker, df, horizon_key, cand, *, j, first_test_index, cell, bars, atr_values, params, level_map_at, confluence_at) -> (plan | None, reason)`, `armed_replay.make_confluence_at(df, horizon_key)`, `backtest_scenarios.levels_asof`, `reaction.is_test` — existing, unchanged. **No change to `armed_replay.py`:** `plan_at` reads only `cell.b` from the `Cell` it is handed, so `StructCell.plan_cell()` supplies `Cell(n, k, 0.10)`.
 - Produces: `released(bars, atr_values, level, direction, k, start, stop) -> bool`; `level_key(cand) -> tuple`; `StructCellResult` with `issued: list[(trigger index, plan, trigger)]`, `confirmed: list[(ArmCandidate, ArmOutcome)]` (issued or regated), `counts: Counter`, `arms: list[(arm index, end index | None, status-or-plan-reason)]`; `replay_structure(ticker, df, horizon_key, cells, *, params=None, candidates=None, level_cache=None, level_map_at=None, confluence_at=None) -> dict[cell_id, StructCellResult]`. Counts keys: `armed`, `issued`, `regate_*`, `cancelled_zone_failed`, `expired`, `unresolved`.
 
 - [ ] **Step 1: Write the failing replay tests**
@@ -757,19 +757,19 @@ Expected: no output.
 
 ```bash
 git add swingbot/core/backtesting/structure_arm.py tests/backtesting/test_structure_arm_replay.py
-git commit -m "feat(v126): touch-episode bookkeeping and the per-cell structure replay"
+git commit -m "feat(v127): touch-episode bookkeeping and the per-cell structure replay"
 ```
 
 ---
 
-### Task V126-3: The random-delay permutation population
+### Task V127-3: The random-delay permutation population
 
 **Files:**
 - Modify: `swingbot/core/backtesting/structure_arm.py` (append)
 - Test: `tests/backtesting/test_structure_arm_permutation.py`
 
 **Interfaces:**
-- Consumes: V126-2's `StructCellResult.confirmed`; `armed_replay.delay_permutations(ticker, df, horizon_key, cell, confirmed, *, n, seed, level_cache, params=None, level_map_at=None, confluence_at=None) -> list[list[(entry_date, strategy, horizon_key, outcome)]]` — existing, unchanged. Its seed is `[seed, crc32("ticker|horizon")]`, its draw `[cand.index, min(cand.index + cell.n, last bar)]`, its first-test scan starts at `cand.index` — which is v126's test bar, so the stop always anchors from `i`.
+- Consumes: V127-2's `StructCellResult.confirmed`; `armed_replay.delay_permutations(ticker, df, horizon_key, cell, confirmed, *, n, seed, level_cache, params=None, level_map_at=None, confluence_at=None) -> list[list[(entry_date, strategy, horizon_key, outcome)]]` — existing, unchanged. Its seed is `[seed, crc32("ticker|horizon")]`, its draw `[cand.index, min(cand.index + cell.n, last bar)]`, its first-test scan starts at `cand.index` — which is v127's test bar, so the stop always anchors from `i`.
 - Produces: `structure_permutations(ticker, df, horizon_key, cell: StructCell, confirmed, *, n, seed, level_cache, params=None, level_map_at=None, confluence_at=None) -> list` (same shape as `delay_permutations`).
 
 - [ ] **Step 1: Write the failing tests**
@@ -848,7 +848,7 @@ def structure_permutations(ticker: str, df, horizon_key: str, cell: StructCell, 
                            n: int, seed: int, level_cache: dict, params: ScanParams | None = None,
                            level_map_at=None, confluence_at=None) -> list:
     """Spec §4.2's random-delay null: armed_replay.delay_permutations over
-    the arms that triggered, with v126's frozen stop buffer. Each arm's
+    the arms that triggered, with v127's frozen stop buffer. Each arm's
     candidate index IS its test bar, so delay_permutations' first-test scan
     anchors the stop at the arm bar and draws from [i, min(i + N, last)]."""
     return armed_replay.delay_permutations(
@@ -866,19 +866,19 @@ Expected: `VERDICT: PASS  3 passed`.
 
 ```bash
 git add swingbot/core/backtesting/structure_arm.py tests/backtesting/test_structure_arm_permutation.py
-git commit -m "feat(v126): random-delay permutation over triggered structure arms"
+git commit -m "feat(v127): random-delay permutation over triggered structure arms"
 ```
 
 ---
 
-### Task V126-4: The 12-cell grid, selection and population disclosure
+### Task V127-4: The 12-cell grid, selection and population disclosure
 
 **Files:**
 - Create: `swingbot/core/backtesting/structure_measurement.py`
 - Test: `tests/backtesting/test_structure_measurement.py`
 
 **Interfaces:**
-- Consumes: V126-1's `StructCell`, `TRIGGERS`; `armed_measurement.score_cell(rows, cell) -> CellScore` (reads only `cell.cell_id`), `Selection`, `Row`, `in_window`, `arm_trades`, `arms_blob`, `folds_blob`, `permutation_p`, the window/permutation constants and `LIMITATIONS`; `backtest_wf.plateau_report(param_name, grid, expectancies, adopted_value) -> dict` — existing, unchanged. `armed_measurement.CELLS` (v90's 30 cells) is not touched.
+- Consumes: V127-1's `StructCell`, `TRIGGERS`; `armed_measurement.score_cell(rows, cell) -> CellScore` (reads only `cell.cell_id`), `Selection`, `Row`, `in_window`, `arm_trades`, `arms_blob`, `folds_blob`, `permutation_p`, the window/permutation constants and `LIMITATIONS`; `backtest_wf.plateau_report(param_name, grid, expectancies, adopted_value) -> dict` — existing, unchanged. `armed_measurement.CELLS` (v90's 30 cells) is not touched.
 - Produces: `N_GRID = (5, 10, 15)`, `K_GRID = (0.25, 0.5)`, `CELLS` (12 `StructCell`s, trigger-major), `FUNNEL_COLUMNS = ("armed", "issued", "regated", "cancelled_zone_failed", "expired", "unresolved")`, `SELECTION_RULE`; `cell_by_id(cell_id) -> StructCell`; `select_cell(rows, cells=CELLS) -> Selection` (plateau params `STRUCT_N`, `STRUCT_K`); `trigger_rows(selection) -> list[CellScore]`; `funnel(arm_records, window) -> dict[cell_id, dict[column, int]]` where a record is `{"cell", "horizon", "arm_date", "status"}`; `render_selection_md(selection, funnel_counts) -> str`. Re-exports `BASELINE`, `FOLD_TEST_YEARS`, `LIMITATIONS`, `MDE_TARGET_DAYS`, `NO_ELIGIBLE_CELL`, `PERMUTATION_N`, `PERMUTATION_SEED`, `RUN1_WINDOW`, `SELECTED`, `SELECTION_OBSERVED_DAYS`, `SELECTION_WINDOW`, `SPIKE`, `VALIDATION_WINDOW`, `Row`, `Selection`, `arm_trades`, `arms_blob`, `folds_blob`, `in_window`, `permutation_p` for the script.
 
 - [ ] **Step 1: Write the failing tests**
@@ -1007,7 +1007,7 @@ Expected: FAIL — `ImportError: cannot import name 'structure_measurement'`.
 Create `swingbot/core/backtesting/structure_measurement.py`:
 
 ```python
-"""Pre-registered v126 structure-break armed-entry measurement (spec §3.3, §4).
+"""Pre-registered v127 structure-break armed-entry measurement (spec §3.3, §4).
 
 The constants below ARE the pre-registration. None is a config.Field, so
 no search can sweep them, and none may change after a number is seen.
@@ -1140,7 +1140,7 @@ def _plateau_lines(selection: Selection) -> list:
 
 
 def render_selection_md(selection: Selection, funnel_counts: dict) -> str:
-    lines = ["# v126 structure-break armed entries — Stage 1 selection", "",
+    lines = ["# v127 structure-break armed entries — Stage 1 selection", "",
              f"**Verdict: {selection.verdict}**", "",
              f"Window: {SELECTION_WINDOW[0]}..{SELECTION_WINDOW[1]} (fold-train only).", "",
              "## Pre-registered rule", "", SELECTION_RULE, "", LIMITATIONS, "",
@@ -1167,5 +1167,5 @@ Expected: no output.
 
 ```bash
 git add swingbot/core/backtesting/structure_measurement.py tests/backtesting/test_structure_measurement.py
-git commit -m "feat(v126): 12-cell structure grid, N/k plateau selection, population disclosure"
+git commit -m "feat(v127): 12-cell structure grid, N/k plateau selection, population disclosure"
 ```

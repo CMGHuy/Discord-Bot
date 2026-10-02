@@ -1,18 +1,18 @@
-# v126 Structure-Break Armed Entries — Part 2: the script, the gate and the runs
+# v127 Structure-Break Armed Entries — Part 2: the script, the gate and the runs
 
-> Part of `2026-10-02-v126-structure-break-armed-entries`. Header, global constraints, spec readings, review focus, parallelisation and outcomes live in `_0-index.md` — read its **Global Constraints** before any task here. Phase 1 (V126-1..4) is in `_1-replay-and-grid.md`.
+> Part of `2026-10-02-v127-structure-break-armed-entries`. Header, global constraints, spec readings, review focus, parallelisation and outcomes live in `_0-index.md` — read its **Global Constraints** before any task here. Phase 1 (V127-1..4) is in `_1-replay-and-grid.md`.
 
 # Phase 2 — The measurement script and the gate (worktree branch)
 
-### Task V126-5: `measure_structure_arm.py`
+### Task V127-5: `measure_structure_arm.py`
 
 **Files:**
 - Create: `scripts/backtest/measure_structure_arm.py`
 - Test: `tests/scripts/test_measure_structure_arm.py`
 
 **Interfaces:**
-- Consumes: V126-2's `replay_structure` / `StructCellResult.arms`; V126-3's `structure_permutations`; V126-4's `structure_measurement` (`CELLS`, `cell_by_id`, `select_cell`, `funnel`, `render_selection_md`, `FUNNEL_COLUMNS`, the re-exported windows/blobs). From the sibling script `measure_armed_entries.py`, unchanged: `STAGE2_PASS_MARKER = "**Overall: PASS**"`, `_map(worker, tasks, workers)`, `_trade(frame, index, plan, date) -> ArmTrade`, `load_frame(cache_dir, symbol)`, `read_rows(run_dir)` (globs `*.jsonl`), `write_shard(path, rows)`. Sibling-script imports are established (`measure_fib_v103.py`, `measure_v104.py`).
-- Produces: CLI `replay --run run1|run2 [--stage2-doc] [--tickers] [--horizons] [--workers]`, `summary --out-md`, `select [--out-md] [--out-json]`, `arms --stage mde|walkforward|validation --cell --out`, `permute --cell --out-json [--workers]`; exit codes 0 ok, 1 select non-SELECTED, 2 empty window/no baseline, 3 run2 locked, 4 resume metadata mismatch / no run2. Module constants `OUT_ROOT = ROOT / "data" / "v126"`, `RUNS`, `BESPOKE_REASON`. On disk per ticker: `<ticker>.jsonl` (trade rows, written last — its presence marks the ticker done), `<ticker>.counts.json`, `<ticker>.arms.json` (arm records; **not** `.jsonl`), plus `run.json` and a transient `progress.txt`.
+- Consumes: V127-2's `replay_structure` / `StructCellResult.arms`; V127-3's `structure_permutations`; V127-4's `structure_measurement` (`CELLS`, `cell_by_id`, `select_cell`, `funnel`, `render_selection_md`, `FUNNEL_COLUMNS`, the re-exported windows/blobs). From the sibling script `measure_armed_entries.py`, unchanged: `STAGE2_PASS_MARKER = "**Overall: PASS**"`, `_map(worker, tasks, workers)`, `_trade(frame, index, plan, date) -> ArmTrade`, `load_frame(cache_dir, symbol)`, `read_rows(run_dir)` (globs `*.jsonl`), `write_shard(path, rows)`. Sibling-script imports are established (`measure_fib_v103.py`, `measure_v104.py`).
+- Produces: CLI `replay --run run1|run2 [--stage2-doc] [--tickers] [--horizons] [--workers]`, `summary --out-md`, `select [--out-md] [--out-json]`, `arms --stage mde|walkforward|validation --cell --out`, `permute --cell --out-json [--workers]`; exit codes 0 ok, 1 select non-SELECTED, 2 empty window/no baseline, 3 run2 locked, 4 resume metadata mismatch / no run2. Module constants `OUT_ROOT = ROOT / "data" / "v127"`, `RUNS`, `BESPOKE_REASON`. On disk per ticker: `<ticker>.jsonl` (trade rows, written last — its presence marks the ticker done), `<ticker>.counts.json`, `<ticker>.arms.json` (arm records; **not** `.jsonl`), plus `run.json` and a transient `progress.txt`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -77,8 +77,8 @@ def _write_run1(out, rows, arms=()):
     return run_dir
 
 
-def test_defaults_point_at_the_v126_root_and_all_ten_horizons():
-    assert msa.OUT_ROOT.parts[-2:] == ("data", "v126")
+def test_defaults_point_at_the_v127_root_and_all_ten_horizons():
+    assert msa.OUT_ROOT.parts[-2:] == ("data", "v127")
     assert len(msa.LEGACY_HORIZONS) == 10
 
 
@@ -185,7 +185,7 @@ def test_the_arms_feed_validate_component_as_a_bespoke_instrument(tmp_path, caps
     mde = tmp_path / "mde.json"
     assert msa.main(["arms", "--stage", "mde", "--cell", "MSB-N5-k0.25",
                      "--out-root", str(out), "--out", str(mde)]) == 0
-    assert vc.main(["--stage", "mde", "--arms", str(mde), "--title", "v126 fixture",
+    assert vc.main(["--stage", "mde", "--arms", str(mde), "--title", "v127 fixture",
                     "--window", "2018-06-01..2020-12-31", "--train-effect-pp", "16.67",
                     "--observed-days", "945", "--target-days", "730",
                     "--bespoke-instrument", msa.BESPOKE_REASON]) == 0
@@ -217,9 +217,9 @@ Create `scripts/backtest/measure_structure_arm.py`:
 
 ```python
 #!/usr/bin/env python3
-"""v126: replay and score the pre-registered structure-break armed-entry grid.
+"""v127: replay and score the pre-registered structure-break armed-entry grid.
 
-Read docs/superpowers/specs/2026-10-02-v126-structure-break-armed-entries-design.md
+Read docs/superpowers/specs/2026-10-02-v127-structure-break-armed-entries-design.md
 §4 first. The walk lives in swingbot/core/backtesting/structure_arm.py, the
 arithmetic in structure_measurement.py; this script only replays frames and
 moves rows to and from disk. Stage verdicts come from
@@ -257,9 +257,9 @@ from swingbot.core.backtesting.acceptance import ArmTrade  # noqa: E402
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS  # noqa: E402
 
 CACHE_DIR = ROOT / "data" / "backtest_cache"
-OUT_ROOT = ROOT / "data" / "v126"
+OUT_ROOT = ROOT / "data" / "v127"
 RUNS = {"run1": sm.RUN1_WINDOW, "run2": sm.VALIDATION_WINDOW}
-BESPOKE_REASON = ("structure_arm: v126 armed structure-break replay "
+BESPOKE_REASON = ("structure_arm: v127 armed structure-break replay "
                   "(measure_arms.py has no armed-entry engine)")
 
 
@@ -389,7 +389,7 @@ def cmd_summary(args) -> int:
     rows = sm.in_window(read_rows(run_dir), sm.SELECTION_WINDOW)
     funnel = sm.funnel(read_arms(run_dir), sm.SELECTION_WINDOW)
     lo, hi = sm.SELECTION_WINDOW
-    lines = ["# v126 structure-break armed entries — run1 replay", "",
+    lines = ["# v127 structure-break armed entries — run1 replay", "",
              f"Rows in the selection window {lo}..{hi}: {len(rows)} across "
              f"{len({r.trade.ticker for r in rows})} tickers.", "", sm.LIMITATIONS, "",
              "| arm | rows | " + " | ".join(sm.FUNNEL_COLUMNS) + " |",
@@ -555,19 +555,19 @@ Expected: at most `F ... cmd_replay - C (11)`; nothing at or above 15.
 
 ```bash
 git add scripts/backtest/measure_structure_arm.py tests/scripts/test_measure_structure_arm.py
-git commit -m "feat(v126): measure_structure_arm.py -- sharded replay, selection, arms, permutation"
+git commit -m "feat(v127): measure_structure_arm.py -- sharded replay, selection, arms, permutation"
 ```
 
 ---
 
-### Task V126-6: Full-suite verification and merge
+### Task V127-6: Full-suite verification and merge
 
 **Files:** none created; verifies Phases 1–2.
 
 - [ ] **Step 1: v88/v90 are byte-identical**
 
 ```bash
-git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-02-v126-structure-break-armed-entries diff --stat main -- swingbot/core/backtesting/armed_replay.py swingbot/core/backtesting/armed_measurement.py scripts/backtest/measure_armed_entries.py swingbot/core/market/reaction.py tests/backtesting/test_armed_replay.py tests/backtesting/test_armed_measurement.py tests/scripts/test_measure_armed_entries.py
+git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-02-v127-structure-break-armed-entries diff --stat main -- swingbot/core/backtesting/armed_replay.py swingbot/core/backtesting/armed_measurement.py scripts/backtest/measure_armed_entries.py swingbot/core/market/reaction.py tests/backtesting/test_armed_replay.py tests/backtesting/test_armed_measurement.py tests/scripts/test_measure_armed_entries.py
 ```
 
 Expected: **no output.** Any diff is a violation of the spec's §3.2 — revert it and move the change into `structure_arm.py`.
@@ -579,29 +579,29 @@ Expected: only `cmd_replay - C (11)`.
 
 - [ ] **Step 3: Run the full suite once**
 
-Dispatch the `test-runner` subagent (or run `python scripts/dev/testrun.py full`) once, over V126-1..5. Expect `0 failed`, `0 xfailed`, and the whole-repo pyflakes undefined-name gate clean. **If it is not green, fix forward from those failures** — they are this plan's regressions, and the task is not done until the run is. The one non-obvious caller to check if something fails outside the files above: anything globbing `data/v*/run1/*.jsonl` generically (the arm records are `.arms.json` precisely to stay out of such globs).
+Dispatch the `test-runner` subagent (or run `python scripts/dev/testrun.py full`) once, over V127-1..5. Expect `0 failed`, `0 xfailed`, and the whole-repo pyflakes undefined-name gate clean. **If it is not green, fix forward from those failures** — they are this plan's regressions, and the task is not done until the run is. The one non-obvious caller to check if something fails outside the files above: anything globbing `data/v*/run1/*.jsonl` generically (the arm records are `.arms.json` precisely to stay out of such globs).
 
 - [ ] **Step 4: Merge the worktree branch to `main`**
 
 Per `docs/claude/document-lifecycle.md` and the `worktree-lifecycle` skill (other sessions are active — check `git -C E:/Documents/Private/Projects/Discord-Bot status` first and stage nothing of theirs). A conflict-free merge is not re-run; a merge that resolved conflicts gets one run.
 
 ```bash
-git -C E:/Documents/Private/Projects/Discord-Bot merge --no-ff 2026-10-02-v126-structure-break-armed-entries -m "Merge branch '2026-10-02-v126-structure-break-armed-entries'"
+git -C E:/Documents/Private/Projects/Discord-Bot merge --no-ff 2026-10-02-v127-structure-break-armed-entries -m "Merge branch '2026-10-02-v127-structure-break-armed-entries'"
 ```
 
-Do not remove the worktree yet — V126-12 closes the plan out.
+Do not remove the worktree yet — V127-12 closes the plan out.
 
 ---
 
-# Phase 3 — Measurement runs (on `main`, after V126-6's merge)
+# Phase 3 — Measurement runs (on `main`, after V127-6's merge)
 
-Every task here runs on `main` in the main tree. `<run-date>` is the date (`YYYY-MM-DD`) the command in that task finishes; `<cell>` is the cell id V126-8 selects. **Commit each result as written before reading anything into it.** A verdict that ends the measurement goes straight to V126-12 — the grid, windows, rule and constants never change. Every long command is dispatched to `backtest-runner`: it is resumable (re-running skips finished tickers), flushes `done/total tickers (pct%)` to stdout and to `data/v126/<run>/progress.txt`, and deletes that file on completion.
+Every task here runs on `main` in the main tree. `<run-date>` is the date (`YYYY-MM-DD`) the command in that task finishes; `<cell>` is the cell id V127-8 selects. **Commit each result as written before reading anything into it.** A verdict that ends the measurement goes straight to V127-12 — the grid, windows, rule and constants never change. Every long command is dispatched to `backtest-runner`: it is resumable (re-running skips finished tickers), flushes `done/total tickers (pct%)` to stdout and to `data/v127/<run>/progress.txt`, and deletes that file on completion.
 
-### Task V126-7: Run 1 replay
+### Task V127-7: Run 1 replay
 
 **Files:**
-- Create (local, not committed): `data/v126/run1/*.jsonl`, `*.counts.json`, `*.arms.json`, `run.json`
-- Create: `docs/superpowers/results/<run-date>-v126-structure-run1.md`
+- Create (local, not committed): `data/v127/run1/*.jsonl`, `*.counts.json`, `*.arms.json`, `run.json`
+- Create: `docs/superpowers/results/<run-date>-v127-structure-run1.md`
 
 **Interfaces:**
 - Consumes: the merged code; `data/backtest_cache/*.csv`.
@@ -613,33 +613,33 @@ Every task here runs on `main` in the main tree. `<run-date>` is the date (`YYYY
 python -c "import pandas as pd, glob; f=sorted(glob.glob('data/backtest_cache/*.csv')); d=[pd.read_csv(p, index_col='Date', parse_dates=True).index for p in f]; print(len(f), 'files', min(i.min() for i in d).date(), '->', min(i.max() for i in d).date())"
 ```
 
-Expected (observed 2026-10-02): `75 files 2018-06-01 -> 2025-12-30`. `run.json` pins the file list, so the cache must not change between here and V126-11. **If the count or the range differs, stop and report — do not refetch on your own**; other plans read this cache. (The 2025-12-31 bar is absent from today's cache; V126-11's doc records that as observed.)
+Expected (observed 2026-10-02): `75 files 2018-06-01 -> 2025-12-30`. `run.json` pins the file list, so the cache must not change between here and V127-11. **If the count or the range differs, stop and report — do not refetch on your own**; other plans read this cache. (The 2025-12-31 bar is absent from today's cache; V127-11's doc records that as observed.)
 
 - [ ] **Step 2: Dispatch the replay to `backtest-runner`**
 
-Brief: run `python scripts/backtest/measure_structure_arm.py replay --run run1` from the repo root (main tree); it is resumable; answer progress questions from `data/v126/run1/progress.txt`; report the final `complete: N rows` line, the elapsed time, and any traceback verbatim.
+Brief: run `python scripts/backtest/measure_structure_arm.py replay --run run1` from the repo root (main tree); it is resumable; answer progress questions from `data/v127/run1/progress.txt`; report the final `complete: N rows` line, the elapsed time, and any traceback verbatim.
 
 Expected: exit 0, `complete: <N> rows`, no `progress.txt` left behind. Budget ~1h–1h30 (v88's 24 cells took 1h41m over 88 tickers; this is 12 cells over 75).
 
 - [ ] **Step 3: Summarise, sanity-check and commit**
 
 ```bash
-python scripts/backtest/measure_structure_arm.py summary --out-md docs/superpowers/results/<run-date>-v126-structure-run1.md
+python scripts/backtest/measure_structure_arm.py summary --out-md docs/superpowers/results/<run-date>-v127-structure-run1.md
 ```
 
 The summary reads the selection window only. Sanity check before committing: every cell's `armed` must be non-zero, and both `issued` and `cancelled_zone_failed` must be non-zero in at least one MSB and one HL cell. If any of that is zero across the grid, the walk did not take effect — stop and debug rather than reading numbers. Do not open any shard for fold-year dates.
 
 ```bash
-git add docs/superpowers/results/<run-date>-v126-structure-run1.md
-git commit -m "docs(v126): run 1 replay complete"
+git add docs/superpowers/results/<run-date>-v127-structure-run1.md
+git commit -m "docs(v127): run 1 replay complete"
 ```
 
 ---
 
-### Task V126-8: Stage 1 — selection
+### Task V127-8: Stage 1 — selection
 
 **Files:**
-- Create: `docs/superpowers/results/<run-date>-v126-structure-stage1.md` and `.json`
+- Create: `docs/superpowers/results/<run-date>-v127-structure-stage1.md` and `.json`
 
 **Interfaces:**
 - Consumes: Run 1 rows and arm records, selection window only.
@@ -648,7 +648,7 @@ git commit -m "docs(v126): run 1 replay complete"
 - [ ] **Step 1: Run the pre-registered selection**
 
 ```bash
-python scripts/backtest/measure_structure_arm.py select --out-md docs/superpowers/results/<run-date>-v126-structure-stage1.md --out-json docs/superpowers/results/<run-date>-v126-structure-stage1.json
+python scripts/backtest/measure_structure_arm.py select --out-md docs/superpowers/results/<run-date>-v127-structure-stage1.md --out-json docs/superpowers/results/<run-date>-v127-structure-stage1.json
 echo $?
 ```
 
@@ -659,33 +659,33 @@ The doc carries, per spec §6: the full 12-cell table, the plateau reports on `N
 - [ ] **Step 2: Commit the result as written**
 
 ```bash
-git add docs/superpowers/results/<run-date>-v126-structure-stage1.md docs/superpowers/results/<run-date>-v126-structure-stage1.json
-git commit -m "docs(v126): stage 1 selection -- <verdict as printed>"
+git add docs/superpowers/results/<run-date>-v127-structure-stage1.md docs/superpowers/results/<run-date>-v127-structure-stage1.json
+git commit -m "docs(v127): stage 1 selection -- <verdict as printed>"
 ```
 
 - [ ] **Step 3: Branch on the verdict**
 
-- `SELECTED` → read `<cell>`'s `delta_win_rate_pp` from the JSON's `scores` list (`<effect>`); carry both to V126-9.
-- `NO_ELIGIBLE_CELL` or `SPIKE` → go to V126-12 with that verdict.
+- `SELECTED` → read `<cell>`'s `delta_win_rate_pp` from the JSON's `scores` list (`<effect>`); carry both to V127-9.
+- `NO_ELIGIBLE_CELL` or `SPIKE` → go to V127-12 with that verdict.
 
-Read the population disclosure before moving on and quote the selected (or best) cell's alert-volume ratio in V126-12's row — the v88 volume blow-up (ratios ~5.9) must be visible if it recurred.
+Read the population disclosure before moving on and quote the selected (or best) cell's alert-volume ratio in V127-12's row — the v88 volume blow-up (ratios ~5.9) must be visible if it recurred.
 
 ---
 
-### Task V126-9: Stage 0 — minimum detectable effect
+### Task V127-9: Stage 0 — minimum detectable effect
 
 **Files:**
-- Create (local): `data/v126/arms_mde.json`
-- Create: `docs/superpowers/results/<run-date>-v126-structure-stage0.md`
+- Create (local): `data/v127/arms_mde.json`
+- Create: `docs/superpowers/results/<run-date>-v127-structure-stage0.md`
 
 **Interfaces:**
-- Consumes: `<cell>` and `<effect>` from V126-8.
+- Consumes: `<cell>` and `<effect>` from V127-8.
 - Produces: `RESOLVABLE` (continue) or `REFUSED` (budget intact).
 
 - [ ] **Step 1: Build the selection-window arms**
 
 ```bash
-python scripts/backtest/measure_structure_arm.py arms --stage mde --cell <cell> --out data/v126/arms_mde.json
+python scripts/backtest/measure_structure_arm.py arms --stage mde --cell <cell> --out data/v127/arms_mde.json
 ```
 
 Expected: exit 0.
@@ -693,17 +693,17 @@ Expected: exit 0.
 - [ ] **Step 2: Run the MDE gate**
 
 ```bash
-python scripts/backtest/validate_component.py --stage mde --arms data/v126/arms_mde.json --title "v126 structure-break armed entries <cell>" --window "2018-06-01..2020-12-31" --train-effect-pp <effect> --observed-days 945 --target-days 730 --bespoke-instrument "structure_arm: v126 armed structure-break replay (measure_arms.py has no armed-entry engine)"
+python scripts/backtest/validate_component.py --stage mde --arms data/v127/arms_mde.json --title "v127 structure-break armed entries <cell>" --window "2018-06-01..2020-12-31" --train-effect-pp <effect> --observed-days 945 --target-days 730 --bespoke-instrument "structure_arm: v127 armed structure-break replay (measure_arms.py has no armed-entry engine)"
 ```
 
 Expected: first line `BESPOKE INSTRUMENT: structure_arm: ...`, then the observed/projected N and the paired and unpaired MDE, ending in `RESOLVABLE -- the shot may proceed.` (exit 0) or `REFUSED -- ...` (exit 1). The gate uses the paired MDE when the arms share keys (v100's instrument, which does not reopen anything).
 
 - [ ] **Step 3: Write and commit the record**
 
-Create `docs/superpowers/results/<run-date>-v126-structure-stage0.md`:
+Create `docs/superpowers/results/<run-date>-v127-structure-stage0.md`:
 
 ```markdown
-# v126 structure-break armed entries — Stage 0 (MDE)
+# v127 structure-break armed entries — Stage 0 (MDE)
 
 **Verdict: <RESOLVABLE | REFUSED>**
 
@@ -718,28 +718,28 @@ Observed/target days: 945 / 730. Instrument: bespoke (`structure_arm`), reason p
 ```
 
 ```bash
-git add docs/superpowers/results/<run-date>-v126-structure-stage0.md
-git commit -m "docs(v126): stage 0 MDE -- <verdict>"
+git add docs/superpowers/results/<run-date>-v127-structure-stage0.md
+git commit -m "docs(v127): stage 0 MDE -- <verdict>"
 ```
 
-`REFUSED` → V126-12, budget intact.
+`REFUSED` → V127-12, budget intact.
 
 ---
 
-### Task V126-10: Stage 2 — walk-forward
+### Task V127-10: Stage 2 — walk-forward
 
 **Files:**
-- Create (local): `data/v126/arms_walkforward.json`
-- Create: `docs/superpowers/results/<run-date>-v126-structure-stage2.md` and `.json`
+- Create (local): `data/v127/arms_walkforward.json`
+- Create: `docs/superpowers/results/<run-date>-v127-structure-stage2.md` and `.json`
 
 **Interfaces:**
 - Consumes: `<cell>`; Run 1 rows for 2021, 2022, 2023 — **first read of the fold years by anyone**.
-- Produces: `**Overall: PASS**` (unlocks V126-11's replay) or FAIL.
+- Produces: `**Overall: PASS**` (unlocks V127-11's replay) or FAIL.
 
 - [ ] **Step 1: Build the fold arms**
 
 ```bash
-python scripts/backtest/measure_structure_arm.py arms --stage walkforward --cell <cell> --out data/v126/arms_walkforward.json
+python scripts/backtest/measure_structure_arm.py arms --stage walkforward --cell <cell> --out data/v127/arms_walkforward.json
 ```
 
 Expected: exit 0, three folds (`2021`, `2022`, `2023`) each carrying a baseline and a component arm.
@@ -747,17 +747,17 @@ Expected: exit 0, three folds (`2021`, `2022`, `2023`) each carrying a baseline 
 - [ ] **Step 2: Run the walk-forward gate**
 
 ```bash
-python scripts/backtest/validate_component.py --stage walkforward --arms data/v126/arms_walkforward.json --title "v126 structure-break armed entries <cell>" --window "2021..2023" --out-json docs/superpowers/results/<run-date>-v126-structure-stage2.json --bespoke-instrument "structure_arm: v126 armed structure-break replay (measure_arms.py has no armed-entry engine)"
+python scripts/backtest/validate_component.py --stage walkforward --arms data/v127/arms_walkforward.json --title "v127 structure-break armed entries <cell>" --window "2021..2023" --out-json docs/superpowers/results/<run-date>-v127-structure-stage2.json --bespoke-instrument "structure_arm: v127 armed structure-break replay (measure_arms.py has no armed-entry engine)"
 ```
 
 Expected: `PASS -- stage 2 walkforward win-rate consistency gate` (exit 0) or `FAIL -- ...` (exit 1), against the pre-registered clause — **>= 2 of 3 folds improving, no fold worse than −1.0pp, per-fold N >= 30**. A fold with N < 30 fails the clause; it is not dropped to rescue the average.
 
 - [ ] **Step 3: Write and commit the record**
 
-Create `docs/superpowers/results/<run-date>-v126-structure-stage2.md`. V126-11's replay reads this file for the literal marker `**Overall: PASS**`, so write `PASS` there only if the gate printed `PASS`:
+Create `docs/superpowers/results/<run-date>-v127-structure-stage2.md`. V127-11's replay reads this file for the literal marker `**Overall: PASS**`, so write `PASS` there only if the gate printed `PASS`:
 
 ```markdown
-# v126 structure-break armed entries — Stage 2 (walk-forward)
+# v127 structure-break armed entries — Stage 2 (walk-forward)
 
 **Overall: <PASS | FAIL>**
 
@@ -780,22 +780,22 @@ Clause: >= 2 of 3 folds improving, no fold worse than −1.0pp, per-fold N >= 30
 Fill the table from the JSON's `folds` list (`test_years`, `n`, `delta_win_rate_pp`).
 
 ```bash
-git add docs/superpowers/results/<run-date>-v126-structure-stage2.md docs/superpowers/results/<run-date>-v126-structure-stage2.json
-git commit -m "docs(v126): stage 2 walk-forward -- <PASS|FAIL>"
+git add docs/superpowers/results/<run-date>-v127-structure-stage2.md docs/superpowers/results/<run-date>-v127-structure-stage2.json
+git commit -m "docs(v127): stage 2 walk-forward -- <PASS|FAIL>"
 ```
 
-FAIL → V126-12, budget intact.
+FAIL → V127-12, budget intact.
 
 ---
 
-### Task V126-11: Stage 3 — VALIDATION, one shot
+### Task V127-11: Stage 3 — VALIDATION, one shot
 
 **Files:**
-- Create (local): `data/v126/run2/*`, `data/v126/arms_validation.json`, `data/v126/permutation.json`
-- Create: `docs/superpowers/results/<run-date>-v126-structure-stage3.md` and `.json`
+- Create (local): `data/v127/run2/*`, `data/v127/arms_validation.json`, `data/v127/permutation.json`
+- Create: `docs/superpowers/results/<run-date>-v127-structure-stage3.md` and `.json`
 
 **Interfaces:**
-- Consumes: `<cell>`; V126-10's Stage 2 doc reading `**Overall: PASS**`.
+- Consumes: `<cell>`; V127-10's Stage 2 doc reading `**Overall: PASS**`.
 - Produces: the plan's terminal verdict.
 
 **This is the one shot. It runs once, on a window no one has inspected for structure-break behaviour. Do not run it to "see", and do not re-run it after reading it.**
@@ -805,7 +805,7 @@ FAIL → V126-12, budget intact.
 Dispatch to `backtest-runner`:
 
 ```bash
-python scripts/backtest/measure_structure_arm.py replay --run run2 --stage2-doc docs/superpowers/results/<run-date>-v126-structure-stage2.md
+python scripts/backtest/measure_structure_arm.py replay --run run2 --stage2-doc docs/superpowers/results/<run-date>-v127-structure-stage2.md
 ```
 
 Expected: exit 0, `complete: <N> rows`, no `progress.txt` left. The script refuses (exit 3) unless the Stage 2 doc contains `**Overall: PASS**`; that refusal is the integrity guard working, not a bug to route around.
@@ -813,8 +813,8 @@ Expected: exit 0, `complete: <N> rows`, no `progress.txt` left. The script refus
 - [ ] **Step 2: Build the arms and the permutation**
 
 ```bash
-python scripts/backtest/measure_structure_arm.py arms --stage validation --cell <cell> --out data/v126/arms_validation.json
-python scripts/backtest/measure_structure_arm.py permute --cell <cell> --out-json data/v126/permutation.json
+python scripts/backtest/measure_structure_arm.py arms --stage validation --cell <cell> --out data/v127/arms_validation.json
+python scripts/backtest/measure_structure_arm.py permute --cell <cell> --out-json data/v127/permutation.json
 ```
 
 `permute` is long (200 draws over every triggered arm, memoised per arm-bar); dispatch it to `backtest-runner` too. Expected: `permutation p = <p>`. A `None` p means no valid permuted ΔWR — it is carried forward as missing, which Step 3 turns into a FAIL.
@@ -822,35 +822,35 @@ python scripts/backtest/measure_structure_arm.py permute --cell <cell> --out-jso
 - [ ] **Step 3: Run the gate**
 
 ```bash
-P=$(python -c "import json; v=json.load(open('data/v126/permutation.json'))['p_value']; print('' if v is None else v)")
-python scripts/backtest/validate_component.py --stage validation --arms data/v126/arms_validation.json --title "v126 structure-break armed entries <cell>" --window "2024-01-01..2025-12-31" ${P:+--permutation-p $P} --bespoke-instrument "structure_arm: v126 armed structure-break replay (measure_arms.py has no armed-entry engine)" --out-md docs/superpowers/results/<run-date>-v126-structure-stage3.md --out-json docs/superpowers/results/<run-date>-v126-structure-stage3.json
+P=$(python -c "import json; v=json.load(open('data/v127/permutation.json'))['p_value']; print('' if v is None else v)")
+python scripts/backtest/validate_component.py --stage validation --arms data/v127/arms_validation.json --title "v127 structure-break armed entries <cell>" --window "2024-01-01..2025-12-31" ${P:+--permutation-p $P} --bespoke-instrument "structure_arm: v127 armed structure-break replay (measure_arms.py has no armed-entry engine)" --out-md docs/superpowers/results/<run-date>-v127-structure-stage3.md --out-json docs/superpowers/results/<run-date>-v127-structure-stage3.json
 ```
 
 Expected: clauses 1–5 each resolved; clause 6 (`mechanism`) reports `SKIPPED` ("not a subset feature") and never blocks. Without `--permutation-p` the permutation clause reads `FAIL -- no permutation p supplied`, and that is the verdict — **a missing p is a FAIL, not a skip.**
 
 - [ ] **Step 4: Complete and commit the record**
 
-Append to the generated `docs/superpowers/results/<run-date>-v126-structure-stage3.md`: the permutation JSON (`p_value`, `n`, `n_valid`, `seed`), `LIMITATIONS` quoted verbatim, and one line recording the cache's last common date as observed in V126-7 Step 1.
+Append to the generated `docs/superpowers/results/<run-date>-v127-structure-stage3.md`: the permutation JSON (`p_value`, `n`, `n_valid`, `seed`), `LIMITATIONS` quoted verbatim, and one line recording the cache's last common date as observed in V127-7 Step 1.
 
 ```bash
-git add docs/superpowers/results/<run-date>-v126-structure-stage3.md docs/superpowers/results/<run-date>-v126-structure-stage3.json
-git commit -m "docs(v126): stage 3 VALIDATION -- <PASS|FAIL>"
+git add docs/superpowers/results/<run-date>-v127-structure-stage3.md docs/superpowers/results/<run-date>-v127-structure-stage3.json
+git commit -m "docs(v127): stage 3 VALIDATION -- <PASS|FAIL>"
 ```
 
 ---
 
-### Task V126-12: Close-out
+### Task V127-12: Close-out
 
 Runs whatever verdict ended the measurement.
 
 **Files:**
 - Modify: `docs/claude/backtest-methodology.md` (closed pre-registrations table)
-- Modify: `docs/superpowers/specs/2026-10-02-v126-structure-break-armed-entries-design.md` (§4.4 outcome line)
-- Move: the three plan parts `docs/superpowers/plans/2026-10-02-v126-structure-break-armed-entries_{0-index,1-replay-and-grid,2-script-and-runs}.md` and the spec → `implemented/` (the code reached `main`, so not `no-lift/`)
+- Modify: `docs/superpowers/specs/2026-10-02-v127-structure-break-armed-entries-design.md` (§4.4 outcome line)
+- Move: the three plan parts `docs/superpowers/plans/2026-10-02-v127-structure-break-armed-entries_{0-index,1-replay-and-grid,2-script-and-runs}.md` and the spec → `implemented/` (the code reached `main`, so not `no-lift/`)
 
 - [ ] **Step 1: Add the closed-table row**
 
-Append a row to `### Closed pre-registrations — do not re-run these` in `docs/claude/backtest-methodology.md`, in the table's existing three-column shape (see the v88/v90 rows). The component cell reads `Structure-break armed entries — MSB / HL after the zone test, one arm per touch episode (v126)`. The outcome cell states, in order: the verdict in bold with `budget intact` or `budget spent`; the stage it ended at; the selected cell (or that none was selected, and the rule's pick); the numbers that decided it (Stage 1: the pick's cut %, ΔWR, ΔExpR, its plateau rows on `N` and `k`, both trigger rows, and its alert-volume ratio; Stage 2: per-fold ΔWR and N; Stage 3: every clause's detail line and the permutation p); and one sentence on what reopening would need (**a genuinely new mechanism**, not a looser threshold or another grid over these knobs). The record cell lists every results doc by path.
+Append a row to `### Closed pre-registrations — do not re-run these` in `docs/claude/backtest-methodology.md`, in the table's existing three-column shape (see the v88/v90 rows). The component cell reads `Structure-break armed entries — MSB / HL after the zone test, one arm per touch episode (v127)`. The outcome cell states, in order: the verdict in bold with `budget intact` or `budget spent`; the stage it ended at; the selected cell (or that none was selected, and the rule's pick); the numbers that decided it (Stage 1: the pick's cut %, ΔWR, ΔExpR, its plateau rows on `N` and `k`, both trigger rows, and its alert-volume ratio; Stage 2: per-fold ΔWR and N; Stage 3: every clause's detail line and the permutation p); and one sentence on what reopening would need (**a genuinely new mechanism**, not a looser threshold or another grid over these knobs). The record cell lists every results doc by path.
 
 - [ ] **Step 2: Record the outcome in the spec**
 
@@ -863,16 +863,16 @@ A negative measurement stays `Edge: expectancy` with `Bump: none`. Change nothin
 - [ ] **Step 4: Move the documents and commit**
 
 ```bash
-git -C E:/Documents/Private/Projects/Discord-Bot mv docs/superpowers/plans/2026-10-02-v126-structure-break-armed-entries_0-index.md docs/superpowers/plans/implemented/
-git -C E:/Documents/Private/Projects/Discord-Bot mv docs/superpowers/plans/2026-10-02-v126-structure-break-armed-entries_1-replay-and-grid.md docs/superpowers/plans/implemented/
-git -C E:/Documents/Private/Projects/Discord-Bot mv docs/superpowers/plans/2026-10-02-v126-structure-break-armed-entries_2-script-and-runs.md docs/superpowers/plans/implemented/
-git -C E:/Documents/Private/Projects/Discord-Bot mv docs/superpowers/specs/2026-10-02-v126-structure-break-armed-entries-design.md docs/superpowers/specs/implemented/
-git -C E:/Documents/Private/Projects/Discord-Bot add docs/claude/backtest-methodology.md docs/superpowers/specs/implemented/2026-10-02-v126-structure-break-armed-entries-design.md
-git -C E:/Documents/Private/Projects/Discord-Bot commit -m "docs(v126): close out structure-break armed entries -- <verdict>"
+git -C E:/Documents/Private/Projects/Discord-Bot mv docs/superpowers/plans/2026-10-02-v127-structure-break-armed-entries_0-index.md docs/superpowers/plans/implemented/
+git -C E:/Documents/Private/Projects/Discord-Bot mv docs/superpowers/plans/2026-10-02-v127-structure-break-armed-entries_1-replay-and-grid.md docs/superpowers/plans/implemented/
+git -C E:/Documents/Private/Projects/Discord-Bot mv docs/superpowers/plans/2026-10-02-v127-structure-break-armed-entries_2-script-and-runs.md docs/superpowers/plans/implemented/
+git -C E:/Documents/Private/Projects/Discord-Bot mv docs/superpowers/specs/2026-10-02-v127-structure-break-armed-entries-design.md docs/superpowers/specs/implemented/
+git -C E:/Documents/Private/Projects/Discord-Bot add docs/claude/backtest-methodology.md docs/superpowers/specs/implemented/2026-10-02-v127-structure-break-armed-entries-design.md
+git -C E:/Documents/Private/Projects/Discord-Bot commit -m "docs(v127): close out structure-break armed entries -- <verdict>"
 ```
 
-Verify with `git show --stat HEAD` that the spec's §4.4 edit is in the commit — a `git mv` of a file edited in the same breath can land the rename without the edit. The `backtest-methodology.md` change is a `docs/claude/` edit: per `working-conventions.md` § Codex mirror, add the condensed row to root `AGENTS.md` in the same commit if `AGENTS.md` mirrors the closed table (`grep -n "v90" AGENTS.md` — if it lists v90's closure, add v126's the same way; if not, nothing to mirror).
+Verify with `git show --stat HEAD` that the spec's §4.4 edit is in the commit — a `git mv` of a file edited in the same breath can land the rename without the edit. The `backtest-methodology.md` change is a `docs/claude/` edit: per `working-conventions.md` § Codex mirror, add the condensed row to root `AGENTS.md` in the same commit if `AGENTS.md` mirrors the closed table (`grep -n "v90" AGENTS.md` — if it lists v90's closure, add v127's the same way; if not, nothing to mirror).
 
 - [ ] **Step 5: Remove the worktree**
 
-Per `document-lifecycle.md`: confirm the branch is merged (`git -C E:/Documents/Private/Projects/Discord-Bot rev-list --count main..2026-10-02-v126-structure-break-armed-entries` prints `0`), then `git -C E:/Documents/Private/Projects/Discord-Bot worktree remove .claude/worktrees/2026-10-02-v126-structure-break-armed-entries`. The branch name contains neither `backup` nor `stable-`; still, deleting the branch is the human partner's call — leave it.
+Per `document-lifecycle.md`: confirm the branch is merged (`git -C E:/Documents/Private/Projects/Discord-Bot rev-list --count main..2026-10-02-v127-structure-break-armed-entries` prints `0`), then `git -C E:/Documents/Private/Projects/Discord-Bot worktree remove .claude/worktrees/2026-10-02-v127-structure-break-armed-entries`. The branch name contains neither `backup` nor `stable-`; still, deleting the branch is the human partner's call — leave it.
