@@ -258,6 +258,8 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     # reference doc must be named in AGENTS.md (sync_codex via test_codex_mirror).
     ("docs/claude/", ("tests/hooks/test_guardrails.py",
                       "tests/hooks/test_codex_mirror.py")),
+    # The backup runbook is parsed for the commands it documents.
+    ("docs/deploy/DEPLOY_HETZNER.md", ("tests/scripts/test_backup_db.py",)),
     # Every testrun.py command line deploy.yml runs is parsed for real.
     (".github/workflows/", ("tests/dev/test_testrun_ci_invocations.py",)),
 )

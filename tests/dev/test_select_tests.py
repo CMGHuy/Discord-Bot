@@ -266,7 +266,7 @@ def test_unplaceable_extension_widens(sel, tmp_path):
 
 
 def test_inert_path_alone_runs_nothing(sel, tmp_path):
-    result = sel.select(["docs/deploy/DEPLOY_HETZNER.md"], _repo(tmp_path))
+    result = sel.select(["docs/deploy/NOTES.md"], _repo(tmp_path))
     assert (result.full, result.targets) == (False, [])
     assert "inert" in result.reason
 
@@ -536,6 +536,10 @@ def _inner_links(node) -> set[int]:
 # Literals that name an existing file but are only ever fed to a function as
 # a string -- never opened -- so their being inert is correct.
 _NOT_READ = {
+    # test_sse_contract.py names the frontend/ directory; it reads sources,
+    # and the directory walk also lists these READMEs.
+    "frontend/README.md",
+    "frontend/chart-harness/README.md",
     # test_guardrails.py feeds these to the hook's plan-doc shape check.
     "docs/superpowers/plans/implemented/2026-09-18-v96-claude-skills-layer.md",
     "docs/superpowers/plans/implemented/2026-09-16-v92-exit-quality-harvest.md",
