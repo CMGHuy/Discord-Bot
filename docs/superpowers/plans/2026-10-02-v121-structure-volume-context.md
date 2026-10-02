@@ -8,13 +8,13 @@
 **Spec:** `docs/superpowers/specs/2026-10-02-v121-structure-volume-context-design.md`
 **Bump:** bot patch
 **Edge:** none (integrity)
-**Progress:** planning complete; implementation not started.
+**Progress:** planning complete; implementation not started. Amended 2026-10-02 (before any implementation): four leg-shape keys added to V121-2 (spec § Features, "Leg-shape keys"); code and expected values prototyped against the fixtures, 35 tests passing.
 
 ## Global constraints
 
 - Measurement only: no gate, score weight, exit rule, alert text, chart or plan change. v122/v123 consume `structure.py` later and must not start until this merges.
 - Pivot contract (load-bearing): bar `i` is a swing high when `High[i]` is strictly greater than the `k` highs before it and `>=` the `k` highs after it (mirror for lows), `k = 3`. A pivot at `i` is knowable only from bar `i + k`; at decision bar `t` only pivots with `i <= t - k` exist. `k` is frozen at 3, not a search knob. Do not reuse `indicators.zigzag_pivots` or the private `signals._swing_highs`.
-- Frozen descriptive constants: absorption volume multiple `1.5` (vs mean of the 20 *prior* bars), absorption range `<= 0.6` ATR14, trend windows `10`/`50`, progress lookback `10`. Changing one is a new spec.
+- Frozen descriptive constants: absorption volume multiple `1.5` (vs mean of the 20 *prior* bars), absorption range `<= 0.6` ATR14, trend windows `10`/`50`, progress lookback `10`, impulse-decay minimum of `2` bars per third. Changing one is a new spec.
 - Frames shorter than 60 bars return `None` for every new key and never raise.
 - Every pre-existing `entry_context` key keeps its value byte-identical, except the two dead keys `swing_high_atr`/`swing_low_atr`, which the spec fills on purpose.
 - No backfill of historical trade records. No read-time upcasting: a missing key on an old record reads `None` through `dict.get`, which is the existing default.
@@ -28,7 +28,7 @@
 | File | Responsibility |
 |---|---|
 | `swingbot/core/market/structure.py` (new) | `confirmed_pivots`, leg/absorption helpers, `structure_features(df, direction) -> dict`, `STRUCTURE_KEYS`. Pure, causal, reads only the frame it is given. |
-| `swingbot/core/edge/context.py` | Append the ten new keys to `FEATURE_KEYS`; merge `structure_features` into `entry_context`. |
+| `swingbot/core/edge/context.py` | Append the fourteen new keys to `FEATURE_KEYS`; merge `structure_features` into `entry_context`. |
 | `tests/market/structure_fixtures.py` (new) | Shared hand-built frames (zigzag trends, mirrors, pullback, wavy). |
 | `tests/market/test_structure_pivots.py`, `tests/market/test_structure_features.py` (new) | Pivot truncation/lag/tie tests; per-feature known answers and bearish mirrors. |
 | `tests/edge/test_edge_context_structure.py` (new) | Witness of pre-existing keys, new-key merge, short-frame `None`, stamp path. |
@@ -45,6 +45,7 @@ Verified anchors (HEAD `c5af1b92`): `edge/context.py:11` `FEATURE_KEYS`, `:29` `
 3. A frame with no range (High == Low == Close, ATR 0) must give `None` for every ATR-scaled key and no structure — Task V121-2 tests the flat frame.
 4. A raise inside `structure_features` would blank the whole live snapshot (via `stamp_entry_context`'s `except`) and crash replay (`backtest.py` calls `entry_context` bare) — Task V121-2's NaN-bar test and Task V121-3's stamp test pin "never raises".
 5. Old live records carry no new keys; the report must bucket them as `"None"`, not KeyError — Task V121-5 tests it.
+6. `pullback_legs` is a pure extraction from `pullback_vol_ratio`: every pre-existing `pullback_vol_ratio` test must still pass unchanged, and v122 depends on its signature — Task V121-2 keeps both.
 
 ## Parallelisation
 
@@ -59,7 +60,7 @@ Verified anchors (HEAD `c5af1b92`): `edge/context.py:11` `FEATURE_KEYS`, `:29` `
 
 **Interfaces:**
 - Produces: `PIVOT_K = 3`; `PIVOT_COLUMNS = ("last_sh_pos", "last_sh", "prior_sh_pos", "prior_sh", "last_sl_pos", "last_sl", "prior_sl_pos", "prior_sl")`; `pivot_confirmations(df, k=PIVOT_K) -> tuple[np.ndarray, np.ndarray]` (boolean arrays indexed by **confirmation** bar `j`: True when bar `j - k` is a swing high / low); `confirmed_pivots(df, k=PIVOT_K) -> pd.DataFrame` with `PIVOT_COLUMNS`, positional indices as floats, NaN where fewer pivots exist; `_num(value) -> float | None` (finite, rounded to 6). Positions are positional (`0..len-1`) so they are identical on a prefix.
-- Fixtures produced: `UP`, `MIXED`, `BROKEN`, `zigzag(points, leg=8)`, `frame(points, *, mirror=False)`, `pullback_frame()`, `wavy_frame(n=300)`.
+- Fixtures produced: `UP`, `MIXED`, `BROKEN`, `zigzag(points, leg=8)`, `frame(points, *, mirror=False)`, `pullback_frame()`, `wavy_frame(n=300)`, `slowing_pullback_frame()`, `short_impulse_frame()` (the last two for V121-2's leg-shape keys).
 
 - [ ] **Step 1: Write the shared fixtures.**
 
@@ -105,6 +106,26 @@ def wavy_frame(n=300):
     closes = 100 + 0.05 * i + 6 * np.sin(i / 7.0) + 2 * np.sin(i / 2.3)
     volumes = 1_000_000 + 300_000 * np.sin(i / 3.1) + 5_000 * i
     return make_ohlcv(closes, spread_pct=1.5, volumes=volumes)
+
+
+def _leg_frame(impulse_steps, pre_leg=12):
+    """A swing low (bar 48 at pre_leg=12), an impulse built from `impulse_steps`
+    close-to-close rises, then the same 3-bar pullback as `pullback_frame`."""
+    pre = zigzag([100, 112, 100, 110, 100], leg=pre_leg)  # 4*pre_leg + 1 bars, low last
+    impulse = 100 + np.cumsum(impulse_steps)
+    pullback = impulse[-1] - np.array([2.0, 4.0, 6.0])
+    return make_ohlcv(np.concatenate([pre, impulse, pullback]), spread_pct=1.0)
+
+
+def slowing_pullback_frame():
+    """Ten-bar impulse whose steps shrink 4 -> 0.5: momentum fading into the high."""
+    return _leg_frame([4.0, 4.0, 3.5, 3.0, 2.5, 2.0, 1.5, 1.0, 0.5, 0.5])
+
+
+def short_impulse_frame():
+    """Four-bar impulse (base at 56, high at 60): a 5-bar leg is too short for a
+    range decay (< 2 bars per third). pre_leg=14 keeps the frame >= 60 bars."""
+    return _leg_frame([5.0, 5.0, 5.0, 5.0], pre_leg=14)
 ```
 
 - [ ] **Step 2: Write the failing pivot tests.**
@@ -250,10 +271,10 @@ git commit -m "feat(v121): causal confirmed fractal pivots (k=3) in market/struc
 **Files:** Modify `swingbot/core/market/structure.py`; create `tests/market/test_structure_features.py`.
 
 **Interfaces:**
-- Consumes (V121-1): `PIVOT_K`, `pivot_confirmations`, `confirmed_pivots`, `_num`, fixtures `UP`, `MIXED`, `BROKEN`, `frame`, `pullback_frame`.
-- Produces: `STRUCTURE_KEYS` (12-tuple below, spec table order); `MIN_BARS = 60`; `true_range(df) -> pd.Series`; `absorption_series(df, atr_series) -> pd.Series[bool]`; `pullback_vol_ratio(df, direction, k=PIVOT_K) -> float | None`; `structure_features(df, direction) -> dict` with exactly `STRUCTURE_KEYS`. Booleans are Python `bool`, `absorption_count_10` is `int`, `structure_state` is `"up" | "down" | "mixed" | None`, floats rounded to 6.
+- Consumes (V121-1): `PIVOT_K`, `pivot_confirmations`, `confirmed_pivots`, `_num`, fixtures `UP`, `MIXED`, `BROKEN`, `frame`, `pullback_frame`, `slowing_pullback_frame`, `short_impulse_frame`.
+- Produces: `STRUCTURE_KEYS` (16-tuple below, spec table order); `LEG_SHAPE_KEYS` (its last 4); `MIN_BARS = 60`; `MIN_LEG_THIRD = 2`; `true_range(df) -> pd.Series`; `absorption_series(df, atr_series) -> pd.Series[bool]`; `pullback_legs(df, direction, k=PIVOT_K) -> tuple[int, int, int] | None` (`(base, turn, t)` positions); `pullback_vol_ratio(df, direction, k=PIVOT_K) -> float | None` (signature unchanged: v122 consumes it); `leg_shape_features(df, direction, atr_value) -> dict`; `structure_features(df, direction) -> dict` with exactly `STRUCTURE_KEYS`. Booleans are Python `bool`, `absorption_count_10` is `int`, `structure_state` is `"up" | "down" | "mixed" | None`, floats rounded to 6.
 
-Definitions (bullish; bearish mirrors where the spec says so): `structure_state` from last vs prior SH and SL; `structure_aligned` = state is `"up"` (bullish) / `"down"` (bearish); `last_pivot_held` = `Close[t] > last SL` (bullish) / `< last SH` (bearish); `hh_failed` = last SH `<=` prior SH (bullish) / last SL `>=` prior SL (bearish); `swing_high_atr = (last SH − Close)/ATR14`, `swing_low_atr = (Close − last SL)/ATR14` (not direction-signed, named by side); `vol_trend_10_50`, `range_trend_10_50` = mean over last 10 ÷ mean over last 50 bars; `progress_atr_10` = direction-signed `(Close[t] − Close[t-10])/ATR14`; `absorption_bar` = `Volume/mean20(prior 20 bars) >= 1.5` and `(High−Low)/ATR14 <= 0.6`; `absorption_count_10` = absorption bars in the last 10; `pullback_vol_ratio` per the spec's legs (impulse `SL0..SH` inclusive, pullback `SH+1..t`, `None` if a leg has < 2 bars, a mean is zero/NaN, or `Close[t] > High[SH]`).
+Definitions (bullish; bearish mirrors where the spec says so): `structure_state` from last vs prior SH and SL; `structure_aligned` = state is `"up"` (bullish) / `"down"` (bearish); `last_pivot_held` = `Close[t] > last SL` (bullish) / `< last SH` (bearish); `hh_failed` = last SH `<=` prior SH (bullish) / last SL `>=` prior SL (bearish); `swing_high_atr = (last SH − Close)/ATR14`, `swing_low_atr = (Close − last SL)/ATR14` (not direction-signed, named by side); `vol_trend_10_50`, `range_trend_10_50` = mean over last 10 ÷ mean over last 50 bars; `progress_atr_10` = direction-signed `(Close[t] − Close[t-10])/ATR14`; `absorption_bar` = `Volume/mean20(prior 20 bars) >= 1.5` and `(High−Low)/ATR14 <= 0.6`; `absorption_count_10` = absorption bars in the last 10; `pullback_vol_ratio` per the spec's legs (impulse `SL0..SH` inclusive, pullback `SH+1..t`, `None` if a leg has < 2 bars, a mean is zero/NaN, or `Close[t] > High[SH]`). Leg-shape keys on the same `pullback_legs` (bullish; mirror for bearish), all `None` when the legs are undefined or the impulse height `High[SH] − Low[SL0]` is not `> 0`: `pullback_depth_frac = (High[SH] − min Low[SH+1..t]) / height`; `pullback_bars_ratio = (t − SH) / (SH − SL0)`; `impulse_atr_per_bar = height / (SH − SL0) / ATR14[t]` (`None` if ATR is 0/None); `impulse_range_decay` = mean true range of the last third of bars `SL0..SH` ÷ mean of the first third (third = `len // 3`; `None` below `MIN_LEG_THIRD` bars per third or a zero/NaN first-third mean). Depth above 1 is legitimate: the pullback took out the impulse's origin.
 
 - [ ] **Step 1: Write the failing feature tests.**
 
@@ -265,7 +286,8 @@ import pytest
 from swingbot.core.market import structure as st
 from swingbot.core.market.indicators import atr
 from tests.conftest import make_ohlcv
-from tests.market.structure_fixtures import BROKEN, MIXED, UP, frame, pullback_frame
+from tests.market.structure_fixtures import (BROKEN, MIXED, UP, frame, pullback_frame, short_impulse_frame,
+                                               slowing_pullback_frame)
 
 
 @pytest.mark.parametrize("mirror,direction", [(False, "bullish"), (True, "bearish")])
@@ -383,6 +405,7 @@ def test_flat_prices_give_no_structure_and_no_atr_keys():
     assert out["structure_state"] is None and out["structure_aligned"] is None
     assert out["swing_high_atr"] is None and out["progress_atr_10"] is None
     assert out["range_trend_10_50"] is None
+    assert all(out[key] is None for key in st.LEG_SHAPE_KEYS)
 
 
 def test_nan_bars_do_not_raise():
@@ -399,6 +422,62 @@ def test_a_peak_younger_than_k_bars_is_not_used():
     close, atr14 = float(df["Close"].iloc[74]), float(atr(df.iloc[:75], 14).iloc[-1])
     expected = round((float(df["High"].iloc[56]) - close) / atr14, 6)
     assert st.structure_features(df.iloc[:75], "bullish")["swing_high_atr"] == expected
+
+
+def test_pullback_shape_on_hand_derived_legs():
+    df = pullback_frame()                            # SL0 bar 48, SH bar 58, t = 61
+    assert st.pullback_legs(df, "bullish") == (48, 58, 61)
+    out = st.structure_features(df, "bullish")
+    # depth = (High[58] - min Low[59..61]) / (High[58] - Low[48]) = (120.6 - 113.43) / (120.6 - 99.5)
+    assert out["pullback_depth_frac"] == round(7.17 / 21.1, 6)
+    assert out["pullback_bars_ratio"] == 0.3         # 3 pullback bars / 10 impulse bars
+
+
+def test_bearish_pullback_shape_mirror():
+    df = pullback_frame()
+    mirrored = make_ohlcv((250 - df["Close"]).to_numpy(), spread_pct=1.0, volumes=df["Volume"].to_numpy())
+    high, low = mirrored["High"].to_numpy(), mirrored["Low"].to_numpy()
+    out = st.structure_features(mirrored, "bearish")
+    assert st.pullback_legs(mirrored, "bearish") == (48, 58, 61)
+    assert out["pullback_depth_frac"] == round((high[59:62].max() - low[58]) / (high[48] - low[58]), 6)
+    assert out["pullback_bars_ratio"] == 0.3
+
+
+def test_impulse_speed_is_height_per_bar_in_atr():
+    df = pullback_frame()
+    atr14 = float(atr(df, 14).iloc[-1])
+    assert st.structure_features(df, "bullish")["impulse_atr_per_bar"] == pytest.approx(21.1 / 10 / atr14, abs=1e-6)
+
+
+def test_slowing_impulse_has_range_decay_below_one():
+    assert st.structure_features(slowing_pullback_frame(), "bullish")["impulse_range_decay"] < 0.5
+    assert st.structure_features(pullback_frame(), "bullish")["impulse_range_decay"] > 1.0
+
+
+def test_short_impulse_has_no_range_decay_but_keeps_the_rest():
+    out = st.structure_features(short_impulse_frame(), "bullish")
+    assert st.pullback_legs(short_impulse_frame(), "bullish") == (56, 60, 63)
+    assert out["impulse_range_decay"] is None
+    assert out["pullback_bars_ratio"] == 0.75        # 3 / 4
+    assert out["pullback_depth_frac"] is not None and out["impulse_atr_per_bar"] is not None
+
+
+def test_no_pullback_leaves_every_leg_shape_key_none():
+    df = pullback_frame()
+    closes = df["Close"].to_numpy().copy()
+    closes[-1] = 125.0                               # back above the swing high
+    beyond = make_ohlcv(closes, spread_pct=1.0, volumes=df["Volume"].to_numpy())
+    out = st.structure_features(beyond, "bullish")
+    assert st.pullback_legs(beyond, "bullish") is None
+    assert all(out[key] is None for key in st.LEG_SHAPE_KEYS)
+
+
+def test_leg_shape_keys_ignore_volume():
+    df = pullback_frame().copy()
+    df["Volume"] = 0.0
+    out = st.structure_features(df, "bullish")
+    assert out["pullback_vol_ratio"] is None
+    assert out["pullback_bars_ratio"] == 0.3
 ```
 
 - [ ] **Step 2:** Run `python scripts/dev/testrun.py file tests/market/test_structure_features.py`; expect FAIL (`AttributeError: module ... has no attribute 'structure_features'`).
@@ -417,9 +496,12 @@ ABSORPTION_VOL_MULT = 1.5   # frozen descriptive definition
 ABSORPTION_RANGE_ATR = 0.6  # frozen descriptive definition
 SHORT_WINDOW, LONG_WINDOW = 10, 50
 PROGRESS_LOOKBACK = 10
+MIN_LEG_THIRD = 2           # impulse_range_decay needs >= 2 bars per third (a leg of >= 6 bars)
+LEG_SHAPE_KEYS = ("pullback_depth_frac", "pullback_bars_ratio", "impulse_atr_per_bar", "impulse_range_decay")
 STRUCTURE_KEYS = ("structure_state", "structure_aligned", "last_pivot_held", "hh_failed",
                   "swing_high_atr", "swing_low_atr", "vol_trend_10_50", "range_trend_10_50",
-                  "progress_atr_10", "absorption_bar", "absorption_count_10", "pullback_vol_ratio")
+                  "progress_atr_10", "absorption_bar", "absorption_count_10", "pullback_vol_ratio",
+                  *LEG_SHAPE_KEYS)
 
 
 def true_range(df: pd.DataFrame) -> pd.Series:
@@ -442,23 +524,14 @@ def _last_pivot_before(flags: np.ndarray, before: int, k: int) -> int | None:
     return int(earlier[-1]) if len(earlier) else None
 
 
-def _leg_ratio(volume: np.ndarray, start: int, pivot: int, t: int) -> float | None:
-    impulse, pullback = volume[start:pivot + 1], volume[pivot + 1:t + 1]
-    if len(impulse) < 2 or len(pullback) < 2:
-        return None
-    impulse_mean, pullback_mean = float(np.mean(impulse)), float(np.mean(pullback))
-    if not (impulse_mean > 0 and pullback_mean > 0):
-        return None
-    return _num(pullback_mean / impulse_mean)
+def pullback_legs(df: pd.DataFrame, direction: str, k: int = PIVOT_K) -> tuple[int, int, int] | None:
+    """Positional ``(base, turn, t)`` of the impulse/pullback legs at the final bar.
 
-
-def pullback_vol_ratio(df: pd.DataFrame, direction: str, k: int = PIVOT_K) -> float | None:
-    """Mean pullback-leg volume / mean impulse-leg volume at the final bar.
-
-    Bullish: SH = last confirmed swing high, SL0 = last swing low before SH;
-    impulse = SL0..SH, pullback = SH+1..t; None once Close[t] > High[SH].
-    Bearish mirrors with lows. Bars SH+1..SH+3 are ordinary, knowable volume:
-    only the pivot label is lagged."""
+    Bullish: turn = SH, the last confirmed swing high; base = SL0, the last
+    swing low before SH; impulse = base..turn, pullback = turn+1..t. None when
+    either pivot is missing or Close[t] > High[SH] (not a pullback). Bearish
+    mirrors with lows. Bars turn+1..turn+3 are ordinary, knowable bars: only
+    the pivot label is lagged."""
     sh, sl = pivot_confirmations(df, k)
     bullish = direction == "bullish"
     turn_flags, base_flags = (sh, sl) if bullish else (sl, sh)
@@ -471,9 +544,66 @@ def pullback_vol_ratio(df: pd.DataFrame, direction: str, k: int = PIVOT_K) -> fl
         return None
     close = float(df["Close"].iloc[t])
     beyond = close > float(df["High"].iloc[turn]) if bullish else close < float(df["Low"].iloc[turn])
-    if beyond:
+    return None if beyond else (base, turn, t)
+
+
+def _leg_ratio(volume: np.ndarray, start: int, pivot: int, t: int) -> float | None:
+    impulse, pullback = volume[start:pivot + 1], volume[pivot + 1:t + 1]
+    if len(impulse) < 2 or len(pullback) < 2:
         return None
-    return _leg_ratio(df["Volume"].to_numpy(float), base, turn, t)
+    impulse_mean, pullback_mean = float(np.mean(impulse)), float(np.mean(pullback))
+    if not (impulse_mean > 0 and pullback_mean > 0):
+        return None
+    return _num(pullback_mean / impulse_mean)
+
+
+def pullback_vol_ratio(df: pd.DataFrame, direction: str, k: int = PIVOT_K) -> float | None:
+    """Mean pullback-leg volume / mean impulse-leg volume at the final bar
+    (legs per ``pullback_legs``)."""
+    legs = pullback_legs(df, direction, k)
+    return None if legs is None else _leg_ratio(df["Volume"].to_numpy(float), *legs)
+
+
+def _impulse_height(high: np.ndarray, low: np.ndarray, base: int, turn: int, bullish: bool) -> float:
+    return float(high[turn] - low[base]) if bullish else float(high[base] - low[turn])
+
+
+def _pullback_give(high: np.ndarray, low: np.ndarray, turn: int, t: int, bullish: bool) -> float:
+    """How far the pullback leg's extreme has retraced from the turn pivot."""
+    if bullish:
+        return float(high[turn] - np.min(low[turn + 1:t + 1]))
+    return float(np.max(high[turn + 1:t + 1]) - low[turn])
+
+
+def _range_decay(tr: np.ndarray, base: int, turn: int) -> float | None:
+    """Mean true range of the impulse leg's last third / its first third."""
+    leg = tr[base:turn + 1]
+    third = len(leg) // 3
+    if third < MIN_LEG_THIRD:
+        return None
+    first = float(np.mean(leg[:third]))
+    return _num(float(np.mean(leg[-third:])) / first) if first > 0 else None
+
+
+def leg_shape_features(df: pd.DataFrame, direction: str, atr_value: float | None) -> dict:
+    """Pullback depth/duration and impulse speed/decay on the ``pullback_legs``
+    legs. All None when the legs are undefined or the impulse has no height."""
+    out = dict.fromkeys(LEG_SHAPE_KEYS)
+    legs = pullback_legs(df, direction)
+    if legs is None:
+        return out
+    base, turn, t = legs
+    bullish = direction == "bullish"
+    high, low = df["High"].to_numpy(float), df["Low"].to_numpy(float)
+    height = _impulse_height(high, low, base, turn, bullish)
+    if not height > 0:
+        return out
+    impulse_bars = turn - base
+    out.update(pullback_depth_frac=_num(_pullback_give(high, low, turn, t, bullish) / height),
+               pullback_bars_ratio=_num((t - turn) / impulse_bars),
+               impulse_atr_per_bar=_num(height / impulse_bars / atr_value) if atr_value else None,
+               impulse_range_decay=_range_decay(true_range(df).to_numpy(float), base, turn))
+    return out
 
 
 def _state(piv) -> str | None:
@@ -523,14 +653,16 @@ def structure_features(df: pd.DataFrame, direction: str) -> dict:
         return out
     piv = confirmed_pivots(df).iloc[-1]
     atr_series = atr(df, 14)
+    atr_value = _num(atr_series.iloc[-1])
     absorption = absorption_series(df, atr_series)
     out.update(_structure_keys(piv, float(df["Close"].iloc[-1]), direction))
-    out.update(_atr_keys(df, piv, _num(atr_series.iloc[-1]), direction))
+    out.update(_atr_keys(df, piv, atr_value, direction))
     out.update(vol_trend_10_50=_ratio_of_means(df["Volume"].astype(float)),
                range_trend_10_50=_ratio_of_means(true_range(df)),
                absorption_bar=bool(absorption.iloc[-1]),
                absorption_count_10=int(absorption.iloc[-SHORT_WINDOW:].sum()),
                pullback_vol_ratio=pullback_vol_ratio(df, direction))
+    out.update(leg_shape_features(df, direction, atr_value))
     return out
 ```
 
@@ -539,10 +671,10 @@ def structure_features(df: pd.DataFrame, direction: str) -> dict:
 
 ```bash
 git add swingbot/core/market/structure.py tests/market/test_structure_features.py
-git commit -m "feat(v121): structure, absorption and pullback-volume entry features"
+git commit -m "feat(v121): structure, absorption, pullback-volume and leg-shape entry features"
 ```
 
-**Implementation detail.** Every value is computed at the final row from the frame passed in, so the caller's slicing (`df.iloc[:i + 1]` in replay, the completed frame live) is the only time boundary. `_num(nan)` returns `None`, which is how a missing pivot becomes `None` for `swing_*_atr` without a branch. `absorption_series` compares against `mean20` of the **prior** 20 bars (`shift(1)`), matching the spec's "mean20(prior)". Do not add any parameter that lets a caller change `k` or a constant at call time beyond `pivot_confirmations`'s existing `k` argument (kept for testability; production callers never pass it).
+**Implementation detail.** Every value is computed at the final row from the frame passed in, so the caller's slicing (`df.iloc[:i + 1]` in replay, the completed frame live) is the only time boundary. `_num(nan)` returns `None`, which is how a missing pivot becomes `None` for `swing_*_atr` without a branch. `absorption_series` compares against `mean20` of the **prior** 20 bars (`shift(1)`), matching the spec's "mean20(prior)". Do not add any parameter that lets a caller change `k` or a constant at call time beyond `pivot_confirmations`'s existing `k` argument (kept for testability; production callers never pass it). The leg-shape keys reuse `pullback_legs` — the same legs `pullback_vol_ratio` measures — so no second leg definition exists; they read only High/Low/Close (zero volume leaves them defined) and the ATR value `structure_features` already computed.
 
 # Phase 2 — Snapshot integration and storage
 
@@ -552,7 +684,7 @@ git commit -m "feat(v121): structure, absorption and pullback-volume entry featu
 
 **Interfaces:**
 - Consumes (V121-2): `structure_features(df, direction) -> dict`, `STRUCTURE_KEYS`.
-- Produces: `FEATURE_KEYS` = the existing 20 keys in their current order, then `"structure_state", "structure_aligned", "last_pivot_held", "hh_failed", "vol_trend_10_50", "range_trend_10_50", "progress_atr_10", "absorption_bar", "absorption_count_10", "pullback_vol_ratio"` (30 total; `swing_high_atr`/`swing_low_atr` keep their existing positions). `entry_context(...)` signature unchanged.
+- Produces: `FEATURE_KEYS` = the existing 20 keys in their current order, then `"structure_state", "structure_aligned", "last_pivot_held", "hh_failed", "vol_trend_10_50", "range_trend_10_50", "progress_atr_10", "absorption_bar", "absorption_count_10", "pullback_vol_ratio", "pullback_depth_frac", "pullback_bars_ratio", "impulse_atr_per_bar", "impulse_range_decay"` (34 total; `swing_high_atr`/`swing_low_atr` keep their existing positions). `entry_context(...)` signature unchanged.
 
 - [ ] **Step 1: Write the witness test FIRST and run it on the unchanged code.** The literal values below are what `entry_context` returned at HEAD `c5af1b92` on this fixture. If any differs on your machine, recapture from the **unchanged** code before Step 3 and record why — never edit the witness after touching `context.py`.
 
@@ -566,7 +698,8 @@ from tests.conftest import make_ohlcv
 
 STRUCTURE_NEW = ("structure_state", "structure_aligned", "last_pivot_held", "hh_failed",
                  "vol_trend_10_50", "range_trend_10_50", "progress_atr_10", "absorption_bar",
-                 "absorption_count_10", "pullback_vol_ratio")
+                 "absorption_count_10", "pullback_vol_ratio", "pullback_depth_frac", "pullback_bars_ratio",
+                 "impulse_atr_per_bar", "impulse_range_decay")
 FILLED_DEAD = ("swing_high_atr", "swing_low_atr")
 ASOF = {"regime2_state": "bull_quiet", "rs_pctile": 64.0, "sector_pctile": None, "rs_combined": 61.0}
 WITNESS = {
@@ -666,7 +799,8 @@ FEATURE_KEYS = ("stop_atr", "stop_pct", "planned_rr", "swing_high_atr", "swing_l
                 # v121: causal structure / volume-in-context (market/structure.py); swing_*_atr above are now filled
                 "structure_state", "structure_aligned", "last_pivot_held", "hh_failed", "vol_trend_10_50",
                 "range_trend_10_50", "progress_atr_10", "absorption_bar", "absorption_count_10",
-                "pullback_vol_ratio")
+                "pullback_vol_ratio", "pullback_depth_frac", "pullback_bars_ratio", "impulse_atr_per_bar",
+                "impulse_range_decay")
 ```
 
 Inside `entry_context`, directly after the `out.update(stop_pct=..., ..., dow=...)` statement and before `volume_mean = ...`, add one unconditional line:
@@ -706,7 +840,8 @@ from swingbot.core.tracking.performance import _db_record, _json_record
 
 NEW = {"structure_state": "up", "structure_aligned": True, "last_pivot_held": True, "hh_failed": False,
        "swing_high_atr": 1.25, "swing_low_atr": 0.75, "vol_trend_10_50": 0.8, "range_trend_10_50": 0.9,
-       "progress_atr_10": -0.5, "absorption_bar": False, "absorption_count_10": 2, "pullback_vol_ratio": 0.5}
+       "progress_atr_10": -0.5, "absorption_bar": False, "absorption_count_10": 2, "pullback_vol_ratio": 0.5,
+       "pullback_depth_frac": 0.4, "pullback_bars_ratio": 0.3, "impulse_atr_per_bar": 1.1, "impulse_range_decay": 0.8}
 
 
 def _trade(trade_id, context):
@@ -755,7 +890,7 @@ git commit -m "test(v121): entry_context new keys live in trades.doc -- add, no 
 - Consumes: `entry_context` keys (V121-3); `acceptance.win_rate`, `acceptance.expectancy_r`, `acceptance.DECIDED`; `replay_scenarios`, `SKIPPED`, `simulate_exit` (`planning/plan_engine.py`); `StrategyEngine().iter_trades`, `.strategies`; `planning.params.stamp_entry_context`; `windows.ALL_HORIZONS`; `measure_arms.cached_universe`, `measure_arms.load_frame`; `ScanParams.from_config()`; `TradeLog().get_trades`, `scope.closed_only`, `metrics.r_multiple`.
 - Produces: `ReportRow(source, direction, outcome, r_multiple, context)`; `window_refusal(start, end) -> str | None`; `quintile_edges(rows, key) -> list[float] | None`; `bucket_of(value, edges) -> str`; `bucket_table(rows, key, edges) -> list[dict]`; `live_rows(trades) -> list[ReportRow]`; `confluence_rows(...)`, `strategy_rows(...)`, `replay_ticker(task)`, `replay_all(tickers, horizons, window, *, workers=1)`; `main(argv) -> int`.
 
-Design: categorical keys (`structure_state`, `structure_aligned`, `last_pivot_held`, `hh_failed`, `absorption_bar`, `absorption_count_10`) bucket as-is; continuous keys (`swing_high_atr`, `swing_low_atr`, `vol_trend_10_50`, `range_trend_10_50`, `progress_atr_10`, `pullback_vol_ratio`) bucket by quintile edges fixed from the TRAIN replay population. A replay run writes the edges file (`--edges`, default `data/v121_train_quintiles.json`); a live run **requires** it and refuses without it, so live buckets are always TRAIN-fixed. Rows split by `(source, direction, bucket)`. Live outcome: `win`/`loss` as stored, any other closed status counts as `scratch` (in ExpR, not in the win-rate denominator — the `acceptance` convention). Strategy-sourced replay plans are not stamped by `StrategyEngine`, so the report stamps them at the **signal** bar with the live stamper; confluence plans arrive stamped from `replay_scenarios`. The engines themselves are not modified.
+Design: categorical keys (`structure_state`, `structure_aligned`, `last_pivot_held`, `hh_failed`, `absorption_bar`, `absorption_count_10`) bucket as-is; continuous keys (`swing_high_atr`, `swing_low_atr`, `vol_trend_10_50`, `range_trend_10_50`, `progress_atr_10`, `pullback_vol_ratio`, `pullback_depth_frac`, `pullback_bars_ratio`, `impulse_atr_per_bar`, `impulse_range_decay`) bucket by quintile edges fixed from the TRAIN replay population. A replay run writes the edges file (`--edges`, default `data/v121_train_quintiles.json`); a live run **requires** it and refuses without it, so live buckets are always TRAIN-fixed. Rows split by `(source, direction, bucket)`. Live outcome: `win`/`loss` as stored, any other closed status counts as `scratch` (in ExpR, not in the win-rate denominator — the `acceptance` convention). Strategy-sourced replay plans are not stamped by `StrategyEngine`, so the report stamps them at the **signal** bar with the live stamper; confluence plans arrive stamped from `replay_scenarios`. The engines themselves are not modified.
 
 - [ ] **Step 1: Write the failing tests.**
 
@@ -911,7 +1046,8 @@ PROGRESS = ROOT / "logs" / "volume_context_report.progress"
 CATEGORICAL = ("structure_state", "structure_aligned", "last_pivot_held", "hh_failed",
                "absorption_bar", "absorption_count_10")
 CONTINUOUS = ("swing_high_atr", "swing_low_atr", "vol_trend_10_50", "range_trend_10_50",
-              "progress_atr_10", "pullback_vol_ratio")
+              "progress_atr_10", "pullback_vol_ratio", "pullback_depth_frac", "pullback_bars_ratio",
+              "impulse_atr_per_bar", "impulse_range_decay")
 QUINTILES = (0.2, 0.4, 0.6, 0.8)
 HEADER = ("v121 volume-in-context report -- DESCRIPTIVE ONLY. Not for choosing v122/v123 "
           "grid values (both frozen in their specs). No inferential statistic is printed.")

@@ -62,6 +62,10 @@ for bearish) so analysis never has to branch.
 | `absorption_bar` | entry bar `Volume / mean20(prior) ≥ 1.5` **and** `(High−Low) / ATR14 ≤ 0.6` | 5 |
 | `absorption_count_10` | number of absorption bars in `t-9..t` | 5 |
 | `pullback_vol_ratio` | mean Volume of the **pullback leg** ÷ mean Volume of the **impulse leg** (below) | 2, 5 |
+| `pullback_depth_frac` | how far the pullback leg's extreme has retraced ÷ impulse height (below) | PA-9 |
+| `pullback_bars_ratio` | pullback-leg bars ÷ impulse-leg bars | PA-9 |
+| `impulse_atr_per_bar` | impulse height ÷ impulse bars ÷ `ATR14[t]` — how fast the leg moved | PA-8 |
+| `impulse_range_decay` | mean True Range of the impulse leg's last third ÷ its first third — below 1 is "still rising, but slowing" | PA-8 |
 
 **Pullback / impulse legs** (bullish; mirror for bearish). Let `SH` be the
 last confirmed swing high at `t` and `SL0` the last confirmed swing low before
@@ -73,8 +77,24 @@ contain at least 3 bars whenever it is defined; bars between `SH` and
 `SH+3` are read as ordinary volume, which is knowable — only the *pivot
 label* is lagged.
 
-The 1.5 and 0.6 absorption constants and the 10/50 windows are frozen
-descriptive definitions, not search knobs; changing one is a new spec.
+**Leg-shape keys** (added 2026-10-02, before implementation; source: the
+partner's price-action course, Day 8 "momentum" = PA-8 and Day 9 "impulse
+and pullback" = PA-9). They use the **same legs** as `pullback_vol_ratio` and
+are `None` whenever it is undefined for a leg reason, or the impulse height
+is not `> 0`. Bullish (mirror for bearish): height = `High[SH] − Low[SL0]`;
+`pullback_depth_frac = (High[SH] − min Low[SH+1..t]) / height` — the deepest
+point reached, not `Close[t]`, because an entry bar has usually turned back
+already; a value above 1 is legitimate (the pullback took out the impulse's
+origin). `pullback_bars_ratio = (t − SH) / (SH − SL0)`.
+`impulse_atr_per_bar = height / (SH − SL0) / ATR14[t]` (ATR at the decision
+bar, like every other ATR-scaled key). `impulse_range_decay` splits bars
+`SL0..SH` into thirds (`len // 3`) and needs at least 2 bars per third (a
+6-bar leg), else `None`. They read no volume, so a zero-volume frame leaves
+them defined. Like every v121 key they gate nothing.
+
+The 1.5 and 0.6 absorption constants, the 10/50 windows and the
+2-bars-per-third minimum are frozen descriptive definitions, not search
+knobs; changing one is a new spec.
 
 ## Placement and data flow
 
@@ -128,7 +148,10 @@ waiting on; the report's header says so and prints no inferential statistic.
 - Each feature: hand-built frames with known answers (clean HH/HL uptrend →
   `"up"`, aligned, held; lower high → `hh_failed`; a 3-bar pullback on half
   the impulse volume → `pullback_vol_ratio == 0.5`; a high-volume inside bar →
-  `absorption_bar`); bearish mirrors of each.
+  `absorption_bar`; the pullback fixture's depth `7.17 / 21.1` and bars ratio
+  `0.3`; an impulse with shrinking steps → `impulse_range_decay < 0.5`; a
+  5-bar leg → no decay but the other leg-shape keys defined; price back above
+  the high → all four `None`); bearish mirrors of each.
 - `entry_context` keeps every pre-existing key's value byte-identical on a
   fixture (witness test captured before the change) — except
   `swing_high_atr`/`swing_low_atr`, which this spec deliberately fills
