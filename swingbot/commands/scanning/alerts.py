@@ -6,6 +6,8 @@ import discord
 from swingbot import config
 from swingbot.bot_core import bot
 from swingbot.core import presentation as ui
+from swingbot.core.scanning import engine as scan_engine
+from swingbot.core.scanning.short_candidates import admitted_short_modes
 from swingbot.core.infra.posted_log import log_posted
 from swingbot.core.presentation import kinds
 from swingbot.core.presentation.kinds import Kind
@@ -284,3 +286,28 @@ async def _send_alerts(destination, alerts, route_by_confidence: bool = False):
             log.warning("Could not post alert for %s -- the rest of the batch still posts.",
                         getattr(plan, "ticker", None) or getattr(embed, "title", "?"),
                         exc_info=True)
+
+
+async def post_short_universe(destination, *, bot=None, require_confirmation: bool = True,
+                              route_by_confidence: bool = False) -> list:
+    """V118-4: the SHORT extra-universe pass and its alerts.
+
+    Only ever called AFTER the base alerts were sent, so a cold extra fetch
+    cannot hold back a ready watchlist alert. Off (default): returns [] with
+    no fetch. A recap/display-only caller never calls this and stays base-only.
+    """
+    if not admitted_short_modes(config):
+        return []
+    short_alerts = await scan_engine.run_short_universe_scan(
+        require_confirmation=require_confirmation, bot=bot,
+        progress=scan_engine.ScanProgress())
+    await _send_alerts(destination, short_alerts, route_by_confidence=route_by_confidence)
+    return short_alerts
+
+
+async def send_then_short(destination, base_alerts, *, bot=None, require_confirmation: bool = True,
+                          route_by_confidence: bool = False) -> None:
+    """Send the base alerts, THEN run the extra lane (the scheduled-path invariant)."""
+    await _send_alerts(destination, base_alerts, route_by_confidence=route_by_confidence)
+    await post_short_universe(destination, bot=bot, require_confirmation=require_confirmation,
+                              route_by_confidence=route_by_confidence)

@@ -788,6 +788,41 @@ FIELDS: list[Field] = [
           options=["watchlist", "sp500", "sp500_top150", "etfs", "sp500+etfs"],
           help="What the scanner covers. The watchlist is ALWAYS included on top of any "
                "universe. Flip beyond watchlist only after the E77 rollout checklist."),
+    Field("SHORT_UNIVERSE_ENABLED", "SHORT_UNIVERSE_ENABLED", "Universe & Scanning",
+          "SHORT extra-universe lane (v118)",
+          type="checkbox", default="false",
+          help="v118. On: S&P 500 members outside the base universe are scanned for BEARISH "
+               "confluence only (broad weakness in a bearish SPY regime, isolated weakness "
+               "otherwise). Extra symbols never enter base breadth, the base RS cache, the base "
+               "strategy pass or a bullish alert. No broker order is ever placed and borrow "
+               "availability is not checked -- confirm a borrow before acting on an alert. "
+               "Off (default): the scan is unchanged."),
+    Field("SHORT_UNIVERSE_BROAD_ENABLED", "SHORT_UNIVERSE_BROAD_ENABLED", "Universe & Scanning",
+          "SHORT extra lane: admit broad-weakness mode (v118)", type="checkbox", default="false",
+          help="v118 per-mode admission. Needs SHORT_UNIVERSE_ENABLED. Off (default): no broad-weakness "
+               "candidate can reach an alert. Flip only after the pre-registered v118 gate passes for "
+               "this mode on its own."),
+    Field("SHORT_UNIVERSE_ISOLATED_ENABLED", "SHORT_UNIVERSE_ISOLATED_ENABLED", "Universe & Scanning",
+          "SHORT extra lane: admit isolated-weakness mode (v118)", type="checkbox", default="false",
+          help="v118 per-mode admission. Needs SHORT_UNIVERSE_ENABLED. Off (default): no isolated-weakness "
+               "candidate can reach an alert. Flip only after the pre-registered v118 gate passes for "
+               "this mode on its own."),
+    Field("SHORT_UNIVERSE_RESEARCH_MODE", "SHORT_UNIVERSE_RESEARCH_MODE", "Universe & Scanning",
+          "SHORT extra lane: research replay mode (v118)", type="select", default="off",
+          options=["off", "broad", "isolated"],
+          help="v118 research-only measurement knob: the historical replay "
+               "(scripts/backtest/measure_arms.py) adds the extra lane in this one weakness mode. "
+               "Nothing in the live bot reads it -- SHORT_UNIVERSE_ENABLED alone turns the live "
+               "lane on. Off (default): the replay is the base lane only."),
+    Field("SHORT_UNIVERSE_MAX_SYMBOLS", "SHORT_UNIVERSE_MAX_SYMBOLS", "Universe & Scanning",
+          "SHORT extra lane: max symbols per scan", type="number", default="50", min=1, max=500, step=1,
+          help="v118 operational safeguard (not a search knob): the extra lane fetches at most this many "
+               "symbols per scan, in snapshot order, after the base alerts have been sent."),
+    Field("SHORT_UNIVERSE_FETCH_BUDGET_SECONDS", "SHORT_UNIVERSE_FETCH_BUDGET_SECONDS",
+          "Universe & Scanning", "SHORT extra lane: fetch budget (seconds)",
+          type="number", default="120", min=10, max=1800, step=10,
+          help="v118 operational safeguard (not a search knob): the extra lane stops fetching further "
+               "chunks once this much time has passed and records budget_exhausted. Base scan unaffected."),
     Field("EARNINGS_BLACKOUT_SESSIONS", "EARNINGS_BLACKOUT_SESSIONS", "Universe & Scanning",
           "Earnings blackout (sessions before the reaction)", type="number", default="0", min=0, max=5, step=1,
           help="Blocks a setup when the next earnings reaction is 1 to this many trading sessions away (0 = off). "
@@ -1098,7 +1133,7 @@ _SEARCH_CLASSES = {
         "DEAD_CAT_BOUNCE_VETO", "DCB_DECLINE_PCT", "DCB_GAP_REQUIRED",
         "DCB_VOLUME_RATIO", "RSI_DIV_MIN_CONSECUTIVE_TURN",
         "MA_RIBBON_CONFIRM_BARS", "SR_MIN_LEVEL_TOUCHES",
-        "FIB_TARGET_1_0_EXTENSION",
+        "FIB_TARGET_1_0_EXTENSION", "SHORT_UNIVERSE_RESEARCH_MODE",
     },
     "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO", "EARNINGS_BLACKOUT_SESSIONS"},
     "live_only": {
@@ -1113,6 +1148,7 @@ _SEARCH_CLASSES = {
         "INTRADAY_RTH_ONLY", "EXTENDED_HOURS_EXIT_CHECK",
         "QUIET_HOURS_START_BERLIN", "QUIET_HOURS_END_BERLIN",
         "EXTENDED_HOURS_DEBOUNCE_TICKS",
+        "SHORT_UNIVERSE_MAX_SYMBOLS", "SHORT_UNIVERSE_FETCH_BUDGET_SECONDS",
     },
     "never": {"SLIPPAGE_BPS", "COMMISSION_PER_TRADE", "COMMISSION_RISK_BASIS"},
 }
@@ -1134,6 +1170,14 @@ _CASTERS = {
 }
 
 
+# Lower-cased mode selects; an unknown value falls back to "off" with a warning.
+_MODE_VALUES = {
+    "PLAN_ENGINE_V2": ("off", "shadow", "on"),
+    "STRATEGY_ALERTS_MODE": ("off", "shadow", "live"),
+    "SHORT_UNIVERSE_RESEARCH_MODE": ("off", "broad", "isolated"),
+}
+
+
 def _cast(f: Field, raw: str):
     # A couple of "select" fields need a specific underlying type rather
     # than the raw string the <select> posts back -- handled by attr name
@@ -1142,18 +1186,11 @@ def _cast(f: Field, raw: str):
         return raw.upper()
     if f.attr in ("MIN_ALERT_CONFIDENCE_LEVEL", "SECONDARY_ALERT_MIN_CONFIDENCE"):
         return int(raw)
-    if f.attr == "PLAN_ENGINE_V2":
+    if f.attr in _MODE_VALUES:
         v = str(raw).lower()
-        if v not in ("off", "shadow", "on"):
+        if v not in _MODE_VALUES[f.attr]:
             log.warning(
-                "invalid PLAN_ENGINE_V2=%r, falling back to 'off'", raw)
-            return "off"
-        return v
-    if f.attr == "STRATEGY_ALERTS_MODE":
-        v = str(raw).lower()
-        if v not in ("off", "shadow", "live"):
-            log.warning(
-                "invalid STRATEGY_ALERTS_MODE=%r, falling back to 'off'", raw)
+                "invalid %s=%r, falling back to 'off'", f.attr, raw)
             return "off"
         return v
     caster = _CASTERS.get(f.type)

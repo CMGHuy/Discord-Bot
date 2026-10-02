@@ -10,6 +10,7 @@ from swingbot.core.market import opex
 from swingbot.core import presentation as ui
 from swingbot.core.presentation import kinds
 from swingbot.core.presentation.kinds import Kind
+from swingbot.core.presentation.short_notice import FIELD_NAME as SHORT_FIELD, short_lane_notice
 
 
 def strategy_plan_line(plan) -> str:
@@ -85,6 +86,19 @@ def _branches_field(plan, is_bull: bool, stop: float, stop_pct: float) -> tuple:
     return ("🔀 If it gets there", f"{first}\n{second}", False)
 
 
+def _short_notice_text(item, nums, plan_v2) -> str:
+    """The extra-lane execution notice for this item ("" for a base alert), from the
+    same plan_numbers_for_display values the rest of the alert quotes."""
+    return short_lane_notice(getattr(item, "candidate_context", None), nums,
+                             getattr(plan_v2, "expiry_bars", None),
+                             currency=config.CURRENCY_SYMBOL)
+
+
+def _short_notice_fields(item, nums, plan_v2) -> list:
+    notice = _short_notice_text(item, nums, plan_v2)
+    return [(SHORT_FIELD, notice, False)] if notice else []
+
+
 def build_embed(item, explanation, perf_stats, open_positions_warning, chart_filename,
                 htf_info: dict = None, layout: str = "detailed") -> discord.Embed:
     """
@@ -128,6 +142,7 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
         "target2": plan.target2_price,
     })
     stop_pct, stop_r = stop_figures_for_display(plan_v2, nums, plan)
+    sections["headline"].extend(_short_notice_fields(item, nums, plan_v2))
 
     unmet = [(requirement.label, requirement.detail)
              for requirement in item.requirements if not requirement.passed]
@@ -290,8 +305,16 @@ def build_simple_alert(item) -> discord.Embed:
     """Build the execution-feed ticket for a live v2 plan, else the legacy mirror."""
     plan_v2 = _v2_plan(item)
     if plan_v2 is not None and config.PLAN_ENGINE_V2 == "on":
-        return build_ticket_embed(item, plan_v2)
-    return _legacy_simple_alert(item)
+        embed = build_ticket_embed(item, plan_v2)
+    else:
+        embed = _legacy_simple_alert(item)
+    nums = plan_numbers_for_display(plan_v2, {
+        "entry": item.plan.entry, "stop_loss": item.plan.stop_loss,
+        "take_profit": item.plan.take_profit, "target2": item.plan.target2_price})
+    notice = _short_notice_text(item, nums, plan_v2)
+    if notice:
+        embed.add_field(name=SHORT_FIELD, value=notice, inline=False)
+    return embed
 
 
 def _legacy_simple_alert(item) -> discord.Embed:

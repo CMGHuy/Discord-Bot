@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import math
+import hashlib
 import time
 from datetime import datetime, timezone
 
@@ -35,7 +36,9 @@ from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.scan_params import ScanParams
 
-from . import analyze, dedup, fetch, progress_store, runstate, strategy_pass, telemetry
+from . import analyze, dedup, fetch, progress_store, runstate, short_funnel, strategy_pass, telemetry
+from .short_candidates import ShortReference, build_reference_rels, extra_candidates
+from .short_reference import completed_frame as _completed, etf_for_sector
 from .analyze import paper_trade_decision
 from .embeds import (
     build_embed, build_simple_alert, notify_closed_trades, notify_near_close,
@@ -109,6 +112,44 @@ def _maybe_run_strategy_pass(*,tickers, fresh_data, spy_df, regimes, rs_cache, s
     alerts.extend(result.alerts)
     return {"strategy_plans": len(result.plans), "strategy_opened": result.opened}
 
+def _short_now():
+    return datetime.now(timezone.utc)
+
+
+def build_extra_candidates(base_tickers, *, decision_date, snapshot, reference, rejected=None) -> list:
+    """SHORT extra-lane candidates for `decision_date`, or [] with a logged reason.
+
+    Pure over its arguments: base_tickers is only read (a symbol the base lane
+    scans is never an extra candidate) and no base structure is touched.
+    """
+    found, reason = extra_candidates(base_tickers, snapshot, reference, rejected)
+    if reason is not None:
+        log.info("SHORT extra lane skipped for %s: %s", decision_date, reason)
+    return found
+
+
+def _short_reference_id(day, snapshot, rels) -> str:
+    digest = hashlib.sha1(
+        f"{day}|{snapshot.membership_asof}|{[round(r, 6) for r in rels]}".encode()).hexdigest()
+    return f"short-{day}-{digest[:8]}"
+
+
+def _short_reference(day, snapshot, extra_frames, base_frames, spy_df, now, sector_frames=None):
+    """Immutable context for the extra lane; the regime is the completed SPY bar's.
+
+    `sector_frames` (V118-7): a historical replay supplies the as-of sector ETF
+    frames it holds; None fetches them (the live scan)."""
+    spy_done = _completed(spy_df, now)
+    etfs = sorted({etf_for_sector(snapshot.sector_of.get(s)) for s in extra_frames} - {None})
+    rels = tuple(build_reference_rels({**base_frames, **extra_frames}, spy_df, now))
+    sectors = fetch._fetch_frames(etfs) if sector_frames is None else {
+        etf: sector_frames[etf] for etf in etfs if etf in sector_frames}
+    return ShortReference(
+        frames=extra_frames, spy=spy_df, sector_frames=sectors,
+        spy_regime=get_regime(spy_done), reference_rels=rels, now=now,
+        reference_id=_short_reference_id(day, snapshot, rels))
+
+
 # Ensures only one scan (automatic or !check) runs its heavy work at a time --
 # without this, an automatic scan and a manual !check could both write to
 # trades.json/state.json from different threads simultaneously.
@@ -168,6 +209,16 @@ def _logged_plan_fields(plan_v2, scenario, level_map, direction: str) -> tuple[l
     risk = abs(float(plan_v2.trigger_price) - float(plan_v2.stop_loss))
     rr = abs(float(plan_v2.tp1) - float(plan_v2.trigger_price)) / risk if risk else 0.0
     return list(dict.fromkeys(sources)), rr
+
+
+def _scan_tickers() -> list:
+    """The base lane's symbols: the watchlist plus any configured universe."""
+    tickers = load_watchlist()
+    if config.SCAN_UNIVERSE != "watchlist":
+        extra = [s for s in universe.universe_symbols(config.SCAN_UNIVERSE)
+                 if s not in set(tickers)]
+        tickers = tickers + extra
+    return tickers
 
 
 def _hard_filters_snapshot(params: ScanParams | None = None) -> dict:
@@ -264,11 +315,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     if params is None:
         params = ScanParams.from_config()
 
-    tickers = load_watchlist()
-    if config.SCAN_UNIVERSE != "watchlist":
-        extra = [s for s in universe.universe_symbols(config.SCAN_UNIVERSE)
-                 if s not in set(tickers)]
-        tickers = tickers + extra
+    tickers = _scan_tickers()
     # One calendar lookup per scan, passed down rather than re-derived per
     # ticker per horizon. `None` off an opex day (and whenever the feature is
     # off) leaves both thresholds exactly as configured.
@@ -407,9 +454,13 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             log.debug("regime_series computation failed", exc_info=True)
 
     account_cfg = load_account_config()
+    # V118-4: the SHORT extra lane is NOT part of this scan: it runs afterwards
+    # (short_run.run_short_universe_scan) once these alerts have been sent, so a
+    # cold extra crawl cannot delay, reorder or be counted in these phases.
     _finish_phase("enrichment")
 
     scan_items = []
+    funnel = short_funnel.ShortFunnel()   # V118-5: merged serially below, never touched by workers
     all_newly_closed = []
     all_near_close_warnings = []
     checked_count = 0
@@ -473,6 +524,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             # never let one bad ticker's None slot crash the merge.
             continue
 
+        funnel.merge(per_ticker.get("funnel_events", ()))
         all_newly_closed.extend(per_ticker["newly_closed"])
         all_near_close_warnings.extend(per_ticker["near_close_warnings"])
         checked_count += per_ticker["checked"]
@@ -563,7 +615,9 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                     log.debug("%s %s dropped by RS gate: %s", item.result.ticker,
                               item.result.trend, rs_result["reason"])
                     rs_blocked += 1
+                    funnel.record_item(item, "rs", "rs_blocked")
                     continue
+            funnel.record_item(item, "rs")
 
             if item.all_requirements_met:
                 # Deferred from _scan_one (fix for a task-review finding): only
@@ -585,8 +639,10 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 if (config.PLAN_ENGINE_V2 == "on"
                         and getattr(item, "plan_v2_rejected", None)):
                     filtered_by_rr += 1
+                    funnel.record_item(item, "plan", item.plan_v2_rejected)
                     _skip_rejected_plan(item, require_confirmation)
                     continue          # never reaches scan_items -> never alerts
+                funnel.record_item(item, "plan")
             scan_items.append(item)
 
     # Kill switch (E47): computed once per scan, right here -- AFTER the
@@ -634,6 +690,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     )
 
     deduped = dedup.dedup_scan_items(scan_items)
+    funnel.record_dedup(scan_items, deduped)
     deduped.sort(key=lambda item: (item.all_requirements_met, item.conf.score), reverse=True)
 
     if progress is not None:
@@ -729,6 +786,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             # confirmation=False) still shows it, since that's an
             # on-demand snapshot request, not a repeating alert.
             skipped_already_open += 1
+            funnel.record_item(item, "trade_decision", "existing_trade")
             log.debug("%s (%s, %s): already has an open trade -- skipping re-alert (use !check to see current state)",
                        result.ticker, result.horizon_key, result.trend)
             continue
@@ -813,6 +871,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         trendline_fit = None
         # v81: ticket PLACE / DO NOT PLACE mirrors this exact decision.
         item.paper_logged, item.not_logged_reason = paper_trade_decision(item, already_open)
+        funnel.record_decision(item)
         if item.paper_logged:
             # v2 plan pedigree (tier/badge/quality/source) rides along with
             # plan_id -- same cutover guard: only a live "on" plan is real
@@ -984,6 +1043,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         # formatting, no chart); _send_alerts decides whether a simple channel
         # is configured to receive it.
         alerts.append((embed, chart_path, item.plan_v2, build_simple_alert(item)))
+        funnel.record_item(item, "send")
 
         # Secondary alerting (email / push) -- fires only for high-confidence,
         # fully-qualifying alerts when enabled. Blocking I/O but we're already
@@ -1037,6 +1097,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "phases_s": phase_durations,
             "normalized_frame_cache": data_store.normalized_frame_cache_stats(),
             "data_sources": _count_sources(fresh_data),
+            "short_funnel": funnel.snapshot(),
             **fetch.fetch_stats(),
         }
         telemetry.log_scan_telemetry(scan_stats)

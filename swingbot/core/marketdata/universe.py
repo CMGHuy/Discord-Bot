@@ -6,8 +6,12 @@ reasonable model for a $20M+/day name, a fantasy for a $500k/day one.
 """
 from __future__ import annotations
 
+import csv
+import datetime as dt
+import hashlib
 import json
 import os
+from dataclasses import dataclass
 
 import pandas as pd
 
@@ -113,6 +117,99 @@ def load(name: str) -> list[dict]:
         out.append({"symbol": sym, "name": row["name"],
                     "sector": row["sector"], "etf": bool(row["etf"])})
     return out
+
+
+# --- Dated short-lane snapshot (v118) ---------------------------------------
+#
+# Read-only adapter beside load(): the bearish extra lane needs "who was in the
+# index on THIS date", never today's list projected backwards. None means the
+# lane is skipped -- there is no fallback to the legacy sp500.json rows.
+
+LIVE_SNAPSHOT_MAX_AGE_SESSIONS = 5  # fixed operational default, not a tuned knob
+_SECTOR_HISTORY_FILE = "sp500_sector_history.csv"
+
+
+@dataclass(frozen=True)
+class ShortSnapshot:
+    symbols: tuple[str, ...]
+    membership_asof: str
+    sector_of: dict[str, str]
+
+
+def _sha256_file(path: str) -> str | None:
+    try:
+        with open(path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except OSError:
+        return None
+
+
+def _live_snapshot_meta_ok(meta: dict, day: str) -> bool:
+    asof = meta.get("as_of")
+    if not asof or asof > day or meta.get("source") != "manual_csv":
+        return False
+    digest = _sha256_file(os.path.join(UNIVERSE_DIR, "sp500.json"))
+    if digest is None or meta.get("universe_sha256") != digest:
+        return False
+    from swingbot.core.market.session import nyse_calendar
+    try:
+        age = nyse_calendar().sessions_between(
+            dt.date.fromisoformat(asof), dt.date.fromisoformat(day))
+    except ValueError:
+        return False
+    return age is not None and age <= LIVE_SNAPSHOT_MAX_AGE_SESSIONS
+
+
+def live_short_snapshot(day: str) -> ShortSnapshot | None:
+    from swingbot.core.infra.jsonio import read_json
+    meta = read_json(os.path.join(UNIVERSE_DIR, "sp500.snapshot.json"), {})
+    if not isinstance(meta, dict) or not _live_snapshot_meta_ok(meta, day):
+        return None
+    rows = load("sp500")
+    return ShortSnapshot(tuple(r["symbol"] for r in rows), meta["as_of"],
+                         {r["symbol"]: r["sector"] for r in rows})
+
+
+def _load_sector_intervals(path: str) -> dict[str, list[tuple[str, str, str]]]:
+    from swingbot.core.marketdata.pit_membership import OPEN_END, normalize_symbol
+    try:
+        with open(path, newline="", encoding="utf-8-sig") as f:
+            rows = list(csv.DictReader(f))
+    except OSError:
+        return {}
+    out: dict[str, list[tuple[str, str, str]]] = {}
+    for row in rows:
+        sym = normalize_symbol(row.get("ticker") or "")
+        start = (row.get("start_date") or "").strip()
+        sector = (row.get("sector") or "").strip()
+        if sym and start and sector:
+            end = (row.get("end_date") or "").strip() or OPEN_END
+            out.setdefault(sym, []).append((start, end, sector))
+    return out
+
+
+def _sector_on(day: str, spans: list[tuple[str, str, str]]) -> str | None:
+    for start, end, sector in spans:
+        if start <= day < end:
+            return sector
+    return None
+
+
+def historical_short_snapshot(day: str) -> ShortSnapshot | None:
+    from swingbot.core.marketdata.pit_membership import is_member, load_intervals
+    intervals = load_intervals(os.path.join(UNIVERSE_DIR, "sp500_membership.csv"))
+    sectors = _load_sector_intervals(os.path.join(UNIVERSE_DIR, _SECTOR_HISTORY_FILE))
+    if not intervals or not sectors:
+        return None
+    symbols = tuple(sorted(s for s, spans in intervals.items() if is_member(day, spans)))
+    sector_of = {s: sec for s in symbols
+                 if (sec := _sector_on(day[:10], sectors.get(s, []))) is not None}
+    return ShortSnapshot(symbols, day[:10], sector_of)
+
+
+def short_snapshot(day: str, *, live: bool) -> ShortSnapshot | None:
+    """Dated membership + sector for the bearish extra lane, or None (skip)."""
+    return live_short_snapshot(day) if live else historical_short_snapshot(day)
 
 
 def universe_symbols(name: str) -> list[str]:
