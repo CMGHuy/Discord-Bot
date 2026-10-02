@@ -419,3 +419,37 @@ def test_heat_and_kill_switch_flags_are_stamped_not_hidden(alert_env, monkeypatc
     short_run._stamp_risk_flags(item, {"AAA": frame()}, {"balance": 10000.0, "risk_pct": 1.0})
     assert item.heat_blocked == {"allowed": False, "why": "heat"}
     assert item.kill_switch_blocked == {"on": True, "reason": "dd"}
+
+
+def _capture_embed_args(monkeypatch):
+    seen = {}
+
+    def fake_build_embed(item, explanation, perf, warning, chart, **kw):
+        seen["warning"], seen["intraday"] = warning, item.intraday
+        return object()
+    monkeypatch.setattr(short_run, "build_embed", fake_build_embed)
+    monkeypatch.setattr(short_run, "build_simple_alert", lambda item: object())
+    return seen
+
+
+def test_extra_lane_alert_carries_the_base_open_position_warning(alert_env, monkeypatch):
+    class Full(_FakeLog):
+        def get_stats(self, *a, **k):
+            return {"win_rate": None, "closed": 0, "open": 5, "n": 0}
+    monkeypatch.setattr(short_run, "trade_log", Full())
+    monkeypatch.setattr(short_run.rs_factors, "intraday_confirms", lambda *a: True)
+    seen = _capture_embed_args(monkeypatch)
+    short_run._build_alerts([_ready_item(monkeypatch)], True, {"AAA": frame()}, frame())
+    assert "5 paper trades already open (limit 5)" in seen["warning"]
+    assert seen["intraday"] is True
+
+
+def test_extra_lane_intraday_failure_leaves_no_annotation(alert_env, monkeypatch):
+    monkeypatch.setattr(short_run, "trade_log", _FakeLog())
+
+    def boom(*a):
+        raise RuntimeError("no 1h data")
+    monkeypatch.setattr(short_run.rs_factors, "intraday_confirms", boom)
+    seen = _capture_embed_args(monkeypatch)
+    short_run._build_alerts([_ready_item(monkeypatch)], True, {"AAA": frame()}, frame())
+    assert seen["warning"] is None and seen["intraday"] is None

@@ -19,6 +19,7 @@ from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, ge
 from swingbot.core.charts.trendline_fit import fit_trendline
 from swingbot.core.db import write_failure
 from swingbot.core.edge import correlation as corr_mod
+from swingbot.core.edge import factors as rs_factors
 from swingbot.core.edge import heat as heat_mod
 from swingbot.core.edge import regime2
 from swingbot.core.edge import throttle
@@ -293,6 +294,24 @@ def _should_post(item, require_confirmation) -> bool:
     return _post_block(item, require_confirmation) is None
 
 
+def _open_positions_warning(account_cfg) -> str | None:
+    """The base lane's "N paper trades already open" warning, same wording and limit."""
+    open_count = trade_log.get_stats()["open"]
+    max_open = account_cfg.get("max_open_positions", 5)
+    if open_count >= max_open:
+        return f"{open_count} paper trades already open (limit {max_open}) — consider skipping new size here."
+    return None
+
+
+def _stamp_intraday(item) -> None:
+    """Advisory 1h-VWAP confirmation, as in the base lane; a failure renders nothing."""
+    try:
+        item.intraday = rs_factors.intraday_confirms(item.result.ticker, item.result.trend)
+    except Exception as exc:
+        log.debug("Intraday confirmation unavailable for %s: %s", item.result.ticker, exc)
+        item.intraday = None
+
+
 def _alert_for(item, frames, spy_df, account_cfg, alerts, funnel=None):
     result, plan, conf = item.result, item.plan, item.conf
     h = HORIZONS[result.horizon_key]
@@ -313,8 +332,10 @@ def _alert_for(item, frames, spy_df, account_cfg, alerts, funnel=None):
     trade_id = _log_trade(item, nums, explanation, fit, alerts) if item.paper_logged else None
     chart_path, chart_filename = _render_chart(item, nums, df, frames, spy_df, trade_id, fit)
     _stamp_risk_flags(item, frames, account_cfg)
+    warning = _open_positions_warning(account_cfg)
+    _stamp_intraday(item)
     embed = build_embed(item, explanation, trade_log.get_stats(conf.level),
-                        None, chart_filename, htf_info=item.htf_info, layout=config.ALERT_EMBED_LAYOUT)
+                        warning, chart_filename, htf_info=item.htf_info, layout=config.ALERT_EMBED_LAYOUT)
     alerts.append((embed, chart_path, item.plan_v2, build_simple_alert(item)))
     if funnel is not None:
         funnel.record_item(item, "send")
