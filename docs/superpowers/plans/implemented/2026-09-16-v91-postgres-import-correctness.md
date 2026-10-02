@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11, SQLAlchemy Core, Alembic, PostgreSQL 18, pytest.
 
-**Spec:** `docs/superpowers/specs/2026-09-16-v91-postgres-import-correctness-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-09-16-v91-postgres-import-correctness-design.md`
 
 **Bump:** bot patch
 **Edge:** none (integrity)
@@ -910,8 +910,8 @@ Check each against real output, not memory:
 - [ ] **Step 4: Move the plan and spec to `implemented/`**
 
 ```bash
-git mv docs/superpowers/plans/2026-09-16-v91-postgres-import-correctness.md docs/superpowers/plans/implemented/
-git mv docs/superpowers/specs/2026-09-16-v91-postgres-import-correctness-design.md docs/superpowers/specs/implemented/
+git mv docs/superpowers/plans/implemented/2026-09-16-v91-postgres-import-correctness.md docs/superpowers/plans/implemented/
+git mv docs/superpowers/specs/implemented/2026-09-16-v91-postgres-import-correctness-design.md docs/superpowers/specs/implemented/
 ```
 
 - [ ] **Step 5: Bump the version**
