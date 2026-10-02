@@ -297,3 +297,28 @@ def test_bad_research_mode_value_is_refused(capsys, tmp_path):
 def test_now_is_after_the_close_of_the_decision_date():
     now = scan_replay.decision_now("2025-01-10")
     assert now.tzinfo is not None and now.astimezone(dt.timezone.utc).date() == dt.date(2025, 1, 10)
+
+
+# --- review fix: base frames that are unlisted or stale on the decision date --------
+
+def test_unlisted_and_stale_base_frames_are_excluded_not_fatal(sealed):
+    """LATE lists after the decision date (empty as of it); STALE lacks the decision
+    bar. Neither may crash the replay, both are counted, and BASE's rows are the
+    same as without them, flag off and on."""
+    frames = _frames()
+    late = frames["BASE"].copy()
+    late.index = late.index + pd.Timedelta(weeks=200)
+    frames["LATE"] = late
+    frames["STALE"] = frames["BASE"].drop(pd.Timestamp(WINDOW[0]))
+    spec = scan_replay.ReplaySpec(base_tickers=("BASE", "LATE", "STALE"), horizons=HORIZONS)
+
+    def run(mode):
+        return scan_replay.replay_short_universe(frames, WINDOW, ScanParams.from_config(),
+                                                 mode=mode, spec=spec)
+    on, off = run("isolated"), run("off")
+    assert on.base_alerts == off.base_alerts == _replay("off").base_alerts
+    assert [row.ticker for row in on.added] == ["AAA"]
+    skipped = {(ex.lane, ex.ticker, ex.stage, ex.reason) for ex in on.excluded
+               if ex.reason == "stale_or_unlisted"}
+    assert {("base", "LATE", "base", "stale_or_unlisted"),
+            ("base", "STALE", "base", "stale_or_unlisted")} <= skipped

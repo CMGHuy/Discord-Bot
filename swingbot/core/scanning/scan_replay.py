@@ -262,10 +262,28 @@ def _scan_params(inputs: _Day, params) -> dict:
             "hard_filters": scan_run._hard_filters_snapshot(params)}
 
 
+def _decision_frames(lane: _Lane, inputs: _Day, tickers, stage: str) -> dict:
+    """As-of frames whose last bar IS the decision date; the rest are excluded.
+
+    A ticker listed after the decision date has an empty as-of frame, and one
+    missing the decision bar would be analysed on an older bar -- neither is a
+    scan the live lane could have run that day. As-of cut only: no later bar
+    is read.
+    """
+    usable = {}
+    for ticker in tickers:
+        frame = inputs.asof.get(ticker)
+        if frame is not None and len(frame) and frame.index[-1].date().isoformat() == inputs.day:
+            usable[ticker] = frame
+        elif frame is not None:
+            lane.exclude(inputs.day, ticker, None, stage, "stale_or_unlisted")
+    return usable
+
+
 # --- the base lane ----------------------------------------------------------------
 
 def _base_day(lane: _Lane, inputs: _Day, frames: dict, params, spec: ReplaySpec) -> None:
-    base = {t: inputs.asof[t] for t in spec.base_tickers if t in inputs.asof}
+    base = _decision_frames(lane, inputs, spec.base_tickers, "base")
     stamped = short_run._stamp_context(base, inputs.spy)
     rs_cache = {"rels": {t: rs_factors.relative_return(f, inputs.spy) for t, f in base.items()}}
     breadth = rs_factors.breadth_pct_above_50ema(base)
@@ -292,7 +310,7 @@ def _extra_reference(inputs: _Day, spec: ReplaySpec, lane: _Lane):
     for symbol in queue:
         if symbol not in extra:
             lane.exclude(inputs.day, symbol, None, "candidate", "missing_frame")
-    base = {t: inputs.asof[t] for t in spec.base_tickers if t in inputs.asof}
+    base = _decision_frames(lane, inputs, spec.base_tickers, "reference")
     return scan_run._short_reference(inputs.day, snapshot, extra, base, inputs.spy, inputs.now,
                                      sector_frames=inputs.asof)
 
