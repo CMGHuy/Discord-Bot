@@ -69,8 +69,12 @@ the mirror throughout.
     re-tuned; v121 froze it at 3).
   - `HL` — as `MSB`, but additionally a swing low confirmed at `j`, with
     index `> i`, whose low `> L_j`, must exist.
-- **Cancel — zone failed.** `Close[j] < L_j − 0.10·ATR14[j]` → terminal
-  `cancelled_zone_failed`.
+- **Cancel — zone failed.** `Close[j] < L_{j-1} − 0.10·ATR14[j]` → terminal
+  `cancelled_zone_failed`, where `L_{j-1} = min(Low[i..j-1])` is the touch
+  low *before* bar `j` (an inclusive `L_j` could never fire, since
+  `Close[j] >= Low[j] >= L_j`; corrected at planning). The stop still uses
+  the inclusive `L_j`. On a bar that both fails the zone and breaks
+  structure, the cancel wins.
 - **Expire.** No trigger by bar `i + N` → terminal `expired`.
 - **Entry.** Stop-entry at `High[j]` of the trigger bar with
   `STOP_ENTRY_EXPIRY_BARS = 2` (v90's value).
