@@ -8,7 +8,7 @@
 **Spec:** `docs/superpowers/specs/2026-10-01-v120-stable-snapshots-offsite-pull-design.md`
 **Bump:** none
 **Edge:** none (integrity)
-**Progress:** V120-1 to V120-7 implemented and reviewed on branch `2026-10-01-v120-stable-snapshots-offsite-pull` (17 commits, rebased onto `origin/main` 33580cbc on 2026-10-01 night; not pushed, not merged). V120-10's full-suite gate has not passed yet (see "Status as built"). V120-8 and V120-9 are live production tasks and wait for the partner.
+**Progress:** V120-1 to V120-7 implemented and reviewed on branch `2026-10-01-v120-stable-snapshots-offsite-pull` (17 commits, rebased onto `origin/main` aabee1c1, tip `2fa8112e`, on 2026-10-02; not pushed, not merged). V120-10's full-suite gate PASSED on that tip: 5588 passed, 0 failed, 14 skipped, run against a private base database (`TEST_DATABASE_URL` ... `/swingbot_test_v120run`; the name must start with `swingbot_test` because `tests/test_store_harness.py` checks it). V120-8 and V120-9 are live production tasks and wait for the partner.
 
 ## Status as built (2026-10-01 night) -- read before V120-8, V120-9 and V120-10
 
@@ -55,7 +55,7 @@ retention in `DEPLOY_HETZNER.md` already says 90 days (corrected upstream). Any 
 
 **Test database.** `origin/main` now carries `be3ec50f` (the schema-free fixture gets its own database) and the autouse store-truncation fixture.
 Three full runs on 2026-10-01 each failed on a different unrelated shared-database or timing test, `main` included; the follow-up branch
-`2026-10-01-db-test-isolation-followup` makes database names unique per checkout so concurrent sessions stop colliding.
+`2026-10-01-db-test-isolation-followup` (one commit on `origin/main`, not merged) makes database names unique per checkout so concurrent sessions stop colliding. A superseded first attempt, branch `2026-10-01-db-test-isolation` at `c1a790bf`, is kept unmerged and undeleted.
 
 ## Global constraints
 
