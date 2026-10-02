@@ -24,6 +24,7 @@ fetch is run.
 """
 import argparse
 import csv
+import hashlib
 import json
 import os
 import sys
@@ -33,7 +34,28 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from swingbot.core.marketdata.universe import UNIVERSE_DIR  # noqa: E402
 
 
-def build(raw_csv: str, top: int | None) -> str:
+def _atomic_write_bytes(path: str, data: bytes) -> None:
+    tmp = f"{path}.tmp"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    os.replace(tmp, path)
+
+
+def write_snapshot_meta(raw_csv: str, universe_path: str, as_of: str) -> str:
+    """v118: sp500.snapshot.json beside sp500.json. Hashes the exact raw CSV and
+    generated JSON bytes so a later manual overwrite cannot inherit this date."""
+    with open(raw_csv, "rb") as f:
+        raw_sha = hashlib.sha256(f.read()).hexdigest()
+    with open(universe_path, "rb") as f:
+        uni_sha = hashlib.sha256(f.read()).hexdigest()
+    meta = {"as_of": as_of, "source": "manual_csv",
+            "raw_sha256": raw_sha, "universe_sha256": uni_sha}
+    out = os.path.join(os.path.dirname(universe_path), "sp500.snapshot.json")
+    _atomic_write_bytes(out, json.dumps(meta, indent=1).encode("utf-8"))
+    return out
+
+
+def build(raw_csv: str, top: int | None, as_of: str | None = None) -> str:
     rows = []
     with open(raw_csv, newline="", encoding="utf-8-sig") as f:
         for r in csv.DictReader(f):
@@ -63,6 +85,8 @@ def build(raw_csv: str, top: int | None) -> str:
     with open(out, "w", encoding="utf-8") as f:
         json.dump(deduped, f, indent=1)
     print(f"wrote {out}: {len(deduped)} symbols")
+    if as_of and name == "sp500":  # never stamp a date for a file of unknown as-of
+        print(f"wrote {write_snapshot_meta(raw_csv, out, as_of)}")
     return out
 
 
@@ -70,5 +94,7 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--raw", default="data/universe/sp500_raw.csv")
     p.add_argument("--top", type=int, default=None)
+    p.add_argument("--as-of", default=None, metavar="YYYY-MM-DD",
+                   help="date the raw CSV constituents were true; writes sp500.snapshot.json")
     a = p.parse_args()
-    build(a.raw, a.top)
+    build(a.raw, a.top, a.as_of)
