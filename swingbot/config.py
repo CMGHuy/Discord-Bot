@@ -797,6 +797,16 @@ FIELDS: list[Field] = [
                "strategy pass or a bullish alert. No broker order is ever placed and borrow "
                "availability is not checked -- confirm a borrow before acting on an alert. "
                "Off (default): the scan is unchanged."),
+    Field("SHORT_UNIVERSE_BROAD_ENABLED", "SHORT_UNIVERSE_BROAD_ENABLED", "Universe & Scanning",
+          "SHORT extra lane: admit broad-weakness mode (v118)", type="checkbox", default="false",
+          help="v118 per-mode admission. Needs SHORT_UNIVERSE_ENABLED. Off (default): no broad-weakness "
+               "candidate can reach an alert. Flip only after the pre-registered v118 gate passes for "
+               "this mode on its own."),
+    Field("SHORT_UNIVERSE_ISOLATED_ENABLED", "SHORT_UNIVERSE_ISOLATED_ENABLED", "Universe & Scanning",
+          "SHORT extra lane: admit isolated-weakness mode (v118)", type="checkbox", default="false",
+          help="v118 per-mode admission. Needs SHORT_UNIVERSE_ENABLED. Off (default): no isolated-weakness "
+               "candidate can reach an alert. Flip only after the pre-registered v118 gate passes for "
+               "this mode on its own."),
     Field("SHORT_UNIVERSE_RESEARCH_MODE", "SHORT_UNIVERSE_RESEARCH_MODE", "Universe & Scanning",
           "SHORT extra lane: research replay mode (v118)", type="select", default="off",
           options=["off", "broad", "isolated"],

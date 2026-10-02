@@ -20,6 +20,16 @@ from swingbot.core.scanning.short_reference import (align_completed,
 MIN_PANEL_SYMBOLS = 5
 
 
+def admitted_short_modes(cfg) -> frozenset:
+    """The weakness modes allowed to emit a live alert: none unless the master flag is on."""
+    if not cfg.SHORT_UNIVERSE_ENABLED:
+        return frozenset()
+    return frozenset(mode for mode, allowed in (
+        ("broad", cfg.SHORT_UNIVERSE_BROAD_ENABLED),
+        ("isolated", cfg.SHORT_UNIVERSE_ISOLATED_ENABLED),
+    ) if allowed)
+
+
 def _has_bars(frame) -> bool:
     return frame is not None and len(frame) > 0
 

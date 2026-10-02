@@ -92,6 +92,8 @@ def _run_base_scan(monkeypatch, short_on, snapshot=_FIXTURE_SNAPSHOT):
     extra_frames = {"AAA": frame(100, 70)}
     snap = ShortSnapshot(("AAA", "BBB"), "2026-09-01", {}) if snapshot is _FIXTURE_SNAPSHOT else snapshot
     monkeypatch.setattr(config, "SHORT_UNIVERSE_ENABLED", short_on)
+    monkeypatch.setattr(config, "SHORT_UNIVERSE_BROAD_ENABLED", short_on)
+    monkeypatch.setattr(config, "SHORT_UNIVERSE_ISOLATED_ENABLED", short_on)
     monkeypatch.setattr(config, "SCAN_UNIVERSE", "watchlist")
     monkeypatch.setattr(scan_run, "_reload_config_before_scan", lambda: {})
     monkeypatch.setattr(scan_run, "load_watchlist", lambda: ["BASE", "BBB", "B1", "B2", "B3"])

@@ -180,6 +180,8 @@ def lane(monkeypatch, both_directions):
     ref = SimpleNamespace(spy=frame(), sector_frames={}, reference_rels=(-0.2, 0.1, 0.2),
                           frames={}, now=NOW)
     monkeypatch.setattr(config, "SHORT_UNIVERSE_ENABLED", True)
+    monkeypatch.setattr(config, "SHORT_UNIVERSE_BROAD_ENABLED", True)      # V118-8: modes admit separately
+    monkeypatch.setattr(config, "SHORT_UNIVERSE_ISOLATED_ENABLED", True)
     monkeypatch.setattr(config, "RS_GATE", False)
     monkeypatch.setattr(scan_run, "_short_now", lambda: NOW)
     monkeypatch.setattr(scan_run, "_scan_tickers", lambda: ["BASE"])
@@ -267,6 +269,7 @@ def _record_order(monkeypatch):
 def test_base_alerts_are_sent_before_the_first_extra_fetch(monkeypatch):
     alerts_mod, events = _record_order(monkeypatch)
     monkeypatch.setattr(config, "SHORT_UNIVERSE_ENABLED", True)
+    monkeypatch.setattr(config, "SHORT_UNIVERSE_BROAD_ENABLED", True)
     asyncio.run(alerts_mod.send_then_short("chan", ["BASE"], require_confirmation=True))
     assert events == [("send", ["BASE"]), ("short_fetch", True), ("send", ["SHORT"])]
 

@@ -7,6 +7,7 @@ from swingbot import config
 from swingbot.bot_core import bot
 from swingbot.core import presentation as ui
 from swingbot.core.scanning import engine as scan_engine
+from swingbot.core.scanning.short_candidates import admitted_short_modes
 from swingbot.core.infra.posted_log import log_posted
 from swingbot.core.presentation import kinds
 from swingbot.core.presentation.kinds import Kind
@@ -295,7 +296,7 @@ async def post_short_universe(destination, *, bot=None, require_confirmation: bo
     cannot hold back a ready watchlist alert. Off (default): returns [] with
     no fetch. A recap/display-only caller never calls this and stays base-only.
     """
-    if not config.SHORT_UNIVERSE_ENABLED:
+    if not admitted_short_modes(config):
         return []
     short_alerts = await scan_engine.run_short_universe_scan(
         require_confirmation=require_confirmation, bot=bot,

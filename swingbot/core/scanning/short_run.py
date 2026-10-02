@@ -37,7 +37,7 @@ from swingbot.scan_params import ScanParams
 from . import analyze, dedup, fetch, qualify, runstate, scan_run, short_funnel, telemetry
 from .embeds import (build_embed, build_simple_alert, notify_closed_trades,
                      notify_near_close, plan_numbers_for_display)
-from .short_candidates import extra_symbols
+from .short_candidates import admitted_short_modes, extra_symbols
 from .short_funnel import ShortFunnel
 from .singletons import state, trade_log
 
@@ -313,6 +313,18 @@ def _build_alerts(deduped, require_confirmation, frames, spy_df, funnel=None) ->
 
 # --- the pass ---------------------------------------------------------------------
 
+def _admitted_candidates(candidates, modes, funnel=None) -> list:
+    """Candidates whose mode is admitted; the rest never reach analysis or an alert."""
+    kept = []
+    for candidate in candidates:
+        if candidate.mode in modes:
+            kept.append(candidate)
+        else:
+            _note(funnel, short_funnel.BEARISH, "candidate", "mode_not_admitted",
+                  mode=candidate.mode, symbol=candidate.ticker)
+    return kept
+
+
 def _lane_inputs(base_tickers, now, funnel=None):
     """(candidates, reference, extra_frames, snapshot) for today's session."""
     day = session_date(now)
@@ -325,6 +337,7 @@ def _lane_inputs(base_tickers, now, funnel=None):
     rejected: list = []
     candidates = scan_run.build_extra_candidates(
         base_tickers, decision_date=day, snapshot=snapshot, reference=reference, rejected=rejected)
+    candidates = _admitted_candidates(candidates, admitted_short_modes(config), funnel)
     for symbol, reason in rejected:
         _note(funnel, short_funnel.BEARISH, "candidate", reason, symbol=symbol)
     if reference is None:
@@ -366,6 +379,8 @@ def _log_funnel(funnel: ShortFunnel, alerts: int) -> None:
 
 def _sync_run_short_scan(require_confirmation: bool, progress=None) -> tuple:
     """(alerts, newly_closed, near_close_warnings) for the extra lane."""
+    if not admitted_short_modes(config):   # precedes every extra fetch and side effect
+        return [], [], []
     base_tickers = tuple(scan_run._scan_tickers())
     funnel = ShortFunnel()
     candidates, reference, extra_frames, snapshot = _lane_inputs(
@@ -405,7 +420,7 @@ async def run_short_universe_scan(require_confirmation: bool = True, bot=None, p
     -- a failure here is logged and never reaches the base scan, but a store
     write halt still propagates exactly as it does for the base scan).
     """
-    if not config.SHORT_UNIVERSE_ENABLED:
+    if not admitted_short_modes(config):
         return []
     with scan_context(new_scan_id()):
         async with scan_run._scan_lock:
