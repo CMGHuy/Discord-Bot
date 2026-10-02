@@ -9,7 +9,7 @@ disable-model-invocation: true
 ## Step 1 — Read the authority
 
 Spec section 2 of
-`docs/superpowers/specs/2026-10-01-v120-stable-snapshots-offsite-pull-design.md`.
+`docs/superpowers/specs/implemented/2026-10-01-v120-stable-snapshots-offsite-pull-design.md`.
 This skill is the checklist; the reasoning lives there.
 
 ## Step 2 — Pull

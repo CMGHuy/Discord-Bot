@@ -9,7 +9,7 @@ disable-model-invocation: true
 ## Step 1 — Read the authority
 
 Spec sections 1, 2 and 4 of
-`docs/superpowers/specs/2026-10-01-v120-stable-snapshots-offsite-pull-design.md`,
+`docs/superpowers/specs/implemented/2026-10-01-v120-stable-snapshots-offsite-pull-design.md`,
 then `docs/deploy/DB_RESTORE.md`. This skill is the checklist; the reasoning
 lives there. Ask the partner for a one-line note for the tag.
 

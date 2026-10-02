@@ -5,10 +5,10 @@
 **Goal:** A `/stable-snapshot` skill that pins a full known-good point (tag, images, `.env`, dump, market_data restic snapshot) and a manual `/backup-pull` that brings a verified rebuild-from-zero set to this machine.
 **Architecture:** One stdlib Python helper (`backup_manifest.py`) owns manifest build/verify/prune/naming; thin bash scripts do the VM-side staging (`stable_snapshot.sh`, `restore_stable.sh`) and the dev-side transfer (`pull_backups.sh`) over `ssh-hetzner.sh`; two Tier 2 skills are the checklists; the SessionStart hook shows pull age.
 **Tech Stack:** Bash, Python 3.11 stdlib, pytest, PowerShell (hook), restic, pg_dump.
-**Spec:** `docs/superpowers/specs/2026-10-01-v120-stable-snapshots-offsite-pull-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-01-v120-stable-snapshots-offsite-pull-design.md`
 **Bump:** none
 **Edge:** none (integrity)
-**Progress:** implemented and live on 2026-10-02. V120-1 to V120-7 merged and deployed (`origin/main` `122b7444`, CI run green); V120-8 done (first pull PASS, local restore drill PASS, second pull PASS); V120-9 done (tag `stable-2026-10-02`, `restore_stable.sh --dry-run` PASS); V120-10 passed twice (5588 passed on the rebased branch against a private database, 5596 passed on the merged tip with the default database). Results: `docs/deploy/DB_RESTORE.md`. The spec was amended to the code as built; what remains is `/close-out` (the partner types it).
+**Progress:** implemented and live on 2026-10-02. V120-1 to V120-7 merged and deployed (`origin/main` `122b7444`, CI run green); V120-8 done (first pull PASS, local restore drill PASS, second pull PASS); V120-9 done (tag `stable-2026-10-02`, `restore_stable.sh --dry-run` PASS); V120-10 passed twice (5588 passed on the rebased branch against a private database, 5596 passed on the merged tip with the default database). Results: `docs/deploy/DB_RESTORE.md`. The spec was amended to the code as built. Closed out on 2026-10-02 with `/close-out`: the plan and its spec moved to `implemented/`, and the worktree and branch were removed after the merge. The header predictions held: `Bump: none` (no bot or UI runtime code changed, so no release commit) and `Edge: none (integrity)`.
 
 ## Status as built (2026-10-01 night) -- read before V120-8, V120-9 and V120-10
 
@@ -31,7 +31,7 @@ per task, a whole-branch review on the most capable model, and two targeted re-r
   snapshot is taken under `flock logs/restic.lock`, and a failed run forgets its own restic snapshot.
 - The BACKUP hook line uses ` | ` (ASCII), not a middle dot, and warns when the pull folder named in `LAST_GOOD_PULL` is missing.
 
-**Spec statements now stale -- amend the spec at close-out** (`docs/superpowers/specs/2026-10-01-v120-stable-snapshots-offsite-pull-design.md`):
+**Spec statements now stale -- amend the spec at close-out** (`docs/superpowers/specs/implemented/2026-10-01-v120-stable-snapshots-offsite-pull-design.md`):
 (1) section 3 row_counts and the subcommand/flag lists; (2) section 2 pull folder also holds `market_data.tar`; (3) section 2 overdue line:
 warns from 8 whole days, no-pull wording, ASCII separator; (4) section 1 order: the restic snapshot is taken before the manifest, the folder is
 built as `<name>.partial` and renamed last, a failed run forgets its restic snapshot; (5) section 1 restore: no flag prints the plan and exits 2,
