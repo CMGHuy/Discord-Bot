@@ -125,3 +125,54 @@ def test_reset_clears_spot_misses(monkeypatch):
     router.daily_bars(["XAUUSD"], "2y", _yf_daily([]))
     router.reset()
     assert router.spot_miss_reason("XAUUSD") is None
+
+
+class _SlowAlpaca:
+    """Serves every eligible symbol after `sleep` seconds (v106 T13b)."""
+    def __init__(self, sleep):
+        self.sleep = sleep
+
+    def daily_bars(self, tickers, period):
+        import time
+        time.sleep(self.sleep)
+        return {t: _frame(100.0) for t in tickers}
+
+
+@pytest.fixture
+def _alpaca_on(monkeypatch):
+    monkeypatch.setattr(config, "ALPACA_ENABLED", True)
+    monkeypatch.setattr(config, "ALPACA_API_KEY_ID", "k")
+    monkeypatch.setattr(config, "ALPACA_API_SECRET_KEY", "s")
+    monkeypatch.setattr(config, "ALPACA_BARS_TIMEOUT_SECONDS", 2.0)
+    monkeypatch.setattr(router, "_provider_factory", lambda *a: _SlowAlpaca(0.4))
+    router.reset()
+
+
+def _slow_yf(calls, sleep):
+    def fetch(tickers, period):
+        import time
+        calls.append(list(tickers))
+        time.sleep(sleep)
+        return {t: _frame() for t in tickers if t in ("GC=F", "SI=F")}
+    return fetch
+
+
+def test_spot_futures_fetch_overlaps_the_alpaca_batches(monkeypatch, _alpaca_on):
+    import time
+    _ratio_ok(monkeypatch)
+    calls = []
+    started = time.monotonic()
+    out = router.daily_bars(["AAPL", "XAUUSD"], "2y", _slow_yf(calls, 0.4))
+    assert time.monotonic() - started < 0.7          # sequential would be >= 0.8
+    assert calls == [["GC=F"]]
+    assert out["AAPL"].attrs["source"] == "alpaca"
+    assert out["XAUUSD"].attrs["source"] == "spot-scaled:GC=F"
+
+
+def test_future_in_the_same_call_is_still_reused_with_alpaca_on(monkeypatch, _alpaca_on):
+    _ratio_ok(monkeypatch)
+    calls = []
+    out = router.daily_bars(["AAPL", "GC=F", "XAUUSD"], "2y", _slow_yf(calls, 0.0))
+    assert calls == [["GC=F"]]
+    assert out["GC=F"].attrs["source"] == "yfinance"
+    assert out["XAUUSD"].attrs["source"] == "spot-scaled:GC=F"

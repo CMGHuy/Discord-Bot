@@ -28,6 +28,9 @@ _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="alpaca")
 # returns, so sharing one pool would silently push quotes onto yfinance).
 _quote_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="alpaca-quote")
 _lock = threading.Lock()
+#: v106 T13b: a spot symbol's future is fetched from yfinance here while the
+#: Alpaca batches are in flight, instead of after them.
+_side_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="spot-side")
 
 
 class _Bucket:
@@ -331,9 +334,25 @@ def _spot_prices(spot) -> dict:
     return out
 
 
+def _spot_alongside(spot, tickers, wanted, fetch):
+    """A future of `_spot_daily` started now, or None to run it afterwards.
+    Only when Alpaca has work to overlap and no underlying is in this call
+    itself -- that frame is reused, so the spot path must wait for it."""
+    if not spot or not wanted:
+        return None
+    if any(spot_metals.underlying(t) in tickers for t in spot):
+        return None
+    return _side_pool.submit(with_current_context(_spot_daily), spot, {}, fetch)
+
+
 def daily_bars(tickers, period, yf_fetch):
     spot, tickers = spot_metals.split_spot(tickers)
     wanted, rest = _split(tickers)
+
+    def fetch(ts):
+        return yf_fetch(ts, period)
+
+    side = _spot_alongside(spot, tickers, wanted, fetch)
     n = symbols_per_request(period)
     batches = [wanted[i:i + n] for i in range(0, len(wanted), n)]
     got = {}
@@ -341,8 +360,8 @@ def daily_bars(tickers, period, yf_fetch):
         got.update(part or {})
     misses = [t for t in wanted if t not in got]
     _log_fallback("daily_bars", misses)
-    out = _merge(got, rest, misses, lambda ts: yf_fetch(ts, period))
-    out.update(_spot_daily(spot, out, lambda ts: yf_fetch(ts, period)))
+    out = _merge(got, rest, misses, fetch)
+    out.update(side.result() if side is not None else _spot_daily(spot, out, fetch))
     return out
 
 

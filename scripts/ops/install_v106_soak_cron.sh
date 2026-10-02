@@ -7,11 +7,14 @@
 # verdict. The job removes its own line after the 2026-10-07 run.
 #
 # Run ON the VM, e.g. from a dev machine:
-#   ./scripts/ops/ssh-hetzner.sh "bash -s" < scripts/ops/install_v106_soak_cron.sh
+#   ./scripts/ops/ssh-hetzner.sh "bash -s -- START END" < scripts/ops/install_v106_soak_cron.sh
+# START/END = the soak window's first and last trading day (UTC dates).
 set -euo pipefail
+START=${1:-2026-10-01}
+END=${2:-2026-10-07}
 
 MARKER='# v106 soak attempt 2 check (installed by install_v106_soak_cron.sh)'
-CRON_LINE='15 21 * * 1-5 /bin/bash /opt/swing-bot/scripts/ops/v106_soak_cron.sh'
+CRON_LINE="15 21 * * 1-5 /bin/bash /opt/swing-bot/scripts/ops/v106_soak_cron.sh $START $END"
 
 {
     crontab -l 2>/dev/null | grep -vF "$MARKER" | grep -vF "v106_soak_cron.sh" || true

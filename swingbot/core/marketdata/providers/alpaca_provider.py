@@ -23,6 +23,28 @@ INTRADAY_DAYS = 700
 ROWS_PER_PAGE = 10_000      # Alpaca bars page size; a request past it paginates serially
 
 
+_RAW_COLS = ["t", "o", "h", "l", "c", "v"]
+_FRAME_COLS = ["open", "high", "low", "close", "volume"]
+
+
+def _frames_from_raw(raw: dict) -> dict:
+    """{alpaca symbol: frame} from a raw_data=True bars response, in the shape
+    BarSet.df.xs(symbol) had: lowercase OHLCV columns over a tz-aware UTC
+    index. Every symbol's timestamps are parsed in one vectorised pass."""
+    symbols = [s for s, bars in raw.items() if bars]
+    if not symbols:
+        return {}
+    flat = pd.DataFrame.from_records([b for s in symbols for b in raw[s]], columns=_RAW_COLS)
+    index = pd.DatetimeIndex(pd.to_datetime(flat["t"], utc=True, format="ISO8601"), name="timestamp")
+    values = flat[_RAW_COLS[1:]].to_numpy(dtype="float64")
+    out, start = {}, 0
+    for symbol in symbols:
+        end = start + len(raw[symbol])
+        out[symbol] = pd.DataFrame(values[start:end], columns=_FRAME_COLS, index=index[start:end])
+        start = end
+    return out
+
+
 class AlpacaMiss(Exception):
     """Alpaca could not answer; the router falls back to yfinance."""
 
@@ -52,12 +74,17 @@ class AlpacaProvider:
     def __init__(self, key_id: str, secret: str, live_feed: str = "iex", *,
                  client=None, now=None):
         self._client = client or StockHistoricalDataClient(key_id, secret)
+        # Bars come back as raw dicts (v106 T13b): alpaca-py's model path
+        # (Bar objects, then BarSet.df) costs ~0.45 s of GIL-bound CPU per
+        # 10k-row page, which serialises the router's parallel batches.
+        # An injected client serves both roles.
+        self._bars_client = client or StockHistoricalDataClient(key_id, secret, raw_data=True)
         self._live_feed = DataFeed(live_feed.lower())
         self._now = now or (lambda: datetime.now(timezone.utc))
 
-    def _call(self, method, req):
+    def _call(self, method, req, client=None):
         try:
-            return getattr(self._client, method)(req)
+            return getattr(client or self._client, method)(req)
         except Exception as exc:
             if getattr(exc, "status_code", None) in (401, 403):
                 raise AlpacaAuthError(str(exc)) from exc
@@ -68,11 +95,8 @@ class AlpacaProvider:
         req = StockBarsRequest(symbol_or_symbols=list(by_symbol), timeframe=timeframe,
                                start=start, end=self._now() - SIP_DELAY,
                                feed=DataFeed.SIP, adjustment=Adjustment.ALL)
-        df = self._call("get_stock_bars", req).df
-        if df is None or df.empty:
-            return {}
-        present = set(df.index.get_level_values("symbol"))
-        return {by_symbol[s]: df.xs(s, level="symbol") for s in by_symbol if s in present}
+        raw = self._call("get_stock_bars", req, self._bars_client) or {}
+        return {by_symbol[s]: df for s, df in _frames_from_raw(raw).items() if s in by_symbol}
 
     def daily_bars(self, tickers, period):
         now = self._now()

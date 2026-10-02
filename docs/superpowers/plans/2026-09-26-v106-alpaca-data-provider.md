@@ -1440,6 +1440,29 @@ token now pays for exactly one HTTP call, where today one token covers 4.
   days as pre-registered rather than call it early; the verdict is the
   FINAL line after the 2026-10-07 run.*
 
+### Task T13b: Raw-dict bars and spot fetch alongside Alpaca
+
+*Added 2026-10-02 from soak attempt 2's interim (a) FAIL, user's call to fix
+it inside v106; thresholds unchanged.* Measured on production in session:
+one 75-symbol call = ~1.7 s parallel HTTP + ~1.9 s alpaca-py model/`.df`/
+`xs` CPU serialised by the GIL across the 4 batches + ~0.7-1.4 s yfinance
+spot-future work run after Alpaca. The VM (2 vCPU) sits at ~190 % bot CPU in
+session, so CPU saved is wall time saved.
+- [x] **Bars as raw dicts:** `AlpacaProvider` gets a second
+  `StockHistoricalDataClient(raw_data=True)` for bars (snapshots keep models);
+  `_frames_from_raw` builds every symbol's frame in one vectorised pass, same
+  shape `BarSet.df.xs` gave. Prod check: frame-for-frame equal on 19 symbols.
+- [x] **Spot alongside:** `router._spot_alongside` runs `_spot_daily` on a
+  one-thread side pool while the batches are in flight, unless Alpaca has no
+  work or an underlying is in the call itself (reuse kept).
+- [x] Tests: four provider tests, two router-spot tests; radon unchanged.
+  Prod A/B (same box, alternating): old 4.0-8.3 s, new 1.9-3.96 s per call.
+  8×10 batches were tried and dropped (no first-call gain).
+- [ ] Full suite; deploy; the deploy ends soak attempt 2 -- record it as
+  *superseded by T13b at <deploy time>* with its numbers to that point, start
+  attempt 3 (5 trading days from the first full day after deploy) and re-run
+  `install_v106_soak_cron.sh` with the new window.
+
 ### Task T14: Close-out
 
 The user runs `/close-out`; the Skill tool blocks it for Claude. It follows
