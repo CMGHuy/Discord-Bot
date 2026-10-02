@@ -338,7 +338,9 @@ a group of one.
 
 - **Losing the VM loses the history.** Point-in-time history sits on the same
   disk as the database; the partner accepted this, and it can be moved off-box
-  later without changing the design.
+  later without changing the design. *Since 2026-10-02 (v120): losing the VM loses only
+  what changed since the last good `/backup-pull`, plus the point-in-time history; see
+  `DB_RESTORE.md`.*
 - **Posted Discord alerts cannot be recalled.** After a rollback the book
   matches the target second, but the channel still shows later messages.
 - **The worst case loses five minutes.** It is bounded by `archive_timeout`.

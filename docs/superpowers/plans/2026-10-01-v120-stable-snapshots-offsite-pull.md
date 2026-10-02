@@ -8,7 +8,7 @@
 **Spec:** `docs/superpowers/specs/2026-10-01-v120-stable-snapshots-offsite-pull-design.md`
 **Bump:** none
 **Edge:** none (integrity)
-**Progress:** V120-1 to V120-7 implemented and reviewed on branch `2026-10-01-v120-stable-snapshots-offsite-pull` (17 commits, rebased onto `origin/main` aabee1c1, tip `2fa8112e`, on 2026-10-02; not pushed, not merged). V120-10's full-suite gate PASSED on that tip: 5588 passed, 0 failed, 14 skipped, run against a private base database (`TEST_DATABASE_URL` ... `/swingbot_test_v120run`; the name must start with `swingbot_test` because `tests/test_store_harness.py` checks it). V120-8 and V120-9 are live production tasks and wait for the partner.
+**Progress:** implemented and live on 2026-10-02. V120-1 to V120-7 merged and deployed (`origin/main` `122b7444`, CI run green); V120-8 done (first pull PASS, local restore drill PASS, second pull PASS); V120-9 done (tag `stable-2026-10-02`, `restore_stable.sh --dry-run` PASS); V120-10 passed twice (5588 passed on the rebased branch against a private database, 5596 passed on the merged tip with the default database). Results: `docs/deploy/DB_RESTORE.md`. The spec was amended to the code as built; what remains is `/close-out` (the partner types it).
 
 ## Status as built (2026-10-01 night) -- read before V120-8, V120-9 and V120-10
 

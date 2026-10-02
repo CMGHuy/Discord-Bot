@@ -87,3 +87,96 @@ An earlier attempt at 13:50 UTC FAILED before restoring anything: the scratch co
 only its two mark rows in the `pitr_drill` schema in production, which is by design. The script now
 exports `DRILL_TARGET` once the target second is known (commit `fix(v116): the PITR drill exports
 DRILL_TARGET ...`); the passing run used that fixed copy, run from `/tmp` on the VM.
+
+## Off-VM copy and stable snapshots (v120)
+
+Live on 2026-10-02 (UTC), after the v120 scripts reached production through the normal deploy
+(CI run for `122b7444`). Everything below ran against production through `scripts/ops/ssh-hetzner.sh`.
+Two skills drive it from the dev machine: `/backup-pull` (`scripts/ops/pull_backups.sh`) and
+`/stable-snapshot <note>` (`scripts/ops/stable_snapshot.sh` on the VM, then the tag and a local copy).
+Local copies live in the main tree's gitignored `backups/` (`pulls/`, `market_data/`, `stable/`).
+
+### Pulls
+
+| pull | folder | bytes | files | time | verdict |
+|---|---|---|---|---|---|
+| first (full `market_data/`) | `pulls/2026-10-02T07-59Z` | 191,025,299 (dump 555,874; `market_data.tar` 190,443,520) | 520 | 28 s | PASS |
+| second (incremental) | `pulls/2026-10-02T08-04Z` | 38,183,027 (`market_data.tar` 37,601,280) | 59 | 12 s | PASS |
+
+Both folders pass `backup_manifest.py verify` (sha256 and size of every file, no unlisted file, full gzip read);
+nothing was missing on the VM; the local mirror holds 520 files; `git status` stayed clean (`backups/` is ignored).
+
+### Local restore drill
+
+`db.sql.gz` of the first pull was restored into a throwaway `postgres:18` container (the manifest's
+`pg_server_version` is `18.6`; the container reported `18.6 (Debian 18.6-1.pgdg13+2)`) in 4.7 s, then exact
+`count(*)` per table was compared with the manifest's `row_counts` (keys are schema-qualified, counted from the
+dump's COPY blocks):
+
+| table | manifest | restored |
+|---|---|---|
+| `pitr_drill.marks` | 4 | 4 |
+| `public.account` | 1 | 1 |
+| `public.account_balance_history` | 872 | 872 |
+| `public.admin_jobs` | 0 | 0 |
+| `public.alembic_version` | 1 | 1 |
+| `public.bot_heartbeat` | 1 | 1 |
+| `public.dropped_doc_fields` | 0 | 0 |
+| `public.journal_entries` | 666 | 666 |
+| `public.killswitch` | 1 | 1 |
+| `public.manual_close_notify` | 0 | 0 |
+| `public.market_data_state` | 466 | 466 |
+| `public.plans` | 516 | 516 |
+| `public.runtime_flags` | 1 | 1 |
+| `public.scan_progress` | 1 | 1 |
+| `public.scheduled_jobs` | 3 | 3 |
+| `public.settings_audit` | 1 | 1 |
+| `public.signal_state` | 1637 | 1637 |
+| `public.starred_plans` | 0 | 0 |
+| `public.ticker_directory` | 0 | 0 |
+| `public.trades` | 861 | 861 |
+| `public.tuning_proposals` | 0 | 0 |
+| `public.tuning_results` | 0 | 0 |
+| `public.ui_preferences` | 1 | 1 |
+| `public.watchlist` | 77 | 77 |
+
+24 tables and 5,110 rows on both sides, 0 mismatches; `alembic_version` in the restored database is `v116_002`.
+VERDICT: PASS. Container and anonymous volume removed (Docker volumes 47 before and after).
+
+### First stable snapshot
+
+- Tag `stable-2026-10-02` (annotated, pushed) on `122b7444`, which was at that moment `origin/main`, the VM checkout
+  `HEAD` and the `git_sha` of the last `deploys.jsonl` line. Local `main` carried another session's unpushed commit,
+  so the tag names the commit explicitly instead of `HEAD`.
+- VM folder `backups/stable/stable-2026-10-02/` (mode 700; `db.sql.gz` and `env` mode 600): `db.sql.gz` 555,859 bytes,
+  `env` 5,633, `deploy.json` 203, `manifest.json` 1,594. Manifest: git `122b7444afe8`, bot image
+  `ghcr.io/cmghuy/discord-bot:sha-122b7444afe8`, db image `ghcr.io/cmghuy/discord-bot-db:pgcfg-aae12c7a4b74`,
+  Postgres 18.6, 24 tables, 5,110 rows. The snapshot took 5 s and was started at 08:10 UTC, after the hourly restic
+  job's `:07` lock window.
+- restic snapshot `e8d77959` (181.232 MiB) tagged `market_data`, `stable`, `stable-2026-10-02`; `restic_hourly.sh`
+  now forgets with `--keep-tag stable`, so it outlives the 30-day window.
+- Local copy `backups/stable/stable-2026-10-02/` pulled and verified (PASS); `LAST_GOOD_PULL` untouched.
+
+`restore_stable.sh stable-2026-10-02 --dry-run` on the VM:
+
+```
+PASS
+Stable point stable-2026-10-02 resolves to:
+  dump       backups/stable/stable-2026-10-02/db.sql.gz
+  code       git 122b7444afe89fdff0a7d5338fcf61ca5c66e588
+  bot image  ghcr.io/cmghuy/discord-bot:sha-122b7444afe8
+  db image   ghcr.io/cmghuy/discord-bot-db:pgcfg-aae12c7a4b74
+  market     restic e8d77959c5f06fb2e33ff5020d35d139a1a6764e0469b5a6ebd833c589491fa4
+Dry run: nothing changed.
+```
+
+It changed nothing: container creation times, the `.env` mtime, the checkout `HEAD` and the `market_data` file
+count (520) were identical before and after.
+
+### What this does and does not cover
+
+- The off-VM copy is as old as the last `/backup-pull`; the SessionStart `BACKUP` line warns from 8 days.
+- It restores to the pull, not to a second: point-in-time history stays on the VM (pgBackRest, restic).
+- A stable point's `market_data/` is pinned only on the VM (restic); off the VM it is the rolling mirror.
+- Each pull's `env` is plaintext on the dev machine, like `.env`.
+- A real `restore_stable.sh --i-mean-it` has not been run, only `--dry-run`.

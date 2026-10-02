@@ -307,7 +307,7 @@ unrestorable target. Run it again without `--dry-run` to roll back.
 | Cron (VM time) | Script | What |
 |---|---|---|
 | `30 2 * * *` | `pitr_backup.sh` | pgBackRest full on Sundays, differential otherwise; prunes `.env` versions past 30 days |
-| `7 * * * *` | `restic_hourly.sh` | hourly restic snapshot of `market_data/`, forgets past 30 days |
+| `7 * * * *` | `restic_hourly.sh` | hourly restic snapshot of `market_data/`, forgets past 30 days (snapshots tagged `stable` are kept) |
 | `0 4 1 * *` | `pitr_verify.sh` | monthly proof both repositories are readable (`pgbackrest verify`, `restic check`) |
 | `0 3 * * *` | `backup_db.sh` | nightly `pg_dump` into `data/backups/db/`, kept 90 days (second, day-level method) |
 
@@ -324,6 +324,8 @@ within 7 days before a revision that drops or renames a doc field on production.
 **`pg_dump` restore.** `scripts/ops/restore_db.sh <dump.sql.gz> <target-db>`
 replays one into a throwaway database (no default target; `swingbot` needs
 `--i-mean-it`); the record of that drill is `DB_RESTORE.md`.
+
+**Off-VM copy and stable snapshots (v120).** Every backup above sits on this VM's own disk. `/backup-pull` (`scripts/ops/pull_backups.sh`, run from the dev machine's main tree) brings a verified rebuild-from-zero set (a fresh `pg_dump`, `.env`, `deploys.jsonl`, an incremental mirror of `market_data/`) into the gitignored `backups/` there; it is manual, and the SessionStart `BACKUP` line warns when it is overdue. `/stable-snapshot <note>` pins a known-good point for good: `backups/stable/<name>/` on the VM (dump, `.env`, deploy record, manifest), a restic snapshot tagged `stable`, and an annotated `stable-*` git tag; `scripts/ops/restore_stable.sh <name> --dry-run` shows what restoring it would do (a real run needs `--i-mean-it`). Both run as root through `ssh-hetzner.sh`; git on the VM runs as `deploy`. Drills and numbers: `DB_RESTORE.md`, section "Off-VM copy and stable snapshots (v120)".
 
 ## Useful one-liners on the server
 
