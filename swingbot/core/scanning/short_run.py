@@ -23,7 +23,6 @@ from swingbot.core.edge import factors as rs_factors
 from swingbot.core.edge import heat as heat_mod
 from swingbot.core.edge import regime2
 from swingbot.core.edge import throttle
-from swingbot.core.edge.rs_gate import rs_verdict
 from swingbot.core.infra.logsetup import new_scan_id, scan_context
 from swingbot.core.infra.notifier import notify_secondary
 from swingbot.core.market import market_context, opex
@@ -35,7 +34,7 @@ from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.core.planning.account import load_account_config
 from swingbot.scan_params import ScanParams
 
-from . import analyze, dedup, fetch, runstate, scan_run, short_funnel, telemetry
+from . import analyze, dedup, fetch, qualify, runstate, scan_run, short_funnel, telemetry
 from .embeds import (build_embed, build_simple_alert, notify_closed_trades,
                      notify_near_close, plan_numbers_for_display)
 from .short_candidates import extra_symbols
@@ -134,70 +133,25 @@ def _monitor_stranded(base_tickers, candidate_tickers, extra_frames, live_prices
 
 # --- confirmation / gates / plan -----------------------------------------------------
 
-def _confirmed(item, require_confirmation: bool) -> bool:
-    """The base debounce: only a fully-qualifying item is tracked, and it posts
-    once confirmed. `!check` (require_confirmation=False) skips the debounce."""
-    if not require_confirmation:
-        return True
-    if not item.all_requirements_met:
-        return False
-    item.previous_confirmed = state.confirmed_value(item.result.state_key)
-    return state.confirm_or_update(
-        item.result.state_key, item.result.state_value,
+def _qualify_context(require_confirmation, frames, lane) -> qualify.QualifyContext:
+    """The live inputs to `qualify_short_item`: today's store, wall clock, no prior-open
+    set (the one-open-trade rule runs after dedup, in `_build_alerts`)."""
+    return qualify.QualifyContext(
+        frames=frames, spy=lane["spy"], sector_of=lane["sector_of"],
+        etf_symbol_of=lane["etf_symbol_of"], sector_frames=lane["sector_frames"],
+        regime=lane["regime"], regimes=lane["regimes"],
+        confirmations=state if require_confirmation else None,
         required_confirmations=config.SIGNAL_CONFIRMATION_SCANS)
-
-
-def _rs_blocked(item) -> bool:
-    if not config.RS_GATE:
-        return False
-    verdict = rs_verdict(
-        item.result.ticker, item.result.trend,
-        item.rs_combined if item.rs_combined is not None else 50.0,
-        rs_available=item.rs_combined is not None)
-    return verdict["status"] == "block"
-
-
-def _attach_plan(item, frame, regime, regimes) -> bool:
-    """Build the v2 plan; False when the plan was rejected (item must not alert)."""
-    when = frame.index[-1] if frame is not None and len(frame) > 0 else None
-    analyze.attach_plan_v2(
-        item, item.plan, frame, item.result.ticker, item.result.horizon_key,
-        level_map=item.level_map, regime=regime, rs_percentile=item.rs_percentile,
-        breadth=None, regime2_state=analyze._regime_at(regimes, when))
-    if item.plan_v2 is not None:
-        item.plan_v2.regime_aligned = not (item.htf_info and item.htf_info.get("counter_trend", False))
-    return not (config.PLAN_ENGINE_V2 == "on" and getattr(item, "plan_v2_rejected", None))
-
-
-def _plan_stage(item, frames, lane, funnel, require_confirmation) -> bool:
-    """Plan build for a fully-qualifying item; False when it was rejected (dropped)."""
-    if not item.all_requirements_met:
-        return True
-    if _attach_plan(item, frames.get(item.result.ticker), lane["regime"], lane["regimes"]):
-        if funnel is not None:
-            funnel.record_item(item, "plan")
-        return True
-    if funnel is not None:
-        funnel.record_item(item, "plan", getattr(item, "plan_v2_rejected", None) or "rejected")
-    scan_run._skip_rejected_plan(item, require_confirmation)
-    return False
 
 
 def _qualified_items(items, require_confirmation, frames, lane) -> list:
     """Confirmation, sector RS, RS gate and plan build -- the base merge, serial."""
-    funnel = lane.get("funnel")
+    context = _qualify_context(require_confirmation, frames, lane)
     kept = []
     for item in items:
-        if not _confirmed(item, require_confirmation):
-            continue
-        analyze._apply_sector_rs(item, item.result.ticker, lane["sector_of"], lane["etf_symbol_of"],
-                                 lane["sector_frames"], lane["spy"])
-        blocked = _rs_blocked(item)
-        if funnel is not None:
-            funnel.record_item(item, "rs", "rs_blocked" if blocked else None)
-        if blocked:
-            continue
-        if _plan_stage(item, frames, lane, funnel, require_confirmation):
+        verdict = qualify.qualify_short_item(item.candidate_context, item, context)
+        qualify.record_verdict(lane.get("funnel"), verdict)
+        if isinstance(verdict, qualify.Accepted):
             kept.append(item)
     return kept
 

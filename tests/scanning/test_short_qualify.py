@@ -143,3 +143,113 @@ def test_check_shows_an_unmet_item_without_a_plan(offline):
     kept = _kept(items, require_confirmation=False)
     assert kept == [("4w", 0.0, None), GOLDEN_KEPT[1]]
     assert offline.entries == {}
+
+
+# --- Part 2: the pure helper's contract ---------------------------------------------
+
+from swingbot.core.scanning import qualify  # noqa: E402
+
+
+class Boom:
+    """Any attribute access fails: proves the helper never reaches a singleton."""
+
+    def __getattr__(self, name):
+        raise AssertionError(f"hidden I/O: {name}")
+
+
+@pytest.fixture
+def sealed(offline, monkeypatch):
+    for module in (short_run, scan_run):
+        monkeypatch.setattr(module, "state", Boom())
+    monkeypatch.setattr(short_run, "trade_log", Boom())
+    return offline
+
+
+def _context(**over):
+    base = dict(frames={"AAA": _stock()}, spy=_spy(_stock()), sector_of={}, etf_symbol_of={},
+                sector_frames={}, regime=None, regimes=None, confirmations=MemoryState(),
+                required_confirmations=1, issued_at="2025-01-10T21:00:00+00:00", now=NOW)
+    base.update(over)
+    return qualify.QualifyContext(**base)
+
+
+def test_accepted_item_carries_a_plan_stamped_with_the_explicit_clock(sealed):
+    verdict = qualify.qualify_short_item(CANDIDATE, _items()[0], _context())
+    assert isinstance(verdict, qualify.Accepted)
+    plan = verdict.item.plan_v2
+    assert (round(plan.trigger_price, 6), round(plan.stop_loss, 6), round(plan.tp1, 6)) == GOLDEN_KEPT[0][2]
+    assert plan.issued_at == "2025-01-10T21:00:00+00:00"
+
+
+def test_extra_candidate_never_qualifies_a_bullish_item(sealed):
+    item = _items()[0]
+    item.result.trend = "bullish"
+    assert qualify.qualify_short_item(CANDIDATE, item, _context()) == qualify.Rejected(item, "direction", "not_bearish")
+
+
+def test_unmet_and_awaiting_items_stop_at_confirmation(sealed):
+    unmet = _items()[0]
+    unmet.requirements = [SimpleNamespace(passed=False, label="x", detail="y", key="min_confluence")]
+    assert qualify.qualify_short_item(CANDIDATE, unmet, _context()).reason == "unmet"
+    awaiting = qualify.qualify_short_item(CANDIDATE, _items()[0], _context(required_confirmations=2))
+    assert (awaiting.stage, awaiting.reason) == ("confirmation", "awaiting_confirmation")
+
+
+def test_rs_leader_is_rejected_at_rs(sealed):
+    item = _items()[0]
+    item.rs_percentile = 99.0
+    verdict = qualify.qualify_short_item(CANDIDATE, item, _context())
+    assert (verdict.stage, verdict.reason) == ("rs", "rs_blocked")
+
+
+def test_prior_open_ticker_is_rejected_after_its_plan(sealed):
+    verdict = qualify.qualify_short_item(CANDIDATE, _items()[0], _context(open_tickers=frozenset({"AAA"})))
+    assert (verdict.stage, verdict.reason) == ("trade_decision", "existing_trade")
+    assert verdict.item.plan_v2 is not None
+
+
+def test_rejected_plan_revokes_on_the_supplied_store(sealed, monkeypatch):
+    monkeypatch.setattr(analyze, "build_confluence_plan", lambda *a, **k: None)
+    store = MemoryState()
+    verdict = qualify.qualify_short_item(CANDIDATE, _items()[0], _context(confirmations=store))
+    assert (verdict.stage, verdict.reason) == ("plan", "no_qualifying_target")
+    assert all(entry.get("trend") is None for entry in store.entries.values())
+
+
+# --- Part 3: scenario scoring with injected I/O (what the replay runs) --------------
+
+def _offline_io(records=None):
+    def track_record(level):
+        if records is not None:
+            records.append(level)
+        return (None, 0)
+    return analyze.ScanIO(stop_requested=lambda: False, monitor_scan=lambda *a: ([], []),
+                          monitor_open=lambda *a: ([], []), track_record=track_record)
+
+
+def test_injected_io_scores_the_same_items_without_the_journal(offline, monkeypatch):
+    live = [(i.result.horizon_key, i.conf.score, i.rs_percentile) for i in _items()]
+    monkeypatch.setattr(analyze, "trade_log", Boom())
+    monkeypatch.setattr(analyze, "runstate", Boom())
+    stock = _stock()
+    levels_seen = []
+    ctx = analyze.ExtraScanContext(
+        regime=None, min_confluence=2, min_confidence=4,
+        rs_cache={"rels": dict(enumerate(REFERENCE_RELS))}, spy_df=_spy(stock), live_prices={},
+        hard_filters=HARD_FILTERS, opex_tier=None, now=NOW, io=_offline_io(levels_seen))
+    items = analyze.scan_extra_candidate(CANDIDATE, stock, ctx, ["2w", "4w", "2m", "3m"])
+    assert [(i.result.horizon_key, i.conf.score, i.rs_percentile) for i in items] == live
+    assert levels_seen   # the confidence track record came from the injected source
+
+
+def test_unaligned_candidate_monitors_through_the_injected_io(offline, monkeypatch):
+    monkeypatch.setattr(analyze, "monitor_open_only", Boom())
+    seen = []
+    io = analyze.ScanIO(stop_requested=lambda: False, monitor_scan=lambda *a: ([], []),
+                        monitor_open=lambda *a: seen.append(a[0]) or ([], []),
+                        track_record=lambda level: (None, 0))
+    ctx = analyze.ExtraScanContext(regime=None, min_confluence=2, min_confidence=4, rs_cache=None,
+                                   spy_df=None, live_prices={}, hard_filters=None, opex_tier=None,
+                                   now=NOW, io=io)
+    assert analyze.scan_extra_candidate(CANDIDATE, _stock(), ctx, ["2w"]) == []
+    assert seen == ["AAA"]
