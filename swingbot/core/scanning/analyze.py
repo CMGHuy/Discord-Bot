@@ -37,7 +37,8 @@ from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, planned_loss_pc
 from swingbot.core.market.indicators import atr
 from swingbot.core.market.session import now_et
 
-from . import runstate
+from . import runstate, short_funnel
+from .short_reference import align_completed
 from .confidence import score_confidence
 from .embeds import _build_requirement_checks
 from .regime import get_htf_bias
@@ -45,7 +46,7 @@ from .singletons import trade_log
 from . import risk_features
 
 
-log = logging.getLogger("swing-bot.scan_engine")
+log = logging.getLogger(__name__)
 
 
 def veto_bullish_for(df) -> bool:
@@ -78,6 +79,7 @@ class ScanItem:
     stop_confluence: tuple = None
     combined_from: list = field(default_factory=list)
     htf_info: dict = None             # from get_htf_bias() -- None when HTF check is off or inconclusive
+    previous_confirmed: str = None    # state's confirmed value before this scan confirmed the item
     htf_bias: str | None = None       # "bullish"/"bearish" from the same get_htf_bias() call, always stored (not just on counter-trend like htf_info) so attach_plan_v2/_build_quality_inputs can reuse it instead of recomputing
     plan_v2: object = None            # TradePlanV2 | None
     plan_v2_rejected: str | None = None  # e.g. "no_qualifying_target" (v31 Task 6) -- distinguishes a real "no trade here" from a builder exception
@@ -90,6 +92,7 @@ class ScanItem:
     # v81: the paper-trade decision mirrored by the order ticket.
     paper_logged: bool = False
     not_logged_reason: str | None = None
+    candidate_context: dict | None = None   # V118-5: source/mode/reference of the extra-lane candidate; None = base lane
 
     @property
     def all_requirements_met(self) -> bool:
@@ -98,8 +101,7 @@ class ScanItem:
         return all(r.passed for r in self.requirements) if self.requirements else True
 
 
-def paper_trade_decision(item: ScanItem, already_open: bool) -> tuple[bool, str | None]:
-    """Whether this item is logged, and the ticket's explanation when not."""
+def _decision_for(item: ScanItem, already_open: bool) -> tuple[bool, str | None]:
     if already_open:
         return False, "already open"
     unmet = [f"{requirement.label}: {requirement.detail}"
@@ -107,6 +109,21 @@ def paper_trade_decision(item: ScanItem, already_open: bool) -> tuple[bool, str 
     if unmet:
         return False, "unmet: " + "; ".join(unmet)
     return True, None
+
+
+def paper_trade_decision(item: ScanItem, already_open: bool) -> tuple[bool, str | None]:
+    """Whether this item is logged, and the ticket's explanation when not."""
+    allowed, reason = _decision_for(item, already_open)
+    if not allowed:
+        log.debug("gate: %s (%s) not logged -- %s", getattr(item.result, "ticker", "?"),
+                  getattr(item.result, "horizon_key", "?"), reason)
+    return allowed, reason
+
+
+def _reject_plan(item, reason: str, ticker: str, horizon_key: str) -> None:
+    """Record why no v2 plan was attached; say so at DEBUG (per symbol, per scan)."""
+    item.plan_v2_rejected = reason
+    log.debug("gate: %s (%s) plan rejected -- %s", ticker, horizon_key, reason)
 
 
 # Points-per-component ceiling for the decision chart's quality box (E66),
@@ -330,13 +347,17 @@ def pd_normalize(when):
 
 
 def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
-                    regime=None, rs_percentile=None, breadth=None, regime2_state=None):
+                    regime=None, rs_percentile=None, breadth=None, regime2_state=None,
+                    issued_at=None, now=None):
     """Construct the v2 plan for a qualifying scan item, flag-gated.
     A v2 construction failure must NEVER break the legacy scan -- log and
     move on (shadow mode exists precisely to surface such failures safely).
 
     regime/rs_percentile/breadth are scan-wide/per-item readings the caller
-    already has in scope (Task E37 wiring) -- see _build_quality_inputs."""
+    already has in scope (Task E37 wiring) -- see _build_quality_inputs.
+
+    `issued_at`/`now` (V118-7) let a historical replay supply the clock; None
+    keeps the live wall clock. Neither changes a plan price."""
     if config.PLAN_ENGINE_V2 == "off":
         return
     try:
@@ -355,7 +376,7 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             # the legacy scenario numbers (which is what plan_numbers_for_display
             # does for plan=None, and would silently re-post the very prices
             # this change exists to stop posting).
-            item.plan_v2_rejected = "no_qualifying_target"
+            _reject_plan(item, "no_qualifying_target", ticker, horizon_key)
             return
         if planned_loss_pct(plan.trigger_price, plan.stop_loss) > HARD_MAX_PLANNED_LOSS_PCT + 1e-9:
             # Scenario building keeps the horizon's wider stop ceiling so
@@ -364,13 +385,13 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             # stop_entry plan is cancelled_risk_cap on fill and a market plan
             # would open in breach of the 2% rule. Posting it only issues an
             # alert the bot then cancels seconds later (GC=F, 2026-09-28).
-            item.plan_v2_rejected = "risk_cap"
+            _reject_plan(item, "risk_cap", ticker, horizon_key)
             return
         # item.plan_v2 is set BEFORE risk_features stamping (below) is even
         # attempted -- a render-only feature's stamping failure must never
         # unset the plan and silently fall the item through to legacy-number
         # rendering (final-review Fix 4).
-        plan.issued_at = datetime.now(timezone.utc).isoformat()
+        plan.issued_at = issued_at or datetime.now(timezone.utc).isoformat()
         item.plan_v2 = plan
         stamp_entry_context(plan, df, {
             "regime2_state": regime2_state,
@@ -397,7 +418,7 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
                 atr_val=_atr_for(df),
                 close=float(df["Close"].iloc[-1]),
                 rs_percentile=rs_percentile,
-                now=now_et(),
+                now=now or now_et(),
             )
         except Exception:
             log.warning("risk_features stamping failed for %s/%s -- plan_v2 still posts, "
@@ -521,11 +542,83 @@ def _format_badge_stats(stats: dict | None) -> str:
     return f"N={stats['n']} · {wr}"
 
 
+def _rs_pctile(df, spy_df, rs_cache, rs_frames=None):
+    """RS percentile vs the reference universe; None without a cache.
+
+    `rs_frames` (stock, spy) overrides the frames ranked -- the SHORT lane
+    passes the completed, date-aligned pair its reference returns used.
+    """
+    if rs_cache is None:
+        return None
+    stock, spy = rs_frames or (df, spy_df)
+    return rs_factors.rs_percentile(stock, spy, universe_rels=list(rs_cache["rels"].values()))
+
+
+@dataclass(frozen=True)
+class ScanIO:
+    """V118-7: the four things `_scan_one` reads beyond its frames, injectable.
+
+    The live scan uses LIVE_IO (the stop flag, open-trade monitoring and the
+    journal track record that feeds confidence). A historical replay passes
+    its own: no stop flag, no monitoring, a track record it states explicitly.
+    """
+    stop_requested: object        # () -> bool
+    monitor_scan: object          # (ticker, df, current_price) -> (newly_closed, near_close)
+    monitor_open: object          # (ticker, df, live_price) -> (newly_closed, near_close)
+    track_record: object          # (base_level) -> (win_rate_pct | None, closed_count)
+
+
+def _live_stop_requested() -> bool:
+    return runstate.is_stop_requested()
+
+
+def _live_monitor_scan(ticker, df, current_price):
+    """Existing-trade SL/TP and near-close checks on the already-fetched df."""
+    newly_closed = trade_log.update_open_trades(ticker, df, live_price=current_price)
+    if newly_closed:
+        log.info("%s: %d open trade(s) closed this scan (%s)", ticker, len(newly_closed),
+                  ", ".join(f"{t['id']}={t['status']}" for t in newly_closed))
+    # Check remaining open trades (that didn't just close) for near-close proximity,
+    # reusing this same already-fetched df -- no extra API calls.
+    near_close = _check_near_close(ticker, df)
+    if near_close:
+        log.info("%s: %d trade(s) newly near their stop-loss/take-profit", ticker, len(near_close))
+    return newly_closed, near_close
+
+
+def _live_monitor_open(ticker, df, live_price=None):
+    return monitor_open_only(ticker, df, live_price)
+
+
+def _live_track_record(base_level: int) -> tuple:
+    """`expand=False` (v79): ONE outcome per position, not one per scaled-out
+    leg -- see the call site in `_scan_one` and TradeLog.get_stats."""
+    stats = trade_log.get_stats(base_level, expand=False)
+    return (stats["win_rate"], stats["closed"])
+
+
+LIVE_IO = ScanIO(_live_stop_requested, _live_monitor_scan, _live_monitor_open, _live_track_record)
+
+
+def scenarios_for_direction(scenarios, allowed_directions):
+    """Keep only scenarios whose direction is allowed; None allows all.
+
+    Applied AFTER levels.build_scenarios so the dead-cat-bounce veto keeps its
+    meaning (it blocks bullish scenarios inside build_scenarios) -- the SHORT
+    lane filters by direction here and never reuses `block_bullish`.
+    """
+    if allowed_directions is None:
+        return scenarios
+    return [s for s in scenarios if s.direction in allowed_directions]
+
+
 def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
               regime, effective_min_confluence: int, effective_min_confidence: int,
               rs_cache: dict = None, spy_df=None, breadth: float = None,
               live_prices: dict = None, hard_filters: dict = None,
-              opex_tier_today=None) -> dict:
+              opex_tier_today=None, allowed_directions=None, rs_frames=None,
+              funnel_source: str = short_funnel.BASE_SOURCE, funnel_mode: str | None = None,
+              io: ScanIO | None = None) -> dict:
     """
     Per-ticker analysis body of _sync_run_scan's ANALYZE phase, extracted
     so it can run inside a map_tickers() worker thread (Task E20). Handles
@@ -568,7 +661,11 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
     "near_close_warnings": [...], "checked": int, "no_entry_point": int,
     "scenarios_found": int, "fully_qualifying": int,
     "failed_counts": {...}, "conf_level_counts": {...}}.
+
+    `io` (V118-7) supplies the stop flag, existing-trade monitoring and the
+    confidence track record; None is LIVE_IO, the live scan's behaviour.
     """
+    io = io or LIVE_IO
     hard_filters = hard_filters or {
         'min_reward_pct': config.MIN_REWARD_PCT,
         'max_stop_loss_pct': config.MAX_STOP_LOSS_PCT,
@@ -593,9 +690,10 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
         },
         "conf_level_counts": {},   # {1..5: number of scenarios scored at that level}
         "data_quality_failed": False,   # E47: this ticker tripped the E16 data-quality gate
+        "funnel_events": [],   # V118-5: immutable (direction, source, mode, stage, reason) tuples, merged serially by the caller
     }
 
-    if runstate.is_stop_requested():
+    if io.stop_requested():
         # Cooperative, checked once per ticker just like the old serial
         # loop did -- see the module-level _STOP_FILE docstring for why
         # this is file-based and only checked at per-ticker checkpoints.
@@ -637,17 +735,9 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
     live = (live_prices or {}).get(ticker)
     current_price = live if (live and live > 0) else float(df["Close"].iloc[-1])
 
-    newly_closed = trade_log.update_open_trades(ticker, df, live_price=current_price)
-    if newly_closed:
-        log.info("%s: %d open trade(s) closed this scan (%s)", ticker, len(newly_closed),
-                  ", ".join(f"{t['id']}={t['status']}" for t in newly_closed))
+    # Existing-trade SL/TP and near-close monitoring (LIVE_IO: _live_monitor_scan).
+    newly_closed, near_close = io.monitor_scan(ticker, df, current_price)
     stats["newly_closed"].extend(newly_closed)
-
-    # Check remaining open trades (that didn't just close) for near-close proximity,
-    # reusing this same already-fetched df -- no extra API calls.
-    near_close = _check_near_close(ticker, df)
-    if near_close:
-        log.info("%s: %d trade(s) newly near their stop-loss/take-profit", ticker, len(near_close))
     stats["near_close_warnings"].extend(near_close)
 
     bars_available = len(df)
@@ -687,10 +777,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
     # inside the loop below. rs_cache is None when the network-bound SPY/RS
     # lookup failed for this scan (see _sync_run_scan); None propagates
     # through cleanly (factor_rs treats it as absent, not a real reading).
-    rs_pctile = None
-    if rs_cache is not None:
-        rs_pctile = rs_factors.rs_percentile(
-            df, spy_df, universe_rels=list(rs_cache["rels"].values()))
+    rs_pctile = _rs_pctile(df, spy_df, rs_cache, rs_frames)
 
     # Trendline candidates (v56) depend only on this ticker's df/current_price
     # -- not on horizon -- so they're computed once per ticker here rather
@@ -785,7 +872,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             log.debug("%s (%s): no qualifying entry point (either no genuine support/resistance on both "
                        "sides, or the reward/stop/risk-reward requirements weren't met)", ticker, horizon_key)
 
-        for scenario in scenarios:
+        for scenario in scenarios_for_direction(scenarios, allowed_directions):
             stats["scenarios_found"] += 1
             if scenario.tight_stop:
                 log.info("%s (%s, %s): tight stop -- %.1f%% away, below this horizon's normal ATR cushion (%.1f%%)",
@@ -806,6 +893,8 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
                     log.debug("%s/%s %s dropped: %s", ticker, horizon_key,
                               scenario.direction, mtf_verdict["reason"])
                     stats["mtf_misaligned"] += 1
+                    stats["funnel_events"].append(
+                        (scenario.direction, funnel_source, funnel_mode, "scenario", "mtf_opposed"))
                     continue
 
             # Simulate EVERY supported strategy independently against
@@ -840,8 +929,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             # what the dashboards count; it must not change what the bot
             # posts. See TradeLog.get_stats' docstring.
             base_level_preview = max(1, min(5, target_confluence[0]))
-            base_level_stats = trade_log.get_stats(base_level_preview, expand=False)
-            track_record = (base_level_stats["win_rate"], base_level_stats["closed"])
+            track_record = io.track_record(base_level_preview)   # LIVE_IO: the journal
 
             # htf_result computed once above the scenario loop (v56) --
             # score_confidence's htf_bias input and the htf_counter_trend
@@ -895,6 +983,8 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
                     all_ok = False
             if all_ok:
                 stats["fully_qualifying"] += 1
+            stats["funnel_events"].extend(short_funnel.scenario_events(
+                scenario.direction, funnel_source, funnel_mode, requirements))
 
             result = levels.ScenarioSignal(
                 ticker=ticker, horizon_key=horizon_key, horizon_label=h["label"],
@@ -940,4 +1030,74 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
     return stats
 
 
+# --- V118-4: the SHORT extra lane's per-symbol analysis ---------------------------
 
+BEARISH_ONLY = ("bearish",)
+
+
+@dataclass
+class ExtraScanContext:
+    """Scan-wide inputs for the extra lane, frozen once per extra scan.
+
+    `rs_cache` is the lane's own in-memory {"rels": ...}; `newly_closed` and
+    `near_close` collect what monitoring an extra symbol's open trade found.
+    """
+    regime: object
+    min_confluence: int
+    min_confidence: int
+    rs_cache: dict | None
+    spy_df: object
+    live_prices: dict
+    hard_filters: dict | None
+    opex_tier: object
+    now: object = None
+    io: ScanIO | None = None          # V118-7: None = LIVE_IO; a replay injects its own
+    newly_closed: list = field(default_factory=list)
+    near_close: list = field(default_factory=list)
+    funnel_events: list = field(default_factory=list)
+
+
+def scan_extra_candidate(candidate, frame, context: ExtraScanContext, horizons) -> list:
+    """Bearish ScanItems for one extra-lane candidate; [] on any screen failure.
+
+    Runs the base per-symbol analysis (same E12 liquidity / E16 data-quality
+    screens, levels, scenarios, geometry, quality and RS inputs) with the
+    direction filter applied after scenario creation and before any plan or
+    confirmation work. Never the strategy pass; breadth is None (the base
+    breadth is not this universe's).
+    """
+    key = (short_funnel.BEARISH, candidate.source, candidate.mode)
+    context.funnel_events.append((*key, "candidate", None))
+    aligned = align_completed(frame, context.spy_df, None, context.now)
+    if aligned is None:
+        # An open trade on this symbol must still be monitored for its SL/TP.
+        context.funnel_events.append((*key, "aligned", "unaligned"))
+        closed, near = (context.io or LIVE_IO).monitor_open(
+            candidate.ticker, frame, context.live_prices.get(candidate.ticker))
+        context.newly_closed.extend(closed)
+        context.near_close.extend(near)
+        return []
+    context.funnel_events.append((*key, "aligned", None))
+    stats = _scan_one(
+        candidate.ticker, frame, list(horizons), None, context.regime,
+        context.min_confluence, context.min_confidence, rs_cache=context.rs_cache,
+        spy_df=context.spy_df, breadth=None, live_prices=context.live_prices,
+        hard_filters=context.hard_filters, opex_tier_today=context.opex_tier,
+        allowed_directions=BEARISH_ONLY, rs_frames=aligned[:2],
+        funnel_source=candidate.source, funnel_mode=candidate.mode, io=context.io)
+    context.newly_closed.extend(stats["newly_closed"])
+    context.near_close.extend(stats["near_close_warnings"])
+    context.funnel_events.extend(stats["funnel_events"])
+    for item in stats["items"]:
+        item.candidate_context = short_funnel.candidate_context(candidate)
+    return stats["items"]
+
+
+def monitor_open_only(ticker: str, df, live_price: float | None = None) -> tuple[list, list]:
+    """SL/TP monitoring for an open paper trade whose symbol is not scanned for
+    new entries today. Returns (newly_closed, near_close_warnings)."""
+    if df is None or len(df) == 0:
+        return [], []
+    price = live_price if live_price and live_price > 0 else float(df["Close"].iloc[-1])
+    closed = trade_log.update_open_trades(ticker, df, live_price=price)
+    return closed, _check_near_close(ticker, df)

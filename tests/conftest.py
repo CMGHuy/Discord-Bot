@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tests.db.conftest import db_committed, db_conn, db_engine, db_engine_empty  # noqa: F401
+from tests.db.conftest import db_committed, db_conn, db_engine, db_engine_empty, store_db  # noqa: F401
 
 
 @pytest.hookimpl(trylast=True)
@@ -147,3 +147,61 @@ def market_df():
     closes = 100 * np.cumprod(1 + rets)
     vols = rng.integers(500_000, 3_000_000, 1500).astype(float)
     return make_ohlcv(closes, spread_pct=2.0, volumes=vols)
+
+
+@pytest.fixture
+def restore_root_logging():
+    """Snapshot the root logger's handlers and level; restore both afterwards.
+
+    configure_logging() (swingbot/core/infra/logsetup.py) replaces the root
+    handlers it owns. A test calling it without this fixture would leave its
+    tmp-file handler on the process root for every later test in the worker.
+    """
+    root = logging.getLogger()
+    saved_handlers, saved_level = root.handlers[:], root.level
+    yield root
+    for handler in root.handlers[:]:
+        if handler not in saved_handlers:
+            root.removeHandler(handler)
+            handler.close()
+    for handler in saved_handlers:
+        if handler not in root.handlers:
+            root.addHandler(handler)
+    root.setLevel(saved_level)
+
+
+@pytest.fixture(autouse=True)
+def _store_database(request, monkeypatch):
+    """v116 Phase 4: every store is Postgres. A test that reaches get_engine()
+    gets this worker's test database -- lazily, so a test that never touches
+    a store opens nothing -- and the tables it touched are truncated after it.
+    With db-test down, such a test skips with the start command."""
+    import sqlalchemy as sa
+
+    from swingbot.core.db import engine as engine_module
+    from swingbot.core.db.repositories import base as base_module
+    from swingbot.core.db.schema import METADATA
+    used = {}
+    if request.node.get_closest_marker("real_engine"):
+        yield
+        return
+
+    def lazy():
+        if "engine" not in used:
+            used["engine"] = request.getfixturevalue("db_engine")
+        return used["engine"]
+
+    monkeypatch.setattr(engine_module, "get_engine", lazy)
+    monkeypatch.setattr(base_module, "get_engine", lazy)
+    # scripts/db/import_settings_audit.py binds the name at import time, so the two
+    # patches above do not reach it; without this it talks to the shared base database.
+    import importlib
+    try:
+        monkeypatch.setattr(importlib.import_module("scripts.db.import_settings_audit"), "get_engine", lazy)
+    except ImportError:
+        pass
+    yield
+    if used:
+        names = ", ".join(table.name for table in METADATA.sorted_tables)
+        with used["engine"].begin() as conn:
+            conn.execute(sa.text(f"TRUNCATE {names} RESTART IDENTITY CASCADE"))

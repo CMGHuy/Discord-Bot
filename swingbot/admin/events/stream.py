@@ -42,7 +42,7 @@ from swingbot.admin.api_v1.auth import require_auth
 
 from .broker import EventBroker, Subscription, get_broker
 
-log = logging.getLogger("swing-bot.admin.events")
+log = logging.getLogger(__name__)
 
 #: Seconds of silence before a comment-free keep-alive goes out. Proxies and
 #: browsers both drop an idle connection, and the client cannot tell that

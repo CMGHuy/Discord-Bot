@@ -26,7 +26,7 @@ import logging
 
 import pandas as pd
 
-log = logging.getLogger("swing-bot.candlestick_patterns")
+log = logging.getLogger(__name__)
 
 try:
     import pandas_ta_classic  # noqa: F401 -- registers the .ta accessor on DataFrames

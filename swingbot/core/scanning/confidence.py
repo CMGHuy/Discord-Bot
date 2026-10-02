@@ -123,7 +123,7 @@ from swingbot.core.market.candlestick_patterns import detect_confirming_pattern
 from swingbot.core.market.volatility import adx_trend_strength, macd_momentum_aligned, rsi_trend_aligned, squeeze_breakout_confirmation
 from swingbot.core.scanning.factors import FACTORS, FactorContext, run_factors
 
-log = logging.getLogger("swing-bot.confidence")
+log = logging.getLogger(__name__)
 
 # v32 Task 9: Level 6 ("Elite") was conditional on TRAIN clearing n>=100,
 # point estimate >=90%, Wilson lower bound >=80% and above Level 5's own

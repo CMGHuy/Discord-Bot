@@ -56,7 +56,7 @@ from swingbot import config
 from swingbot.core.market import market_context
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.edge.regime2 import REGIMES
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason, universe_symbols
 
 TRAIN_FROM, TRAIN_TO = "2020-01-01", "2023-12-31"
@@ -101,7 +101,7 @@ def collect(tickers, strategies, spy_df, *, quiet=False):
 
         n_trades = 0
         for strategy in strategies:
-            for hk in HORIZONS:
+            for hk in LEGACY_HORIZONS:
                 try:
                     summary = run_backtest(ticker, df, strategy, hk, one_at_a_time=True)
                 except Exception:
@@ -175,7 +175,7 @@ def decide(pooled, by_fold, strategies):
 def render(rows, allow, tickers, strategies):
     out = []
     out.append(f"== REGIME_ALLOW evidence | TRAIN {TRAIN_FROM}..{TRAIN_TO} | "
-               f"{len(tickers)} tickers x {len(strategies)} strategies x {len(HORIZONS)} horizons ==")
+               f"{len(tickers)} tickers x {len(strategies)} strategies x {len(LEGACY_HORIZONS)} horizons ==")
     out.append("")
     out.append("Pre-registered rule: deny (strategy, regime) iff N>=30 AND expectancy_r<0 "
                "AND negative in >=3 of 4 sub-folds (a sub-fold with N<30 counts as 'not negative').")
@@ -235,7 +235,7 @@ def main(argv=None) -> int:
 
     cached = [t for t in tickers if load_cached(t) is not None]
     print(f"{len(cached)}/{len(tickers)} tickers cached | {len(strategies)} strategies | "
-          f"{len(HORIZONS)} horizons", flush=True)
+          f"{len(LEGACY_HORIZONS)} horizons", flush=True)
 
     pooled, by_fold = collect(cached, strategies, spy_df)
     allow, rows = decide(pooled, by_fold, strategies)

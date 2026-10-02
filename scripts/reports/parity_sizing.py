@@ -9,7 +9,7 @@ rewired it to call plan_engine). See that module's docstring for why it must
 stay independent of plan_engine.py.
 
 Runs every ticker cached under data/backtest_cache/ x every strategy in
-backtest.ALL_STRATEGIES x every horizon in HORIZONS x every entry bar whose
+backtest.ALL_STRATEGIES x every horizon in LEGACY_HORIZONS x every entry bar whose
 entry date falls in the TRAIN window (2020-01-01..2023-12-31, same window
 scripts/backtest/run_backtest_range.py and scripts/backtest/tune_strategy.py use), comparing
 stop old vs new (STOP ONLY -- see the v31 note below for why tp1 isn't).
@@ -45,7 +45,7 @@ import pandas as pd
 
 from swingbot.core.backtesting import backtest
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, _plan_series
-from swingbot.core.market.strategy_types import HORIZONS, MIN_BARS
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS, MIN_BARS
 
 from tests.fixtures.legacy_trade_plan_at import legacy_trade_plan_at
 
@@ -91,7 +91,7 @@ def main() -> int:
             continue
         print(f"[{ti}/{len(tickers)}] {ticker}", flush=True)
 
-        for horizon_key in HORIZONS:
+        for horizon_key in LEGACY_HORIZONS:
             min_bars = MIN_BARS[horizon_key]
             if len(df) < min_bars + 10:
                 continue

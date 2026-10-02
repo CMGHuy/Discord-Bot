@@ -26,6 +26,13 @@ class PlanRepository(Repository):
                              where=sa.func.upper(plans.c.ticker) == (ticker or "").upper(),
                              order_by=plans.c.created_at.desc())
 
+    def version(self, *, conn=None) -> tuple[int, str | None]:
+        """(row count, newest updated_at) -- moves on any insert, update or delete."""
+        statement = sa.select(sa.func.count(), sa.func.max(plans.c.updated_at))
+        with self._tx(conn) as connection:
+            count, newest = connection.execute(statement).one()
+        return int(count), None if newest is None else newest.isoformat()
+
 
 _repo: PlanRepository | None = None
 

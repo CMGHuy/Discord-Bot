@@ -23,7 +23,7 @@ def _full_step_every_tick(monkeypatch):
 
 
 def _close_from_another_process(path: str, plan_id: str, status: str) -> None:
-    admin = PlanStore(path=path)
+    admin = PlanStore()
     plan = admin.get(plan_id)
     record_transition(plan, status, reason="manual", at="t1")
     admin.update(plan)
@@ -31,7 +31,7 @@ def _close_from_another_process(path: str, plan_id: str, status: str) -> None:
 
 def test_manual_close_during_price_fetch_is_not_overwritten(tmp_path):
     path = str(tmp_path / "plans.json")
-    store = PlanStore(path=path)
+    store = PlanStore()
     store.add(_active())
 
     def price_fn(ticker):
@@ -41,15 +41,15 @@ def test_manual_close_during_price_fetch_is_not_overwritten(tmp_path):
     events = PlanManager(store, price_fn).poll()
 
     assert events == []
-    assert PlanStore(path=path).get("p1").status == PlanStatus.CLOSED
+    assert PlanStore().get("p1").status == PlanStatus.CLOSED
 
 
 def test_plan_still_open_after_reload_is_stepped_as_before(tmp_path):
     path = str(tmp_path / "plans.json")
-    store = PlanStore(path=path)
+    store = PlanStore()
     store.add(_active())
 
     events = PlanManager(store, lambda ticker: 105.0).poll()
 
     assert [e.transition for e in events] == ["be_moved"]
-    assert PlanStore(path=path).get("p1").working_stop == 100.0
+    assert PlanStore().get("p1").working_stop == 100.0

@@ -11,6 +11,10 @@ UNCLASSIFIED = "unclassified"
 
 C, S = frozenset({"confluence"}), frozenset({"strategy"})
 CS = C | S
+#: Whole-scan population engines (v118): a knob they observe needs every
+#: ticker's frame at once, not one (ticker, df) at a time.
+SU = frozenset({"short_universe"})
+POPULATION_ENGINES = SU
 
 
 @dataclass(frozen=True)
@@ -49,6 +53,12 @@ REGISTRY: dict[str, Reach] = {
     "ADAPTIVE_RUNNER_TRAIL_ENABLED": Reach(REACHABLE, "Post-TP1 runner trail in simulate_exit. Not observable on the v74 fixture since the v104 stop ceiling (verified 2026-09-28): its one trade past TIGHTEN_TRIGGER_R was a lifecycle-widened plan. Covered by tests/planning/test_exit_sim_scaleout.py.", CS),
     "TIGHTEN_TRIGGER_R": Reach(REACHABLE, _TIGHTEN, CS),
     "TIGHTEN_ATR_MULT": Reach(REACHABLE, _TIGHTEN, CS),
+    "SHORT_UNIVERSE_RESEARCH_MODE": Reach(REACHABLE, (
+        "v118: the short_universe population engine replays the base scan and the extra "
+        "lane per decision date through the live selector (build_extra_candidates), "
+        "scan_extra_candidate and qualify_short_item, on PIT membership/sector intervals. "
+        "Proven on the fixture in tests/backtesting/test_measure_short_universe.py; a real "
+        "run needs data/universe/sp500_sector_history.csv, which does not exist yet."), SU),
     "CONFLUENCE_DEVIATION_PCT": _live("Confirmation counting happens in scan analysis; replay uses fixed tolerance."),
     "MIN_ALERT_CONFIDENCE_LEVEL": _live("Confidence scoring belongs to scanning.confidence."),
     "UNIFIED_CONFIDENCE": _live("Confidence scoring belongs to scanning.confidence."),

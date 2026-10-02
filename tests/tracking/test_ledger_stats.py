@@ -1,13 +1,11 @@
 import pytest
 
-from swingbot import config
 from swingbot.core.tracking.performance import TradeLog
 
 
 @pytest.fixture
-def log(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    return TradeLog(path=str(tmp_path / "trades.json"))
+def log():
+    return TradeLog()
 
 
 def _open(log, ticker, ledger=None):
@@ -20,7 +18,7 @@ def _close(log, trade_id, status, pnl):
     trade = log.get_trade_by_id(trade_id)
     trade.update(status=status, exit_price=100.0, realized_pnl_amount=pnl,
                  closed_at="2026-09-17T20:00:00+00:00")
-    log._save()
+    log._db_upsert(trade)
 
 
 def test_ledger_scopes_records_stats_and_summary(log):

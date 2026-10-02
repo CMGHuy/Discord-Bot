@@ -34,6 +34,9 @@ data/backtest_cache/
 # scripts/data/fetch_backtest_data.py --start 2010-01-01 --end 2025-12-31.
 data/backtest_cache_ext/
 data/backups/
+# v116 point-in-time recovery: pgBackRest repo, .env versions, restic repo,
+# deploys.jsonl. VM-only; never committed.
+/backups/
 # Runtime relative-strength cache, rebuilt from the configured universe.
 data/universe/rs_cache.json
 
@@ -65,6 +68,7 @@ data/v103_*.json
 # collect --mechanism E); the committed stage JSONs under docs/superpowers/results/ are the record.
 data/v108_*.json
 data/v104_*.json
+data/v113_*.json
 # Same reason and same glob shape for v34's RS-gate measurement dumps
 # (data/v34_train.json, data/v34_train_rows.json, data/v34_validation.json),
 # re-derivable via scripts/backtest/measure_rs_gate_effect.py.
@@ -146,3 +150,4 @@ data/v90/
 
 # claude plugin eval run artefacts (HTML reports, aggregate json) -- never committed
 .claude/skills/*/evals/results/
+

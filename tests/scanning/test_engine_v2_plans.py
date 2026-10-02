@@ -6,11 +6,13 @@ import pytest
 
 import swingbot.config as config
 from swingbot.core.planning import account as _account
+from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, planned_loss_pct
 from swingbot.core.edge import throttle
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.core.scanning import analyze, dedup, engine, fetch, runstate, scan_run
 from swingbot.core.scanning.engine import ScanProgress
 from tests.helpers import make_ohlcv
+from tests.store_seed import seed_store
 
 
 def test_engine_has_no_discord_dependency():
@@ -26,65 +28,23 @@ def test_engine_has_no_discord_dependency():
 
 @pytest.fixture(autouse=True)
 def isolate_data_dir(tmp_path, monkeypatch):
-    """Point `config.DATA_DIR` somewhere this test owns.
+    """Point `config.DATA_DIR` somewhere this test owns, and seed the account.
 
-    These tests drive `_sync_run_scan`, which reads the account config and
-    writes scan telemetry — and until this fixture existed it did both against
-    the REAL `data/`. Two consequences, both of which actually happened:
-
-    - the suite wrote real `scan_telemetry.jsonl` rows during a run, which is
-      why that filename had to be gitignored;
-    - and it READ the real `account.json`, so the suite's result depended on
-      whatever was sitting in `data/`. A fixture file with `balance_history`
-      keyed `date` instead of `ts` failed five tests here with `KeyError:
-      'ts'` — a failure with no connection to anything these tests are about.
-
-    The second half is the dangerous one: a suite that reads shared mutable
-    state passes on one machine and fails on another for reasons invisible in
-    the diff.
-
-    Seeded rather than left empty, because the code under test assumes these
-    files exist — an absent account.json is a different failure from an
-    isolated one, and would just move the problem.
+    These tests drive `_sync_run_scan`, which writes scan telemetry -- against
+    the REAL `data/` until this fixture existed (the suite wrote real
+    `scan_telemetry.jsonl` rows, which is why that filename had to be
+    gitignored). The account row is seeded rather than left to default so the
+    result never depends on what a previous test left in the database.
     """
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
 
-    # DATA_DIR alone is not enough, and finding out why is the whole reason
-    # this fixture is documented rather than terse. `account.py` does
-    # `CONFIG_PATH = os.path.join(config.DATA_DIR, "account.json")` at IMPORT
-    # time, and `load_account_config(path=CONFIG_PATH)` binds that as a
-    # default argument at DEF time -- so it is captured twice over, and
-    # patching either `config.DATA_DIR` or `account.CONFIG_PATH` afterwards
-    # changes nothing. The engine also imported the function by name, so it
-    # holds its own reference.
-    #
-    # Patching it where the engine looks it up is the one place that works.
-    # Two entry points, reached two different ways, so both need redirecting:
-    # the engine imported `load_account_config` BY NAME (its own reference),
-    # and calls `get_balance_history_points` THROUGH the module. Patching the
-    # module attribute fixes the second and does nothing for the first.
-    account_path = str(tmp_path / "account.json")
-    monkeypatch.setattr(
-        scan_run, "load_account_config",
-        lambda path=account_path: _account.load_account_config(path),
-    )
-    monkeypatch.setattr(
-        _account, "get_balance_history_points",
-        lambda path=account_path: [
-            (e["ts"][:10], e["balance"])
-            for e in _account.get_balance_history(path)
-        ],
-    )
-
-    (tmp_path / "trades.json").write_text("[]", encoding="utf-8")
-    (tmp_path / "plans.json").write_text("[]", encoding="utf-8")
-    (tmp_path / "account.json").write_text(json.dumps({
+    seed_store("account", {
         "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
         "sizing_mode": "risk_pct",
         # `ts`, not `date`. account.py reads entry["ts"] unguarded.
         "balance_history": [{"ts": "2026-08-01T00:00:00+00:00",
                              "balance": 10000.0}],
-    }), encoding="utf-8")
+    })
 
 
 def _item():
@@ -257,7 +217,7 @@ def test_sync_run_scan_gates_attach_plan_v2_on_all_ok(monkeypatch, tmp_path, stu
         fetch, "get_daily_data",
         lambda ticker, period=None: df.copy() if ticker == "TEST" else None,
     )
-    monkeypatch.setattr(scan_run, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
+    monkeypatch.setattr(scan_run, "trade_log", TradeLog())
     monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
 
     captured = {}
@@ -307,16 +267,50 @@ def test_attach_plan_v2_records_the_rejection_reason(monkeypatch):
     assert item.plan_v2_rejected == "no_qualifying_target"
 
 
-def test_attach_plan_v2_rejects_a_plan_whose_stop_is_beyond_the_hard_cap(monkeypatch):
+def _gc_scenario():
+    return SimpleNamespace(direction="bearish", entry=4194.30, stop_loss=4278.68,
+                           take_profit=4066.11, target_sources=["FVG (bullish)"],
+                           stop_sources=["Rolling resistance"])
+
+
+def test_attach_plan_v2_clamps_a_stop_beyond_the_hard_cap_and_issues(monkeypatch):
     # Production 2026-09-28: GC=F plans with a 2.01% trigger-to-stop loss were
-    # posted, then cancelled_risk_cap by PlanManager seconds later on fill. A
-    # plan the execution guard can never open must not be posted at all.
+    # posted, then cancelled_risk_cap on fill, and f01e87e2 then rejected them.
+    # v115: the stop is clamped to 1.75% from the trigger and the plan issues.
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", True)
     item = _item()
-    scenario = SimpleNamespace(direction="bearish", entry=4194.30, stop_loss=4278.68,
-                               take_profit=4066.11, target_sources=["FVG (bullish)"],
-                               stop_sources=["Rolling resistance"])
-    engine.attach_plan_v2(item, scenario, make_ohlcv([4194.30] * 60),
+    engine.attach_plan_v2(item, _gc_scenario(), make_ohlcv([4194.30] * 60),
+                          "GC=F", "4w", level_map=None)
+    assert item.plan_v2 is not None
+    assert getattr(item, "plan_v2_rejected", None) is None
+    assert item.plan_v2.stop_loss == pytest.approx(4194.30 * 1.0175)
+    assert planned_loss_pct(item.plan_v2.trigger_price,
+                            item.plan_v2.stop_loss) <= HARD_MAX_PLANNED_LOSS_PCT
+
+
+def test_attach_plan_v2_issues_a_four_percent_stop_at_one_point_75(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", True)
+    item = _item()
+    scenario = SimpleNamespace(direction="bullish", entry=100.0, stop_loss=96.0,
+                               take_profit=104.0, target_sources=["EMA21"],
+                               stop_sources=["Rolling support"])
+    engine.attach_plan_v2(item, scenario, make_ohlcv([100.0] * 60),
+                          "AAPL", "4w", level_map=None)
+    assert item.plan_v2 is not None
+    assert getattr(item, "plan_v2_rejected", None) is None
+    assert item.plan_v2.stop_loss == pytest.approx(98.25)
+    assert item.plan_v2.tp1 == pytest.approx(104.0)
+
+
+def test_attach_plan_v2_still_rejects_beyond_the_cap_when_the_clamp_is_off(monkeypatch):
+    # The f01e87e2 safety net is unchanged: with the clamp off, the 2.01% GC=F
+    # plan builds (tp 4066.11 is 1.52R) and is rejected as risk_cap.
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    monkeypatch.setattr(config, "CLAMP_STOP_TO_HARD_CAP", False)
+    item = _item()
+    engine.attach_plan_v2(item, _gc_scenario(), make_ohlcv([4194.30] * 60),
                           "GC=F", "4w", level_map=None)
     assert item.plan_v2 is None
     assert item.plan_v2_rejected == "risk_cap"
@@ -363,7 +357,7 @@ def _setup_minimal_scan(monkeypatch, tmp_path):
         fetch, "get_daily_data",
         lambda ticker, period=None: df.copy() if ticker == "TEST" else None,
     )
-    monkeypatch.setattr(scan_run, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
+    monkeypatch.setattr(scan_run, "trade_log", TradeLog())
     monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
 
 
@@ -441,7 +435,7 @@ def test_illiquid_ticker_skips_new_signals_but_still_monitors_open_trades(monkey
     )
     monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
 
-    test_log = TradeLog(path=str(tmp_path / "trades.json"))
+    test_log = TradeLog()
     monkeypatch.setattr(engine, "trade_log", test_log)
     monkeypatch.setattr(scan_run, "trade_log", test_log)
     monkeypatch.setattr(analyze, "trade_log", test_log)
@@ -539,7 +533,7 @@ def test_sync_run_scan_parallel_dispatch_matches_serial(monkeypatch, tmp_path, s
         # debounce state nor the progress/funnel state from one run may
         # leak into the other.
         monkeypatch.setattr(config, "SCAN_WORKERS", workers)
-        monkeypatch.setattr(scan_run, "trade_log", TradeLog(path=str(tmp_path / f"trades_{workers}.json")))
+        monkeypatch.setattr(scan_run, "trade_log", TradeLog())
         progress = ScanProgress()
 
         captured = {}
@@ -618,7 +612,7 @@ def _drive_alert_loop(monkeypatch, tmp_path, intraday_fn, alert_data_fn=None):
         fetch, "get_daily_data",
         alert_data_fn or (lambda ticker, period=None: df.copy() if ticker == "TEST" else None),
     )
-    monkeypatch.setattr(scan_run, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
+    monkeypatch.setattr(scan_run, "trade_log", TradeLog())
     monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
 
     # Network / filesystem-bound parts of the alert loop, stubbed.
@@ -702,7 +696,6 @@ def test_mass_fetch_failure_raises_data_fail_frac_and_engages_kill_switch(monkey
     kill-switch computation happens before the alert-building loop and
     doesn't need it to run.
     """
-    monkeypatch.setattr(throttle, "KILLSWITCH_PATH", str(tmp_path / "killswitch.json"))
     assert throttle.kill_state()["on"] is False   # sanity: off before the scan
 
     good_df = _structured_df()
@@ -713,7 +706,7 @@ def test_mass_fetch_failure_raises_data_fail_frac_and_engages_kill_switch(monkey
         fetch, "get_daily_data",
         lambda ticker, period=None: good_df.copy() if ticker == "OK" else None,
     )
-    monkeypatch.setattr(scan_run, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
+    monkeypatch.setattr(scan_run, "trade_log", TradeLog())
     monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
     monkeypatch.setattr(scan_run.account_module, "get_balance_history_points", lambda: [])
     monkeypatch.setattr(dedup, "dedup_scan_items", lambda items: [])
@@ -890,7 +883,7 @@ def test_regime_at_logs_a_warning_on_a_real_lookup_miss():
 
 
 def test_regime_at_stays_silent_on_no_regimes_at_all(caplog):
-    with caplog.at_level("WARNING", logger="swing-bot.scan_engine"):
+    with caplog.at_level("WARNING", logger="swingbot.core.scanning.analyze"):
         result = analyze._regime_at(None, None)
     assert result is None
     assert not caplog.records  # nothing to diagnose -- there was no series to miss on
@@ -900,7 +893,7 @@ def test_regime_at_returns_the_matching_regime_without_logging(caplog):
     import pandas as pd
 
     regimes = pd.Series(["bull_quiet"], index=pd.to_datetime(["2026-01-02"]))
-    with caplog.at_level("WARNING", logger="swing-bot.scan_engine"):
+    with caplog.at_level("WARNING", logger="swingbot.core.scanning.analyze"):
         result = analyze._regime_at(regimes, pd.Timestamp("2026-01-02"))
     assert result == "bull_quiet"
     assert not caplog.records
@@ -918,3 +911,35 @@ def test_attach_plan_v2_stamps_issued_at_in_utc(monkeypatch):
     stamped = datetime.fromisoformat(item.plan_v2.issued_at)
     assert stamped.tzinfo is not None and stamped.utcoffset().total_seconds() == 0
     assert before <= stamped <= after
+
+
+def test_a_setup_rejected_at_plan_build_can_alert_once_its_plan_qualifies(
+        monkeypatch, tmp_path, stub_batch_fetch):
+    """2026-09-29 production: a confirmed setup whose plan was rejected at
+    build (risk_cap / no_qualifying_target) stayed marked confirmed in
+    state, so it never alerted later even once its plan fit. The rejection
+    must revoke the confirmation so the setup re-confirms and posts."""
+    from swingbot.core.infra.state import StateStore
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    monkeypatch.setattr(config, "SIGNAL_CONFIRMATION_SCANS", 2)
+    _setup_minimal_scan(monkeypatch, tmp_path)
+    monkeypatch.setattr(scan_run, "state", StateStore())
+
+    captured = []
+
+    def _capture_and_shortcircuit(items):
+        captured.append(list(items))
+        return []
+
+    monkeypatch.setattr(dedup, "dedup_scan_items", _capture_and_shortcircuit)
+    real_builder = analyze.build_confluence_plan
+
+    monkeypatch.setattr(analyze, "build_confluence_plan", lambda *a, **k: None)
+    for _ in range(2):          # pending, then confirmed -> rejected at build
+        engine._sync_run_scan("4w", require_confirmation=True, progress=None, min_confluence=0)
+    assert captured[-1] == []
+
+    monkeypatch.setattr(analyze, "build_confluence_plan", real_builder)
+    for _ in range(2):          # the same setup re-confirms, now with a plan
+        engine._sync_run_scan("4w", require_confirmation=True, progress=None, min_confluence=0)
+    assert captured[-1], "a revoked confirmation must be able to confirm and post again"

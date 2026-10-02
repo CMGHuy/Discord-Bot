@@ -28,6 +28,7 @@ def enabled(monkeypatch):
     monkeypatch.setattr(config, "ALPACA_API_KEY_ID", "k")
     monkeypatch.setattr(config, "ALPACA_API_SECRET_KEY", "s")
     monkeypatch.setattr(config, "ALPACA_TIMEOUT_SECONDS", 0.5)
+    monkeypatch.setattr(config, "ALPACA_BARS_TIMEOUT_SECONDS", 0.5)
     monkeypatch.setattr(config, "ALPACA_BREAKER_FAILURES", 2)
     monkeypatch.setattr(config, "ALPACA_BREAKER_COOLDOWN_SECONDS", 60)
     router.reset()
@@ -73,10 +74,10 @@ def test_breaker_opens_then_cools_down(enabled, monkeypatch):
     prov = FakeProvider(exc=AlpacaMiss("500")); _use(monkeypatch, prov)
     for _ in range(3):
         router.daily_bars(["AAPL"], "2y", yf_daily([]))
-    assert prov.calls == 2 and router.stats()["breaker_open"] is True
+    assert prov.calls == 4 and router.stats()["breaker_open"] is True  # 2 calls x (try + 1 retry)
     monkeypatch.setattr(router._breaker, "open_until", 0.0)
     router.daily_bars(["AAPL"], "2y", yf_daily([]))
-    assert prov.calls == 3
+    assert prov.calls == 6
 
 def test_auth_error_latches_until_keys_change(enabled, monkeypatch):
     prov = FakeProvider(exc=AlpacaAuthError("401")); _use(monkeypatch, prov)
@@ -107,3 +108,54 @@ def test_non_hourly_intraday_is_plain_yfinance(enabled, monkeypatch):
     prov = FakeProvider(); _use(monkeypatch, prov)
     out = router.intraday_bars("AAPL", "15m", lambda t, iv: _df())
     assert prov.calls == 0 and out.attrs["source"] == "yfinance"
+
+
+class BatchProvider(FakeProvider):
+    """Records each daily_bars batch; raises for a batch holding `bad`."""
+    def __init__(self, bad=None, **kw):
+        super().__init__(**kw); self.batches, self.bad = [], bad
+    def daily_bars(self, tickers, period):
+        self.batches.append(list(tickers))
+        if self.bad in tickers: raise AlpacaMiss("boom")
+        self._maybe(); return {t: _df() for t in tickers}
+
+def _syms(n): return [f"A{chr(65 + i // 26)}{chr(65 + i % 26)}" for i in range(n)]
+
+def _size(monkeypatch, n):
+    monkeypatch.setattr(router, "symbols_per_request", lambda period: n)
+
+def test_daily_bars_sends_page_sized_batches(enabled, monkeypatch):
+    prov = BatchProvider(); _use(monkeypatch, prov); _size(monkeypatch, 20)
+    tickers = _syms(45)
+    out = router.daily_bars(tickers, "2y", yf_daily([]))
+    assert sorted(len(b) for b in prov.batches) == [5, 20, 20]
+    assert {out[t].attrs["source"] for t in tickers} == {"alpaca"}
+
+def test_failed_batch_falls_back_only_its_symbols(enabled, monkeypatch):
+    tickers = _syms(45)
+    prov = BatchProvider(bad=tickers[25]); _use(monkeypatch, prov); _size(monkeypatch, 20)
+    calls = []
+    out = router.daily_bars(tickers, "2y", yf_daily(calls))
+    assert calls == [tickers[20:40]]
+    assert {out[t].attrs["source"] for t in tickers[:20] + tickers[40:]} == {"alpaca"}
+    assert {out[t].attrs["source"] for t in tickers[20:40]} == {"yfinance-fallback"}
+
+def test_batches_run_in_parallel_under_one_deadline(enabled, monkeypatch):
+    prov = BatchProvider(sleep=0.3); _use(monkeypatch, prov); _size(monkeypatch, 2)
+    tickers = _syms(6); t0 = time.monotonic()
+    out = router.daily_bars(tickers, "2y", yf_daily([]))
+    assert time.monotonic() - t0 < 0.5
+    assert {out[t].attrs["source"] for t in tickers} == {"alpaca"}
+
+def test_each_batch_takes_a_bucket_token(enabled, monkeypatch):
+    prov = BatchProvider(); _use(monkeypatch, prov); _size(monkeypatch, 2)
+    router._bucket.tokens, router._bucket.refill_per_s = 2.0, 0.0
+    tickers = _syms(6); calls = []
+    out = router.daily_bars(tickers, "2y", yf_daily(calls))
+    assert len(prov.batches) == 2 and calls == [tickers[4:]]
+    assert {out[t].attrs["source"] for t in tickers[4:]} == {"yfinance-fallback"}
+
+def test_miss_log_names_timeout(enabled, monkeypatch, caplog):
+    _use(monkeypatch, FakeProvider(daily={"AAPL"}, sleep=2)); caplog.set_level("DEBUG")
+    router.daily_bars(["AAPL"], "2y", yf_daily([]))
+    assert "TimeoutError" in caplog.text

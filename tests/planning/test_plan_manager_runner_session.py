@@ -11,7 +11,7 @@ DAY1_A=dt.datetime(2026,8,27,10,0,tzinfo=US_MARKET_TZ); DAY1_B=dt.datetime(2026,
 def _rth_on(monkeypatch): monkeypatch.setattr(config,"INTRADAY_RTH_ONLY",True)
 def _env(tmp_path,prices):
     feed=FakePriceFeed(); feed.set_series("AAPL",prices)
-    store=PlanStore(path=str(tmp_path/"plans.json")); store.add(_active())
+    store=PlanStore(); store.add(_active())
     return store,PlanManager(store,feed.get_price)
 def test_tp1_stamps_runner_floor_session(tmp_path):
     store,mgr=_env(tmp_path,[110.5]); mgr.poll(now=DAY1_A)

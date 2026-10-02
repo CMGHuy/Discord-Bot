@@ -20,6 +20,8 @@ def log_scan_telemetry(stats: dict, path: str | None = None) -> None:
     row = {"at": dt.datetime.now(dt.timezone.utc).isoformat(), **stats}
     with open(path or TELEMETRY_PATH, "a", encoding="utf-8") as f:
         f.write(_json.dumps(row) + "\n")
+    from swingbot.core.db import notify
+    notify.publish("scan")
 
 
 def recent_telemetry(n: int = 50, path: str | None = None) -> list:

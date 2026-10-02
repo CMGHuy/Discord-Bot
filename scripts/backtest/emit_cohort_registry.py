@@ -22,7 +22,7 @@ from swingbot.core.backtesting.cohort_registry import cohort_key  # noqa: E402
 from swingbot.core.market.session import now_et  # noqa: E402
 
 
-# Real trades.json records (performance.py's log_trade) use these three
+# Real trade records (performance.py's log_trade) use these three
 # lowercase closed statuses -- "win"/"loss" on a stop/target hit, "closed" on
 # a manual exit with no win/loss verdict. There is no "CLOSED" status; that
 # was a guess, not a value this codebase ever writes.
@@ -47,7 +47,7 @@ def _et_calendar_date(opened_at: str | None) -> str | None:
 
 
 def _normalize_live_trades(trades: list[dict]) -> list[dict]:
-    """Adapt raw trades.json records to the {created_at, direction,
+    """Adapt raw trade records to the {created_at, direction,
     r_realized} shape aggregate_cells() expects -- the shape the backtest
     replay JSON already uses natively.
 
@@ -128,9 +128,21 @@ def _pool_mean_r(live: list[dict], backtest: list[dict]) -> float:
     return round(sum(realized_rs) / len(realized_rs), 6) if realized_rs else 0.0
 
 
+def load_live_trades(path: str | None) -> list[dict]:
+    """Closed-or-open confluence trades from the trades table, or from an
+    exported JSON file (scripts/db/export_json.py --store trades)."""
+    if path:
+        trades = json.loads(Path(path).read_text(encoding="utf-8"))
+    else:
+        from swingbot.core.tracking.performance import TradeLog
+        trades = TradeLog().get_trades(limit=None)
+    return [trade for trade in trades if trade.get("source") == "confluence"]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--live", required=True, help="data/trades.json")
+    parser.add_argument("--live", default=None,
+                        help="trades JSON export to read instead of the trades table")
     parser.add_argument("--backtest", required=True, help="confluence replay trades JSON")
     parser.add_argument("--spy", default="market_data/SPY.csv")
     parser.add_argument("--out", default="swingbot/core/backtesting/cohort_registry.json")
@@ -140,12 +152,7 @@ def main() -> int:
 
     spy = pd.read_csv(args.spy, index_col=0, parse_dates=True)
     regimes = regime_series(spy)
-    live_raw = [
-        trade
-        for trade in json.loads(Path(args.live).read_text(encoding="utf-8"))
-        if trade.get("source") == "confluence"
-    ]
-    live = _normalize_live_trades(live_raw)
+    live = _normalize_live_trades(load_live_trades(args.live))
     backtest = json.loads(Path(args.backtest).read_text(encoding="utf-8"))
     print(f"live closed confluence trades: {len(live)}", flush=True)
     print(f"backtest replay trades: {len(backtest)}", flush=True)

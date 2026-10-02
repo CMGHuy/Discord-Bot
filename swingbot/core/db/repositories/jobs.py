@@ -21,8 +21,14 @@ class JobRepository(Repository):
     @staticmethod
     def _storage(record: dict) -> dict:
         record = dict(record)
-        record.pop("id", None)
-        if "state" in record and "status" not in record:
+        # The JSON job record is keyed by `id` and never carries `job_id`; the
+        # table's natural key is `job_id`, and `id` is its surrogate column.
+        legacy_id = record.pop("id", None)
+        if legacy_id is not None:
+            record.setdefault("job_id", legacy_id)
+        if "state" in record:
+            # `state` is the legacy field callers edit; a record read back from
+            # the table carries both, and the edited `state` must win.
             record["status"] = record["state"]
         return record
 

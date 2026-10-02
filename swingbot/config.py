@@ -52,7 +52,7 @@ _PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(_PACKAGE_DIR)
 ENV_PATH = os.path.join(_PROJECT_ROOT, ".env")
 
-log = logging.getLogger("swing-bot.config")
+log = logging.getLogger(__name__)
 
 # All runtime state (trades.json, state.json, account.json, watchlist.json)
 # and generated chart images live under the project root, not inside the
@@ -134,7 +134,7 @@ FIELDS: list[Field] = [
           type="number", default="5", min=1, max=120, step=1,
           help="Every scan both looks for new trades and checks all open trades for near-close proximity."),
     Field("SIGNAL_CONFIRMATION_SCANS", "SIGNAL_CONFIRMATION_SCANS", "Scanning & Session", "Confirmation scans",
-          type="number", default="2", min=1, max=10, step=1,
+          type="number", default="1", min=1, max=10, step=1,
           help="A signal must appear the same way this many consecutive scans before it's confirmed and alerted -- filters intraday flicker."),
     Field("LOG_LEVEL", "LOG_LEVEL", "Scanning & Session", "Log level",
           type="select", default="INFO", options=["DEBUG", "INFO", "WARNING", "ERROR"],
@@ -152,13 +152,23 @@ FIELDS: list[Field] = [
           help="Hard filter, enforced exactly as set: a scenario is dropped entirely (not shown, not scored) "
                "unless its target is at least this far from today's price. No exceptions for a close miss."),
     Field("MIN_STOP_DISTANCE_PCT", "MIN_STOP_DISTANCE_PCT", "Trade Filters & Risk", "Min stop distance %",
-          type="float", default="2.0", min=0, step=0.5,
+          type="float", default="1.75", min=0, step=0.25,
           help="Hard filter, enforced exactly as set: dropped entirely if the stop sits closer than this -- "
                "too exposed to ordinary daily noise. No exceptions for a close miss."),
     Field("MAX_STOP_LOSS_PCT", "MAX_STOP_LOSS_PCT", "Trade Filters & Risk", "Max stop-loss %",
           type="float", default="2.0", min=0, max=2.0, step=0.5,
           help="Hard filter: a plan may never carry more than 2% price risk from entry to its initial stop. "
                "A market gap can still execute beyond that stop; realised fills remain reported honestly."),
+    Field("CLAMP_STOP_TO_HARD_CAP", "CLAMP_STOP_TO_HARD_CAP", "Trade Filters & Risk",
+          "Clamp wide confluence stops to the 2% cap",
+          type="checkbox", default="true",
+          help="v115. A confluence setup whose natural stop sits further than 2% from the entry "
+               "is still issued, with its stop moved to 1.75% from the entry (0.25% inside the "
+               "cap, so a fill a little past the trigger is not cancelled). The target is "
+               "then chosen against that tighter risk, and the setup is dropped if no level pays "
+               "the min reward:risk ratio. Off: the stop stays where the levels put it and any plan "
+               "beyond 2% is rejected (risk_cap), which at a 2.0% stop floor posts almost nothing. "
+               "Historical replay clamps too. An unmeasured live change (v115, Edge: volume)."),
     Field("MIN_RISK_REWARD_RATIO", "MIN_RISK_REWARD_RATIO", "Trade Filters & Risk", "Min reward:risk ratio",
           type="float", default="1.5", min=0, step=0.1,
           help="Hard filter, enforced exactly as set: dropped entirely unless the reward:risk to target 1 "
@@ -664,6 +674,12 @@ FIELDS: list[Field] = [
     Field("ALPACA_TIMEOUT_SECONDS", "ALPACA_TIMEOUT_SECONDS", "Data Sources",
           "Alpaca call timeout (s)", type="number", default="5", min=1, max=30, step=1,
           help="Past this an Alpaca call is abandoned and the symbols fall back to yfinance."),
+    Field("ALPACA_BARS_TIMEOUT_SECONDS", "ALPACA_BARS_TIMEOUT_SECONDS", "Data Sources",
+          "Alpaca bulk-bars timeout (s)", type="number", default="20", min=1, max=120, step=1,
+          help="Shared deadline for one bulk bars call (daily bars across all batches, 1h bars). "
+               "A 19-symbol 2y daily batch takes ~2 s, so the 5 s quote timeout is far too tight "
+               "for it. ALPACA_TIMEOUT_SECONDS stays the deadline for quotes. Past this the "
+               "missed symbols fall back to yfinance."),
     Field("ALPACA_MAX_TRADE_AGE_SECONDS", "ALPACA_MAX_TRADE_AGE_SECONDS", "Data Sources",
           "Max IEX last-trade age in session (s)", type="number", default="300",
           min=30, max=3600, step=30,
@@ -675,6 +691,13 @@ FIELDS: list[Field] = [
     Field("ALPACA_BREAKER_COOLDOWN_SECONDS", "ALPACA_BREAKER_COOLDOWN_SECONDS",
           "Data Sources", "Alpaca breaker cool-down (s)", type="number", default="300",
           min=30, max=3600, step=30, help="How long Alpaca is skipped once the breaker opens."),
+    Field("SPOT_QUOTE_MAX_AGE_SECONDS", "SPOT_QUOTE_MAX_AGE_SECONDS", "Data Sources",
+          "Max spot metals quote age (s)", type="number", default="900",
+          min=60, max=86400, step=60,
+          help="v109. XAUUSD/XAGUSD are priced off gold-api.com's spot quote. A quote whose "
+               "updatedAt is older than this is treated exactly like a missing one: the scan "
+               "skips new signals for that metal and open plans are not stepped until a fresh "
+               "quote arrives. Never falls back to unscaled futures prices."),
 
     # --- Admin UI (affects the admin container, not the bot -- see docstring) ---
     Field("ADMIN_USERNAME", "ADMIN_USERNAME", "Admin UI", "Admin username",
@@ -744,6 +767,14 @@ FIELDS: list[Field] = [
           help="Last close below this floor skips the ticker for new signals this scan -- filters penny "
                "stocks, whose price action/spreads behave differently from the swing-trade universe this "
                "bot is tuned for."),
+    Field("LIQUIDITY_EXEMPT_NON_EQUITY", "LIQUIDITY_EXEMPT_NON_EQUITY", "Universe & Scanning",
+          "Exempt futures/FX/indices from the dollar-volume floor",
+          type="checkbox", default="false",
+          help="v115. On: futures, FX and indices skip the average dollar-volume floor, because "
+               "Yahoo reports their volume in contracts or as 0, so Close x Volume understates "
+               "them. Off (default, the 09-22 behaviour): they must clear UNIVERSE_MIN_DOLLAR_VOL, "
+               "so a thin-contract future such as SI=F is skipped for new signals. Spot metals "
+               "(XAUUSD, XAGUSD) are exempt either way. History and price floors always apply."),
     # SR5 renamed the admin UI's Universe workspace to Watchlist, end to end.
     # This key and its section are deliberately NOT part of that rename, and
     # this note exists so nobody "finishes the job" later: *watchlist* is the
@@ -757,6 +788,41 @@ FIELDS: list[Field] = [
           options=["watchlist", "sp500", "sp500_top150", "etfs", "sp500+etfs"],
           help="What the scanner covers. The watchlist is ALWAYS included on top of any "
                "universe. Flip beyond watchlist only after the E77 rollout checklist."),
+    Field("SHORT_UNIVERSE_ENABLED", "SHORT_UNIVERSE_ENABLED", "Universe & Scanning",
+          "SHORT extra-universe lane (v118)",
+          type="checkbox", default="false",
+          help="v118. On: S&P 500 members outside the base universe are scanned for BEARISH "
+               "confluence only (broad weakness in a bearish SPY regime, isolated weakness "
+               "otherwise). Extra symbols never enter base breadth, the base RS cache, the base "
+               "strategy pass or a bullish alert. No broker order is ever placed and borrow "
+               "availability is not checked -- confirm a borrow before acting on an alert. "
+               "Off (default): the scan is unchanged."),
+    Field("SHORT_UNIVERSE_BROAD_ENABLED", "SHORT_UNIVERSE_BROAD_ENABLED", "Universe & Scanning",
+          "SHORT extra lane: admit broad-weakness mode (v118)", type="checkbox", default="false",
+          help="v118 per-mode admission. Needs SHORT_UNIVERSE_ENABLED. Off (default): no broad-weakness "
+               "candidate can reach an alert. Flip only after the pre-registered v118 gate passes for "
+               "this mode on its own."),
+    Field("SHORT_UNIVERSE_ISOLATED_ENABLED", "SHORT_UNIVERSE_ISOLATED_ENABLED", "Universe & Scanning",
+          "SHORT extra lane: admit isolated-weakness mode (v118)", type="checkbox", default="false",
+          help="v118 per-mode admission. Needs SHORT_UNIVERSE_ENABLED. Off (default): no isolated-weakness "
+               "candidate can reach an alert. Flip only after the pre-registered v118 gate passes for "
+               "this mode on its own."),
+    Field("SHORT_UNIVERSE_RESEARCH_MODE", "SHORT_UNIVERSE_RESEARCH_MODE", "Universe & Scanning",
+          "SHORT extra lane: research replay mode (v118)", type="select", default="off",
+          options=["off", "broad", "isolated"],
+          help="v118 research-only measurement knob: the historical replay "
+               "(scripts/backtest/measure_arms.py) adds the extra lane in this one weakness mode. "
+               "Nothing in the live bot reads it -- SHORT_UNIVERSE_ENABLED alone turns the live "
+               "lane on. Off (default): the replay is the base lane only."),
+    Field("SHORT_UNIVERSE_MAX_SYMBOLS", "SHORT_UNIVERSE_MAX_SYMBOLS", "Universe & Scanning",
+          "SHORT extra lane: max symbols per scan", type="number", default="50", min=1, max=500, step=1,
+          help="v118 operational safeguard (not a search knob): the extra lane fetches at most this many "
+               "symbols per scan, in snapshot order, after the base alerts have been sent."),
+    Field("SHORT_UNIVERSE_FETCH_BUDGET_SECONDS", "SHORT_UNIVERSE_FETCH_BUDGET_SECONDS",
+          "Universe & Scanning", "SHORT extra lane: fetch budget (seconds)",
+          type="number", default="120", min=10, max=1800, step=10,
+          help="v118 operational safeguard (not a search knob): the extra lane stops fetching further "
+               "chunks once this much time has passed and records budget_exhausted. Base scan unaffected."),
     Field("EARNINGS_BLACKOUT_SESSIONS", "EARNINGS_BLACKOUT_SESSIONS", "Universe & Scanning",
           "Earnings blackout (sessions before the reaction)", type="number", default="0", min=0, max=5, step=1,
           help="Blocks a setup when the next earnings reaction is 1 to this many trading sessions away (0 = off). "
@@ -1044,11 +1110,6 @@ FIELDS: list[Field] = [
           help="Consumed only when the Postgres container first initializes. "
                "It must match DATABASE_URL; changing it later requires ALTER ROLE "
                "or a controlled database rebuild."),
-    Field("DB_STORES", "DB_STORES", "Database", "Per-store migration stages",
-          default="",
-          help="Comma-separated name:stage pairs: json (files only), dual "
-               "(write both/read files), or db (Postgres only). Stores not "
-               "listed remain json. Example: trades:db,plans:dual."),
 ]
 
 _SEARCH_CLASSES = {
@@ -1072,7 +1133,7 @@ _SEARCH_CLASSES = {
         "DEAD_CAT_BOUNCE_VETO", "DCB_DECLINE_PCT", "DCB_GAP_REQUIRED",
         "DCB_VOLUME_RATIO", "RSI_DIV_MIN_CONSECUTIVE_TURN",
         "MA_RIBBON_CONFIRM_BARS", "SR_MIN_LEVEL_TOUCHES",
-        "FIB_TARGET_1_0_EXTENSION",
+        "FIB_TARGET_1_0_EXTENSION", "SHORT_UNIVERSE_RESEARCH_MODE",
     },
     "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO", "EARNINGS_BLACKOUT_SESSIONS"},
     "live_only": {
@@ -1087,6 +1148,7 @@ _SEARCH_CLASSES = {
         "INTRADAY_RTH_ONLY", "EXTENDED_HOURS_EXIT_CHECK",
         "QUIET_HOURS_START_BERLIN", "QUIET_HOURS_END_BERLIN",
         "EXTENDED_HOURS_DEBOUNCE_TICKS",
+        "SHORT_UNIVERSE_MAX_SYMBOLS", "SHORT_UNIVERSE_FETCH_BUDGET_SECONDS",
     },
     "never": {"SLIPPAGE_BPS", "COMMISSION_PER_TRADE", "COMMISSION_RISK_BASIS"},
 }
@@ -1108,6 +1170,14 @@ _CASTERS = {
 }
 
 
+# Lower-cased mode selects; an unknown value falls back to "off" with a warning.
+_MODE_VALUES = {
+    "PLAN_ENGINE_V2": ("off", "shadow", "on"),
+    "STRATEGY_ALERTS_MODE": ("off", "shadow", "live"),
+    "SHORT_UNIVERSE_RESEARCH_MODE": ("off", "broad", "isolated"),
+}
+
+
 def _cast(f: Field, raw: str):
     # A couple of "select" fields need a specific underlying type rather
     # than the raw string the <select> posts back -- handled by attr name
@@ -1116,18 +1186,11 @@ def _cast(f: Field, raw: str):
         return raw.upper()
     if f.attr in ("MIN_ALERT_CONFIDENCE_LEVEL", "SECONDARY_ALERT_MIN_CONFIDENCE"):
         return int(raw)
-    if f.attr == "PLAN_ENGINE_V2":
+    if f.attr in _MODE_VALUES:
         v = str(raw).lower()
-        if v not in ("off", "shadow", "on"):
-            logging.getLogger("swingbot.config").warning(
-                "invalid PLAN_ENGINE_V2=%r, falling back to 'off'", raw)
-            return "off"
-        return v
-    if f.attr == "STRATEGY_ALERTS_MODE":
-        v = str(raw).lower()
-        if v not in ("off", "shadow", "live"):
-            logging.getLogger("swingbot.config").warning(
-                "invalid STRATEGY_ALERTS_MODE=%r, falling back to 'off'", raw)
+        if v not in _MODE_VALUES[f.attr]:
+            log.warning(
+                "invalid %s=%r, falling back to 'off'", f.attr, raw)
             return "off"
         return v
     caster = _CASTERS.get(f.type)

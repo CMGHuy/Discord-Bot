@@ -24,7 +24,7 @@ def _rth_on(monkeypatch):
 def _env(tmp_path, prices):
     feed = FakePriceFeed()
     feed.set_series("AAPL", prices)
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_active())
     return store, PlanManager(store, feed.get_price)
 
@@ -57,7 +57,7 @@ def test_yesterdays_observation_does_not_make_today_continuous(tmp_path):
 def test_continuity_works_the_same_way_for_a_short(tmp_path):
     feed = FakePriceFeed()
     feed.set_series("AAPL", [101.0, 106.0])
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     plan = _plan(entry_type="market", direction="bearish", trigger_price=100.0,
                  entry_price=100.0, stop_loss=105.0, tp1=90.0)
     record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at="t0")

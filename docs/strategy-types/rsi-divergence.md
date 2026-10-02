@@ -53,6 +53,8 @@ This is by far the highest-volume strategy. N=1099 counts every horizon, and
 because the entry ignores the horizon, those are heavily the same bars counted
 repeatedly.
 
+**v113 1w cells (Part B, TRAIN 2010-01-01..2025-12-31, universe 74, horizon 1w masked):** bullish N=484, WR 40.1%, ExpR +0.337, lower bound +0.231, cleared Tier 2 at Stage 1; Part B bar failing clauses: wr; folds 12 qualifying / 11 positive. bearish N=75, WR 33.3%, ExpR +0.227, lower bound -0.093, no tier; Part B bar failing clauses: wr, lower_bound; folds 0 qualifying / 0 positive. Neither cell proceeds to the holdout (Part B's bar is Tier 1 plus a bootstrap lower bound > 0; every 1w cell fails Tier 1 on WR); no `cells` admission, no registry row. Source: `results/2026-09-30-v113-partB.md`.
+
 ## Pseudocode
 
 ```python

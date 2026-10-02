@@ -6,11 +6,14 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from swingbot import config
 from swingbot.core.market import levels, opex
 from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION, HORIZONS, SHORT_STRATEGIES
-from swingbot.core.risk_limits import capped_planned_loss_pct, planned_loss_pct
+from swingbot.core.risk_limits import (HARD_MAX_PLANNED_LOSS_PCT, capped_planned_loss_pct,
+                                       planned_loss_pct)
 from .plan_types import PlanStatus, TradePlanV2, record_transition
 from . import params as plan_params
+from . import reward_floor
 from .lifecycle import apply_level_lifecycle
 from .stop_scope import DROP, stop_ceiling
 from .params import (DEFAULT_EXPIRY_BARS, STRUCTURE_BUFFER_ATR, TP1_FRACTION,
@@ -220,6 +223,12 @@ _STRUCTURAL_BRANCHES = {
 _STRUCTURAL_BRANCHES.update({name: _short_branch for name in SHORT_STRATEGIES})
 
 
+def _geometry_ok(close, stop, tp1, strategy, horizon_key) -> bool:
+    """A plan needs a real stop distance and (v113 §1) must clear its horizon's
+    strategy-plan reward floor -- the same check backtest._trade_plan_at runs."""
+    return abs(close - stop) > 0 and reward_floor.clears(close, tp1, strategy, horizon_key)
+
+
 def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
                         direction, level_map=None, quality_inputs=None,
                         stop_mult=None, tp2_r=None,
@@ -255,10 +264,11 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         direction=direction, strategy=strategy, horizon_key=horizon_key,
         level_map=level_map, candidate_levels=candidates)
 
-    if abs(close - stop) <= 0:
+    if not _geometry_ok(close, stop, tp1, strategy, horizon_key):
         return None
 
-    entry_type = entry_type_for(strategy, "strategy")
+    shape = plan_shape_for(strategy)
+    entry_type = shape["entry_type"]
     created_at = df.index[index].date().isoformat()
     exit_params = plan_params.exit_params_for(strategy)
     tp2 = None
@@ -285,9 +295,9 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         source="strategy", strategy=strategy, horizon_key=horizon_key,
         direction=direction, entry_type=entry_type, trigger_price=close,
         entry_price=close if entry_type == "market" else None,
-        expiry_bars=DEFAULT_EXPIRY_BARS, stop_loss=stop, tp1=tp1,
-        tp1_fraction=TP1_FRACTION, tp2=tp2,
-        breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
+        expiry_bars=shape["expiry_bars"], stop_loss=stop, tp1=tp1,
+        tp1_fraction=shape["tp1_fraction"], tp2=tp2,
+        breakeven_trigger_fraction=shape["breakeven_trigger_fraction"],
         trail_atr_mult=exit_params["trail_atr_mult"],
         quality_score=0, quality_breakdown=[],
         badge="WEAK", badge_stats={}, status=PlanStatus.PENDING,
@@ -349,6 +359,30 @@ def primary_strategy_for(scenario) -> str:
     return _pick_primary_source(sources) or "S/R Confluence"
 
 
+# v115: the clamp lands this far inside the hard cap, so a stop-entry fill a
+# little past the trigger (plan_manager._step_pending checks the FILL price
+# against the cap with no tolerance) still passes the risk_cap guard.
+CLAMP_HEADROOM_PCT = 0.25
+
+
+def _clamp_stop_to_hard_cap(entry: float, stop_loss: float, is_bull: bool) -> float:
+    """v115: a confluence stop further than HARD_MAX_PLANNED_LOSS_PCT from the
+    trigger moves to HARD_MAX_PLANNED_LOSS_PCT - CLAMP_HEADROOM_PCT from it
+    (entry -/+ entry * 1.75 / 100), so the setup is issued instead of being
+    rejected by attach_plan_v2's risk_cap safety net, with headroom for a fill
+    slightly past the trigger. Gated by CLAMP_STOP_TO_HARD_CAP (default on). A
+    stop within the cap, a missing stop, a stop on the wrong side of the entry
+    or an invalid entry is returned unchanged."""
+    if not config.CLAMP_STOP_TO_HARD_CAP or stop_loss is None:
+        return stop_loss
+    if entry is None or entry <= 0 or (stop_loss >= entry if is_bull else stop_loss <= entry):
+        return stop_loss
+    if planned_loss_pct(entry, stop_loss) <= HARD_MAX_PLANNED_LOSS_PCT:
+        return stop_loss
+    offset = entry * (HARD_MAX_PLANNED_LOSS_PCT - CLAMP_HEADROOM_PCT) / 100.0
+    return entry - offset if is_bull else entry + offset
+
+
 def build_confluence_plan(scenario, df, *, ticker, horizon_key,
                           primary_strategy, level_map=None,
                           quality_inputs=None, params=None,
@@ -362,19 +396,22 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
     `primary_strategy` is the real per-scenario attribution (see
     primary_strategy_for). `level_map` is an optional (supports, resistances)
     pair from levels.build_level_map -- when absent, the only honest
-    candidate is the scenario's own real target."""
+    candidate is the scenario's own real target. v115: a stop beyond the 2% hard
+    cap is first clamped to 1.75% (_clamp_stop_to_hard_cap), so tp1/tp2 and the plan
+    use the clamped risk."""
     if params is None:
         from swingbot.scan_params import ScanParams
         params = ScanParams.from_config()
     entry = scenario.entry
     is_bull = scenario.direction == "bullish"
+    stop_loss = _clamp_stop_to_hard_cap(entry, scenario.stop_loss, is_bull)
 
     if level_map is not None:
         candidates = levels.target_candidates(*level_map, scenario.direction)
     else:
         candidates = [scenario.take_profit] if scenario.take_profit is not None else []
 
-    tp1 = select_structural_target(entry, scenario.stop_loss, is_bull, candidates,
+    tp1 = select_structural_target(entry, stop_loss, is_bull, candidates,
                                    params.min_risk_reward_ratio, params.max_risk_reward_ratio)
     if tp1 is None:
         return None
@@ -399,7 +436,7 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
         source="confluence", strategy=primary_strategy, horizon_key=horizon_key,
         direction=scenario.direction, entry_type=entry_type, trigger_price=entry,
         entry_price=entry if entry_type == "market" else None,
-        expiry_bars=DEFAULT_EXPIRY_BARS, stop_loss=scenario.stop_loss, tp1=tp1,
+        expiry_bars=DEFAULT_EXPIRY_BARS, stop_loss=stop_loss, tp1=tp1,
         tp1_fraction=TP1_FRACTION, tp2=tp2,
         breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
         trail_atr_mult=TRAIL_ATR_MULT, quality_score=0, quality_breakdown=[],
@@ -430,6 +467,17 @@ def entry_type_for(strategy: str, source: str) -> str:
     if source == "confluence":
         return "stop_entry"
     return STRATEGY_ENTRY_TYPE.get(strategy, "market")
+
+
+def plan_shape_for(strategy: str) -> dict:
+    """Entry type, entry-order life, TP1 fraction and break-even trigger for a
+    strategy-source plan. build_strategy_plan and backtest._bt_plan both read
+    this, so the two cannot diverge. Unlisted strategies get today's shape."""
+    shape = {"entry_type": entry_type_for(strategy, "strategy"),
+             "expiry_bars": DEFAULT_EXPIRY_BARS, "tp1_fraction": TP1_FRACTION,
+             "breakeven_trigger_fraction": BREAKEVEN_TRIGGER_FRACTION}
+    shape.update(plan_params.PLAN_SHAPES.get(strategy, {}))
+    return shape
 
 
 def _level_stop_or_none(entry, level_stop, is_bull, horizon):

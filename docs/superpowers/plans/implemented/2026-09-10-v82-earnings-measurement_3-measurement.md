@@ -293,7 +293,7 @@ git commit -m "docs(v82): stage 3 VALIDATION -- <PASS|FAIL>, budget spent"
 
 **Files:**
 - Modify: `docs/claude/backtest-methodology.md` (closed-pre-registrations table, after the `DEAD_CAT_BOUNCE_VETO (v68)` row, line 135)
-- Modify: `docs/superpowers/specs/2026-09-10-v82-earnings-awareness-design.md` (a `## Status` section directly under the header block)
+- Modify: `docs/superpowers/specs/implemented/2026-09-10-v82-earnings-awareness-design.md` (a `## Status` section directly under the header block)
 - Move: `docs/superpowers/plans/2026-09-10-v82-earnings-measurement_*.md` → `docs/superpowers/plans/implemented/`
 - Modify: `docs/superpowers/plans/2026-09-10-v82-earnings-measurement_0-index.md` (Progress block, before moving)
 
@@ -346,7 +346,7 @@ Expected after fixing: every hit reads `plans/implemented/2026-09-10-v82-earning
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/claude/backtest-methodology.md docs/superpowers/specs/2026-09-10-v82-earnings-awareness-design.md docs/superpowers/plans/implemented/
+git add docs/claude/backtest-methodology.md docs/superpowers/specs/implemented/2026-09-10-v82-earnings-awareness-design.md docs/superpowers/plans/implemented/
 git commit -m "docs(v82): close earnings blackout measurement -- <verdict>"
 ```
 

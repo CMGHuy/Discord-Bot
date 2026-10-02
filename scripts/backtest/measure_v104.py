@@ -30,7 +30,7 @@ from swingbot.core.backtesting.acceptance import BOOTSTRAP_RESAMPLES  # noqa: E4
 from swingbot.core.backtesting.backtest import run_backtest  # noqa: E402
 from swingbot.core.market import earnings_context  # noqa: E402
 from swingbot.core.market.entry_filters import DEFAULT_PARAMS, entries_for, gate_override  # noqa: E402
-from swingbot.core.market.strategy_types import HORIZONS, SHORT_STRATEGIES, STRATEGY_GATES  # noqa: E402
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS, STRATEGY_GATES, V104_SHORTS  # noqa: E402
 
 # --- pre-registered constants (spec §5.1) ---
 TRAIN = ("2010-01-01", "2025-12-31")
@@ -38,7 +38,7 @@ HOLDOUT_START = "2026-01-01"
 HOLDOUT_END: str | None = "2026-09-25"     # frozen ONCE by V104-15 and committed before any Stage 3 run
 THIN_REOPEN = "2026-12-31"         # spec §5.4
 FOLD_YEARS = tuple(range(2013, 2026))
-ALL_HZ = tuple(HORIZONS)
+ALL_HZ = tuple(LEGACY_HORIZONS)
 RESULTS = ROOT / "docs" / "superpowers" / "results"
 
 PART_A = (
@@ -49,7 +49,7 @@ PART_A = (
     ("RSI Divergence", "bullish"), ("RSI Divergence", "bearish"),
     ("Elliott Wave", "bullish"), ("Elliott Wave", "bearish"),
 )
-BULL_TRAP, VOL_BREAKDOWN, GAP_DRIFT = SHORT_STRATEGIES
+BULL_TRAP, VOL_BREAKDOWN, GAP_DRIFT = V104_SHORTS
 MECHANISMS = {
     "B1": SimpleNamespace(strategy=BULL_TRAP, knob="k", grid=(1, 2, 3), loosest=3,
                           earnings=("hold", "exit_before")),

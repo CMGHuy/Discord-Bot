@@ -73,6 +73,8 @@ Exits use the defaults: trail 2.5 × ATR, TP2 on.
   WR 83.8%, ExpR +0.094, pre-v31 arithmetic). Its VALIDATION shot FAILED.
 - v84: the proposed rescue was withdrawn, because it already shipped.
 
+**v113 1w cells (Part B, TRAIN 2010-01-01..2025-12-31, universe 74, horizon 1w masked):** bullish N=0 (no rows scored on 1w; the empty cell is arithmetic, not a market verdict). bearish N=0 (no rows scored on 1w; the empty cell is arithmetic, not a market verdict). Neither cell proceeds to the holdout (Part B's bar is Tier 1 plus a bootstrap lower bound > 0; every 1w cell fails Tier 1 on WR); no `cells` admission, no registry row. Source: `results/2026-09-30-v113-partB.md`.
+
 ## Pseudocode
 
 ```python

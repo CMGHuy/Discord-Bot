@@ -45,6 +45,28 @@ def promoted_for(table_name: str) -> tuple[str, ...]:
     return PROMOTED[table_name]
 
 
+def _doc_ok(column: sa.Column) -> bool:
+    return (isinstance(column.type, JSONB) and not column.nullable
+            and column.server_default is not None)
+
+
+def contract_violations(table: sa.Table) -> list[str]:
+    """What a table breaks of the hybrid contract (docs/claude/schema-evolution.md):
+    a `doc JSONB NOT NULL DEFAULT '{}'` and an `updated_at TIMESTAMPTZ NOT NULL`."""
+    problems = []
+    doc = table.c.get("doc")
+    if doc is None:
+        problems.append(f"{table.name}: no doc column")
+    elif not _doc_ok(doc):
+        problems.append(f"{table.name}: doc must be JSONB NOT NULL DEFAULT '{{}}'")
+    updated = table.c.get("updated_at")
+    if updated is None:
+        problems.append(f"{table.name}: no updated_at column")
+    elif not getattr(updated.type, "timezone", False) or updated.nullable:
+        problems.append(f"{table.name}: updated_at must be TIMESTAMPTZ NOT NULL")
+    return problems
+
+
 trades = register(
     sa.Table(
         "trades", METADATA,
@@ -161,3 +183,106 @@ tuning_proposals = register(sa.Table("tuning_proposals", METADATA,
     sa.Column("id", sa.BigInteger, primary_key=True), sa.Column("filename", sa.Text, nullable=False, unique=True),
     sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False), *standard_columns(),
     sa.Index("tuning_proposals_created_idx", "created_at")), ("filename", "created_at"))
+
+
+# v116 Phase 1: the last two files that drove live updates. Ephemeral state --
+# nothing is imported, and at the db stage both start empty.
+scan_progress = register(sa.Table("scan_progress", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("key", sa.Text, nullable=False, unique=True), *standard_columns()), ("key",))
+market_data_state = register(sa.Table("market_data_state", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("key", sa.Text, nullable=False, unique=True), *standard_columns()), ("key",))
+
+
+# v116 Phase 2: where doc_fields.drop_doc_field keeps what it removed, so the
+# revision's downgrade can put it back. Written only inside Alembic revisions.
+dropped_doc_fields = register(sa.Table("dropped_doc_fields", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("table_name", sa.Text, nullable=False),
+    sa.Column("field", sa.Text, nullable=False),
+    sa.Column("row_id", sa.BigInteger, nullable=False),
+    *standard_columns(),
+    sa.UniqueConstraint("table_name", "field", "row_id", name="dropped_doc_fields_row_uq")),
+    ("table_name", "field", "row_id"))
+
+
+#: Why each promoted column is a column and not a `doc` field. A promotion
+#: costs a migration forever after, so each names what needs it: identity,
+#: a foreign key, an index a hot query uses, or a NOT NULL the database must
+#: enforce. tests/db/test_schema_contract.py requires exactly one line per
+#: PROMOTED entry -- promoting a column means adding its reason here.
+PROMOTION_REASONS: dict[str, dict[str, str]] = {
+    "trades": {
+        "trade_id": "natural key; unique lookup from every command and the admin",
+        "ticker": "trades_ticker_opened_idx; per-ticker open-trade checks",
+        "strategy": "per-strategy filters in analytics",
+        "horizon": "one-trade-per-ticker-and-horizon check",
+        "direction": "NOT NULL invariant every consumer relies on",
+        "status": "trades_status_idx; open/closed filter on every read",
+        "opened_at": "trades_ticker_opened_idx ordering; NOT NULL",
+        "closed_at": "closed-trade date ranges in analytics",
+        "entry": "numeric column for SQL-side P&L queries",
+        "stop_loss": "numeric column for SQL-side risk queries",
+    },
+    "plans": {
+        "plan_id": "natural key; foreign-key target of starred_plans",
+        "ticker": "plans_ticker_idx; per-ticker plan lookup",
+        "strategy": "per-strategy plan filters",
+        "horizon_key": "per-horizon plan filters",
+        "status": "plans_status_idx; open-plan polling every tick",
+        "created_at": "age ordering on the Plans screen; NOT NULL",
+    },
+    "starred_plans": {"plan_id": "unique key and cascading foreign key into plans"},
+    "account": {"key": "singleton key ('config')"},
+    "account_balance_history": {
+        "ts": "unique key; chronological balance history",
+        "balance": "numeric column for the equity curve",
+    },
+    "journal_entries": {
+        "trade_id": "natural key; one entry per trade",
+        "strategy": "per-strategy journal filters",
+        "outcome": "win/loss filters",
+        "closed_at": "journal_entries_closed_idx ordering",
+        "created_at": "NOT NULL creation time",
+    },
+    "signal_state": {"key": "natural key of the confirmation state machine"},
+    "watchlist": {
+        "ticker": "natural key; one row per ticker",
+        "added_at": "NOT NULL insertion time for ordering",
+    },
+    "runtime_flags": {
+        "name": "natural key; one row per flag",
+        "set_at": "when the flag was raised; shown by the admin",
+    },
+    "bot_heartbeat": {"key": "singleton key ('bot')", "ts": "liveness age computed in SQL"},
+    "admin_jobs": {
+        "job_id": "natural key",
+        "kind": "filter by job type",
+        "status": "admin_jobs_status_idx; active-job lookup",
+        "started_at": "newest-first ordering; NOT NULL",
+        "finished_at": "age-based prune of finished jobs",
+    },
+    "scheduled_jobs": {"job": "natural key", "fired_on": "NOT NULL fire-once-a-day date"},
+    "ui_preferences": {"owner": "natural key; one row per user"},
+    "settings_audit": {"ts": "settings_audit_ts_idx; newest-first audit list"},
+    "killswitch": {
+        "key": "singleton key ('global')",
+        "engaged": "NOT NULL on/off that every issuance checks",
+        "engaged_at": "when it engaged; shown to the partner",
+    },
+    "manual_close_notify": {"queued_at": "manual_close_notify_queued_idx; drain order"},
+    "ticker_directory": {"symbol": "natural key", "name": "ticker_directory_name_idx; name search"},
+    "tuning_results": {"job_id": "natural key; one result per job", "created_at": "NOT NULL creation time"},
+    "tuning_proposals": {
+        "filename": "natural key",
+        "created_at": "tuning_proposals_created_idx; newest-first list",
+    },
+    "scan_progress": {"key": "singleton key ('current')"},
+    "market_data_state": {"key": "natural key 'SYMBOL|timeframe'"},
+    "dropped_doc_fields": {
+        "table_name": "which table a dropped value came from; restore filter",
+        "field": "which doc field was dropped; restore filter",
+        "row_id": "the source row's id; restore join key",
+    },
+}

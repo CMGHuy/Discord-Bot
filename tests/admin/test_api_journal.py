@@ -15,6 +15,7 @@ import json
 import pytest
 
 from tests.admin.api_v1_contract import NULLABLE_NUMBER, assert_shape
+from tests.store_seed import seed_store
 
 _LOGIN = {"username": "admin", "password": "admin"}
 
@@ -56,9 +57,8 @@ def _trade(trade_id, *, status="win"):
 @pytest.fixture
 def seed(admin_app, tmp_path):
     def _seed(trades=(), entries=()):
-        (tmp_path / "plans.json").write_text("[]", encoding="utf-8")
-        (tmp_path / "trades.json").write_text(json.dumps(list(trades)), encoding="utf-8")
-        (tmp_path / "journal.json").write_text(json.dumps(list(entries)), encoding="utf-8")
+        seed_store("trades", list(trades))
+        seed_store("journal", list(entries))
     return _seed
 
 

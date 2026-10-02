@@ -10,6 +10,7 @@ from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.tracking.performance import TradeLog
 from tests.fake_feed import FakePriceFeed
 from tests.planning.test_plan_engine_model import _plan
+from tests.store_seed import seed_store
 
 
 def _pending(**kw):
@@ -22,7 +23,7 @@ def _pending(**kw):
 
 
 def _mgr(tmp_path, feed, **kw):
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     return store, PlanManager(store, feed.get_price, **kw)
 
 
@@ -61,7 +62,7 @@ def test_pending_below_trigger_no_event(tmp_path):
 def test_price_fetch_failure_skips_plan_not_poll(tmp_path):
     def flaky(ticker):
         raise TimeoutError("yfinance hiccup")
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_pending())
     mgr = PlanManager(store, flaky)
     assert mgr.poll() == []              # no crash, no transition
@@ -69,7 +70,7 @@ def test_price_fetch_failure_skips_plan_not_poll(tmp_path):
 
 def test_pending_expires_past_expiry_bars(tmp_path):
     feed = FakePriceFeed([("AAPL", 100.0)])       # never reaches trigger
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_pending(expiry_bars=5))
     mgr = PlanManager(store, feed.get_price, bar_count_fn=lambda t, created: 6)
     events = mgr.poll()
@@ -79,7 +80,7 @@ def test_pending_expires_past_expiry_bars(tmp_path):
 
 def test_pending_at_exactly_expiry_bars_still_live(tmp_path):
     feed = FakePriceFeed([("AAPL", 100.0)])
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_pending(expiry_bars=5))
     mgr = PlanManager(store, feed.get_price, bar_count_fn=lambda t, created: 5)
     assert mgr.poll() == []                        # boundary: == is NOT expired
@@ -87,7 +88,7 @@ def test_pending_at_exactly_expiry_bars_still_live(tmp_path):
 
 def test_no_bar_count_fn_means_no_expiry(tmp_path):
     feed = FakePriceFeed([("AAPL", 100.0)])
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_pending())
     assert PlanManager(store, feed.get_price).poll() == []
 
@@ -145,11 +146,10 @@ def test_fill_updates_the_scan_time_placeholder_not_a_second_trade(tmp_path, mon
     forever, regardless of price. Pin: exactly one trade per plan_id, its
     entry moved onto the real fill."""
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    (tmp_path / "trades.json").write_text("[]", encoding="utf-8")
-    (tmp_path / "account.json").write_text(json.dumps({
+    seed_store("account", {
         "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
         "sizing_mode": "risk_pct", "balance_history": [],
-    }), encoding="utf-8")
+    })
     trade_log = TradeLog()
     # The scan-time placeholder: entry = trigger_price, not the eventual fill.
     trade_log.log_trade(
@@ -158,7 +158,7 @@ def test_fill_updates_the_scan_time_placeholder_not_a_second_trade(tmp_path, mon
         entry=105.0, stop_loss=104.0, take_profit=110.0, plan_id="p1")
 
     feed = FakePriceFeed([("AAPL", 106.0)])
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_pending(stop_loss=104.0))
     mgr = PlanManager(store, feed.get_price, trade_log=trade_log)
 
@@ -181,15 +181,14 @@ def test_fill_still_logs_a_trade_when_no_placeholder_exists(tmp_path, monkeypatc
     so have no placeholder trade waiting. The fill must still get logged --
     not silently dropped -- just via a fresh trade this once."""
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    (tmp_path / "trades.json").write_text("[]", encoding="utf-8")
-    (tmp_path / "account.json").write_text(json.dumps({
+    seed_store("account", {
         "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
         "sizing_mode": "risk_pct", "balance_history": [],
-    }), encoding="utf-8")
+    })
     trade_log = TradeLog()   # no placeholder logged
 
     feed = FakePriceFeed([("AAPL", 106.0)])
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_pending(stop_loss=104.0))
     mgr = PlanManager(store, feed.get_price, trade_log=trade_log)
 
@@ -213,11 +212,10 @@ def test_expiry_discards_the_placeholder_trade(tmp_path, monkeypatch):
     filled, so the placeholder is deleted, not closed -- there is no real
     fill/exit to record."""
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    (tmp_path / "trades.json").write_text("[]", encoding="utf-8")
-    (tmp_path / "account.json").write_text(json.dumps({
+    seed_store("account", {
         "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
         "sizing_mode": "risk_pct", "balance_history": [],
-    }), encoding="utf-8")
+    })
     trade_log = TradeLog()
     trade_log.log_trade(
         ticker="AAPL", strategy="Fibonacci", horizon_key="4w",
@@ -225,7 +223,7 @@ def test_expiry_discards_the_placeholder_trade(tmp_path, monkeypatch):
         entry=105.0, stop_loss=95.0, take_profit=110.0, plan_id="p1")
 
     feed = FakePriceFeed([("AAPL", 100.0)])       # never reaches trigger
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_pending(expiry_bars=5))
     mgr = PlanManager(store, feed.get_price, bar_count_fn=lambda t, created: 6,
                       trade_log=trade_log)
@@ -240,11 +238,10 @@ def test_expiry_discards_the_placeholder_trade(tmp_path, monkeypatch):
 
 def test_invalidation_discards_the_placeholder_trade(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    (tmp_path / "trades.json").write_text("[]", encoding="utf-8")
-    (tmp_path / "account.json").write_text(json.dumps({
+    seed_store("account", {
         "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
         "sizing_mode": "risk_pct", "balance_history": [],
-    }), encoding="utf-8")
+    })
     trade_log = TradeLog()
     trade_log.log_trade(
         ticker="AAPL", strategy="Fibonacci", horizon_key="4w",
@@ -252,7 +249,7 @@ def test_invalidation_discards_the_placeholder_trade(tmp_path, monkeypatch):
         entry=105.0, stop_loss=95.0, take_profit=110.0, plan_id="p1")
 
     feed = FakePriceFeed([("AAPL", 94.0)])        # below stop 95, trigger never hit
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_pending())
     mgr = PlanManager(store, feed.get_price, trade_log=trade_log)
 
@@ -269,15 +266,14 @@ def test_cancellation_with_no_placeholder_is_a_safe_no_op(tmp_path, monkeypatch)
     a plan can reach PlanStore with no placeholder trade waiting. Cancelling
     it must not raise just because there is nothing to discard."""
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    (tmp_path / "trades.json").write_text("[]", encoding="utf-8")
-    (tmp_path / "account.json").write_text(json.dumps({
+    seed_store("account", {
         "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
         "sizing_mode": "risk_pct", "balance_history": [],
-    }), encoding="utf-8")
+    })
     trade_log = TradeLog()   # no placeholder logged
 
     feed = FakePriceFeed([("AAPL", 94.0)])
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(_pending())
     mgr = PlanManager(store, feed.get_price, trade_log=trade_log)
 

@@ -48,8 +48,8 @@ live *outside* the image: `docker-compose.yml`, `deploy/`, and `.env`.
 **Only state is mounted from the host** — `data/`, `logs/`, `exports/`,
 `market_data/` and `.env`. The application code and the SPA bundle come from
 the image and nothing on the host may shadow them. Both containers mount the
-same `data/`, which is how the admin UI reads the very `trades.json` the bot
-is writing.
+same `data/` (and the same `db` service), which is how the admin UI reads the
+very trades the bot is writing.
 
 The bot needs **no inbound networking at all** to run — Discord bots
 connect *outbound* to Discord's Gateway, so the whole pipeline above
@@ -268,24 +268,64 @@ gives the admin UI a real public hostname via a Cloudflare Tunnel
 (`docker-compose.yml`'s `cloudflared` service, off by default behind the
 `tunnel` Compose profile).
 
-## PostgreSQL (v67 migration, in progress)
+## PostgreSQL (the only store)
 
-The `db` service (`postgres:18-alpine`) keeps its data in the `pgdata` volume.
-The port is deliberately unpublished; reach it with
+The `db` service (`postgres:18-alpine`, built with pgBackRest) keeps its data in
+the `pgdata` volume. The port is deliberately unpublished; reach it with
 `docker compose exec db psql -U swingbot -d swingbot`.
 
-- **Stages.** `DB_STORES` in `.env` selects a per-store stage
-  (`name:json|dual|db`). Empty means every store is JSON-only and nothing reads
-  the database. Stages are re-read on SIGHUP.
-- **Schema.** `docker compose exec bot alembic upgrade head`.
-- **Import.** `scripts/ops/reimport_production.sh` re-imports every migrated
-  store from JSON (idempotent upserts, JSON read-only) and prints counts. Run it
-  from WSL, piped over ssh; the header of the script has the exact command.
-- **Verification.** `docker compose exec -T bot python scripts/db/parity_report.py --all`
-  is the only verifier to trust; an import's own summary is not authoritative.
+Every trading and operational store is a Postgres table; there is no JSON copy,
+no per-store stage and no import step. Only `analytics_snapshot.json`,
+`scan_snapshots.json`, `scan_telemetry.jsonl` and `.env` remain files.
 
-**Nightly backups do not exist yet** (v67 P6-03/P6-04 are unbuilt). No store may
-reach the `db` stage until they do.
+- **Schema.** `docker compose exec bot alembic upgrade head`. A shape change is
+  an Alembic revision (`docs/claude/schema-evolution.md`).
+- **Write failures.** A database write failure at issuance pauses scanning
+  (`StoreWriteHalt`); fix the database, then unpause from the admin UI.
+- **Editing `.env`.** `python3 scripts/ops/env_set.py KEY value` edits it in
+  place and snapshots it; `sed -i` leaves the containers reading the old inode
+  (`docs/claude/known-traps.md`, "Editing production `.env` with `sed -i`").
+
+### Point-in-time rollback
+
+`scripts/ops/rollback_to.sh "<UTC timestamp>"` (run on the VM as root) restores
+the whole bot to one second within the last 30 days: Postgres (pgBackRest
+PITR), `market_data/` (restic), `.env` (`backups/env`) and the bot and db images
+(`backups/deploys.jsonl`). It starts with scanning **paused**; unpause from the
+admin UI. Not rolled back, by design: Discord messages already posted, logs,
+telemetry, caches. Always rehearse first:
+
+```bash
+bash scripts/ops/ssh-hetzner.sh "scripts/ops/rollback_to.sh '2026-10-14 13:05:00' --dry-run"
+```
+
+`--dry-run` prints the artifacts the target resolves to and refuses an
+unrestorable target. Run it again without `--dry-run` to roll back.
+
+**Backups.** Installed by `scripts/ops/install_pitr_crons.sh` (idempotent):
+
+| Cron (VM time) | Script | What |
+|---|---|---|
+| `30 2 * * *` | `pitr_backup.sh` | pgBackRest full on Sundays, differential otherwise; prunes `.env` versions past 30 days |
+| `7 * * * *` | `restic_hourly.sh` | hourly restic snapshot of `market_data/`, forgets past 30 days (snapshots tagged `stable` are kept) |
+| `0 4 1 * *` | `pitr_verify.sh` | monthly proof both repositories are readable (`pgbackrest verify`, `restic check`) |
+| `0 3 * * *` | `backup_db.sh` | nightly `pg_dump` into `data/backups/db/`, kept 90 days (second, day-level method) |
+
+`backups/` layout: `pitr/` (pgBackRest repository, outside `pgdata`), `restic/`
+(market-data repository), `env/` (one `.env` version per save) and
+`deploys.jsonl` (one line per deploy: git sha, bot and db images).
+
+**The drill.** `scripts/ops/pitr_drill.sh` writes a mark before and after a
+target second, restores that second into the throwaway
+`deploy/db/docker-compose.drill.yml` project and checks the marks and two
+content hashes; the last line of `logs/pitr_drill.log` is the VERDICT. Repeat it
+within 7 days before a revision that drops or renames a doc field on production.
+
+**`pg_dump` restore.** `scripts/ops/restore_db.sh <dump.sql.gz> <target-db>`
+replays one into a throwaway database (no default target; `swingbot` needs
+`--i-mean-it`); the record of that drill is `DB_RESTORE.md`.
+
+**Off-VM copy and stable snapshots (v120).** Every backup above sits on this VM's own disk. `/backup-pull` (`scripts/ops/pull_backups.sh`, run from the dev machine's main tree) brings a verified rebuild-from-zero set (a fresh `pg_dump`, `.env`, `deploys.jsonl`, an incremental mirror of `market_data/`) into the gitignored `backups/` there; it is manual, and the SessionStart `BACKUP` line warns when it is overdue. `/stable-snapshot <note>` pins a known-good point for good: `backups/stable/<name>/` on the VM (dump, `.env`, deploy record, manifest), a restic snapshot tagged `stable`, and an annotated `stable-*` git tag; `scripts/ops/restore_stable.sh <name> --dry-run` shows what restoring it would do (a real run needs `--i-mean-it`). Both run as root through `ssh-hetzner.sh`; git on the VM runs as `deploy`. Drills and numbers: `DB_RESTORE.md`, section "Off-VM copy and stable snapshots (v120)".
 
 ## Useful one-liners on the server
 
@@ -371,3 +411,13 @@ to keep a single-server setup simple, but the pieces are all reusable.
   code any more, and `deploy.sh` fails the deploy if either container is
   not running the digest it just pulled. If you see it, check that nobody
   has re-added a `.:/app` mount to `docker-compose.yml`.
+
+**`.env` ownership.** `deploy.sh` runs as the `deploy` user and rewrites `/opt/swing-bot/.env` in
+place (it pins both image tags). If an edit as `root` leaves the file `root:root`, the deploy's
+pin step fails with `PermissionError` after the containers are already up. Keep it
+`deploy:deploy` (`chown deploy:deploy /opt/swing-bot/.env`). `env_set.py` keeps the owner, because
+it rewrites in place.
+
+**Remote commands through `ssh-hetzner.sh`.** The wrapper runs `wsl ssh "<cmd>"`, so `$(...)` and
+`$VAR` inside the quoted command expand on the dev machine, not the VM. Pipe a script on stdin
+(`... "bash -s" < script.sh`) whenever the command needs the VM's own values.

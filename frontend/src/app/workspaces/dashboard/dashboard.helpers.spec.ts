@@ -284,9 +284,13 @@ describe('deriveCancelledVisible', () => {
 
   it('keeps what a cancelled plan does have', () => {
     const cancelled = deriveCancelledVisible(ALL);
-    for (const kept of ['ticker', 'status', 'plan', 'closed_at']) {
+    for (const kept of ['ticker', 'status', 'plan', 'closed_at', 'opened_at', 'confidence_level']) {
       expect(cancelled).toContain(kept);
     }
+  });
+
+  it('folds direction into the confidence cell, like every other tab', () => {
+    expect(deriveCancelledVisible([...ALL, 'direction'])).not.toContain('direction');
   });
 });
 

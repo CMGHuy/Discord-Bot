@@ -21,6 +21,8 @@ def _save_scan_snapshots(data: dict) -> None:
     try:
         with open(_SNAPSHOT_PATH, "w") as f:
             json.dump(data, f, indent=2)
+        from swingbot.core.db import notify
+        notify.publish("scan")
     except OSError:
         pass
 

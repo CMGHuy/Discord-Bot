@@ -17,10 +17,10 @@ from swingbot.core.market.explain import build_explanation
 from swingbot.core.planning.plan_engine import TradePlanV2
 from swingbot.core.scanning.embeds import (
     RequirementCheck, build_closed_trade_embed, build_embed, build_near_close_embed,
-    regenerate_chart_for_trade,
+    build_simple_alert, regenerate_chart_for_trade,
 )
-from swingbot.core.scanning import embeds as embeds_mod, plan_table, snapshots
-from swingbot.core.presentation import ansi
+from swingbot.core.scanning import alert_embeds, embeds as embeds_mod, plan_table, snapshots
+from swingbot.core.presentation import ansi, kinds, tokens
 from swingbot.core import presentation as ui
 from swingbot.core.scanning.engine import ScanItem
 
@@ -124,8 +124,7 @@ def test_an_unmet_requirement_gets_its_own_field():
 
 
 def test_a_blocked_alert_takes_the_inert_accent_not_red():
-    from swingbot.core.presentation import tokens
-    assert _build(make_item(all_ok=False)).color.value == tokens.ACCENT_BLOCKED
+    assert _build(make_item(all_ok=False)).color.value == kinds.SETUP_BLOCKED
 
 
 def test_a_clean_alert_has_no_blocked_field():
@@ -141,7 +140,7 @@ def test_weak_plan_v2_uses_its_confidence_level_colour(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     item = make_item(plan_v2=make_plan_v2(badge="WEAK", confidence_level=1))
     embed = _build(item)
-    assert embed.color.value == 0x9ACD32
+    assert embed.color.value == kinds.SETUP_RAMP[4]
     assert "WEAK" not in embed.title
     assert "NVDA" in embed.title
 
@@ -150,7 +149,7 @@ def test_validated_plan_uses_the_confidence_level_colour_without_badge(monkeypat
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", confidence_level=3))
     embed = _build(item)
-    assert embed.color.value == 0x9ACD32
+    assert embed.color.value == kinds.SETUP_RAMP[4]
     assert "VALIDATED" not in embed.title
     assert "NVDA" in embed.title
 
@@ -159,7 +158,7 @@ def test_no_v2_plan_falls_back_to_the_shared_confidence_accent_and_plain_title(m
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     item = make_item(plan_v2=None, all_ok=True)
     embed = _build(item)
-    assert embed.color.value == ui.accent_for_level(item.conf.level).value
+    assert embed.color.value == kinds.SETUP_RAMP[item.conf.level]
     assert not embed.title.startswith(("1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"))
     assert "NVDA" in embed.title
 
@@ -401,11 +400,19 @@ def _make_closed_trade(**overrides):
     return trade
 
 
-def test_closed_trade_outcomes_use_the_shared_ramp_endpoints():
-    from swingbot.core.presentation import tokens
-    assert build_closed_trade_embed(_make_closed_trade(status="win")).color.value == tokens.ACCENT_RAMP[5]
-    assert build_closed_trade_embed(_make_closed_trade(status="loss")).color.value == tokens.ACCENT_RAMP[1]
-    assert build_closed_trade_embed(_make_closed_trade(status="closed")).color.value == tokens.ACCENT_RAMP[3]
+def test_closed_trade_outcomes_take_the_result_ramp():
+    assert build_closed_trade_embed(_make_closed_trade(status="win")).color.value in kinds.RESULT_GREENS
+    assert build_closed_trade_embed(_make_closed_trade(status="loss")).color.value in kinds.RESULT_REDS
+    assert build_closed_trade_embed(_make_closed_trade(status="closed")).color.value == kinds.RESULT_GREY
+
+
+def test_closed_trade_title_and_push_line_come_from_the_registry():
+    embed = build_closed_trade_embed(_make_closed_trade(status="win"))
+    assert embed.title == "🏁 ▲ LONG NVDA · CLOSED · ✅ WIN +2.0R"
+    assert embed.push_text == "🏁 RESULT · ▲ LONG NVDA · CLOSED · ✅ WIN +2.0R"
+    assert ansi.paint("2.0R", "green") in embed.description
+    manual = build_closed_trade_embed(_make_closed_trade(status="closed"))
+    assert manual.title == "🏁 ▲ LONG NVDA · CLOSED · 🔒 MANUAL CLOSE"
 
 
 def test_closed_trade_headline_uses_the_actual_exit_and_realised_metrics():
@@ -427,7 +434,7 @@ def _make_near_close_warning(**trade_overrides):
     }
 
 
-def test_all_three_embeds_share_timestamp_and_disclaimer_and_preserve_ids(monkeypatch):
+def test_all_three_embeds_are_timestamped_with_family_footers_and_keep_ids(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
 
     scan_item = make_item(plan_v2=make_plan_v2(plan_id="12345678-abcd-efgh"))
@@ -444,17 +451,10 @@ def test_all_three_embeds_share_timestamp_and_disclaimer_and_preserve_ids(monkey
     assert closed_embed.timestamp is not None
     assert near_close_embed.timestamp is not None
 
-    # All three share the identical disclaimer prefix once the plan-id
-    # suffix is stripped off.
-    prefixes = {
-        scan_embed.footer.text.split(" · plan ")[0],
-        closed_embed.footer.text.split(" · plan ")[0],
-        near_close_embed.footer.text.split(" · plan ")[0],
-    }
-    assert len(prefixes) == 1
-
-    # Scan embed's footer carries the 8-char-truncated plan id.
-    assert "plan 12345678" in scan_embed.footer.text
+    # v110: each family owns its footer -- only NEW SETUP keeps the disclaimer.
+    assert scan_embed.footer.text == f"{tokens.DISCLAIMER} · plan 12345678"
+    assert closed_embed.footer.text == "RESULT"
+    assert near_close_embed.footer.text == "WATCH"
 
     # Closed-trade embed has no plan_id -- no " · plan " suffix at all.
     assert " · plan " not in closed_embed.footer.text
@@ -690,3 +690,130 @@ def test_regenerate_chart_passes_none_without_a_stored_fit(monkeypatch):
 
     assert "trendline_fit" in captured
     assert captured["trendline_fit"] is None
+
+
+def test_full_alert_title_push_line_and_footer_come_from_the_registry(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    embed = _build(make_item(plan_v2=make_plan_v2(plan_id="12345678-abcd")))
+    assert embed.title == "🆕 ▲ LONG NVDA · ALERT · Lv4 ⭐"
+    assert embed.push_text == "🆕 NEW SETUP · ▲ LONG NVDA · ALERT · Lv4 ⭐"
+    assert embed.color.value == kinds.SETUP_RAMP[4]
+    assert embed.footer.text == f"{tokens.DISCLAIMER} · plan 12345678"
+
+
+def test_a_blocked_alert_says_review_instead_of_the_star():
+    assert _build(make_item(all_ok=False)).title == "🆕 ▲ LONG NVDA · ALERT · Lv4 ⚠️ review"
+
+
+def test_full_alert_never_uses_the_retired_circles():
+    for trend in ("bullish", "bearish"):
+        item = make_item()
+        item.result.trend = trend
+        title = _build(item).title
+        assert "🟢" not in title and "🔴" not in title
+
+
+def test_a_short_alert_leads_with_the_red_side_line():
+    item = make_item()
+    item.result.trend = "bearish"
+    embed = _build(item)
+    assert embed.title.startswith("🆕 ▼ SHORT NVDA")
+    assert ansi.paint("▼ SHORT", "red") in embed.description
+
+
+def test_intraday_confirmation_uses_a_plain_check_not_the_outcome_mark():
+    item = make_item()
+    item.intraday = True
+    field = next(f for f in _build(item).fields if f.name == "⏱ Intraday timing")
+    assert field.value.startswith("✔ confirms") and "✅" not in field.value
+
+
+# --- v115: a clamped v2 stop must not contradict itself in the alert -------
+
+def _clamped_item():
+    """The scenario wants a 4% stop (96.00); v115's clamp priced the v2 plan
+    at 98.25, 1.75% below the 100.00 trigger."""
+    import dataclasses
+    item = make_item(plan_v2=dataclasses.replace(make_plan_v2(), stop_loss=98.25))
+    item.plan = make_legacy_plan(stop_loss=96.0)
+    item.plan.stop_distance_pct = 4.0
+    item.plan.risk_reward_ratio = 2.5
+    return item
+
+
+def _clamped_scenario_result():
+    result = _fake_scenario_result()
+    result.scenario.stop_loss, result.scenario.stop_distance_pct = 96.0, 4.0
+    return result
+
+
+def _all_embed_text(embed):
+    plain = ansi._ESCAPE_RE.sub("", embed.description)
+    return "\n".join([plain] + [f"{f.name}\n{f.value}" for f in embed.fields])
+
+
+def test_a_clamped_stop_reads_the_same_everywhere_in_the_alert(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = _clamped_item()
+    scenario_result = _fake_scenario_result()
+    scenario_result.scenario.stop_loss, scenario_result.scenario.stop_distance_pct = 96.0, 4.0
+    explanation = build_explanation(scenario_result, plan=item.plan_v2)
+    embed = build_embed(item, explanation=explanation, perf_stats=PERF_STATS_EMPTY,
+                        open_positions_warning=None, chart_filename=None, layout="detailed")
+    text = _all_embed_text(embed)
+    assert "96.00" not in text and "4.0%" not in text
+    assert "98.25" in text
+    assert "−1.8%" in text  # headline magnitude, typographic minus
+    assert "5.7R" in text and "2.5R" not in text  # 10.00 reward over 1.75 risk
+    branches = next(f for f in embed.fields if f.name == "🔀 If it gets there")
+    assert "98.25 (1.8%)" in branches.value
+    assert "Stop at **98.25** (-1.8%)" in explanation
+    assert "reverses → stop 98.25." in explanation
+
+
+def test_a_clamped_stop_reads_the_same_in_the_simple_channel(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = _clamped_item()
+    # build_simple_alert routes a priced v2 plan to the ticket; the legacy
+    # mirror is reached only off that route, but must agree if it ever is.
+    for embed in (build_simple_alert(item), alert_embeds._legacy_simple_alert(item)):
+        text = _all_embed_text(embed)
+        assert "96.00" not in text and "4.0%" not in text and "2.5R" not in text
+        assert "98.25" in text
+
+
+def test_an_unclamped_v2_plan_keeps_the_scenario_r_even_when_tp1_differs(monkeypatch):
+    import dataclasses
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = make_item(plan_v2=dataclasses.replace(make_plan_v2(), tp1=120.0))
+    text = _all_embed_text(_build(item))
+    assert "100.00 → 120.00 / 95.00" in text
+    assert "−5.0% 2.0R" in text  # scenario's R, not 20/5 = 4.0R off the v2 TP1
+    stop_entry = dataclasses.replace(item.plan_v2, entry_type="stop_entry", trigger_price=102.0)
+    explanation = build_explanation(_fake_scenario_result(), plan=stop_entry)
+    assert "Stop at **95.00** (-5.0%)" in explanation  # not 6.9% from the trigger
+
+
+def test_an_uncomputable_v2_stop_distance_falls_back_to_the_scenario(monkeypatch):
+    import dataclasses
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = _clamped_item()
+    zero_entry = dataclasses.replace(item.plan_v2, trigger_price=0.0)
+    nums = {"entry": 0.0, "stop_loss": 98.25, "take_profit": 110.0}
+    assert plan_table.stop_figures_for_display(zero_entry, nums, item.plan) == (4.0, 2.5)
+    assert "Stop at **96.00** (-4.0%)" in build_explanation(
+        _clamped_scenario_result(), plan=zero_entry)
+
+
+def test_an_unclamped_stop_renders_as_before(monkeypatch):
+    for flag, plan_v2 in (("off", None), ("on", make_plan_v2())):
+        monkeypatch.setattr(config, "PLAN_ENGINE_V2", flag)
+        embed = _build(make_item(plan_v2=plan_v2))
+        text = _all_embed_text(embed)
+        assert "100.00 → 110.00 / 95.00" in text
+        assert "+10.0% −5.0% 2.0R" in text
+        branches = next(f for f in embed.fields if f.name == "🔀 If it gets there")
+        assert "support at 95.00 (5.0%)" in branches.value
+        explanation = build_explanation(_fake_scenario_result(), plan=plan_v2)
+        assert "Stop at **95.00** (-5.0%)" in explanation
+        assert "reverses → stop 95.00." in explanation

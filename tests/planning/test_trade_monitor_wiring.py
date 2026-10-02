@@ -74,7 +74,7 @@ def test_plan_manager_batches_distinct_open_plan_tickers(tmp_path, monkeypatch):
     from swingbot.core.planning.plan_store import PlanStore
     from tests.planning.test_plan_manager_pending import _pending
 
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     first = _pending(plan_id="batch-a", ticker="AAPL", stop_loss=104.0)
     second = _pending(plan_id="batch-b", ticker="AAPL", stop_loss=104.0)
     store.add(first)

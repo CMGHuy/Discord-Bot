@@ -102,9 +102,8 @@ def wilson_interval(wins: int, n: int, z: float = 1.96) -> tuple:
     return (max(0.0, centre - margin), min(1.0, centre + margin))
 
 
-def load_frames(cache_dir: Path, watchlist_path: Path, tickers: list | None,
+def load_frames(cache_dir: Path, watchlist: list, tickers: list | None,
                 sample_every: int) -> dict:
-    watchlist = json.loads(watchlist_path.read_text())
     if tickers:
         symbols = [t for t in tickers if t in watchlist] or tickers
     else:
@@ -279,22 +278,21 @@ def main() -> int:
     window = VALIDATION if args.validation else TRAIN
     label = "VALIDATION" if args.validation else "TRAIN"
     cache_dir = Path(args.cache_dir) if args.cache_dir else CACHE_DIR
-    watchlist_path = cache_dir.parent / "watchlist.json"
-    if not watchlist_path.exists():
-        watchlist_path = ROOT / "data" / "watchlist.json"
+    from swingbot.core.marketdata.watchlist import load_watchlist
+    watchlist = load_watchlist()
 
     tickers = [t.strip() for t in args.tickers.split(",")] if args.tickers else None
     horizons = [h.strip() for h in args.horizons.split(",")] if args.horizons else HORIZONS_TO_TEST
     sample_every = 1 if tickers else SAMPLE_EVERY
 
-    frames = load_frames(cache_dir, watchlist_path, tickers, sample_every)
+    frames = load_frames(cache_dir, watchlist, tickers, sample_every)
     if not frames:
-        print(f"No frames loaded from {cache_dir} (watchlist {watchlist_path}) -- "
+        print(f"No frames loaded from {cache_dir} (watchlist table) -- "
               f"run scripts/data/fetch_backtest_data.py or pass --cache-dir.",
               file=sys.stderr)
         return 1
     print(f"Window: {label} {window[0]}..{window[1]} | {len(frames)} of "
-          f"{len(json.loads(watchlist_path.read_text()))} tickers "
+          f"{len(watchlist)} tickers "
           f"(every {sample_every}{'th' if not tickers else ''}, alphabetical) "
           f"= {sorted(frames)}", flush=True)
     print(f"Horizons: {horizons} | gates: {BASE_GATES}", flush=True)

@@ -11,6 +11,7 @@ from swingbot.core.planning.plan_engine import TradePlanV2
 from swingbot.core.scanning import snapshots
 from swingbot.core.scanning.embeds import build_embed
 from swingbot.core import presentation as ui
+from swingbot.core.presentation import kinds
 
 TODAY = dt.date(2026, 7, 11)
 
@@ -65,6 +66,11 @@ def make_plan_v2(badge="VALIDATED", confidence_level=5, quality_score=72, plan_i
     )
 
 
+def test_fake_item_from_plan_carries_the_plans_confidence_level():
+    assert _fake_item_from_plan(make_plan_v2(confidence_level=5)).conf.level == 5
+    assert _fake_item_from_plan(make_plan_v2(confidence_level=None)).conf.level == 3
+
+
 def test_fake_item_from_plan_builds_embed_without_crashing_and_uses_the_shared_accent():
     plan = make_plan_v2(badge="VALIDATED", confidence_level=5)
     item = _fake_item_from_plan(plan)
@@ -82,8 +88,8 @@ def test_fake_item_from_plan_builds_embed_without_crashing_and_uses_the_shared_a
     assert isinstance(embed, discord.Embed)
     # Direction remains explicit in the title while confidence is expressed
     # through the shared accent, not a numbered or badge chip.
-    assert embed.title.startswith("🟢 LONG")
-    assert embed.color.value == ui.accent_for_level(item.conf.level).value
+    assert embed.title.startswith("🆕 ▲ LONG NVDA")
+    assert embed.color.value == kinds.SETUP_RAMP[item.conf.level]
     assert "VALIDATED" not in embed.title
     assert "NVDA" in embed.title
 
@@ -297,7 +303,7 @@ from swingbot.commands.stats import _journal_note_result
 
 def test_journal_note_result_success(tmp_path, monkeypatch):
     from swingbot.core.analytics.journal import JournalStore
-    store = JournalStore(path=str(tmp_path / "journal.json"))
+    store = JournalStore()
     store.add({"trade_id": "T1", "ticker": "NVDA", "outcome": "win", "r_realized": 1.0,
               "auto_lesson": "lesson", "tags": []})
     msg = _journal_note_result(store, "T1", "watch the gap next time")
@@ -307,7 +313,7 @@ def test_journal_note_result_success(tmp_path, monkeypatch):
 
 def test_journal_note_result_missing_id(tmp_path):
     from swingbot.core.analytics.journal import JournalStore
-    store = JournalStore(path=str(tmp_path / "journal.json"))
+    store = JournalStore()
     msg = _journal_note_result(store, "missing", "x")
     assert "no journal entry" in msg.lower()
 

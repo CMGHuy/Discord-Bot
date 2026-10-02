@@ -9,11 +9,10 @@ above that stale take_profit, so the very next scan re-triggers hit_target
 and closes the trade early -- silently swallowing the real runner leg, since
 close_plan_trade() can no longer find an "open" trade to attach it to.
 """
-import json
-
 import pandas as pd
 
 from swingbot.core.tracking.performance import TradeLog
+from tests.store_seed import seed_store
 
 
 def _bars(rows):
@@ -27,6 +26,7 @@ def _bars(rows):
 
 def _trade(plan_id=None, *, stop_loss=95.0, take_profit=110.0):
     t = {"id": "t1", "ticker": "AAPL", "direction": "bullish", "status": "open",
+         "strategy": "RSI", "horizon_key": "2w",
          "entry": 100.0, "stop_loss": stop_loss, "take_profit": take_profit,
          "opened_at": "2026-07-01T10:00:00+00:00", "shares": 10}
     if plan_id:
@@ -34,29 +34,27 @@ def _trade(plan_id=None, *, stop_loss=95.0, take_profit=110.0):
     return t
 
 
-def test_manager_owned_partial_trade_is_not_closed_by_the_legacy_scanner(tmp_path):
+def test_manager_owned_partial_trade_is_not_closed_by_the_legacy_scanner():
     """The runner is still open (working_stop=BE, real target=TP2), but the
     trade record's stale take_profit still reads TP1 (110) -- a bar that
     revisits/exceeds that level must not close the trade out from under
     plan_manager."""
-    path = tmp_path / "trades.json"
-    path.write_text(json.dumps([_trade(plan_id="p1")]))
-    log = TradeLog(path=str(path))
+    seed_store("trades", [_trade(plan_id="p1")])
+    log = TradeLog()
 
     df = _bars([("2026-07-02", 111.0, 112.0, 110.5, 111.5)])  # revisits old TP1
     closed = log.update_open_trades("AAPL", df, live_price=111.5)
 
     assert closed == []
-    reloaded = json.loads(path.read_text())
+    reloaded = TradeLog().get_trades(status=None, limit=None)
     assert reloaded[0]["status"] == "open"     # plan_manager still owns this
 
 
-def test_legacy_trade_still_closes_on_target_hit(tmp_path):
+def test_legacy_trade_still_closes_on_target_hit():
     """Unguarded (no plan_id): the legacy single-target close path is
     unchanged."""
-    path = tmp_path / "trades.json"
-    path.write_text(json.dumps([_trade()]))
-    log = TradeLog(path=str(path))
+    seed_store("trades", [_trade()])
+    log = TradeLog()
 
     df = _bars([("2026-07-02", 111.0, 112.0, 110.5, 111.5)])
     closed = log.update_open_trades("AAPL", df, live_price=111.5)

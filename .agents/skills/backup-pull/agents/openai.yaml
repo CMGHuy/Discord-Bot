@@ -1,0 +1,3 @@
+# GENERATED from .claude/skills/backup-pull/SKILL.md by scripts/dev/sync_codex.py -- edit the source, then re-run the script. Never edit this copy.
+policy:
+  allow_implicit_invocation: false

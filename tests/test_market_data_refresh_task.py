@@ -34,7 +34,7 @@ def test_market_data_refresh_passes_its_configured_time_budget(monkeypatch):
 
     monkeypatch.setattr(config, "MARKET_DATA_AUTO_REFRESH", True, raising=False)
     monkeypatch.setattr(config, "MARKET_DATA_REFRESH_BUDGET_SECONDS", 77, raising=False)
-    monkeypatch.setattr(scanning_mod, "load_watchlist", lambda: ["AAPL"], raising=False)
+    monkeypatch.setattr("swingbot.commands.scanning.loops.load_watchlist", lambda: ["AAPL"])
     monkeypatch.setattr("swingbot.core.marketdata.data_refresh.refresh_all", fake_refresh_all)
 
     _run(scanning_mod.market_data_refresh.coro())
@@ -50,7 +50,7 @@ def test_market_data_refresh_logs_when_the_budget_is_hit(monkeypatch):
 
     monkeypatch.setattr(config, "MARKET_DATA_AUTO_REFRESH", True, raising=False)
     monkeypatch.setattr(config, "MARKET_DATA_REFRESH_BUDGET_SECONDS", 30, raising=False)
-    monkeypatch.setattr(scanning_mod, "load_watchlist", lambda: ["AAPL"], raising=False)
+    monkeypatch.setattr("swingbot.commands.scanning.loops.load_watchlist", lambda: ["AAPL"])
     monkeypatch.setattr("swingbot.core.marketdata.data_refresh.refresh_all", fake_refresh_all)
 
     from swingbot.commands.scanning import loops
@@ -67,10 +67,10 @@ def test_market_data_refresh_stays_quiet_when_the_budget_is_not_hit(monkeypatch,
                 "failures": [], "state": {}, "deadline_hit": False}
 
     monkeypatch.setattr(config, "MARKET_DATA_AUTO_REFRESH", True, raising=False)
-    monkeypatch.setattr(scanning_mod, "load_watchlist", lambda: ["AAPL"], raising=False)
+    monkeypatch.setattr("swingbot.commands.scanning.loops.load_watchlist", lambda: ["AAPL"])
     monkeypatch.setattr("swingbot.core.marketdata.data_refresh.refresh_all", fake_refresh_all)
 
-    with caplog.at_level("WARNING", logger="swing-bot"):
+    with caplog.at_level("WARNING"):
         _run(scanning_mod.market_data_refresh.coro())
 
     assert not any("time budget" in r.message for r in caplog.records)

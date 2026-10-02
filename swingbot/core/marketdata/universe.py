@@ -6,8 +6,12 @@ reasonable model for a $20M+/day name, a fantasy for a $500k/day one.
 """
 from __future__ import annotations
 
+import csv
+import datetime as dt
+import hashlib
 import json
 import os
+from dataclasses import dataclass
 
 import pandas as pd
 
@@ -24,6 +28,20 @@ def _volume_is_not_shares(symbol: str) -> bool:
     return classify(symbol) in _VOLUME_NOT_SHARES
 
 
+def _dollar_volume_exempt(symbol: str | None) -> bool:
+    """v115: which symbols skip the dollar-volume floor. v109 spot metals
+    (spot_metals.SPOT_PAIRS, the single source of truth) always do: their bars
+    carry the future's contract volume, and the partner kept them scanning
+    (2026-09-30). 4a649b36's futures/FX/index exemption applies only while
+    LIQUIDITY_EXEMPT_NON_EQUITY is on (default off = the 09-22 floor)."""
+    if symbol is None:
+        return False
+    from swingbot.core.marketdata.spot_metals import is_spot_metal
+    if is_spot_metal(symbol):
+        return True
+    return bool(config.LIQUIDITY_EXEMPT_NON_EQUITY) and _volume_is_not_shares(symbol)
+
+
 def liquidity_ok(df: pd.DataFrame, min_avg_dollar_vol: float | None = None,
                   min_price: float | None = None) -> bool:
     return liquidity_reason(df, min_avg_dollar_vol, min_price) is None
@@ -32,14 +50,17 @@ def liquidity_ok(df: pd.DataFrame, min_avg_dollar_vol: float | None = None,
 #: Asset classes whose Yahoo "Volume" is not a share count: futures report
 #: contracts (SI=F is 5,000 oz each), FX and indices report 0. Close x Volume
 #: is meaningless for them, so only the history and price floors apply.
-_VOLUME_NOT_SHARES = frozenset({"future", "fx", "index"})
+#: v109: spot metals carry their future's contract volume unchanged.
+_VOLUME_NOT_SHARES = frozenset({"future", "fx", "index", "spot_metal"})
 
 
 def liquidity_reason(df: pd.DataFrame, min_avg_dollar_vol: float | None = None,
                       min_price: float | None = None,
                       symbol: str | None = None) -> str | None:
     """None when liquid; else a loggable reason string. Passing `symbol`
-    exempts futures/FX/indices from the dollar-volume floor."""
+    always exempts v109 spot metals from the dollar-volume floor, and exempts
+    futures/FX/indices only while LIQUIDITY_EXEMPT_NON_EQUITY is on (v115;
+    default off)."""
     if df is None or len(df) < 20:
         return "insufficient history (<20 bars)"
     floor_dv = min_avg_dollar_vol if min_avg_dollar_vol is not None else \
@@ -49,7 +70,7 @@ def liquidity_reason(df: pd.DataFrame, min_avg_dollar_vol: float | None = None,
     last_close = float(df["Close"].iloc[-1])
     if last_close < floor_px:
         return f"price {last_close:.2f} < {floor_px:.2f} floor"
-    if symbol is not None and _volume_is_not_shares(symbol):
+    if _dollar_volume_exempt(symbol):
         return None
     dv = _avg_dollar_vol(df)
     if dv < floor_dv:
@@ -96,6 +117,99 @@ def load(name: str) -> list[dict]:
         out.append({"symbol": sym, "name": row["name"],
                     "sector": row["sector"], "etf": bool(row["etf"])})
     return out
+
+
+# --- Dated short-lane snapshot (v118) ---------------------------------------
+#
+# Read-only adapter beside load(): the bearish extra lane needs "who was in the
+# index on THIS date", never today's list projected backwards. None means the
+# lane is skipped -- there is no fallback to the legacy sp500.json rows.
+
+LIVE_SNAPSHOT_MAX_AGE_SESSIONS = 5  # fixed operational default, not a tuned knob
+_SECTOR_HISTORY_FILE = "sp500_sector_history.csv"
+
+
+@dataclass(frozen=True)
+class ShortSnapshot:
+    symbols: tuple[str, ...]
+    membership_asof: str
+    sector_of: dict[str, str]
+
+
+def _sha256_file(path: str) -> str | None:
+    try:
+        with open(path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except OSError:
+        return None
+
+
+def _live_snapshot_meta_ok(meta: dict, day: str) -> bool:
+    asof = meta.get("as_of")
+    if not asof or asof > day or meta.get("source") != "manual_csv":
+        return False
+    digest = _sha256_file(os.path.join(UNIVERSE_DIR, "sp500.json"))
+    if digest is None or meta.get("universe_sha256") != digest:
+        return False
+    from swingbot.core.market.session import nyse_calendar
+    try:
+        age = nyse_calendar().sessions_between(
+            dt.date.fromisoformat(asof), dt.date.fromisoformat(day))
+    except ValueError:
+        return False
+    return age is not None and age <= LIVE_SNAPSHOT_MAX_AGE_SESSIONS
+
+
+def live_short_snapshot(day: str) -> ShortSnapshot | None:
+    from swingbot.core.infra.jsonio import read_json
+    meta = read_json(os.path.join(UNIVERSE_DIR, "sp500.snapshot.json"), {})
+    if not isinstance(meta, dict) or not _live_snapshot_meta_ok(meta, day):
+        return None
+    rows = load("sp500")
+    return ShortSnapshot(tuple(r["symbol"] for r in rows), meta["as_of"],
+                         {r["symbol"]: r["sector"] for r in rows})
+
+
+def _load_sector_intervals(path: str) -> dict[str, list[tuple[str, str, str]]]:
+    from swingbot.core.marketdata.pit_membership import OPEN_END, normalize_symbol
+    try:
+        with open(path, newline="", encoding="utf-8-sig") as f:
+            rows = list(csv.DictReader(f))
+    except OSError:
+        return {}
+    out: dict[str, list[tuple[str, str, str]]] = {}
+    for row in rows:
+        sym = normalize_symbol(row.get("ticker") or "")
+        start = (row.get("start_date") or "").strip()
+        sector = (row.get("sector") or "").strip()
+        if sym and start and sector:
+            end = (row.get("end_date") or "").strip() or OPEN_END
+            out.setdefault(sym, []).append((start, end, sector))
+    return out
+
+
+def _sector_on(day: str, spans: list[tuple[str, str, str]]) -> str | None:
+    for start, end, sector in spans:
+        if start <= day < end:
+            return sector
+    return None
+
+
+def historical_short_snapshot(day: str) -> ShortSnapshot | None:
+    from swingbot.core.marketdata.pit_membership import is_member, load_intervals
+    intervals = load_intervals(os.path.join(UNIVERSE_DIR, "sp500_membership.csv"))
+    sectors = _load_sector_intervals(os.path.join(UNIVERSE_DIR, _SECTOR_HISTORY_FILE))
+    if not intervals or not sectors:
+        return None
+    symbols = tuple(sorted(s for s, spans in intervals.items() if is_member(day, spans)))
+    sector_of = {s: sec for s in symbols
+                 if (sec := _sector_on(day[:10], sectors.get(s, []))) is not None}
+    return ShortSnapshot(symbols, day[:10], sector_of)
+
+
+def short_snapshot(day: str, *, live: bool) -> ShortSnapshot | None:
+    """Dated membership + sector for the bearish extra lane, or None (skip)."""
+    return live_short_snapshot(day) if live else historical_short_snapshot(day)
 
 
 def universe_symbols(name: str) -> list[str]:

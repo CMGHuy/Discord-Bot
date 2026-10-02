@@ -40,6 +40,7 @@ import {
   DASHBOARD_TABLE_ID,
   FULL_COLUMNS,
   PINNED_COLUMNS,
+  openedAt,
   tradeColumns,
 } from '../trades/trades.columns';
 import { amount, dateTime, money, pct, signed } from '../../ui/format';
@@ -444,7 +445,7 @@ export const DASHBOARD_COLUMNS = tradeColumns();
          table's default cell renderer, which reads column.value -- and
          neither column defines one, so every row rendered the "no value"
          em dash regardless of what the row actually held. -->
-    <ng-template #openedCell let-row>{{ fmtDate(row.opened_at) }}</ng-template>
+    <ng-template #openedCell let-row>{{ fmtDate(openedAt(row)) }}</ng-template>
     <ng-template #closedCell let-row>{{ fmtDate(row.closed_at) }}</ng-template>
     <ng-template #actionsCell let-row>
       <sb-row-actions [row]="row" (done)="store.load()" />
@@ -903,6 +904,7 @@ export class Dashboard {
   protected fmtSigned = signed;
   protected fmtPct = pct;
   protected fmtDate = dateTime;
+  protected openedAt = openedAt;
 
   /** row.id IS the plan id; the '#' column is 3rem wide and the full id is
    *  on the detail page it links to. Same rule trades.ts's own shortId

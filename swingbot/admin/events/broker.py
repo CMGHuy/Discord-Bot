@@ -1,15 +1,15 @@
-"""One watcher, many browsers — fan-out, sequencing, and the connection cap.
+"""One listener, many browsers — fan-out, sequencing, and the connection cap.
 
 Spec: `docs/superpowers/specs/implemented/2026-08-08-v12-realtime-push-design.md`,
 Decisions 4 and 5.
 
-The watcher (NG20) knows how to turn a file modification into an event
-type. This module is what stands between it and the SSE endpoint (NG22),
-and it exists for one structural reason: **the stat() load must not scale
-with the number of open tabs.** A watcher per connection would be the
-obvious wiring and would multiply the sweep by every tab the user left
-open. So there is one watcher for the process, started lazily on the first
-connection, fanning out to a queue per connection.
+The listener (`DbEventListener`) turns Postgres NOTIFYs into event types.
+This module is what stands between it and the SSE endpoint (NG22), and it
+exists for one structural reason: **the database load must not scale with
+the number of open tabs.** A listener per connection would be the obvious
+wiring and would hold a Postgres connection per tab. So there is one
+listener for the process, started lazily on the first connection, fanning
+out to a queue per connection.
 
 The three responsibilities, none of which belong in either neighbour:
 
@@ -36,9 +36,21 @@ from datetime import datetime, timezone
 
 from swingbot.admin.api_v1 import ApiError, iso
 
-from .watcher import FileWatcher
+from .db_listener import DbEventListener
 
-log = logging.getLogger("swing-bot.admin.events")
+log = logging.getLogger(__name__)
+
+
+def _default_watcher(emit):
+    """One listener per process: LISTEN/NOTIFY for every concern (v116).
+
+    The broker has always taken an injectable factory (for tests that drive
+    publish by hand); this is the default. The four sources that stay files
+    raise their own NOTIFY (`events.FILE_PUBLISHERS`), so nothing stat()s
+    `data/` any more.
+    """
+    return DbEventListener(emit)
+
 
 #: Concurrent event connections. Spec Decision 5: the cap exists so that a
 #: reconnect bug in the client leaks visibly and boundedly instead of
@@ -165,7 +177,7 @@ class EventBroker:
         max_connections: int = MAX_CONNECTIONS,
         queue_limit: int = QUEUE_LIMIT,
     ):
-        self._watcher_factory = watcher_factory or (lambda emit: FileWatcher(emit))
+        self._watcher_factory = watcher_factory or _default_watcher
         self._max_connections = max_connections
         self._queue_limit = queue_limit
 
@@ -232,10 +244,11 @@ class EventBroker:
     def _release(self, subscription: Subscription) -> None:
         """Drop a connection, stopping the watcher if it was the last.
 
-        Restarting builds a *new* watcher rather than reviving this one.
-        A FileWatcher primes itself in `__init__`, so a fresh instance both
-        re-reads the disk state that moved while nobody was connected, and
-        avoids racing a thread that is still winding down from `stop()`.
+        Restarting builds a *new* watcher rather than reviving this one, so
+        the restart never races a thread still winding down from `stop()`.
+        A DbEventListener has nothing to prime from (a notification sent while
+        nobody listened is gone), and the resync every new connection
+        receives covers that gap instead.
         """
         with self._lock:
             self._subscriptions.discard(subscription)

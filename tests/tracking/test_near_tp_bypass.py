@@ -1,9 +1,9 @@
-import json
 from unittest.mock import patch
 
 from swingbot.core.tracking.performance import TradeLog
-from swingbot.core.presentation import tokens
+from swingbot.core.presentation import kinds
 from swingbot.core.scanning.lifecycle_embeds import build_near_close_embed
+from tests.store_seed import seed_store
 
 
 def _near_tp_trade(plan_id=None):
@@ -23,33 +23,34 @@ def _warning(which: str):
             "sl_dist_pct": 1.0, "tp_dist_pct": 1.0, "current_price": 105.0}
 
 
-def test_near_stop_warns_in_the_ramps_red():
-    assert build_near_close_embed(_warning("stop-loss")).color.value == tokens.ACCENT_RAMP[1]
+def test_near_stop_warns_in_the_watch_orange():
+    embed = build_near_close_embed(_warning("stop-loss"))
+    assert embed.color.value == kinds.WATCH_STOP_ORANGE
+    assert embed.title == "👀 ▲ LONG AAPL · NEARING STOP · 1.0% away"
+    assert embed.push_text == "👀 WATCH · ▲ LONG AAPL · NEARING STOP · 1.0% away"
+    assert embed.footer.text == "WATCH"
 
 
-def test_near_target_uses_the_ramps_green_and_explicit_title():
+def test_near_target_uses_the_watch_lime_and_explicit_title():
     stop = build_near_close_embed(_warning("stop-loss"))
     target = build_near_close_embed(_warning("take-profit"))
-    assert target.color.value == tokens.ACCENT_RAMP[5]
+    assert target.color.value == kinds.WATCH_TP_LIME
     assert "stop" in stop.title.lower()
+    assert "NEARING TP" in target.title
 
 
-def test_manager_owned_trades_skip_near_tp_timeout(tmp_path, monkeypatch):
-    monkeypatch.setattr("swingbot.core.analytics.journal.config.DATA_DIR", str(tmp_path))
-    path = tmp_path / "trades.json"
-    path.write_text(json.dumps([_near_tp_trade(plan_id="p1")]))
-    log = TradeLog(path=str(path))
+def test_manager_owned_trades_skip_near_tp_timeout():
+    seed_store("trades", [_near_tp_trade(plan_id="p1")])
+    log = TradeLog()
     with patch("swingbot.core.marketdata.data.get_daily_data", return_value=None):
         # 109.5 = 95% of the way to target; stall clock long expired
         closed = log.check_near_tp_timeout("AAPL", live_price=109.5)
     assert closed == []                       # runner/trail owns this decision
 
 
-def test_legacy_trades_still_timeout(tmp_path, monkeypatch):
-    monkeypatch.setattr("swingbot.core.analytics.journal.config.DATA_DIR", str(tmp_path))
-    path = tmp_path / "trades.json"
-    path.write_text(json.dumps([_near_tp_trade()]))
-    log = TradeLog(path=str(path))
+def test_legacy_trades_still_timeout():
+    seed_store("trades", [_near_tp_trade()])
+    log = TradeLog()
     with patch("swingbot.core.marketdata.data.get_daily_data", return_value=None):
         closed = log.check_near_tp_timeout("AAPL", live_price=109.5)
     assert len(closed) == 1                   # unchanged legacy behavior

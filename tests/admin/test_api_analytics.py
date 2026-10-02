@@ -16,6 +16,7 @@ import json
 import pytest
 
 from tests.admin.api_v1_contract import NULLABLE_NUMBER, assert_error, assert_shape
+from tests.store_seed import seed_store
 
 _LOGIN = {"username": "admin", "password": "admin"}
 
@@ -84,9 +85,8 @@ def _year():
 @pytest.fixture
 def seed(admin_app, tmp_path):
     def _seed(trades=()):
-        (tmp_path / "plans.json").write_text("[]", encoding="utf-8")
-        (tmp_path / "trades.json").write_text(json.dumps(list(trades)), encoding="utf-8")
-        (tmp_path / "account.json").write_text(json.dumps({"base_balance": 1000.0, "balance": 1150.0, "risk_pct": 1.0, "max_position_pct": 20.0, "sizing_mode": "risk_pct", "balance_history": []}), encoding="utf-8")
+        seed_store("trades", list(trades))
+        seed_store("account", {"base_balance": 1000.0, "balance": 1150.0, "risk_pct": 1.0, "max_position_pct": 20.0, "sizing_mode": "risk_pct", "balance_history": []})
     return _seed
 
 
@@ -415,9 +415,9 @@ def test_horizon_rows_carry_no_badge_field(seed, logged_in):
 
 
 def test_horizon_rows_use_the_real_horizon_vocabulary(seed, logged_in):
-    from swingbot.core.market.strategy_types import HORIZONS
+    from swingbot.core.market.strategy_types import HORIZONS, LEGACY_HORIZONS
 
-    horizons = list(HORIZONS)[:3]
+    horizons = list(LEGACY_HORIZONS)[:3]
     seed(trades=[
         _closed_r(chr(ord("a") + i) * 16,
                   closed_at=f"2026-04-0{i + 1}T16:00:00+00:00", r=1.0, horizon=h)

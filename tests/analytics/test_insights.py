@@ -128,11 +128,10 @@ def test_retrospective_uses_shared_signed_formatters_and_plain_chunks():
     assert isinstance(out, list) and all(isinstance(chunk, str) for chunk in out)
 
 
-def test_retrospective_lessons_block_present_when_journaled(tmp_path, monkeypatch):
-    monkeypatch.setattr("swingbot.core.analytics.journal.config.DATA_DIR", str(tmp_path))
+def test_retrospective_lessons_block_present_when_journaled():
     from swingbot.core.analytics.journal import JournalStore
 
-    JournalStore(path=str(tmp_path / "journal.json")).add({
+    JournalStore().add({
         "trade_id": "aaa", "ticker": "AAA", "auto_lesson": "Clean capture: banked 100% of the available move.",
         "closed_at": "2026-03-10T16:00:00+00:00", "tags": [], "note": "",
     })

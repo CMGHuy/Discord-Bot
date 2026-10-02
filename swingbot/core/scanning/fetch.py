@@ -11,18 +11,20 @@ from collections import OrderedDict
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait as _futures_wait
 
 from swingbot import config
+from swingbot.core.infra.logsetup import with_current_context
 # `get_current_price` is re-exported: scan_run.py calls it as
 # `fetch.get_current_price`, so it is used even though nothing here calls it.
 from swingbot.core.marketdata.data import get_current_price  # noqa: F401
 from swingbot.core.marketdata.data import (
     get_current_price_batch, get_daily_data, get_daily_data_batch,
 )
-from swingbot.core.marketdata import data_refresh, data_store, universe
+from swingbot.core.marketdata import data_refresh, data_store, spot_metals, universe
+from swingbot.core.marketdata.history_splice import splice_cached_history
 
 from . import runstate
 
 
-log = logging.getLogger("swing-bot.scan_engine")
+log = logging.getLogger(__name__)
 
 #: v106 soak telemetry for the current scan, reset by reset_fetch_stats()
 #: at scan start and read into the telemetry row at scan end.
@@ -177,7 +179,7 @@ def _run_bounded(fn, args: tuple, timeout_seconds: float, label: str):
             try:
                 return future.result()
             except Exception as exc:
-                log.error("%s failed: %s", label, exc)
+                log.error("%s failed: %s", label, exc, exc_info=True)
                 return None
         log.error(
             "%s did not finish within %ss -- killing the worker process and "
@@ -221,8 +223,25 @@ def _fetch_one_ticker(ticker: str) -> tuple:
     try:
         return ticker, get_daily_data(ticker, period=config.DEFAULT_HISTORY_PERIOD)
     except Exception as exc:
-        log.error("Crawl: error fetching data for %s: %s", ticker, exc)
+        log.error("Crawl: error fetching data for %s: %s", ticker, exc, exc_info=True)
         return ticker, None
+
+
+def _with_cached_depth(ticker: str, live):
+    """A cold ticker's live frame is shallow (Alpaca reaches back to 2016, a
+    2y period to 2y) while its STALE cache file still holds the full archive.
+    Splice the cache's older bars under the live frame (live wins on overlap,
+    nothing after the live frame's first bar is taken from the cache, the
+    partial today bar stays last) so levels/long-horizon strategies see the
+    same depth as the cache-first path. Any cache problem -> the live frame."""
+    if live is None:
+        return None
+    try:
+        cached = data_store.load_normalized(ticker, "daily")
+        return splice_cached_history(live, cached, ticker)
+    except Exception as exc:
+        log.debug("Crawl: cache splice skipped for %s (%s)", ticker, exc)
+        return live
 
 
 def _fetch_cold_frames(tickers: list, progress: "ScanProgress" = None) -> list:
@@ -279,7 +298,55 @@ def _fetch_cold_frames(tickers: list, progress: "ScanProgress" = None) -> list:
             label=f"Crawl: cold-fetch fallback for {ticker}") or (ticker, None)
         resolved[ticker] = df
 
-    return [(t, resolved.get(t)) for t in tickers]
+    return [(t, _with_cached_depth(t, resolved.get(t))) for t in tickers]
+
+
+def _spot_daily_worker(ticker: str, period: str) -> tuple:
+    """v109 worker body for one spot symbol: its spot-scaled frame, or None
+    plus the reason the router recorded -- that record lives in this worker
+    process, so it travels back with the result (the same shape as
+    _price_batch_with_sources)."""
+    from swingbot.core.marketdata.providers import router
+    df = get_daily_data_batch([ticker], period).get(ticker)
+    if df is not None:
+        return df, ""
+    return None, router.spot_miss_reason(ticker) or "no spot frame"
+
+
+def _log_spot_outcome(ticker: str, df, reason: str) -> None:
+    """The scan's one line per spot symbol: the ratio its levels are drawn at
+    (so an alert reconciles with the futures chart), or why it was skipped."""
+    if df is None:
+        log.info("%s: skipping new-signal scan -- spot quote unavailable (%s)", ticker, reason)
+        return
+    a = df.attrs
+    log.info("%s: spot ratio %.5f (spot %.2f / %s %.2f)", ticker, a["spot_ratio"],
+             a["spot_price"], a["spot_underlying"], a["futures_price"])
+
+
+def _crawl_spot(tickers: list, progress: "ScanProgress" = None) -> dict:
+    """v109: spot metals skip the disk cache (a scaled frame is never cached)
+    and the cold path's single-ticker fallback (candidate_symbols() would
+    alias XAUUSD to UNSCALED GC=F). One bounded worker per symbol; the
+    outcome is logged here, in the scan's own process. A skipped symbol is
+    simply absent -- _scan_one's existing "no frame" path, never futures."""
+    period = config.DEFAULT_HISTORY_PERIOD
+    timeout = int(getattr(config, "COLD_FETCH_TIMEOUT_SECONDS", 180))
+    out: dict = {}
+    for ticker in tickers:
+        if runstate.is_stop_requested():
+            break
+        df, reason = _run_bounded(
+            _spot_daily_worker, (ticker, period), timeout,
+            label=f"Crawl: spot fetch for {ticker}") or (None, "spot fetch failed or timed out")
+        _log_spot_outcome(ticker, df, reason)
+        if df is not None:
+            out[ticker] = df
+        if progress is not None:
+            progress.done += 1
+            progress.current_ticker = ticker
+    return out
+
 
 def _load_cached_daily(ticker: str):
     """v47: today's daily bar from market_data/daily/{TICKER}.csv, or None.
@@ -358,9 +425,10 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     results = LRUFrames(max_frames=len(tickers))
     started = time.monotonic()
 
+    spot, plain = spot_metals.split_spot(tickers)
     cold = []
     warm = 0
-    for ticker in tickers:
+    for ticker in plain:
         if runstate.is_stop_requested():
             log.info("Crawl: stop requested -- ending early (%d/%d ticker(s) resolved so far)",
                       len(results), len(tickers))
@@ -380,11 +448,44 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     for ticker, df in _fetch_cold_frames(cold, progress):
         if df is not None:
             results[ticker] = df
+    results.update(_crawl_spot(spot, progress))
 
     elapsed = time.monotonic() - started
     log.info("Crawl complete in %.1fs: %d/%d ticker(s) resolved (%d from cache, %d fetched)",
               elapsed, len(results), len(tickers), warm, len(cold))
     return results
+
+
+SHORT_CRAWL_CHUNK = 20
+
+
+def _crawl_bounded(symbols, *, max_symbols: int, budget_s: float,
+                   chunk: int = SHORT_CRAWL_CHUNK, clock=time.monotonic) -> tuple[dict, str | None]:
+    """V118-4: cache-first crawl of the SHORT extra lane's symbols, bounded.
+
+    At most `max_symbols` are queued, resolved `chunk` at a time through the
+    same `_crawl_latest_data` the base scan uses (cache first, then the bounded
+    cold pool), and the deadline is checked BETWEEN chunks. A spent budget, a
+    stop request or a failed chunk ends only this queue and is named in the
+    returned reason ("budget_exhausted" / "stopped" / "fetch_failed", else
+    None); frames already resolved are kept. Never reorders or touches the base
+    crawl -- the caller runs it after the base alerts were sent.
+    """
+    queue = list(symbols)[:max(0, int(max_symbols))]
+    deadline = clock() + budget_s
+    frames: dict = {}
+    for batch in _chunked(queue, chunk):
+        if runstate.is_stop_requested():
+            return frames, "stopped"
+        if clock() >= deadline:
+            log.info("SHORT crawl: budget spent -- %d/%d symbol(s) resolved", len(frames), len(queue))
+            return frames, "budget_exhausted"
+        try:
+            frames.update(_crawl_latest_data(batch, None))
+        except Exception:
+            log.warning("SHORT crawl: chunk of %d failed -- ending the extra queue", len(batch), exc_info=True)
+            return frames, "fetch_failed"
+    return frames, None
 
 
 def _fetch_live_prices(tickers: list, progress: "ScanProgress" = None) -> dict:
@@ -496,9 +597,9 @@ def _daily_frame_for(symbol: str):
     if df is not None:
         return df
     try:
-        return get_daily_data(symbol, period=config.DEFAULT_HISTORY_PERIOD)
+        return _with_cached_depth(symbol, get_daily_data(symbol, period=config.DEFAULT_HISTORY_PERIOD))
     except Exception as exc:
-        log.warning("Could not resolve daily frame for %s: %s", symbol, exc)
+        log.warning("Could not resolve daily frame for %s: %s", symbol, exc, exc_info=True)
         return None
 
 
@@ -523,8 +624,12 @@ def map_tickers(fn, tickers: list, workers: int | None = None) -> list:
 
     if n <= 1 or len(tickers) <= 1:
         return [safe(t) for t in tickers]
+    # v111 audit: ThreadPoolExecutor threads start in an empty context, so
+    # without the wrap every worker line would log scan id "-". Spawned
+    # ProcessPoolExecutor children (_run_bounded, the cold fetch) cannot
+    # inherit a ContextVar at all; their outcome is logged by this process.
     with ThreadPoolExecutor(max_workers=n) as pool:
-        return list(pool.map(safe, tickers))
+        return list(pool.map(with_current_context(safe), tickers))
 
 
 

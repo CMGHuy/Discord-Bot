@@ -29,7 +29,6 @@ from its IPO/listing date; one that starts AT the floor is truncated by Yahoo.
 """
 import argparse
 import datetime as dt
-import json
 import sys
 import time
 import warnings
@@ -57,7 +56,9 @@ from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
 
 def load_watchlist() -> list[str]:
-    return json.loads((ROOT / "data" / "watchlist.json").read_text())
+    """The watchlist table: Postgres is the only store."""
+    from swingbot.core.marketdata.watchlist import load_watchlist as repo_watchlist
+    return repo_watchlist()
 
 
 def max_days_for(timeframe: str) -> int:

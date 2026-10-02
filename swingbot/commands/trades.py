@@ -8,6 +8,7 @@ import discord
 from swingbot import config
 from swingbot.core.planning import account as account_module
 from swingbot.core import presentation as ui
+from swingbot.core.presentation import kinds
 from swingbot.core.scanning import engine as scan_engine
 from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.bot_core import bot
@@ -199,6 +200,24 @@ async def trades_clear_history(ctx):
     await ctx.send(f"Cleared {count} closed trade record(s). Open trades were not touched.")
 
 
+_OPEN_STYLE = ("🔵", "scratch", "OPEN")
+_CLOSED_STYLES = {
+    "win": (kinds.outcome_mark("win"), "win", f"WIN {kinds.outcome_mark('win')}"),
+    "loss": (kinds.outcome_mark("loss"), "loss", f"LOSS {kinds.outcome_mark('loss')}"),
+}
+_MANUAL_STYLE = (kinds.outcome_mark("manual"), "scratch", "MANUALLY CLOSED")
+#: trade status -> the registry outcome whose mark the !today list shows.
+_STATUS_OUTCOME = {"win": "win", "loss": "loss"}
+
+
+def _status_style(status: str) -> tuple[str, str, str]:
+    """(title icon, accent outcome, status word) for !trade. Closed-trade marks
+    come from the v110 registry so they match the pushed RESULT messages."""
+    if status == "open":
+        return _OPEN_STYLE
+    return _CLOSED_STYLES.get(status, _MANUAL_STYLE)
+
+
 def _build_trade_detail_embed(match: dict) -> discord.Embed:
     """
     One trade's full detail as a proper Discord embed -- a grid of
@@ -212,18 +231,8 @@ def _build_trade_detail_embed(match: dict) -> discord.Embed:
     cur = get_currency_symbol(match["ticker"], config.CURRENCY_SYMBOL)
     method = _primary_source_label(match)
 
-    if is_open:
-        icon, accent = "🔵", ui.accent_for_outcome("scratch")
-        status_word = "OPEN"
-    elif match["status"] == "win":
-        icon, accent = "✅", ui.accent_for_outcome("win")
-        status_word = "WIN ✅"
-    elif match["status"] == "loss":
-        icon, accent = "❌", ui.accent_for_outcome("loss")
-        status_word = "LOSS ❌"
-    else:
-        icon, accent = "🔒", ui.accent_for_outcome("scratch")
-        status_word = "MANUALLY CLOSED"
+    icon, accent_outcome, status_word = _status_style(match["status"])
+    accent = ui.accent_for_outcome(accent_outcome)
 
     embed = discord.Embed(title=f"{icon} Trade {match['id']} — {match['ticker']}")
 
@@ -518,7 +527,7 @@ async def summary_cmd(ctx):
     if closed_today:
         lines = []
         for t in sorted(closed_today, key=lambda t: t.get("closed_at") or ""):
-            icon = "✅" if t["status"] == "win" else ("❌" if t["status"] == "loss" else "🔒")
+            icon = kinds.outcome_mark(_STATUS_OUTCOME.get(t["status"], "manual"))
             pct = closed_pnl_pct(t)
             amt = t.get("realized_pnl_amount")
             pct_str = ui.fmt_pct(pct) if pct is not None else "n/a"

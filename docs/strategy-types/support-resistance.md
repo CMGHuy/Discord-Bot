@@ -58,6 +58,8 @@ Exits use the defaults: trail 2.5 × ATR, TP2 on.
 | v104 structural stop, in-scope arm | same | 907 | 43.9% | +0.357 | Tier 2 (lower bound +0.281), beats baseline, clears the fold check (12/12) — **PROCEEDED to the 2026 holdout** |
 | v104 structural stop, in-scope arm | HOLDOUT 2026-01-01..2026-09-25 | 45 | 40.0% | +0.139 | bootstrap lower bound **−0.143 → FAIL** (Tier 2's deciding clause); shot spent, final. `results/2026-09-28-v104-holdout.md` |
 
+**v113 1w cells (Part B, TRAIN 2010-01-01..2025-12-31, universe 74, horizon 1w masked):** bullish N=921, WR 30.8%, ExpR +0.170, lower bound +0.087, cleared Tier 2 at Stage 1; Part B bar failing clauses: wr; folds 12 qualifying / 11 positive. bearish N=148, WR 32.4%, ExpR +0.132, lower bound -0.079, no tier; Part B bar failing clauses: wr, lower_bound; folds 4 qualifying / 2 positive. Neither cell proceeds to the holdout (Part B's bar is Tier 1 plus a bootstrap lower bound > 0; every 1w cell fails Tier 1 on WR); no `cells` admission, no registry row. Source: `results/2026-09-30-v113-partB.md`.
+
 ## Pseudocode
 
 ```python

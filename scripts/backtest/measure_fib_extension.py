@@ -36,7 +36,7 @@ from swingbot.core.backtesting.backtest import run_backtest_daterange  # noqa: E
 from swingbot.core.backtesting.backtest_wf import (  # noqa: E402
     ANCHORED_FOLDS, _frame_for, _symbols_for_folds,
 )
-from swingbot.core.market.strategy_types import HORIZONS  # noqa: E402
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS  # noqa: E402
 from swingbot.core.marketdata.universe import liquidity_ok  # noqa: E402
 
 STRATEGY = "Fibonacci"
@@ -74,7 +74,7 @@ def main() -> int:
     args = ap.parse_args()
 
     symbols = _symbols(args.tickers)
-    horizons = list(HORIZONS)
+    horizons = list(LEGACY_HORIZONS)
 
     if args.stage == "mde":
         baseline = _leg_with_progress(STRATEGY, symbols, horizons, *TRAIN, {})

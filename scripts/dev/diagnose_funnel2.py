@@ -20,6 +20,7 @@ from collections import Counter
 from swingbot import config
 from swingbot.core.market import levels, trendlines
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS  # noqa: E402
 from swingbot.core.marketdata import universe, watchlist as watchlist_mod
 from swingbot.core.scanning import engine
 
@@ -51,7 +52,8 @@ def main():
             continue
         cp = float(df["Close"].iloc[-1])
         tl = trendlines.custom_scanner_levels(df, cp)
-        for hk, h in HORIZONS.items():
+        for hk in LEGACY_HORIZONS:
+            h = HORIZONS[hk]
             if len(df) < MIN_BARS[hk]:
                 continue
             n_combo += 1

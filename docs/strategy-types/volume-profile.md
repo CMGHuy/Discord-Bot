@@ -51,6 +51,8 @@ It has the best ExpR in the registry but the smallest N. N=32 barely clears
 the VALIDATION floor of 15, so treat the size of the edge with caution. The
 bearish arm failed in v93 and stays masked.
 
+**v113 1w cells (Part B, TRAIN 2010-01-01..2025-12-31, universe 74, horizon 1w masked):** bullish N=2161, WR 34.9%, ExpR +0.192, lower bound +0.141, cleared Tier 2 at Stage 1; Part B bar failing clauses: wr; folds 13 qualifying / 10 positive. bearish N=231, WR 31.6%, ExpR +0.044, lower bound -0.127, no tier; Part B bar failing clauses: wr, lower_bound; folds 6 qualifying / 4 positive. Neither cell proceeds to the holdout (Part B's bar is Tier 1 plus a bootstrap lower bound > 0; every 1w cell fails Tier 1 on WR); no `cells` admission, no registry row. Source: `results/2026-09-30-v113-partB.md`.
+
 ## Pseudocode
 
 ```python

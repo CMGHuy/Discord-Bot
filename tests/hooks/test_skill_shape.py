@@ -20,7 +20,7 @@ MAX_SKILL_LINES = 80
 # Tier 1 and Tier 3 are model-invocable, so they carry a trigger table.
 # Tier 2 is slash-only and carries disable-model-invocation instead.
 TIER_1_AND_3 = {"backtest-gate", "no-lookahead", "pooled-numbers", "mirror-prod", "edge-module", "alert-surface", "schema-change", "worktree-lifecycle"}   # each skill task appends its own name
-TIER_2 = {"close-out", "new-doc", "deploy"}        # each ritual task appends its own name
+TIER_2 = {"close-out", "new-doc", "deploy", "stable-snapshot", "backup-pull"}        # each ritual task appends its own name
 
 # A bare threshold in a SKILL.md is content that belongs in docs/claude/.
 # Dates, version numbers and step numbers are not thresholds.
@@ -107,3 +107,24 @@ def test_every_skill_is_registered_in_exactly_one_tier():
     on_disk = {p.name for p in _skill_dirs()}
     assert on_disk == GRANDFATHERED | TIER_1_AND_3 | TIER_2
     assert not (TIER_1_AND_3 & TIER_2)
+
+
+def test_backup_skills_match_the_v120_final_fixes():
+    snap = (SKILLS_DIR / "stable-snapshot" / "SKILL.md").read_text(encoding="utf-8")
+    pull = (SKILLS_DIR / "backup-pull" / "SKILL.md").read_text(encoding="utf-8")
+    # every ssh command that runs git does so as the deploy user
+    assert "runuser -u deploy -- git -C /opt/swing-bot rev-parse HEAD" in snap
+    for line in snap.splitlines():
+        if "ssh-hetzner.sh" in line or "/opt/swing-bot" in line:
+            assert not re.search(r"(?<!-- )git -C", line), line
+    # Step 4: a failed snapshot is never tagged
+    assert "do NOT tag" in snap
+    # Step 5: image references, by their manifest field names, not digests
+    assert "digest" not in snap.lower()
+    assert "`bot_image`" in snap and "`db_image`" in snap and "image references" in snap
+    # Step 6: recovery for a leftover .partial
+    assert "deletes the .partial by hand" in snap and "re-runs Step 6 only" in snap
+    # the off-VM copy lives in the main tree's backups/
+    assert "main tree's `backups/" in snap and "main tree's `backups/" in pull
+    # FAIL wording matches the script's stderr line
+    assert "pull_backups: FAIL" in pull

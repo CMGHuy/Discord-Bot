@@ -34,6 +34,14 @@ read, which is why this file sits at the repository root. Codex stops adding
 instructions at 32 KiB combined (`project_doc_max_bytes`), so this file stays
 condensed and pushes detail into `docs/claude/`.
 
+## Far-off scheduled work
+
+Work that must run well after now (next trading day, a week out) is scheduled
+on the Hetzner VM as cron (scripts under `scripts/ops/` with an idempotent
+`install_<name>_cron.sh`, logging to `logs/<name>.log`), never on the dev
+laptop. Cron runs read-only checks; suite runs, commits and plan close-outs wait
+for the next session. Detail: `docs/claude/working-conventions.md` § Scheduling.
+
 ## Project and production boundary
 
 Swingbot is a Discord swing-trade alert bot. It scans stock and ETF watchlists
@@ -136,9 +144,9 @@ strategy-badge threshold. `Edge: harvest` features are out of scope for this
 funnel and must name the gate they use instead.
 
 **Never quote a pooled figure (ExpR, win rate, N, badge tier) from a document.**
-Re-derive it from the live book. The repo-local `data/journal.json`,
-`trades.json` and `plans.json` are dev fixture data; the real book is on the
-production VM (`/opt/swing-bot/data/`, read-only over `ssh-hetzner.sh`). When
+Re-derive it from the live book. A dev database's `journal_entries`, `trades`
+and `plans` tables are fixture data; the real book is the production VM's
+Postgres (read-only `psql` over `ssh-hetzner.sh`). When
 investigating live bugs read the bind-mounted `/opt/swing-bot/logs/*.log*`, not
 `docker logs` (a deploy empties it), and split findings into still-firing versus
 historical (`working-conventions.md`).
@@ -147,8 +155,9 @@ Read before acting:
 
 - `docs/claude/architecture.md` before changing `swingbot/core`, plan engine or
   scan pipeline.
-- `docs/claude/known-traps.md` before changing data caching, scan output or
-  embeds.
+- `docs/claude/known-traps.md` before changing data caching, scan output,
+  embeds, the 2% stop cap/clamp or the liquidity floor, or editing production
+  `.env` (edit in place, never `sed -i`).
 - `docs/claude/backtest-methodology.md` before running or interpreting a
   backtest, grid or validation.
 - `docs/claude/edge-priorities.md` before choosing strategy work.
@@ -160,6 +169,15 @@ Read before acting:
 - `docs/claude/testing-cost.md` before optimizing, timing or interpreting a
   changed test count.
 - `docs/claude/code-complexity.md` before writing or changing any function.
+- `docs/claude/schema-evolution.md` before changing a table's shape or the
+  fields a stored record carries (add, rename, drop, promote).
+
+Every trading and operational store is Postgres-only (v116): no JSON copy, no
+stages, no dual writes. Rollback is point-in-time: `scripts/ops/rollback_to.sh
+"<UTC>" [--dry-run]` on the VM (30 days; scanning restarts paused), with
+`pg_dump` files (90 days) as the day-level second method
+(`docs/deploy/DEPLOY_HETZNER.md`, `DB_RESTORE.md`). A DB write failure at
+issuance pauses scanning (`StoreWriteHalt`); unpause from the admin UI.
 - `docs/claude/skills-tools.md` before choosing repo-specific skills or
   automation.
 
@@ -184,8 +202,10 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
 whenever Claude would run `/<name>`: `gate` (pre-commit gate), `task-brief`
 (extract one plan task with its trap preflight), `new-doc` (new spec or plan),
-`close-out` (plan close-out) and `deploy` (Hetzner deploy sequence). Skill text
-names Claude tools (`AskUserQuestion`, `Agent`, `Grep`); use your equivalent.
+`close-out` (plan close-out), `deploy` (Hetzner deploy sequence),
+`stable-snapshot` (pin a known-good point) and `backup-pull` (off-VM backup
+pull). Skill text names Claude tools (`AskUserQuestion`, `Agent`, `Grep`); use
+your equivalent.
 
 ## Efficient repository navigation
 

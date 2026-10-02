@@ -26,7 +26,10 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   restructure: `core/edge/`, `core/scanning/`, `core/analytics/`,
   `core/charts/`, and `core/presentation/`. `presentation/` owns every
   Discord colour, glyph, number format and embed part: pure `tokens.py`,
-  phone-safe `ansi.py`, then whole embed parts in `components.py`. Nothing
+  the v110 notification registry `kinds.py` (six families, one `Kind` per
+  pushed event, the stripe ramps — the only styling path for pushed
+  messages), phone-safe `ansi.py`, then whole embed parts in `components.py`
+  (including `PushEmbed`, whose push line every sender passes as `content`). Nothing
   outside it may touch `discord.Color`; its AST guard enforces that boundary.
 - **Frontend (`frontend/`, the admin SPA).** **Spacing between panels (v89):**
   one token, `--section-gap`; workspaces stack panels in `.sb-stack`/host
@@ -34,13 +37,23 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   `frontend/src/app/ui/spacing.spec.ts` and
   `frontend/src/app/workspaces/workspace-gaps.spec.ts`; measured live with
   `scripts/dev/ui_spacing_audit.js`.
-- **`swingbot/core/db/`** is the PostgreSQL persistence boundary introduced by
-  v67. Its SQLAlchemy Core repositories split flat store records into promoted
-  columns and a `doc JSONB` payload, then merge them back so callers keep their
-  existing dict contract. Nothing outside this package imports SQLAlchemy.
-  Stores select `json`, `dual`, or `db` through `DB_STORES`; database writes
-  fail fast, unlike `infra/jsonio.py` reads which preserve the bot's
-  file-recovery behavior. Alembic revisions are explicit, part-prefixed ids.
+- **`swingbot/core/db/`** is the PostgreSQL persistence boundary (v67, made the
+  only store by v116). Its SQLAlchemy Core repositories (`repositories/`) split
+  flat store records into promoted columns and a `doc JSONB` payload
+  (`codec.py`, `doc_fields.py` for rename/drop of doc fields), then merge them
+  back so callers keep their existing dict contract. Nothing outside this
+  package imports SQLAlchemy. **Every table registered in `schema.PROMOTED`
+  is Postgres-only**: no JSON file backs a trading or operational store, there
+  are no stages or dual writes, and a database write failure raises instead of
+  falling back (`write_failure.py`: `StoreWriteHalt` pauses scanning at
+  issuance). Live updates to the admin SPA are LISTEN/NOTIFY triggers
+  (`notify.py`, table-to-concern map in `events.py`); the four sources that
+  stay files (`analytics_snapshot.json`, `scan_snapshots.json`,
+  `scan_telemetry.jsonl`, `.env`) call `notify.publish` themselves
+  (`events.FILE_PUBLISHERS`). Rollback is point-in-time
+  (`scripts/ops/rollback_to.sh`, `docs/deploy/DEPLOY_HETZNER.md`); shape
+  changes are Alembic revisions (`docs/claude/schema-evolution.md`). Alembic
+  revisions are explicit, part-prefixed ids.
 - **`swingbot/core/edge/`** (edge-engine-v4, current active work area) is
   growth/risk math, mostly pure functions: `sizing.py` (fractional-Kelly, vol
   targeting), `heat.py` (portfolio heat cap), `correlation.py` (cluster

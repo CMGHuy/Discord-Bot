@@ -56,6 +56,7 @@ _LEGACY_STATUS = {
 
 # Statuses where a live price is meaningless -- the position is over.
 _TERMINAL = {"CLOSED", "CANCELLED"}
+_UNFILLED_TERMINAL = {"CANCELLED", "EXPIRED"}
 
 FILTERS = frozenset({"status", "outcome", "ticker", "strategy", "horizon", "tier",
                      "direction", "origin", "has_note",
@@ -178,6 +179,11 @@ def _held_hours(opened_at, closed_at) -> float | None:
         return None
 
 
+def _first_set(*values):
+    """First value that is not None -- 0 is a real confidence level."""
+    return next((v for v in values if v is not None), None)
+
+
 def _open_shares(shares: float | None, legs_realized: list) -> float | None:
     """The share count still exposed to price movement right now.
 
@@ -242,6 +248,13 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
     t = trade or {}
     opened_at = t.get("opened_at")
     closed_at = t.get("closed_at")
+    # A plan that died unfilled has no trade, so the plan's own lifetime stands
+    # in for the execution span: created_at -> the cancel/expiry transition.
+    # opened_at stays null (nothing was opened); the SPA reads created_at.
+    held_from = opened_at
+    if not trade and plan.get("status") in _UNFILLED_TERMINAL:
+        closed_at = _terminal_at(plan, None)
+        held_from = plan.get("created_at")
     # v73 keeps every surface on the same answer for a partial runner. In
     # particular TP1 is banked history, not a current target, and a missing
     # working stop falls back to its locked-in runner floor, never risk stop.
@@ -266,8 +279,8 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "cohort_label": plan.get("cohort_label") or "COHORT_UNKNOWN",
         "cohort_stats": plan.get("cohort_stats") or {},
         "tier": t.get("tier") or plan.get("tier"),
-        "confidence_level": t.get("confidence_level"),
-        "confidence_score": t.get("confidence_score"),
+        "confidence_level": _first_set(t.get("confidence_level"), plan.get("confidence_level")),
+        "confidence_score": _first_set(t.get("confidence_score"), plan.get("confidence_score")),
         "quality_score": plan.get("quality_score"),
         # Execution P&L remains based on the position's original fill. The
         # projection's runner entry is carried through the banked-leg facts.
@@ -299,9 +312,8 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         # Transient -- consumed and stripped by `_attach_unrealized_pnl`
         # once a live price exists to compute pnl_pct/r_multiple/
         # realized_pnl_amount for a row that hasn't closed yet.
-        "_legs": plan.get("legs_realized") or [],
         "_risk_stop": plan.get("stop_loss"),
-        "held_hours": _held_hours(opened_at, closed_at),
+        "held_hours": _held_hours(held_from, closed_at),
         "opened_at": opened_at,
         "closed_at": closed_at,
         "has_note": plan["plan_id"] in noted or t.get("id") in noted,
@@ -499,10 +511,9 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "realized_pnl_amount": t.get("realized_pnl_amount"),
         "pnl_pct": dash.closed_pnl(t),
         "r_multiple": dash.closed_r(t),
-        # Transient -- see `_row_from_plan`'s matching fields. Legacy v1
-        # trades never scale out, so `_legs` is always empty and `_risk_stop`
-        # is always the same value already shown as `stop_loss`.
-        "_legs": [],
+        # Transient -- see `_row_from_plan`'s matching field. Legacy v1
+        # trades never scale out, so `_risk_stop` is always the same value
+        # already shown as `stop_loss`.
         "_risk_stop": t.get("stop_loss"),
         "held_hours": _held_hours(t.get("opened_at"), t.get("closed_at")),
         "opened_at": t.get("opened_at"),
@@ -600,7 +611,7 @@ def _attach_follow_scores(rows: list[dict], plans: list[dict]) -> None:
 
 def build_rows() -> list[dict]:
     """The join. Every row the collection can return, unfiltered."""
-    plans = list(PlanStore()._plans.values())
+    plans = PlanStore().records()
     trades = TradeLog().get_trades(status=None, limit=None, sort_by="opened_at") or []
     noted = _noted_ids()
 
@@ -728,7 +739,7 @@ def get_trade(trade_id: str):
     log = TradeLog()
 
     if _looks_like_a_plan_id(trade_id):
-        plan = PlanStore()._plans.get(trade_id)
+        plan = PlanStore().get_record(trade_id)
         if plan is None:
             return error("not_found", f"No trade with id {trade_id!r}", 404)
         trade = next(
@@ -742,7 +753,7 @@ def get_trade(trade_id: str):
         # does -- follow_score is a composite, so scoring this plan alone would
         # give a different number from the one the list shows for the same row.
         # `test_detail_row_fields_match_the_list_exactly` is what caught that.
-        _attach_follow_scores([row], list(PlanStore()._plans.values()))
+        _attach_follow_scores([row], PlanStore().records())
     else:
         trade = log.get_trade_by_id(trade_id)
         if trade is None:
@@ -966,13 +977,13 @@ def _attach_unrealized_pnl(rows: list[dict]) -> None:
     position look unpriced -- it has real live P&L, just not the terminal
     kind those two functions compute.
 
-    Reads `_legs`/`_risk_stop` (transient, set by the two row builders) with
+    Reads `_risk_stop` (transient, set by the two row builders) with
     `.get`, not `.pop`: like `_attach_status_fields`, this may run twice on
     the same row objects when a request sorts by a field that needs a price
     for every row, not just the page (see the `_SORT_ALIASES` branch in
     `list_trades`) -- popping here would make the second pass recompute from
     an empty/missing fallback and silently overwrite the first pass's real
-    numbers. `_strip_internal_fields` removes both once, at the very end.
+    numbers. `_strip_internal_fields` removes it once, at the very end.
 
     Sets transient `_display_shares` when a row has realized a leg; this is
     applied to the public `shares` field exactly once by `_strip_internal_fields`
@@ -987,7 +998,7 @@ def _attach_unrealized_pnl(rows: list[dict]) -> None:
             row["pnl_pct"] = dash.unrealized_pnl(entry, direction, price)
             row["r_multiple"] = dash.unrealized_r(entry, row.get("_risk_stop"), direction, price)
             row["realized_pnl_amount"] = dash.unrealized_pnl_amount(
-                entry, direction, row.get("shares"), row.get("_legs"), price)
+                entry, direction, row.get("open_shares"), price)
         # Store the display value in a transient field; apply it exactly once
         # in _strip_internal_fields after all passes are complete.
         if row.get("open_shares") is not None:
@@ -995,7 +1006,7 @@ def _attach_unrealized_pnl(rows: list[dict]) -> None:
 
 
 def _strip_internal_fields(rows: list[dict]) -> None:
-    """Drop the transient `_legs`/`_risk_stop`/`_display_shares` keys --
+    """Drop the transient `_risk_stop`/`_display_shares` keys --
     must run exactly once, after every other row transform, so neither leaks
     onto the wire and breaks the row's declared shape.
 
@@ -1010,7 +1021,6 @@ def _strip_internal_fields(rows: list[dict]) -> None:
             row["shares"] = row.pop("_display_shares")
         else:
             row.pop("_display_shares", None)
-        row.pop("_legs", None)
         row.pop("_risk_stop", None)
 
 

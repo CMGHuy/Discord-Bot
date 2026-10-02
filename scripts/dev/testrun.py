@@ -53,9 +53,11 @@ WORKERS = "4"
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from select_tests import ESCALATE_PREFIXES, Selection, select  # noqa: E402
 
+# 127.0.0.1, not localhost: docker publishes the port on IPv4 only, and on Windows
+# "localhost" tries IPv6 first and stalls ~5s per connection before falling back.
 # Kept aligned with tests/db/conftest.py by tests/dev/test_testrun_db_preflight.py.
 # Scripts must not import test modules just to discover this value.
-TEST_DB_URL_DEFAULT = "postgresql+psycopg://swingbot:swingbot@localhost:55432/swingbot_test"
+TEST_DB_URL_DEFAULT = "postgresql+psycopg://swingbot:swingbot@127.0.0.1:55432/swingbot_test"
 
 # Neutralise pytest.ini's `addopts = -q`: under -q, pytest 9.1.1 prints no
 # summary counts line at all, and a parser that sees no counts must never
@@ -142,6 +144,30 @@ def undefined_names(paths: list[str] | None = None) -> list[str]:
     if not paths:
         return []
 
+    found: list[str] = []
+    for chunk in _argv_chunks(paths):
+        found.extend(_pyflakes_undefined(chunk))
+    return found
+
+
+# Windows rejects a command line past ~32767 characters; the tracked .py list
+# crossed it, so pyflakes runs over chunks well under that.
+_ARGV_BUDGET = 24000
+
+
+def _argv_chunks(paths: list[str]) -> list[list[str]]:
+    chunks: list[list[str]] = [[]]
+    size = 0
+    for path in paths:
+        if chunks[-1] and size + len(path) + 1 > _ARGV_BUDGET:
+            chunks.append([])
+            size = 0
+        chunks[-1].append(path)
+        size += len(path) + 1
+    return chunks
+
+
+def _pyflakes_undefined(paths: list[str]) -> list[str]:
     try:
         result = subprocess.run(
             # 180s, not 60: pyflakes over the whole tree measured ~52s on an

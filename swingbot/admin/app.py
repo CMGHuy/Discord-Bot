@@ -35,12 +35,9 @@ the `_reload_env_if_changed` before-request hook further down.
 import gzip
 import hashlib
 import hmac
-import json
-import logging
 import os
 from datetime import datetime, timedelta, timezone
 from functools import wraps
-from logging.handlers import RotatingFileHandler
 
 from flask import Flask, Response, redirect, request, session, url_for
 
@@ -53,8 +50,10 @@ from .helpers import docker_sdk, _load_or_create_secret_key  # noqa: F401
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
-TRIGGER_FILE = os.path.join(config.DATA_DIR, "trigger_check.flag")
-PAUSE_FILE = os.path.join(config.DATA_DIR, "scan_paused.flag")
+# The scan trigger and pause flags are owned by
+# swingbot.commands.scanning.runstate, which stage-branches them between
+# data/ files and the runtime_flags table. This module keeps no paths of its
+# own: a second definition is a flag the bot stops reading at `flags:db`.
 
 # Section headings for the Settings screen, keyed by the section name in
 # swingbot.config.FIELDS. Consumed by api_v1/system.py, which imports this
@@ -85,16 +84,6 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=90)
 # often run over plain HTTP on a private network/localhost (see module
 # docstring), and Secure=True would silently break the cookie there.
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-
-# Wire Flask + Werkzeug request logs to admin.log so the Logs page can show
-# admin UI activity separately from the bot's own log stream.
-_admin_log_fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-_admin_file_handler = RotatingFileHandler(config.ADMIN_LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=2)
-_admin_file_handler.setFormatter(_admin_log_fmt)
-app.logger.addHandler(_admin_file_handler)
-app.logger.setLevel(logging.INFO)
-logging.getLogger("werkzeug").addHandler(_admin_file_handler)
-logging.getLogger("werkzeug").setLevel(logging.INFO)
 
 
 @app.after_request
@@ -294,7 +283,7 @@ def _trade_for_levels(trade_id: str):
     # its plan in `plan_id`; a legacy trade has none and simply keeps no
     # working-stop line, same as before this lookup existed.
     plan_id = trade.get("plan_id")
-    plan = PlanStore()._plans.get(plan_id) if plan_id else None
+    plan = PlanStore().get_record(plan_id) if plan_id else None
     if plan is not None:
         trade = {**trade, "working_stop": plan.get("working_stop")}
     return trade
@@ -309,6 +298,44 @@ def _trade_for_levels(trade_id: str):
 # picked up by mistake, which is the exact failure they were written against.
 
 
+def _parse_iso(value) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    try:
+        parsed = datetime.fromisoformat(value) if value else None
+    except (TypeError, ValueError):
+        return None
+    if parsed is not None and parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _heartbeat_snapshot() -> tuple[dict, datetime | None]:
+    """(heartbeat fields, when last seen): the row and its `timestamp` field."""
+    from swingbot.commands.scanning import runstate
+    fields = runstate._read_heartbeat()
+    return fields, _parse_iso(fields.get("timestamp"))
+
+
+def _heartbeat_status(hb: dict, seen: datetime | None, threshold: float) -> dict:
+    now = datetime.now(timezone.utc)
+    last_success = hb.get("last_success")
+    success_at = _parse_iso(last_success)
+    healthy = None if success_at is None else (now - success_at).total_seconds() < threshold
+    halted = hb.get("store_write_failure")
+    return {
+        "bot_alive": seen is not None and (now - seen).total_seconds() < threshold,
+        "bot_last_seen": seen.isoformat() if seen else None,
+        "bot_session_active": hb.get("session_active"),
+        "bot_scan_paused": hb.get("scan_paused"),
+        # v116: a store-write halt is unhealthy until the partner unpauses.
+        "bot_healthy": False if halted else healthy,
+        "bot_last_success": last_success,
+        "bot_consecutive_failures": int(hb.get("consecutive_failures") or 0),
+        "bot_store_write_failure": halted,
+    }
+
+
 def scan_status_payload() -> dict:
     """Whether a scan trigger is pending, whether the automatic background
     scan loop is paused, whether a scan is running right now, and whether the
@@ -316,64 +343,24 @@ def scan_status_payload() -> dict:
     every tick -- see commands/scanning.py).
 
     A plain dict rather than a Response so /api/v1/system/scan can serve the
-    same payload (NG16). The flag-file names this reads must match the ones
-    the BOT reads; a mismatch is invisible in the UI, which simply shows
-    "not paused" forever. tests/admin/test_api_v1_system_scan.py pins
-    these constants against commands/scanning.py's.
+    same payload (NG16). The trigger and pause state come from the bot's own
+    runstate module, so the admin and the bot read the same flag at every
+    storage stage; a second copy of the paths here once meant a UI showing
+    "not paused" forever. tests/admin/test_scan_flags_stage.py pins it.
     """
-    pending = os.path.exists(TRIGGER_FILE)
-    mtime = None
-    if pending:
-        try:
-            mtime = datetime.fromtimestamp(os.path.getmtime(TRIGGER_FILE), tz=timezone.utc).isoformat()
-        except OSError:
-            pass
-    paused = os.path.exists(PAUSE_FILE)
-    paused_at = None
-    if paused:
-        try:
-            paused_at = datetime.fromtimestamp(os.path.getmtime(PAUSE_FILE), tz=timezone.utc).isoformat()
-        except OSError:
-            pass
+    from swingbot.commands.scanning import runstate
+
+    pending = runstate.is_trigger_requested()
+    mtime = runstate.trigger_requested_at() if pending else None
+    paused = runstate.is_scan_paused()
+    paused_at = runstate.scan_paused_at() if paused else None
     running = is_scan_running()
 
-    # Bot liveness: the heartbeat file is written on every session_scan tick
-    # (every SCAN_INTERVAL_MINUTES). If it's older than 2× that interval the
-    # bot process is likely hung or offline.
-    heartbeat_file = os.path.join(config.DATA_DIR, "bot_heartbeat.json")
-    bot_alive = False
-    bot_last_seen = None
-    bot_session_active = None
-    bot_scan_paused = None
-    bot_healthy = None
-    bot_last_success = None
-    bot_consecutive_failures = 0
-    if os.path.exists(heartbeat_file):
-        try:
-            age_seconds = datetime.now(timezone.utc).timestamp() - os.path.getmtime(heartbeat_file)
-            threshold = config.SCAN_INTERVAL_MINUTES * 60 * 2  # 2× interval
-            bot_alive = age_seconds < threshold
-            bot_last_seen = datetime.fromtimestamp(
-                os.path.getmtime(heartbeat_file), tz=timezone.utc
-            ).isoformat()
-            with open(heartbeat_file) as hf:
-                hb = json.load(hf)
-                bot_session_active = hb.get("session_active")
-                bot_scan_paused = hb.get("scan_paused")
-                bot_last_success = hb.get("last_success")
-                bot_consecutive_failures = int(hb.get("consecutive_failures") or 0)
-                if bot_last_success:
-                    try:
-                        success_age = (
-                            datetime.now(timezone.utc)
-                            - datetime.fromisoformat(bot_last_success)
-                        ).total_seconds()
-                        bot_healthy = success_age < threshold
-                    except ValueError:
-                        bot_healthy = None
-        except (OSError, json.JSONDecodeError):
-            pass
-
+    # Bot liveness: written on every session_scan tick (every
+    # SCAN_INTERVAL_MINUTES). Older than 2x that interval means the bot
+    # process is likely hung or offline.
+    threshold = config.SCAN_INTERVAL_MINUTES * 60 * 2
+    hb, seen = _heartbeat_snapshot()
     return {
         "pending": pending, "triggered_at": mtime, "paused": paused, "paused_at": paused_at,
         "running": running,
@@ -381,13 +368,7 @@ def scan_status_payload() -> dict:
         # "no bar" rather than as 0% -- see progress_store for why the
         # percentage in here is not ScanProgress.pct.
         "progress": progress_store.read(),
-        "bot_alive": bot_alive,
-        "bot_last_seen": bot_last_seen,
-        "bot_session_active": bot_session_active,
-        "bot_scan_paused": bot_scan_paused,
-        "bot_healthy": bot_healthy,
-        "bot_last_success": bot_last_success,
-        "bot_consecutive_failures": bot_consecutive_failures,
+        **_heartbeat_status(hb, seen, threshold),
     }
 
 

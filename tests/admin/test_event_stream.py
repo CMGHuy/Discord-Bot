@@ -47,7 +47,7 @@ class FakeWatcher:
 def broker(monkeypatch):
     """A broker whose watcher is inert, installed as the process singleton.
 
-    The real FileWatcher would start a stat() loop against the test's
+    The real listener would open a Postgres connection against the test's
     tmp_path for the life of every connection these tests open.
     """
     made = b.EventBroker(watcher_factory=lambda emit: FakeWatcher(emit))

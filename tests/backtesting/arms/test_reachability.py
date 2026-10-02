@@ -15,7 +15,9 @@ def test_entries_are_well_formed():
         assert reach.cls in CLASSES, attr
         assert reach.reason.strip(), attr
         if reach.cls == r.REACHABLE:
-            assert reach.observed_by and reach.observed_by <= {"confluence", "strategy"}, attr
+            assert reach.observed_by and reach.observed_by <= {"confluence", "strategy", "short_universe"}, attr
+            assert not (reach.observed_by & r.POPULATION_ENGINES and reach.observed_by - r.POPULATION_ENGINES), (
+                f"{attr}: a population engine cannot share a knob with a per-ticker engine")
         else:
             assert not reach.observed_by and not reach.fixture_observable, attr
 

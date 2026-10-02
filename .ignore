@@ -42,3 +42,6 @@ frontend/.angular/
 
 __pycache__/
 .pytest_cache/
+
+# Pulled VM backups (v120): env files with live tokens, dumps, market mirror.
+backups/

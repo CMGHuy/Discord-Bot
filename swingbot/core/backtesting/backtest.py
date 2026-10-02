@@ -167,6 +167,15 @@ def _short_plan_at(df, i, strategy, horizon_key, direction, entry, atr_val):
     return picked[:2], picked[2]
 
 
+def _floored(entry, stop_loss, take_profit, strategy, horizon_key):
+    """(entry, stop, target), or None when the plan misses its horizon's v113
+    reward floor -- the same planning/reward_floor check build_strategy_plan runs."""
+    from swingbot.core.planning.reward_floor import clears
+    if not clears(entry, take_profit, strategy, horizon_key):
+        return None
+    return entry, stop_loss, take_profit
+
+
 def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_high_series=None, swing_low_series=None, volume_ratio_series=None, entry_levels=None):
     """Sizing lives in plan_engine (single source of truth shared with live
     plans); this wrapper only picks the branch from the precomputed series.
@@ -242,7 +251,33 @@ def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_hi
         direction=direction, strategy=strategy, horizon_key=horizon_key,
         candidate_levels=candidates)
 
-    return entry, stop_loss, take_profit
+    return _floored(entry, stop_loss, take_profit, strategy, horizon_key)
+
+
+def _bt_plan(df, i, *, ticker, strategy, horizon_key, direction, entry, stop_loss,
+             take_profit, tp2, trail_atr_mult):
+    """The backtest's TradePlanV2 for one entry, in the same shape the live
+    builder uses (builders.plan_shape_for) -- a limit-entry strategy is
+    simulated as a limit here too. expiry 5 / TP1 fraction 0.5 for every
+    unlisted strategy, exactly the literals this loop carried before v113."""
+    from swingbot.core.planning.builders import plan_shape_for
+    from swingbot.core.planning.plan_engine import PlanStatus, TradePlanV2
+    from swingbot.core.planning.short_builders import short_hold_cap
+
+    shape = plan_shape_for(strategy)
+    return TradePlanV2(
+        plan_id="bt", ticker=ticker, created_at=str(df.index[i].date()),
+        source="strategy", strategy=strategy, horizon_key=horizon_key,
+        direction=direction, entry_type=shape["entry_type"], trigger_price=entry,
+        entry_price=entry if shape["entry_type"] == "market" else None,
+        expiry_bars=shape["expiry_bars"], stop_loss=stop_loss,
+        tp1=take_profit, tp1_fraction=shape["tp1_fraction"], tp2=tp2,
+        breakeven_trigger_fraction=shape["breakeven_trigger_fraction"],
+        trail_atr_mult=trail_atr_mult,
+        hold_cap_bars=short_hold_cap(df, i, strategy),
+        quality_score=0, quality_breakdown=[],
+        badge="WEAK", badge_stats={}, status=PlanStatus.ACTIVE,
+    )
 
 
 def run_backtest(
@@ -308,11 +343,7 @@ def run_backtest(
     _lm_supports: list = []
     _lm_resistances: list = []
     if exit_model == "v2":
-        from swingbot.core.planning.plan_engine import (
-            PlanStatus, TradePlanV2, entry_type_for, exit_params_for,
-            select_tp2,
-        )
-        from swingbot.core.planning.short_builders import short_hold_cap
+        from swingbot.core.planning.plan_engine import exit_params_for, select_tp2
         _exit_params = exit_params_for(strategy)
 
     entry_idx = np.where((bullish_entries.values | bearish_entries.values))[0]
@@ -350,20 +381,10 @@ def run_backtest(
                     [lv.price for lv in _lm_supports],
                     direction, entry, take_profit)
 
-            entry_type = entry_type_for(strategy, "strategy")
-            plan = TradePlanV2(
-                plan_id="bt", ticker=ticker, created_at=str(df.index[i].date()),
-                source="strategy", strategy=strategy, horizon_key=horizon_key,
-                direction=direction, entry_type=entry_type, trigger_price=entry,
-                entry_price=entry if entry_type == "market" else None,
-                expiry_bars=5, stop_loss=stop_loss,
-                tp1=take_profit, tp1_fraction=0.5, tp2=tp2,
-                breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
-                trail_atr_mult=_exit_params["trail_atr_mult"],
-                hold_cap_bars=short_hold_cap(df, i, strategy),
-                quality_score=0, quality_breakdown=[],
-                badge="WEAK", badge_stats={}, status=PlanStatus.ACTIVE,
-            )
+            plan = _bt_plan(df, i, ticker=ticker, strategy=strategy, horizon_key=horizon_key,
+                            direction=direction, entry=entry, stop_loss=stop_loss,
+                            take_profit=take_profit, tp2=tp2,
+                            trail_atr_mult=_exit_params["trail_atr_mult"])
             res = simulate_exit(df, i, plan, scale_out=scale_out)
             # A stop_entry plan that never triggers before expiry ("not_triggered")
             # or whose realized entry has zero/negative risk ("no_trade") produced
@@ -525,8 +546,9 @@ ALL_STRATEGIES = (
 
 def run_full_backtest(ticker: str, df: pd.DataFrame, frictions: bool = True) -> list[BacktestSummary]:
     """Backtest all strategies x all horizons for one ticker."""
+    from swingbot.core.market.strategy_types import live_horizons
     results = []
-    for horizon_key in HORIZONS:
+    for horizon_key in live_horizons():
         for strategy in ALL_STRATEGIES:
             results.append(run_backtest(ticker, df, strategy, horizon_key, frictions=frictions))
     return results

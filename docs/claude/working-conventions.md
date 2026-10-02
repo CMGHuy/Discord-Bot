@@ -198,13 +198,13 @@ half-written work.
 
 ## Investigating production (read-only)
 
-- **The real book lives on the VM, not here.** `data/journal.json`,
-  `trades.json` and `plans.json` in this checkout are dev fixture data (tells:
-  every entry bullish, `holding_days` of 0, `opened_at`/`closed_at` a fraction
-  of a second apart). **Never derive a pooled figure — ExpR, win rate, N —
-  from them.** The specs that did drew a wrong conclusion. Read the real files
-  at `/opt/swing-bot/data/` via `scripts/ops/ssh-hetzner.sh "<cmd>"`, and when
-  a document cites a book figure, check which file it came from.
+- **The real book lives on the VM, not here.** The `journal_entries`, `trades` and `plans` tables of a dev database are
+  fixture data (tells: every entry bullish, `holding_days` of 0,
+  `opened_at`/`closed_at` a fraction of a second apart). **Never derive a pooled figure — ExpR, win rate, N —
+  from them.** The specs that did drew a wrong conclusion. Query the real
+  tables with `scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose
+  exec -T db psql -U swingbot -d swingbot -c '<read-only SQL>'"`, and when a
+  document cites a book figure, check which table it came from.
 - **Use the bind-mounted logs, not `docker logs`.** A deploy recreates the
   containers, so `docker logs` shows only minutes of history after any release
   and looks like "no errors" while a multi-day outage sits in the rotated
@@ -272,6 +272,23 @@ figure (see "Long-running scripts must report progress" above), and gets
 deleted once the subagent's final report lands — the controller answers a
 mid-run progress question from this file's percentage, never by reading the
 subagent's own transcript.
+
+## Scheduling far-off work
+
+Anything that must run well after the current session (the next trading day, a
+week-long soak check) is scheduled **on the Hetzner VM**, not on the dev laptop
+(`CronCreate`/`/loop`/`/schedule` sessions die when it sleeps or shuts down).
+
+- Write the job as a script under `scripts/ops/` plus an idempotent
+  `install_<name>_cron.sh`; pattern: `install_intraday_coverage_cron.sh`.
+  One-shot jobs remove their own crontab line when they finish.
+- Install it through `ssh-hetzner.sh` after the scripts have deployed (push to
+  `main`), and commit the scripts — a cron only on the box is an unmirrored
+  live change (§ Production changes).
+- The job logs to `logs/<name>.log` on the VM. It is read-only checks only; work
+  that needs Claude (suite, commits, moving a plan) is picked up by the next
+  session, which reads that log first.
+- Tell the partner when it will run and where the log is.
 
 ## Codex mirror
 

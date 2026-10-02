@@ -30,7 +30,7 @@ from email.message import EmailMessage
 
 from swingbot import config
 
-log = logging.getLogger("swing-bot.notifier")
+log = logging.getLogger(__name__)
 
 
 def _send_email(subject: str, body: str) -> bool:
@@ -54,7 +54,7 @@ def _send_email(subject: str, body: str) -> bool:
                     "(Gmail users: use an App Password, not your account password)")
         return False
     except Exception as exc:
-        log.warning("Email alert failed: %s", exc)
+        log.warning("Email alert failed: %s", exc, exc_info=True)
         return False
 
 
@@ -81,16 +81,48 @@ def _send_push(title: str, message: str, tags: str = "chart_with_upwards_trend",
                 log.warning("Push alert: ntfy.sh returned status %d", resp.status)
             return ok
     except urllib.error.URLError as exc:
-        log.warning("Push alert (ntfy.sh) network error: %s", exc)
+        log.warning("Push alert (ntfy.sh) network error: %s", exc, exc_info=True)
         return False
     except Exception as exc:
-        log.warning("Push alert (ntfy.sh) failed: %s", exc)
+        log.warning("Push alert (ntfy.sh) failed: %s", exc, exc_info=True)
         return False
 
 
 def _push_priority(conf_level: int) -> str:
     """Map confidence level 1-5 to ntfy priority string."""
     return {5: "max", 4: "high", 3: "default", 2: "low", 1: "min"}.get(conf_level, "default")
+
+
+def _clamped_stop_figures(item, plan):
+    """(stop price, stop %, R) when v115's clamp moved the priced v2 stop,
+    else None. Same funnel as the Discord alert, so the two agree."""
+    from swingbot.core.market.explain import v2_stop_was_moved
+    from swingbot.core.scanning.plan_table import (
+        plan_numbers_for_display, stop_figures_for_display)
+    plan_v2 = getattr(item, "plan_v2", None)
+    nums = plan_numbers_for_display(plan_v2, {
+        "entry": plan.entry, "stop_loss": plan.stop_loss,
+        "take_profit": plan.take_profit, "target2": plan.target2_price})
+    if (config.PLAN_ENGINE_V2 != "on" or plan_v2 is None
+            or not v2_stop_was_moved(plan, nums["entry"], nums["stop_loss"])):
+        return None
+    pct, r = stop_figures_for_display(plan_v2, nums, plan)
+    return nums["stop_loss"], pct, r
+
+
+def _short_notice(item, plan) -> str:
+    """The extra-lane notice ("" for a base alert), from the same funnel numbers."""
+    from swingbot.core.presentation.short_notice import short_lane_notice
+    from swingbot.core.scanning.plan_table import plan_numbers_for_display
+    context = getattr(item, "candidate_context", None)
+    if not context:
+        return ""
+    plan_v2 = getattr(item, "plan_v2", None)
+    nums = plan_numbers_for_display(plan_v2, {
+        "entry": plan.entry, "stop_loss": plan.stop_loss,
+        "take_profit": plan.take_profit, "target2": plan.target2_price})
+    return short_lane_notice(context, nums, getattr(plan_v2, "expiry_bars", None),
+                             currency=config.CURRENCY_SYMBOL)
 
 
 def _build_alert_texts(item, plan, conf) -> tuple[str, str]:
@@ -112,7 +144,14 @@ def _build_alert_texts(item, plan, conf) -> tuple[str, str]:
     )
 
     # Compute pct distances (not stored on TradePlan — derive them here)
+    stop_price = plan.stop_loss
     stop_distance_pct = abs(plan.entry - plan.stop_loss) / plan.entry * 100
+    rr_text = f"{plan.risk_reward_ratio}"
+    clamped = _clamped_stop_figures(item, plan)
+    if clamped is not None:
+        stop_price, stop_distance_pct, r = clamped
+        if r is not None:
+            rr_text = f"{r:.1f}"
     target_distance_pct = abs(plan.take_profit - plan.entry) / plan.entry * 100
     stop_sign = "-" if is_bull else "+"
 
@@ -126,14 +165,17 @@ def _build_alert_texts(item, plan, conf) -> tuple[str, str]:
         f"Confidence: {conf.label} (Lv{conf.level}/5, {conf.score}/100)",
         "",
         f"Entry    : {cur}{plan.entry:.2f}",
-        f"Stop-loss: {cur}{plan.stop_loss:.2f}  ({stop_sign}{stop_distance_pct:.1f}%)",
+        f"Stop-loss: {cur}{stop_price:.2f}  ({stop_sign}{stop_distance_pct:.1f}%)",
         f"Target 1 : {cur}{plan.take_profit:.2f}  (+{target_distance_pct:.1f}%)",
-        f"R:R      : {plan.risk_reward_ratio}:1",
+        f"R:R      : {rr_text}:1",
         "",
         f"Confirmed by: {sources_str}",
         "",
         "Technical signal only — not financial advice.",
     ]
+    notice = _short_notice(item, plan)
+    if notice:
+        body_lines[-1:-1] = [notice, ""]
     return subject, "\n".join(body_lines)
 
 

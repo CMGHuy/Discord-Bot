@@ -1,7 +1,10 @@
 """The flat-record codec used by the staged PostgreSQL migration."""
 import pytest
 
-from swingbot.core.db.codec import ReservedKeyError, merge_doc, split_doc
+import datetime as dt
+from decimal import Decimal
+
+from swingbot.core.db.codec import ReservedKeyError, merge_doc, normalise, split_doc
 
 
 PROMOTED = ("trade_id", "ticker", "status", "closed_at")
@@ -92,3 +95,19 @@ def test_sanitise_leaves_bools_and_ints_alone():
     """bool is a subclass of int, not float -- it must not be coerced."""
     from swingbot.core.db.codec import sanitise_non_finite
     assert sanitise_non_finite({"a": True, "b": 3}) == {"a": True, "b": 3}
+
+
+def test_normalise_turns_a_decimal_into_a_float():
+    assert normalise(Decimal("1.5")) == 1.5
+    assert isinstance(normalise(Decimal("1.5")), float)
+
+
+def test_normalise_turns_a_datetime_into_its_isoformat():
+    when = dt.datetime(2026, 1, 2, 15, 0, tzinfo=dt.timezone.utc)
+    assert normalise(when) == when.isoformat()
+
+
+def test_normalise_recurses_through_dicts_and_lists():
+    when = dt.datetime(2026, 1, 2, 15, 0, tzinfo=dt.timezone.utc)
+    value = {"legs": [{"r": Decimal("2.5"), "at": when}], "t": (Decimal("1"), 3)}
+    assert normalise(value) == {"legs": [{"r": 2.5, "at": when.isoformat()}], "t": [1.0, 3]}

@@ -19,7 +19,7 @@ from swingbot.core.infra.jsonio import atomic_write_json, read_json
 
 DEFAULT_PATH = os.path.join(config.DATA_DIR, "analytics_snapshot.json")
 
-log = logging.getLogger("swing-bot.snapshots")
+log = logging.getLogger(__name__)
 
 
 def build_snapshot(closed: list[dict], starting_balance: float, registry_entries: list[dict], *, weak_closed=()) -> dict:
@@ -77,7 +77,9 @@ def build_snapshot(closed: list[dict], starting_balance: float, registry_entries
 
 
 def save_snapshot(snap: dict, path: str | None = None) -> None:
+    from swingbot.core.db import notify
     atomic_write_json(path or DEFAULT_PATH, snap)
+    notify.publish("analytics")
 
 
 def load_snapshot(path: str | None = None, max_age_seconds: int = 3600) -> dict | None:

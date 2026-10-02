@@ -30,7 +30,7 @@ def _pinned_flags(monkeypatch):
 def _env(tmp_path, prices, plan=None, atr_fn=None):
     feed = FakePriceFeed()
     feed.set_series("AAPL", prices)
-    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store = PlanStore()
     store.add(plan if plan is not None else _active())
     return store, PlanManager(store, feed.get_price, atr_fn=atr_fn)
 

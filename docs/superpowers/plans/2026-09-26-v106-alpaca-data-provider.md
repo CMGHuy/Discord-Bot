@@ -1419,6 +1419,54 @@ token now pays for exactly one HTTP call, where today one token covers 4.
   starting the first full trading day after the deploy; record the window
   here, then run T13 Step 6 unchanged.
 
+  *Recorded 2026-10-02 (the boxes above were never ticked at the time).
+  Steps 1-3 verified on main: the six named tests exist and
+  `test_provider_router.py` passes; radon prints only `router._account`
+  C (11), under the repo's < 15 limit. Merged d541f482 2026-09-30 19:03
+  UTC; **production first checked out T13a at 2026-09-30 20:43 UTC**
+  (`ce7bb09d`, host reflog), after the close. The Step 5 first-scan check
+  was not recorded at the time; read afterwards: 0 `Alpaca daily_bars
+  miss` lines and 0 Alpaca exceptions since the deploy. **Soak attempt 2
+  window = 2026-10-01, 10-02, 10-05, 10-06, 10-07.** Evaluated by
+  `scripts/ops/v106_soak_check.py` (T13 Step 6 definitions, unchanged),
+  run each weekday 21:15 UTC by the one-shot cron
+  `scripts/ops/install_v106_soak_cron.sh` → `logs/v106_soak_cron.log` on the VM.
+  **Interim, 2026-10-02 13:31 UTC (day 2 before its session):** 275 scans;
+  (a) p95 `cold_fetch_s` **4.70 s** (429 timings, max 18.84) -- FAIL so
+  far; (b) fallback **1.53 %** (489 / 31871) -- PASS; (c) 0.01299 -- PASS.
+  The fallback fix worked; (a) does not yet. Timings of 18 s sit far past
+  the 5 s router deadline, so something other than the Alpaca call is now
+  dominating the chunk -- not diagnosed. The user chose to run the full 5
+  days as pre-registered rather than call it early; the verdict is the
+  FINAL line after the 2026-10-07 run.*
+
+### Task T13b: Raw-dict bars and spot fetch alongside Alpaca
+
+*Added 2026-10-02 from soak attempt 2's interim (a) FAIL, user's call to fix
+it inside v106; thresholds unchanged.* Measured on production in session:
+one 75-symbol call = ~1.7 s parallel HTTP + ~1.9 s alpaca-py model/`.df`/
+`xs` CPU serialised by the GIL across the 4 batches + ~0.7-1.4 s yfinance
+spot-future work run after Alpaca. The VM (2 vCPU) sits at ~190 % bot CPU in
+session, so CPU saved is wall time saved.
+- [x] **Bars as raw dicts:** `AlpacaProvider` gets a second
+  `StockHistoricalDataClient(raw_data=True)` for bars (snapshots keep models);
+  `_frames_from_raw` builds every symbol's frame in one vectorised pass, same
+  shape `BarSet.df.xs` gave. Prod check: frame-for-frame equal on 19 symbols.
+- [x] **Spot alongside:** `router._spot_alongside` runs `_spot_daily` on a
+  one-thread side pool while the batches are in flight, unless Alpaca has no
+  work or an underlying is in the call itself (reuse kept).
+- [x] Tests: four provider tests, two router-spot tests; radon unchanged.
+  Prod A/B (same box, alternating): old 4.0-8.3 s, new 1.9-3.96 s per call.
+  8×10 batches were tried and dropped (no first-call gain).
+- [x] Full suite 5747 passed, 1 failed (`test_restore_db` LF check on a stale
+  CRLF working copy; index is LF). Deployed cfe75a6d **2026-10-02 15:26:27
+  UTC**; first two scans: `cold_fetch_s` 0.81-1.69 s, fallback 0, errors 0.
+- **Soak attempt 2 -- superseded by T13b at 15:26:27 UTC, never judged.**
+  298 scans to then: (a) p95 4.69 s FAIL; (b) 1.48 % PASS; (c) 0.01299 PASS.
+  Also mixed: v118 went live 14:39 UTC the same day (another session).
+- [ ] **Soak attempt 3 = 2026-10-05 .. 2026-10-09**, T13 Step 6 unchanged;
+  cron installed with that window; verdict = FINAL line of the cron log.
+
 ### Task T14: Close-out
 
 The user runs `/close-out`; the Skill tool blocks it for Claude. It follows

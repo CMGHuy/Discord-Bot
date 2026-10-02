@@ -37,79 +37,43 @@ balance over time, not just the %-based equity curve it already had.
 
 Balance model -- self-healing by design:
   effective balance = base_balance + SUM(realized_pnl_amount over every
-                       trade in trades.json that has actually settled)
+                       trade in the trades table that has actually settled)
 
 `base_balance` is the only number a human ever sets directly (via
 `!account balance <amount>`) -- it is NOT the displayed balance. The
 displayed/usable "balance" is always RECOMPUTED from base_balance plus
-the full all-time realized P&L pulled straight from trades.json, every
+the full all-time realized P&L pulled straight from the trades table, every
 single time load_account_config() runs, rather than trusted as a single
 incrementally-updated running total. This means:
   - Setting the balance back to 10,000 (or up to 100,000,000) never
     discards trading history -- the account immediately reflects
     10,000 (or 100,000,000) PLUS everything ever realized, and keeps
     adding future realized P&L on top of that new base.
-  - If account.json is ever lost, corrupted, or accidentally reset to a
+  - If the account table is ever lost, corrupted, or accidentally reset to a
     stale/default value (e.g. by a deploy pipeline), the balance simply
-    recomputes itself correctly again from base_balance + trades.json --
+    recomputes itself correctly again from base_balance + the trades table --
     there is no drifting running total that can silently lose history.
 """
-import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from swingbot import config as app_config
-from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.market import opex
 from swingbot.core.market.session import BERLIN_TZ as _BERLIN_TZ
 
 
-def _default_config_path() -> str:
-    """Resolved fresh on every call (not a module-level constant) -- a
-    `path: str = <module-level constant>`-style default is evaluated ONCE,
-    at import time, baking in whatever `app_config.DATA_DIR` was then. A test that
-    monkeypatches `config.DATA_DIR` to an isolated tmp_path AFTER this
-    module has already been imported (the normal case: pytest imports every
-    test module, and transitively this one, at collection time, before any
-    fixture runs) then has no effect on a caller that omits `path` -- every
-    such call keeps hitting the REAL data/account.json instead. Confirmed
-    live: tests/tracking/test_one_trade_per_ticker.py's manual-close and
-    reversal tests passed serially (the real account.json happened to be
-    present and valid on that machine) but failed under xdist parallel
-    workers, which all raced writes to that SAME real file at once."""
-    return os.path.join(app_config.DATA_DIR, "account.json")
-
-
-def _use_db(path: str | None) -> bool:
-    """Whether this call should read account state from PostgreSQL.
-
-    An explicit path is deliberately an escape hatch for tests and maintenance
-    tools: it always selects the file backend, regardless of migration stage.
-    """
-    if path is not None:
-        return False
-    from swingbot.core.db import stages
-    return stages.reads_db("account")
-
-
 # balance_history is append-only and grows one entry per closed trade (plus
 # manual balance overrides) -- cheap to keep a very long tail of, but capped
-# so a years-old, extremely active account doesn't grow account.json without
+# so a years-old, extremely active account doesn't grow the account table without
 # bound. Far more than enough for any chart resolution the admin UI needs.
 _MAX_BALANCE_HISTORY = 5000
 
 
-def _read_trades_file(path: str | None) -> list[dict]:
-    """Read the legacy trade store, retaining jsonio's corruption handling."""
-    trades = read_json(path or os.path.join(app_config.DATA_DIR, "trades.json"), [])
-    return trades if isinstance(trades, list) else []
-
-
-def _sum_realized_pnl(trades_path: str = None) -> float:
+def _sum_realized_pnl() -> float:
     """
     All-time realized P&L: sum of `realized_pnl_amount` across every trade
-    in trades.json that has actually settled (i.e. the field is not None).
-    Reads trades.json directly (rather than importing core.performance's
+    in the trades table that has actually settled (i.e. the field is not None).
+    Reads the repository directly (rather than importing core.performance's
     TradeLog) to avoid a circular import -- performance.py already imports
     this module at load time. This is the single source of truth the
     effective account balance is layered on top of. A stored balance self-heals
@@ -118,16 +82,9 @@ def _sum_realized_pnl(trades_path: str = None) -> float:
     so an open trade must never be treated as settled merely because it has a
     banked scale-out leg.
     """
-    if trades_path is None:
-        from swingbot.core.db import stages
-        if stages.reads_db("trades"):
-            from swingbot.core.db.repositories.trades import trades_repo
-            from swingbot.core.db.dual import normalise
-            trades = normalise(trades_repo().list_all())
-        else:
-            trades = _read_trades_file(None)
-    else:
-        trades = _read_trades_file(trades_path)
+    from swingbot.core.db.repositories.trades import trades_repo
+    from swingbot.core.db.codec import normalise
+    trades = normalise(trades_repo().list_all())
     total = 0.0
     for t in trades:
         pnl = t.get("realized_pnl_amount")
@@ -145,11 +102,9 @@ def _sum_realized_pnl(trades_path: str = None) -> float:
     return round(total, 2)
 
 
-def load_account_config(path: str = None) -> dict:
-    requested_path = path
-    path = path or _default_config_path()
+def load_account_config() -> dict:
     # Canonical defaults -- every key that exists in the account config schema.
-    # Used both as the seed for a brand-new account.json AND as a fallback for
+    # Used both as the seed for a brand-new account row AND as a fallback for
     # keys that were added after an existing file was first created (so loading
     # an old file never returns a dict that's missing a key downstream code
     # assumes will be there).
@@ -164,13 +119,8 @@ def load_account_config(path: str = None) -> dict:
         "max_risk_amount_absolute":    app_config.MAX_RISK_AMOUNT_ABSOLUTE,
         "balance_history":    [],
     }
-    if _use_db(requested_path):
-        from swingbot.core.db.repositories.account import account_repo
-        stored = account_repo().load()
-    elif os.path.exists(path):
-        stored = read_json(path, None)
-    else:
-        stored = None
+    from swingbot.core.db.repositories.account import account_repo
+    stored = account_repo().load()
     if stored:
         # Merge: stored values win over defaults, but any key that doesn't
         # exist in the stored file gets the default value.
@@ -187,7 +137,7 @@ def load_account_config(path: str = None) -> dict:
         # trusted from storage -- so it cannot silently lose realized P&L.
         merged["balance"] = round(merged["base_balance"] + _sum_realized_pnl(), 2)
         if needs_save:
-            save_account_config(merged, requested_path)
+            save_account_config(merged)
         return merged
     # Brand-new account -- seed balance_history with a starting point so the
     # "balance over time" chart has something to plot from before the first
@@ -199,17 +149,13 @@ def load_account_config(path: str = None) -> dict:
         "pnl_amount": None,
         "reason": "account created",
     }]
-    save_account_config(defaults, requested_path)
+    save_account_config(defaults)
     return dict(defaults)
 
 
-def save_account_config(config: dict, path: str = None):
-    from swingbot.core.db import stages
-    if path is not None or stages.writes_json("account"):
-        atomic_write_json(path or _default_config_path(), config)
-    if path is None and stages.writes_db("account"):
-        from swingbot.core.db.repositories.account import account_repo
-        account_repo().save(config)
+def save_account_config(config: dict) -> None:
+    from swingbot.core.db.repositories.account import account_repo
+    account_repo().save(config)
 
 
 def _append_balance_history(cfg: dict, entry: dict) -> dict:
@@ -220,7 +166,7 @@ def _append_balance_history(cfg: dict, entry: dict) -> dict:
     return cfg
 
 
-def set_balance(balance: float, path: str = None) -> dict:
+def set_balance(balance: float) -> dict:
     """
     Sets the account's BASE balance -- not the final displayed balance.
     The effective balance shown everywhere is always base_balance + all-time
@@ -229,7 +175,7 @@ def set_balance(balance: float, path: str = None) -> dict:
     reflects that new base plus everything ever realized on top of it, and
     keeps adding future realized P&L to that new base going forward.
     """
-    config = load_account_config(path)
+    config = load_account_config()
     config["base_balance"] = balance
     realized_total = _sum_realized_pnl()
     effective_balance = round(balance + realized_total, 2)
@@ -246,50 +192,50 @@ def set_balance(balance: float, path: str = None) -> dict:
         "base_balance": balance,
         "realized_pnl_total": realized_total,
     })
-    save_account_config(config, path)
+    save_account_config(config)
     return config
 
 
-def set_risk_pct(risk_pct: float, path: str = None) -> dict:
-    config = load_account_config(path)
+def set_risk_pct(risk_pct: float) -> dict:
+    config = load_account_config()
     config["risk_pct"] = risk_pct
-    save_account_config(config, path)
+    save_account_config(config)
     return config
 
 
-def set_max_open_positions(max_open: int, path: str = None) -> dict:
-    config = load_account_config(path)
+def set_max_open_positions(max_open: int) -> dict:
+    config = load_account_config()
     config["max_open_positions"] = max_open
-    save_account_config(config, path)
+    save_account_config(config)
     return config
 
 
-def set_max_position_pct(max_pct: float, path: str = None) -> dict:
-    config = load_account_config(path)
+def set_max_position_pct(max_pct: float) -> dict:
+    config = load_account_config()
     config["max_position_pct"] = max_pct
-    save_account_config(config, path)
+    save_account_config(config)
     return config
 
 
-def set_max_position_value_absolute(amount: float, path: str = None) -> dict:
+def set_max_position_value_absolute(amount: float) -> dict:
     """Hard currency cap on position value -- see compute_position_size()'s
     docstring for why this exists alongside (not instead of) max_position_pct."""
-    config = load_account_config(path)
+    config = load_account_config()
     config["max_position_value_absolute"] = amount
-    save_account_config(config, path)
+    save_account_config(config)
     return config
 
 
-def set_max_risk_amount_absolute(amount: float, path: str = None) -> dict:
+def set_max_risk_amount_absolute(amount: float) -> dict:
     """Hard currency cap on real risk-if-stopped -- see compute_position_size()'s
     docstring for why this exists alongside (not instead of) risk_pct."""
-    config = load_account_config(path)
+    config = load_account_config()
     config["max_risk_amount_absolute"] = amount
-    save_account_config(config, path)
+    save_account_config(config)
     return config
 
 
-def set_sizing_mode(mode: str, path: str = None) -> dict:
+def set_sizing_mode(mode: str) -> dict:
     mode = mode.strip().lower()
     if mode in ("account", "account_pct", "alloc", "allocation"):
         mode = "account_pct"
@@ -304,33 +250,32 @@ def set_sizing_mode(mode: str, path: str = None) -> dict:
     else:
         raise ValueError(
             f"Unknown sizing mode {mode!r} -- use 'risk', 'account', 'kelly', 'vol_target', or 'min_of_all'.")
-    config = load_account_config(path)
+    config = load_account_config()
     config["sizing_mode"] = mode
-    save_account_config(config, path)
+    save_account_config(config)
     return config
 
 
-def set_position_pct(pct: float, path: str = None) -> dict:
-    config = load_account_config(path)
+def set_position_pct(pct: float) -> dict:
+    config = load_account_config()
     config["position_pct"] = pct
-    save_account_config(config, path)
+    save_account_config(config)
     return config
 
 
-def get_balance_history(path: str = None) -> list:
+def get_balance_history() -> list:
     """Chronological list of {ts, balance, pnl_amount, reason/trade_id/ticker}
     entries -- one per closed trade settlement plus any manual `!account
     balance` overrides -- for the admin Performance page's balance-over-time
     chart."""
-    if _use_db(path):
-        from swingbot.core.db.repositories.account import account_repo
-        return account_repo().history()
-    return load_account_config(path).get("balance_history", [])
+    from swingbot.core.db.codec import normalise
+    from swingbot.core.db.repositories.account import account_repo
+    return normalise(account_repo().history())
 
 
-def get_balance_history_points(path: str = None) -> list:
+def get_balance_history_points() -> list:
     """Adapter: (date_str, balance) tuples from balance_history for growth_path()."""
-    return [(entry["ts"][:10], entry["balance"]) for entry in get_balance_history(path)]
+    return [(entry["ts"][:10], entry["balance"]) for entry in get_balance_history()]
 
 
 def _to_berlin(ts_iso: str) -> datetime | None:
@@ -343,7 +288,7 @@ def _to_berlin(ts_iso: str) -> datetime | None:
     return dt.astimezone(_BERLIN_TZ)
 
 
-def get_daily_summary(path: str = None) -> dict:
+def get_daily_summary() -> dict:
     """
     Today's account-balance movement (Europe/Berlin calendar day, matching
     the same day boundary performance.py's by-day-of-week breakdown
@@ -370,11 +315,11 @@ def get_daily_summary(path: str = None) -> dict:
 
     All currency fields are None if there's no balance_history at all
     (shouldn't normally happen -- load_account_config always seeds at
-    least one entry -- but guards against a hand-edited account.json).
+    least one entry -- but guards against a hand-edited account row).
     """
-    cfg = load_account_config(path)
+    cfg = load_account_config()
     balance = float(cfg.get("balance", 0))
-    history = cfg.get("balance_history", [])
+    history = get_balance_history()
     if not history:
         return {
             "balance": balance, "balance_start_of_day": None, "pct_change_today": None,
@@ -418,7 +363,7 @@ def get_daily_summary(path: str = None) -> dict:
     }
 
 
-def apply_realized_pnl(pnl_amount: float, meta: dict = None, path: str = None) -> dict:
+def apply_realized_pnl(pnl_amount: float, meta: dict = None) -> dict:
     """
     Records one trade's realized currency P&L in balance_history (for the
     Performance page's balance-over-time chart) and returns the resulting
@@ -429,11 +374,11 @@ def apply_realized_pnl(pnl_amount: float, meta: dict = None, path: str = None) -
 
     Note: this trade's realized_pnl_amount is written onto the trade record
     itself by the caller AFTER this returns (see _settle_account_balance's
-    docstring), so trades.json doesn't yet include it when load_account_config()
+    docstring), so the trades table doesn't yet include it when load_account_config()
     (and its _sum_realized_pnl() call) runs a few lines below -- pnl_amount is
     therefore added explicitly here on top of the freshly-computed balance,
     rather than trusting a stored running total. Once the caller saves the
-    trade, trades.json and the computed balance are back in agreement, so
+    trade, the trades table and the computed balance are back in agreement, so
     every subsequent load recomputes the exact same figure independently --
     nothing here is a drifting increment that could ever get out of sync.
 
@@ -442,7 +387,7 @@ def apply_realized_pnl(pnl_amount: float, meta: dict = None, path: str = None) -
     it. Returns the account config dict with "balance" reflecting this
     trade's settlement (already saved to disk).
     """
-    config = load_account_config(path)
+    config = load_account_config()
     new_balance = round(float(config.get("balance", 0)) + pnl_amount, 2)
     config["balance"] = new_balance
     entry = {
@@ -453,7 +398,7 @@ def apply_realized_pnl(pnl_amount: float, meta: dict = None, path: str = None) -
     if meta:
         entry.update(meta)
     _append_balance_history(config, entry)
-    save_account_config(config, path)
+    save_account_config(config)
     return config
 
 

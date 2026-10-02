@@ -1,0 +1,52 @@
+"""UI preferences in Postgres, with the size cap intact."""
+import pytest
+
+from swingbot import config
+from swingbot.core.db.repositories.preferences import PreferencesRepository
+
+
+@pytest.fixture
+def client_at(admin_app, auth, tmp_path, monkeypatch, db_committed):
+    from swingbot.core.db.engine import reset_engine
+    monkeypatch.setattr(
+        config, "DATABASE_URL",
+        db_committed.engine.url.render_as_string(hide_password=False))
+    reset_engine()
+    client = admin_app.test_client()
+
+    yield client
+    reset_engine()
+
+
+def _put(client, auth, prefs):
+    return client.put("/api/v1/system/preferences", json={"preferences": prefs},
+                      headers=auth)
+
+
+def _get(client, auth):
+    return client.get("/api/v1/system/preferences", headers=auth).get_json()["preferences"]
+
+
+def test_round_trips_through_a_row(client_at, auth):
+    c = client_at
+    _put(c, auth, {"columns": ["ticker", "r"]})
+    assert _get(c, auth)["columns"] == ["ticker", "r"]
+
+
+def test_the_64kb_cap_still_refuses(client_at, auth, db_committed):
+    c = client_at
+    resp = _put(c, auth, {"blob": "x" * (64 * 1024 + 1)})
+    assert resp.status_code >= 400
+    assert PreferencesRepository().load(conn=db_committed) == {}
+
+
+def test_an_empty_store_reads_as_an_empty_dict(db_conn):
+    assert PreferencesRepository().load(conn=db_conn) == {}
+
+
+def test_saving_twice_keeps_one_row(db_conn):
+    repo = PreferencesRepository()
+    repo.save({"a": 1}, conn=db_conn)
+    repo.save({"a": 2}, conn=db_conn)
+    assert repo.count(conn=db_conn) == 1
+    assert repo.load(conn=db_conn) == {"a": 2}

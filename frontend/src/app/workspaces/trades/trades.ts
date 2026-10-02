@@ -61,6 +61,7 @@ import {
   FULL_COLUMNS,
   PINNED_COLUMNS,
   TRADES_TABLE_ID,
+  openedAt,
   tradeColumns,
 } from './trades.columns';
 
@@ -445,7 +446,7 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
       <sb-confidence-cell [level]="row.confidence_level" [score]="row.confidence_score" />
     </ng-template>
 
-    <ng-template #openedCell let-row>{{ fmtDate(row.opened_at) }}</ng-template>
+    <ng-template #openedCell let-row>{{ fmtDate(openedAt(row)) }}</ng-template>
     <ng-template #closedCell let-row>{{ fmtDate(row.closed_at) }}</ng-template>
 
     <ng-template #actionsCell let-row>
@@ -915,6 +916,7 @@ export class Trades {
   protected fmtPct = pct;
   protected fmtText = text;
   protected fmtDate = dateTime;
+  protected openedAt = openedAt;
   protected bankedLegPct = bankedLegPct;
   protected bankedLegAmount = bankedLegAmount;
   protected fmtNum(value: number | null, decimals = 2): string {

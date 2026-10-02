@@ -18,10 +18,3 @@ def test_every_part2_store_has_an_importer():
     expected = {f"import_{name}" for name in PART2_STORES}
     expected = {name.replace("import_starred_plans", "import_starred") for name in expected}
     assert expected <= scripts, f"missing importers: {sorted(expected - scripts)}"
-
-
-def test_no_part2_store_defaults_to_a_stage_other_than_json():
-    from swingbot import config
-    from swingbot.core.db import stages
-    configured = stages.parse(config.DB_STORES)
-    assert not (PART2_STORES & set(configured)), "a committed config promoted a Part 2 store"

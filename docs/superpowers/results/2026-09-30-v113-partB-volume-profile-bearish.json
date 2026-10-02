@@ -1,0 +1,216 @@
+{
+ "universe_n": 74,
+ "part": "B",
+ "strategy": "Volume Profile",
+ "direction": "bearish",
+ "horizon": "1w",
+ "scored": {
+  "stats": {
+   "n": 231,
+   "wins": 73,
+   "losses": 158,
+   "win_rate": 31.601731601731604,
+   "expectancy_r": 0.043562874251497,
+   "scratch_timeout_share": 0.3083832335329341
+  },
+  "lower_bound": -0.126793071559633,
+  "tier1": {
+   "clears": false,
+   "clauses": {
+    "wr": false,
+    "exp_r": true,
+    "n": true,
+    "scratch": true
+   }
+  },
+  "tier2": {
+   "clears": false,
+   "clauses": {
+    "exp_r": true,
+    "lower_bound": false,
+    "n": true,
+    "scratch": true
+   }
+  },
+  "tier": null
+ },
+ "clauses": {
+  "wr": false,
+  "exp_r": true,
+  "n": true,
+  "scratch": true,
+  "lower_bound": false
+ },
+ "folds": [
+  {
+   "test_year": 2013,
+   "tol": "fixed",
+   "stats": {
+    "n": 14,
+    "wins": 5,
+    "losses": 9,
+    "win_rate": 35.714285714285715,
+    "expectancy_r": 0.23636000000000001,
+    "scratch_timeout_share": 0.44
+   }
+  },
+  {
+   "test_year": 2014,
+   "tol": "fixed",
+   "stats": {
+    "n": 5,
+    "wins": 4,
+    "losses": 1,
+    "win_rate": 80.0,
+    "expectancy_r": 0.9888999999999999,
+    "scratch_timeout_share": 0.5
+   }
+  },
+  {
+   "test_year": 2015,
+   "tol": "fixed",
+   "stats": {
+    "n": 13,
+    "wins": 5,
+    "losses": 8,
+    "win_rate": 38.46153846153847,
+    "expectancy_r": 0.22358333333333333,
+    "scratch_timeout_share": 0.4583333333333333
+   }
+  },
+  {
+   "test_year": 2016,
+   "tol": "fixed",
+   "stats": {
+    "n": 20,
+    "wins": 6,
+    "losses": 14,
+    "win_rate": 30.0,
+    "expectancy_r": 0.07882758620689657,
+    "scratch_timeout_share": 0.3103448275862069
+   }
+  },
+  {
+   "test_year": 2017,
+   "tol": "fixed",
+   "stats": {
+    "n": 4,
+    "wins": 1,
+    "losses": 3,
+    "win_rate": 25.0,
+    "expectancy_r": -0.3238,
+    "scratch_timeout_share": 0.2
+   }
+  },
+  {
+   "test_year": 2018,
+   "tol": "fixed",
+   "stats": {
+    "n": 5,
+    "wins": 1,
+    "losses": 4,
+    "win_rate": 20.0,
+    "expectancy_r": -0.23150000000000004,
+    "scratch_timeout_share": 0.5
+   }
+  },
+  {
+   "test_year": 2019,
+   "tol": "fixed",
+   "stats": {
+    "n": 12,
+    "wins": 1,
+    "losses": 11,
+    "win_rate": 8.333333333333332,
+    "expectancy_r": -0.7971666666666666,
+    "scratch_timeout_share": 0.0
+   }
+  },
+  {
+   "test_year": 2020,
+   "tol": "fixed",
+   "stats": {
+    "n": 16,
+    "wins": 7,
+    "losses": 9,
+    "win_rate": 43.75,
+    "expectancy_r": 0.32120000000000004,
+    "scratch_timeout_share": 0.2
+   }
+  },
+  {
+   "test_year": 2021,
+   "tol": "fixed",
+   "stats": {
+    "n": 5,
+    "wins": 1,
+    "losses": 4,
+    "win_rate": 20.0,
+    "expectancy_r": -0.1814,
+    "scratch_timeout_share": 0.5
+   }
+  },
+  {
+   "test_year": 2022,
+   "tol": "fixed",
+   "stats": {
+    "n": 27,
+    "wins": 10,
+    "losses": 17,
+    "win_rate": 37.03703703703704,
+    "expectancy_r": 0.2491818181818182,
+    "scratch_timeout_share": 0.18181818181818182
+   }
+  },
+  {
+   "test_year": 2023,
+   "tol": "fixed",
+   "stats": {
+    "n": 32,
+    "wins": 13,
+    "losses": 19,
+    "win_rate": 40.625,
+    "expectancy_r": 0.1975111111111111,
+    "scratch_timeout_share": 0.28888888888888886
+   }
+  },
+  {
+   "test_year": 2024,
+   "tol": "fixed",
+   "stats": {
+    "n": 19,
+    "wins": 4,
+    "losses": 15,
+    "win_rate": 21.052631578947366,
+    "expectancy_r": -0.21738709677419352,
+    "scratch_timeout_share": 0.3870967741935484
+   }
+  },
+  {
+   "test_year": 2025,
+   "tol": "fixed",
+   "stats": {
+    "n": 29,
+    "wins": 7,
+    "losses": 22,
+    "win_rate": 24.137931034482758,
+    "expectancy_r": -0.17576923076923073,
+    "scratch_timeout_share": 0.2564102564102564
+   }
+  }
+ ],
+ "stage2": {
+  "clears": true,
+  "qualifying": 6,
+  "positive": 4,
+  "unselected": 0
+ },
+ "floor": {
+  "floor_drops": 0,
+  "floor_passes": 650,
+  "floor_drop_rate": 0.0
+ },
+ "cap_bind_rate": 0.937125748502994,
+ "proceed_to_holdout": false,
+ "tier": null
+}

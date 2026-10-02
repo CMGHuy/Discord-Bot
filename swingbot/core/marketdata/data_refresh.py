@@ -20,10 +20,9 @@ import logging
 import os
 import time
 
-from swingbot import config
-from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.infra.retry import with_retry
 from swingbot.core.marketdata.adjustments import merge_adjusted
+from swingbot.core.marketdata import spot_metals
 from swingbot.core.marketdata.data_store import (
     DATA_DIR,
     TRAINING_TIMEFRAMES,
@@ -31,10 +30,11 @@ from swingbot.core.marketdata.data_store import (
     cache_path,
     fetch_interval_data,
     load_from_disk,
+    refuse_spot_write,
     timeframe_name,
 )
 
-log = logging.getLogger("swing-bot.data_refresh")
+log = logging.getLogger(__name__)
 
 # How often each timeframe is worth re-fetching. A new monthly candle only
 # closes twelve times a year; an hourly one closes every session hour.
@@ -62,13 +62,19 @@ RETRY_BASE_DELAY = 2.0
 # genuine gaps for as long as it runs.
 FAILED_RETRY_HOURS = 0.5
 
-STATE_FILE = os.path.join(config.DATA_DIR, "market_data_state.json")
-
 
 def load_state() -> dict:
     """Per-(symbol,timeframe) coverage + failure record. Survives restarts so
-    an unresolved gap keeps being retried across bot sessions."""
-    return read_json(STATE_FILE, {}) or {}
+    an unresolved gap keeps being retried across bot sessions. At stage
+    `market_data_state:db` it lives in its table, which starts empty (v116:
+    ephemeral, no import) -- an empty map only means every gap is retried on
+    its normal staleness window once."""
+    try:
+        from swingbot.core.db.repositories.market_data_state import market_data_state_repo
+        return market_data_state_repo().load()
+    except Exception as exc:            # never let bookkeeping break a refresh
+        log.warning("could not read market-data state: %s", exc, exc_info=True)
+        return {}
 
 
 def prioritise_symbols(symbols, priority_symbols=()) -> list[str]:
@@ -96,9 +102,10 @@ def prioritise_symbols(symbols, priority_symbols=()) -> list[str]:
 
 def save_state(state: dict) -> None:
     try:
-        atomic_write_json(STATE_FILE, state)
+        from swingbot.core.db.repositories.market_data_state import market_data_state_repo
+        market_data_state_repo().save(state)
     except Exception as exc:            # never let bookkeeping break a refresh
-        log.warning("could not write %s: %s", STATE_FILE, exc)
+        log.warning("could not save market-data state: %s", exc, exc_info=True)
 
 
 def _key(symbol: str, timeframe: str) -> str:
@@ -229,6 +236,7 @@ def _merge_save(existing, fresh, symbol: str, timeframe: str,
     isn't needed to fix the observed symptom and isn't worth the extra risk
     of getting split-vs-dividend volume conventions wrong here.
     """
+    refuse_spot_write(symbol)
     if existing is None or len(existing) == 0:
         merged, added = fresh, len(fresh)
     else:
@@ -268,7 +276,7 @@ def refresh_symbol(symbol: str, timeframe: str, base_dir: str = DATA_DIR,
                             attempts=RETRY_ATTEMPTS, base_delay=RETRY_BASE_DELAY,
                             label=f"{symbol}/{tf} full")
         except Exception as exc:
-            log.warning("refresh %s/%s failed after retries: %s", symbol, tf, exc)
+            log.warning("refresh %s/%s failed after retries: %s", symbol, tf, exc, exc_info=True)
             return {**out, "status": "failed", "rows": have, "error": str(exc)[:200]}
         merged, added = _merge_save(existing, df, symbol, tf, base_dir)
         return {**out, "status": "full" if have == 0 else "incremental",
@@ -281,7 +289,7 @@ def refresh_symbol(symbol: str, timeframe: str, base_dir: str = DATA_DIR,
                            attempts=RETRY_ATTEMPTS, base_delay=RETRY_BASE_DELAY,
                            label=f"{symbol}/{tf} incremental")
     except Exception as exc:
-        log.warning("incremental %s/%s failed after retries: %s", symbol, tf, exc)
+        log.warning("incremental %s/%s failed after retries: %s", symbol, tf, exc, exc_info=True)
         return {**out, "status": "failed", "rows": have, "error": str(exc)[:200]}
 
     if fresh is None or len(fresh) == 0:
@@ -363,6 +371,7 @@ def refresh_all(symbols, timeframes=TRAINING_TIMEFRAMES, base_dir: str = DATA_DI
     provider, to starve the Discord gateway heartbeat and drop the bot's
     connection.
     """
+    symbols = spot_metals.cache_symbols(symbols)   # v109: refresh GC=F for XAUUSD, never XAUUSD
     timeframes = [timeframe_name(t) for t in timeframes]
     summary = {tf: {"full": 0, "incremental": 0, "fresh": 0, "failed": 0,
                     "added": 0} for tf in timeframes}
@@ -383,7 +392,7 @@ def refresh_all(symbols, timeframes=TRAINING_TIMEFRAMES, base_dir: str = DATA_DI
                 r = refresh_symbol(symbol, tf, base_dir=base_dir, force=force,
                                    state=state)
             except Exception as exc:      # belt-and-braces: loop must survive
-                log.warning("refresh %s/%s crashed: %s", symbol, tf, exc)
+                log.warning("refresh %s/%s crashed: %s", symbol, tf, exc, exc_info=True)
                 r = {"symbol": symbol, "timeframe": tf, "status": "failed",
                      "rows": 0, "added": 0, "error": str(exc)[:200]}
             bucket = summary[tf]

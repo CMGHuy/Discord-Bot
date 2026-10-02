@@ -44,7 +44,7 @@ from swingbot.core.backtesting.backtest_wf import (ANCHORED_FOLDS, GATE_MAX_DEGR
                                        GATE_MIN_IMPROVING_FOLDS,
                                        GATE_MIN_N_PER_FOLD, _apply_overrides,
                                        _frame_for, gate)
-from swingbot.core.market.strategy_types import HORIZONS  # noqa: E402
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS  # noqa: E402
 from swingbot.core.marketdata.universe import liquidity_ok, universe_symbols  # noqa: E402
 from swingbot.core.marketdata.watchlist import load_watchlist  # noqa: E402
 
@@ -225,7 +225,7 @@ def main() -> int:
     if args.limit_symbols:
         symbols = symbols[:args.limit_symbols]
     strategies = args.strategy or list(ALL_STRATEGIES)
-    horizons = args.horizon or list(HORIZONS)
+    horizons = args.horizon or list(LEGACY_HORIZONS)
     components = args.component or list(REGISTERED_COMPONENTS)
 
     started = time.time()

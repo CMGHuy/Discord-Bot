@@ -1,0 +1,296 @@
+{
+ "universe_n": 74,
+ "part": "A",
+ "strategy": "Downtrend Overbought Fade",
+ "direction": "bearish",
+ "horizon": "1w",
+ "stage1": {
+  "cells": {
+   "1": {
+    "stats": {
+     "n": 1045,
+     "wins": 371,
+     "losses": 674,
+     "win_rate": 35.50239234449761,
+     "expectancy_r": -0.12760814249363867,
+     "scratch_timeout_share": 0.11365564037319763
+    },
+    "lower_bound": -0.19613473265913833,
+    "tier1": {
+     "clears": false,
+     "clauses": {
+      "wr": false,
+      "exp_r": false,
+      "n": true,
+      "scratch": true
+     }
+    },
+    "tier2": {
+     "clears": false,
+     "clauses": {
+      "exp_r": false,
+      "lower_bound": false,
+      "n": true,
+      "scratch": true
+     }
+    },
+    "tier": null
+   },
+   "1.25": {
+    "stats": {
+     "n": 1027,
+     "wins": 335,
+     "losses": 692,
+     "win_rate": 32.619279454722495,
+     "expectancy_r": -0.08980136402387041,
+     "scratch_timeout_share": 0.12446717817561807
+    },
+    "lower_bound": -0.16740773308072085,
+    "tier1": {
+     "clears": false,
+     "clauses": {
+      "wr": false,
+      "exp_r": false,
+      "n": true,
+      "scratch": true
+     }
+    },
+    "tier2": {
+     "clears": false,
+     "clauses": {
+      "exp_r": false,
+      "lower_bound": false,
+      "n": true,
+      "scratch": true
+     }
+    },
+    "tier": null
+   },
+   "1.5": {
+    "stats": {
+     "n": 1004,
+     "wins": 299,
+     "losses": 705,
+     "win_rate": 29.780876494023907,
+     "expectancy_r": -0.05629708904109592,
+     "scratch_timeout_share": 0.1404109589041096
+    },
+    "lower_bound": -0.14060913307152795,
+    "tier1": {
+     "clears": false,
+     "clauses": {
+      "wr": false,
+      "exp_r": false,
+      "n": true,
+      "scratch": true
+     }
+    },
+    "tier2": {
+     "clears": false,
+     "clauses": {
+      "exp_r": false,
+      "lower_bound": false,
+      "n": true,
+      "scratch": true
+     }
+    },
+    "tier": null
+   }
+  },
+  "plateau_tier1": [],
+  "plateau_tier2": [],
+  "winner": null,
+  "winner_tier": null
+ },
+ "stage2": {
+  "folds": [
+   {
+    "test_year": 2013,
+    "tol": 1.5,
+    "stats": {
+     "n": 51,
+     "wins": 16,
+     "losses": 35,
+     "win_rate": 31.372549019607842,
+     "expectancy_r": -0.057081967213114745,
+     "scratch_timeout_share": 0.16393442622950818
+    }
+   },
+   {
+    "test_year": 2014,
+    "tol": 1.5,
+    "stats": {
+     "n": 31,
+     "wins": 7,
+     "losses": 24,
+     "win_rate": 22.58064516129032,
+     "expectancy_r": -0.08854761904761904,
+     "scratch_timeout_share": 0.2619047619047619
+    }
+   },
+   {
+    "test_year": 2015,
+    "tol": 1.5,
+    "stats": {
+     "n": 68,
+     "wins": 29,
+     "losses": 39,
+     "win_rate": 42.64705882352941,
+     "expectancy_r": 0.26024657534246576,
+     "scratch_timeout_share": 0.0684931506849315
+    }
+   },
+   {
+    "test_year": 2016,
+    "tol": 1.5,
+    "stats": {
+     "n": 76,
+     "wins": 13,
+     "losses": 63,
+     "win_rate": 17.105263157894736,
+     "expectancy_r": -0.44639285714285715,
+     "scratch_timeout_share": 0.09523809523809523
+    }
+   },
+   {
+    "test_year": 2017,
+    "tol": 1.5,
+    "stats": {
+     "n": 36,
+     "wins": 11,
+     "losses": 25,
+     "win_rate": 30.555555555555557,
+     "expectancy_r": -0.08820454545454548,
+     "scratch_timeout_share": 0.18181818181818182
+    }
+   },
+   {
+    "test_year": 2018,
+    "tol": 1.5,
+    "stats": {
+     "n": 43,
+     "wins": 18,
+     "losses": 25,
+     "win_rate": 41.86046511627907,
+     "expectancy_r": 0.4069615384615386,
+     "scratch_timeout_share": 0.17307692307692307
+    }
+   },
+   {
+    "test_year": 2019,
+    "tol": 1.5,
+    "stats": {
+     "n": 67,
+     "wins": 15,
+     "losses": 52,
+     "win_rate": 22.388059701492537,
+     "expectancy_r": -0.24514285714285716,
+     "scratch_timeout_share": 0.12987012987012986
+    }
+   },
+   {
+    "test_year": 2020,
+    "tol": 1.5,
+    "stats": {
+     "n": 69,
+     "wins": 21,
+     "losses": 48,
+     "win_rate": 30.434782608695656,
+     "expectancy_r": 0.18654444444444437,
+     "scratch_timeout_share": 0.23333333333333334
+    }
+   },
+   {
+    "test_year": 2021,
+    "tol": 1.5,
+    "stats": {
+     "n": 25,
+     "wins": 4,
+     "losses": 21,
+     "win_rate": 16.0,
+     "expectancy_r": -0.4168387096774194,
+     "scratch_timeout_share": 0.1935483870967742
+    }
+   },
+   {
+    "test_year": 2022,
+    "tol": 1.5,
+    "stats": {
+     "n": 147,
+     "wins": 49,
+     "losses": 98,
+     "win_rate": 33.33333333333333,
+     "expectancy_r": -0.08950931677018634,
+     "scratch_timeout_share": 0.08695652173913043
+    }
+   },
+   {
+    "test_year": 2023,
+    "tol": 1.5,
+    "stats": {
+     "n": 107,
+     "wins": 24,
+     "losses": 83,
+     "win_rate": 22.429906542056074,
+     "expectancy_r": -0.26366929133858263,
+     "scratch_timeout_share": 0.15748031496062992
+    }
+   },
+   {
+    "test_year": 2024,
+    "tol": 1.5,
+    "stats": {
+     "n": 66,
+     "wins": 21,
+     "losses": 45,
+     "win_rate": 31.818181818181817,
+     "expectancy_r": -0.04149333333333334,
+     "scratch_timeout_share": 0.12
+    }
+   },
+   {
+    "test_year": 2025,
+    "tol": 1.5,
+    "stats": {
+     "n": 98,
+     "wins": 34,
+     "losses": 64,
+     "win_rate": 34.69387755102041,
+     "expectancy_r": 0.023982608695652167,
+     "scratch_timeout_share": 0.14782608695652175
+    }
+   }
+  ],
+  "verdict": {
+   "clears": false,
+   "qualifying": 13,
+   "positive": 4,
+   "unselected": 0
+  }
+ },
+ "floor": {
+  "1": {
+   "floor_drops": 0,
+   "floor_passes": 2968,
+   "floor_drop_rate": 0.0
+  },
+  "1.25": {
+   "floor_drops": 0,
+   "floor_passes": 2949,
+   "floor_drop_rate": 0.0
+  },
+  "1.5": {
+   "floor_drops": 0,
+   "floor_passes": 2935,
+   "floor_drop_rate": 0.0
+  }
+ },
+ "cap_bind": {
+  "1": 0.993214588634436,
+  "1.25": 0.9931798806479113,
+  "1.5": 0.9931506849315068
+ },
+ "proceed_to_holdout": false,
+ "validation_cell": null,
+ "tier": null
+}

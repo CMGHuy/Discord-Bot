@@ -4,6 +4,8 @@ import pytest
 from swingbot import config
 from swingbot.core.db import engine as dbengine
 
+pytestmark = pytest.mark.real_engine
+
 
 @pytest.fixture(autouse=True)
 def _clean_engine():
@@ -38,8 +40,6 @@ def test_database_fields_have_the_correct_safety_flags():
     assert fields["DATABASE_URL"].hot_reloadable is False
     assert fields["POSTGRES_PASSWORD"].sensitive is True
     assert fields["POSTGRES_PASSWORD"].hot_reloadable is False
-    assert fields["DB_STORES"].sensitive is False
-    assert fields["DB_STORES"].hot_reloadable is True
 
 
 def test_transaction_reuses_an_existing_connection(db_conn):

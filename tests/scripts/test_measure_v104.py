@@ -11,7 +11,7 @@ import measure_v104 as mv  # noqa: E402
 
 from swingbot import config  # noqa: E402
 from swingbot.core.market.entry_filters import DEFAULT_PARAMS  # noqa: E402
-from swingbot.core.market.strategy_types import HORIZONS  # noqa: E402
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS  # noqa: E402
 
 FAST = dict(n_resamples=200, seed=42)
 
@@ -35,7 +35,7 @@ def test_admitted_horizons_follow_the_live_gate():
     assert mv.admitted_horizons("VWAP", "bullish") == ("4w",)
     assert mv.admitted_horizons("MACD", "bullish") == ("3m", "4m", "7m", "8m", "9m")
     assert mv.admitted_horizons("Break & Retest", "bearish") == ("2m", "3m", "4m")
-    assert mv.admitted_horizons("Fibonacci", "bullish") == tuple(HORIZONS)
+    assert mv.admitted_horizons("Fibonacci", "bullish") == LEGACY_HORIZONS
 
 
 def test_part_a_has_fifteen_cells_matching_the_live_gates():

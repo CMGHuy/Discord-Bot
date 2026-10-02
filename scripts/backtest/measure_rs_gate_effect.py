@@ -89,13 +89,13 @@ from swingbot.core.edge import factors as rs_factors  # noqa: E402
 from swingbot.core.marketdata import universe  # noqa: E402
 from swingbot.core.marketdata.asset_class import is_rs_eligible  # noqa: E402
 from swingbot.core.marketdata.backtest_cache import cache_path  # noqa: E402
-from swingbot.core.market.strategy_types import HORIZONS  # noqa: E402
+from swingbot.core.market.strategy_types import HORIZONS, LEGACY_HORIZONS  # noqa: E402
 
 CACHE_DIR = ROOT / "data" / "backtest_cache"
 TRAIN = ("2020-01-01", "2023-12-31")
 VALIDATION = ("2024-01-01", "2025-12-31")  # verbatim run_backtest_range.py
 
-HKEYS = list(HORIZONS)
+HKEYS = list(LEGACY_HORIZONS)
 BENCHMARK = "SPY"
 
 # The brief's grid.
@@ -215,7 +215,7 @@ def collect(frames: dict, pct: dict, sector_pct: dict, sector_of_ticker: dict,
     horizon's own window.
 
     Same population call as v33's instrument -- run_backtest(..., exit_model=
-    "v2", scale_out=True) over ALL_STRATEGIES x HORIZONS -- so the scenario
+    "v2", scale_out=True) over ALL_STRATEGIES x LEGACY_HORIZONS -- so the scenario
     count is directly comparable with v33's published 4337."""
     rows = []
     for ticker, df in frames.items():
@@ -445,13 +445,8 @@ def main() -> int:
 
     # Scenario universe = the WATCHLIST, not every CSV in the cache: SPY and
     # the sector ETFs now live there too and are inputs, not subjects.
-    wl_path = ROOT / "data" / "watchlist.json"
-    if not wl_path.exists():
-        # `data/` is gitignored, so a worktree has its own near-empty copy.
-        # Fall back to the checkout the cache belongs to (same reason
-        # --cache-dir exists at all).
-        wl_path = Path(cache).parent / "watchlist.json"
-    watchlist = json.loads(wl_path.read_text())
+    from swingbot.core.marketdata.watchlist import load_watchlist
+    watchlist = load_watchlist()
     frames = {}
     for sym in sorted(watchlist):
         df = load(sym)

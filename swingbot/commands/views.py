@@ -10,6 +10,7 @@ this codebase before this file existed -- so a user who has learned
 gets the identical mental model here.
 """
 import asyncio
+import logging
 import os
 
 import discord
@@ -19,44 +20,27 @@ from swingbot.core import presentation as ui
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
 from swingbot.core.backtesting.registry import decay_for, decay_note
-from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.market.strategy import HORIZONS
 from swingbot.core.market.session import market_today
 
+log = logging.getLogger(__name__)
+
 _plan_store = PlanStore()
 
-_STARRED_PATH = os.path.join(config.DATA_DIR, "starred_plans.json")
-
-
 def starred_ids() -> set:
-    from swingbot.core.db import stages
-    if stages.reads_db("starred_plans"):
-        from swingbot.core.db.repositories.starred import starred_repo
-        return starred_repo().ids()
-    return set(read_json(_STARRED_PATH, []))
+    from swingbot.core.db.repositories.starred import starred_repo
+    return starred_repo().ids()
 
 
 def star_plan(plan_id: str) -> None:
-    from swingbot.core.db import stages
-    if stages.writes_json("starred_plans"):
-        ids = set(read_json(_STARRED_PATH, []))
-        ids.add(plan_id)
-        atomic_write_json(_STARRED_PATH, sorted(ids))
-    if stages.writes_db("starred_plans"):
-        from swingbot.core.db.repositories.starred import starred_repo
-        starred_repo().star(plan_id)
+    from swingbot.core.db.repositories.starred import starred_repo
+    starred_repo().star(plan_id)
 
 
 def unstar_plan(plan_id: str) -> None:
-    from swingbot.core.db import stages
-    if stages.writes_json("starred_plans"):
-        ids = set(read_json(_STARRED_PATH, []))
-        ids.discard(plan_id)
-        atomic_write_json(_STARRED_PATH, sorted(ids))
-    if stages.writes_db("starred_plans"):
-        from swingbot.core.db.repositories.starred import starred_repo
-        starred_repo().unstar(plan_id)
+    from swingbot.core.db.repositories.starred import starred_repo
+    starred_repo().unstar(plan_id)
 
 
 class PlanActionView(discord.ui.View):
@@ -101,6 +85,7 @@ class PlanActionView(discord.ui.View):
         try:
             df = await asyncio.to_thread(get_daily_data, plan.ticker)
         except Exception as exc:
+            log.warning("plan panel %s: could not fetch price data for %s", self.plan_id, plan.ticker, exc_info=True)
             await interaction.followup.send(f"Could not fetch price data for {plan.ticker}: {exc}", ephemeral=True)
             return
         h = HORIZONS.get(plan.horizon_key, {})
@@ -115,6 +100,7 @@ class PlanActionView(discord.ui.View):
                 horizon=h, plan_v2=plan,
             )
         except Exception as exc:
+            log.warning("plan panel %s: chart render failed", self.plan_id, exc_info=True)
             await interaction.followup.send(f"Chart render failed: {exc}", ephemeral=True)
             return
         await interaction.followup.send(

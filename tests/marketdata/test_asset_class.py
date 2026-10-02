@@ -57,7 +57,8 @@ def test_crypto_is_not_rs_eligible():
     # the RAW watchlist string into rs_verdict() -> classify(), never a
     # pre-resolved symbol. classify() must handle these unresolved forms
     # itself, not merely a hand-resolved symbol handed to it by a test.
-    ("XAUUSD", "future"),
+    ("XAUUSD", "spot_metal"),
+    ("XAGUSD", "spot_metal"),
     ("SPX", "index"),
     ("BTC", "crypto"),
     ("BTCUSD", "crypto"),
@@ -95,3 +96,17 @@ def test_aliases_keys_that_are_also_real_tickers_are_rs_eligible(symbol):
     these must NOT be exempted, because the data actually fetched for them
     is ordinary equity/ETF data, not the futures/ETN the alias implies."""
     assert is_rs_eligible(symbol) is True
+
+
+@pytest.mark.parametrize("symbol", ["XAUUSD", "XAGUSD", " xauusd "])
+def test_spot_metals_classify_before_the_alias_walk(symbol):
+    """v109: XAUUSD is spot-priced now, not an alias of GC=F."""
+    assert classify(symbol) == "spot_metal"
+    assert is_rs_eligible(symbol) is False
+
+
+@pytest.mark.parametrize("symbol,expected", [
+    ("GC=F", "future"), ("SI=F", "future"), ("XAU", "future"), ("GOLD", "equity"),
+])
+def test_futures_and_other_aliases_are_unchanged(symbol, expected):
+    assert classify(symbol) == expected

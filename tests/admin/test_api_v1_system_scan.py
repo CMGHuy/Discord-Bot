@@ -1,22 +1,13 @@
 """NG16 — /api/v1/system/{logs,scan,bot} .
 
-**`test_admin_and_bot_agree_on_the_flag_file_names` is the point of this
-file.** Scan control is entirely file-based: the admin writes a flag and the
-bot polls for it. The two sides define those paths as SEPARATE constants
-(`app.py`'s TRIGGER_FILE/PAUSE_FILE vs `commands/scanning.py`'s
-_TRIGGER_FILE/_PAUSE_FILE/_HEARTBEAT_FILE), and nothing but that test makes
-them agree. A rename on one side raises nothing, logs nothing, and produces
-a UI that cheerfully reports "not paused" forever while the bot stays
-paused -- which is exactly the failure NG16 names.
-
-`engine._STOP_FILE` and `engine._RUNNING_FILE` are baked from config.DATA_DIR
-at import time and `swingbot.core.scanning.engine` is not in conftest's
-reload list, so anything touching stop/running state patches them. Writing
-through the real constant leaves a stop flag in the developer's data/
-directory that the next real scan obeys.
+**`test_the_admin_keeps_no_flag_paths_of_its_own` is the point of this
+file.** The admin raises a flag and the bot polls for it. The two sides once
+defined those paths as SEPARATE constants, and a rename on one side raised
+nothing, logged nothing, and produced a UI that cheerfully reported "not
+paused" forever while the bot stayed paused -- exactly the failure NG16
+names. The admin now goes through `commands/scanning/runstate.py`, the
+module the bot reads, and every flag is a row in the flags table.
 """
-import os
-
 import pytest
 
 from tests.admin.api_v1_contract import (NULLABLE_STR, assert_error,
@@ -32,27 +23,9 @@ def logged_in(client):
 
 
 @pytest.fixture
-def scan_files(admin_app, tmp_path, monkeypatch):
-    """Every scan flag pointed at the test's own directory.
-
-    admin_app's reload covers app.py's TRIGGER_FILE/PAUSE_FILE; engine's two
-    are patched here because that module is deliberately not reloaded.
-    """
-    from swingbot.admin import app as admin_module
-    from swingbot.core.scanning import engine
-    from swingbot.core.scanning import runstate
-
-    monkeypatch.setattr(runstate, "_STOP_FILE", str(tmp_path / "stop_scan.flag"))
-    monkeypatch.setattr(runstate, "_RUNNING_FILE", str(tmp_path / "scan_running.flag"))
-    assert admin_module.TRIGGER_FILE.startswith(str(tmp_path)), (
-        "app.py's flag paths did not follow the test DATA_DIR"
-    )
-    return {
-        "trigger": admin_module.TRIGGER_FILE,
-        "pause": admin_module.PAUSE_FILE,
-        "stop": runstate._STOP_FILE,
-        "running": runstate._RUNNING_FILE,
-    }
+def scan_files(admin_app):
+    """The scan flags are rows; the fixture name stays for the tests' signatures."""
+    return None
 
 
 @pytest.fixture
@@ -67,21 +40,19 @@ def log_files(admin_app, tmp_path, monkeypatch):
 
 # --- the flag-name contract --------------------------------------------
 
-def test_admin_and_bot_agree_on_the_flag_file_names():
-    """The one that matters. Scan control is a file the admin writes and the
-    bot polls; the two define those paths independently, and a mismatch is
-    silent on both sides -- no error, no log line, just a UI that reports
-    "not paused" while the bot stays paused."""
+def test_the_admin_keeps_no_flag_paths_of_its_own():
+    """The one that matters. A second definition of the trigger/pause state
+    is silent on both sides when it drifts -- no error, no log line, just a
+    UI that reports "not paused" while the bot stays paused."""
     from swingbot.admin import app as admin_module
-    from swingbot.commands import scanning as bot_module
 
-    assert (os.path.basename(admin_module.TRIGGER_FILE)
-            == os.path.basename(bot_module._TRIGGER_FILE))
-    assert (os.path.basename(admin_module.PAUSE_FILE)
-            == os.path.basename(bot_module._PAUSE_FILE))
-    assert os.path.basename(bot_module._HEARTBEAT_FILE) == "bot_heartbeat.json", (
-        "app.py's scan_status_payload reads this name literally"
-    )
+    assert not hasattr(admin_module, "TRIGGER_FILE")
+    assert not hasattr(admin_module, "PAUSE_FILE")
+
+
+def _bot_runstate():
+    from swingbot.commands.scanning import runstate
+    return runstate
 
 
 # --- scan status --------------------------------------------------------
@@ -100,6 +71,7 @@ def test_scan_status_shape(logged_in, scan_files):
         "bot_healthy": (bool, type(None)),
         "bot_last_success": NULLABLE_STR,
         "bot_consecutive_failures": int,
+        "bot_store_write_failure": (dict, type(None)),
         "progress": (dict, type(None)),
     })
 
@@ -110,11 +82,11 @@ def test_pause_then_resume(logged_in, scan_files):
     body = logged_in.post("/api/v1/system/scan/pause").get_json()
     assert body["ok"] is True
     assert body["scan"]["paused"] is True
-    assert os.path.exists(scan_files["pause"])
+    assert _bot_runstate().is_scan_paused() is True
 
     body = logged_in.post("/api/v1/system/scan/resume").get_json()
     assert body["scan"]["paused"] is False
-    assert not os.path.exists(scan_files["pause"])
+    assert _bot_runstate().is_scan_paused() is False
 
 
 def test_resume_when_not_paused_is_not_an_error(logged_in, scan_files):
@@ -126,16 +98,18 @@ def test_resume_when_not_paused_is_not_an_error(logged_in, scan_files):
 def test_trigger_writes_the_flag_the_bot_polls(logged_in, scan_files):
     body = logged_in.post("/api/v1/system/scan/trigger").get_json()
     assert body["scan"]["pending"] is True
-    assert os.path.exists(scan_files["trigger"])
+    assert _bot_runstate().is_trigger_requested() is True
 
 
 def test_stop_is_distinct_from_pause(logged_in, scan_files):
     """Stop cuts short a scan already running; pause stops future automatic
-    ones. They write different files, and conflating them means "stop" would
+    ones. They are different flags, and conflating them means "stop" would
     silently disable scheduled scanning."""
+    from swingbot.core.scanning import runstate
+
     logged_in.post("/api/v1/system/scan/stop")
-    assert os.path.exists(scan_files["stop"])
-    assert not os.path.exists(scan_files["pause"])
+    assert runstate.is_stop_requested() is True
+    assert _bot_runstate().is_scan_paused() is False
 
 
 def test_commands_return_the_resulting_status(logged_in, scan_files):
@@ -148,7 +122,7 @@ def test_commands_return_the_resulting_status(logged_in, scan_files):
 def test_scan_commands_require_auth(client, scan_files):
     for verb in ("trigger", "stop", "pause", "resume"):
         assert_error(client.post(f"/api/v1/system/scan/{verb}"), "auth", 401)
-    assert not os.path.exists(scan_files["pause"]), (
+    assert _bot_runstate().is_scan_paused() is False, (
         "an unauthenticated call must not have written a flag"
     )
 
@@ -261,23 +235,19 @@ def test_restart_requires_auth(client):
 
 # --- tick health -------------------------------------------------------
 
-import json
 from datetime import datetime, timedelta, timezone
 
 
-def _write_heartbeat_file(tmp_path, **fields):
-    path = os.path.join(str(tmp_path), "bot_heartbeat.json")
-    with open(path, "w") as fh:
-        json.dump(fields, fh)
-    return path
+def _write_heartbeat(**fields):
+    from swingbot.core.db.repositories.heartbeat import heartbeat_repo
+    heartbeat_repo().beat(fields)
 
 
-def test_recent_success_is_healthy(tmp_path, monkeypatch):
+def test_recent_success_is_healthy():
     from swingbot.admin import app as admin_app
 
-    monkeypatch.setattr(admin_app.config, "DATA_DIR", str(tmp_path))
     now = datetime.now(timezone.utc)
-    _write_heartbeat_file(tmp_path, timestamp=now.isoformat(),
+    _write_heartbeat(timestamp=now.isoformat(),
                           last_success=now.isoformat(), consecutive_failures=0)
 
     payload = admin_app.scan_status_payload()
@@ -287,14 +257,13 @@ def test_recent_success_is_healthy(tmp_path, monkeypatch):
     assert payload["bot_consecutive_failures"] == 0
 
 
-def test_fresh_heartbeat_with_stale_success_is_alive_but_unhealthy(tmp_path, monkeypatch):
+def test_fresh_heartbeat_with_stale_success_is_alive_but_unhealthy():
     """The exact blackout shape: the process is looping and stamping
     liveness, but no tick has completed for hours."""
     from swingbot.admin import app as admin_app
 
-    monkeypatch.setattr(admin_app.config, "DATA_DIR", str(tmp_path))
     now = datetime.now(timezone.utc)
-    _write_heartbeat_file(tmp_path, timestamp=now.isoformat(),
+    _write_heartbeat(timestamp=now.isoformat(),
                           last_success=(now - timedelta(hours=6)).isoformat(),
                           consecutive_failures=72)
 
@@ -305,14 +274,13 @@ def test_fresh_heartbeat_with_stale_success_is_alive_but_unhealthy(tmp_path, mon
     assert payload["bot_consecutive_failures"] == 72
 
 
-def test_never_reported_success_is_unknown_not_failing(tmp_path, monkeypatch):
+def test_never_reported_success_is_unknown_not_failing():
     """A bot that has not restarted since the upgrade has no last_success.
     That is unknown, and must not render as failing."""
     from swingbot.admin import app as admin_app
 
-    monkeypatch.setattr(admin_app.config, "DATA_DIR", str(tmp_path))
     now = datetime.now(timezone.utc)
-    _write_heartbeat_file(tmp_path, timestamp=now.isoformat())
+    _write_heartbeat(timestamp=now.isoformat())
 
     payload = admin_app.scan_status_payload()
 
@@ -329,7 +297,7 @@ def test_scan_status_carries_no_progress_when_nothing_is_scanning(logged_in, sca
     assert logged_in.get("/api/v1/system/scan").get_json()["progress"] is None
 
 
-def test_scan_status_relays_the_record_the_bot_published(logged_in, scan_files, tmp_path):
+def test_scan_status_relays_the_record_the_bot_published(logged_in, scan_files):
     from swingbot.core.scanning import progress_store
     from swingbot.core.scanning.scan_run import ScanProgress
 
@@ -347,10 +315,15 @@ def test_scan_status_relays_the_record_the_bot_published(logged_in, scan_files, 
     assert progress_payload["current_ticker"] == "AAPL"
 
 
-def test_a_corrupt_progress_record_does_not_take_the_status_endpoint_down(
-    logged_in, scan_files, tmp_path,
+def test_an_unreadable_progress_record_does_not_take_the_status_endpoint_down(
+    logged_in, scan_files, monkeypatch,
 ):
-    (tmp_path / "scan_progress.json").write_text("{torn")
+    import swingbot.core.db.repositories.scan_progress as repo_module
+
+    def _unreadable():
+        raise RuntimeError("the progress row cannot be read")
+
+    monkeypatch.setattr(repo_module, "scan_progress_repo", _unreadable)
     response = logged_in.get("/api/v1/system/scan")
     assert response.status_code == 200
     assert response.get_json()["progress"] is None

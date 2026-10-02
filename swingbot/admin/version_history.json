@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-09-28 12:18:59 UTC",
+  "generated_at": "2026-10-02 14:35:04 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.21.0",
-    "bot": "1.10.4"
+    "ui": "1.21.1",
+    "bot": "2.0.0"
   },
   "releases": [
     {
@@ -1291,6 +1291,110 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-09-29",
+      "last_seen": "2026-09-29",
+      "commit": "f8435502",
+      "subject": "release(bot): 1.10.5 -- setups rejected at the 2% cap can still alert later; rejections logged",
+      "versions": {
+        "ui": "1.21.0",
+        "bot": "1.10.5"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-29",
+      "last_seen": "2026-09-29",
+      "commit": "3a51b0ce",
+      "subject": "release(bot): 1.10.6 -- spot gold/silver alerts priced on spot (XAUUSD/XAGUSD)",
+      "versions": {
+        "ui": "1.21.0",
+        "bot": "1.10.6"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-30",
+      "last_seen": "2026-09-30",
+      "commit": "5b3f34dc",
+      "subject": "release(bot): 1.11.0 -- distinct, colourful Discord notifications (one registry of kinds)",
+      "versions": {
+        "ui": "1.21.0",
+        "bot": "1.11.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-30",
+      "last_seen": "2026-09-30",
+      "commit": "cca04def",
+      "subject": "release(bot): 1.11.1 -- one logging setup, __name__ loggers, scan ids, lifecycle log lines",
+      "versions": {
+        "ui": "1.21.0",
+        "bot": "1.11.1"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-30",
+      "last_seen": "2026-09-30",
+      "commit": "5225a1eb",
+      "subject": "release(bot): 1.12.0 -- setups with a stop wider than 2% issue again, clamped to 1.75%; stop floor back to 2.0",
+      "versions": {
+        "ui": "1.21.0",
+        "bot": "1.12.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-09-30",
+      "last_seen": "2026-09-30",
+      "commit": "ea831f81",
+      "subject": "release(bot): 1.12.1 -- email/push alert shows the clamped stop, matching the Discord alert",
+      "versions": {
+        "ui": "1.21.0",
+        "bot": "1.12.1"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-01",
+      "last_seen": "2026-10-01",
+      "commit": "104a9b88",
+      "subject": "release(bot): 2.0.0 -- stores are Postgres-only; whole-bot point-in-time rollback",
+      "versions": {
+        "ui": "1.21.0",
+        "bot": "2.0.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-02",
+      "last_seen": "2026-10-02",
+      "commit": "4ed05134",
+      "subject": "release(ui): 1.21.1 -- Partial tab P&L no longer double-counts the banked TP1 leg",
+      "versions": {
+        "ui": "1.21.1",
+        "bot": "2.0.0"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]

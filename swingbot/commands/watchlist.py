@@ -1,10 +1,13 @@
 """!watchlist and its subcommands."""
 import asyncio
+import logging
 
 from swingbot.bot_core import bot
 from swingbot.core.marketdata.backtest_cache import ensure_cached_background
 from swingbot.core.marketdata.data import get_daily_data
 from swingbot.core.marketdata.watchlist import add_ticker, clear_watchlist, load_watchlist, remove_ticker
+
+log = logging.getLogger(__name__)
 
 
 @bot.group(name="watchlist", invoke_without_command=True)
@@ -24,11 +27,13 @@ async def watchlist_add(ctx, ticker: str):
     try:
         await asyncio.to_thread(get_daily_data, ticker, "5d")
     except Exception as e:
+        log.warning("!watchlist add %s: could not fetch data", ticker.upper(), exc_info=True)
         await ctx.send(
             f"⚠️ Heads up: couldn't fetch data for **{ticker.upper()}** ({e}). "
             f"It's still in your watchlist, but scans will skip it until this resolves. "
-            f"Common fixes: indices use Yahoo's `^` format (S&P 500 = `^GSPC`), metals use "
-            f"futures tickers (gold = `GC=F`, silver = `SI=F`), forex needs a `=X` suffix "
+            f"Common fixes: indices use Yahoo's `^` format (S&P 500 = `^GSPC`), spot metals are "
+            f"gold = `XAUUSD`, silver = `XAGUSD` (futures `GC=F` / `SI=F` still work and stay "
+            f"futures-priced), forex needs a `=X` suffix "
             f"(e.g. `EURUSD=X`). Use `!watchlist remove {ticker.upper()}` if you want to try a different symbol."
         )
 

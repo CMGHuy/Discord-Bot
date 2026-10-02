@@ -3,7 +3,7 @@ TRAIN-window strategy tuning grids via scripts/backtest/tune_strategy.py). At mo
 ONE job runs at a time -- tuning is deliberately serialized, both because
 concurrent grid sweeps would contend for the same OHLCV cache/CPU and
 because the workbench UI (Task C33+) only has room to show one running
-job's progress. State persisted to data/admin_jobs.json so a restart of
+job's progress. State persisted to the admin_jobs table so a restart of
 the admin process doesn't lose job history; a job found "running" at
 startup whose pid is actually dead (the admin process or the subprocess
 itself died mid-job -- e.g. a container restart) is reaped to "failed"
@@ -12,6 +12,7 @@ rather than permanently blocking every future job start.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import subprocess
@@ -93,10 +94,6 @@ def build_tune_args(strategy: str, params: dict | None) -> list[str]:
     return args
 
 
-def _jobs_path() -> str:
-    return os.path.join(config.DATA_DIR, "admin_jobs.json")
-
-
 def _log_dir() -> str:
     d = os.path.join(config._PROJECT_ROOT, "logs", "jobs")
     os.makedirs(d, exist_ok=True)
@@ -104,32 +101,15 @@ def _log_dir() -> str:
 
 
 def _read_jobs() -> dict:
-    from swingbot.core.db import stages
-    if stages.reads_db("jobs"):
-        from swingbot.core.db.repositories.jobs import jobs_repo
-        return jobs_repo().all_jobs()
-    path = _jobs_path()
-    if not os.path.exists(path):
-        return {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return {}
+    from swingbot.core.db.repositories.jobs import jobs_repo
+    return jobs_repo().all_jobs()
 
 
 def _write_jobs(jobs: dict) -> None:
-    from swingbot.core.db import stages
-    if stages.writes_json("jobs"):
-        path = _jobs_path()
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(jobs, f, indent=2)
-    if stages.writes_db("jobs"):
-        from swingbot.core.db.repositories.jobs import jobs_repo
-        repository = jobs_repo()
-        for record in jobs.values():
-            repository.put(record)
+    from swingbot.core.db.repositories.jobs import jobs_repo
+    repository = jobs_repo()
+    for record in jobs.values():
+        repository.put(record)
 
 
 def _pid_alive(pid: int) -> bool:
@@ -158,6 +138,26 @@ def _pid_alive(pid: int) -> bool:
 #: to describe the PROCESS, not one manager object.
 _WATCHED: set[str] = set()
 _WATCHED_LOCK = threading.Lock()
+
+
+def _ingest_tuning_result(job_id: str, result_path: str | None) -> None:
+    """Copy the child's ``--json`` output into Postgres once the job is done.
+
+    The child process writes the file (tune_strategy.py owns that format), so
+    the database write happens here, in the parent, when the job finishes. The
+    file is only a hand-off and is removed after ingest.
+    """
+    if not result_path:
+        return
+    try:
+        with open(result_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        from swingbot.core.db.repositories.tuning import tuning_repo
+        tuning_repo().save_result(job_id, payload)
+        os.remove(result_path)
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "could not store tuning result for job %s", job_id)
 
 
 class JobManager:
@@ -215,7 +215,7 @@ class JobManager:
             result_path = None
             if kind == "tune":
                 script = os.path.join(config._PROJECT_ROOT, "scripts", "backtest", "tune_strategy.py")
-                results_dir = os.path.join(config.DATA_DIR, "tuning_results")
+                results_dir = os.path.join(config.DATA_DIR, "tuning_handoff")
                 os.makedirs(results_dir, exist_ok=True)
                 result_path = os.path.join(results_dir, f"{job_id}.json")
                 argv = [sys.executable, script, *args, "--json", result_path]
@@ -257,6 +257,8 @@ class JobManager:
                             j[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
                             j[job_id]["returncode"] = proc.returncode
                             _write_jobs(j)
+                    if kind == "tune" and proc.returncode == 0:
+                        _ingest_tuning_result(job_id, result_path)
                 finally:
                     # In a finally: if this thread dies unexpectedly the job
                     # must become reapable again, or it would sit "running"

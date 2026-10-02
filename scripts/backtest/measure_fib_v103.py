@@ -25,10 +25,10 @@ from swingbot import config
 from swingbot.core.backtesting.acceptance import BOOTSTRAP_RESAMPLES
 from swingbot.core.backtesting.backtest import run_backtest
 from swingbot.core.market.entry_filters import DEFAULT_PARAMS, entries_for, gate_override
-from swingbot.core.market.strategy_types import HORIZONS, STRATEGY_GATES
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS, STRATEGY_GATES
 
 DIRECTIONS = ("bullish", "bearish")
-ALL_HZ = tuple(HORIZONS)
+ALL_HZ = tuple(LEGACY_HORIZONS)
 _MISSING = object()
 MECHANISMS = {
     "A": SimpleNamespace(strategy="Fibonacci", grid=(0.1, 0.25, 0.5), loosest=0.1, baseline=0.0, inert_ratio=None),

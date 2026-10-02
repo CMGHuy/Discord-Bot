@@ -18,18 +18,14 @@ empty list and a warning is logged once, matching this codebase's existing
 pattern for other optional/best-effort features (logo fetching, trendln).
 """
 import logging
-import os
 import time
 import urllib.request
-
-from swingbot import config
 
 log = logging.getLogger(__name__)
 
 NASDAQ_LISTED_URL = "https://ftp.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
 OTHER_LISTED_URL = "https://ftp.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
 
-_CACHE_PATH = os.path.join(config.DATA_DIR, "ticker_directory.json")
 _REFRESH_INTERVAL_SECONDS = 7 * 24 * 3600  # re-download at most once a week
 
 # In-memory copy for the life of the process, avoiding a JSON re-parse of a
@@ -96,29 +92,36 @@ def _build_directory() -> list[dict]:
                 seen.add(row["symbol"])
                 rows.append(row)
         except Exception as exc:
-            log.warning("Could not download ticker directory from %s: %s", url, exc)
+            log.warning("Could not download ticker directory from %s: %s", url, exc, exc_info=True)
     return rows
 
 
 def _save_cache(rows: list[dict]) -> None:
-    import json
+    # A regenerable cache: failing to persist it costs one re-download, so
+    # it logs instead of raising.
     try:
-        os.makedirs(config.DATA_DIR, exist_ok=True)
-        with open(_CACHE_PATH, "w") as f:
-            json.dump({"fetched_at": time.time(), "rows": rows}, f)
-    except OSError as exc:
-        log.warning("Could not write ticker directory cache: %s", exc)
+        from swingbot.core.db.repositories.ticker_directory import ticker_directory_repo
+        ticker_directory_repo().replace(rows)
+    except Exception:
+        log.warning("Could not write ticker directory cache to the database",
+                    exc_info=True)
 
 
 def _load_cache() -> tuple[list[dict], float]:
-    import json
-    if not os.path.exists(_CACHE_PATH):
-        return [], 0.0
+    """Returns (rows, loaded_at).
+
+    One of the TWO stores whose read may fall back (the other is rs_cache).
+    The fail-fast rule protects trading state; a directory of listed symbols
+    is regenerable from the exchange in seconds, and refusing to start
+    because a cache was unreachable would be worse than re-downloading it.
+    """
     try:
-        with open(_CACHE_PATH, "r") as f:
-            data = json.load(f)
-        return data.get("rows", []), data.get("fetched_at", 0.0)
-    except (OSError, ValueError):
+        from swingbot.core.db.repositories.ticker_directory import ticker_directory_repo
+        repo = ticker_directory_repo()
+        return repo.all_rows(), repo.loaded_at()
+    except Exception:
+        log.warning("ticker directory cache unreadable from the database; "
+                    "will re-download", exc_info=True)
         return [], 0.0
 
 
@@ -179,6 +182,9 @@ def search_tickers(query: str, limit: int = 15) -> list[dict]:
     _ensure_loaded()
     if not _directory:
         return []
+    rows = _search_db(query, limit)
+    if rows is not None:
+        return rows
 
     starts_with = []
     contains = []
@@ -194,3 +200,14 @@ def search_tickers(query: str, limit: int = 15) -> list[dict]:
 
     results = (starts_with + contains)[:limit]
     return results
+
+
+def _search_db(query: str, limit: int) -> list[dict] | None:
+    """Indexed search; None means "use the in-memory scan"."""
+    try:
+        from swingbot.core.db.repositories.ticker_directory import ticker_directory_repo
+        return ticker_directory_repo().search(query, limit)
+    except Exception:
+        log.warning("ticker directory search failed in the database; "
+                    "using the in-memory copy", exc_info=True)
+        return None

@@ -13,6 +13,7 @@ import pytest
 
 from tests.admin.api_v1_contract import (NULLABLE_NUMBER, NULLABLE_STR,
                                          assert_error, assert_shape)
+from tests.store_seed import seed_store
 
 _LOGIN = {"username": "admin", "password": "admin"}
 
@@ -39,8 +40,8 @@ def _trade(trade_id, *, closed_at="2026-08-03T20:00:00+00:00", status="win",
 @pytest.fixture
 def seed(admin_app, tmp_path):
     def _seed(trades=(), entries=()):
-        (tmp_path / "trades.json").write_text(json.dumps(list(trades)), encoding="utf-8")
-        (tmp_path / "journal.json").write_text(json.dumps(list(entries)), encoding="utf-8")
+        seed_store("trades", list(trades))
+        seed_store("journal", [{"created_at": "2026-01-01T00:00:00+00:00", **entry} for entry in entries])
     return _seed
 
 

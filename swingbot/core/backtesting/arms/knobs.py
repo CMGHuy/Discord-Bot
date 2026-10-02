@@ -18,7 +18,13 @@ def parse_knob(text: str) -> tuple[str, object]:
     attr, separator, raw = text.partition("=")
     if not separator or not attr:
         raise ValueError(f"--knob must be ATTR=value, got {text!r}")
-    return attr, config._cast(_field(attr), raw)
+    field = _field(attr)
+    allowed = [value for value, _label in field.options]
+    if allowed and raw not in allowed:
+        # A select's caster may fall back to a default ("off"); a measurement
+        # must never silently run a different arm than the one it named.
+        raise ValueError(f"{attr} must be one of {allowed}, got {raw!r}")
+    return attr, config._cast(field, raw)
 
 
 @contextmanager

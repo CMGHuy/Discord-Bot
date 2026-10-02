@@ -11,6 +11,7 @@ import pytest
 
 from swingbot import config
 from swingbot.core.tracking.performance import TradeLog
+from tests.store_seed import seed_store
 
 
 @pytest.fixture
@@ -20,11 +21,10 @@ def tlog(tmp_path, monkeypatch):
     # "no quote available" so every test not specifically about that price
     # fetch stays offline and deterministic; tests that care override this.
     monkeypatch.setattr("swingbot.core.marketdata.data.get_current_price", lambda *a, **k: None)
-    (tmp_path / "trades.json").write_text("[]", encoding="utf-8")
-    (tmp_path / "account.json").write_text(json.dumps({
+    seed_store("account", {
         "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
         "sizing_mode": "risk_pct", "balance_history": [],
-    }), encoding="utf-8")
+    })
     return TradeLog()
 
 
@@ -171,7 +171,7 @@ def test_manual_close_settles_the_still_open_remainder_as_a_leg(tlog, monkeypatc
     tid = _log(tlog, entry=100.0, target=110.0)
     tl_trade = tlog.get_trade_by_id(tid)
     tl_trade["legs"].append({"fraction": 0.5, "exit_price": 110.0, "r": 2.0, "reason": "tp1"})
-    tlog._save()
+    tlog._db_upsert(tl_trade)
     tlog.close_trade_manual(tid, reason="manual")
     t = tlog.get_trade_by_id(tid)
     assert t["exit_price"] == 108.0
@@ -248,7 +248,7 @@ def test_reversed_close_settles_the_still_open_remainder_as_a_leg(tlog):
     tid = _log(tlog, entry=100.0, target=110.0)
     trade = tlog.get_trade_by_id(tid)
     trade["legs"].append({"fraction": 0.5, "exit_price": 110.0, "r": 2.0, "reason": "tp1"})
-    tlog._save()
+    tlog._db_upsert(trade)
 
     closed = tlog.close_trade_reversed(tid, 97.5)
 
@@ -260,7 +260,7 @@ def test_reversed_close_settles_the_still_open_remainder_as_a_leg(tlog):
 
 
 def test_reversing_a_plan_linked_trade_closes_its_plan(tlog):
-    """The trade row is only half a v2 position; plans.json holds the other
+    """The trade row is only half a v2 position; the plans table holds the other
     half, and the plan manager acts on that. Closing only the row left the
     plan ACTIVE -- still stepped every minute, still able to post a close for
     a position already reversed -- next to the inverse's new plan."""

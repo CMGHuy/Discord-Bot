@@ -13,29 +13,14 @@ working around; the SPA gets the structured version.
 from __future__ import annotations
 
 import datetime as dt
-import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from flask import jsonify, request
 
-from swingbot import config
-
 from . import api_v1, error
 from .auth import require_auth
 
-
-def _watchlist_path() -> str:
-    """Resolved per call, NOT taken from watchlist.DEFAULT_PATH.
-
-    That module computes its default at import time from config.DATA_DIR, so
-    it keeps pointing at whatever DATA_DIR was when it was first imported --
-    which in a test run is the real project's data/ directory, monkeypatch or
-    not. Reading through it is merely wrong; WRITING through it edits the
-    user's actual watchlist from a test. Every call below therefore passes an
-    explicit path. Same value in production, isolable everywhere else.
-    """
-    return os.path.join(config.DATA_DIR, "watchlist.json")
 
 # Same shape the Jinja bulk-add applies: length cap plus an alphanumeric
 # test that tolerates the punctuation real symbols use (BRK.B, RDS-A, EURUSD=X).
@@ -149,7 +134,7 @@ def list_tickers():
     from swingbot.core.marketdata.watchlist import load_watchlist
     from swingbot.admin.watchlist_rows import build_market_rows, build_signals
 
-    tickers = list(load_watchlist(_watchlist_path()))
+    tickers = list(load_watchlist())
     counts = {t: {"open": 0, "closed": 0} for t in tickers}
     for tr in TradeLog().get_trades(status=None, limit=None) or []:
         bucket = counts.get(tr.get("ticker"))
@@ -194,8 +179,7 @@ def add_tickers():
         return error("invalid", "Body must contain a 'tickers' list.", 400)
 
     candidates = [str(t).strip().upper() for t in raw if str(t).strip()]
-    path = _watchlist_path()
-    existing = set(load_watchlist(path))
+    existing = set(load_watchlist())
 
     added, already, invalid = [], [], []
     for ticker in candidates:
@@ -204,7 +188,7 @@ def add_tickers():
         elif ticker in existing:
             already.append(ticker)
         else:
-            add_ticker(ticker, path)
+            add_ticker(ticker)
             added.append(ticker)
 
     # Non-blocking history warm-up for genuinely new symbols; cached ones
@@ -214,7 +198,7 @@ def add_tickers():
 
     return jsonify({
         "added": added, "already_present": already, "invalid": invalid,
-        "total": len(load_watchlist(path)),
+        "total": len(load_watchlist()),
     })
 
 
@@ -224,10 +208,9 @@ def remove_ticker_route(symbol: str):
     from swingbot.core.marketdata.watchlist import load_watchlist, remove_ticker
 
     symbol = symbol.strip().upper()
-    path = _watchlist_path()
-    if symbol not in set(load_watchlist(path)):
+    if symbol not in set(load_watchlist()):
         return error("not_found", f"{symbol!r} is not in the watchlist.", 404)
-    remaining = remove_ticker(symbol, path)
+    remaining = remove_ticker(symbol)
     return jsonify({"removed": symbol, "total": len(remaining)})
 
 

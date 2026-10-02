@@ -13,6 +13,13 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   78 hourly, what the edge-engine tasks depend on -- and, since v47, what
   the live scan reads first). Both are gitignored.
   Check which one a script reads before pointing it at a path.
+- **Spot metals are never cached under their own name (v109).** `XAUUSD` /
+  `XAGUSD` bars are `GC=F` / `SI=F` bars × a live spot ratio
+  (`marketdata/spot_metals.py`). Only the raw future is cached (`GC_F.csv`);
+  `save_to_disk` and `data_refresh._merge_save` raise on a spot name, and
+  `refresh_all`, `update_cache` and `backtest_cache.ensure_cached` map it to
+  the future. A cached scaled frame would freeze one day's ratio into later
+  levels. The scan crawl skips the disk cache for spot symbols entirely.
 - **`market_data/` is timeframe-first, not ticker-first.** Folders are the
   semantic names in `data_store.TIMEFRAMES` (`monthly`, `weekly`, `daily`,
   `hourly`, `15min`, …); filenames are sanitized (`GC=F` → `GC_F.csv`, same
@@ -42,13 +49,23 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   real module directly — `from swingbot.core.scanning import engine as
   scan_engine` is the live equivalent of the old `scan_engine.py` shim import,
   keeping the `scan_engine.*` vocabulary at usage sites unchanged.
-- **Sizing and embed-building happen in `core/scanning/engine.py`'s
-  alert-building loop**, right before `build_embed()` — *not* in
-  `commands/scanning.py::_send_alerts`, which only posts already-built
-  tuples. Wiring sizing there is a silent no-op.
-- **Add embed fields through the `sections["headline"]` accumulator** in
-  `embeds.py`, never a raw `embed.add_field()` — the latter breaks
-  `embed_theme.SECTION_ORDER`.
+- **Sizing and embed-building happen in `core/scanning/scan_run.py`'s
+  alert-building loop** (inside `_sync_run_scan`: the heat / cluster /
+  kill-switch stamps, then `build_embed()` and `build_simple_alert()`) —
+  *not* in `commands/scanning/alerts.py::_send_alerts`, which only posts
+  already-built tuples. Wiring sizing there is a silent no-op. The v2
+  ticket's share count comes from `plan_table._sizing_snapshot`, called by
+  `execution_embeds.build_ticket_embed`.
+- **Add embed fields through the `sections[...]` accumulator** in
+  `core/scanning/alert_embeds.py::build_embed`, never a raw
+  `embed.add_field()` — the latter breaks `presentation.SECTION_ORDER`
+  (`core/presentation/tokens.py`).
+- **Every pushed message is styled by `core/presentation/kinds.py` (v110)
+  and built as a `PushEmbed`.** Send it with
+  `channel.send(**ui.push_kwargs(embed))`. A bare `send(embed=embed)` still
+  posts, but silently drops the push-preview `content` line, which is the only
+  text a phone notification shows. Command replies call
+  `apply_chrome(accent=…)` and are deliberately not registry-styled.
 - **Scan-loop ordering invariant:** ticker screens (liquidity, data quality)
   go *after* `update_open_trades`/`_check_near_close` and *before* the
   new-signal horizon loop, so an already-open paper trade keeps being
@@ -146,42 +163,23 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   after Release B and was deleted on 2026-08-14. **If you ever reintroduce an
   enumerated filter dropdown, build its options from the full history
   server-side** — deriving them from the loaded page is the original bug.
-- **Not every `data/` JSON file is written atomically — six are not.** Spec
-  v12 Decision 2 asserted the whole directory was; the NG23 audit found
-  otherwise, which is why that task existed. Atomic, via
-  `jsonio.atomic_write_json` (`<path>.tmp` → fsync → `os.replace`):
-  `trades.json` (`core/tracking/performance.py:225`), `plans.json`
-  (`planning/plan_store.py`), `starred_plans.json` (`commands/views.py:36`),
-  `account.json` (`core/planning/account.py:174`), `state.json`
-  (`core/infra/state.py:31`), `analytics_snapshot.json`
-  (`core/analytics/snapshots.py:71`), `journal.json`
-  (`core/analytics/journal.py:32`), `killswitch.json`
-  (`core/edge/throttle.py:94`). **Plain `open(path, "w")` + `json.dump`**
-  — truncate first, then fill, so a reader inside that window gets a
-  truncated document: `scan_snapshots.json` (`core/scanning/embeds.py:58`),
-  `bot_heartbeat.json` (`commands/scanning.py:172`), `watchlist.json`
-  (`core/marketdata/watchlist.py:21`), `ticker_directory.json`
-  (`core/marketdata/ticker_directory.py:108`), `admin_jobs.json`
-  (`admin/jobs.py:120`),
-  and `.env` (`admin/helpers.py:114`). `tuning_results/<job>.json` uses
-  `Path.write_text` (`scripts/backtest/tune_strategy.py:171`) — a fresh file per job,
-  so nothing is truncated, but it is listed in the directory before it is
-  complete. **The event watcher is not the exposure** — it compares
-  `(mtime, size)` and never opens a watched file. The exposure is the SPA,
-  which refetches through the v1 API on the event, and the API does parse.
-  The 250ms trailing debounce puts that refetch at least a debounce after
-  the last observed write, which covers all of these in practice (they are
-  small), so this is a narrow race and not a live bug — but note that push
-  *correlates* it where polling did not: the 5-second poll hit a write
-  window by luck, an event fires precisely because of the write. Use
-  `atomic_write_json` for any new file under `data/`, and before growing any
-  of the six.
-- **The non-parsed watched paths are deliberate, not an oversight.** The four
-  `*.flag` files carry their whole meaning in existence + mtime, and
-  `scan_telemetry.jsonl` is append-only, so a torn trailing line is the
-  reader's problem and the API owns tolerating it (spec v12 Decision 2).
-  Do not "fix" either by adding a parse to the watcher — that would trade
-  away the property that makes it immune to schema changes.
+- **Only four sources are still files, and only one is written atomically.**
+  Every trading and operational store is a Postgres table (v116), so there is
+  no `data/trades.json` to tear. The four file sources raise their SSE event
+  themselves through `notify.publish` (`core/db/events.py` `FILE_PUBLISHERS`):
+  `analytics_snapshot.json` (`jsonio.atomic_write_json`, temp file + fsync +
+  `os.replace`), `scan_snapshots.json` (`core/scanning/snapshots.py`, plain
+  `open(path, "w")` + `json.dump`: truncate, then fill, so a reader inside
+  that window sees a torn document), `scan_telemetry.jsonl` (append-only; a
+  torn trailing line is the reader's problem) and `.env` (`admin/helpers.py`
+  `_write_env_text`, temp file + rename). The SPA refetches through the v1 API
+  on the event, which parses; the 250ms trailing debounce puts that refetch
+  after the write in practice, so the `scan_snapshots.json` race is narrow, not
+  a live bug. Use `atomic_write_json` for any new file under `data/`.
+- **A database write failure at issuance pauses scanning (`StoreWriteHalt`).**
+  `core/db/write_failure.py` halts the scan loop rather than alert on a plan
+  that was never recorded. Unpause from the admin UI after fixing the
+  database; the unpause is the acknowledgement.
 
 ## `PlanManager.check_bar()` is unwired — do not "fix" it
 
@@ -195,7 +193,7 @@ Do not silently unify them: v68 deliberately measured `min_confluence=1` and
 that population. `tests/backtesting/test_knob_observability.py` documents the
 replay harness blind spots explicitly.
 
-`check_bar` / `_check_bar_active` / `_check_bar_partial` model overnight gap fills and are tested, but production never calls them. The live bot exits exclusively through `poll()`. Keep the path inert: wiring it would create a second authority for `plans.json`. Change `_step_active` / `_step_partial` for live exits; mirror bar checks only to keep their tests honest.
+`check_bar` / `_check_bar_active` / `_check_bar_partial` model overnight gap fills and are tested, but production never calls them. The live bot exits exclusively through `poll()`. Keep the path inert: wiring it would create a second authority for the `plans` table. Change `_step_active` / `_step_partial` for live exits; mirror bar checks only to keep their tests honest.
 
 ## The full state machine now runs across the whole Berlin-local active window
 
@@ -276,3 +274,96 @@ with this gap in place. Detail: `docs/strategy-types/shared-mechanics.md` §4a.
 **Fixed by v104 Part 0 (V104-2):** the widening ceiling is now
 `stop_scope.stop_ceiling(...)` -- 2% out of scope. Numbers measured before
 this fix are not comparable to numbers after it.
+
+## Editing production `.env` with `sed -i` changes nothing live
+
+`docker-compose.yml` bind-mounts `.env` as a single file, which tracks the
+inode. `sed -i`, and any other tool that writes a temp file and renames it,
+leaves both containers reading the old inode. The admin UI then saves into
+that orphan, and the bot's reload never fires. Found 2026-09-30, when a
+`MIN_STOP_DISTANCE_PCT` edit showed on the host but read 2.0 in the container.
+
+- **Edit in place:** `python3 scripts/ops/env_set.py KEY value` (edits in
+  place, then snapshots the file), nano, or `cat new > .env`.
+- **Or recreate:** `SWING_BOT_IMAGE=<running sha- image> docker compose up -d
+  --force-recreate --no-build --wait bot admin`. Without `SWING_BOT_IMAGE`,
+  compose falls back to the non-existent `swing-bot:latest`.
+- **Verify:** `docker compose exec -T bot grep <KEY> /app/.env`.
+
+## Stop floor and 2% cap: the empty band, and the v115 clamp
+
+`f01e87e2` rejects any plan with a stop over 2% (`risk_cap` in
+`attach_plan_v2`). With `MIN_STOP_DISTANCE_PCT` >= 2.0, only a stop of exactly
+2.0% survived, and production posted nothing from Sep 25 to Sep 30. A replay
+on live data gave 0 setups at a 2.0 or 1.5 floor and 10 at 1.0, so production
+ran 1.0 as a stopgap on 2026-09-30.
+
+**v115 (`CLAMP_STOP_TO_HARD_CAP`, default on)** moves a wider confluence stop
+to **1.75%** from the trigger inside `build_confluence_plan`, before target
+selection. That is the 2% cap minus `CLAMP_HEADROOM_PCT` (0.25, a constant in
+`builders.py`). The floor is back at 2.0 (production back on 2.0 since
+2026-09-30 20:44 UTC, when the v115 image was live). The `risk_cap` reject in `attach_plan_v2` stays as a safety net.
+
+- **Why 1.75, not 2.0.** `plan_manager._step_pending` cancels a stop-entry
+  fill `risk_cap` when `planned_loss_pct(fill, stop) > 2.0`, with no
+  tolerance. A stop at exactly 2% is cancelled on any fill past the trigger,
+  and float rounding can tip a stop at exactly 2% over the cap.
+  0.25% of headroom absorbs a small gap. A fill more than about 0.25% past
+  the trigger is still cancelled `risk_cap`: that is the 2% policy working,
+  not a bug.
+
+- **With the clamp off, the empty band comes back.** A funnel of "N checked ->
+  N no entry point" or a run of `risk_cap` rejects is this band, not a data
+  fault.
+- **Replay clamps by default.** `replay_scenarios` and `armed_replay.plan_at`
+  call `build_confluence_plan`. Confluence replay numbers produced before
+  v115 used the unclamped stop and are not comparable to later ones. To
+  reproduce them, set `CLAMP_STOP_TO_HARD_CAP=false`. The backtest has no
+  fill guard, so it never models a gap cancel: live can cancel a clamped
+  plan that replay fills.
+- `armed_replay.plan_at` stores the scenario's **unclamped**
+  `stop_distance_pct` while its plan carries the clamped stop. Read the stop
+  off the plan, never off that field. This is known and deliberately left
+  unchanged.
+- A clamped stop sits at no structural level. It reaches an alert only with
+  `PLAN_ENGINE_V2=on`, and then the clamped stop shows everywhere in the
+  alert: plan table, chart, ticket, headline, simple mirror and explanation.
+  The stop % and R come from the v2 plan **only when the stop was clamped**
+  (`explain.v2_stop_was_moved`, used by `plan_table.stop_figures_for_display`);
+  every other alert, and every target figure, is unchanged. In `shadow`, the
+  scenario's unclamped stop is what posts.
+- v114 (a 1.5-2.0 band, measured before shipping) was abandoned before any
+  build on 2026-09-30 (`no-lift/`), with its VALIDATION shot unspent. It is
+  still the measured route if the partner later wants the band instead of
+  the clamp.
+
+## Futures skipped for dollar volume is deliberate (v115)
+
+`SI=F: skipping new-signal scan -- avg dollar vol $0.1M < $20M floor` is the
+configured behaviour, not a bug. Yahoo reports futures volume in contracts and
+FX/index volume as 0. `4a649b36` exempted those classes. v115 put that
+exemption behind `LIQUIDITY_EXEMPT_NON_EQUITY`, default **off**, to restore
+the 09-22 scan. Turn it on to scan thin-contract futures again. The v109 spot
+metals (`spot_metals.SPOT_PAIRS`: XAUUSD, XAGUSD) stay exempt either way
+(partner, 2026-09-30). They carry their future's contract volume, so XAGUSD
+scans while SI=F, on the same bars, is skipped. That is by design.
+
+## The market_data cache never self-heals (v116 follow-up)
+
+`data_refresh._merge_save` is a UNION that never overwrites bars already on disk, and a warm
+refresh fetches only bars newer than the last cached one; `refresh_symbol(force=True)` merges
+too. So a single bad full fetch is permanent: around 2026-08-05 16 daily and 5 hourly files
+(PLTR, SNOW, SOFI, SBUX, TSLA, ... AVGO, AXON, BA, BKNG, CRM) ended up with another
+instrument's older history (SOFI started in 2000, TSLA in 1992, SNOW and PLTR shared one
+row count and start date), with correct recent bars appended on top for two months. The
+signs: the scan found almost nothing for those tickers, and `history_splice` refused to
+splice them ("overlap closes disagree").
+
+- **Audit and repair with `scripts/ops/market_cache_repair.py`** (`plan` is read-only;
+  `apply` quarantines each bad file under `market_data/_quarantine/<stamp>/` and refetches it
+  cold, only when the fresh frame agrees with Alpaca). Re-run `plan` after any suspicious
+  refresh or provider change; it should print only `OK`.
+- **Never "fix" one by deleting rows or forcing a refresh**: a forced refresh merges, so the
+  wrong older bars survive. Move the file away first, then refetch.
+- Weekly/monthly files differ from a fresh yfinance download by a small uniform offset
+  (adjustment basis); that is not this problem and is deliberately not repaired.

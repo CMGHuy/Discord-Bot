@@ -1,51 +1,54 @@
 ---
 name: schema-change
-description: Use when changing the Postgres schema, a store's read or write path, or a data migration -- the JSON-to-Postgres strangler is per-store and partially complete, so some stores are migrated and some are not. Not for reading data, not for analytics queries, and not for the JSON files under data/ that no longer back a migrated store.
+description: Use when changing the Postgres schema, a store's read or write path, or a data migration -- every store is Postgres-only, so a shape change is an Alembic revision following docs/claude/schema-evolution.md. Not for reading data, not for analytics queries, and not for the few files under data/ that were never stores (snapshots, telemetry).
 ---
 <!-- GENERATED from .claude/skills/schema-change/SKILL.md by scripts/dev/sync_codex.py -- edit the source, then re-run the script. Never edit this copy. -->
 
 # Schema change
 
-## Step 1 — Establish which stores are migrated
+## Step 1 — Read the recipe and pick the operation
 
-The strangler runs per store, not as one cutover. Check the current state in
-code, not from a plan doc: does `swingbot/core/db/repositories/` have a
-repository class for the store you're touching, and does
-`scripts/db/parity_report.py`'s `STORES` dict cover it. A plan can say a
-store is migrated after the code has already moved past it, or before.
+Read `docs/claude/schema-evolution.md` and pick one: add (a field in `doc`, no
+migration), rename or drop (a data revision using `swingbot/core/db/doc_fields.py`),
+or promote (a DDL revision plus a reason in `schema.PROMOTION_REASONS`). Never add
+read-time upcasting for an old field name; the revision converts old rows.
 
 ## Step 2 — Read up before writing DDL
 
 Confirm current Postgres DDL best practice for the change you're making
 before you write it -- a schema change is not reversible the way an app-code
-change is.
+change is. A new revision's `down_revision` is the current head
+(`python -m alembic heads`).
 
-## Step 3 — `parity_report` is the only verifier to trust
+## Step 3 — The three contract tests
 
-Run `python scripts/db/parity_report.py` after any import or migration
-touching a store. It diffs the JSON source against the Postgres table field
-by field; an import that completes without raising has not been verified by
-that alone.
+`tests/db/test_schema_contract.py`, `tests/db/test_unknown_field_round_trip.py`
+and `tests/db/test_doc_fields.py` guard the hybrid layout (promoted columns plus
+`doc`). Run them after any change to `schema.py`, a repository or a revision;
+a migration that completes without raising has not been verified by that alone.
 
-## Step 4 — Round-trip before cutover
+## Step 4 — Round-trip and downgrade
 
-Before pointing a store's reads at Postgres, write a record, read it back
-through the same repository, and compare -- against real data pulled from the
-store you're migrating, not a fixture built to round-trip cleanly.
+Write a record, read it back through the same repository, and compare --
+against real data shape pulled from the store, not a fixture built to round-trip
+cleanly. Run the revision's downgrade once against the test database.
 
 ## The gate
 
-`parity_report` clean on the store you touched, and the round-trip from Step
-4 committed as a test someone else can re-run -- not one you ran once
-locally and threw away.
+The contract tests green, the revision's downgrade run once against the test
+database, and the round-trip committed as a test someone else can re-run. Before
+a drop or rename runs on production, a point-in-time-rollback drill within the
+last 7 days (`docs/deploy/DB_RESTORE.md`); the rollback is
+`scripts/ops/rollback_to.sh`.
 
 ## Known wrong turns
 
 | Tempting | Reality |
 |---|---|
-| "The import printed no errors" | A swallowed write failure also prints nothing -- silence is not success. |
+| "The migration printed no errors" | A swallowed write failure also prints nothing -- silence is not success. |
 | "The row counts match" | Counts matching says nothing about field content; a field can be dropped or mangled on every row while the count holds. |
-| "The JSON is still there as a backup" | It stays a backup only until a writer overwrites it -- check whether the write path already switched before trusting it. |
+| "I'll read the old field name too, just in case" | That is a second code path per field forever; the revision converts the rows once. |
+| "A JSON file under data/ is a backup" | No store is backed by a file any more; the backup is `rollback_to.sh` and the `pg_dump` files. |
 
 ## Trigger table
 

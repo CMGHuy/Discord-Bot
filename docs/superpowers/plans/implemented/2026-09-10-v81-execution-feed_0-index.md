@@ -73,7 +73,7 @@ coroutines run under `asyncio.run`), JSON persistence through `PlanStore`.
 | `swingbot/core/scanning/lifecycle_embeds.py` | `notify_plan_events` routes to the feed, returns deliveries | F6 |
 | `swingbot/commands/scanning/loops.py` | `trade_monitor` acknowledges deliveries; sweeps with no open trade | F6 |
 | `tests/presentation/test_surface_agreement.py` | the feed's stop agrees with `plan_view` | F7 |
-| `docs/superpowers/plans/2026-08-29-v67-json-to-postgres_2b-trading-state-plans.md` | P2-07 note and round-trip fields | F7 |
+| `docs/superpowers/plans/implemented/2026-08-29-v67-json-to-postgres_2b-trading-state-plans.md` | P2-07 note and round-trip fields | F7 |
 | `scripts/dev/preview_execution_feed.py` | new — prints every instruction | F7 |
 
 ## Parallelisation

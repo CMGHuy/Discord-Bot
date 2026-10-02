@@ -42,7 +42,7 @@ fact; verdict comes from the merge commits, not the boxes, per
 **Files:**
 - Modify: `swingbot/core/planning/plan_types.py` (append one field after `pending_notice`, the last field of `TradePlanV2`)
 - Modify: `swingbot/core/scanning/analyze.py:327-388` (`attach_plan_v2`)
-- Modify: `docs/superpowers/plans/2026-08-29-v67-json-to-postgres_2b-trading-state-plans.md` (note under `### Task P2-07`)
+- Modify: `docs/superpowers/plans/implemented/2026-08-29-v67-json-to-postgres_2b-trading-state-plans.md` (note under `### Task P2-07`)
 - Modify: `docs/superpowers/specs/2026-09-15-v87-intraday-bar-archive-design.md` §3.3 (wording fix, see Step 9)
 - Test: `tests/planning/test_plan_serialization.py`, `tests/scanning/test_engine_v2_plans.py`, `tests/db/test_plans_repository.py`, `tests/backtesting/test_backtest_scenarios.py`
 
@@ -161,7 +161,7 @@ Same three commands as Step 4. Expected: all PASS, `0 failed`.
 
 In `tests/db/test_plans_repository.py`, in `test_full_plan_document_round_trips`, add `issued_at="2026-09-15T14:31:07+00:00",` to the `_plan("P1", ...)` call's keyword arguments, beside `notified_stop=101.5,`. If a second round-trip test (`test_the_full_plan_dict_round_trips`) exists in the file, add the same keyword there too.
 
-In `docs/superpowers/plans/2026-08-29-v67-json-to-postgres_2b-trading-state-plans.md`, directly below the existing v81 note under `### Task P2-07: The plans repository and importer`, insert:
+In `docs/superpowers/plans/implemented/2026-08-29-v67-json-to-postgres_2b-trading-state-plans.md`, directly below the existing v81 note under `### Task P2-07: The plans repository and importer`, insert:
 
 ```markdown
 > **v87 (2026-09-15):** `TradePlanV2` gained `issued_at` (UTC ISO timestamp,
@@ -183,7 +183,7 @@ persists goes through; the backtest leaves it `None`,`. (Verified while planning
 - [ ] **Step 10: Commit**
 
 ```bash
-git -C <worktree> add swingbot/core/planning/plan_types.py swingbot/core/scanning/analyze.py tests/planning/test_plan_serialization.py tests/scanning/test_engine_v2_plans.py tests/backtesting/test_backtest_scenarios.py tests/db/test_plans_repository.py docs/superpowers/plans/2026-08-29-v67-json-to-postgres_2b-trading-state-plans.md docs/superpowers/specs/2026-09-15-v87-intraday-bar-archive-design.md
+git -C <worktree> add swingbot/core/planning/plan_types.py swingbot/core/scanning/analyze.py tests/planning/test_plan_serialization.py tests/scanning/test_engine_v2_plans.py tests/backtesting/test_backtest_scenarios.py tests/db/test_plans_repository.py docs/superpowers/plans/implemented/2026-08-29-v67-json-to-postgres_2b-trading-state-plans.md docs/superpowers/specs/2026-09-15-v87-intraday-bar-archive-design.md
 git -C <worktree> commit -m "feat(v87): stamp issued_at on every live plan"
 ```
 

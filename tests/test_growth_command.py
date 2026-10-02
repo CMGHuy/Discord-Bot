@@ -152,7 +152,6 @@ def test_growth_command_no_chart_below_min_history(monkeypatch, tmp_path):
 
 def test_killswitch_command_status_reports_off_by_default(monkeypatch, tmp_path):
     from swingbot.core.edge import throttle
-    monkeypatch.setattr(throttle, "KILLSWITCH_PATH", str(tmp_path / "killswitch.json"))
 
     ctx = MagicMock()
     ctx.send = AsyncMock()
@@ -166,7 +165,6 @@ def test_killswitch_command_status_reports_off_by_default(monkeypatch, tmp_path)
 
 def test_killswitch_command_on_engages_and_status_reflects_it(monkeypatch, tmp_path):
     from swingbot.core.edge import throttle
-    monkeypatch.setattr(throttle, "KILLSWITCH_PATH", str(tmp_path / "killswitch.json"))
 
     ctx = MagicMock()
     ctx.send = AsyncMock()
@@ -184,7 +182,6 @@ def test_killswitch_command_on_engages_and_status_reflects_it(monkeypatch, tmp_p
 
 def test_killswitch_command_off_releases(monkeypatch, tmp_path):
     from swingbot.core.edge import throttle
-    monkeypatch.setattr(throttle, "KILLSWITCH_PATH", str(tmp_path / "killswitch.json"))
     throttle.set_kill(True, reason="manual")
 
     ctx = MagicMock()

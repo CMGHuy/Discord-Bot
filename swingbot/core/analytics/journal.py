@@ -7,57 +7,31 @@ a lesson, they only render what's already here."""
 from __future__ import annotations
 
 import logging
-import os
-import threading
 from datetime import datetime, timezone
 
-from swingbot import config
 from swingbot.core.analytics import metrics
 from swingbot.core.analytics.mfe_mae import compute_mfe_mae
-from swingbot.core.infra.jsonio import atomic_write_json, read_json
 
-log = logging.getLogger("swing-bot.journal")
-
-_LOCK = threading.Lock()
+log = logging.getLogger(__name__)
 
 
 class JournalStore:
-    def __init__(self, path: str | None = None):
-        self.path = path or os.path.join(config.DATA_DIR, "journal.json")
-
-    def _load(self) -> list[dict]:
-        return read_json(self.path, [])
-
-    def _save(self, entries: list[dict]) -> None:
-        atomic_write_json(self.path, entries)
-
     def add(self, entry: dict) -> dict:
         """Insert (or replace, if `entry["trade_id"]` already exists) one
         journal entry, stamping `created_at` fresh every time -- a
         re-add (e.g. the backfill script re-run, or a future re-journal
         after a correction) always reflects "when this record was last
         written", not "when it was first written"."""
-        from swingbot.core.db import stages
+        from swingbot.core.db.repositories.journal import journal_repo
         stamped = dict(entry, created_at=datetime.now(timezone.utc).isoformat())
-        if stages.writes_json("journal"):
-            with _LOCK:
-                entries = self._load()
-                entries = [item for item in entries if item.get("trade_id") != entry.get("trade_id")]
-                entries.append(stamped)
-                self._save(entries)
-        if stages.writes_db("journal"):
-            from swingbot.core.db.repositories.journal import journal_repo
-            journal_repo().upsert(stamped)
+        journal_repo().upsert(stamped)
         return stamped
 
     def get(self, trade_id: str) -> dict | None:
-        from swingbot.core.db import stages
-        if stages.reads_db("journal"):
-            from swingbot.core.db.dual import normalise
-            from swingbot.core.db.repositories.journal import journal_repo
-            entry = journal_repo().get(trade_id)
-            return None if entry is None else normalise(entry)
-        return next((e for e in self._load() if e.get("trade_id") == trade_id), None)
+        from swingbot.core.db.codec import normalise
+        from swingbot.core.db.repositories.journal import journal_repo
+        entry = journal_repo().get(trade_id)
+        return None if entry is None else normalise(entry)
 
     def entries(self, *, strategy: str | None = None, tag: str | None = None,
                 outcome: str | None = None, since: str | None = None,
@@ -65,39 +39,18 @@ class JournalStore:
         """Every matching entry, newest first (by `closed_at`, falling back
         to `created_at` for an entry that somehow lacks it). All filters
         are AND-combined; omit a filter (leave it None) to not apply it."""
-        from swingbot.core.db import stages
-        if stages.reads_db("journal"):
-            from swingbot.core.db.dual import normalise
-            from swingbot.core.db.repositories.journal import journal_repo
-            return normalise(journal_repo().entries(
-                strategy=strategy, tag=tag, outcome=outcome, since=since, has_note=has_note
-            ))
-        rows = self._load()
-        if strategy is not None:
-            rows = [e for e in rows if e.get("strategy") == strategy]
-        if tag is not None:
-            rows = [e for e in rows if tag in (e.get("tags") or [])]
-        if outcome is not None:
-            rows = [e for e in rows if e.get("outcome") == outcome]
-        if since is not None:
-            rows = [e for e in rows if (e.get("closed_at") or "") >= since]
-        if has_note is not None:
-            rows = [e for e in rows if bool((e.get("note") or "").strip()) == has_note]
-        rows.sort(key=lambda e: e.get("closed_at") or e.get("created_at") or "", reverse=True)
-        return rows
+        from swingbot.core.db.codec import normalise
+        from swingbot.core.db.repositories.journal import journal_repo
+        return normalise(journal_repo().entries(
+            strategy=strategy, tag=tag, outcome=outcome, since=since, has_note=has_note
+        ))
 
     def set_note(self, trade_id: str, note: str) -> bool:
         """Attach/replace a free-text note on an existing entry. False (no
         exception) when `trade_id` isn't journaled -- most likely a trade
         that hasn't closed yet, or predates the journal existing at all."""
-        with _LOCK:
-            entries = self._load()
-            for e in entries:
-                if e.get("trade_id") == trade_id:
-                    e["note"] = note
-                    self._save(entries)
-                    return True
-            return False
+        from swingbot.core.db.repositories.journal import journal_repo
+        return journal_repo().patch(trade_id, {"note": note}) is not None
 
 
 #: v50: the vocabulary now lives in metrics.py so both modules share one

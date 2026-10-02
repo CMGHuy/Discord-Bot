@@ -23,6 +23,7 @@ import pytest
 
 from tests.admin.api_v1_contract import assert_error, assert_shape
 from tests.admin.test_api_v1_trades import _trade
+from tests.store_seed import seed_store
 
 _LOGIN = {"username": "admin", "password": "admin"}
 _TRADE_ID = "dddddddddddddddd"
@@ -31,9 +32,8 @@ _TRADE_ID = "dddddddddddddddd"
 @pytest.fixture
 def seed(admin_app, tmp_path):
     def _seed(trades=(), journal=()):
-        (tmp_path / "plans.json").write_text("[]", encoding="utf-8")
-        (tmp_path / "trades.json").write_text(json.dumps(list(trades)), encoding="utf-8")
-        (tmp_path / "journal.json").write_text(json.dumps(list(journal)), encoding="utf-8")
+        seed_store("trades", list(trades))
+        seed_store("journal", [{"created_at": "2026-01-01T00:00:00+00:00", **entry} for entry in journal])
     return _seed
 
 

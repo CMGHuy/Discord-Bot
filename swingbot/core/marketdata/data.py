@@ -10,7 +10,7 @@ import yfinance as yf
 
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.infra.retry import with_retry
-from swingbot.core.marketdata import yf_safe
+from swingbot.core.marketdata import spot_metals, yf_safe
 from swingbot.core.marketdata.providers import router
 from swingbot.core.marketdata.providers.base import SOURCE_YF, is_alpaca_eligible
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
@@ -36,6 +36,8 @@ def get_daily_data(ticker: str, period: str = "2y") -> pd.DataFrame:
     indicator used across all swing horizons (EMA200 for the 6-month
     horizon, plus its lookback window).
     """
+    if spot_metals.is_spot_metal(ticker):
+        return _spot_daily_or_raise(ticker, period)
     if is_alpaca_eligible(ticker):
         # v106: an Alpaca miss comes back empty (the no-op yf_fetch), so the
         # candidate_symbols loop below runs exactly as before.
@@ -62,8 +64,22 @@ def get_daily_data(ticker: str, period: str = "2y") -> pd.DataFrame:
     raise ValueError(
         f"No data returned for '{ticker}'. Tried: {', '.join(tried)}. "
         f"Check the symbol matches Yahoo Finance's format (e.g. '^GSPC' for S&P 500, "
-        f"'GC=F' for gold, 'EURUSD=X' for forex)."
+        f"'EURUSD=X' for forex). Spot gold = 'XAUUSD', spot silver = 'XAGUSD' "
+        f"('GC=F' / 'SI=F' still work and stay futures-priced)."
     )
+
+
+def _spot_daily_or_raise(ticker: str, period: str) -> pd.DataFrame:
+    """v109: a spot metal's bars are its future's bars x the live spot ratio
+    (router.daily_bars). Never the candidate_symbols() loop: ALIASES maps
+    XAUUSD -> GC=F, which would hand back UNSCALED futures prices."""
+    key = ticker.upper().strip()
+    df = router.daily_bars([key], period, _yf_daily_batch).get(key)
+    if df is None:
+        raise ValueError(
+            f"No spot data for '{key}': {router.spot_miss_reason(key) or 'unavailable'}. "
+            f"Spot symbols never fall back to unscaled futures prices.")
+    return df
 
 
 def get_daily_data_batch(tickers: list, period: str = "2y") -> dict:
@@ -104,7 +120,7 @@ def _yf_daily_batch(tickers: list, period: str) -> dict:
                          label=f"get_daily_data_batch({len(tickers)} tickers)")
     except Exception as exc:
         log.error("get_daily_data_batch failed for %d ticker(s) after %d attempt(s): %s",
-                   len(tickers), FETCH_RETRY_ATTEMPTS, exc)
+                   len(tickers), FETCH_RETRY_ATTEMPTS, exc, exc_info=True)
         return {}
     if raw is None or raw.empty:
         return {}
@@ -211,7 +227,7 @@ def _yf_batch_prices(tickers: list) -> dict:
         raw = yf_safe.download(" ".join(tickers), period="1d", interval="1m",
                           group_by="ticker", prepost=True, progress=False)
     except Exception as exc:
-        log.error("get_current_price_batch failed for %d ticker(s): %s", len(tickers), exc)
+        log.error("get_current_price_batch failed for %d ticker(s): %s", len(tickers), exc, exc_info=True)
         return {}
     if raw is None or raw.empty:
         return {}
@@ -500,6 +516,21 @@ def _cached_or_alpaca_quote(ticker_key: str, cached, now: float,
     return PriceQuote(price, False)
 
 
+def _spot_price_detail(ticker_key: str, cached, now: float,
+                       allow_stale: bool) -> PriceQuote | None:
+    """v109: a spot metal's live price is gold-api.com's spot quote. Missing
+    or stale is the same "no price" a failed quote already gives: None for a
+    trading caller, the last known-good value (flagged stale) for display.
+    Never the candidate loop, which would price XAUUSD off GC=F."""
+    quote = spot_metals.spot_quote(ticker_key)
+    if quote is not None:
+        _price_cache[ticker_key] = (quote.price, now, False)
+        return PriceQuote(quote.price, False)
+    if cached and allow_stale:
+        return PriceQuote(cached[0], True)
+    return None
+
+
 def get_current_price_detail(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS,
                              *, allow_stale: bool = True) -> PriceQuote | None:
     """
@@ -528,6 +559,8 @@ def get_current_price_detail(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SE
     ticker_key = ticker.upper().strip()
     cached = _price_cache.get(ticker_key)
     now = time.monotonic()
+    if spot_metals.is_spot_metal(ticker_key):
+        return _spot_price_detail(ticker_key, cached, now, allow_stale)
     early = _cached_or_alpaca_quote(ticker_key, cached, now, ttl_seconds)
     if early is not None:
         return early
@@ -626,7 +659,7 @@ def prefetch_prices(tickers: list[str], max_workers: int = 10) -> None:
     try:
         prices = get_current_price_batch(unique)
     except Exception as exc:
-        log.debug("prefetch_prices batch failed: %s", exc)
+        log.warning("prefetch_prices batch failed: %s", exc, exc_info=True)
         return
     now = time.monotonic()
     for ticker, price in prices.items():

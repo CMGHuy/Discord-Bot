@@ -1,8 +1,7 @@
 import asyncio
 import datetime as dt
 import functools
-import json
-import os
+import logging
 
 import discord
 from discord.ext import tasks
@@ -10,14 +9,19 @@ from discord.ext import tasks
 from swingbot import config
 from swingbot.config import auto_reload_if_changed
 from swingbot.core.scanning import engine as scan_engine
-from swingbot.bot_core import bot, in_session, log, SESSION_TZ, install_reload_signal_handler, on_config_reload
+from swingbot.bot_core import bot, in_session, SESSION_TZ, install_reload_signal_handler, on_config_reload
 from swingbot.core.marketdata.data import get_current_price_batch
 from swingbot.core.scanning.fetch import _run_bounded
 from swingbot.core.infra.silent_channel import silence
-from swingbot.core.infra.jsonio import atomic_write_json, read_json
+from swingbot.core.infra.logsetup import apply_log_level
+from swingbot.core.db import write_failure
+from swingbot.core.infra import pitr_watch
+from swingbot.core import presentation as ui
 from swingbot.core.marketdata.watchlist import load_watchlist
-from . import presence, recap, runstate
-from .alerts import _send_alerts
+from . import notices, presence, recap, runstate
+from .alerts import _send_alerts, send_then_short
+
+log = logging.getLogger(__name__)
 
 trade_log = scan_engine.trade_log
 _ready_announcement_sent = False
@@ -64,12 +68,9 @@ async def _maybe_escalate_health(failures: int, exc: Exception) -> None:
     if channel is None:
         return
     last = runstate.last_success_iso() or "never"
-    await channel.send(
-        f"🚨 **Bot health alert** — the scan tick has failed {failures} time(s) in a row.\n"
-        f"• Last successful tick: {last}\n"
-        f"• Latest error: `{type(exc).__name__}: {str(exc)[:400]}`\n"
-        f"No alerts are being produced until this clears."
-    )
+    # Unguarded on purpose: a failed send must leave the alert inactive so the
+    # next failing tick retries it (session_scan logs the exception).
+    await channel.send(**ui.push_kwargs(notices.health_alert_embed(failures, last, exc)))
     runstate.set_alert_active(True)
 
 
@@ -77,7 +78,40 @@ async def _post_health_recovered() -> None:
     channel = _ops_channel()
     if channel is None:
         return
-    await channel.send("✅ **Bot health recovered** — the scan tick completed successfully again.")
+    await channel.send(**ui.push_kwargs(notices.health_recovered_embed()))
+
+
+async def _halt_on_store_failure(exc: Exception) -> None:
+    """v116: the book could not record what the scan was issuing. Pause the
+    scheduled scan (the partner unpauses from the admin UI), tell ops now --
+    not after HEALTH_ALERT_AFTER_FAILURES ticks -- and mark the heartbeat so
+    the admin's health signal shows it."""
+    try:
+        runstate.set_scan_paused(True)
+    except Exception:
+        log.exception("store-write halt: could not set the pause flag; the database is "
+                      "likely down, and every tick fails until it is back")
+    runstate.record_store_write_failure(exc)
+    channel = _ops_channel()
+    if channel is not None:
+        await notices.send_guarded(channel, notices.store_write_halt_embed(exc),
+                                   what="store-write halt notice")
+
+
+async def _run_scan_posting_partial(channel, **scan_kwargs) -> list:
+    """run_scan + post its alerts; a store-write halt still posts what it built.
+
+    Trades logged before the halting plan write are in the book, and the next
+    scan would skip them as already open -- so their alerts go out now, then
+    the halt propagates to pause scanning. On success the alerts are
+    returned for the caller to post, as before.
+    """
+    try:
+        return await scan_engine.run_scan(**scan_kwargs)
+    except write_failure.StoreWriteHalt as halt:
+        if halt.alerts:
+            await _send_alerts(channel, halt.alerts, route_by_confidence=True)
+        raise
 
 
 @tasks.loop(minutes=config.SCAN_INTERVAL_MINUTES)
@@ -99,6 +133,8 @@ async def session_scan():
         log.exception("session_scan tick failed -- will retry on the next scheduled tick "
                        "(every %d min) instead of stopping the loop entirely", config.SCAN_INTERVAL_MINUTES)
         failures = runstate.record_tick_failure()
+        if write_failure.halts_issuance(exc):
+            await _halt_on_store_failure(exc)
         try:
             await _maybe_escalate_health(failures, exc)
         except Exception:
@@ -157,8 +193,10 @@ async def _session_scan_tick():
     now_str = dt.datetime.now(SESSION_TZ).strftime("%H:%M")
     log.info("Running session scan at %s…", now_str)
     progress = scan_engine.ScanProgress()
-    alerts = await scan_engine.run_scan(require_confirmation=True, bot=bot, progress=progress)
-    await _send_alerts(channel, alerts, route_by_confidence=True)
+    alerts = await _run_scan_posting_partial(
+        channel, require_confirmation=True, bot=bot, progress=progress)
+    await send_then_short(channel, alerts, bot=bot, require_confirmation=True,
+                          route_by_confidence=True)
 
     from swingbot.core.charts.cache import purge
     await asyncio.to_thread(purge)
@@ -169,34 +207,12 @@ async def _session_scan_tick():
     if alerts:
         log.info("Posted %d new confirmed signal(s).", len(alerts))
         if f:
-            # "qualifying" and "alerts posted" can legitimately differ:
-            # qualifying scenarios found for the same ticker+trend with a
-            # near-identical entry/stop/target get merged into one alert by
-            # dedup_scan_items() (same real setup, confirmed by more than one
-            # strategy/horizon), and a qualifying scenario for a ticker that
-            # already has an open trade is skipped rather than re-alerted.
-            # Spelling that out here so "why did qualifying=2 but alerts=1"
-            # is answerable at a glance instead of looking like a bug.
-            gap_parts = []
-            merged = max(0, f.get("fully_qualifying", 0) - f.get("deduped", f.get("fully_qualifying", 0)))
-            if merged:
-                gap_parts.append(f"{merged} merged as duplicate setup(s)")
-            if f.get("skipped_already_open", 0):
-                gap_parts.append(f"{f['skipped_already_open']} already open")
-            gap_str = f" ({', '.join(gap_parts)})" if gap_parts else ""
-            # A little more visual variety than a single 🔍 -- a quick
-            # traffic-light-style read (🟢 several new alerts, 🟡 just one,
-            # plus a ✨ sparkle when at least one is a priority ⭐ setup) so
-            # the channel doesn't read as one flat wall of identical emoji.
-            n = len(alerts)
-            headline_icon = "🟢" if n >= 3 else "🟡" if n >= 1 else "⚪"
-            sparkle = " ✨" if any("⭐" in (a[0].title or "") for a in alerts) else ""
-            summary = (
-                f"{headline_icon} 🔍 **Scan** ({now_str}) — 📡 {f['tickers']} tickers, {f['checked']} combos checked → "
-                f"🧮 {f['scenarios_found']} scenario(s) found (✅ {f['fully_qualifying']} qualifying) → "
-                f"**🚨 {n} new alert(s) posted above**{sparkle}{gap_str}"
-            )
-            await channel.send(summary)
+            # v110 §5: a SYSTEM embed. "qualifying" and "alerts posted" can
+            # legitimately differ (merged duplicates, already-open tickers);
+            # scan_gap_note spells that out. ✨ = a ⭐ priority setup posted.
+            summary = notices.scan_summary_embed(
+                now_str, f, len(alerts), notices.scan_gap_note(f), notices.has_priority(alerts))
+            await channel.send(**ui.push_kwargs(summary))
     else:
         log.info("Session scan complete at %s — nothing new to post.", now_str)
         not_ready_parts = []
@@ -225,54 +241,8 @@ async def _session_scan_tick():
         # chart) specifically so it doesn't turn into the same noise problem
         # that got this removed the first time.
         open_count = trade_log.get_stats()["open"]
-        if f:
-            # Rewritten for clarity -- the old one-line version packed
-            # "qualifying" and "awaiting confirmation" next to each other
-            # with no explanation, which reads as a contradiction ("if it
-            # qualified, why wasn't it shown?"). They're not mutually
-            # exclusive: "qualifying" = passed every hard requirement
-            # (min strategies confirmed, min confidence, min reward:risk,
-            # etc.); "awaiting confirmation" is a SUBSET of qualifying --
-            # a scenario that passed everything but hasn't yet reappeared
-            # for SIGNAL_CONFIRMATION_SCANS consecutive scans in a row
-            # (the automatic scan's debounce filter, meant to skip
-            # intraday flicker -- see engine.py's module docstring).
-            # "below min strategies"/"below min confidence" are separate
-            # FAILURE tallies, not a partition of scenarios_found -- one
-            # scenario can fail more than one requirement at once, so
-            # those numbers can (and often do) add up to more than the
-            # total scenario count. Spelling all of this out in the
-            # message itself so the numbers don't need a code-read to make
-            # sense of.
-            awaiting = f.get("awaiting_confirmation", 0)
-            confirm_note = (
-                f" (needs to reappear {config.SIGNAL_CONFIRMATION_SCANS} scan(s) in a row before it posts)"
-                if awaiting else ""
-            )
-            fail_bits = []
-            if f.get("failed_min_confluence", 0):
-                fail_bits.append(f"{f['failed_min_confluence']} below min strategies")
-            if f.get("failed_min_confidence", 0):
-                fail_bits.append(f"{f['failed_min_confidence']} below min confidence")
-            if f.get("rs_blocked", 0):
-                fail_bits.append(f"{f['rs_blocked']} blocked by RS gate")
-            bullets = [
-                f"📡 {f['tickers']} tickers scanned",
-                f"🧮 {f['scenarios_found']} scenario(s) found",
-                f"✅ {f['fully_qualifying']} fully qualifying (⏳ {awaiting} still awaiting confirmation{confirm_note})",
-            ]
-            if fail_bits:
-                bullets.append(f"❌ failed a requirement: {', '.join(fail_bits)}")
-            bullets.append(f"📂 {open_count} open trade(s)")
-            healthcheck = (
-                f"💓 **Healthcheck** ({now_str}) — nothing new this tick\n"
-                + "\n".join(f"• {b}" for b in bullets)
-            )
-        else:
-            healthcheck = (
-                f"💓 **Healthcheck** ({now_str}) — scan complete, nothing new\n"
-                f"• 📂 {open_count} open trade(s)"
-            )
+        healthcheck = notices.healthcheck_text(now_str, f, open_count,
+                                               config.SIGNAL_CONFIRMATION_SCANS)
         await presence._post_healthcheck(channel, healthcheck)
 
     # Refresh again now that this tick's own scan may have changed the open-
@@ -318,6 +288,62 @@ async def heartbeat():
         latency_ms if latency_ms is not None else "n/a",
     )
 
+#: Settings whose hot-reload is announced in Discord -> (detail, note) for the
+#: CONFIG embed (v110 §5).
+_CONFIG_NOTICES = {
+    "MIN_ALERT_CONFIDENCE_LEVEL": lambda old, new: (
+        f"Min confidence level Lv{old} → Lv{new}",
+        f"Next `!check` and scheduled scans will use Lv{new}+."),
+    "MIN_TARGET_CONFLUENCE_COUNT": lambda old, new: (
+        f"Min strategies confirmed {old} → {new}", ""),
+    "SCAN_INTERVAL_MINUTES": lambda old, new: (
+        f"Scan interval every {old} min → every {new} min", ""),
+    "MIN_RISK_REWARD_RATIO": lambda old, new: (f"Min R:R ratio {old} → {new}", ""),
+}
+
+
+async def _post_config_notices(changed: dict) -> None:
+    """One CONFIG embed per announced key that changed; each send guarded."""
+    if not config.DISCORD_CHANNEL_TRADES_ID:
+        return
+    channel = silence(bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
+    if not channel:
+        return
+    for key, describe in _CONFIG_NOTICES.items():
+        if key in changed:
+            detail, note = describe(*changed[key])
+            await notices.send_guarded(channel, notices.config_notice_embed(detail, note),
+                                       what=f"config-change notice for {key}")
+
+
+def _with_trade_id_as_id(record: dict) -> dict:
+    """The table keeps a trade's `id` as `trade_id` (`id` is a reserved
+    column); the embeds read the trade as `id`."""
+    if "trade_id" not in record:
+        return record
+    restored = dict(record)
+    restored["id"] = restored.pop("trade_id")
+    return restored
+
+
+def _take_manual_close_queue() -> list:
+    """Remove and return the queued manual-close records (the table is the queue)."""
+    from swingbot.core.db.repositories.notify_queue import notify_queue_repo
+    return [_with_trade_id_as_id(record) for record in notify_queue_repo().drain()]
+
+
+async def _post_manual_close_queue() -> None:
+    queued = _take_manual_close_queue()
+    if not queued:
+        return
+    from swingbot.core.scanning.embeds import notify_closed_trades
+    try:
+        await notify_closed_trades(bot, queued)
+        log.info("Posted %d manually-closed trade notification(s) to Discord.", len(queued))
+    except Exception as exc:
+        log.warning("Failed to post manual-close notifications: %s", exc, exc_info=True)
+
+
 @tasks.loop(seconds=30)
 async def config_watcher():
     """
@@ -334,94 +360,31 @@ async def config_watcher():
     """
     changed = await asyncio.to_thread(auto_reload_if_changed)
     if changed:
-        # LOG_LEVEL change needs the Python logging level updated too
+        # config.reload() already logged what changed (masked); SIGHUP and
+        # this watcher share the one interval/market-data path below.
         if "LOG_LEVEL" in changed:
-            import logging
-            logging.getLogger().setLevel(getattr(logging, config.LOG_LEVEL, logging.INFO))
-        if "SCAN_INTERVAL_MINUTES" in changed and session_scan.is_running():
-            session_scan.change_interval(minutes=config.SCAN_INTERVAL_MINUTES)
-            log.info("Scan interval hot-reloaded to every %d min (takes effect next tick).",
-                     config.SCAN_INTERVAL_MINUTES)
-        _apply_market_data_refresh_config(changed)
+            apply_log_level(config.LOG_LEVEL)
+        _apply_scan_interval_change(changed)
 
-        log.info("Config auto-reloaded from .env -- %d setting(s) changed: %s",
-                 len(changed), ", ".join(f"{k}={v[1]!r}" for k, v in changed.items()))
-
-        # Notify Discord channel about key setting changes so the user can
-        # confirm the new value is live without needing to check the logs.
-        _notify_keys = {
-            "MIN_ALERT_CONFIDENCE_LEVEL": (
-                lambda old, new: (
-                    f"⚙️ **Min confidence level** updated: Lv{old} → Lv{new}  "
-                    f"(next `!check` and scheduled scans will use Lv{new}+)"
-                )
-            ),
-            "MIN_TARGET_CONFLUENCE_COUNT": (
-                lambda old, new: (
-                    f"⚙️ **Min strategies confirmed** updated: {old} → {new}"
-                )
-            ),
-            "SCAN_INTERVAL_MINUTES": (
-                lambda old, new: (
-                    f"⚙️ **Scan interval** updated: every {old} min → every {new} min"
-                )
-            ),
-            "MIN_RISK_REWARD_RATIO": (
-                lambda old, new: (
-                    f"⚙️ **Min R:R ratio** updated: {old} → {new}"
-                )
-            ),
-        }
-        if config.DISCORD_CHANNEL_TRADES_ID:
-            channel = silence(bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
-            if channel:
-                for attr_key, fmt_fn in _notify_keys.items():
-                    if attr_key in changed:
-                        old_val, new_val = changed[attr_key]
-                        try:
-                            await channel.send(fmt_fn(old_val, new_val))
-                        except Exception as _e:
-                            log.warning("Could not post config-change notice to Discord: %s", _e)
+        # Notify Discord about key setting changes (v110: CONFIG embeds).
+        await _post_config_notices(changed)
 
     # --- Admin UI manual-close notification queue ---
-    from swingbot.core.db import stages
-    if stages.reads_db("notify_queue"):
-        from swingbot.core.db.repositories.notify_queue import notify_queue_repo
-        _queued = notify_queue_repo().drain()
-    elif os.path.exists(runstate._MANUAL_CLOSE_QUEUE):
-        try:
-            with open(runstate._MANUAL_CLOSE_QUEUE, "r") as _qf:
-                _queued = json.load(_qf)
-        except Exception as _qe:
-            log.warning("Could not read manual_close_notify queue: %s", _qe)
-            _queued = []
-    else:
-        _queued = []
-    if _queued:
-            try:
-                os.remove(runstate._MANUAL_CLOSE_QUEUE)
-            except OSError:
-                pass
-            from swingbot.core.scanning.embeds import notify_closed_trades
-            try:
-                await notify_closed_trades(bot, _queued)
-                log.info("Posted %d manually-closed trade notification(s) to Discord.", len(_queued))
-            except Exception as _ne:
-                log.warning("Failed to post manual-close notifications: %s", _ne)
+    await _post_manual_close_queue()
 
     # --- Admin UI "Run !check now" trigger ---
     if runstate.is_trigger_requested():
         runstate.clear_trigger()
         log.info("Admin UI triggered a manual !check scan.")
         if not config.DISCORD_CHANNEL_TRADES_ID:
-            log.warning("CHANNEL_ID not set; cannot post scan results.")
+            log.warning("DISCORD_CHANNEL_TRADES_ID not set; cannot post scan results.")
             return
         channel = silence(bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
         if channel is None:
             try:
                 channel = silence(await bot.fetch_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
             except Exception as _ce:
-                log.warning("Could not resolve channel %s for triggered scan: %s", config.DISCORD_CHANNEL_TRADES_ID, _ce)
+                log.warning("Could not resolve channel %s for triggered scan: %s", config.DISCORD_CHANNEL_TRADES_ID, _ce, exc_info=True)
                 return
         min_lv = config.MIN_ALERT_CONFIDENCE_LEVEL
         # Post a live-updating progress message — same UX as the Discord
@@ -482,11 +445,13 @@ async def config_watcher():
 
         poller = asyncio.create_task(_ui_poll_progress())
         try:
-            alerts = await scan_engine.run_scan(require_confirmation=False, bot=bot, progress=progress)
+            alerts = await _run_scan_posting_partial(
+                channel, require_confirmation=False, bot=bot, progress=progress)
         finally:
             poller.cancel()
 
-        await _send_alerts(channel, alerts, route_by_confidence=True)
+        await send_then_short(channel, alerts, bot=bot, require_confirmation=False,
+                              route_by_confidence=True)
         f = progress.funnel
         if progress.stopped:
             summary = (
@@ -527,14 +492,14 @@ async def _post_plan_events(plan_events) -> None:
     try:
         deliveries = await notify_plan_events(bot, plan_events)
     except Exception as exc:
-        log.warning("trade_monitor: failed to post plan events: %s", exc)
+        log.warning("trade_monitor: failed to post plan events: %s", exc, exc_info=True)
         return
     if not deliveries:
         return
     try:
         await asyncio.to_thread(plan_manager.ack_notified, deliveries)
     except Exception as exc:
-        log.warning("trade_monitor: could not record feed deliveries (they will be re-sent): %s", exc)
+        log.warning("trade_monitor: could not record feed deliveries (they will be re-sent): %s", exc, exc_info=True)
 
 
 async def _resend_plan_notices() -> None:
@@ -543,10 +508,34 @@ async def _resend_plan_notices() -> None:
     try:
         events = await asyncio.to_thread(plan_manager.run_notice_sweep)
     except Exception as exc:
-        log.warning("trade_monitor: notice sweep failed: %s", exc)
+        log.warning("trade_monitor: notice sweep failed: %s", exc, exc_info=True)
         return
     if events:
         await _post_plan_events(events)
+
+
+async def _live_price_batch(tickers: list) -> dict:
+    """Fresh-only live prices for the trade monitor, or {} on failure.
+
+    One Yahoo request for the whole open book avoids a serial minute-history
+    request per ticker. Fresh-only (allow_stale=False): acting on an old
+    print could falsely close a trade or satisfy an exit transition.
+    Routed through scanning.fetch._run_bounded, not a bare asyncio.to_thread
+    (2026-09-17 incident): a hung yfinance call would otherwise wedge this
+    @tasks.loop forever. A PROCESS, deliberately -- see _run_bounded.
+
+    A failure is a WARNING (was DEBUG until v111): while it lasts, no open
+    trade is checked against its stop or target."""
+    if not tickers:
+        return {}
+    try:
+        return await asyncio.to_thread(
+            _run_bounded, functools.partial(get_current_price_batch, allow_stale=False),
+            (tickers,), float(getattr(config, "LIVE_PRICE_TIMEOUT_SECONDS", 60)),
+            f"trade_monitor: live-price batch of {len(tickers)} ticker(s)") or {}
+    except Exception as exc:
+        log.warning("trade_monitor: batch price fetch failed: %s", exc, exc_info=True)
+        return {}
 
 
 @tasks.loop(seconds=60)
@@ -588,32 +577,7 @@ async def trade_monitor():
     tickers = list({t["ticker"] for t in open_trades})
     all_newly_closed = []
 
-    # One Yahoo request for the whole open book avoids a serial minute-history
-    # request per ticker.  The batch helper is explicitly fresh-only here:
-    # UI callers may show its last-known-good fallback, but acting on an old
-    # print could falsely close a trade or satisfy an exit transition.
-    #
-    # Routed through scanning.fetch._run_bounded, not a bare
-    # asyncio.to_thread (2026-09-17 incident): a hung yfinance call has no
-    # exception and no CPU use to signal it, and this loop's own
-    # @tasks.loop(seconds=60) does not schedule its next tick until this
-    # coroutine returns -- an unbounded hang here wedges the WHOLE loop,
-    # silently, forever, and it is one of the two places (this and
-    # plan_manager._price_batch_fn) responsible for ever closing a trade
-    # between full scans. _run_bounded reused as-is, deliberately a
-    # PROCESS rather than a thread -- see its own docstring for the
-    # production history this repeats and why a thread can't stand in.
-    if tickers:
-        try:
-            live_prices = await asyncio.to_thread(
-                _run_bounded, functools.partial(get_current_price_batch, allow_stale=False),
-                (tickers,), float(getattr(config, "LIVE_PRICE_TIMEOUT_SECONDS", 60)),
-                f"trade_monitor: live-price batch of {len(tickers)} ticker(s)") or {}
-        except Exception as exc:
-            log.debug("trade_monitor: batch price fetch failed: %s", exc)
-            live_prices = {}
-    else:
-        live_prices = {}
+    live_prices = await _live_price_batch(tickers)
 
     for ticker in tickers:
         live = live_prices.get(ticker)
@@ -622,7 +586,7 @@ async def trade_monitor():
         try:
             closed = await asyncio.to_thread(trade_log.close_if_live_price_hit, ticker, live)
         except Exception as exc:
-            log.warning("trade_monitor: close_if_live_price_hit failed for %s: %s", ticker, exc)
+            log.warning("trade_monitor: close_if_live_price_hit failed for %s: %s", ticker, exc, exc_info=True)
             continue
         if closed:
             log.info("trade_monitor: %d trade(s) closed for %s (live=%.4f)", len(closed), ticker, live)
@@ -638,7 +602,7 @@ async def trade_monitor():
         try:
             near_tp_closed = await asyncio.to_thread(trade_log.check_near_tp_timeout, ticker, live)
         except Exception as exc:
-            log.warning("trade_monitor: check_near_tp_timeout failed for %s: %s", ticker, exc)
+            log.warning("trade_monitor: check_near_tp_timeout failed for %s: %s", ticker, exc, exc_info=True)
             continue
         if near_tp_closed:
             log.info("trade_monitor: %d trade(s) closed for %s via near-TP timeout (live=%.4f)",
@@ -650,7 +614,7 @@ async def trade_monitor():
     try:
         plan_events = await asyncio.to_thread(plan_manager.run_manager_tick)
     except Exception as exc:
-        log.warning("trade_monitor: plan manager tick failed: %s", exc)
+        log.warning("trade_monitor: plan manager tick failed: %s", exc, exc_info=True)
         plan_events = []
     if plan_events:
         await _post_plan_events(plan_events)
@@ -660,7 +624,7 @@ async def trade_monitor():
         try:
             await notify_closed_trades(bot, all_newly_closed)
         except Exception as exc:
-            log.warning("trade_monitor: failed to post close notifications: %s", exc)
+            log.warning("trade_monitor: failed to post close notifications: %s", exc, exc_info=True)
         await presence._refresh_presence()
 
 
@@ -676,22 +640,15 @@ _weekend_scan_fired_date: dt.date | None = None
 _earnings_refresh_fired_date: dt.date | None = None
 
 
-def _scheduled_jobs_path() -> str:
-    """Resolve at call time so config/test data directories remain respected."""
-    return os.path.join(config.DATA_DIR, "scheduled_jobs.json")
-
-
 def _scheduled_job_already_fired(job: str, today: dt.date) -> bool:
-    data = read_json(_scheduled_jobs_path(), {})
-    return isinstance(data, dict) and data.get(job) == today.isoformat()
+    from swingbot.core.db.repositories.scheduled import scheduled_repo
+    return scheduled_repo().fired_on(job) == today.isoformat()
 
 
 def _mark_scheduled_job_fired(job: str, today: dt.date) -> None:
-    data = read_json(_scheduled_jobs_path(), {})
-    if not isinstance(data, dict):
-        data = {}
-    data[job] = today.isoformat()
-    atomic_write_json(_scheduled_jobs_path(), data)
+    from swingbot.core.db.repositories.scheduled import scheduled_repo
+    scheduled_repo().mark(job, today.isoformat())
+
 
 @tasks.loop(minutes=1)
 async def daily_recap():
@@ -731,8 +688,8 @@ async def daily_recap():
     _mark_scheduled_job_fired('daily_recap', today)
     try:
         await recap._post_retrospective()
-    except Exception as exc:
-        log.exception("daily_recap: failed to post retrospective: %s", exc)
+    except Exception:
+        log.exception("daily_recap: failed to post retrospective")
 
 
 
@@ -841,8 +798,8 @@ async def market_data_refresh():
             refresh_all, symbols, timeframes, sleep_seconds=0.3,
             deadline_seconds=config.MARKET_DATA_REFRESH_BUDGET_SECONDS,
         )
-    except Exception as exc:
-        log.exception("market_data_refresh: refresh failed: %s", exc)
+    except Exception:
+        log.exception("market_data_refresh: refresh failed")
         return
 
     line = summary_line(result)
@@ -882,6 +839,39 @@ async def _before_market_data_refresh():
     await asyncio.sleep(60)
 
 
+_PITR_WATCH = pitr_watch.PitrWatch()
+
+
+@tasks.loop(minutes=15)
+async def pitr_watch_loop():
+    """v116: WAL-archiver and backups-disk alarms, once per episode, to ops."""
+    try:
+        sample = await asyncio.to_thread(pitr_watch.read_archiver)
+        due = _PITR_WATCH.tick(sample, pitr_watch.disk_used_pct(config.DATA_DIR))
+    except Exception:
+        log.exception("pitr watch tick failed")
+        return
+    channel = _ops_channel()
+    if channel is None:
+        return
+    for notice in due:
+        await notices.send_guarded(channel, notices.pitr_notice_embed(notice), what="PITR alarm")
+
+
+def _always_on_loops() -> tuple:
+    """Loops on_ready starts unconditionally, in start order."""
+    return (session_scan, heartbeat, config_watcher, trade_monitor, daily_recap,
+            weekend_deep_scan_task, weekly_earnings_refresh, pitr_watch_loop)
+
+
+def _start_background_loops() -> None:
+    for loop in _always_on_loops():
+        if not loop.is_running():
+            loop.start()
+    if config.MARKET_DATA_AUTO_REFRESH and not market_data_refresh.is_running():
+        market_data_refresh.start()
+
+
 def _apply_market_data_refresh_config(changed: dict) -> None:
     if "MARKET_DATA_REFRESH_MINUTES" in changed and market_data_refresh.is_running():
         market_data_refresh.change_interval(minutes=config.MARKET_DATA_REFRESH_MINUTES)
@@ -908,6 +898,22 @@ def _apply_scan_interval_change(changed: dict):
     _apply_market_data_refresh_config(changed)
 
 
+async def _post_bot_online(wl_size: int) -> None:
+    """Startup notice (v110 §5): a SYSTEM embed, send guarded (§6.3)."""
+    if not config.DISCORD_CHANNEL_TRADES_ID:
+        return
+    channel = silence(bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
+    if not channel:
+        return
+    embed = notices.bot_online_embed(
+        now_text=dt.datetime.now(SESSION_TZ).strftime("%Y-%m-%d %H:%M %Z"),
+        session_start=config.SESSION_START_HOUR, session_end=config.SESSION_END_HOUR,
+        interval=config.SCAN_INTERVAL_MINUTES, watchlist_size=wl_size,
+        open_count=trade_log.get_stats()["open"],
+        min_level=config.MIN_ALERT_CONFIDENCE_LEVEL)
+    await notices.send_guarded(channel, embed, what="bot-online notice")
+
+
 @bot.event
 async def on_ready():
     global _ready_announcement_sent
@@ -923,22 +929,7 @@ async def on_ready():
         config.CONFLUENCE_DEVIATION_PCT, wl_size,
     )
     install_reload_signal_handler()
-    if not session_scan.is_running():
-        session_scan.start()
-    if not heartbeat.is_running():
-        heartbeat.start()
-    if not config_watcher.is_running():
-        config_watcher.start()
-    if not trade_monitor.is_running():
-        trade_monitor.start()
-    if not daily_recap.is_running():
-        daily_recap.start()
-    if not weekend_deep_scan_task.is_running():
-        weekend_deep_scan_task.start()
-    if not weekly_earnings_refresh.is_running():
-        weekly_earnings_refresh.start()
-    if config.MARKET_DATA_AUTO_REFRESH and not market_data_refresh.is_running():
-        market_data_refresh.start()
+    _start_background_loops()
     await presence._refresh_presence()
 
     if _ready_announcement_sent:
@@ -950,17 +941,7 @@ async def on_ready():
         synced = await bot.tree.sync()
         log.info("Synced %d slash command(s) to Discord.", len(synced))
     except Exception as e:
-        log.warning("Failed to sync slash commands: %s", e)
+        log.warning("Failed to sync slash commands: %s", e, exc_info=True)
 
-    # Post a startup notice to the alerts channel so there's a visible
-    # timestamp in Discord for when the bot came (back) online.
-    if config.DISCORD_CHANNEL_TRADES_ID:
-        channel = silence(bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
-        if channel:
-            open_count = trade_log.get_stats()["open"]
-            await channel.send(
-                f"🤖 **Bot online** — {dt.datetime.now(SESSION_TZ).strftime('%Y-%m-%d %H:%M %Z')}\n"
-                f"Session: {config.SESSION_START_HOUR:02d}:00–{config.SESSION_END_HOUR:02d}:00 Berlin · "
-                f"scan every {config.SCAN_INTERVAL_MINUTES} min · watchlist: {wl_size} ticker(s) · "
-                f"open trades: {open_count} · min confidence: Lv{config.MIN_ALERT_CONFIDENCE_LEVEL}"
-            )
+    # A visible timestamp in Discord for when the bot came (back) online.
+    await _post_bot_online(wl_size)

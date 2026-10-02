@@ -61,13 +61,13 @@ from swingbot import config
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.edge import factors as rs_factors
 from swingbot.core.market.indicators import ema
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import HORIZONS, LEGACY_HORIZONS
 from swingbot.core.scanning.regime import _HTF_EMA_PERIOD, get_htf_bias
 
 CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "backtest_cache"
 TRAIN = ("2020-01-01", "2023-12-31")
 
-HKEYS = list(HORIZONS)
+HKEYS = list(LEGACY_HORIZONS)
 # The next horizon up, in HORIZONS key order. The last horizon has none --
 # an EXEMPTION, never a pass (v33 plan's Global Constraints).
 NEXT_HORIZON = {HKEYS[i]: HKEYS[i + 1] for i in range(len(HKEYS) - 1)}
@@ -209,8 +209,8 @@ def collect(frames: dict, date_range: tuple = TRAIN) -> list:
         close = df["Close"]
         date_to_idx = {str(d.date()): k for k, d in enumerate(df.index)}
         htf_ema = {p: ema(close, p) for p in set(_HTF_EMA_PERIOD.values())}
-        hz_ema = {hk: (ema(close, h["ema_fast"]), ema(close, h["ema_slow"]))
-                  for hk, h in HORIZONS.items()}
+        hz_ema = {hk: (ema(close, HORIZONS[hk]["ema_fast"]), ema(close, HORIZONS[hk]["ema_slow"]))
+                  for hk in LEGACY_HORIZONS}
         n_rows = 0
         for hk in HKEYS:
             htf_period = _HTF_EMA_PERIOD.get(hk)

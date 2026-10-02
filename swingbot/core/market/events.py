@@ -19,11 +19,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import yfinance as yf
 
+from swingbot.core.marketdata.spot_metals import is_spot_metal
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 from swingbot.core.marketdata.universe import is_etf
 from swingbot.core.market.session import market_today
 
-log = logging.getLogger("swing-bot.events")
+log = logging.getLogger(__name__)
 
 # An earnings date is essentially static for weeks at a time -- nothing like
 # get_current_price's 15s TTL is warranted, and the cost of NOT caching this
@@ -45,9 +46,14 @@ _earnings_datetimes_cache: dict[str, tuple[list[dt.datetime], float]] = {}
 _NOT_CACHED = object()
 
 
+def _never_reports(ticker: str) -> bool:
+    """Funds and spot metals (v109) never report earnings: never gate, never fetch."""
+    return is_etf(ticker) or is_spot_metal(ticker)
+
+
 def get_next_earnings_date(ticker: str) -> dt.date | None:
     """Returns the next known earnings date for a ticker, or None if unavailable."""
-    if is_etf(ticker):
+    if _never_reports(ticker):
         return None  # funds don't report earnings; never gate or fetch
 
     for candidate in candidate_symbols(ticker):
@@ -154,7 +160,7 @@ def warm_earnings_cache_background(tickers: list[str]) -> threading.Thread:
 
 
 def _fetch_next_earnings_datetime(ticker: str) -> dt.datetime | None:
-    if is_etf(ticker):
+    if _never_reports(ticker):
         return None
 
     for candidate in candidate_symbols(ticker):
@@ -180,7 +186,7 @@ def get_earnings_datetimes(ticker: str, *, refresh: bool = False) -> list[dt.dat
     Unlike the display-only singular lookup, this preserves a before-open
     report on its own date so calendar consumers can correctly see today.
     """
-    if is_etf(ticker):
+    if _never_reports(ticker):
         return []
     key, now_monotonic = ticker.upper().strip(), time.monotonic()
     cached = _earnings_datetimes_cache.get(key)

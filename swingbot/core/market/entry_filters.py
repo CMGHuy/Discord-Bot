@@ -22,7 +22,7 @@ import pandas as pd
 from swingbot.core.market.indicators import atr, ema, macd, rolling_vwap, rsi, elliott_wave3_entries
 from swingbot.core.market.strategy_types import (
     FIB_TOLERANCE_PCT, HORIZONS, MACD_PERIODS_BY_HORIZON, SR_VOLUME_MULTIPLE,
-    STRATEGY_GATES,
+    STRATEGY_GATES, admits,
 )
 from swingbot.core.risk_limits import capped_planned_loss_pct
 
@@ -128,8 +128,7 @@ def apply_regime_gate(bull: pd.Series, bear: pd.Series, strategy: str,
 def entries_for(strategy: str, df: pd.DataFrame, horizon_key: str,
                 params: dict | None = None,
                 regimes: "pd.Series | None" = None) -> tuple[pd.Series, pd.Series]:
-    """Dispatch to the strategy's entry function, then apply STRATEGY_GATES
-    (direction/horizon restrictions decided by train-window tuning).
+    """Dispatch to the strategy's entry function, then apply the mask (strategy_types.admits: STRATEGY_GATES' direction/horizon axes plus v113 "cells").
 
     `regimes` stays an explicit parameter for callers that already hold a
     series, but it no longer has to be passed: when it is None the regime is
@@ -145,20 +144,11 @@ def entries_for(strategy: str, df: pd.DataFrame, horizon_key: str,
         from swingbot.core.market import market_context
         regimes = market_context.get(df, "ctx_regime")
 
-    gates = STRATEGY_GATES.get(strategy)
-    if gates:
-        horizons = gates.get("horizons")
-        by_direction = gates.get("horizons_by_direction") or {}
-        directions = gates.get("directions")
-        def allowed(direction):
-            if directions is not None and direction not in directions:
-                return False
-            permitted = by_direction.get(direction, horizons)
-            return permitted is None or horizon_key in permitted
-        if not allowed("bullish"):
-            bullish = _off(df)
-        if not allowed("bearish"):
-            bearish = _off(df)
+    # v113 §2: strategy_types.admits is the mask rule (legacy axes + "cells").
+    if not admits(strategy, "bullish", horizon_key):
+        bullish = _off(df)
+    if not admits(strategy, "bearish", horizon_key):
+        bearish = _off(df)
 
     bullish, bearish = apply_regime_gate(bullish, bearish, strategy, regimes)
     return bullish, bearish

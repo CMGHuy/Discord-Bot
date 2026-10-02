@@ -1,4 +1,4 @@
-"""The evidence a store is safe to flip from dual to database reads."""
+"""The evidence a JSON file and its table hold the same records."""
 import os
 
 import pytest

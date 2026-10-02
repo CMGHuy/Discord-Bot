@@ -37,10 +37,22 @@ def test_by_ticker_is_case_insensitive(repo, db_conn):
 
 
 def test_full_plan_document_round_trips(repo, db_conn):
-    from swingbot.core.db.dual import diff_records
+    from tests.db_diff import diff_records
     record = _plan("P1", legs=[{"fraction": 0.5, "r": 1.0}], take_profit=110.0,
                    confidence={"level": 4, "score": 71}, notified_stop=101.5,
                    issued_at="2026-09-15T14:31:07+00:00",
                    pending_notice={"transition": "closed", "detail": {"reason": "loss"}})
     repo.insert(record, conn=db_conn)
     assert diff_records(record, repo.get("P1", conn=db_conn)) == []
+
+
+def test_version_moves_on_insert_update_and_delete(repo, db_conn):
+    empty = repo.version(conn=db_conn)
+    assert empty == (0, None)
+    repo.insert(_plan("P1"), conn=db_conn)
+    inserted = repo.version(conn=db_conn)
+    repo.upsert(_plan("P1", status=PlanStatus.ACTIVE), conn=db_conn)
+    updated = repo.version(conn=db_conn)
+    repo.delete("P1", conn=db_conn)
+    assert len({empty, inserted, updated, repo.version(conn=db_conn)}) >= 3
+    assert inserted != updated

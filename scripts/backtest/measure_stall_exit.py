@@ -42,7 +42,7 @@ from swingbot import config
 from swingbot.core.backtesting.backtest import run_backtest
 from swingbot.core.backtesting.acceptance import arm_trade_from_backtest
 from swingbot.core.backtesting.acceptance_harvest import mde_expectancy_r, evaluate_harvest
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 
 TRAIN_FROM, TRAIN_TO = "2020-01-01", "2023-12-31"
 
@@ -72,7 +72,7 @@ def _arm_trades(flag_on, tickers, pass_label, counter, total):
         df = load_cached(ticker)
         if df is None:
             continue
-        for hk in HORIZONS:
+        for hk in LEGACY_HORIZONS:
             for strat in ALL_STRATEGIES:
                 try:
                     s = run_backtest(ticker, df, strat, hk, one_at_a_time=True,

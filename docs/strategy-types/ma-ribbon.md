@@ -49,6 +49,8 @@ Stop `2 × ATR14`, capped at 2%. TP1 comes from the ATR ladder. Exits: trail
 | v104 structural stop, out-of-scope arm | TRAIN 2010-2025, universe 74 | 1139 | 44.4% | +0.337 | `results/2026-09-28-v104-partA.md` |
 | v104 structural stop, in-scope arm | same | 670 | 48.8% | +0.258 | Tier 2, clears the fold check (13 qualifying, 12 positive), but in-scope ExpR is *below* the out-of-scope arm's — **NO-LIFT at Stage 1** |
 
+**v113 1w cells (Part B, TRAIN 2010-01-01..2025-12-31, universe 74, horizon 1w masked):** bullish N=342, WR 41.2%, ExpR +0.353, lower bound +0.240, cleared Tier 2 at Stage 1; Part B bar failing clauses: wr; folds 11 qualifying / 11 positive. bearish N=65, WR 35.4%, ExpR +0.097, lower bound -0.226, no tier; Part B bar failing clauses: wr, lower_bound; folds 0 qualifying / 0 positive. Neither cell proceeds to the holdout (Part B's bar is Tier 1 plus a bootstrap lower bound > 0; every 1w cell fails Tier 1 on WR); no `cells` admission, no registry row. Source: `results/2026-09-30-v113-partB.md`.
+
 ## Pseudocode
 
 ```python

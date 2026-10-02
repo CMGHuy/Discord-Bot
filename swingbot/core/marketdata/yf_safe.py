@@ -17,13 +17,20 @@ upgrading past that and re-verifying.
 ``yf.download`` is looked up at call time, so tests that monkeypatch
 ``yfinance.download`` still intercept every call.
 """
+import logging
 import threading
 
 import yfinance as yf
+
+log = logging.getLogger(__name__)
 
 _DOWNLOAD_LOCK = threading.Lock()
 
 
 def download(*args, **kwargs):
     with _DOWNLOAD_LOCK:
-        return yf.download(*args, **kwargs)
+        frame = yf.download(*args, **kwargs)
+    if frame is None or getattr(frame, "empty", False):
+        log.debug("yfinance download returned no rows: tickers=%r",
+                  kwargs.get("tickers", args[0] if args else None))
+    return frame

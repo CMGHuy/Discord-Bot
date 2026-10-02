@@ -140,7 +140,7 @@ def _validate(values: Mapping) -> tuple[str, str] | None:
         f = fields[key]
         # _build_env_text writes one `KEY=value` line per field, so a value
         # carrying a line break forges an extra setting -- and the audit log
-        # records only the field the client named, leaving settings_audit.jsonl
+        # records only the field the client named, leaving the settings audit
         # and .env permanently disagreeing. Every field type is checked: the
         # type-specific rules below never reach `text`/`password`, which is
         # exactly where an arbitrary string can arrive.
@@ -416,20 +416,12 @@ def get_scan():
 @api_v1.route("/system/scan/trigger", methods=["POST"])
 @require_auth
 def scan_trigger():
-    import json
-    import os
-
-    from swingbot.admin.app import TRIGGER_FILE
+    from swingbot.commands.scanning import runstate
 
     try:
-        os.makedirs(config.DATA_DIR, exist_ok=True)
-        with open(TRIGGER_FILE, "w") as f:
-            f.write(json.dumps({
-                "triggered_at": datetime.now(timezone.utc).isoformat(),
-                "source": "admin_ui",
-            }))
+        runstate.request_trigger()
     except OSError as exc:
-        return error("unavailable", f"Could not write the trigger file: {exc}", 503)
+        return error("unavailable", f"Could not queue the scan trigger: {exc}", 503)
     return _scan_result(True, "Scan queued — the bot picks it up within 30 seconds.")
 
 
@@ -451,14 +443,10 @@ def scan_stop():
 @api_v1.route("/system/scan/pause", methods=["POST"])
 @require_auth
 def scan_pause():
-    import os
-
-    from swingbot.admin.app import PAUSE_FILE
+    from swingbot.commands.scanning import runstate
 
     try:
-        os.makedirs(config.DATA_DIR, exist_ok=True)
-        with open(PAUSE_FILE, "w") as f:
-            f.write(datetime.now(timezone.utc).isoformat())
+        runstate.set_scan_paused(True)
     except OSError as exc:
         return error("unavailable", f"Could not write the pause file: {exc}", 503)
     return _scan_result(True, "Automatic scanning paused — manual !check still works.")
@@ -467,13 +455,10 @@ def scan_pause():
 @api_v1.route("/system/scan/resume", methods=["POST"])
 @require_auth
 def scan_resume():
-    import os
-
-    from swingbot.admin.app import PAUSE_FILE
+    from swingbot.commands.scanning import runstate
 
     try:
-        if os.path.exists(PAUSE_FILE):
-            os.remove(PAUSE_FILE)
+        runstate.set_scan_paused(False)
     except OSError as exc:
         return error("unavailable", f"Could not remove the pause file: {exc}", 503)
     return _scan_result(True, "Automatic scanning resumed.")
@@ -515,10 +500,14 @@ _PREFERENCES_MAX_BYTES = 64 * 1024
 _DEFAULT_MIN_SAMPLE_N = 30
 
 
-def _preferences_path() -> str:
-    import os
+def _load_preferences() -> dict:
+    from swingbot.core.db.repositories.preferences import preferences_repo
+    return preferences_repo().load()
 
-    return os.path.join(config.DATA_DIR, "ui_preferences.json")
+
+def _store_preferences(saved: dict) -> None:
+    from swingbot.core.db.repositories.preferences import preferences_repo
+    preferences_repo().save(saved)
 
 
 @api_v1.route("/system/preferences", methods=["GET"])
@@ -544,9 +533,7 @@ def get_preferences():
     server that validated its shape would need editing every time the SPA
     remembered one more thing.
     """
-    from swingbot.core.infra.jsonio import read_json
-
-    preferences = read_json(_preferences_path(), {}) or {}
+    preferences = _load_preferences()
     # A missing value is an older preferences blob, not an instruction to
     # remove the statistical guard. Keep the default server-side so every
     # client receives one truth before it has ever written preferences.
@@ -563,8 +550,6 @@ def put_preferences():
     a merge would make deleting a key impossible without a second verb.
     """
     import json
-
-    from swingbot.core.infra.jsonio import atomic_write_json
 
     payload = request.get_json(silent=True)
     if not isinstance(payload, Mapping):
@@ -586,5 +571,5 @@ def put_preferences():
 
     saved = dict(preferences)
     saved.setdefault("minSampleN", _DEFAULT_MIN_SAMPLE_N)
-    atomic_write_json(_preferences_path(), saved)
+    _store_preferences(saved)
     return jsonify({"preferences": saved})

@@ -88,11 +88,13 @@ heading).
 | `mirror-prod` | 1 | model-invocable | `working-conventions.md` |
 | `edge-module` | 3 | model-invocable | `architecture.md` |
 | `alert-surface` | 3 | model-invocable | `known-traps.md` |
-| `schema-change` | 3 | model-invocable | none — Step 1 reads code (`swingbot/core/db/repositories/`, `scripts/db/parity_report.py`), not a doc |
+| `schema-change` | 3 | model-invocable | `schema-evolution.md` — Step 1 reads it to pick add/rename/drop/promote |
 | `worktree-lifecycle` | 3 | model-invocable | `document-lifecycle.md`, `working-conventions.md` |
 | `close-out` | 2 | slash-only (`/close-out`) | `document-lifecycle.md`, `working-conventions.md` |
 | `new-doc` | 2 | slash-only (`/new-doc`) | `document-conventions.md` |
 | `deploy` | 2 | slash-only (`/deploy`) | none — Step 1 reads `docs/deploy/DEPLOY_HETZNER.md` and `docs/deploy/DOCKER.md`, not `docs/claude/` |
+| `stable-snapshot` | 2 | slash-only (`/stable-snapshot`) | none — Step 1 reads the v120 spec and `docs/deploy/DB_RESTORE.md`, not `docs/claude/` |
+| `backup-pull` | 2 | slash-only (`/backup-pull`) | none — Step 1 reads the v120 spec and `docs/deploy/DB_RESTORE.md`, not `docs/claude/` |
 
 Tier 1 (integrity gates) and Tier 3 (seam briefings) are both
 model-invocable and share one mechanical shape contract — a `Trigger table`
@@ -104,8 +106,9 @@ pooled numbers, unmirrored prod changes), Tier 3 briefs an architectural seam
 before it's crossed (edge module boundaries, the alert surface, a schema
 change, worktree lifecycle). Tier 2 skills carry
 `disable-model-invocation: true` and no Trigger table — they are checklists
-for an explicit slash command (`/close-out`, `/new-doc`, `/deploy`), not
-things the model should decide to run on its own.
+for an explicit slash command (`/close-out`, `/new-doc`, `/deploy`,
+`/stable-snapshot`, `/backup-pull`), not things the model should decide to run
+on its own.
 
 ## Proving a skill fires: the eval suites
 

@@ -1,7 +1,7 @@
 from types import SimpleNamespace as Trade
 
 from swingbot.core.backtesting import arm_rule as ar
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 
 
 def _trades(wins, losses, scratches=0, timeouts=0):
@@ -33,7 +33,7 @@ def test_stage_one_clauses_and_zero_scratch_share():
 def test_stage_two_and_plateau_helpers():
     assert ar.stage2_allowed({"win_rate": 46.0, "expectancy_r": .3}) is True
     assert ar.stage2_allowed({"win_rate": 52.0, "expectancy_r": .3}) is False
-    neighbours = ar.neighbour_subsets(("2m", "3m", "4m"), tuple(HORIZONS))
+    neighbours = ar.neighbour_subsets(("2m", "3m", "4m"), LEGACY_HORIZONS)
     assert ("3m", "4m") in neighbours and ("4w", "2m", "3m", "4m") in neighbours
     good = {"win_rate": 53.0, "n": 40}
     assert ar.plateau_ok(good, [good] * 4) is True
