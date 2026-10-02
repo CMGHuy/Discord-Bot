@@ -536,11 +536,23 @@ def _format_badge_stats(stats: dict | None) -> str:
     return f"N={stats['n']} · {wr}"
 
 
+def scenarios_for_direction(scenarios, allowed_directions):
+    """Keep only scenarios whose direction is allowed; None allows all.
+
+    Applied AFTER levels.build_scenarios so the dead-cat-bounce veto keeps its
+    meaning (it blocks bullish scenarios inside build_scenarios) -- the SHORT
+    lane filters by direction here and never reuses `block_bullish`.
+    """
+    if allowed_directions is None:
+        return scenarios
+    return [s for s in scenarios if s.direction in allowed_directions]
+
+
 def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
               regime, effective_min_confluence: int, effective_min_confidence: int,
               rs_cache: dict = None, spy_df=None, breadth: float = None,
               live_prices: dict = None, hard_filters: dict = None,
-              opex_tier_today=None) -> dict:
+              opex_tier_today=None, allowed_directions=None) -> dict:
     """
     Per-ticker analysis body of _sync_run_scan's ANALYZE phase, extracted
     so it can run inside a map_tickers() worker thread (Task E20). Handles
@@ -800,7 +812,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             log.debug("%s (%s): no qualifying entry point (either no genuine support/resistance on both "
                        "sides, or the reward/stop/risk-reward requirements weren't met)", ticker, horizon_key)
 
-        for scenario in scenarios:
+        for scenario in scenarios_for_direction(scenarios, allowed_directions):
             stats["scenarios_found"] += 1
             if scenario.tight_stop:
                 log.info("%s (%s, %s): tight stop -- %.1f%% away, below this horizon's normal ATR cushion (%.1f%%)",
@@ -955,4 +967,55 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
     return stats
 
 
+# --- V118-4: the SHORT extra lane's per-symbol analysis ---------------------------
 
+BEARISH_ONLY = ("bearish",)
+
+
+@dataclass
+class ExtraScanContext:
+    """Scan-wide inputs for the extra lane, frozen once per extra scan.
+
+    `rs_cache` is the lane's own in-memory {"rels": ...}; `newly_closed` and
+    `near_close` collect what monitoring an extra symbol's open trade found.
+    """
+    regime: object
+    min_confluence: int
+    min_confidence: int
+    rs_cache: dict | None
+    spy_df: object
+    live_prices: dict
+    hard_filters: dict | None
+    opex_tier: object
+    newly_closed: list = field(default_factory=list)
+    near_close: list = field(default_factory=list)
+
+
+def scan_extra_candidate(candidate, frame, context: ExtraScanContext, horizons) -> list:
+    """Bearish ScanItems for one extra-lane candidate; [] on any screen failure.
+
+    Runs the base per-symbol analysis (same E12 liquidity / E16 data-quality
+    screens, levels, scenarios, geometry, quality and RS inputs) with the
+    direction filter applied after scenario creation and before any plan or
+    confirmation work. Never the strategy pass; breadth is None (the base
+    breadth is not this universe's).
+    """
+    stats = _scan_one(
+        candidate.ticker, frame, list(horizons), None, context.regime,
+        context.min_confluence, context.min_confidence, rs_cache=context.rs_cache,
+        spy_df=context.spy_df, breadth=None, live_prices=context.live_prices,
+        hard_filters=context.hard_filters, opex_tier_today=context.opex_tier,
+        allowed_directions=BEARISH_ONLY)
+    context.newly_closed.extend(stats["newly_closed"])
+    context.near_close.extend(stats["near_close_warnings"])
+    return stats["items"]
+
+
+def monitor_open_only(ticker: str, df, live_price: float | None = None) -> tuple[list, list]:
+    """SL/TP monitoring for an open paper trade whose symbol is not scanned for
+    new entries today. Returns (newly_closed, near_close_warnings)."""
+    if df is None or len(df) == 0:
+        return [], []
+    price = live_price if live_price and live_price > 0 else float(df["Close"].iloc[-1])
+    closed = trade_log.update_open_trades(ticker, df, live_price=price)
+    return closed, _check_near_close(ticker, df)

@@ -11,7 +11,7 @@ from swingbot.core.scanning import engine as scan_engine
 from swingbot.core.market.strategy import LEGACY_HORIZONS
 from swingbot.core.marketdata.watchlist import load_watchlist
 from . import presence, recap, runstate
-from .alerts import _send_alerts
+from .alerts import _send_alerts, post_short_universe, send_then_short
 
 log = logging.getLogger(__name__)
 
@@ -199,6 +199,7 @@ async def check_cmd(ctx, *args: str):
                     + ")."
                 )
             )
+        await post_short_universe(ctx, bot=bot, require_confirmation=False)
         return
 
     f = progress.funnel
@@ -213,7 +214,7 @@ async def check_cmd(ctx, *args: str):
         + f")  •  confidence breakdown: {lv_breakdown}"
     )
     await progress_msg.edit(content=summary)
-    await _send_alerts(ctx, alerts)
+    await send_then_short(ctx, alerts, bot=bot, require_confirmation=False)
 
 
 async def _check_historical(ctx, horizon: str, date_from: str | None, date_to: str | None):

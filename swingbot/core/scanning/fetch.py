@@ -456,6 +456,38 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     return results
 
 
+SHORT_CRAWL_CHUNK = 20
+
+
+def _crawl_bounded(symbols, *, max_symbols: int, budget_s: float,
+                   chunk: int = SHORT_CRAWL_CHUNK, clock=time.monotonic) -> tuple[dict, str | None]:
+    """V118-4: cache-first crawl of the SHORT extra lane's symbols, bounded.
+
+    At most `max_symbols` are queued, resolved `chunk` at a time through the
+    same `_crawl_latest_data` the base scan uses (cache first, then the bounded
+    cold pool), and the deadline is checked BETWEEN chunks. A spent budget, a
+    stop request or a failed chunk ends only this queue and is named in the
+    returned reason ("budget_exhausted" / "stopped" / "fetch_failed", else
+    None); frames already resolved are kept. Never reorders or touches the base
+    crawl -- the caller runs it after the base alerts were sent.
+    """
+    queue = list(symbols)[:max(0, int(max_symbols))]
+    deadline = clock() + budget_s
+    frames: dict = {}
+    for batch in _chunked(queue, chunk):
+        if runstate.is_stop_requested():
+            return frames, "stopped"
+        if clock() >= deadline:
+            log.info("SHORT crawl: budget spent -- %d/%d symbol(s) resolved", len(frames), len(queue))
+            return frames, "budget_exhausted"
+        try:
+            frames.update(_crawl_latest_data(batch, None))
+        except Exception:
+            log.warning("SHORT crawl: chunk of %d failed -- ending the extra queue", len(batch), exc_info=True)
+            return frames, "fetch_failed"
+    return frames, None
+
+
 def _fetch_live_prices(tickers: list, progress: "ScanProgress" = None) -> dict:
     """v55: Phase 1b of every scan -- one batched live-price fetch (chunked)
     for the WHOLE watchlist, not just cold tickers: a warm daily-bar cache

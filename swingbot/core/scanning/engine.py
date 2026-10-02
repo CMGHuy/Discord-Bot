@@ -26,6 +26,7 @@ from .analyze import (ScanItem, build_decision_context, _build_quality_inputs,
                       _scan_one)
 from .scan_run import (ScanProgress, get_regime, _logged_plan_fields,
                        _sync_run_scan, run_scan, get_all_unrealized_pnl)
+from .short_run import run_short_universe_scan
 from .embeds import (_build_requirement_checks, build_embed, build_simple_alert,
                      plan_numbers_for_display, regenerate_chart_for_trade,
                      build_closed_trade_embed, notify_closed_trades,
@@ -42,7 +43,7 @@ __all__ = [
     "_daily_frame_for", "map_tickers", "ScanItem", "build_decision_context",
     "_build_quality_inputs", "attach_plan_v2", "_check_near_close",
     "_apply_sector_rs", "_scan_one", "ScanProgress", "get_regime",
-    "_logged_plan_fields", "_sync_run_scan", "run_scan", "get_all_unrealized_pnl",
+    "_logged_plan_fields", "_sync_run_scan", "run_scan", "run_short_universe_scan", "get_all_unrealized_pnl",
     "_build_requirement_checks",
     "build_embed", "build_simple_alert", "plan_numbers_for_display",
     "regenerate_chart_for_trade", "build_closed_trade_embed", "notify_closed_trades",

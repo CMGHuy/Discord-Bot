@@ -19,7 +19,7 @@ from swingbot.core.infra import pitr_watch
 from swingbot.core import presentation as ui
 from swingbot.core.marketdata.watchlist import load_watchlist
 from . import notices, presence, recap, runstate
-from .alerts import _send_alerts
+from .alerts import _send_alerts, send_then_short
 
 log = logging.getLogger(__name__)
 
@@ -195,7 +195,8 @@ async def _session_scan_tick():
     progress = scan_engine.ScanProgress()
     alerts = await _run_scan_posting_partial(
         channel, require_confirmation=True, bot=bot, progress=progress)
-    await _send_alerts(channel, alerts, route_by_confidence=True)
+    await send_then_short(channel, alerts, bot=bot, require_confirmation=True,
+                          route_by_confidence=True)
 
     from swingbot.core.charts.cache import purge
     await asyncio.to_thread(purge)
@@ -449,7 +450,8 @@ async def config_watcher():
         finally:
             poller.cancel()
 
-        await _send_alerts(channel, alerts, route_by_confidence=True)
+        await send_then_short(channel, alerts, bot=bot, require_confirmation=False,
+                              route_by_confidence=True)
         f = progress.funnel
         if progress.stopped:
             summary = (

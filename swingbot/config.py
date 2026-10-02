@@ -797,6 +797,15 @@ FIELDS: list[Field] = [
                "strategy pass or a bullish alert. No broker order is ever placed and borrow "
                "availability is not checked -- confirm a borrow before acting on an alert. "
                "Off (default): the scan is unchanged."),
+    Field("SHORT_UNIVERSE_MAX_SYMBOLS", "SHORT_UNIVERSE_MAX_SYMBOLS", "Universe & Scanning",
+          "SHORT extra lane: max symbols per scan", type="number", default="50", min=1, max=500, step=1,
+          help="v118 operational safeguard (not a search knob): the extra lane fetches at most this many "
+               "symbols per scan, in snapshot order, after the base alerts have been sent."),
+    Field("SHORT_UNIVERSE_FETCH_BUDGET_SECONDS", "SHORT_UNIVERSE_FETCH_BUDGET_SECONDS",
+          "Universe & Scanning", "SHORT extra lane: fetch budget (seconds)",
+          type="number", default="120", min=10, max=1800, step=10,
+          help="v118 operational safeguard (not a search knob): the extra lane stops fetching further "
+               "chunks once this much time has passed and records budget_exhausted. Base scan unaffected."),
     Field("EARNINGS_BLACKOUT_SESSIONS", "EARNINGS_BLACKOUT_SESSIONS", "Universe & Scanning",
           "Earnings blackout (sessions before the reaction)", type="number", default="0", min=0, max=5, step=1,
           help="Blocks a setup when the next earnings reaction is 1 to this many trading sessions away (0 = off). "
@@ -1122,6 +1131,7 @@ _SEARCH_CLASSES = {
         "INTRADAY_RTH_ONLY", "EXTENDED_HOURS_EXIT_CHECK",
         "QUIET_HOURS_START_BERLIN", "QUIET_HOURS_END_BERLIN",
         "EXTENDED_HOURS_DEBOUNCE_TICKS",
+        "SHORT_UNIVERSE_MAX_SYMBOLS", "SHORT_UNIVERSE_FETCH_BUDGET_SECONDS",
     },
     "never": {"SLIPPAGE_BPS", "COMMISSION_PER_TRADE", "COMMISSION_RISK_BASIS"},
 }

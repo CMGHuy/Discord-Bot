@@ -120,7 +120,7 @@ def test_base_inputs_are_identical_with_flag_off_and_on(monkeypatch, caplog):
     base_off = _run_base_scan(monkeypatch, False)
     with caplog.at_level("INFO"):
         base_on = _run_base_scan(monkeypatch, True)
-    assert "SHORT extra lane: 1 candidate(s)" in caplog.text   # AAA only; BBB is base
+    assert "SHORT extra lane" not in caplog.text   # V118-4: the lane runs after the base send
     assert base_off.tickers == base_on.tickers == ["B1", "B2", "B3", "BASE", "BBB"]
     assert base_off.breadth == base_on.breadth
     assert base_off.rs_rels == base_on.rs_rels
@@ -134,13 +134,11 @@ def test_flag_defaults_off():
     assert config.SHORT_UNIVERSE_ENABLED is False
 
 
-def test_stale_snapshot_records_no_snapshot_and_leaves_base_alone(monkeypatch, caplog):
+def test_base_scan_never_runs_the_lane_even_with_no_snapshot(monkeypatch, caplog):
     base_off = _run_base_scan(monkeypatch, False)
     with caplog.at_level("INFO"):
         base_on = _run_base_scan(monkeypatch, True, snapshot=None)
-    assert "no_snapshot" in caplog.text
-    assert "SHORT extra lane failed" not in caplog.text
-    assert "SHORT extra lane: 0 candidate(s)" in caplog.text
+    assert "SHORT extra lane" not in caplog.text
     assert base_off.tickers == base_on.tickers
     assert base_off.strategy == base_on.strategy
     assert base_off.long_payloads == base_on.long_payloads
