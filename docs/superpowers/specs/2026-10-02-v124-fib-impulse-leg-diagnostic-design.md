@@ -29,7 +29,7 @@ v113 `1w`) was measured on those anchors. Anchor selection is therefore a
 mechanism outside all of them, which is what `backtest-methodology.md`
 requires before Fibonacci is reopened.
 
-This spec builds the leg and measures, on TRAIN only, whether each of the four
+This spec builds the leg and measures, on the 2015–2025 diagnostic window, whether each of the four
 claims shows any signal in the bot's own trades. It gates nothing.
 
 ## Scope
@@ -80,15 +80,33 @@ second pivot implementation.
 `scripts/backtest/measure_fib_anchor_diagnostic.py`, read-only, modelled on
 `measure_fib_diagnostic.py` (v101) and `measure_fib_v103.py`.
 
-- **Window:** `TRAIN_EXT` 2010-01-01..2023-12-31, extended cache
-  `data/backtest_cache_ext`, the v103 universe. The script refuses any window
-  touching 2024-01-01 or later.
+- **Window (partner decision, 2026-10-02):** entries and features on
+  2015-01-01..2025-12-31, extended cache `data/backtest_cache_ext`, the v103
+  universe. The window bounds entry dates; bars before 2015 serve only as
+  lookback history. The script refuses any diagnostic window starting before
+  2015-01-01 or ending after 2025-12-31.
+- **Outcome resolution past the window.** A trade entered on or before
+  2025-12-31 and still open then may resolve on later (2026) bars, exactly as
+  the harness already does for every window. That is outcome resolution only:
+  no feature, bucket or verdict reads a bar after the entry bar.
+- **Holdout and budget.** 2026 is the holdout, per the v104/v113 precedent.
+  v103 already spent Fibonacci's 2024–25 VALIDATION shot (bullish `b=0.1`,
+  FAIL). This is a diagnostic, not a validation shot: it spends no budget and
+  re-scores no closed candidate. Reading 2024–25 here is a deliberate partner
+  exception to the "2024–2025 tainted for selection" rule, limited to
+  admitting arms to a spec. Every follow-on arm must name its own holdout in
+  its pre-registration.
 - **Trades:** today's Fibonacci entries through `run_backtest` with the v2 +
   scale-out engine. Bearish is unmasked inside the script only, through
   `entry_filters.gate_override`, and is reported as description.
-- **Sanity check:** the bullish baseline must reproduce v103's reference arm
-  (N=815, WR 36.81%, ExpR +0.222). A difference is explained in the results
-  document before any bucket is read.
+- **Sanity check, on v103's own window.** Before the diagnostic runs, the
+  script runs the same trade collector on 2010-01-01..2023-12-31 (`TRAIN_EXT`)
+  and the bullish baseline must reproduce v103's reference arm: N=815,
+  WR 36.81%, ExpR +0.2219, universe 73. That proves the instrument matches
+  v103. The 2015 lower bound and the 2025 upper bound apply to the diagnostic
+  window only; this check runs on exactly 2010-01-01..2023-12-31 and nothing
+  else. A difference is explained in a committed note before any bucket is
+  read, and the report refuses to write tables until that note exists.
 
 Each arm has **one primary split**, fixed here. All features are computed at
 the entry bar from `df.iloc[:t+1]`.
@@ -108,9 +126,22 @@ because v102 closed it; Zigzag Pivot is
 excluded because v49 measured it as 0.838 redundant with Fibonacci.
 
 Arm 4 depends on identifying the Fibonacci candidate behind a confluence
-trade, by recomputing `collect_candidate_levels` at the entry bar. If the
-replay cannot identify it, arm 4 is reported as **not measurable with this
-instrument** and does not proceed on this diagnostic.
+trade. A confluence plan does not carry its level sources, so the script
+rebuilds them. Three rules, decided by the partner on 2026-10-02:
+
+- **Map-bar recompute.** `levels_asof` caches one level map per 5-bar bucket,
+  built at the first bar the replay visits in it:
+  `max(MIN_BARS[h], (index // 5) * 5)`, never after the entry. The script
+  rebuilds that map, re-splits it against the entry close as the replay
+  does, and recomputes `collect_candidate_levels` **on that map bar**, not the
+  entry bar. That is the frame that produced the level.
+- **"The level" is the stop level and the target-1 level** of the scenario,
+  the two `primary_strategy_for` reads. Its Fibonacci candidates are the
+  Fibonacci-family labels in those two levels.
+- **All-or-nothing rebuild.** A trade is identified only if the plan's stop
+  equals `_clamp_stop_to_hard_cap(trigger, rebuilt stop level, is_bull)`. If
+  even one confluence trade fails, arm 4 is reported as **not measurable with
+  this instrument** and does not proceed on this diagnostic.
 
 **Exit rule, fixed in advance.** An arm proceeds to its own spec only if, on
 the bullish side, the favourable bucket has a higher win rate **and** an ExpR
@@ -140,7 +171,9 @@ per-ticker progress and a percent figure past 15 minutes.
   an end younger than 3 bars returning NaN; a leg that does and does not
   break the prior major high; `zone_touch` true and false.
 - **Short frames** return all NaN and never raise.
-- **Script:** refuses a window ending after 2023-12-31; bucket arithmetic
+- **Script:** refuses a diagnostic window starting before 2015-01-01 or
+  ending after 2025-12-31, and a reproduction window other than
+  2010-01-01..2023-12-31; bucket arithmetic
   checked against a small fixture of hand-labelled trades.
 - `no-lookahead` skill review of `fib_leg.py` and the script's feature code.
 - Every new function stays under cyclomatic complexity 15.
@@ -163,7 +196,9 @@ winner, so one arm's failure does not contaminate another.
 
 - No stop, target or exit change: v84, v101 and v103 closed those.
 - No bearish rescue: bearish rows are description only.
-- No reading of 2024–2025 data for any purpose.
+- No feature, bucket or verdict reads a bar after its entry bar; bars after
+  2025-12-31 serve only to resolve trades still open then. No 2026 entry is
+  ever read.
 - No selection from the "also described" columns.
 
 ## Parallelisation

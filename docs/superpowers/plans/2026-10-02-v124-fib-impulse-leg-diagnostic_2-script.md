@@ -4,13 +4,13 @@
 
 # Phase 2 — The diagnostic script
 
-### Task V124-3: Window guard, bucket arithmetic, verdicts, reproduction
+### Task V124-3: Window guards, bucket arithmetic, verdicts, reproduction
 
 **Files:** Create `scripts/backtest/measure_fib_anchor_diagnostic.py`, `tests/scripts/test_measure_fib_anchor_diagnostic.py`.
 
 **Interfaces:**
 - Consumes: `funnel.MIN_N_TRAIN`, `funnel.pooled`, `funnel.dir_rows`; `measure_fib_confluence.TRAIN_EXT`, `Progress`, `_load_frames`, `_write`, `require_ext_cache`.
-- Produces: `DIRECTIONS`, `LAST_TRAIN_DAY`, `TOL_ATR = 0.25`, `DIVISORS = (4, 6, 8)`, `PRIMARY_DIVISOR = 6`, `MIN_BUCKET_N = 30`, `MIN_SIGN_DIVISORS = 2`, `REFERENCE`, `REFERENCE_UNIVERSE_N = 73`, `EXIT_RULE`; `require_train_window(window) -> window` (raises `SystemExit`); `bucket(rows, favourable) -> {"favourable": stats, "rest": stats}`; `split_passes(buckets) -> bool`; `wr_sign_positive(buckets) -> bool`; `divisor_buckets(rows, cell_key) -> {"4"|"6"|"8": buckets}` (reads `row["d<divisor>"][cell_key]`); `leg_arm_verdict(by_divisor) -> {"primary_passes", "wr_sign_divisors", "proceeds"}`; `single_split_verdict(buckets) -> {"primary_passes", "proceeds"}`; `describe(rows, key) -> {label: stats}`; `quintile_key(rows, value_key) -> callable`; `reproduction(rows, direction, universe_n, reference=REFERENCE) -> dict`.
+- Produces: `DIRECTIONS`, `DIAG_WINDOW = ("2015-01-01", "2025-12-31")`, `REPRO_WINDOW = TRAIN_EXT`, `TOL_ATR = 0.25`, `DIVISORS = (4, 6, 8)`, `PRIMARY_DIVISOR = 6`, `MIN_BUCKET_N = 30`, `MIN_SIGN_DIVISORS = 2`, `REFERENCE`, `REFERENCE_UNIVERSE_N = 73`, `EXIT_RULE`; `require_diagnostic_window(window) -> window` (raises `SystemExit` for a start before 2015-01-01 or an end after 2025-12-31); `require_repro_window(window) -> tuple` (raises unless the window is exactly `REPRO_WINDOW`); `bucket(rows, favourable) -> {"favourable": stats, "rest": stats}`; `split_passes(buckets) -> bool`; `wr_sign_positive(buckets) -> bool`; `divisor_buckets(rows, cell_key) -> {"4"|"6"|"8": buckets}` (reads `row["d<divisor>"][cell_key]`); `leg_arm_verdict(by_divisor) -> {"primary_passes", "wr_sign_divisors", "proceeds"}`; `single_split_verdict(buckets) -> {"primary_passes", "proceeds"}`; `describe(rows, key) -> {label: stats}`; `quintile_key(rows, value_key) -> callable`; `reproduction(rows, direction, universe_n, reference=None) -> dict` (`None` reads the module's `REFERENCE` at call time).
 
 - [ ] **Step 0: Precondition** as in V124-1 Step 0.
 - [ ] **Step 1: Write the failing tests.**
@@ -52,16 +52,24 @@ def group(wins, losses, win_r=2.0, **flags):
 GOOD = dict(anchored=True, zone_confluence=True, fib_on_leg=True, confirm_close=True)
 
 
-@pytest.mark.parametrize("window", [("2010-01-01", "2024-01-01"), ("2010-01-01", "2025-12-31"),
-                                    ("2024-01-01", "2024-06-30")])
-def test_window_touching_2024_is_refused(window):
-    with pytest.raises(SystemExit, match="TRAIN_EXT only"):
-        _module().require_train_window(window)
+@pytest.mark.parametrize("window", [("2014-12-31", "2025-12-31"), ("2015-01-01", "2026-01-02"),
+                                    ("2010-01-01", "2023-12-31"), ("2026-01-02", "2026-06-30")])
+def test_diagnostic_window_outside_2015_2025_is_refused(window):
+    with pytest.raises(SystemExit, match="diagnostic window"):
+        _module().require_diagnostic_window(window)
 
 
-def test_train_ext_is_accepted():
+@pytest.mark.parametrize("window", [("2015-01-01", "2025-12-31"), ("2015-01-01", "2015-12-31")])
+def test_diagnostic_window_inside_2015_2025_is_accepted(window):
+    assert _module().require_diagnostic_window(window) == window
+
+
+def test_reproduction_window_is_exactly_v103s():
     module = _module()
-    assert module.require_train_window(module.TRAIN_EXT) == ("2010-01-01", "2023-12-31")
+    assert module.require_repro_window(["2010-01-01", "2023-12-31"]) == ("2010-01-01", "2023-12-31")
+    for window in (("2010-01-01", "2025-12-31"), ("2015-01-01", "2023-12-31")):
+        with pytest.raises(SystemExit, match="reproduction runs on 2010-01-01..2023-12-31"):
+            module.require_repro_window(window)
 
 
 def test_bucket_arithmetic_on_hand_labelled_rows():
@@ -159,8 +167,11 @@ def test_reproduction_compares_n_wr_expr_and_universe():
 
 def test_reference_is_the_v103_arm():
     module = _module()
-    assert module.REFERENCE["bullish"] == {"n": 815, "win_rate": 36.81, "expectancy_r": 0.222}
+    assert module.REFERENCE["bullish"] == {"n": 815, "win_rate": 36.81, "expectancy_r": 0.2219}
+    assert module.REFERENCE["bearish"] == {"n": 169, "win_rate": 23.67, "expectancy_r": -0.1269}
     assert module.REFERENCE_UNIVERSE_N == 73
+    assert module.REPRO_WINDOW == ("2010-01-01", "2023-12-31")
+    assert module.DIAG_WINDOW == ("2015-01-01", "2025-12-31")
 ```
 
 - [ ] **Step 2: Run** `python scripts/dev/testrun.py file tests/scripts/test_measure_fib_anchor_diagnostic.py`. Expect FAIL (`ModuleNotFoundError`).
@@ -168,10 +179,17 @@ def test_reference_is_the_v103_arm():
 
 ```python
 #!/usr/bin/env python3
-"""v124: Fibonacci impulse-leg anchor diagnostic -- TRAIN_EXT only, read-only.
+"""v124: Fibonacci impulse-leg anchor diagnostic -- read-only.
 
 Spec: docs/superpowers/specs/2026-10-02-v124-fib-impulse-leg-diagnostic-design.md
 Extended cache only: run with BACKTEST_CACHE_DIR=data/backtest_cache_ext.
+
+Two windows. The diagnostic reads entries 2015-01-01..2025-12-31 (DIAG_WINDOW,
+partner decision 2026-10-02); a trade still open at 2025-12-31 may resolve on
+2026 bars (outcome resolution only). First, the v103 reference arm is
+re-collected on its own window 2010-01-01..2023-12-31 (REPRO_WINDOW) to prove
+the instrument matches v103; the 2015/2025 bounds do not apply to that check.
+2026 is the holdout. No VALIDATION budget is spent.
 
 It measures whether each of four Fibonacci-handbook claims shows any signal
 in the bot's own trades. It gates nothing. Each arm has one primary split,
@@ -180,11 +198,13 @@ arm earns its own spec.
 
 Commands (from the repo root):
   BACKTEST_CACHE_DIR=data/backtest_cache_ext python scripts/backtest/measure_fib_anchor_diagnostic.py \\
+      collect-repro --direction bullish --out <json>
+  BACKTEST_CACHE_DIR=data/backtest_cache_ext python scripts/backtest/measure_fib_anchor_diagnostic.py \\
       collect-fib --direction bullish --out <json>
   BACKTEST_CACHE_DIR=data/backtest_cache_ext python scripts/backtest/measure_fib_anchor_diagnostic.py \\
       collect-confluence --tickers A,B,C --out <json>
-  python scripts/backtest/measure_fib_anchor_diagnostic.py reproduce --fib <bull json> <bear json>
-  python scripts/backtest/measure_fib_anchor_diagnostic.py report --fib <bull json> <bear json> \\
+  python scripts/backtest/measure_fib_anchor_diagnostic.py reproduce --repro <bull json> <bear json>
+  python scripts/backtest/measure_fib_anchor_diagnostic.py report --repro <bull> <bear> --fib <bull> <bear> \\
       --confluence <json> [<json> ...] --out <json> --md <md> [--reproduction-note <md>]
 """
 from __future__ import annotations
@@ -204,27 +224,35 @@ from funnel import MIN_N_TRAIN, dir_rows, pooled  # noqa: E402
 from measure_fib_confluence import TRAIN_EXT, Progress, _load_frames, _write, require_ext_cache  # noqa: E402
 
 DIRECTIONS = ("bullish", "bearish")
-LAST_TRAIN_DAY = "2023-12-31"
+DIAG_WINDOW = ("2015-01-01", "2025-12-31")   # entries + features (partner decision, 2026-10-02)
+REPRO_WINDOW = TRAIN_EXT                     # v103's own window, for the reproduction check only
 # --- frozen in the spec ---
 TOL_ATR = 0.25            # one tolerance, arms 1, 2 and 4
 DIVISORS = (4, 6, 8)      # leg-dependent splits reported at every divisor
 PRIMARY_DIVISOR = 6       # == fib_leg.ORIGIN_DIVISOR (pinned by a test in V124-4)
 MIN_BUCKET_N = MIN_N_TRAIN
 MIN_SIGN_DIVISORS = 2
-REFERENCE = {"bullish": {"n": 815, "win_rate": 36.81, "expectancy_r": 0.222},
-             "bearish": {"n": 169, "win_rate": 23.67, "expectancy_r": -0.127}}
+REFERENCE = {"bullish": {"n": 815, "win_rate": 36.81, "expectancy_r": 0.2219},
+             "bearish": {"n": 169, "win_rate": 23.67, "expectancy_r": -0.1269}}
 REFERENCE_UNIVERSE_N = 73
 EXIT_RULE = ("An arm proceeds to its own spec only if, on the bullish side, the favourable bucket "
              "has a higher win rate and an ExpR no lower than the rest, with N >= 30 in each bucket. "
              "Arms 1, 2 and 4 must also keep the win-rate sign at two of the three divisors.")
 
 
-def require_train_window(window):
-    """Refuse any window whose start or end falls after 2023-12-31."""
+def require_diagnostic_window(window):
+    """Refuse a diagnostic window starting before 2015-01-01 or ending after 2025-12-31."""
     start, end = window
-    if max(start, end) > LAST_TRAIN_DAY:
-        raise SystemExit(f"v124 reads TRAIN_EXT only: window {start}..{end} touches 2024-01-01 or later")
+    if start < DIAG_WINDOW[0] or end > DIAG_WINDOW[1]:
+        raise SystemExit(f"v124 diagnostic window is {DIAG_WINDOW[0]}..{DIAG_WINDOW[1]}: got {start}..{end}")
     return window
+
+
+def require_repro_window(window):
+    """The v103 reproduction runs on exactly REPRO_WINDOW, nothing else."""
+    if tuple(window) != REPRO_WINDOW:
+        raise SystemExit(f"the v103 reproduction runs on {REPRO_WINDOW[0]}..{REPRO_WINDOW[1]} only: got {window}")
+    return tuple(window)
 
 
 def bucket(rows, favourable) -> dict:
@@ -289,12 +317,13 @@ def quintile_key(rows, value_key):
     return label
 
 
-def reproduction(rows, direction, universe_n, reference=REFERENCE) -> dict:
-    observed, want = pooled(dir_rows(rows, direction)), reference[direction]
+def reproduction(rows, direction, universe_n, reference=None) -> dict:
+    """v103 reference arm on REPRO_WINDOW: N exact, WR at 2 dp, ExpR at 4 dp, universe exact."""
+    observed, want = pooled(dir_rows(rows, direction)), (reference or REFERENCE)[direction]
     same = (observed["n"] == want["n"] and observed["win_rate"] is not None
             and observed["expectancy_r"] is not None
             and round(observed["win_rate"], 2) == want["win_rate"]
-            and round(observed["expectancy_r"], 3) == want["expectancy_r"])
+            and round(observed["expectancy_r"], 4) == want["expectancy_r"])
     return {"observed": observed, "reference": want, "universe_n": universe_n,
             "reference_universe_n": REFERENCE_UNIVERSE_N,
             "matches": bool(same and universe_n == REFERENCE_UNIVERSE_N)}
@@ -305,16 +334,16 @@ def reproduction(rows, direction, universe_n, reference=REFERENCE) -> dict:
 
 ```bash
 git add scripts/backtest/measure_fib_anchor_diagnostic.py tests/scripts/test_measure_fib_anchor_diagnostic.py
-git commit -m "feat(v124): diagnostic window guard, bucket arithmetic and exit-rule verdicts"
+git commit -m "feat(v124): diagnostic and reproduction window guards, bucket arithmetic, verdicts"
 ```
 
-### Task V124-4: Arms 1–3 features and the Fibonacci collector
+### Task V124-4: Arms 1–3 features, the Fibonacci collector and the reproduction collector
 
 **Files:** Modify `scripts/backtest/measure_fib_anchor_diagnostic.py`, `tests/scripts/test_measure_fib_anchor_diagnostic.py`.
 
 **Interfaces:**
-- Consumes (V124-1/2): `fib_leg.ORIGIN_DIVISOR`, `leg_at`, `origin_strength`, `PRICE_COLUMNS`; (V124-3) `require_train_window`, `TOL_ATR`, `DIVISORS`, `Progress`, `_load_frames`, `_write`, `require_ext_cache`; (existing) `measure_fib_v103.collect_trades`, `measure_fib_diagnostic.fib_level`/`tested_ratio`, `run_backtest_range._build_asof_map`, `levels.collect_candidate_levels`/`strategy_family`, `structure.PIVOT_K`/`pivot_confirmations`, `indicators.atr`, `HORIZONS`, `config.AVWAP_LEVELS_ENABLED`.
-- Produces: `ZONE_FAMILIES`; `atr_at(prefix) -> float`; `near(a, b, atr_value) -> bool`; `rolling_anchor(prefix, lookback) -> dict | None` (`low`, `low_pos`, `high`, `high_pos`, first occurrence); `anchored_split(anchor, leg, atr_value, direction) -> bool`; `anchor_is_fractal(prefix, anchor, direction) -> bool | None`; `zone_confluence(candidates, leg, atr_value) -> bool`; `level_confluence(candidates, level, atr_value) -> bool`; `close_in_zone(leg, close) -> bool`; `confirm_close(prefix, direction) -> bool`; `confirm_wick(prefix, direction) -> bool`; `tri(value) -> bool | None`; `num(value) -> float | None`; `leg_cell(...) -> dict` (keys `has_leg`, `anchored`, `zone_confluence`, `zone_touch`, `close_in_zone`, `broke_structure`, `leg_atr`); `fib_trade_features(frame, horizon_key, direction, entry_date, *, candidates_fn=collect_candidate_levels) -> dict` (keys `confirm_close`, `confirm_wick`, `anchor_fractal`, `tested_ratio`, `rolling_level_confluence`, `d4`, `d6`, `d8`); `collect_fib(frames, asof_map, direction, window=TRAIN_EXT, *, run_fn=None, progress=None, candidates_fn=collect_candidate_levels) -> list[dict]`; `_cmd_collect_fib(args)`.
+- Consumes (V124-1/2): `fib_leg.ORIGIN_DIVISOR`, `leg_at`, `origin_strength`, `PRICE_COLUMNS`; (V124-3) `require_diagnostic_window`, `require_repro_window`, `DIAG_WINDOW`, `REPRO_WINDOW`, `TOL_ATR`, `DIVISORS`, `Progress`, `_load_frames`, `_write`, `require_ext_cache`; (existing) `measure_fib_v103.collect_trades`, `measure_fib_diagnostic.fib_level`/`tested_ratio`, `run_backtest_range._build_asof_map`, `levels.collect_candidate_levels`/`strategy_family`, `structure.PIVOT_K`/`pivot_confirmations`, `indicators.atr`, `HORIZONS`, `config.AVWAP_LEVELS_ENABLED`.
+- Produces: `ZONE_FAMILIES`; `atr_at(prefix) -> float`; `near(a, b, atr_value) -> bool`; `rolling_anchor(prefix, lookback) -> dict | None` (`low`, `low_pos`, `high`, `high_pos`, first occurrence); `anchored_split(anchor, leg, atr_value, direction) -> bool`; `anchor_is_fractal(prefix, anchor, direction) -> bool | None`; `zone_confluence(candidates, leg, atr_value) -> bool`; `level_confluence(candidates, level, atr_value) -> bool`; `close_in_zone(leg, close) -> bool`; `confirm_close(prefix, direction) -> bool`; `confirm_wick(prefix, direction) -> bool`; `tri(value) -> bool | None`; `num(value) -> float | None`; `leg_cell(...) -> dict` (keys `has_leg`, `anchored`, `zone_confluence`, `zone_touch`, `close_in_zone`, `broke_structure`, `leg_atr`); `fib_trade_features(frame, horizon_key, direction, entry_date, *, candidates_fn=collect_candidate_levels) -> dict` (keys `confirm_close`, `confirm_wick`, `anchor_fractal`, `tested_ratio`, `rolling_level_confluence`, `d4`, `d6`, `d8`); `collect_fib(frames, asof_map, direction, window=DIAG_WINDOW, *, run_fn=None, progress=None, candidates_fn=collect_candidate_levels) -> list[dict]`; `collect_repro(frames, asof_map, direction, *, run_fn=None, progress=None) -> list[dict]` (trade rows only, on `REPRO_WINDOW`); `_frames_and_asof(args)`, `_cmd_collect_fib(args)`, `_cmd_collect_repro(args)`.
 
 - [ ] **Step 0: Precondition** as in V124-1 Step 0.
 - [ ] **Step 1: Write the failing tests.** Append. On `CLEAN[:17]` with horizon `2w` (`fib_lookback` 15, so `origin_strength` is 3 at every divisor), the rolling window is bars 2..16. Its low is bar 7 (8.5) and its high is bar 13 (15.5), the leg's own origin and end. Bar 16 has Open = Close = 13, Low 12.5, High 13.5, so the lower wick is exactly half the range.
@@ -402,11 +431,14 @@ def test_primary_divisor_is_the_fib_leg_default():
     assert _module().PRIMARY_DIVISOR == ORIGIN_DIVISOR
 
 
-def test_collect_fib_refuses_a_2024_window_before_running():
-    def explode(*args, **kwargs):
-        raise AssertionError("run_fn must not be called")
-    with pytest.raises(SystemExit, match="TRAIN_EXT only"):
-        _module().collect_fib({}, {}, "bullish", ("2010-01-01", "2024-03-01"), run_fn=explode)
+def _explode(*args, **kwargs):
+    raise AssertionError("run_fn must not be called")
+
+
+@pytest.mark.parametrize("window", [("2015-01-01", "2026-03-01"), ("2010-01-01", "2023-12-31")])
+def test_collect_fib_refuses_a_window_outside_2015_2025_before_running(window):
+    with pytest.raises(SystemExit, match="diagnostic window"):
+        _module().collect_fib({}, {}, "bullish", window, run_fn=_explode)
 
 
 def test_collect_fib_stamps_features_on_reference_trades():
@@ -418,12 +450,28 @@ def test_collect_fib_stamps_features_on_reference_trades():
         trades = [NS(entry_date=date, direction="bullish", outcome="win", r_multiple=1.5)] if horizon == "2w" else []
         return NS(trades=trades)
 
-    rows = module.collect_fib({"AAA": frame}, {}, "bullish", module.TRAIN_EXT, run_fn=run_fn,
+    rows = module.collect_fib({"AAA": frame}, {}, "bullish", module.DIAG_WINDOW, run_fn=run_fn,
                               candidates_fn=lambda df, h, price: [])
     assert len(rows) == 1
     row = rows[0]
     assert (row["ticker"], row["horizon_key"], row["outcome"], row["r_multiple"]) == ("AAA", "2w", "win", 1.5)
     assert row["d6"]["anchored"] is True and row["d6"]["zone_confluence"] is False
+
+
+def test_collect_repro_runs_the_reference_arm_on_v103s_window_without_features():
+    module = _module()
+    frame, date = _entry(False)
+    seen = []
+
+    def run_fn(ticker, df, strategy, horizon, **kwargs):
+        trades = [NS(entry_date=date, direction="bullish", outcome="loss", r_multiple=-1.0),
+                  NS(entry_date="2024-02-01", direction="bullish", outcome="win", r_multiple=2.0)]
+        seen.append(horizon)
+        return NS(trades=trades if horizon == "2w" else [])
+
+    rows = module.collect_repro({"AAA": frame}, {}, "bullish", run_fn=run_fn)
+    assert [row["entry_date"] for row in rows] == [date]       # the 2024 entry is outside 2010-2023
+    assert "d6" not in rows[0] and seen
 ```
 
 - [ ] **Step 2: Run** `python scripts/dev/testrun.py file tests/scripts/test_measure_fib_anchor_diagnostic.py`. Expect the new tests to FAIL (`AttributeError`).
@@ -574,11 +622,19 @@ def fib_trade_features(frame, horizon_key, direction, entry_date, *, candidates_
     return out
 
 
-def collect_fib(frames, asof_map, direction, window=TRAIN_EXT, *, run_fn=None, progress=None,
+def collect_repro(frames, asof_map, direction, *, run_fn=None, progress=None) -> list:
+    """The v103 reference arm (b=0) on REPRO_WINDOW, trade rows only: the
+    instrument check. The diagnostic window's 2015/2025 bounds do not apply."""
+    window = require_repro_window(REPRO_WINDOW)
+    return measure_fib_v103.collect_trades("A", frames, asof_map, 0.0, window, directions=(direction,),
+                                           run_fn=run_fn, progress=progress)
+
+
+def collect_fib(frames, asof_map, direction, window=DIAG_WINDOW, *, run_fn=None, progress=None,
                 candidates_fn=collect_candidate_levels) -> list:
     """Today's Fibonacci trades (the v103 reference arm, b=0) with features.
     Bearish is unmasked inside v103's collector through gate_override."""
-    require_train_window(window)
+    require_diagnostic_window(window)
     rows = measure_fib_v103.collect_trades("A", frames, asof_map, 0.0, window, directions=(direction,),
                                            run_fn=run_fn, progress=progress)
     ticks, out = Progress(len(rows)), []
@@ -589,14 +645,27 @@ def collect_fib(frames, asof_map, direction, window=TRAIN_EXT, *, run_fn=None, p
     return out
 
 
-def _cmd_collect_fib(args):
-    require_train_window(TRAIN_EXT)
+def _frames_and_asof(args):
     require_ext_cache()
-    started = time.monotonic()
     frames = _load_frames(args.universe, args.tickers)
-    asof_map = _build_asof_map(list(frames), frames, args.universe)
-    rows = collect_fib(frames, asof_map, args.direction, TRAIN_EXT)
-    _write(args.out, {"kind": "fib", "direction": args.direction, "window": TRAIN_EXT,
+    return frames, _build_asof_map(list(frames), frames, args.universe)
+
+
+def _cmd_collect_repro(args):
+    started = time.monotonic()
+    frames, asof_map = _frames_and_asof(args)
+    rows = collect_repro(frames, asof_map, args.direction)
+    _write(args.out, {"kind": "repro", "direction": args.direction, "window": REPRO_WINDOW,
+                      "universe_n": len(frames), "rows": rows,
+                      "elapsed_s": round(time.monotonic() - started, 1)})
+
+
+def _cmd_collect_fib(args):
+    require_diagnostic_window(DIAG_WINDOW)
+    started = time.monotonic()
+    frames, asof_map = _frames_and_asof(args)
+    rows = collect_fib(frames, asof_map, args.direction, DIAG_WINDOW)
+    _write(args.out, {"kind": "fib", "direction": args.direction, "window": DIAG_WINDOW,
                       "universe_n": len(frames), "avwap_levels_enabled": bool(config.AVWAP_LEVELS_ENABLED),
                       "rows": rows, "elapsed_s": round(time.monotonic() - started, 1)})
 ```
@@ -606,7 +675,7 @@ def _cmd_collect_fib(args):
 
 ```bash
 git add scripts/backtest/measure_fib_anchor_diagnostic.py tests/scripts/test_measure_fib_anchor_diagnostic.py
-git commit -m "feat(v124): arm 1-3 entry-bar features and the reference-arm Fibonacci collector"
+git commit -m "feat(v124): arm 1-3 entry-bar features, Fibonacci and v103-reproduction collectors"
 ```
 
 ### Task V124-5: Arm 4 identification and the confluence collector
@@ -614,8 +683,8 @@ git commit -m "feat(v124): arm 1-3 entry-bar features and the reference-arm Fibo
 **Files:** Modify `scripts/backtest/measure_fib_anchor_diagnostic.py`, `tests/scripts/test_measure_fib_anchor_diagnostic.py`.
 
 **Interfaces:**
-- Consumes (V124-4): `near`, `atr_at`, `leg_at`, `origin_strength`, `collect_candidate_levels`, `strategy_family`, `HORIZONS`, `config`; (V124-3) `require_train_window`, `DIVISORS`, `Progress`, `_load_frames`, `_write`, `require_ext_cache`; (existing) `backtest_scenarios.LEVEL_REFRESH_BARS`, `levels_asof`, `replay_scenarios`; `strategy_types.MIN_BARS`; `confluence_engine.SKIPPED`; `plan_engine.simulate_exit`; `builders._clamp_stop_to_hard_cap`; `levels.Level`; `strategy_types.LEGACY_HORIZONS`.
-- Produces: `FIB_FAMILY`, `LEG_PRICE_KEYS`, `ALL_HZ`; `bucket_bar(index, horizon_key) -> int`; `scenario_levels(ticker, frame, index, horizon_key, direction, *, levels_fn=levels_asof) -> (stop_level, target_level) | None`; `is_identified(plan, stop_level) -> bool`; `fib_labels(pair) -> set[str]`; `fib_candidate_prices(candidates, labels) -> list[float]`; `arm4_cell(leg, prices, atr_value) -> {"has_leg", "fib_on_leg"}`; `confluence_row(ticker, frame, horizon_key, index, plan, result, *, levels_fn, candidates_fn) -> dict` (trade keys plus `identified`, `has_fib`, and `d4`/`d6`/`d8` only when `has_fib`); `confluence_trades(ticker, frame, horizon_key, window, *, replay_fn, exit_fn) -> [(index, plan, result)]`; `collect_confluence(frames, window=TRAIN_EXT, *, horizons=ALL_HZ, replay_fn, exit_fn, levels_fn, candidates_fn) -> list[dict]`; `_cmd_collect_confluence(args)`.
+- Consumes (V124-4): `near`, `atr_at`, `leg_at`, `origin_strength`, `collect_candidate_levels`, `strategy_family`, `HORIZONS`, `config`; (V124-3) `require_diagnostic_window`, `DIAG_WINDOW`, `DIVISORS`, `Progress`, `_load_frames`, `_write`, `require_ext_cache`; (existing) `backtest_scenarios.LEVEL_REFRESH_BARS`, `levels_asof`, `replay_scenarios`; `strategy_types.MIN_BARS`; `confluence_engine.SKIPPED`; `plan_engine.simulate_exit`; `builders._clamp_stop_to_hard_cap`; `levels.Level`; `strategy_types.LEGACY_HORIZONS`.
+- Produces: `FIB_FAMILY`, `LEG_PRICE_KEYS`, `ALL_HZ`; `bucket_bar(index, horizon_key) -> int`; `scenario_levels(ticker, frame, index, horizon_key, direction, *, levels_fn=levels_asof) -> (stop_level, target_level) | None`; `is_identified(plan, stop_level) -> bool`; `fib_labels(pair) -> set[str]`; `fib_candidate_prices(candidates, labels) -> list[float]`; `arm4_cell(leg, prices, atr_value) -> {"has_leg", "fib_on_leg"}`; `confluence_row(ticker, frame, horizon_key, index, plan, result, *, levels_fn, candidates_fn) -> dict` (trade keys plus `identified`, `has_fib`, and `d4`/`d6`/`d8` only when `has_fib`); `confluence_trades(ticker, frame, horizon_key, window, *, replay_fn, exit_fn) -> [(index, plan, result)]`; `collect_confluence(frames, window=DIAG_WINDOW, *, horizons=ALL_HZ, replay_fn, exit_fn, levels_fn, candidates_fn) -> list[dict]`; `_cmd_collect_confluence(args)`.
 
 - [ ] **Step 0: Precondition** as in V124-1 Step 0.
 - [ ] **Step 1: Write the failing tests.** Append. On `RESTART` (26 bars) at index 25 with `2w` (`MIN_BARS` 20), the bucket bar is 25. The leg is origin 11.0, end 16.5, size 5.5, so `level_500` is 13.75.
@@ -720,9 +789,9 @@ def test_confluence_trades_window_and_skips():
     trades = module.confluence_trades("AAA", frame, "2w", (start, end), replay_fn=replay_fn, exit_fn=exit_fn)
     assert [index for index, _, _ in trades] == [25]           # 20 before start, 24 skipped
     assert seen["last"] == end
-    with pytest.raises(SystemExit, match="TRAIN_EXT only"):
-        module.confluence_trades("AAA", frame, "2w", ("2010-01-01", "2024-01-02"),
-                                 replay_fn=replay_fn, exit_fn=exit_fn)
+    for window in (("2010-01-01", "2023-12-31"), ("2015-01-01", "2026-01-02")):
+        with pytest.raises(SystemExit, match="diagnostic window"):
+            module.confluence_trades("AAA", frame, "2w", window, replay_fn=replay_fn, exit_fn=exit_fn)
 ```
 
 - [ ] **Step 2: Run** `python scripts/dev/testrun.py file tests/scripts/test_measure_fib_anchor_diagnostic.py`. Expect the new tests to FAIL (`AttributeError`).
@@ -815,7 +884,7 @@ def confluence_row(ticker, frame, horizon_key, index, plan, result, *, levels_fn
 def confluence_trades(ticker, frame, horizon_key, window, *, replay_fn=replay_scenarios,
                       exit_fn=simulate_exit) -> list:
     """Mirror of ConfluenceEngine.run_ticker that keeps (index, plan, result)."""
-    start, end = require_train_window(window)
+    start, end = require_diagnostic_window(window)
     out = []
     for index, plan in replay_fn(ticker, frame.loc[:end], horizon_key):
         if str(frame.index[index].date()) < start:
@@ -826,10 +895,10 @@ def confluence_trades(ticker, frame, horizon_key, window, *, replay_fn=replay_sc
     return out
 
 
-def collect_confluence(frames, window=TRAIN_EXT, *, horizons=ALL_HZ, replay_fn=replay_scenarios,
+def collect_confluence(frames, window=DIAG_WINDOW, *, horizons=ALL_HZ, replay_fn=replay_scenarios,
                        exit_fn=simulate_exit, levels_fn=levels_asof,
                        candidates_fn=collect_candidate_levels) -> list:
-    require_train_window(window)
+    require_diagnostic_window(window)
     progress, rows = Progress(len(frames) * len(horizons)), []
     for ticker, frame in sorted(frames.items()):
         for horizon_key in horizons:
@@ -842,18 +911,18 @@ def collect_confluence(frames, window=TRAIN_EXT, *, horizons=ALL_HZ, replay_fn=r
 
 
 def _cmd_collect_confluence(args):
-    require_train_window(TRAIN_EXT)
+    require_diagnostic_window(DIAG_WINDOW)
     require_ext_cache()
     started = time.monotonic()
     frames = _load_frames(args.universe, args.tickers)
-    rows = collect_confluence(frames, TRAIN_EXT)
-    _write(args.out, {"kind": "confluence", "window": TRAIN_EXT, "tickers": sorted(frames),
+    rows = collect_confluence(frames, DIAG_WINDOW)
+    _write(args.out, {"kind": "confluence", "window": DIAG_WINDOW, "tickers": sorted(frames),
                       "universe_n": len(frames), "avwap_levels_enabled": bool(config.AVWAP_LEVELS_ENABLED),
                       "rows": rows, "elapsed_s": round(time.monotonic() - started, 1)})
 ```
 
 - [ ] **Step 4: Run** `python scripts/dev/testrun.py file tests/scripts/test_measure_fib_anchor_diagnostic.py`. Expect PASS. Run `python -m radon cc -s -n C scripts/backtest/measure_fib_anchor_diagnostic.py` and expect no output.
-- [ ] **Step 5: Smoke identification check (real data; counts only).** This needs the extended CSV cache, which already exists locally (`data/backtest_cache_ext/SPY.csv`). If it is missing, stop and ask; do not fetch. The window is one TRAIN year and one horizon. Print only counts, never pooled outcomes, so no bucket is read.
+- [ ] **Step 5: Smoke identification check (real data; counts only).** This needs the extended CSV cache, which already exists locally (`data/backtest_cache_ext/SPY.csv`). If it is missing, stop and ask; do not fetch. The window is one diagnostic-window year (2015) and one horizon. Print only counts, never pooled outcomes, so no bucket is read.
 
 ```bash
 BACKTEST_CACHE_DIR=data/backtest_cache_ext python - <<'EOF'
@@ -862,7 +931,7 @@ sys.path[:0] = ["scripts/backtest", "."]
 import measure_fib_anchor_diagnostic as m
 from measure_fib_confluence import _load_frames
 started = time.monotonic()
-rows = m.collect_confluence(_load_frames(None, "SPY"), ("2012-01-01", "2012-12-31"), horizons=("4w",))
+rows = m.collect_confluence(_load_frames(None, "SPY"), ("2015-01-01", "2015-12-31"), horizons=("4w",))
 print("trades", len(rows), "unidentified", sum(not r["identified"] for r in rows),
       "with_fib", sum(r["has_fib"] for r in rows), "seconds", round(time.monotonic() - started, 1))
 EOF
@@ -881,8 +950,8 @@ git commit -m "feat(v124): arm 4 level-map identification and the confluence col
 **Files:** Modify `scripts/backtest/measure_fib_anchor_diagnostic.py`, `tests/scripts/test_measure_fib_anchor_diagnostic.py`.
 
 **Interfaces:**
-- Consumes (V124-3): `bucket`, `divisor_buckets`, `leg_arm_verdict`, `single_split_verdict`, `describe`, `quintile_key`, `reproduction`, `require_train_window`, `EXIT_RULE`, `DIVISORS`, `PRIMARY_DIVISOR`; (V124-4/5) row shapes, `_cmd_collect_fib`, `_cmd_collect_confluence`.
-- Produces: `fib_tables(rows, direction) -> dict` (`arm1`, `arm1_described`, `arm2`, `arm2_described`, `arm3`, `arm3_described`); `confluence_tables(rows) -> dict` (`population`, `unidentified`, `fib_population_n`, `measurable`, `arm4`); `verdicts(fib, confluence) -> {"arm1".."arm4"}`; `build_report(fib_payloads, confluence_payloads) -> dict`; `render_markdown(report) -> str`; `main(argv=None) -> int` with commands `collect-fib`, `collect-confluence`, `reproduce`, `report`.
+- Consumes (V124-3): `bucket`, `divisor_buckets`, `leg_arm_verdict`, `single_split_verdict`, `describe`, `quintile_key`, `reproduction`, `require_diagnostic_window`, `require_repro_window`, `EXIT_RULE`, `DIVISORS`, `PRIMARY_DIVISOR`; (V124-4/5) row shapes, `_cmd_collect_repro`, `_cmd_collect_fib`, `_cmd_collect_confluence`.
+- Produces: `fib_tables(rows, direction) -> dict` (`arm1`, `arm1_described`, `arm2`, `arm2_described`, `arm3`, `arm3_described`); `confluence_tables(rows) -> dict` (`population`, `unidentified`, `fib_population_n`, `measurable`, `arm4`); `verdicts(fib, confluence) -> {"arm1".."arm4"}`; `build_report(fib_payloads, confluence_payloads, repro_payloads) -> dict` (diagnostic payloads must lie inside `DIAG_WINDOW`, repro payloads must be exactly `REPRO_WINDOW`; reproduction is computed from the repro payloads only); `render_markdown(report) -> str`; `main(argv=None) -> int` with commands `collect-repro`, `collect-fib`, `collect-confluence`, `reproduce`, `report`.
 
 - [ ] **Step 0: Precondition** as in V124-1 Step 0.
 - [ ] **Step 1: Write the failing tests.** Append:
@@ -891,17 +960,28 @@ git commit -m "feat(v124): arm 4 level-map identification and the confluence col
 import json
 
 
+DIAG = ["2015-01-01", "2025-12-31"]
+REPRO = ["2010-01-01", "2023-12-31"]
+
+
 def _payloads(confluence_rows=None):
     bull = group(20, 20, **GOOD) + group(12, 28)
     bear = [dict(row, direction="bearish") for row in group(5, 10)]
-    fib = [{"kind": "fib", "direction": "bullish", "window": ["2010-01-01", "2023-12-31"], "universe_n": 73,
+    fib = [{"kind": "fib", "direction": "bullish", "window": DIAG, "universe_n": 73,
             "avwap_levels_enabled": True, "rows": bull},
-           {"kind": "fib", "direction": "bearish", "window": ["2010-01-01", "2023-12-31"], "universe_n": 73,
+           {"kind": "fib", "direction": "bearish", "window": DIAG, "universe_n": 73,
             "avwap_levels_enabled": True, "rows": bear}]
     rows = confluence_rows if confluence_rows is not None else group(20, 20, **GOOD) + group(12, 28)
-    confluence = [{"kind": "confluence", "window": ["2010-01-01", "2023-12-31"], "tickers": ["AAA"],
+    confluence = [{"kind": "confluence", "window": DIAG, "tickers": ["AAA"],
                    "universe_n": 1, "avwap_levels_enabled": True, "rows": rows}]
-    return fib, confluence
+    repro = [{"kind": "repro", "direction": "bullish", "window": REPRO, "universe_n": 73, "rows": group(20, 20)},
+             {"kind": "repro", "direction": "bearish", "window": REPRO, "universe_n": 73,
+              "rows": [dict(row, direction="bearish") for row in group(5, 10)]}]
+    return fib, confluence, repro
+
+
+REPRO_MATCH = {"bullish": {"n": 40, "win_rate": 50.0, "expectancy_r": 0.5},
+               "bearish": {"n": 15, "win_rate": 33.33, "expectancy_r": 0.0}}
 
 
 def test_report_verdicts_follow_the_exit_rule():
@@ -912,7 +992,8 @@ def test_report_verdicts_follow_the_exit_rule():
     assert {arm: v["proceeds"] for arm, v in report["verdicts"].items()} == {
         "arm1": True, "arm2": True, "arm3": True, "arm4": True}
     assert report["fib"]["bearish"]["arm1"]["6"]["rest"]["n"] == 15        # described, not judged
-    assert report["reproduction"]["bullish"]["matches"] is False            # 80 trades, not 815
+    assert report["reproduction"]["bullish"]["observed"]["n"] == 40         # from the repro payload
+    assert report["reproduction"]["bullish"]["matches"] is False            # 40 trades, not 815
 
 
 def test_one_unidentified_confluence_trade_makes_arm4_not_measurable():
@@ -925,12 +1006,20 @@ def test_one_unidentified_confluence_trade_makes_arm4_not_measurable():
     assert "not measurable with this instrument" in module.render_markdown(report)
 
 
-def test_report_refuses_a_payload_from_outside_train_ext():
+def test_report_refuses_a_diagnostic_payload_outside_2015_2025():
     module = _module()
-    fib, confluence = _payloads()
+    fib, confluence, repro = _payloads()
     fib[0]["window"] = ["2010-01-01", "2025-12-31"]
-    with pytest.raises(SystemExit, match="TRAIN_EXT only"):
-        module.build_report(fib, confluence)
+    with pytest.raises(SystemExit, match="diagnostic window"):
+        module.build_report(fib, confluence, repro)
+
+
+def test_report_refuses_a_repro_payload_not_on_v103s_window():
+    module = _module()
+    fib, confluence, repro = _payloads()
+    repro[0]["window"] = DIAG
+    with pytest.raises(SystemExit, match="reproduction runs on"):
+        module.build_report(fib, confluence, repro)
 
 
 def test_markdown_carries_the_exit_rule_and_every_divisor():
@@ -943,9 +1032,10 @@ def test_markdown_carries_the_exit_rule_and_every_divisor():
 
 
 def _write_inputs(tmp_path):
-    fib, confluence = _payloads()
+    fib, confluence, repro = _payloads()
     paths = []
-    for name, payload in (("bull", fib[0]), ("bear", fib[1]), ("conf", confluence[0])):
+    for name, payload in (("bull", fib[0]), ("bear", fib[1]), ("conf", confluence[0]),
+                          ("rbull", repro[0]), ("rbear", repro[1])):
         path = tmp_path / f"{name}.json"
         path.write_text(json.dumps(payload), encoding="utf-8")
         paths.append(str(path))
@@ -954,9 +1044,10 @@ def _write_inputs(tmp_path):
 
 def test_report_command_needs_a_note_when_the_baseline_does_not_reproduce(tmp_path):
     module = _module()
-    bull, bear, conf = _write_inputs(tmp_path)
+    bull, bear, conf, rbull, rbear = _write_inputs(tmp_path)
     out, md = tmp_path / "report.json", tmp_path / "report.md"
-    argv = ["report", "--fib", bull, bear, "--confluence", conf, "--out", str(out), "--md", str(md)]
+    argv = ["report", "--repro", rbull, rbear, "--fib", bull, bear, "--confluence", conf,
+            "--out", str(out), "--md", str(md)]
     with pytest.raises(SystemExit, match="does not reproduce"):
         module.main(argv)
     assert not out.exists() and not md.exists()
@@ -967,10 +1058,20 @@ def test_report_command_needs_a_note_when_the_baseline_does_not_reproduce(tmp_pa
     assert md.read_text(encoding="utf-8").startswith("# v124")
 
 
+def test_report_command_needs_no_note_when_the_baseline_reproduces(tmp_path, monkeypatch):
+    module = _module()
+    monkeypatch.setattr(module, "REFERENCE", REPRO_MATCH)
+    bull, bear, conf, rbull, rbear = _write_inputs(tmp_path)
+    out, md = tmp_path / "report.json", tmp_path / "report.md"
+    assert module.main(["report", "--repro", rbull, rbear, "--fib", bull, bear, "--confluence", conf,
+                        "--out", str(out), "--md", str(md)]) == 0
+    assert json.loads(out.read_text(encoding="utf-8"))["reproduction"]["bullish"]["matches"] is True
+
+
 def test_reproduce_command_prints_only_the_baseline(tmp_path, capsys):
     module = _module()
-    bull, bear, _ = _write_inputs(tmp_path)
-    assert module.main(["reproduce", "--fib", bull, bear]) == 0
+    _, _, _, rbull, rbear = _write_inputs(tmp_path)
+    assert module.main(["reproduce", "--repro", rbull, rbear]) == 0
     printed = capsys.readouterr().out
     assert '"matches": false' in printed and "arm1" not in printed
 ```
@@ -1018,23 +1119,31 @@ def verdicts(fib, confluence) -> dict:
             "arm3": single_split_verdict(bull["arm3"]), "arm4": arm4}
 
 
-def _fib_payload(payloads, direction):
-    for payload in payloads:
-        if payload["direction"] == direction:
-            return payload
-    raise SystemExit(f"no collect-fib payload for {direction}")
+def _by_direction(payloads, kind):
+    found = {payload["direction"]: payload for payload in payloads}
+    missing = [d for d in DIRECTIONS if d not in found]
+    if missing:
+        raise SystemExit(f"no {kind} payload for {', '.join(missing)}")
+    return found
 
 
-def build_report(fib_payloads, confluence_payloads) -> dict:
+def reproductions(repro_payloads) -> dict:
+    """Reproduction on REPRO_WINDOW only; refuses a payload from any other window."""
+    for payload in repro_payloads:
+        require_repro_window(payload["window"])
+    found = _by_direction(repro_payloads, "collect-repro")
+    return {d: reproduction(found[d]["rows"], d, found[d]["universe_n"]) for d in DIRECTIONS}
+
+
+def build_report(fib_payloads, confluence_payloads, repro_payloads) -> dict:
     for payload in fib_payloads + confluence_payloads:
-        require_train_window(tuple(payload["window"]))
-    by_direction = {d: _fib_payload(fib_payloads, d) for d in DIRECTIONS}
+        require_diagnostic_window(tuple(payload["window"]))
+    by_direction = _by_direction(fib_payloads, "collect-fib")
     fib = {d: fib_tables(by_direction[d]["rows"], d) for d in DIRECTIONS}
     confluence = confluence_tables([row for payload in confluence_payloads for row in payload["rows"]])
-    return {"window": list(TRAIN_EXT), "exit_rule": EXIT_RULE,
+    return {"window": list(DIAG_WINDOW), "repro_window": list(REPRO_WINDOW), "exit_rule": EXIT_RULE,
             "avwap_levels_enabled": sorted({p["avwap_levels_enabled"] for p in fib_payloads + confluence_payloads}),
-            "reproduction": {d: reproduction(by_direction[d]["rows"], d, by_direction[d]["universe_n"])
-                             for d in DIRECTIONS},
+            "reproduction": reproductions(repro_payloads),
             "fib": fib, "confluence": confluence, "verdicts": verdicts(fib, confluence)}
 
 
@@ -1068,15 +1177,15 @@ def _arm_lines(tables, key, title, by_divisor) -> list:
 
 
 def _reproduction_lines(reproductions) -> list:
-    lines = ["## Baseline reproduction (v103 reference arm, b=0)", "",
+    lines = ["## Baseline reproduction (v103 reference arm, b=0, on 2010-01-01..2023-12-31)", "",
              "| direction | N | WR | ExpR | universe | reference N / WR / ExpR / universe | matches |",
              "|---|---|---|---|---|---|---|"]
     for direction, item in reproductions.items():
         obs, ref = item["observed"], item["reference"]
         wr = "n/a" if obs["win_rate"] is None else f"{obs['win_rate']:.2f}%"
-        exp = "n/a" if obs["expectancy_r"] is None else f"{obs['expectancy_r']:+.3f}"
+        exp = "n/a" if obs["expectancy_r"] is None else f"{obs['expectancy_r']:+.4f}"
         lines.append(f"| {direction} | {obs['n']} | {wr} | {exp} | {item['universe_n']} | "
-                     f"{ref['n']} / {ref['win_rate']}% / {ref['expectancy_r']:+.3f} / "
+                     f"{ref['n']} / {ref['win_rate']}% / {ref['expectancy_r']:+.4f} / "
                      f"{item['reference_universe_n']} | {item['matches']} |")
     return lines + [""]
 
@@ -1105,7 +1214,8 @@ def _confluence_lines(confluence) -> list:
 def render_markdown(report) -> str:
     start, end = report["window"]
     lines = ["# v124 Fibonacci anchor diagnostic -- generated tables", "",
-             f"Window {start}..{end} (TRAIN_EXT). AVWAP_LEVELS_ENABLED: {report['avwap_levels_enabled']}.", "",
+             f"Diagnostic window {start}..{end} (entries and features; 2026 is the holdout). "
+             f"AVWAP_LEVELS_ENABLED: {report['avwap_levels_enabled']}.", "",
              "## Exit rule (fixed in the spec)", "", f"> {report['exit_rule']}", ""]
     lines += _reproduction_lines(report["reproduction"]) + _verdict_lines(report["verdicts"])
     for direction in DIRECTIONS:
@@ -1124,17 +1234,15 @@ def _load(paths) -> list:
 
 
 def _cmd_reproduce(args):
-    payloads = _load(args.fib)
-    result = {d: reproduction(_fib_payload(payloads, d)["rows"], d, _fib_payload(payloads, d)["universe_n"])
-              for d in DIRECTIONS}
-    print(json.dumps(result, indent=1), flush=True)
+    print(json.dumps(reproductions(_load(args.repro)), indent=1), flush=True)
 
 
 def _cmd_report(args):
-    report = build_report(_load(args.fib), _load(args.confluence))
+    report = build_report(_load(args.fib), _load(args.confluence), _load(args.repro))
     note = args.reproduction_note
     if not report["reproduction"]["bullish"]["matches"] and not (note and Path(note).is_file()):
-        raise SystemExit("bullish baseline does not reproduce v103 (N=815, WR 36.81%, ExpR +0.222, universe 73): "
+        raise SystemExit("bullish baseline does not reproduce v103 on 2010-01-01..2023-12-31 "
+                         "(N=815, WR 36.81%, ExpR +0.2219, universe 73): "
                          "explain the difference in a committed note, then pass --reproduction-note <path>")
     report["reproduction_note"] = note
     _write(args.out, report)
@@ -1142,18 +1250,21 @@ def _cmd_report(args):
 
 
 def _parser():
-    parser = argparse.ArgumentParser(description="v124 Fibonacci impulse-leg anchor diagnostic (TRAIN_EXT)")
+    parser = argparse.ArgumentParser(description="v124 Fibonacci impulse-leg anchor diagnostic (2015-2025)")
     sub = parser.add_subparsers(dest="cmd", required=True)
+    repro = sub.add_parser("collect-repro")
     fib = sub.add_parser("collect-fib")
-    fib.add_argument("--direction", required=True, choices=DIRECTIONS)
+    for command in (repro, fib):
+        command.add_argument("--direction", required=True, choices=DIRECTIONS)
     confluence = sub.add_parser("collect-confluence")
-    for command in (fib, confluence):
+    for command in (repro, fib, confluence):
         command.add_argument("--out", required=True)
         command.add_argument("--universe")
         command.add_argument("--tickers", help="comma-separated subset: chunks and smoke runs")
     reproduce = sub.add_parser("reproduce")
-    reproduce.add_argument("--fib", nargs=2, required=True)
+    reproduce.add_argument("--repro", nargs=2, required=True)
     report = sub.add_parser("report")
+    report.add_argument("--repro", nargs=2, required=True)
     report.add_argument("--fib", nargs=2, required=True)
     report.add_argument("--confluence", nargs="+", required=True)
     report.add_argument("--out", required=True)
@@ -1162,7 +1273,8 @@ def _parser():
     return parser
 
 
-COMMANDS = {"collect-fib": _cmd_collect_fib, "collect-confluence": _cmd_collect_confluence,
+COMMANDS = {"collect-repro": _cmd_collect_repro, "collect-fib": _cmd_collect_fib,
+            "collect-confluence": _cmd_collect_confluence,
             "reproduce": _cmd_reproduce, "report": _cmd_report}
 
 
@@ -1177,7 +1289,7 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 4: Run** `python scripts/dev/testrun.py file tests/scripts/test_measure_fib_anchor_diagnostic.py`. Expect PASS. Run `python -m radon cc -s -n C scripts/backtest/measure_fib_anchor_diagnostic.py tests/scripts/test_measure_fib_anchor_diagnostic.py` and expect no output. Run `python scripts/backtest/measure_fib_anchor_diagnostic.py --help` and expect the four commands.
+- [ ] **Step 4: Run** `python scripts/dev/testrun.py file tests/scripts/test_measure_fib_anchor_diagnostic.py`. Expect PASS. Run `python -m radon cc -s -n C scripts/backtest/measure_fib_anchor_diagnostic.py tests/scripts/test_measure_fib_anchor_diagnostic.py` and expect no output. Run `python scripts/backtest/measure_fib_anchor_diagnostic.py --help` and expect the five commands.
 - [ ] **Step 5: Commit.**
 
 ```bash
