@@ -71,7 +71,7 @@ def _scan_context(reference, params, live_prices, regime) -> "analyze.ExtraScanC
         min_confidence=opex.effective_min_confidence_level(tier),
         rs_cache={"rels": dict(enumerate(reference.reference_rels))},
         spy_df=reference.spy, live_prices=live_prices,
-        hard_filters=scan_run._hard_filters_snapshot(params), opex_tier=tier)
+        hard_filters=scan_run._hard_filters_snapshot(params), opex_tier=tier, now=reference.now)
 
 
 def _spy_frame(base_frames: dict):

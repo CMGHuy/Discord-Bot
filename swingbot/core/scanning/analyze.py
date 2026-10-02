@@ -38,6 +38,7 @@ from swingbot.core.market.indicators import atr
 from swingbot.core.market.session import now_et
 
 from . import runstate
+from .short_reference import align_completed
 from .confidence import score_confidence
 from .embeds import _build_requirement_checks
 from .regime import get_htf_bias
@@ -536,6 +537,18 @@ def _format_badge_stats(stats: dict | None) -> str:
     return f"N={stats['n']} · {wr}"
 
 
+def _rs_pctile(df, spy_df, rs_cache, rs_frames=None):
+    """RS percentile vs the reference universe; None without a cache.
+
+    `rs_frames` (stock, spy) overrides the frames ranked -- the SHORT lane
+    passes the completed, date-aligned pair its reference returns used.
+    """
+    if rs_cache is None:
+        return None
+    stock, spy = rs_frames or (df, spy_df)
+    return rs_factors.rs_percentile(stock, spy, universe_rels=list(rs_cache["rels"].values()))
+
+
 def scenarios_for_direction(scenarios, allowed_directions):
     """Keep only scenarios whose direction is allowed; None allows all.
 
@@ -552,7 +565,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
               regime, effective_min_confluence: int, effective_min_confidence: int,
               rs_cache: dict = None, spy_df=None, breadth: float = None,
               live_prices: dict = None, hard_filters: dict = None,
-              opex_tier_today=None, allowed_directions=None) -> dict:
+              opex_tier_today=None, allowed_directions=None, rs_frames=None) -> dict:
     """
     Per-ticker analysis body of _sync_run_scan's ANALYZE phase, extracted
     so it can run inside a map_tickers() worker thread (Task E20). Handles
@@ -714,10 +727,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
     # inside the loop below. rs_cache is None when the network-bound SPY/RS
     # lookup failed for this scan (see _sync_run_scan); None propagates
     # through cleanly (factor_rs treats it as absent, not a real reading).
-    rs_pctile = None
-    if rs_cache is not None:
-        rs_pctile = rs_factors.rs_percentile(
-            df, spy_df, universe_rels=list(rs_cache["rels"].values()))
+    rs_pctile = _rs_pctile(df, spy_df, rs_cache, rs_frames)
 
     # Trendline candidates (v56) depend only on this ticker's df/current_price
     # -- not on horizon -- so they're computed once per ticker here rather
@@ -987,6 +997,7 @@ class ExtraScanContext:
     live_prices: dict
     hard_filters: dict | None
     opex_tier: object
+    now: object = None
     newly_closed: list = field(default_factory=list)
     near_close: list = field(default_factory=list)
 
@@ -1000,12 +1011,15 @@ def scan_extra_candidate(candidate, frame, context: ExtraScanContext, horizons) 
     confirmation work. Never the strategy pass; breadth is None (the base
     breadth is not this universe's).
     """
+    aligned = align_completed(frame, context.spy_df, None, context.now)
+    if aligned is None:
+        return []
     stats = _scan_one(
         candidate.ticker, frame, list(horizons), None, context.regime,
         context.min_confluence, context.min_confidence, rs_cache=context.rs_cache,
         spy_df=context.spy_df, breadth=None, live_prices=context.live_prices,
         hard_filters=context.hard_filters, opex_tier_today=context.opex_tier,
-        allowed_directions=BEARISH_ONLY)
+        allowed_directions=BEARISH_ONLY, rs_frames=aligned[:2])
     context.newly_closed.extend(stats["newly_closed"])
     context.near_close.extend(stats["near_close_warnings"])
     return stats["items"]

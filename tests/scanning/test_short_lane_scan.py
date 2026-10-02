@@ -1,4 +1,6 @@
 """V118-4: bounded fetch and bearish-only scenario analysis for the SHORT lane."""
+import datetime as dt
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -31,8 +33,12 @@ def scenario(direction):
         constraints={"min_reward": True})
 
 
+AFTER_CLOSE = dt.datetime(2026, 9, 18, 22, 0, tzinfo=dt.timezone.utc)
+INTRADAY = dt.datetime(2026, 9, 18, 15, 0, tzinfo=dt.timezone.utc)
+
+
 def context(**over):
-    base = dict(regime=None, min_confluence=1, min_confidence=1,
+    base = dict(now=AFTER_CLOSE, regime=None, min_confluence=1, min_confidence=1,
                 rs_cache={"rels": {"0": -0.1, "1": 0.1}}, spy_df=frame(),
                 live_prices={}, hard_filters=None, opex_tier=None)
     base.update(over)
@@ -172,7 +178,7 @@ def lane(monkeypatch, both_directions):
     """The extra pass with every network/store edge stubbed; records the calls."""
     seen = {"bounded": [], "monitored": [], "built": [], "rs_refresh": 0}
     ref = SimpleNamespace(spy=frame(), sector_frames={}, reference_rels=(-0.2, 0.1, 0.2),
-                          frames={})
+                          frames={}, now=NOW)
     monkeypatch.setattr(config, "SHORT_UNIVERSE_ENABLED", True)
     monkeypatch.setattr(config, "RS_GATE", False)
     monkeypatch.setattr(scan_run, "_short_now", lambda: NOW)
@@ -276,3 +282,139 @@ def test_the_scheduled_and_manual_callers_use_the_sequencing_helper():
     from swingbot.commands.scanning import commands, loops
     assert "send_then_short(channel, alerts" in inspect.getsource(loops._session_scan_tick)
     assert "send_then_short(ctx, alerts" in inspect.getsource(commands.check_cmd.callback)
+
+
+# --- RS is ranked on the same completed, aligned window as its reference ------------
+
+def _with_forming_bar(close, forming):
+    f = frame(n=300)
+    f["Close"] = close
+    f.iloc[-1, f.columns.get_loc("Close")] = forming
+    return f
+
+
+def _percentile_of_first_item(monkeypatch, stock, spy, now):
+    seen = []
+    real = analyze.rs_factors.rs_percentile
+    monkeypatch.setattr(analyze.rs_factors, "rs_percentile",
+                        lambda t, s, **k: seen.append(real(t, s, **k)) or seen[-1])
+    ctx = context(spy_df=spy, now=now, rs_cache={"rels": {str(i): i / 100 for i in range(-20, 21)}})
+    analyze.scan_extra_candidate(CANDIDATE, stock, ctx, ["2w"])
+    return seen[0]
+
+
+def test_rs_percentile_ignores_todays_forming_bar(both_directions, monkeypatch):
+    """Truncation: during the session the forming 09-18 bar may move freely and the
+    ranked percentile must equal the one computed with that bar removed."""
+    spy = frame(n=300)
+    base_close = np.linspace(100.0, 120.0, 300)
+    spy["Close"] = np.linspace(100.0, 101.0, 300)
+    crashed = _percentile_of_first_item(monkeypatch, _with_forming_bar(base_close, 60.0), spy, INTRADAY)
+    spiked = _percentile_of_first_item(monkeypatch, _with_forming_bar(base_close, 200.0), spy, INTRADAY)
+    truncated = _percentile_of_first_item(
+        monkeypatch, _with_forming_bar(base_close, 60.0).iloc[:-1], spy.iloc[:-1], INTRADAY)
+    assert crashed == spiked == truncated
+
+
+# --- the lane's merge and alert code, unstubbed ---------------------------------------
+
+def _ready_item(monkeypatch):
+    """A real bearish ScanItem that meets every requirement."""
+    items = analyze.scan_extra_candidate(CANDIDATE, frame(), context(), ["2w"])
+    item = items[0]
+    item.requirements = []
+    item.rs_percentile = 5.0
+    return item
+
+
+def _lane_dict():
+    return {"sector_of": {}, "etf_symbol_of": {}, "sector_frames": {}, "spy": frame(),
+            "regime": None, "regimes": None}
+
+
+@pytest.fixture
+def merge_env(both_directions, monkeypatch):
+    monkeypatch.setattr(config, "RS_GATE", True)
+    monkeypatch.setattr(config, "RS_LAGGARD_PERCENTILE", 30)
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "off")
+    monkeypatch.setattr(analyze, "attach_plan_v2", lambda item, *a, **k: None)
+
+
+def test_rejected_plan_drops_the_item(merge_env, monkeypatch):
+    item = _ready_item(monkeypatch)
+
+    def reject(it, *a, **k):
+        it.plan_v2_rejected = "no_qualifying_target"
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    monkeypatch.setattr(analyze, "attach_plan_v2", reject)
+    assert short_run._qualified_items([item], False, {"AAA": frame()}, _lane_dict()) == []
+
+
+def test_rs_gate_drops_a_bearish_item_that_is_not_a_laggard(merge_env, monkeypatch):
+    leader, laggard = _ready_item(monkeypatch), _ready_item(monkeypatch)
+    leader.rs_percentile = 99.0
+    kept = short_run._qualified_items([leader, laggard], False, {"AAA": frame()}, _lane_dict())
+    assert kept == [laggard]
+
+
+class _FakeLog:
+    def __init__(self, open_trade=None):
+        self.open_trade, self.logged = open_trade, []
+
+    def open_trade_for_ticker(self, ticker):
+        return self.open_trade
+
+    def log_trade(self, **kw):
+        self.logged.append(kw)
+        return "T-1"
+
+    def get_stats(self, *a, **k):
+        return {"win_rate": None, "closed": 0, "open": 0, "n": 0}
+
+    def get_trades(self, **k):
+        return []
+
+
+@pytest.fixture
+def alert_env(merge_env, monkeypatch):
+    monkeypatch.setattr(short_run, "load_account_config", lambda: {"balance": 10000.0, "risk_pct": 1.0})
+    monkeypatch.setattr(short_run.scan_run, "_earnings_in_window", lambda *a: None)
+    monkeypatch.setattr(short_run, "_render_chart", lambda *a, **k: (None, None))
+    monkeypatch.setattr(short_run, "notify_secondary", lambda *a, **k: None)
+    monkeypatch.setattr(short_run.throttle, "kill_state", lambda: {"on": False})
+
+
+def test_open_trade_on_the_ticker_blocks_the_post_under_confirmation(alert_env, monkeypatch):
+    fake = _FakeLog(open_trade={"id": 7, "direction": "bearish"})
+    monkeypatch.setattr(short_run, "trade_log", fake)
+    item = _ready_item(monkeypatch)
+    assert short_run._build_alerts([item], True, {"AAA": frame()}, frame()) == []
+    assert fake.logged == []
+
+
+def test_non_qualifying_item_is_not_posted_by_check(alert_env, monkeypatch):
+    fake = _FakeLog()
+    monkeypatch.setattr(short_run, "trade_log", fake)
+    item = _ready_item(monkeypatch)
+    item.requirements = [SimpleNamespace(passed=False, label="min strategies", detail="1<3", key="min_confluence")]
+    assert short_run._build_alerts([item], False, {"AAA": frame()}, frame()) == []
+    assert fake.logged == []
+
+
+def test_qualifying_bearish_item_logs_a_short_and_builds_one_alert(alert_env, monkeypatch):
+    fake = _FakeLog()
+    monkeypatch.setattr(short_run, "trade_log", fake)
+    item = _ready_item(monkeypatch)
+    alerts = short_run._build_alerts([item], True, {"AAA": frame()}, frame())
+    assert len(alerts) == 1 and alerts[0][0] is not None
+    assert [(t["ticker"], t["direction"]) for t in fake.logged] == [("AAA", "bearish")]
+
+
+def test_heat_and_kill_switch_flags_are_stamped_not_hidden(alert_env, monkeypatch):
+    monkeypatch.setattr(short_run, "trade_log", _FakeLog())
+    monkeypatch.setattr(short_run.heat_mod, "heat_check", lambda *a, **k: {"allowed": False, "why": "heat"})
+    monkeypatch.setattr(short_run.throttle, "kill_state", lambda: {"on": True, "reason": "dd"})
+    item = _ready_item(monkeypatch)
+    short_run._stamp_risk_flags(item, {"AAA": frame()}, {"balance": 10000.0, "risk_pct": 1.0})
+    assert item.heat_blocked == {"allowed": False, "why": "heat"}
+    assert item.kill_switch_blocked == {"on": True, "reason": "dd"}
