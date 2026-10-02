@@ -141,7 +141,7 @@ def unrealized_pnl(entry, direction: str, price) -> float | None:
     off exit_price -- deliberately NOT weighted by how much of the position a
     TP1 leg already realized. `%` answers "how is the price doing", which is
     the same question regardless of size; `unrealized_pnl_amount` below is
-    where the remaining/realized split actually has to show up, in $ terms."""
+    where the remaining size actually has to show up, in $ terms."""
     if not price or not entry:
         return None
     raw = (price - entry) / entry * 100
@@ -162,25 +162,17 @@ def unrealized_r(entry, stop_loss, direction: str, price) -> float | None:
     return round(realized / risk, 2)
 
 
-def unrealized_pnl_amount(entry, direction: str, shares, legs: list, price) -> float | None:
-    """Blended $ P&L for a still-open position: any already-realized legs
-    (e.g. a TP1 partial) at their OWN exit price, plus whatever fraction of
-    the original size is still open, priced at the live quote. Same
-    fraction-weighting core/tracking/performance.py's settle_legs() uses for
-    a fully closed multi-leg trade, with the live price standing in for the
-    leg that hasn't closed yet -- this is the number `open_shares` exists to
-    scale, so a TP1 partial's dollar figure reflects only what's still
-    exposed to further price movement rather than the full original size."""
-    if not shares or entry is None or price is None:
+def unrealized_pnl_amount(entry, direction: str, open_shares, price) -> float | None:
+    """Live $ P&L on the shares still held, priced at the live quote.
+
+    Deliberately excludes any leg a TP1 partial already banked: since v79
+    the Trades table shows that leg as its own CLOSED row with its own
+    realized amount, so blending it in here too counted the same profit
+    twice -- once on the leg row, again on the PARTIAL runner row."""
+    if not open_shares or entry is None or price is None:
         return None
     sign = 1 if direction == "bullish" else -1
-    legs = legs or []
-    realized_fraction = sum(leg.get("fraction", 0) for leg in legs)
-    remaining_fraction = max(0.0, 1.0 - realized_fraction)
-    realized = sum(shares * leg.get("fraction", 0) * (leg.get("exit_price", entry) - entry) * sign
-                   for leg in legs)
-    unrealized = shares * remaining_fraction * (price - entry) * sign
-    return round(realized + unrealized, 2)
+    return round(open_shares * (price - entry) * sign, 2)
 
 
 def closed_days(t) -> dict | None:
