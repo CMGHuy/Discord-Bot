@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11 / Flask (backend), Angular 18 + `@ngrx/signals` + Vitest (frontend), Financial Modeling Prep (FMP) as the news source.
 
-**Spec:** `docs/superpowers/specs/2026-09-10-v83-mine-news-crawl-design.md`
+**Spec:** `docs/superpowers/specs/no-lift/2026-09-10-v83-mine-news-crawl-design.md`
 
 ## Global Constraints
 
@@ -854,3 +854,8 @@ Per `docs/claude/working-conventions.md`: bump the `ui` line only (minor), leave
 git add VERSION.json
 git commit -m "release(ui): <new-version> -- MINE lane news crawl"
 ```
+
+
+## Closing note (2026-10-02)
+
+No-lift by the partner's decision: **never built.** No branch or worktree exists and `main` has none of this plan's code (`general_news`, `NewsStore`, `NewsCrawl` are absent) -- only these docs, moved to `no-lift/` so the live-plan list stays accurate. A considered decision, not an oversight. No backtest was involved (`Edge: none (integrity)`), so no pre-registration row.

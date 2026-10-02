@@ -188,7 +188,7 @@ ticker's next earnings reaction. Every K arm, the Stage 1 selection rule, the
 fold split and the calendar-shift permutation are arithmetic over that one
 table, so every arm scores the identical population (v68's one-pass argument).
 
-PRE-REGISTERED by docs/superpowers/specs/2026-09-10-v82-earnings-awareness-design.md
+PRE-REGISTERED by docs/superpowers/specs/implemented/2026-09-10-v82-earnings-awareness-design.md
 (B2-B5 and "Planning findings (Plan B)"). Changing a constant here is a new
 pre-registration, not a tuning step.
 """

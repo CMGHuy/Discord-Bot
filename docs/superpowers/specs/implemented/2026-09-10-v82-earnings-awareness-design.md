@@ -13,9 +13,9 @@ depends on nothing and may start immediately.
 
 | Part | State |
 |---|---|
-| Phase A — label, notice, stored fields | not started (Plan A; needs v81 merged) |
+| Phase A — label, notice, stored fields | **not built** — closed out unbuilt 2026-10-02 at the partner's request; no Plan A file exists. Reopen by moving this spec back up and writing Plan A |
 | Phase B — measurement | **NO_ELIGIBLE_K**, budget intact — `docs/superpowers/plans/implemented/2026-09-10-v82-earnings-measurement_0-index.md` and the results docs it lists |
-| C1 — wiring into `scan_run.py` | not started (Plan A) |
+| C1 — wiring into `scan_run.py` | not built (Plan A) |
 | C2/C3 — rename, frozen class, wf_components note | done in Plan B M3 |
 | C4 — default flip | void — default stays 0 |
 
