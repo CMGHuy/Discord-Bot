@@ -36,7 +36,7 @@ from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.scan_params import ScanParams
 
-from . import analyze, dedup, fetch, progress_store, runstate, strategy_pass, telemetry
+from . import analyze, dedup, fetch, progress_store, runstate, short_funnel, strategy_pass, telemetry
 from .short_candidates import ShortReference, build_reference_rels, extra_candidates
 from .short_reference import completed_frame as _completed, etf_for_sector
 from .analyze import paper_trade_decision
@@ -116,13 +116,13 @@ def _short_now():
     return datetime.now(timezone.utc)
 
 
-def build_extra_candidates(base_tickers, *, decision_date, snapshot, reference) -> list:
+def build_extra_candidates(base_tickers, *, decision_date, snapshot, reference, rejected=None) -> list:
     """SHORT extra-lane candidates for `decision_date`, or [] with a logged reason.
 
     Pure over its arguments: base_tickers is only read (a symbol the base lane
     scans is never an extra candidate) and no base structure is touched.
     """
-    found, reason = extra_candidates(base_tickers, snapshot, reference)
+    found, reason = extra_candidates(base_tickers, snapshot, reference, rejected)
     if reason is not None:
         log.info("SHORT extra lane skipped for %s: %s", decision_date, reason)
     return found
@@ -455,6 +455,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     _finish_phase("enrichment")
 
     scan_items = []
+    funnel = short_funnel.ShortFunnel()   # V118-5: merged serially below, never touched by workers
     all_newly_closed = []
     all_near_close_warnings = []
     checked_count = 0
@@ -518,6 +519,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             # never let one bad ticker's None slot crash the merge.
             continue
 
+        funnel.merge(per_ticker.get("funnel_events", ()))
         all_newly_closed.extend(per_ticker["newly_closed"])
         all_near_close_warnings.extend(per_ticker["near_close_warnings"])
         checked_count += per_ticker["checked"]
@@ -608,7 +610,9 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                     log.debug("%s %s dropped by RS gate: %s", item.result.ticker,
                               item.result.trend, rs_result["reason"])
                     rs_blocked += 1
+                    funnel.record_item(item, "rs", "rs_blocked")
                     continue
+            funnel.record_item(item, "rs")
 
             if item.all_requirements_met:
                 # Deferred from _scan_one (fix for a task-review finding): only
@@ -630,8 +634,10 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 if (config.PLAN_ENGINE_V2 == "on"
                         and getattr(item, "plan_v2_rejected", None)):
                     filtered_by_rr += 1
+                    funnel.record_item(item, "plan", item.plan_v2_rejected)
                     _skip_rejected_plan(item, require_confirmation)
                     continue          # never reaches scan_items -> never alerts
+                funnel.record_item(item, "plan")
             scan_items.append(item)
 
     # Kill switch (E47): computed once per scan, right here -- AFTER the
@@ -679,6 +685,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     )
 
     deduped = dedup.dedup_scan_items(scan_items)
+    funnel.record_dedup(scan_items, deduped)
     deduped.sort(key=lambda item: (item.all_requirements_met, item.conf.score), reverse=True)
 
     if progress is not None:
@@ -774,6 +781,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             # confirmation=False) still shows it, since that's an
             # on-demand snapshot request, not a repeating alert.
             skipped_already_open += 1
+            funnel.record_item(item, "trade_decision", "existing_trade")
             log.debug("%s (%s, %s): already has an open trade -- skipping re-alert (use !check to see current state)",
                        result.ticker, result.horizon_key, result.trend)
             continue
@@ -858,6 +866,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         trendline_fit = None
         # v81: ticket PLACE / DO NOT PLACE mirrors this exact decision.
         item.paper_logged, item.not_logged_reason = paper_trade_decision(item, already_open)
+        funnel.record_decision(item)
         if item.paper_logged:
             # v2 plan pedigree (tier/badge/quality/source) rides along with
             # plan_id -- same cutover guard: only a live "on" plan is real
@@ -1029,6 +1038,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         # formatting, no chart); _send_alerts decides whether a simple channel
         # is configured to receive it.
         alerts.append((embed, chart_path, item.plan_v2, build_simple_alert(item)))
+        funnel.record_item(item, "send")
 
         # Secondary alerting (email / push) -- fires only for high-confidence,
         # fully-qualifying alerts when enabled. Blocking I/O but we're already
@@ -1082,6 +1092,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "phases_s": phase_durations,
             "normalized_frame_cache": data_store.normalized_frame_cache_stats(),
             "data_sources": _count_sources(fresh_data),
+            "short_funnel": funnel.snapshot(),
             **fetch.fetch_stats(),
         }
         telemetry.log_scan_telemetry(scan_stats)

@@ -143,25 +143,30 @@ def _input_failure(snapshot, reference) -> str | None:
     return None
 
 
-def _candidate_for(symbol, snapshot, reference) -> ShortCandidate | None:
+def _candidate_for(symbol, snapshot, reference, rejected=None) -> ShortCandidate | None:
     frame = reference.frames.get(symbol)
     sector_etf = etf_for_sector(snapshot.sector_of.get(symbol))
-    mode, _reason = select_mode(
+    mode, reason = select_mode(
         frame, reference.spy, reference.sector_frames.get(sector_etf),
         spy_regime=reference.spy_regime, reference_rels=reference.reference_rels,
         now=reference.now)
     if mode is None:
+        if rejected is not None:
+            rejected.append((symbol, reason))   # V118-5: the reason is the funnel's, not discarded
         return None
     bar_date = completed_frame(frame, reference.now).index[-1].date().isoformat()
     return ShortCandidate(symbol, mode, SOURCE, bar_date, snapshot.membership_asof,
                           reference.reference_id)
 
 
-def extra_candidates(base_tickers, snapshot, reference):
-    """([ShortCandidate, ...], None) or ([], stable_reason)."""
+def extra_candidates(base_tickers, snapshot, reference, rejected=None):
+    """([ShortCandidate, ...], None) or ([], stable_reason).
+
+    `rejected`, when given, collects (symbol, stable_reason) for every symbol
+    select_mode turned down."""
     reason = _input_failure(snapshot, reference)
     if reason is not None:
         return [], reason
-    found = (_candidate_for(s, snapshot, reference)
+    found = (_candidate_for(s, snapshot, reference, rejected)
              for s in extra_symbols(snapshot, base_tickers))
     return [c for c in found if c is not None], None

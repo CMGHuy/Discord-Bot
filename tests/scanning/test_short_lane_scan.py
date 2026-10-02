@@ -201,8 +201,9 @@ def lane(monkeypatch, both_directions):
     monkeypatch.setattr(analyze, "monitor_open_only",
                         lambda t, df, live=None: seen["monitored"].append(t) or ([], []))
     monkeypatch.setattr(short_run, "_stamp_context", lambda frames, spy: frames)
+    monkeypatch.setattr(short_run.telemetry, "log_scan_telemetry", lambda *a, **k: None)
     monkeypatch.setattr(short_run, "_build_alerts",
-                        lambda deduped, rc, frames, spy: seen["built"].append(list(deduped)) or [])
+                        lambda deduped, rc, frames, spy, funnel=None: seen["built"].append(list(deduped)) or [])
     monkeypatch.setattr(short_run, "_lane_state", lambda *a: {
         "sector_of": {}, "etf_symbol_of": {}, "sector_frames": {}, "spy": None,
         "regime": None, "regimes": None})

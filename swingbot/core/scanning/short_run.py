@@ -34,10 +34,11 @@ from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.core.planning.account import load_account_config
 from swingbot.scan_params import ScanParams
 
-from . import analyze, dedup, fetch, runstate, scan_run
+from . import analyze, dedup, fetch, runstate, scan_run, short_funnel, telemetry
 from .embeds import (build_embed, build_simple_alert, notify_closed_trades,
                      notify_near_close, plan_numbers_for_display)
 from .short_candidates import extra_symbols
+from .short_funnel import ShortFunnel
 from .singletons import state, trade_log
 
 log = logging.getLogger(__name__)
@@ -79,11 +80,27 @@ def _spy_frame(base_frames: dict):
     return spy if spy is not None else fetch._daily_frame_for(config.MARKET_REGIME_TICKER)
 
 
-def _crawl_extra(snapshot, base_tickers) -> dict:
+def _note(funnel, direction, stage, reason=None, mode=short_funnel.UNSELECTED) -> None:
+    """Record a lane-level (no ScanItem yet) funnel fact; no-op without a funnel."""
+    if funnel is not None:
+        funnel.record(direction, short_funnel.EXTRA_SOURCE, mode, stage, reason)
+
+
+def _note_unresolved(funnel, queue, frames, reason) -> None:
+    """Every queued symbol with no frame, under its crawl stop reason (budget/stale/missing)."""
+    cap = config.SHORT_UNIVERSE_MAX_SYMBOLS
+    for position, symbol in enumerate(queue):
+        if symbol not in frames:
+            _note(funnel, short_funnel.BEARISH, "candidate",
+                  reason or ("symbol_cap" if position >= cap else "missing_frame"))
+
+
+def _crawl_extra(snapshot, base_tickers, funnel=None) -> dict:
     queue = [] if snapshot is None else list(extra_symbols(snapshot, base_tickers))
     frames, reason = fetch._crawl_bounded(
         queue, max_symbols=config.SHORT_UNIVERSE_MAX_SYMBOLS,
         budget_s=config.SHORT_UNIVERSE_FETCH_BUDGET_SECONDS)
+    _note_unresolved(funnel, queue, frames, reason)
     if reason is not None:
         log.warning("SHORT extra lane: crawl ended early (%s) -- %d/%d symbol(s) resolved",
                     reason, len(frames), len(queue))
@@ -93,7 +110,7 @@ def _crawl_extra(snapshot, base_tickers) -> dict:
     return frames
 
 
-def _monitor_stranded(base_tickers, candidate_tickers, extra_frames, live_prices, ctx) -> None:
+def _monitor_stranded(base_tickers, candidate_tickers, extra_frames, live_prices, ctx, funnel=None) -> None:
     """Monitor every outstanding extra-lane trade the scan below will not touch.
 
     A symbol that is not a candidate today (or whose fetch fell outside the
@@ -104,6 +121,7 @@ def _monitor_stranded(base_tickers, candidate_tickers, extra_frames, live_prices
     missing = [t for t in stranded if t not in extra_frames]
     frames = {**extra_frames, **(fetch._crawl_latest_data(missing, None) if missing else {})}
     for ticker in stranded:
+        _note(funnel, short_funnel.BEARISH, "candidate", "not_selected")   # no new entry; still monitored below
         closed, near = analyze.monitor_open_only(ticker, frames.get(ticker), live_prices.get(ticker))
         ctx.newly_closed.extend(closed)
         ctx.near_close.extend(near)
@@ -146,21 +164,36 @@ def _attach_plan(item, frame, regime, regimes) -> bool:
     return not (config.PLAN_ENGINE_V2 == "on" and getattr(item, "plan_v2_rejected", None))
 
 
+def _plan_stage(item, frames, lane, funnel, require_confirmation) -> bool:
+    """Plan build for a fully-qualifying item; False when it was rejected (dropped)."""
+    if not item.all_requirements_met:
+        return True
+    if _attach_plan(item, frames.get(item.result.ticker), lane["regime"], lane["regimes"]):
+        if funnel is not None:
+            funnel.record_item(item, "plan")
+        return True
+    if funnel is not None:
+        funnel.record_item(item, "plan", getattr(item, "plan_v2_rejected", None) or "rejected")
+    scan_run._skip_rejected_plan(item, require_confirmation)
+    return False
+
+
 def _qualified_items(items, require_confirmation, frames, lane) -> list:
     """Confirmation, sector RS, RS gate and plan build -- the base merge, serial."""
+    funnel = lane.get("funnel")
     kept = []
     for item in items:
         if not _confirmed(item, require_confirmation):
             continue
         analyze._apply_sector_rs(item, item.result.ticker, lane["sector_of"], lane["etf_symbol_of"],
                                  lane["sector_frames"], lane["spy"])
-        if _rs_blocked(item):
+        blocked = _rs_blocked(item)
+        if funnel is not None:
+            funnel.record_item(item, "rs", "rs_blocked" if blocked else None)
+        if blocked:
             continue
-        if item.all_requirements_met and not _attach_plan(
-                item, frames.get(item.result.ticker), lane["regime"], lane["regimes"]):
-            scan_run._skip_rejected_plan(item, require_confirmation)
-            continue
-        kept.append(item)
+        if _plan_stage(item, frames, lane, funnel, require_confirmation):
+            kept.append(item)
     return kept
 
 
@@ -245,14 +278,18 @@ def _stamp_risk_flags(item, frames, account_cfg) -> None:
         item.kill_switch_blocked = kill
 
 
-def _should_post(item, require_confirmation) -> bool:
-    """One open trade per ticker; a not-fully-qualifying item never posts."""
+def _post_block(item, require_confirmation) -> str | None:
+    """Why this item must not post: one open trade per ticker, or a failed requirement."""
     if require_confirmation and trade_log.open_trade_for_ticker(item.result.ticker) is not None:
-        return False
-    return item.all_requirements_met
+        return "existing_trade"
+    return None if item.all_requirements_met else "unmet"
 
 
-def _alert_for(item, frames, spy_df, account_cfg, alerts):
+def _should_post(item, require_confirmation) -> bool:
+    return _post_block(item, require_confirmation) is None
+
+
+def _alert_for(item, frames, spy_df, account_cfg, alerts, funnel=None):
     result, plan, conf = item.result, item.plan, item.conf
     h = HORIZONS[result.horizon_key]
     df = frames.get(result.ticker)
@@ -266,6 +303,8 @@ def _alert_for(item, frames, spy_df, account_cfg, alerts):
         "take_profit": plan.take_profit, "target2": plan.target2_price})
     already_open = trade_log.open_trade_for_ticker(result.ticker) is not None
     item.paper_logged, item.not_logged_reason = analyze.paper_trade_decision(item, already_open)
+    if funnel is not None:
+        funnel.record_decision(item)
     fit = _fit_trendline(df, plan, h, result.trend) if item.paper_logged else None
     trade_id = _log_trade(item, nums, explanation, fit, alerts) if item.paper_logged else None
     chart_path, chart_filename = _render_chart(item, nums, df, frames, spy_df, trade_id, fit)
@@ -273,34 +312,44 @@ def _alert_for(item, frames, spy_df, account_cfg, alerts):
     embed = build_embed(item, explanation, trade_log.get_stats(conf.level),
                         None, chart_filename, htf_info=item.htf_info, layout=config.ALERT_EMBED_LAYOUT)
     alerts.append((embed, chart_path, item.plan_v2, build_simple_alert(item)))
+    if funnel is not None:
+        funnel.record_item(item, "send")
     notify_secondary(item, plan, conf)
 
 
-def _build_alerts(deduped, require_confirmation, frames, spy_df) -> list:
+def _build_alerts(deduped, require_confirmation, frames, spy_df, funnel=None) -> list:
     account_cfg = load_account_config()
     alerts: list = []
     for item in deduped:
         if runstate.is_stop_requested():
             log.info("SHORT alert building: stop requested -- %d/%d built", len(alerts), len(deduped))
             break
-        if _should_post(item, require_confirmation):
-            _alert_for(item, frames, spy_df, account_cfg, alerts)
+        blocked = _post_block(item, require_confirmation)
+        if blocked is None:
+            _alert_for(item, frames, spy_df, account_cfg, alerts, funnel)
+        elif funnel is not None:
+            funnel.record_item(item, "trade_decision", blocked)
     return alerts
 
 
 # --- the pass ---------------------------------------------------------------------
 
-def _lane_inputs(base_tickers, now):
+def _lane_inputs(base_tickers, now, funnel=None):
     """(candidates, reference, extra_frames, snapshot) for today's session."""
     day = session_date(now)
     snapshot = universe.short_snapshot(day, live=True)
-    extra_frames = _crawl_extra(snapshot, base_tickers)
+    extra_frames = _crawl_extra(snapshot, base_tickers, funnel)
     base_frames = fetch._crawl_latest_data(list(base_tickers), None)   # cache-first: warm after the base scan
     spy_df = _spy_frame(base_frames)
     reference = None if spy_df is None or snapshot is None else scan_run._short_reference(
         day, snapshot, extra_frames, base_frames, spy_df, now)
+    rejected: list = []
     candidates = scan_run.build_extra_candidates(
-        base_tickers, decision_date=day, snapshot=snapshot, reference=reference)
+        base_tickers, decision_date=day, snapshot=snapshot, reference=reference, rejected=rejected)
+    for _symbol, reason in rejected:
+        _note(funnel, short_funnel.BEARISH, "candidate", reason)
+    if reference is None:
+        _note(funnel, short_funnel.BEARISH, "candidate", "no_snapshot" if snapshot is None else "no_reference")
     return candidates, reference, extra_frames, snapshot
 
 
@@ -327,28 +376,44 @@ def _analyze_candidates(candidates, frames, ctx, progress) -> list:
     return items
 
 
+def _log_funnel(funnel: ShortFunnel, alerts: int) -> None:
+    """One telemetry row keyed direction/source/mode/stage/reason; never blocks the lane."""
+    try:
+        telemetry.log_scan_telemetry({"type": "short_funnel", "alerts": alerts,
+                                      "short_funnel": funnel.snapshot()})
+    except Exception:
+        log.exception("SHORT funnel telemetry failed -- not blocking the lane")
+
+
 def _sync_run_short_scan(require_confirmation: bool, progress=None) -> tuple:
     """(alerts, newly_closed, near_close_warnings) for the extra lane."""
     base_tickers = tuple(scan_run._scan_tickers())
-    candidates, reference, extra_frames, snapshot = _lane_inputs(base_tickers, scan_run._short_now())
+    funnel = ShortFunnel()
+    candidates, reference, extra_frames, snapshot = _lane_inputs(
+        base_tickers, scan_run._short_now(), funnel)
     params = ScanParams.from_config()
     if progress is not None:
         progress.stage, progress.total, progress.done = "short universe", len(candidates), 0
     if reference is None:
         ctx = analyze.ExtraScanContext(None, 1, 1, None, None, {}, None, None)
-        _monitor_stranded(base_tickers, set(), extra_frames, {}, ctx)
+        _monitor_stranded(base_tickers, set(), extra_frames, {}, ctx, funnel)
+        _log_funnel(funnel, 0)
         return [], ctx.newly_closed, ctx.near_close
     regime = scan_run.get_regime(reference.spy)
     frames = _stamp_context(extra_frames, reference.spy)
     symbols = sorted({c.ticker for c in candidates} | set(_open_extra_tickers(base_tickers)))
     live_prices = fetch._fetch_live_prices(symbols, None) if symbols else {}
     ctx = _scan_context(reference, params, live_prices, regime)
-    _monitor_stranded(base_tickers, {c.ticker for c in candidates}, extra_frames, live_prices, ctx)
+    _monitor_stranded(base_tickers, {c.ticker for c in candidates}, extra_frames, live_prices, ctx, funnel)
     items = _analyze_candidates(candidates, frames, ctx, progress)
-    qualified = _qualified_items(items, require_confirmation, frames, _lane_state(reference, snapshot, regime))
+    funnel.merge(ctx.funnel_events)
+    lane = {**_lane_state(reference, snapshot, regime), "funnel": funnel}
+    qualified = _qualified_items(items, require_confirmation, frames, lane)
     deduped = dedup.dedup_scan_items(qualified)
+    funnel.record_dedup(qualified, deduped)
     deduped.sort(key=lambda item: (item.all_requirements_met, item.conf.score), reverse=True)
-    alerts = _build_alerts(deduped, require_confirmation, frames, reference.spy)
+    alerts = _build_alerts(deduped, require_confirmation, frames, reference.spy, funnel)
+    _log_funnel(funnel, len(alerts))
     log.info("SHORT extra lane: %d candidate(s), %d scenario(s), %d alert(s)",
              len(candidates), len(items), len(alerts))
     return alerts, ctx.newly_closed, ctx.near_close

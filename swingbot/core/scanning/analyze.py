@@ -37,7 +37,7 @@ from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, planned_loss_pc
 from swingbot.core.market.indicators import atr
 from swingbot.core.market.session import now_et
 
-from . import runstate
+from . import runstate, short_funnel
 from .short_reference import align_completed
 from .confidence import score_confidence
 from .embeds import _build_requirement_checks
@@ -92,6 +92,7 @@ class ScanItem:
     # v81: the paper-trade decision mirrored by the order ticket.
     paper_logged: bool = False
     not_logged_reason: str | None = None
+    candidate_context: dict | None = None   # V118-5: source/mode/reference of the extra-lane candidate; None = base lane
 
     @property
     def all_requirements_met(self) -> bool:
@@ -565,7 +566,8 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
               regime, effective_min_confluence: int, effective_min_confidence: int,
               rs_cache: dict = None, spy_df=None, breadth: float = None,
               live_prices: dict = None, hard_filters: dict = None,
-              opex_tier_today=None, allowed_directions=None, rs_frames=None) -> dict:
+              opex_tier_today=None, allowed_directions=None, rs_frames=None,
+              funnel_source: str = short_funnel.BASE_SOURCE, funnel_mode: str | None = None) -> dict:
     """
     Per-ticker analysis body of _sync_run_scan's ANALYZE phase, extracted
     so it can run inside a map_tickers() worker thread (Task E20). Handles
@@ -633,6 +635,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
         },
         "conf_level_counts": {},   # {1..5: number of scenarios scored at that level}
         "data_quality_failed": False,   # E47: this ticker tripped the E16 data-quality gate
+        "funnel_events": [],   # V118-5: immutable (direction, source, mode, stage, reason) tuples, merged serially by the caller
     }
 
     if runstate.is_stop_requested():
@@ -843,6 +846,8 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
                     log.debug("%s/%s %s dropped: %s", ticker, horizon_key,
                               scenario.direction, mtf_verdict["reason"])
                     stats["mtf_misaligned"] += 1
+                    stats["funnel_events"].append(
+                        (scenario.direction, funnel_source, funnel_mode, "scenario", "mtf_opposed"))
                     continue
 
             # Simulate EVERY supported strategy independently against
@@ -932,6 +937,8 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
                     all_ok = False
             if all_ok:
                 stats["fully_qualifying"] += 1
+            stats["funnel_events"].extend(short_funnel.scenario_events(
+                scenario.direction, funnel_source, funnel_mode, requirements))
 
             result = levels.ScenarioSignal(
                 ticker=ticker, horizon_key=horizon_key, horizon_label=h["label"],
@@ -1000,6 +1007,7 @@ class ExtraScanContext:
     now: object = None
     newly_closed: list = field(default_factory=list)
     near_close: list = field(default_factory=list)
+    funnel_events: list = field(default_factory=list)
 
 
 def scan_extra_candidate(candidate, frame, context: ExtraScanContext, horizons) -> list:
@@ -1011,17 +1019,29 @@ def scan_extra_candidate(candidate, frame, context: ExtraScanContext, horizons) 
     confirmation work. Never the strategy pass; breadth is None (the base
     breadth is not this universe's).
     """
+    key = (short_funnel.BEARISH, candidate.source, candidate.mode)
+    context.funnel_events.append((*key, "candidate", None))
     aligned = align_completed(frame, context.spy_df, None, context.now)
     if aligned is None:
+        # An open trade on this symbol must still be monitored for its SL/TP.
+        context.funnel_events.append((*key, "aligned", "unaligned"))
+        closed, near = monitor_open_only(candidate.ticker, frame, context.live_prices.get(candidate.ticker))
+        context.newly_closed.extend(closed)
+        context.near_close.extend(near)
         return []
+    context.funnel_events.append((*key, "aligned", None))
     stats = _scan_one(
         candidate.ticker, frame, list(horizons), None, context.regime,
         context.min_confluence, context.min_confidence, rs_cache=context.rs_cache,
         spy_df=context.spy_df, breadth=None, live_prices=context.live_prices,
         hard_filters=context.hard_filters, opex_tier_today=context.opex_tier,
-        allowed_directions=BEARISH_ONLY, rs_frames=aligned[:2])
+        allowed_directions=BEARISH_ONLY, rs_frames=aligned[:2],
+        funnel_source=candidate.source, funnel_mode=candidate.mode)
     context.newly_closed.extend(stats["newly_closed"])
     context.near_close.extend(stats["near_close_warnings"])
+    context.funnel_events.extend(stats["funnel_events"])
+    for item in stats["items"]:
+        item.candidate_context = short_funnel.candidate_context(candidate)
     return stats["items"]
 
 
