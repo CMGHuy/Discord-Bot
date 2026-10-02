@@ -156,6 +156,25 @@ def test_an_added_row_records_mode_dates_prices_and_outcome(sealed):
     assert (row.lane, row.mode, row.decision_date) == ("short_universe", "isolated", "2019-01-11")
     assert row.stop > row.entry > row.target
     assert row.outcome in ("win", "loss", "scratch", "timeout", "not_triggered", "no_trade")
+    assert row.exit_date >= row.decision_date
+
+
+def _alert(r, entry, stop, decision, exit_):
+    return scan_replay.ReplayAlert(
+        lane="short_universe", ticker="X", direction="bearish", source="confluence", mode="broad",
+        decision_date=decision, horizon_key="4w", strategy="S", entry=entry, stop=stop, target=entry - 2,
+        planned_rr=2.0, outcome="win", r_multiple=r, exit_date=exit_)
+
+
+def test_break_even_borrow_fee_zeroes_the_added_expectancy():
+    """Fee f (annual, fraction of entry) costs f * entry/risk * days/365 R per trade;
+    the break-even f solves sum(r) = f * sum(entry/risk * days/365)."""
+    alerts = [_alert(0.5, 100.0, 102.0, "2019-01-01", "2019-01-11"),     # 50 * 10/365
+              _alert(-0.2, 50.0, 51.0, "2019-01-01", "2019-01-21")]      # 50 * 20/365
+    expected = 0.3 / (50 * 10 / 365 + 50 * 20 / 365)
+    assert scan_replay.break_even_borrow_fee(alerts) == pytest.approx(expected)
+    assert scan_replay.break_even_borrow_fee([_alert(-0.5, 100.0, 102.0, "2019-01-01", "2019-01-11")]) == 0.0
+    assert scan_replay.break_even_borrow_fee([]) is None
 
 
 def test_ex_member_is_absent_from_every_record(sealed):

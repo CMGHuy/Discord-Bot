@@ -90,6 +90,7 @@ class ReplayAlert:
     planned_rr: float | None
     outcome: str
     r_multiple: float | None
+    exit_date: str | None = None   # last bar of the position; the decision date when never filled
 
     def arm_trade(self) -> ArmTrade:
         return ArmTrade(ticker=self.ticker, strategy=self.strategy, horizon_key=self.horizon_key,
@@ -239,7 +240,7 @@ def _alert(lane: _Lane, day: str, item, full: pd.DataFrame) -> ReplayAlert | Non
         mode=_mode_of(item), decision_date=day, horizon_key=plan.horizon_key, strategy=plan.strategy,
         entry=float(entry), stop=float(plan.stop_loss), target=float(plan.tp1),
         planned_rr=planned_rr(entry, plan.stop_loss, plan.tp1), outcome=result.outcome,
-        r_multiple=result.r_total)
+        r_multiple=result.r_total, exit_date=exit_day)
 
 
 def _post(lane: _Lane, day: str, qualified: list, frames: dict) -> None:
@@ -331,6 +332,30 @@ def _extra_day(lane: _Lane, inputs: _Day, frames: dict, params, spec: ReplaySpec
     context = _qualify_context(inputs, lane, stamped, inputs.snapshot.sector_of,
                                dict(reference.sector_frames))
     _post(lane, inputs.day, _qualified(items, context, lane, inputs.day), frames)
+
+
+# --- borrow-fee sensitivity (spec: report a break-even fee, never claim borrow) ---
+
+_NO_POSITION = ("not_triggered", "no_trade")
+
+
+def _fee_exposure(alert: ReplayAlert) -> float:
+    """R lost per unit of annual borrow fee: entry/risk x days held / 365 (min 1 day)."""
+    risk = abs(alert.entry - alert.stop)
+    held = (dt.date.fromisoformat(alert.exit_date) - dt.date.fromisoformat(alert.decision_date)).days
+    return (alert.entry / risk) * max(1, held) / 365.0 if risk else 0.0
+
+
+def break_even_borrow_fee(alerts) -> float | None:
+    """Annual borrow fee (fraction of entry value) at which the alerts' summed R is zero.
+
+    0.0 when the summed R is already <= 0; None with no filled position.
+    """
+    filled = [a for a in alerts if a.outcome not in _NO_POSITION and a.r_multiple is not None]
+    exposure = sum(_fee_exposure(a) for a in filled)
+    if not filled or exposure <= 0:
+        return None
+    return max(0.0, sum(a.r_multiple for a in filled) / exposure)
 
 
 # --- entry points -----------------------------------------------------------------
