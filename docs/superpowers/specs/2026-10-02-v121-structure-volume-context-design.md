@@ -86,7 +86,11 @@ covers short frames and old records. Because `entry_context` is already
 called from both the live stamp (`planning/params.py:stamp_entry_context`)
 and replay (`backtesting/backtest.py`, `backtest_scenarios.py`), both paths
 gain the features with no new wiring. Short frames (< 60 bars) return all
-`None`, never raise.
+`None`, never raise. The live snapshot is computed on whatever frame the
+scan passes, which may end in today's forming bar (exactly as the existing
+`vol_ratio_20` is); that is acceptable for a descriptive record. Any
+consumer that **acts** on these features (v122's gate, v123's exit) must
+call `structure.py` on completed bars only.
 
 **Storage.** The snapshot travels as `entry_context` on the trade record
 (`tracking/performance.py`). The plan must confirm with the `schema-change`
@@ -122,11 +126,14 @@ waiting on; the report's header says so and prints no inferential statistic.
   last row equals `confirmed_pivots(df).iloc[t]`; a pivot never appears
   before `i + k`.
 - Each feature: hand-built frames with known answers (clean HH/HL uptrend →
-  `"up"`, aligned, held; lower high → `hh_failed`; a 2-bar pullback on half
+  `"up"`, aligned, held; lower high → `hh_failed`; a 3-bar pullback on half
   the impulse volume → `pullback_vol_ratio == 0.5`; a high-volume inside bar →
   `absorption_bar`); bearish mirrors of each.
 - `entry_context` keeps every pre-existing key's value byte-identical on a
-  fixture (witness test captured before the change), and `entry_context` on
+  fixture (witness test captured before the change) — except
+  `swing_high_atr`/`swing_low_atr`, which this spec deliberately fills
+  (`bb_width_pctile_250` is also never filled today; left alone, out of
+  scope) — and `entry_context` on
   < 60 bars returns `None` for every new key.
 - Report: refuses a window ending after 2023-12-31 for `--source replay`.
 - `no-lookahead` skill review on `structure.py` and `context.py`.

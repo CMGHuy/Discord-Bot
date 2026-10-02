@@ -86,13 +86,24 @@ and `progress_stall_fires(pivots_row, prev_post_entry_sh, features_row, c,
 direction, entry_index, j)`. `_scale_out_exit_walk` precomputes the v121
 series once per walk (they are truncation-stable, so row `j` equals a
 recomputation on `df.iloc[:j+1]` — tested) and calls them per bar.
-`planning/plan_manager.py` calls the same two functions from its
-completed-daily-bar check (the path that already updates the chandelier
-trail), never from the intraday poll. A `progress_stall` fire marks the
-runner for exit at the next session open and emits the existing runner-close
-lifecycle event with reason `progress_stall`; `hl_trail` updates
-`working_stop` with reason `structure_trail`. Wording goes through the
-`alert-surface` skill. Paper only — no order is ever placed.
+**Live call site (corrected at planning).** The live chandelier trail is
+updated only inside the intraday poll (`plan_manager._step_partial`);
+`check_bar()` is unwired and `known-traps.md` forbids wiring it. So
+`_step_partial` evaluates each newly **completed** daily bar exactly once,
+on the completed frame (`strategy_pass.completed_frame()`), never on the
+forming bar, and calls the same two functions. A `progress_stall` fire
+closes the runner at the first regular-session tick after the confirming
+bar (replay: `Open[j+1]`), with close reason `tp1_runner_progress_stall` —
+the `tp1_` prefix is what `_close_runner` and `performance.py` read as a
+win, and the mechanism never changes TP1 status. An `hl_trail` stop hit
+keeps the existing `runner_trail` reason; `structure_trail` appears on the
+live log line only. Wording goes through the `alert-surface` skill. Paper
+only — no order is ever placed.
+
+**Paired entries.** `StrategyEngine` holds one trade per ticker at a time,
+so an earlier runner exit can admit a later entry. Pairing is guaranteed
+only on shared trade keys; added and removed trades are disclosed with
+counts, never assumed absent, and the harvest clauses score the paired keys.
 
 ## Measurement
 
@@ -121,6 +132,14 @@ exit-only design: identical entries replayed under baseline and arm through
 5. Stage 3 VALIDATION 2024-01-01..2025-12-31 — one shot per arm, all four
    harvest clauses; missing permutation p = FAIL.
 
+**Tooling built by this plan (frozen in the pre-registration before use).**
+`validate_component.py`'s walkforward stage is win-rate-only and its
+validation stage runs the v72 gate, and `permutation_test.py` shifts
+entries, which cannot test an exit-only change. v123 therefore adds a
+harvest fold gate and harvest validation stage to `validate_component.py`,
+a ticker-cluster arm-label permutation on ΔExpR (n = 200) for clause 4, and
+a Stage 1 harvest selection script, each with its own tests.
+
 The two arms are separate budgets, run serially, never pooled. Pre-
 registration record committed under `docs/superpowers/results/` before any
 outcome is read; `backtest-gate` invoked before every run.
@@ -146,8 +165,8 @@ needs a mechanism other than "post-entry confirmed `k=3` swing low minus
 - Outcome-flip test: across a fixture set, TP1-touched status is identical
   baseline vs arm.
 - Parity: one fixture through `_scale_out_exit_walk` and through
-  `plan_manager`'s daily-bar check produces the same stop sequence and exit
-  session.
+  `plan_manager._step_partial`'s completed-bar step produces the same stop
+  sequence and exit session; a poll on a forming bar changes nothing.
 - `no-lookahead` review of every new function.
 
 ## Parallelisation

@@ -84,6 +84,26 @@ Selection follows the funnel in `backtest-methodology.md` verbatim:
 5. **Stage 3 VALIDATION** 2024-01-01..2025-12-31 — one shot per component,
    all six v72 clauses, missing permutation p = FAIL.
 
+**Clause 6 reading (frozen amendment).** A rejected entry frees the
+one-position slot (strategy) or the 5-bar cooldown (confluence), so the
+component arm is not a strict subset of baseline and `acceptance.py`
+reports the mechanism clause `SKIPPED`. For v122 the mechanism clause is
+scored on the **baseline** arm: trades the predicate flags at `d` (the
+"removed" population) vs the **in-scope** baseline trades it does not flag
+("retained" — trades outside the component's scope are in neither group); pass iff removed WR < retained WR **and** removed ExpR ≤ 0.
+Replacement trades the freed slots admit are part of the component arm and
+count fully in clauses 1–5; the replacement count is disclosed.
+
+**Clause 5 instrument (partner decision, 2026-10-02).** Today's
+`scripts/backtest/permutation_test.py` shifts strategy entries through
+`backtest_wf.run_folds` on TRAIN folds and reports ExpR; it cannot score
+stamped VALIDATION arms or confluence entries. v122 **extends that script**
+(not a new instrument) to read a stamped arm pair, cover confluence as well as
+strategy entries, and report a p-value on ΔWR (n = 200, fixed seed). The
+extension gets its own reviewed task and a witness test proving the script's
+existing output is unchanged, and it is frozen in the pre-registration
+before any VALIDATION arm exists.
+
 Arms are produced with `scripts/backtest/measure_arms.py` (live
 constructor via the arm engines) and judged by
 `scripts/backtest/validate_component.py`. No bespoke measurement script. The
@@ -98,7 +118,10 @@ both paths: after the entry signal is known and before plan stamping —
 `scanning/strategy_pass.py` and the confluence path in `scanning/analyze.py`
 live; `backtesting/arms/strategy_engine.py` and the confluence arm engine in
 replay. Each call site checks `PULLBACK_DRYUP_SCOPE` and, for `strategy`,
-membership of the frozen list. A parity test feeds one fixture through the
+membership of the frozen list. The predicate is always evaluated on
+**completed daily bars only**: a live call site drops today's still-forming
+bar before calling it (as v119 does), so a pivot's `k` confirming bars are
+never an unfinished candle and live matches replay. A parity test feeds one fixture through the
 live and replay call sites and asserts the same accept/reject. Rejections are
 logged with reason `pullback_volume` (scan funnel) so production shows what
 the gate removed.
