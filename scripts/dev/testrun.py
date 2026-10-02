@@ -13,6 +13,9 @@ Profiles (see docs/claude/testing-cost.md for the measurements behind them):
     python scripts/dev/testrun.py full tests/charts/ tests/admin/  # shard, -n 4
     python scripts/dev/testrun.py file tests/x.py   # one path, serial         ~7s
     python scripts/dev/testrun.py lf                # --lf, serial          seconds
+    python scripts/dev/testrun.py changed          # only tests reaching your diff
+    python scripts/dev/testrun.py changed --dry-run  # print the selection, run nothing
+    python scripts/dev/testrun.py changed --audit    # selection, then full: report misses
 
 `fast` runs serial on purpose: measured 27.1s serial vs 27.2s at -n 4, i.e. it
 is already at the fixed per-invocation overhead floor and workers only add
@@ -45,6 +48,11 @@ LOG = REPO / ".pytest-last-run.log"
 
 WORKERS = "4"
 
+# scripts/dev is sys.path[0] when this is run directly, but NOT when a test
+# loads it via spec_from_file_location. Insert explicitly so both work.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from select_tests import ESCALATE_PREFIXES, Selection, select  # noqa: E402
+
 # 127.0.0.1, not localhost: docker publishes the port on IPv4 only, and on Windows
 # "localhost" tries IPv6 first and stalls ~5s per connection before falling back.
 # Kept aligned with tests/db/conftest.py by tests/dev/test_testrun_db_preflight.py.
@@ -66,37 +74,36 @@ FAILED_RE = re.compile(r"^(?:FAILED|ERROR)\s+(\S+)")
 COUNT_RE = re.compile(r"(\d+) (passed|failed|skipped|xfailed|xpassed|error|errors|deselected)")
 
 
-# Editing any of these can break a test that only runs in the slow tier, so
-# `fast` transparently upgrades itself to `full` when they are dirty. Tiering
-# is a speed optimisation; it must not become a way to miss a regression.
-# `swingbot/admin/templates/` was here until Release B deleted it, and
-# `swingbot/admin/static/` until v80 deleted `static/tokens.css`. The palette
-# `core/charts/chart_style.THEME` copies is now the SPA's own
-# `frontend/src/styles/tokens.css`, and tests/charts/test_chart_theme.py (slow
-# tier) reads it -- so a token edit can still break a render-tier test.
-ESCALATE_PREFIXES = (
-    "swingbot/core/charts/",
-    "frontend/src/styles/tokens.css",
-)
+def _git_listing(*args: str) -> list[str] | None:
+    """NUL-separated (-z) git listing, or None if git can't answer.
 
-
-def changed_paths() -> list[str] | None:
-    """Working-tree + staged paths vs HEAD. None if git can't answer."""
+    -z because core.quotePath would otherwise wrap non-ASCII names in
+    quotes, and a quoted name matches no prefix and no file.
+    """
     try:
-        out = subprocess.run(
-            ["git", "diff", "--name-only", "HEAD"], cwd=REPO,
-            capture_output=True, text=True, timeout=15,
-        )
-        untracked = subprocess.run(
-            ["git", "ls-files", "--others", "--exclude-standard"], cwd=REPO,
-            capture_output=True, text=True, timeout=15,
-        )
+        out = subprocess.run(["git", *args, "-z"], cwd=REPO,
+                             capture_output=True, timeout=15)
     except (OSError, subprocess.SubprocessError):
         return None
     if out.returncode != 0:
         return None
-    paths = out.stdout.splitlines() + untracked.stdout.splitlines()
-    return [p.strip().replace("\\", "/") for p in paths if p.strip()]
+    text = out.stdout.decode("utf-8", errors="surrogateescape")
+    return [item.replace("\\", "/") for item in text.split("\0") if item]
+
+
+def changed_paths() -> list[str] | None:
+    """Working-tree + staged paths vs HEAD, plus untracked. None if git can't
+    answer.
+
+    --no-renames: with rename detection a staged `git mv` lists only the new
+    path, so the old one would escape REGISTRY_PREFIXES widening and its
+    importers would never be selected. Both sides must be listed.
+    """
+    diff = _git_listing("diff", "--name-only", "--no-renames", "HEAD")
+    untracked = _git_listing("ls-files", "--others", "--exclude-standard")
+    if diff is None or untracked is None:
+        return None
+    return diff + untracked
 
 
 def should_escalate() -> tuple[bool, str]:
@@ -191,13 +198,20 @@ def _pyflakes_undefined(paths: list[str]) -> list[str]:
     return [line for line in result.stdout.splitlines() if "undefined name" in line]
 
 
-def build_args(profile: str, target: list[str]) -> list[str]:
+def build_args(profile: str, target: list[str] | None,
+               targets: list[str] | None = None) -> list[str]:
     if profile == "fast":
         return BASE + ["-m", "not slow", "tests/"]
     if profile == "full":
         return BASE + ["-n", WORKERS, *(target or ["tests/"])]
     if profile == "lf":
         return BASE + ["--lf", "tests/"]
+    if profile == "changed":
+        if not targets:
+            sys.exit("testrun.py changed: no targets resolved")
+        # Serial on purpose: below FULL_THRESHOLD the set is small and xdist's
+        # worker startup dominates, the same reason `fast` runs serial.
+        return BASE + list(targets)
     if profile == "file":
         if not target:
             sys.exit("testrun.py file <path>: missing path")
@@ -270,6 +284,74 @@ def run(pytest_args: list[str]) -> tuple[dict[str, int], list[str], float, int]:
     return counts, failed, time.time() - started, rc
 
 
+def resolve_changed(args) -> Selection | None:
+    """Print the selection; return it, or None meaning 'run the full profile'.
+
+    --dry-run exits here rather than returning, so a wrong selection is
+    visible rather than inferred from a suspiciously fast green run.
+    """
+    selection = select(changed_paths(), REPO)
+    print(f"SELECTION: {selection.reason}")
+    if selection.full:
+        if args.dry_run:
+            sys.exit(0)
+        return None
+    for path in selection.targets:
+        print(f"  {path}")
+    if args.dry_run:
+        sys.exit(0)
+    return selection
+
+
+def audit_misses(selected: list[str], full_failed: list[str]) -> list[str]:
+    """Failing node ids that the selection would NOT have run.
+
+    This set is the only interesting output of an audit: a regression the
+    inner loop would have hidden. Directory targets end in '/', so a prefix
+    match is the right test for both shapes.
+    """
+    return [
+        node for node in full_failed
+        if not any(node.split("::")[0].startswith(t) for t in selected)
+    ]
+
+
+def run_audit(targets: list[str]) -> int:
+    """Run the full suite and compare its failures with the selection.
+
+    Returns 1 on a miss, 2 when the full run itself did not complete (no
+    parseable counts, or pytest exit code outside 0/1), else 0. An empty selection is audited too: every
+    failure is then a miss, which is exactly the claim 'nothing needs running'
+    being checked. One clean run is weak evidence, not proof -- hence
+    'covered every failure', never 'the selection is safe'.
+    """
+    print("AUDIT: running the full suite to check the selection...")
+    counts, full_failed, full_elapsed, rc = run(build_args("full", None))
+    if not counts or rc not in (0, 1):
+        # INTERNALERROR, interrupt, collection crash: the full run did not
+        # finish, so its (empty) failure list proves nothing either way.
+        print(f"AUDIT: UNKNOWN  full run did not complete "
+              f"(pytest exit code {rc}); full output: {LOG}")
+        return 2
+    misses = audit_misses(targets, full_failed)
+    if not misses:
+        print(f"AUDIT: OK  selection covered every failure  (full: {full_elapsed:.1f}s)")
+        return 0
+    print(f"AUDIT: MISS  {len(misses)} failure(s) the selection would not have run:")
+    for node in misses[:10]:
+        print(f"  {node}")
+    return 1
+
+
+def audit_leg(targets: list[str] | None, code: int) -> int:
+    """Audit after a `changed` run; a miss turns a green exit code into 1."""
+    if targets is None:
+        # Widened: that run WAS the full suite, so there is nothing to compare.
+        print("AUDIT: SKIPPED  selection widened to the full suite; nothing to compare")
+        return code
+    return code or run_audit(targets)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Split out from main() so tests/dev/test_testrun_ci_invocations.py can
     feed it every `testrun.py` command line deploy.yml actually runs --
@@ -280,7 +362,7 @@ def build_parser() -> argparse.ArgumentParser:
     real strings, not hand-picked ones.
     """
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("profile", choices=["fast", "full", "file", "lf"])
+    ap.add_argument("profile", choices=["fast", "full", "file", "lf", "changed"])
     ap.add_argument("target", nargs="*",
                     help="`file`: one or more paths. `full`: shard to these "
                          "paths instead of all of tests/. Ignored otherwise.")
@@ -289,37 +371,32 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--skip-lint-gate", action="store_true",
                     help="skip the whole-repo pyflakes undefined-name gate "
                          "(for a `full` shard where another shard already runs it)")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="`changed`: print the selection and exit without running")
+    ap.add_argument("--audit", action="store_true",
+                    help="`changed`: run the selection, then the full suite, "
+                         "and report any failure the selection would have missed")
     return ap
 
 
-def main() -> int:
-    args = build_parser().parse_args()
+def lint_gate() -> int | None:
+    """Undefined-name gate for `full`. Returns an exit code on failure, else None."""
+    try:
+        findings = undefined_names()
+    except RuntimeError as exc:
+        print(f"VERDICT: FAIL  {exc}")
+        return 1
+    if findings:
+        print(f"VERDICT: FAIL  {len(findings)} undefined name(s) -- this is the class that caused two production outages")
+        for finding in findings[:10]:
+            print(f"  {finding}")
+        return 1
+    return None
 
-    profile = args.profile
-    if profile == "fast" and not args.no_escalate:
-        escalate, why = should_escalate()
-        if escalate:
-            print(f"NOTE: {why} -> escalating to full tier")
-            profile = "full"
 
-    if profile == "full" and not args.skip_lint_gate:
-        try:
-            findings = undefined_names()
-        except RuntimeError as exc:
-            print(f"VERDICT: FAIL  {exc}")
-            return 1
-        if findings:
-            print(f"VERDICT: FAIL  {len(findings)} undefined name(s) -- this is the class that caused two production outages")
-            for finding in findings[:10]:
-                print(f"  {finding}")
-            return 1
-
-    warning = db_preflight()
-    if warning:
-        print(warning, file=sys.stderr, flush=True)
-
-    counts, failed, elapsed, rc = run(build_args(profile, args.target))
-
+def report(counts: dict[str, int], failed: list[str], elapsed: float, rc: int,
+           targets: list[str] | None) -> int:
+    """Print the verdict and return the exit code."""
     # No parseable counts means we do not know what happened. Never optimistic.
     if not counts:
         print(f"VERDICT: UNKNOWN (could not parse pytest output)  in {elapsed:.1f}s")
@@ -331,7 +408,8 @@ def main() -> int:
     bad = counts.get("failed", 0) + counts.get("error", 0) + counts.get("errors", 0)
 
     if bad == 0 and rc == 0:
-        print(f"VERDICT: PASS  {summary}  in {elapsed:.1f}s")
+        suffix = f"  ({len(targets)} target(s) selected)" if targets else ""
+        print(f"VERDICT: PASS  {summary}  in {elapsed:.1f}s{suffix}")
         return 0
 
     print(f"VERDICT: FAIL  {summary}  in {elapsed:.1f}s")
@@ -341,6 +419,44 @@ def main() -> int:
         print(f"  ... and {len(failed) - 10} more")
     print(f"  full output: {LOG}")
     return 1
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+
+    profile = args.profile
+    targets: list[str] | None = None
+
+    if profile == "changed":
+        selection = resolve_changed(args)
+        if selection is None:
+            profile = "full"
+        elif not selection.targets:
+            # inert change: nothing to run, and that is a pass -- unless audited
+            return run_audit([]) if args.audit else 0
+        else:
+            targets = selection.targets
+
+    if profile == "fast" and not args.no_escalate:
+        escalate, why = should_escalate()
+        if escalate:
+            print(f"NOTE: {why} -> escalating to full tier")
+            profile = "full"
+
+    if profile == "full" and not args.skip_lint_gate:
+        failure = lint_gate()
+        if failure is not None:
+            return failure
+
+    warning = db_preflight()
+    if warning:
+        print(warning, file=sys.stderr, flush=True)
+
+    counts, failed, elapsed, rc = run(build_args(profile, args.target, targets))
+    code = report(counts, failed, elapsed, rc, targets)
+    if args.profile == "changed" and args.audit:
+        return audit_leg(targets, code)
+    return code
 
 
 if __name__ == "__main__":

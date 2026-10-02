@@ -246,6 +246,7 @@ never route around it with another tool.
 ```bash
 python scripts/dev/testrun.py full                    # full suite, -n 4: one-line verdict
 python scripts/dev/testrun.py fast                    # ~27s, skips the slow tier
+python scripts/dev/testrun.py changed                 # only tests reaching your diff; widens to full when unsure
 python scripts/dev/testrun.py file tests/test_foo.py  # one file (~7s): use while iterating
 python -m pytest tests/test_foo.py::test_bar -v       # single test, raw pytest
 make check                                            # py_compile pass; without make (Windows): python -m py_compile bot.py admin_ui.py swingbot/**/*.py
@@ -261,6 +262,14 @@ make up / make logs / make restart                    # docker compose lifecycle
 Use the wrapper rather than the raw suite; it prints a one-line verdict instead
 of ~1150 progress lines. Never re-run the full suite to check a local change.
 
+- `python scripts/dev/testrun.py changed` — runs only the tests reaching your
+  diff, and widens to the full suite whenever it cannot be sure (registry
+  dispatch, an unplaceable file type, a failed git call). Inner loop only:
+  it is not a gate, and the plan-final full run is unchanged. `--dry-run`
+  prints the selection without running it, even when it widens to full.
+  `--audit` runs the selection then the full suite and reports failures the
+  selection missed (exit 1 on a miss; SKIPPED when it already widened;
+  UNKNOWN, exit 2, when the full run did not complete).
 - `python scripts/dev/testrun.py file tests/test_foo.py` while iterating.
 - `python scripts/dev/testrun.py fast` for broader, non-render-heavy checks.
 - `python scripts/dev/testrun.py full` once as final verification of an entire

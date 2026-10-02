@@ -54,6 +54,43 @@ just be the same ~52s answer five times. The workflow file's own comments
 carry the full reasoning; this entry exists so "why does CI have 5 backend
 jobs instead of 1" doesn't require reading the YAML to answer.
 
+## Change-aware selection (`changed`)
+
+`python scripts/dev/testrun.py changed` runs only the test files that reach
+what you changed. `--dry-run` prints the selection without running it, and
+exits without running even when the selection widens to the full suite.
+
+- `changed --audit` runs the selection, then the full suite, and reports any
+  failure the selection would have missed. It prints `AUDIT: SKIPPED` when the
+  selection already widened (that run was the full suite), `AUDIT: UNKNOWN`
+  (exit 2) when the full run did not complete, and exits 1 on a miss. One
+  clean audit is evidence, not proof.
+
+**It is an inner-loop tool and not a gate.** `/gate` and a plan's final
+verification task still run everything. That boundary is the safety argument:
+a selection bug costs a slow feedback cycle, never a missed regression.
+
+**Every failure mode widens; none narrows.** Unparseable file, unplaceable
+extension, failed git call, a changed source file no test imports, or too
+many test files selected (`FULL_THRESHOLD`, unmeasured) — all run the full
+suite, and the `SELECTION:` line says which one fired. Read that line before
+doubting it.
+
+**What it cannot see:** anything reached by name rather than by import. The
+strategy registry under `swingbot/core/edge/` is the standing example, which
+is why `REGISTRY_PREFIXES` in `scripts/dev/select_tests.py` widens on it
+unconditionally. If you add wiring of that shape, add the prefix — a gap
+there is the one kind of miss that matters. Files tests *read as data*
+(`.claude/`, `CLAUDE.md`, `AGENTS.md`, `docs/claude/`, `.github/workflows/`)
+route to their readers through `DATA_READERS`, checked before the inert
+`docs/`/`*.md` rule; a guard test fails when a test names a repo file that
+would still classify inert.
+
+**`FULL_THRESHOLD = 0.4` is unmeasured**, and its comment in the source says
+so. The serial-vs-`-n 4` crossover needs a cooled idle box; per the two traps
+below, a reading taken while anything else runs is worthless. Deriving it is
+open work, not a number to quote.
+
 ## Measuring is fragile — two traps
 
 1. **Cool down 20s between runs.** Back-to-back runs inflate each other by up
