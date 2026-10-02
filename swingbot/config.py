@@ -797,6 +797,13 @@ FIELDS: list[Field] = [
                "strategy pass or a bullish alert. No broker order is ever placed and borrow "
                "availability is not checked -- confirm a borrow before acting on an alert. "
                "Off (default): the scan is unchanged."),
+    Field("SHORT_UNIVERSE_RESEARCH_MODE", "SHORT_UNIVERSE_RESEARCH_MODE", "Universe & Scanning",
+          "SHORT extra lane: research replay mode (v118)", type="select", default="off",
+          options=["off", "broad", "isolated"],
+          help="v118 research-only measurement knob: the historical replay "
+               "(scripts/backtest/measure_arms.py) adds the extra lane in this one weakness mode. "
+               "Nothing in the live bot reads it -- SHORT_UNIVERSE_ENABLED alone turns the live "
+               "lane on. Off (default): the replay is the base lane only."),
     Field("SHORT_UNIVERSE_MAX_SYMBOLS", "SHORT_UNIVERSE_MAX_SYMBOLS", "Universe & Scanning",
           "SHORT extra lane: max symbols per scan", type="number", default="50", min=1, max=500, step=1,
           help="v118 operational safeguard (not a search knob): the extra lane fetches at most this many "
@@ -1116,7 +1123,7 @@ _SEARCH_CLASSES = {
         "DEAD_CAT_BOUNCE_VETO", "DCB_DECLINE_PCT", "DCB_GAP_REQUIRED",
         "DCB_VOLUME_RATIO", "RSI_DIV_MIN_CONSECUTIVE_TURN",
         "MA_RIBBON_CONFIRM_BARS", "SR_MIN_LEVEL_TOUCHES",
-        "FIB_TARGET_1_0_EXTENSION",
+        "FIB_TARGET_1_0_EXTENSION", "SHORT_UNIVERSE_RESEARCH_MODE",
     },
     "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO", "EARNINGS_BLACKOUT_SESSIONS"},
     "live_only": {
@@ -1153,6 +1160,14 @@ _CASTERS = {
 }
 
 
+# Lower-cased mode selects; an unknown value falls back to "off" with a warning.
+_MODE_VALUES = {
+    "PLAN_ENGINE_V2": ("off", "shadow", "on"),
+    "STRATEGY_ALERTS_MODE": ("off", "shadow", "live"),
+    "SHORT_UNIVERSE_RESEARCH_MODE": ("off", "broad", "isolated"),
+}
+
+
 def _cast(f: Field, raw: str):
     # A couple of "select" fields need a specific underlying type rather
     # than the raw string the <select> posts back -- handled by attr name
@@ -1161,18 +1176,11 @@ def _cast(f: Field, raw: str):
         return raw.upper()
     if f.attr in ("MIN_ALERT_CONFIDENCE_LEVEL", "SECONDARY_ALERT_MIN_CONFIDENCE"):
         return int(raw)
-    if f.attr == "PLAN_ENGINE_V2":
+    if f.attr in _MODE_VALUES:
         v = str(raw).lower()
-        if v not in ("off", "shadow", "on"):
+        if v not in _MODE_VALUES[f.attr]:
             log.warning(
-                "invalid PLAN_ENGINE_V2=%r, falling back to 'off'", raw)
-            return "off"
-        return v
-    if f.attr == "STRATEGY_ALERTS_MODE":
-        v = str(raw).lower()
-        if v not in ("off", "shadow", "live"):
-            log.warning(
-                "invalid STRATEGY_ALERTS_MODE=%r, falling back to 'off'", raw)
+                "invalid %s=%r, falling back to 'off'", f.attr, raw)
             return "off"
         return v
     caster = _CASTERS.get(f.type)

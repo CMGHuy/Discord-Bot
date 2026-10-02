@@ -37,3 +37,31 @@ def run_arm(ticker: str, df, engine_ids, horizons, signal_window, delta: dict) -
             out.extend(get_engine(engine_id).run_ticker(
                 ticker, df, horizons, signal_window, params))
     return out
+
+
+# --- v118: whole-scan population engines ---------------------------------------------
+
+class PopulationEngine(Protocol):
+    engine_id: str
+
+    def run_population(self, frames: dict, window: tuple[str, str], params, *,
+                       mode: str) -> list: ...
+
+
+def population_engine_for(delta: dict) -> str | None:
+    """The population engine a knob delta needs, or None for per-ticker engines."""
+    from swingbot.core.backtesting.arms import reachability
+    for attr in delta:
+        reach = reachability.REGISTRY.get(attr)
+        found = sorted(reach.observed_by & reachability.POPULATION_ENGINES) if reach else []
+        if found:
+            return found[0]
+    return None
+
+
+def get_population_engine(engine_id: str, **kwargs) -> PopulationEngine:
+    """Construct a registered population engine; KeyError when none is registered."""
+    if engine_id == "short_universe":
+        from swingbot.core.backtesting.arms.short_universe_engine import ShortUniverseEngine
+        return ShortUniverseEngine(**kwargs)
+    raise KeyError(engine_id)

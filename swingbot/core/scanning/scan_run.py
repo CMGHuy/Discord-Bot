@@ -134,13 +134,18 @@ def _short_reference_id(day, snapshot, rels) -> str:
     return f"short-{day}-{digest[:8]}"
 
 
-def _short_reference(day, snapshot, extra_frames, base_frames, spy_df, now):
-    """Immutable context for the extra lane; the regime is the completed SPY bar's."""
+def _short_reference(day, snapshot, extra_frames, base_frames, spy_df, now, sector_frames=None):
+    """Immutable context for the extra lane; the regime is the completed SPY bar's.
+
+    `sector_frames` (V118-7): a historical replay supplies the as-of sector ETF
+    frames it holds; None fetches them (the live scan)."""
     spy_done = _completed(spy_df, now)
     etfs = sorted({etf_for_sector(snapshot.sector_of.get(s)) for s in extra_frames} - {None})
     rels = tuple(build_reference_rels({**base_frames, **extra_frames}, spy_df, now))
+    sectors = fetch._fetch_frames(etfs) if sector_frames is None else {
+        etf: sector_frames[etf] for etf in etfs if etf in sector_frames}
     return ShortReference(
-        frames=extra_frames, spy=spy_df, sector_frames=fetch._fetch_frames(etfs),
+        frames=extra_frames, spy=spy_df, sector_frames=sectors,
         spy_regime=get_regime(spy_done), reference_rels=rels, now=now,
         reference_id=_short_reference_id(day, snapshot, rels))
 

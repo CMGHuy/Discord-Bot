@@ -14,8 +14,9 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path[:0] = [str(ROOT), str(ROOT / "scripts" / "data"), str(ROOT / "scripts" / "backtest")]
 
 from swingbot.core.backtesting.arms import reachability, windows  # noqa: E402
-from swingbot.core.backtesting.arms.engine import DEFAULT_ENGINES, run_arm  # noqa: E402
-from swingbot.core.backtesting.arms.knobs import parse_knob  # noqa: E402
+from swingbot.core.backtesting.arms.engine import (DEFAULT_ENGINES, get_population_engine,  # noqa: E402
+                                                   population_engine_for, run_arm)
+from swingbot.core.backtesting.arms.knobs import apply_knobs, parse_knob  # noqa: E402
 from swingbot.core.backtesting.arms.pairing import changed_outcomes  # noqa: E402
 from swingbot.core.backtesting.arms.provenance import build_stamp, code_hash  # noqa: E402
 from swingbot.core.backtesting.backtest_scenarios import _resolve_replay_workers  # noqa: E402
@@ -39,6 +40,18 @@ def static_refusal(delta: dict):
         classification = reachability.classify(attr)
         if classification != reachability.REACHABLE:
             return f"refused:unreachable:{classification}", reachability.reason(attr)
+    return None
+
+
+def population_refusal(delta: dict):
+    """A knob only a whole-scan engine observes is refused when that engine is absent."""
+    engine_id = population_engine_for(delta)
+    if engine_id is None:
+        return None
+    try:
+        get_population_engine(engine_id)
+    except (KeyError, ImportError) as exc:
+        return "refused:no-population-engine", f"{engine_id} is not available ({exc!r})."
     return None
 
 
@@ -86,16 +99,62 @@ def _rows(trades, start, end):
     return [dataclasses.asdict(trade) for trade in trades if start <= trade.entry_date <= end]
 
 
+def population_symbols() -> list[str]:
+    """v118: every symbol a whole-scan replay may need -- the cached universe, the
+    point-in-time S&P 500 members that have a cached frame, the benchmark and the
+    sector ETFs. A member with no cached frame is simply absent (counted by the
+    replay as missing_frame): Yahoo keeps no history for most delisted names."""
+    from swingbot import config
+    from swingbot.core.marketdata import universe as universe_mod
+    from swingbot.core.marketdata.backtest_cache import cache_path
+    from swingbot.core.marketdata.pit_membership import load_intervals
+    members = load_intervals(str(Path(universe_mod.UNIVERSE_DIR) / "sp500_membership.csv"))
+    etfs = universe_mod.sector_map("etfs")
+    wanted = set(cached_universe()) | set(members) | set(etfs) | {config.MARKET_REGIME_TICKER}
+    return sorted(symbol for symbol in wanted if cache_path(symbol).exists())
+
+
+def _population_arm(engine_id, frames, universe, horizons, window, delta) -> list:
+    """One arm of a population engine, its config delta applied for the whole pass."""
+    from swingbot import config
+    from swingbot.scan_params import ScanParams
+    with apply_knobs(delta):
+        params = ScanParams.from_config()
+        engine = get_population_engine(engine_id, base_tickers=universe, horizons=horizons)
+        return engine.run_population(frames, window, params, mode=config.SHORT_UNIVERSE_RESEARCH_MODE)
+
+
+def _produce_population(engine_id, universe, horizons, signal_window, delta) -> tuple:
+    """Load each frame once, then baseline (the knob at its default, i.e. off) and
+    component (the knob applied) over the identical frames. One process: the
+    replay is cross-sectional per decision date, not per ticker."""
+    frames = {symbol: frame for symbol in population_symbols()
+              if (frame := load_frame(symbol)) is not None}
+    baseline_hash = code_hash()
+    baseline = _population_arm(engine_id, frames, universe, horizons, signal_window, {})
+    print(f"  [baseline] {len(baseline)} trades", flush=True)
+    component_hash = code_hash()
+    component = _population_arm(engine_id, frames, universe, horizons, signal_window, delta)
+    print(f"  [component] {len(component)} trades", flush=True)
+    return baseline_hash, baseline, component_hash, component
+
+
 def produce(stage, delta, *, universe, spec=None, horizons=None, engines=DEFAULT_ENGINES,
             workers=None, progress_path=None, preregistration=None) -> dict:
     spec = spec or windows.resolve(stage)
     horizons = tuple(horizons or windows.ALL_HORIZONS)
-    workers = _resolve_replay_workers(workers)
-    total, counter = 2 * len(universe), [0]
-    baseline_hash = code_hash()
-    baseline = _run_arm_all("baseline", universe, engines, horizons, spec.signal_window, {}, workers, progress_path, counter, total)
-    component_hash = code_hash()
-    component = _run_arm_all("component", universe, engines, horizons, spec.signal_window, delta, workers, progress_path, counter, total)
+    population = population_engine_for(delta)
+    if population is not None:
+        engines = (population,)
+        baseline_hash, baseline, component_hash, component = _produce_population(
+            population, universe, horizons, spec.signal_window, delta)
+    else:
+        workers = _resolve_replay_workers(workers)
+        total, counter = 2 * len(universe), [0]
+        baseline_hash = code_hash()
+        baseline = _run_arm_all("baseline", universe, engines, horizons, spec.signal_window, {}, workers, progress_path, counter, total)
+        component_hash = code_hash()
+        component = _run_arm_all("component", universe, engines, horizons, spec.signal_window, delta, workers, progress_path, counter, total)
     stamp = build_stamp(stage=stage, signal_window=spec.signal_window, universe=universe, horizons=horizons,
                         engines=engines, knob_delta=delta, engine_hash_baseline=baseline_hash,
                         engine_hash_component=component_hash, changed_outcomes=changed_outcomes(baseline, component),
@@ -125,7 +184,7 @@ def main(argv=None) -> int:
         unknown = next((knob.partition("=")[0] for knob in args.knob if reachability.classify(knob.partition("=")[0]) == reachability.UNCLASSIFIED), None)
         print(f"{'refused:unreachable:unclassified' if unknown else 'refused:bad-knob'} -- {exc}", file=sys.stderr)
         return 1
-    refusal = static_refusal(delta)
+    refusal = static_refusal(delta) or population_refusal(delta)
     if refusal:
         print(f"{refusal[0]} -- {refusal[1]} Budget intact.", file=sys.stderr)
         return 1
