@@ -1,7 +1,7 @@
 # v118 pre-registration — SHORT candidate universe (scan-level additive arm)
 
-Spec: `docs/superpowers/specs/2026-10-01-v118-short-universe-swing-design.md`.
-Plan: `docs/superpowers/plans/2026-10-01-v118-short-universe-swing.md` (Task V118-7).
+Spec: `docs/superpowers/specs/implemented/2026-10-01-v118-short-universe-swing-design.md`.
+Plan: `docs/superpowers/plans/implemented/2026-10-01-v118-short-universe-swing.md` (Task V118-7).
 Edge: volume.
 
 **Written before any v118 outcome existed.** No v118 arm JSON, pilot run or

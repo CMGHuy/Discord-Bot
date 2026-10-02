@@ -1,6 +1,6 @@
 # v118 result — SHORT candidate universe: stopped at reachability (blocked, no measurement)
 
-Plan: `docs/superpowers/plans/2026-10-01-v118-short-universe-swing.md`.
+Plan: `docs/superpowers/plans/implemented/2026-10-01-v118-short-universe-swing.md`.
 Pre-registration: `docs/superpowers/results/2026-10-01-v118-short-universe-preregistration.md`.
 Edge: volume.
 

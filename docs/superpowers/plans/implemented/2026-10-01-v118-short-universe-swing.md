@@ -6,9 +6,9 @@
 **Architecture:** Build an optional candidate lane with its own completed-bar reference panel, then feed only bearish scenarios into the existing confluence decisions. Preserve the base scan inputs and measure the additive population at scan level before enabling it.
 **Tech Stack:** Python 3.11, pandas, existing scan/plan/alert modules, pytest.
 **Spec:** `docs/superpowers/specs/2026-10-01-v118-short-universe-swing-design.md`
-**Bump:** bot patch (only if qualified alerts ship)
+**Bump:** none (predicted: bot patch if qualified alerts ship; none did -- the lane ships default-off and no evidence stage ran)
 **Edge:** volume
-**Progress:** planning complete; implementation and measurement not started.
+**Progress:** closed 2026-10-02. V118-1..V118-9 built, reviewed and merged (full suite 5620 passed, 0 failed). The SHORT lane, scan-level replay instrument (`SHORT_UNIVERSE_RESEARCH_MODE` REACHABLE on fixtures) and per-mode admission guard ship inert, all flags default false. Measured stages were NOT run: no point-in-time sector-history source exists, and the partner chose to stop at reachability. Not a negative result. Record: `docs/superpowers/results/2026-10-02-v118-short-universe-result.md`.
 
 ## Global constraints
 
