@@ -33,6 +33,7 @@ _DECISION_REASON = {"already open": "existing_trade"}
 @dataclass
 class ShortFunnel:
     counts: Counter = field(default_factory=Counter)
+    candidate_symbols: set = field(default_factory=set)   # symbols already counted at `candidate`
 
     def record(self, direction: str, source: str, mode: str | None,
                stage: str, reason: str | None = None) -> None:
@@ -46,6 +47,10 @@ class ShortFunnel:
             self.record(*event)
 
     def record_item(self, item, stage: str, reason: str | None = None) -> None:
+        """Per-item stages after confidence. An item that failed a requirement was
+        already rejected by scenario_events, so it is never counted again here."""
+        if not item.all_requirements_met:
+            return
         self.record(*item_key(item), stage, reason)
 
     def record_decision(self, item) -> None:

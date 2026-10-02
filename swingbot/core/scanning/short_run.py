@@ -80,10 +80,12 @@ def _spy_frame(base_frames: dict):
     return spy if spy is not None else fetch._daily_frame_for(config.MARKET_REGIME_TICKER)
 
 
-def _note(funnel, direction, stage, reason=None, mode=short_funnel.UNSELECTED) -> None:
+def _note(funnel, direction, stage, reason=None, mode=short_funnel.UNSELECTED, symbol=None) -> None:
     """Record a lane-level (no ScanItem yet) funnel fact; no-op without a funnel."""
     if funnel is not None:
         funnel.record(direction, short_funnel.EXTRA_SOURCE, mode, stage, reason)
+        if symbol is not None and stage == "candidate":
+            funnel.candidate_symbols.add(symbol)
 
 
 def _note_unresolved(funnel, queue, frames, reason) -> None:
@@ -92,7 +94,7 @@ def _note_unresolved(funnel, queue, frames, reason) -> None:
     for position, symbol in enumerate(queue):
         if symbol not in frames:
             _note(funnel, short_funnel.BEARISH, "candidate",
-                  reason or ("symbol_cap" if position >= cap else "missing_frame"))
+                  reason or ("symbol_cap" if position >= cap else "missing_frame"), symbol=symbol)
 
 
 def _crawl_extra(snapshot, base_tickers, funnel=None) -> dict:
@@ -121,7 +123,9 @@ def _monitor_stranded(base_tickers, candidate_tickers, extra_frames, live_prices
     missing = [t for t in stranded if t not in extra_frames]
     frames = {**extra_frames, **(fetch._crawl_latest_data(missing, None) if missing else {})}
     for ticker in stranded:
-        _note(funnel, short_funnel.BEARISH, "candidate", "not_selected")   # no new entry; still monitored below
+        if funnel is None or ticker not in funnel.candidate_symbols:   # one candidate-stage row per symbol
+            _note(funnel, short_funnel.BEARISH, "candidate", "not_selected", symbol=ticker)
+        # no new entry for it; it is still monitored below
         closed, near = analyze.monitor_open_only(ticker, frames.get(ticker), live_prices.get(ticker))
         ctx.newly_closed.extend(closed)
         ctx.near_close.extend(near)
@@ -327,7 +331,7 @@ def _build_alerts(deduped, require_confirmation, frames, spy_df, funnel=None) ->
         blocked = _post_block(item, require_confirmation)
         if blocked is None:
             _alert_for(item, frames, spy_df, account_cfg, alerts, funnel)
-        elif funnel is not None:
+        elif funnel is not None and blocked == "existing_trade":   # unmet is already a scenario_events rejection
             funnel.record_item(item, "trade_decision", blocked)
     return alerts
 
@@ -346,8 +350,8 @@ def _lane_inputs(base_tickers, now, funnel=None):
     rejected: list = []
     candidates = scan_run.build_extra_candidates(
         base_tickers, decision_date=day, snapshot=snapshot, reference=reference, rejected=rejected)
-    for _symbol, reason in rejected:
-        _note(funnel, short_funnel.BEARISH, "candidate", reason)
+    for symbol, reason in rejected:
+        _note(funnel, short_funnel.BEARISH, "candidate", reason, symbol=symbol)
     if reference is None:
         _note(funnel, short_funnel.BEARISH, "candidate", "no_snapshot" if snapshot is None else "no_reference")
     return candidates, reference, extra_frames, snapshot
