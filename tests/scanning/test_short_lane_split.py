@@ -70,7 +70,10 @@ def test_symbol_without_data_is_skipped_not_raised():
 
 # --- base invariance through the real _sync_run_scan -------------------------
 
-def _run_base_scan(monkeypatch, short_on):
+_FIXTURE_SNAPSHOT = object()
+
+
+def _run_base_scan(monkeypatch, short_on, snapshot=_FIXTURE_SNAPSHOT):
     base = {"BASE": frame(100, 110), "SPY": frame(100, 99), "BBB": frame(100, 104),
             "B1": frame(100, 105), "B2": frame(100, 120), "B3": frame(100, 130)}
     seen = {"tickers": [], "rs_rels": None, "breadth": None, "strategy": None}
@@ -87,7 +90,7 @@ def _run_base_scan(monkeypatch, short_on):
         return {"strategy_plans": 0, "strategy_opened": 0}
 
     extra_frames = {"AAA": frame(100, 70)}
-    snap = ShortSnapshot(("AAA", "BBB"), "2026-09-01", {})
+    snap = ShortSnapshot(("AAA", "BBB"), "2026-09-01", {}) if snapshot is _FIXTURE_SNAPSHOT else snapshot
     monkeypatch.setattr(config, "SHORT_UNIVERSE_ENABLED", short_on)
     monkeypatch.setattr(config, "SCAN_UNIVERSE", "watchlist")
     monkeypatch.setattr(scan_run, "_reload_config_before_scan", lambda: {})
@@ -129,3 +132,15 @@ def test_base_inputs_are_identical_with_flag_off_and_on(monkeypatch, caplog):
 
 def test_flag_defaults_off():
     assert config.SHORT_UNIVERSE_ENABLED is False
+
+
+def test_stale_snapshot_records_no_snapshot_and_leaves_base_alone(monkeypatch, caplog):
+    base_off = _run_base_scan(monkeypatch, False)
+    with caplog.at_level("INFO"):
+        base_on = _run_base_scan(monkeypatch, True, snapshot=None)
+    assert "no_snapshot" in caplog.text
+    assert "SHORT extra lane failed" not in caplog.text
+    assert "SHORT extra lane: 0 candidate(s)" in caplog.text
+    assert base_off.tickers == base_on.tickers
+    assert base_off.strategy == base_on.strategy
+    assert base_off.long_payloads == base_on.long_payloads

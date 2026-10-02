@@ -160,7 +160,7 @@ def _build_short_lane(enabled, base_tickers, base_frames, spy_df) -> tuple:
         snapshot = universe.short_snapshot(day, live=True)
         queue = [] if snapshot is None else list(extra_symbols(snapshot, base_tickers))
         extra_frames = fetch._crawl_latest_data(queue, None) if queue else {}
-        reference = None if spy_df is None else _short_reference(
+        reference = None if spy_df is None or snapshot is None else _short_reference(
             day, snapshot, extra_frames, base_frames, spy_df, now)
         found = build_extra_candidates(
             base_tickers, decision_date=day, snapshot=snapshot, reference=reference)
