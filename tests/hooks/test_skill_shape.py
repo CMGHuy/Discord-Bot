@@ -58,18 +58,19 @@ def test_every_skill_declares_name_and_description(path):
     assert len(meta.get("description", "")) >= 40
 
 
-@pytest.mark.parametrize("path", _skill_dirs(), ids=lambda p: p.name)
+def _new_skill_dirs():
+    """Skills the v96 budget and no-restatement rules apply to."""
+    return [p for p in _skill_dirs() if p.name not in GRANDFATHERED]
+
+
+@pytest.mark.parametrize("path", _new_skill_dirs(), ids=lambda p: p.name)
 def test_new_skills_stay_within_the_line_budget(path):
-    if path.name in GRANDFATHERED:
-        pytest.skip("predates the v96 budget")
     lines = (path / "SKILL.md").read_text(encoding="utf-8").splitlines()
     assert len(lines) <= MAX_SKILL_LINES
 
 
-@pytest.mark.parametrize("path", _skill_dirs(), ids=lambda p: p.name)
+@pytest.mark.parametrize("path", _new_skill_dirs(), ids=lambda p: p.name)
 def test_new_skills_restate_no_thresholds(path):
-    if path.name in GRANDFATHERED:
-        pytest.skip("predates the v96 no-restatement rule")
     _, body = _read_skill(path.name)
     hits = _THRESHOLD_RE.findall(body)
     assert not hits, f"{path.name} restates {hits}; cite docs/claude/ instead"
