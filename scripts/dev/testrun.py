@@ -203,7 +203,7 @@ def build_args(profile: str, target: list[str] | None,
     if profile == "fast":
         return BASE + ["-m", "not slow", "tests/"]
     if profile == "full":
-        return BASE + ["-n", WORKERS, *(target or ["tests/"])]
+        return BASE + ["-n", WORKERS, "--dist", "worksteal", *(target or ["tests/"])]
     if profile == "lf":
         return BASE + ["--lf", "tests/"]
     if profile == "changed":

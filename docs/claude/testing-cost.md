@@ -19,6 +19,21 @@ there is fine; a `failed` anywhere is yours.
 > Older docs record `841 passed, 54 skipped, 1 failed`. That baseline is
 > **stale** — the suite has grown to 1145. Don't compare against it.
 
+## Baseline 2026-10-03 (supersedes the 1145-test figures below)
+
+**5819 passed, 2 skipped, 0 failed** (the 2 skips are Windows-only: POSIX modes,
+symlinks). The suite is ~5x larger than the numbers below; full `-n 4` is now
+roughly 5 minutes, and single runs swing 250-380s with machine load. The DB
+tests need the `swing-db-test` container running (`docker start swing-db-test`),
+otherwise ~1200 tests skip silently.
+
+`full` uses `--dist worksteal` so one long test cannot leave workers idle at the
+tail: 295s vs 337s for default `load` back to back (one sample each, noisy).
+The cost is dominated by a few tests -- `tests/backtesting/test_scenario_parallel.py`
+(3 tests, 44-78s each) is the floor. Its fixture cannot shrink: 2 tickers instead
+of 4 made the aggregates empty and tripped the `n > 0` guard that protects the
+closed pre-registrations.
+
 ## Timings
 
 | Config | Wall | Speedup |
