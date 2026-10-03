@@ -544,6 +544,8 @@ _NOT_READ = {
     "docs/superpowers/plans/implemented/2026-09-18-v96-claude-skills-layer.md",
     "docs/superpowers/plans/implemented/2026-09-16-v92-exit-quality-harvest.md",
     "docs/superpowers/plans/2026-08-29-v67-json-to-postgres_1a-foundation-core.md",
+    # test_guardrails.py feeds this to the hook's cat/Read warning; never opened.
+    ".superpowers/sdd/progress.md",
     # test_env_example_sync.py quotes these in an assertion message.
     "docs/superpowers/plans/implemented/v34-train-preregistration.md",
     "docs/superpowers/plans/implemented/v35-avwap-preregistration.md",
