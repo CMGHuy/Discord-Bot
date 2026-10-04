@@ -212,7 +212,20 @@ def _closed(plan, detail: dict, side: dict, common: dict) -> Instruction:
     told, held = detail.get("notified_stop"), detail.get("bot_stop")
     if told is not None and held is not None and not math.isclose(told, held, abs_tol=1e-6):
         lines.append(f"your last pinged stop was {_price(told)} — that order may still be open")
+    lines.extend(_staged_order_lines(plan, detail, side))
     return Instruction(verb=verb, headline=headline, lines=tuple(lines), tone=tone, **common)
+
+
+def _staged_order_lines(plan, detail: dict, side: dict) -> list[str]:
+    """v119: a close that leaves a broker order behind. The bot never touches
+    the broker, so these only ever tell the reader to cancel or verify."""
+    if detail.get("reason") == "time_exit":
+        return [f"CANCEL or VERIFY any resting protective {side['stop']} at your broker "
+                "-- the bot cannot cancel it for you"]
+    if getattr(plan, "time_exit_due_date", None):
+        return [f"CANCEL or VERIFY the closing-auction {side['exit']} order you staged "
+                "at your broker -- the bot cannot cancel it for you"]
+    return []
 
 
 def _auction_clock(stamp: str | None) -> str:
@@ -228,13 +241,14 @@ def _time_exit(plan, event, side: dict, common: dict, sizing: dict | None) -> In
     and the unresolved notice (no official price, nothing was closed)."""
     detail = event.detail
     if event.transition == "time_exit_unresolved":
+        lines = [f"{detail.get('reason', 'official closing-auction price unavailable')}; "
+                 "the bot has NOT closed this paper trade"]
+        if detail.get("cover_fraction") is not None:     # None = schedule missing, no cover advice
+            lines.append(f"If you still hold it, {side['exit']} (cover the remaining "
+                         f"{detail['cover_fraction']:.0%})")
         return Instruction(
             verb=CLOSE_AT_MARKET, headline="TIME EXIT UNRESOLVED — no official close price",
-            lines=(f"{detail.get('reason', 'official closing-auction price unavailable')}; "
-                   "the bot has NOT closed this paper trade",
-                   f"If you still hold it, {side['exit']} (cover the remaining "
-                   f"{detail.get('cover_fraction', 1.0):.0%})"),
-            tone="bad", **common)
+            lines=tuple(lines), tone="bad", **common)
     whole = _whole_shares(sizing)
     fraction = detail.get("cover_fraction", 1.0)
     qty = f"{math.floor(whole * fraction):,} sh" if whole is not None else f"{fraction:.0%}"
@@ -248,6 +262,15 @@ def _time_exit(plan, event, side: dict, common: dict, sizing: dict | None) -> In
         tone="neutral", **common)
 
 
+def _closed_event(plan, event, side: dict, common: dict, sizing: dict | None) -> Instruction:
+    return _closed(plan, event.detail, side, common)
+
+
+#: transitions whose instruction is a whole builder of its own.
+_BUILDERS = {"time_exit_due": _time_exit, "time_exit_unresolved": _time_exit,
+             "closed": _closed_event}
+
+
 def instruction_for(plan, event, *, sizing: dict | None = None) -> Instruction:
     """The execution-feed instruction for one plan_manager PlanEvent (v81 D2,
     D3). Every live stop is read from ``event.detail``, which plan_manager
@@ -257,8 +280,8 @@ def instruction_for(plan, event, *, sizing: dict | None = None) -> Instruction:
     detail = event.detail
     common = dict(ticker=plan.ticker, direction=plan.direction, plan_id=plan.plan_id)
     transition = event.transition
-    if transition in ("time_exit_due", "time_exit_unresolved"):
-        return _time_exit(plan, event, side, common, sizing)
+    if transition in _BUILDERS:
+        return _BUILDERS[transition](plan, event, side, common, sizing)
     if transition == "filled":
         fill = _price(detail["entry_price"])
         return Instruction(
@@ -302,6 +325,4 @@ def instruction_for(plan, event, *, sizing: dict | None = None) -> Instruction:
         return Instruction(
             verb=CANCEL, headline=f"CANCEL {side['entry_stop']} {_price(plan.trigger_price)}",
             lines=(why,), tone="inert", **common)
-    if transition == "closed":
-        return _closed(plan, detail, side, common)
     raise ValueError(f"no execution-feed instruction for {transition!r}")

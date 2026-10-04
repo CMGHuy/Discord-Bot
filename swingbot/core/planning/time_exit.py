@@ -31,6 +31,11 @@ NOTICE_LEAD = dt.timedelta(minutes=20)
 LATE_GRACE = dt.timedelta(minutes=5)
 
 
+#: Ten sessions span at least this many calendar days (Mon -> Fri of the next
+#: week); before it the due date cannot have arrived whatever the calendar says.
+MIN_TEN_SESSION_SPAN = dt.timedelta(days=11)
+
+
 class AuctionClose(NamedTuple):
     """What an injected closing-auction price source returns."""
 

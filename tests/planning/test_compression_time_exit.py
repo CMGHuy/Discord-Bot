@@ -214,9 +214,11 @@ def test_restart_after_due_before_close_does_not_restage_and_still_closes():
     store, mgr = _env(auction=_auction(99.0))
     mgr.poll(now=_at(STD_TENTH, 15, 35))
     restarted = PlanManager(PlanStore(), lambda t: 99.5, auction_close_fn=_auction(99.0))
-    mid = restarted.poll(now=_at(STD_TENTH, 15, 45))
-    assert _only(mid, "time_exit_due") == [] or all(
-        e.detail["notice_id"].endswith("2026-12-01") for e in _only(mid, "time_exit_due"))
+    ids_before = [n["id"] for n in store.get("p1").pending_time_notices]
+    restarted.poll(now=_at(STD_TENTH, 15, 45))
+    after = store.get("p1")
+    assert len(ids_before) == 1 and [n["id"] for n in after.pending_time_notices] == ids_before
+    assert after.time_exit_due_date == "2026-12-01"
     assert store.get("p1").status == PlanStatus.ACTIVE
     closed = restarted.poll(now=_at(STD_TENTH, 16, 0, 20))
     assert _kinds(_only(closed, "closed")) == ["closed"]
@@ -242,11 +244,11 @@ def test_official_auction_close_persists_one_terminal_leg_for_an_active_plan():
     assert [h["status"] for h in history].count(PlanStatus.CLOSED) == 1
 
 
-def test_closing_poll_without_a_prior_due_notice_still_notices_late_then_closes():
+def test_first_poll_after_the_close_sends_no_stale_cover_notice_only_the_close():
     store, mgr = _env(auction=_auction(99.0))
     events = mgr.poll(now=_at(STD_TENTH, 16, 0, 20))
-    assert _kinds(events) == ["time_exit_due", "closed"]
-    assert events[0].detail["late"] is True
+    assert _kinds(events) == ["closed"]               # the auction is over: no "cover in the auction"
+    assert store.get("p1").time_exit_due_date == "2026-12-01"
 
 
 @pytest.mark.parametrize("auction", [None,
@@ -303,13 +305,31 @@ def test_stop_before_the_time_close_wins_after_the_moc_was_staged():
     assert store.get("p1").status_history[-1]["reason"] == "loss"
 
 
-def test_stop_on_the_close_poll_beats_the_auction_price():
+def test_stop_print_on_the_due_session_before_the_close_beats_the_time_close():
     store, mgr = _env(price=101.5, auction=_auction(99.0))
-    events = mgr.poll(now=_at(STD_TENTH, 16, 0, 10))
+    events = mgr.poll(now=_at(STD_TENTH, 15, 59, 50))
     assert [e.detail["reason"] for e in _only(events, "closed")] == ["loss"]
 
 
-def test_due_and_terminal_notices_queue_side_by_side_and_ack_independently():
+def test_stop_print_after_the_official_close_cannot_book_a_stop_after_the_moc_covered():
+    store, mgr = _env(price=101.5, auction=_auction(98.0))
+    events = mgr.poll(now=_at(STD_TENTH, 16, 0, 10))
+    closed = _only(events, "closed")
+    assert [e.detail["reason"] for e in closed] == ["time_exit"]
+    assert closed[0].detail["exit_price"] == 98.0
+
+
+def test_day_eleven_stop_print_while_unresolved_fabricates_no_close():
+    store, mgr = _env(price=101.5, auction=None)
+    mgr.poll(now=_at(STD_TENTH, 16, 5))
+    events = mgr.poll(now=_at(dt.date(2026, 12, 2), 10, 0))
+    assert _only(events, "closed") == []
+    plan = store.get("p1")
+    assert plan.status == PlanStatus.ACTIVE and plan.legs_realized == []
+    assert plan.status_history[-1]["status"] == PlanStatus.ACTIVE
+
+
+def test_a_terminal_close_supersedes_the_owed_time_notice():
     store, mgr = _env(auction=_auction(99.0))
     due_events = mgr.poll(now=_at(STD_TENTH, 15, 35))
     due_id = _only(due_events, "time_exit_due")[0].detail["notice_id"]
@@ -317,12 +337,9 @@ def test_due_and_terminal_notices_queue_side_by_side_and_ack_independently():
     stop_mgr.poll(now=_at(STD_TENTH, 15, 50))
     plan = store.get("p1")
     assert plan.pending_notice["transition"] == "closed"
-    assert [n["id"] for n in plan.pending_time_notices] == [due_id]
+    assert due_id.endswith("2026-12-01") and plan.pending_time_notices == []
     resent = stop_mgr.resend_notices()
-    assert sorted(_kinds(resent)) == ["closed", "time_exit_due"]
-    pm.ack_notified([Delivery("p1", "notice", due_id)])
-    plan = store.get("p1")
-    assert plan.pending_time_notices == [] and plan.pending_notice["transition"] == "closed"
+    assert _kinds(resent) == ["closed"]
     pm.ack_notified([Delivery("p1", "notice", "closed")])
     assert store.get("p1").pending_notice is None
 
@@ -359,8 +376,9 @@ def test_early_close_notice_at_1240_and_close_at_1300():
 def test_friday_before_a_monday_holiday_fill_closes_on_the_tenth_session():
     store, mgr = _env(_short(fill_day=FRI_FILL), auction=_auction(99.0))
     assert mgr.poll(now=_at(dt.date(2026, 1, 29), 16, 1)) == []              # session 9
+    assert _only(mgr.poll(now=_at(FRI_TENTH, 15, 40)), "time_exit_due") != []
     events = mgr.poll(now=_at(FRI_TENTH, 16, 0, 5))
-    assert [e.transition for e in events] == ["time_exit_due", "closed"]
+    assert _only(events, "closed") != []
 
 
 def test_persisted_partial_closes_its_remaining_fraction_and_keeps_the_prior_leg():
@@ -371,8 +389,8 @@ def test_persisted_partial_closes_its_remaining_fraction_and_keeps_the_prior_leg
     plan.status_history.append({"status": "PARTIAL", "reason": "tp1_partial",
                                 "at": "2026-11-20T15:00:00+00:00"})
     store, mgr = _env(plan, price=97.0, auction=_auction(98.0))
+    due = _only(mgr.poll(now=_at(STD_TENTH, 15, 40)), "time_exit_due")
     events = mgr.poll(now=_at(STD_TENTH, 16, 0, 10))
-    due = _only(events, "time_exit_due")
     assert due[0].detail["cover_fraction"] == pytest.approx(0.5)
     closed = _only(events, "closed")
     assert closed[0].detail["reason"] == "time_exit"
@@ -441,3 +459,44 @@ def test_unresolved_instruction_is_urgent_and_says_no_price():
         "notice_id": "p1:time_exit_unresolved:2026-12-01"})
     instruction = instruction_for(_short(), event)
     assert "UNRESOLVED" in instruction.headline.upper()
+
+
+# -- fix round 1: instructions and edge cases ----------------------------------------------
+
+def _closed_event(reason, **detail):
+    from swingbot.core.planning.plan_manager import PlanEvent
+    return PlanEvent("p1", "closed", {"reason": reason, "exit_price": 101.0,
+                                      "session": "regular", **detail})
+
+
+def test_stop_after_a_staged_moc_tells_the_reader_to_cancel_or_verify_it():
+    from swingbot.core.presentation.instructions import instruction_for
+    plan = _short(time_exit_due_date="2026-12-01")
+    text = " ".join(instruction_for(plan, _closed_event("loss")).lines)
+    assert "CANCEL or VERIFY" in text and "closing-auction" in text
+    assert "auto" not in text.lower() and "automatically" not in text.lower()
+
+
+def test_stop_without_a_staged_moc_has_no_moc_line():
+    from swingbot.core.presentation.instructions import instruction_for
+    text = " ".join(instruction_for(_short(), _closed_event("loss")).lines)
+    assert "closing-auction" not in text
+
+
+def test_time_exit_close_tells_the_reader_to_cancel_or_verify_a_resting_stop():
+    from swingbot.core.presentation.instructions import instruction_for
+    plan = _short(time_exit_due_date="2026-12-01")
+    text = " ".join(instruction_for(plan, _closed_event("time_exit")).lines)
+    assert "CANCEL or VERIFY" in text and "protective" in text
+
+
+def test_schedule_gap_near_calendar_end_sends_nothing_early_and_no_cover_advice_later():
+    plan = _short(fill_day=dt.date(2030, 12, 27))
+    store, mgr = _env(plan, auction=_auction())
+    assert mgr.poll(now=_at(dt.date(2030, 12, 30), 10, 0)) == []        # not yet plausible
+    events = mgr.poll(now=_at(dt.date(2031, 1, 10), 10, 0))
+    assert _kinds(events) == ["time_exit_unresolved"]
+    assert events[0].detail["cover_fraction"] is None
+    from swingbot.core.presentation.instructions import instruction_for
+    text = " ".join(instruction_for(plan, events[0]).lines)
+    assert "cover the remaining" not in text

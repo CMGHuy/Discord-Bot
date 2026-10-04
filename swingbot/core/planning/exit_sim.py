@@ -405,6 +405,18 @@ def _limit_entry_exit(df, signal_index: int, plan: TradePlanV2, scale_out: bool,
     return _not_triggered()
 
 
+def _hold_cap_bars(plan: TradePlanV2, max_holding_days: int) -> int:
+    """The walkers' scan length after the plan's hold cap. They scan
+    entry_index+1 .. entry_index+N; the compression short's fill session is
+    session 1, so its cap of N sessions ends at entry_index + N - 1 (live: the
+    tenth session). Every other strategy keeps entry_index + N."""
+    hold_cap = getattr(plan, "hold_cap_bars", None)
+    if hold_cap is None:
+        return max_holding_days
+    cap = int(hold_cap) - 1 if _is_compression(plan) else int(hold_cap)
+    return min(max_holding_days, cap)
+
+
 def simulate_exit(
     df,
     signal_index: int,
@@ -442,14 +454,7 @@ def simulate_exit(
     if max_holding_days is None:
         max_holding_days = HORIZONS[plan.horizon_key]["max_holding_days"]
 
-    hold_cap = getattr(plan, "hold_cap_bars", None)
-    if hold_cap is not None:
-        max_holding_days = min(max_holding_days, int(hold_cap))
-        if _is_compression(plan):
-            # The walkers scan entry_index+1 .. entry_index+max_holding_days;
-            # the compression short's fill session is session 1, so a cap of N
-            # sessions ends at entry_index + N - 1 (live: the tenth session).
-            max_holding_days = min(max_holding_days, int(hold_cap) - 1)
+    max_holding_days = _hold_cap_bars(plan, max_holding_days)
 
     if plan.entry_type == "limit":
         return _limit_entry_exit(df, signal_index, plan, scale_out, max_holding_days)
