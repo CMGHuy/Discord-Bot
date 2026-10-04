@@ -223,6 +223,23 @@ FIELDS: list[Field] = [
                "high/low and the 1.272 extension. Ships OFF: it is a pre-registered "
                "measurement (v84), not a demonstrated edge, and flips on only if its one "
                "VALIDATION shot passes."),
+    Field("PULLBACK_DRYUP_SCOPE", "PULLBACK_DRYUP_SCOPE", "Trade Filters & Risk",
+          "Pullback volume dry-up gate: scope (v122)",
+          type="select", default="off",
+          options=[("off", "Off"),
+                   ("strategy", "Strategy entries -- Fibonacci, EMA Crossover (pullback mode), "
+                                "Break & Retest, RSI, RSI Divergence, MA Ribbon, VWAP"),
+                   ("confluence", "Confluence entries (level touches)")],
+          help="v122. Rejects a pullback entry whose pullback leg averaged more than "
+               "PULLBACK_DRYUP_MAX_RATIO x its impulse leg's volume "
+               "(market/structure.py:pullback_vol_ratio). An undefined ratio always passes. "
+               "Ships OFF: each scope is its own pre-registered measurement and flips on only "
+               "if its one VALIDATION shot passes."),
+    Field("PULLBACK_DRYUP_MAX_RATIO", "PULLBACK_DRYUP_MAX_RATIO", "Trade Filters & Risk",
+          "Pullback volume dry-up gate: max pullback/impulse volume ratio",
+          type="float", default="0", min=0, max=2, step=0.05,
+          help="The gate rejects when the ratio is strictly above this value. 0 turns the "
+               "gate off whatever the scope. v122's frozen grid is 0.60 / 0.75 / 0.90."),
     Field("FIB_SR_CONFLUENCE_ATR", "FIB_SR_CONFLUENCE_ATR", "Trade Filters & Risk",
           "Fibonacci: Rolling S/R confluence tolerance (x ATR)",
           type="float", default="0.0", min=0.0, max=2.0, step=0.25,
@@ -1183,6 +1200,7 @@ _CASTERS = {
 _MODE_VALUES = {
     "PLAN_ENGINE_V2": ("off", "shadow", "on"),
     "STRATEGY_ALERTS_MODE": ("off", "shadow", "live"),
+    "PULLBACK_DRYUP_SCOPE": ("off", "strategy", "confluence"),
     "SHORT_UNIVERSE_RESEARCH_MODE": ("off", "broad", "isolated"),
     "COMPRESSION_SHORT_RESEARCH_MODE": ("off", "broad", "isolated"),
 }
