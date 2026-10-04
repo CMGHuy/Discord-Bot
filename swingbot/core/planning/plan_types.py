@@ -118,6 +118,16 @@ class TradePlanV2:
     # v87. The E29 intraday reading is deliberately NOT stored beside it: it
     # is a pure function of the archived 1h tape and this timestamp.
     issued_at: str | None = None
+    # v119 ten-session time exit (planning/time_exit.py). pending_time_notices:
+    # the due / unresolved notices not yet acknowledged, one dict per notice
+    # {"id", "transition", "detail", "at", "acked"}; a list because a due notice
+    # and a terminal close can be owed together, which the single pending_notice
+    # slot cannot hold. time_exit_due_date: the session the due notice went out
+    # for (also the guard against staging the close twice).
+    # time_exit_unresolved_date: the ET date an unresolved notice last went out.
+    pending_time_notices: list = field(default_factory=list)
+    time_exit_due_date: str | None = None
+    time_exit_unresolved_date: str | None = None
 
 
 def effective_stop(plan: TradePlanV2) -> float:

@@ -17,6 +17,7 @@ from .params import RUNNER_FLOOR_FRACTION
 from .lifecycle import (at_or_beyond_stop, fill_price, limit_fill_price, limit_hit,
                         pending_expired, pending_invalidated, stop_touched, trigger_hit)
 from .targets import _safe_atr_value
+from .time_exit import PROXY_BASIS, TIME_EXIT_REASON
 @dataclass
 class ExitResult:
     outcome: str                 # "win"|"loss"|"scratch"|"timeout"|"not_triggered"|"no_trade"
@@ -111,17 +112,7 @@ def _single_leg_exit_walk(
     if outcome == "timeout":
         exit_price, exit_index = float(close[end]), end
 
-    if outcome == "win":
-        r, reason = rr, "tp1"
-    elif outcome == "loss":
-        r, reason = -1.0, "stop"
-    elif outcome == "scratch":
-        r, reason = 0.0, "breakeven_stop"
-    else:  # timeout
-        r = (exit_price - entry_price) * sign / risk
-        reason = "timeout"
-
-    r = round(r, 3)
+    r, leg = _single_leg_booking(outcome, rr, exit_price, entry_price, sign, risk, plan)
 
     return ExitResult(
         outcome=outcome,
@@ -130,8 +121,28 @@ def _single_leg_exit_walk(
         exit_index=exit_index,
         entry_price=entry_price,
         r_total=r,
-        legs=[{"fraction": 1.0, "exit_price": exit_price, "r": r, "reason": reason}],
+        legs=[leg],
     )
+
+
+_SINGLE_LEG_REASONS = {"win": "tp1", "loss": "stop", "scratch": "breakeven_stop"}
+
+
+def _single_leg_booking(outcome: str, rr: float, exit_price: float, entry_price: float,
+                        sign: int, risk: float, plan: TradePlanV2) -> tuple[float, dict]:
+    """(rounded r, the one leg) of a single-leg walk's outcome."""
+    r = {"win": rr, "loss": -1.0, "scratch": 0.0}.get(outcome)
+    if r is None:                    # timeout: marked to the last scanned close
+        r = (exit_price - entry_price) * sign / risk
+    r = round(r, 3)
+    leg = {"fraction": 1.0, "exit_price": exit_price, "r": r,
+           "reason": _SINGLE_LEG_REASONS.get(outcome, "timeout")}
+    if outcome == "timeout" and _is_compression(plan):
+        # v119: the compression short's timeout is the tenth-session paper
+        # close; live prices it at the official auction, the replay at the
+        # bar's Close, and says so.
+        leg["reason"], leg["price_basis"] = TIME_EXIT_REASON, PROXY_BASIS
+    return r, leg
 
 
 def chandelier_stop(extreme_close_since_tp1: float, atr_value: float,
@@ -434,6 +445,11 @@ def simulate_exit(
     hold_cap = getattr(plan, "hold_cap_bars", None)
     if hold_cap is not None:
         max_holding_days = min(max_holding_days, int(hold_cap))
+        if _is_compression(plan):
+            # The walkers scan entry_index+1 .. entry_index+max_holding_days;
+            # the compression short's fill session is session 1, so a cap of N
+            # sessions ends at entry_index + N - 1 (live: the tenth session).
+            max_holding_days = min(max_holding_days, int(hold_cap) - 1)
 
     if plan.entry_type == "limit":
         return _limit_entry_exit(df, signal_index, plan, scale_out, max_holding_days)

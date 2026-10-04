@@ -34,6 +34,7 @@ _EXIT_WORDS = {
     "tp1_runner_be": "runner floor",
     "tp1_runner_trail": "trail",
     "tp1_runner_tp2": "TP2",
+    "time_exit": "ten-session time exit",
 }
 
 
@@ -214,6 +215,39 @@ def _closed(plan, detail: dict, side: dict, common: dict) -> Instruction:
     return Instruction(verb=verb, headline=headline, lines=tuple(lines), tone=tone, **common)
 
 
+def _auction_clock(stamp: str | None) -> str:
+    """'16:00' from an ISO auction time; the raw text if it will not parse."""
+    try:
+        return dt.datetime.fromisoformat(str(stamp)).strftime("%H:%M ET")
+    except ValueError:
+        return str(stamp)
+
+
+def _time_exit(plan, event, side: dict, common: dict, sizing: dict | None) -> Instruction:
+    """v119 ten-session time exit: the due notice (cover at the close auction)
+    and the unresolved notice (no official price, nothing was closed)."""
+    detail = event.detail
+    if event.transition == "time_exit_unresolved":
+        return Instruction(
+            verb=CLOSE_AT_MARKET, headline="TIME EXIT UNRESOLVED — no official close price",
+            lines=(f"{detail.get('reason', 'official closing-auction price unavailable')}; "
+                   "the bot has NOT closed this paper trade",
+                   f"If you still hold it, {side['exit']} (cover the remaining "
+                   f"{detail.get('cover_fraction', 1.0):.0%})"),
+            tone="bad", **common)
+    whole = _whole_shares(sizing)
+    fraction = detail.get("cover_fraction", 1.0)
+    qty = f"{math.floor(whole * fraction):,} sh" if whole is not None else f"{fraction:.0%}"
+    late = "LATE — " if detail.get("late") else ""
+    return Instruction(
+        verb=CLOSE_AT_MARKET,
+        headline=(f"{late}{side['exit']} {qty} in the closing auction "
+                  f"({_auction_clock(detail.get('auction_time'))})"),
+        lines=("ten sessions since the fill; a market-on-close order is the paper exit",
+               "ignore this if you already exited on a stop or target"),
+        tone="neutral", **common)
+
+
 def instruction_for(plan, event, *, sizing: dict | None = None) -> Instruction:
     """The execution-feed instruction for one plan_manager PlanEvent (v81 D2,
     D3). Every live stop is read from ``event.detail``, which plan_manager
@@ -223,6 +257,8 @@ def instruction_for(plan, event, *, sizing: dict | None = None) -> Instruction:
     detail = event.detail
     common = dict(ticker=plan.ticker, direction=plan.direction, plan_id=plan.plan_id)
     transition = event.transition
+    if transition in ("time_exit_due", "time_exit_unresolved"):
+        return _time_exit(plan, event, side, common, sizing)
     if transition == "filled":
         fill = _price(detail["entry_price"])
         return Instruction(
