@@ -265,17 +265,10 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  # tests/db/, tests/scripts/, tests/hooks/, tests/dev/, and every loose
-  # tests/test_*.py (bot.py/discord glue, config, slash-command wiring --
-  # nothing with its own package subdirectory). Also the ONE shard that runs
-  # the whole-repo pyflakes undefined-name gate -- see header comment.
-  #
-  # `tests/test_*.py` is unquoted on purpose: bash glob-expands it before
-  # testrun.py ever sees argv, so this shard's file list is derived at run
-  # time from whatever loose top-level test files actually exist, the same
-  # anti-drift reasoning as every other shard's directory paths. A quoted
-  # version would hand testrun.py the literal string "tests/test_*.py",
-  # which pytest does not glob-expand itself.
+  # tests/db/, tests/scripts/, tests/hooks/ and tests/dev/. Also the ONE shard
+  # that runs the whole-repo pyflakes undefined-name gate -- see header comment.
+  # There are no loose top-level tests/test_*.py files any more: every test lives
+  # in a package subdirectory, and each subdirectory is listed in exactly one shard.
   backend-test-misc:
     runs-on: ubuntu-latest
     # v116 Phase 4: every store is Postgres; store tests need the database in every shard.
@@ -309,10 +302,10 @@ jobs:
       - name: Compile every module
         run: python -m compileall -q swingbot bot.py admin_ui.py scripts tests
 
-      - name: Test suite (db/scripts/hooks/dev + top-level)
+      - name: Test suite (db/scripts/hooks/dev)
         run: |
           python scripts/dev/testrun.py full \
-            tests/db/ tests/scripts/ tests/hooks/ tests/dev/ tests/test_*.py
+            tests/db/ tests/scripts/ tests/hooks/ tests/dev/
 
       - name: Upload pytest log on failure
         if: failure()

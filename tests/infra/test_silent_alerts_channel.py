@@ -12,7 +12,7 @@ send site, so these tests cover both halves:
     wrapped, so a fully-charted alert posted through it is silent even when
     the simple mirror (which normally decides that) is switched off.
 
-No pytest-asyncio in this repo (see tests/test_views.py) -- coroutines are
+No pytest-asyncio in this repo (see tests/commands/test_views.py) -- coroutines are
 driven with asyncio.run().
 """
 import asyncio
