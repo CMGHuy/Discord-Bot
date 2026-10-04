@@ -358,14 +358,35 @@ def test_resend_never_drops_an_old_time_notice():
     plan = store.get("p1")
     plan.pending_time_notices[0]["at"] = "2020-01-01T00:00:00+00:00"
     store.update(plan)
-    assert _kinds(mgr.resend_notices()) == ["time_exit_due"]
+    assert _kinds(mgr.resend_notices(now=_at(STD_TENTH, 15, 45))) == ["time_exit_due"]
+    assert len(store.get("p1").pending_time_notices) == 1
+
+
+def test_an_unacked_due_notice_is_dropped_once_its_auction_has_passed_but_the_plan_stays_open():
+    store, mgr = _env(auction=lambda t, d: None)
+    first = mgr.poll(now=_at(STD_TENTH, 15, 35))
+    due_id = _only(first, "time_exit_due")[0].detail["notice_id"]
+    assert _kinds(mgr.resend_notices(now=_at(STD_TENTH, 15, 59))) == ["time_exit_due"]   # still before the close
+    assert _only(mgr.resend_notices(now=_at(STD_TENTH, 16, 0, 5)), "time_exit_due") == []
+    plan = store.get("p1")
+    assert plan.status == PlanStatus.ACTIVE and due_id not in [n["id"] for n in plan.pending_time_notices]
+    pm.ack_notified([Delivery("p1", "notice", due_id)])               # a late ack of a dropped id is harmless
+    assert store.get("p1").status == PlanStatus.ACTIVE
+
+
+def test_the_unresolved_notice_is_still_resent_after_the_auction_passed():
+    store, mgr = _env(auction=lambda t, d: None)
+    mgr.poll(now=_at(STD_TENTH, 15, 35))
+    mgr.poll(now=_at(STD_TENTH, 16, 5))                              # drops the due, queues the unresolved
+    kinds = _kinds(mgr.resend_notices(now=_at(dt.date(2026, 12, 2), 9, 0)))
+    assert kinds == ["time_exit_unresolved"]
     assert len(store.get("p1").pending_time_notices) == 1
 
 
 def test_ack_removes_only_the_matching_time_notice():
     store, mgr = _env(auction=lambda t, d: None)
-    mgr.poll(now=_at(STD_TENTH, 15, 35))
     mgr.poll(now=_at(STD_TENTH, 16, 5))
+    mgr.poll(now=_at(dt.date(2026, 12, 2), 10, 0))                   # a second day's unresolved notice
     ids = [n["id"] for n in store.get("p1").pending_time_notices]
     assert len(ids) == 2
     pm.ack_notified([Delivery("p1", "notice", ids[0])])

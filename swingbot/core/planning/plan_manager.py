@@ -265,6 +265,20 @@ def _eligible_session(plan: TradePlanV2):
     return nyse_calendar().next_session(signal_day)
 
 
+def _due_auction_passed(notice: dict, now=None) -> bool:
+    """True for a time_exit_due notice whose stated auction time is already past.
+    Anything unreadable stays owed (never drop on a doubt)."""
+    if notice.get("transition") != te.TIME_EXIT_DUE:
+        return False
+    try:
+        auction = datetime.fromisoformat(str(notice["detail"]["auction_time"]))
+    except (KeyError, TypeError, ValueError):
+        return False
+    if auction.tzinfo is None:
+        return False
+    return now_et(now) >= auction
+
+
 class PlanManager:
     def __init__(self, store: PlanStore, price_fn, bar_count_fn=None,
                  atr_fn=None, trade_log=None, price_batch_fn=None,
@@ -288,33 +302,40 @@ class PlanManager:
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def resend_notices(self) -> list[PlanEvent]:
+    def resend_notices(self, now=None) -> list[PlanEvent]:
         """Re-emit unacknowledged notices, dropping ones older than five days.
-        The v119 time notices are exempt from that drop: they stay owed until
-        acknowledged."""
+        The v119 time notices are exempt from that age drop: they stay owed until
+        acknowledged -- except a due notice whose auction has passed (see
+        _resend_time_notices). ``now`` is test injection; production reads the clock."""
         cutoff = datetime.now(timezone.utc) - timedelta(days=NOTICE_RESEND_DAYS)
         events: list[PlanEvent] = []
         for plan in self.store.all():
-            events.extend(self._resend_time_notices(plan))
+            events.extend(self._resend_time_notices(plan, now))
             event = self._resend_pending(plan, cutoff)
             if event is not None:
                 events.append(event)
         return events
 
-    def _resend_time_notices(self, plan: TradePlanV2) -> list[PlanEvent]:
+    def _resend_time_notices(self, plan: TradePlanV2, now=None) -> list[PlanEvent]:
         """The unacknowledged time notices of a still-open plan, first in line
         (before any single-slot close). A terminal plan's are superseded by its
         close notice and dropped: "cover in the auction" must never follow
-        "exited"."""
+        "exited". An open plan's due notice is dropped too once its auction has
+        passed -- the unresolved / close notice covers that case, and "cover in
+        the closing auction" would be stale."""
         if not plan.pending_time_notices:
             return []
         if plan.status in (PlanStatus.CLOSED, PlanStatus.CANCELLED):
             plan.pending_time_notices = []
             self.store.update(plan)
             return []
+        live = [n for n in plan.pending_time_notices if not _due_auction_passed(n, now)]
+        if len(live) != len(plan.pending_time_notices):
+            plan.pending_time_notices = live
+            self.store.update(plan)
         return [PlanEvent(plan.plan_id, notice["transition"],
                           dict(notice["detail"], notice_id=notice["id"]))
-                for notice in plan.pending_time_notices]
+                for notice in live]
 
     def _resend_pending(self, plan: TradePlanV2, cutoff) -> PlanEvent | None:
         """The single-slot notice as an event, or None (and the slot cleared)
@@ -413,7 +434,7 @@ class PlanManager:
         # INTRADAY_RTH_ONLY=false is still the pre-v64 escape hatch: no RTH
         # distinction at all, so this is unconditionally "regular" there too.
         regular = is_regular_session(now) if config.INTRADAY_RTH_ONLY else True
-        events: list[PlanEvent] = self.resend_notices()
+        events: list[PlanEvent] = self.resend_notices(now)
         open_plans = self.store.open_plans()
         prices: dict[str, float] | None = None
         if self.price_batch_fn is not None and open_plans:

@@ -7,7 +7,9 @@ claims an order was cancelled for them.
 """
 import asyncio
 import dataclasses
+import datetime as dt
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -215,12 +217,13 @@ def test_two_outstanding_time_notices_survive_a_restart_and_ack_independently(ch
                                  _notice("p1:time_exit_unresolved:2026-12-01",
                                          "time_exit_unresolved")]
     store.add(plan)
-    events = PlanManager(PlanStore(), None).resend_notices()      # a fresh process
+    before_close = dt.datetime(2026, 12, 1, 15, 40, tzinfo=ZoneInfo("America/New_York"))
+    events = PlanManager(PlanStore(), None).resend_notices(now=before_close)      # a fresh process
     assert {e.detail["notice_id"] for e in events} == {
         "p1:time_exit_due:2026-12-01", "p1:time_exit_unresolved:2026-12-01"}
     feed = _Chan()
     deliveries = asyncio.run(lifecycle_embeds.notify_plan_events(_bot(feed), events))
     assert len(deliveries) == 2
     ack_notified([d for d in deliveries if d.value.endswith("due:2026-12-01")])
-    left = PlanManager(PlanStore(), None).resend_notices()
+    left = PlanManager(PlanStore(), None).resend_notices(now=before_close)
     assert [e.detail["notice_id"] for e in left] == ["p1:time_exit_unresolved:2026-12-01"]
