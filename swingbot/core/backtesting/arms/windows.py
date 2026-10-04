@@ -46,6 +46,7 @@ STAGES: dict[str, StageSpec] = {
 FUNNEL_TO_PRODUCER_STAGE = {
     "reachability": "pilot",
     "mde": "selection",
+    "selection": "selection",
     "walkforward": "walkforward",
     "validation": "validation",
 }

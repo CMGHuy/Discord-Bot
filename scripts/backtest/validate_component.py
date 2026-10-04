@@ -3,6 +3,7 @@
 from __future__ import annotations
 import argparse
 import datetime as dt
+import dataclasses
 import json
 import sys
 from pathlib import Path
@@ -11,6 +12,8 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 from swingbot.core.backtesting.acceptance import ALPHA, BOOTSTRAP_RESAMPLES, GEOMETRY_MAX_DROP_PCT, NON_INFERIORITY_R, VOLUME_MAX_CUT_PCT, ArmTrade, AcceptanceResult, ClauseResult, evaluate, delta_expectancy_r, delta_standardised_win_rate, mde_paired, mde_win_rate, project_target_n, render_json, render_markdown  # noqa: E402
 from swingbot.core.backtesting.acceptance_harvest import mde_expectancy_r  # noqa: E402
+from swingbot.core.backtesting.acceptance import population_split  # noqa: E402
+from swingbot.core.backtesting.arms.selection import SELECTED, evaluate_cell, select_cell  # noqa: E402
 from swingbot.core.backtesting.arms import reachability  # noqa: E402
 from swingbot.core.backtesting.arms.pairing import changed_outcomes, overlap  # noqa: E402
 from swingbot.core.backtesting.arms.provenance import check_stamp  # noqa: E402
@@ -57,6 +60,8 @@ def stage_reachability(args):
             print(f"refused:unreachable:{cls} -- {reachability.reason(attr)} Budget intact.", file=sys.stderr); return 1
     baseline, component = load_arms(args.arms); changed = changed_outcomes(baseline, component)
     print(f"knobs: {delta} baseline N={len(baseline)} component N={len(component)} changed outcomes: {changed}")
+    split = population_split(baseline, component)
+    print(f"split removed={len(split['removed'])} added={len(split['added'])} changed={len(split['changed'])} is_subset={split['is_subset']}")
     if not changed:
         print("refused:zero-diff -- the component reached no trade. Budget intact.", file=sys.stderr); return 1
     print("REACHABLE -- the component changes trades; Stage 0 may proceed."); return 0
@@ -119,10 +124,72 @@ def _run_gate(args, stage):
 
 def stage_validation(args): return _run_gate(args, "validation")
 
+def _parse_grid(items):
+    grid = []
+    for item in items:
+        value, separator, path = item.partition("=")
+        if not separator or not path:
+            raise ValueError("expected VALUE=PATH for --grid-arms")
+        grid.append((float(value), Path(path)))
+    return grid
+
+
+def _cell_mechanism(args, path, baseline, component, value):
+    """Component-specific baseline mechanism hook, supplied by V122-9."""
+    return None
+
+
+def _selection_cells(args, grid):
+    cells = []
+    for value, path in grid:
+        token = check_stamp(json.loads(path.read_text()), funnel_stage="selection",
+                            full_universe=_full_universe())
+        if token:
+            print(f"{token} -- selection stamp gate. Budget intact.", file=sys.stderr)
+            return None
+        baseline, component = load_arms(path)
+        mechanism = _cell_mechanism(args, path, baseline, component, value)
+        cells.append(evaluate_cell(value, baseline, component,
+                                   resolvable=value not in args.mde_refused,
+                                   n_resamples=args.resamples, seed=args.seed,
+                                   mechanism=mechanism))
+    return cells
+
+
+def stage_selection(args):
+    try:
+        grid = _parse_grid(args.grid_arms)
+    except ValueError as error:
+        print(f"refused:malformed-grid -- {error}. Budget intact.", file=sys.stderr)
+        return 1
+    if not grid:
+        print("refused:no-grid -- --grid-arms is required. Budget intact.", file=sys.stderr)
+        return 1
+    cells = _selection_cells(args, grid)
+    if cells is None:
+        return 1
+    result = select_cell(cells, "PULLBACK_DRYUP_MAX_RATIO")
+    for cell in result.cells:
+        print(f"d={cell.value} eligible={cell.eligible} dWR={cell.delta_win_rate_pp} ExpR={cell.expectancy_r} failed={cell.failed} disclosure={cell.disclosure}")
+    print(f"verdict={result.verdict} selected={result.selected}")
+    if args.out_json:
+        path = Path(args.out_json)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(dataclasses.asdict(result), indent=1), encoding="utf-8")
+    return 0 if result.verdict == SELECTED else 1
+
+
 def main(argv=None):
-    parser = argparse.ArgumentParser(); parser.add_argument("--stage", required=True, choices=("reachability", "mde", "walkforward", "validation")); parser.add_argument("--arms", required=True, type=Path); parser.add_argument("--title", required=True); parser.add_argument("--window", required=True)
+    parser = argparse.ArgumentParser(); parser.add_argument("--stage", required=True, choices=("reachability", "mde", "selection", "walkforward", "validation")); parser.add_argument("--arms", type=Path); parser.add_argument("--title", required=True); parser.add_argument("--window", required=True)
     parser.add_argument("--permutation-p", type=float, default=None); parser.add_argument("--train-effect-pp", type=float, default=0.0); parser.add_argument("--train-effect-r", type=float, default=0.0); parser.add_argument("--observed-days", type=int, default=None); parser.add_argument("--target-days", type=int, default=730); parser.add_argument("--resamples", type=int, default=BOOTSTRAP_RESAMPLES); parser.add_argument("--seed", type=int, default=42); parser.add_argument("--notes", default=None); parser.add_argument("--out-md", default=None); parser.add_argument("--out-json", default=None); parser.add_argument("--bespoke-instrument", default=None); parser.add_argument("--mde-method", choices=("paired", "unpaired"), default="paired"); parser.add_argument("--gate", choices=("win_rate", "harvest"), default="win_rate")
-    args = parser.parse_args(argv); refused = _stamp_gate(args)
+    parser.add_argument("--grid-arms", action="append", default=[])
+    parser.add_argument("--mde-refused", action="append", type=float, default=[])
+    args = parser.parse_args(argv)
+    if args.stage == "selection":
+        return stage_selection(args)
+    if args.arms is None:
+        parser.error("--arms is required for non-selection stages")
+    refused = _stamp_gate(args)
     if refused is not None: return refused
     return {"reachability": stage_reachability,"mde": stage_mde,"walkforward": stage_walkforward,"validation": stage_validation}[args.stage](args)
 
