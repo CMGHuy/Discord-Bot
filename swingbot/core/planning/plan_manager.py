@@ -251,17 +251,20 @@ def maybe_pyramid(plan, price: float) -> dict | None:
 def _eligible_session(plan: TradePlanV2):
     """The one NYSE session (a date) that may fill a stop-entry plan: the first
     session strictly after the signal day. A date-only ``created_at`` is stored
-    as UTC midnight, so midnight is read as that calendar date; any other stamp
-    is converted to its ET date. None when the stamp is unreadable or the
+    as UTC midnight, so midnight (read in UTC, whatever offset the database
+    session handed it back in) is that calendar date; any other stamp is
+    converted to its ET date. None when the stamp is unreadable or the
     calendar ends first (the caller then falls back to the normal path)."""
     try:
         created = datetime.fromisoformat(str(plan.created_at))
     except ValueError:
         return None
-    if created.tzinfo is None or created.time() == datetime.min.time():
+    if created.tzinfo is None:
         signal_day = created.date()
     else:
-        signal_day = created.astimezone(US_MARKET_TZ).date()
+        utc = created.astimezone(timezone.utc)
+        signal_day = utc.date() if utc.time() == datetime.min.time() \
+            else created.astimezone(US_MARKET_TZ).date()
     return nyse_calendar().next_session(signal_day)
 
 

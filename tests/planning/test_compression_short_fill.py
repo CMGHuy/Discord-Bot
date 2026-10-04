@@ -129,6 +129,23 @@ def test_live_late_poll_after_the_eligible_session_expires_instead_of_filling():
     assert plan.status == PlanStatus.CANCELLED
 
 
+@pytest.mark.parametrize("stamp", [
+    "2026-11-25",                                # date only
+    "2026-11-25T00:00:00+00:00",                 # UTC midnight
+    "2026-11-24T19:00:00-05:00",                 # the same instant read back under an ET session TimeZone
+    "2026-11-25T01:00:00+01:00",                 # ... and under a Berlin one
+])
+def test_the_signal_day_is_timezone_robust_for_a_stored_date_only_stamp(stamp):
+    from swingbot.core.planning.plan_manager import _eligible_session
+    assert _eligible_session(_short(created_at=stamp)).isoformat() == "2026-11-27"
+
+
+def test_a_real_intraday_stamp_still_reads_as_its_et_date():
+    from swingbot.core.planning.plan_manager import _eligible_session
+    plan = _short(created_at="2026-11-25T20:30:00+00:00")                     # 15:30 ET on the 25th
+    assert _eligible_session(plan).isoformat() == "2026-11-27"
+
+
 def test_non_compression_stop_entry_gap_behaviour_is_unchanged():
     # A Fibonacci bearish stop_entry gapping far past the cap still fills in
     # replay (no risk-cap check there) and still expires on its own bar count.
