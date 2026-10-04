@@ -289,6 +289,20 @@ def test_a_zero_diff_pilot_still_writes_why_every_candidate_was_excluded(produce
     assert [(r["ticker"], r["reason"]) for r in side["excluded"]] == [("ABC", "mode_not_allowed")]
 
 
+def test_a_failing_sidecar_never_pre_empts_the_zero_diff_refusal(producer, monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(ma, "cached_universe", lambda: ["ABC"])
+
+    def boom(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(ma, "_write_sidecar", boom)
+    out = tmp_path / "v119-isolated-pilot-arms.json"
+    assert ma.main(["--knob", f"{KNOB}=isolated", "--stage", "pilot", "--out", str(out), "--workers", "1"]) == 1
+    err = capsys.readouterr().err
+    assert "warning: diagnostics sidecar not written" in err and "refused:zero-diff" in err
+    assert out.exists()                                           # the arm file stays; no traceback
+
+
 def test_no_sidecar_without_the_compression_knob():
     spec = ma.windows.resolve("pilot")
     assert ma.compression_sidecar({}, {"MIN_REWARD_PCT": 4.0}, ["ABC"], spec) is None

@@ -193,6 +193,16 @@ def _write_sidecar(out: Path, sidecar) -> None:
         out.with_name(f"{out.stem}.diagnostics.json").write_text(json.dumps(sidecar), encoding="utf-8")
 
 
+def _write_sidecar_or_warn(out: Path, blob, delta, universe, spec) -> None:
+    """The sidecar is diagnostics only: a failure here warns and never pre-empts the zero-diff refusal
+    (or turns a spent one-shot stage into a traceback that invites a re-run)."""
+    try:
+        _write_sidecar(out, compression_sidecar(blob, delta, universe, spec))
+    except Exception as exc:    # noqa: BLE001
+        print(f"warning: diagnostics sidecar not written ({type(exc).__name__}: {exc}); the arm file is intact.",
+              file=sys.stderr)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--knob", action="append", required=True)
@@ -221,7 +231,7 @@ def main(argv=None) -> int:
                    preregistration=str(args.preregistration) if args.preregistration else None)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(blob), encoding="utf-8")
-    _write_sidecar(args.out, compression_sidecar(blob, delta, universe, windows.resolve(args.stage)))
+    _write_sidecar_or_warn(args.out, blob, delta, universe, windows.resolve(args.stage))
     if args.stage == "pilot" and blob["provenance"]["changed_outcomes"] == 0:
         print("refused:zero-diff -- the component changed no trade on the pilot slice. Budget intact.", file=sys.stderr)
         return 1
