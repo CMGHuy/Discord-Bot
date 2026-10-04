@@ -69,3 +69,56 @@ def test_other_stages_require_arms(stage):
     with pytest.raises(SystemExit) as error:
         vc.main(['--stage', stage, '--title', 't', '--window', 'w'])
     assert error.value.code == 2
+
+
+@pytest.mark.parametrize('values', [('.6', '.60'), ('nan', '.75'), ('inf', '.75'), ('-inf', '.75')])
+def test_selection_refuses_duplicate_or_nonfinite_grid_before_reading(tmp_path, capsys, values):
+    args = ['--stage', 'selection', '--title', 't', '--window', 'w']
+    for value in values:
+        args += [f'--grid-arms={value}={tmp_path / "absent.json"}']
+    assert vc.main(args) == 1
+    error = capsys.readouterr().err
+    assert 'refused:malformed-grid' in error and 'Budget intact.' in error
+
+
+@pytest.mark.parametrize('kind', ['missing', 'directory', 'json', 'stamp', 'window', 'hash', 'universe', 'rows'])
+def test_selection_refuses_unreadable_or_malformed_arm_input(tmp_path, capsys, kind):
+    path = malformed_input(tmp_path, kind)
+    assert vc.main(['--stage', 'selection', '--title', 't', '--window', 'w',
+                    '--grid-arms', f'.6={path}']) == 1
+    error = capsys.readouterr().err
+    assert 'refused:' in error and 'Budget intact.' in error
+
+
+def malformed_input(tmp_path, kind):
+    path = stamped(tmp_path, .60)
+    if kind == 'missing':
+        path.unlink()
+    elif kind == 'directory':
+        path = tmp_path
+    elif kind == 'json':
+        path.write_text('{broken')
+    else:
+        blob = json.loads(path.read_text())
+        if kind == 'stamp':
+            blob['provenance'] = []
+        elif kind == 'window':
+            blob['provenance']['signal_window'] = [None]
+        elif kind == 'hash':
+            blob['provenance']['engine_hash'] = ['h']
+        elif kind == 'universe':
+            blob['provenance']['universe'] = 12
+        else:
+            blob['baseline'] = [{'invalid': True}]
+        path.write_text(json.dumps(blob))
+    return path
+
+
+def test_selection_refuses_string_signal_window(tmp_path, capsys):
+    path = stamped(tmp_path, .6)
+    blob = json.loads(path.read_text())
+    blob['provenance']['signal_window'] = '10'
+    path.write_text(json.dumps(blob))
+    assert vc.main(['--stage', 'selection', '--title', 't', '--window', 'w',
+                    '--grid-arms', f'.6={path}']) == 1
+    assert 'refused:' in capsys.readouterr().err

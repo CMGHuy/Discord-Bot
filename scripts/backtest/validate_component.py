@@ -5,6 +5,7 @@ import argparse
 import datetime as dt
 import dataclasses
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -126,11 +127,16 @@ def stage_validation(args): return _run_gate(args, "validation")
 
 def _parse_grid(items):
     grid = []
+    seen = set()
     for item in items:
         value, separator, path = item.partition("=")
         if not separator or not path:
             raise ValueError("expected VALUE=PATH for --grid-arms")
-        grid.append((float(value), Path(path)))
+        value = float(value)
+        if not math.isfinite(value) or value in seen:
+            raise ValueError("grid values must be finite and unique")
+        seen.add(value)
+        grid.append((value, Path(path)))
     return grid
 
 
@@ -139,15 +145,44 @@ def _cell_mechanism(args, path, baseline, component, value):
     return None
 
 
-def _selection_cells(args, grid):
-    cells = []
-    for value, path in grid:
-        token = check_stamp(json.loads(path.read_text()), funnel_stage="selection",
-                            full_universe=_full_universe())
+def _selection_stamp_shape(blob):
+    stamp = blob.get("provenance")
+    if not stamp:
+        return
+    fields = {"engine_hash": dict, "signal_window": list, "universe": list, "horizons": list}
+    if any(not isinstance(stamp[name], expected) for name, expected in fields.items()):
+        raise ValueError("malformed provenance fields")
+    window = stamp["signal_window"]
+    if len(window) != 2:
+        raise ValueError("signal window requires two dates")
+    start, end = (dt.date.fromisoformat(value) for value in window)
+    if start > end:
+        raise ValueError("signal window dates are reversed")
+
+
+def _selection_input(path):
+    """Refuse input failures before any selection evaluation."""
+    try:
+        blob = json.loads(path.read_text())
+        _selection_stamp_shape(blob)
+        token = check_stamp(blob, funnel_stage="selection", full_universe=_full_universe())
         if token:
             print(f"{token} -- selection stamp gate. Budget intact.", file=sys.stderr)
             return None
-        baseline, component = load_arms(path)
+        return ([ArmTrade(**row) for row in blob["baseline"]],
+                [ArmTrade(**row) for row in blob["component"]])
+    except (OSError, ValueError, TypeError, KeyError, IndexError, AttributeError):
+        print("refused:malformed-arms -- unreadable or malformed selection input. Budget intact.", file=sys.stderr)
+        return None
+
+
+def _selection_cells(args, grid):
+    cells = []
+    for value, path in grid:
+        arms = _selection_input(path)
+        if arms is None:
+            return None
+        baseline, component = arms
         mechanism = _cell_mechanism(args, path, baseline, component, value)
         cells.append(evaluate_cell(value, baseline, component,
                                    resolvable=value not in args.mde_refused,
