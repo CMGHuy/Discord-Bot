@@ -160,12 +160,12 @@ def _selection_stamp_shape(blob):
         raise ValueError("signal window dates are reversed")
 
 
-def _selection_input(path):
+def _selection_input(path, full_universe):
     """Refuse input failures before any selection evaluation."""
     try:
         blob = json.loads(path.read_text())
         _selection_stamp_shape(blob)
-        token = check_stamp(blob, funnel_stage="selection", full_universe=_full_universe())
+        token = check_stamp(blob, funnel_stage="selection", full_universe=full_universe)
         if token:
             print(f"{token} -- selection stamp gate. Budget intact.", file=sys.stderr)
             return None
@@ -177,9 +177,10 @@ def _selection_input(path):
 
 
 def _selection_cells(args, grid):
+    full_universe = _full_universe()
     cells = []
     for value, path in grid:
-        arms = _selection_input(path)
+        arms = _selection_input(path, full_universe)
         if arms is None:
             return None
         baseline, component = arms

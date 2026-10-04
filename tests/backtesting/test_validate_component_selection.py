@@ -122,3 +122,15 @@ def test_selection_refuses_string_signal_window(tmp_path, capsys):
     assert vc.main(['--stage', 'selection', '--title', 't', '--window', 'w',
                     '--grid-arms', f'.6={path}']) == 1
     assert 'refused:' in capsys.readouterr().err
+
+
+def test_selection_does_not_hide_universe_resolution_errors(tmp_path, monkeypatch):
+    path = stamped(tmp_path, .6)
+
+    def broken_universe():
+        raise ValueError('universe resolution failed')
+
+    monkeypatch.setattr(vc, '_full_universe', broken_universe)
+    with pytest.raises(ValueError, match='universe resolution failed'):
+        vc.main(['--stage', 'selection', '--title', 't', '--window', 'w',
+                 '--grid-arms', f'.6={path}'])
