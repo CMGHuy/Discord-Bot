@@ -103,6 +103,11 @@ strategy entries, and report a p-value on ΔWR (n = 200, fixed seed). The
 extension gets its own reviewed task and a witness test proving the script's
 existing output is unchanged, and it is frozen in the pre-registration
 before any VALIDATION arm exists.
+The arm-pair null shifts removal labels only. It refuses a pair with changed
+outcomes on surviving keyed trades, which that null cannot model; a stamped
+pair must also pass the producer, validation-window, universe, horizon and
+engine checks before a p-value is computed. These are fail-closed instrument
+requirements, frozen before either component's pre-registration.
 
 Arms are produced with `scripts/backtest/measure_arms.py` (live
 constructor via the arm engines) and judged by
