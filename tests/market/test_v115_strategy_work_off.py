@@ -12,7 +12,7 @@ from swingbot.core.market import strategy_types as st
 from swingbot.core.market.entry_filters import DEFAULT_PARAMS
 from swingbot.core.scanning import scan_run
 
-ENV_EXAMPLE = Path(__file__).resolve().parent.parent / ".env.example"
+ENV_EXAMPLE = Path(__file__).resolve().parents[2] / ".env.example"
 WHY = "must stay off (v115 § Strategy work)"
 
 FLAGS_OFF = [
