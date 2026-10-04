@@ -85,3 +85,32 @@ Note: `sum_capture` (pooled: sum of all runner_r / sum of all mfe_r) is reported
 ## Results (appended as-is after the run)
 
 Note: The 2026-09-10 "43%" memory figure is superseded by this re-derivation.
+
+Run: TRAIN 2020-01-01..2023-12-31, 75-ticker local cache, ten horizons, both engines, code defaults. Raw numbers in `2026-10-02-v123-runner-headroom.json`.
+
+### Pooled (runner trades only, n = 3127)
+
+| mean runner R | mean MFE R | mean capture (verdict form) | sum capture (ratio of sums) |
+|---|---|---|---|
+| 2.430 | 3.769 | 70.4% | 64.5% |
+
+Runner exit mix: runner_be 66.5%, runner_timeout 1.4%, runner_tp2 20.5%, runner_trail 11.6%
+
+### Per horizon
+
+| horizon | n | mean capture | sum capture |
+|---|---|---|---|
+| 2m | 338 | 68.3% | 62.2% |
+| 2w | 263 | 73.1% | 69.4% |
+| 3m | 368 | 70.3% | 63.7% |
+| 4m | 311 | 68.9% | 63.1% |
+| 4w | 381 | 69.1% | 64.1% |
+| 5m | 279 | 68.4% | 62.3% |
+| 6m | 275 | 71.3% | 63.3% |
+| 7m | 333 | 71.3% | 64.9% |
+| 8m | 287 | 73.2% | 67.6% |
+| 9m | 292 | 71.3% | 65.7% |
+
+### Verdict
+
+**HEADROOM** — pooled mean capture 70.4% is below the frozen 75% stop rule, so the arms are not closed without a shot. This is baseline description, not selection.
