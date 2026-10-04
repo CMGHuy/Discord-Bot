@@ -91,3 +91,12 @@ def test_live_scan_off_then_confluence(monkeypatch, tmp_path, stub_batch_fetch):
     assert after.funnel['scenarios_found'] == 0
     assert after.funnel['failed_pullback_volume'] == before.funnel['scenarios_found']
     assert frames and all(len(frame) == len(_structured_df()) for frame in frames)
+
+
+def test_strategy_funnel_off_includes_zero_pullback_count(monkeypatch):
+    monkeypatch.setattr(config, 'STRATEGY_ALERTS_MODE', 'off')
+    summary = scan_run._maybe_run_strategy_pass(
+        tickers=[], fresh_data={}, spy_df=None, regimes=None, rs_cache=None,
+        sector_of_ticker={}, etf_symbol_of_sector={}, sector_etf_frames={},
+        trade_log=_Log(), alerts=[], require_confirmation=False)
+    assert summary['strategy_pullback_volume'] == 0

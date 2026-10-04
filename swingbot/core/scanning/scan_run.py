@@ -89,7 +89,8 @@ def _maybe_run_strategy_pass(*,tickers, fresh_data, spy_df, regimes, rs_cache, s
     mode = config.STRATEGY_ALERTS_MODE
     if mode == "off":
         return {"strategy_plans": 0, "strategy_opened": 0,
-                "compression_shadow": 0, "compression_rejected": 0}
+                "compression_shadow": 0, "compression_rejected": 0,
+                "strategy_pullback_volume": 0}
     if not require_confirmation:
         mode = "shadow"
     live_allow = {value.strip() for value in (config.STRATEGY_ALERTS_LIVE_STRATEGIES or "").split(",") if value.strip()}
