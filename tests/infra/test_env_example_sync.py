@@ -34,7 +34,7 @@ _ASSIGNMENT = re.compile(r"^([A-Z0-9_]+)=", re.MULTILINE)
 
 def _example_keys() -> set[str]:
     from pathlib import Path
-    path = Path(__file__).resolve().parent.parent / ".env.example"
+    path = Path(__file__).resolve().parents[2] / ".env.example"
     return set(_ASSIGNMENT.findall(path.read_text(encoding="utf-8")))
 
 
@@ -73,7 +73,7 @@ _FROZEN = {
 
 def test_frozen_constants_match_the_schema_default():
     from pathlib import Path
-    path = Path(__file__).resolve().parent.parent / ".env.example"
+    path = Path(__file__).resolve().parents[2] / ".env.example"
     text = path.read_text(encoding="utf-8")
     schema = {f.key: f.default for f in config.FIELDS}
     for key, doc in _FROZEN.items():
