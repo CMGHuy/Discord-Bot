@@ -9,7 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from swingbot import config
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import COMPRESSION_SHORT, HORIZONS
+from swingbot.core.risk_limits import planned_loss_pct
+from .stop_scope import plan_stop_ceiling
 from .plan_types import TradePlanV2
 from .params import RUNNER_FLOOR_FRACTION
 from .lifecycle import (at_or_beyond_stop, fill_price, limit_fill_price, limit_hit,
@@ -24,9 +26,12 @@ class ExitResult:
     entry_price: float | None
     r_total: float               # sum over legs of fraction * signed_r
     legs: list                   # [{"fraction","exit_price","r","reason"}]
+    # Why a not_triggered row was excluded ("risk_cap"|"expired"|"invalidated");
+    # set only on the compression short's rows, None everywhere else.
+    cancel_reason: str | None = None
 
 
-def _not_triggered() -> ExitResult:
+def _not_triggered(cancel_reason: str | None = None) -> ExitResult:
     return ExitResult(
         outcome="not_triggered",
         runner_outcome=None,
@@ -35,6 +40,7 @@ def _not_triggered() -> ExitResult:
         entry_price=None,
         r_total=0.0,
         legs=[],
+        cancel_reason=cancel_reason,
     )
 
 
@@ -348,6 +354,26 @@ def _fill_bar_exit(df, j: int, entry_price: float, plan: TradePlanV2) -> ExitRes
     return None
 
 
+def _is_compression(plan: TradePlanV2) -> bool:
+    """The compression short alone gets the live-parity fill policy; every other
+    strategy's stop-entry replay stays exactly as it was."""
+    return plan.strategy == COMPRESSION_SHORT
+
+
+def _compression_fill(df, j: int, entry_price: float, plan: TradePlanV2,
+                      scale_out: bool, max_holding_days: int) -> ExitResult:
+    """Fill policy for the compression short, mirroring PlanManager._step_pending:
+    a gap fill whose planned loss exceeds the stop ceiling is cancelled (an
+    excluded not_triggered row, never scored), otherwise the fill bar is checked
+    against the stop (stop-first) before the normal exit walk."""
+    if planned_loss_pct(entry_price, plan.stop_loss) > plan_stop_ceiling(plan):
+        return _not_triggered("risk_cap")
+    early = _fill_bar_exit(df, j, entry_price, plan)
+    if early is not None:
+        return early
+    return _walk_for(plan, scale_out)(df, j, entry_price, plan, max_holding_days)
+
+
 def _limit_entry_exit(df, signal_index: int, plan: TradePlanV2, scale_out: bool,
                       max_holding_days: int) -> ExitResult:
     """v113 §3: a resting limit at trigger_price, live for the plan's
@@ -418,12 +444,14 @@ def simulate_exit(
         return _walk_for(plan, scale_out)(df, entry_index, entry_price, plan, max_holding_days)
 
     # stop_entry: scan signal_index+1 .. signal_index+plan.expiry_bars for a
-    # trigger touch, watching for pre-fill invalidation along the way.
+    # trigger touch, watching for pre-fill invalidation along the way. df rows
+    # are sessions, so a holiday between signal and next bar costs nothing.
     high = df["High"].values
     low = df["Low"].values
     open_ = df["Open"].values
     close = df["Close"].values
     n = len(df)
+    strict = _is_compression(plan)
 
     j = signal_index + 1
     while j < n:
@@ -431,12 +459,13 @@ def simulate_exit(
         if pending_expired(plan, bars_since_created):
             break
         if trigger_hit(plan, float(high[j]), float(low[j])):
-            entry_index = j
             entry_price = fill_price(plan, float(open_[j]))
-            return _walk_for(plan, scale_out)(df, entry_index, entry_price, plan, max_holding_days)
+            if strict:
+                return _compression_fill(df, j, entry_price, plan, scale_out, max_holding_days)
+            return _walk_for(plan, scale_out)(df, j, entry_price, plan, max_holding_days)
         if pending_invalidated(plan, float(close[j])):
-            return _not_triggered()
+            return _not_triggered("invalidated" if strict else None)
         j += 1
 
-    return _not_triggered()
+    return _not_triggered("expired" if strict else None)
 

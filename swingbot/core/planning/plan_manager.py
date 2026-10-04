@@ -14,8 +14,10 @@ from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 
 from swingbot import config
-from swingbot.core.market.session import (is_quiet_hours, is_regular_session,
-                                          is_tape_open, session_date)
+from swingbot.core.market.session import (RTH_CLOSE, RTH_OPEN, US_MARKET_TZ, is_quiet_hours,
+                                          is_regular_session, is_tape_open, now_et,
+                                          nyse_calendar, session_date)
+from swingbot.core.market.strategy_types import COMPRESSION_SHORT
 from swingbot.core.risk_limits import planned_loss_pct
 from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
                                        chandelier_stop, pending_expired,
@@ -241,6 +243,23 @@ def maybe_pyramid(plan, price: float) -> dict | None:
         return {"add_shares_fraction": round(fraction, 4), "add_entry": price,
                 "add_stop": plan.entry_price}
     return None
+
+
+def _eligible_session(plan: TradePlanV2):
+    """The one NYSE session (a date) that may fill a stop-entry plan: the first
+    session strictly after the signal day. A date-only ``created_at`` is stored
+    as UTC midnight, so midnight is read as that calendar date; any other stamp
+    is converted to its ET date. None when the stamp is unreadable or the
+    calendar ends first (the caller then falls back to the normal path)."""
+    try:
+        created = datetime.fromisoformat(str(plan.created_at))
+    except ValueError:
+        return None
+    if created.tzinfo is None or created.time() == datetime.min.time():
+        signal_day = created.date()
+    else:
+        signal_day = created.astimezone(US_MARKET_TZ).date()
+    return nyse_calendar().next_session(signal_day)
 
 
 class PlanManager:
@@ -524,17 +543,42 @@ class PlanManager:
 
     def _step(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
         if plan.status == PlanStatus.PENDING:
-            return self._step_pending(plan, price)
+            return self._step_pending(plan, price, now)
         if plan.status == PlanStatus.ACTIVE:
             return self._step_active(plan, price, now)     # Tasks 61-63
         if plan.status == PlanStatus.PARTIAL:
             return self._step_partial(plan, price, now)    # Tasks 64-66
         return []
 
-    def _step_pending(self, plan: TradePlanV2, price: float) -> list[PlanEvent]:
+    def _compression_window(self, plan: TradePlanV2, now) -> list[PlanEvent] | None:
+        """v119: the compression short's resting sell-stop lives for exactly one
+        regular session, the first NYSE session after the signal day (counted on
+        the session calendar, so a holiday in between is not an expiry). None =
+        the eligible session is open, run the normal fill checks; a list (maybe
+        empty) = nothing further to do this poll."""
+        eligible = _eligible_session(plan)
+        if eligible is None:
+            return None
+        et = now_et(now)
+        if et.date() < eligible or (et.date() == eligible and et.time() < RTH_OPEN):
+            return []                    # same-bar / pre-open prints never fill
+        if et.date() == eligible and et.time() < RTH_CLOSE:
+            return None
+        closed_at = datetime.combine(eligible, RTH_CLOSE, tzinfo=US_MARKET_TZ).isoformat()
+        record_transition(plan, PlanStatus.CANCELLED, reason="expired", at=closed_at)
+        self.store.update(plan)
+        return [PlanEvent(plan.plan_id, "cancelled_expired", {
+            "bars_waited": 1, "cancel_resting_order": True,
+            "eligible_session": eligible.isoformat(), "expires_at": closed_at})]
+
+    def _step_pending(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
         is_bull = plan.direction == "bullish"
 
-        if self.bar_count_fn is not None:
+        if plan.strategy == COMPRESSION_SHORT:
+            window = self._compression_window(plan, now)
+            if window is not None:
+                return window
+        elif self.bar_count_fn is not None:
             bars = self.bar_count_fn(plan.ticker, plan.created_at)
             if pending_expired(plan, bars):
                 record_transition(plan, PlanStatus.CANCELLED, reason="expired",
