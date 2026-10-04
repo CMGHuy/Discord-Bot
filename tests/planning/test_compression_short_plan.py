@@ -140,3 +140,27 @@ def test_other_strategies_never_get_a_hold_cap():
     df, t = fade_df()
     plan = build_strategy_plan(df, t, ticker="T", strategy=FADE, horizon_key=FADE_HZ, direction="bearish")
     assert plan.hold_cap_bars is None
+
+
+def test_the_level_lifecycle_never_moves_the_compression_stop_or_target(frame, monkeypatch):
+    from swingbot.core.planning import builders
+    monkeypatch.setattr(config, "LEVEL_LIFECYCLE_STOPS_ENABLED", True, raising=False)
+    calls = []
+
+    def widener(*a, stop, tp1, **k):   # what a tested resistance above the high would do
+        calls.append(1)
+        return stop + 0.1, tp1 - 0.1, {"lifecycle_stop": {}}
+
+    monkeypatch.setattr(builders, "apply_level_lifecycle", widener)
+    plan = _plan(frame, _levels(95.40))
+    assert not calls
+    assert plan.stop_loss == pytest.approx(float(frame["High"].iloc[-1]) + 0.25 * _atr(frame))
+    assert plan.tp1 == 95.40
+
+
+def test_reward_floor_is_checked_on_the_trigger_and_target(frame, monkeypatch):
+    from swingbot.core.planning import reward_floor
+    seen = []
+    monkeypatch.setattr(reward_floor, "clears", lambda *a: seen.append(a) or False)
+    assert _plan(frame, _levels(95.40)) is None
+    assert seen == [(TRIGGER, 95.40, COMPRESSION_SHORT, HZ)]

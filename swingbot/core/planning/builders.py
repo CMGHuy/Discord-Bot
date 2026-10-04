@@ -261,6 +261,20 @@ def _geometry_ok(close, stop, tp1, strategy, horizon_key) -> bool:
     return abs(close - stop) > 0 and reward_floor.clears(close, tp1, strategy, horizon_key)
 
 
+def _lifecycle_pair(df, index, entry, stop, tp1, atr_val, direction, strategy,
+                    horizon_key, level_map, candidates):
+    """(stop, tp1) after the level lifecycle. The v119 compression short is
+    exempt: its stop is the exact release-bar structure and its target one
+    confirmed support, neither of which the adjuster's re-selection may move."""
+    if strategy == COMPRESSION_SHORT:
+        return stop, tp1
+    stop, tp1, _meta = apply_level_lifecycle(
+        df, index, entry=entry, stop=stop, tp1=tp1, atr_val=atr_val,
+        direction=direction, strategy=strategy, horizon_key=horizon_key,
+        level_map=level_map, candidate_levels=candidates)
+    return stop, tp1
+
+
 def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
                         direction, level_map=None, quality_inputs=None,
                         stop_mult=None, tp2_r=None,
@@ -291,10 +305,9 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     # meta is intentionally unused for now: surfacing which level drove the
     # plan means a TradePlanV2 field, which is a persisted-schema change and a
     # separate piece of work from wiring the adjuster in.
-    stop, tp1, _lifecycle_meta = apply_level_lifecycle(
-        df, index, entry=close, stop=stop, tp1=tp1, atr_val=atr_val,
-        direction=direction, strategy=strategy, horizon_key=horizon_key,
-        level_map=level_map, candidate_levels=candidates)
+    stop, tp1 = _lifecycle_pair(
+        df, index, close, stop, tp1, atr_val, direction, strategy, horizon_key,
+        level_map, candidates)
 
     if not _geometry_ok(close, stop, tp1, strategy, horizon_key):
         return None
