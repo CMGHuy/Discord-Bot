@@ -3,17 +3,13 @@
 ## Specification
 
 **Frozen Stop Rule (from spec v123):**
-```
-"NO_HEADROOM" when mean capture >= 0.75
-"HEADROOM" otherwise
-```
+> if mean runner capture ≥ 75%, there is no headroom: both arms can only exit at or before today's runner exit (`hl_trail` only ratchets the stop tighter; `progress_stall` only adds an earlier exit), so both close without a shot. The numbers are reported as-is either way; this is baseline description, not selection.
 
 ## Definitions
 
 **MFE (Maximum Favorable Excursion) R:**
-- Window: `[TP1 bar, exit bar)` (closes from bar after TP1 touched through exit bar exclusive)
+- Window: closes from the TP1 bar through the bar before the runner exit; floor = realised runner R
 - Formula: Best close within MFE window minus entry price, divided by risk
-- Capped below by realised runner R
 
 **Capture Ratio:**
 - Formula: `runner_r / mfe_r` (only for trades with MFE > 0)
@@ -30,8 +26,8 @@
 **Horizons:** All ten horizons (from `swingbot.core.backtesting.arms.windows.ALL_HORIZONS`)
 
 **Engines:**
-- StrategyEngine.iter_trades (strategy-generated plans from backtesting)
-- replay_scenarios (sentiment/regime-based replay scenarios)
+- `StrategyEngine.iter_trades` (strategy-generated plans)
+- `replay_scenarios` (live plan constructor replayed on TRAIN)
 
 **Exit Simulation:** `scale_out=True` (runner tracking enabled)
 
@@ -65,18 +61,24 @@ Non-runner trades (single leg or non-wins) are excluded.
 
 ## Stop Rule Logic
 
-The `stop_rule()` function:
+The `stop_rule()` function uses `pooled["mean_capture"]` — the per-trade mean over all trades with MFE > 0:
 ```python
 mean = summary["pooled"]["mean_capture"]
 return "NO_HEADROOM" if mean is not None and mean >= 0.75 else "HEADROOM"
 ```
 
-**NO_HEADROOM verdict:** Runner leg captured >= 75% of available MFE, indicating limited headroom for improvement.
+Note: `sum_capture` (pooled: sum of all runner_r / sum of all mfe_r) is reported alongside `mean_capture` but is not the decision rule.
 
-**HEADROOM verdict:** Runner leg captured < 75% of available MFE, indicating potential for optimization.
+**NO_HEADROOM verdict:** Mean runner capture >= 75%, indicating limited headroom for improvement.
+
+**HEADROOM verdict:** Mean runner capture < 75%, indicating potential for optimization.
 
 ## Status
 
 **Task V123-0:** Baseline read-only instrument created. No changes to `swingbot/` files.
 
 **Next:** Dispatch backtest-runner to execute full TRAIN replay and record results.
+
+## Results (appended as-is after the run)
+
+Note: The 2026-09-10 "43%" memory figure is superseded by this re-derivation.
