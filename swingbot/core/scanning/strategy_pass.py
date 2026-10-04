@@ -160,11 +160,14 @@ def _count_compression_reject(result: "PassResult", stamp: dict, reason: str) ->
         result.earnings_excluded_by_mode[mode] += 1
 
 
-def compression_shadow_record(frame, *, ticker, horizon, deps: _PassDeps, result: "PassResult"):
+def compression_shadow_record(frame, *, ticker, horizon, deps: _PassDeps, result: "PassResult",
+                              seen: set | None = None):
     """Shadow evaluation of the masked compression strategy on the raw signal: the decision, a plan
     built for audit, and a record. Never a stored plan, alert, paper trade or order instruction.
 
-    Skipped (None) when the bar has no raw signal or the mask admits this cell (the normal path owns it).
+    Skipped (None) when the bar has no raw signal, the mask admits this cell (the normal path owns it),
+    or (ticker, horizon, bar_date) is already in `seen` -- a re-scan of the same completed bar neither
+    fetches earnings again nor re-counts the candidate. The key is added to `seen` once evaluated.
     """
     from swingbot.core.market.short_entries import compression_short_frame
     from swingbot.core.market.strategy_types import COMPRESSION_SHORT, admits
@@ -175,6 +178,11 @@ def compression_shadow_record(frame, *, ticker, horizon, deps: _PassDeps, result
     signal = compression_short_frame(frame, horizon)["signal"]
     if not len(signal) or not bool(signal.iloc[-1]):
         return None
+    key = (ticker, horizon, frame.index[-1].date().isoformat())
+    if seen is not None:
+        if key in seen:
+            return None
+        seen.add(key)
     stamp, reason = _compression_context(ticker, COMPRESSION_SHORT, frame, deps)
     plan = None
     if reason is None:
@@ -250,10 +258,27 @@ def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, hori
                           build_strategy_simple_embed(plan)))
 
 
+def _shadow_step(result: PassResult, frame, *, ticker, horizon, deps: _PassDeps, seen) -> None:
+    """The compression shadow evaluation, isolated: a raise here is logged and never costs the ticker's
+    remaining horizons or strategies their own signals."""
+    try:
+        record = compression_shadow_record(frame, ticker=ticker, horizon=horizon, deps=deps,
+                                           result=result, seen=seen)
+    except Exception:
+        log.warning("compression shadow: %s/%s failed -- continuing", ticker, horizon, exc_info=True)
+        return
+    if record is not None:
+        result.compression_shadow.append(record)
+
+
 def run_strategy_pass(tickers, fresh_data, *, now, horizons, spy_df, regimes,
                       rs_combined_of, mode: str, live_allow: set, trade_log, plan_store,
-                      asof_of=None, compression_of=None, earnings_of=None) -> PassResult:
-    """Build strategy plans after confluence; only eligible live plans open trades."""
+                      asof_of=None, compression_of=None, earnings_of=None,
+                      shadow_seen: set | None = None) -> PassResult:
+    """Build strategy plans after confluence; only eligible live plans open trades.
+
+    `shadow_seen`: (ticker, horizon, bar_date) keys of compression shadow records already written; the
+    caller loads it so a re-scan of one completed bar records and counts it once."""
     result = PassResult()
     deps = _PassDeps(plan_store, trade_log, mode, live_allow, rs_combined_of, asof_of, compression_of,
                      earnings_of, now)
@@ -271,10 +296,8 @@ def run_strategy_pass(tickers, fresh_data, *, now, horizons, spy_df, regimes,
                 for strategy, direction in strategy_signals(frame, horizon, spy_df=spy_df):
                     _emit_signal(result, frame, ticker=ticker, strategy=strategy, direction=direction,
                                  horizon=horizon, bar_date=bar_date, regime=regime, deps=deps)
-                record = compression_shadow_record(frame, ticker=ticker, horizon=horizon,
-                                                   deps=deps, result=result)
-                if record is not None:
-                    result.compression_shadow.append(record)
+                _shadow_step(result, frame, ticker=ticker, horizon=horizon, deps=deps,
+                             seen=shadow_seen)
         except Exception:
             log.warning("strategy pass: %s failed -- continuing", ticker, exc_info=True)
     return result

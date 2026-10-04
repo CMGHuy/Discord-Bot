@@ -42,6 +42,24 @@ def append(plan, legacy_scenario_summary: dict, path: str | None = None,
         f.write(json.dumps(record) + "\n")       # one write() call per line
 
 
+def compression_recorded_keys(path: str | None = None) -> set:
+    """(ticker, horizon, bar_date) of every compression shadow line already written (both rotation
+    slots), so a re-scan of the same completed bar is recorded once."""
+    path = path or os.path.join(config.DATA_DIR, "compression_shadow.jsonl")
+    keys = set()
+    for name in (path, path + ".1"):
+        if not os.path.exists(name):
+            continue
+        with open(name, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    row = json.loads(line)
+                    keys.add((row["ticker"], row["horizon"], row["bar_date"]))
+                except (ValueError, KeyError):
+                    continue
+    return keys
+
+
 def append_compression(record: dict, path: str | None = None) -> None:
     """One audit line for the masked compression short's raw signal (v119): its own file, so the v2
     parity report (which diffs `plan` against `legacy`) never reads it. Never an alert."""

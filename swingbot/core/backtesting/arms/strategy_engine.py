@@ -122,26 +122,29 @@ class StrategyEngine:
                 level_map = build_level_map(
                     window, HORIZONS[horizon_key], float(df["Close"].iloc[index]))
                 level_map_key = index // 5
+            counted = date >= start        # warm-up candidates are never counted, same predicate as the yield
             plan, stamp = self._candidate_plan(
                 ticker, window, index, strategy, horizon_key, direction, params,
-                level_map if wants_tp2 else None)
+                level_map if wants_tp2 else None, counted)
             if plan is None:
                 continue
             result = simulate_exit(df, index, plan, scale_out=True)
-            if self._skipped(result, strategy, stamp):
+            if self._skipped(result, strategy, stamp, counted):
                 continue
             open_until = result.exit_index
-            if date >= start:
+            if counted:
                 yield date, plan, result
 
-    def _candidate_plan(self, ticker, window, index, strategy, horizon_key, direction, params, level_map):
+    def _candidate_plan(self, ticker, window, index, strategy, horizon_key, direction, params, level_map,
+                        counted=True):
         """(plan | None, stamp): the shared pre-entry decision (compression short only), then the live
-        constructor on bars <= index. A rejection is counted here and returns no plan."""
+        constructor on bars <= index. A rejection is counted (when `counted`) and returns no plan."""
         stamp = {}
         if strategy == COMPRESSION_SHORT:
             stamp, reason = self._compression_stamp(ticker, window)
             if reason is not None:
-                self._count(stamp, reason)
+                if counted:
+                    self._count(stamp, reason)
                 return None, stamp
         plan = build_strategy_plan(
             window, index, ticker=ticker, strategy=strategy,
@@ -149,17 +152,18 @@ class StrategyEngine:
             level_map=level_map, scan_params=params,
         )
         if plan is None:
-            self._count_plan_none(strategy, window, horizon_key, stamp)
+            if counted:
+                self._count_plan_none(strategy, window, horizon_key, stamp)
             return None, stamp
         if stamp:
             plan.entry_context = {**(plan.entry_context or {}), **stamp}
         return plan, stamp
 
-    def _skipped(self, result, strategy, stamp) -> bool:
+    def _skipped(self, result, strategy, stamp, counted=True) -> bool:
         """Whether the walk produced no scored trade; a compression row says why (expiry, gap-risk...)."""
         if result.outcome not in SKIPPED:
             return False
-        if strategy == COMPRESSION_SHORT:
+        if strategy == COMPRESSION_SHORT and counted:
             self._count(stamp, _CANCEL_REASONS.get(result.cancel_reason, "not_triggered"))
         return True
 

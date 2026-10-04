@@ -148,12 +148,12 @@ class _Log:
 
 
 def _live_pass(frame=STOCK, *, mode="shadow", live_allow=(), spy=FALLING_SPY, snapshot=CLEAR,
-               hooks=True, open_cell=False):
+               hooks=True, open_cell=False, earnings_of=None, seen=None):
     store, log = _Store(), _Log()
-    kwargs = {}
+    kwargs = {"shadow_seen": seen}
     if hooks:
-        kwargs = dict(compression_of=lambda t, f: cc.compression_mode_for(f, spy, SECTOR, now=DECISION),
-                      earnings_of=lambda t: snapshot)
+        kwargs.update(compression_of=lambda t, f: cc.compression_mode_for(f, spy, SECTOR, now=DECISION),
+                      earnings_of=earnings_of or (lambda t: snapshot))
     ctx = (entry_filters.gate_override(COMPRESSION_SHORT, {"cells": {("bearish", HZ)}})
            if open_cell else contextlib.nullcontext())
     with ctx:
@@ -420,3 +420,90 @@ def test_strategy_path_never_scores_the_squeeze_a_second_time(monkeypatch):
     live, _, _ = _live_pass(mode="live", live_allow={COMPRESSION_SHORT}, open_cell=True)
     _replay(FULL_PATH, _context())
     assert live.plans[0].confidence_level is None
+
+
+# -- fix round 1 ----------------------------------------------------------------------------------------------------
+
+def test_a_shadow_failure_never_costs_other_strategies_their_later_horizons(monkeypatch):
+    emitted = []
+
+    def boom(*a, **k):
+        raise RuntimeError("shadow blew up")
+
+    monkeypatch.setattr(sp, "compression_shadow_record", boom)
+    monkeypatch.setattr(sp, "strategy_signals",
+                        lambda frame, horizon, spy_df: [("MACD", "bullish")])
+    monkeypatch.setattr(sp, "_emit_signal", lambda result, frame, **kw: emitted.append(kw["horizon"]))
+    result = sp.run_strategy_pass(
+        ["ABC"], {"ABC": STOCK}, now=DECISION, horizons=["2w", "4w"], spy_df=FALLING_SPY, regimes=None,
+        rs_combined_of=lambda t: None, mode="shadow", live_allow=set(), trade_log=_Log(),
+        plan_store=_Store())
+    assert emitted == ["2w", "4w"] and result.compression_shadow == []
+
+
+def test_warm_up_candidates_before_the_window_are_never_counted():
+    context = _context(snapshot=IN_WINDOW)
+    engine = StrategyEngine([COMPRESSION_SHORT], compression_context=context)
+    after = str(SIGNAL_DAY + dt.timedelta(days=1))
+    trades = list(engine.iter_trades("ABC", FULL_PATH, COMPRESSION_SHORT, HZ, (after, "2026-12-31"), None))
+    assert trades == []
+    assert engine.compression_reasons == {} and engine.compression_reasons_by_mode == {}
+    inside, _ = _replay(FULL_PATH, context)
+    assert inside.compression_reasons == {"earnings_within_window": 1}
+
+
+def test_two_scans_of_one_completed_bar_record_and_count_one_candidate_and_fetch_once():
+    fetched, seen = [], set()
+
+    def earnings_of(ticker):
+        fetched.append(ticker)
+        return IN_WINDOW
+
+    first, _, _ = _live_pass(earnings_of=earnings_of, seen=seen)
+    second, _, _ = _live_pass(earnings_of=earnings_of, seen=seen)
+    assert len(first.compression_shadow) == 1 and first.compression_rejected == 1
+    assert second.compression_shadow == [] and second.compression_rejected == 0
+    assert second.compression_reasons_by_mode == {}
+    assert fetched == ["ABC"]                                  # the second scan never re-fetched
+
+
+def test_recorded_keys_survive_a_restart_through_the_shadow_file(tmp_path, monkeypatch):
+    from swingbot.core.backtesting import shadow_log
+    from swingbot.core.scanning import scan_run
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    live, _, _ = _live_pass()
+    scan_run._record_compression_shadow(live)
+    assert scan_run._compression_seen() == {("ABC", HZ, SIGNAL_DAY.isoformat())}
+    again, _, _ = _live_pass(seen=shadow_log.compression_recorded_keys())
+    assert again.compression_shadow == []
+
+
+def test_off_mode_scan_returns_zero_compression_funnel_keys(monkeypatch):
+    from swingbot.core.scanning import scan_run
+    monkeypatch.setattr(config, "STRATEGY_ALERTS_MODE", "off")
+    out = scan_run._maybe_run_strategy_pass(
+        tickers=[], fresh_data={}, spy_df=None, regimes=None, rs_cache=None, sector_of_ticker={},
+        etf_symbol_of_sector={}, sector_etf_frames={}, trade_log=None, alerts=[], require_confirmation=True)
+    assert out == {"strategy_plans": 0, "strategy_opened": 0, "compression_shadow": 0,
+                   "compression_rejected": 0}
+
+
+def test_tp1_parity_with_a_support_derived_from_the_as_of_window(monkeypatch):
+    """Not a constant: the support is computed from the window each path hands the builder, so a path
+    that fed a longer (look-ahead) window or a different bar would disagree."""
+    monkeypatch.setattr(levels_mod, "build_level_map", lambda window, *a, **k: (
+        [Level(price=round(float(window["Low"].iloc[-1]) - 0.57, 2), sources=["Swing low", "Pivot low"])], []))
+    shadow, _, _ = _live_pass()
+    live, _, _ = _live_pass(open_cell=True)
+    _, trades = _replay(FULL_PATH, _context())
+    expected = round(float(STOCK["Low"].iloc[-1]) - 0.57, 2)
+    assert live.plans[0].tp1 == trades[0][1].tp1 == shadow.compression_shadow[0]["plan"]["tp1"] == expected
+    assert expected != TARGET
+
+
+def test_the_signal_close_backtest_path_refuses_the_compression_short():
+    from swingbot.core.backtesting import backtest as bt
+    with pytest.raises(ValueError, match="StrategyEngine"):
+        bt.run_backtest("ABC", FULL_PATH, COMPRESSION_SHORT, HZ)
+    with pytest.raises(ValueError, match="StrategyEngine"):
+        bt._trade_plan_at(FULL_PATH, len(STOCK) - 1, "bearish", COMPRESSION_SHORT, HZ, None)
