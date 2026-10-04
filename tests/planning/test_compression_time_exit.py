@@ -146,6 +146,12 @@ def test_replay_target_on_the_tenth_bar_keeps_priority_over_the_time_close():
     assert (res.outcome, res.exit_index) == ("win", 14)
 
 
+def test_replay_data_ending_before_the_tenth_session_is_not_labelled_a_time_exit():
+    res = simulate_exit(_flat(n=10), 5, _short(entry_type="market"), scale_out=True)    # bars 6..9 only
+    assert res.outcome == "timeout" and res.exit_index == 9 < res.entry_index + 9
+    assert res.legs[0]["reason"] == "timeout" and "price_basis" not in res.legs[0]
+
+
 def test_replay_other_strategies_keep_their_bar_count():
     plan = _short(entry_type="market", strategy="Fibonacci")
     res = simulate_exit(_flat(), 5, plan, scale_out=True)

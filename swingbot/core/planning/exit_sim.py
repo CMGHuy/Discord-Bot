@@ -112,7 +112,8 @@ def _single_leg_exit_walk(
     if outcome == "timeout":
         exit_price, exit_index = float(close[end]), end
 
-    r, leg = _single_leg_booking(outcome, rr, exit_price, entry_price, sign, risk, plan)
+    r, leg = _single_leg_booking(outcome, rr, exit_price, entry_price, sign, risk, plan,
+                                entry_index, exit_index)
 
     return ExitResult(
         outcome=outcome,
@@ -129,7 +130,8 @@ _SINGLE_LEG_REASONS = {"win": "tp1", "loss": "stop", "scratch": "breakeven_stop"
 
 
 def _single_leg_booking(outcome: str, rr: float, exit_price: float, entry_price: float,
-                        sign: int, risk: float, plan: TradePlanV2) -> tuple[float, dict]:
+                        sign: int, risk: float, plan: TradePlanV2,
+                        entry_index: int, exit_index: int) -> tuple[float, dict]:
     """(rounded r, the one leg) of a single-leg walk's outcome."""
     r = {"win": rr, "loss": -1.0, "scratch": 0.0}.get(outcome)
     if r is None:                    # timeout: marked to the last scanned close
@@ -137,12 +139,20 @@ def _single_leg_booking(outcome: str, rr: float, exit_price: float, entry_price:
     r = round(r, 3)
     leg = {"fraction": 1.0, "exit_price": exit_price, "r": r,
            "reason": _SINGLE_LEG_REASONS.get(outcome, "timeout")}
-    if outcome == "timeout" and _is_compression(plan):
+    if outcome == "timeout" and _is_compression(plan) and _tenth_session_reached(plan, entry_index, exit_index):
         # v119: the compression short's timeout is the tenth-session paper
         # close; live prices it at the official auction, the replay at the
-        # bar's Close, and says so.
+        # bar's Close, and says so. A walk cut short by the end of the data
+        # (right-censored) keeps the plain "timeout" label and no price basis.
         leg["reason"], leg["price_basis"] = TIME_EXIT_REASON, PROXY_BASIS
     return r, leg
+
+
+def _tenth_session_reached(plan: TradePlanV2, entry_index: int, exit_index: int) -> bool:
+    """True only when the walk really ran to the plan's hold cap (fill session = session 1)."""
+    if plan.hold_cap_bars is None:
+        return True
+    return exit_index == entry_index + int(plan.hold_cap_bars) - 1
 
 
 def chandelier_stop(extreme_close_since_tp1: float, atr_value: float,
