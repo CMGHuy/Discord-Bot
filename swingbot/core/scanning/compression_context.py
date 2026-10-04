@@ -13,7 +13,7 @@ from __future__ import annotations
 import datetime as dt
 
 from swingbot.core.market import earnings_calendar as ec
-from swingbot.core.market.session import now_et
+from swingbot.core.market.session import RTH_CLOSE, now_et
 from swingbot.core.scanning.strategy_pass import completed_frame
 
 RETURN_WINDOW = 63
@@ -73,8 +73,24 @@ def _aware(value) -> bool:
     return value.tzinfo is not None and value.utcoffset() is not None
 
 
-def earnings_clear_for_ten_sessions(ticker, decision_at, snapshot, calendar) -> tuple[bool, str]:
-    """True only when a fresh, verified calendar shows no report reaction in sessions 1-10 after the signal.
+def _signal_day(decision_at, calendar, signal_bar_date):
+    """The last completed session at `decision_at`: the explicit bar date, else derived from the clock
+    (before the close of a session day the in-progress bar is excluded, so the signal bar is the prior session)."""
+    if signal_bar_date is not None:
+        return signal_bar_date
+    et = now_et(decision_at)
+    day = et.date()
+    if calendar.is_session(day) and et.time() < RTH_CLOSE:
+        day -= dt.timedelta(days=1)
+    earlier = calendar.sessions(calendar.first, day)
+    return earlier[-1] if earlier else None
+
+
+def earnings_clear_for_ten_sessions(ticker, decision_at, snapshot, calendar, *, signal_bar_date=None) -> tuple[bool, str]:
+    """True only when a fresh, verified calendar shows no report reaction in sessions 1-10 after the signal bar.
+
+    Sessions are counted from the signal bar (`signal_bar_date`, the last completed bar), never from the
+    decision date: an intraday or pre-open decision has today as session 1.
 
     NO-LOOKAHEAD: only `snapshot` as observed at or before `decision_at` is read; a
     snapshot observed later, a failed query, or a stale one never yields True.
@@ -85,7 +101,9 @@ def earnings_clear_for_ten_sessions(ticker, decision_at, snapshot, calendar) -> 
         return False, "earnings_unknown"
     if snapshot.observed_at > decision_at:
         return False, "earnings_stale"
-    signal_day = now_et(decision_at).date()
+    signal_day = _signal_day(decision_at, calendar, signal_bar_date)
+    if signal_day is None:
+        return False, "earnings_unknown"
     age = calendar.sessions_between(now_et(snapshot.observed_at).date(), signal_day)
     if age is None or age > MAX_SNAPSHOT_AGE_SESSIONS:
         return False, "earnings_stale"

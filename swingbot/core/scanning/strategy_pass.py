@@ -140,19 +140,20 @@ def _compression_context(ticker, strategy, frame, deps: _PassDeps):
     mode, reason = deps.compression_of(ticker, frame) if deps.compression_of else (None, "no_context")
     if mode is None:
         return {}, reason or "no_mode"
-    clear, why = _earnings_verdict(ticker, deps)
+    clear, why = _earnings_verdict(ticker, deps, frame.index[-1].date())
     if not clear:
         return {"compression_mode": mode}, why
     return {"compression_mode": mode, "compression_bar_date": frame.index[-1].date().isoformat()}, None
 
 
-def _earnings_verdict(ticker, deps: "_PassDeps") -> tuple[bool, str]:
+def _earnings_verdict(ticker, deps: "_PassDeps", signal_bar_date) -> tuple[bool, str]:
     """Fresh-earnings exclusion; fails closed when no snapshot source or decision time is wired."""
     from swingbot.core.market.session import nyse_calendar
     from swingbot.core.scanning.compression_context import earnings_clear_for_ten_sessions
     if deps.earnings_of is None or deps.now is None:
         return False, "earnings_unknown"
-    return earnings_clear_for_ten_sessions(ticker, deps.now, deps.earnings_of(ticker), nyse_calendar())
+    return earnings_clear_for_ten_sessions(ticker, deps.now, deps.earnings_of(ticker), nyse_calendar(),
+                                          signal_bar_date=signal_bar_date)
 
 
 def _goes_live(deps: _PassDeps, strategy: str) -> bool:

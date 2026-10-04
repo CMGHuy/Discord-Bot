@@ -241,6 +241,9 @@ def earnings_snapshot(ticker: str, *, now: dt.datetime | None = None) -> Earning
 
     A fund or spot metal is answered explicitly as `nonreporting_instrument`;
     a stock whose every fetch raised is `query_ok=False`, never an empty clear.
+
+    `now` is for live/test use only. It is NOT a historical as-of: never use it to
+    stamp a present-day fetch as past knowledge (that is lookahead).
     """
     observed = now if now is not None else dt.datetime.now(dt.timezone.utc)
     if _never_reports(ticker):

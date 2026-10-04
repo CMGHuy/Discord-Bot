@@ -50,6 +50,17 @@ def test_report_on_signal_day_after_close_reacts_session_one():
     assert gate("ABC", SIGNAL, _snap(_after_close(dt.date(2026, 9, 17))), CAL) == (False, "earnings_within_window")
 
 
+def test_preopen_decision_anchors_window_on_the_signal_bar_not_today():
+    thursday_bar, friday = dt.date(2026, 9, 17), dt.date(2026, 9, 18)
+    pre_open = dt.datetime(2026, 9, 18, 8, tzinfo=ET)  # signal bar is Thursday; Friday is session 1
+    snap = _snap(_before_open(friday), observed=pre_open)
+    assert gate("ABC", pre_open, snap, CAL, signal_bar_date=thursday_bar) == (False, "earnings_within_window")
+    assert gate("ABC", pre_open, snap, CAL) == (False, "earnings_within_window")  # derived from the clock
+    # session 11 from the Thursday bar is Friday 10-02: clear; anchoring on today would wrongly call it session 10
+    assert gate("ABC", pre_open, _snap(_before_open(SESSIONS[10]), observed=pre_open), CAL,
+                signal_bar_date=thursday_bar) == (True, "clear")
+
+
 def test_intraday_report_is_treated_conservatively():
     mid = dt.datetime.combine(SESSIONS[9], dt.time(12), tzinfo=ET)  # reaction session 10 or 11
     assert gate("ABC", SIGNAL, _snap(mid), CAL) == (False, "earnings_within_window")
