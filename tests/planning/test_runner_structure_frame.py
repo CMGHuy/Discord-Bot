@@ -34,6 +34,8 @@ def test_trend_ratios_equal_v121_scalars_at_every_bar():
     from swingbot.core.market import structure
     df = stall_frame()
     frame = runner_structure_frame(df)
+    for key in ("range_trend_10_50", "vol_trend_10_50"):
+        assert frame[key].iloc[:49].isna().all()
     for t in range(structure.MIN_BARS - 1, len(df)):
         scalar = structure.structure_features(df.iloc[:t + 1], "bullish")
         for key in ("range_trend_10_50", "vol_trend_10_50"):

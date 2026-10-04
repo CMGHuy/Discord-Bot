@@ -35,7 +35,7 @@ PIVOT_K = 3                                      # v121 frozen fractal width
 def _trend_ratio(series: pd.Series) -> pd.Series:
     """Per-bar mean(last SHORT_WINDOW) / mean(last LONG_WINDOW) -- the series
     form of v121's scalar _ratio_of_means. NaN before LONG_WINDOW bars; a zero
-    long mean gives inf/NaN, which no <= comparison passes."""
+    long mean gives NaN, which no <= comparison passes."""
     from swingbot.core.market import structure
     short = series.rolling(structure.SHORT_WINDOW).mean()
     long = series.rolling(structure.LONG_WINDOW).mean()
@@ -233,6 +233,76 @@ def runner_floor(entry: float, tp1: float) -> float:
     and this module's backtest walk must never drift apart.
     """
     return entry + RUNNER_FLOOR_FRACTION * (tp1 - entry)
+
+STALL_VOLUME_MAX = 1.0   # v123 frozen: volume ratio ceiling, not gridded
+
+
+def _post_entry(index, entry_index) -> bool:
+    return index == index and index > entry_index        # NaN-safe
+
+
+def _at_most(value, ceiling) -> bool:
+    return value == value and value <= ceiling           # NaN never passes
+
+
+def _pivot_cols(direction: str, swing: str) -> tuple[str, str, str, str]:
+    """(last idx, last px, prior idx, prior px) for 'trail' (the protective
+    swing) or 'progress' (the swing that should extend)."""
+    bull_low = (direction == "bullish") == (swing == "trail")
+    p = "sl" if bull_low else "sh"
+    return f"{p}_i", f"{p}_px", f"{p}_prev_i", f"{p}_prev_px"
+
+
+def structural_runner_stop(pivots_row, atr_value, b, direction, entry_index):
+    """v123 hl_trail candidate: the latest confirmed post-entry swing low
+    minus b x ATR (bearish: swing high plus). None without such a pivot.
+    Row j holds only pivots confirmed by j (index <= j - PIVOT_K)."""
+    idx, px, _, _ = _pivot_cols(direction, "trail")
+    if not _post_entry(pivots_row[idx], entry_index):
+        return None
+    sign = -1 if direction == "bullish" else 1
+    return float(pivots_row[px]) + sign * b * atr_value
+
+
+def prev_post_entry_pivot(pivots_row, direction, entry_index):
+    """The prior confirmed post-entry swing high (bearish: low), or None."""
+    _, _, prev_idx, prev_px = _pivot_cols(direction, "progress")
+    if not _post_entry(pivots_row[prev_idx], entry_index):
+        return None
+    return float(pivots_row[prev_px])
+
+
+def progress_stall_fires(pivots_row, prev_post_entry_sh, features_row, c, direction,
+                         entry_index, j) -> bool:
+    """v123 progress_stall at bar j: a post-entry swing high confirmed AT j
+    that fails to exceed the prior one, with range and volume both cooling."""
+    idx, px, _, _ = _pivot_cols(direction, "progress")
+    new_pivot = pivots_row[idx]
+    if not (_post_entry(new_pivot, entry_index) and int(new_pivot) == j - PIVOT_K):
+        return False
+    if prev_post_entry_sh is None:
+        return False
+    high = float(pivots_row[px])
+    failed = high <= prev_post_entry_sh if direction == "bullish" else high >= prev_post_entry_sh
+    return bool(failed and _at_most(features_row["range_trend_10_50"], c)
+                and _at_most(features_row["vol_trend_10_50"], STALL_VOLUME_MAX))
+
+
+def runner_structure_step(frame, j, *, entry_index, direction, runner_stop, atr_value):
+    """One completed runner bar under RUNNER_STRUCTURE_EXIT, shared by the
+    replay walk and plan_manager: (stop for bar j+1, stall fired at j)."""
+    mode, row = config.RUNNER_STRUCTURE_EXIT, frame.iloc[j]
+    if mode == "hl_trail":
+        cand = structural_runner_stop(row, atr_value, config.RUNNER_HL_TRAIL_ATR_BUFFER,
+                                      direction, entry_index)
+        if cand is None:
+            return runner_stop, False
+        return (max(runner_stop, cand) if direction == "bullish" else min(runner_stop, cand)), False
+    if mode == "progress_stall":
+        prev = prev_post_entry_pivot(row, direction, entry_index)
+        return runner_stop, progress_stall_fires(row, prev, row, config.RUNNER_STALL_RANGE_MAX,
+                                                 direction, entry_index, j)
+    return runner_stop, False
 
 
 @dataclass(frozen=True)
