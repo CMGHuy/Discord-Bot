@@ -1,7 +1,7 @@
 # v119 — First bearish compression release, 3–10-session SHORT plan
 
 **Version:** ui 1.21.0 · bot 1.12.1 (at writing)
-**Bump:** bot patch (only if the new alert and exit lifecycle ship)
+**Bump:** none (the strategy stays masked; no alert or exit lifecycle ships live)
 **Edge:** expectancy
 
 ## Correction and status
