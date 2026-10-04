@@ -125,3 +125,31 @@ def test_live_header_names_the_local_book(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(vcr, "load_live_trades", lambda: [])
     vcr.main(["--source", "live", "--edges", str(edges)])
     assert "local TradeLog book" in capsys.readouterr().out
+
+
+def test_replay_train_subwindow_refuses_the_default_edges_path(monkeypatch, capsys):
+    monkeypatch.setattr(vcr, "replay_all", lambda *a, **k: pytest.fail("computed"))
+    assert vcr.main(["--source", "replay", "--start", "2022-01-01"]) == 1
+    assert "refused" in capsys.readouterr().out
+
+
+def test_live_refuses_edges_not_built_from_the_full_train_window(tmp_path, monkeypatch, capsys):
+    edges = tmp_path / "edges.json"
+    edges.write_text('{"window": ["2022-01-01", "2023-12-31"], "edges": {}}', encoding="utf-8")
+    monkeypatch.setattr(vcr, "load_live_trades", lambda: pytest.fail("read the book"))
+    assert vcr.main(["--source", "live", "--edges", str(edges)]) == 1
+    assert "refused" in capsys.readouterr().out
+
+
+def test_continuous_key_without_edges_is_one_no_edges_bucket():
+    assert vcr.bucket_of(0.37, None, continuous=True) == "no-edges"
+    assert vcr.bucket_of(0.91, None, continuous=True) == "no-edges"
+    assert vcr.bucket_of(None, None, continuous=True) == "None"
+    rows = [_row("confluence", "bullish", "win", 1.0, vol_trend_10_50=v) for v in (0.1, 0.2)]
+    assert [line["bucket"] for line in vcr.bucket_table(rows, "vol_trend_10_50", None)] == ["no-edges"]
+
+
+@pytest.mark.parametrize("start,end", [("garbage", "2023-12-31"), ("2020-01-01", "2023-13-45"), ("2020", "2023-12-31"),
+                                       ("2021-1-5", "2023-12-31")])
+def test_window_refusal_rejects_unparseable_dates(start, end):
+    assert "refused" in vcr.window_refusal(start, end)

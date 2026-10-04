@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import date
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -43,7 +44,8 @@ QUINTILES = (0.2, 0.4, 0.6, 0.8)
 HEADER = ("v121 volume-in-context report -- DESCRIPTIVE ONLY. Not for choosing v122/v123 "
           "grid values (both frozen in their specs). No inferential statistic is printed.")
 LIVE_WARNING = ("source: local TradeLog book. --source live overlaps the 2026 holdout that open pre-registrations (v104) "
-                "are waiting on: monitoring only.")
+                "are waiting on: monitoring only. Live volume features may come from an in-progress (forming) bar, while "
+                "the TRAIN edges are built from completed bars.")
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,10 @@ class ReportRow:
 
 def window_refusal(start: str, end: str) -> str | None:
     """Replay may only read TRAIN; anything touching 2024-01-01+ is refused."""
+    try:
+        date.fromisoformat(start), date.fromisoformat(end)
+    except ValueError:
+        return f"refused: replay window {start}..{end} is not a pair of ISO dates"
     if start < TRAIN_START or end > TRAIN_END or start > end:
         return (f"refused: replay window {start}..{end} is outside TRAIN "
                 f"{TRAIN_START}..{TRAIN_END}")
@@ -74,11 +80,11 @@ def all_edges(rows) -> dict:
     return {key: quintile_edges(rows, key) for key in CONTINUOUS}
 
 
-def bucket_of(value, edges) -> str:
+def bucket_of(value, edges, *, continuous: bool = False) -> str:
     if value is None:
         return "None"
     if edges is None:
-        return str(value)
+        return "no-edges" if continuous else str(value)
     return f"Q{int(np.searchsorted(edges, float(value), side='right')) + 1}"
 
 
@@ -86,7 +92,7 @@ def bucket_table(rows, key: str, edges) -> list[dict]:
     """One line per (source, direction, bucket): N, win rate, ExpR."""
     groups: dict[tuple, list] = {}
     for row in rows:
-        bucket = bucket_of(row.context.get(key), edges)
+        bucket = bucket_of(row.context.get(key), edges, continuous=key in CONTINUOUS)
         groups.setdefault((row.source, row.direction, bucket), []).append(row)
     return [{"feature": key, "source": source, "direction": direction, "bucket": bucket,
              "n": len(members), "win_rate": acceptance.win_rate(members),
@@ -228,9 +234,10 @@ def _run_replay(args) -> tuple[list, dict] | None:
     if refusal:
         print(refusal)
         return None
-    if args.tickers and Path(args.edges).resolve() == DEFAULT_EDGES.resolve():
-        print("refused: a --tickers subset needs an explicit --edges path other than "
-              f"the default {DEFAULT_EDGES.name} (a subset must not overwrite the TRAIN edges)")
+    partial = bool(args.tickers) or (args.start, args.end) != (TRAIN_START, TRAIN_END)
+    if partial and Path(args.edges).resolve() == DEFAULT_EDGES.resolve():
+        print("refused: a --tickers subset or a TRAIN sub-window needs an explicit --edges path other than "
+              f"the default {DEFAULT_EDGES.name} (it must not overwrite the full-TRAIN edges)")
         return None
     from swingbot.core.backtesting.arms.windows import ALL_HORIZONS
     tickers = args.tickers.split(",") if args.tickers else cached_universe()
@@ -248,7 +255,12 @@ def _run_live(args) -> tuple[list, dict] | None:
     if not path.exists():
         print(f"refused: live needs TRAIN quintile edges at {path}; run --source replay first")
         return None
-    return live_rows(load_live_trades()), json.loads(path.read_text(encoding="utf-8"))["edges"]
+    blob = json.loads(path.read_text(encoding="utf-8"))
+    if list(blob.get("window") or ()) != [TRAIN_START, TRAIN_END]:
+        print(f"refused: edges at {path} were built from window {blob.get('window')}, "
+              f"not the full TRAIN {TRAIN_START}..{TRAIN_END}")
+        return None
+    return live_rows(load_live_trades()), blob["edges"]
 
 
 def main(argv=None) -> int:

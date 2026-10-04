@@ -248,10 +248,18 @@ def test_swing_distances_bearish_mirror_frame():
 
 @pytest.mark.parametrize("direction", ["bullish", "bearish"])
 def test_features_are_truncation_stable(direction):
+    """Bars after n must not change what n bars knew: scrambling them leaves the
+    features alone, and the full-frame pivot table agrees with the truncated one."""
     from tests.market.structure_fixtures import wavy_frame
-    df = wavy_frame()
+    full = wavy_frame()
     for n in (120, 200, 260):
-        assert st.structure_features(df.iloc[:n], direction) ==             st.structure_features(df.iloc[:n].copy(), direction)
-        future_scrambled = df.iloc[:n + 30].copy()
-        future_scrambled.iloc[n:] = future_scrambled.iloc[n:] * 3
-        assert st.structure_features(future_scrambled.iloc[:n], direction) ==             st.structure_features(df.iloc[:n], direction)
+        truncated = st.structure_features(full.iloc[:n], direction)
+        scrambled = full.copy()
+        scrambled.iloc[n:] = scrambled.iloc[n:].to_numpy()[::-1] * 3
+        assert st.structure_features(scrambled.iloc[:n], direction) == truncated
+        pivots = st.confirmed_pivots(full)
+        assert pivots.iloc[:n].equals(st.confirmed_pivots(full.iloc[:n]))
+        row = pivots.iloc[n - 1]
+        close, atr14 = float(full["Close"].iloc[n - 1]), float(atr(full, 14).iloc[n - 1])
+        assert truncated["swing_high_atr"] == pytest.approx((row["last_sh"] - close) / atr14, abs=1e-5)
+        assert truncated["swing_low_atr"] == pytest.approx((close - row["last_sl"]) / atr14, abs=1e-5)
