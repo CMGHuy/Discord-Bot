@@ -59,7 +59,8 @@ def runner_structure_frame(df) -> pd.DataFrame:
 @dataclass
 class ExitResult:
     outcome: str                 # "win"|"loss"|"scratch"|"timeout"|"not_triggered"|"no_trade"
-    runner_outcome: str | None   # "runner_tp2"|"runner_trail"|"runner_be"|"runner_timeout"|None
+    runner_outcome: str | None   # "runner_tp2"|"runner_trail"|"runner_be"|"runner_timeout"|
+                                 # "runner_progress_stall"|None
     entry_index: int | None
     exit_index: int | None
     entry_price: float | None
@@ -317,6 +318,7 @@ class _WalkCtx:
     sign: int
     risk: float
     end: int
+    open_: object
 
 
 def _no_trade(entry_index, entry_price) -> ExitResult:
@@ -402,14 +404,20 @@ def _runner_timeout(ctx, checked_stop) -> float:
     return max(exit_px, checked_stop) if ctx.is_bull else min(exit_px, checked_stop)
 
 
-def _runner_phase(df, ctx, tp1_index):
-    """Phase 2: (exit price, exit index, runner reason) for the post-TP1 leg."""
+def _runner_phase(df, ctx, tp1_index, trace=None):
+    """Phase 2: (exit price, exit index, runner reason) for the post-TP1 leg.
+    v123: a structure rule (RUNNER_STRUCTURE_EXIT) updates after the chandelier,
+    from this bar's close, effective next bar; a stall exits at the next open."""
     from swingbot.core.market.indicators import atr as atr_indicator
     floor = runner_floor(ctx.entry_price, ctx.plan.tp1)
     runner_stop = checked_stop = floor
     extreme_close = float(ctx.close[tp1_index])
     atr_series = atr_indicator(df, 14)
+    frame = runner_structure_frame(df) if config.RUNNER_STRUCTURE_EXIT != "off" else None
+    stall_pending = False
     for j in range(tp1_index + 1, ctx.end + 1):
+        if stall_pending:                            # the open comes first
+            return float(ctx.open_[j]), j, "runner_progress_stall"
         checked_stop = runner_stop
         hit = _runner_bar_exit(ctx, j, runner_stop, floor)
         if hit is not None:
@@ -417,7 +425,21 @@ def _runner_phase(df, ctx, tp1_index):
         c = float(ctx.close[j])
         extreme_close = max(extreme_close, c) if ctx.is_bull else min(extreme_close, c)
         runner_stop = _chandelier_ratchet(ctx, j, extreme_close, runner_stop, atr_series)
+        if frame is not None:
+            runner_stop, stall_pending = _structure_update(ctx, frame, j, runner_stop, atr_series)
+        if trace is not None:
+            trace.append((j, runner_stop))
     return _runner_timeout(ctx, checked_stop), ctx.end, "runner_timeout"
+
+
+def _structure_update(ctx, frame, j, runner_stop, atr_series):
+    """runner_structure_step for bar j; a stall on the last walked bar is dropped
+    so the timeout handles it (no bar j+1 inside the holding window)."""
+    atr_val = _safe_atr_value(ctx.entry_price, float(atr_series.iloc[j]))
+    stop, fires = runner_structure_step(frame, j, entry_index=ctx.entry_index,
+                                        direction=ctx.plan.direction,
+                                        runner_stop=runner_stop, atr_value=atr_val)
+    return stop, fires and j < ctx.end
 
 
 def _runner_result(ctx, runner) -> ExitResult:
@@ -436,6 +458,7 @@ def _runner_result(ctx, runner) -> ExitResult:
 
 def _scale_out_exit_walk(
     df, entry_index: int, entry_price: float, plan: TradePlanV2, max_holding_days: int,
+    *, trace=None,
 ) -> ExitResult:
     """Hybrid scale-out walk (spec Sec5). Phase 1 (pre-TP1) is byte-identical
     to _single_leg_exit_walk when the stall-exit flag is off; a stop/scratch/
@@ -454,11 +477,11 @@ def _scale_out_exit_walk(
     is_bull = plan.direction == "bullish"
     ctx = _WalkCtx(df["High"].values, df["Low"].values, df["Close"].values, entry_index,
                    entry_price, plan, is_bull, 1 if is_bull else -1, risk,
-                   min(entry_index + max_holding_days, len(df) - 1))
+                   min(entry_index + max_holding_days, len(df) - 1), df["Open"].values)
     pre = _pre_tp1_phase(ctx)
     if isinstance(pre, ExitResult):
         return pre
-    return _runner_result(ctx, _runner_phase(df, ctx, pre))
+    return _runner_result(ctx, _runner_phase(df, ctx, pre, trace))
 
 
 def _walk_for(plan: TradePlanV2, scale_out: bool):
