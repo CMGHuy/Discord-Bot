@@ -59,6 +59,24 @@ def test_hl_stop_is_hit_on_a_drop_through_the_swing_low(monkeypatch):
     assert base.runner_outcome == "runner_timeout"
     assert arm.runner_outcome == "runner_trail" and arm.exit_index == len(df) - 1
     assert arm.outcome == base.outcome == "win"
+    assert arm.legs[1]["exit_price"] == pytest.approx(runner_structure_frame(df)["sl_px"].iloc[-1])
+
+
+def test_pivot_never_moves_the_stop_its_confirmation_bar_is_checked_against(monkeypatch):
+    """Confirmation is non-strict on the right: bar confirm's Low may EQUAL the
+    pivot low. With b = 0 the new stop equals that Low, so applying the update
+    before bar confirm's own hit check would exit runner_trail there."""
+    _mode(monkeypatch, "hl_trail", b=0.0)
+    df = sawtooth(4)
+    pivot = WARMUP + 6
+    confirm = pivot + 3
+    df.iloc[confirm, df.columns.get_loc("Low")] = df["Low"].iloc[pivot]
+    frame = runner_structure_frame(df)
+    assert frame["sl_i"].iloc[confirm] == pivot                       # confirms at this bar
+    assert frame["sl_px"].iloc[confirm] == df["Low"].iloc[confirm]    # stop would touch it
+    res = _scale_out_exit_walk(df, E, 100.0, _runner_plan(), 60)
+    assert not (res.runner_outcome == "runner_trail" and res.exit_index == confirm)
+    assert res.exit_index > confirm
 
 
 def _stall_j(df):
@@ -69,6 +87,14 @@ def _stall_j(df):
     j = hits[0]
     assert frame["range_trend_10_50"].iloc[j] <= 0.70 and frame["vol_trend_10_50"].iloc[j] <= 1.0
     return j
+
+
+def test_off_mode_never_stalls(monkeypatch):
+    df = stall_frame()
+    _stall_j(df)
+    _mode(monkeypatch, "off", c=0.70)
+    res = _scale_out_exit_walk(df, E, 100.0, _runner_plan(), 60)
+    assert res.runner_outcome == "runner_timeout" and res.exit_index == len(df) - 1
 
 
 def test_stall_exits_at_next_open(monkeypatch):
