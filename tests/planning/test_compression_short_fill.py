@@ -11,6 +11,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import pandas as pd
+import pytest
 
 from swingbot.core.market.strategy_types import COMPRESSION_SHORT
 from swingbot.core.planning.exit_sim import simulate_exit
@@ -113,7 +114,7 @@ def test_unfilled_next_session_expires_in_both_paths_with_cancel_instruction():
 def test_live_does_not_expire_or_fill_on_the_holiday_between_signal_and_next_session():
     plan, events = _live(99.0, day=(2026, 11, 26))    # Thanksgiving, no session
     assert events == [] and plan.status == PlanStatus.PENDING
-    plan, events = _live(100.4, hour=15, minute=59)   # eligible session, still open
+    plan, events = _live(100.4, hour=12, minute=59)   # eligible half-day, still open
     assert events == [] and plan.status == PlanStatus.PENDING
 
 
@@ -143,3 +144,66 @@ def test_exit_result_cancel_reason_defaults_to_none():
     plan = _plan(direction="bearish", entry_type="stop_entry", trigger_price=100.0,
                  stop_loss=110.0, tp1=90.0, tp1_fraction=1.0, tp2=None, expiry_bars=1)
     assert simulate_exit(df, 0, plan, scale_out=True).cancel_reason is None
+
+
+def test_compression_shape_pins_one_session_expiry():
+    # The live window ignores plan.expiry_bars, so the shape must stay at 1.
+    from swingbot.core.planning.builders import plan_shape_for
+    assert plan_shape_for(COMPRESSION_SHORT)["expiry_bars"] == 1
+
+
+def test_half_day_window_closes_at_13_not_16():
+    # 2026-11-27 (day after Thanksgiving) is a 13:00 ET early close.
+    plan, events = _live(100.4, hour=12, minute=55)
+    assert events == [] and plan.status == PlanStatus.PENDING
+    plan, events = _live(100.4, hour=13, minute=5)
+    assert [e.transition for e in events] == ["cancelled_expired"]
+    assert events[0].detail["expires_at"].startswith("2026-11-27T13:00:00")
+
+
+def test_session_close_table():
+    import datetime as dt
+    from swingbot.core.market.session import session_close
+    assert session_close(dt.date(2026, 11, 27)) == dt.time(13, 0)
+    assert session_close(dt.date(2026, 12, 24)) == dt.time(13, 0)
+    assert session_close(dt.date(2023, 7, 3)) == dt.time(13, 0)
+    assert session_close(dt.date(2026, 11, 30)) == dt.time(16, 0)
+    assert session_close(dt.date(2026, 11, 20)) == dt.time(16, 0)   # Fri, not after Thanksgiving
+
+
+def test_expiry_missed_in_quiet_hours_is_delivered_once_next_morning():
+    feed = FakePriceFeed([("AAPL", 100.4)])
+    store = PlanStore()
+    store.add(_short())
+    mgr = PlanManager(store, feed.get_price)
+    morning = datetime(2026, 11, 30, 8, 0, tzinfo=ZoneInfo("Europe/Berlin"))
+    events = mgr.poll(now=morning)
+    assert [e.transition for e in events] == ["cancelled_expired"]
+    assert events[0].detail["expires_at"].startswith("2026-11-27T13:00:00")
+    mgr.poll(now=morning)                    # a second tick must not re-cancel
+    history = store.get("p1").status_history
+    assert [h["status"] for h in history].count(PlanStatus.CANCELLED) == 1
+
+
+@pytest.mark.parametrize("created_at", ["2026-11-25", "2026-11-25T00:00:00+00:00",
+                                        "2026-11-26T01:00:00+00:00"])
+def test_signal_day_from_created_at_forms(created_at):
+    # Date-only, UTC-midnight and a late-evening-ET UTC stamp (Nov 25 20:00 ET)
+    # all mean signal day 11-25 -> eligible session 11-27.
+    plan, events = _live(99.0, plan=_short(created_at=created_at), day=(2026, 11, 26))
+    assert events == [] and plan.status == PlanStatus.PENDING
+    plan, events = _live(TRIGGER, plan=_short(created_at=created_at))
+    assert [e.transition for e in events] == ["filled"]
+
+
+def test_live_risk_cap_history_reason_is_risk_cap():
+    gap_open = STOP / (1 + plan_stop_ceiling(_short()) / 100.0) - 1.0
+    plan, _ = _live(gap_open)
+    assert plan.status_history[-1]["reason"] == "risk_cap"
+
+
+def test_fill_bar_exit_gap_through_stop_is_a_flat_scratch():
+    from swingbot.core.planning.exit_sim import _fill_bar_exit
+    df = _frame((102.0, 102.5, 101.5, 102.0))
+    res = _fill_bar_exit(df, 1, 101.5, _short())      # fill at/beyond the 101 stop
+    assert res.outcome == "scratch" and res.r_total == 0.0

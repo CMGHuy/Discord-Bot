@@ -14,9 +14,9 @@ from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 
 from swingbot import config
-from swingbot.core.market.session import (RTH_CLOSE, RTH_OPEN, US_MARKET_TZ, is_quiet_hours,
+from swingbot.core.market.session import (RTH_OPEN, US_MARKET_TZ, is_quiet_hours,
                                           is_regular_session, is_tape_open, now_et,
-                                          nyse_calendar, session_date)
+                                          nyse_calendar, session_close, session_date)
 from swingbot.core.market.strategy_types import COMPRESSION_SHORT
 from swingbot.core.risk_limits import planned_loss_pct
 from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
@@ -555,16 +555,24 @@ class PlanManager:
         regular session, the first NYSE session after the signal day (counted on
         the session calendar, so a holiday in between is not an expiry). None =
         the eligible session is open, run the normal fill checks; a list (maybe
-        empty) = nothing further to do this poll."""
+        empty) = nothing further to do this poll.
+
+        The window ends at the eligible session's official close (13:00 ET on a
+        half-day, see session_close). Delivery of the expiry is at-least-once
+        and may be delayed to the next poll that runs with a price (quiet hours
+        or a missing quote); ``expires_at`` still records the real close. The
+        plan turns CANCELLED on that poll, so the event is emitted once, and
+        the pending notice is re-sent until acknowledged."""
         eligible = _eligible_session(plan)
         if eligible is None:
             return None
         et = now_et(now)
+        close = session_close(eligible)
         if et.date() < eligible or (et.date() == eligible and et.time() < RTH_OPEN):
             return []                    # same-bar / pre-open prints never fill
-        if et.date() == eligible and et.time() < RTH_CLOSE:
+        if et.date() == eligible and et.time() < close:
             return None
-        closed_at = datetime.combine(eligible, RTH_CLOSE, tzinfo=US_MARKET_TZ).isoformat()
+        closed_at = datetime.combine(eligible, close, tzinfo=US_MARKET_TZ).isoformat()
         record_transition(plan, PlanStatus.CANCELLED, reason="expired", at=closed_at)
         self.store.update(plan)
         return [PlanEvent(plan.plan_id, "cancelled_expired", {
