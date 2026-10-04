@@ -27,11 +27,12 @@ from swingbot import config
 from swingbot.core.backtesting import backtest as bt
 from swingbot.core.backtesting.acceptance import arm_trade_from_plan
 from swingbot.core.backtesting.arms.confluence_engine import SKIPPED
+from swingbot.core.edge import gates
 from swingbot.core.market import entry_filters
 from swingbot.core.market.levels import build_level_map
 from swingbot.core.market.strategy_types import COMPRESSION_SHORT, HORIZONS, MIN_BARS
 from swingbot.core.planning.builders import build_strategy_plan
-from swingbot.core.planning.plan_engine import exit_params_for, simulate_exit
+from swingbot.core.planning.plan_engine import TradePlanV2, exit_params_for, simulate_exit
 
 # ExitResult.cancel_reason -> the scan-level reason it is counted under.
 _CANCEL_REASONS = {"expired": "expired", "risk_cap": "gap_risk_cancel", "invalidated": "invalidated"}
@@ -226,10 +227,10 @@ class StrategyEngine:
                 if counted:
                     self._count(stamp, reason)
                 return None, stamp
-        plan = build_strategy_plan(
+        plan = self._gated_plan(
             window, index, ticker=ticker, strategy=strategy,
             horizon_key=horizon_key, direction=direction,
-            level_map=level_map, scan_params=params,
+            level_map=level_map, params=params,
         )
         if plan is None:
             if counted:
@@ -238,6 +239,18 @@ class StrategyEngine:
         if stamp:
             plan.entry_context = {**(plan.entry_context or {}), **stamp}
         return plan, stamp
+
+    @staticmethod
+    def _gated_plan(window, index, *, ticker, strategy, horizon_key, direction,
+                    level_map, params) -> TradePlanV2 | None:
+        """Admit the signal on completed bars through index before constructing its plan."""
+        if gates.pullback_dryup_blocks(window, direction, source="strategy", strategy=strategy):
+            return None
+        return build_strategy_plan(
+            window, index, ticker=ticker, strategy=strategy,
+            horizon_key=horizon_key, direction=direction,
+            level_map=level_map, scan_params=params,
+        )
 
     def _skipped(self, result, strategy, stamp, counted=True) -> bool:
         """Whether the walk produced no scored trade; a compression row says why (expiry, gap-risk...)."""

@@ -12,6 +12,7 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 
 from swingbot import config
+from swingbot.core.edge import gates as edge_gates
 from swingbot.core.market import levels
 from swingbot.core.market.chart_patterns import dead_cat_bounce
 from swingbot.core.planning.plan_engine import build_confluence_plan, primary_strategy_for, simulate_exit
@@ -70,6 +71,11 @@ def levels_asof(ticker: str, df, bar_index: int, horizon_key: str, cache: dict):
     result = levels.build_level_map(window, HORIZONS[horizon_key], price)
     cache[key] = result
     return result
+
+
+def _dryup_kept(scenarios, window) -> list:
+    """Admit scenarios on the completed as-of window before planning or cooldown."""
+    return edge_gates.filter_pullback_dryup(scenarios, window)[0]
 
 
 def replay_scenarios(ticker: str, df, horizon_key: str, *, params: ScanParams | None = None,
@@ -134,6 +140,7 @@ def replay_scenarios(ticker: str, df, horizon_key: str, *, params: ScanParams | 
             min_risk_reward=gates["min_risk_reward"],
             block_bullish=block_bullish)
 
+        scenarios = _dryup_kept(scenarios, window)
         for sc in scenarios:
             n_confl, families = levels.count_confirming_strategies(
                 window, h, price, sc.take_profit, tolerance_pct=5.0)
