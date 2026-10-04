@@ -167,7 +167,7 @@ _BARE_PYTEST_RE = re.compile(r"python\s+-m\s+pytest\s*(-\w+\s*)*$")
 _BIG_DOCS = {
     "README.md": "README.md is a short overview + documentation index. Read the "
                  "topic file it points at instead -- docs/strategy/strategy.md, "
-                 "docs/setup.md, docs/commands.md, docs/features/features.md.",
+                 "docs/guides/setup.md, docs/guides/commands.md, docs/features/features.md.",
     "progress.md": "progress.md is 173 KB -- read only its tail (`tail` it, or Read "
                    "with an offset), never the whole file.",
 }
