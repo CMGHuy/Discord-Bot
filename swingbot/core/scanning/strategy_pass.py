@@ -13,6 +13,7 @@ from swingbot.core.planning.params import stamp_badge, stamp_cohort, stamp_entry
 from swingbot.core.planning.stop_scope import risk_sizing_ok
 from swingbot.core.tracking import ledger as ledger_mod
 from swingbot.core.edge.rs_gate import rs_verdict
+from swingbot.core.edge.gates import PULLBACK_VOLUME_REASON, pullback_dryup_blocks
 from swingbot.core.scanning.alert_embeds import (build_strategy_alert_embed,
                                                  build_strategy_simple_embed)
 
@@ -88,6 +89,7 @@ class PassResult:
     # "<mode>:<reason>" (mode broad|isolated|none), the broad/isolated split of compression_reasons.
     compression_reasons_by_mode: Counter = field(default_factory=Counter)
     compression_shadow: list = field(default_factory=list)  # audit records of the masked raw signal
+    pullback_volume: int = 0
 
 
 @dataclass
@@ -217,6 +219,15 @@ def _count_plan_none(result: PassResult, frame, strategy, horizon, stamp: dict) 
         _count_compression_reject(result, stamp, compression_rejection_reason(frame, len(frame) - 1, horizon))
 
 
+def _dryup_blocked(frame, *, ticker, strategy, direction, horizon) -> bool:
+    """Reject scoped pullbacks using the pass's completed daily frame."""
+    if not pullback_dryup_blocks(frame, direction, source="strategy", strategy=strategy):
+        return False
+    log.debug("%s (%s, %s, %s): rejected %s", ticker, horizon, strategy,
+              direction, PULLBACK_VOLUME_REASON)
+    return True
+
+
 def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, horizon,
                  bar_date, regime, deps: _PassDeps) -> None:
     """Store and, when eligible, alert one fired strategy signal."""
@@ -225,6 +236,9 @@ def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, hori
         return
     if _rs_blocked(ticker, direction, deps.rs_combined_of):
         result.rs_blocked += 1
+        return
+    if _dryup_blocked(frame, ticker=ticker, strategy=strategy, direction=direction, horizon=horizon):
+        result.pullback_volume += 1
         return
     stamp, reject_reason = _compression_context(ticker, strategy, frame, deps)
     if reject_reason:
