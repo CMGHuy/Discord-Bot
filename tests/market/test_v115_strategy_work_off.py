@@ -19,6 +19,7 @@ FLAGS_OFF = [
     ("v92", "ADAPTIVE_RUNNER_TRAIL_ENABLED", False),
     ("v92", "DATA_DRIVEN_STOPS_ENABLED", False),
     ("v92", "STALL_EXIT_ENABLED", False),
+    ("v123", "RUNNER_STRUCTURE_EXIT", "off"),
     ("v103", "FIB_LEVEL_STOP_ATR", 0.0),
     ("v103", "FIB_LEVEL_STOP_DIRECTIONS", ""),
     ("v104", "STRUCTURAL_STOP_SCOPE", ""),

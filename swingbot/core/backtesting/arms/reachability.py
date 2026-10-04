@@ -33,6 +33,8 @@ def _outside(reason):
     return Reach(OUTSIDE_REPLAY, reason)
 
 
+_V123 = "v123: the runner walk does not read this yet (wired in V123-5, reclassified in V123-10)."
+
 _OPEX = "OPEX adjustment needs the calendar-aware live scan date path; replay has no OPEX-date input."
 _RS = "Relative strength is cross-sectional and evaluated in scanning/engine.py, which no replay runs."
 _DCB = "Measured through its dedicated DCB harness (replay_scenarios takes dcb_params, not config)."
@@ -89,6 +91,9 @@ REGISTRY: dict[str, Reach] = {
     "SCALE_OUT_ENABLED": _outside("Engines always simulate scale_out=True; switch is not a replay dimension."),
     "DEAD_CAT_BOUNCE_VETO": _outside(_DCB), "DCB_DECLINE_PCT": _outside(_DCB),
     "DCB_GAP_REQUIRED": _outside(_DCB), "DCB_VOLUME_RATIO": _outside(_DCB),
+    "RUNNER_STRUCTURE_EXIT": _outside(_V123),
+    "RUNNER_HL_TRAIL_ATR_BUFFER": _outside(_V123),
+    "RUNNER_STALL_RANGE_MAX": _outside(_V123),
 }
 
 
