@@ -6,7 +6,9 @@ At signal bar ``i`` the constructor receives only ``df.iloc[:i + 1]``;
 The v119 compression short is research-only here: it runs when a
 ``CompressionResearchContext`` is supplied or the research knob
 ``COMPRESSION_SHORT_RESEARCH_MODE`` is not ``off``, under a scoped ``gate_override``
-of its own ("bearish", "2w") cell -- the global mask is never mutated -- and every
+of its own ("bearish", "2w") cell -- ``gate_override`` temporarily writes the
+process-wide ``STRATEGY_GATES`` entry and restores it in a ``finally``, so this is
+for offline scripts and tests only, never a live scan thread -- and every
 candidate passes the same pre-entry decision the live pass calls
 (``compression_context.decide_compression_entry``). Under the knob only that one
 weakness mode is admitted, so a broad run and an isolated run are separate cohorts.

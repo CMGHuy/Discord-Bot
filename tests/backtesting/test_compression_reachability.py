@@ -221,19 +221,12 @@ def test_research_override_is_scoped_and_admits_only_the_bearish_2w_cell(monkeyp
 
 # -- one full path through both channels -------------------------------------------------
 
-def test_full_path_live_and_replay_agree_on_plan_and_the_tenth_session_exit(monkeypatch):
-    assert bool(compression_short_frame(STOCK, HZ)["signal"].iloc[-1])
-
-    shadow, _, _ = _live_pass()                                  # mask closed: raw signal, audit plan only
-    (record,) = shadow.compression_shadow
-    live, store, log = _live_pass(open_cell=True)                # the cell opened, scoped to this scan
-    assert (live.compression_rejected, live.alerts, log.opened) == (0, [], [])
-    (live_plan,) = live.plans
+def _assert_shadow_matches_live_plan(record, live_plan):
     assert (record["plan"]["trigger_price"], record["plan"]["stop_loss"], record["plan"]["tp1"]) == \
            (live_plan.trigger_price, live_plan.stop_loss, live_plan.tp1)
-    engine, trades = _replay(FULL_PATH, _context())
-    ((date, replay_plan, result),) = trades
 
+
+def _assert_live_and_replay_plans_agree(live_plan, replay_plan, date):
     assert live_plan.entry_context["compression_mode"] == replay_plan.entry_context["compression_mode"] == "broad"
     assert live_plan.entry_context["compression_bar_date"] == replay_plan.entry_context["compression_bar_date"] \
         == SIGNAL_DAY.isoformat() == date
@@ -244,14 +237,16 @@ def test_full_path_live_and_replay_agree_on_plan_and_the_tenth_session_exit(monk
            (replay_plan.expiry_bars, replay_plan.hold_cap_bars, replay_plan.tp2, replay_plan.tp1_fraction) == \
            (1, 10, None, 1.0)
 
-    # replay exit: filled on session 1, neither stop nor target, closes on the tenth session
+
+def _assert_replay_exits_on_the_tenth_session(result):
+    """Filled on session 1, neither stop nor target, closes on the tenth session."""
     fill_index = FULL_PATH.index.get_loc(pd.Timestamp(FILL_DAY))
     assert result.entry_index == fill_index and result.outcome == "timeout"
     assert FULL_PATH.index[result.exit_index].date() == TENTH == te.tenth_session(FILL_DAY, CAL)
     assert result.legs[-1]["reason"] == "time_exit" and result.legs[-1]["price_basis"] == "daily_close_proxy"
 
-    # live: the same plan through PlanManager, official-auction close at the tenth session
-    events, live_after = _live_lifecycle(monkeypatch, live_plan, fill_price=95.94, hold_price=95.90)
+
+def _assert_live_closes_at_the_official_auction(events, live_after, result):
     (filled,) = _only(events, "filled")
     assert filled.detail["entry_price"] == result.entry_price == 95.94
     (closed,) = _only(events, "closed")
@@ -260,6 +255,24 @@ def test_full_path_live_and_replay_agree_on_plan_and_the_tenth_session_exit(monk
     assert datetime.fromisoformat(leg["closed_at"]).astimezone(ET).date() == TENTH
     assert leg["price_basis"] == "official_auction"
     assert live_after.status == "CLOSED"
+
+
+def test_full_path_live_and_replay_agree_on_plan_and_the_tenth_session_exit(monkeypatch):
+    assert bool(compression_short_frame(STOCK, HZ)["signal"].iloc[-1])
+
+    shadow, _, _ = _live_pass()                                  # mask closed: raw signal, audit plan only
+    (record,) = shadow.compression_shadow
+    live, store, log = _live_pass(open_cell=True)                # the cell opened, scoped to this scan
+    assert (live.compression_rejected, live.alerts, log.opened) == (0, [], [])
+    (live_plan,) = live.plans
+    _assert_shadow_matches_live_plan(record, live_plan)
+    engine, trades = _replay(FULL_PATH, _context())
+    ((date, replay_plan, result),) = trades
+    _assert_live_and_replay_plans_agree(live_plan, replay_plan, date)
+    _assert_replay_exits_on_the_tenth_session(result)
+    # live: the same plan through PlanManager, official-auction close at the tenth session
+    events, live_after = _live_lifecycle(monkeypatch, live_plan, fill_price=95.94, hold_price=95.90)
+    _assert_live_closes_at_the_official_auction(events, live_after, result)
 
 
 # -- the second: expiry --------------------------------------------------------------------------
