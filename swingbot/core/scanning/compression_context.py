@@ -11,9 +11,10 @@ last completed date. A later sector/SPY bar can never change today's mode.
 from __future__ import annotations
 
 import datetime as dt
+from zoneinfo import ZoneInfo
 
 from swingbot.core.market import earnings_calendar as ec
-from swingbot.core.market.session import RTH_CLOSE, now_et
+from swingbot.core.market.session import RTH_CLOSE, nyse_calendar, now_et
 from swingbot.core.scanning.strategy_pass import completed_frame
 
 RETURN_WINDOW = 63
@@ -84,6 +85,66 @@ def _signal_day(decision_at, calendar, signal_bar_date):
         day -= dt.timedelta(days=1)
     earlier = calendar.sessions(calendar.first, day)
     return earlier[-1] if earlier else None
+
+
+COMPRESSION_MODES = ("broad", "isolated")
+
+
+def decision_time_for(bar_date: dt.date) -> dt.datetime:
+    """The replay's decision instant for a signal bar: 17:00 ET on its own date, after the close
+    (the live scan decides after the same completed bar; the bar is complete, the next is unseen)."""
+    return dt.datetime.combine(bar_date, dt.time(17), tzinfo=ZoneInfo("America/New_York"))
+
+
+def compression_mode_for(stock, spy, sector, *, now) -> tuple[str | None, str | None]:
+    """compression_mode with the SPY regime read from SPY's completed bars up to the stock's last date.
+
+    Fails closed (None, reason) when SPY has too little history for a regime.
+    NO-LOOKAHEAD: SPY is cut to the stock's last completed date before the regime is read.
+    """
+    stock_done = completed_frame(stock, now)
+    spy_done = completed_frame(spy, now)
+    if stock_done is None or len(stock_done) == 0 or spy_done is None or len(spy_done) == 0:
+        return compression_mode(stock, spy, sector, now=now, spy_regime=None)
+    from swingbot import config
+    from swingbot.core.scanning.regime import get_market_regime
+    try:
+        regime = get_market_regime(_upto(spy_done, stock_done.index[-1]), config.MARKET_REGIME_TICKER)
+    except ValueError:
+        return None, "spy_regime_unavailable"
+    return compression_mode(stock, spy, sector, now=now, spy_regime=regime)
+
+
+def decide_compression_entry(ticker, frame, *, mode, mode_reason, snapshot, now, calendar=None,
+                             allowlist=COMPRESSION_MODES) -> tuple[dict, str | None]:
+    """THE pre-entry decision, called before build_strategy_plan by the live pass and the research
+    replay alike: (stamp, None) to build a plan, or (stamp, reason) to reject it.
+
+    `mode`/`mode_reason` are compression_mode's verdict; the stamp carries the mode (and the signal bar
+    date once admitted) onto the plan. A rejection after the mode is known still carries the mode, so the
+    caller can split its counters broad/isolated. No timestamp or snapshot means no admission.
+    """
+    if mode is None:
+        return {}, mode_reason or "no_mode"
+    if mode not in allowlist:
+        return {}, "mode_not_allowed"
+    stamp = {"compression_mode": mode}
+    bar_date = frame.index[-1].date()
+    if now is None:
+        return stamp, "earnings_unknown"
+    clear, why = earnings_clear_for_ten_sessions(
+        ticker, now, snapshot, calendar or nyse_calendar(), signal_bar_date=bar_date)
+    if not clear:
+        return stamp, why
+    return {**stamp, "compression_bar_date": bar_date.isoformat()}, None
+
+
+def compression_candidate_decision(ticker, stock, spy, sector, snapshot, *, now, calendar=None,
+                                   allowlist=COMPRESSION_MODES) -> tuple[dict, str | None]:
+    """Mode selection plus the shared decision, from raw frames: the research replay's entry point."""
+    mode, why = compression_mode_for(stock, spy, sector, now=now)
+    return decide_compression_entry(ticker, completed_frame(stock, now), mode=mode, mode_reason=why,
+                                    snapshot=snapshot, now=now, calendar=calendar, allowlist=allowlist)
 
 
 def earnings_clear_for_ten_sessions(ticker, decision_at, snapshot, calendar, *, signal_bar_date=None) -> tuple[bool, str]:

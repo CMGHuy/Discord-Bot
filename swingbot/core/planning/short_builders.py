@@ -92,6 +92,27 @@ def compression_structure(df, index, *, trigger, atr_val, horizon_key, level_map
     return (stop, max(valid)) if valid else None
 
 
+def compression_rejection_reason(df, index, horizon_key, scan_params=None) -> str:
+    """Why build_strategy_plan returned no compression-short plan at `index`: "over_cap_stop" when the
+    release-high stop breaks the horizon's ceiling from the resting trigger, "no_support" when no
+    confirmed lower support sits inside the RR band, else "plan_rejected" (reward floor and the like).
+    Audit only -- it recomputes the structure the builder already rejected."""
+    from swingbot.core.market.indicators import atr
+    from .builders import strategy_entry_reference
+    from .targets import _safe_atr_value
+    trigger = strategy_entry_reference(df, index, COMPRESSION_SHORT)
+    atr_val = _safe_atr_value(trigger, float(atr(df, 14).iloc[index]))
+    stop = float(df["High"].iloc[index]) + STRUCTURE_BUFFER_ATR * atr_val
+    if not _valid_stop(COMPRESSION_SHORT, horizon_key, trigger, stop):
+        return "over_cap_stop"
+    if scan_params is None:
+        from swingbot.scan_params import ScanParams
+        scan_params = ScanParams.from_config()
+    picked = compression_structure(df, index, trigger=trigger, atr_val=atr_val,
+                                   horizon_key=horizon_key, level_map=None, scan_params=scan_params)
+    return "no_support" if picked is None else "plan_rejected"
+
+
 def short_hold_cap(df, index, strategy):
     """Bars to hold a short on its `exit_before` setting: the bar before the
     next report reacts. None when holding through or no report is known."""

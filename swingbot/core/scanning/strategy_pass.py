@@ -85,6 +85,9 @@ class PassResult:
     compression_rejected: int = 0
     earnings_excluded_by_mode: Counter = field(default_factory=Counter)
     compression_reasons: Counter = field(default_factory=Counter)
+    # "<mode>:<reason>" (mode broad|isolated|none), the broad/isolated split of compression_reasons.
+    compression_reasons_by_mode: Counter = field(default_factory=Counter)
+    compression_shadow: list = field(default_factory=list)  # audit records of the masked raw signal
 
 
 @dataclass
@@ -133,27 +136,59 @@ def _open_trade(deps: _PassDeps, plan, *, ticker, strategy, horizon, direction) 
 
 
 def _compression_context(ticker, strategy, frame, deps: _PassDeps):
-    """(stamp, reject_reason) for the masked compression strategy; other strategies pass through."""
+    """(stamp, reject_reason) for the masked compression strategy; other strategies pass through.
+
+    The verdict is compression_context.decide_compression_entry -- the same pure function the
+    research replay calls -- fed from this pass's hooks. No hook wired = fail closed."""
     from swingbot.core.market.strategy_types import COMPRESSION_SHORT
+    from swingbot.core.scanning.compression_context import decide_compression_entry
     if strategy != COMPRESSION_SHORT:
         return {}, None
     mode, reason = deps.compression_of(ticker, frame) if deps.compression_of else (None, "no_context")
-    if mode is None:
-        return {}, reason or "no_mode"
-    clear, why = _earnings_verdict(ticker, deps, frame.index[-1].date())
-    if not clear:
-        return {"compression_mode": mode}, why
-    return {"compression_mode": mode, "compression_bar_date": frame.index[-1].date().isoformat()}, None
+    snapshot = deps.earnings_of(ticker) if (deps.earnings_of and mode is not None) else None
+    return decide_compression_entry(ticker, frame, mode=mode, mode_reason=reason,
+                                    snapshot=snapshot, now=deps.now)
 
 
-def _earnings_verdict(ticker, deps: "_PassDeps", signal_bar_date) -> tuple[bool, str]:
-    """Fresh-earnings exclusion; fails closed when no snapshot source or decision time is wired."""
-    from swingbot.core.market.session import nyse_calendar
-    from swingbot.core.scanning.compression_context import earnings_clear_for_ten_sessions
-    if deps.earnings_of is None or deps.now is None:
-        return False, "earnings_unknown"
-    return earnings_clear_for_ten_sessions(ticker, deps.now, deps.earnings_of(ticker), nyse_calendar(),
-                                          signal_bar_date=signal_bar_date)
+def _count_compression_reject(result: "PassResult", stamp: dict, reason: str) -> None:
+    """One rejected compression candidate: the flat counter, the broad/isolated split, the earnings tally."""
+    mode = stamp.get("compression_mode")
+    result.compression_rejected += 1
+    result.compression_reasons[reason] += 1
+    result.compression_reasons_by_mode[f"{mode or 'none'}:{reason}"] += 1
+    if reason.startswith("earnings_") and mode:
+        result.earnings_excluded_by_mode[mode] += 1
+
+
+def compression_shadow_record(frame, *, ticker, horizon, deps: _PassDeps, result: "PassResult"):
+    """Shadow evaluation of the masked compression strategy on the raw signal: the decision, a plan
+    built for audit, and a record. Never a stored plan, alert, paper trade or order instruction.
+
+    Skipped (None) when the bar has no raw signal or the mask admits this cell (the normal path owns it).
+    """
+    from swingbot.core.market.short_entries import compression_short_frame
+    from swingbot.core.market.strategy_types import COMPRESSION_SHORT, admits
+    from swingbot.core.planning.plan_types import plan_to_dict
+    from swingbot.core.planning.short_builders import compression_rejection_reason
+    if admits(COMPRESSION_SHORT, "bearish", horizon):
+        return None
+    signal = compression_short_frame(frame, horizon)["signal"]
+    if not len(signal) or not bool(signal.iloc[-1]):
+        return None
+    stamp, reason = _compression_context(ticker, COMPRESSION_SHORT, frame, deps)
+    plan = None
+    if reason is None:
+        plan = build_strategy_plan(frame, len(frame) - 1, ticker=ticker, strategy=COMPRESSION_SHORT,
+                                   horizon_key=horizon, direction="bearish")
+        if plan is None:
+            reason = compression_rejection_reason(frame, len(frame) - 1, horizon)
+        else:
+            plan.entry_context = {**(plan.entry_context or {}), **stamp}
+    if reason is not None:
+        _count_compression_reject(result, stamp, reason)
+    return {"ticker": ticker, "horizon": horizon, "bar_date": frame.index[-1].date().isoformat(),
+            "mode": stamp.get("compression_mode"), "reason": reason, "alert": False,
+            "plan": plan_to_dict(plan) if plan is not None else None}
 
 
 def _goes_live(deps: _PassDeps, strategy: str) -> bool:
@@ -164,6 +199,14 @@ def _goes_live(deps: _PassDeps, strategy: str) -> bool:
     if strategy == COMPRESSION_SHORT:
         return strategy in deps.live_allow
     return not deps.live_allow or strategy in deps.live_allow
+
+
+def _count_plan_none(result: PassResult, frame, strategy, horizon, stamp: dict) -> None:
+    """A compression candidate that cleared the decision but built no plan: count why."""
+    from swingbot.core.market.strategy_types import COMPRESSION_SHORT
+    from swingbot.core.planning.short_builders import compression_rejection_reason
+    if strategy == COMPRESSION_SHORT:
+        _count_compression_reject(result, stamp, compression_rejection_reason(frame, len(frame) - 1, horizon))
 
 
 def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, horizon,
@@ -177,16 +220,14 @@ def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, hori
         return
     stamp, reject_reason = _compression_context(ticker, strategy, frame, deps)
     if reject_reason:
-        result.compression_rejected += 1
-        result.compression_reasons[reject_reason] += 1
-        if reject_reason.startswith("earnings_"):
-            result.earnings_excluded_by_mode[stamp["compression_mode"]] += 1
+        _count_compression_reject(result, stamp, reject_reason)
         return
     plan = build_strategy_plan_at(
         frame, ticker=ticker, strategy=strategy, horizon_key=horizon,
         direction=direction, regime2_state=regime,
         asof=deps.asof_of(ticker) if deps.asof_of else None)
     if plan is None:
+        _count_plan_none(result, frame, strategy, horizon, stamp)
         return
     plan.entry_context = {**(plan.entry_context or {}), **stamp}
     if not risk_sizing_ok(plan):
@@ -230,6 +271,10 @@ def run_strategy_pass(tickers, fresh_data, *, now, horizons, spy_df, regimes,
                 for strategy, direction in strategy_signals(frame, horizon, spy_df=spy_df):
                     _emit_signal(result, frame, ticker=ticker, strategy=strategy, direction=direction,
                                  horizon=horizon, bar_date=bar_date, regime=regime, deps=deps)
+                record = compression_shadow_record(frame, ticker=ticker, horizon=horizon,
+                                                   deps=deps, result=result)
+                if record is not None:
+                    result.compression_shadow.append(record)
         except Exception:
             log.warning("strategy pass: %s failed -- continuing", ticker, exc_info=True)
     return result
