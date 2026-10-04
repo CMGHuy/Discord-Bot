@@ -50,12 +50,12 @@ def compression_recorded_keys(path: str | None = None) -> set:
     for name in (path, path + ".1"):
         if not os.path.exists(name):
             continue
-        with open(name, encoding="utf-8") as f:
+        with open(name, encoding="utf-8", errors="replace") as f:      # a damaged byte never aborts the read
             for line in f:
                 try:
                     row = json.loads(line)
                     keys.add((row["ticker"], row["horizon"], row["bar_date"]))
-                except (ValueError, KeyError):
+                except (ValueError, KeyError, TypeError):             # TypeError: a non-object line
                     continue
     return keys
 

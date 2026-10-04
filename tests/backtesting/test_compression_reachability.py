@@ -507,3 +507,44 @@ def test_the_signal_close_backtest_path_refuses_the_compression_short():
         bt.run_backtest("ABC", FULL_PATH, COMPRESSION_SHORT, HZ)
     with pytest.raises(ValueError, match="StrategyEngine"):
         bt._trade_plan_at(FULL_PATH, len(STOCK) - 1, "bearish", COMPRESSION_SHORT, HZ, None)
+
+
+# -- final fix: a damaged shadow log never stops a scan ---------------------------------------------------------------
+
+def _good_line():
+    import json
+    return json.dumps({"ticker": "ABC", "horizon": HZ, "bar_date": SIGNAL_DAY.isoformat()}) + "\n"
+
+
+def _seen_with(tmp_path, monkeypatch, raw: bytes, rotated: bytes = b""):
+    from swingbot.core.scanning import scan_run
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    (tmp_path / "compression_shadow.jsonl").write_bytes(raw)
+    if rotated:
+        (tmp_path / "compression_shadow.jsonl.1").write_bytes(rotated)
+    return scan_run._compression_seen()
+
+
+@pytest.mark.parametrize("bad", [b"[1, 2]\n", b"null\n", b"7\n", b"{not json\n", b"\xff\xfe\x00bad\n"])
+def test_a_damaged_shadow_line_is_skipped_and_the_valid_keys_survive(tmp_path, monkeypatch, bad):
+    keys = _seen_with(tmp_path, monkeypatch, bad + _good_line().encode() + bad)
+    assert keys == {("ABC", HZ, SIGNAL_DAY.isoformat())}
+
+
+def test_a_missing_shadow_file_and_a_rotated_slot_both_read_without_raising(tmp_path, monkeypatch):
+    from swingbot.core.scanning import scan_run
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    assert scan_run._compression_seen() == set()                       # neither file exists
+    keys = _seen_with(tmp_path, monkeypatch, b"", rotated=_good_line().encode())
+    assert keys == {("ABC", HZ, SIGNAL_DAY.isoformat())}               # only the .1 slot holds it
+
+
+def test_an_unexpected_read_failure_means_none_seen_never_a_raised_scan(monkeypatch):
+    from swingbot.core.backtesting import shadow_log
+    from swingbot.core.scanning import scan_run
+
+    def boom(*a, **k):
+        raise TypeError("anything at all")
+
+    monkeypatch.setattr(shadow_log, "compression_recorded_keys", boom)
+    assert scan_run._compression_seen() == set()

@@ -131,7 +131,7 @@ def _compression_seen() -> set:
     from swingbot.core.backtesting import shadow_log
     try:
         return shadow_log.compression_recorded_keys()
-    except OSError:
+    except Exception:    # noqa: BLE001 -- a damaged audit log must never stop a scan or its Discord alerts
         log.warning("compression shadow log unreadable -- dedup disabled this scan", exc_info=True)
         return set()
 
