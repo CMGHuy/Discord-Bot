@@ -14,8 +14,8 @@ sys.path.insert(0, str(ROOT))
 from swingbot.core.backtesting.acceptance import ALPHA, BOOTSTRAP_RESAMPLES, GEOMETRY_MAX_DROP_PCT, NON_INFERIORITY_R, VOLUME_MAX_CUT_PCT, ArmTrade, AcceptanceResult, ClauseResult, evaluate, delta_expectancy_r, delta_standardised_win_rate, mde_paired, mde_win_rate, project_target_n, render_json, render_markdown  # noqa: E402
 from swingbot.core.backtesting.acceptance_harvest import mde_expectancy_r  # noqa: E402
 from swingbot.core.backtesting.acceptance import population_split  # noqa: E402
-from swingbot.core.backtesting.arms.selection import SELECTED, evaluate_cell, select_cell  # noqa: E402
-from swingbot.core.backtesting.arms import reachability  # noqa: E402
+from swingbot.core.backtesting.arms.selection import SELECTED, evaluate_cell, select_cell, with_clause  # noqa: E402
+from swingbot.core.backtesting.arms import dryup_clauses, reachability  # noqa: E402
 from swingbot.core.backtesting.arms.pairing import changed_outcomes, overlap  # noqa: E402
 from swingbot.core.backtesting.arms.provenance import check_stamp  # noqa: E402
 from swingbot.core.backtesting.backtest_wf import gate_win_rate  # noqa: E402
@@ -118,6 +118,12 @@ def _write_skeleton(args, stage):
 def _run_gate(args, stage):
     baseline, component = load_arms(args.arms); _write_skeleton(args, stage)
     result = evaluate(baseline, component, stage=stage, permutation_p=args.permutation_p, n_resamples=args.resamples, seed=args.seed)
+    try:
+        mechanism = _cell_mechanism(args, args.arms, baseline, component, None)
+    except dryup_clauses.NotADryupArm:
+        return _refuse_not_dryup()
+    if mechanism is not None:
+        result = with_clause(result, mechanism)
     markdown = render_markdown(result, title=args.title, window=args.window, notes=_notes(args)); print(markdown)
     if args.out_md: Path(args.out_md).parent.mkdir(parents=True, exist_ok=True); Path(args.out_md).write_text(markdown, encoding="utf-8")
     if args.out_json: Path(args.out_json).parent.mkdir(parents=True, exist_ok=True); Path(args.out_json).write_text(json.dumps(render_json(result), indent=1), encoding="utf-8")
@@ -140,8 +146,35 @@ def _parse_grid(items):
     return grid
 
 
+def _frame_for(ticker):
+    from measure_arms import load_frame
+    return load_frame(ticker)
+
+
+def _baseline_ratios(baseline, scope):
+    # Each arm evaluation gets a fresh cache: a later dataset cannot reuse it.
+    return dryup_clauses.scoped_ratios(baseline, _frame_for, scope)
+
+
+def _dryup_mechanism_for(path, baseline):
+    context = dryup_clauses.knob_context(json.loads(Path(path).read_text()))
+    if context is None:
+        raise dryup_clauses.NotADryupArm(str(path))
+    scope, d = context
+    ratios = _baseline_ratios(baseline, scope)
+    print(json.dumps(dryup_clauses.none_share(ratios, scope)))
+    return dryup_clauses.baseline_mechanism(baseline, dryup_clauses.flagged_keys(ratios, d), scope)
+
+
+def _refuse_not_dryup():
+    print('refused:not-a-dryup-arm -- active dry-up knobs required. Budget intact.', file=sys.stderr)
+    return 1
+
+
 def _cell_mechanism(args, path, baseline, component, value):
-    """Component-specific baseline mechanism hook, supplied by V122-9."""
+    """Opt-in frozen baseline reading; replacements stay in clauses 1–5."""
+    if getattr(args, 'dryup_mechanism', False):
+        return _dryup_mechanism_for(path, baseline)
     return None
 
 
@@ -201,7 +234,10 @@ def stage_selection(args):
     if not grid:
         print("refused:no-grid -- --grid-arms is required. Budget intact.", file=sys.stderr)
         return 1
-    cells = _selection_cells(args, grid)
+    try:
+        cells = _selection_cells(args, grid)
+    except dryup_clauses.NotADryupArm:
+        return _refuse_not_dryup()
     if cells is None:
         return 1
     result = select_cell(cells, "PULLBACK_DRYUP_MAX_RATIO")
@@ -220,6 +256,7 @@ def main(argv=None):
     parser.add_argument("--permutation-p", type=float, default=None); parser.add_argument("--train-effect-pp", type=float, default=0.0); parser.add_argument("--train-effect-r", type=float, default=0.0); parser.add_argument("--observed-days", type=int, default=None); parser.add_argument("--target-days", type=int, default=730); parser.add_argument("--resamples", type=int, default=BOOTSTRAP_RESAMPLES); parser.add_argument("--seed", type=int, default=42); parser.add_argument("--notes", default=None); parser.add_argument("--out-md", default=None); parser.add_argument("--out-json", default=None); parser.add_argument("--bespoke-instrument", default=None); parser.add_argument("--mde-method", choices=("paired", "unpaired"), default="paired"); parser.add_argument("--gate", choices=("win_rate", "harvest"), default="win_rate")
     parser.add_argument("--grid-arms", action="append", default=[])
     parser.add_argument("--mde-refused", action="append", type=float, default=[])
+    parser.add_argument('--dryup-mechanism', action='store_true')
     args = parser.parse_args(argv)
     if args.stage == "selection":
         return stage_selection(args)
