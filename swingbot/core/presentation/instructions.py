@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from swingbot.core.planning.exit_sim import runner_floor
 from swingbot.core.planning.plan_types import breakeven_trigger
-from swingbot.core.presentation import tokens
+from swingbot.core.presentation import short_notice, tokens
 from swingbot.core.presentation.plan_view import plan_view
 
 PLACE = "PLACE"
@@ -223,8 +223,7 @@ def _staged_order_lines(plan, detail: dict, side: dict) -> list[str]:
         return [f"CANCEL or VERIFY any resting protective {side['stop']} at your broker "
                 "-- the bot cannot cancel it for you"]
     if getattr(plan, "time_exit_due_date", None):
-        return [f"CANCEL or VERIFY the closing-auction {side['exit']} order you staged "
-                "at your broker -- the bot cannot cancel it for you"]
+        return [short_notice.staged_moc_line(side["exit"])]
     return []
 
 
@@ -252,14 +251,10 @@ def _time_exit(plan, event, side: dict, common: dict, sizing: dict | None) -> In
     whole = _whole_shares(sizing)
     fraction = detail.get("cover_fraction", 1.0)
     qty = f"{math.floor(whole * fraction):,} sh" if whole is not None else f"{fraction:.0%}"
-    late = "LATE — " if detail.get("late") else ""
-    return Instruction(
-        verb=CLOSE_AT_MARKET,
-        headline=(f"{late}{side['exit']} {qty} in the closing auction "
-                  f"({_auction_clock(detail.get('auction_time'))})"),
-        lines=("ten sessions since the fill; a market-on-close order is the paper exit",
-               "ignore this if you already exited on a stop or target"),
-        tone="neutral", **common)
+    headline, lines = short_notice.compression_due_lines(
+        side["exit"], qty, detail, _auction_clock(detail.get("auction_time")))
+    return Instruction(verb=CLOSE_AT_MARKET, headline=headline, lines=lines,
+                       tone="neutral", **common)
 
 
 def _closed_event(plan, event, side: dict, common: dict, sizing: dict | None) -> Instruction:
@@ -313,7 +308,9 @@ def instruction_for(plan, event, *, sizing: dict | None = None) -> Instruction:
                    "since the last ping",),
             **common)
     if transition in ("cancelled_expired", "cancelled_invalidated", "cancelled_risk_cap"):
-        if transition == "cancelled_expired":
+        if short_notice.is_compression(plan) and transition != "cancelled_invalidated":
+            why = short_notice.compression_cancel_why(plan, transition, detail)
+        elif transition == "cancelled_expired":
             why = f"not triggered within {plan.expiry_bars} sessions"
         elif transition == "cancelled_invalidated":
             why = f"price reached the stop {_price(plan.stop_loss)} before triggering"
