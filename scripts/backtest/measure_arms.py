@@ -170,6 +170,29 @@ def produce(stage, delta, *, universe, spec=None, horizons=None, engines=DEFAULT
     return blob
 
 
+COMPRESSION_KNOB = "COMPRESSION_SHORT_RESEARCH_MODE"
+
+
+def compression_sidecar(blob, delta, universe, spec) -> dict | None:
+    """v119: the compression short's per-mode diagnostics for this run (signal/entry/exit dates, mode,
+    excluded candidates with reasons, exit reasons, daily_close_proxy label), replayed through the same
+    StrategyEngine and offline as-of context the component arm used. None without the knob. The stamped
+    arm rows are never touched; this is written beside them."""
+    mode = delta.get(COMPRESSION_KNOB)
+    if mode in (None, "off"):
+        return None
+    from swingbot.core.backtesting.arms import compression_research as cr
+    frames = {ticker: frame for ticker in universe if (frame := load_frame(ticker)) is not None}
+    measured = cr.measure_compression_short(frames, spec.signal_window, mode=mode, context=cr.offline_context())
+    return cr.sidecar_record(measured, signal_window=spec.signal_window, universe=universe,
+                             component_rows=blob.get("component"))
+
+
+def _write_sidecar(out: Path, sidecar) -> None:
+    if sidecar is not None:
+        out.with_name(f"{out.stem}.diagnostics.json").write_text(json.dumps(sidecar), encoding="utf-8")
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--knob", action="append", required=True)
@@ -198,6 +221,7 @@ def main(argv=None) -> int:
                    preregistration=str(args.preregistration) if args.preregistration else None)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(blob), encoding="utf-8")
+    _write_sidecar(args.out, compression_sidecar(blob, delta, universe, windows.resolve(args.stage)))
     if args.stage == "pilot" and blob["provenance"]["changed_outcomes"] == 0:
         print("refused:zero-diff -- the component changed no trade on the pilot slice. Budget intact.", file=sys.stderr)
         return 1

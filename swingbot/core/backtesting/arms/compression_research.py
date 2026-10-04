@@ -49,7 +49,7 @@ class CompressionMeasurement:
     diagnostics_by_mode: Counter
     exit_reasons: Counter
     close_price_basis: str = PROXY_BASIS
-    notes: list = field(default_factory=list)
+    excluded: list = field(default_factory=list)
 
     def break_even_borrow_fee(self) -> float | None:
         """Annual borrow fee (fraction of entry value) at which the cohort's summed R is zero.
@@ -87,7 +87,28 @@ def measure_compression_short(frames: dict, window: tuple[str, str], *, mode: st
         mode=mode, trades=trades, signal_diagnostics=list(engine.compression_signals),
         diagnostics=Counter(engine.compression_reasons),
         diagnostics_by_mode=Counter(engine.compression_reasons_by_mode),
-        exit_reasons=Counter(engine.compression_exit_reasons))
+        exit_reasons=Counter(engine.compression_exit_reasons), excluded=list(engine.compression_excluded))
+
+
+def sidecar_record(measured: CompressionMeasurement, *, signal_window, universe, component_rows) -> dict:
+    """The supplemental report written beside a stamped arm file -- never merged into it.
+
+    `matches_component_rows` cross-checks the diagnostics' scored signals against the arm's own
+    compression rows by (ticker, signal date); None when the arm file has no single component list."""
+    keys = sorted((row["ticker"], row["signal_date"]) for row in measured.signal_diagnostics)
+    matches = None
+    if component_rows is not None:
+        matches = keys == sorted((row["ticker"], row["entry_date"]) for row in component_rows
+                                 if row["strategy"] == COMPRESSION_SHORT)
+    return {
+        "mode": measured.mode, "signal_window": list(signal_window), "universe": list(universe),
+        "close_price_basis": measured.close_price_basis,
+        "signal_diagnostics": measured.signal_diagnostics, "excluded": measured.excluded,
+        "exclusions": dict(measured.diagnostics), "exclusions_by_mode": dict(measured.diagnostics_by_mode),
+        "exit_reasons": dict(measured.exit_reasons),
+        "break_even_borrow_fee": measured.break_even_borrow_fee(),
+        "matches_component_rows": matches,
+    }
 
 
 # --- the explicit offline as-of loader ------------------------------------------------------

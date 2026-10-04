@@ -67,7 +67,7 @@ REGISTRY: dict[str, Reach] = {
         "v74 fixture: a select has no perturbation there). A real run reads "
         "compression_research.offline_context(): no as-of earnings archive exists, so every "
         "historical candidate is excluded earnings_unknown."), S),
-    "CONFLUENCE_DEVIATION_PCT":_live("Confirmation counting happens in scan analysis; replay uses fixed tolerance."),
+    "CONFLUENCE_DEVIATION_PCT": _live("Confirmation counting happens in scan analysis; replay uses fixed tolerance."),
     "MIN_ALERT_CONFIDENCE_LEVEL": _live("Confidence scoring belongs to scanning.confidence."),
     "UNIFIED_CONFIDENCE": _live("Confidence scoring belongs to scanning.confidence."),
     "DEDUP_TOLERANCE_PCT": _live("Deduplication runs when the live scan builds its alert set."),

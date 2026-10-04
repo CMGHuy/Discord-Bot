@@ -256,6 +256,72 @@ def test_stamped_strategy_engine_knob_changes_outcomes_on_the_pilot_fixture(prod
     assert not any(row["strategy"] == COMPRESSION_SHORT for row in blob["baseline"])
 
 
+def test_excluded_candidates_are_listed_with_date_mode_and_reason():
+    measured = _measure("isolated")
+    assert measured.excluded == [{"ticker": "ABC", "signal_date": SIGNAL_DAY.isoformat(), "mode": None,
+                                  "reason": "mode_not_allowed"}]
+    assert _measure("broad").excluded == []
+
+
+def test_a_pilot_run_writes_the_per_mode_diagnostics_sidecar_beside_the_arm_json(producer, monkeypatch, tmp_path):
+    monkeypatch.setattr(ma, "cached_universe", lambda: ["ABC"])
+    out = tmp_path / "v119-broad-pilot-arms.json"
+    assert ma.main(["--knob", f"{KNOB}=broad", "--stage", "pilot", "--out", str(out), "--workers", "1"]) == 0
+    side = json.loads((tmp_path / "v119-broad-pilot-arms.diagnostics.json").read_text(encoding="utf-8"))
+    assert side["mode"] == "broad" and side["close_price_basis"] == "daily_close_proxy"
+    assert side["signal_window"] == list(WINDOW) and side["universe"] == ["ABC"]
+    (row,) = side["signal_diagnostics"]
+    assert row["exit_reason"] == "time_exit" and row["entry_date"] > row["signal_date"]
+    assert side["exit_reasons"] == {"time_exit": 1} and side["exclusions"] == {} and side["excluded"] == []
+    assert side["matches_component_rows"] is True
+    blob = json.loads(out.read_text(encoding="utf-8"))
+    stamped = {f.name for f in dataclasses.fields(ArmTrade)}
+    assert all(set(row) == stamped for row in blob["component"] + blob["baseline"])    # rows untouched
+
+
+def test_a_zero_diff_pilot_still_writes_why_every_candidate_was_excluded(producer, monkeypatch, tmp_path):
+    monkeypatch.setattr(ma, "cached_universe", lambda: ["ABC"])
+    out = tmp_path / "v119-isolated-pilot-arms.json"
+    assert ma.main(["--knob", f"{KNOB}=isolated", "--stage", "pilot", "--out", str(out), "--workers", "1"]) == 1
+    side = json.loads((tmp_path / "v119-isolated-pilot-arms.diagnostics.json").read_text(encoding="utf-8"))
+    assert side["signal_diagnostics"] == [] and side["exclusions"] == {"mode_not_allowed": 1}
+    assert side["exclusions_by_mode"] == {"none:mode_not_allowed": 1}
+    assert [(r["ticker"], r["reason"]) for r in side["excluded"]] == [("ABC", "mode_not_allowed")]
+
+
+def test_no_sidecar_without_the_compression_knob():
+    spec = ma.windows.resolve("pilot")
+    assert ma.compression_sidecar({}, {"MIN_REWARD_PCT": 4.0}, ["ABC"], spec) is None
+    assert ma.compression_sidecar({}, {KNOB: "off"}, ["ABC"], spec) is None
+
+
+# -- borrow-fee break-even (mirrors test_measure_short_universe's, counted from the fill) ------------
+
+def _fee_row(r, entry, stop, entry_date, exit_date):
+    return {"r_multiple": r, "entry_price": entry, "stop_loss": stop,
+            "entry_date": entry_date, "exit_date": exit_date}
+
+
+def _cohort(rows):
+    from collections import Counter
+    return cr.CompressionMeasurement("broad", [], rows, Counter(), Counter(), Counter())
+
+
+def test_break_even_borrow_fee_zeroes_the_cohort_expectancy():
+    rows = [_fee_row(0.5, 100.0, 102.0, "2019-01-01", "2019-01-11"),     # 50 * 10/365
+            _fee_row(-0.2, 50.0, 51.0, "2019-01-01", "2019-01-21")]      # 50 * 20/365
+    assert _cohort(rows).break_even_borrow_fee() == pytest.approx(0.3 / (50 * 10 / 365 + 50 * 20 / 365))
+
+
+def test_break_even_borrow_fee_edges():
+    assert _cohort([]).break_even_borrow_fee() is None                                   # no filled row
+    assert _cohort([_fee_row(-0.5, 100.0, 102.0, "2019-01-01", "2019-01-11")]).break_even_borrow_fee() == 0.0
+    flat = _fee_row(0.5, 100.0, 100.0, "2019-01-01", "2019-01-11")
+    assert cr._fee_exposure(flat) == 0.0 and _cohort([flat]).break_even_borrow_fee() is None   # risk <= 0
+    same_day = _fee_row(0.5, 100.0, 102.0, "2019-01-02", "2019-01-02")
+    assert cr._fee_exposure(same_day) == pytest.approx(50 / 365)                          # min one day held
+
+
 def test_stage_minus_one_fixture_reads_reachable_in_validate_component(producer, tmp_path, capsys):
     import validate_component as vc
     arms = tmp_path / "v119-fixture-pilot.json"

@@ -47,7 +47,13 @@ from Postgres, which was unreachable.)
   broad component adds exactly the compression row and moves no other row;
   `validate_component.py --stage reachability` reads it `REACHABLE`.
 - Explicit offline as-of loader (`compression_research.offline_context`) and
-  per-mode supplemental diagnostics (`measure_compression_short`).
+  per-mode supplemental diagnostics (`measure_compression_short`). A
+  `measure_arms.py` run with the knob writes them beside the arm file as
+  `<out-stem>.diagnostics.json` (scored signals with signal/entry/exit dates,
+  mode and exit reason; every excluded candidate with its reason; totals by
+  reason and by mode; the `daily_close_proxy` label; the break-even borrow fee;
+  a cross-check against the arm's own compression rows), including on a
+  zero-diff pilot. The stamped `ArmTrade` rows are unchanged.
 - The research cell is now the fixed `("bearish", "2w")` cell; before this task it
   followed the replayed horizon and would have opened the short on every legacy
   horizon under a full-horizon run.

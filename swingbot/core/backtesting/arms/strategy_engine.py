@@ -86,7 +86,9 @@ class StrategyEngine:
         self.compression_reasons_by_mode: Counter = Counter()
         # Supplemental research diagnostics -- never part of a stamped ArmTrade row.
         self.compression_signals: list[dict] = []
+        self.compression_excluded: list[dict] = []
         self.compression_exit_reasons: Counter = Counter()
+        self._candidate: tuple = (None, None)
 
     def run_ticker(self, ticker, df, horizons, signal_window, params) -> list:
         out = []
@@ -166,8 +168,13 @@ class StrategyEngine:
                                            snapshot=snapshot, now=decided_at, allowlist=allowlist)
 
     def _count(self, stamp, reason) -> None:
+        """Count one excluded compression candidate and list it (the candidate `_candidate_plan` set)."""
+        mode = stamp.get("compression_mode")
         self.compression_reasons[reason] += 1
-        self.compression_reasons_by_mode[f"{stamp.get('compression_mode') or 'none'}:{reason}"] += 1
+        self.compression_reasons_by_mode[f"{mode or 'none'}:{reason}"] += 1
+        ticker, signal_date = self._candidate
+        self.compression_excluded.append(
+            {"ticker": ticker, "signal_date": signal_date, "mode": mode, "reason": reason})
 
     def iter_trades(self, ticker, df, strategy, horizon_key, signal_window, params):
         start, end = signal_window
@@ -211,6 +218,7 @@ class StrategyEngine:
         constructor on bars <= index. A rejection is counted (when `counted`) and returns no plan."""
         stamp = {}
         if strategy == COMPRESSION_SHORT:
+            self._candidate = (ticker, str(window.index[-1].date()))
             stamp, reason = self._compression_stamp(ticker, window)
             if reason is not None:
                 if counted:
