@@ -1,6 +1,7 @@
 """v122 predicate and scope rules (spec: Testing -- Predicate, Scope)."""
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
 from swingbot import config
@@ -66,6 +67,18 @@ def test_real_instrument_bullish_and_bearish_mirror():
     for df, direction in ((frame, "bullish"), (mirror(frame), "bearish")):
         assert gates.pullback_dryup_rejects(df, direction, 0.75) is True
         assert gates.pullback_dryup_rejects(df, direction, 0.90) is False
+
+
+def test_predicate_uses_only_bars_in_the_callers_cutoff():
+    prefix = pullback_frame(0.6 * IMPULSE_VOLUME)
+    future = prefix.iloc[[-1]].copy()
+    future.index = future.index + pd.offsets.BDay(1)
+    future["Volume"] = 10 * IMPULSE_VOLUME
+    extended = pd.concat([prefix, future])
+    for df, direction in ((prefix, "bullish"), (mirror(prefix), "bearish")):
+        assert gates.pullback_dryup_rejects(df, direction, 0.75) is False
+    for df, direction in ((extended, "bullish"), (mirror(extended), "bearish")):
+        assert gates.pullback_dryup_rejects(df, direction, 0.75) is True
 
 
 def test_frozen_list_is_exact_and_names_real_entry_functions():
