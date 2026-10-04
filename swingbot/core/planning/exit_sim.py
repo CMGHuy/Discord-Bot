@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import pandas as pd
+
 from swingbot import config
 from swingbot.core.market.strategy_types import COMPRESSION_SHORT, HORIZONS
 from swingbot.core.risk_limits import planned_loss_pct
@@ -18,6 +20,42 @@ from .lifecycle import (at_or_beyond_stop, fill_price, limit_fill_price, limit_h
                         pending_expired, pending_invalidated, stop_touched, trigger_hit)
 from .targets import _safe_atr_value
 from .time_exit import PROXY_BASIS, TIME_EXIT_REASON
+
+#: v121's pivot column names mapped to v123's. The ONLY place v121 column
+#: names appear in v123; V123-1's gate step checks them against the merged module.
+_V121_PIVOT_COLUMNS = {
+    "sh_i": "last_sh_pos", "sh_px": "last_sh",
+    "sh_prev_i": "prior_sh_pos", "sh_prev_px": "prior_sh",
+    "sl_i": "last_sl_pos", "sl_px": "last_sl",
+    "sl_prev_i": "prior_sl_pos", "sl_prev_px": "prior_sl",
+}
+PIVOT_K = 3                                      # v121 frozen fractal width
+
+
+def _trend_ratio(series: pd.Series) -> pd.Series:
+    """Per-bar mean(last SHORT_WINDOW) / mean(last LONG_WINDOW) -- the series
+    form of v121's scalar _ratio_of_means. NaN before LONG_WINDOW bars; a zero
+    long mean gives inf/NaN, which no <= comparison passes."""
+    from swingbot.core.market import structure
+    short = series.rolling(structure.SHORT_WINDOW).mean()
+    long = series.rolling(structure.LONG_WINDOW).mean()
+    return (short / long).astype(float)
+
+
+def runner_structure_frame(df) -> pd.DataFrame:
+    """Per-bar confirmed pivots and range/volume trends for the v123 runner
+    rules. Row j uses df.iloc[:j+1] only (v121 truncation contract; rolling
+    windows are causal)."""
+    from swingbot.core.market import structure
+    pivots = structure.confirmed_pivots(df, k=PIVOT_K)
+    out = pd.DataFrame(index=df.index)
+    for ours, theirs in _V121_PIVOT_COLUMNS.items():
+        out[ours] = pivots[theirs].astype(float).values
+    out["range_trend_10_50"] = _trend_ratio(structure.true_range(df)).values
+    out["vol_trend_10_50"] = _trend_ratio(df["Volume"].astype(float)).values
+    return out
+
+
 @dataclass
 class ExitResult:
     outcome: str                 # "win"|"loss"|"scratch"|"timeout"|"not_triggered"|"no_trade"
