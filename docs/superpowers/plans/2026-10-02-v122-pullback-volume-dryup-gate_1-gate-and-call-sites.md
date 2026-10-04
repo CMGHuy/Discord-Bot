@@ -998,7 +998,7 @@ def test_forming_bar_never_reaches_the_predicate(monkeypatch, direction):
 - [ ] **Step 2: Run it**
 
 Run: `python scripts/dev/testrun.py file tests/backtesting/test_pullback_dryup_parity.py`
-Expected: PASS (26 cases). A failure here is a real parity bug in V122-4 or V122-5, or a v121 ratio that disagrees with the spec's leg definition on the hand-built frame. Fix the call site. Never fix the test, and never change v121 from this plan.
+Expected: PASS (14 cases: 8 strategy, 4 confluence, 2 forming-bar). A failure here is a real parity bug in V122-4 or V122-5, or a v121 ratio that disagrees with the spec's leg definition on the hand-built frame. Fix the call site. Never fix the test, and never change v121 from this plan.
 
 - [ ] **Step 3: Commit**
 
