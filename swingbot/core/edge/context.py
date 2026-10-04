@@ -5,12 +5,18 @@ import math
 
 from swingbot.core.edge.gates import gap_stats, stop_beyond_gap_noise
 from swingbot.core.market.indicators import adx, atr, ema, rsi
+from swingbot.core.market.structure import structure_features
 from swingbot.core.scanning.regime import _HTF_EMA_PERIOD
 
 HTF_EMA_PERIOD = _HTF_EMA_PERIOD
 FEATURE_KEYS = ("stop_atr", "stop_pct", "planned_rr", "swing_high_atr", "swing_low_atr", "horizon_key", "direction",
                 "atr_pctile_250", "vol_ratio_20", "rsi_14", "adx_14", "bb_width_pctile_250", "htf_aligned",
-                "gap_p90_pct", "gap_fragile", "dow", "regime2_state", "rs_pctile", "sector_pctile", "rs_combined")
+                "gap_p90_pct", "gap_fragile", "dow", "regime2_state", "rs_pctile", "sector_pctile", "rs_combined",
+                # v121: causal structure / volume-in-context (market/structure.py); swing_*_atr above are now filled
+                "structure_state", "structure_aligned", "last_pivot_held", "hh_failed", "vol_trend_10_50",
+                "range_trend_10_50", "progress_atr_10", "absorption_bar", "absorption_count_10",
+                "pullback_vol_ratio", "pullback_depth_frac", "pullback_bars_ratio", "impulse_atr_per_bar",
+                "impulse_range_decay")
 
 
 def _number(value):
@@ -39,6 +45,7 @@ def entry_context(df, *, direction: str, horizon_key: str, stop: float, target: 
                stop_atr=_number(risk / atr_value) if atr_value else None,
                atr_pctile_250=_pctile(atr_series), rsi_14=_number(rsi(df["Close"], 14).iloc[-1]),
                adx_14=_number(adx(df, 14).iloc[-1]), dow=int(df.index[-1].dayofweek))
+    out.update(structure_features(df, direction))   # v121; all None below 60 bars
     volume_mean = df["Volume"].rolling(20).mean().iloc[-1]
     out["vol_ratio_20"] = _number(df["Volume"].iloc[-1] / volume_mean) if volume_mean else None
     period = HTF_EMA_PERIOD.get(horizon_key)
