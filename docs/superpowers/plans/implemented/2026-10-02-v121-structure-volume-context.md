@@ -8,7 +8,7 @@
 **Spec:** `docs/superpowers/specs/2026-10-02-v121-structure-volume-context-design.md`
 **Bump:** bot patch
 **Edge:** none (integrity)
-**Progress:** planning complete; implementation not started. Amended 2026-10-02 (before any implementation): four leg-shape keys added to V121-2 (spec § Features, "Leg-shape keys"); code and expected values prototyped against the fixtures, 35 tests passing.
+**Progress:** implemented and merged to main (e27fb62c, bot 2.0.1); release at db5464e5. Final review: no Critical/Important; fix wave 2e6482b3. Deferred: live book pools sandbox+main ledgers; replay helpers lack direct tests; pivot_confirmations recomputed 3x per call (cost, unmeasured). One unrelated timing flake in the full run (test_next_earnings_fields_null_and_non_blocking_when_not_yet_cached, passes alone). Original note: Amended 2026-10-02 (before any implementation): four leg-shape keys added to V121-2 (spec § Features, "Leg-shape keys"); code and expected values prototyped against the fixtures, 35 tests passing.
 
 ## Global constraints
 
