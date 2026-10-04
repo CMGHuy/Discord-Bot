@@ -37,6 +37,12 @@ _OPEX = "OPEX adjustment needs the calendar-aware live scan date path; replay ha
 _RS = "Relative strength is cross-sectional and evaluated in scanning/engine.py, which no replay runs."
 _DCB = "Measured through its dedicated DCB harness (replay_scenarios takes dcb_params, not config)."
 _TIGHTEN = "Only active when ADAPTIVE_RUNNER_TRAIL_ENABLED=true; a lone perturbation at the default is inert by design."
+_DRYUP = ("v122 pullback dry-up gate (edge/gates.py), applied before plan construction in "
+          "StrategyEngine._gated_plan and backtest_scenarios._dryup_kept. Inert unless "
+          "PULLBACK_DRYUP_SCOPE != off and PULLBACK_DRYUP_MAX_RATIO > 0 together, so a lone "
+          "perturbation at the default is inert by design. Stage -1: measure_arms.py --stage "
+          "pilot --knob PULLBACK_DRYUP_SCOPE=<scope> --knob PULLBACK_DRYUP_MAX_RATIO=0.60, "
+          "then validate_component.py --stage reachability.")
 
 REGISTRY: dict[str, Reach] = {
     "MIN_REWARD_PCT": Reach(REACHABLE, "Scenario admission gate in replay_scenarios.", C, True),
@@ -53,6 +59,8 @@ REGISTRY: dict[str, Reach] = {
     "ADAPTIVE_RUNNER_TRAIL_ENABLED": Reach(REACHABLE, "Post-TP1 runner trail in simulate_exit. Not observable on the v74 fixture since the v104 stop ceiling (verified 2026-09-28): its one trade past TIGHTEN_TRIGGER_R was a lifecycle-widened plan. Covered by tests/planning/test_exit_sim_scaleout.py.", CS),
     "TIGHTEN_TRIGGER_R": Reach(REACHABLE, _TIGHTEN, CS),
     "TIGHTEN_ATR_MULT": Reach(REACHABLE, _TIGHTEN, CS),
+    "PULLBACK_DRYUP_SCOPE": Reach(REACHABLE, _DRYUP, CS),
+    "PULLBACK_DRYUP_MAX_RATIO": Reach(REACHABLE, _DRYUP, CS),
     "SHORT_UNIVERSE_RESEARCH_MODE": Reach(REACHABLE, (
         "v118: the short_universe population engine replays the base scan and the extra "
         "lane per decision date through the live selector (build_extra_candidates), "
