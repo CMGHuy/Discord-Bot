@@ -64,13 +64,18 @@ class StrategyEngine:
         out = []
         for horizon_key in horizons:
             for strategy in self.strategies:
-                for date, plan, result in self.iter_trades(
-                        ticker, df, strategy, horizon_key, signal_window, params):
-                    out.append(arm_trade_from_plan(
-                        plan, entry_date=date, outcome=result.outcome,
-                        r_multiple=result.r_total,
-                    ))
+                out.extend(self.iter_trades_for_strategy(
+                    ticker, df, strategy, horizon_key, signal_window, params))
         return out
+
+    def iter_trades_for_strategy(self, ticker, df, strategy, horizon_key, signal_window, params):
+        """One (strategy, horizon) cell's stamped ArmTrade rows, in signal order."""
+        for date, plan, result in self.iter_trades(
+                ticker, df, strategy, horizon_key, signal_window, params):
+            yield arm_trade_from_plan(
+                plan, entry_date=date, outcome=result.outcome,
+                r_multiple=result.r_total,
+            )
 
     def _entries(self, df, strategy, horizon_key):
         """Entry series; the compression short alone is read under its scoped research cell."""

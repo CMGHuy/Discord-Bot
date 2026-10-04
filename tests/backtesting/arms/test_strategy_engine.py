@@ -36,6 +36,16 @@ def test_run_ticker_emits_keyed_strategy_trades(frame):
     assert len({trade.key for trade in trades}) == len(trades)
 
 
+def test_run_ticker_is_the_horizon_major_concatenation_of_iter_trades_for_strategy(frame):
+    """v119 seam: run_ticker's rows, in order, are iter_trades_for_strategy per (horizon, strategy)."""
+    strategies = ("Support/Resistance", "RSI Divergence", "Fibonacci")
+    engine, params = StrategyEngine(strategies=strategies), ScanParams.from_config()
+    expected = [trade for horizon in ("4w", "3m") for strategy in strategies
+                for trade in engine.iter_trades_for_strategy("AAPL", frame, strategy, horizon, WINDOW, params)]
+    assert engine.run_ticker("AAPL", frame, ("4w", "3m"), WINDOW, params) == expected
+    assert expected
+
+
 def test_signal_window_filters_but_dedup_state_survives(frame):
     engine, params = StrategyEngine(strategies=("MACD",)), ScanParams.from_config()
     full = engine.run_ticker("AAPL", frame, ("4w",), WINDOW, params)
