@@ -45,6 +45,7 @@ _EXIT_REASON_ALIASES: dict[str, str] = {
     "tp1_runner_be": "runner_be",       # plan_manager.py:630, 740
     "tp1_runner_tp2": "runner_tp2",     # plan_manager.py:637, 749
     "auto (near-tp stall)": "timeout",  # performance.py:1647, 1509
+    "time_exit": "timeout",             # v119 compression short's tenth-session close (time_exit.TIME_EXIT_REASON)
 }
 
 

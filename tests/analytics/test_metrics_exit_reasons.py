@@ -95,6 +95,7 @@ def test_leg_reason_drives_the_bucket():
     pytest.param("tp1_runner_be", "win", "runner_be", id="tp1-runner-be"),
     pytest.param("tp1_runner_tp2", "win", "runner_tp2", id="tp1-runner-tp2"),
     pytest.param("auto (near-tp stall)", "win", "timeout", id="near-tp-stall"),
+    pytest.param("time_exit", "closed", "timeout", id="v119-compression-time-exit"),
 ])
 def test_production_close_reasons_map_by_exact_text(text, status, bucket):
     trade = {"status": status, "close_reason": text, "entry": 100.0, "stop_loss": 99.0,
