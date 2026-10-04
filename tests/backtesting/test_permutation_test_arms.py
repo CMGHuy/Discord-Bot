@@ -155,6 +155,8 @@ def test_changed_surviving_outcomes_are_not_scored_as_removal_signal():
     {"engine_hash": {"baseline": ["fake"], "component": ["fake"]}},
     {"preregistration": True},
     {"engines": [{}]},
+    {"engines": ["strategy"]},
+    {"engines": ["confluence", "strategy", "bogus"]},
     {"universe": [{}]},
 ])
 def test_cli_refuses_invalid_stamps(tmp_path, capsys, stamp_change):

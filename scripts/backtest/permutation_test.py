@@ -104,6 +104,13 @@ def _valid_engine_hashes(hashes):
         for arm in ("baseline", "component"))
 
 
+def _engines_match(engines, baseline, component):
+    from swingbot.core.backtesting.arms.engine import DEFAULT_ENGINES
+
+    sources = {trade.source for trade in baseline + component}
+    return engines == list(DEFAULT_ENGINES) and None not in sources and sources <= set(engines)
+
+
 def _stamp_population_refusal(stamp, baseline, component):
     universe, horizons, engines = stamp.get("universe"), stamp.get("horizons"), stamp.get("engines")
     if not isinstance(universe, list) or not isinstance(horizons, list) or not isinstance(engines, list):
@@ -112,8 +119,7 @@ def _stamp_population_refusal(stamp, baseline, component):
         return "refused:malformed-stamp"
     if stamp.get("universe_count") != len(universe):
         return "refused:malformed-stamp"
-    sources = {trade.source for trade in baseline + component}
-    if None in sources or not sources <= set(engines):
+    if not _engines_match(engines, baseline, component):
         return "refused:engine-mismatch"
     if not _valid_engine_hashes(stamp.get("engine_hash")):
         return "refused:malformed-stamp"
