@@ -26,6 +26,14 @@ def test_completed_frame_and_deduplication():
     assert not sp.already_emitted(Store(), "AAPL", "MACD", "4m", "2026-09-16")
 
 
+_NOW = dt.datetime(2026, 9, 16, 17, tzinfo=ET)
+
+
+def _clear_snapshot():
+    from swingbot.core.market.events import EarningsSnapshot
+    return EarningsSnapshot(_NOW, (), True, "test")
+
+
 def test_compression_signal_is_stamped_with_mode_and_bar_date_or_rejected():
     from types import SimpleNamespace
     from swingbot.core.market.strategy_types import COMPRESSION_SHORT
@@ -34,7 +42,8 @@ def test_compression_signal_is_stamped_with_mode_and_bar_date_or_rejected():
     plan_store = SimpleNamespace(all=lambda: [], add=added.append)
     stamp = sp._compression_context("AAPL", COMPRESSION_SHORT, frame,
                                     sp._PassDeps(plan_store, None, "shadow", set(), None,
-                                                 compression_of=lambda t, f: ("broad", None)))
+                                                 compression_of=lambda t, f: ("broad", None),
+                                                 earnings_of=lambda t: _clear_snapshot(), now=_NOW))
     assert stamp == ({"compression_mode": "broad", "compression_bar_date": "2026-09-16"}, None)
     deps = sp._PassDeps(plan_store, None, "shadow", set(), None)
     assert sp._compression_context("AAPL", COMPRESSION_SHORT, frame, deps) == ({}, "no_context")

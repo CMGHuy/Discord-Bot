@@ -83,6 +83,7 @@ class PassResult:
     skipped_dup: int = 0
     sizing_blocked: int = 0
     compression_rejected: int = 0
+    earnings_excluded_by_mode: Counter = field(default_factory=Counter)
     compression_reasons: Counter = field(default_factory=Counter)
 
 
@@ -97,6 +98,8 @@ class _PassDeps:
     rs_combined_of: object
     asof_of: object = None
     compression_of: object = None  # (ticker, frame) -> (mode, reason); None = fail closed
+    earnings_of: object = None  # ticker -> EarningsSnapshot observed by `now`; None = fail closed
+    now: object = None  # the decision timestamp (tz-aware)
 
 
 def _regime_for(regimes, frame):
@@ -137,7 +140,19 @@ def _compression_context(ticker, strategy, frame, deps: _PassDeps):
     mode, reason = deps.compression_of(ticker, frame) if deps.compression_of else (None, "no_context")
     if mode is None:
         return {}, reason or "no_mode"
+    clear, why = _earnings_verdict(ticker, deps)
+    if not clear:
+        return {"compression_mode": mode}, why
     return {"compression_mode": mode, "compression_bar_date": frame.index[-1].date().isoformat()}, None
+
+
+def _earnings_verdict(ticker, deps: "_PassDeps") -> tuple[bool, str]:
+    """Fresh-earnings exclusion; fails closed when no snapshot source or decision time is wired."""
+    from swingbot.core.market.session import nyse_calendar
+    from swingbot.core.scanning.compression_context import earnings_clear_for_ten_sessions
+    if deps.earnings_of is None or deps.now is None:
+        return False, "earnings_unknown"
+    return earnings_clear_for_ten_sessions(ticker, deps.now, deps.earnings_of(ticker), nyse_calendar())
 
 
 def _goes_live(deps: _PassDeps, strategy: str) -> bool:
@@ -163,6 +178,8 @@ def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, hori
     if reject_reason:
         result.compression_rejected += 1
         result.compression_reasons[reject_reason] += 1
+        if reject_reason.startswith("earnings_"):
+            result.earnings_excluded_by_mode[stamp["compression_mode"]] += 1
         return
     plan = build_strategy_plan_at(
         frame, ticker=ticker, strategy=strategy, horizon_key=horizon,
@@ -193,10 +210,11 @@ def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, hori
 
 def run_strategy_pass(tickers, fresh_data, *, now, horizons, spy_df, regimes,
                       rs_combined_of, mode: str, live_allow: set, trade_log, plan_store,
-                      asof_of=None, compression_of=None) -> PassResult:
+                      asof_of=None, compression_of=None, earnings_of=None) -> PassResult:
     """Build strategy plans after confluence; only eligible live plans open trades."""
     result = PassResult()
-    deps = _PassDeps(plan_store, trade_log, mode, live_allow, rs_combined_of, asof_of, compression_of)
+    deps = _PassDeps(plan_store, trade_log, mode, live_allow, rs_combined_of, asof_of, compression_of,
+                     earnings_of, now)
     for ticker in tickers:
         raw = fresh_data.get(ticker)
         if raw is None or len(raw) == 0:
