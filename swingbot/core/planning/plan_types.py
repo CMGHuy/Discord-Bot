@@ -125,9 +125,13 @@ class TradePlanV2:
     # slot cannot hold. time_exit_due_date: the session the due notice went out
     # for (also the guard against staging the close twice).
     # time_exit_unresolved_date: the ET date an unresolved notice last went out.
+    # time_exit_notified_date: the due session a time_exit_due notice was actually
+    # queued for -- None when the due session was marked handled without one (the
+    # auction was already over), so a later close never claims a staged MOC.
     pending_time_notices: list = field(default_factory=list)
     time_exit_due_date: str | None = None
     time_exit_unresolved_date: str | None = None
+    time_exit_notified_date: str | None = None
 
 
 def effective_stop(plan: TradePlanV2) -> float:

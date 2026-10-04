@@ -128,11 +128,17 @@ def test_due_notice_says_buy_to_cover_by_the_stated_closing_auction_with_shares(
 
 
 def test_stop_after_due_says_cancel_verify_staged_moc_even_on_a_closed_plan():
-    plan = _short(time_exit_due_date="2026-12-01", status="CLOSED")
+    plan = _short(time_exit_due_date="2026-12-01", time_exit_notified_date="2026-12-01", status="CLOSED")
     event = PlanEvent("p1", "closed", {"reason": "loss", "exit_price": 101.0, "session": "regular"})
     assert "cancel/verify staged moc" in _words(instruction_for(plan, event)).lower()
     target = PlanEvent("p1", "closed", {"reason": "win", "exit_price": 95.0, "session": "regular"})
     assert "cancel/verify staged moc" in _words(instruction_for(plan, target)).lower()
+
+
+def test_a_due_session_handled_without_a_sent_notice_gets_no_staged_moc_line():
+    plan = _short(time_exit_due_date="2026-12-01", status="CLOSED")       # the notice was never sent
+    event = PlanEvent("p1", "closed", {"reason": "loss", "exit_price": 101.0, "session": "regular"})
+    assert "staged moc" not in _words(instruction_for(plan, event)).lower()
 
 
 def test_no_moc_line_without_a_staged_moc():

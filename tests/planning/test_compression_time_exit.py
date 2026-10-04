@@ -187,6 +187,7 @@ def test_due_notice_at_1530_carries_cover_size_and_auction_time_and_does_not_clo
     plan = store.get("p1")
     assert plan.status == PlanStatus.ACTIVE                 # a notice never closes a plan
     assert plan.time_exit_due_date == "2026-12-01"
+    assert plan.time_exit_notified_date == "2026-12-01"      # the reader was actually told to stage it
     assert [n["transition"] for n in plan.pending_time_notices] == ["time_exit_due"]
 
 
@@ -255,6 +256,7 @@ def test_first_poll_after_the_close_sends_no_stale_cover_notice_only_the_close()
     events = mgr.poll(now=_at(STD_TENTH, 16, 0, 20))
     assert _kinds(events) == ["closed"]               # the auction is over: no "cover in the auction"
     assert store.get("p1").time_exit_due_date == "2026-12-01"
+    assert store.get("p1").time_exit_notified_date is None    # never told to stage a MOC
 
 
 @pytest.mark.parametrize("auction", [None,
@@ -426,15 +428,18 @@ def test_plan_without_a_recorded_fill_is_left_alone():
 
 def test_plan_json_written_before_this_task_loads_with_empty_time_fields():
     row = plan_to_dict(_short())
-    for name in ("pending_time_notices", "time_exit_due_date", "time_exit_unresolved_date"):
+    for name in ("pending_time_notices", "time_exit_due_date", "time_exit_unresolved_date",
+                 "time_exit_notified_date"):
         del row[name]
     plan = plan_from_dict(row)
     assert plan.pending_time_notices == []
     assert plan.time_exit_due_date is None and plan.time_exit_unresolved_date is None
+    assert plan.time_exit_notified_date is None
 
 
 def test_time_fields_round_trip_through_the_store():
-    plan = _short(time_exit_due_date="2026-12-01", created_at="2026-11-10T00:00:00+00:00",
+    plan = _short(time_exit_due_date="2026-12-01", time_exit_notified_date="2026-12-01",
+                  created_at="2026-11-10T00:00:00+00:00",
                   pending_time_notices=[
         {"id": "p1:time_exit_due:2026-12-01", "transition": "time_exit_due",
          "detail": {"late": False}, "at": "2026-12-01T20:30:00+00:00", "acked": False}])
@@ -477,10 +482,17 @@ def _closed_event(reason, **detail):
 
 def test_stop_after_a_staged_moc_tells_the_reader_to_cancel_or_verify_it():
     from swingbot.core.presentation.instructions import instruction_for
-    plan = _short(time_exit_due_date="2026-12-01")
+    plan = _short(time_exit_due_date="2026-12-01", time_exit_notified_date="2026-12-01")
     text = " ".join(instruction_for(plan, _closed_event("loss")).lines)
     assert "CANCEL or VERIFY" in text and "closing-auction" in text
     assert "auto" not in text.lower() and "automatically" not in text.lower()
+
+
+def test_a_due_session_marked_handled_without_a_notice_never_claims_a_staged_moc():
+    from swingbot.core.presentation.instructions import instruction_for
+    plan = _short(time_exit_due_date="2026-12-01")           # the auction-over branch: no notice was sent
+    text = " ".join(instruction_for(plan, _closed_event("loss")).lines)
+    assert "closing-auction" not in text and "CANCEL or VERIFY" not in text
 
 
 def test_stop_without_a_staged_moc_has_no_moc_line():

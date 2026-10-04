@@ -222,7 +222,7 @@ def _staged_order_lines(plan, detail: dict, side: dict) -> list[str]:
     if detail.get("reason") == "time_exit":
         return [f"CANCEL or VERIFY any resting protective {side['stop']} at your broker "
                 "-- the bot cannot cancel it for you"]
-    if getattr(plan, "time_exit_due_date", None):
+    if getattr(plan, "time_exit_notified_date", None):      # a due notice was actually sent
         return [short_notice.staged_moc_line(side["exit"])]
     return []
 

@@ -936,7 +936,7 @@ class PlanManager:
         event = self._queue_time_notice_once(plan, te.TIME_EXIT_DUE, due, {
             "cover_fraction": te.cover_fraction(plan), "auction_time": close_at.isoformat(),
             "due_session": due.isoformat(), "late": et > deadline + te.LATE_GRACE})
-        plan.time_exit_due_date = due.isoformat()
+        plan.time_exit_due_date = plan.time_exit_notified_date = due.isoformat()
         self.store.update(plan)
         return [event] if event is not None else []
 
