@@ -192,6 +192,19 @@ Each only if the diagnostic admits it, in this order, each with its own spec:
 Arms 2–4 are measured against the same baseline as arm 1, not stacked on its
 winner, so one arm's failure does not contaminate another.
 
+**Major-tier leg origin (bridge to v130, noted 2026-10-04).** The handbook
+asks for a swing with a clear reaction that fits the structure. `origin_k`
+gets "major" only by widening the fractal window. v130's major tier tests the
+handbook's version instead: the departure broke the prior opposite swing and
+reacted by at least 2 ATR. A measurement spec that takes the leg origin from
+v130's `major_pivots` is written only if **both** of these hold:
+
+- arm 1 here passes
+- v130 declares the major tier "more informative"
+
+That spec freezes its own splits without reading either report's buckets.
+This spec's contract and exit rule are unchanged.
+
 ## Non-goals
 
 - No stop, target or exit change: v84, v101 and v103 closed those.
