@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from dataclasses import dataclass, field
 import pandas as pd
 
@@ -82,6 +83,7 @@ class PassResult:
     skipped_dup: int = 0
     sizing_blocked: int = 0
     compression_rejected: int = 0
+    compression_reasons: Counter = field(default_factory=Counter)
 
 
 @dataclass
@@ -128,14 +130,24 @@ def _open_trade(deps: _PassDeps, plan, *, ticker, strategy, horizon, direction) 
 
 
 def _compression_context(ticker, strategy, frame, deps: _PassDeps):
-    """(stamp, rejected) for the masked compression strategy; other strategies pass through."""
+    """(stamp, reject_reason) for the masked compression strategy; other strategies pass through."""
     from swingbot.core.market.strategy_types import COMPRESSION_SHORT
     if strategy != COMPRESSION_SHORT:
-        return {}, False
-    mode, _reason = deps.compression_of(ticker, frame) if deps.compression_of else (None, "no_context")
+        return {}, None
+    mode, reason = deps.compression_of(ticker, frame) if deps.compression_of else (None, "no_context")
     if mode is None:
-        return {}, True
-    return {"compression_mode": mode, "compression_bar_date": frame.index[-1].date().isoformat()}, False
+        return {}, reason or "no_mode"
+    return {"compression_mode": mode, "compression_bar_date": frame.index[-1].date().isoformat()}, None
+
+
+def _goes_live(deps: _PassDeps, strategy: str) -> bool:
+    """Live eligibility; the masked compression strategy must be named in a non-empty allow-list."""
+    from swingbot.core.market.strategy_types import COMPRESSION_SHORT
+    if deps.mode != "live":
+        return False
+    if strategy == COMPRESSION_SHORT:
+        return strategy in deps.live_allow
+    return not deps.live_allow or strategy in deps.live_allow
 
 
 def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, horizon,
@@ -147,9 +159,10 @@ def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, hori
     if _rs_blocked(ticker, direction, deps.rs_combined_of):
         result.rs_blocked += 1
         return
-    stamp, rejected = _compression_context(ticker, strategy, frame, deps)
-    if rejected:
+    stamp, reject_reason = _compression_context(ticker, strategy, frame, deps)
+    if reject_reason:
         result.compression_rejected += 1
+        result.compression_reasons[reject_reason] += 1
         return
     plan = build_strategy_plan_at(
         frame, ticker=ticker, strategy=strategy, horizon_key=horizon,
@@ -167,7 +180,7 @@ def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, hori
         return
     deps.plan_store.add(plan)
     result.plans.append(plan)
-    goes_live = deps.mode == "live" and (not deps.live_allow or strategy in deps.live_allow)
+    goes_live = _goes_live(deps, strategy)
     if not goes_live or deps.trade_log.open_trade_for_ticker(ticker) is not None:
         result.stored_only += 1
         return

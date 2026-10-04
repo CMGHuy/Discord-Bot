@@ -48,10 +48,12 @@ def test_stale_frames_are_unaligned():
 
 def test_arms_are_mutually_exclusive():
     for stock in (WEAK, STRONG):
-        for regime, spy in ((BEAR, FALLING_SPY), (BULL, RISING_SPY)):
-            modes = {compression_mode(stock, spy, SECTOR, now=ASOF, spy_regime=regime)[0]}
-            assert len(modes) == 1 and modes <= {"broad", "isolated", None}
-    assert compression_mode(WEAK, FALLING_SPY, SECTOR, now=ASOF, spy_regime=BEAR)[0] == "broad"
+        broad = compression_mode(stock, FALLING_SPY, SECTOR, now=ASOF, spy_regime=BEAR)[0]
+        other = compression_mode(stock, RISING_SPY, SECTOR, now=ASOF, spy_regime=BULL)[0]
+        assert broad == "broad"
+        assert other in ("isolated", None) and other != broad
+    assert compression_mode(WEAK, RISING_SPY, SECTOR, now=ASOF, spy_regime=BULL)[0] == "isolated"
+    assert compression_mode(STRONG, RISING_SPY, SECTOR, now=ASOF, spy_regime=BULL)[0] is None
 
 
 def test_tomorrows_sector_bar_cannot_change_todays_mode():
