@@ -45,6 +45,8 @@ EXIT_V2_PARAMS: dict[str, dict] = {
     "Earnings Gap Drift":      {"trail_atr_mult": 2.5, "tp2": False},
     # v113 Part A: one whole-position target, no runner, fixed by spec §3.
     "Downtrend Overbought Fade": {"trail_atr_mult": 2.5, "tp2": False},
+    # v119: one whole-position support target, no runner, fixed by spec.
+    "First Bearish Compression Release": {"trail_atr_mult": 2.5, "tp2": False},
 }
 
 # v113: the shape of a plan whose strategy is traded as resting orders placed at
@@ -58,6 +60,11 @@ PLAN_SHAPES: dict[str, dict] = {
     # the whole position; no break-even move (amendment 3).
     "Downtrend Overbought Fade": {"entry_type": "limit", "expiry_bars": 1,
                                   "tp1_fraction": 1.0, "breakeven_trigger_fraction": 1.0},
+    # v119: resting sell-stop one tick below the release low, good for the next
+    # session only; one whole-position target; no break-even move.
+    "First Bearish Compression Release": {"entry_type": "stop_entry", "expiry_bars": 1,
+                                          "tp1_fraction": 1.0, "breakeven_trigger_fraction": 1.0,
+                                          "hold_cap_bars": 10},   # hard exit 10 sessions after the fill
 }
 
 

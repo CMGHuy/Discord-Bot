@@ -1,6 +1,7 @@
 """Plan v2 builders for strategy and confluence sources."""
 from __future__ import annotations
 
+import math
 import uuid
 from dataclasses import dataclass
 
@@ -8,7 +9,8 @@ import numpy as np
 
 from swingbot import config
 from swingbot.core.market import levels, opex
-from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION, HORIZONS, SHORT_STRATEGIES
+from swingbot.core.market.strategy_types import (BREAKEVEN_TRIGGER_FRACTION, COMPRESSION_SHORT, HORIZONS,
+                                                  SHORT_STRATEGIES)
 from swingbot.core.risk_limits import (HARD_MAX_PLANNED_LOSS_PCT, capped_planned_loss_pct,
                                        planned_loss_pct)
 from .plan_types import PlanStatus, TradePlanV2, record_transition
@@ -103,6 +105,35 @@ class _BranchInputs:
     atr_val: float
     stop_mult: float | None
     scan_params: object
+    level_map: object = None
+
+
+def strategy_entry_reference(df, index, strategy) -> float:
+    """The price a strategy's plan is sized and triggered from. Every strategy
+    but the v119 compression short uses the signal close; that one rests a
+    sell-stop one valid $0.01 tick below the release bar's low (the screened
+    universe is US shares, minimum tick $0.01), so risk, RR and the reward
+    floor all measure from that trigger."""
+    if strategy != COMPRESSION_SHORT:
+        return float(df["Close"].iloc[index])
+    low_cents = math.floor(float(df["Low"].iloc[index]) * 100 + 1e-6)
+    return round((low_cents - 1) / 100, 2)
+
+
+def _compression_branch(inputs):
+    """v119: stop above the release high, the nearest confirmed lower support."""
+    from .short_builders import compression_structure
+
+    params = inputs.scan_params
+    if params is None:
+        from swingbot.scan_params import ScanParams
+        params = ScanParams.from_config()
+    picked = compression_structure(
+        inputs.df, inputs.index, trigger=inputs.close, atr_val=inputs.atr_val,
+        horizon_key=inputs.horizon_key, level_map=inputs.level_map, scan_params=params)
+    if picked is None:
+        return None
+    return picked[0], picked[1], [picked[1]], None
 
 
 def _branch_result(result, candidates, applied_stop_mult=None):
@@ -221,6 +252,7 @@ _STRUCTURAL_BRANCHES = {
     "Fibonacci Continuation": _fib_continuation_branch,
 }
 _STRUCTURAL_BRANCHES.update({name: _short_branch for name in SHORT_STRATEGIES})
+_STRUCTURAL_BRANCHES[COMPRESSION_SHORT] = _compression_branch
 
 
 def _geometry_ok(close, stop, tp1, strategy, horizon_key) -> bool:
@@ -242,13 +274,13 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     journal iff config.DATA_DRIVEN_STOPS_ENABLED -- so the flag-off path
     is bit-identical to before and never opens the journal at all."""
     from swingbot.core.market.indicators import atr as atr_indicator
-    close = float(df["Close"].iloc[index])
+    close = strategy_entry_reference(df, index, strategy)
     atr_series = atr_indicator(df, 14)
     atr_val = _safe_atr_value(close, float(atr_series.iloc[index]))
     branch = _STRUCTURAL_BRANCHES.get(strategy, _atr_branch)
     picked = branch(_BranchInputs(
         df, index, strategy, horizon_key, direction, close, atr_val, stop_mult,
-        scan_params,
+        scan_params, level_map,
     ))
     if picked is None:
         return None
@@ -301,6 +333,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         trail_atr_mult=exit_params["trail_atr_mult"],
         quality_score=0, quality_breakdown=[],
         badge="WEAK", badge_stats={}, status=PlanStatus.PENDING,
+        hold_cap_bars=shape.get("hold_cap_bars"),
     )
     if entry_type == "market":
         record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
