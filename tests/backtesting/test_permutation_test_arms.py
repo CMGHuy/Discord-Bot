@@ -3,19 +3,23 @@
 import json
 import runpy
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from swingbot.core.backtesting import backtest_wf
 from swingbot.core.backtesting.acceptance import ArmTrade
 from swingbot.core.backtesting.arms.provenance import build_stamp
+from swingbot.core.backtesting.arms.windows import ALL_HORIZONS
 
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 SCRIPT = ROOT / "scripts" / "backtest" / "permutation_test.py"
 WITNESS = ROOT / "tests" / "fixtures" / "v122" / "permutation_fold_witness.json"
 FOLD_ARGV = ["permutation_test.py", "--component-json", '{"X": 1}', "--n", "50"]
+UNIVERSE = [f"T{number}" for number in range(25)]
 
 
 def fake_run_folds(overrides):
@@ -78,9 +82,11 @@ def _write(tmp_path, baseline, component, stamped=True):
     if stamped:
         blob["provenance"] = build_stamp(
             stage="validation", signal_window=("2024-01-01", "2025-12-31"),
-            universe=["T0"], horizons=("4w",), engines=("strategy",),
-            knob_delta={}, engine_hash_baseline="h", engine_hash_component="h",
-            changed_outcomes=1)
+            universe=UNIVERSE, horizons=ALL_HORIZONS,
+            engines=("confluence", "strategy"),
+            knob_delta={"PULLBACK_DRYUP_SCOPE": "strategy", "PULLBACK_DRYUP_MAX_RATIO": 0.75},
+            engine_hash_baseline="h", engine_hash_component="h",
+            changed_outcomes=1, preregistration="synthetic-test-registration")
     path = tmp_path / "arms.json"
     path.write_text(json.dumps(blob), encoding="utf-8")
     return path
@@ -88,6 +94,19 @@ def _write(tmp_path, baseline, component, stamped=True):
 
 def _load_script():
     return runpy.run_path(str(SCRIPT))
+
+
+def _run_arm_cli(argv, universe_loader=None):
+    import contextlib
+    import io
+
+    namespace = _load_script()
+    main = namespace["main"]
+    main.__globals__["_full_universe"] = universe_loader or (lambda: UNIVERSE)
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        code = main(argv)
+    return code, output.getvalue()
 
 
 def test_removing_losers_is_distinguishable_from_luck():
@@ -109,11 +128,52 @@ def test_seeded_arm_pair_permutation_is_reproducible():
 
 def test_cli_arms_mode(tmp_path):
     path = _write(tmp_path, *_arm_pair("loss"))
-    result = json.loads(run_script(["permutation_test.py", "--arms", str(path)]))
+    code, output = _run_arm_cli(["--arms", str(path)])
+    assert code == 0
+    result = json.loads(output)
     assert result["verdict"] == "REAL" and result["n"] == 200
 
 
 def test_cli_refuses_unstamped_arms(tmp_path, capsys):
     path = _write(tmp_path, *_arm_pair("loss"), stamped=False)
-    assert _load_script()["main"](["--arms", str(path)]) == 1
+    assert _run_arm_cli(["--arms", str(path)])[0] == 1
     assert "refused:unstamped" in capsys.readouterr().err
+
+
+def test_changed_surviving_outcomes_are_not_scored_as_removal_signal():
+    baseline, component = _arm_pair("loss")
+    first = component[0]
+    component[0] = replace(first, outcome="loss" if first.outcome == "win" else "win")
+    with pytest.raises(ValueError, match="changed-outcomes"):
+        _load_script()["arm_pair_permutation"](baseline, component, n_perm=20)
+
+
+@pytest.mark.parametrize("stamp_change", [
+    {"provenance": {"made_up": True}},
+    {"stage": "selection"},
+    {"engine_hash": {"baseline": "h", "component": "different"}},
+    {"engines": [{}]},
+    {"universe": [{}]},
+])
+def test_cli_refuses_invalid_stamps(tmp_path, capsys, stamp_change):
+    path = _write(tmp_path, *_arm_pair("loss"))
+    blob = json.loads(path.read_text(encoding="utf-8"))
+    if "provenance" in stamp_change:
+        blob.update(stamp_change)
+    else:
+        blob["provenance"].update(stamp_change)
+    path.write_text(json.dumps(blob), encoding="utf-8")
+    assert _run_arm_cli(["--arms", str(path)])[0] == 1
+    assert "refused:" in capsys.readouterr().err
+
+
+def test_cli_refuses_when_authoritative_universe_is_unavailable(tmp_path, capsys):
+    from sqlalchemy.exc import OperationalError
+
+    path = _write(tmp_path, *_arm_pair("loss"))
+
+    def unavailable():
+        raise OperationalError("watchlist", {}, Exception("offline"))
+
+    assert _run_arm_cli(["--arms", str(path)], universe_loader=unavailable)[0] == 1
+    assert "refused:universe-unavailable" in capsys.readouterr().err

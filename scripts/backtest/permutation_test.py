@@ -77,6 +77,8 @@ def arm_pair_permutation(baseline, component, n_perm: int = 200, seed: int = 42)
     from swingbot.core.backtesting.acceptance import delta_standardised_win_rate, population_split
 
     split = population_split(baseline, component)
+    if split["changed"]:
+        raise ValueError("refused:changed-outcomes -- the removal-label null cannot model changed surviving trades")
     groups = _labelled_by_ticker(baseline, {trade.key for trade in split["removed"]})
     observed = delta_standardised_win_rate(baseline, component)
     shifts = np.random.default_rng(seed).integers(*SHIFT_RANGE, size=n_perm)
@@ -90,16 +92,91 @@ def arm_pair_permutation(baseline, component, n_perm: int = 200, seed: int = 42)
             "changed": len(split["changed"])}
 
 
-def _arms_main(args) -> int:
+def _full_universe():
+    from scripts.backtest.measure_arms import cached_universe
+
+    return cached_universe()
+
+
+def _stamp_population_refusal(stamp, baseline, component):
+    universe, horizons, engines = stamp.get("universe"), stamp.get("horizons"), stamp.get("engines")
+    if not isinstance(universe, list) or not isinstance(horizons, list) or not isinstance(engines, list):
+        return "refused:malformed-stamp"
+    if not all(isinstance(value, str) for values in (universe, horizons, engines) for value in values):
+        return "refused:malformed-stamp"
+    if stamp.get("universe_count") != len(universe):
+        return "refused:malformed-stamp"
+    sources = {trade.source for trade in baseline + component}
+    if None in sources or not sources <= set(engines):
+        return "refused:engine-mismatch"
+    hashes = stamp.get("engine_hash")
+    if not isinstance(hashes, dict):
+        return "refused:malformed-stamp"
+    return None
+
+
+def _stamp_shape_refusal(stamp, baseline, component):
+    from swingbot.core.backtesting.arms.provenance import PRODUCER_VERSION
+    from swingbot.core.backtesting.arms.windows import STAGES
+
+    if stamp is None:
+        return "refused:unstamped"
+    if not isinstance(stamp, dict):
+        return "refused:malformed-stamp"
+    if stamp.get("producer") != "measure_arms" or stamp.get("producer_version") != PRODUCER_VERSION:
+        return "refused:invalid-producer"
+    if stamp.get("stage") != "validation":
+        return "refused:stage-mismatch"
+    if stamp.get("signal_window") != list(STAGES["validation"].signal_window):
+        return "refused:window-mismatch"
+    if not stamp.get("preregistration"):
+        return "refused:no-preregistration"
+    return _stamp_population_refusal(stamp, baseline, component)
+
+
+def _stamp_refusal(blob, baseline, component):
+    from swingbot.core.backtesting.arms.provenance import check_stamp
+
+    refusal = _stamp_shape_refusal(blob.get("provenance"), baseline, component)
+    if refusal:
+        return refusal
+    return check_stamp(blob, funnel_stage="validation", full_universe=_full_universe())
+
+
+def _load_arm_pair(path):
     from swingbot.core.backtesting.acceptance import ArmTrade
 
-    blob = json.loads(Path(args.arms).read_text(encoding="utf-8"))
-    if not blob.get("provenance"):
-        print("refused:unstamped -- --arms needs a measure_arms.py stamped file.", file=sys.stderr)
+    try:
+        blob = json.loads(Path(path).read_text(encoding="utf-8"))
+        baseline = [ArmTrade(**row) for row in blob["baseline"]]
+        component = [ArmTrade(**row) for row in blob["component"]]
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        print(f"refused:malformed-arms -- {exc}", file=sys.stderr)
+        return None
+    return blob, baseline, component
+
+
+def _arms_main(args) -> int:
+    from sqlalchemy.exc import OperationalError
+
+    loaded = _load_arm_pair(args.arms)
+    if loaded is None:
         return 1
-    baseline = [ArmTrade(**row) for row in blob["baseline"]]
-    component = [ArmTrade(**row) for row in blob["component"]]
-    out = arm_pair_permutation(baseline, component, n_perm=args.n, seed=args.seed)
+    blob, baseline, component = loaded
+    try:
+        refusal = _stamp_refusal(blob, baseline, component)
+    except OperationalError:
+        print("refused:universe-unavailable -- authoritative Postgres watchlist unavailable. "
+              "Budget intact.", file=sys.stderr)
+        return 1
+    if refusal:
+        print(f"{refusal} -- incompatible arm stamp. Budget intact.", file=sys.stderr)
+        return 1
+    try:
+        out = arm_pair_permutation(baseline, component, n_perm=args.n, seed=args.seed)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     out["verdict"] = ("REAL" if out["p_value"] is not None and out["p_value"] < 0.05
                       else "INDISTINGUISHABLE FROM LUCK")
     print(json.dumps(out, indent=1))
