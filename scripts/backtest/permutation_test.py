@@ -46,11 +46,14 @@ def _fold_run_fn(overrides: dict):
     return run
 
 
-if __name__ == "__main__":
+def _parser():
     p = argparse.ArgumentParser()
     p.add_argument("--component-json", default="{}")
     p.add_argument("--n", type=int, default=200)
-    args = p.parse_args()
+    return p
+
+
+def _fold_main(args) -> int:
     run = _fold_run_fn(json.loads(args.component_json))
     real = run(0)
     permuted = permuted_expectancies(run, n_perm=args.n)
@@ -58,3 +61,12 @@ if __name__ == "__main__":
     print(json.dumps({"real_expectancy": real, "p_value": pv,
                       "verdict": "REAL" if pv <= 0.05 else "INDISTINGUISHABLE FROM LUCK"},
                      indent=1))
+    return 0
+
+
+def main(argv=None) -> int:
+    return _fold_main(_parser().parse_args(argv))
+
+
+if __name__ == "__main__":
+    sys.exit(main())
