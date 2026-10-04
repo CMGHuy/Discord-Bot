@@ -81,10 +81,15 @@ def _skip_rejected_plan(item, require_confirmation: bool) -> None:
 def _maybe_run_strategy_pass(*,tickers, fresh_data, spy_df, regimes, rs_cache, sector_of_ticker,
                              etf_symbol_of_sector, sector_etf_frames, trade_log, alerts,
                              require_confirmation) -> dict:
-    """Run v93's opt-in path; manual checks are strictly shadow-only."""
+    """Run v93's opt-in path; manual checks are strictly shadow-only.
+
+    The compression short's shadow evidence (compression_shadow.jsonl, scan-level reasons) accrues ONLY
+    while STRATEGY_ALERTS_MODE is "shadow" or "live"; with the default "off" this returns before any of
+    it runs. V119-10's evidence gate therefore depends on the global mode being "shadow"."""
     mode = config.STRATEGY_ALERTS_MODE
     if mode == "off":
-        return {"strategy_plans": 0, "strategy_opened": 0}
+        return {"strategy_plans": 0, "strategy_opened": 0,
+                "compression_shadow": 0, "compression_rejected": 0}
     if not require_confirmation:
         mode = "shadow"
     live_allow = {value.strip() for value in (config.STRATEGY_ALERTS_LIVE_STRATEGIES or "").split(",") if value.strip()}
@@ -105,12 +110,60 @@ def _maybe_run_strategy_pass(*,tickers, fresh_data, spy_df, regimes, rs_cache, s
     def rs_combined_of(ticker):
         return asof_of(ticker).get("rs_combined")
 
+    now = datetime.now(timezone.utc)
+    compression_of, earnings_of = _compression_hooks(
+        now, spy_df, sector_of_ticker, etf_symbol_of_sector, sector_etf_frames)
     result = strategy_pass.run_strategy_pass(
-        tickers, fresh_data, now=datetime.now(timezone.utc), horizons=list(live_horizons()), spy_df=spy_df,
+        tickers, fresh_data, now=now, horizons=list(live_horizons()), spy_df=spy_df,
         regimes=regimes, rs_combined_of=rs_combined_of, mode=mode, live_allow=live_allow,
-        trade_log=trade_log, plan_store=PlanStore(), asof_of=asof_of)
+        trade_log=trade_log, plan_store=PlanStore(), asof_of=asof_of,
+        compression_of=compression_of, earnings_of=earnings_of,
+        shadow_seen=_compression_seen())
     alerts.extend(result.alerts)
-    return {"strategy_plans": len(result.plans), "strategy_opened": result.opened}
+    _record_compression_shadow(result)
+    return {"strategy_plans": len(result.plans), "strategy_opened": result.opened,
+            "compression_shadow": len(result.compression_shadow),
+            "compression_rejected": result.compression_rejected}
+
+
+def _compression_seen() -> set:
+    """Keys of compression shadow records already on disk; an unreadable log means 'none seen'."""
+    from swingbot.core.backtesting import shadow_log
+    try:
+        return shadow_log.compression_recorded_keys()
+    except Exception:    # noqa: BLE001 -- a damaged audit log must never stop a scan or its Discord alerts
+        log.warning("compression shadow log unreadable -- dedup disabled this scan", exc_info=True)
+        return set()
+
+
+def _compression_hooks(now, spy_df, sector_of_ticker, etf_symbol_of_sector, sector_etf_frames):
+    """The compression short's live context: market mode from SPY plus the dated sector ETF frame, and a
+    fresh typed earnings snapshot per candidate (called only when the raw signal fires)."""
+    from swingbot.core.market.events import earnings_snapshot
+    from swingbot.core.scanning import compression_context as cc
+
+    def sector_frame(ticker):
+        etf = etf_symbol_of_sector.get(sector_of_ticker.get(ticker)) if sector_of_ticker else None
+        return (sector_etf_frames or {}).get(etf)
+
+    def compression_of(ticker, frame):
+        return cc.compression_mode_for(frame, spy_df, sector_frame(ticker), now=now)
+
+    return compression_of, lambda ticker: earnings_snapshot(ticker, now=now)
+
+
+def _record_compression_shadow(result) -> None:
+    """Persist the shadow records (own JSONL, never an alert) and log the scan-level reasons by mode."""
+    from swingbot.core.backtesting import shadow_log
+    for record in result.compression_shadow:
+        try:
+            shadow_log.append_compression(record)
+        except OSError:
+            log.warning("compression shadow record not written for %s", record.get("ticker"), exc_info=True)
+    if result.compression_shadow or result.compression_rejected:
+        log.info("compression short (shadow): %d raw signal(s), %d rejected; reasons by mode %s",
+                 len(result.compression_shadow), result.compression_rejected,
+                 dict(result.compression_reasons_by_mode))
 
 def _short_now():
     return datetime.now(timezone.utc)

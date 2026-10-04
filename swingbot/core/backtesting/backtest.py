@@ -78,6 +78,15 @@ from swingbot.core.market.strategy_types import (  # noqa: F401
 ENTRY_SHIFT = 0
 
 
+def _refuse_compression(strategy: str) -> None:
+    """v119: the compression short rests a sell-stop below the release low with a ten-session hold
+    cap; this signal-close path models neither. Its research arm is arms/strategy_engine.py."""
+    from swingbot.core.market.strategy_types import COMPRESSION_SHORT
+    if strategy == COMPRESSION_SHORT:
+        raise ValueError(f"{COMPRESSION_SHORT} is not backtestable here (signal-close entry, no hold "
+                         "cap); use StrategyEngine with a CompressionResearchContext")
+
+
 @dataclass
 class BacktestTrade:
     entry_date: str
@@ -185,6 +194,7 @@ def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_hi
     arithmetic on purpose (see Task 15). Returns None when the chosen builder
     finds no target that clears MIN_RISK_REWARD_RATIO -- no qualifying setup
     at this bar, not a crash."""
+    _refuse_compression(strategy)
     from swingbot.core.planning.plan_engine import (
         _atr_plan,
         _elliott_plan,
@@ -316,6 +326,7 @@ def run_backtest(
     ``asof`` is this ticker's per-date cross-sectional frame; without it the
     four cross-sectional context features are recorded as ``None``.
     """
+    _refuse_compression(strategy)
     min_bars = MIN_BARS[horizon_key]
     if len(df) < min_bars + 10:
         return BacktestSummary(

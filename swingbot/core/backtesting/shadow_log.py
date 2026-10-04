@@ -42,6 +42,35 @@ def append(plan, legacy_scenario_summary: dict, path: str | None = None,
         f.write(json.dumps(record) + "\n")       # one write() call per line
 
 
+def compression_recorded_keys(path: str | None = None) -> set:
+    """(ticker, horizon, bar_date) of every compression shadow line already written (both rotation
+    slots), so a re-scan of the same completed bar is recorded once."""
+    path = path or os.path.join(config.DATA_DIR, "compression_shadow.jsonl")
+    keys = set()
+    for name in (path, path + ".1"):
+        if not os.path.exists(name):
+            continue
+        with open(name, encoding="utf-8", errors="replace") as f:      # a damaged byte never aborts the read
+            for line in f:
+                try:
+                    row = json.loads(line)
+                    keys.add((row["ticker"], row["horizon"], row["bar_date"]))
+                except (ValueError, KeyError, TypeError):             # TypeError: a non-object line
+                    continue
+    return keys
+
+
+def append_compression(record: dict, path: str | None = None) -> None:
+    """One audit line for the masked compression short's raw signal (v119): its own file, so the v2
+    parity report (which diffs `plan` against `legacy`) never reads it. Never an alert."""
+    path = path or os.path.join(config.DATA_DIR, "compression_shadow.jsonl")
+    if os.path.exists(path) and os.path.getsize(path) >= MAX_BYTES:
+        os.replace(path, path + ".1")
+    line = {"ts_scan": datetime.now(timezone.utc).isoformat(), **record}
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(line, default=str) + "\n")
+
+
 def _forward_return(frame, scan_date, horizon_days: int) -> float | None:
     """Return over `horizon_days` TRADING bars from the first bar at or
     after `scan_date`. None while the window has not matured -- a partial

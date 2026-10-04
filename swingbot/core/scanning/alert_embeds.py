@@ -10,7 +10,7 @@ from swingbot.core.market import opex
 from swingbot.core import presentation as ui
 from swingbot.core.presentation import kinds
 from swingbot.core.presentation.kinds import Kind
-from swingbot.core.presentation.short_notice import FIELD_NAME as SHORT_FIELD, short_lane_notice
+from swingbot.core.presentation.short_notice import FIELD_NAME as SHORT_FIELD, alert_notice
 
 
 def strategy_plan_line(plan) -> str:
@@ -89,9 +89,8 @@ def _branches_field(plan, is_bull: bool, stop: float, stop_pct: float) -> tuple:
 def _short_notice_text(item, nums, plan_v2) -> str:
     """The extra-lane execution notice for this item ("" for a base alert), from the
     same plan_numbers_for_display values the rest of the alert quotes."""
-    return short_lane_notice(getattr(item, "candidate_context", None), nums,
-                             getattr(plan_v2, "expiry_bars", None),
-                             currency=config.CURRENCY_SYMBOL)
+    return alert_notice(plan_v2, getattr(item, "candidate_context", None), nums,
+                        currency=config.CURRENCY_SYMBOL)
 
 
 def _short_notice_fields(item, nums, plan_v2) -> list:

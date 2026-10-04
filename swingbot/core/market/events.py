@@ -16,6 +16,7 @@ import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 
 import yfinance as yf
 
@@ -211,6 +212,51 @@ def get_earnings_datetimes(ticker: str, *, refresh: bool = False) -> list[dt.dat
         upcoming = [value for value in result if value >= now]
         _earnings_datetime_cache[key] = (min(upcoming) if upcoming else None, now_monotonic)
     return list(result)
+
+
+def _utc(value: dt.datetime, what: str) -> dt.datetime:
+    """Tz-aware UTC instant; a naive timestamp is ambiguous and rejected."""
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{what} must be timezone-aware, got naive {value!r}")
+    return value.astimezone(dt.timezone.utc)
+
+
+@dataclass(frozen=True)
+class EarningsSnapshot:
+    """What one earnings query answered, and when. `query_ok` separates a
+    confirmed empty answer from a failed fetch -- an empty list alone cannot."""
+
+    observed_at: dt.datetime
+    reports: tuple[dt.datetime, ...]
+    query_ok: bool
+    source: str
+
+    def __post_init__(self):
+        object.__setattr__(self, "observed_at", _utc(self.observed_at, "observed_at"))
+        object.__setattr__(self, "reports", tuple(sorted(_utc(r, "report") for r in self.reports)))
+
+
+def earnings_snapshot(ticker: str, *, now: dt.datetime | None = None) -> EarningsSnapshot:
+    """Typed, uncached earnings observation. The display API above is untouched.
+
+    A fund or spot metal is answered explicitly as `nonreporting_instrument`;
+    a stock whose every fetch raised is `query_ok=False`, never an empty clear.
+
+    `now` is for live/test use only. It is NOT a historical as-of: never use it to
+    stamp a present-day fetch as past knowledge (that is lookahead).
+    """
+    observed = now if now is not None else dt.datetime.now(dt.timezone.utc)
+    if _never_reports(ticker):
+        return EarningsSnapshot(observed, (), True, "nonreporting_instrument")
+    for candidate in candidate_symbols(ticker):
+        try:
+            frame = yf.Ticker(candidate).get_earnings_dates(limit=8)
+        except Exception as exc:
+            log.debug("Earnings snapshot fetch failed for %s: %s", candidate, exc)
+            continue
+        reports = () if frame is None or frame.empty else tuple(ts.to_pydatetime() for ts in frame.index)
+        return EarningsSnapshot(observed, reports, True, "yahoo")
+    return EarningsSnapshot(observed, (), False, "yahoo")
 
 
 def earnings_within_window(ticker: str, max_holding_days: int):

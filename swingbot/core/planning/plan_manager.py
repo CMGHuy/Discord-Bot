@@ -14,9 +14,12 @@ from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 
 from swingbot import config
-from swingbot.core.market.session import (is_quiet_hours, is_regular_session,
-                                          is_tape_open, session_date)
+from swingbot.core.market.session import (RTH_OPEN, US_MARKET_TZ, is_quiet_hours,
+                                          is_regular_session, is_tape_open, now_et,
+                                          nyse_calendar, session_close, session_date)
+from swingbot.core.market.strategy_types import COMPRESSION_SHORT
 from swingbot.core.risk_limits import planned_loss_pct
+from swingbot.core.planning import time_exit as te
 from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
                                        chandelier_stop, pending_expired,
                                        pending_invalidated, record_transition,
@@ -69,6 +72,8 @@ _TRANSITION_LOG = {
     "be_moved": ("break-even moved", "working_stop"),
     "tp1_partial": ("TP1 hit", "exit_price"),
     "closed": ("closed", "exit_price"),
+    "time_exit_due": ("time exit due", None),
+    "time_exit_unresolved": ("time exit unresolved", None),
     "cancelled_expired": ("expired", None),
     "cancelled_invalidated": ("invalidated", "live_price"),
     "cancelled_risk_cap": ("risk cap hit", "entry_price"),
@@ -243,9 +248,44 @@ def maybe_pyramid(plan, price: float) -> dict | None:
     return None
 
 
+def _eligible_session(plan: TradePlanV2):
+    """The one NYSE session (a date) that may fill a stop-entry plan: the first
+    session strictly after the signal day. A date-only ``created_at`` is stored
+    as UTC midnight, so midnight (read in UTC, whatever offset the database
+    session handed it back in) is that calendar date; any other stamp is
+    converted to its ET date. None when the stamp is unreadable or the
+    calendar ends first (the caller then falls back to the normal path)."""
+    try:
+        created = datetime.fromisoformat(str(plan.created_at))
+    except ValueError:
+        return None
+    if created.tzinfo is None:
+        signal_day = created.date()
+    else:
+        utc = created.astimezone(timezone.utc)
+        signal_day = utc.date() if utc.time() == datetime.min.time() \
+            else created.astimezone(US_MARKET_TZ).date()
+    return nyse_calendar().next_session(signal_day)
+
+
+def _due_auction_passed(notice: dict, now=None) -> bool:
+    """True for a time_exit_due notice whose stated auction time is already past.
+    Anything unreadable stays owed (never drop on a doubt)."""
+    if notice.get("transition") != te.TIME_EXIT_DUE:
+        return False
+    try:
+        auction = datetime.fromisoformat(str(notice["detail"]["auction_time"]))
+    except (KeyError, TypeError, ValueError):
+        return False
+    if auction.tzinfo is None:
+        return False
+    return now_et(now) >= auction
+
+
 class PlanManager:
     def __init__(self, store: PlanStore, price_fn, bar_count_fn=None,
-                 atr_fn=None, trade_log=None, price_batch_fn=None):
+                 atr_fn=None, trade_log=None, price_batch_fn=None,
+                 auction_close_fn=None):
         self.store = store
         self.price_fn = price_fn            # ticker -> live float
         # Optional on purpose: the deterministic unit-test feeds only expose
@@ -255,35 +295,70 @@ class PlanManager:
         self.bar_count_fn = bar_count_fn    # (ticker, created_at) -> bars since
         self.atr_fn = atr_fn                # ticker -> current ATR(14) (Task 66)
         self.trade_log = trade_log          # TradeLog (Task 70)
+        # v119: (ticker, day) -> (price, source, asof) | None. Fail-closed
+        # default: with no official closing-auction source nothing is ever
+        # closed on the time rule, the reader gets an unresolved notice instead.
+        self.auction_close_fn = auction_close_fn
         self._last_seen: dict[str, tuple[str, float]] = {}
         self._risk_cap_warned: set[str] = set()
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def resend_notices(self) -> list[PlanEvent]:
-        """Re-emit unacknowledged notices, dropping ones older than five days."""
+    def resend_notices(self, now=None) -> list[PlanEvent]:
+        """Re-emit unacknowledged notices, dropping ones older than five days.
+        The v119 time notices are exempt from that age drop: they stay owed until
+        acknowledged -- except a due notice whose auction has passed (see
+        _resend_time_notices). ``now`` is test injection; production reads the clock."""
         cutoff = datetime.now(timezone.utc) - timedelta(days=NOTICE_RESEND_DAYS)
         events: list[PlanEvent] = []
         for plan in self.store.all():
-            notice = plan.pending_notice
-            if not notice:
-                continue
-            try:
-                queued = datetime.fromisoformat(notice["at"])
-                if queued.tzinfo is None:
-                    queued = queued.replace(tzinfo=timezone.utc)
-            except (KeyError, TypeError, ValueError):
-                queued = None
-            if queued is None or queued < cutoff:
-                log.warning("execution feed: dropping undelivered %s for plan %s (queued %s)",
-                            notice.get("transition"), plan.plan_id, notice.get("at"))
-                plan.pending_notice = None
-                self.store.update(plan)
-                continue
-            events.append(PlanEvent(plan.plan_id, notice["transition"],
-                                    dict(notice["detail"])))
+            events.extend(self._resend_time_notices(plan, now))
+            event = self._resend_pending(plan, cutoff)
+            if event is not None:
+                events.append(event)
         return events
+
+    def _resend_time_notices(self, plan: TradePlanV2, now=None) -> list[PlanEvent]:
+        """The unacknowledged time notices of a still-open plan, first in line
+        (before any single-slot close). A terminal plan's are superseded by its
+        close notice and dropped: "cover in the auction" must never follow
+        "exited". An open plan's due notice is dropped too once its auction has
+        passed -- the unresolved / close notice covers that case, and "cover in
+        the closing auction" would be stale."""
+        if not plan.pending_time_notices:
+            return []
+        if plan.status in (PlanStatus.CLOSED, PlanStatus.CANCELLED):
+            plan.pending_time_notices = []
+            self.store.update(plan)
+            return []
+        live = [n for n in plan.pending_time_notices if not _due_auction_passed(n, now)]
+        if len(live) != len(plan.pending_time_notices):
+            plan.pending_time_notices = live
+            self.store.update(plan)
+        return [PlanEvent(plan.plan_id, notice["transition"],
+                          dict(notice["detail"], notice_id=notice["id"]))
+                for notice in live]
+
+    def _resend_pending(self, plan: TradePlanV2, cutoff) -> PlanEvent | None:
+        """The single-slot notice as an event, or None (and the slot cleared)
+        when it is empty or older than the cutoff."""
+        notice = plan.pending_notice
+        if not notice:
+            return None
+        try:
+            queued = datetime.fromisoformat(notice["at"])
+            if queued.tzinfo is None:
+                queued = queued.replace(tzinfo=timezone.utc)
+        except (KeyError, TypeError, ValueError):
+            queued = None
+        if queued is None or queued < cutoff:
+            log.warning("execution feed: dropping undelivered %s for plan %s (queued %s)",
+                        notice.get("transition"), plan.plan_id, notice.get("at"))
+            plan.pending_notice = None
+            self.store.update(plan)
+            return None
+        return PlanEvent(plan.plan_id, notice["transition"], dict(notice["detail"]))
 
     def _feed_bookkeeping(self, plan: TradePlanV2, new_events: list[PlanEvent],
                           regular: bool, now=None) -> list[PlanEvent]:
@@ -295,17 +370,40 @@ class PlanManager:
                 event.detail["session"] = "regular" if regular else "extended"
                 event.detail["notified_stop"] = last_told_stop(plan)
                 event.detail["bot_stop"] = _stop_at_close(plan)
+        self._record_time_notices(plan, new_events)
         notices = [event for event in new_events if event.transition in NOTICE_EVENTS]
         if notices:
             latest = notices[-1]
             plan.pending_notice = {"transition": latest.transition,
                                    "detail": dict(latest.detail), "at": self._now()}
             self.store.update(plan)
-        if not regular or any(event.transition in STOP_EVENTS | NOTICE_EVENTS
+        if not regular or any(event.transition in STOP_EVENTS | NOTICE_EVENTS | te.TIME_EVENTS
                               for event in new_events):
             return new_events
         moved = stop_move_event(plan, session_date(now), trail_notify_min_r())
         return new_events + [moved] if moved is not None else new_events
+
+    def _record_time_notices(self, plan: TradePlanV2, new_events: list[PlanEvent]) -> None:
+        """Make sure every time event is on the durable list (the step already
+        queued it with its guard in one write; this is the idempotent backstop).
+        Time events never touch the single pending_notice slot."""
+        if any(event.transition == "closed" for event in new_events):
+            # The terminal notice supersedes whatever was owed on the time rule.
+            if plan.pending_time_notices:
+                plan.pending_time_notices = []
+                self.store.update(plan)
+            return
+        queued = {notice["id"] for notice in plan.pending_time_notices}
+        added = False
+        for event in new_events:
+            notice_id = event.detail.get("notice_id")
+            if event.transition in te.TIME_EVENTS and notice_id and notice_id not in queued:
+                plan.pending_time_notices.append(self._time_notice(
+                    notice_id, event.transition, event.detail))
+                queued.add(notice_id)
+                added = True
+        if added:
+            self.store.update(plan)
 
     def poll(self, now=None) -> list[PlanEvent]:
         # One gate, and only one (2026-09-14, on direct request): the
@@ -339,7 +437,7 @@ class PlanManager:
         # INTRADAY_RTH_ONLY=false is still the pre-v64 escape hatch: no RTH
         # distinction at all, so this is unconditionally "regular" there too.
         regular = is_regular_session(now) if config.INTRADAY_RTH_ONLY else True
-        events: list[PlanEvent] = self.resend_notices()
+        events: list[PlanEvent] = self.resend_notices(now)
         open_plans = self.store.open_plans()
         prices: dict[str, float] | None = None
         if self.price_batch_fn is not None and open_plans:
@@ -524,17 +622,64 @@ class PlanManager:
 
     def _step(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
         if plan.status == PlanStatus.PENDING:
-            return self._step_pending(plan, price)
+            return self._step_pending(plan, price, now)
+        if self._past_time_exit_close(plan, now):
+            # v119: from the due session's official close on, the paper close
+            # is owned by the time rule alone. A later print -- an extended-hours
+            # spike through the stop, a day-11 tick -- must neither book a stop
+            # after the MOC covered nor fabricate a close while the official
+            # price is unresolved.
+            return self._compression_time_events(plan, now)
         if plan.status == PlanStatus.ACTIVE:
-            return self._step_active(plan, price, now)     # Tasks 61-63
-        if plan.status == PlanStatus.PARTIAL:
-            return self._step_partial(plan, price, now)    # Tasks 64-66
-        return []
+            events = self._step_active(plan, price, now)     # Tasks 61-63
+        elif plan.status == PlanStatus.PARTIAL:
+            events = self._step_partial(plan, price, now)    # Tasks 64-66
+        else:
+            return []
+        # v119: the ten-session time rule runs strictly AFTER the stop/target
+        # checks above and never when they already closed the plan this tick.
+        if (plan.strategy != COMPRESSION_SHORT or plan.status == PlanStatus.CLOSED
+                or any(event.transition == "closed" for event in events)):
+            return events
+        return events + self._compression_time_events(plan, now)
 
-    def _step_pending(self, plan: TradePlanV2, price: float) -> list[PlanEvent]:
+    def _compression_window(self, plan: TradePlanV2, now) -> list[PlanEvent] | None:
+        """v119: the compression short's resting sell-stop lives for exactly one
+        regular session, the first NYSE session after the signal day (counted on
+        the session calendar, so a holiday in between is not an expiry). None =
+        the eligible session is open, run the normal fill checks; a list (maybe
+        empty) = nothing further to do this poll.
+
+        The window ends at the eligible session's official close (13:00 ET on a
+        half-day, see session_close). Delivery of the expiry is at-least-once
+        and may be delayed to the next poll that runs with a price (quiet hours
+        or a missing quote); ``expires_at`` still records the real close. The
+        plan turns CANCELLED on that poll, so the event is emitted once, and
+        the pending notice is re-sent until acknowledged."""
+        eligible = _eligible_session(plan)
+        if eligible is None:
+            return None
+        et = now_et(now)
+        close = session_close(eligible)
+        if et.date() < eligible or (et.date() == eligible and et.time() < RTH_OPEN):
+            return []                    # same-bar / pre-open prints never fill
+        if et.date() == eligible and et.time() < close:
+            return None
+        closed_at = datetime.combine(eligible, close, tzinfo=US_MARKET_TZ).isoformat()
+        record_transition(plan, PlanStatus.CANCELLED, reason="expired", at=closed_at)
+        self.store.update(plan)
+        return [PlanEvent(plan.plan_id, "cancelled_expired", {
+            "bars_waited": 1, "cancel_resting_order": True,
+            "eligible_session": eligible.isoformat(), "expires_at": closed_at})]
+
+    def _step_pending(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
         is_bull = plan.direction == "bullish"
 
-        if self.bar_count_fn is not None:
+        if plan.strategy == COMPRESSION_SHORT:
+            window = self._compression_window(plan, now)
+            if window is not None:
+                return window
+        elif self.bar_count_fn is not None:
             bars = self.bar_count_fn(plan.ticker, plan.created_at)
             if pending_expired(plan, bars):
                 record_transition(plan, PlanStatus.CANCELLED, reason="expired",
@@ -734,17 +879,154 @@ class PlanManager:
         return []
 
     def _close_runner(self, plan: TradePlanV2, fill: float, reason: str,
-                      risk: float, sign: int) -> list[PlanEvent]:
+                      risk: float, sign: int, extra: dict | None = None) -> list[PlanEvent]:
         r2 = (fill - plan.entry_price) * sign / risk if risk > 0 else 0.0
         at = self._now()
         leg = {"fraction": 1.0 - plan.tp1_fraction, "exit_price": fill,
-               "r": r2, "reason": reason, "closed_at": at}
+               "r": r2, "reason": reason, "closed_at": at, **(extra or {})}
         plan.legs_realized.append(leg)
         record_transition(plan, PlanStatus.CLOSED, reason=reason, at=at)
         persisted = self._persist_terminal(plan, leg, "win" if reason.startswith("tp1_") else "closed")
         return [PlanEvent(plan.plan_id, "closed",
                           {"reason": reason, "exit_price": fill, "leg": leg,
                            "_terminal_persisted": persisted})]
+
+    # -- v119 ten-session time exit (compression short) ---------------------------
+    # Called from _step AFTER the stop/target checks. A notice never closes a
+    # plan: only an official closing-auction price, at or after the verified
+    # close, persists the paper close. No price = an explicit unresolved notice.
+
+    def _past_time_exit_close(self, plan: TradePlanV2, now) -> bool:
+        """True for an open compression short at or after the official close of
+        its tenth session (any later day too, while it is still open)."""
+        if plan.strategy != COMPRESSION_SHORT or plan.status not in (
+                PlanStatus.ACTIVE, PlanStatus.PARTIAL):
+            return False
+        try:
+            due = te.tenth_session(te.fill_day_from_history(plan.status_history),
+                                   nyse_calendar())
+        except ValueError:
+            return False
+        et = now_et(now)
+        close_at = te.official_close_at(due)
+        return et.date() > due if close_at is None else et >= close_at
+
+    def _time_notice(self, notice_id: str, transition: str, detail: dict) -> dict:
+        return {"id": notice_id, "transition": transition, "detail": dict(detail),
+                "at": self._now(), "acked": False}
+
+    def _queue_time_notice_once(self, plan: TradePlanV2, transition: str, day,
+                                detail: dict) -> PlanEvent | None:
+        """Queue one notice with id plan_id + transition + date on the durable
+        list (no store write: the caller persists it with its own guard).
+        None when that id is already queued."""
+        notice_id = te.time_notice_id(plan.plan_id, transition, day)
+        if any(notice["id"] == notice_id for notice in plan.pending_time_notices):
+            return None
+        detail = dict(detail, notice_id=notice_id)
+        plan.pending_time_notices.append(self._time_notice(notice_id, transition, detail))
+        return PlanEvent(plan.plan_id, transition, detail)
+
+    def _unresolved_events(self, plan: TradePlanV2, due, et: datetime,
+                           why: str) -> list[PlanEvent]:
+        """One explicit time_exit_unresolved notice per ET date; the plan stays
+        open and nothing is fabricated."""
+        today = et.date()
+        if plan.time_exit_unresolved_date == today.isoformat():
+            return []
+        plan.time_exit_unresolved_date = today.isoformat()
+        event = self._queue_time_notice_once(plan, te.TIME_EXIT_UNRESOLVED, today, {
+            "reason": why, "due_session": due.isoformat() if due else None,
+            # no due session known = no cover advice (the position may be days from due)
+            "cover_fraction": te.cover_fraction(plan) if due else None})
+        self.store.update(plan)
+        return [event] if event is not None else []
+
+    def _due_notice_events(self, plan: TradePlanV2, due, et: datetime,
+                           close_at: datetime) -> list[PlanEvent]:
+        """The single time_exit_due notice, from the notice deadline on. The
+        due date on the plan is the guard against a second one (restart-safe)."""
+        if plan.time_exit_due_date == due.isoformat():
+            return []
+        if et >= close_at:
+            # The auction is over: "cover in the closing auction" would be stale.
+            # Mark it handled and let the close / unresolved notice speak.
+            plan.time_exit_due_date = due.isoformat()
+            self.store.update(plan)
+            return []
+        deadline = te.notice_deadline(close_at)
+        if et < deadline:
+            return []
+        event = self._queue_time_notice_once(plan, te.TIME_EXIT_DUE, due, {
+            "cover_fraction": te.cover_fraction(plan), "auction_time": close_at.isoformat(),
+            "due_session": due.isoformat(), "late": et > deadline + te.LATE_GRACE})
+        plan.time_exit_due_date = plan.time_exit_notified_date = due.isoformat()
+        self.store.update(plan)
+        return [event] if event is not None else []
+
+    def _official_auction(self, plan: TradePlanV2, due) -> te.AuctionClose | None:
+        if self.auction_close_fn is None:
+            return None
+        try:
+            return te.parse_auction(self.auction_close_fn(plan.ticker, due))
+        except Exception as exc:
+            log.warning("time exit: auction close lookup failed for %s: %s", plan.ticker, exc, exc_info=True)
+            return None
+
+    def _close_time_exit(self, plan: TradePlanV2, auction: te.AuctionClose) -> list[PlanEvent]:
+        """Persist the paper close of whatever is still open at the official
+        auction price, through the one terminal path."""
+        sign = 1 if plan.direction == "bullish" else -1
+        entry = plan.entry_price
+        risk = abs(entry - plan.stop_loss)
+        basis = {"price_basis": te.OFFICIAL_BASIS, "auction_asof": auction.asof}
+        if plan.legs_realized:      # legacy PARTIAL: the prior leg stays untouched
+            return self._close_runner(plan, auction.price, te.TIME_EXIT_REASON, risk, sign, basis)
+        r = (auction.price - entry) * sign / risk if risk > 0 else 0.0
+        at = self._now()
+        leg = {"fraction": 1.0, "exit_price": auction.price, "r": r,
+               "reason": te.TIME_EXIT_REASON, "closed_at": at, **basis}
+        record_transition(plan, PlanStatus.CLOSED, reason=te.TIME_EXIT_REASON, at=at)
+        persisted = self._persist_terminal(plan, leg, "loss" if r < 0 else "closed")
+        return [PlanEvent(plan.plan_id, "closed",
+                          {"reason": te.TIME_EXIT_REASON, "exit_price": auction.price,
+                           "leg": leg, "_terminal_persisted": persisted})]
+
+    def _close_or_unresolved(self, plan: TradePlanV2, due, et: datetime) -> list[PlanEvent]:
+        auction = self._official_auction(plan, due)
+        if auction is None:
+            return self._unresolved_events(
+                plan, due, et, "no official closing-auction price is available")
+        return self._close_time_exit(plan, auction)
+
+    def _compression_time_events(self, plan: TradePlanV2, now) -> list[PlanEvent]:
+        """The ten-session rule for one open compression short: the due notice
+        from the deadline on, the paper close once the official close has passed.
+        Fails closed (unresolved notice) when the exchange schedule or the
+        official price is missing."""
+        try:
+            fill_day = te.fill_day_from_history(plan.status_history)
+        except ValueError:
+            log.warning("time exit: plan %s has no recorded fill; not timing it", plan.plan_id)
+            return []
+        et = now_et(now)
+        try:
+            due = te.tenth_session(fill_day, nyse_calendar())
+        except ValueError:
+            if et.date() < fill_day + te.MIN_TEN_SESSION_SPAN:
+                return []            # ten sessions cannot have passed yet
+            return self._unresolved_events(
+                plan, None, et, "exchange schedule does not cover the due session")
+        if et.date() < due:
+            return []
+        close_at = te.official_close_at(due)
+        if close_at is None:
+            return self._unresolved_events(
+                plan, due, et, "official close time unavailable for the due session")
+        events = self._due_notice_events(plan, due, et, close_at)
+        if et < close_at:
+            return events
+        return events + self._close_or_unresolved(plan, due, et)
 
     # -- overnight/session-open bar check (Task 67) --------------------------
     # UNWIRED: production exits exclusively through poll(); see known-traps.md.
@@ -928,6 +1210,20 @@ def run_notice_sweep() -> list[PlanEvent]:
     return _manager().resend_notices()
 
 
+def _ack_notice(plan, value) -> bool:
+    """Clear the delivered notice: a v119 time notice by its stable id, else the
+    single slot by transition. False when nothing matched."""
+    remaining = [n for n in plan.pending_time_notices if n["id"] != value]
+    if len(remaining) != len(plan.pending_time_notices):
+        plan.pending_time_notices = remaining
+        return True
+    notice = plan.pending_notice
+    if not notice or notice.get("transition") != value:
+        return False
+    plan.pending_notice = None
+    return True
+
+
 def ack_notified(deliveries) -> None:
     """Record execution-feed deliveries through the manager-owned plan store."""
     if not deliveries:
@@ -939,12 +1235,7 @@ def ack_notified(deliveries) -> None:
             continue
         if delivery.kind == "stop":
             plan.notified_stop = float(delivery.value)
-        elif delivery.kind == "notice":
-            notice = plan.pending_notice
-            if not notice or notice.get("transition") != delivery.value:
-                continue
-            plan.pending_notice = None
-        else:
+        elif delivery.kind != "notice" or not _ack_notice(plan, delivery.value):
             continue
         store.update(plan)
 

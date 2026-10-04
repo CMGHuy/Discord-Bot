@@ -9,12 +9,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from swingbot import config
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import COMPRESSION_SHORT, HORIZONS
+from swingbot.core.risk_limits import planned_loss_pct
+from .stop_scope import plan_stop_ceiling
 from .plan_types import TradePlanV2
 from .params import RUNNER_FLOOR_FRACTION
 from .lifecycle import (at_or_beyond_stop, fill_price, limit_fill_price, limit_hit,
                         pending_expired, pending_invalidated, stop_touched, trigger_hit)
 from .targets import _safe_atr_value
+from .time_exit import PROXY_BASIS, TIME_EXIT_REASON
 @dataclass
 class ExitResult:
     outcome: str                 # "win"|"loss"|"scratch"|"timeout"|"not_triggered"|"no_trade"
@@ -24,9 +27,12 @@ class ExitResult:
     entry_price: float | None
     r_total: float               # sum over legs of fraction * signed_r
     legs: list                   # [{"fraction","exit_price","r","reason"}]
+    # Why a not_triggered row was excluded ("risk_cap"|"expired"|"invalidated");
+    # set only on the compression short's rows, None everywhere else.
+    cancel_reason: str | None = None
 
 
-def _not_triggered() -> ExitResult:
+def _not_triggered(cancel_reason: str | None = None) -> ExitResult:
     return ExitResult(
         outcome="not_triggered",
         runner_outcome=None,
@@ -35,6 +41,7 @@ def _not_triggered() -> ExitResult:
         entry_price=None,
         r_total=0.0,
         legs=[],
+        cancel_reason=cancel_reason,
     )
 
 
@@ -105,17 +112,8 @@ def _single_leg_exit_walk(
     if outcome == "timeout":
         exit_price, exit_index = float(close[end]), end
 
-    if outcome == "win":
-        r, reason = rr, "tp1"
-    elif outcome == "loss":
-        r, reason = -1.0, "stop"
-    elif outcome == "scratch":
-        r, reason = 0.0, "breakeven_stop"
-    else:  # timeout
-        r = (exit_price - entry_price) * sign / risk
-        reason = "timeout"
-
-    r = round(r, 3)
+    r, leg = _single_leg_booking(outcome, rr, exit_price, entry_price, sign, risk, plan,
+                                entry_index, exit_index)
 
     return ExitResult(
         outcome=outcome,
@@ -124,8 +122,37 @@ def _single_leg_exit_walk(
         exit_index=exit_index,
         entry_price=entry_price,
         r_total=r,
-        legs=[{"fraction": 1.0, "exit_price": exit_price, "r": r, "reason": reason}],
+        legs=[leg],
     )
+
+
+_SINGLE_LEG_REASONS = {"win": "tp1", "loss": "stop", "scratch": "breakeven_stop"}
+
+
+def _single_leg_booking(outcome: str, rr: float, exit_price: float, entry_price: float,
+                        sign: int, risk: float, plan: TradePlanV2,
+                        entry_index: int, exit_index: int) -> tuple[float, dict]:
+    """(rounded r, the one leg) of a single-leg walk's outcome."""
+    r = {"win": rr, "loss": -1.0, "scratch": 0.0}.get(outcome)
+    if r is None:                    # timeout: marked to the last scanned close
+        r = (exit_price - entry_price) * sign / risk
+    r = round(r, 3)
+    leg = {"fraction": 1.0, "exit_price": exit_price, "r": r,
+           "reason": _SINGLE_LEG_REASONS.get(outcome, "timeout")}
+    if outcome == "timeout" and _is_compression(plan) and _tenth_session_reached(plan, entry_index, exit_index):
+        # v119: the compression short's timeout is the tenth-session paper
+        # close; live prices it at the official auction, the replay at the
+        # bar's Close, and says so. A walk cut short by the end of the data
+        # (right-censored) keeps the plain "timeout" label and no price basis.
+        leg["reason"], leg["price_basis"] = TIME_EXIT_REASON, PROXY_BASIS
+    return r, leg
+
+
+def _tenth_session_reached(plan: TradePlanV2, entry_index: int, exit_index: int) -> bool:
+    """True only when the walk really ran to the plan's hold cap (fill session = session 1)."""
+    if plan.hold_cap_bars is None:
+        return True
+    return exit_index == entry_index + int(plan.hold_cap_bars) - 1
 
 
 def chandelier_stop(extreme_close_since_tp1: float, atr_value: float,
@@ -348,6 +375,26 @@ def _fill_bar_exit(df, j: int, entry_price: float, plan: TradePlanV2) -> ExitRes
     return None
 
 
+def _is_compression(plan: TradePlanV2) -> bool:
+    """The compression short alone gets the live-parity fill policy; every other
+    strategy's stop-entry replay stays exactly as it was."""
+    return plan.strategy == COMPRESSION_SHORT
+
+
+def _compression_fill(df, j: int, entry_price: float, plan: TradePlanV2,
+                      scale_out: bool, max_holding_days: int) -> ExitResult:
+    """Fill policy for the compression short, mirroring PlanManager._step_pending:
+    a gap fill whose planned loss exceeds the stop ceiling is cancelled (an
+    excluded not_triggered row, never scored), otherwise the fill bar is checked
+    against the stop (stop-first) before the normal exit walk."""
+    if planned_loss_pct(entry_price, plan.stop_loss) > plan_stop_ceiling(plan):
+        return _not_triggered("risk_cap")
+    early = _fill_bar_exit(df, j, entry_price, plan)
+    if early is not None:
+        return early
+    return _walk_for(plan, scale_out)(df, j, entry_price, plan, max_holding_days)
+
+
 def _limit_entry_exit(df, signal_index: int, plan: TradePlanV2, scale_out: bool,
                       max_holding_days: int) -> ExitResult:
     """v113 §3: a resting limit at trigger_price, live for the plan's
@@ -366,6 +413,18 @@ def _limit_entry_exit(df, signal_index: int, plan: TradePlanV2, scale_out: bool,
             return early
         return _walk_for(plan, scale_out)(df, j, entry_price, plan, max_holding_days)
     return _not_triggered()
+
+
+def _hold_cap_bars(plan: TradePlanV2, max_holding_days: int) -> int:
+    """The walkers' scan length after the plan's hold cap. They scan
+    entry_index+1 .. entry_index+N; the compression short's fill session is
+    session 1, so its cap of N sessions ends at entry_index + N - 1 (live: the
+    tenth session). Every other strategy keeps entry_index + N."""
+    hold_cap = getattr(plan, "hold_cap_bars", None)
+    if hold_cap is None:
+        return max_holding_days
+    cap = int(hold_cap) - 1 if _is_compression(plan) else int(hold_cap)
+    return min(max_holding_days, cap)
 
 
 def simulate_exit(
@@ -405,9 +464,7 @@ def simulate_exit(
     if max_holding_days is None:
         max_holding_days = HORIZONS[plan.horizon_key]["max_holding_days"]
 
-    hold_cap = getattr(plan, "hold_cap_bars", None)
-    if hold_cap is not None:
-        max_holding_days = min(max_holding_days, int(hold_cap))
+    max_holding_days = _hold_cap_bars(plan, max_holding_days)
 
     if plan.entry_type == "limit":
         return _limit_entry_exit(df, signal_index, plan, scale_out, max_holding_days)
@@ -418,12 +475,14 @@ def simulate_exit(
         return _walk_for(plan, scale_out)(df, entry_index, entry_price, plan, max_holding_days)
 
     # stop_entry: scan signal_index+1 .. signal_index+plan.expiry_bars for a
-    # trigger touch, watching for pre-fill invalidation along the way.
+    # trigger touch, watching for pre-fill invalidation along the way. df rows
+    # are sessions, so a holiday between signal and next bar costs nothing.
     high = df["High"].values
     low = df["Low"].values
     open_ = df["Open"].values
     close = df["Close"].values
     n = len(df)
+    strict = _is_compression(plan)
 
     j = signal_index + 1
     while j < n:
@@ -431,12 +490,13 @@ def simulate_exit(
         if pending_expired(plan, bars_since_created):
             break
         if trigger_hit(plan, float(high[j]), float(low[j])):
-            entry_index = j
             entry_price = fill_price(plan, float(open_[j]))
-            return _walk_for(plan, scale_out)(df, entry_index, entry_price, plan, max_holding_days)
+            if strict:
+                return _compression_fill(df, j, entry_price, plan, scale_out, max_holding_days)
+            return _walk_for(plan, scale_out)(df, j, entry_price, plan, max_holding_days)
         if pending_invalidated(plan, float(close[j])):
-            return _not_triggered()
+            return _not_triggered("invalidated" if strict else None)
         j += 1
 
-    return _not_triggered()
+    return _not_triggered("expired" if strict else None)
 

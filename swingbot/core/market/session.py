@@ -194,6 +194,28 @@ class SessionCalendar:
         return None if a is None or b is None else b - a
 
 
+EARLY_CLOSE = dt.time(13, 0)
+
+
+def is_early_close(d: dt.date) -> bool:
+    """NYSE 13:00 ET half-day, derived from the standard rules (a minimal model,
+    not an exchange feed): the Friday after Thanksgiving; Dec 24 and Jul 3 when
+    they are trading days. A Jul 3 / Dec 24 that is a full holiday is already
+    out of NYSE_HOLIDAYS, and a Jul 3 session implies Jul 4 falls Tue-Fri."""
+    if d.weekday() >= 5 or d in NYSE_HOLIDAYS:
+        return False
+    if (d.month, d.day) in ((12, 24), (7, 3)):
+        return True
+    thanksgiving = d - dt.timedelta(days=1)
+    return d.weekday() == 4 and d.month == 11 and thanksgiving.weekday() == 3 \
+        and 22 <= thanksgiving.day <= 28
+
+
+def session_close(d: dt.date) -> dt.time:
+    """Official regular-session close (ET) of session ``d``."""
+    return EARLY_CLOSE if is_early_close(d) else RTH_CLOSE
+
+
 @functools.lru_cache(maxsize=1)
 def nyse_calendar() -> SessionCalendar:
     """Every NYSE session covered by the frozen holiday table."""

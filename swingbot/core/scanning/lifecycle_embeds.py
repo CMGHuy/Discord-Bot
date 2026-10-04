@@ -426,7 +426,9 @@ def _delivery(plan, event):
         return Delivery(plan.plan_id, "stop", event.detail["new"])
     if event.transition in ("be_moved", "tp1_partial"):
         return Delivery(plan.plan_id, "stop", event.detail["working_stop"])
-    return Delivery(plan.plan_id, "notice", event.transition)
+    # A v119 time notice is acknowledged by its stable id, so one acked notice
+    # never clears the other; every other notice by its transition.
+    return Delivery(plan.plan_id, "notice", event.detail.get("notice_id", event.transition))
 
 
 async def notify_plan_events(bot, events) -> list:
@@ -439,6 +441,7 @@ async def notify_plan_events(bot, events) -> list:
     from swingbot.core.infra.silent_channel import silence
     from swingbot.core.planning.plan_manager import NOTICE_EVENTS, STOP_EVENTS
     from swingbot.core.planning.plan_store import PlanStore
+    from swingbot.core.planning.time_exit import TIME_EVENTS
     from .execution_embeds import build_instruction_embed
 
     store = PlanStore()
@@ -450,7 +453,7 @@ async def notify_plan_events(bot, events) -> list:
             plan = store.get(event.plan_id)
             if plan is None:
                 continue
-            if event.transition not in STOP_EVENTS | NOTICE_EVENTS:
+            if event.transition not in STOP_EVENTS | NOTICE_EVENTS | TIME_EVENTS:
                 if history is not None:
                     status_embed = build_plan_event_embed(plan, event)
                     await history.send(**ui.push_kwargs(status_embed))
