@@ -75,3 +75,24 @@ def test_step_never_loosens_and_off_is_inert(monkeypatch):
     assert runner_structure_step(frame, 0, runner_stop=105.0, **kw) == (105.0, False)
     monkeypatch.setattr(config, "RUNNER_STRUCTURE_EXIT", "off")
     assert runner_structure_step(frame, 0, runner_stop=103.0, **kw) == (103.0, False)
+
+
+def test_step_in_progress_stall_mode_wires_prior_pivot_and_range_knob(monkeypatch):
+    frame = pd.DataFrame([_row()] * 20 + [_stall(), _stall()]).reset_index(drop=True)
+    monkeypatch.setattr(config, "RUNNER_STRUCTURE_EXIT", "progress_stall")
+    monkeypatch.setattr(config, "RUNNER_STALL_RANGE_MAX", 0.7)
+    kw = dict(entry_index=10, direction="bullish", runner_stop=105.0, atr_value=2.0)
+    assert runner_structure_step(frame, 20, **kw) == (105.0, True)
+    assert runner_structure_step(frame, 21, **kw) == (105.0, False)       # pivot not new at 21
+    monkeypatch.setattr(config, "RUNNER_STALL_RANGE_MAX", 0.4)            # range 0.5 now too hot
+    assert runner_structure_step(frame, 20, **kw) == (105.0, False)
+    assert runner_structure_step(frame, 20, **{**kw, "entry_index": 12}) == (105.0, False)  # prior pre-entry
+
+
+def test_bearish_step_never_loosens(monkeypatch):
+    frame = pd.DataFrame([_row(sh_i=12, sh_px=96.0)])
+    monkeypatch.setattr(config, "RUNNER_STRUCTURE_EXIT", "hl_trail")
+    monkeypatch.setattr(config, "RUNNER_HL_TRAIL_ATR_BUFFER", 0.0)
+    kw = dict(entry_index=10, direction="bearish", atr_value=2.0)
+    assert runner_structure_step(frame, 0, runner_stop=97.0, **kw) == (96.0, False)
+    assert runner_structure_step(frame, 0, runner_stop=95.0, **kw) == (95.0, False)
