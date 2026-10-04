@@ -20,8 +20,9 @@
 **Time Window (TRAIN):**
 - Start: 2020-01-01
 - End: 2023-12-31
+- Recorded before outcome is read from CSV
 
-**Universe:** Full cached universe (all tickers)
+**Universe:** Every ticker with a daily CSV in the local backtest cache (market_data/daily), listed from disk; not watchlist-filtered, because production Postgres is unreachable from the dev machine
 
 **Horizons:** All ten horizons (from `swingbot.core.backtesting.arms.windows.ALL_HORIZONS`)
 

@@ -17,6 +17,16 @@ TRAIN = ("2020-01-01", "2023-12-31")
 STOP_CAPTURE = 0.75          # spec v123 frozen stop rule
 
 
+def cache_universe() -> list[str]:
+    """Sorted tickers with daily CSV in the local backtest cache.
+    Derives from swingbot.core.marketdata.backtest_cache; does not touch DB."""
+    from swingbot.core.marketdata.backtest_cache import CACHE_DIR
+    csvs = CACHE_DIR.glob("*.csv")
+    # Reverse the ticker name transformation: =, ^, / are replaced with _
+    tickers = [p.stem for p in csvs]
+    return sorted(tickers)
+
+
 def _tp1_index(df, result, plan) -> int:
     high, low = df["High"].values, df["Low"].values
     for j in range(result.entry_index + 1, result.exit_index + 1):
@@ -99,14 +109,14 @@ def _ticker_rows(task) -> list:
 
 
 def main(argv=None) -> int:
-    from measure_arms import _write_progress, cached_universe
+    from measure_arms import _write_progress
     from swingbot.core.backtesting.arms.windows import ALL_HORIZONS
     from swingbot.core.backtesting.backtest_scenarios import _resolve_replay_workers
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out-json", required=True, type=Path)
     parser.add_argument("--workers", type=int, default=None)
     args = parser.parse_args(argv)
-    universe = cached_universe()
+    universe = cache_universe()
     progress = ROOT / "logs" / f"runner_headroom.{uuid.uuid4().hex[:8]}.progress"
     rows, done = [], 0
     with ProcessPoolExecutor(max_workers=_resolve_replay_workers(args.workers)) as pool:

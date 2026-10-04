@@ -4,9 +4,10 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "reports"))
-from runner_headroom import runner_metrics, stop_rule, summarise  # noqa: E402
+from runner_headroom import runner_metrics, stop_rule, summarise, cache_universe  # noqa: E402
 
 from swingbot.core.planning.plan_engine import simulate_exit
+from swingbot.core.marketdata import backtest_cache
 from tests.helpers import make_ohlcv
 from tests.planning.test_exit_sim_single import _plan
 
@@ -35,3 +36,13 @@ def test_frozen_stop_rule():
     assert stop_rule(summarise(rows)) == "NO_HEADROOM"
     rows[0]["capture"] = 0.74
     assert stop_rule(summarise(rows)) == "HEADROOM"
+
+
+def test_cache_universe_returns_sorted_tickers_from_disk(monkeypatch, tmp_path):
+    # Create test CSV files in tmp cache dir
+    for ticker in ["ZULU", "AAPL", "XYZ"]:
+        (tmp_path / f"{ticker}.csv").touch()
+    # Monkeypatch CACHE_DIR to tmp_path (no DB access)
+    monkeypatch.setattr(backtest_cache, "CACHE_DIR", tmp_path)
+    # Verify sorted return from disk
+    assert cache_universe() == ["AAPL", "XYZ", "ZULU"]
