@@ -24,3 +24,18 @@ def test_completed_frame_and_deduplication():
         def all(self): return [P()]
     assert sp.already_emitted(Store(), "AAPL", "MACD", "3m", "2026-09-16")
     assert not sp.already_emitted(Store(), "AAPL", "MACD", "4m", "2026-09-16")
+
+
+def test_compression_signal_is_stamped_with_mode_and_bar_date_or_rejected():
+    from types import SimpleNamespace
+    from swingbot.core.market.strategy_types import COMPRESSION_SHORT
+    frame = _frame_ending(dt.date(2026, 9, 16))
+    added = []
+    plan_store = SimpleNamespace(all=lambda: [], add=added.append)
+    stamp = sp._compression_context("AAPL", COMPRESSION_SHORT, frame,
+                                    sp._PassDeps(plan_store, None, "shadow", set(), None,
+                                                 compression_of=lambda t, f: ("broad", None)))
+    assert stamp == ({"compression_mode": "broad", "compression_bar_date": "2026-09-16"}, False)
+    deps = sp._PassDeps(plan_store, None, "shadow", set(), None)
+    assert sp._compression_context("AAPL", COMPRESSION_SHORT, frame, deps) == ({}, True)
+    assert sp._compression_context("AAPL", "MACD", frame, deps) == ({}, False)

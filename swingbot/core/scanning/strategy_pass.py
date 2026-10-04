@@ -81,6 +81,7 @@ class PassResult:
     rs_blocked: int = 0
     skipped_dup: int = 0
     sizing_blocked: int = 0
+    compression_rejected: int = 0
 
 
 @dataclass
@@ -93,6 +94,7 @@ class _PassDeps:
     live_allow: set
     rs_combined_of: object
     asof_of: object = None
+    compression_of: object = None  # (ticker, frame) -> (mode, reason); None = fail closed
 
 
 def _regime_for(regimes, frame):
@@ -125,6 +127,17 @@ def _open_trade(deps: _PassDeps, plan, *, ticker, strategy, horizon, direction) 
         ledger=plan.ledger, entry_context=plan.entry_context)
 
 
+def _compression_context(ticker, strategy, frame, deps: _PassDeps):
+    """(stamp, rejected) for the masked compression strategy; other strategies pass through."""
+    from swingbot.core.market.strategy_types import COMPRESSION_SHORT
+    if strategy != COMPRESSION_SHORT:
+        return {}, False
+    mode, _reason = deps.compression_of(ticker, frame) if deps.compression_of else (None, "no_context")
+    if mode is None:
+        return {}, True
+    return {"compression_mode": mode, "compression_bar_date": frame.index[-1].date().isoformat()}, False
+
+
 def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, horizon,
                  bar_date, regime, deps: _PassDeps) -> None:
     """Store and, when eligible, alert one fired strategy signal."""
@@ -134,12 +147,17 @@ def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, hori
     if _rs_blocked(ticker, direction, deps.rs_combined_of):
         result.rs_blocked += 1
         return
+    stamp, rejected = _compression_context(ticker, strategy, frame, deps)
+    if rejected:
+        result.compression_rejected += 1
+        return
     plan = build_strategy_plan_at(
         frame, ticker=ticker, strategy=strategy, horizon_key=horizon,
         direction=direction, regime2_state=regime,
         asof=deps.asof_of(ticker) if deps.asof_of else None)
     if plan is None:
         return
+    plan.entry_context = {**(plan.entry_context or {}), **stamp}
     if not risk_sizing_ok(plan):
         log.error(
             "strategy pass: %s %s %s %s uses structural stops but has no risk-based sizing "
@@ -162,10 +180,10 @@ def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, hori
 
 def run_strategy_pass(tickers, fresh_data, *, now, horizons, spy_df, regimes,
                       rs_combined_of, mode: str, live_allow: set, trade_log, plan_store,
-                      asof_of=None) -> PassResult:
+                      asof_of=None, compression_of=None) -> PassResult:
     """Build strategy plans after confluence; only eligible live plans open trades."""
     result = PassResult()
-    deps = _PassDeps(plan_store, trade_log, mode, live_allow, rs_combined_of, asof_of)
+    deps = _PassDeps(plan_store, trade_log, mode, live_allow, rs_combined_of, asof_of, compression_of)
     for ticker in tickers:
         raw = fresh_data.get(ticker)
         if raw is None or len(raw) == 0:
