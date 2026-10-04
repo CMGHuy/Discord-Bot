@@ -47,6 +47,35 @@ def bollinger_bands(df: pd.DataFrame, window: int = 20, num_std: float = 2.0) ->
     return pd.DataFrame({"middle": middle, "upper": middle + num_std * std, "lower": middle - num_std * std})
 
 
+def squeeze_release_series(df: pd.DataFrame, bb_window: int = 20, num_std: float = 2.0,
+                           kc_ema_period: int = 20, kc_atr_period: int = 10,
+                           kc_multiplier: float = 1.5, volume_multiple: float = 1.5) -> pd.DataFrame:
+    """Causal per-bar TTM-squeeze release flags (all boolean, indexed like df).
+
+    Row k reads only bars <= k: BB/KC are trailing, and release / breakout /
+    volume comparisons use shift(1). Bars lacking history are False.
+    """
+    bb = bollinger_bands(df, window=bb_window, num_std=num_std)
+    kc = keltner_channel(df, ema_period=kc_ema_period,
+                         atr_period=kc_atr_period, multiplier=kc_multiplier)
+    squeezed = ((bb["upper"] < kc["upper"]) & (bb["lower"] > kc["lower"])).fillna(False)
+    first_release = squeezed.shift(1, fill_value=False) & ~squeezed
+    prior_volume = df["Volume"].rolling(bb_window).mean().shift(1)
+    enough_volume = (prior_volume.gt(0) &
+                     df["Volume"].ge(volume_multiple * prior_volume)).fillna(False)
+    bearish = (df["Close"] < bb["lower"].shift(1)).fillna(False)
+    bullish = (df["Close"] > bb["upper"].shift(1)).fillna(False)
+    enough_history = pd.Series(range(len(df)), index=df.index).ge(
+        max(bb_window, kc_ema_period, kc_atr_period) + 4)
+    return pd.DataFrame({
+        "is_squeeze": squeezed, "squeeze_off": first_release,
+        "volume_confirmed": enough_volume,
+        "bearish_breakout": bearish, "bullish_breakout": bullish,
+        "bearish_confirmed": first_release & enough_volume & bearish & enough_history,
+        "bullish_confirmed": first_release & enough_volume & bullish & enough_history,
+    }, index=df.index)
+
+
 def squeeze_breakout_confirmation(df: pd.DataFrame, direction: str, bb_window: int = 20, num_std: float = 2.0,
                                    kc_ema_period: int = 20, kc_atr_period: int = 10, kc_multiplier: float = 1.5,
                                    volume_multiple: float = 1.5) -> dict:
@@ -83,38 +112,21 @@ def squeeze_breakout_confirmation(df: pd.DataFrame, direction: str, bb_window: i
     if len(df) < max(bb_window, kc_ema_period, kc_atr_period) + 5:
         return empty
 
+    series = squeeze_release_series(df, bb_window, num_std, kc_ema_period,
+                                    kc_atr_period, kc_multiplier, volume_multiple)
+    row = series.iloc[-1]
+    side = "bullish" if direction == "bullish" else "bearish"
     bb = bollinger_bands(df, bb_window, num_std)
-    kc = keltner_channel(df, kc_ema_period, kc_atr_period, kc_multiplier)
-
-    # Squeeze ON when BOTH bb bands are inside BOTH kc bands
-    squeeze_on = (bb["upper"] < kc["upper"]) & (bb["lower"] > kc["lower"])
-
-    prev_squeeze = bool(squeeze_on.iloc[-2]) if len(squeeze_on) > 1 else False
-    curr_squeeze = bool(squeeze_on.iloc[-1])
-    squeeze_off = prev_squeeze and not curr_squeeze   # squeeze just fired this bar
-
-    width_pct = float((bb["upper"].iloc[-1] - bb["lower"].iloc[-1]) / bb["middle"].iloc[-1] * 100) if pd.notna(bb["middle"].iloc[-1]) else 0.0
-
-    avg_volume = df["Volume"].rolling(bb_window).mean().iloc[-2] if len(df) > bb_window + 1 else None
-    today_volume = df["Volume"].iloc[-1]
-    volume_confirmed = bool(avg_volume and pd.notna(avg_volume) and today_volume >= volume_multiple * avg_volume)
-
-    prior_upper, prior_lower = bb["upper"].iloc[-2], bb["lower"].iloc[-2]
-    close_today = df["Close"].iloc[-1]
-    if direction == "bullish":
-        breakout_confirmed = bool(pd.notna(prior_upper) and close_today > prior_upper)
-    else:
-        breakout_confirmed = bool(pd.notna(prior_lower) and close_today < prior_lower)
-
-    confirmed = squeeze_off and volume_confirmed and breakout_confirmed
+    mid = bb["middle"].iloc[-1]
+    width_pct = float((bb["upper"].iloc[-1] - bb["lower"].iloc[-1]) / mid * 100) if pd.notna(mid) else 0.0
 
     return {
-        "confirmed": confirmed,
-        "is_squeeze": curr_squeeze,
-        "squeeze_off": squeeze_off,
+        "confirmed": bool(row[f"{side}_confirmed"]),
+        "is_squeeze": bool(row["is_squeeze"]),
+        "squeeze_off": bool(row["squeeze_off"]),
         "width_pct": round(width_pct, 2),
-        "volume_confirmed": volume_confirmed,
-        "breakout_confirmed": breakout_confirmed,
+        "volume_confirmed": bool(row["volume_confirmed"]),
+        "breakout_confirmed": bool(row[f"{side}_breakout"]),
     }
 
 
