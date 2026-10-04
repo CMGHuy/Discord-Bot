@@ -214,6 +214,9 @@ cooldown after `choch_against`. It must:
 - state why it is not a re-run of v17 or v33
 - clear both the v72 and v92 gates on TRAIN → VALIDATION
 
+A second candidate (noted 2026-10-04) is a Fibonacci leg anchored on a major
+pivot. v124's "What follows" holds it, and it also needs v124's arm 1 to pass.
+
 ## Testing
 
 - **Truncation:** for every cut `t` on fixture and real-symbol frames,
