@@ -152,6 +152,8 @@ def test_changed_surviving_outcomes_are_not_scored_as_removal_signal():
     {"provenance": {"made_up": True}},
     {"stage": "selection"},
     {"engine_hash": {"baseline": "h", "component": "different"}},
+    {"engine_hash": {"baseline": ["fake"], "component": ["fake"]}},
+    {"preregistration": True},
     {"engines": [{}]},
     {"universe": [{}]},
 ])

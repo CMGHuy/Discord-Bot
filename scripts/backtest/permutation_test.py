@@ -98,6 +98,12 @@ def _full_universe():
     return cached_universe()
 
 
+def _valid_engine_hashes(hashes):
+    return isinstance(hashes, dict) and all(
+        isinstance(hashes.get(arm), str) and hashes[arm].strip()
+        for arm in ("baseline", "component"))
+
+
 def _stamp_population_refusal(stamp, baseline, component):
     universe, horizons, engines = stamp.get("universe"), stamp.get("horizons"), stamp.get("engines")
     if not isinstance(universe, list) or not isinstance(horizons, list) or not isinstance(engines, list):
@@ -109,8 +115,7 @@ def _stamp_population_refusal(stamp, baseline, component):
     sources = {trade.source for trade in baseline + component}
     if None in sources or not sources <= set(engines):
         return "refused:engine-mismatch"
-    hashes = stamp.get("engine_hash")
-    if not isinstance(hashes, dict):
+    if not _valid_engine_hashes(stamp.get("engine_hash")):
         return "refused:malformed-stamp"
     return None
 
@@ -129,7 +134,8 @@ def _stamp_shape_refusal(stamp, baseline, component):
         return "refused:stage-mismatch"
     if stamp.get("signal_window") != list(STAGES["validation"].signal_window):
         return "refused:window-mismatch"
-    if not stamp.get("preregistration"):
+    preregistration = stamp.get("preregistration")
+    if not isinstance(preregistration, str) or not preregistration.strip():
         return "refused:no-preregistration"
     return _stamp_population_refusal(stamp, baseline, component)
 
