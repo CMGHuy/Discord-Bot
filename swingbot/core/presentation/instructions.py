@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from swingbot.core.planning.exit_sim import runner_floor
 from swingbot.core.planning.plan_types import breakeven_trigger
-from swingbot.core.presentation import tokens
+from swingbot.core.presentation import short_notice, tokens
 from swingbot.core.presentation.plan_view import plan_view
 
 PLACE = "PLACE"
@@ -34,6 +34,7 @@ _EXIT_WORDS = {
     "tp1_runner_be": "runner floor",
     "tp1_runner_trail": "trail",
     "tp1_runner_tp2": "TP2",
+    "time_exit": "ten-session time exit",
 }
 
 
@@ -211,7 +212,58 @@ def _closed(plan, detail: dict, side: dict, common: dict) -> Instruction:
     told, held = detail.get("notified_stop"), detail.get("bot_stop")
     if told is not None and held is not None and not math.isclose(told, held, abs_tol=1e-6):
         lines.append(f"your last pinged stop was {_price(told)} — that order may still be open")
+    lines.extend(_staged_order_lines(plan, detail, side))
     return Instruction(verb=verb, headline=headline, lines=tuple(lines), tone=tone, **common)
+
+
+def _staged_order_lines(plan, detail: dict, side: dict) -> list[str]:
+    """v119: a close that leaves a broker order behind. The bot never touches
+    the broker, so these only ever tell the reader to cancel or verify."""
+    if detail.get("reason") == "time_exit":
+        return [f"CANCEL or VERIFY any resting protective {side['stop']} at your broker "
+                "-- the bot cannot cancel it for you"]
+    if getattr(plan, "time_exit_notified_date", None):      # a due notice was actually sent
+        return [short_notice.staged_moc_line(side["exit"])]
+    return []
+
+
+def _auction_clock(stamp: str | None) -> str:
+    """'16:00' from an ISO auction time; the raw text if it will not parse."""
+    try:
+        return dt.datetime.fromisoformat(str(stamp)).strftime("%H:%M ET")
+    except ValueError:
+        return str(stamp)
+
+
+def _time_exit(plan, event, side: dict, common: dict, sizing: dict | None) -> Instruction:
+    """v119 ten-session time exit: the due notice (cover at the close auction)
+    and the unresolved notice (no official price, nothing was closed)."""
+    detail = event.detail
+    if event.transition == "time_exit_unresolved":
+        lines = [f"{detail.get('reason', 'official closing-auction price unavailable')}; "
+                 "the bot has NOT closed this paper trade"]
+        if detail.get("cover_fraction") is not None:     # None = schedule missing, no cover advice
+            lines.append(f"If you still hold it, {side['exit']} (cover the remaining "
+                         f"{detail['cover_fraction']:.0%})")
+        return Instruction(
+            verb=CLOSE_AT_MARKET, headline="TIME EXIT UNRESOLVED — no official close price",
+            lines=tuple(lines), tone="bad", **common)
+    whole = _whole_shares(sizing)
+    fraction = detail.get("cover_fraction", 1.0)
+    qty = f"{math.floor(whole * fraction):,} sh" if whole is not None else f"{fraction:.0%}"
+    headline, lines = short_notice.compression_due_lines(
+        side["exit"], qty, detail, _auction_clock(detail.get("auction_time")))
+    return Instruction(verb=CLOSE_AT_MARKET, headline=headline, lines=lines,
+                       tone="neutral", **common)
+
+
+def _closed_event(plan, event, side: dict, common: dict, sizing: dict | None) -> Instruction:
+    return _closed(plan, event.detail, side, common)
+
+
+#: transitions whose instruction is a whole builder of its own.
+_BUILDERS = {"time_exit_due": _time_exit, "time_exit_unresolved": _time_exit,
+             "closed": _closed_event}
 
 
 def instruction_for(plan, event, *, sizing: dict | None = None) -> Instruction:
@@ -223,6 +275,8 @@ def instruction_for(plan, event, *, sizing: dict | None = None) -> Instruction:
     detail = event.detail
     common = dict(ticker=plan.ticker, direction=plan.direction, plan_id=plan.plan_id)
     transition = event.transition
+    if transition in _BUILDERS:
+        return _BUILDERS[transition](plan, event, side, common, sizing)
     if transition == "filled":
         fill = _price(detail["entry_price"])
         return Instruction(
@@ -254,7 +308,9 @@ def instruction_for(plan, event, *, sizing: dict | None = None) -> Instruction:
                    "since the last ping",),
             **common)
     if transition in ("cancelled_expired", "cancelled_invalidated", "cancelled_risk_cap"):
-        if transition == "cancelled_expired":
+        if short_notice.is_compression(plan) and transition != "cancelled_invalidated":
+            why = short_notice.compression_cancel_why(plan, transition, detail)
+        elif transition == "cancelled_expired":
             why = f"not triggered within {plan.expiry_bars} sessions"
         elif transition == "cancelled_invalidated":
             why = f"price reached the stop {_price(plan.stop_loss)} before triggering"
@@ -266,6 +322,4 @@ def instruction_for(plan, event, *, sizing: dict | None = None) -> Instruction:
         return Instruction(
             verb=CANCEL, headline=f"CANCEL {side['entry_stop']} {_price(plan.trigger_price)}",
             lines=(why,), tone="inert", **common)
-    if transition == "closed":
-        return _closed(plan, detail, side, common)
     raise ValueError(f"no execution-feed instruction for {transition!r}")

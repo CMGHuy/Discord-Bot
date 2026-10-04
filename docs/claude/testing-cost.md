@@ -19,6 +19,21 @@ there is fine; a `failed` anywhere is yours.
 > Older docs record `841 passed, 54 skipped, 1 failed`. That baseline is
 > **stale** — the suite has grown to 1145. Don't compare against it.
 
+## Baseline 2026-10-03 (supersedes the 1145-test figures below)
+
+**5819 passed, 2 skipped, 0 failed** (the 2 skips are Windows-only: POSIX modes,
+symlinks). The suite is ~5x larger than the numbers below; full `-n 4` is now
+roughly 5 minutes, and single runs swing 250-380s with machine load. The DB
+tests need the `swing-db-test` container running (`docker start swing-db-test`),
+otherwise ~1200 tests skip silently.
+
+`full` uses `--dist worksteal` so one long test cannot leave workers idle at the
+tail: 295s vs 337s for default `load` back to back (one sample each, noisy).
+The cost is dominated by a few tests -- `tests/backtesting/test_scenario_parallel.py`
+(3 tests, 44-78s each) is the floor. Its fixture cannot shrink: 2 tickers instead
+of 4 made the aggregates empty and tripped the `n > 0` guard that protects the
+closed pre-registrations.
+
 ## Timings
 
 | Config | Wall | Speedup |
@@ -53,6 +68,43 @@ undefined-name gate (`testrun.py`'s `undefined_names()`); the other four pass
 just be the same ~52s answer five times. The workflow file's own comments
 carry the full reasoning; this entry exists so "why does CI have 5 backend
 jobs instead of 1" doesn't require reading the YAML to answer.
+
+## Change-aware selection (`changed`)
+
+`python scripts/dev/testrun.py changed` runs only the test files that reach
+what you changed. `--dry-run` prints the selection without running it, and
+exits without running even when the selection widens to the full suite.
+
+- `changed --audit` runs the selection, then the full suite, and reports any
+  failure the selection would have missed. It prints `AUDIT: SKIPPED` when the
+  selection already widened (that run was the full suite), `AUDIT: UNKNOWN`
+  (exit 2) when the full run did not complete, and exits 1 on a miss. One
+  clean audit is evidence, not proof.
+
+**It is an inner-loop tool and not a gate.** `/gate` and a plan's final
+verification task still run everything. That boundary is the safety argument:
+a selection bug costs a slow feedback cycle, never a missed regression.
+
+**Every failure mode widens; none narrows.** Unparseable file, unplaceable
+extension, failed git call, a changed source file no test imports, or too
+many test files selected (`FULL_THRESHOLD`, unmeasured) — all run the full
+suite, and the `SELECTION:` line says which one fired. Read that line before
+doubting it.
+
+**What it cannot see:** anything reached by name rather than by import. The
+strategy registry under `swingbot/core/edge/` is the standing example, which
+is why `REGISTRY_PREFIXES` in `scripts/dev/select_tests.py` widens on it
+unconditionally. If you add wiring of that shape, add the prefix — a gap
+there is the one kind of miss that matters. Files tests *read as data*
+(`.claude/`, `CLAUDE.md`, `AGENTS.md`, `docs/claude/`, `.github/workflows/`)
+route to their readers through `DATA_READERS`, checked before the inert
+`docs/`/`*.md` rule; a guard test fails when a test names a repo file that
+would still classify inert.
+
+**`FULL_THRESHOLD = 0.4` is unmeasured**, and its comment in the source says
+so. The serial-vs-`-n 4` crossover needs a cooled idle box; per the two traps
+below, a reading taken while anything else runs is worthless. Deriving it is
+open work, not a number to quote.
 
 ## Measuring is fragile — two traps
 

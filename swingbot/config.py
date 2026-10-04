@@ -814,6 +814,14 @@ FIELDS: list[Field] = [
                "(scripts/backtest/measure_arms.py) adds the extra lane in this one weakness mode. "
                "Nothing in the live bot reads it -- SHORT_UNIVERSE_ENABLED alone turns the live "
                "lane on. Off (default): the replay is the base lane only."),
+    Field("COMPRESSION_SHORT_RESEARCH_MODE", "COMPRESSION_SHORT_RESEARCH_MODE", "Universe & Scanning",
+          "Compression short: research replay mode (v119)", type="select", default="off",
+          options=["off", "broad", "isolated"],
+          help="v119 research-only measurement knob: the historical replay "
+               "(scripts/backtest/measure_arms.py, StrategyEngine) adds the masked First Bearish "
+               "Compression Release short in its bearish 2w research cell, admitting only this one "
+               "weakness mode. Nothing in the live bot reads it -- the live strategy mask stays "
+               "closed. Off (default): the replay runs without the compression short."),
     Field("SHORT_UNIVERSE_MAX_SYMBOLS", "SHORT_UNIVERSE_MAX_SYMBOLS", "Universe & Scanning",
           "SHORT extra lane: max symbols per scan", type="number", default="50", min=1, max=500, step=1,
           help="v118 operational safeguard (not a search knob): the extra lane fetches at most this many "
@@ -1134,6 +1142,7 @@ _SEARCH_CLASSES = {
         "DCB_VOLUME_RATIO", "RSI_DIV_MIN_CONSECUTIVE_TURN",
         "MA_RIBBON_CONFIRM_BARS", "SR_MIN_LEVEL_TOUCHES",
         "FIB_TARGET_1_0_EXTENSION", "SHORT_UNIVERSE_RESEARCH_MODE",
+        "COMPRESSION_SHORT_RESEARCH_MODE",
     },
     "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO", "EARNINGS_BLACKOUT_SESSIONS"},
     "live_only": {
@@ -1175,6 +1184,7 @@ _MODE_VALUES = {
     "PLAN_ENGINE_V2": ("off", "shadow", "on"),
     "STRATEGY_ALERTS_MODE": ("off", "shadow", "live"),
     "SHORT_UNIVERSE_RESEARCH_MODE": ("off", "broad", "isolated"),
+    "COMPRESSION_SHORT_RESEARCH_MODE": ("off", "broad", "isolated"),
 }
 
 

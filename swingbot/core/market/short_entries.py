@@ -13,8 +13,9 @@ import pandas as pd
 
 from swingbot.core.market.entry_filters import (DEFAULT_PARAMS, ENTRY_FUNCS, _params,
                                                 compute_shared_gates)
-from swingbot.core.market.indicators import rsi
-from swingbot.core.market.strategy_types import (FADE_STRATEGY, HORIZONS, SR_VOLUME_MULTIPLE,
+from swingbot.core.market.indicators import atr, rsi
+from swingbot.core.market.volatility import squeeze_release_series
+from swingbot.core.market.strategy_types import (COMPRESSION_SHORT, FADE_STRATEGY, HORIZONS, SR_VOLUME_MULTIPLE,
                                                  V104_SHORTS)
 
 BULL_TRAP, VOL_BREAKDOWN, GAP_DRIFT = V104_SHORTS
@@ -168,8 +169,22 @@ def fade_frame(df: pd.DataFrame, horizon_key: str, params: dict | None = None) -
     return frame
 
 
+def compression_short_frame(df: pd.DataFrame, horizon_key: str, params: dict | None = None) -> pd.DataFrame:
+    """v119: first bearish release from a TTM squeeze, 2w only. Bar-level signal;
+    final stop/target geometry is owned by the planning layer (V119-5)."""
+    frame = _empty(df)
+    if horizon_key != "2w":
+        return frame
+    release = squeeze_release_series(df)
+    frame["signal"] = release["bearish_confirmed"].fillna(False).astype(bool)
+    frame["level"] = df["Close"].astype(float)
+    frame["stop"] = (df["High"] + STOP_ATR * atr(df, 14)).astype(float)
+    return frame
+
+
 FRAMES = {BULL_TRAP: bull_trap_frame, VOL_BREAKDOWN: vol_breakdown_frame,
-          GAP_DRIFT: gap_drift_frame, FADE: fade_frame}
+          GAP_DRIFT: gap_drift_frame, FADE: fade_frame,
+          COMPRESSION_SHORT: compression_short_frame}
 
 
 def _short_only(frame_fn):

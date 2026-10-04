@@ -10,8 +10,9 @@ import pandas as pd
 from swingbot.core.market.entry_filters import DEFAULT_PARAMS
 from swingbot.core.market.indicators import zigzag_pivots
 from swingbot.core.market.short_entries import BULL_TRAP, FADE, structure_at
-from swingbot.core.market.strategy_types import HORIZONS, SHORT_STRATEGIES
+from swingbot.core.market.strategy_types import COMPRESSION_SHORT, HORIZONS, SHORT_STRATEGIES
 from swingbot.core.risk_limits import planned_loss_pct
+from .params import STRUCTURE_BUFFER_ATR
 from .stop_scope import stop_ceiling
 from .targets import atr_target_candidates, select_structural_target
 
@@ -63,6 +64,53 @@ def plan_short(df, index, strategy, horizon_key, direction, *, entry, atr_val, s
     tp1 = select_structural_target(entry, structure["stop"], False, candidates,
                                    scan_params.min_risk_reward_ratio, scan_params.max_risk_reward_ratio)
     return None if tp1 is None else (structure["stop"], tp1, candidates)
+
+
+def _supports_as_of(df, index, horizon_key, trigger, level_map):
+    """Supports for a compression short: the caller's map, else one built from
+    bars <= index only (the engine hands none when TP2 is off)."""
+    if level_map is not None:
+        return level_map[0]
+    from swingbot.core.market import levels as levels_mod
+    return levels_mod.build_level_map(df.iloc[:index + 1], HORIZONS[horizon_key], trigger)[0]
+
+
+def compression_structure(df, index, *, trigger, atr_val, horizon_key, level_map, scan_params):
+    """v119: (stop, target) for the compression short, sized off the resting
+    `trigger` -- stop = release-bar high + the structural ATR buffer (a ceiling
+    breach REJECTS, never clamps); target = the nearest lower support whose RR
+    from the trigger sits inside the current band. No ATR fallback and no
+    synthetic cap: no qualifying support means no plan."""
+    stop = float(df["High"].iloc[index]) + STRUCTURE_BUFFER_ATR * atr_val
+    if not _valid_stop(COMPRESSION_SHORT, horizon_key, trigger, stop):
+        return None
+    risk = stop - trigger
+    low, high = scan_params.min_risk_reward_ratio, scan_params.max_risk_reward_ratio
+    supports = _supports_as_of(df, index, horizon_key, trigger, level_map)
+    valid = [p for p in (float(lv.price) for lv in supports)
+             if p < trigger and low <= (trigger - p) / risk <= high]
+    return (stop, max(valid)) if valid else None
+
+
+def compression_rejection_reason(df, index, horizon_key, scan_params=None) -> str:
+    """Why build_strategy_plan returned no compression-short plan at `index`: "over_cap_stop" when the
+    release-high stop breaks the horizon's ceiling from the resting trigger, "no_support" when no
+    confirmed lower support sits inside the RR band, else "plan_rejected" (reward floor and the like).
+    Audit only -- it recomputes the structure the builder already rejected."""
+    from swingbot.core.market.indicators import atr
+    from .builders import strategy_entry_reference
+    from .targets import _safe_atr_value
+    trigger = strategy_entry_reference(df, index, COMPRESSION_SHORT)
+    atr_val = _safe_atr_value(trigger, float(atr(df, 14).iloc[index]))
+    stop = float(df["High"].iloc[index]) + STRUCTURE_BUFFER_ATR * atr_val
+    if not _valid_stop(COMPRESSION_SHORT, horizon_key, trigger, stop):
+        return "over_cap_stop"
+    if scan_params is None:
+        from swingbot.scan_params import ScanParams
+        scan_params = ScanParams.from_config()
+    picked = compression_structure(df, index, trigger=trigger, atr_val=atr_val,
+                                   horizon_key=horizon_key, level_map=None, scan_params=scan_params)
+    return "no_support" if picked is None else "plan_rejected"
 
 
 def short_hold_cap(df, index, strategy):

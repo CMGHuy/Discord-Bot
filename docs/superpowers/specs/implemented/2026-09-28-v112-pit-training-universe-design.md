@@ -1,7 +1,8 @@
 # v112 — Point-in-time S&P 500 training universe + confluence-scan re-check
 
 **Version:** ui 1.21.0 · bot 1.10.4
-**Bump:** bot patch
+**Bump:** none (amended at close-out 2026-10-04: predicted `bot patch`, but only backtest tooling and data shipped, no runtime change)
+**Status (close-out 2026-10-04):** code and data shipped (merge `7395369c`). The Runbook was never run: there is no `v112-confluence-recheck` results file, so the pre-registered reading is unspent and still open. Closed by the partner's decision, not because the runbook resolved.
 **Edge:** none (integrity) — it buys measurement power (N), not edge. The
 confluence re-check it enables is the input to a later `Edge: expectancy` plan.
 

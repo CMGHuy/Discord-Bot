@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** `docs/superpowers/specs/2026-09-22-v99-change-aware-test-selection-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-09-22-v99-change-aware-test-selection-design.md`
 **Bump:** none
 **Edge:** none (integrity)
 

@@ -112,17 +112,16 @@ def _clamped_stop_figures(item, plan):
 
 def _short_notice(item, plan) -> str:
     """The extra-lane notice ("" for a base alert), from the same funnel numbers."""
-    from swingbot.core.presentation.short_notice import short_lane_notice
+    from swingbot.core.presentation.short_notice import alert_notice, is_compression
     from swingbot.core.scanning.plan_table import plan_numbers_for_display
     context = getattr(item, "candidate_context", None)
-    if not context:
-        return ""
     plan_v2 = getattr(item, "plan_v2", None)
+    if not context and not is_compression(plan_v2):
+        return ""
     nums = plan_numbers_for_display(plan_v2, {
         "entry": plan.entry, "stop_loss": plan.stop_loss,
         "take_profit": plan.take_profit, "target2": plan.target2_price})
-    return short_lane_notice(context, nums, getattr(plan_v2, "expiry_bars", None),
-                             currency=config.CURRENCY_SYMBOL)
+    return alert_notice(plan_v2, context, nums, currency=config.CURRENCY_SYMBOL)
 
 
 def _build_alert_texts(item, plan, conf) -> tuple[str, str]:

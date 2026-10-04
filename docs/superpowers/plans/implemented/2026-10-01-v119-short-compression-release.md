@@ -6,9 +6,9 @@
 **Architecture:** Refactor the existing squeeze calculation into one causal series, register a masked bearish-only 2w strategy, and construct the same pending plan in live scan and replay. Add a live hard-cap notice and paper close that agree with replay, then run a separate pre-registered evidence funnel for broad and isolated weakness.
 **Tech Stack:** Python 3.11, pandas, existing strategy/plan/scan/notification modules, pytest.
 **Spec:** `docs/superpowers/specs/2026-10-01-v119-short-compression-release-design.md`
-**Bump:** bot patch (only if the new alert and exit lifecycle ship)
+**Bump:** none (the strategy stays masked; no alert or exit lifecycle ships live)
 **Edge:** expectancy
-**Progress:** planning complete; implementation, broker-workflow confirmation and measurement not started.
+**Progress:** implemented and merged 2026-10-04 (masked, 2w only). Both arms recorded `unmeasurable` (no as-of earnings archive; isolated arm also lacks dated sector history and sector ETFs); see docs/superpowers/results/2026-10-04-v119-compression-short-result.md. Unmask gates open: measurement data, acceptance amendment A1-A3 instrument, universe decision, production official auction_close_fn.
 
 ## Global constraints
 

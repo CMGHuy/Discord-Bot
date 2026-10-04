@@ -95,7 +95,7 @@ def test_registered_short_only_and_masked_until_a_cell_admits_1w():
 
 def test_short_lists_and_defaults():
     assert se.FADE == FADE_STRATEGY == "Downtrend Overbought Fade"
-    assert SHORT_STRATEGIES == V104_SHORTS + (FADE_STRATEGY,)
+    assert SHORT_STRATEGIES == V104_SHORTS + (FADE_STRATEGY, "First Bearish Compression Release")
     assert (se.BULL_TRAP, se.VOL_BREAKDOWN, se.GAP_DRIFT) == V104_SHORTS
     assert ef.DEFAULT_PARAMS[se.FADE] == {"m": 1.0}
 

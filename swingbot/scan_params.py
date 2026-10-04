@@ -68,6 +68,7 @@ class ScanParams:
     sr_min_level_touches: int
     fib_target_1_0_extension: bool
     short_universe_research_mode: str = "off"   # v118 research replay only
+    compression_short_research_mode: str = "off"   # v119 research replay only
 
     @classmethod
     def from_config(cls) -> "ScanParams":
@@ -122,4 +123,5 @@ class ScanParams:
             sr_min_level_touches=config.SR_MIN_LEVEL_TOUCHES,
             fib_target_1_0_extension=config.FIB_TARGET_1_0_EXTENSION,
             short_universe_research_mode=config.SHORT_UNIVERSE_RESEARCH_MODE,
+            compression_short_research_mode=config.COMPRESSION_SHORT_RESEARCH_MODE,
         )

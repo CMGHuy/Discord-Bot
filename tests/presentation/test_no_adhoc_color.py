@@ -19,7 +19,7 @@ def _guarded_files() -> list[pathlib.Path]:
     files: list[pathlib.Path] = []
     for package in GUARDED_PACKAGES:
         files.extend(sorted((REPO / package).rglob("*.py")))
-    return files
+    return [f for f in files if not f.relative_to(REPO).as_posix().startswith(ALLOWED)]
 
 
 def _colour_offences(tree: ast.AST) -> list[tuple[int, str]]:
@@ -43,8 +43,6 @@ def _colour_offences(tree: ast.AST) -> list[tuple[int, str]]:
 @pytest.mark.parametrize("path", _guarded_files(), ids=lambda path: path.name)
 def test_no_adhoc_colour_outside_the_presentation_package(path):
     rel = path.relative_to(REPO).as_posix()
-    if rel.startswith(ALLOWED):
-        pytest.skip("the presentation package owns colour")
     offences = _colour_offences(ast.parse(path.read_text(encoding="utf-8"), filename=str(path)))
     assert not offences, f"{rel} sets colour directly: {offences}"
 
