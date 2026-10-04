@@ -22,7 +22,7 @@ def cache_universe() -> list[str]:
     Derives from swingbot.core.marketdata.backtest_cache; does not touch DB."""
     from swingbot.core.marketdata.backtest_cache import CACHE_DIR
     csvs = CACHE_DIR.glob("*.csv")
-    # Reverse the ticker name transformation: =, ^, / are replaced with _
+    # Stems are the sanitised cache names (e.g., GC_F for GC=F, _GSPC for ^GSPC)
     tickers = [p.stem for p in csvs]
     return sorted(tickers)
 
@@ -117,6 +117,9 @@ def main(argv=None) -> int:
     parser.add_argument("--workers", type=int, default=None)
     args = parser.parse_args(argv)
     universe = cache_universe()
+    if not universe:
+        print("error: backtest cache is empty; no tickers to process", file=sys.stderr)
+        return 2
     progress = ROOT / "logs" / f"runner_headroom.{uuid.uuid4().hex[:8]}.progress"
     rows, done = [], 0
     with ProcessPoolExecutor(max_workers=_resolve_replay_workers(args.workers)) as pool:

@@ -4,10 +4,10 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "reports"))
-from runner_headroom import runner_metrics, stop_rule, summarise, cache_universe  # noqa: E402
 
-from swingbot.core.planning.plan_engine import simulate_exit
+from runner_headroom import cache_universe, main, runner_metrics, stop_rule, summarise  # noqa: E402
 from swingbot.core.marketdata import backtest_cache
+from swingbot.core.planning.plan_engine import simulate_exit
 from tests.helpers import make_ohlcv
 from tests.planning.test_exit_sim_single import _plan
 
@@ -39,10 +39,25 @@ def test_frozen_stop_rule():
 
 
 def test_cache_universe_returns_sorted_tickers_from_disk(monkeypatch, tmp_path):
-    # Create test CSV files in tmp cache dir
-    for ticker in ["ZULU", "AAPL", "XYZ"]:
+    # Create test CSV files in tmp cache dir, including a sanitised stem
+    for ticker in ["ZULU", "AAPL", "XYZ", "GC_F"]:
         (tmp_path / f"{ticker}.csv").touch()
+    # Create a non-CSV file that must be ignored
+    (tmp_path / "README.txt").touch()
+    (tmp_path / "data.json").write_text("{}")
     # Monkeypatch CACHE_DIR to tmp_path (no DB access)
     monkeypatch.setattr(backtest_cache, "CACHE_DIR", tmp_path)
-    # Verify sorted return from disk
-    assert cache_universe() == ["AAPL", "XYZ", "ZULU"]
+    # Verify sorted return from disk, ignoring non-CSV files
+    assert cache_universe() == ["AAPL", "GC_F", "XYZ", "ZULU"]
+
+
+def test_main_returns_error_on_empty_cache(monkeypatch, tmp_path, capsys):
+    # Monkeypatch CACHE_DIR to empty tmp_path
+    monkeypatch.setattr(backtest_cache, "CACHE_DIR", tmp_path)
+    # Call main() with empty universe
+    out_json = tmp_path / "result.json"
+    rc = main(["--out-json", str(out_json)])
+    # Verify error code and no output file
+    assert rc == 2
+    assert not out_json.exists()
+    assert "backtest cache is empty" in capsys.readouterr().err

@@ -22,7 +22,7 @@
 - End: 2023-12-31
 - Recorded before outcome is read from CSV
 
-**Universe:** Every ticker with a daily CSV in the local backtest cache (market_data/daily), listed from disk; not watchlist-filtered, because production Postgres is unreachable from the dev machine
+**Universe:** Every ticker with a daily CSV in the local backtest cache (`data/backtest_cache/`, via `backtest_cache.CACHE_DIR`; honours `BACKTEST_CACHE_DIR` env var if set). Listed from disk; not watchlist-filtered, because production Postgres is unreachable from the dev machine. Observed universe: 75 CSVs in the main checkout's cache directory. Tickers are the sanitised cache stems (e.g., `GC_F` for `GC=F`, `_GSPC` for `^GSPC`); `plan.ticker` from metrics is not used, only the cache stem
 
 **Horizons:** All ten horizons (from `swingbot.core.backtesting.arms.windows.ALL_HORIZONS`)
 
@@ -39,6 +39,8 @@ Only trades with:
 2. Two legs (`len(result.legs) == 2`, indicating runner exit executed)
 
 Non-runner trades (single leg or non-wins) are excluded.
+
+**Error handling:** If the backtest cache is empty or missing, `main()` prints an error to stderr and returns exit code 2 without writing `--out-json`. This prevents silent verdicts from no data.
 
 ## Metrics Produced
 
