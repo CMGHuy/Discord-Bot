@@ -946,7 +946,7 @@ class PlanManager:
         try:
             return te.parse_auction(self.auction_close_fn(plan.ticker, due))
         except Exception as exc:
-            log.warning("time exit: auction close lookup failed for %s: %s", plan.ticker, exc)
+            log.warning("time exit: auction close lookup failed for %s: %s", plan.ticker, exc, exc_info=True)
             return None
 
     def _close_time_exit(self, plan: TradePlanV2, auction: te.AuctionClose) -> list[PlanEvent]:
