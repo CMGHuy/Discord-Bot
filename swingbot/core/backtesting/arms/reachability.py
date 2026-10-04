@@ -59,7 +59,15 @@ REGISTRY: dict[str, Reach] = {
         "scan_extra_candidate and qualify_short_item, on PIT membership/sector intervals. "
         "Proven on the fixture in tests/backtesting/test_measure_short_universe.py; a real "
         "run needs data/universe/sp500_sector_history.csv, which does not exist yet."), SU),
-    "CONFLUENCE_DEVIATION_PCT": _live("Confirmation counting happens in scan analysis; replay uses fixed tolerance."),
+    "COMPRESSION_SHORT_RESEARCH_MODE": Reach(REACHABLE, (
+        "v119: StrategyEngine adds the masked compression short inside its scoped "
+        "('bearish', '2w') research cell, admitting only the named weakness mode, through the "
+        "shared pre-entry decision and the live constructor. Proven to change outcomes on the "
+        "stamped pilot fixture in tests/backtesting/test_measure_compression_short.py (not the "
+        "v74 fixture: a select has no perturbation there). A real run reads "
+        "compression_research.offline_context(): no as-of earnings archive exists, so every "
+        "historical candidate is excluded earnings_unknown."), S),
+    "CONFLUENCE_DEVIATION_PCT":_live("Confirmation counting happens in scan analysis; replay uses fixed tolerance."),
     "MIN_ALERT_CONFIDENCE_LEVEL": _live("Confidence scoring belongs to scanning.confidence."),
     "UNIFIED_CONFIDENCE": _live("Confidence scoring belongs to scanning.confidence."),
     "DEDUP_TOLERANCE_PCT": _live("Deduplication runs when the live scan builds its alert set."),
