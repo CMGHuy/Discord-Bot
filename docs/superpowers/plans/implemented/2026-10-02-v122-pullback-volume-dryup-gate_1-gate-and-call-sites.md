@@ -2,7 +2,7 @@
 
 > Part of `2026-10-02-v122-pullback-volume-dryup-gate_0-index.md` (header, global constraints, file map, review focus and `## Parallelisation` live there). Read that index's Global constraints with every task. Steps use `- [ ]` for tracking.
 
-**Spec:** `docs/superpowers/specs/2026-10-02-v122-pullback-volume-dryup-gate-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-02-v122-pullback-volume-dryup-gate-design.md`
 
 # Phase 1 — Knobs, predicate, witness
 

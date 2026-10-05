@@ -1,6 +1,6 @@
 # v122 pre-registration — pullback volume dry-up gate
 
-**Committed before any v122 outcome is read and before any VALIDATION arm exists.** Spec: `docs/superpowers/specs/2026-10-02-v122-pullback-volume-dryup-gate-design.md` (including its frozen amendments). Plan: `docs/superpowers/plans/2026-10-02-v122-pullback-volume-dryup-gate_0-index.md` (parts `_1`, `_2`).
+**Committed before any v122 outcome is read and before any VALIDATION arm exists.** Spec: `docs/superpowers/specs/implemented/2026-10-02-v122-pullback-volume-dryup-gate-design.md` (including its frozen amendments). Plan: `docs/superpowers/plans/implemented/2026-10-02-v122-pullback-volume-dryup-gate_0-index.md` (parts `_1`, `_2`).
 
 ## Claim
 

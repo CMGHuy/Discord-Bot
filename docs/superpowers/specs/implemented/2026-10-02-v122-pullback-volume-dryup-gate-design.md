@@ -1,8 +1,9 @@
 # v122 — Pullback volume dry-up gate
 
 **Version:** ui 1.21.0 · bot 2.0.0 (at writing)
-**Bump:** bot patch (only if a scope passes VALIDATION and ships default-on; alert volume drops, no new surface)
+**Bump:** none (both scopes refused at Stage 0; the gate stays off)
 **Edge:** expectancy
+**Status:** Closed 2026-10-05. Strategy and confluence were both no-lift at Stage 0; code merged inert with both VALIDATION budgets intact. See `docs/superpowers/results/2026-10-04-v122-strategy.md` and `docs/superpowers/results/2026-10-05-v122-confluence.md`.
 
 ## Hypothesis
 

@@ -5,9 +5,13 @@
 **Goal:** Add one binary gate that rejects a pullback entry when its pullback leg averaged more than `d` × its impulse leg's volume. Live and replay call it at the same decision point, on completed bars only. It ships off and is measured as two separate pre-registered components, `strategy` and `confluence`, through the v72/v100 funnel.
 **Architecture:** One predicate in `swingbot/core/edge/gates.py` reads v121's `market/structure.py:pullback_vol_ratio`. Four call sites ask it before a plan is built: `strategy_pass._emit_signal` and `analyze._scan_one` live (both after `strategy_pass.completed_frame`), and `StrategyEngine.iter_trades` and `backtest_scenarios.replay_scenarios` in replay. Two searchable knobs drive it. The spec relies on funnel tooling that does not exist yet, so the plan adds it first: a Stage 1 judge, the frozen clause-6 baseline reading behind `--dryup-mechanism`, and an extended `permutation_test.py --arms` as the clause-5 instrument. The two components are then measured serially.
 **Tech Stack:** Python 3.11, pandas, pytest, the v100 arm producer (`scripts/backtest/measure_arms.py`), the judge (`scripts/backtest/validate_component.py`) and `scripts/backtest/permutation_test.py`.
-**Spec:** `docs/superpowers/specs/2026-10-02-v122-pullback-volume-dryup-gate-design.md`, including its frozen amendments: the clause 6 reading, the clause 5 instrument, and completed bars only. It depends on `docs/superpowers/specs/2026-10-02-v121-structure-volume-context-design.md`.
-**Bump:** bot patch (only if a scope passes VALIDATION and ships default-on)
+**Spec:** `docs/superpowers/specs/implemented/2026-10-02-v122-pullback-volume-dryup-gate-design.md`, including its frozen amendments: the clause 6 reading, the clause 5 instrument, and completed bars only. It depends on `docs/superpowers/specs/2026-10-02-v121-structure-volume-context-design.md`.
+**Bump:** none (both scopes refused at Stage 0; the gate stays off)
 **Edge:** expectancy
+
+## Progress
+
+Closed 2026-10-05. Tasks V122-1 through V122-15 completed and the code merged into `main` inert. Both pre-registered components were reachable, but all three threshold cells in each component were refused by the paired Stage 0 MDE gate. Stage 1 selection, walk-forward, permutation, and VALIDATION were not run; both one-shot VALIDATION budgets remain intact. The measured record is in `docs/superpowers/results/2026-10-04-v122-strategy.md` and `docs/superpowers/results/2026-10-05-v122-confluence.md`. `PULLBACK_DRYUP_SCOPE` remains `off` and `PULLBACK_DRYUP_MAX_RATIO` remains `0.0`; no release bump applies. The final full suite passed with 0 failed and 0 xfailed.
 
 ## Global constraints
 
