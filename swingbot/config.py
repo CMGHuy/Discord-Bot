@@ -1090,15 +1090,18 @@ FIELDS: list[Field] = [
                    ("progress_stall", "Progress stall -- exit next open on a failed higher high, contracting range and cooling volume")],
           help="v123. Post-TP1 runner only; cannot move win rate. Evaluated on completed "
                "daily bars (exit_sim.runner_structure_step, shared with plan_manager). "
-               "Off until its own pre-registered harvest funnel judges it."),
+               "Closed: hl_trail at Stage 0 (MDE-refused), progress_stall at Stage -1 "
+               "(zero-diff) -- see docs/claude/backtest-methodology.md closed row (v123). Keep off."),
     Field("RUNNER_HL_TRAIL_ATR_BUFFER", "RUNNER_HL_TRAIL_ATR_BUFFER", "Exit quality",
           "Higher-low trail ATR buffer (b)",
           type="float", default="0.0", min=0.0, max=1.0, step=0.25,
-          help="v123 hl_trail: stop = last confirmed swing low - b x ATR(14). Grid {0, 0.25, 0.5}."),
+          help="v123 hl_trail: stop = last confirmed swing low - b x ATR(14). Grid {0, 0.25, 0.5}. "
+               "Closed at Stage 0 -- see the v123 closed row in docs/claude/backtest-methodology.md."),
     Field("RUNNER_STALL_RANGE_MAX", "RUNNER_STALL_RANGE_MAX", "Exit quality",
           "Progress-stall range ratio ceiling (c)",
           type="float", default="1.0", min=0.5, max=1.5, step=0.05,
-          help="v123 progress_stall: fires only when mean TR(10)/mean TR(50) <= c. Grid {0.70, 0.85, 1.00}."),
+          help="v123 progress_stall: fires only when mean TR(10)/mean TR(50) <= c. Grid {0.70, 0.85, 1.00}. "
+               "Closed at Stage -1 -- see the v123 closed row in docs/claude/backtest-methodology.md."),
 
     # --- Chart patterns ---
     Field("DEAD_CAT_BOUNCE_VETO", "DEAD_CAT_BOUNCE_VETO", "Chart patterns",
