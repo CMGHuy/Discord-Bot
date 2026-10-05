@@ -56,12 +56,12 @@ export type DashboardScopeMode = DashboardScope;
         />
 
         <div class="grid">
-          <sb-metric-card label="Open P&L" [value]="openPnlPct()" tone="pnl" unit="%" />
+          <sb-metric-card label="Open P&L" [value]="openPnlPct()" tone="pnl" unit="%" [sub]="openPnlSub()" />
           <sb-metric-card label="Win rate" [value]="winRate()" unit="%" [decimals]="1" [sub]="sample(winRateN())" />
           <sb-metric-card label="Expectancy" [value]="expectancyR()" tone="pnl" unit="R" [sub]="sample(expectancyN())" />
-          <sb-metric-card label="Payoff ratio" [value]="payoffRatio()" [decimals]="2" />
+          <sb-metric-card label="Payoff ratio" [value]="payoffRatio()" [decimals]="2" [sub]="noCloseHint(payoffRatio())" />
           <sb-metric-card [label]="realizedLabel()" [value]="realizedAmount()"
-                          tone="pnl" [unit]="currencyUnit()" />
+                          tone="pnl" [unit]="currencyUnit()" [sub]="noCloseHint(realizedAmount())" />
           <sb-metric-card label="Open trades" [value]="openTrades()" [decimals]="0" />
           <sb-metric-card label="Avg confidence" [value]="avgConfidence()" [decimals]="1" />
           <sb-metric-card label="Risk used" [value]="riskUsedPct()" unit="%" [sub]="riskSub()" />
@@ -150,6 +150,8 @@ export class TradingPerformance {
   readonly changePct = input<number | null>(null);
   readonly points = input<readonly number[]>([]);
   readonly openPnlPct = input<number | null>(null);
+  /** Money equivalent of the open P&L %, shown beneath it. */
+  readonly openPnlAmount = input<number | null>(null);
   readonly winRate = input<number | null>(null);
   readonly expectancyR = input<number | null>(null);
   readonly winRateN = input<number | null>(null);
@@ -180,6 +182,15 @@ export class TradingPerformance {
   protected fmtFigure(value: number | null, unit: string, decimals: number): string {
     return value === null ? '—' : `${value.toFixed(decimals)}${unit}`;
   }
+  /** An em dash alone reads as broken. When the scope is today and the figure
+   *  is absent, say why: nothing has closed yet (the "All days" toggle has it). */
+  protected noCloseHint(value: number | null): string | null {
+    return value === null && this.scope() === 'today' ? 'none closed today' : null;
+  }
+  protected readonly openPnlSub = computed(() => {
+    const value = this.openPnlAmount();
+    return value === null ? null : amount(value, this.currency());
+  });
   protected readonly riskSub = computed(() => {
     const cap = this.riskCapPct();
     return cap === null ? null : `of ${cap.toFixed(1)}% cap`;

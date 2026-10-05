@@ -298,6 +298,8 @@ export interface EquitySeries {
 export interface Dashboard {
   account_balance: number | null;
   open_pnl_pct: number | null;
+  /** Sum of shares x (price - entry) over open positions; null when none has a share count. */
+  open_pnl_amount: number | null;
   risk_used_pct: number | null;
   risk_cap_pct: number | null;
   open_trades: number;

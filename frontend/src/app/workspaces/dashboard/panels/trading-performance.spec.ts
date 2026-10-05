@@ -49,6 +49,21 @@ describe('trading performance panel', () => {
     expect(text).toContain('Realised today');
   });
 
+  it('shows the open P&L amount under the percentage', () => {
+    const el = render({ openPnlPct: 2.5, openPnlAmount: 1234.5, currency: '€', scope: 'today' });
+    const card = [...el.querySelectorAll('sb-metric-card')]
+      .find((c) => c.textContent?.includes('Open P&L'))!;
+    expect(card.textContent).toContain('2.50%');
+    expect(card.textContent).toContain('1,234.50');
+  });
+
+  it('explains an absent figure in today scope instead of a bare dash', () => {
+    const el = render({ payoffRatio: null, realizedAmount: null, currency: '€', scope: 'today' });
+    const card = [...el.querySelectorAll('sb-metric-card')]
+      .find((c) => c.textContent?.includes('Payoff ratio'))!;
+    expect(card.textContent).toContain('none closed today');
+  });
+
   it('emits the scope the user picked', () => {
     const f = TestBed.createComponent(TradingPerformance);
     f.componentRef.setInput('scope', 'today');
