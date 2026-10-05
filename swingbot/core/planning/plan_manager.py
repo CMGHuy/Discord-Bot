@@ -300,9 +300,12 @@ def entry_bar_position(frame, entered_at) -> int | None:
     return position if position >= 0 else None
 
 
-def _holding_cap(plan) -> int:
-    """Bars after entry the replay walk covers (simulate_exit's max_holding_days)."""
-    cap = HORIZONS[plan.horizon_key]["max_holding_days"]
+def _holding_cap(plan) -> int | None:
+    """Bars after entry the replay walk covers (simulate_exit's max_holding_days);
+    None for a retired horizon key (a legacy plan)."""
+    cap = HORIZONS.get(plan.horizon_key, {}).get("max_holding_days")
+    if cap is None:
+        return None
     hold = getattr(plan, "hold_cap_bars", None)
     return min(cap, int(hold)) if hold is not None else cap
 
@@ -856,7 +859,11 @@ class PlanManager:
         the confirming bar -- the live counterpart of replay's Open[j+1]."""
         if config.RUNNER_STRUCTURE_EXIT == "off" or self.daily_frame_fn is None:
             return []
-        verdict = self._structure_verdict(plan, now)
+        try:
+            verdict = self._structure_verdict(plan, now)
+        except Exception as exc:
+            log.debug("structure exit: evaluation failed for %s: %s", plan.ticker, exc)
+            return []
         if verdict is None or not verdict[1]:
             return []
         if not is_regular_session(now) or session_date(now) <= verdict[0]:
@@ -890,7 +897,8 @@ class PlanManager:
         j = len(completed) - 1
         bar_date = completed.index[j].date().isoformat()
         entry_index = entry_bar_position(completed, self._entered_at(plan))
-        if entry_index is None or j <= entry_index or j >= entry_index + _holding_cap(plan):
+        cap = _holding_cap(plan)
+        if entry_index is None or cap is None or j <= entry_index or j >= entry_index + cap:
             return None
         if plan.runner_floor_session is not None and bar_date <= plan.runner_floor_session:
             return None
@@ -998,6 +1006,7 @@ class PlanManager:
                "r": r2, "reason": reason, "closed_at": at, **(extra or {})}
         plan.legs_realized.append(leg)
         record_transition(plan, PlanStatus.CLOSED, reason=reason, at=at)
+        self._structure_seen.pop(plan.plan_id, None)
         persisted = self._persist_terminal(plan, leg, "win" if reason.startswith("tp1_") else "closed")
         return [PlanEvent(plan.plan_id, "closed",
                           {"reason": reason, "exit_price": fill, "leg": leg,
