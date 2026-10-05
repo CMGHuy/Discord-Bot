@@ -8,7 +8,7 @@
 **Spec:** `docs/superpowers/specs/2026-10-02-v123-runner-structure-exit-design.md` (depends on `docs/superpowers/specs/2026-10-02-v121-structure-volume-context-design.md`)
 **Bump:** bot patch (only if an arm passes VALIDATION and ships default-on)
 **Edge:** harvest
-**Progress:** planning complete; nothing implemented or measured.
+**Progress:** CLOSED 2026-10-05. Code merged inert (`RUNNER_STRUCTURE_EXIT=off`). `hl_trail` closed at Stage 0 (all cells MDE-refused); `progress_stall` closed at Stage -1 (refused:zero-diff). Neither VALIDATION shot spent; no ship, no version bump. Full suite green on the branch (6175 passed). Results: `docs/superpowers/results/2026-10-02-v123-*.md`.
 
 ## Global constraints
 
