@@ -57,6 +57,18 @@ describe('trading performance panel', () => {
     expect(card.textContent).toContain('1,234.50');
   });
 
+  it('colours the open P&L amount by its sign, like the percentage', () => {
+    const subOf = (amountValue: number) => {
+      const el = render({ openPnlPct: 1, openPnlAmount: amountValue, currency: '€', scope: 'today' });
+      const card = [...el.querySelectorAll('sb-metric-card')]
+        .find((c) => c.textContent?.includes('Open P&L'))!;
+      return card.querySelector('.sub')!;
+    };
+    expect(subOf(50).classList.contains('pos')).toBe(true);
+    expect(subOf(-50).classList.contains('neg')).toBe(true);
+    expect(subOf(0).classList.contains('pos') || subOf(0).classList.contains('neg')).toBe(false);
+  });
+
   it('explains an absent figure in today scope instead of a bare dash', () => {
     const el = render({ payoffRatio: null, realizedAmount: null, currency: '€', scope: 'today' });
     const card = [...el.querySelectorAll('sb-metric-card')]

@@ -56,7 +56,7 @@ export type DashboardScopeMode = DashboardScope;
         />
 
         <div class="grid">
-          <sb-metric-card label="Open P&L" [value]="openPnlPct()" tone="pnl" unit="%" [sub]="openPnlSub()" />
+          <sb-metric-card label="Open P&L" [value]="openPnlPct()" tone="pnl" unit="%" [sub]="openPnlSub()" [subPnl]="openPnlAmount()" />
           <sb-metric-card label="Win rate" [value]="winRate()" unit="%" [decimals]="1" [sub]="sample(winRateN())" />
           <sb-metric-card label="Expectancy" [value]="expectancyR()" tone="pnl" unit="R" [sub]="sample(expectancyN())" />
           <sb-metric-card label="Payoff ratio" [value]="payoffRatio()" [decimals]="2" [sub]="noCloseHint(payoffRatio())" />

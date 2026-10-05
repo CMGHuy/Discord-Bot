@@ -24,7 +24,7 @@ export type MetricTone = 'plain' | 'pnl' | 'caution';
         {{ display() }}
       </span>
       @if (sub(); as subtext) {
-        <span class="sub num">{{ subtext }}</span>
+        <span class="sub num" [class]="subClass()">{{ subtext }}</span>
       }
     </div>
   `,
@@ -86,6 +86,9 @@ export class MetricCard {
   readonly unit = input('');
   readonly sub = input<string | null>(null);
   readonly decimals = input(2);
+  /** When set, the sub line takes the P&L colour of this number's sign (same
+   *  rule as the main value). Leave null for a plain muted sub line. */
+  readonly subPnl = input<number | null>(null);
 
   /** An em dash, not "0" or "—%": a metric with no value yet is not a
    *  metric that is zero, and on a balance those differ by everything. */
@@ -93,6 +96,14 @@ export class MetricCard {
     const value = this.value();
     if (value === null) return '—';
     return `${value.toFixed(this.decimals())}${this.unit()}`;
+  });
+
+  protected readonly subClass = computed(() => {
+    const value = this.subPnl();
+    if (value === null) return '';
+    if (value > 0) return 'pos';
+    if (value < 0) return 'neg';
+    return '';
   });
 
   protected readonly valueClass = computed(() => {
