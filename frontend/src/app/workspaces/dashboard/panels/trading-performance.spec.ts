@@ -32,6 +32,23 @@ describe('trading performance panel', () => {
     expect(el.textContent).toContain('2.34');
   });
 
+  it('phone summary carries win rate, expectancy, payoff and realised', () => {
+    // At <=640px the eight-card grid is display:none, so the phone summary is
+    // the only place these four figures can appear.
+    const el = render({
+      winRate: 49.1, winRateN: 12, expectancyR: -0.16, payoffRatio: 2.34,
+      realizedAmount: 5, realizedLabel: 'Realised today', currency: '€', scope: 'today',
+    });
+    const text = el.querySelector('.mobile-summary')!.textContent ?? '';
+    expect(text).toContain('Win rate');
+    expect(text).toContain('49.1%');
+    expect(text).toContain('Expectancy');
+    expect(text).toContain('-0.16R');
+    expect(text).toContain('Payoff');
+    expect(text).toContain('2.34');
+    expect(text).toContain('Realised today');
+  });
+
   it('emits the scope the user picked', () => {
     const f = TestBed.createComponent(TradingPerformance);
     f.componentRef.setInput('scope', 'today');

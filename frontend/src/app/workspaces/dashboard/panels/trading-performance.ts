@@ -77,6 +77,10 @@ export type DashboardScopeMode = DashboardScope;
         <div><span>Today</span><strong [class.pos]="(changePct() ?? 0) > 0" [class.neg]="(changePct() ?? 0) < 0">{{ fmtPct(changePct()) }}</strong></div>
         <div><span>Open</span><strong>{{ openTrades() }}</strong></div>
         <div><span>Risk</span><strong>{{ fmtPct(riskUsedPct()) }}</strong></div>
+        <div><span>Win rate</span><strong>{{ fmtFigure(winRate(), '%', 1) }}</strong></div>
+        <div><span>Expectancy</span><strong [class.pos]="(expectancyR() ?? 0) > 0" [class.neg]="(expectancyR() ?? 0) < 0">{{ fmtFigure(expectancyR(), 'R', 2) }}</strong></div>
+        <div><span>Payoff</span><strong>{{ fmtFigure(payoffRatio(), '', 2) }}</strong></div>
+        <div><span>{{ realizedLabel() }}</span><strong [class.pos]="(realizedAmount() ?? 0) > 0" [class.neg]="(realizedAmount() ?? 0) < 0">{{ fmtFigure(realizedAmount(), currencyUnit(), 2) }}</strong></div>
       </div>
     </sb-panel>
   `,
@@ -172,6 +176,10 @@ export class TradingPerformance {
   protected readonly currencyUnit = computed(() => ` ${this.currency()}`);
   protected fmtAmount = (value: number | null) => amount(value, this.currency());
   protected fmtPct = pct;
+  /** Same rule as MetricCard: no value is an em dash, never a zero. */
+  protected fmtFigure(value: number | null, unit: string, decimals: number): string {
+    return value === null ? '—' : `${value.toFixed(decimals)}${unit}`;
+  }
   protected readonly riskSub = computed(() => {
     const cap = this.riskCapPct();
     return cap === null ? null : `of ${cap.toFixed(1)}% cap`;
