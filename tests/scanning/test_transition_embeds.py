@@ -187,3 +187,9 @@ def test_the_plan_line_names_the_side_and_drops_the_check_mark():
     e = _embed("be_moved", {"working_stop": 100.0}, badge="VALIDATED")
     plan_field = next(f.value for f in e.fields if f.name == "Plan (v2)")
     assert "LONG" in plan_field and "bullish" not in plan_field and "✅" not in plan_field
+
+
+def test_progress_stall_close_is_a_win_style():
+    from swingbot.core.scanning.lifecycle_embeds import CLOSE_REASON_STYLES
+    kind, outcome, phrase = CLOSE_REASON_STYLES["tp1_runner_progress_stall"]
+    assert outcome == "win" and "higher high" in phrase

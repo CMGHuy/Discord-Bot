@@ -35,7 +35,12 @@ _EXIT_WORDS = {
     "tp1_runner_trail": "trail",
     "tp1_runner_tp2": "TP2",
     "time_exit": "ten-session time exit",
+    "tp1_runner_progress_stall": "higher high failed on cooling range and volume",
 }
+
+#: Closes the bot books with no resting broker order behind them (v123):
+#: the reader must act at market, exactly like an extended-hours exit.
+_MARKET_EXIT_REASONS = frozenset({"tp1_runner_progress_stall"})
 
 
 @dataclass(frozen=True)
@@ -194,15 +199,27 @@ def _stop_kind(plan, new_stop: float) -> str:
     return "runner floor" if math.isclose(new_stop, floor, abs_tol=1e-6) else "trail"
 
 
+def _market_close_headline(detail: dict) -> str:
+    if detail.get("reason") in _MARKET_EXIT_REASONS:
+        return f"CLOSE AT MARKET now — {_EXIT_WORDS[detail['reason']]}"
+    return "CLOSE AT MARKET now"
+
+
+def _market_close_line(side: dict, exit_price, detail: dict) -> str:
+    if detail.get("reason") in _MARKET_EXIT_REASONS:
+        return (f"{side['exit']} at market: the runner's {_EXIT_WORDS[detail['reason']]} "
+                f"(bot exit @ {_price(exit_price)}); no resting order covers this exit")
+    return (f"{side['exit']}: the bot exited on an extended-hours print @ "
+            f"{_price(exit_price)}; resting stop orders do not fire outside regular hours")
+
+
 def _closed(plan, detail: dict, side: dict, common: dict) -> Instruction:
     exit_price = detail.get("exit_price")
     r = total_r(plan, exit_price)
     tone = "good" if r > 0.05 else "bad" if r < -0.05 else "neutral"
-    if detail.get("session") == "extended":
-        verb, headline = CLOSE_AT_MARKET, "CLOSE AT MARKET now"
-        lines = [f"{side['exit']}: the bot exited on an extended-hours print @ "
-                 f"{_price(exit_price)}; resting stop orders do not fire outside "
-                 "regular hours",
+    if detail.get("session") == "extended" or detail.get("reason") in _MARKET_EXIT_REASONS:
+        verb, headline = CLOSE_AT_MARKET, _market_close_headline(detail)
+        lines = [_market_close_line(side, exit_price, detail),
                  f"{signed_r(r)} total"]
     else:
         word = _EXIT_WORDS.get(detail.get("reason"), detail.get("reason") or "closed")

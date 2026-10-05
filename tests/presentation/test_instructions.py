@@ -248,3 +248,16 @@ def test_a_trail_exit_warns_when_the_readers_stop_lagged():
 def test_an_unknown_transition_is_refused():
     with pytest.raises(ValueError):
         ins.instruction_for(_long_pending(), _event("pyramid_add"))
+
+
+def test_progress_stall_close_says_close_at_market():
+    plan = _plan(status="CLOSED", entry_price=100.0, stop_loss=95.0, tp1=110.0,
+                 working_stop=100.0,
+                 legs_realized=[{"fraction": 0.5, "exit_price": 110.0, "r": 2.0, "reason": "tp1"},
+                                {"fraction": 0.5, "exit_price": 112.0, "r": 2.4,
+                                 "reason": "tp1_runner_progress_stall"}])
+    i = ins.instruction_for(plan, _event("closed", reason="tp1_runner_progress_stall",
+                                         exit_price=112.0, session="regular"))
+    assert i.verb == ins.CLOSE_AT_MARKET
+    assert "higher high failed" in i.headline
+    assert "no resting order covers this exit" in i.lines[0]
