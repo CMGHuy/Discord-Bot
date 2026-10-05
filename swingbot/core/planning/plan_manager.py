@@ -733,11 +733,15 @@ class PlanManager:
         already does with plan.created_at. None (no stall check possible)
         when the fill was never recorded -- a plan persisted before this
         history existed, or one filled some other way."""
-        entered_at = next((h.get("at") for h in plan.status_history
-                           if h.get("status") == PlanStatus.ACTIVE), None)
+        entered_at = self._entered_at(plan)
         if entered_at is None:
             return None
         return self.bar_count_fn(plan.ticker, entered_at)
+
+    def _entered_at(self, plan) -> str | None:
+        """The `at` of the transition that moved this plan to ACTIVE, or None."""
+        return next((h.get("at") for h in plan.status_history
+                     if h.get("status") == PlanStatus.ACTIVE), None)
 
     def _step_active(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
         is_bull = plan.direction == "bullish"
@@ -831,12 +835,9 @@ class PlanManager:
         # status changes -- the Discord layer posts it and the operator
         # decides. Checked before the stop/TP2 branches so it can't fire on
         # the same tick that closes the runner.
-        if config.PYRAMIDING_ENABLED and plan.pyramid_add is None:
-            add = maybe_pyramid(plan, price)
-            if add is not None:
-                plan.pyramid_add = add
-                self.store.update(plan)
-                return [PlanEvent(plan.plan_id, "pyramid_add", dict(add))]
+        pyramid = self._maybe_suggest_pyramid(plan, price)
+        if pyramid:
+            return pyramid
 
         # No same-session guard here (removed 2026-09-10, trader decision):
         # v64 suppressed both checks for the rest of the session TP1 fired
@@ -861,22 +862,38 @@ class PlanManager:
             if hit_tp2:
                 return self._close_runner(plan, price, "tp1_runner_tp2", risk, sign)
 
-        if self.atr_fn is not None:
-            extreme = plan.runner_high_close
-            extreme = price if extreme is None else (max(extreme, price) if is_bull
-                                                     else min(extreme, price))
-            if extreme != plan.runner_high_close:
-                plan.runner_high_close = extreme
-                atr_val = float(self.atr_fn(plan.ticker))
-                trail = chandelier_stop(extreme, atr_val, plan.trail_atr_mult,
-                                        plan.direction)
-                floor = (plan.working_stop if plan.working_stop is not None
-                         else runner_floor(entry, plan.tp1))
-                new_stop = max(floor, trail) if is_bull else min(floor, trail)
-                if new_stop != plan.working_stop:
-                    plan.working_stop = new_stop
-                self.store.update(plan)
+        self._ratchet_chandelier(plan, price, is_bull, entry)
         return []
+
+    def _maybe_suggest_pyramid(self, plan, price) -> list[PlanEvent]:
+        """Edge E38 suggestion, flag-gated OFF, at most once per plan."""
+        if not config.PYRAMIDING_ENABLED or plan.pyramid_add is not None:
+            return []
+        add = maybe_pyramid(plan, price)
+        if add is None:
+            return []
+        plan.pyramid_add = add
+        self.store.update(plan)
+        return [PlanEvent(plan.plan_id, "pyramid_add", dict(add))]
+
+    def _ratchet_chandelier(self, plan, price, is_bull, entry) -> None:
+        """Live chandelier ratchet off the extreme tick since TP1 (Task 66)."""
+        if self.atr_fn is None:
+            return
+        extreme = plan.runner_high_close
+        extreme = price if extreme is None else (max(extreme, price) if is_bull
+                                                 else min(extreme, price))
+        if extreme == plan.runner_high_close:
+            return
+        plan.runner_high_close = extreme
+        atr_val = float(self.atr_fn(plan.ticker))
+        trail = chandelier_stop(extreme, atr_val, plan.trail_atr_mult, plan.direction)
+        floor = (plan.working_stop if plan.working_stop is not None
+                 else runner_floor(entry, plan.tp1))
+        new_stop = max(floor, trail) if is_bull else min(floor, trail)
+        if new_stop != plan.working_stop:
+            plan.working_stop = new_stop
+        self.store.update(plan)
 
     def _close_runner(self, plan: TradePlanV2, fill: float, reason: str,
                       risk: float, sign: int, extra: dict | None = None) -> list[PlanEvent]:
