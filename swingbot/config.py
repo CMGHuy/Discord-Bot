@@ -698,6 +698,12 @@ FIELDS: list[Field] = [
                "A 19-symbol 2y daily batch takes ~2 s, so the 5 s quote timeout is far too tight "
                "for it. ALPACA_TIMEOUT_SECONDS stays the deadline for quotes. Past this the "
                "missed symbols fall back to yfinance."),
+    Field("ADMIN_YF_LOCK_TIMEOUT_SECONDS", "ADMIN_YF_LOCK_TIMEOUT_SECONDS", "Data Sources",
+          "Admin: yfinance wait limit (s)", type="number", default="10", min=1, max=120, step=1,
+          help="How long an admin page request waits for the shared yfinance download lock "
+               "before rendering without that data. Stops slow Yahoo responses queueing "
+               "requests until the admin runs out of connections. Admin web process only; "
+               "the scanner always waits. Read at admin start -- restart the admin to apply."),
     Field("ALPACA_MAX_TRADE_AGE_SECONDS", "ALPACA_MAX_TRADE_AGE_SECONDS", "Data Sources",
           "Max IEX last-trade age in session (s)", type="number", default="300",
           min=30, max=3600, step=30,

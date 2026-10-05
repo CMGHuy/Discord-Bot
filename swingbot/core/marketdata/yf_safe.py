@@ -27,9 +27,35 @@ log = logging.getLogger(__name__)
 _DOWNLOAD_LOCK = threading.Lock()
 
 
-def download(*args, **kwargs):
-    with _DOWNLOAD_LOCK:
+class DownloadBusy(RuntimeError):
+    """The download lock could not be taken inside the caller's wait limit.
+
+    Expected under load, not a fault: the caller renders without the data and
+    the next refresh retries. `no_retry` stops `with_retry` multiplying the
+    wait by its attempt count.
+    """
+    no_retry = True
+
+
+#: Wait limit applied when a caller passes none. `None` (every process but the
+#: admin web process, v132) means wait as long as it takes -- the scanner and
+#: backtests must never lose a download to a busy lock.
+_default_lock_timeout: float | None = None
+
+
+def set_default_lock_timeout(seconds: float | None) -> None:
+    global _default_lock_timeout
+    _default_lock_timeout = seconds
+
+
+def download(*args, lock_timeout: float | None = None, **kwargs):
+    limit = lock_timeout if lock_timeout is not None else _default_lock_timeout
+    if not _DOWNLOAD_LOCK.acquire(timeout=-1 if limit is None else limit):
+        raise DownloadBusy(f"yfinance download lock busy for {limit:g}s")
+    try:
         frame = yf.download(*args, **kwargs)
+    finally:
+        _DOWNLOAD_LOCK.release()
     if frame is None or getattr(frame, "empty", False):
         log.debug("yfinance download returned no rows: tickers=%r",
                   kwargs.get("tickers", args[0] if args else None))

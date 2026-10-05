@@ -30,6 +30,10 @@ def with_retry(fn, *args, attempts: int = None, base_delay: float = None,
         try:
             return fn(*args, **kwargs)
         except Exception as exc:
+            # v132: a deliberate give-up (e.g. yf_safe.DownloadBusy) must not be
+            # multiplied by the attempt count.
+            if getattr(exc, "no_retry", False):
+                raise
             last = exc
             if i < attempts - 1:
                 delay = base_delay * (2 ** i)

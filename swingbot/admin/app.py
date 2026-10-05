@@ -375,6 +375,11 @@ def scan_status_payload() -> dict:
 def main():
     host = os.getenv("ADMIN_HOST", "0.0.0.0")
     port = int(os.getenv("ADMIN_PORT", "1234"))
+    # v132: only this process bounds its wait for the yfinance download lock.
+    # A page request that cannot get the lock renders without that data
+    # instead of holding its socket in a queue (the 2026-10-05 exhaustion).
+    from swingbot.core.marketdata import yf_safe
+    yf_safe.set_default_lock_timeout(float(config.ADMIN_YF_LOCK_TIMEOUT_SECONDS))
     app.run(host=host, port=port, debug=False)
 
 

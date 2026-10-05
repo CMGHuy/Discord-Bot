@@ -118,6 +118,9 @@ def _yf_daily_batch(tickers: list, period: str) -> dict:
                          group_by="ticker", auto_adjust=True, progress=False,
                          attempts=FETCH_RETRY_ATTEMPTS, base_delay=FETCH_RETRY_BASE_DELAY,
                          label=f"get_daily_data_batch({len(tickers)} tickers)")
+    except yf_safe.DownloadBusy as exc:
+        log.info("yfinance busy, skipped %d ticker(s): %s", len(tickers), exc)
+        return {}
     except Exception as exc:
         log.error("get_daily_data_batch failed for %d ticker(s) after %d attempt(s): %s",
                    len(tickers), FETCH_RETRY_ATTEMPTS, exc, exc_info=True)
@@ -226,6 +229,9 @@ def _yf_batch_prices(tickers: list) -> dict:
     try:
         raw = yf_safe.download(" ".join(tickers), period="1d", interval="1m",
                           group_by="ticker", prepost=True, progress=False)
+    except yf_safe.DownloadBusy as exc:
+        log.info("yfinance busy, skipped %d ticker(s): %s", len(tickers), exc)
+        return {}
     except Exception as exc:
         log.error("get_current_price_batch failed for %d ticker(s): %s", len(tickers), exc, exc_info=True)
         return {}
