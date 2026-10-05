@@ -1,4 +1,4 @@
-# v132 — Admin download pile-up: tape cache, lock wait limit, fallback poll
+# v132 — Admin download pile-up: tape cache, lock wait limit, scan-event throttle
 
 **Version:** ui 1.21.1 · bot 2.0.1 (at writing)
 **Bump:** bot patch, ui patch
@@ -26,11 +26,9 @@ whole mechanism:
 
 The chain, from trigger to collapse:
 
-1. **Trigger.** When a browser's event stream fails, `EventStream` falls back
-   to bumping every event counter every 5 seconds
-   (`frontend/src/app/api/event-stream.ts`, `POLL_INTERVAL_MS = 5_000`). Every
-   store refetches, the tape included. Two clients in fallback produce about
-   24 tape requests a minute — the measured rate.
+1. **Trigger.** Clients refetch the tape far more often than intended — on
+   every `scan` event (about one a second during a scan) and on the
+   5-second fallback poll. See the measured section below.
 2. **Expensive call.** Each tape request makes two Yahoo downloads: live
    prices, and **two years of daily bars for every flagged symbol**, used only
    to compute one change percentage per row. The price batch has a 15-second
@@ -47,17 +45,25 @@ The same errors appear in the log 25 minutes before any unusual traffic. A
 screenshot audit that reloaded about 80 pages turned a slow pile-up into a
 fast one, but ordinary use reaches the same state on its own.
 
-## What is not known
+## What the trigger turned out to be (task 1, measured 2026-10-05)
 
-**Why the clients were in fallback mode.** Two explanations fit, and the fix
-for each is different:
+The first draft of this spec blamed the 5-second fallback poll. Measuring the
+live stream through the public URL corrected that:
 
-- The stream never works through the Cloudflare tunnel (buffering or an idle
-  timeout), so every public client polls permanently.
-- The server's 8-connection cap was full, so later clients were refused and
-  degraded.
+- **The stream works through the Cloudflare tunnel.** Frames arrive as they
+  are sent; nothing buffers. No transport fix is needed.
+- **`scan` fires about once a second while a scan runs.** Since v116 every
+  write to the `scan_progress` table raises `scan`
+  (`swingbot/core/db/events.py`, `TABLE_CHANNELS`). Seven `scan` events
+  arrived in the first seven seconds of one sample; a later 30-second sample
+  between progress bursts carried four.
+- **Four stores refetch on `scan`:** `tape`, `market-index`, `chart` and
+  `connection` (the scan-progress display). Only the last one wants
+  per-second updates. The other three each hit Yahoo.
 
-Task 1 measures which. Parts A and B below are correct under either answer.
+The fallback poll remains a second, smaller source of the same load whenever
+a client does degrade. Whether the two clients observed after the restart
+were live or degraded was not established; Part C covers both.
 
 ## Design
 
@@ -102,22 +108,23 @@ cannot take the lock in time raises `DownloadBusy`.
 This is the safety net. Part A removes the queue in normal operation; Part B
 bounds it when Yahoo itself is slow.
 
-### Part C — The fallback poll stops hammering market data (client)
+### Part C — Market-data stores react to `scan` at most every 30 seconds (client)
 
-- **Task 1 result decides the first half.** If the stream fails through the
-  tunnel, fix the transport (response headers that disable proxy buffering, a
-  ping interval under the tunnel's idle timeout). If the cap was the cause,
-  raise or restructure it. Either way the goal is that a healthy public client
-  is `live`, not `degraded`.
-- **Fallback polling becomes tiered.** `EventStream` keeps the 5-second timer
-  for cheap, database-backed events and bumps the market-data events (`scan`,
-  which drives the tape) every 30 seconds. Subscribers still never ask which
-  mode they are in; the tiering lives inside `EventStream`. The cost is that
-  anything else subscribed to `scan` (scan progress on the System workspace)
-  also refreshes every 30 seconds while a client is degraded; that is
-  accepted, because degraded should be rare once the transport is fixed.
+- **`EventStream.changes(name, { minIntervalMs })`** returns a throttled view
+  of the same counter: the first bump passes through at once, later bumps
+  inside the interval collapse into one trailing bump at its end. The
+  unthrottled signature is unchanged.
+- **`tape`, `market-index` and `chart` subscribe to `scan` with a 30-second
+  interval.** `connection` keeps the raw signal, so scan progress still moves
+  every second.
+- **One mechanism covers both sources.** Live progress bursts and the
+  5-second fallback poll both arrive as bumps of the same counter, so the
+  throttle bounds each without the stores knowing which mode they are in.
 - **A hidden tab does not poll.** While `document.hidden`, the fallback timer
   pauses, and one bump fires when the tab becomes visible again.
+
+No server event contract changes: `scan_progress` keeps raising `scan`, so
+there is no migration.
 
 ## Out of scope
 
@@ -148,21 +155,20 @@ bounds it when Yahoo itself is slow.
 - **Tape endpoint test:** 20 concurrent `/market/tape` requests against a
   slow fake download complete with at most two downloads and no thread left
   waiting. This is the regression test for the incident.
-- **EventStream tests:** in degraded mode the market-data counter bumps on the
-  30-second tier and the others on the 5-second tier; a hidden document pauses
-  both; visibility returning fires one bump.
+- **EventStream tests:** ten bumps inside the interval reach a throttled
+  subscriber as one immediate and one trailing bump, and an unthrottled
+  subscriber as ten; a hidden document pauses the fallback timer; visibility
+  returning fires one bump.
 - **Production check after deploy:** with two clients open for ten minutes,
   the admin process's handle and thread counts stay flat.
 
 ## Tasks, in order
 
-1. Measure why public clients degrade (stream through the tunnel versus the
-   connection cap) and record the answer in this spec.
+1. Measure why the tape is refetched so often. **Done** — see above.
 2. Part A — tape cache with single-flight.
 3. Part B — lock wait limit and `DownloadBusy`.
-4. Part C — transport fix chosen by task 1, tiered fallback poll, hidden-tab
-   pause.
+4. Part C — throttled `scan` subscription for the three market-data stores,
+   hidden-tab pause.
 5. Full suite, deploy, production check.
 
-Tasks 2 and 3 are independent of each other and of task 1. Task 4 depends on
-task 1's answer.
+Tasks 2, 3 and 4 are independent of each other.
