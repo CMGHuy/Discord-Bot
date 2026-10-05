@@ -10,7 +10,7 @@ import {
 
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
-import { EventStream } from '../api/event-stream';
+import { EventStream, MARKET_DATA_MIN_INTERVAL_MS } from '../api/event-stream';
 import { ChartResponse } from '../api/models';
 
 interface ChartSlice {
@@ -158,7 +158,8 @@ export const ChartStore = signalStore(
   withHooks({
     onInit(store, events = inject(EventStream)) {
       const trades = events.changes('trades');
-      const scan = events.changes('scan');
+      // v132: `scan` fires ~1/s during a scan and this refetch hits Yahoo.
+      const scan = events.changes('scan', { minIntervalMs: MARKET_DATA_MIN_INTERVAL_MS });
       effect(() => {
         trades();
         scan();

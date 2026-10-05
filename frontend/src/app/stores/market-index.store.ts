@@ -2,7 +2,7 @@ import { effect, inject } from '@angular/core';
 import { patchState, signalStore, withHooks, withMethods, withState } from '@ngrx/signals';
 
 import { ApiClient } from '../api/api-client';
-import { EventStream } from '../api/event-stream';
+import { EventStream, MARKET_DATA_MIN_INTERVAL_MS } from '../api/event-stream';
 import { TapeRow } from '../api/models';
 
 /** Lane A's fixed symbols, in the exact order the tape shows them.
@@ -58,7 +58,8 @@ export const MarketIndexStore = signalStore(
   }),
   withHooks({
     onInit(store, events = inject(EventStream)) {
-      const scan = events.changes('scan');
+      // v132: `scan` fires ~1/s during a scan and this refetch hits Yahoo.
+      const scan = events.changes('scan', { minIntervalMs: MARKET_DATA_MIN_INTERVAL_MS });
       effect(() => {
         scan();
         store.load();

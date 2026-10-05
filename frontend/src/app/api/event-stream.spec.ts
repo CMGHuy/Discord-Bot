@@ -276,6 +276,49 @@ describe('EventStream', () => {
     expect(trades()).toBe(afterRecovery); // no poll ticks on top of live events
   });
 
+  /* -- throttled subscription (v132) ------------------------------------ */
+
+  it('collapses a burst into one immediate and one trailing bump', () => {
+    const raw = stream.changes('scan');
+    const slow = stream.changes('scan', { minIntervalMs: 30_000 });
+    for (let i = 0; i < 10; i++) FakeEventSource.latest().emit('scan', i + 1);
+    expect(raw()).toBe(10);
+    expect(slow()).toBe(1);
+    vi.advanceTimersByTime(30_000);
+    expect(slow()).toBe(2);
+    vi.advanceTimersByTime(60_000);
+    expect(slow()).toBe(2);
+  });
+
+  it('passes a lone event straight through after a quiet interval', () => {
+    const slow = stream.changes('scan', { minIntervalMs: 30_000 });
+    FakeEventSource.latest().emit('scan', 1);
+    vi.advanceTimersByTime(31_000);
+    FakeEventSource.latest().emit('scan', 2);
+    expect(slow()).toBe(2);
+  });
+
+  it('shares one throttle between subscribers of the same event and interval', () => {
+    expect(stream.changes('scan', { minIntervalMs: 30_000 }))
+      .toBe(stream.changes('scan', { minIntervalMs: 30_000 }));
+  });
+
+  it('does not poll while the document is hidden, and catches up once on return', () => {
+    const source = FakeEventSource.latest();
+    source.fail();
+    source.fail();
+    source.fail();
+    const trades = stream.changes('trades');
+    const before = trades();
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+    vi.advanceTimersByTime(POLL_INTERVAL_MS * 3);
+    expect(trades()).toBe(before);
+    hidden.mockReturnValue(false);
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(trades()).toBe(before + 1);
+    hidden.mockRestore();
+  });
+
   it('closes everything on disconnect', () => {
     const trades = stream.changes('trades');
     const source = FakeEventSource.latest();

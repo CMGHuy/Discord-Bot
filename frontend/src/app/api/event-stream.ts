@@ -1,4 +1,4 @@
-import { Injectable, Signal, signal } from '@angular/core';
+import { Injectable, Signal, WritableSignal, signal } from '@angular/core';
 import { Subject } from 'rxjs';
 
 /** The ten event types the server can raise, plus the two it synthesises.
@@ -31,6 +31,23 @@ const FAILURE_WINDOW_MS = 60_000;
 
 /** The interval the old Jinja UI polled at, and what this falls back to. */
 export const POLL_INTERVAL_MS = 5_000;
+
+/** How often a store that hits market data may react to `scan` (v132).
+ *  `scan` fires about once a second while a scan runs (every
+ *  `scan_progress` write raises it), and each reaction used to cost the
+ *  server a Yahoo download -- which is how the admin ran out of sockets on
+ *  2026-10-05. */
+export const MARKET_DATA_MIN_INTERVAL_MS = 30_000;
+
+/** One rate-limited view of an event counter, shared by every subscriber
+ *  asking for the same event at the same interval. */
+interface Throttle {
+  readonly name: EventName;
+  readonly out: WritableSignal<number>;
+  readonly interval: number;
+  last: number;
+  timer: ReturnType<typeof setTimeout> | null;
+}
 
 /** How often a degraded client tries the stream again. */
 const RECOVERY_INTERVAL_MS = 30_000;
@@ -65,6 +82,8 @@ export class EventStream {
   private readonly raisedSubject = new Subject<EventName>();
   readonly raised = this.raisedSubject.asObservable();
   private readonly counters = new Map<EventName, ReturnType<typeof signal<number>>>();
+  private readonly throttles = new Map<string, Throttle>();
+  private visibilityBound = false;
   /** Timestamps of recent connection failures, inside the rolling window. */
   private failures: number[] = [];
   private pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -77,8 +96,19 @@ export class EventStream {
    * effect, and an effect only re-runs when the value it read changes. A
    * boolean set true twice is one change; two events must be two.
    */
-  changes(name: EventName): Signal<number> {
-    return this.counterFor(name).asReadonly();
+  changes(name: EventName, options?: { minIntervalMs: number }): Signal<number> {
+    if (!options) return this.counterFor(name).asReadonly();
+    // Throttled view (v132): the first bump passes at once, the rest of a
+    // burst collapses into one trailing bump. The signal itself is returned
+    // (not `asReadonly()`, a new object per call) so subscribers share it;
+    // the return type is what keeps callers read-only.
+    const key = `${name}:${options.minIntervalMs}`;
+    let throttle = this.throttles.get(key);
+    if (!throttle) {
+      throttle = { name, out: signal(0), interval: options.minIntervalMs, last: -Infinity, timer: null };
+      this.throttles.set(key, throttle);
+    }
+    return throttle.out;
   }
 
   connect(): void {
@@ -115,6 +145,10 @@ export class EventStream {
     this.source?.close();
     this.source = null;
     this.stopPolling();
+    for (const throttle of this.throttles.values()) {
+      if (throttle.timer !== null) clearTimeout(throttle.timer);
+      throttle.timer = null;
+    }
     if (this.recoveryTimer !== null) {
       clearInterval(this.recoveryTimer);
       this.recoveryTimer = null;
@@ -135,6 +169,26 @@ export class EventStream {
   private bump(name: EventName): void {
     this.counterFor(name).update((n) => n + 1);
     this.raisedSubject.next(name);
+    for (const throttle of this.throttles.values()) {
+      if (throttle.name === name) this.pass(throttle);
+    }
+  }
+
+  /** Leading edge at once, everything else inside the interval as one
+   *  trailing bump -- so the last event of a burst is never lost. */
+  private pass(throttle: Throttle): void {
+    const wait = throttle.last + throttle.interval - Date.now();
+    if (wait <= 0) {
+      this.release(throttle);
+    } else if (throttle.timer === null) {
+      throttle.timer = setTimeout(() => this.release(throttle), wait);
+    }
+  }
+
+  private release(throttle: Throttle): void {
+    throttle.timer = null;
+    throttle.last = Date.now();
+    throttle.out.update((n) => n + 1);
   }
 
   private bumpAll(): void {
@@ -185,7 +239,18 @@ export class EventStream {
 
   private startPolling(): void {
     if (this.pollTimer !== null) return;
-    this.pollTimer = setInterval(() => this.bumpAll(), POLL_INTERVAL_MS);
+    this.pollTimer = setInterval(() => {
+      // A tab nobody is looking at must not cost the server a refetch (v132).
+      if (typeof document !== 'undefined' && document.hidden) return;
+      this.bumpAll();
+    }, POLL_INTERVAL_MS);
+    if (!this.visibilityBound && typeof document !== 'undefined') {
+      this.visibilityBound = true;
+      // One catch-up refetch when the tab is looked at again.
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && this.pollTimer !== null) this.bumpAll();
+      });
+    }
   }
 
   private stopPolling(): void {

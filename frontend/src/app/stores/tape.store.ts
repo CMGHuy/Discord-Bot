@@ -9,7 +9,7 @@ import {
 } from '@ngrx/signals';
 
 import { ApiClient } from '../api/api-client';
-import { EventStream } from '../api/event-stream';
+import { EventStream, MARKET_DATA_MIN_INTERVAL_MS } from '../api/event-stream';
 import { TapeRow } from '../api/models';
 import { readTapeSymbols, toggleTapeSymbol } from '../ui/tape-prefs';
 import { PreferencesStore } from './preferences.store';
@@ -117,7 +117,8 @@ export const TapeStore = signalStore(
   }),
   withHooks({
     onInit(store, events = inject(EventStream)) {
-      const scan = events.changes('scan');
+      // v132: `scan` fires ~1/s during a scan and this refetch hits Yahoo.
+      const scan = events.changes('scan', { minIntervalMs: MARKET_DATA_MIN_INTERVAL_MS });
       // Tracked, deliberately: `load()` reads `store.symbols()` (transitively,
       // through `prefs.values()`), so this effect re-runs on a genuine `scan`
       // AND whenever the flagged-symbol set actually changes -- which is
