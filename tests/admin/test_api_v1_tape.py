@@ -23,6 +23,8 @@ def no_daily_batch_network(monkeypatch):
     2-year-per-request bug this endpoint was fixed to stop doing. Stubbed
     here so every test defaults to "no frame" (change_pct stays None) unless
     it overrides this to exercise the real computation."""
+    from swingbot.admin import tape_cache
+    tape_cache.reset()  # v132: the cache must not carry rows between tests
     monkeypatch.setattr("swingbot.core.marketdata.data.get_daily_data_batch", lambda syms: {})
 
 
@@ -235,3 +237,44 @@ def test_earnings_6_days_out_landing_next_monday_is_excluded():
     assert kind is None
     assert label is None
     assert rank == 2
+
+
+def test_concurrent_tape_requests_share_one_download(admin_app):
+    """v132: the 2026-10-05 pile-up. Twenty tabs asking at once cost ONE slow
+    download each for prices and daily bars -- not twenty of each queued on
+    the yfinance lock while their sockets stay open."""
+    import threading
+    import time
+
+    calls = {"prices": 0, "daily": 0}
+
+    def slow_prices(symbols):
+        calls["prices"] += 1
+        time.sleep(0.3)
+        return {s: 10.0 for s in symbols}
+
+    def slow_daily(symbols):
+        calls["daily"] += 1
+        time.sleep(0.3)
+        return {s: _frame(9.0, 10.0) for s in symbols}
+
+    clients = []
+    for _ in range(20):
+        c = admin_app.test_client()
+        c.post("/api/v1/session", json=_LOGIN)
+        clients.append(c)
+
+    statuses: list = []
+
+    def hit(c):
+        statuses.append(c.get("/api/v1/market/tape?symbols=NVDA,AMD").status_code)
+
+    with patch("swingbot.core.marketdata.data.get_current_price_batch", side_effect=slow_prices), \
+         patch("swingbot.core.marketdata.data.get_daily_data_batch", side_effect=slow_daily):
+        threads = [threading.Thread(target=hit, args=(c,)) for c in clients]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(20)
+    assert statuses == [200] * 20
+    assert calls == {"prices": 1, "daily": 1}

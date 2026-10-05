@@ -668,7 +668,7 @@ def tape():
     """
     from datetime import datetime, timezone
 
-    from swingbot.core.marketdata import data as market_data
+    from swingbot.admin import tape_cache
     from swingbot.core.planning.plan_store import PlanStore
     from swingbot.core.tracking.performance import TradeLog
 
@@ -677,21 +677,13 @@ def tape():
     if not symbols:
         return jsonify({"as_of": as_of, "rows": []})
 
-    try:
-        prices = market_data.get_current_price_batch(symbols) or {}
-    except Exception:  # a dead feed degrades to a priceless tape, never a 500
-        prices = {}
-
-    # ONE batched fetch for every flagged symbol's change_pct, not one
-    # `_ohlcv_frame` call per row -- `tape()` fires on every `scan` SSE event,
-    # automatically, and a per-symbol uncached 2-year yfinance download in
-    # that loop would share Yahoo's rate limit with the bot's own scanner on
-    # every single scan. A symbol missing from the dict (no usable data came
-    # back for it) just means `_tape_change_pct` returns None for that row.
-    try:
-        frames = market_data.get_daily_data_batch(symbols) or {}
-    except Exception:
-        frames = {}
+    # v132: both batches go through the single-flight cache -- any number of
+    # tabs costs one download per TTL instead of one per request, and N
+    # concurrent requests wait on one download rather than queueing N of them
+    # on the yfinance lock (the 2026-10-05 handle exhaustion). The cache
+    # degrades a dead feed to stale or priceless rows, never a 500.
+    prices = tape_cache.prices(symbols)
+    frames = tape_cache.daily_frames(symbols)
 
     open_trades: dict = {}
     try:
