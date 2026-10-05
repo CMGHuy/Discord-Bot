@@ -226,6 +226,27 @@ def gate_win_rate(result: dict) -> str:
     return "PASS"
 
 
+#: v123 PRE-REGISTERED Stage 2 rule for an exit-only (harvest) component:
+#: >= 2 of 3 folds with dExpR > 0, none below -0.02R, >= 30 TP1-touched per fold.
+HARVEST_GATE_MIN_POSITIVE_FOLDS = 2
+HARVEST_GATE_MAX_FOLD_LOSS_R = 0.02
+HARVEST_GATE_MIN_TP1_PER_FOLD = 30
+
+
+def gate_expectancy_harvest(result: dict) -> str:
+    folds = result["folds"]
+    deltas = [f.get("delta_expectancy_r") for f in folds]
+    if len(folds) != 3 or any(d is None for d in deltas):
+        return "FAIL"
+    if any(f["n_tp1"] < HARVEST_GATE_MIN_TP1_PER_FOLD for f in folds):
+        return "FAIL"
+    if sum(d > 0 for d in deltas) < HARVEST_GATE_MIN_POSITIVE_FOLDS:
+        return "FAIL"
+    if any(d < -HARVEST_GATE_MAX_FOLD_LOSS_R for d in deltas):
+        return "FAIL"
+    return "PASS"
+
+
 def _early_exit_r(pos: dict, exit_price: float) -> float:
     """R of a position cut short at `exit_price` instead of run to its stop or
     target. Same direction-adjusted formula get_stats/_closed_r use live."""

@@ -23,13 +23,13 @@ from .acceptance import (
     delta_expectancy_r, delta_standardised_win_rate,
     cluster_bootstrap, bootstrap_delta, BootstrapResult, ClauseResult,
     AcceptanceResult, population_split, stratum_table, design_effect,
-    _clause_volume, _clause_permutation, render_markdown,
+    _clause_volume, _clause_permutation, render_markdown, _group_by_ticker,
     BOOTSTRAP_RESAMPLES, ALPHA, _Z_ALPHA_ONE_SIDED, _Z_POWER, STAGES,
 )
 
 __all__ = [
     "HARVEST_VERSION", "WIN_RATE_FLOOR_PP", "mde_expectancy_r",
-    "evaluate_harvest", "render_markdown",
+    "evaluate_harvest", "permutation_p_expectancy", "render_markdown",
 ]
 
 HARVEST_VERSION = 1
@@ -173,3 +173,30 @@ def evaluate_harvest(baseline, component, *, stage: str,
                             split={k: len(v) if isinstance(v, list) else v
                                    for k, v in split.items()},
                             seed=seed, version=HARVEST_VERSION)
+
+
+def _swapped(b_by, c_by, tickers, swap):
+    pb, pc = [], []
+    for ticker, flip in zip(tickers, swap):
+        b, c = b_by.get(ticker, []), c_by.get(ticker, [])
+        pb.extend(c if flip else b)
+        pc.extend(b if flip else c)
+    return pb, pc
+
+
+def permutation_p_expectancy(baseline, component, *, n_perm: int = 200,
+                             seed: int = 42) -> float | None:
+    """v123 not_luck instrument for paired exit-only designs: swap the arm
+    labels of a random half of tickers (clusters), recompute dExpR, and
+    report the share of permutations at or above the observed dExpR."""
+    observed = delta_expectancy_r(baseline, component)
+    if observed is None:
+        return None
+    b_by, c_by = _group_by_ticker(baseline), _group_by_ticker(component)
+    tickers = sorted(set(b_by) | set(c_by))
+    rng = np.random.default_rng(seed)
+    hits = 0
+    for _ in range(n_perm):
+        delta = delta_expectancy_r(*_swapped(b_by, c_by, tickers, rng.random(len(tickers)) < 0.5))
+        hits += delta is not None and delta >= observed - 1e-12
+    return hits / n_perm
