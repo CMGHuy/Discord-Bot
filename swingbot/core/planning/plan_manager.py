@@ -17,9 +17,11 @@ from swingbot import config
 from swingbot.core.market.session import (RTH_OPEN, US_MARKET_TZ, is_quiet_hours,
                                           is_regular_session, is_tape_open, now_et,
                                           nyse_calendar, session_close, session_date)
-from swingbot.core.market.strategy_types import COMPRESSION_SHORT
+from swingbot.core.market.strategy_types import COMPRESSION_SHORT, HORIZONS
 from swingbot.core.risk_limits import planned_loss_pct
 from swingbot.core.planning import time_exit as te
+from swingbot.core.planning.exit_sim import runner_structure_frame, runner_structure_step
+from swingbot.core.planning.targets import _safe_atr_value
 from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
                                        chandelier_stop, pending_expired,
                                        pending_invalidated, record_transition,
@@ -51,7 +53,8 @@ class PlanEvent:
     plan_id: str
     transition: str      # "filled"|"cancelled_expired"|"cancelled_invalidated"|
                          # "cancelled_risk_cap"|"be_moved"|"tp1_partial"|
-                         # "closed"|"pyramid_add"
+                         # "closed"|"pyramid_add"; close reasons include
+                         # "tp1_runner_progress_stall" (v123 structure exit)
     detail: dict = field(default_factory=dict)
 
 
@@ -282,10 +285,37 @@ def _due_auction_passed(notice: dict, now=None) -> bool:
     return now_et(now) >= auction
 
 
+def entry_bar_position(frame, entered_at) -> int | None:
+    """Position of the fill session's daily bar in `frame` (v123), or None."""
+    if entered_at is None:
+        return None
+    try:
+        when = datetime.fromisoformat(str(entered_at))
+    except ValueError:
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    fill_day = session_date(when)
+    position = sum(day.isoformat() <= fill_day for day in frame.index.date) - 1
+    return position if position >= 0 else None
+
+
+def _holding_cap(plan) -> int:
+    """Bars after entry the replay walk covers (simulate_exit's max_holding_days)."""
+    cap = HORIZONS[plan.horizon_key]["max_holding_days"]
+    hold = getattr(plan, "hold_cap_bars", None)
+    return min(cap, int(hold)) if hold is not None else cap
+
+
+def _daily_frame(ticker):
+    from swingbot.core.marketdata.data import get_daily_data
+    return get_daily_data(ticker)
+
+
 class PlanManager:
     def __init__(self, store: PlanStore, price_fn, bar_count_fn=None,
                  atr_fn=None, trade_log=None, price_batch_fn=None,
-                 auction_close_fn=None):
+                 auction_close_fn=None, daily_frame_fn=None):
         self.store = store
         self.price_fn = price_fn            # ticker -> live float
         # Optional on purpose: the deterministic unit-test feeds only expose
@@ -301,6 +331,8 @@ class PlanManager:
         self.auction_close_fn = auction_close_fn
         self._last_seen: dict[str, tuple[str, float]] = {}
         self._risk_cap_warned: set[str] = set()
+        self.daily_frame_fn = daily_frame_fn   # ticker -> daily OHLCV (v123)
+        self._structure_seen: dict[str, tuple[str, bool]] = {}
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
@@ -818,11 +850,74 @@ class PlanManager:
                               {"working_stop": entry, "live_price": price})]
         return []
 
+    def _structure_runner_step(self, plan, price, now=None) -> list[PlanEvent]:
+        """v123: the runner's structure exit on the last COMPLETED daily bar,
+        never a tick. A stall closes at the first regular-session tick after
+        the confirming bar -- the live counterpart of replay's Open[j+1]."""
+        if config.RUNNER_STRUCTURE_EXIT == "off" or self.daily_frame_fn is None:
+            return []
+        verdict = self._structure_verdict(plan, now)
+        if verdict is None or not verdict[1]:
+            return []
+        if not is_regular_session(now) or session_date(now) <= verdict[0]:
+            return []
+        risk = abs(plan.entry_price - plan.stop_loss)
+        sign = 1 if plan.direction == "bullish" else -1
+        return self._close_runner(plan, price, "tp1_runner_progress_stall", risk, sign)
+
+    def _structure_verdict(self, plan, now) -> tuple[str, bool] | None:
+        """(completed bar date, stall fired), evaluated once per completed bar."""
+        bar = self._completed_runner_bar(plan, now)
+        if bar is None:
+            return None
+        completed, j, entry_index, bar_date = bar
+        cached = self._structure_seen.get(plan.plan_id)
+        if cached is not None and cached[0] == bar_date:
+            return cached
+        verdict = (bar_date, self._apply_structure_bar(plan, completed, j, entry_index))
+        self._structure_seen[plan.plan_id] = verdict
+        return verdict
+
+    def _completed_runner_bar(self, plan, now):
+        from swingbot.core.scanning.strategy_pass import completed_frame
+        try:
+            completed = completed_frame(self.daily_frame_fn(plan.ticker), now)
+        except Exception as exc:
+            log.debug("structure exit: daily frame failed for %s: %s", plan.ticker, exc)
+            return None
+        if completed is None or len(completed) == 0:
+            return None
+        j = len(completed) - 1
+        bar_date = completed.index[j].date().isoformat()
+        entry_index = entry_bar_position(completed, self._entered_at(plan))
+        if entry_index is None or j <= entry_index or j >= entry_index + _holding_cap(plan):
+            return None
+        if plan.runner_floor_session is not None and bar_date <= plan.runner_floor_session:
+            return None
+        return completed, j, entry_index, bar_date
+
+    def _apply_structure_bar(self, plan, completed, j, entry_index) -> bool:
+        from swingbot.core.market.indicators import atr
+        stop = (plan.working_stop if plan.working_stop is not None
+                else runner_floor(plan.entry_price, plan.tp1))
+        atr_value = _safe_atr_value(plan.entry_price, float(atr(completed, 14).iloc[j]))
+        new_stop, fires = runner_structure_step(
+            runner_structure_frame(completed), j, entry_index=entry_index,
+            direction=plan.direction, runner_stop=stop, atr_value=atr_value)
+        if new_stop != stop:
+            plan.working_stop = new_stop
+            self.store.update(plan)
+            _plan_line("structure trail", plan, new_stop, " reason=structure_trail")
+        return fires
+
     def _step_partial(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
         is_bull = plan.direction == "bullish"
         sign = 1 if is_bull else -1
         entry = plan.entry_price
         risk = abs(entry - plan.stop_loss)
+        structure = self._structure_runner_step(plan, price, now)
+        if structure:
+            return structure
         # A PARTIAL plan always has working_stop set (the TP1 branch above
         # writes it). The fallback only fires for a plan persisted to
         # data/plans.json before v39; using the floor there tightens those
@@ -1204,7 +1299,7 @@ def _manager() -> PlanManager:
         batch_fn = _price_batch_fn if _price_fn is _DEFAULT_PRICE_FN else None
         _MANAGER = PlanManager(PlanStore(), _price_fn, atr_fn=_live_atr,
                                bar_count_fn=_bars_since, trade_log=TradeLog(),
-                               price_batch_fn=batch_fn)
+                               price_batch_fn=batch_fn, daily_frame_fn=_daily_frame)
     return _MANAGER
 
 
