@@ -173,6 +173,12 @@ def _realized(closed: list[dict], mode: str) -> dict:
     }
 
 
+def _total_or_none(values: list[float]) -> float | None:
+    """None, not 0, when nothing contributed: no priced position is a
+    different fact from a position that is exactly flat."""
+    return round(sum(values), 2) if values else None
+
+
 @api_v1.route("/dashboard", methods=["GET"])
 @require_auth
 def dashboard():
@@ -209,6 +215,7 @@ def dashboard():
     account_cfg = dash.load_account_config()
     views = dash.build_open_trade_views(open_trades, account_cfg)
     pcts = views["unrealized_pcts"]
+    amounts = views["unrealized_amounts"]
 
     confidences = [
         t["confidence_level"] for t in open_trades
@@ -220,6 +227,7 @@ def dashboard():
         # primary
         "account_balance": account_cfg.get("balance"),
         "open_pnl_pct": round(sum(pcts) / len(pcts), 2) if pcts else None,
+        "open_pnl_amount": _total_or_none(amounts),
         "risk_used_pct": heat,
         "risk_cap_pct": cap,
         # chips

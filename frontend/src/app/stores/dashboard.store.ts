@@ -90,6 +90,7 @@ export const DashboardStore = signalStore(
 
     balance: computed(() => data()?.account_balance ?? null),
     openPnlPct: computed(() => data()?.open_pnl_pct ?? null),
+    openPnlAmount: computed(() => data()?.open_pnl_amount ?? null),
     riskUsedPct: computed(() => data()?.risk_used_pct ?? null),
     riskCapPct: computed(() => data()?.risk_cap_pct ?? null),
 

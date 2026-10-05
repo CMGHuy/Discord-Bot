@@ -187,6 +187,7 @@ export const DASHBOARD_COLUMNS = tradeColumns();
       [changePct]="store.equityChangePct()"
       [points]="store.equityPoints()"
       [openPnlPct]="store.openPnlPct()"
+      [openPnlAmount]="store.openPnlAmount()"
       [winRate]="store.winRate()"
       [expectancyR]="store.expectancyR()"
       [winRateN]="store.winRateN()"

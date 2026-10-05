@@ -5,7 +5,7 @@ from dotenv import dotenv_values
 
 from swingbot import config
 
-ENV_EXAMPLE = Path(__file__).resolve().parent.parent / ".env.example"
+ENV_EXAMPLE = Path(__file__).resolve().parents[2] / ".env.example"
 
 
 def _field(key):

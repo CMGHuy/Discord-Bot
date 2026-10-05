@@ -60,7 +60,7 @@ def _root_log_files(tmp_path, statements):
         "print('|'.join(h.baseFilename for h in logging.getLogger().handlers"
         " if isinstance(h, RotatingFileHandler)))\n"
     )
-    root = str(pathlib.Path(__file__).resolve().parents[1])
+    root = str(pathlib.Path(__file__).resolve().parents[2])
     out = subprocess.run([sys.executable, "-c", script], cwd=root,
                          capture_output=True, text=True, check=True).stdout
     return out.strip().splitlines()[-1] if out.strip() else ""

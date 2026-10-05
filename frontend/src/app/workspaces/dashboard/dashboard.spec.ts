@@ -43,6 +43,7 @@ function payload(overrides: Partial<DashboardData> = {}): DashboardData {
   return {
     account_balance: 10000,
     open_pnl_pct: 1.2,
+    open_pnl_amount: 120,
     risk_used_pct: 3,
     risk_cap_pct: 20,
     open_trades: 2,

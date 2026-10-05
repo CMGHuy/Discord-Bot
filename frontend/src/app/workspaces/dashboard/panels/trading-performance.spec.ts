@@ -32,6 +32,50 @@ describe('trading performance panel', () => {
     expect(el.textContent).toContain('2.34');
   });
 
+  it('phone summary carries win rate, expectancy, payoff and realised', () => {
+    // At <=640px the eight-card grid is display:none, so the phone summary is
+    // the only place these four figures can appear.
+    const el = render({
+      winRate: 49.1, winRateN: 12, expectancyR: -0.16, payoffRatio: 2.34,
+      realizedAmount: 5, realizedLabel: 'Realised today', currency: '€', scope: 'today',
+    });
+    const text = el.querySelector('.mobile-summary')!.textContent ?? '';
+    expect(text).toContain('Win rate');
+    expect(text).toContain('49.1%');
+    expect(text).toContain('Expectancy');
+    expect(text).toContain('-0.16R');
+    expect(text).toContain('Payoff');
+    expect(text).toContain('2.34');
+    expect(text).toContain('Realised today');
+  });
+
+  it('shows the open P&L amount under the percentage', () => {
+    const el = render({ openPnlPct: 2.5, openPnlAmount: 1234.5, currency: '€', scope: 'today' });
+    const card = [...el.querySelectorAll('sb-metric-card')]
+      .find((c) => c.textContent?.includes('Open P&L'))!;
+    expect(card.textContent).toContain('2.50%');
+    expect(card.textContent).toContain('1,234.50');
+  });
+
+  it('colours the open P&L amount by its sign, like the percentage', () => {
+    const subOf = (amountValue: number) => {
+      const el = render({ openPnlPct: 1, openPnlAmount: amountValue, currency: '€', scope: 'today' });
+      const card = [...el.querySelectorAll('sb-metric-card')]
+        .find((c) => c.textContent?.includes('Open P&L'))!;
+      return card.querySelector('.sub')!;
+    };
+    expect(subOf(50).classList.contains('pos')).toBe(true);
+    expect(subOf(-50).classList.contains('neg')).toBe(true);
+    expect(subOf(0).classList.contains('pos') || subOf(0).classList.contains('neg')).toBe(false);
+  });
+
+  it('explains an absent figure in today scope instead of a bare dash', () => {
+    const el = render({ payoffRatio: null, realizedAmount: null, currency: '€', scope: 'today' });
+    const card = [...el.querySelectorAll('sb-metric-card')]
+      .find((c) => c.textContent?.includes('Payoff ratio'))!;
+    expect(card.textContent).toContain('none closed today');
+  });
+
   it('emits the scope the user picked', () => {
     const f = TestBed.createComponent(TradingPerformance);
     f.componentRef.setInput('scope', 'today');

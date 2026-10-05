@@ -12,7 +12,7 @@ import pytest
 
 from tests.helpers import make_ohlcv
 from tests.store_seed import seed_store
-from tests.test_emit_cohort_registry import _raw_win_trade
+from tests.scripts.test_emit_cohort_registry import _raw_win_trade
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))

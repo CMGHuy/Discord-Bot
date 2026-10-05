@@ -11,7 +11,7 @@ Two halves:
     tolerates the legacy 3-tuple alert shape, and never lets a simple-channel
     failure cost the real alert.
 
-No pytest-asyncio in this repo (see tests/test_views.py) -- coroutines are
+No pytest-asyncio in this repo (see tests/commands/test_views.py) -- coroutines are
 driven with asyncio.run().
 """
 import asyncio

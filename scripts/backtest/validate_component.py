@@ -12,13 +12,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 from swingbot.core.backtesting.acceptance import ALPHA, BOOTSTRAP_RESAMPLES, GEOMETRY_MAX_DROP_PCT, NON_INFERIORITY_R, VOLUME_MAX_CUT_PCT, ArmTrade, AcceptanceResult, ClauseResult, evaluate, delta_expectancy_r, delta_standardised_win_rate, mde_paired, mde_win_rate, project_target_n, render_json, render_markdown  # noqa: E402
-from swingbot.core.backtesting.acceptance_harvest import mde_expectancy_r  # noqa: E402
+from swingbot.core.backtesting.acceptance_harvest import evaluate_harvest, mde_expectancy_r  # noqa: E402
 from swingbot.core.backtesting.acceptance import population_split  # noqa: E402
 from swingbot.core.backtesting.arms.selection import SELECTED, evaluate_cell, select_cell, with_clause  # noqa: E402
 from swingbot.core.backtesting.arms import dryup_clauses, reachability  # noqa: E402
 from swingbot.core.backtesting.arms.pairing import changed_outcomes, overlap  # noqa: E402
 from swingbot.core.backtesting.arms.provenance import check_stamp  # noqa: E402
-from swingbot.core.backtesting.backtest_wf import gate_win_rate  # noqa: E402
+from swingbot.core.backtesting.backtest_wf import gate_expectancy_harvest, gate_win_rate  # noqa: E402
 DECIDED = ("win", "loss")
 
 def load_arms(path):
@@ -98,6 +98,23 @@ def _notes(args):
     if not getattr(args, "bespoke_instrument", None): return args.notes
     prefix = f"BESPOKE INSTRUMENT (not measure_arms.py): {args.bespoke_instrument}."
     return f"{prefix} {args.notes}" if args.notes else prefix
+
+def _harvest_fold_rows(folds):
+    return [{"test_years": f["test_year"], "delta_expectancy_r": delta_expectancy_r(f["baseline"], f["component"]),
+             "n_tp1": min(sum(t.outcome == "win" for t in f["baseline"]), sum(t.outcome == "win" for t in f["component"]))} for f in folds]
+
+def _stage_walkforward_harvest(args, folds):
+    rows = _harvest_fold_rows(folds); verdict = gate_expectancy_harvest({"folds": rows})
+    print(f"{verdict} -- stage 2 walkforward harvest gate (dExpR)")
+    if args.out_json: Path(args.out_json).parent.mkdir(parents=True, exist_ok=True); Path(args.out_json).write_text(json.dumps({"verdict": verdict, "folds": rows}, indent=1), encoding="utf-8")
+    return 0 if verdict == "PASS" else 1
+
+def _evaluate_for(args, baseline, component, stage):
+    if args.gate == "harvest":
+        result = evaluate_harvest(baseline, component, stage=stage, structurally_immune_to_wr=True, permutation_p=args.permutation_p, n_resamples=args.resamples, seed=args.seed)
+        print(f"disclosure: outcome flips={result.split['changed']} added={result.split['added']} removed={result.split['removed']}")
+        return result
+    return evaluate(baseline, component, stage=stage, permutation_p=args.permutation_p, n_resamples=args.resamples, seed=args.seed)
 
 def stage_walkforward(args):
     folds = load_folds(args.arms)

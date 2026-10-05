@@ -1,7 +1,7 @@
 """The opex settings must exist, default safe, and be discoverable.
 
 `.env.example` presence is already covered globally by
-tests/test_env_example_sync.py; what is asserted here is the part that file
+tests/infra/test_env_example_sync.py; what is asserted here is the part that file
 cannot check -- that the master switch ships OFF.
 """
 from swingbot import config

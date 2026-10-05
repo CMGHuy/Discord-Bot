@@ -7,7 +7,7 @@ they document:
   * `update_open_trades` (performance.py:622) excludes `plan_id` trades and
     `check_near_tp_timeout` (:1230) skips them, because a v2 trade record's
     take_profit/stop_loss are frozen at log_trade time and never updated
-    after TP1 -- run_manager_tick owns those. tests/test_trade_monitor_task.py
+    after TP1 -- run_manager_tick owns those. tests/commands/test_trade_monitor_task.py
     asserts in as many words that run_manager_tick is "the ONLY code path
     that monitors plan_id-linked trades' SL/TP".
   * `update_open_trades` (:683-695) fills at the observed `live_price`, "not

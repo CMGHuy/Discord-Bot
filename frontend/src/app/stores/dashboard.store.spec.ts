@@ -62,6 +62,7 @@ const RESPONSE: Dashboard = {
   realized: { amount: 240.5, pct: null, n: 3, wins: 2, losses: 1 },
   account_balance: 10_000,
   open_pnl_pct: 1.5,
+  open_pnl_amount: 150,
   risk_used_pct: 4,
   risk_cap_pct: 10,
   open_trades: 3,

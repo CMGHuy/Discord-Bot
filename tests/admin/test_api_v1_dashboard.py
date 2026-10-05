@@ -31,6 +31,7 @@ _LOGIN = {"username": "admin", "password": "admin"}
 DASHBOARD = {
     "account_balance": NULLABLE_NUMBER,
     "open_pnl_pct": NULLABLE_NUMBER,
+    "open_pnl_amount": NULLABLE_NUMBER,
     "risk_used_pct": NULLABLE_NUMBER,
     "risk_cap_pct": NULLABLE_NUMBER,
     "open_trades": int,
@@ -279,6 +280,28 @@ def test_open_side_excludes_weak_ledger_trades(seed, logged_in, monkeypatch):
     assert body["open_trades"] == 1
     assert body["avg_confidence"] == 4.0
     assert body["open_pnl_pct"] == 10.0
+    assert body["open_pnl_amount"] == 100.0   # 10 sh x +10; weak trade excluded
+
+
+def test_open_pnl_amount_sums_shares_times_move(seed, logged_in, monkeypatch):
+    """The Open P&L card's money line: sum of shares x (price - entry) across
+    open main-ledger trades, signed by direction. A trade with no recorded
+    share count adds nothing rather than a guessed amount, and with no
+    priced position at all the figure is null, never 0."""
+    import swingbot.admin.dashboard as dash
+    from tests.admin.test_api_v1_trades import _trade
+
+    long_t = _trade("aaaaaaaaaaaaaaaa", plan_id=None, ticker="AAPL", status="open")
+    long_t.update(entry=100.0, shares=10, direction="bullish")
+    short_t = _trade("bbbbbbbbbbbbbbbb", plan_id=None, ticker="MSFT", status="open")
+    short_t.update(entry=200.0, shares=2, direction="bearish")
+    seed(trades=[long_t, short_t])
+
+    prices = {"AAPL": 110.0, "MSFT": 210.0}   # +100 long, -20 short
+    monkeypatch.setattr(dash, "prefetch_prices", lambda tickers: None)
+    monkeypatch.setattr(dash, "get_current_price", lambda ticker: prices[ticker])
+
+    assert logged_in.get("/api/v1/dashboard").get_json()["open_pnl_amount"] == 80.0
 
 
 # ---------------------------------------------------------------------------

@@ -134,6 +134,13 @@ def test_cli_arms_mode(tmp_path):
     assert result["verdict"] == "REAL" and result["n"] == 200
 
 
+def test_cli_harvest_arms_mode(tmp_path):
+    path = _write(tmp_path, *_arm_pair("loss"))
+    result = json.loads(run_script(["permutation_test.py", "--harvest-arms", str(path), "--n", "10"]))
+    assert 0.0 <= result["p_value"] <= 1.0
+    assert result["instrument"] == "ticker-cluster arm-label swap on dExpR (v123)"
+
+
 def test_cli_refuses_unstamped_arms(tmp_path, capsys):
     path = _write(tmp_path, *_arm_pair("loss"), stamped=False)
     assert _run_arm_cli(["--arms", str(path)])[0] == 1

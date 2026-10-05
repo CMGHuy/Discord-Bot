@@ -67,6 +67,9 @@ class ScanParams:
     ma_ribbon_confirm_bars: int
     sr_min_level_touches: int
     fib_target_1_0_extension: bool
+    runner_structure_exit: str
+    runner_hl_trail_atr_buffer: float
+    runner_stall_range_max: float
     short_universe_research_mode: str = "off"   # v118 research replay only
     compression_short_research_mode: str = "off"   # v119 research replay only
 
@@ -122,6 +125,9 @@ class ScanParams:
             ma_ribbon_confirm_bars=config.MA_RIBBON_CONFIRM_BARS,
             sr_min_level_touches=config.SR_MIN_LEVEL_TOUCHES,
             fib_target_1_0_extension=config.FIB_TARGET_1_0_EXTENSION,
+            runner_structure_exit=config.RUNNER_STRUCTURE_EXIT,
+            runner_hl_trail_atr_buffer=config.RUNNER_HL_TRAIL_ATR_BUFFER,
+            runner_stall_range_max=config.RUNNER_STALL_RANGE_MAX,
             short_universe_research_mode=config.SHORT_UNIVERSE_RESEARCH_MODE,
             compression_short_research_mode=config.COMPRESSION_SHORT_RESEARCH_MODE,
         )
