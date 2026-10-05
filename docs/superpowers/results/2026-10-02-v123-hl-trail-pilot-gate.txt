@@ -1,0 +1,2 @@
+knobs: {'RUNNER_STRUCTURE_EXIT': 'hl_trail', 'RUNNER_HL_TRAIL_ATR_BUFFER': 0.0} baseline N=439 component N=439 changed outcomes: 2
+REACHABLE -- the component changes trades; Stage 0 may proceed.
