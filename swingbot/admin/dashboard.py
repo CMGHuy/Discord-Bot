@@ -343,13 +343,23 @@ def build_sizing_note(account_cfg: dict) -> dict:
     }
 
 
+def _append_amount(amounts: list, trade: dict, price) -> None:
+    """Add one open trade's live money P&L to `amounts`, skipping a trade
+    with no recorded share count rather than guessing a size for it."""
+    value = unrealized_pnl_amount(
+        trade.get("entry"), trade.get("direction"), trade.get("shares"), price)
+    if value is not None:
+        amounts.append(value)
+
+
 def build_open_trade_views(open_trades: list, account_cfg: dict) -> dict:
     """One pass over open trades producing every per-trade map the table needs:
     price, status dot, P&L + SL/TP progress + position bar, holding period, and
     position sizing.
 
-    Returns {status, price, pnl, days, sizing, unrealized_pcts} -- the first
-    five keyed by trade id, the last a flat list for the Open P&L stat card.
+    Returns {status, price, pnl, days, sizing, unrealized_pcts, unrealized_amounts} -- the
+    first five keyed by trade id, the last two flat lists for the Open P&L card
+    (a trade with no recorded share count adds to the first but not the second).
     """
     status_map: dict = {}
     price_map: dict = {}
@@ -357,6 +367,7 @@ def build_open_trade_views(open_trades: list, account_cfg: dict) -> dict:
     days_map: dict = {}
     sizing_map: dict = {}
     unrealized_pcts: list = []
+    unrealized_amounts: list = []
     now_utc = datetime.now(timezone.utc)
 
     # Fetch all prices concurrently so the loop below hits the in-memory cache
@@ -396,6 +407,7 @@ def build_open_trade_views(open_trades: list, account_cfg: dict) -> dict:
             raw_pnl = (price - entry) / entry * 100
             pnl_pct = raw_pnl if is_bull else -raw_pnl
             unrealized_pcts.append(pnl_pct)
+            _append_amount(unrealized_amounts, t, price)
 
             # Progress toward each level from entry (0% = at entry, 100% = at
             # level, >100% = past it). Clamped to 0 when price moved AWAY.
@@ -434,4 +446,5 @@ def build_open_trade_views(open_trades: list, account_cfg: dict) -> dict:
     return {
         "status": status_map, "price": price_map, "pnl": pnl_map,
         "days": days_map, "sizing": sizing_map, "unrealized_pcts": unrealized_pcts,
+        "unrealized_amounts": unrealized_amounts,
     }
