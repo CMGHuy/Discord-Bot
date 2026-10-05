@@ -70,6 +70,8 @@ class ScanParams:
     runner_structure_exit: str
     runner_hl_trail_atr_buffer: float
     runner_stall_range_max: float
+    pullback_dryup_scope: str
+    pullback_dryup_max_ratio: float
     short_universe_research_mode: str = "off"   # v118 research replay only
     compression_short_research_mode: str = "off"   # v119 research replay only
 
@@ -128,6 +130,8 @@ class ScanParams:
             runner_structure_exit=config.RUNNER_STRUCTURE_EXIT,
             runner_hl_trail_atr_buffer=config.RUNNER_HL_TRAIL_ATR_BUFFER,
             runner_stall_range_max=config.RUNNER_STALL_RANGE_MAX,
+            pullback_dryup_scope=config.PULLBACK_DRYUP_SCOPE,
+            pullback_dryup_max_ratio=config.PULLBACK_DRYUP_MAX_RATIO,
             short_universe_research_mode=config.SHORT_UNIVERSE_RESEARCH_MODE,
             compression_short_research_mode=config.COMPRESSION_SHORT_RESEARCH_MODE,
         )

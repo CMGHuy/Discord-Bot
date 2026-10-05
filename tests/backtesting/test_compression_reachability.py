@@ -498,7 +498,7 @@ def test_off_mode_scan_returns_zero_compression_funnel_keys(monkeypatch):
         tickers=[], fresh_data={}, spy_df=None, regimes=None, rs_cache=None, sector_of_ticker={},
         etf_symbol_of_sector={}, sector_etf_frames={}, trade_log=None, alerts=[], require_confirmation=True)
     assert out == {"strategy_plans": 0, "strategy_opened": 0, "compression_shadow": 0,
-                   "compression_rejected": 0}
+                   "compression_rejected": 0, "strategy_pullback_volume": 0}
 
 
 def test_tp1_parity_with_a_support_derived_from_the_as_of_window(monkeypatch):
