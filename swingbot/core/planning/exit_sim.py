@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import pandas as pd
+
 from swingbot import config
 from swingbot.core.market.strategy_types import COMPRESSION_SHORT, HORIZONS
 from swingbot.core.risk_limits import planned_loss_pct
@@ -18,10 +20,47 @@ from .lifecycle import (at_or_beyond_stop, fill_price, limit_fill_price, limit_h
                         pending_expired, pending_invalidated, stop_touched, trigger_hit)
 from .targets import _safe_atr_value
 from .time_exit import PROXY_BASIS, TIME_EXIT_REASON
+
+#: v121's pivot column names mapped to v123's. The ONLY place v121 column
+#: names appear in v123; V123-1's gate step checks them against the merged module.
+_V121_PIVOT_COLUMNS = {
+    "sh_i": "last_sh_pos", "sh_px": "last_sh",
+    "sh_prev_i": "prior_sh_pos", "sh_prev_px": "prior_sh",
+    "sl_i": "last_sl_pos", "sl_px": "last_sl",
+    "sl_prev_i": "prior_sl_pos", "sl_prev_px": "prior_sl",
+}
+PIVOT_K = 3                                      # v121 frozen fractal width
+
+
+def _trend_ratio(series: pd.Series) -> pd.Series:
+    """Per-bar mean(last SHORT_WINDOW) / mean(last LONG_WINDOW) -- the series
+    form of v121's scalar _ratio_of_means. NaN before LONG_WINDOW bars; a zero
+    long mean gives NaN, which no <= comparison passes."""
+    from swingbot.core.market import structure
+    short = series.rolling(structure.SHORT_WINDOW).mean()
+    long = series.rolling(structure.LONG_WINDOW).mean()
+    return (short / long).astype(float)
+
+
+def runner_structure_frame(df) -> pd.DataFrame:
+    """Per-bar confirmed pivots and range/volume trends for the v123 runner
+    rules. Row j uses df.iloc[:j+1] only (v121 truncation contract; rolling
+    windows are causal)."""
+    from swingbot.core.market import structure
+    pivots = structure.confirmed_pivots(df, k=PIVOT_K)
+    out = pd.DataFrame(index=df.index)
+    for ours, theirs in _V121_PIVOT_COLUMNS.items():
+        out[ours] = pivots[theirs].astype(float).values
+    out["range_trend_10_50"] = _trend_ratio(structure.true_range(df)).values
+    out["vol_trend_10_50"] = _trend_ratio(df["Volume"].astype(float)).values
+    return out
+
+
 @dataclass
 class ExitResult:
     outcome: str                 # "win"|"loss"|"scratch"|"timeout"|"not_triggered"|"no_trade"
-    runner_outcome: str | None   # "runner_tp2"|"runner_trail"|"runner_be"|"runner_timeout"|None
+    runner_outcome: str | None   # "runner_tp2"|"runner_trail"|"runner_be"|"runner_timeout"|
+                                 # "runner_progress_stall"|None
     entry_index: int | None
     exit_index: int | None
     entry_price: float | None
@@ -196,9 +235,230 @@ def runner_floor(entry: float, tp1: float) -> float:
     """
     return entry + RUNNER_FLOOR_FRACTION * (tp1 - entry)
 
+STALL_VOLUME_MAX = 1.0   # v123 frozen: volume ratio ceiling, not gridded
+
+
+def _post_entry(index, entry_index) -> bool:
+    return index == index and index > entry_index        # NaN-safe
+
+
+def _at_most(value, ceiling) -> bool:
+    return value == value and value <= ceiling           # NaN never passes
+
+
+def _pivot_cols(direction: str, swing: str) -> tuple[str, str, str, str]:
+    """(last idx, last px, prior idx, prior px) for 'trail' (the protective
+    swing) or 'progress' (the swing that should extend)."""
+    bull_low = (direction == "bullish") == (swing == "trail")
+    p = "sl" if bull_low else "sh"
+    return f"{p}_i", f"{p}_px", f"{p}_prev_i", f"{p}_prev_px"
+
+
+def structural_runner_stop(pivots_row, atr_value, b, direction, entry_index):
+    """v123 hl_trail candidate: the latest confirmed post-entry swing low
+    minus b x ATR (bearish: swing high plus). None without such a pivot.
+    Row j holds only pivots confirmed by j (index <= j - PIVOT_K)."""
+    idx, px, _, _ = _pivot_cols(direction, "trail")
+    if not _post_entry(pivots_row[idx], entry_index):
+        return None
+    sign = -1 if direction == "bullish" else 1
+    return float(pivots_row[px]) + sign * b * atr_value
+
+
+def prev_post_entry_pivot(pivots_row, direction, entry_index):
+    """The prior confirmed post-entry swing high (bearish: low), or None."""
+    _, _, prev_idx, prev_px = _pivot_cols(direction, "progress")
+    if not _post_entry(pivots_row[prev_idx], entry_index):
+        return None
+    return float(pivots_row[prev_px])
+
+
+def progress_stall_fires(pivots_row, prev_post_entry_sh, features_row, c, direction,
+                         entry_index, j) -> bool:
+    """v123 progress_stall at bar j: a post-entry swing high confirmed AT j
+    that fails to exceed the prior one, with range and volume both cooling."""
+    idx, px, _, _ = _pivot_cols(direction, "progress")
+    new_pivot = pivots_row[idx]
+    if not (_post_entry(new_pivot, entry_index) and int(new_pivot) == j - PIVOT_K):
+        return False
+    if prev_post_entry_sh is None:
+        return False
+    high = float(pivots_row[px])
+    failed = high <= prev_post_entry_sh if direction == "bullish" else high >= prev_post_entry_sh
+    return bool(failed and _at_most(features_row["range_trend_10_50"], c)
+                and _at_most(features_row["vol_trend_10_50"], STALL_VOLUME_MAX))
+
+
+def runner_structure_step(frame, j, *, entry_index, direction, runner_stop, atr_value):
+    """One completed runner bar under RUNNER_STRUCTURE_EXIT, shared by the
+    replay walk and plan_manager: (stop for bar j+1, stall fired at j)."""
+    mode, row = config.RUNNER_STRUCTURE_EXIT, frame.iloc[j]
+    if mode == "hl_trail":
+        cand = structural_runner_stop(row, atr_value, config.RUNNER_HL_TRAIL_ATR_BUFFER,
+                                      direction, entry_index)
+        if cand is None:
+            return runner_stop, False
+        return (max(runner_stop, cand) if direction == "bullish" else min(runner_stop, cand)), False
+    if mode == "progress_stall":
+        prev = prev_post_entry_pivot(row, direction, entry_index)
+        return runner_stop, progress_stall_fires(row, prev, row, config.RUNNER_STALL_RANGE_MAX,
+                                                 direction, entry_index, j)
+    return runner_stop, False
+
+
+@dataclass(frozen=True)
+class _WalkCtx:
+    high: object
+    low: object
+    close: object
+    entry_index: int
+    entry_price: float
+    plan: TradePlanV2
+    is_bull: bool
+    sign: int
+    risk: float
+    end: int
+    open_: object
+
+
+def _no_trade(entry_index, entry_price) -> ExitResult:
+    return ExitResult(outcome="no_trade", runner_outcome=None, entry_index=entry_index,
+                      exit_index=None, entry_price=entry_price, r_total=0.0, legs=[])
+
+
+def _full_leg(ctx, outcome, j, price, r, reason) -> ExitResult:
+    return ExitResult(outcome=outcome, runner_outcome=None, entry_index=ctx.entry_index,
+                      exit_index=j, entry_price=ctx.entry_price, r_total=r,
+                      legs=[{"fraction": 1.0, "exit_price": price, "r": r, "reason": reason}])
+
+
+def _pre_tp1_touches(ctx, j, cur_stop, be_trigger):
+    hi, lo = float(ctx.high[j]), float(ctx.low[j])
+    if ctx.is_bull:
+        return lo <= cur_stop, hi >= ctx.plan.tp1, hi >= be_trigger
+    return hi >= cur_stop, lo <= ctx.plan.tp1, lo <= be_trigger
+
+
+def _stall_exit(ctx, j) -> ExitResult | None:
+    """Task 12 stall exit (pre-TP1); stop/target already won any same-bar tie."""
+    plan = ctx.plan
+    if not (config.STALL_EXIT_ENABLED and plan.stall_exit_day is not None
+            and (j - ctx.entry_index) > plan.stall_exit_day):
+        return None
+    current_r = (float(ctx.close[j]) - ctx.entry_price) * ctx.sign / ctx.risk
+    if not current_r < 0.5:
+        return None
+    r = round(current_r, 3)
+    return _full_leg(ctx, "loss" if r < 0 else "scratch", j, float(ctx.close[j]), r, "stall_exit")
+
+
+def _pre_tp1_phase(ctx) -> ExitResult | int:
+    """Phase 1, identical to the single-leg walk: a terminal ExitResult, or the TP1 bar."""
+    plan, stop_moved = ctx.plan, False
+    target_dist = abs(plan.tp1 - ctx.entry_price)
+    be_trigger = ctx.entry_price + ctx.sign * plan.breakeven_trigger_fraction * target_dist
+    for j in range(ctx.entry_index + 1, ctx.end + 1):
+        cur_stop = ctx.entry_price if stop_moved else plan.stop_loss
+        hit_stop, hit_target, reached_trigger = _pre_tp1_touches(ctx, j, cur_stop, be_trigger)
+        if hit_stop:  # conservative: stop first, exactly as single-leg
+            return _full_leg(ctx, "scratch" if stop_moved else "loss", j, cur_stop,
+                             round(0.0 if stop_moved else -1.0, 3),
+                             "breakeven_stop" if stop_moved else "stop")
+        if hit_target:
+            return j
+        stalled = _stall_exit(ctx, j)
+        if stalled is not None:
+            return stalled
+        if reached_trigger and not stop_moved:
+            stop_moved = True
+    exit_price = float(ctx.close[ctx.end])   # timeout before TP1
+    return _full_leg(ctx, "timeout", ctx.end, exit_price,
+                     round((exit_price - ctx.entry_price) * ctx.sign / ctx.risk, 3), "timeout")
+
+
+def _runner_bar_exit(ctx, j, runner_stop, floor):
+    """Runner stop first, then TP2; the stop checked is the one set BEFORE bar j."""
+    hi, lo = float(ctx.high[j]), float(ctx.low[j])
+    if (lo <= runner_stop) if ctx.is_bull else (hi >= runner_stop):
+        # v39: "runner_be" means "closed at its initial post-TP1 floor"; the
+        # string is deliberately unchanged (~30 files pattern-match it).
+        return runner_stop, j, ("runner_be" if runner_stop == floor else "runner_trail")
+    tp2 = ctx.plan.tp2
+    if tp2 is not None and ((hi >= tp2) if ctx.is_bull else (lo <= tp2)):
+        return tp2, j, "runner_tp2"
+    return None
+
+
+def _chandelier_ratchet(ctx, j, extreme_close, runner_stop, atr_series) -> float:
+    """Ratchet for the NEXT bar from THIS bar's close only -- no intrabar lookahead."""
+    atr_val = _safe_atr_value(ctx.entry_price, float(atr_series.iloc[j]))
+    runner_r = (extreme_close - ctx.entry_price) * ctx.sign / ctx.risk
+    mult = _effective_trail_mult(ctx.plan.trail_atr_mult, runner_r)
+    trail = chandelier_stop(extreme_close, atr_val, mult, ctx.plan.direction)
+    return max(runner_stop, trail) if ctx.is_bull else min(runner_stop, trail)
+
+
+def _runner_timeout(ctx, checked_stop) -> float:
+    """Clamp to the level actually checked against the last bar walked."""
+    exit_px = float(ctx.close[ctx.end])
+    return max(exit_px, checked_stop) if ctx.is_bull else min(exit_px, checked_stop)
+
+
+def _runner_phase(df, ctx, tp1_index, trace=None):
+    """Phase 2: (exit price, exit index, runner reason) for the post-TP1 leg.
+    v123: a structure rule (RUNNER_STRUCTURE_EXIT) updates after the chandelier,
+    from this bar's close, effective next bar; a stall exits at the next open."""
+    from swingbot.core.market.indicators import atr as atr_indicator
+    floor = runner_floor(ctx.entry_price, ctx.plan.tp1)
+    runner_stop = checked_stop = floor
+    extreme_close = float(ctx.close[tp1_index])
+    atr_series = atr_indicator(df, 14)
+    frame = runner_structure_frame(df) if config.RUNNER_STRUCTURE_EXIT != "off" else None
+    stall_pending = False
+    for j in range(tp1_index + 1, ctx.end + 1):
+        if stall_pending:                            # the open comes first
+            return float(ctx.open_[j]), j, "runner_progress_stall"
+        checked_stop = runner_stop
+        hit = _runner_bar_exit(ctx, j, runner_stop, floor)
+        if hit is not None:
+            return hit
+        c = float(ctx.close[j])
+        extreme_close = max(extreme_close, c) if ctx.is_bull else min(extreme_close, c)
+        runner_stop = _chandelier_ratchet(ctx, j, extreme_close, runner_stop, atr_series)
+        if frame is not None:
+            runner_stop, stall_pending = _structure_update(ctx, frame, j, runner_stop, atr_series)
+        if trace is not None:
+            trace.append((j, runner_stop))
+    return _runner_timeout(ctx, checked_stop), ctx.end, "runner_timeout"
+
+
+def _structure_update(ctx, frame, j, runner_stop, atr_series):
+    """runner_structure_step for bar j; a stall on the last walked bar is dropped
+    so the timeout handles it (no bar j+1 inside the holding window)."""
+    atr_val = _safe_atr_value(ctx.entry_price, float(atr_series.iloc[j]))
+    stop, fires = runner_structure_step(frame, j, entry_index=ctx.entry_index,
+                                        direction=ctx.plan.direction,
+                                        runner_stop=runner_stop, atr_value=atr_val)
+    return stop, fires and j < ctx.end
+
+
+def _runner_result(ctx, runner) -> ExitResult:
+    runner_exit, exit_index, reason = runner
+    plan = ctx.plan
+    rr = abs(plan.tp1 - ctx.entry_price) / ctx.risk
+    frac1 = plan.tp1_fraction
+    frac2 = 1.0 - frac1
+    leg1 = {"fraction": frac1, "exit_price": plan.tp1, "r": round(rr, 3), "reason": "tp1"}
+    r2 = round((runner_exit - ctx.entry_price) * ctx.sign / ctx.risk, 3)
+    leg2 = {"fraction": frac2, "exit_price": runner_exit, "r": r2, "reason": reason}
+    return ExitResult(outcome="win", runner_outcome=reason, entry_index=ctx.entry_index,
+                      exit_index=exit_index, entry_price=ctx.entry_price,
+                      r_total=round(frac1 * rr + frac2 * r2, 3), legs=[leg1, leg2])
+
 
 def _scale_out_exit_walk(
     df, entry_index: int, entry_price: float, plan: TradePlanV2, max_holding_days: int,
+    *, trace=None,
 ) -> ExitResult:
     """Hybrid scale-out walk (spec Sec5). Phase 1 (pre-TP1) is byte-identical
     to _single_leg_exit_walk when the stall-exit flag is off; a stop/scratch/
@@ -211,140 +471,17 @@ def _scale_out_exit_walk(
     toward profit via a chandelier trail (Task 26) as the runner rides, with
     an optional TP2 target (Task 25). Task 27 still owes runner-timeout
     test coverage."""
-    from swingbot.core.market.indicators import atr as atr_indicator
-
-    high, low, close = df["High"].values, df["Low"].values, df["Close"].values
-    n = len(df)
-    is_bull = plan.direction == "bullish"
-    sign = 1 if is_bull else -1
-    stop_loss, tp1 = plan.stop_loss, plan.tp1
-    risk = abs(entry_price - stop_loss)
+    risk = abs(entry_price - plan.stop_loss)
     if risk <= 0:
-        return ExitResult(outcome="no_trade", runner_outcome=None,
-                          entry_index=entry_index, exit_index=None,
-                          entry_price=entry_price, r_total=0.0, legs=[])
-    target_dist = abs(tp1 - entry_price)
-    rr = target_dist / risk
-    frac1 = plan.tp1_fraction
-    frac2 = 1.0 - frac1
-
-    be_trigger = entry_price + sign * plan.breakeven_trigger_fraction * target_dist
-    stop_moved = False
-    end = min(entry_index + max_holding_days, n - 1)
-
-    # ---- phase 1: identical to the single-leg walk until TP1 touches ----
-    tp1_index = None
-    for j in range(entry_index + 1, end + 1):
-        hi, lo = float(high[j]), float(low[j])
-        cur_stop = entry_price if stop_moved else stop_loss
-        if is_bull:
-            hit_stop, hit_target = lo <= cur_stop, hi >= tp1
-            reached_trigger = hi >= be_trigger
-        else:
-            hit_stop, hit_target = hi >= cur_stop, lo <= tp1
-            reached_trigger = lo <= be_trigger
-
-        if hit_stop:  # conservative: stop first, exactly as single-leg
-            outcome = "scratch" if stop_moved else "loss"
-            r = round(0.0 if stop_moved else -1.0, 3)
-            reason = "breakeven_stop" if stop_moved else "stop"
-            return ExitResult(outcome=outcome, runner_outcome=None,
-                              entry_index=entry_index, exit_index=j,
-                              entry_price=entry_price, r_total=r,
-                              legs=[{"fraction": 1.0, "exit_price": cur_stop,
-                                     "r": r, "reason": reason}])
-        if hit_target:
-            tp1_index = j
-            break
-        # Conservative ordering: stop/target above win any tie with the stall
-        # check -- a real stop breach or TP1 touch always beats a stall exit
-        # on the same bar.
-        if (config.STALL_EXIT_ENABLED and plan.stall_exit_day is not None
-                and (j - entry_index) > plan.stall_exit_day):
-            current_r = (float(close[j]) - entry_price) * sign / risk
-            if current_r < 0.5:
-                exit_price = float(close[j])
-                r = round(current_r, 3)
-                return ExitResult(outcome="loss" if r < 0 else "scratch",
-                                  runner_outcome=None, entry_index=entry_index,
-                                  exit_index=j, entry_price=entry_price, r_total=r,
-                                  legs=[{"fraction": 1.0, "exit_price": exit_price,
-                                         "r": r, "reason": "stall_exit"}])
-        if reached_trigger and not stop_moved:
-            stop_moved = True
-
-    if tp1_index is None:   # timeout before TP1 -- identical to single-leg
-        exit_price = float(close[end])
-        r = round((exit_price - entry_price) * sign / risk, 3)
-        return ExitResult(outcome="timeout", runner_outcome=None,
-                          entry_index=entry_index, exit_index=end,
-                          entry_price=entry_price, r_total=r,
-                          legs=[{"fraction": 1.0, "exit_price": exit_price,
-                                 "r": r, "reason": "timeout"}])
-
-    leg1 = {"fraction": frac1, "exit_price": tp1, "r": round(rr, 3), "reason": "tp1"}
-
-    # ---- phase 2: runner. Stop starts at the v39 runner floor (entry +
-    # RUNNER_FLOOR_FRACTION x (tp1 - entry)), NOT at plain breakeven; it
-    # protects bars AFTER the TP1 bar (same "subsequent bars only"
-    # convention as the BE move). Task 25 added the TP2 branch; Task 26 adds
-    # the chandelier ratchet: the stop trails the extreme close since TP1 by
-    # trail_atr_mult x ATR(14), only ever moving toward profit (never back
-    # down toward the floor).
-    runner_stop = runner_floor(entry_price, tp1)
-    runner_exit = runner_reason = None
-    exit_index = None
-    tp2 = plan.tp2
-    extreme_close = float(close[tp1_index])
-    atr_series = atr_indicator(df, 14)
-    checked_stop = runner_stop   # the level checked against the CURRENT bar; stays
-                                 # at the initial runner-floor value if the loop
-                                 # below never runs
-
-    for j in range(tp1_index + 1, end + 1):
-        checked_stop = runner_stop   # snapshot BEFORE this bar's own ratchet
-        hi, lo = float(high[j]), float(low[j])
-        if (lo <= runner_stop) if is_bull else (hi >= runner_stop):
-            runner_exit, exit_index = runner_stop, j
-            # v39: "runner_be" now means "closed at its initial post-TP1
-            # floor", not literally at entry. The STRING is deliberately
-            # unchanged -- ~30 files pattern-match it, including frozen
-            # result JSONs under docs/superpowers/results/ and
-            # performance.py's reason.startswith("tp1_") classifier.
-            runner_reason = ("runner_be"
-                             if runner_stop == runner_floor(entry_price, tp1)
-                             else "runner_trail")
-            break
-        if tp2 is not None and ((hi >= tp2) if is_bull else (lo <= tp2)):
-            runner_exit, exit_index, runner_reason = tp2, j, "runner_tp2"
-            break
-        # No exit this bar: ratchet the stop for the NEXT iteration using
-        # THIS bar's close only -- no intrabar lookahead.
-        extreme_close = (max(extreme_close, float(close[j])) if is_bull
-                          else min(extreme_close, float(close[j])))
-        atr_val = _safe_atr_value(entry_price, float(atr_series.iloc[j]))
-        runner_r = (extreme_close - entry_price) * sign / risk
-        mult = _effective_trail_mult(plan.trail_atr_mult, runner_r)
-        trail = chandelier_stop(extreme_close, atr_val, mult, plan.direction)
-        runner_stop = max(runner_stop, trail) if is_bull else min(runner_stop, trail)
-
-    if runner_exit is None:   # Task 27 pins the runner-timeout case with tests
-        # Clamp to checked_stop (the level actually checked against the last
-        # bar walked, or the initial BE if the loop never ran) -- NOT the
-        # live runner_stop, which may already be ratcheted past what that
-        # bar's own low/high were ever tested against.
-        exit_px = float(close[end])
-        runner_exit = max(exit_px, checked_stop) if is_bull else min(exit_px, checked_stop)
-        exit_index, runner_reason = end, "runner_timeout"
-
-    r2 = round((runner_exit - entry_price) * sign / risk, 3)
-    leg2 = {"fraction": frac2, "exit_price": runner_exit, "r": r2,
-            "reason": runner_reason}
-    return ExitResult(outcome="win", runner_outcome=runner_reason,
-                      entry_index=entry_index, exit_index=exit_index,
-                      entry_price=entry_price,
-                      r_total=round(frac1 * rr + frac2 * r2, 3),
-                      legs=[leg1, leg2])
+        return _no_trade(entry_index, entry_price)
+    is_bull = plan.direction == "bullish"
+    ctx = _WalkCtx(df["High"].values, df["Low"].values, df["Close"].values, entry_index,
+                   entry_price, plan, is_bull, 1 if is_bull else -1, risk,
+                   min(entry_index + max_holding_days, len(df) - 1), df["Open"].values)
+    pre = _pre_tp1_phase(ctx)
+    if isinstance(pre, ExitResult):
+        return pre
+    return _runner_result(ctx, _runner_phase(df, ctx, pre, trace))
 
 
 def _walk_for(plan: TradePlanV2, scale_out: bool):

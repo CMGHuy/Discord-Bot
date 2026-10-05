@@ -1,0 +1,6 @@
+observed N         : 8737 over 1675d
+projected target N : 3808 over 730d
+paired MDE   (dExpR): 0.0009R
+unpaired MDE (dExpR): 0.2041R
+gating on: paired
+REFUSED -- the TRAIN effect is below the minimum this sample can detect. Budget intact.

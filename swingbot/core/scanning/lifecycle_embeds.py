@@ -305,6 +305,7 @@ CLOSE_REASON_STYLES = {
     "tp1_runner_be": (Kind.WIN, "win", "runner closed at its floor"),
     "tp1_runner_tp2": (Kind.WIN, "win", "runner hit TP2"),
     "tp1_runner_trail": (Kind.WIN, "win", "trail locked profit"),
+    "tp1_runner_progress_stall": (Kind.WIN, "win", "runner exited: higher high failed on cooling volume"),
 }
 
 _ENDED_OUTCOME = {Kind.EXPIRED: "expired", Kind.INVALIDATED: "invalidated"}

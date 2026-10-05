@@ -1,0 +1,2 @@
+refused:zero-diff -- the component reached no trade. Budget intact.
+knobs: {'RUNNER_STRUCTURE_EXIT': 'progress_stall', 'RUNNER_STALL_RANGE_MAX': 1.0} baseline N=439 component N=439 changed outcomes: 0

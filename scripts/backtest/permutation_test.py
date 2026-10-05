@@ -50,7 +50,18 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--component-json", default="{}")
     p.add_argument("--n", type=int, default=200)
+    p.add_argument("--harvest-arms", default=None)
     args = p.parse_args()
+    if args.harvest_arms:
+        from pathlib import Path
+        from swingbot.core.backtesting.acceptance import ArmTrade
+        from swingbot.core.backtesting.acceptance_harvest import permutation_p_expectancy
+        blob = json.loads(Path(args.harvest_arms).read_text())
+        b = [ArmTrade(**r) for r in blob["baseline"]]
+        c = [ArmTrade(**r) for r in blob["component"]]
+        print(json.dumps({"p_value": permutation_p_expectancy(b, c, n_perm=args.n),
+                          "instrument": "ticker-cluster arm-label swap on dExpR (v123)"}))
+        sys.exit(0)
     run = _fold_run_fn(json.loads(args.component_json))
     real = run(0)
     permuted = permuted_expectancies(run, n_perm=args.n)

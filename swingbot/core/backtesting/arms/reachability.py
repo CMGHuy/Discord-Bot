@@ -33,6 +33,8 @@ def _outside(reason):
     return Reach(OUTSIDE_REPLAY, reason)
 
 
+_V123_PARAM = "Only active under its RUNNER_STRUCTURE_EXIT mode; a lone perturbation at mode off is inert by design."
+
 _OPEX = "OPEX adjustment needs the calendar-aware live scan date path; replay has no OPEX-date input."
 _RS = "Relative strength is cross-sectional and evaluated in scanning/engine.py, which no replay runs."
 _DCB = "Measured through its dedicated DCB harness (replay_scenarios takes dcb_params, not config)."
@@ -89,6 +91,9 @@ REGISTRY: dict[str, Reach] = {
     "SCALE_OUT_ENABLED": _outside("Engines always simulate scale_out=True; switch is not a replay dimension."),
     "DEAD_CAT_BOUNCE_VETO": _outside(_DCB), "DCB_DECLINE_PCT": _outside(_DCB),
     "DCB_GAP_REQUIRED": _outside(_DCB), "DCB_VOLUME_RATIO": _outside(_DCB),
+    "RUNNER_STRUCTURE_EXIT": Reach(REACHABLE, "Post-TP1 runner rule in simulate_exit's scale-out walk (exit_sim.runner_structure_step); both engines simulate scale_out=True. Not observable on the v74 fixture (measured 2026-10-05: hl_trail b=0.0 and progress_stall c=1.0 changed 0 outcomes or R; no runner reaches a post-entry pivot rule). Covered by V123-5 tests.", CS),
+    "RUNNER_HL_TRAIL_ATR_BUFFER": Reach(REACHABLE, _V123_PARAM, CS),
+    "RUNNER_STALL_RANGE_MAX": Reach(REACHABLE, _V123_PARAM, CS),
 }
 
 

@@ -1,0 +1,30 @@
+{
+ "verdict": "NO_PLATEAU",
+ "selected": null,
+ "rows": [
+  {
+   "value": 0.0,
+   "n": 8737,
+   "delta_r": 0.0011775208881767418,
+   "lo95": 6.392963050918869e-05,
+   "eligible": true,
+   "plateau": false
+  },
+  {
+   "value": 0.25,
+   "n": 8737,
+   "delta_r": 0.0005034909007668453,
+   "lo95": -0.0003223963863315596,
+   "eligible": false,
+   "plateau": false
+  },
+  {
+   "value": 0.5,
+   "n": 8737,
+   "delta_r": 0.00019606272175806683,
+   "lo95": -0.0003035637037271679,
+   "eligible": false,
+   "plateau": false
+  }
+ ]
+}
