@@ -33,6 +33,7 @@ import argparse
 import collections
 import json
 import math
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -495,7 +496,18 @@ def verdicts(fib, confluence) -> dict:
             "arm3": single_split_verdict(bull["arm3"]), "arm4": arm4}
 
 
+def _require_kind(payloads, kind):
+    for payload in payloads:
+        if payload.get("kind") != kind:
+            raise SystemExit(f"expected a {kind} payload, got kind={payload.get('kind')!r}")
+
+
 def _by_direction(payloads, kind):
+    directions = [payload["direction"] for payload in payloads]
+    duplicates = sorted({d for d in directions if directions.count(d) > 1})
+    if duplicates:
+        raise SystemExit(f"duplicate {kind} payload for {', '.join(duplicates)}: "
+                         "one job per direction (only collect-confluence is chunked)")
     found = {payload["direction"]: payload for payload in payloads}
     missing = [d for d in DIRECTIONS if d not in found]
     if missing:
@@ -505,6 +517,7 @@ def _by_direction(payloads, kind):
 
 def reproductions(repro_payloads) -> dict:
     """Reproduction on REPRO_WINDOW only; refuses a payload from any other window."""
+    _require_kind(repro_payloads, "repro")
     for payload in repro_payloads:
         require_repro_window(payload["window"])
     found = _by_direction(repro_payloads, "collect-repro")
@@ -512,8 +525,13 @@ def reproductions(repro_payloads) -> dict:
 
 
 def build_report(fib_payloads, confluence_payloads, repro_payloads) -> dict:
+    _require_kind(fib_payloads, "fib")
+    _require_kind(confluence_payloads, "confluence")
     for payload in fib_payloads + confluence_payloads:
-        require_diagnostic_window(tuple(payload["window"]))
+        window = tuple(payload["window"])
+        require_diagnostic_window(window)
+        if window != DIAG_WINDOW:
+            raise SystemExit(f"diagnostic window must be exactly {DIAG_WINDOW}, got {window}")
     by_direction = _by_direction(fib_payloads, "collect-fib")
     fib = {d: fib_tables(by_direction[d]["rows"], d) for d in DIRECTIONS}
     confluence = confluence_tables([row for payload in confluence_payloads for row in payload["rows"]])
@@ -613,13 +631,34 @@ def _cmd_reproduce(args):
     print(json.dumps(reproductions(_load(args.repro)), indent=1), flush=True)
 
 
+def _git(path, *args):
+    return subprocess.run(["git", "-C", str(Path(path).resolve().parent), *args],
+                          capture_output=True, text=True, check=False)
+
+
+def _note_is_tracked(path) -> bool:
+    """True when the note is tracked by git; True too when not in a repo or git is missing."""
+    try:
+        if _git(path, "rev-parse", "--is-inside-work-tree").returncode != 0:
+            return True
+        return _git(path, "ls-files", "--error-unmatch", Path(path).resolve().name).returncode == 0
+    except OSError:
+        return True
+
+
+def _note_ok(note) -> bool:
+    path = Path(note) if note else None
+    return bool(path and path.is_file() and path.read_text(encoding="utf-8").strip()
+                and _note_is_tracked(path))
+
+
 def _cmd_report(args):
     report = build_report(_load(args.fib), _load(args.confluence), _load(args.repro))
     note = args.reproduction_note
-    if not report["reproduction"]["bullish"]["matches"] and not (note and Path(note).is_file()):
+    if not report["reproduction"]["bullish"]["matches"] and not _note_ok(note):
         raise SystemExit("bullish baseline does not reproduce v103 on 2010-01-01..2023-12-31 "
                          "(N=815, WR 36.81%, ExpR +0.2219, universe 73): "
-                         "explain the difference in a committed note, then pass --reproduction-note <path>")
+                         "explain the difference in a committed, non-empty note, then pass --reproduction-note <path>")
     report["reproduction_note"] = note
     _write(args.out, report)
     Path(args.md).write_text(render_markdown(report), encoding="utf-8")

@@ -553,3 +553,110 @@ def test_reproduce_command_prints_only_the_baseline(tmp_path, capsys):
     assert module.main(["reproduce", "--repro", rbull, rbear]) == 0
     printed = capsys.readouterr().out
     assert '"matches": false' in printed and "arm1" not in printed
+
+
+def test_duplicate_direction_payload_is_refused_not_collapsed():
+    module = _module()
+    fib, confluence, repro = _payloads()
+    with pytest.raises(SystemExit, match="duplicate"):
+        module.build_report([fib[0], fib[0], fib[1]], confluence, repro)
+    with pytest.raises(SystemExit, match="duplicate"):
+        module.build_report(fib, confluence, [repro[1], repro[1]])
+
+
+def test_payload_in_the_wrong_slot_is_refused():
+    module = _module()
+    fib, confluence, repro = _payloads()
+    with pytest.raises(SystemExit, match="kind"):
+        module.build_report(fib, confluence, [dict(repro[0], kind="fib"), repro[1]])
+    with pytest.raises(SystemExit, match="kind"):
+        module.build_report([dict(fib[0], kind="repro"), fib[1]], confluence, repro)
+    with pytest.raises(SystemExit, match="kind"):
+        module.build_report(fib, [dict(confluence[0], kind="fib")], repro)
+
+
+def test_diagnostic_window_must_be_exactly_2015_2025():
+    module = _module()
+    fib, confluence, repro = _payloads()
+    confluence[0]["window"] = ["2016-01-01", "2025-12-31"]      # inside, but not the window
+    with pytest.raises(SystemExit, match="diagnostic window"):
+        module.build_report(fib, confluence, repro)
+
+
+def test_empty_favourable_bucket_does_not_pass_and_does_not_raise():
+    module = _module()
+    fib, confluence, repro = _payloads()
+    fib[0]["rows"] = group(20, 20)                      # nothing favourable on any split
+    report = module.build_report(fib, confluence, repro)
+    assert report["verdicts"]["arm1"]["proceeds"] is False
+    assert report["verdicts"]["arm3"]["proceeds"] is False
+    assert "n/a" in module.render_markdown(report)
+
+
+def test_reproduction_note_must_be_non_empty(tmp_path):
+    module = _module()
+    bull, bear, conf, rbull, rbear = _write_inputs(tmp_path)
+    note = tmp_path / "note.md"
+    note.write_text("", encoding="utf-8")
+    out, md = tmp_path / "report.json", tmp_path / "report.md"
+    with pytest.raises(SystemExit, match="does not reproduce"):
+        module.main(["report", "--repro", rbull, rbear, "--fib", bull, bear, "--confluence", conf,
+                     "--out", str(out), "--md", str(md), "--reproduction-note", str(note)])
+    assert not out.exists()
+
+
+def test_reproduction_note_inside_a_repo_must_be_tracked(tmp_path, monkeypatch):
+    module = _module()
+    monkeypatch.setattr(module, "_note_is_tracked", lambda path: False)
+    bull, bear, conf, rbull, rbear = _write_inputs(tmp_path)
+    note = tmp_path / "note.md"
+    note.write_text("explained", encoding="utf-8")
+    with pytest.raises(SystemExit, match="does not reproduce"):
+        module.main(["report", "--repro", rbull, rbear, "--fib", bull, bear, "--confluence", conf,
+                     "--out", str(tmp_path / "r.json"), "--md", str(tmp_path / "r.md"),
+                     "--reproduction-note", str(note)])
+
+
+def test_note_outside_any_repo_counts_as_tracked(tmp_path):
+    note = tmp_path / "note.md"
+    note.write_text("x", encoding="utf-8")
+    assert _module()._note_is_tracked(note) is True
+
+
+def _collect(module, monkeypatch, tmp_path, argv, **patches):
+    written = {}
+    monkeypatch.setattr(module, "_write", lambda path, payload: written.update(payload))
+    for name, value in patches.items():
+        monkeypatch.setattr(module, name, value)
+    assert module.main(argv + ["--out", str(tmp_path / "o.json")]) == 0
+    return written
+
+
+def test_collect_commands_write_payloads_build_report_accepts(tmp_path, monkeypatch):
+    module = _module()
+    frames = {"AAA": object()}
+    common = dict(_frames_and_asof=lambda args: (frames, {}))
+    repro = {}
+    fib = {}
+    for direction in module.DIRECTIONS:
+        rows = group(20, 20, **GOOD)
+        repro[direction] = _collect(module, monkeypatch, tmp_path,
+                                    ["collect-repro", "--direction", direction],
+                                    collect_repro=lambda *a, rows=rows, **k: rows, **common)
+        fib[direction] = _collect(module, monkeypatch, tmp_path,
+                                  ["collect-fib", "--direction", direction],
+                                  collect_fib=lambda *a, rows=rows, **k: rows, **common)
+    conf = _collect(module, monkeypatch, tmp_path, ["collect-confluence"],
+                    require_ext_cache=lambda: None, _load_frames=lambda universe, tickers: frames,
+                    collect_confluence=lambda *a, **k: group(20, 20, **GOOD))
+    assert repro["bullish"]["kind"] == "repro" and tuple(repro["bullish"]["window"]) == module.REPRO_WINDOW
+    assert repro["bullish"]["universe_n"] == 1
+    for payload in (fib["bullish"], conf):
+        assert tuple(payload["window"]) == module.DIAG_WINDOW and payload["universe_n"] == 1
+    assert fib["bullish"]["kind"] == "fib" and conf["kind"] == "confluence"
+    for payload in (fib["bullish"], fib["bearish"], conf):
+        payload["window"] = list(payload["window"])         # JSON round trip
+    for payload in repro.values():
+        payload["window"] = list(payload["window"])
+    report = module.build_report(list(fib.values()), [conf], list(repro.values()))
+    assert set(report["verdicts"]) == {"arm1", "arm2", "arm3", "arm4"}
