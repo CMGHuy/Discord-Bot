@@ -167,11 +167,13 @@ One predicate, four call sites, the same ones v122's gate uses:
   `strategy_pass.py` holds none, and `strategy_engine` builds one only when
   a plan wants TP2, cached per 5-bar bucket. With the gate active for
   `strategy`, live builds the map on its `completed_frame` (the frame v122's
-  `_dryup_blocked` already uses) and replay builds the same bucketed as-of
-  map for every in-scope signal. The replay bucket can lag live by up to
-  four bars; that is the engine's existing convention and is disclosed in
-  the results, not tuned. With the gate off neither path builds anything
-  extra, so baseline arms stay byte-identical.
+  `_dryup_blocked` already uses) and replay builds a map on the frame
+  truncated at the signal bar itself, for every in-scope signal. The gate
+  never reads the engine's 5-bar TP2 bucket, so live, replay and the
+  clause-6 reading all judge a plan against the same map (partner decision,
+  2026-10-06). The plan handed to `build_strategy_plan` is unchanged: it
+  still receives the bucketed map only when it wants TP2. With the gate off
+  neither path builds anything extra, so baseline arms stay byte-identical.
 - Rejections are logged in the scan funnel with reason `headroom`.
 
 Out of scope: moving any target or stop, any score weight, alert or chart
