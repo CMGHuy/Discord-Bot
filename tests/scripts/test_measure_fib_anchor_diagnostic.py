@@ -305,3 +305,107 @@ def test_collect_fib_drops_an_entry_in_the_2026_holdout():
                               candidates_fn=lambda df, h, price: [])
     assert [row["entry_date"] for row in rows] == [date]
     assert not any(row["entry_date"].startswith("2026") for row in rows)
+
+
+from swingbot.core.market.levels import Level
+from tests.market.fib_leg_fixtures import RESTART
+
+
+@pytest.mark.parametrize("index,horizon_key,expected", [
+    (132, "3m", 130), (137, "3m", 135), (131, "3m", 130), (128, "2w", 125), (21, "2w", 20), (20, "2w", 20)])
+def test_bucket_bar_is_the_replays_first_visit(index, horizon_key, expected):
+    assert _module().bucket_bar(index, horizon_key) == expected
+
+
+def test_scenario_levels_rebuilds_the_map_and_resplits_at_this_close():
+    module = _module()
+    frame = path_frame([10.0] * 30)                            # Close 10 everywhere
+    calls = []
+
+    def levels_fn(ticker, df, bar, horizon_key, cache):
+        calls.append(bar)
+        return ([Level(9.0, ["Fib 61.8%"]), Level(8.0, ["EMA20"])],
+                [Level(9.2, ["Rolling resistance"]), Level(12.0, ["Swing high"])])   # 9.2 is below 10 now
+
+    stop, target = module.scenario_levels("AAA", frame, 27, "2w", "bullish", levels_fn=levels_fn)
+    assert calls == [25]
+    assert (stop.price, target.price) == (9.2, 12.0)
+    stop, target = module.scenario_levels("AAA", frame, 27, "2w", "bearish", levels_fn=levels_fn)
+    assert (stop.price, target.price) == (12.0, 9.2)
+    one_sided = module.scenario_levels("AAA", frame, 27, "2w", "bullish",
+                                       levels_fn=lambda *a: ([Level(9.0, ["EMA20"])], []))
+    assert one_sided is None
+
+
+def test_is_identified_matches_the_replays_clamped_stop():
+    from swingbot.core.planning.builders import _clamp_stop_to_hard_cap
+    module = _module()
+    level = Level(95.0, ["Fib 61.8%"])
+    clamped = _clamp_stop_to_hard_cap(100.0, 95.0, True)
+    assert module.is_identified(NS(trigger_price=100.0, stop_loss=clamped, direction="bullish"), level) is True
+    assert module.is_identified(NS(trigger_price=100.0, stop_loss=clamped - 0.01, direction="bullish"), level) is False
+    assert module.is_identified(NS(trigger_price=100.0, stop_loss=None, direction="bullish"), level) is False
+
+
+def test_fib_labels_and_prices():
+    module = _module()
+    pair = (Level(9.0, ["Fib 61.8%", "EMA20"]), Level(12.0, ["Swing high", "Rolling resistance"]))
+    labels = module.fib_labels(pair)
+    assert labels == {"Fib 61.8%", "Swing high"}
+    candidates = [(9.0, "Fib 61.8%"), (12.0, "Swing high"), (9.1, "EMA20"), (8.0, "Fib 50.0%")]
+    assert module.fib_candidate_prices(candidates, labels) == [9.0, 12.0]
+
+
+def _restart_case(stop_loss_offset=0.0, levels=None):
+    from swingbot.core.planning.builders import _clamp_stop_to_hard_cap
+    module = _module()
+    frame = path_frame(RESTART)                               # Close[25] = 14.8
+    stop_level = Level(13.7, ["Fib 50.0%", "EMA20"])
+    levels = levels or ([stop_level], [Level(16.0, ["Rolling resistance"])])
+    plan = NS(direction="bullish", trigger_price=14.8,
+              stop_loss=_clamp_stop_to_hard_cap(14.8, 13.7, True) + stop_loss_offset)
+    return module.confluence_row("AAA", frame, "2w", 25, plan, NS(outcome="win", r_total=1.2),
+                                 levels_fn=lambda *a: levels,
+                                 candidates_fn=lambda df, h, price: [(13.75, "Fib 50.0%"), (13.6, "EMA20")])
+
+
+def test_confluence_row_finds_the_fib_candidate_on_the_leg():
+    row = _restart_case()
+    assert (row["identified"], row["has_fib"]) == (True, True)
+    assert (row["outcome"], row["r_multiple"], row["direction"]) == ("win", 1.2, "bullish")
+    for divisor in (4, 6, 8):
+        assert row[f"d{divisor}"] == {"has_leg": True, "fib_on_leg": True}   # 13.75 == level_500
+
+
+def test_confluence_row_without_fib_source_has_no_cells():
+    row = _restart_case(levels=([Level(13.7, ["EMA20"])], [Level(16.0, ["Rolling resistance"])]))
+    assert (row["identified"], row["has_fib"]) == (True, False)
+    assert "d6" not in row
+
+
+def test_confluence_row_with_a_mismatched_stop_is_unidentified():
+    row = _restart_case(stop_loss_offset=0.05)
+    assert (row["identified"], row["has_fib"]) == (False, False)
+
+
+def test_confluence_trades_window_and_skips():
+    module = _module()
+    frame = path_frame(RESTART)
+    seen = {}
+
+    def replay_fn(ticker, df, horizon_key):
+        seen["last"] = str(df.index[-1].date())
+        return [(20, NS(direction="bullish")), (24, NS(direction="bullish")), (25, NS(direction="bullish"))]
+
+    def exit_fn(df, index, plan, scale_out):
+        assert scale_out is True
+        return NS(outcome="not_triggered" if index == 24 else "win", r_total=1.0)
+
+    start = str(frame.index[21].date())
+    end = str(frame.index[25].date())
+    trades = module.confluence_trades("AAA", frame, "2w", (start, end), replay_fn=replay_fn, exit_fn=exit_fn)
+    assert [index for index, _, _ in trades] == [25]           # 20 before start, 24 skipped
+    assert seen["last"] == end
+    for window in (("2010-01-01", "2023-12-31"), ("2015-01-01", "2026-01-02")):
+        with pytest.raises(SystemExit, match="diagnostic window"):
+            module.confluence_trades("AAA", frame, "2w", window, replay_fn=replay_fn, exit_fn=exit_fn)

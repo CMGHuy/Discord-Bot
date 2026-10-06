@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import math
 import sys
 import time
 from pathlib import Path
@@ -51,8 +52,13 @@ from swingbot import config  # noqa: E402
 from swingbot.core.market.fib_leg import leg_at, origin_strength  # noqa: E402
 from swingbot.core.market.indicators import atr  # noqa: E402
 from swingbot.core.market.levels import collect_candidate_levels, strategy_family  # noqa: E402
-from swingbot.core.market.strategy_types import HORIZONS  # noqa: E402
+from swingbot.core.market.strategy_types import HORIZONS, LEGACY_HORIZONS, MIN_BARS  # noqa: E402
 from swingbot.core.market.structure import PIVOT_K, pivot_confirmations  # noqa: E402
+from swingbot.core.backtesting.arms.confluence_engine import SKIPPED  # noqa: E402
+from swingbot.core.backtesting.backtest_scenarios import (  # noqa: E402
+    LEVEL_REFRESH_BARS, levels_asof, replay_scenarios)
+from swingbot.core.planning.builders import _clamp_stop_to_hard_cap  # noqa: E402
+from swingbot.core.planning.plan_engine import simulate_exit  # noqa: E402
 
 DIRECTIONS = ("bullish", "bearish")
 DIAG_WINDOW = ("2015-01-01", "2025-12-31")   # entries + features (partner decision, 2026-10-02)
@@ -332,5 +338,118 @@ def _cmd_collect_fib(args):
     frames, asof_map = _frames_and_asof(args)
     rows = collect_fib(frames, asof_map, args.direction, DIAG_WINDOW)
     _write(args.out, {"kind": "fib", "direction": args.direction, "window": DIAG_WINDOW,
+                      "universe_n": len(frames), "avwap_levels_enabled": bool(config.AVWAP_LEVELS_ENABLED),
+                      "rows": rows, "elapsed_s": round(time.monotonic() - started, 1)})
+
+
+FIB_FAMILY = "Fibonacci"
+LEG_PRICE_KEYS = ("origin_price", "level_382", "level_500", "level_618", "end_price")
+ALL_HZ = tuple(LEGACY_HORIZONS)
+
+
+def bucket_bar(index, horizon_key) -> int:
+    """The bar replay_scenarios built its cached level map at: the first bar of
+    index's LEVEL_REFRESH_BARS bucket the replay visited (never before warm-up)."""
+    return max(MIN_BARS[horizon_key], (index // LEVEL_REFRESH_BARS) * LEVEL_REFRESH_BARS)
+
+
+def scenario_levels(ticker, frame, index, horizon_key, direction, *, levels_fn=levels_asof):
+    """(stop-side level, target-1 level) the replay's scenario at ``index`` was
+    built from: the same as-of map, re-split against Close[index] as the replay does."""
+    supports, resistances = levels_fn(ticker, frame, bucket_bar(index, horizon_key), horizon_key, {})
+    price = float(frame["Close"].iloc[index])
+    ordered = sorted(supports + resistances, key=lambda level: level.price)
+    below = [level for level in ordered if level.price < price][::-1]
+    above = [level for level in ordered if level.price > price]
+    if not below or not above:
+        return None
+    return (below[0], above[0]) if direction == "bullish" else (above[0], below[0])
+
+
+def is_identified(plan, stop_level) -> bool:
+    """The rebuild is right only if it reproduces the plan's own (clamped) stop."""
+    if plan.stop_loss is None:
+        return False
+    expected = _clamp_stop_to_hard_cap(plan.trigger_price, stop_level.price, plan.direction == "bullish")
+    return math.isclose(plan.stop_loss, expected, rel_tol=1e-9, abs_tol=1e-12)
+
+
+def fib_labels(pair) -> set:
+    return {label for level in pair for label in level.sources if strategy_family(label) == FIB_FAMILY}
+
+
+def fib_candidate_prices(candidates, labels) -> list:
+    return [float(price) for price, label in candidates if label in labels]
+
+
+def arm4_cell(leg, prices, atr_value) -> dict:
+    """Arm 4 primary: a Fibonacci candidate within 0.25 ATR of a leg price."""
+    return {"has_leg": bool(np.isfinite(leg["origin_price"])),
+            "fib_on_leg": any(near(price, leg[key], atr_value) for price in prices for key in LEG_PRICE_KEYS)}
+
+
+def _fib_prices_at(frame, index, horizon_key, labels, candidates_fn):
+    prefix = frame.iloc[:bucket_bar(index, horizon_key) + 1]
+    candidates = candidates_fn(prefix, HORIZONS[horizon_key], float(prefix["Close"].iloc[-1]))
+    return fib_candidate_prices(candidates, labels)
+
+
+def _arm4_cells(prefix, horizon_key, direction, prices) -> dict:
+    atr_value = atr_at(prefix)
+    return {f"d{d}": arm4_cell(leg_at(prefix, direction, origin_strength(horizon_key, d)), prices, atr_value)
+            for d in DIVISORS}
+
+
+def confluence_row(ticker, frame, horizon_key, index, plan, result, *, levels_fn=levels_asof,
+                   candidates_fn=collect_candidate_levels) -> dict:
+    row = {"ticker": ticker, "horizon_key": horizon_key, "direction": plan.direction,
+           "entry_date": str(frame.index[index].date()), "outcome": result.outcome,
+           "r_multiple": result.r_total}
+    pair = scenario_levels(ticker, frame, index, horizon_key, plan.direction, levels_fn=levels_fn)
+    row["identified"] = pair is not None and is_identified(plan, pair[0])
+    labels = fib_labels(pair) if row["identified"] else set()
+    row["has_fib"] = bool(labels)
+    if labels:
+        prices = _fib_prices_at(frame, index, horizon_key, labels, candidates_fn)
+        row.update(_arm4_cells(frame.iloc[:index + 1], horizon_key, plan.direction, prices))
+    return row
+
+
+def confluence_trades(ticker, frame, horizon_key, window, *, replay_fn=replay_scenarios,
+                      exit_fn=simulate_exit) -> list:
+    """Mirror of ConfluenceEngine.run_ticker that keeps (index, plan, result)."""
+    start, end = require_diagnostic_window(window)
+    out = []
+    for index, plan in replay_fn(ticker, frame.loc[:end], horizon_key):
+        if str(frame.index[index].date()) < start:
+            continue
+        result = exit_fn(frame, index, plan, scale_out=True)
+        if result.outcome not in SKIPPED:
+            out.append((index, plan, result))
+    return out
+
+
+def collect_confluence(frames, window=DIAG_WINDOW, *, horizons=ALL_HZ, replay_fn=replay_scenarios,
+                       exit_fn=simulate_exit, levels_fn=levels_asof,
+                       candidates_fn=collect_candidate_levels) -> list:
+    require_diagnostic_window(window)
+    progress, rows = Progress(len(frames) * len(horizons)), []
+    for ticker, frame in sorted(frames.items()):
+        for horizon_key in horizons:
+            progress.tick(f"confluence {ticker} {horizon_key}")
+            for index, plan, result in confluence_trades(ticker, frame, horizon_key, window,
+                                                         replay_fn=replay_fn, exit_fn=exit_fn):
+                rows.append(confluence_row(ticker, frame, horizon_key, index, plan, result,
+                                           levels_fn=levels_fn, candidates_fn=candidates_fn))
+    return rows
+
+
+def _cmd_collect_confluence(args):
+    require_diagnostic_window(DIAG_WINDOW)
+    require_ext_cache()
+    started = time.monotonic()
+    frames = _load_frames(args.universe, args.tickers)
+    rows = collect_confluence(frames, DIAG_WINDOW)
+    _write(args.out, {"kind": "confluence", "window": DIAG_WINDOW, "tickers": sorted(frames),
                       "universe_n": len(frames), "avwap_levels_enabled": bool(config.AVWAP_LEVELS_ENABLED),
                       "rows": rows, "elapsed_s": round(time.monotonic() - started, 1)})
