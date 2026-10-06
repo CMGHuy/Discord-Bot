@@ -411,29 +411,64 @@ def test_confluence_trades_window_and_skips():
             module.confluence_trades("AAA", frame, "2w", window, replay_fn=replay_fn, exit_fn=exit_fn)
 
 
+@pytest.mark.parametrize("index", [25, 27])          # 25 is the bucket bar itself; 27 is mid-bucket
 @pytest.mark.parametrize("direction", ["bullish", "bearish"])
-def test_confluence_row_ignores_bars_after_the_entry(direction):
+def test_confluence_row_ignores_bars_after_the_entry(direction, index):
     from swingbot.core.planning.builders import _clamp_stop_to_hard_cap
     module = _module()
+    assert module.bucket_bar(index, "2w") == 25
     bullish = direction == "bullish"
-    clean = path_frame(RESTART, mirror=not bullish)
-    poisoned = path_frame(RESTART + [60.0, 1.0, 60.0], mirror=not bullish)
-    poisoned.iloc[:26] = clean.iloc[:26].to_numpy()          # identical history, poisoned future
-    close = float(clean["Close"].iloc[25])
-    level = Level(close - 1.1 if bullish else close + 1.1, ["Fib 50.0%"])
-    other = Level(close + 1.2 if bullish else close - 1.2, ["Rolling resistance"])
-    plan = NS(direction=direction, trigger_price=close,
-              stop_loss=_clamp_stop_to_hard_cap(close, level.price, bullish))
+    clean = path_frame(RESTART + [14.7, 14.6, 14.5, 14.4, 14.3], mirror=not bullish)
+    poisoned = clean.copy()
+    poisoned.iloc[index + 1:] = [[60.0, 61.0, 1.0, 1.0, 9e9] if i % 2 else [1.0, 2.0, 0.5, 1.0, 9e9]
+                                 for i in range(len(clean) - index - 1)]
+    close = float(clean["Close"].iloc[index])
+    seen_bars = []
+
+    def levels_fn(ticker, df, bar, horizon_key, cache):
+        seen_bars.append(bar)
+        base = float(df.iloc[:bar + 1]["Close"].iloc[-1])          # the as-of map reads only its own prefix
+        return (([Level(base - 1.1, ["Fib 50.0%"])], [Level(base + 1.2, ["Rolling resistance"])]) if bullish
+                else ([Level(base - 1.2, ["Rolling resistance"])], [Level(base + 1.1, ["Fib 50.0%"])]))
+
+    def candidates_fn(df, horizon, price):
+        return [(float(df["Close"].iloc[-1]) - 1.05, "Fib 50.0%")]
 
     def run(frame):
-        return module.confluence_row(
-            "AAA", frame, "2w", 25, plan, NS(outcome="win", r_total=1.0),
-            levels_fn=lambda t, df, bar, h, cache: ([level], [other]) if bullish else ([other], [level]),
-            candidates_fn=lambda df, h, price: [(float(df["Close"].iloc[-1]) - 1.05, "Fib 50.0%")])
+        base = float(clean["Close"].iloc[25])
+        level = Level(base - 1.1 if bullish else base + 1.1, ["Fib 50.0%"])
+        plan = NS(direction=direction, trigger_price=close,
+                  stop_loss=_clamp_stop_to_hard_cap(close, level.price, bullish))
+        return module.confluence_row("AAA", frame, "2w", index, plan, NS(outcome="win", r_total=1.0),
+                                     levels_fn=levels_fn, candidates_fn=candidates_fn)
 
-    full, truncated = run(poisoned), run(clean.iloc[:26])
+    full, truncated = run(poisoned), run(clean.iloc[:index + 1])
     assert full == truncated
+    assert seen_bars == [25, 25]                                   # never past the bucket bar
     assert full["identified"] is True and full["has_fib"] is True and "d6" in full
+
+
+def test_scenario_levels_and_fib_prices_ignore_bars_after_the_entry_with_the_real_builders():
+    from swingbot.core.backtesting.backtest_scenarios import levels_asof
+    from swingbot.core.market.levels import collect_candidate_levels
+    from swingbot.core.market.strategy_types import HORIZONS
+    from tests.market.fib_leg_fixtures import walk_frame
+    module = _module()
+    index = 108                                                    # bucket bar 105
+    clean = walk_frame(130)
+    poisoned = clean.copy()
+    poisoned.iloc[index + 1:] = clean.iloc[index + 1:].to_numpy() * 7.0
+    truncated = clean.iloc[:index + 1]
+    for direction in ("bullish", "bearish"):
+        got = module.scenario_levels("AAA", poisoned, index, "2w", direction, levels_fn=levels_asof)
+        want = module.scenario_levels("AAA", truncated, index, "2w", direction, levels_fn=levels_asof)
+        assert got is not None and got == want
+    prefix = clean.iloc[:module.bucket_bar(index, "2w") + 1]
+    candidates = collect_candidate_levels(prefix, HORIZONS["2w"], float(prefix["Close"].iloc[-1]))
+    labels = {label for _, label in candidates}
+    assert labels
+    assert (module._fib_prices_at(poisoned, index, "2w", labels, collect_candidate_levels)
+            == module._fib_prices_at(truncated, index, "2w", labels, collect_candidate_levels))
 
 
 import json
