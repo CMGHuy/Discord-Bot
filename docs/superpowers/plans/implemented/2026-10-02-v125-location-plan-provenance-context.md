@@ -8,7 +8,7 @@
 **Spec:** `docs/superpowers/specs/2026-10-02-v125-location-plan-provenance-context-design.md`
 **Bump:** bot patch
 **Edge:** none (integrity)
-**Progress:** planning complete; implementation not started. **Blocked on v121** (`docs/superpowers/plans/2026-10-02-v121-structure-volume-context.md`, not yet implemented). Code and expected values below were prototyped on 2026-10-02 against the v121 plan's own V121-1/2/3/5 code (89 tests passing in a scratch harness); re-verify after v121 merges, as V125-1 Step 1 instructs.
+**Progress:** CLOSED 2026-10-06 -- all seven tasks implemented and merged to `main` (merge `37a71380`, bot 2.0.2). Full suite 6397 passed, 3 skipped, 0 failed, 0 xfailed; only the pre-existing `entry_context` C (17) over the complexity limit. Predictions held (`Bump: bot patch`, `Edge: none (integrity)`). `volume_context_report.py` was deliberately never run; its first run waits on the "#3" structure-break entry spec freezing its grid.
 
 ## Global constraints
 
