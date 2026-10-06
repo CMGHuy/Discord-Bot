@@ -198,7 +198,8 @@ def stamp_entry_context(plan: TradePlanV2, df, asof: dict | None) -> None:
     from swingbot.core.edge.context import entry_context
     try:
         plan.entry_context = entry_context(df, direction=plan.direction, horizon_key=plan.horizon_key,
-                                            stop=plan.stop_loss, target=plan.tp1, asof=asof)
+                                            stop=plan.stop_loss, target=plan.tp1, asof=asof,
+                                            entry=getattr(plan, "trigger_price", None))
     except Exception:
         plan.entry_context = {}
 

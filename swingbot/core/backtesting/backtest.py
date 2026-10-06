@@ -427,7 +427,7 @@ def run_backtest(
                 runner_outcome=res.runner_outcome,
                 context=entry_context(df.iloc[:i + 1], direction=direction, horizon_key=horizon_key,
                                       stop=stop_loss, target=take_profit,
-                                      asof=asof_row(asof, df.index[i])),
+                                      asof=asof_row(asof, df.index[i]), entry=entry),
             ))
             continue
 
@@ -505,7 +505,7 @@ def run_backtest(
             r_multiple=round(r_multiple, 3), holding_days=holding_days,
             context=entry_context(df.iloc[:i + 1], direction=direction, horizon_key=horizon_key,
                                   stop=stop_loss, target=take_profit,
-                                  asof=asof_row(asof, df.index[i])),
+                                  asof=asof_row(asof, df.index[i]), entry=entry),
         ))
 
     evaluated_trades = [t for t in trades if t.outcome in ("win", "loss")]

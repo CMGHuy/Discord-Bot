@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-04 12:36:52 UTC",
+  "generated_at": "2026-10-06 09:12:10 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.21.1",
-    "bot": "2.0.1"
+    "bot": "2.0.2"
   },
   "releases": [
     {
@@ -1405,6 +1405,19 @@
       "versions": {
         "ui": "1.21.1",
         "bot": "2.0.1"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-06",
+      "last_seen": "2026-10-06",
+      "commit": "21216132",
+      "subject": "release(bot): 2.0.2 -- v125 location and plan-provenance entry snapshot",
+      "versions": {
+        "ui": "1.21.1",
+        "bot": "2.0.2"
       },
       "changed": [
         "bot"
