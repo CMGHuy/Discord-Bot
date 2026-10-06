@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """v121 descriptive report: closed trades bucketed by entry-structure features.
 
-DESCRIPTIVE ONLY. It must not be used to choose v122's or v123's grid values --
+DESCRIPTIVE ONLY. v125 adds plan-provenance, location, leg-phase and zone keys; they must
+not be used to choose the structure-break entry spec's grid values (frozen in that spec
+before this report exists). It must not be used to choose v122's or v123's grid values --
 both grids are frozen in their own specs. ``--source replay`` is TRAIN-only
 (2020-01-01..2023-12-31) and refuses any other window. ``--source live`` reads
 the production book, which overlaps the 2026 holdout other pre-registrations
@@ -36,13 +38,20 @@ TRAIN_START, TRAIN_END = "2020-01-01", "2023-12-31"
 DEFAULT_EDGES = ROOT / "data" / "v121_train_quintiles.json"
 PROGRESS = ROOT / "logs" / "volume_context_report.progress"
 CATEGORICAL = ("structure_state", "structure_aligned", "last_pivot_held", "hh_failed",
-               "absorption_bar", "absorption_count_10")
+               "absorption_bar", "absorption_count_10",
+               # v125: plan provenance and leg / zone labels
+               "target_capped", "stop_clamped", "leg_phase", "zone_state")
 CONTINUOUS = ("swing_high_atr", "swing_low_atr", "vol_trend_10_50", "range_trend_10_50",
               "progress_atr_10", "pullback_vol_ratio", "pullback_depth_frac", "pullback_bars_ratio",
-              "impulse_atr_per_bar", "impulse_range_decay")
+              "impulse_atr_per_bar", "impulse_range_decay",
+              # v125: location and zone quality
+              "zone_dist_atr", "room_atr", "range_pos", "zone_touches", "zone_departure_atr")
 QUINTILES = (0.2, 0.4, 0.6, 0.8)
 HEADER = ("v121 volume-in-context report -- DESCRIPTIVE ONLY. Not for choosing v122/v123 "
           "grid values (both frozen in their specs). No inferential statistic is printed.")
+V125_NOTE = ("v125 keys (plan provenance, location, leg phase, zone): not to be used to choose "
+             "the structure-break entry spec's grid values (frozen in that spec before this report exists).")
+PROVENANCE_CELL = ("target_capped", "stop_clamped")
 LIVE_WARNING = ("source: local TradeLog book. --source live overlaps the 2026 holdout that open pre-registrations (v104) "
                 "are waiting on: monitoring only. Live volume features may come from an in-progress (forming) bar, while "
                 "the TRAIN edges are built from completed bars.")
@@ -104,14 +113,44 @@ def _fmt(value, spec: str) -> str:
     return "  n/a" if value is None else format(value, spec)
 
 
+def _sum_r(members) -> float | None:
+    """Total R over closed rows -- the same population acceptance.expectancy_r averages."""
+    rs = [row.r_multiple for row in members
+          if row.outcome in acceptance.CLOSED and row.r_multiple is not None]
+    return round(float(sum(rs)), 4) if rs else None
+
+
+def provenance_table(rows) -> list[dict]:
+    """v125 cross-table: one line per (source, direction, target_capped, stop_clamped)."""
+    groups: dict[tuple, list] = {}
+    for row in rows:
+        cell = tuple(bucket_of(row.context.get(key), None) for key in PROVENANCE_CELL)
+        groups.setdefault((row.source, row.direction, *cell), []).append(row)
+    return [{"source": source, "direction": direction, "target_capped": capped, "stop_clamped": clamped,
+             "n": len(members), "win_rate": acceptance.win_rate(members),
+             "expectancy_r": acceptance.expectancy_r(members), "sum_r": _sum_r(members)}
+            for (source, direction, capped, clamped), members in sorted(groups.items())]
+
+
+def _provenance_lines(rows) -> list[str]:
+    lines = ["\n== target_capped x stop_clamped =="]
+    for line in provenance_table(rows):
+        lines.append(f"{line['source']:<10} {line['direction']:<8} capped={line['target_capped']:<5} "
+                     f"clamped={line['stop_clamped']:<5} N={line['n']:>5}  "
+                     f"WR {_fmt(line['win_rate'], '6.2f')}%  ExpR {_fmt(line['expectancy_r'], '+.4f')}  "
+                     f"sumR {_fmt(line['sum_r'], '+.2f')}")
+    return lines
+
+
 def render(rows, edges: dict, *, source: str) -> str:
-    lines = [HEADER] + ([LIVE_WARNING] if source == "live" else []) + [f"closed trades: {len(rows)}"]
+    lines = [HEADER, V125_NOTE] + ([LIVE_WARNING] if source == "live" else []) + [f"closed trades: {len(rows)}"]
     for key in CATEGORICAL + CONTINUOUS:
         lines.append(f"\n== {key} ==  edges={edges.get(key)}")
         for line in bucket_table(rows, key, edges.get(key) if key in CONTINUOUS else None):
             lines.append(f"{line['source']:<10} {line['direction']:<8} {line['bucket']:<7} "
                          f"N={line['n']:>5}  WR {_fmt(line['win_rate'], '6.2f')}%  "
                          f"ExpR {_fmt(line['expectancy_r'], '+.4f')}")
+    lines.extend(_provenance_lines(rows))
     return "\n".join(lines)
 
 
