@@ -434,3 +434,122 @@ def test_confluence_row_ignores_bars_after_the_entry(direction):
     full, truncated = run(poisoned), run(clean.iloc[:26])
     assert full == truncated
     assert full["identified"] is True and full["has_fib"] is True and "d6" in full
+
+
+import json
+
+
+DIAG = ["2015-01-01", "2025-12-31"]
+REPRO = ["2010-01-01", "2023-12-31"]
+
+
+def _payloads(confluence_rows=None):
+    bull = group(20, 20, **GOOD) + group(12, 28)
+    bear = [dict(row, direction="bearish") for row in group(5, 10)]
+    fib = [{"kind": "fib", "direction": "bullish", "window": DIAG, "universe_n": 73,
+            "avwap_levels_enabled": True, "rows": bull},
+           {"kind": "fib", "direction": "bearish", "window": DIAG, "universe_n": 73,
+            "avwap_levels_enabled": True, "rows": bear}]
+    rows = confluence_rows if confluence_rows is not None else group(20, 20, **GOOD) + group(12, 28)
+    confluence = [{"kind": "confluence", "window": DIAG, "tickers": ["AAA"],
+                   "universe_n": 1, "avwap_levels_enabled": True, "rows": rows}]
+    repro = [{"kind": "repro", "direction": "bullish", "window": REPRO, "universe_n": 73, "rows": group(20, 20)},
+             {"kind": "repro", "direction": "bearish", "window": REPRO, "universe_n": 73,
+              "rows": [dict(row, direction="bearish") for row in group(5, 10)]}]
+    return fib, confluence, repro
+
+
+REPRO_MATCH = {"bullish": {"n": 40, "win_rate": 50.0, "expectancy_r": 0.5},
+               "bearish": {"n": 15, "win_rate": 33.33, "expectancy_r": 0.0}}
+
+
+def test_report_verdicts_follow_the_exit_rule():
+    module = _module()
+    report = module.build_report(*_payloads())
+    assert report["exit_rule"] == module.EXIT_RULE
+    assert report["avwap_levels_enabled"] == [True]
+    assert {arm: v["proceeds"] for arm, v in report["verdicts"].items()} == {
+        "arm1": True, "arm2": True, "arm3": True, "arm4": True}
+    assert report["fib"]["bearish"]["arm1"]["6"]["rest"]["n"] == 15        # described, not judged
+    assert report["reproduction"]["bullish"]["observed"]["n"] == 40         # from the repro payload
+    assert report["reproduction"]["bullish"]["matches"] is False            # 40 trades, not 815
+
+
+def test_one_unidentified_confluence_trade_makes_arm4_not_measurable():
+    module = _module()
+    rows = group(20, 20, **GOOD) + group(12, 28)
+    rows[0] = dict(rows[0], identified=False)
+    report = module.build_report(*_payloads(rows))
+    assert report["confluence"]["unidentified"] == 1
+    assert report["verdicts"]["arm4"] == {"proceeds": False, "not_measurable": True}
+    assert "not measurable with this instrument" in module.render_markdown(report)
+
+
+def test_report_refuses_a_diagnostic_payload_outside_2015_2025():
+    module = _module()
+    fib, confluence, repro = _payloads()
+    fib[0]["window"] = ["2010-01-01", "2025-12-31"]
+    with pytest.raises(SystemExit, match="diagnostic window"):
+        module.build_report(fib, confluence, repro)
+
+
+def test_report_refuses_a_repro_payload_not_on_v103s_window():
+    module = _module()
+    fib, confluence, repro = _payloads()
+    repro[0]["window"] = DIAG
+    with pytest.raises(SystemExit, match="reproduction runs on"):
+        module.build_report(fib, confluence, repro)
+
+
+def test_markdown_carries_the_exit_rule_and_every_divisor():
+    module = _module()
+    text = module.render_markdown(module.build_report(*_payloads()))
+    assert module.EXIT_RULE in text
+    for divisor in (4, 6, 8):
+        assert f"d={divisor} favourable" in text
+    assert "Fibonacci bearish (description only)" in text
+
+
+def _write_inputs(tmp_path):
+    fib, confluence, repro = _payloads()
+    paths = []
+    for name, payload in (("bull", fib[0]), ("bear", fib[1]), ("conf", confluence[0]),
+                          ("rbull", repro[0]), ("rbear", repro[1])):
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        paths.append(str(path))
+    return paths
+
+
+def test_report_command_needs_a_note_when_the_baseline_does_not_reproduce(tmp_path):
+    module = _module()
+    bull, bear, conf, rbull, rbear = _write_inputs(tmp_path)
+    out, md = tmp_path / "report.json", tmp_path / "report.md"
+    argv = ["report", "--repro", rbull, rbear, "--fib", bull, bear, "--confluence", conf,
+            "--out", str(out), "--md", str(md)]
+    with pytest.raises(SystemExit, match="does not reproduce"):
+        module.main(argv)
+    assert not out.exists() and not md.exists()
+    note = tmp_path / "note.md"
+    note.write_text("difference explained", encoding="utf-8")
+    assert module.main(argv + ["--reproduction-note", str(note)]) == 0
+    assert json.loads(out.read_text(encoding="utf-8"))["verdicts"]["arm1"]["proceeds"] is True
+    assert md.read_text(encoding="utf-8").startswith("# v124")
+
+
+def test_report_command_needs_no_note_when_the_baseline_reproduces(tmp_path, monkeypatch):
+    module = _module()
+    monkeypatch.setattr(module, "REFERENCE", REPRO_MATCH)
+    bull, bear, conf, rbull, rbear = _write_inputs(tmp_path)
+    out, md = tmp_path / "report.json", tmp_path / "report.md"
+    assert module.main(["report", "--repro", rbull, rbear, "--fib", bull, bear, "--confluence", conf,
+                        "--out", str(out), "--md", str(md)]) == 0
+    assert json.loads(out.read_text(encoding="utf-8"))["reproduction"]["bullish"]["matches"] is True
+
+
+def test_reproduce_command_prints_only_the_baseline(tmp_path, capsys):
+    module = _module()
+    _, _, _, rbull, rbear = _write_inputs(tmp_path)
+    assert module.main(["reproduce", "--repro", rbull, rbear]) == 0
+    printed = capsys.readouterr().out
+    assert '"matches": false' in printed and "arm1" not in printed

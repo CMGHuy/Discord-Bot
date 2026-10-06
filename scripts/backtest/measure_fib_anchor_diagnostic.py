@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import json
 import math
 import sys
 import time
@@ -453,3 +454,212 @@ def _cmd_collect_confluence(args):
     _write(args.out, {"kind": "confluence", "window": DIAG_WINDOW, "tickers": sorted(frames),
                       "universe_n": len(frames), "avwap_levels_enabled": bool(config.AVWAP_LEVELS_ENABLED),
                       "rows": rows, "elapsed_s": round(time.monotonic() - started, 1)})
+
+
+def _primary(row):
+    return row[f"d{PRIMARY_DIVISOR}"]
+
+
+def fib_tables(rows, direction) -> dict:
+    rows = dir_rows(rows, direction)
+    leg_atr = quintile_key(rows, lambda row: _primary(row)["leg_atr"])
+    return {
+        "arm1": divisor_buckets(rows, "anchored"),
+        "arm1_described": {"rolling_origin_is_fractal": describe(rows, lambda row: row["anchor_fractal"]),
+                           "broke_structure": describe(rows, lambda row: _primary(row)["broke_structure"]),
+                           "leg_atr_quintile": describe(rows, leg_atr)},
+        "arm2": divisor_buckets(rows, "zone_confluence"),
+        "arm2_described": {"zone_touch": describe(rows, lambda row: _primary(row)["zone_touch"]),
+                           "close_in_zone": describe(rows, lambda row: _primary(row)["close_in_zone"]),
+                           "tested_ratio": describe(rows, lambda row: row["tested_ratio"]),
+                           "rolling_level_confluence": describe(rows, lambda row: row["rolling_level_confluence"])},
+        "arm3": bucket(rows, lambda row: row["confirm_close"]),
+        "arm3_described": {"rejection_wick_half_range": describe(rows, lambda row: row["confirm_wick"])},
+    }
+
+
+def confluence_tables(rows) -> dict:
+    unidentified = sum(not row["identified"] for row in rows)
+    population = [row for row in rows if row["has_fib"]]
+    return {"population": {d: pooled(dir_rows(rows, d)) for d in DIRECTIONS},
+            "unidentified": unidentified, "fib_population_n": len(population),
+            "measurable": bool(rows) and unidentified == 0,
+            "arm4": {d: divisor_buckets(dir_rows(population, d), "fib_on_leg") for d in DIRECTIONS}}
+
+
+def verdicts(fib, confluence) -> dict:
+    bull = fib["bullish"]
+    arm4 = (leg_arm_verdict(confluence["arm4"]["bullish"]) if confluence["measurable"]
+            else {"proceeds": False, "not_measurable": True})
+    return {"arm1": leg_arm_verdict(bull["arm1"]), "arm2": leg_arm_verdict(bull["arm2"]),
+            "arm3": single_split_verdict(bull["arm3"]), "arm4": arm4}
+
+
+def _by_direction(payloads, kind):
+    found = {payload["direction"]: payload for payload in payloads}
+    missing = [d for d in DIRECTIONS if d not in found]
+    if missing:
+        raise SystemExit(f"no {kind} payload for {', '.join(missing)}")
+    return found
+
+
+def reproductions(repro_payloads) -> dict:
+    """Reproduction on REPRO_WINDOW only; refuses a payload from any other window."""
+    for payload in repro_payloads:
+        require_repro_window(payload["window"])
+    found = _by_direction(repro_payloads, "collect-repro")
+    return {d: reproduction(found[d]["rows"], d, found[d]["universe_n"]) for d in DIRECTIONS}
+
+
+def build_report(fib_payloads, confluence_payloads, repro_payloads) -> dict:
+    for payload in fib_payloads + confluence_payloads:
+        require_diagnostic_window(tuple(payload["window"]))
+    by_direction = _by_direction(fib_payloads, "collect-fib")
+    fib = {d: fib_tables(by_direction[d]["rows"], d) for d in DIRECTIONS}
+    confluence = confluence_tables([row for payload in confluence_payloads for row in payload["rows"]])
+    return {"window": list(DIAG_WINDOW), "repro_window": list(REPRO_WINDOW), "exit_rule": EXIT_RULE,
+            "avwap_levels_enabled": sorted({p["avwap_levels_enabled"] for p in fib_payloads + confluence_payloads}),
+            "reproduction": reproductions(repro_payloads),
+            "fib": fib, "confluence": confluence, "verdicts": verdicts(fib, confluence)}
+
+
+# --- markdown ---------------------------------------------------------------
+
+ARM_SECTIONS = (("arm1", "Arm 1 anchored entry", True), ("arm2", "Arm 2 zone + confluence", True),
+                ("arm3", "Arm 3 confirmation", False))
+
+
+def _stats_line(name, stats) -> str:
+    wr = "n/a" if stats["win_rate"] is None else f"{stats['win_rate']:.2f}%"
+    exp = "n/a" if stats["expectancy_r"] is None else f"{stats['expectancy_r']:+.3f}"
+    return f"| {name} | {stats['n']} | {wr} | {exp} |"
+
+
+def _table(title, named_stats) -> list:
+    lines = [f"#### {title}", "", "| bucket | N | WR | ExpR |", "|---|---|---|---|"]
+    return lines + [_stats_line(name, stats) for name, stats in named_stats.items()] + [""]
+
+
+def _divisor_rows(by_divisor) -> dict:
+    return {f"d={d} {side}": by_divisor[str(d)][side] for d in DIVISORS for side in ("favourable", "rest")}
+
+
+def _arm_lines(tables, key, title, by_divisor) -> list:
+    primary = _divisor_rows(tables[key]) if by_divisor else tables[key]
+    lines = _table(f"{title} -- primary split", primary)
+    for name, groups in tables[f"{key}_described"].items():
+        lines += _table(f"{title} -- described: {name}", groups)
+    return lines
+
+
+def _reproduction_lines(reproductions) -> list:
+    lines = ["## Baseline reproduction (v103 reference arm, b=0, on 2010-01-01..2023-12-31)", "",
+             "| direction | N | WR | ExpR | universe | reference N / WR / ExpR / universe | matches |",
+             "|---|---|---|---|---|---|---|"]
+    for direction, item in reproductions.items():
+        obs, ref = item["observed"], item["reference"]
+        wr = "n/a" if obs["win_rate"] is None else f"{obs['win_rate']:.2f}%"
+        exp = "n/a" if obs["expectancy_r"] is None else f"{obs['expectancy_r']:+.4f}"
+        lines.append(f"| {direction} | {obs['n']} | {wr} | {exp} | {item['universe_n']} | "
+                     f"{ref['n']} / {ref['win_rate']}% / {ref['expectancy_r']:+.4f} / "
+                     f"{item['reference_universe_n']} | {item['matches']} |")
+    return lines + [""]
+
+
+def _verdict_lines(verdict_map) -> list:
+    lines = ["## Verdicts (bullish only)", "", "| arm | primary passes | WR-sign divisors | proceeds |",
+             "|---|---|---|---|"]
+    for arm, item in verdict_map.items():
+        primary = "not measurable" if item.get("not_measurable") else item["primary_passes"]
+        lines.append(f"| {arm} | {primary} | {item.get('wr_sign_divisors', '-')} | {item['proceeds']} |")
+    return lines + [""]
+
+
+def _confluence_lines(confluence) -> list:
+    lines = ["## Confluence (arm 4)", ""] + _table("Whole confluence population (described)",
+                                                   confluence["population"])
+    lines += [f"Unidentified trades: {confluence['unidentified']}. "
+              f"Trades with a Fibonacci-family source: {confluence['fib_population_n']}.", ""]
+    if not confluence["measurable"]:
+        return lines + ["Arm 4 is **not measurable with this instrument**.", ""]
+    for direction in DIRECTIONS:
+        lines += _table(f"Arm 4 {direction} -- primary split", _divisor_rows(confluence["arm4"][direction]))
+    return lines
+
+
+def render_markdown(report) -> str:
+    start, end = report["window"]
+    lines = ["# v124 Fibonacci anchor diagnostic -- generated tables", "",
+             f"Diagnostic window {start}..{end} (entries and features; 2026 is the holdout). "
+             f"AVWAP_LEVELS_ENABLED: {report['avwap_levels_enabled']}.", "",
+             "## Exit rule (fixed in the spec)", "", f"> {report['exit_rule']}", ""]
+    lines += _reproduction_lines(report["reproduction"]) + _verdict_lines(report["verdicts"])
+    for direction in DIRECTIONS:
+        suffix = " (description only)" if direction == "bearish" else ""
+        lines += [f"## Fibonacci {direction}{suffix}", ""]
+        for key, title, by_divisor in ARM_SECTIONS:
+            lines += _arm_lines(report["fib"][direction], key, title, by_divisor)
+    lines += _confluence_lines(report["confluence"])
+    return "\n".join(lines) + "\n"
+
+
+# --- CLI ----------------------------------------------------------------------
+
+def _load(paths) -> list:
+    return [json.loads(Path(path).read_text(encoding="utf-8")) for path in paths]
+
+
+def _cmd_reproduce(args):
+    print(json.dumps(reproductions(_load(args.repro)), indent=1), flush=True)
+
+
+def _cmd_report(args):
+    report = build_report(_load(args.fib), _load(args.confluence), _load(args.repro))
+    note = args.reproduction_note
+    if not report["reproduction"]["bullish"]["matches"] and not (note and Path(note).is_file()):
+        raise SystemExit("bullish baseline does not reproduce v103 on 2010-01-01..2023-12-31 "
+                         "(N=815, WR 36.81%, ExpR +0.2219, universe 73): "
+                         "explain the difference in a committed note, then pass --reproduction-note <path>")
+    report["reproduction_note"] = note
+    _write(args.out, report)
+    Path(args.md).write_text(render_markdown(report), encoding="utf-8")
+
+
+def _parser():
+    parser = argparse.ArgumentParser(description="v124 Fibonacci impulse-leg anchor diagnostic (2015-2025)")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    repro = sub.add_parser("collect-repro")
+    fib = sub.add_parser("collect-fib")
+    for command in (repro, fib):
+        command.add_argument("--direction", required=True, choices=DIRECTIONS)
+    confluence = sub.add_parser("collect-confluence")
+    for command in (repro, fib, confluence):
+        command.add_argument("--out", required=True)
+        command.add_argument("--universe")
+        command.add_argument("--tickers", help="comma-separated subset: chunks and smoke runs")
+    reproduce = sub.add_parser("reproduce")
+    reproduce.add_argument("--repro", nargs=2, required=True)
+    report = sub.add_parser("report")
+    report.add_argument("--repro", nargs=2, required=True)
+    report.add_argument("--fib", nargs=2, required=True)
+    report.add_argument("--confluence", nargs="+", required=True)
+    report.add_argument("--out", required=True)
+    report.add_argument("--md", required=True)
+    report.add_argument("--reproduction-note")
+    return parser
+
+
+COMMANDS = {"collect-repro": _cmd_collect_repro, "collect-fib": _cmd_collect_fib,
+            "collect-confluence": _cmd_collect_confluence,
+            "reproduce": _cmd_reproduce, "report": _cmd_report}
+
+
+def main(argv=None) -> int:
+    args = _parser().parse_args(argv)
+    COMMANDS[args.cmd](args)
+    print(f"v124 {args.cmd} done", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
