@@ -165,7 +165,16 @@ removed from `backtest_wf`'s v1 output.
 inline / through `_trade_plan_at`; every replay calls `build_strategy_plan`,
 inheriting `_resolve_stall_exit_day`, data-driven stops, the reward floor
 and every future builder rule. `scripts/backtest/measure_fib_diagnostic.py`
-(the last outside caller) migrates; `_trade_plan_at` is deleted. A parity
+migrates to `build_strategy_plan`; `_trade_plan_at` stops being a
+constructor. *Amended at planning (v137):* v1 cannot route through
+`build_strategy_plan` and stay byte-identical (the builder reads the journal
+for stop_mult/TP2, applies opex widening, takes a level_map), so the v1
+arithmetic survives as `_v1_plan_levels`, private to the frozen v1 loop and
+the two v1 parity reports (`scripts/reports/parity_exits.py`,
+`parity_sizing.py`), confined by a guard test. Under v2 the replay makes the
+live call exactly and rejects `tp2_mode != "none"`; it also fails fast while
+any journal- or clock-reading builder flag (data-driven stops, stall exit,
+opex caution) is on, until phase 5's simulated journal lifts that. A parity
 test asserts that, at sampled bars, the v2 replay plan equals what
 `scanning/strategy_pass.py:build_strategy_plan_at` returns for the same
 completed frame.
