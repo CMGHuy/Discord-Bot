@@ -168,24 +168,30 @@ def _entry(mirror):
     return frame, str(frame.index[16].date())
 
 
-@pytest.mark.parametrize("mirror,direction", SIDES)
-def test_fib_trade_features_on_the_clean_leg(mirror, direction):
+CLEAN_LEG_CASES = [   # mirror, direction, zone price, zone label
+    (False, "bullish", 11.5, "Volume Profile HVN"),
+    (True, "bearish", MIRROR - 11.5, "Anchored VWAP (swing low)")]       # inside the 0.5-0.618 zone
+CLEAN_LEG_EXPECTED = {
+    "anchor_fractal": True,
+    "confirm_close": False,                       # Close 13 is not above the prior High 14
+    "confirm_wick": True,                         # wick 0.5 of range 1.0
+    "tested_ratio": 0.382,                        # nearest level 12.826 to Close 13
+    "rolling_level_confluence": False}            # 11.5 is > 0.25 ATR from 12.826
+CLEAN_LEG_CELL = {"has_leg": True, "anchored": True, "zone_confluence": True, "zone_touch": False,
+                  "close_in_zone": False, "broke_structure": True}
+
+
+@pytest.mark.parametrize("mirror,direction,zone_price,label", CLEAN_LEG_CASES)
+def test_fib_trade_features_on_the_clean_leg(mirror, direction, zone_price, label):
     module = _module()
     frame, date = _entry(mirror)
-    zone_price = MIRROR - 11.5 if mirror else 11.5            # inside the 0.5-0.618 zone
-    label = "Anchored VWAP (swing low)" if mirror else "Volume Profile HVN"
     out = module.fib_trade_features(frame, "2w", direction, date,
                                     candidates_fn=lambda df, h, price: [(zone_price, label), (zone_price, "EMA20")])
-    assert out["anchor_fractal"] is True
-    assert out["confirm_close"] is False                       # Close 13 is not above the prior High 14
-    assert out["confirm_wick"] is True                         # wick 0.5 of range 1.0
-    assert out["tested_ratio"] == 0.382                        # nearest level 12.826 to Close 13
-    assert out["rolling_level_confluence"] is False            # 11.5 is > 0.25 ATR from 12.826
+    assert {key: out[key] for key in CLEAN_LEG_EXPECTED} == CLEAN_LEG_EXPECTED
     for divisor in (4, 6, 8):
         cell = out[f"d{divisor}"]
-        assert cell["has_leg"] is True and cell["anchored"] is True and cell["zone_confluence"] is True
-        assert cell["zone_touch"] is False and cell["close_in_zone"] is False
-        assert cell["broke_structure"] is True and cell["leg_atr"] > 0
+        assert {key: cell[key] for key in CLEAN_LEG_CELL} == CLEAN_LEG_CELL
+        assert cell["leg_atr"] > 0
 
 
 def test_zone_ignores_other_families_and_missing_legs():
