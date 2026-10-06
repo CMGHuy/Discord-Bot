@@ -5,9 +5,10 @@
 **Goal:** Build a causal impulse-leg instrument (`swingbot/core/market/fib_leg.py`) and a read-only diagnostic script (entries 2015-01-01..2025-12-31) that measures, against today's rolling-anchor Fibonacci trades, whether each of the handbook's four claims shows any signal. The output gates nothing.
 **Architecture:** `fib_leg.py` is pure and has no live caller. It draws the leg from v121's `structure.confirmed_pivots` (origin) and `structure.pivot_confirmations` (the swing before the origin), works in a direction-oriented space so one code path serves bullish and bearish, and exposes `impulse_leg` (every bar) plus `leg_at` (last bar only, used by the script). `scripts/backtest/measure_fib_anchor_diagnostic.py` reuses v103's reference-arm collector (`measure_fib_v103.collect_trades("A", ..., 0.0, ...)`) for the Fibonacci trades, mirrors `ConfluenceEngine.run_ticker` for the confluence trades, stamps arm features from `df.iloc[:t+1]`, and writes bucket tables plus exit-rule verdicts.
 **Tech Stack:** Python 3.11, pandas/numpy, existing `market.indicators.atr`, `market.levels`, `backtesting.backtest_scenarios`, the `scripts/backtest/funnel.py` pooled-stats helpers, pytest.
-**Spec:** `docs/superpowers/specs/2026-10-02-v124-fib-impulse-leg-diagnostic-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-02-v124-fib-impulse-leg-diagnostic-design.md`
 **Bump:** none
 **Edge:** none (integrity)
+**Progress:** CLOSED 2026-10-06 -- all seven tasks implemented and merged to `main` (merge `3b798c7d`; `Bump: none` and `Edge: none (integrity)` held). Measurement run done: arms 1, 2 and 4 fail the exit rule (no-lift rows in `docs/claude/backtest-methodology.md`), arm 3 passes and has earned a spec only; the v103 baseline did not reproduce (v104 `a356c7f2` stop-widening cap plus the 2026-09-28 cache refresh), see `docs/superpowers/results/2026-10-06-v124-fib-anchor-diagnostic.md` and `2026-10-06-v124-reproduction-note.md`. Full suite on the branch: 5074 passed, 1 failed (pre-existing environment-dependent v122 witness, fixed in `b62e9e4f`).
 
 ## Global constraints
 
