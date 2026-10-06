@@ -257,3 +257,16 @@ def replay_structure(ticker: str, df, horizon_key: str, cells, *, params: ScanPa
                 atr(df, 14).to_numpy(dtype=float), Pivots.from_frame(df), params,
                 level_map_at, confluence_at)
     return {cell.cell_id: _replay_cell(fr, candidates, cell) for cell in cells}
+
+
+def structure_permutations(ticker: str, df, horizon_key: str, cell: StructCell, confirmed, *,
+                           n: int, seed: int, level_cache: dict, params: ScanParams | None = None,
+                           level_map_at=None, confluence_at=None) -> list:
+    """Spec §4.2's random-delay null: armed_replay.delay_permutations over
+    the arms that triggered, with v127's frozen stop buffer. Each arm's
+    candidate index IS its test bar, so delay_permutations' first-test scan
+    anchors the stop at the arm bar and draws from [i, min(i + N, last)]."""
+    return armed_replay.delay_permutations(
+        ticker, df, horizon_key, cell.plan_cell(), confirmed, n=n, seed=seed,
+        level_cache=level_cache, params=params, level_map_at=level_map_at,
+        confluence_at=confluence_at)
