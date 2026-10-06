@@ -1,0 +1,1756 @@
+{
+ "kind": "repro",
+ "direction": "bearish",
+ "window": [
+  "2010-01-01",
+  "2023-12-31"
+ ],
+ "universe_n": 74,
+ "rows": [
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2023-01-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2022-10-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2015-09-17",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2012-07-09",
+   "outcome": "win",
+   "r_multiple": 8.056
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2018-04-30",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2018-04-30",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2013-03-22",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2018-04-30",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2014-10-22",
+   "outcome": "win",
+   "r_multiple": 1.655
+  },
+  {
+   "ticker": "ASTS",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2022-07-12",
+   "outcome": "win",
+   "r_multiple": 1.397
+  },
+  {
+   "ticker": "ASTS",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2022-07-22",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "BA",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2020-05-19",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2022-08-05",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CRWD",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2022-11-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2015-09-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2015-03-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2020-07-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2020-07-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2020-07-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2020-07-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2020-07-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2020-07-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "DDOG",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2023-01-19",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "DELL",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2020-01-17",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "DELL",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2020-01-17",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "DELL",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2020-01-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "DOCU",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2022-02-10",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "DOCU",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2022-05-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "DOCU",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2019-09-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "DOCU",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2019-09-05",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2018-11-07",
+   "outcome": "win",
+   "r_multiple": 1.883
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2023-04-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2016-11-17",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2021-07-16",
+   "outcome": "win",
+   "r_multiple": 1.49
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2021-09-15",
+   "outcome": "win",
+   "r_multiple": 1.515
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2021-07-08",
+   "outcome": "win",
+   "r_multiple": 1.668
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2021-10-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2021-07-16",
+   "outcome": "win",
+   "r_multiple": 1.832
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2021-08-25",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2021-09-15",
+   "outcome": "win",
+   "r_multiple": 1.278
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2022-01-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2022-01-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2020-04-23",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2019-04-02",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2020-05-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2020-10-13",
+   "outcome": "win",
+   "r_multiple": 1.416
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2019-04-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2020-05-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2019-04-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2020-05-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2020-10-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2020-10-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2020-10-13",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2019-04-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2020-05-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2020-10-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2020-10-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2020-10-13",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2020-05-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2020-10-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2020-10-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2020-10-13",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2020-05-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2020-10-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2020-10-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2020-10-13",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2020-05-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2020-10-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2020-10-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2020-10-13",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2020-05-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2020-10-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2020-10-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2020-10-13",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "GLW",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2012-03-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GLW",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2012-03-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2014-09-19",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2020-04-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2023-09-29",
+   "outcome": "win",
+   "r_multiple": 3.518
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2020-05-01",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GOOGL",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2023-01-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GS",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2011-10-19",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "HIMS",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2021-11-10",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2011-04-28",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2019-05-22",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2011-05-11",
+   "outcome": "win",
+   "r_multiple": 4.219
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2019-05-29",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2019-09-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2019-09-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2019-09-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2013-12-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2015-12-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2013-11-22",
+   "outcome": "win",
+   "r_multiple": 1.28
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2015-12-03",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2013-11-22",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2020-06-22",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2020-06-22",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2020-06-22",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2020-06-22",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2020-06-22",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2020-06-22",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2020-06-22",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2023-06-16",
+   "outcome": "win",
+   "r_multiple": 1.745
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2020-12-18",
+   "outcome": "win",
+   "r_multiple": 1.678
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2022-10-31",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2023-11-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2022-12-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRNA",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2023-07-24",
+   "outcome": "win",
+   "r_multiple": 5.573
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2023-05-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2012-07-31",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2012-11-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2022-11-16",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2023-05-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2011-04-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2011-04-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2011-04-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2011-05-02",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2013-05-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2020-06-19",
+   "outcome": "win",
+   "r_multiple": 1.38
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2018-05-10",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2020-06-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2018-03-13",
+   "outcome": "win",
+   "r_multiple": 1.474
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2018-05-10",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2020-06-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2018-05-10",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2020-06-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2020-06-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2016-09-13",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2020-06-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2020-06-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2020-06-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2020-06-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2016-04-04",
+   "outcome": "win",
+   "r_multiple": 1.735
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2011-11-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2011-11-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2015-09-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2011-12-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2019-09-18",
+   "outcome": "win",
+   "r_multiple": 2.161
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2019-09-18",
+   "outcome": "win",
+   "r_multiple": 2.161
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2017-06-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2017-06-15",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2017-06-15",
+   "outcome": "win",
+   "r_multiple": 1.591
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2017-06-15",
+   "outcome": "win",
+   "r_multiple": 1.591
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2017-06-15",
+   "outcome": "win",
+   "r_multiple": 1.588
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2012-11-29",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2012-01-11",
+   "outcome": "win",
+   "r_multiple": 1.324
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2012-01-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2012-11-29",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2019-01-22",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2012-01-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2012-01-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2020-06-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2020-06-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2020-06-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2020-06-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PANW",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2013-11-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "PYPL",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2023-06-23",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "QBTS",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2023-01-17",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "QBTS",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2023-11-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2022-10-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2015-04-13",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2022-10-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2015-04-13",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2015-04-02",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2015-04-02",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2015-04-13",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2015-04-13",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2015-04-13",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2015-04-13",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2015-04-13",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "RKLB",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2022-12-14",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2022-03-31",
+   "outcome": "win",
+   "r_multiple": 3.985
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2018-07-30",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2020-07-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2017-02-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2020-07-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2017-02-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2020-07-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2020-07-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SHOP",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2022-06-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SHOP",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2022-06-27",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "SNOW",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2022-12-02",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "SNOW",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2022-06-28",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "SNOW",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2023-01-19",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNOW",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2022-12-13",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SOFI",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2022-05-05",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "SOFI",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2022-05-31",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "STX",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2015-07-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "STX",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2019-06-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2019-06-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2019-06-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2016-06-21",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2016-09-27",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2018-10-02",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2016-10-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2016-11-29",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2018-10-02",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2016-10-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2016-11-28",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2018-10-02",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "UBER",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2020-08-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UBER",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2022-07-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UBER",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2020-08-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UBER",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2022-12-13",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UBER",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2020-08-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UBER",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2020-08-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UBER",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2020-08-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2023-06-23",
+   "outcome": "win",
+   "r_multiple": 1.317
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2023-06-23",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2019-09-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2019-01-22",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2022-09-12",
+   "outcome": "win",
+   "r_multiple": 6.999
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2011-11-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2015-08-19",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2016-03-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2022-03-30",
+   "outcome": "win",
+   "r_multiple": 1.262
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2020-07-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2015-11-19",
+   "outcome": "win",
+   "r_multiple": 1.309
+  }
+ ],
+ "elapsed_s": 275.1
+}

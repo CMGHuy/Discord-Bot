@@ -1,0 +1,8940 @@
+{
+ "kind": "repro",
+ "direction": "bullish",
+ "window": [
+  "2010-01-01",
+  "2023-12-31"
+ ],
+ "universe_n": 74,
+ "rows": [
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2012-09-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-08-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-01-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-02-01",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-02-23",
+   "outcome": "win",
+   "r_multiple": 1.459
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2012-07-27",
+   "outcome": "win",
+   "r_multiple": 4.78
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-01-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-12-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-05-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-01-02",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-08-01",
+   "outcome": "win",
+   "r_multiple": 2.361
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2020-11-05",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2023-03-16",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2023-03-16",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2023-05-05",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2023-03-16",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2023-05-05",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2022-04-13",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2023-03-16",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2023-05-05",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2022-04-13",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2011-05-17",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2013-02-26",
+   "outcome": "win",
+   "r_multiple": 2.85
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-10-08",
+   "outcome": "win",
+   "r_multiple": 3.127
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2016-04-29",
+   "outcome": "win",
+   "r_multiple": 1.535
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-09-06",
+   "outcome": "win",
+   "r_multiple": 1.638
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-12-02",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2012-09-05",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-09-15",
+   "outcome": "win",
+   "r_multiple": 3.501
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-06-29",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-03-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-05-15",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-08-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2012-09-05",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2012-10-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2019-06-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-05-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-05-14",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2020-12-16",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-02-02",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-05-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-05-14",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2012-09-05",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-05-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-05-14",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2016-03-11",
+   "outcome": "win",
+   "r_multiple": 4.07
+  },
+  {
+   "ticker": "ADBE",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2016-03-11",
+   "outcome": "win",
+   "r_multiple": 4.07
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-12-16",
+   "outcome": "win",
+   "r_multiple": 1.539
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-09-22",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-06-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-01-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-07-09",
+   "outcome": "win",
+   "r_multiple": 1.346
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-10-03",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-08-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-01-11",
+   "outcome": "win",
+   "r_multiple": 1.47
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-02-23",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-07-21",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2015-03-13",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2019-08-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2020-04-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2020-05-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2020-06-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2020-04-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMAT",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2020-05-18",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-03-11",
+   "outcome": "win",
+   "r_multiple": 1.81
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-05-09",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-05-14",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-09-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-07-19",
+   "outcome": "win",
+   "r_multiple": 6.346
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-01-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-04-28",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-01-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-09-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-07-19",
+   "outcome": "win",
+   "r_multiple": 6.329
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2011-05-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2017-07-05",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2020-04-06",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-04-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2019-03-11",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2020-04-06",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-04-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2019-03-11",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2019-05-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2019-05-14",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMD",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2020-04-06",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2011-05-17",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2011-09-23",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-01-14",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-01-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2016-09-12",
+   "outcome": "win",
+   "r_multiple": 3.383
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-07-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2010-11-18",
+   "outcome": "win",
+   "r_multiple": 4.079
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-01-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-10-05",
+   "outcome": "win",
+   "r_multiple": 1.654
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2012-06-04",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-02-13",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-06-30",
+   "outcome": "win",
+   "r_multiple": 6.428
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-10-24",
+   "outcome": "win",
+   "r_multiple": 5.381
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-05-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-01-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-12-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-12-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-08-03",
+   "outcome": "win",
+   "r_multiple": 1.28
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2011-10-05",
+   "outcome": "win",
+   "r_multiple": 1.654
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2015-09-08",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2015-10-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-01-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-01-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-05-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-05-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-09-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-12-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2017-10-24",
+   "outcome": "win",
+   "r_multiple": 5.268
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-05-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-05-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-09-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-11-03",
+   "outcome": "win",
+   "r_multiple": 1.754
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2011-10-04",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2016-03-23",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2017-01-05",
+   "outcome": "win",
+   "r_multiple": 1.543
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-05-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-05-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-11-03",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-12-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2011-10-04",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2021-05-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2021-05-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2021-12-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2016-03-23",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2021-12-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2021-12-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2012-05-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2012-06-04",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2021-12-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2012-05-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AMZN",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2012-06-04",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ASML",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2012-06-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ASML",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2012-12-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ASML",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2013-01-10",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ASML",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-10-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ASML",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-09-21",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ASML",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-02-14",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ASML",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2012-06-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ASML",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-03-05",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ASML",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-09-03",
+   "outcome": "win",
+   "r_multiple": 3.478
+  },
+  {
+   "ticker": "ASML",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-10-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ASML",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-05-13",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ASML",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-11-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ASML",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2012-06-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ASML",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-12-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ASML",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2014-01-10",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ASML",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2014-01-22",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-01-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-09-19",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-06-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-11-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-06-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-11-23",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-02-13",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-03-13",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-03-10",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-06-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-07-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2012-07-18",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-11-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-10-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-06-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-07-08",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-03-13",
+   "outcome": "win",
+   "r_multiple": 5.606
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-05-14",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-07-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-12-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2016-07-08",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-12-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2019-01-07",
+   "outcome": "win",
+   "r_multiple": 3.811
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2023-12-07",
+   "outcome": "win",
+   "r_multiple": 4.781
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2023-12-07",
+   "outcome": "win",
+   "r_multiple": 4.781
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2022-03-15",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2015-11-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2018-03-09",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2011-10-05",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "AVGO",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2018-03-09",
+   "outcome": "win",
+   "r_multiple": 1.889
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-09-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-09-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-12-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-03-25",
+   "outcome": "win",
+   "r_multiple": 1.594
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-04-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-02-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-01-05",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-05-02",
+   "outcome": "win",
+   "r_multiple": 1.661
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-02-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2019-08-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2019-09-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2011-05-25",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2019-09-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2020-05-07",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2020-05-07",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2012-06-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2020-05-07",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2012-06-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2012-06-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2012-06-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "AXON",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2020-05-07",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "BA",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2012-12-31",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "BA",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-03-25",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "BA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-05-25",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "BA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-01-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "BA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-04-17",
+   "outcome": "win",
+   "r_multiple": 1.557
+  },
+  {
+   "ticker": "BA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-05-19",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "BA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-10-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "BA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-04-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "BA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-07-20",
+   "outcome": "win",
+   "r_multiple": 2.387
+  },
+  {
+   "ticker": "BA",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2018-10-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "BA",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-06-30",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "BA",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2023-08-25",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "BA",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2018-10-25",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "BA",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-06-21",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "BA",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2023-08-25",
+   "outcome": "win",
+   "r_multiple": 1.441
+  },
+  {
+   "ticker": "BA",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2018-10-12",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2010-12-20",
+   "outcome": "win",
+   "r_multiple": 1.3
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2011-05-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-07-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-09-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-08-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-05-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-01-14",
+   "outcome": "win",
+   "r_multiple": 1.421
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-06-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-01-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2015-09-04",
+   "outcome": "win",
+   "r_multiple": 1.284
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2015-09-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2015-09-04",
+   "outcome": "win",
+   "r_multiple": 1.284
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2015-09-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2014-06-16",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2014-07-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2015-09-04",
+   "outcome": "win",
+   "r_multiple": 1.818
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2014-06-16",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2015-09-04",
+   "outcome": "win",
+   "r_multiple": 1.818
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2015-09-04",
+   "outcome": "win",
+   "r_multiple": 1.818
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2018-02-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2015-09-04",
+   "outcome": "win",
+   "r_multiple": 1.818
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2015-09-04",
+   "outcome": "win",
+   "r_multiple": 1.818
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2015-09-04",
+   "outcome": "win",
+   "r_multiple": 1.818
+  },
+  {
+   "ticker": "CEG",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-09-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CEG",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-12-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CEG",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-10-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CEG",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2022-12-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CRM",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2013-08-16",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CRM",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-04-26",
+   "outcome": "win",
+   "r_multiple": 1.348
+  },
+  {
+   "ticker": "CRM",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-06-28",
+   "outcome": "win",
+   "r_multiple": 1.336
+  },
+  {
+   "ticker": "CRM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-07-22",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CRM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-11-25",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CRM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-03-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CRM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-03-13",
+   "outcome": "win",
+   "r_multiple": 1.525
+  },
+  {
+   "ticker": "CRM",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2011-06-17",
+   "outcome": "win",
+   "r_multiple": 1.758
+  },
+  {
+   "ticker": "CRM",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2014-09-29",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "CRM",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2014-11-25",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CRM",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2011-05-19",
+   "outcome": "win",
+   "r_multiple": 1.989
+  },
+  {
+   "ticker": "CRM",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2011-06-17",
+   "outcome": "win",
+   "r_multiple": 1.758
+  },
+  {
+   "ticker": "CRM",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2014-11-25",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CRM",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2019-01-04",
+   "outcome": "win",
+   "r_multiple": 4.128
+  },
+  {
+   "ticker": "CRM",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2014-09-29",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "CRM",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2019-01-04",
+   "outcome": "win",
+   "r_multiple": 4.128
+  },
+  {
+   "ticker": "CRWD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-11-04",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "CRWD",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-06-07",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2013-02-26",
+   "outcome": "win",
+   "r_multiple": 2.353
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2016-06-28",
+   "outcome": "win",
+   "r_multiple": 2.335
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2010-12-01",
+   "outcome": "win",
+   "r_multiple": 3.594
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2012-02-14",
+   "outcome": "win",
+   "r_multiple": 1.761
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-10-31",
+   "outcome": "win",
+   "r_multiple": 2.299
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-01-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-04-14",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-06-01",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2018-01-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2012-12-31",
+   "outcome": "win",
+   "r_multiple": 3.241
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2013-11-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2023-04-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2012-12-31",
+   "outcome": "win",
+   "r_multiple": 3.241
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2013-11-15",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "CVX",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2012-12-31",
+   "outcome": "win",
+   "r_multiple": 3.241
+  },
+  {
+   "ticker": "DDOG",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-01-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "DDOG",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2022-02-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "DDOG",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2020-12-10",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "DDOG",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2020-12-14",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "DDOG",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2020-12-10",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "DDOG",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-01-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "DELL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-06-02",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "DELL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-10-05",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "DELL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-08-30",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "DELL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-11-22",
+   "outcome": "win",
+   "r_multiple": 1.265
+  },
+  {
+   "ticker": "DELL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-08-31",
+   "outcome": "win",
+   "r_multiple": 5.76
+  },
+  {
+   "ticker": "DOCU",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-09-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "DOCU",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-01-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "DOCU",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2020-12-03",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "DOCU",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-02-23",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-10-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2017-06-30",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2017-10-13",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-08-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-02-27",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-05-23",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-10-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-06-30",
+   "outcome": "win",
+   "r_multiple": 4.511
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-05-18",
+   "outcome": "win",
+   "r_multiple": 1.408
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-01-11",
+   "outcome": "win",
+   "r_multiple": 4.373
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-09-13",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2011-08-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2015-06-30",
+   "outcome": "win",
+   "r_multiple": 2.9
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2018-01-11",
+   "outcome": "win",
+   "r_multiple": 4.373
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2018-01-11",
+   "outcome": "win",
+   "r_multiple": 4.373
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2023-05-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2011-08-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2023-05-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2023-05-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2023-07-10",
+   "outcome": "win",
+   "r_multiple": 1.934
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2023-05-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2023-07-10",
+   "outcome": "win",
+   "r_multiple": 1.934
+  },
+  {
+   "ticker": "EBAY",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2023-07-10",
+   "outcome": "win",
+   "r_multiple": 1.934
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2011-06-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2011-12-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-09-16",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2016-09-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2017-05-01",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-05-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-05-28",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-05-25",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2010-12-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-01-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-04-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-10-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-04-20",
+   "outcome": "win",
+   "r_multiple": 4.808
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-06-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-05-07",
+   "outcome": "win",
+   "r_multiple": 5.333
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-03-19",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-04-25",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-05-05",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-05-25",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-08-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-06-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2019-03-11",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "FTNT",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2013-03-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2011-03-30",
+   "outcome": "win",
+   "r_multiple": 2.491
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2012-03-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-09-08",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-12-16",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2023-09-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2023-09-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2012-03-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2021-01-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2021-12-16",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2022-01-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2022-01-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2013-11-13",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-09-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2017-06-08",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-09-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-08-20",
+   "outcome": "timeout",
+   "r_multiple": 1.09
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-04-03",
+   "outcome": "win",
+   "r_multiple": 1.468
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-10-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-07-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-07-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-11-16",
+   "outcome": "win",
+   "r_multiple": 1.375
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-12-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-11-07",
+   "outcome": "win",
+   "r_multiple": 4.401
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-10-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-06-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-06-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-11-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-12-16",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2014-10-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-10-30",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2022-10-17",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2017-10-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2019-12-05",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2015-12-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2015-12-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2022-10-17",
+   "outcome": "win",
+   "r_multiple": 2.47
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2012-10-24",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GD",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2015-12-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GLW",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2011-03-02",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GLW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-04-01",
+   "outcome": "win",
+   "r_multiple": 1.634
+  },
+  {
+   "ticker": "GLW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-12-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GLW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-07-25",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GLW",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2023-03-02",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GLW",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2013-10-17",
+   "outcome": "win",
+   "r_multiple": 6.636
+  },
+  {
+   "ticker": "GLW",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2017-10-18",
+   "outcome": "win",
+   "r_multiple": 2.5
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-01-22",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-02-03",
+   "outcome": "win",
+   "r_multiple": 4.867
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-05-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-08-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-05-05",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-07-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2013-04-10",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2018-01-22",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-07-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GM",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2023-07-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GOOGL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-10-23",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GOOGL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-02-23",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GOOGL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-06-28",
+   "outcome": "win",
+   "r_multiple": 1.904
+  },
+  {
+   "ticker": "GOOGL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-08-13",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GOOGL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-03-29",
+   "outcome": "win",
+   "r_multiple": 4.393
+  },
+  {
+   "ticker": "GOOGL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-03-29",
+   "outcome": "win",
+   "r_multiple": 2.751
+  },
+  {
+   "ticker": "GOOGL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-10-04",
+   "outcome": "win",
+   "r_multiple": 2.525
+  },
+  {
+   "ticker": "GOOGL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-09-22",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GOOGL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-12-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GOOGL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-10-02",
+   "outcome": "win",
+   "r_multiple": 1.55
+  },
+  {
+   "ticker": "GOOGL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-12-05",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "GOOGL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-12-02",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GOOGL",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2017-12-05",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "GOOGL",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2020-10-29",
+   "outcome": "win",
+   "r_multiple": 3.632
+  },
+  {
+   "ticker": "GOOGL",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2018-05-30",
+   "outcome": "win",
+   "r_multiple": 2.331
+  },
+  {
+   "ticker": "GS",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2013-12-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GS",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-01-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GS",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-07-11",
+   "outcome": "win",
+   "r_multiple": 1.748
+  },
+  {
+   "ticker": "GS",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-01-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GS",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-11-15",
+   "outcome": "win",
+   "r_multiple": 3.08
+  },
+  {
+   "ticker": "GS",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-11-23",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GS",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-02-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GS",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2013-11-08",
+   "outcome": "win",
+   "r_multiple": 1.744
+  },
+  {
+   "ticker": "GS",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2023-02-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GS",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2018-04-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "GS",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2017-06-28",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "GS",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2014-07-11",
+   "outcome": "win",
+   "r_multiple": 2.024
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2012-11-12",
+   "outcome": "win",
+   "r_multiple": 1.254
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-11-19",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-12-17",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-07-21",
+   "outcome": "timeout",
+   "r_multiple": 1.642
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2010-11-19",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2010-12-01",
+   "outcome": "win",
+   "r_multiple": 3.328
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-04-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2012-05-10",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2012-12-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-01-10",
+   "outcome": "win",
+   "r_multiple": 1.618
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-06-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-06-13",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-03-14",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-03-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-06-16",
+   "outcome": "win",
+   "r_multiple": 1.278
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-11-16",
+   "outcome": "win",
+   "r_multiple": 3.663
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-05-24",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-08-19",
+   "outcome": "win",
+   "r_multiple": 2.02
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-12-20",
+   "outcome": "win",
+   "r_multiple": 1.724
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-01-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2013-10-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2014-03-14",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2014-03-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2014-03-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2014-06-16",
+   "outcome": "win",
+   "r_multiple": 1.765
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2023-04-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2018-05-18",
+   "outcome": "win",
+   "r_multiple": 1.817
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2023-04-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HD",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2023-04-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2013-07-22",
+   "outcome": "win",
+   "r_multiple": 1.96
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2013-08-16",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-01-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-07-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-12-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-05-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-08-16",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-11-27",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-05-30",
+   "outcome": "win",
+   "r_multiple": 1.711
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-02-01",
+   "outcome": "win",
+   "r_multiple": 7.373
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-05-13",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2022-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-08-16",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-08-16",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "HPQ",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2018-05-30",
+   "outcome": "win",
+   "r_multiple": 1.671
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-09-05",
+   "outcome": "timeout",
+   "r_multiple": -0.573
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-04-14",
+   "outcome": "win",
+   "r_multiple": 3.31
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2012-04-25",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-03-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-06-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-01-04",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-08-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2023-10-26",
+   "outcome": "win",
+   "r_multiple": 4.301
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2016-11-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2018-03-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2019-10-10",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2019-10-10",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-07-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-09-10",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2017-12-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-04-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-04-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-01-06",
+   "outcome": "win",
+   "r_multiple": 1.421
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-06-14",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-03-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-03-16",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-10-02",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-10-31",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-12-07",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-04-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-04-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-05-19",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-05-31",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-12-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-12-28",
+   "outcome": "win",
+   "r_multiple": 2.799
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2018-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2015-04-23",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2018-03-02",
+   "outcome": "win",
+   "r_multiple": 1.324
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2018-12-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-07-15",
+   "outcome": "win",
+   "r_multiple": 1.736
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2012-08-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2019-04-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ILMN",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2021-03-22",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2010-12-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2017-05-01",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-01-08",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-02-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-01-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-12-04",
+   "outcome": "win",
+   "r_multiple": 1.47
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-01-07",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-01-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-02-02",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-06-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-06-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-01-08",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2013-11-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-06-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2023-10-27",
+   "outcome": "win",
+   "r_multiple": 5.221
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2017-05-01",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2017-06-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2011-10-05",
+   "outcome": "win",
+   "r_multiple": 2.949
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2014-03-18",
+   "outcome": "win",
+   "r_multiple": 1.299
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2017-05-01",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2011-10-05",
+   "outcome": "win",
+   "r_multiple": 2.949
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2014-03-18",
+   "outcome": "win",
+   "r_multiple": 1.299
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2016-06-29",
+   "outcome": "win",
+   "r_multiple": 2.594
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2013-10-10",
+   "outcome": "win",
+   "r_multiple": 1.734
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2019-10-24",
+   "outcome": "win",
+   "r_multiple": 3.122
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2011-10-04",
+   "outcome": "win",
+   "r_multiple": 3.962
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2019-10-24",
+   "outcome": "win",
+   "r_multiple": 3.122
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2011-10-04",
+   "outcome": "win",
+   "r_multiple": 3.962
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2019-10-24",
+   "outcome": "win",
+   "r_multiple": 3.122
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2011-10-04",
+   "outcome": "win",
+   "r_multiple": 3.962
+  },
+  {
+   "ticker": "INTC",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2019-10-24",
+   "outcome": "win",
+   "r_multiple": 3.122
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2012-02-14",
+   "outcome": "win",
+   "r_multiple": 1.563
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-10-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2017-11-24",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-01-02",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-04-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2012-03-07",
+   "outcome": "win",
+   "r_multiple": 2.03
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-03-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-04-16",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-08-28",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-06-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-12-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-06-28",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-08-19",
+   "outcome": "win",
+   "r_multiple": 1.632
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-11-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-10-04",
+   "outcome": "win",
+   "r_multiple": 1.779
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2012-03-07",
+   "outcome": "win",
+   "r_multiple": 1.459
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2012-10-31",
+   "outcome": "win",
+   "r_multiple": 1.591
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2015-06-25",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2020-09-22",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2023-05-08",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2013-04-16",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2019-11-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2019-11-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "INTU",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2023-04-27",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "IREN",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-08-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "IREN",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2023-05-05",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "IREN",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2023-05-05",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "IREN",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2023-05-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "IREN",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2023-08-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "IREN",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2023-05-05",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "IREN",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2023-05-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ISRG",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2011-12-15",
+   "outcome": "win",
+   "r_multiple": 2.887
+  },
+  {
+   "ticker": "ISRG",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-03-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ISRG",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-09-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ISRG",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-05-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ISRG",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-05-18",
+   "outcome": "win",
+   "r_multiple": 1.977
+  },
+  {
+   "ticker": "ISRG",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-08-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ISRG",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-06-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ISRG",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-11-24",
+   "outcome": "win",
+   "r_multiple": 1.999
+  },
+  {
+   "ticker": "ISRG",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-09-13",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ISRG",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2012-11-16",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ISRG",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2012-11-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ISRG",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2015-09-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-04-11",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-01-25",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2022-06-30",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2012-10-15",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2012-11-20",
+   "outcome": "timeout",
+   "r_multiple": 1.289
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-10-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-04-15",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-09-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-05-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-06-30",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2012-11-20",
+   "outcome": "win",
+   "r_multiple": 3.962
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2014-10-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2019-04-15",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2022-11-15",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2019-04-15",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2022-11-14",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2019-04-15",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2022-11-14",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2019-04-15",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2022-11-14",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2019-04-15",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "JNJ",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2022-11-14",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "JPM",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-09-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "JPM",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-01-23",
+   "outcome": "win",
+   "r_multiple": 1.888
+  },
+  {
+   "ticker": "JPM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-08-13",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "JPM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-01-20",
+   "outcome": "win",
+   "r_multiple": 3.781
+  },
+  {
+   "ticker": "JPM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-10-14",
+   "outcome": "win",
+   "r_multiple": 2.049
+  },
+  {
+   "ticker": "JPM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-01-23",
+   "outcome": "win",
+   "r_multiple": 1.888
+  },
+  {
+   "ticker": "JPM",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2013-06-25",
+   "outcome": "win",
+   "r_multiple": 2.429
+  },
+  {
+   "ticker": "JPM",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2023-08-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "JPM",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2013-10-25",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-10-02",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-12-17",
+   "outcome": "win",
+   "r_multiple": 1.516
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-10-24",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-07-26",
+   "outcome": "win",
+   "r_multiple": 1.765
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-11-13",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-12-14",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-05-18",
+   "outcome": "win",
+   "r_multiple": 1.676
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-01-19",
+   "outcome": "win",
+   "r_multiple": 1.749
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-06-30",
+   "outcome": "win",
+   "r_multiple": 1.314
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-12-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-03-09",
+   "outcome": "win",
+   "r_multiple": 1.74
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-05-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2014-06-20",
+   "outcome": "win",
+   "r_multiple": 2.064
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2014-07-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2019-10-28",
+   "outcome": "win",
+   "r_multiple": 1.674
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-03-09",
+   "outcome": "win",
+   "r_multiple": 1.446
+  },
+  {
+   "ticker": "META",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2021-03-09",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MRNA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-07-27",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MRNA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-10-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRNA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-03-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRNA",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2020-10-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-02-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-07-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2022-01-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-03-14",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-07-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-05-22",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-11-19",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-07-30",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-02-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-08-19",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-05-18",
+   "outcome": "win",
+   "r_multiple": 2.48
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2019-08-13",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2019-11-19",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2020-01-07",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2019-10-24",
+   "outcome": "win",
+   "r_multiple": 1.251
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2019-11-01",
+   "outcome": "win",
+   "r_multiple": 1.647
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2020-01-07",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2018-06-01",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2018-06-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2022-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2022-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MRVL",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2022-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2011-05-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2012-07-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-08-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-07-29",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-12-21",
+   "outcome": "win",
+   "r_multiple": 1.49
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-04-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-05-03",
+   "outcome": "win",
+   "r_multiple": 1.696
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-07-31",
+   "outcome": "timeout",
+   "r_multiple": 0.566
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-09-10",
+   "outcome": "win",
+   "r_multiple": 1.295
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-03-08",
+   "outcome": "win",
+   "r_multiple": 2.702
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-07-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-10-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-05-14",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-05-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2012-07-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-12-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-05-08",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-12-18",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-01-05",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-06-28",
+   "outcome": "win",
+   "r_multiple": 2.715
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-07-31",
+   "outcome": "win",
+   "r_multiple": 1.991
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-10-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-06-05",
+   "outcome": "win",
+   "r_multiple": 3.239
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-10-04",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-09-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-11-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-11-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-05-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-07-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2015-06-16",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2020-09-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2020-12-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2023-10-23",
+   "outcome": "win",
+   "r_multiple": 1.9
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2011-05-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2011-08-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2019-02-04",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2011-06-08",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-09-05",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-06-08",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-10-17",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-09-02",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-05-04",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-12-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-07-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2014-09-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2015-05-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2015-05-28",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2015-09-02",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-03-19",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2015-05-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2015-06-05",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2015-08-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2015-09-02",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2015-09-02",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2017-05-04",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2021-08-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2017-05-04",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2021-07-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2021-08-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2017-05-04",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2021-07-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2021-08-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2021-07-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2021-08-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2021-07-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MSTR",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2021-08-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-04-26",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-09-03",
+   "outcome": "win",
+   "r_multiple": 6.442
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-10-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-12-02",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-04-25",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-12-04",
+   "outcome": "win",
+   "r_multiple": 1.691
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-03-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-09-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2014-09-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2019-11-25",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2023-08-14",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2020-06-03",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "MU",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2020-06-29",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2011-04-12",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2011-04-27",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2013-05-30",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2013-07-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2010-12-15",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-03-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-10-10",
+   "outcome": "win",
+   "r_multiple": 2.079
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-01-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-12-01",
+   "outcome": "win",
+   "r_multiple": 3.532
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-03-27",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-04-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-06-21",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-05-27",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2016-01-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-08-21",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-02-23",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2018-09-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2018-10-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2017-08-21",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-01-13",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NFLX",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-07-19",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2013-08-19",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-03-17",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-06-28",
+   "outcome": "win",
+   "r_multiple": 1.638
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-01-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-08-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2012-04-25",
+   "outcome": "win",
+   "r_multiple": 1.506
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-06-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-09-03",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-12-17",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-11-18",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-03-23",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-02-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-03-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-10-30",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-01-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-06-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2011-02-17",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-03-23",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2016-03-11",
+   "outcome": "win",
+   "r_multiple": 2.049
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2011-06-14",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2016-03-11",
+   "outcome": "win",
+   "r_multiple": 2.049
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2011-06-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2011-06-14",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2016-03-11",
+   "outcome": "win",
+   "r_multiple": 2.049
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2011-06-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NKE",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2011-06-14",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-07-22",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-07-14",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-09-09",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-11-12",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-06-07",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-08-14",
+   "outcome": "win",
+   "r_multiple": 6.086
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-09-17",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-11-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-11-30",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-09-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-06-05",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-09-09",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-01-05",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-01-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-02-23",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-10-13",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-07-28",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2014-11-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-02-23",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NOW",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2014-09-16",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2011-05-06",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2013-12-10",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-05-16",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-11-16",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-10-10",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-12-10",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-01-14",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-05-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-05-19",
+   "outcome": "win",
+   "r_multiple": 2.068
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-05-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-05-14",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2015-06-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-01-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-03-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2011-05-06",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2011-05-06",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2011-05-06",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "NVDA",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2011-05-06",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-09-09",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-10-22",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-08-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-02-24",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-02-06",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-03-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-03-24",
+   "outcome": "win",
+   "r_multiple": 1.823
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-04-28",
+   "outcome": "win",
+   "r_multiple": 2.645
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-06-10",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-06-16",
+   "outcome": "win",
+   "r_multiple": 4.328
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-08-16",
+   "outcome": "win",
+   "r_multiple": 2.132
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-01-25",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-09-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-08-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-01-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-11-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2013-06-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2014-09-09",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2015-06-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2015-06-10",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2017-12-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-01-25",
+   "outcome": "win",
+   "r_multiple": 1.401
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2013-06-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2023-12-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "ORCL",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2013-06-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PANW",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-05-22",
+   "outcome": "win",
+   "r_multiple": 6.044
+  },
+  {
+   "ticker": "PANW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-05-07",
+   "outcome": "win",
+   "r_multiple": 6.475
+  },
+  {
+   "ticker": "PANW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-07-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PANW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-02-09",
+   "outcome": "win",
+   "r_multiple": 6.161
+  },
+  {
+   "ticker": "PANW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-06-08",
+   "outcome": "win",
+   "r_multiple": 1.731
+  },
+  {
+   "ticker": "PANW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-11-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PANW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-08-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PANW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-05-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PANW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-12-17",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PANW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-01-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "PANW",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-05-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PANW",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2019-08-08",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "PANW",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2019-11-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2012-01-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-05-27",
+   "outcome": "timeout",
+   "r_multiple": 1.157
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-05-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2016-04-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2017-06-09",
+   "outcome": "timeout",
+   "r_multiple": -0.328
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-09-17",
+   "outcome": "timeout",
+   "r_multiple": 0.973
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-12-19",
+   "outcome": "timeout",
+   "r_multiple": -0.711
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-06-04",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-12-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-05-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-08-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-11-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-08-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-08-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-09-05",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-08-27",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-05-03",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-09-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-09-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-12-16",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-09-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2020-09-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2022-05-03",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2015-05-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2015-06-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2022-05-03",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2013-01-02",
+   "outcome": "win",
+   "r_multiple": 1.98
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2015-06-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2015-07-28",
+   "outcome": "win",
+   "r_multiple": 1.408
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2015-06-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PEP",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2017-01-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2013-03-01",
+   "outcome": "timeout",
+   "r_multiple": 1.314
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-12-13",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2022-07-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2012-04-16",
+   "outcome": "win",
+   "r_multiple": 1.555
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-03-14",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-02-03",
+   "outcome": "win",
+   "r_multiple": 3.282
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-10-12",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-12-13",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2013-09-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2014-03-14",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2022-04-06",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2022-04-06",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2018-05-29",
+   "outcome": "win",
+   "r_multiple": 7.121
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2018-05-29",
+   "outcome": "win",
+   "r_multiple": 7.121
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2022-07-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2023-01-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PLTR",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-10-23",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "PYPL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-09-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PYPL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-12-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PYPL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-07-22",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PYPL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-08-12",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "PYPL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-04-23",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "PYPL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-08-22",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PYPL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-06-04",
+   "outcome": "win",
+   "r_multiple": 4.048
+  },
+  {
+   "ticker": "PYPL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-09-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "PYPL",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2018-12-10",
+   "outcome": "win",
+   "r_multiple": 1.584
+  },
+  {
+   "ticker": "PYPL",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2019-01-04",
+   "outcome": "win",
+   "r_multiple": 1.355
+  },
+  {
+   "ticker": "PYPL",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2018-12-10",
+   "outcome": "win",
+   "r_multiple": 1.584
+  },
+  {
+   "ticker": "PYPL",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2018-12-10",
+   "outcome": "win",
+   "r_multiple": 1.584
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2013-02-14",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-07-28",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-12-14",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-08-23",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2012-11-16",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2019-07-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2019-10-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-04-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-04-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2012-08-31",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2012-11-16",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2021-08-23",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2020-05-14",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "QCOM",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2020-05-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "RKLB",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-11-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "RKLB",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-11-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "RKLB",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-11-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "RKLB",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-11-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "RKLB",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-11-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "RKLB",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-11-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "RKLB",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2021-11-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "RKLB",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2021-11-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-07-30",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2016-03-14",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-03-05",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-03-22",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-08-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-08-28",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-01-07",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-04-02",
+   "outcome": "win",
+   "r_multiple": 2.28
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-08-11",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-08-16",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-02-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2018-05-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2018-05-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2021-11-23",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2023-07-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2023-08-10",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2021-11-23",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2023-07-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2023-08-10",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SBUX",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2018-05-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SHOP",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-07-31",
+   "outcome": "win",
+   "r_multiple": 1.825
+  },
+  {
+   "ticker": "SHOP",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-07-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SHOP",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2018-01-02",
+   "outcome": "win",
+   "r_multiple": 3.839
+  },
+  {
+   "ticker": "SHOP",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2018-11-26",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "SHOP",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2018-11-26",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "SHOP",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2018-11-26",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "SHOP",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2018-11-26",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "SHOP",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2018-11-26",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "SNOW",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-06-27",
+   "outcome": "win",
+   "r_multiple": 1.506
+  },
+  {
+   "ticker": "SNOW",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-05-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNOW",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2023-05-30",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "SNOW",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2023-10-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "SNOW",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2023-05-30",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2013-07-30",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-02-02",
+   "outcome": "win",
+   "r_multiple": 3.351
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-03-30",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-05-01",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2017-08-11",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-07-14",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2011-03-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2012-07-25",
+   "outcome": "win",
+   "r_multiple": 1.73
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-11-25",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-08-12",
+   "outcome": "win",
+   "r_multiple": 3.645
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-11-19",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-04-28",
+   "outcome": "win",
+   "r_multiple": 5.243
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-10-23",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2013-06-27",
+   "outcome": "win",
+   "r_multiple": 1.565
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2019-10-10",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2019-10-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2019-11-25",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2020-09-22",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2020-11-02",
+   "outcome": "win",
+   "r_multiple": 1.426
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2023-10-31",
+   "outcome": "win",
+   "r_multiple": 4.521
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2011-05-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2014-10-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2014-10-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2022-12-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2014-07-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2014-10-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2022-12-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2014-07-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2018-04-26",
+   "outcome": "win",
+   "r_multiple": 1.789
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2022-12-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2014-07-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2018-04-26",
+   "outcome": "win",
+   "r_multiple": 1.659
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2022-12-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2022-12-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2022-12-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "STX",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2017-01-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "STX",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-04-27",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "STX",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-12-04",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "STX",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-01-25",
+   "outcome": "win",
+   "r_multiple": 5.753
+  },
+  {
+   "ticker": "STX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-04-29",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "STX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-09-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "STX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-01-08",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "STX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-10-20",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "STX",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-07-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "STX",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2023-07-27",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-08-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-02-22",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-04-01",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-02-24",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-02-28",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2011-08-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-10-10",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-04-30",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-07-08",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-07-19",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2021-08-23",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2021-09-21",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2011-08-01",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2021-07-08",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "TSLA",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2021-08-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UBER",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-08-02",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UBER",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-03-10",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2011-07-12",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-01-07",
+   "outcome": "win",
+   "r_multiple": 1.697
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-02-04",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-06-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2016-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-01-15",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-09-01",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2010-11-19",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2010-12-10",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-10-02",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-02-02",
+   "outcome": "win",
+   "r_multiple": 3.194
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-04-28",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-09-11",
+   "outcome": "win",
+   "r_multiple": 1.615
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-06-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-09-01",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-11-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2014-01-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2022-11-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2014-01-21",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2022-05-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2011-10-19",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2012-11-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "UNH",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2019-02-12",
+   "outcome": "win",
+   "r_multiple": 1.36
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2012-11-15",
+   "outcome": "win",
+   "r_multiple": 2.597
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2013-12-04",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-09-02",
+   "outcome": "timeout",
+   "r_multiple": -0.198
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-01-07",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-03-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2016-05-16",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2016-08-02",
+   "outcome": "timeout",
+   "r_multiple": 2.105
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2016-09-27",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-08-26",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-02-14",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-06-30",
+   "outcome": "win",
+   "r_multiple": 2.084
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-01-07",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-05-16",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-09-27",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-05-14",
+   "outcome": "win",
+   "r_multiple": 1.438
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-02-23",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2014-06-06",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2014-06-04",
+   "outcome": "win",
+   "r_multiple": 1.624
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2019-01-30",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "V",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2014-06-30",
+   "outcome": "win",
+   "r_multiple": 1.7
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2013-03-08",
+   "outcome": "win",
+   "r_multiple": 1.679
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-04-08",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-01-08",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2017-03-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-01-15",
+   "outcome": "win",
+   "r_multiple": 1.457
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-04-19",
+   "outcome": "win",
+   "r_multiple": 7.724
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-06-25",
+   "outcome": "win",
+   "r_multiple": 3.5
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-11-01",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-01-29",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2014-09-10",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-02-24",
+   "outcome": "win",
+   "r_multiple": 2.066
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-10-03",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-10-24",
+   "outcome": "win",
+   "r_multiple": 1.445
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-08-28",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-09-13",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2013-10-10",
+   "outcome": "win",
+   "r_multiple": 9.045
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2014-04-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "WDC",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2018-03-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2014-01-07",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-11-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-08-21",
+   "outcome": "win",
+   "r_multiple": 1.899
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2013-12-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-01-15",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-02-04",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-08-17",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-10-04",
+   "outcome": "win",
+   "r_multiple": 1.447
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-11-01",
+   "outcome": "win",
+   "r_multiple": 2.083
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-12-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-05-09",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2019-12-26",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2013-02-22",
+   "outcome": "win",
+   "r_multiple": 3.599
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2013-10-10",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2019-02-07",
+   "outcome": "win",
+   "r_multiple": 1.377
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-11-22",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2019-01-31",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2022-01-19",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2018-09-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2018-09-18",
+   "outcome": "loss",
+   "r_multiple": -1.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2018-10-04",
+   "outcome": "scratch",
+   "r_multiple": 0.0
+  },
+  {
+   "ticker": "WMT",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2019-02-04",
+   "outcome": "win",
+   "r_multiple": 2.083
+  }
+ ],
+ "elapsed_s": 199.0
+}
