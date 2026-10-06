@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import math
 
+from swingbot import config
 from swingbot.core.edge.gates import gap_stats, stop_beyond_gap_noise
 from swingbot.core.market.indicators import adx, atr, ema, rsi
 from swingbot.core.market.structure import structure_features
+from swingbot.core.planning.builders import CLAMP_HEADROOM_PCT
+from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, planned_loss_pct
 from swingbot.core.scanning.regime import _HTF_EMA_PERIOD
 
 HTF_EMA_PERIOD = _HTF_EMA_PERIOD
@@ -17,6 +20,9 @@ FEATURE_KEYS = ("stop_atr", "stop_pct", "planned_rr", "swing_high_atr", "swing_l
                 "range_trend_10_50", "progress_atr_10", "absorption_bar", "absorption_count_10",
                 "pullback_vol_ratio", "pullback_depth_frac", "pullback_bars_ratio", "impulse_atr_per_bar",
                 "impulse_range_decay")
+PROVENANCE_KEYS = ("target_capped", "stop_clamped")
+CAP_TOLERANCE = 1e-6       # frozen: relative price tolerance for the synthetic-target identity
+CLAMP_TOLERANCE = 1e-6     # frozen: absolute tolerance, in percentage points, for the clamp identity
 
 
 def _number(value):
@@ -30,6 +36,38 @@ def _number(value):
 def _pctile(series):
     series = series.iloc[-250:].dropna()
     return _number((series <= series.iloc[-1]).mean() * 100) if len(series) >= 60 else None
+
+
+def _finite(*values) -> bool:
+    try:
+        return all(value is not None and math.isfinite(float(value)) for value in values)
+    except (TypeError, ValueError):
+        return False
+
+
+def _target_capped(entry: float, stop: float, tp1: float, max_rr) -> bool | None:
+    """tp1 sits exactly where select_structural_target puts its SYNTHETIC cap price."""
+    if not _finite(max_rr):
+        return None
+    synthetic = entry + (entry - stop) * float(max_rr)
+    return abs(tp1 - synthetic) <= CAP_TOLERANCE * max(1.0, abs(entry))
+
+
+def _stop_clamped(entry: float, stop: float) -> bool:
+    """stop sits exactly where _clamp_stop_to_hard_cap moves a wide confluence stop."""
+    landing = HARD_MAX_PLANNED_LOSS_PCT - CLAMP_HEADROOM_PCT
+    return bool(config.CLAMP_STOP_TO_HARD_CAP) and abs(planned_loss_pct(entry, stop) - landing) <= CLAMP_TOLERANCE
+
+
+def plan_provenance(entry, stop, tp1, max_rr) -> dict:
+    """Whether a plan's tp1 is the synthetic max_rr cap and its stop the v115
+    clamp, derived from the PLANNED entry. Both None without a usable entry,
+    stop and tp1 -- never guessed. Pure; reads no bars."""
+    if not _finite(entry, stop, tp1) or float(entry) <= 0 or float(entry) == float(stop):
+        return dict.fromkeys(PROVENANCE_KEYS)
+    entry, stop, tp1 = float(entry), float(stop), float(tp1)
+    return {"target_capped": _target_capped(entry, stop, tp1, max_rr),
+            "stop_clamped": _stop_clamped(entry, stop)}
 
 
 def entry_context(df, *, direction: str, horizon_key: str, stop: float, target: float, asof=None) -> dict:
