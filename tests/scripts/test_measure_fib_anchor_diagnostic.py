@@ -279,3 +279,29 @@ def test_collect_repro_runs_the_reference_arm_on_v103s_window_without_features()
     rows = module.collect_repro({"AAA": frame}, {}, "bullish", run_fn=run_fn)
     assert [row["entry_date"] for row in rows] == [date]       # the 2024 entry is outside 2010-2023
     assert "d6" not in rows[0] and seen
+
+
+@pytest.mark.parametrize("mirror,direction", SIDES)
+def test_fib_trade_features_ignore_bars_after_the_entry(mirror, direction):
+    module = _module()
+    full = path_frame(CLEAN + [20, 22, 5, 4], mirror=mirror)
+    short = full.iloc[:17]
+    date = str(short.index[16].date())
+    pick = lambda df, h, price: [(11.5, "Volume Profile HVN")]  # noqa: E731
+    assert (module.fib_trade_features(full, "2w", direction, date, candidates_fn=pick)
+            == module.fib_trade_features(short, "2w", direction, date, candidates_fn=pick))
+
+
+def test_collect_fib_drops_an_entry_in_the_2026_holdout():
+    module = _module()
+    frame, date = _entry(False)
+
+    def run_fn(ticker, df, strategy, horizon, **kwargs):
+        trades = [NS(entry_date="2026-01-05", direction="bullish", outcome="win", r_multiple=1.0),
+                  NS(entry_date=date, direction="bullish", outcome="win", r_multiple=1.5)]
+        return NS(trades=trades if horizon == "2w" else [])
+
+    rows = module.collect_fib({"AAA": frame}, {}, "bullish", module.DIAG_WINDOW, run_fn=run_fn,
+                              candidates_fn=lambda df, h, price: [])
+    assert [row["entry_date"] for row in rows] == [date]
+    assert not any(row["entry_date"].startswith("2026") for row in rows)
