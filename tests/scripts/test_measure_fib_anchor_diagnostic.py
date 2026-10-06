@@ -154,3 +154,128 @@ def test_reference_is_the_v103_arm():
     assert module.REFERENCE_UNIVERSE_N == 73
     assert module.REPRO_WINDOW == ("2010-01-01", "2023-12-31")
     assert module.DIAG_WINDOW == ("2015-01-01", "2025-12-31")
+
+
+from types import SimpleNamespace as NS  # noqa: E402
+
+from tests.market.fib_leg_fixtures import CLEAN, MIRROR, path_frame  # noqa: E402
+
+SIDES = [(False, "bullish"), (True, "bearish")]
+
+
+def _entry(mirror):
+    frame = path_frame(CLEAN[:17], mirror=mirror)
+    return frame, str(frame.index[16].date())
+
+
+@pytest.mark.parametrize("mirror,direction", SIDES)
+def test_fib_trade_features_on_the_clean_leg(mirror, direction):
+    module = _module()
+    frame, date = _entry(mirror)
+    zone_price = MIRROR - 11.5 if mirror else 11.5            # inside the 0.5-0.618 zone
+    label = "Anchored VWAP (swing low)" if mirror else "Volume Profile HVN"
+    out = module.fib_trade_features(frame, "2w", direction, date,
+                                    candidates_fn=lambda df, h, price: [(zone_price, label), (zone_price, "EMA20")])
+    assert out["anchor_fractal"] is True
+    assert out["confirm_close"] is False                       # Close 13 is not above the prior High 14
+    assert out["confirm_wick"] is True                         # wick 0.5 of range 1.0
+    assert out["tested_ratio"] == 0.382                        # nearest level 12.826 to Close 13
+    assert out["rolling_level_confluence"] is False            # 11.5 is > 0.25 ATR from 12.826
+    for divisor in (4, 6, 8):
+        cell = out[f"d{divisor}"]
+        assert cell["has_leg"] is True and cell["anchored"] is True and cell["zone_confluence"] is True
+        assert cell["zone_touch"] is False and cell["close_in_zone"] is False
+        assert cell["broke_structure"] is True and cell["leg_atr"] > 0
+
+
+def test_zone_ignores_other_families_and_missing_legs():
+    module = _module()
+    frame, date = _entry(False)
+    out = module.fib_trade_features(frame, "2w", "bullish", date,
+                                    candidates_fn=lambda df, h, price: [(11.5, "EMA20"), (14.0, "Volume Profile HVN")])
+    assert out["d6"]["zone_confluence"] is False
+    nan_leg = dict.fromkeys(("level_500", "level_618", "origin_price", "end_price"), float("nan"))
+    assert module.zone_confluence([(11.5, "Volume Profile HVN")], nan_leg, 1.0) is False
+    assert module.close_in_zone(nan_leg, 11.5) is False
+
+
+def test_short_history_has_no_rolling_anchor():
+    module = _module()
+    prefix = path_frame(CLEAN[:10])
+    assert module.rolling_anchor(prefix, 15) is None
+    assert module.anchored_split(None, {"origin_price": 8.5, "end_price": 15.5}, 1.0, "bullish") is False
+    assert module.anchor_is_fractal(prefix, None, "bullish") is None
+
+
+def test_anchor_that_is_not_a_fractal():
+    module = _module()
+    prefix = path_frame(CLEAN[:9])                             # bar 7 needs bar 10 to confirm
+    anchor = module.rolling_anchor(prefix, 9)
+    assert anchor["low_pos"] == 7
+    assert module.anchor_is_fractal(prefix, anchor, "bullish") is False
+
+
+@pytest.mark.parametrize("mirror,direction", SIDES)
+def test_confirmation_close_beyond_prior_bar(mirror, direction):
+    module = _module()
+    prefix = path_frame([10, 12], mirror=mirror)               # Close 12 > prior High 10.5
+    assert module.confirm_close(prefix, direction) is True
+    assert module.confirm_close(path_frame([10, 10.2], mirror=mirror), direction) is False
+    assert module.confirm_close(path_frame([10], mirror=mirror), direction) is False
+
+
+def test_near_needs_finite_values_and_positive_atr():
+    module = _module()
+    assert module.near(10.0, 10.2, 1.0) is True
+    assert module.near(10.0, 10.3, 1.0) is False
+    assert module.near(10.0, float("nan"), 1.0) is False
+    assert module.near(10.0, 10.0, float("nan")) is False
+    assert module.near(10.0, 10.0, 0.0) is False
+
+
+def test_primary_divisor_is_the_fib_leg_default():
+    from swingbot.core.market.fib_leg import ORIGIN_DIVISOR
+    assert _module().PRIMARY_DIVISOR == ORIGIN_DIVISOR
+
+
+def _explode(*args, **kwargs):
+    raise AssertionError("run_fn must not be called")
+
+
+@pytest.mark.parametrize("window", [("2015-01-01", "2026-03-01"), ("2010-01-01", "2023-12-31")])
+def test_collect_fib_refuses_a_window_outside_2015_2025_before_running(window):
+    with pytest.raises(SystemExit, match="diagnostic window"):
+        _module().collect_fib({}, {}, "bullish", window, run_fn=_explode)
+
+
+def test_collect_fib_stamps_features_on_reference_trades():
+    module = _module()
+    frame, date = _entry(False)
+
+    def run_fn(ticker, df, strategy, horizon, **kwargs):
+        assert strategy == "Fibonacci"
+        trades = [NS(entry_date=date, direction="bullish", outcome="win", r_multiple=1.5)] if horizon == "2w" else []
+        return NS(trades=trades)
+
+    rows = module.collect_fib({"AAA": frame}, {}, "bullish", module.DIAG_WINDOW, run_fn=run_fn,
+                              candidates_fn=lambda df, h, price: [])
+    assert len(rows) == 1
+    row = rows[0]
+    assert (row["ticker"], row["horizon_key"], row["outcome"], row["r_multiple"]) == ("AAA", "2w", "win", 1.5)
+    assert row["d6"]["anchored"] is True and row["d6"]["zone_confluence"] is False
+
+
+def test_collect_repro_runs_the_reference_arm_on_v103s_window_without_features():
+    module = _module()
+    frame, date = _entry(False)
+    seen = []
+
+    def run_fn(ticker, df, strategy, horizon, **kwargs):
+        trades = [NS(entry_date=date, direction="bullish", outcome="loss", r_multiple=-1.0),
+                  NS(entry_date="2024-02-01", direction="bullish", outcome="win", r_multiple=2.0)]
+        seen.append(horizon)
+        return NS(trades=trades if horizon == "2w" else [])
+
+    rows = module.collect_repro({"AAA": frame}, {}, "bullish", run_fn=run_fn)
+    assert [row["entry_date"] for row in rows] == [date]       # the 2024 entry is outside 2010-2023
+    assert "d6" not in rows[0] and seen

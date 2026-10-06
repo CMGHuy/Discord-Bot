@@ -42,6 +42,17 @@ sys.path[:0] = [str(ROOT), str(Path(__file__).resolve().parent)]
 
 from funnel import MIN_N_TRAIN, dir_rows, pooled  # noqa: E402
 from measure_fib_confluence import TRAIN_EXT, Progress, _load_frames, _write, require_ext_cache  # noqa: E402
+import pandas as pd  # noqa: E402
+
+import measure_fib_v103  # noqa: E402
+from measure_fib_diagnostic import fib_level, tested_ratio  # noqa: E402
+from run_backtest_range import _build_asof_map  # noqa: E402
+from swingbot import config  # noqa: E402
+from swingbot.core.market.fib_leg import leg_at, origin_strength  # noqa: E402
+from swingbot.core.market.indicators import atr  # noqa: E402
+from swingbot.core.market.levels import collect_candidate_levels, strategy_family  # noqa: E402
+from swingbot.core.market.strategy_types import HORIZONS  # noqa: E402
+from swingbot.core.market.structure import PIVOT_K, pivot_confirmations  # noqa: E402
 
 DIRECTIONS = ("bullish", "bearish")
 DIAG_WINDOW = ("2015-01-01", "2025-12-31")   # entries + features (partner decision, 2026-10-02)
@@ -147,3 +158,179 @@ def reproduction(rows, direction, universe_n, reference=None) -> dict:
     return {"observed": observed, "reference": want, "universe_n": universe_n,
             "reference_universe_n": REFERENCE_UNIVERSE_N,
             "matches": bool(same and universe_n == REFERENCE_UNIVERSE_N)}
+
+
+ZONE_FAMILIES = frozenset({"Volume Profile", "AVWAP"})   # Rolling S/R closed by v102; Zigzag redundant (v49)
+
+
+def atr_at(prefix) -> float:
+    return float(atr(prefix).iloc[-1]) if len(prefix) else float("nan")
+
+
+def near(a, b, atr_value) -> bool:
+    return bool(np.isfinite(a) and np.isfinite(b) and atr_value > 0 and abs(a - b) <= TOL_ATR * atr_value)
+
+
+def rolling_anchor(prefix, lookback):
+    """The swing low/high fibonacci_entries draws at the last bar: min Low / max
+    High over the trailing ``lookback`` bars (first occurrence). None when short."""
+    if len(prefix) < lookback:
+        return None
+    lows = prefix["Low"].to_numpy(float)[-lookback:]
+    highs = prefix["High"].to_numpy(float)[-lookback:]
+    base = len(prefix) - lookback
+    return {"low": float(lows.min()), "low_pos": base + int(np.argmin(lows)),
+            "high": float(highs.max()), "high_pos": base + int(np.argmax(highs))}
+
+
+def anchored_split(anchor, leg, atr_value, direction) -> bool:
+    """Arm 1 primary: the rolling origin-side extreme within 0.25 ATR of the leg
+    origin AND the other extreme within 0.25 ATR of the leg end."""
+    if anchor is None:
+        return False
+    origin, end = (anchor["low"], anchor["high"]) if direction == "bullish" else (anchor["high"], anchor["low"])
+    return near(origin, leg["origin_price"], atr_value) and near(end, leg["end_price"], atr_value)
+
+
+def anchor_is_fractal(prefix, anchor, direction):
+    """Arm 1 described: is the rolling origin-side extreme a k=3 fractal confirmed by now?"""
+    if anchor is None:
+        return None
+    sh, sl = pivot_confirmations(prefix, PIVOT_K)
+    flags, pos = (sl, anchor["low_pos"]) if direction == "bullish" else (sh, anchor["high_pos"])
+    confirm = pos + PIVOT_K
+    return bool(confirm < len(prefix) and flags[confirm])
+
+
+def _zone_prices(candidates):
+    return [price for price, label in candidates if strategy_family(label) in ZONE_FAMILIES]
+
+
+def zone_confluence(candidates, leg, atr_value) -> bool:
+    """Arm 2 primary: a Volume Profile or AVWAP price inside the leg's 0.5-0.618
+    zone widened by 0.25 ATR each side. False when there is no leg."""
+    lo, hi = sorted((leg["level_500"], leg["level_618"]))
+    if not (np.isfinite(lo) and atr_value > 0):
+        return False
+    pad = TOL_ATR * atr_value
+    return any(lo - pad <= price <= hi + pad for price in _zone_prices(candidates))
+
+
+def level_confluence(candidates, level, atr_value) -> bool:
+    """Arm 2 described: the same families within 0.25 ATR of the rolling tested level."""
+    return any(near(price, level, atr_value) for price in _zone_prices(candidates))
+
+
+def close_in_zone(leg, close) -> bool:
+    lo, hi = sorted((leg["level_500"], leg["level_618"]))
+    return bool(np.isfinite(lo) and lo <= close <= hi)
+
+
+def confirm_close(prefix, direction) -> bool:
+    """Arm 3 primary: Close[t] > High[t-1] (bullish) / Close[t] < Low[t-1] (bearish)."""
+    if len(prefix) < 2:
+        return False
+    close, prior = float(prefix["Close"].iloc[-1]), prefix.iloc[-2]
+    return close > float(prior["High"]) if direction == "bullish" else close < float(prior["Low"])
+
+
+def confirm_wick(prefix, direction) -> bool:
+    """Arm 3 described: rejection wick (lower bullish / upper bearish) >= half the range."""
+    bar = prefix.iloc[-1]
+    high, low = float(bar["High"]), float(bar["Low"])
+    body_lo, body_hi = sorted((float(bar["Open"]), float(bar["Close"])))
+    span = high - low
+    if not span > 0:
+        return False
+    wick = body_lo - low if direction == "bullish" else high - body_hi
+    return wick >= 0.5 * span
+
+
+def tri(value):
+    return None if not np.isfinite(value) else bool(value)
+
+
+def num(value):
+    return round(float(value), 6) if np.isfinite(value) else None
+
+
+def leg_cell(leg, anchor, candidates, atr_value, direction, close) -> dict:
+    return {"has_leg": bool(np.isfinite(leg["origin_price"])),
+            "anchored": anchored_split(anchor, leg, atr_value, direction),
+            "zone_confluence": zone_confluence(candidates, leg, atr_value),
+            "zone_touch": tri(leg["zone_touch"]),
+            "close_in_zone": close_in_zone(leg, close),
+            "broke_structure": tri(leg["broke_structure"]),
+            "leg_atr": num(leg["leg_atr"])}
+
+
+def _rolling_tested(anchor, close, direction):
+    if anchor is None:
+        return None, None
+    ratio = tested_ratio(close, anchor["high"], anchor["low"], direction)
+    return ratio, fib_level(anchor["high"], anchor["low"], ratio, direction)
+
+
+def fib_trade_features(frame, horizon_key, direction, entry_date, *, candidates_fn=collect_candidate_levels) -> dict:
+    """Arm 1-3 features at the entry bar t, from frame.iloc[:t+1] only."""
+    t = frame.index.get_loc(pd.Timestamp(entry_date))
+    prefix = frame.iloc[:t + 1]
+    close, atr_value, h = float(prefix["Close"].iloc[-1]), atr_at(prefix), HORIZONS[horizon_key]
+    anchor = rolling_anchor(prefix, h["fib_lookback"])
+    candidates = candidates_fn(prefix, h, close)
+    ratio, tested_level = _rolling_tested(anchor, close, direction)
+    out = {"confirm_close": confirm_close(prefix, direction), "confirm_wick": confirm_wick(prefix, direction),
+           "anchor_fractal": anchor_is_fractal(prefix, anchor, direction), "tested_ratio": ratio,
+           "rolling_level_confluence": tested_level is not None and level_confluence(candidates, tested_level, atr_value)}
+    for divisor in DIVISORS:
+        leg = leg_at(prefix, direction, origin_strength(horizon_key, divisor))
+        out[f"d{divisor}"] = leg_cell(leg, anchor, candidates, atr_value, direction, close)
+    return out
+
+
+def collect_repro(frames, asof_map, direction, *, run_fn=None, progress=None) -> list:
+    """The v103 reference arm (b=0) on REPRO_WINDOW, trade rows only: the
+    instrument check. The diagnostic window's 2015/2025 bounds do not apply."""
+    window = require_repro_window(REPRO_WINDOW)
+    return measure_fib_v103.collect_trades("A", frames, asof_map, 0.0, window, directions=(direction,),
+                                           run_fn=run_fn, progress=progress)
+
+
+def collect_fib(frames, asof_map, direction, window=DIAG_WINDOW, *, run_fn=None, progress=None,
+                candidates_fn=collect_candidate_levels) -> list:
+    """Today's Fibonacci trades (the v103 reference arm, b=0) with features.
+    Bearish is unmasked inside v103's collector through gate_override."""
+    require_diagnostic_window(window)
+    rows = measure_fib_v103.collect_trades("A", frames, asof_map, 0.0, window, directions=(direction,),
+                                           run_fn=run_fn, progress=progress)
+    ticks, out = Progress(len(rows)), []
+    for row in rows:
+        ticks.tick(f"features {direction} {row['ticker']} {row['entry_date']}")
+        out.append({**row, **fib_trade_features(frames[row["ticker"]], row["horizon_key"], direction,
+                                                row["entry_date"], candidates_fn=candidates_fn)})
+    return out
+
+
+def _frames_and_asof(args):
+    require_ext_cache()
+    frames = _load_frames(args.universe, args.tickers)
+    return frames, _build_asof_map(list(frames), frames, args.universe)
+
+
+def _cmd_collect_repro(args):
+    started = time.monotonic()
+    frames, asof_map = _frames_and_asof(args)
+    rows = collect_repro(frames, asof_map, args.direction)
+    _write(args.out, {"kind": "repro", "direction": args.direction, "window": REPRO_WINDOW,
+                      "universe_n": len(frames), "rows": rows,
+                      "elapsed_s": round(time.monotonic() - started, 1)})
+
+
+def _cmd_collect_fib(args):
+    require_diagnostic_window(DIAG_WINDOW)
+    started = time.monotonic()
+    frames, asof_map = _frames_and_asof(args)
+    rows = collect_fib(frames, asof_map, args.direction, DIAG_WINDOW)
+    _write(args.out, {"kind": "fib", "direction": args.direction, "window": DIAG_WINDOW,
+                      "universe_n": len(frames), "avwap_levels_enabled": bool(config.AVWAP_LEVELS_ENABLED),
+                      "rows": rows, "elapsed_s": round(time.monotonic() - started, 1)})
