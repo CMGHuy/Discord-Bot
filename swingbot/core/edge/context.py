@@ -45,7 +45,7 @@ def _pctile(series):
 def _finite(*values) -> bool:
     try:
         return all(value is not None and math.isfinite(float(value)) for value in values)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return False
 
 
@@ -66,7 +66,9 @@ def _stop_clamped(entry: float, stop: float) -> bool:
 def plan_provenance(entry, stop, tp1, max_rr) -> dict:
     """Whether a plan's tp1 is the synthetic max_rr cap and its stop the v115
     clamp, derived from the PLANNED entry. Both None without a usable entry,
-    stop and tp1 -- never guessed. Pure; reads no bars."""
+    stop and tp1 -- never guessed. Pure; reads no bars. The flags are identity-based:
+    a real level exactly on the cap price, or a natural stop at exactly the clamp
+    percent, is flagged the same."""
     if not _finite(entry, stop, tp1) or float(entry) <= 0 or float(entry) == float(stop):
         return dict.fromkeys(PROVENANCE_KEYS)
     entry, stop, tp1 = float(entry), float(stop), float(tp1)

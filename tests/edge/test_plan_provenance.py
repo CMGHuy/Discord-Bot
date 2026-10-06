@@ -116,3 +116,7 @@ def test_clamp_flag_off_means_never_clamped(monkeypatch):
 
 def test_a_stop_just_inside_the_landing_is_not_clamped():
     assert plan_provenance(100.0, 98.26, 104.0, MAX_RR)["stop_clamped"] is False
+
+
+def test_overflowing_input_gives_none_flags():
+    assert plan_provenance(10**400, 9.0, 12.0, 3.0) == {"target_capped": None, "stop_clamped": None}

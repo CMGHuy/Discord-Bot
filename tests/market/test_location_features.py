@@ -228,3 +228,15 @@ def test_unknown_horizon_leaves_level_keys_none_and_does_not_raise():
 
 def test_keys_are_disjoint_from_v121_structure_keys():
     assert not set(lo.LOCATION_KEYS) & set(st.STRUCTURE_KEYS)
+
+
+def test_nan_last_close_gives_no_leg_phase():
+    df = frame(UP)
+    df.iloc[-1, df.columns.get_loc("Close")] = np.nan
+    assert lo.swing_location(df, "bullish") == {"range_pos": None, "leg_phase": None}
+
+
+def test_nan_last_row_gives_no_leg_phase():
+    df = frame(UP)
+    df.iloc[-1] = np.nan
+    assert lo.swing_location(df, "bullish") == {"range_pos": None, "leg_phase": None}

@@ -12,6 +12,8 @@ departure window, the lifecycle module's TOUCH_ATR_MULT touch tolerance.
 """
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pandas as pd
 
@@ -61,6 +63,8 @@ def swing_location(df: pd.DataFrame, direction: str) -> dict:
     if pd.isna(sh) or pd.isna(sl):
         return {"range_pos": None, "leg_phase": None}
     close, bullish = float(df["Close"].iloc[-1]), direction == "bullish"
+    if not math.isfinite(close):
+        return {"range_pos": None, "leg_phase": None}
     return {"range_pos": _range_pos(close, float(sh), float(sl), bullish),
             "leg_phase": _leg_phase(close, float(sh), float(sl), bullish)}
 
