@@ -35,5 +35,6 @@ def test_context_uses_only_bars_to_entry_and_joins_asof(monkeypatch):
     direct = entry_context(df.iloc[:81], direction="bullish", horizon_key="2w",
                            stop=trade.stop_loss, target=trade.take_profit,
                            asof={"regime2_state": "bear_quiet", "rs_pctile": 12.5,
-                                 "sector_pctile": None, "rs_combined": 12.5})
+                                 "sector_pctile": None, "rs_combined": 12.5},
+                           entry=float(df["Close"].iloc[80]))
     assert trade.context == direct
