@@ -63,7 +63,10 @@ premium/discount position in an impulse leg (v124's leg owns that).
   outcome, so both exist once it closes. v134 runs only after v128's
   closed-table row is written, so nothing here can be read before v128's grid
   and selection are final.
-- **v130 implemented.** The structure tag reads v130's snapshot keys.
+- **v130 implemented and on `main`.** The structure tag reads v130's snapshot
+  keys. v130's plan leaves its branch unmerged on a "not more informative"
+  verdict; in that case v134 stops and asks the partner, and neither reads the
+  unmerged branch nor drops the structure claim by itself.
 
 ## Window
 
@@ -151,12 +154,18 @@ on one ticker.
 
 Baseline `all`-arm plans from `fvg_attribution.record_ticker` whose
 `fvg_family` is true, on replay window 2020-01-01..2023-12-31. Each is tagged
-by the most recently formed FVG candidate in its level cluster. A live FVG
-vote is cast by an untouched gap, so `confluence`, `approach` and
-`touch_close` are evaluated at the signal bar instead of at first touch.
+by the most recently formed gap that casts its FVG vote, under v128's frozen
+vote definition (an unfilled gap whose midpoint is within the vote tolerance
+of the plan's take-profit at the signal bar). The recorder's row does not
+carry the take-profit or the signal bar, so the script re-runs the recorder's
+own replay and a test pins its rows to `record_ticker`'s. A live FVG vote is
+cast by an untouched gap, so `confluence`, `approach` and `touch_close` are
+evaluated at the signal bar instead of at first touch.
 
-Per bucket: N, win rate, ExpR, split by confluence-sourced and
-strategy-sourced. Buckets with `N < 30` print `thin` with no ExpR. The header
+Per bucket: N, win rate, ExpR, for confluence-sourced plans only. A strategy
+plan carries no confluence vote, so it can never be FVG-tagged; the report
+says so in one line (amended 2026-10-06, found while planning). Buckets with
+`N < 30` print `thin` with no ExpR. The header
 says the slice is confounded: FVG-tagged plans carry more families by
 construction, and every one passed every other gate. Table B carries no
 verdict.
