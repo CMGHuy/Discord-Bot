@@ -337,14 +337,25 @@ def test_scenario_levels_rebuilds_the_map_and_resplits_at_this_close():
     assert one_sided is None
 
 
-def test_is_identified_matches_the_replays_clamped_stop():
+def test_is_identified_matches_the_replays_clamped_stop_and_derived_tp1():
     from swingbot.core.planning.builders import _clamp_stop_to_hard_cap
     module = _module()
     level = Level(95.0, ["Fib 61.8%"])
-    clamped = _clamp_stop_to_hard_cap(100.0, 95.0, True)
-    assert module.is_identified(NS(trigger_price=100.0, stop_loss=clamped, direction="bullish"), level) is True
-    assert module.is_identified(NS(trigger_price=100.0, stop_loss=clamped - 0.01, direction="bullish"), level) is False
-    assert module.is_identified(NS(trigger_price=100.0, stop_loss=None, direction="bullish"), level) is False
+    clamped = _clamp_stop_to_hard_cap(100.0, 95.0, True)           # 98.25: risk 1.75
+    rr = NS(min_risk_reward_ratio=1.5, max_risk_reward_ratio=3.0)
+    near, far = 102.0, 110.0           # near pays 1.14R (< floor), far pays 5.7R (> cap)
+    capped = 100.0 + (100.0 - clamped) * 3.0                       # the synthetic max_rr price
+
+    def plan(stop, tp1, direction="bullish"):
+        return NS(trigger_price=100.0, stop_loss=stop, tp1=tp1, direction=direction)
+
+    assert module.is_identified(plan(clamped, capped), level, [near, far], rr) is True
+    assert module.is_identified(plan(clamped, far), level, [near, far], rr) is False      # raw level, not the capped tp1
+    assert module.is_identified(plan(clamped, capped), level, [near, 104.0], rr) is False
+    assert module.is_identified(plan(clamped - 0.01, capped), level, [near, far], rr) is False
+    assert module.is_identified(plan(None, capped), level, [near, far], rr) is False
+    assert module.is_identified(plan(clamped, None), level, [near, far], rr) is False
+    assert module.is_identified(plan(clamped, capped), level, [], rr) is False
 
 
 def test_fib_labels_and_prices():
@@ -356,14 +367,23 @@ def test_fib_labels_and_prices():
     assert module.fib_candidate_prices(candidates, labels) == [9.0, 12.0]
 
 
-def _restart_case(stop_loss_offset=0.0, levels=None):
+def _derived_tp1(entry, stop, bullish, candidates):
+    from swingbot.core.planning.targets import select_structural_target
+    from swingbot.scan_params import ScanParams
+    params = ScanParams.from_config()
+    return select_structural_target(entry, stop, bullish, candidates,
+                                    params.min_risk_reward_ratio, params.max_risk_reward_ratio)
+
+
+def _restart_case(stop_loss_offset=0.0, levels=None, tp1=None):
     from swingbot.core.planning.builders import _clamp_stop_to_hard_cap
     module = _module()
     frame = path_frame(RESTART)                               # Close[25] = 14.8
     stop_level = Level(13.7, ["Fib 50.0%", "EMA20"])
     levels = levels or ([stop_level], [Level(16.0, ["Rolling resistance"])])
-    plan = NS(direction="bullish", trigger_price=14.8,
-              stop_loss=_clamp_stop_to_hard_cap(14.8, 13.7, True) + stop_loss_offset)
+    stop = _clamp_stop_to_hard_cap(14.8, 13.7, True)
+    plan = NS(direction="bullish", trigger_price=14.8, stop_loss=stop + stop_loss_offset,
+              tp1=tp1 if tp1 is not None else _derived_tp1(14.8, stop, True, [16.0]))
     return module.confluence_row("AAA", frame, "2w", 25, plan, NS(outcome="win", r_total=1.2),
                                  levels_fn=lambda *a: levels,
                                  candidates_fn=lambda df, h, price: [(13.75, "Fib 50.0%"), (13.6, "EMA20")])
@@ -386,6 +406,12 @@ def test_confluence_row_without_fib_source_has_no_cells():
 def test_confluence_row_with_a_mismatched_stop_is_unidentified():
     row = _restart_case(stop_loss_offset=0.05)
     assert (row["identified"], row["has_fib"]) == (False, False)
+
+
+def test_confluence_row_with_a_tp1_outside_the_rebuilt_targets_is_unidentified():
+    row = _restart_case(tp1=17.3)                                # derived from the 16.0 resistance
+    assert (row["identified"], row["has_fib"]) == (False, False)
+    assert "d6" not in row
 
 
 def test_confluence_trades_window_and_skips():
@@ -437,8 +463,10 @@ def test_confluence_row_ignores_bars_after_the_entry(direction, index):
     def run(frame):
         base = float(clean["Close"].iloc[25])
         level = Level(base - 1.1 if bullish else base + 1.1, ["Fib 50.0%"])
-        plan = NS(direction=direction, trigger_price=close,
-                  stop_loss=_clamp_stop_to_hard_cap(close, level.price, bullish))
+        stop = _clamp_stop_to_hard_cap(close, level.price, bullish)
+        target = base + 1.2 if bullish else base - 1.2
+        plan = NS(direction=direction, trigger_price=close, stop_loss=stop,
+                  tp1=_derived_tp1(close, stop, bullish, [target]))
         return module.confluence_row("AAA", frame, "2w", index, plan, NS(outcome="win", r_total=1.0),
                                      levels_fn=levels_fn, candidates_fn=candidates_fn)
 

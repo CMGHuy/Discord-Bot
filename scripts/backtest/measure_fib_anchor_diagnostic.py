@@ -53,7 +53,7 @@ from run_backtest_range import _build_asof_map  # noqa: E402
 from swingbot import config  # noqa: E402
 from swingbot.core.market.fib_leg import leg_at, origin_strength  # noqa: E402
 from swingbot.core.market.indicators import atr  # noqa: E402
-from swingbot.core.market.levels import collect_candidate_levels, strategy_family  # noqa: E402
+from swingbot.core.market.levels import collect_candidate_levels, strategy_family, target_candidates  # noqa: E402
 from swingbot.core.market.strategy_types import HORIZONS, LEGACY_HORIZONS, MIN_BARS  # noqa: E402
 from swingbot.core.market.structure import PIVOT_K, pivot_confirmations  # noqa: E402
 from swingbot.core.backtesting.arms.confluence_engine import SKIPPED  # noqa: E402
@@ -61,6 +61,8 @@ from swingbot.core.backtesting.backtest_scenarios import (  # noqa: E402
     LEVEL_REFRESH_BARS, levels_asof, replay_scenarios)
 from swingbot.core.planning.builders import _clamp_stop_to_hard_cap  # noqa: E402
 from swingbot.core.planning.plan_engine import simulate_exit  # noqa: E402
+from swingbot.core.planning.targets import select_structural_target  # noqa: E402
+from swingbot.scan_params import ScanParams  # noqa: E402
 
 DIRECTIONS = ("bullish", "bearish")
 DIAG_WINDOW = ("2015-01-01", "2025-12-31")   # entries + features (partner decision, 2026-10-02)
@@ -355,25 +357,47 @@ def bucket_bar(index, horizon_key) -> int:
     return max(MIN_BARS[horizon_key], (index // LEVEL_REFRESH_BARS) * LEVEL_REFRESH_BARS)
 
 
-def scenario_levels(ticker, frame, index, horizon_key, direction, *, levels_fn=levels_asof):
-    """(stop-side level, target-1 level) the replay's scenario at ``index`` was
-    built from: the same as-of map, re-split against Close[index] as the replay does."""
+def scenario_map(ticker, frame, index, horizon_key, *, levels_fn=levels_asof):
+    """(supports, resistances) the replay handed build_confluence_plan at ``index``:
+    the as-of map for the bucket bar, re-split against Close[index], nearest first."""
     supports, resistances = levels_fn(ticker, frame, bucket_bar(index, horizon_key), horizon_key, {})
     price = float(frame["Close"].iloc[index])
     ordered = sorted(supports + resistances, key=lambda level: level.price)
-    below = [level for level in ordered if level.price < price][::-1]
-    above = [level for level in ordered if level.price > price]
+    return [level for level in ordered if level.price < price][::-1], [level for level in ordered if level.price > price]
+
+
+def map_pair(level_map, direction):
+    """(stop-side level, target-1 level) of a re-split map, or None when one side is empty."""
+    below, above = level_map
     if not below or not above:
         return None
     return (below[0], above[0]) if direction == "bullish" else (above[0], below[0])
 
 
-def is_identified(plan, stop_level) -> bool:
-    """The rebuild is right only if it reproduces the plan's own (clamped) stop."""
-    if plan.stop_loss is None:
+def scenario_levels(ticker, frame, index, horizon_key, direction, *, levels_fn=levels_asof):
+    return map_pair(scenario_map(ticker, frame, index, horizon_key, levels_fn=levels_fn), direction)
+
+
+def derived_tp1(plan, candidates, params):
+    """tp1 exactly as build_confluence_plan derives it: select_structural_target over
+    the re-split map's target candidates, using the plan's own (clamped) stop."""
+    return select_structural_target(plan.trigger_price, plan.stop_loss, plan.direction == "bullish",
+                                    candidates, params.min_risk_reward_ratio, params.max_risk_reward_ratio)
+
+
+def _same(a, b) -> bool:
+    return a is not None and b is not None and math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-12)
+
+
+def is_identified(plan, stop_level, candidates, params=None) -> bool:
+    """The rebuild is right only if it reproduces the plan's own (clamped) stop AND
+    its tp1 as build_confluence_plan derives it from the rebuilt candidates (the stop
+    alone is blind to a wrong map once the hard cap snaps it)."""
+    if plan.stop_loss is None or plan.tp1 is None:
         return False
+    params = params or ScanParams.from_config()
     expected = _clamp_stop_to_hard_cap(plan.trigger_price, stop_level.price, plan.direction == "bullish")
-    return math.isclose(plan.stop_loss, expected, rel_tol=1e-9, abs_tol=1e-12)
+    return _same(plan.stop_loss, expected) and _same(plan.tp1, derived_tp1(plan, candidates, params))
 
 
 def fib_labels(pair) -> set:
@@ -407,8 +431,10 @@ def confluence_row(ticker, frame, horizon_key, index, plan, result, *, levels_fn
     row = {"ticker": ticker, "horizon_key": horizon_key, "direction": plan.direction,
            "entry_date": str(frame.index[index].date()), "outcome": result.outcome,
            "r_multiple": result.r_total}
-    pair = scenario_levels(ticker, frame, index, horizon_key, plan.direction, levels_fn=levels_fn)
-    row["identified"] = pair is not None and is_identified(plan, pair[0])
+    level_map = scenario_map(ticker, frame, index, horizon_key, levels_fn=levels_fn)
+    pair = map_pair(level_map, plan.direction)
+    row["identified"] = pair is not None and is_identified(
+        plan, pair[0], target_candidates(*level_map, plan.direction))
     labels = fib_labels(pair) if row["identified"] else set()
     row["has_fib"] = bool(labels)
     if labels:
