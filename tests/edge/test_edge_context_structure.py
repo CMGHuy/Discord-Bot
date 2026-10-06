@@ -38,7 +38,7 @@ def test_feature_keys_append_the_new_keys_in_order():
         "stop_atr", "stop_pct", "planned_rr", "swing_high_atr", "swing_low_atr", "horizon_key", "direction",
         "atr_pctile_250", "vol_ratio_20", "rsi_14", "adx_14", "bb_width_pctile_250", "htf_aligned",
         "gap_p90_pct", "gap_fragile", "dow", "regime2_state", "rs_pctile", "sector_pctile", "rs_combined")
-    assert FEATURE_KEYS[20:] == STRUCTURE_NEW
+    assert FEATURE_KEYS[20:34] == STRUCTURE_NEW
     assert set(STRUCTURE_KEYS) <= set(FEATURE_KEYS)
 
 

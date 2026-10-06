@@ -6,6 +6,7 @@ import math
 from swingbot import config
 from swingbot.core.edge.gates import gap_stats, stop_beyond_gap_noise
 from swingbot.core.market.indicators import adx, atr, ema, rsi
+from swingbot.core.market.location import location_features
 from swingbot.core.market.structure import structure_features
 from swingbot.core.planning.builders import CLAMP_HEADROOM_PCT
 from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, planned_loss_pct
@@ -19,7 +20,10 @@ FEATURE_KEYS = ("stop_atr", "stop_pct", "planned_rr", "swing_high_atr", "swing_l
                 "structure_state", "structure_aligned", "last_pivot_held", "hh_failed", "vol_trend_10_50",
                 "range_trend_10_50", "progress_atr_10", "absorption_bar", "absorption_count_10",
                 "pullback_vol_ratio", "pullback_depth_frac", "pullback_bars_ratio", "impulse_atr_per_bar",
-                "impulse_range_decay")
+                "impulse_range_decay",
+                # v125: plan provenance (plan_provenance) and location / leg / zone (market/location.py)
+                "target_capped", "stop_clamped", "zone_dist_atr", "room_atr", "range_pos", "leg_phase",
+                "zone_state", "zone_touches", "zone_departure_atr")
 PROVENANCE_KEYS = ("target_capped", "stop_clamped")
 CAP_TOLERANCE = 1e-6       # frozen: relative price tolerance for the synthetic-target identity
 CLAMP_TOLERANCE = 1e-6     # frozen: absolute tolerance, in percentage points, for the clamp identity
@@ -70,10 +74,15 @@ def plan_provenance(entry, stop, tp1, max_rr) -> dict:
             "stop_clamped": _stop_clamped(entry, stop)}
 
 
-def entry_context(df, *, direction: str, horizon_key: str, stop: float, target: float, asof=None) -> dict:
-    """Return only values knowable from ``df``'s final entry bar or before."""
+def entry_context(df, *, direction: str, horizon_key: str, stop: float, target: float, asof=None,
+                  entry=None) -> dict:
+    """Return only values knowable from ``df``'s final entry bar or before.
+
+    ``entry`` is the PLANNED entry (trigger), never a slipped fill; without it
+    the two plan-provenance flags are None."""
     out = {key: None for key in FEATURE_KEYS}
     out.update(direction=direction, horizon_key=horizon_key)
+    out.update(plan_provenance(entry, stop, target, config.MAX_RISK_REWARD_RATIO))   # v125; reads no bars
     if df is None or len(df) < 20:
         return out
     close = float(df["Close"].iloc[-1]); risk = abs(close - stop); reward = abs(target - close)
@@ -84,6 +93,7 @@ def entry_context(df, *, direction: str, horizon_key: str, stop: float, target: 
                atr_pctile_250=_pctile(atr_series), rsi_14=_number(rsi(df["Close"], 14).iloc[-1]),
                adx_14=_number(adx(df, 14).iloc[-1]), dow=int(df.index[-1].dayofweek))
     out.update(structure_features(df, direction))   # v121; all None below 60 bars
+    out.update(location_features(df, direction, horizon_key))   # v125; all None below 60 bars
     volume_mean = df["Volume"].rolling(20).mean().iloc[-1]
     out["vol_ratio_20"] = _number(df["Volume"].iloc[-1] / volume_mean) if volume_mean else None
     period = HTF_EMA_PERIOD.get(horizon_key)
