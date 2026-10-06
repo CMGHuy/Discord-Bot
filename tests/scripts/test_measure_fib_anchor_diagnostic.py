@@ -409,3 +409,28 @@ def test_confluence_trades_window_and_skips():
     for window in (("2010-01-01", "2023-12-31"), ("2015-01-01", "2026-01-02")):
         with pytest.raises(SystemExit, match="diagnostic window"):
             module.confluence_trades("AAA", frame, "2w", window, replay_fn=replay_fn, exit_fn=exit_fn)
+
+
+@pytest.mark.parametrize("direction", ["bullish", "bearish"])
+def test_confluence_row_ignores_bars_after_the_entry(direction):
+    from swingbot.core.planning.builders import _clamp_stop_to_hard_cap
+    module = _module()
+    bullish = direction == "bullish"
+    clean = path_frame(RESTART, mirror=not bullish)
+    poisoned = path_frame(RESTART + [60.0, 1.0, 60.0], mirror=not bullish)
+    poisoned.iloc[:26] = clean.iloc[:26].to_numpy()          # identical history, poisoned future
+    close = float(clean["Close"].iloc[25])
+    level = Level(close - 1.1 if bullish else close + 1.1, ["Fib 50.0%"])
+    other = Level(close + 1.2 if bullish else close - 1.2, ["Rolling resistance"])
+    plan = NS(direction=direction, trigger_price=close,
+              stop_loss=_clamp_stop_to_hard_cap(close, level.price, bullish))
+
+    def run(frame):
+        return module.confluence_row(
+            "AAA", frame, "2w", 25, plan, NS(outcome="win", r_total=1.0),
+            levels_fn=lambda t, df, bar, h, cache: ([level], [other]) if bullish else ([other], [level]),
+            candidates_fn=lambda df, h, price: [(float(df["Close"].iloc[-1]) - 1.05, "Fib 50.0%")])
+
+    full, truncated = run(poisoned), run(clean.iloc[:26])
+    assert full == truncated
+    assert full["identified"] is True and full["has_fib"] is True and "d6" in full
