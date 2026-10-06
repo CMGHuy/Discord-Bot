@@ -73,10 +73,32 @@ def _bounds(o: SimpleNamespace, t: int) -> tuple[int, int] | None:
     return origin, end
 
 
+def _prior_break(o: SimpleNamespace, origin: int, end_price: float) -> float:
+    """1.0 if the end exceeds the last opposite-side pivot BEFORE the origin,
+    0.0 if not, NaN if none exists. Any such pivot is confirmed by t: its
+    confirmation bar is < origin + k <= t."""
+    earlier = o.prior[o.prior < origin]
+    if earlier.size == 0:
+        return np.nan
+    return float(end_price > o.hi[earlier[-1]])
+
+
 def _features(o: SimpleNamespace, t: int, origin: int, end: int) -> dict | None:
-    """Oriented leg row. V124-1 fills the bounds; V124-2 adds the rest."""
-    return {**_NO_LEG, "origin_idx": float(origin), "origin_price": float(o.lo[origin]),
-            "end_idx": float(end), "end_price": float(o.hi[end]), "leg_bars": float(end - origin)}
+    """Oriented leg row at bar t; None when the leg has no size."""
+    origin_price, end_price = float(o.lo[origin]), float(o.hi[end])
+    size = end_price - origin_price
+    if not size > 0:
+        return None
+    levels = {f"level_{round(ratio * 1000)}": end_price - ratio * size for ratio in RATIOS}
+    atr_t = float(o.atr[t])
+    return {"origin_idx": float(origin), "origin_price": origin_price,
+            "end_idx": float(end), "end_price": end_price,
+            "leg_atr": size / atr_t if atr_t > 0 else np.nan,
+            "leg_bars": float(end - origin), **levels,
+            "retrace_now": (end_price - float(o.close[t])) / size,
+            "retrace_deepest": (end_price - float(o.lo[end + 1:t + 1].min())) / size,
+            "zone_touch": float(o.lo[t] <= levels["level_500"] and o.close[t] >= levels["level_618"]),
+            "broke_structure": _prior_break(o, origin, end_price)}
 
 
 def _real(row: dict, sign: float) -> dict:

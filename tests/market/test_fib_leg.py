@@ -4,8 +4,9 @@ import numpy as np
 import pytest
 
 from swingbot.core.market import fib_leg as fl
-from tests.market.fib_leg_fixtures import (BROKEN, CLEAN, MIRROR, RESTART, TIE, path_frame,
-                                           walk_frame)
+from swingbot.core.market.indicators import atr
+from tests.market.fib_leg_fixtures import (BROKEN, CLEAN, HIGH_PRIOR, MIRROR, NO_PRIOR, RESTART, TIE,
+                                           path_frame, walk_frame)
 
 SIDES = [(False, "bullish"), (True, "bearish")]
 
@@ -104,3 +105,42 @@ def test_no_live_module_imports_fib_leg():
     hits = [str(path) for path in sources
             if path.name != "fib_leg.py" and "fib_leg" in path.read_text(encoding="utf-8")]
     assert hits == []
+
+
+# CLEAN at t=16: origin L 8.5, end H 15.5, size 7.0, Close 13, lows since the end 13.5/13/12.5.
+CLEAN_16 = {"level_382": 12.826, "level_500": 12.0, "level_618": 11.174,
+            "retrace_now": 2.5 / 7, "retrace_deepest": 3.0 / 7, "zone_touch": 0.0, "broke_structure": 1.0}
+
+
+@pytest.mark.parametrize("mirror,direction", SIDES)
+def test_clean_leg_features(mirror, direction):
+    df = path_frame(CLEAN[:17], mirror=mirror)
+    row = fl.impulse_leg(df, direction, 3).iloc[-1]
+    expect(row, CLEAN_16, mirror)
+    assert row["leg_atr"] == pytest.approx(7.0 / atr(df).iloc[-1])
+
+
+@pytest.mark.parametrize("mirror,direction", SIDES)
+def test_zone_touch_true(mirror, direction):
+    # bar 17: p=12 -> Low 11.5 <= level_500 12.0 and Close 12.0 >= level_618 11.174
+    expect(leg(CLEAN, mirror, direction, 17),
+           {"zone_touch": 1.0, "retrace_now": 3.5 / 7, "retrace_deepest": 4.0 / 7}, mirror)
+
+
+@pytest.mark.parametrize("mirror,direction", SIDES)
+def test_leg_that_does_not_break_the_prior_high(mirror, direction):
+    assert leg(HIGH_PRIOR, mirror, direction, 16)["broke_structure"] == 0.0   # 15.5 < 17.5
+
+
+@pytest.mark.parametrize("mirror,direction", SIDES)
+def test_restarted_leg_breaks_the_previous_end(mirror, direction):
+    # origin bar 18; the swing high before it is bar 13 (H 15.5); end 16.5 > 15.5
+    assert leg(RESTART, mirror, direction, 25)["broke_structure"] == 1.0
+
+
+@pytest.mark.parametrize("mirror,direction", SIDES)
+def test_no_prior_pivot_gives_nan_break_and_young_atr_gives_nan(mirror, direction):
+    row = leg(NO_PRIOR, mirror, direction, 12)           # 13 bars: ATR14 not defined yet
+    expect(row, {"origin_idx": 4, "end_idx": 9, "end_price": 14.5}, mirror)
+    assert np.isnan(row["broke_structure"])
+    assert np.isnan(row["leg_atr"])
