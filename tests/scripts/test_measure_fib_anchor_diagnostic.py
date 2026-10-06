@@ -725,3 +725,21 @@ def test_collect_commands_write_payloads_build_report_accepts(tmp_path, monkeypa
         payload["window"] = list(payload["window"])
     report = module.build_report(list(fib.values()), [conf], list(repro.values()))
     assert set(report["verdicts"]) == {"arm1", "arm2", "arm3", "arm4"}
+
+
+def test_overlapping_confluence_chunks_are_refused():
+    module = _module()
+    fib, confluence, repro = _payloads()
+    other = dict(confluence[0], tickers=["AAA", "BBB"])
+    with pytest.raises(SystemExit, match="overlap"):
+        module.build_report(fib, [confluence[0], other], repro)
+    disjoint = dict(confluence[0], tickers=["BBB"])
+    assert module.build_report(fib, [confluence[0], disjoint], repro)["confluence"]["unidentified"] == 0
+
+
+def test_mixed_avwap_flags_are_refused():
+    module = _module()
+    fib, confluence, repro = _payloads()
+    fib[1]["avwap_levels_enabled"] = False
+    with pytest.raises(SystemExit, match="avwap_levels_enabled"):
+        module.build_report(fib, confluence, repro)

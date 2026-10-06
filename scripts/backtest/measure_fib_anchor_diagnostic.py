@@ -550,6 +550,18 @@ def reproductions(repro_payloads) -> dict:
     return {d: reproduction(found[d]["rows"], d, found[d]["universe_n"]) for d in DIRECTIONS}
 
 
+def _require_consistent(fib_payloads, confluence_payloads):
+    seen = set()
+    for payload in confluence_payloads:
+        overlap = seen & set(payload["tickers"])
+        if overlap:
+            raise SystemExit(f"confluence chunks overlap on {', '.join(sorted(overlap))}")
+        seen |= set(payload["tickers"])
+    flags = {p["avwap_levels_enabled"] for p in fib_payloads + confluence_payloads}
+    if len(flags) > 1:
+        raise SystemExit(f"mixed avwap_levels_enabled across payloads: {sorted(flags)}")
+
+
 def build_report(fib_payloads, confluence_payloads, repro_payloads) -> dict:
     _require_kind(fib_payloads, "fib")
     _require_kind(confluence_payloads, "confluence")
@@ -558,6 +570,7 @@ def build_report(fib_payloads, confluence_payloads, repro_payloads) -> dict:
         require_diagnostic_window(window)
         if window != DIAG_WINDOW:
             raise SystemExit(f"diagnostic window must be exactly {DIAG_WINDOW}, got {window}")
+    _require_consistent(fib_payloads, confluence_payloads)
     by_direction = _by_direction(fib_payloads, "collect-fib")
     fib = {d: fib_tables(by_direction[d]["rows"], d) for d in DIRECTIONS}
     confluence = confluence_tables([row for payload in confluence_payloads for row in payload["rows"]])
