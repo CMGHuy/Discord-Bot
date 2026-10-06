@@ -1,0 +1,889 @@
+{
+ "window": [
+  "2015-01-01",
+  "2025-12-31"
+ ],
+ "repro_window": [
+  "2010-01-01",
+  "2023-12-31"
+ ],
+ "exit_rule": "An arm proceeds to its own spec only if, on the bullish side, the favourable bucket has a higher win rate and an ExpR no lower than the rest, with N >= 30 in each bucket. Arms 1, 2 and 4 must also keep the win-rate sign at two of the three divisors.",
+ "avwap_levels_enabled": [
+  true
+ ],
+ "reproduction": {
+  "bullish": {
+   "observed": {
+    "n": 880,
+    "wins": 327,
+    "losses": 553,
+    "win_rate": 37.15909090909091,
+    "expectancy_r": 0.24834408602150543,
+    "scratch_timeout_share": 0.2114695340501792
+   },
+   "reference": {
+    "n": 815,
+    "win_rate": 36.81,
+    "expectancy_r": 0.2219
+   },
+   "universe_n": 74,
+   "reference_universe_n": 73,
+   "matches": false
+  },
+  "bearish": {
+   "observed": {
+    "n": 161,
+    "wins": 54,
+    "losses": 107,
+    "win_rate": 33.54037267080746,
+    "expectancy_r": 0.05999541284403671,
+    "scratch_timeout_share": 0.26146788990825687
+   },
+   "reference": {
+    "n": 169,
+    "win_rate": 23.67,
+    "expectancy_r": -0.1269
+   },
+   "universe_n": 74,
+   "reference_universe_n": 73,
+   "matches": false
+  }
+ },
+ "fib": {
+  "bullish": {
+   "arm1": {
+    "4": {
+     "favourable": {
+      "n": 373,
+      "wins": 135,
+      "losses": 238,
+      "win_rate": 36.193029490616624,
+      "expectancy_r": 0.22942350332594216,
+      "scratch_timeout_share": 0.1729490022172949
+     },
+     "rest": {
+      "n": 503,
+      "wins": 185,
+      "losses": 318,
+      "win_rate": 36.779324055666,
+      "expectancy_r": 0.2792215088282504,
+      "scratch_timeout_share": 0.1926163723916533
+     }
+    },
+    "6": {
+     "favourable": {
+      "n": 282,
+      "wins": 99,
+      "losses": 183,
+      "win_rate": 35.1063829787234,
+      "expectancy_r": 0.1506666666666666,
+      "scratch_timeout_share": 0.1826086956521739
+     },
+     "rest": {
+      "n": 594,
+      "wins": 221,
+      "losses": 373,
+      "win_rate": 37.20538720538721,
+      "expectancy_r": 0.30925240054869674,
+      "scratch_timeout_share": 0.18518518518518517
+     }
+    },
+    "8": {
+     "favourable": {
+      "n": 177,
+      "wins": 63,
+      "losses": 114,
+      "win_rate": 35.59322033898305,
+      "expectancy_r": 0.14920353982300874,
+      "scratch_timeout_share": 0.2168141592920354
+     },
+     "rest": {
+      "n": 699,
+      "wins": 257,
+      "losses": 442,
+      "win_rate": 36.76680972818312,
+      "expectancy_r": 0.28738797169811314,
+      "scratch_timeout_share": 0.17570754716981132
+     }
+    }
+   },
+   "arm1_described": {
+    "rolling_origin_is_fractal": {
+     "False": {
+      "n": 186,
+      "wins": 65,
+      "losses": 121,
+      "win_rate": 34.946236559139784,
+      "expectancy_r": 0.2644398340248962,
+      "scratch_timeout_share": 0.22821576763485477
+     },
+     "True": {
+      "n": 690,
+      "wins": 255,
+      "losses": 435,
+      "win_rate": 36.95652173913043,
+      "expectancy_r": 0.2565366146458583,
+      "scratch_timeout_share": 0.1716686674669868
+     }
+    },
+    "broke_structure": {
+     "False": {
+      "n": 226,
+      "wins": 75,
+      "losses": 151,
+      "win_rate": 33.1858407079646,
+      "expectancy_r": 0.20993258426966294,
+      "scratch_timeout_share": 0.15355805243445692
+     },
+     "None": {
+      "n": 165,
+      "wins": 65,
+      "losses": 100,
+      "win_rate": 39.39393939393939,
+      "expectancy_r": 0.43780392156862746,
+      "scratch_timeout_share": 0.19117647058823528
+     },
+     "True": {
+      "n": 485,
+      "wins": 180,
+      "losses": 305,
+      "win_rate": 37.11340206185567,
+      "expectancy_r": 0.21900663349917077,
+      "scratch_timeout_share": 0.1956882255389718
+     }
+    },
+    "leg_atr_quintile": {
+     "Q1": {
+      "n": 129,
+      "wins": 44,
+      "losses": 85,
+      "win_rate": 34.10852713178294,
+      "expectancy_r": 0.18439080459770113,
+      "scratch_timeout_share": 0.25862068965517243
+     },
+     "Q2": {
+      "n": 138,
+      "wins": 40,
+      "losses": 98,
+      "win_rate": 28.985507246376812,
+      "expectancy_r": 0.017908045977011518,
+      "scratch_timeout_share": 0.20689655172413793
+     },
+     "Q3": {
+      "n": 146,
+      "wins": 50,
+      "losses": 96,
+      "win_rate": 34.24657534246575,
+      "expectancy_r": 0.1349942528735632,
+      "scratch_timeout_share": 0.16091954022988506
+     },
+     "Q4": {
+      "n": 141,
+      "wins": 57,
+      "losses": 84,
+      "win_rate": 40.42553191489361,
+      "expectancy_r": 0.4735574712643676,
+      "scratch_timeout_share": 0.1896551724137931
+     },
+     "Q5": {
+      "n": 157,
+      "wins": 64,
+      "losses": 93,
+      "win_rate": 40.76433121019109,
+      "expectancy_r": 0.27025862068965506,
+      "scratch_timeout_share": 0.09770114942528736
+     },
+     "no leg": {
+      "n": 165,
+      "wins": 65,
+      "losses": 100,
+      "win_rate": 39.39393939393939,
+      "expectancy_r": 0.43780392156862746,
+      "scratch_timeout_share": 0.19117647058823528
+     }
+    }
+   },
+   "arm2": {
+    "4": {
+     "favourable": {
+      "n": 611,
+      "wins": 222,
+      "losses": 389,
+      "win_rate": 36.33387888707038,
+      "expectancy_r": 0.22659681697612716,
+      "scratch_timeout_share": 0.1896551724137931
+     },
+     "rest": {
+      "n": 265,
+      "wins": 98,
+      "losses": 167,
+      "win_rate": 36.9811320754717,
+      "expectancy_r": 0.3330343750000001,
+      "scratch_timeout_share": 0.171875
+     }
+    },
+    "6": {
+     "favourable": {
+      "n": 591,
+      "wins": 207,
+      "losses": 384,
+      "win_rate": 35.025380710659896,
+      "expectancy_r": 0.1954313186813186,
+      "scratch_timeout_share": 0.18818681318681318
+     },
+     "rest": {
+      "n": 285,
+      "wins": 113,
+      "losses": 172,
+      "win_rate": 39.64912280701755,
+      "expectancy_r": 0.3906098265895955,
+      "scratch_timeout_share": 0.17630057803468208
+     }
+    },
+    "8": {
+     "favourable": {
+      "n": 557,
+      "wins": 192,
+      "losses": 365,
+      "win_rate": 34.47037701974865,
+      "expectancy_r": 0.1673455344070277,
+      "scratch_timeout_share": 0.18448023426061494
+     },
+     "rest": {
+      "n": 319,
+      "wins": 128,
+      "losses": 191,
+      "win_rate": 40.12539184952978,
+      "expectancy_r": 0.4172071611253198,
+      "scratch_timeout_share": 0.18414322250639387
+     }
+    }
+   },
+   "arm2_described": {
+    "zone_touch": {
+     "False": {
+      "n": 355,
+      "wins": 140,
+      "losses": 215,
+      "win_rate": 39.436619718309856,
+      "expectancy_r": 0.35291079812206566,
+      "scratch_timeout_share": 0.16666666666666666
+     },
+     "None": {
+      "n": 165,
+      "wins": 65,
+      "losses": 100,
+      "win_rate": 39.39393939393939,
+      "expectancy_r": 0.43780392156862746,
+      "scratch_timeout_share": 0.19117647058823528
+     },
+     "True": {
+      "n": 356,
+      "wins": 115,
+      "losses": 241,
+      "win_rate": 32.30337078651686,
+      "expectancy_r": 0.0850743243243243,
+      "scratch_timeout_share": 0.1981981981981982
+     }
+    },
+    "close_in_zone": {
+     "False": {
+      "n": 769,
+      "wins": 279,
+      "losses": 490,
+      "win_rate": 36.28088426527958,
+      "expectancy_r": 0.25976388888888896,
+      "scratch_timeout_share": 0.17841880341880342
+     },
+     "True": {
+      "n": 107,
+      "wins": 41,
+      "losses": 66,
+      "win_rate": 38.31775700934579,
+      "expectancy_r": 0.2484492753623188,
+      "scratch_timeout_share": 0.2246376811594203
+     }
+    },
+    "tested_ratio": {
+     "0.382": {
+      "n": 586,
+      "wins": 219,
+      "losses": 367,
+      "win_rate": 37.37201365187713,
+      "expectancy_r": 0.3075889830508475,
+      "scratch_timeout_share": 0.17231638418079095
+     },
+     "0.5": {
+      "n": 233,
+      "wins": 77,
+      "losses": 156,
+      "win_rate": 33.047210300429185,
+      "expectancy_r": 0.12054237288135591,
+      "scratch_timeout_share": 0.21016949152542372
+     },
+     "0.618": {
+      "n": 57,
+      "wins": 24,
+      "losses": 33,
+      "win_rate": 42.10526315789473,
+      "expectancy_r": 0.3393239436619719,
+      "scratch_timeout_share": 0.19718309859154928
+     }
+    },
+    "rolling_level_confluence": {
+     "False": {
+      "n": 234,
+      "wins": 76,
+      "losses": 158,
+      "win_rate": 32.47863247863248,
+      "expectancy_r": 0.11070790378006873,
+      "scratch_timeout_share": 0.1958762886597938
+     },
+     "True": {
+      "n": 642,
+      "wins": 244,
+      "losses": 398,
+      "win_rate": 38.006230529595015,
+      "expectancy_r": 0.31316602809706257,
+      "scratch_timeout_share": 0.18007662835249041
+     }
+    }
+   },
+   "arm3": {
+    "favourable": {
+     "n": 439,
+     "wins": 171,
+     "losses": 268,
+     "win_rate": 38.95216400911162,
+     "expectancy_r": 0.2928752362948959,
+     "scratch_timeout_share": 0.17013232514177692
+    },
+    "rest": {
+     "n": 437,
+     "wins": 149,
+     "losses": 288,
+     "win_rate": 34.09610983981693,
+     "expectancy_r": 0.22475963302752291,
+     "scratch_timeout_share": 0.1981651376146789
+    }
+   },
+   "arm3_described": {
+    "rejection_wick_half_range": {
+     "False": {
+      "n": 683,
+      "wins": 252,
+      "losses": 431,
+      "win_rate": 36.896046852122986,
+      "expectancy_r": 0.2567104945717732,
+      "scratch_timeout_share": 0.17611580217129072
+     },
+     "True": {
+      "n": 193,
+      "wins": 68,
+      "losses": 125,
+      "win_rate": 35.233160621761655,
+      "expectancy_r": 0.26372244897959185,
+      "scratch_timeout_share": 0.21224489795918366
+     }
+    }
+   }
+  },
+  "bearish": {
+   "arm1": {
+    "4": {
+     "favourable": {
+      "n": 60,
+      "wins": 23,
+      "losses": 37,
+      "win_rate": 38.333333333333336,
+      "expectancy_r": 0.11929591836734696,
+      "scratch_timeout_share": 0.3877551020408163
+     },
+     "rest": {
+      "n": 106,
+      "wins": 40,
+      "losses": 66,
+      "win_rate": 37.735849056603776,
+      "expectancy_r": 0.20368217054263563,
+      "scratch_timeout_share": 0.17829457364341086
+     }
+    },
+    "6": {
+     "favourable": {
+      "n": 36,
+      "wins": 13,
+      "losses": 23,
+      "win_rate": 36.11111111111111,
+      "expectancy_r": 0.07255932203389832,
+      "scratch_timeout_share": 0.3898305084745763
+     },
+     "rest": {
+      "n": 130,
+      "wins": 50,
+      "losses": 80,
+      "win_rate": 38.46153846153847,
+      "expectancy_r": 0.2005059523809524,
+      "scratch_timeout_share": 0.2261904761904762
+     }
+    },
+    "8": {
+     "favourable": {
+      "n": 18,
+      "wins": 6,
+      "losses": 12,
+      "win_rate": 33.33333333333333,
+      "expectancy_r": 0.11650000000000002,
+      "scratch_timeout_share": 0.4375
+     },
+     "rest": {
+      "n": 148,
+      "wins": 57,
+      "losses": 91,
+      "win_rate": 38.513513513513516,
+      "expectancy_r": 0.17557948717948718,
+      "scratch_timeout_share": 0.24102564102564103
+     }
+    }
+   },
+   "arm1_described": {
+    "rolling_origin_is_fractal": {
+     "False": {
+      "n": 25,
+      "wins": 9,
+      "losses": 16,
+      "win_rate": 36.0,
+      "expectancy_r": 0.1544333333333334,
+      "scratch_timeout_share": 0.16666666666666666
+     },
+     "True": {
+      "n": 141,
+      "wins": 54,
+      "losses": 87,
+      "win_rate": 38.297872340425535,
+      "expectancy_r": 0.16920304568527914,
+      "scratch_timeout_share": 0.28426395939086296
+     }
+    },
+    "broke_structure": {
+     "False": {
+      "n": 65,
+      "wins": 27,
+      "losses": 38,
+      "win_rate": 41.53846153846154,
+      "expectancy_r": 0.19943181818181832,
+      "scratch_timeout_share": 0.26136363636363635
+     },
+     "None": {
+      "n": 36,
+      "wins": 13,
+      "losses": 23,
+      "win_rate": 36.11111111111111,
+      "expectancy_r": 0.20469999999999997,
+      "scratch_timeout_share": 0.1
+     },
+     "True": {
+      "n": 65,
+      "wins": 23,
+      "losses": 42,
+      "win_rate": 35.38461538461539,
+      "expectancy_r": 0.12351515151515154,
+      "scratch_timeout_share": 0.3434343434343434
+     }
+    },
+    "leg_atr_quintile": {
+     "Q1": {
+      "n": 25,
+      "wins": 9,
+      "losses": 16,
+      "win_rate": 36.0,
+      "expectancy_r": 0.22663157894736843,
+      "scratch_timeout_share": 0.34210526315789475
+     },
+     "Q2": {
+      "n": 30,
+      "wins": 14,
+      "losses": 16,
+      "win_rate": 46.666666666666664,
+      "expectancy_r": 0.25964864864864867,
+      "scratch_timeout_share": 0.1891891891891892
+     },
+     "Q3": {
+      "n": 29,
+      "wins": 12,
+      "losses": 17,
+      "win_rate": 41.37931034482759,
+      "expectancy_r": 0.3841351351351351,
+      "scratch_timeout_share": 0.21621621621621623
+     },
+     "Q4": {
+      "n": 27,
+      "wins": 9,
+      "losses": 18,
+      "win_rate": 33.33333333333333,
+      "expectancy_r": -0.05821621621621621,
+      "scratch_timeout_share": 0.2702702702702703
+     },
+     "Q5": {
+      "n": 19,
+      "wins": 6,
+      "losses": 13,
+      "win_rate": 31.57894736842105,
+      "expectancy_r": -0.013157894736842082,
+      "scratch_timeout_share": 0.5
+     },
+     "no leg": {
+      "n": 36,
+      "wins": 13,
+      "losses": 23,
+      "win_rate": 36.11111111111111,
+      "expectancy_r": 0.20469999999999997,
+      "scratch_timeout_share": 0.1
+     }
+    }
+   },
+   "arm2": {
+    "4": {
+     "favourable": {
+      "n": 112,
+      "wins": 39,
+      "losses": 73,
+      "win_rate": 34.82142857142857,
+      "expectancy_r": 0.11756209150326799,
+      "scratch_timeout_share": 0.2679738562091503
+     },
+     "rest": {
+      "n": 54,
+      "wins": 24,
+      "losses": 30,
+      "win_rate": 44.44444444444444,
+      "expectancy_r": 0.26998648648648654,
+      "scratch_timeout_share": 0.2702702702702703
+     }
+    },
+    "6": {
+     "favourable": {
+      "n": 94,
+      "wins": 33,
+      "losses": 61,
+      "win_rate": 35.1063829787234,
+      "expectancy_r": 0.12088888888888887,
+      "scratch_timeout_share": 0.3037037037037037
+     },
+     "rest": {
+      "n": 72,
+      "wins": 30,
+      "losses": 42,
+      "win_rate": 41.66666666666667,
+      "expectancy_r": 0.23528260869565218,
+      "scratch_timeout_share": 0.21739130434782608
+     }
+    },
+    "8": {
+     "favourable": {
+      "n": 90,
+      "wins": 32,
+      "losses": 58,
+      "win_rate": 35.55555555555556,
+      "expectancy_r": 0.12863432835820898,
+      "scratch_timeout_share": 0.3283582089552239
+     },
+     "rest": {
+      "n": 76,
+      "wins": 31,
+      "losses": 45,
+      "win_rate": 40.78947368421053,
+      "expectancy_r": 0.22289247311827956,
+      "scratch_timeout_share": 0.1827956989247312
+     }
+    }
+   },
+   "arm2_described": {
+    "zone_touch": {
+     "False": {
+      "n": 80,
+      "wins": 40,
+      "losses": 40,
+      "win_rate": 50.0,
+      "expectancy_r": 0.40997196261682234,
+      "scratch_timeout_share": 0.2523364485981308
+     },
+     "None": {
+      "n": 36,
+      "wins": 13,
+      "losses": 23,
+      "win_rate": 36.11111111111111,
+      "expectancy_r": 0.20469999999999997,
+      "scratch_timeout_share": 0.1
+     },
+     "True": {
+      "n": 50,
+      "wins": 10,
+      "losses": 40,
+      "win_rate": 20.0,
+      "expectancy_r": -0.17611250000000003,
+      "scratch_timeout_share": 0.375
+     }
+    },
+    "close_in_zone": {
+     "False": {
+      "n": 148,
+      "wins": 61,
+      "losses": 87,
+      "win_rate": 41.21621621621622,
+      "expectancy_r": 0.24724878048780494,
+      "scratch_timeout_share": 0.2780487804878049
+     },
+     "True": {
+      "n": 18,
+      "wins": 2,
+      "losses": 16,
+      "win_rate": 11.11111111111111,
+      "expectancy_r": -0.5781818181818181,
+      "scratch_timeout_share": 0.18181818181818182
+     }
+    },
+    "tested_ratio": {
+     "0.382": {
+      "n": 96,
+      "wins": 40,
+      "losses": 56,
+      "win_rate": 41.66666666666667,
+      "expectancy_r": 0.2569285714285714,
+      "scratch_timeout_share": 0.3142857142857143
+     },
+     "0.5": {
+      "n": 53,
+      "wins": 18,
+      "losses": 35,
+      "win_rate": 33.9622641509434,
+      "expectancy_r": 0.04667647058823533,
+      "scratch_timeout_share": 0.22058823529411764
+     },
+     "0.618": {
+      "n": 17,
+      "wins": 5,
+      "losses": 12,
+      "win_rate": 29.411764705882355,
+      "expectancy_r": -0.06199999999999997,
+      "scratch_timeout_share": 0.10526315789473684
+     }
+    },
+    "rolling_level_confluence": {
+     "False": {
+      "n": 45,
+      "wins": 17,
+      "losses": 28,
+      "win_rate": 37.77777777777778,
+      "expectancy_r": 0.40738,
+      "scratch_timeout_share": 0.1
+     },
+     "True": {
+      "n": 121,
+      "wins": 46,
+      "losses": 75,
+      "win_rate": 38.01652892561984,
+      "expectancy_r": 0.09941807909604525,
+      "scratch_timeout_share": 0.3163841807909605
+     }
+    }
+   },
+   "arm3": {
+    "favourable": {
+     "n": 87,
+     "wins": 29,
+     "losses": 58,
+     "win_rate": 33.33333333333333,
+     "expectancy_r": -0.008541666666666706,
+     "scratch_timeout_share": 0.275
+    },
+    "rest": {
+     "n": 79,
+     "wins": 34,
+     "losses": 45,
+     "win_rate": 43.037974683544306,
+     "expectancy_r": 0.36440186915887834,
+     "scratch_timeout_share": 0.2616822429906542
+    }
+   },
+   "arm3_described": {
+    "rejection_wick_half_range": {
+     "False": {
+      "n": 137,
+      "wins": 51,
+      "losses": 86,
+      "win_rate": 37.22627737226277,
+      "expectancy_r": 0.1598989361702128,
+      "scratch_timeout_share": 0.2712765957446808
+     },
+     "True": {
+      "n": 29,
+      "wins": 12,
+      "losses": 17,
+      "win_rate": 41.37931034482759,
+      "expectancy_r": 0.20269230769230773,
+      "scratch_timeout_share": 0.2564102564102564
+     }
+    }
+   }
+  }
+ },
+ "confluence": {
+  "population": {
+   "bullish": {
+    "n": 5539,
+    "wins": 1998,
+    "losses": 3541,
+    "win_rate": 36.07149304928687,
+    "expectancy_r": 0.11860295754492002,
+    "scratch_timeout_share": 0.11925584353633328
+   },
+   "bearish": {
+    "n": 5131,
+    "wins": 1534,
+    "losses": 3597,
+    "win_rate": 29.896706295069187,
+    "expectancy_r": -0.07169707283866558,
+    "scratch_timeout_share": 0.126786929884275
+   }
+  },
+  "unidentified": 0,
+  "fib_population_n": 8352,
+  "measurable": true,
+  "arm4": {
+   "bullish": {
+    "4": {
+     "favourable": {
+      "n": 916,
+      "wins": 307,
+      "losses": 609,
+      "win_rate": 33.51528384279476,
+      "expectancy_r": 0.031017690875232776,
+      "scratch_timeout_share": 0.14711359404096835
+     },
+     "rest": {
+      "n": 2758,
+      "wins": 1063,
+      "losses": 1695,
+      "win_rate": 38.54242204496012,
+      "expectancy_r": 0.1699030340944647,
+      "scratch_timeout_share": 0.13731623396934625
+     }
+    },
+    "6": {
+     "favourable": {
+      "n": 821,
+      "wins": 264,
+      "losses": 557,
+      "win_rate": 32.15590742996346,
+      "expectancy_r": -0.0055356773526370195,
+      "scratch_timeout_share": 0.15098241985522234
+     },
+     "rest": {
+      "n": 2853,
+      "wins": 1106,
+      "losses": 1747,
+      "win_rate": 38.76621100595864,
+      "expectancy_r": 0.17610351089588488,
+      "scratch_timeout_share": 0.13650121065375304
+     }
+    },
+    "8": {
+     "favourable": {
+      "n": 721,
+      "wins": 223,
+      "losses": 498,
+      "win_rate": 30.929264909847433,
+      "expectancy_r": -0.027880141010575874,
+      "scratch_timeout_share": 0.15276145710928318
+     },
+     "rest": {
+      "n": 2953,
+      "wins": 1147,
+      "losses": 1806,
+      "win_rate": 38.8418557399255,
+      "expectancy_r": 0.17550263157894805,
+      "scratch_timeout_share": 0.13654970760233917
+     }
+    }
+   },
+   "bearish": {
+    "4": {
+     "favourable": {
+      "n": 485,
+      "wins": 168,
+      "losses": 317,
+      "win_rate": 34.63917525773196,
+      "expectancy_r": 0.11369512195121947,
+      "scratch_timeout_share": 0.15505226480836237
+     },
+     "rest": {
+      "n": 3046,
+      "wins": 910,
+      "losses": 2136,
+      "win_rate": 29.875246224556797,
+      "expectancy_r": -0.10588109495295099,
+      "scratch_timeout_share": 0.13145138294838893
+     }
+    },
+    "6": {
+     "favourable": {
+      "n": 473,
+      "wins": 164,
+      "losses": 309,
+      "win_rate": 34.6723044397463,
+      "expectancy_r": 0.11281494661921701,
+      "scratch_timeout_share": 0.1583629893238434
+     },
+     "rest": {
+      "n": 3058,
+      "wins": 914,
+      "losses": 2144,
+      "win_rate": 29.888816219751472,
+      "expectancy_r": -0.10499175902244935,
+      "scratch_timeout_share": 0.13100312588803636
+     }
+    },
+    "8": {
+     "favourable": {
+      "n": 450,
+      "wins": 155,
+      "losses": 295,
+      "win_rate": 34.44444444444444,
+      "expectancy_r": 0.11514338919925503,
+      "scratch_timeout_share": 0.16201117318435754
+     },
+     "rest": {
+      "n": 3081,
+      "wins": 923,
+      "losses": 2158,
+      "win_rate": 29.957805907172997,
+      "expectancy_r": -0.10380812641083505,
+      "scratch_timeout_share": 0.1306433408577878
+     }
+    }
+   }
+  }
+ },
+ "verdicts": {
+  "arm1": {
+   "primary_passes": false,
+   "wr_sign_divisors": 0,
+   "proceeds": false
+  },
+  "arm2": {
+   "primary_passes": false,
+   "wr_sign_divisors": 0,
+   "proceeds": false
+  },
+  "arm3": {
+   "primary_passes": true,
+   "proceeds": true
+  },
+  "arm4": {
+   "primary_passes": false,
+   "wr_sign_divisors": 0,
+   "proceeds": false
+  }
+ },
+ "reproduction_note": "docs/superpowers/results/2026-10-06-v124-reproduction-note.md"
+}

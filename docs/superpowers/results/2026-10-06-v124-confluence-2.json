@@ -1,0 +1,10187 @@
+{
+ "kind": "confluence",
+ "window": [
+  "2015-01-01",
+  "2025-12-31"
+ ],
+ "tickers": [
+  "ABNB",
+  "BKNG",
+  "GC=F",
+  "IBM",
+  "MSFT",
+  "PFE",
+  "SNPS"
+ ],
+ "universe_n": 7,
+ "avwap_levels_enabled": true,
+ "rows": [
+  {
+   "ticker": "ABNB",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2022-02-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2022-07-21",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-06-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2024-05-09",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2025-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-08-24",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2022-01-25",
+   "outcome": "win",
+   "r_multiple": 2.083,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-01-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2025-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-05-10",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2021-11-05",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2022-01-25",
+   "outcome": "win",
+   "r_multiple": 2.083,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2022-01-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2022-07-19",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2025-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2021-11-05",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2022-01-25",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2022-09-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2023-03-10",
+   "outcome": "win",
+   "r_multiple": 1.793,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2025-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2025-08-07",
+   "outcome": "win",
+   "r_multiple": 2.664,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2022-01-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2022-05-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2022-07-21",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2022-09-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2025-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2025-08-07",
+   "outcome": "win",
+   "r_multiple": 2.733,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2022-01-25",
+   "outcome": "win",
+   "r_multiple": 2.083,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2022-05-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2022-09-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2023-09-21",
+   "outcome": "win",
+   "r_multiple": 2.083,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2025-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2025-08-07",
+   "outcome": "win",
+   "r_multiple": 2.726,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2025-11-10",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2022-01-25",
+   "outcome": "win",
+   "r_multiple": 2.083,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2022-01-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2022-05-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2022-09-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2023-08-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2023-09-21",
+   "outcome": "win",
+   "r_multiple": 2.56,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2025-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2025-04-24",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2025-08-07",
+   "outcome": "win",
+   "r_multiple": 2.664,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2025-11-10",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2022-05-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2022-07-21",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2022-09-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2023-05-10",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2023-08-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2024-07-25",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2025-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2025-04-28",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2025-05-13",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2025-08-07",
+   "outcome": "win",
+   "r_multiple": 2.664,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2025-11-10",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2022-05-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2022-07-21",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2022-09-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2025-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2025-04-28",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2025-08-07",
+   "outcome": "win",
+   "r_multiple": 2.715,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2025-11-04",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2025-11-10",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2022-07-21",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2022-09-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2025-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2025-05-13",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "ABNB",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2025-08-07",
+   "outcome": "win",
+   "r_multiple": 2.776,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-02-25",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-08-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2016-12-01",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2017-11-07",
+   "outcome": "win",
+   "r_multiple": 3.269,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2017-11-09",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2020-01-27",
+   "outcome": "win",
+   "r_multiple": 1.768,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-03-13",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2021-02-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2024-07-24",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2024-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2025-04-08",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2025-10-07",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-02-25",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-08-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-11-07",
+   "outcome": "win",
+   "r_multiple": 3.269,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2017-11-09",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2020-03-25",
+   "outcome": "win",
+   "r_multiple": 1.934,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2024-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2025-04-03",
+   "outcome": "win",
+   "r_multiple": 1.734,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2025-10-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2015-08-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2017-11-07",
+   "outcome": "win",
+   "r_multiple": 3.498,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2018-06-05",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2021-02-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2023-01-12",
+   "outcome": "win",
+   "r_multiple": 2.083,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2024-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2025-10-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2015-02-25",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2017-11-07",
+   "outcome": "win",
+   "r_multiple": 3.413,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2021-02-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2023-01-12",
+   "outcome": "win",
+   "r_multiple": 2.083,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2024-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2025-01-10",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2016-01-15",
+   "outcome": "win",
+   "r_multiple": 1.792,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2017-11-07",
+   "outcome": "win",
+   "r_multiple": 2.766,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2017-11-10",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2020-08-31",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2021-02-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2023-01-12",
+   "outcome": "win",
+   "r_multiple": 2.083,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2024-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2017-11-08",
+   "outcome": "win",
+   "r_multiple": 2.965,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2017-11-10",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2018-06-05",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2018-12-26",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2018-12-31",
+   "outcome": "win",
+   "r_multiple": 1.535,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2020-09-01",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2020-11-10",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2021-02-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2024-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2025-01-10",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2018-12-26",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2018-12-31",
+   "outcome": "win",
+   "r_multiple": 1.535,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2020-05-26",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2020-11-10",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2021-02-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2024-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2025-01-10",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2020-11-11",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2021-02-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2024-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2020-11-11",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2021-02-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2021-07-08",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2022-03-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2024-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2017-11-07",
+   "outcome": "win",
+   "r_multiple": 1.755,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2018-01-12",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2020-11-11",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2021-02-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2022-08-22",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2024-08-22",
+   "outcome": "win",
+   "r_multiple": 1.345,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "BKNG",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2024-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2016-10-06",
+   "outcome": "timeout",
+   "r_multiple": 0.828,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2018-08-15",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2022-07-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2023-09-27",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2024-04-04",
+   "outcome": "win",
+   "r_multiple": 2.013,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2024-11-13",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-10-04",
+   "outcome": "win",
+   "r_multiple": 1.694,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2016-12-15",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2018-05-15",
+   "outcome": "timeout",
+   "r_multiple": 1.432,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2021-02-26",
+   "outcome": "win",
+   "r_multiple": 1.496,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2022-09-26",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2024-04-04",
+   "outcome": "win",
+   "r_multiple": 2.013,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2016-12-15",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2020-08-18",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2020-11-30",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2021-02-26",
+   "outcome": "win",
+   "r_multiple": 1.496,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2024-04-04",
+   "outcome": "win",
+   "r_multiple": 2.013,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2015-03-10",
+   "outcome": "win",
+   "r_multiple": 1.497,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2016-12-15",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2021-02-26",
+   "outcome": "win",
+   "r_multiple": 1.496,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2024-04-04",
+   "outcome": "win",
+   "r_multiple": 2.013,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2024-04-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2025-05-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2015-03-10",
+   "outcome": "win",
+   "r_multiple": 1.573,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2016-12-15",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2024-04-04",
+   "outcome": "win",
+   "r_multiple": 2.013,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2024-04-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2015-03-10",
+   "outcome": "win",
+   "r_multiple": 1.565,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2016-11-23",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2016-12-15",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2020-08-18",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2021-01-05",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2021-02-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2024-04-04",
+   "outcome": "win",
+   "r_multiple": 2.013,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2024-04-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2025-05-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2015-03-10",
+   "outcome": "win",
+   "r_multiple": 1.572,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2018-10-12",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2024-04-04",
+   "outcome": "win",
+   "r_multiple": 2.013,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2024-04-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2025-05-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2015-03-10",
+   "outcome": "win",
+   "r_multiple": 1.572,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2020-08-18",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2021-01-05",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2024-04-04",
+   "outcome": "win",
+   "r_multiple": 2.013,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2024-04-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2015-03-10",
+   "outcome": "win",
+   "r_multiple": 1.56,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2020-08-18",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2021-01-05",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2024-04-04",
+   "outcome": "win",
+   "r_multiple": 2.013,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2024-04-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2015-03-10",
+   "outcome": "win",
+   "r_multiple": 1.578,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2016-10-04",
+   "outcome": "win",
+   "r_multiple": 1.689,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2020-08-18",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2021-01-05",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2024-04-04",
+   "outcome": "win",
+   "r_multiple": 2.013,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "GC=F",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2024-04-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2017-10-19",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2018-01-17",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2019-01-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2020-04-08",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-06-03",
+   "outcome": "win",
+   "r_multiple": 0.095,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2021-07-02",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2021-11-19",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2024-01-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2024-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2017-10-19",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-01-17",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2018-10-11",
+   "outcome": "win",
+   "r_multiple": 1.861,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2018-11-20",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2019-01-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2020-03-09",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2020-10-27",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2024-01-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2024-07-12",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2024-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2015-01-12",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2018-01-17",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2020-03-09",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2020-06-08",
+   "outcome": "win",
+   "r_multiple": 3.031,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2020-10-27",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2024-01-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2015-01-12",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2018-01-17",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2018-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2020-10-28",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2021-04-21",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2024-01-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2024-04-15",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2024-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2015-01-12",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2018-01-17",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2018-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2021-04-21",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2024-01-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2017-07-19",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2018-01-17",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2018-10-11",
+   "outcome": "win",
+   "r_multiple": 1.886,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2018-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2019-01-09",
+   "outcome": "win",
+   "r_multiple": 3.167,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2020-10-27",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2020-10-28",
+   "outcome": "win",
+   "r_multiple": 3.196,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2021-04-21",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2022-09-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2023-07-28",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2024-01-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2015-01-12",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2018-10-11",
+   "outcome": "win",
+   "r_multiple": 1.986,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2018-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2020-03-09",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2020-10-28",
+   "outcome": "win",
+   "r_multiple": 3.196,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2021-04-21",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2021-04-22",
+   "outcome": "win",
+   "r_multiple": 1.943,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2022-09-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2024-01-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2024-11-01",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2015-01-12",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2018-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2020-10-28",
+   "outcome": "win",
+   "r_multiple": 3.196,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2022-09-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2024-01-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2024-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2015-01-12",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2017-05-08",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2018-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2020-10-28",
+   "outcome": "win",
+   "r_multiple": 3.196,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2021-04-22",
+   "outcome": "win",
+   "r_multiple": 2.049,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2022-09-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2024-01-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2024-10-30",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2015-01-12",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2018-10-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2019-01-09",
+   "outcome": "win",
+   "r_multiple": 2.937,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2020-10-28",
+   "outcome": "win",
+   "r_multiple": 3.196,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2021-04-22",
+   "outcome": "win",
+   "r_multiple": 2.049,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2024-01-26",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2024-10-30",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "IBM",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2025-07-25",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2015-01-30",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2016-01-15",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2017-06-05",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2017-12-04",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-04-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2022-07-29",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2015-01-30",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2016-01-15",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2024-12-09",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2015-01-30",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2015-10-30",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2025-05-02",
+   "outcome": "win",
+   "r_multiple": 3.065,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2015-10-30",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2016-01-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2016-02-04",
+   "outcome": "win",
+   "r_multiple": 2.362,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2022-06-10",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2022-11-03",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2015-10-30",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2022-06-10",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2022-07-12",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2022-11-03",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2015-10-30",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2022-06-10",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2022-07-12",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2022-07-15",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2022-11-03",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2015-10-30",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2016-02-04",
+   "outcome": "win",
+   "r_multiple": 2.585,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2018-12-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2019-01-03",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2020-04-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2022-06-10",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2022-11-03",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2015-10-30",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2020-03-10",
+   "outcome": "win",
+   "r_multiple": 2.349,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2020-04-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2022-06-10",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2022-11-03",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2023-05-01",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2024-12-05",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2015-04-24",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2015-10-30",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2016-04-26",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2016-07-13",
+   "outcome": "win",
+   "r_multiple": 1.704,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2020-04-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2022-06-13",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2022-07-29",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2022-11-03",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2023-04-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2024-12-05",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2015-04-24",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2015-10-30",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2020-04-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2022-11-03",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2023-05-01",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2024-12-05",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "MSFT",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2025-04-17",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2015-11-19",
+   "outcome": "win",
+   "r_multiple": 1.742,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2018-07-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2019-08-05",
+   "outcome": "win",
+   "r_multiple": 2.915,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2020-02-20",
+   "outcome": "win",
+   "r_multiple": 1.717,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-06-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2021-07-29",
+   "outcome": "win",
+   "r_multiple": 2.286,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2021-08-02",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2024-06-17",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2025-06-10",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2015-08-24",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2018-07-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2019-08-05",
+   "outcome": "win",
+   "r_multiple": 2.915,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2020-02-20",
+   "outcome": "win",
+   "r_multiple": 1.717,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2021-07-28",
+   "outcome": "win",
+   "r_multiple": 3.334,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2021-08-02",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2022-10-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-12-02",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2018-07-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2021-07-29",
+   "outcome": "win",
+   "r_multiple": 2.286,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2021-08-02",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2022-10-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2022-12-02",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2015-11-20",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2018-07-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2021-07-29",
+   "outcome": "win",
+   "r_multiple": 2.286,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2021-08-02",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2022-02-28",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2022-10-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2018-07-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2019-01-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2021-07-29",
+   "outcome": "win",
+   "r_multiple": 2.286,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2021-08-02",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2022-10-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2015-11-20",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2018-07-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2020-02-24",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2020-02-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2021-07-29",
+   "outcome": "win",
+   "r_multiple": 2.286,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2021-08-02",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2022-10-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2016-11-07",
+   "outcome": "win",
+   "r_multiple": 2.709,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2018-07-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2020-02-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2021-07-29",
+   "outcome": "win",
+   "r_multiple": 2.286,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2021-08-02",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2022-01-21",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2022-10-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2025-10-01",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2015-07-06",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2016-11-07",
+   "outcome": "win",
+   "r_multiple": 2.709,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2020-02-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2021-07-29",
+   "outcome": "win",
+   "r_multiple": 2.286,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2021-08-02",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2021-12-08",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2022-10-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2024-06-17",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2024-11-04",
+   "outcome": "win",
+   "r_multiple": 1.755,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2020-02-24",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2020-02-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2021-07-29",
+   "outcome": "win",
+   "r_multiple": 2.286,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2021-08-02",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2021-12-08",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2024-06-17",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2018-07-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2019-01-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2020-02-24",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2020-02-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2021-07-29",
+   "outcome": "win",
+   "r_multiple": 2.286,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2021-08-02",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2022-10-07",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2024-06-17",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2024-07-16",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "PFE",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2024-11-08",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2018-09-18",
+   "outcome": "win",
+   "r_multiple": 2.973,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2019-02-04",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-03-12",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2020-04-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2021-10-04",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2022-01-21",
+   "outcome": "win",
+   "r_multiple": 0.911,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2023-10-09",
+   "outcome": "win",
+   "r_multiple": 1.28,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2025-05-05",
+   "outcome": "win",
+   "r_multiple": 3.027,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2015-10-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2016-01-13",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-03-21",
+   "outcome": "win",
+   "r_multiple": 1.721,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-02-04",
+   "outcome": "win",
+   "r_multiple": 1.599,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2019-02-06",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2022-01-21",
+   "outcome": "win",
+   "r_multiple": 0.918,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-03-11",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-10-09",
+   "outcome": "win",
+   "r_multiple": 1.28,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2024-09-06",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2025-06-10",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2025-09-12",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2022-02-25",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2023-10-09",
+   "outcome": "win",
+   "r_multiple": 1.28,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2025-09-12",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2025-11-04",
+   "outcome": "win",
+   "r_multiple": 3.06,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2022-02-24",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2023-10-09",
+   "outcome": "win",
+   "r_multiple": 1.28,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2024-09-06",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2025-11-04",
+   "outcome": "win",
+   "r_multiple": 3.06,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2019-09-09",
+   "outcome": "win",
+   "r_multiple": 1.586,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2022-07-29",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2023-10-09",
+   "outcome": "win",
+   "r_multiple": 1.28,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2023-12-04",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2024-09-06",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2025-09-11",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2025-11-04",
+   "outcome": "win",
+   "r_multiple": 3.06,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2019-09-09",
+   "outcome": "win",
+   "r_multiple": 2.473,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2020-03-13",
+   "outcome": "win",
+   "r_multiple": 2.704,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2022-02-25",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2022-07-29",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2023-10-09",
+   "outcome": "win",
+   "r_multiple": 1.28,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2024-08-28",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2025-09-11",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2025-11-04",
+   "outcome": "win",
+   "r_multiple": 3.06,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2015-10-26",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2019-09-09",
+   "outcome": "win",
+   "r_multiple": 2.514,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2022-05-10",
+   "outcome": "win",
+   "r_multiple": 0.815,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2022-07-29",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2023-10-09",
+   "outcome": "win",
+   "r_multiple": 1.28,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2025-09-11",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2025-11-04",
+   "outcome": "win",
+   "r_multiple": 3.06,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2019-09-09",
+   "outcome": "win",
+   "r_multiple": 2.492,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2020-03-12",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2020-04-21",
+   "outcome": "win",
+   "r_multiple": 3.18,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2022-01-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2022-07-29",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2024-01-02",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2024-12-10",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2025-09-11",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2025-11-04",
+   "outcome": "win",
+   "r_multiple": 3.06,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2015-10-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2019-09-09",
+   "outcome": "win",
+   "r_multiple": 2.492,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2020-04-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2022-01-13",
+   "outcome": "win",
+   "r_multiple": 1.095,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2022-05-09",
+   "outcome": "win",
+   "r_multiple": 2.083,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2022-05-10",
+   "outcome": "win",
+   "r_multiple": 0.815,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2022-07-27",
+   "outcome": "win",
+   "r_multiple": 1.787,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2022-07-29",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2024-01-02",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2024-04-16",
+   "outcome": "win",
+   "r_multiple": 1.863,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2025-09-11",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2025-11-04",
+   "outcome": "win",
+   "r_multiple": 3.06,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2015-10-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2018-06-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2019-09-09",
+   "outcome": "win",
+   "r_multiple": 2.492,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2020-04-16",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2022-01-13",
+   "outcome": "win",
+   "r_multiple": 1.095,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2022-02-01",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2022-07-27",
+   "outcome": "win",
+   "r_multiple": 1.787,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2022-07-29",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2022-08-19",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2024-01-03",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2024-09-26",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2025-09-11",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "SNPS",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2025-11-04",
+   "outcome": "win",
+   "r_multiple": 3.06,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  }
+ ],
+ "elapsed_s": 5727.2
+}

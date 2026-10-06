@@ -1,0 +1,2071 @@
+{
+ "kind": "confluence",
+ "window": [
+  "2015-01-01",
+  "2025-12-31"
+ ],
+ "tickers": [
+  "AAPL"
+ ],
+ "universe_n": 1,
+ "avwap_levels_enabled": true,
+ "rows": [
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2015-11-02",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2016-07-28",
+   "outcome": "win",
+   "r_multiple": 2.655,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2017-02-03",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2017-05-09",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2w",
+   "direction": "bullish",
+   "entry_date": "2017-06-12",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2020-03-09",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2022-07-29",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2w",
+   "direction": "bearish",
+   "entry_date": "2024-06-11",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-07-28",
+   "outcome": "win",
+   "r_multiple": 2.655,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2016-09-19",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2017-05-09",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2018-11-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2019-07-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2020-03-09",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2022-07-29",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2023-04-03",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2024-06-11",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4w",
+   "direction": "bearish",
+   "entry_date": "2025-04-03",
+   "outcome": "win",
+   "r_multiple": 0.011,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4w",
+   "direction": "bullish",
+   "entry_date": "2025-08-08",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2016-09-19",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2017-05-09",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2018-11-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2022-09-29",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2023-03-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2m",
+   "direction": "bearish",
+   "entry_date": "2024-06-11",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2024-08-14",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2025-04-08",
+   "outcome": "win",
+   "r_multiple": 5.311,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "2m",
+   "direction": "bullish",
+   "entry_date": "2025-08-08",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2017-05-09",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2018-11-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2020-02-25",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2020-02-26",
+   "outcome": "win",
+   "r_multiple": 0.004,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2023-03-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "3m",
+   "direction": "bearish",
+   "entry_date": "2024-09-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "3m",
+   "direction": "bullish",
+   "entry_date": "2025-04-08",
+   "outcome": "win",
+   "r_multiple": 5.311,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2017-05-09",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2017-05-17",
+   "outcome": "win",
+   "r_multiple": 1.723,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2017-05-18",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2018-02-15",
+   "outcome": "win",
+   "r_multiple": 1.698,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2018-11-23",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2020-09-03",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2023-04-03",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2024-09-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2024-12-30",
+   "outcome": "win",
+   "r_multiple": 1.525,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4m",
+   "direction": "bearish",
+   "entry_date": "2025-04-03",
+   "outcome": "win",
+   "r_multiple": 0.029,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "4m",
+   "direction": "bullish",
+   "entry_date": "2025-04-08",
+   "outcome": "win",
+   "r_multiple": 5.18,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2017-05-09",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2017-05-18",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2020-09-03",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2020-11-11",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2023-03-31",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2024-06-11",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2024-08-15",
+   "outcome": "win",
+   "r_multiple": 1.647,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2024-09-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "5m",
+   "direction": "bearish",
+   "entry_date": "2024-12-30",
+   "outcome": "win",
+   "r_multiple": 3.124,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "5m",
+   "direction": "bullish",
+   "entry_date": "2025-04-08",
+   "outcome": "win",
+   "r_multiple": 4.043,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2015-07-08",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2017-05-09",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2017-05-17",
+   "outcome": "win",
+   "r_multiple": 1.723,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2017-05-18",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2020-09-03",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2024-09-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "6m",
+   "direction": "bearish",
+   "entry_date": "2024-12-30",
+   "outcome": "win",
+   "r_multiple": 2.732,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "6m",
+   "direction": "bullish",
+   "entry_date": "2025-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2016-08-04",
+   "outcome": "win",
+   "r_multiple": 1.401,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2017-05-09",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2017-05-18",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2020-09-03",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2022-09-29",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2023-11-10",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2024-09-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "7m",
+   "direction": "bearish",
+   "entry_date": "2024-12-30",
+   "outcome": "win",
+   "r_multiple": 3.125,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "7m",
+   "direction": "bullish",
+   "entry_date": "2025-01-02",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2016-08-04",
+   "outcome": "win",
+   "r_multiple": 1.349,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2016-08-05",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2017-05-09",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2017-05-17",
+   "outcome": "win",
+   "r_multiple": 1.723,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2017-05-18",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2019-09-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2020-03-09",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2020-09-03",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2022-09-29",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2024-09-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "8m",
+   "direction": "bearish",
+   "entry_date": "2024-12-30",
+   "outcome": "win",
+   "r_multiple": 3.145,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2025-01-02",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "8m",
+   "direction": "bullish",
+   "entry_date": "2025-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2015-06-29",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2015-07-27",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2017-05-09",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2017-05-17",
+   "outcome": "win",
+   "r_multiple": 1.723,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2017-05-18",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2019-09-11",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2020-09-03",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2022-03-24",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2023-11-10",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2024-08-15",
+   "outcome": "win",
+   "r_multiple": 1.647,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2024-09-20",
+   "outcome": "scratch",
+   "r_multiple": 0.0,
+   "identified": true,
+   "has_fib": false
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "9m",
+   "direction": "bearish",
+   "entry_date": "2024-12-30",
+   "outcome": "win",
+   "r_multiple": 3.164,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": false,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": false,
+    "fib_on_leg": false
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2025-01-02",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": true
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": true
+   }
+  },
+  {
+   "ticker": "AAPL",
+   "horizon_key": "9m",
+   "direction": "bullish",
+   "entry_date": "2025-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "identified": true,
+   "has_fib": true,
+   "d4": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d6": {
+    "has_leg": true,
+    "fib_on_leg": false
+   },
+   "d8": {
+    "has_leg": true,
+    "fib_on_leg": false
+   }
+  }
+ ],
+ "elapsed_s": 608.5
+}
