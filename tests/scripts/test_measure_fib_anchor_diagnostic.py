@@ -587,10 +587,12 @@ def test_empty_favourable_bucket_does_not_pass_and_does_not_raise():
     module = _module()
     fib, confluence, repro = _payloads()
     fib[0]["rows"] = group(20, 20)                      # nothing favourable on any split
+    baseline = module.render_markdown(module.build_report(*_payloads()))
     report = module.build_report(fib, confluence, repro)
+    assert report["fib"]["bullish"]["arm1"]["6"]["favourable"]["win_rate"] is None
     assert report["verdicts"]["arm1"]["proceeds"] is False
     assert report["verdicts"]["arm3"]["proceeds"] is False
-    assert "n/a" in module.render_markdown(report)
+    assert module.render_markdown(report).count("n/a") > baseline.count("n/a")
 
 
 def test_reproduction_note_must_be_non_empty(tmp_path):
