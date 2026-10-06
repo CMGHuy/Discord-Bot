@@ -743,3 +743,26 @@ def test_mixed_avwap_flags_are_refused():
     fib[1]["avwap_levels_enabled"] = False
     with pytest.raises(SystemExit, match="avwap_levels_enabled"):
         module.build_report(fib, confluence, repro)
+
+
+def test_note_must_be_committed_and_unmodified_inside_a_repo(tmp_path):
+    import shutil
+    import subprocess
+    if shutil.which("git") is None:
+        pytest.skip("git unavailable")
+    module = _module()
+
+    def git(*args):
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-C", str(tmp_path), *args],
+                       check=True, capture_output=True)
+
+    git("init", "-q")
+    note = tmp_path / "note.md"
+    note.write_text("explained", encoding="utf-8")
+    assert module._note_is_tracked(note) is False             # untracked
+    git("add", "note.md")
+    assert module._note_is_tracked(note) is False             # staged, never committed
+    git("commit", "-q", "-m", "note")
+    assert module._note_is_tracked(note) is True
+    note.write_text("explained differently", encoding="utf-8")
+    assert module._note_is_tracked(note) is False             # modified since the commit

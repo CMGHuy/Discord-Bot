@@ -676,11 +676,14 @@ def _git(path, *args):
 
 
 def _note_is_tracked(path) -> bool:
-    """True when the note is tracked by git; True too when not in a repo or git is missing."""
+    """True when the note is committed and unmodified; True too when not in a repo or git is missing."""
+    name = Path(path).resolve().name
     try:
         if _git(path, "rev-parse", "--is-inside-work-tree").returncode != 0:
             return True
-        return _git(path, "ls-files", "--error-unmatch", Path(path).resolve().name).returncode == 0
+        return (_git(path, "ls-files", "--error-unmatch", name).returncode == 0
+                and bool(_git(path, "log", "-1", "--format=%H", "--", name).stdout.strip())
+                and _git(path, "diff", "--quiet", "HEAD", "--", name).returncode == 0)
     except OSError:
         return True
 
