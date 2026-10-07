@@ -78,12 +78,13 @@ def mde_expectancy_r(population, *, target_n: int, power: float = 0.80,
     return float((z_a + z_b) * np.sqrt(2.0 * variance / n_eff))
 
 
-def _clause_expectancy_gain(baseline, component, n_resamples, seed) -> ClauseResult:
+def _clause_expectancy_gain(baseline, component, n_resamples, seed,
+                            cluster: str = "ticker") -> ClauseResult:
     """The objective clause: ExpR must IMPROVE, not merely hold -- the
     inverse of v72 clause 2's non-inferiority floor, because for
     Edge:harvest work expectancy is what the feature exists to buy."""
     res = bootstrap_delta(baseline, component, delta_expectancy_r,
-                          n_resamples=n_resamples, seed=seed)
+                          n_resamples=n_resamples, seed=seed, cluster=cluster)
     if res.point is None or res.p_greater_than_zero is None:
         return ClauseResult("expectancy_gain", "FAIL",
                             "no closed trades in one arm", None, 0.0)
@@ -101,7 +102,8 @@ def _clause_expectancy_gain(baseline, component, n_resamples, seed) -> ClauseRes
 
 def _clause_win_rate_floor(baseline, component, n_resamples, seed, *,
                           structurally_immune: bool = False,
-                          split: dict | None = None) -> ClauseResult:
+                          split: dict | None = None,
+                          cluster: str = "ticker") -> ClauseResult:
     """The floor clause: standardised WR may not fall by more than
     WIN_RATE_FLOOR_PP. A mechanism that only touches behaviour after the
     win/loss decision (e.g. the runner leg, post-TP1) cannot move WR at
@@ -131,7 +133,7 @@ def _clause_win_rate_floor(baseline, component, n_resamples, seed, *,
         # actually differ (added/removed/changed), so fall through and
         # bootstrap for real rather than trusting the claim.
     res = bootstrap_delta(baseline, component, delta_standardised_win_rate,
-                          n_resamples=n_resamples, seed=seed)
+                          n_resamples=n_resamples, seed=seed, cluster=cluster)
     if res.point is None or res.lo is None:
         return ClauseResult("win_rate_floor", "FAIL",
                             "no decided trades in one arm", None, WIN_RATE_FLOOR_PP)
@@ -146,7 +148,7 @@ def evaluate_harvest(baseline, component, *, stage: str,
                     structurally_immune_to_wr: bool = False,
                     permutation_p: float | None = None,
                     n_resamples: int = BOOTSTRAP_RESAMPLES,
-                    seed: int = 42) -> AcceptanceResult:
+                    seed: int = 42, cluster: str = "ticker") -> AcceptanceResult:
     """The harvest gate. Every applicable clause must PASS.
 
     No `mechanism` clause (v72 clause 6) -- these hypotheses don't remove
@@ -160,10 +162,10 @@ def evaluate_harvest(baseline, component, *, stage: str,
         raise ValueError(f"stage must be one of {STAGES}, got {stage!r}")
     split = population_split(baseline, component)
     clauses = (
-        _clause_expectancy_gain(baseline, component, n_resamples, seed),
+        _clause_expectancy_gain(baseline, component, n_resamples, seed, cluster),
         _clause_win_rate_floor(baseline, component, n_resamples, seed,
                               structurally_immune=structurally_immune_to_wr,
-                              split=split),
+                              split=split, cluster=cluster),
         _clause_volume(baseline, component),
         _clause_permutation(stage, permutation_p),
     )
@@ -172,7 +174,7 @@ def evaluate_harvest(baseline, component, *, stage: str,
                             strata=stratum_table(baseline, component),
                             split={k: len(v) if isinstance(v, list) else v
                                    for k, v in split.items()},
-                            seed=seed, version=HARVEST_VERSION)
+                            seed=seed, version=HARVEST_VERSION, cluster=cluster)
 
 
 def _swapped(b_by, c_by, tickers, swap):
