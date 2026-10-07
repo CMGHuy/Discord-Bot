@@ -107,8 +107,7 @@ def filter_gaps(df: pd.DataFrame, gaps: list, mode: str = "all",
 
 
 def find_fair_value_gaps_detailed(df: pd.DataFrame, lookback: int = LOOKBACK_BARS,
-                                   max_per_side: int = MAX_GAPS_PER_SIDE, mode: str = "all",
-                          k: float = DEFAULT_DISPLACEMENT_ATR_K) -> list:
+                                   max_per_side: int = MAX_GAPS_PER_SIDE) -> list:
     """
     Same detection as find_fair_value_gaps(), but returns the full gap
     geometry instead of just a midpoint price -- {"bottom", "top", "mid",
