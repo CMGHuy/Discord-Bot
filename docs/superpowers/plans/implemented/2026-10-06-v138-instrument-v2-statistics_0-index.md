@@ -14,7 +14,7 @@
 
 ## Progress
 
-Not started. Update this block when a phase closes and at close-out (IS11).
+Done: IS1–IS11 on `main`, 67a08a20. Phase 6 wires `--instrument v2` to `cluster="week"`.
 
 ## Where to work
 
