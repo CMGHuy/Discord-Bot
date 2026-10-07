@@ -14,8 +14,8 @@ from swingbot.core.backtesting.acceptance import ArmTrade, bootstrap_delta, delt
 from swingbot.core.backtesting.backtest_wf import plateau_report  # noqa: E402
 
 
-def _row(value, baseline, component, refused):
-    res = bootstrap_delta(baseline, component, delta_expectancy_r)
+def _row(value, baseline, component, refused, cluster="ticker"):
+    res = bootstrap_delta(baseline, component, delta_expectancy_r, cluster=cluster)
     eligible = value not in refused and res.lo is not None and res.lo > 0
     return {"value": value, "n": len(component), "delta_r": res.point, "lo95": res.lo, "eligible": eligible}
 
@@ -34,8 +34,8 @@ def _pick(pool, less_aggressive):
     return max(tied) if less_aggressive == "larger" else min(tied)
 
 
-def select(cells, *, param, less_aggressive, refused=()) -> dict:
-    rows = [_row(v, b, c, set(refused)) for v, b, c in cells]
+def select(cells, *, param, less_aggressive, refused=(), cluster="ticker") -> dict:
+    rows = [_row(v, b, c, set(refused), cluster) for v, b, c in cells]
     grid, deltas = [r["value"] for r in rows], [r["delta_r"] or 0.0 for r in rows]
     for i, row in enumerate(rows):
         row["plateau"] = _qualifies(rows, i, param, grid, deltas)

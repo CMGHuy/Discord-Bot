@@ -58,11 +58,12 @@ def badge_verdict(stats, min_n):
     return {"clears": all(clauses.values()), "clauses": clauses}
 
 
-def expr_lower_bound(rows, *, n_resamples=acceptance.BOOTSTRAP_RESAMPLES, seed=BOOTSTRAP_SEED):
+def expr_lower_bound(rows, *, n_resamples=acceptance.BOOTSTRAP_RESAMPLES, seed=BOOTSTRAP_SEED,
+                     cluster="ticker"):
     trades = [SimpleNamespace(**row) for row in rows]
     draws = acceptance.cluster_bootstrap(
         [], trades, lambda _baseline, component: acceptance.expectancy_r(component),
-        n_resamples=n_resamples, seed=seed,
+        n_resamples=n_resamples, seed=seed, cluster=cluster,
     )
     if draws.size == 0:
         return None
@@ -78,9 +79,11 @@ def tier2_verdict(stats, lower_bound, min_n):
     return {"clears": all(clauses.values()), "clauses": clauses}
 
 
-def score_cell(rows, min_n, *, n_resamples=acceptance.BOOTSTRAP_RESAMPLES, seed=BOOTSTRAP_SEED):
+def score_cell(rows, min_n, *, n_resamples=acceptance.BOOTSTRAP_RESAMPLES, seed=BOOTSTRAP_SEED,
+               cluster="ticker"):
     stats = pooled(rows)
-    lower_bound = expr_lower_bound(rows, n_resamples=n_resamples, seed=seed) if rows else None
+    lower_bound = (expr_lower_bound(rows, n_resamples=n_resamples, seed=seed, cluster=cluster)
+                   if rows else None)
     tier1 = badge_verdict(stats, min_n)
     tier2 = tier2_verdict(stats, lower_bound, min_n)
     tier = 1 if tier1["clears"] else (2 if tier2["clears"] else None)
@@ -101,10 +104,10 @@ def _pick_winner(cells, plateau1, plateau2):
 
 
 def stage1(rows_by_cell, direction, grid, *, n_resamples=acceptance.BOOTSTRAP_RESAMPLES,
-           seed=BOOTSTRAP_SEED):
+           seed=BOOTSTRAP_SEED, cluster="ticker"):
     cells = {
         value: score_cell(dir_rows(rows_by_cell[cell_key(value)], direction), MIN_N_TRAIN,
-                          n_resamples=n_resamples, seed=seed)
+                          n_resamples=n_resamples, seed=seed, cluster=cluster)
         for value in grid
     }
     tier1 = {value: cells[value]["tier1"]["clears"] for value in grid}
