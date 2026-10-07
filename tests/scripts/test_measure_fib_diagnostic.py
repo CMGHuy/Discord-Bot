@@ -114,42 +114,39 @@ def test_reclaim_result_is_invalidated_when_a_bar_before_the_reclaim_trades_thro
     low = np.array([99, 97.0, 100.0])   # bar 1's low(97) <= stop(98) -> invalidated
     close = np.array([100, 98.5, 102.0])
     trade = T(stop_loss=98.0)
-    result = mfd._reclaim_result(None, 0, trade, "bullish", "4w", None, None, None,
-                                 high, low, close, 5)
+    result = mfd._reclaim_result(None, 0, trade, "bullish", "4w", high, low, close, 5)
     assert result == ("invalidated", None)
 
 
-def test_reclaim_result_calls_trade_plan_at_the_reclaim_bar_and_simulates_from_there(monkeypatch):
+def test_reclaim_result_builds_the_production_plan_at_the_reclaim_bar_and_simulates_from_there(monkeypatch):
     """I3: the #4 arm is the full production plan at the reclaim bar j
-    (_trade_plan_at, which applies _fibonacci_plan's cap at entry_j and the
+    (_production_plan, which applies _fibonacci_plan's cap at entry_j and the
     lifecycle step itself) -- supersedes the plan's "same stop" wording."""
     mfd = _mfd()
     calls = []
 
-    def fake_trade_plan_at(frame, idx, direction, strategy, horizon_key, atr_s, sh_s, sl_s):
+    def fake_production_plan(frame, idx, direction, horizon_key):
         calls.append(idx)
         return 102.0, 99.5, 110.0   # entry_j, capped stop_j, target_j
 
-    monkeypatch.setattr(mfd, "_trade_plan_at", fake_trade_plan_at)
+    monkeypatch.setattr(mfd, "_production_plan", fake_production_plan)
     high = np.array([101, 100, 103, 111.0])
     low = np.array([99, 100, 100, 100.0])
     close = np.array([100, 100, 102.0, 110.0])
     trade = T(stop_loss=90.0)  # far below every bar's low -- never invalidated
-    result = mfd._reclaim_result(object(), 0, trade, "bullish", "4w", object(), object(), object(),
-                                 high, low, close, 5)
+    result = mfd._reclaim_result(object(), 0, trade, "bullish", "4w", high, low, close, 5)
     assert calls == [2]   # the reclaim bar, not the signal bar
     assert result == mfd.simulate_first_touch(high, low, close, 2, 102.0, 99.5, 110.0, "bullish", 5)
 
 
 def test_reclaim_result_is_no_target_when_the_production_plan_finds_none(monkeypatch):
     mfd = _mfd()
-    monkeypatch.setattr(mfd, "_trade_plan_at", lambda *a, **kw: None)
+    monkeypatch.setattr(mfd, "_production_plan", lambda *a, **kw: None)
     high = np.array([101, 100, 103.0])
     low = np.array([99, 100.0, 100.0])
     close = np.array([100, 100.0, 102.0])
     trade = T(stop_loss=90.0)
-    result = mfd._reclaim_result(object(), 0, trade, "bullish", "4w", object(), object(), object(),
-                                 high, low, close, 5)
+    result = mfd._reclaim_result(object(), 0, trade, "bullish", "4w", high, low, close, 5)
     assert result == ("no_target", None)
 
 
@@ -225,15 +222,14 @@ def test_lifecycle_disabled_flags_are_false_and_arms_match_pre_lifecycle_geometr
     assert features["deeper"] == expected_deeper
 
 
-def test_features_for_stop_mismatch_is_false_when_trade_carries_trade_plan_ats_own_stop():
-    """The new stop_mismatch definition compares against _trade_plan_at's own
-    (stop, target) -- the full production pipeline including
-    apply_level_lifecycle -- not the pre-lifecycle structural_stop/apply_cap
-    geometry."""
+def test_features_for_stop_mismatch_is_false_when_trade_carries_the_production_plans_own_stop():
+    """stop_mismatch compares against _production_plan's own (stop, target) --
+    the live constructor, including apply_level_lifecycle -- not the
+    pre-lifecycle structural_stop/apply_cap geometry."""
     mfd = _mfd()
     frame, horizon, i = _impulse_frame(), "4w", 44
     atr_s, sh_s, sl_s, _, _ = mfd._plan_series(frame, mfd.STRATEGY, horizon)
-    plan_at = mfd._trade_plan_at(frame, i, "bullish", mfd.STRATEGY, horizon, atr_s, sh_s, sl_s)
+    plan_at = mfd._production_plan(frame, i, "bullish", horizon)
     assert plan_at is not None
     entry, stop, target = plan_at
     trade = T(entry_date=str(frame.index[i].date()), direction="bullish", entry=entry,
@@ -493,3 +489,36 @@ def test_render_markdown_names_every_mechanism_and_the_reproduction_line():
     for needle in ("#1 structural_only", "#2 deeper_stop", "#4 reclaim", "v93 reproduction", "Candidates",
                   "lifecycle rate", "over-hard-cap rate", "calibrated (v2+delta)", "#2 coverage", "#4 coverage"):
         assert needle in md
+
+
+def _fib_cases():
+    from tests.fixtures.ohlcv_parity import PARITY_CASES
+    return [case for case in PARITY_CASES if case[1] == "Fibonacci"]
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(("ticker", "strategy", "horizon"), _fib_cases())
+def test_production_plan_reproduces_the_v1_backtest_plan_at_every_fib_signal(
+        monkeypatch, ticker, strategy, horizon):
+    """v137 IC5: moving this closed diagnostic off backtest._trade_plan_at onto
+    build_strategy_plan must not move v101's numbers. On the full frame at the
+    same bar both read the same rolling swings, fib_level_stop_at, lifecycle
+    step and reward floor; this pins that on every fixture Fibonacci signal."""
+    from swingbot.core.backtesting import backtest as bt
+    from tests.backtesting.test_pullback_dryup_witness import pin_code_defaults
+    from tests.fixtures.ohlcv_parity import load_ohlcv
+
+    pin_code_defaults(monkeypatch)
+    mfd = _mfd()
+    frame = load_ohlcv(ticker)
+    atr_s, sh_s, sl_s, _, _ = bt._plan_series(frame, strategy, horizon)
+    bullish, bearish = bt._vectorized_entries(frame, strategy, horizon)
+    compared = 0
+    for i in np.where(bullish.values | bearish.values)[0]:
+        if i < bt.MIN_BARS[horizon]:
+            continue
+        direction = "bullish" if bullish.values[i] else "bearish"
+        expected = bt._trade_plan_at(frame, i, direction, strategy, horizon, atr_s, sh_s, sl_s)
+        assert mfd._production_plan(frame, int(i), direction, horizon) == expected, (ticker, horizon, i)
+        compared += expected is not None
+    assert compared, f"no Fibonacci plan built on {ticker}/{horizon}"
