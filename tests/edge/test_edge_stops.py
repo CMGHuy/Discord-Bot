@@ -2,7 +2,7 @@
 
 The pure distribution math is the briefs' own spec. The wiring blocks
 exist because `_atr_plan` is the SHARED sizing source for both the live
-plan builder and the backtest (`backtest._trade_plan_at`) -- so how these
+plan builder and the backtest (`backtest._v1_plan_levels`) -- so how these
 overrides reach it decides whether backtests stay hermetic or start
 silently reading the live journal. See test_backtest_sizing_path_is_untouched.
 """
@@ -249,22 +249,22 @@ def test_structural_builders_are_untouched():
 
 
 def test_backtest_sizing_path_is_untouched(df):
-    """backtest._trade_plan_at shares _atr_plan with the live builder. The
+    """backtest._v1_plan_levels shares _atr_plan with the live builder. The
     multiplier is resolved at the build_strategy_plan BOUNDARY, never
     inside _atr_plan, so a backtest can never silently start pricing 2020
     trades off the live journal. stop_mult stays an injected parameter the
     E33 fold harness supplies explicitly."""
     import inspect
     from swingbot.core.backtesting import backtest
-    assert "stop_mult" not in inspect.signature(backtest._trade_plan_at).parameters
+    assert "stop_mult" not in inspect.signature(backtest._v1_plan_levels).parameters
     assert inspect.signature(_atr_plan).parameters["stop_mult"].default is None
 
     from swingbot.core.market.indicators import atr
     atr_series = atr(df, 14)
     config_flag = config.DATA_DRIVEN_STOPS_ENABLED
     assert config_flag is False, "this factor must ship default-off"
-    before = backtest._trade_plan_at(df, 79, "bullish", "RSI", "4w", atr_series)
-    assert before == backtest._trade_plan_at(df, 79, "bullish", "RSI", "4w", atr_series)
+    before = backtest._v1_plan_levels(df, 79, "bullish", "RSI", "4w", atr_series)
+    assert before == backtest._v1_plan_levels(df, 79, "bullish", "RSI", "4w", atr_series)
     assert np.isfinite(before[1])
 
 

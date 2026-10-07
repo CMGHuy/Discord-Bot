@@ -14,7 +14,7 @@ is stale.
 | Stop and target sizing | `swingbot/core/planning/builders.py` → `_fib_branch`, `_fibonacci_plan` |
 | Target candidates | `swingbot/core/planning/targets.py` → `fib_target_candidates`, `select_structural_target` |
 | Exit parameters | `swingbot/core/planning/params.py` → `EXIT_V2_PARAMS["Fibonacci"]` |
-| Backtest wiring | `swingbot/core/backtesting/backtest.py` → `_plan_series`, `_trade_plan_at` |
+| Backtest wiring | `swingbot/core/backtesting/backtest.py` → `_plan_series`, `_v1_plan_levels` (the frozen v1 instrument's path) |
 | Level-map role (confluence pipeline) | `swingbot/core/market/levels.py` (one "Fibonacci" vote) |
 
 ---
@@ -224,7 +224,7 @@ exit-v2 TRAIN grid, under pre-v31 target arithmetic and before the 2% cap.
    Fibonacci levels cluster together, they count as **one "Fibonacci" vote**
    toward `MIN_TARGET_CONFLUENCE_COUNT`.
 4. **Backtest** (`backtest.py`). It uses the identical entry function and sizing
-   builder, via `_plan_series` → `_trade_plan_at`.
+   builder, via `_plan_series` → `_v1_plan_levels` (the frozen v1 instrument's path).
 
 ---
 

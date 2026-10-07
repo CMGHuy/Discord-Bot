@@ -2,7 +2,7 @@
 import pytest
 
 from swingbot import config
-from swingbot.core.backtesting.backtest import _plan_series, _trade_plan_at
+from swingbot.core.backtesting.backtest import _plan_series, _v1_plan_levels
 from swingbot.core.planning import builders
 from swingbot.core.planning.builders import _fib_continuation_plan, build_strategy_plan
 from swingbot.core.planning.params import exit_params_for
@@ -41,7 +41,7 @@ def test_backtest_and_live_build_the_same_plan(monkeypatch):
     monkeypatch.setattr(config, "LEVEL_LIFECYCLE_STOPS_ENABLED", False, raising=False)
     df, index = _frame()
     atr_series, high, low, ratio, entry_levels = _plan_series(df, C, HZ)
-    entry, stop, tp1 = _trade_plan_at(df, index, "bullish", C, HZ, atr_series, high, low, ratio, entry_levels)
+    entry, stop, tp1 = _v1_plan_levels(df, index, "bullish", C, HZ, atr_series, high, low, ratio, entry_levels)
     assert entry == 110.5 and stop < 110.0
     expected = select_structural_target(
         entry, stop, True, fib_continuation_targets(110.0, 10.0, 105.0, "bullish"), 1.5, 2.5,
@@ -55,5 +55,5 @@ def test_no_signal_bar_builds_nothing_on_either_path(monkeypatch):
     monkeypatch.setattr(config, "LEVEL_LIFECYCLE_STOPS_ENABLED", False, raising=False)
     df, index = _frame()
     atr_series, high, low, ratio, entry_levels = _plan_series(df, C, HZ)
-    assert _trade_plan_at(df, index + 1, "bullish", C, HZ, atr_series, high, low, ratio, entry_levels) is None
+    assert _v1_plan_levels(df, index + 1, "bullish", C, HZ, atr_series, high, low, ratio, entry_levels) is None
     assert build_strategy_plan(df, index + 1, ticker="TST", strategy=C, horizon_key=HZ, direction="bullish") is None

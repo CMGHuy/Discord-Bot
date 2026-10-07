@@ -80,6 +80,11 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   `swingbot/core/backtesting/backtest.py run_backtest(..., exit_model="v2",
   scale_out=True)` uses the same simulator, so live behavior equals
   backtested behavior. That is an **invariant this repo maintains, not one the code structure guarantees**: the live path polls a tape every 60s while the simulator walks daily bars, and v64 fixed extended-hours prints and sampled-tick stop fills. Any new live-path exit rule must name the simulator line it matches.
+  Plans: under `instrument=resolve("v2")`
+  (`backtesting/instrument/contract.py`, v136/v137) every plan is built by
+  `builders.build_strategy_plan` on the frame truncated at the signal bar; the
+  v1 instrument (the default until the v136 cutover) keeps its frozen
+  `_v1_plan_levels` path, pinned by `tests/backtesting/instrument/test_v1_golden.py`.
   **Exception, by explicit trader decision (2026-09-10):** the runner's stop
   and TP2 checks in `_step_partial`/`_extended_candidate_partial` no longer
   wait for the session after TP1 fires (v64's `runner_floor_session` guard,

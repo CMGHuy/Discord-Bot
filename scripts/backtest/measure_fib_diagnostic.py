@@ -50,7 +50,8 @@ from measure_bearish_arms import _unmasked_gates, apply_laggard_rule  # noqa: E4
 from run_backtest_range import (  # noqa: E402
     TRAIN, _build_asof_map, _tickers_for_run, _with_context, load_cached, window_trades,
 )
-from swingbot.core.backtesting.backtest import _plan_series, _trade_plan_at, run_backtest  # noqa: E402
+from swingbot.core.backtesting.backtest import _plan_series, run_backtest  # noqa: E402
+from swingbot.core.planning.builders import build_strategy_plan  # noqa: E402
 from swingbot.core.market.entry_filters import gate_override  # noqa: E402
 from swingbot.core.market.strategy_types import STRATEGY_GATES  # noqa: E402
 from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason  # noqa: E402
@@ -171,12 +172,10 @@ def trade_features(frame, i, horizon_key, trade, atr_val, swing_high, swing_low,
     the same as run_backtest.
 
     `stop_mismatch` is computed by the caller (_features_for) against
-    _trade_plan_at's own (stop, target) -- the full production pipeline
-    including apply_level_lifecycle -- and passed in so this function stays
-    free of the series plumbing _trade_plan_at needs. `reclaim` (I3) is
-    computed by the caller too, via `_reclaim_result`, which needs the
-    atr/swing_high/swing_low *series* (not just this bar's floats) to call
-    _trade_plan_at at the reclaim bar j."""
+    _production_plan's own (stop, target) -- the live constructor, including
+    apply_level_lifecycle -- and passed in so this function stays free of
+    plan construction. `reclaim` (I3) is computed by the caller too, via
+    `_reclaim_result`, which builds the production plan at the reclaim bar j."""
     h = HORIZONS[horizon_key]
     direction, entry = trade.direction, trade.entry
     is_bull = direction == "bullish"
@@ -371,16 +370,16 @@ REGISTRY_BULLISH = {"n": 246, "win_rate": 35.4, "expectancy_r": 0.232}
 
 
 def _stop_mismatch(trade, plan_at):
-    """True reproduction check: does the trade carry _trade_plan_at's own
+    """True reproduction check: does the trade carry _production_plan's own
     (stop, target) -- the full production pipeline including
     apply_level_lifecycle -- not just the pre-lifecycle structural geometry.
-    None means _trade_plan_at found no qualifying target at this bar, which
+    None means _production_plan found no qualifying target at this bar, which
     itself is a mismatch against a trade that did happen.
 
     Tolerance is 1e-6*entry OR 1e-4 absolute, whichever is larger: run_backtest's
     v2 branch stores trade.stop_loss/take_profit as round(x, 4) (backtest.py),
     so a low-priced ticker (e.g. NVDA ~$13) can read back up to 5e-5 off
-    _trade_plan_at's unrounded value on a genuine exact match -- 1e-6*entry
+    _production_plan's unrounded value on a genuine exact match -- 1e-6*entry
     alone (~1.3e-5 there) is tighter than that rounding step and flags false
     mismatches. 1e-4 is 2x the rounding error and still two-plus orders of
     magnitude below any real lifecycle-widening delta observed (dimes to
@@ -392,8 +391,21 @@ def _stop_mismatch(trade, plan_at):
     return abs(trade.stop_loss - plan_stop) > tol or abs(trade.take_profit - plan_target) > tol
 
 
-def _reclaim_result(frame, i, trade, direction, horizon_key, atr_s, sh_s, sl_s, high, low, close, hold):
-    """#4 arm: the full production plan at the reclaim bar j -- _trade_plan_at,
+def _production_plan(frame, idx, direction, horizon_key):
+    """(entry, stop, target) of the live constructor at bar idx, or None when it
+    finds no qualifying plan. v137: replaced the frozen v1 plan path
+    (backtest._v1_plan_levels) here. Called on frame.iloc[:idx+1] exactly as the
+    live scan does, so the equivalence cases also prove truncation-invariance:
+    the Fibonacci branch reads the same rolling swings, fib_level_stop_at,
+    lifecycle step and reward floor, so v101's numbers do not move
+    (tests/scripts/test_measure_fib_diagnostic.py pins the equivalence)."""
+    plan = build_strategy_plan(frame.iloc[:idx + 1], idx, ticker="v101-diagnostic", strategy=STRATEGY,
+                               horizon_key=horizon_key, direction=direction)
+    return None if plan is None else (plan.trigger_price, plan.stop_loss, plan.tp1)
+
+
+def _reclaim_result(frame, i, trade, direction, horizon_key, high, low, close, hold):
+    """#4 arm: the full production plan at the reclaim bar j -- _production_plan,
     which applies _fibonacci_plan's cap at entry_j and the lifecycle step
     itself (I3; supersedes the plan's "same stop" wording). Invalidated
     first if any bar in (i, j] trades through the bar-i trade's stop: live
@@ -405,7 +417,7 @@ def _reclaim_result(frame, i, trade, direction, horizon_key, atr_s, sh_s, sl_s, 
     stop_i, bull = trade.stop_loss, direction == "bullish"
     if any((low[k] <= stop_i) if bull else (high[k] >= stop_i) for k in range(i + 1, j + 1)):
         return "invalidated", None
-    plan_at = _trade_plan_at(frame, j, direction, STRATEGY, horizon_key, atr_s, sh_s, sl_s)
+    plan_at = _production_plan(frame, j, direction, horizon_key)
     if plan_at is None:
         return "no_target", None
     entry_j, stop_j, target_j = plan_at
@@ -416,11 +428,10 @@ def _features_for(frame, horizon_key, trade, series, rr):
     atr_s, sh_s, sl_s = series
     i = frame.index.get_loc(pd.Timestamp(trade.entry_date))
     atr_val = _safe_atr_value(trade.entry, float(atr_s.iloc[i]))
-    plan_at = _trade_plan_at(frame, i, trade.direction, STRATEGY, horizon_key, atr_s, sh_s, sl_s)
+    plan_at = _production_plan(frame, i, trade.direction, horizon_key)
     high, low, close = frame["High"].values, frame["Low"].values, frame["Close"].values
     hold = HORIZONS[horizon_key]["max_holding_days"]
-    reclaim = _reclaim_result(frame, i, trade, trade.direction, horizon_key, atr_s, sh_s, sl_s,
-                              high, low, close, hold)
+    reclaim = _reclaim_result(frame, i, trade, trade.direction, horizon_key, high, low, close, hold)
     return trade_features(frame, i, horizon_key, trade, atr_val, float(sh_s.iloc[i]), float(sl_s.iloc[i]),
                           cap_distance(trade.entry, horizon_key), *rr, _stop_mismatch(trade, plan_at),
                           reclaim=reclaim)

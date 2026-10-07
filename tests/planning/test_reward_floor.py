@@ -54,9 +54,9 @@ def test_trade_plan_at_drops_what_the_floor_drops(market_df, monkeypatch):
     from swingbot.core.backtesting import backtest as bt
     series = bt._plan_series(market_df, "RSI Divergence", "4w")
     i = next(i for i in range(400, len(market_df))
-             if bt._trade_plan_at(market_df, i, "bullish", "RSI Divergence", "4w", *series) is not None)
+             if bt._v1_plan_levels(market_df, i, "bullish", "RSI Divergence", "4w", *series) is not None)
     monkeypatch.setattr(rf, "clears", lambda *args: False)
-    assert bt._trade_plan_at(market_df, i, "bullish", "RSI Divergence", "4w", *series) is None
+    assert bt._v1_plan_levels(market_df, i, "bullish", "RSI Divergence", "4w", *series) is None
 
 
 def test_every_1w_plan_that_builds_clears_two_percent(market_df):

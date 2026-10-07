@@ -1,6 +1,6 @@
 """v104 Part B sizing: the structure stop verbatim (drop, never cap), TP1 from
 the ATR ladder plus each strategy's own lower levels. Shared by the live
-builder branch and backtest._trade_plan_at, so the two cannot diverge."""
+builder branch and backtest._v1_plan_levels, so the two cannot diverge."""
 from __future__ import annotations
 
 import math

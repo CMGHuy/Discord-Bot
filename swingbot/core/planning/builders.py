@@ -47,7 +47,7 @@ def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None,
     `stop_mult` (edge E31) is an INJECTED MAE-informed adjustment factor,
     never looked up here. That is deliberate: this function is the shared
     sizing source for both live plans (build_strategy_plan) and the
-    backtest (backtest._trade_plan_at), so a journal read hidden in here
+    backtest (backtest._v1_plan_levels), so a journal read hidden in here
     would silently price 2020 backtest trades off today's live journal.
     Callers that legitimately have a multiplier pass it in; the E33 fold
     harness will pass its own fold-train-derived value.
@@ -84,12 +84,14 @@ def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None,
 # --- level lifecycle (P1) ---------------------------------------------------
 #
 # Deliberately lives HERE, next to the sizing builders, and not in either
-# caller. backtest._trade_plan_at and build_strategy_plan are two separate
-# plan paths, and edge-engine-v4's DATA_DRIVEN_STOPS_ENABLED scored exactly
-# 0.0000 -- burning its one pre-registered validation shot -- because it
-# reached only build_strategy_plan while the backtest sized through
-# _trade_plan_at. Anything that touches stop/target must be shared by both or
-# it is unmeasurable by construction.
+# caller. backtest._v1_plan_levels (the frozen v1 backtest instrument) and
+# build_strategy_plan are two separate plan paths, and edge-engine-v4's
+# DATA_DRIVEN_STOPS_ENABLED scored exactly 0.0000 -- burning its one
+# pre-registered validation shot -- because it reached only
+# build_strategy_plan while the backtest sized through the v1 path. Under the
+# v2 instrument (v137) every replay builds through build_strategy_plan; until
+# the v136 cutover anything that touches stop/target must still be shared by
+# both or the v1 numbers cannot see it.
 
 
 @dataclass(frozen=True)
@@ -257,7 +259,7 @@ _STRUCTURAL_BRANCHES[COMPRESSION_SHORT] = _compression_branch
 
 def _geometry_ok(close, stop, tp1, strategy, horizon_key) -> bool:
     """A plan needs a real stop distance and (v113 §1) must clear its horizon's
-    strategy-plan reward floor -- the same check backtest._trade_plan_at runs."""
+    strategy-plan reward floor -- the same check backtest._v1_plan_levels runs."""
     return abs(close - stop) > 0 and reward_floor.clears(close, tp1, strategy, horizon_key)
 
 
@@ -300,7 +302,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         return None
     stop, tp1, candidates, applied_stop_mult = picked
 
-    # P1: the same adjuster backtest._trade_plan_at calls, with the level_map
+    # P1: the same adjuster backtest._v1_plan_levels calls, with the level_map
     # this path already has (so it costs no extra level build here).
     # meta is intentionally unused for now: surfacing which level drove the
     # plan means a TradePlanV2 field, which is a persisted-schema change and a

@@ -3,7 +3,7 @@
 edge-engine-v4's DATA_DRIVEN_STOPS_ENABLED scored exactly 0.0000 and burned
 its one pre-registered validation shot because it reached only
 plan_engine.build_strategy_plan while the backtest sized through
-backtest._trade_plan_at. `test_both_plan_paths_apply_the_same_adjustment` is
+backtest._v1_plan_levels. `test_both_plan_paths_apply_the_same_adjustment` is
 the regression test for that specific failure -- if someone later wires a
 lifecycle consumer into one path only, it fails.
 """
@@ -13,7 +13,7 @@ import pytest
 
 from swingbot import config
 from swingbot.core.planning import plan_engine
-from swingbot.core.backtesting.backtest import _trade_plan_at
+from swingbot.core.backtesting.backtest import _v1_plan_levels
 from swingbot.core.market.indicators import atr
 
 
@@ -78,7 +78,7 @@ def test_flags_off_does_not_build_levels(monkeypatch, df):
 # --- the parity test this whole module exists for ---------------------------
 
 def test_both_plan_paths_apply_the_same_adjustment(monkeypatch, df):
-    """backtest._trade_plan_at and build_strategy_plan must agree.
+    """backtest._v1_plan_levels and build_strategy_plan must agree.
 
     Uses a strategy on the plain ATR branch so both paths run identical
     sizing arithmetic; any divergence is the lifecycle adjuster reaching one
@@ -88,7 +88,7 @@ def test_both_plan_paths_apply_the_same_adjustment(monkeypatch, df):
     atr_series = atr(df, 14)
 
     def price_both():
-        bt = _trade_plan_at(df, i, "bullish", "RSI", "4w", atr_series)
+        bt = _v1_plan_levels(df, i, "bullish", "RSI", "4w", atr_series)
         live = plan_engine.build_strategy_plan(
             df, i, ticker="TEST", strategy="RSI", horizon_key="4w",
             direction="bullish")
@@ -125,7 +125,7 @@ def test_both_paths_agree_on_none(monkeypatch, df):
 
     checked = 0
     for i in range(120, len(df) - 1, 5):
-        bt = _trade_plan_at(df, i, "bullish", "RSI", "4w", atr_series)
+        bt = _v1_plan_levels(df, i, "bullish", "RSI", "4w", atr_series)
         live = plan_engine.build_strategy_plan(
             df, i, ticker="TEST", strategy="RSI", horizon_key="4w", direction="bullish")
         assert bt is None and live is None, (
@@ -141,9 +141,9 @@ def _bars_changed_by_lifecycle(monkeypatch, df, strategy="RSI", horizon="4w"):
     changed = []
     for i in range(120, len(df) - 1, 5):
         _flags(monkeypatch)
-        off = _trade_plan_at(df, i, "bullish", strategy, horizon, atr_series)
+        off = _v1_plan_levels(df, i, "bullish", strategy, horizon, atr_series)
         _flags(monkeypatch, stops=True)
-        on = _trade_plan_at(df, i, "bullish", strategy, horizon, atr_series)
+        on = _v1_plan_levels(df, i, "bullish", strategy, horizon, atr_series)
         if abs(off[1] - on[1]) > 1e-9 or abs(off[2] - on[2]) > 1e-9:
             changed.append((i, off, on))
     return changed
@@ -153,7 +153,7 @@ def test_the_backtest_path_is_not_left_behind(monkeypatch, df):
     """Guards the exact DATA_DRIVEN_STOPS_ENABLED failure mode.
 
     That component scored 0.0000 because it reached only build_strategy_plan
-    while the backtest sized through _trade_plan_at. Asserting "the call is
+    while the backtest sized through _v1_plan_levels. Asserting "the call is
     present" is not enough -- a no-op adjuster would pass that. This asserts
     the backtest plan MEASURABLY moves on at least one bar, which is the
     property the 0.0000 result actually violated.
@@ -178,7 +178,7 @@ def test_both_paths_agree_on_a_bar_the_lifecycle_actually_changes(monkeypatch, d
     i = changed[0][0]
 
     _flags(monkeypatch, stops=True)
-    bt = _trade_plan_at(df, i, "bullish", "RSI", "4w", atr(df, 14))
+    bt = _v1_plan_levels(df, i, "bullish", "RSI", "4w", atr(df, 14))
     live = plan_engine.build_strategy_plan(
         df, i, ticker="TEST", strategy="RSI", horizon_key="4w", direction="bullish")
 
@@ -200,7 +200,7 @@ def _bars_where_stop_widening_fires(monkeypatch, df, *, candidates_for, strategy
     apply_level_lifecycle's stop-widening branch actually engages.
     `candidates_for(entry, atr_val)` decides whether the widening is then
     kept (a qualifying target exists at the new risk) or rolled back (it
-    doesn't). Direct calls to apply_level_lifecycle, not _trade_plan_at, so
+    doesn't). Direct calls to apply_level_lifecycle, not _v1_plan_levels, so
     `meta` is visible. Returns (i, entry, base_stop, base_tp1, stop, tp1,
     meta) for every bar where the branch actually fired (meta non-empty)."""
     atr_series = atr(df, 14)

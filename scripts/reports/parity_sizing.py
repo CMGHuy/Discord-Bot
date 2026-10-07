@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Task 13: full-corpus sizing-parity harness.
 
-Compares `backtest._trade_plan_at` (CURRENT -- it already delegates to
+Compares `backtest._v1_plan_levels` (CURRENT -- it already delegates to
 `plan_engine`, see swingbot/core/backtesting/backtest.py) against
 `tests.fixtures.legacy_trade_plan_at.legacy_trade_plan_at`, a FROZEN copy of
-`_trade_plan_at` as it stood pre-extraction (commit ac91654, before Task 14
+`_v1_plan_levels` (under its pre-v137 name) as it stood pre-extraction (commit ac91654, before Task 14
 rewired it to call plan_engine). See that module's docstring for why it must
 stay independent of plan_engine.py.
 
@@ -60,7 +60,7 @@ def _load_cached(path: Path):
 
 
 def main() -> int:
-    # The level lifecycle (P1) post-processes _trade_plan_at's output and is
+    # The level lifecycle (P1) post-processes _v1_plan_levels's output and is
     # default-on since 2026-08-08, but `legacy_trade_plan_at` is a frozen
     # pre-extraction copy that cannot have it. Left on, every entry bar where a
     # tested level moves the stop reports as a parity MISMATCH -- a spurious
@@ -121,7 +121,7 @@ def main() -> int:
                             df, i, direction, strategy, horizon_key, atr_series,
                             swing_high_series, swing_low_series, volume_ratio_series, entry_levels,
                         )
-                        new_plan = backtest._trade_plan_at(
+                        new_plan = backtest._v1_plan_levels(
                             df, i, direction, strategy, horizon_key, atr_series,
                             swing_high_series, swing_low_series, volume_ratio_series, entry_levels,
                         )

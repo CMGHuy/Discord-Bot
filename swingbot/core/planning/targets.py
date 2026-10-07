@@ -58,7 +58,7 @@ def select_structural_target(entry: float, stop_loss: float, is_bull: bool,
 
 
 # ---------------------------------------------------------------------------
-# Sizing builders — extracted verbatim from backtest._trade_plan_at so the
+# Sizing builders — extracted verbatim from `_v1_plan_levels` (under its pre-v137 name) so the
 # backtest, live signals, and the plan manager all price identically.
 # ---------------------------------------------------------------------------
 

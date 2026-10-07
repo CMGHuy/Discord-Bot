@@ -519,7 +519,7 @@ def test_the_signal_close_backtest_path_refuses_the_compression_short():
     with pytest.raises(ValueError, match="StrategyEngine"):
         bt.run_backtest("ABC", FULL_PATH, COMPRESSION_SHORT, HZ)
     with pytest.raises(ValueError, match="StrategyEngine"):
-        bt._trade_plan_at(FULL_PATH, len(STOCK) - 1, "bearish", COMPRESSION_SHORT, HZ, None)
+        bt._v1_plan_levels(FULL_PATH, len(STOCK) - 1, "bearish", COMPRESSION_SHORT, HZ, None)
 
 
 # -- final fix: a damaged shadow log never stops a scan ---------------------------------------------------------------

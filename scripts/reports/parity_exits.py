@@ -12,7 +12,7 @@ loop.
 Unlike tests/test_exit_parity.py (which reconstructs the plan from
 BacktestTrade's ROUNDED entry/stop_loss/take_profit fields, tolerant to
 5e-4 on r), this script reconstructs the plan from the same UNROUNDED
-_trade_plan_at() output run_backtest itself used -- recomputing the same
+_v1_plan_levels() output run_backtest itself used -- recomputing the same
 atr/swing-high-low/volume-ratio/entry-level series run_backtest computes
 internally (mirrors backtest.py's run_backtest body) -- so the exit-walk
 inputs are bit-identical to the legacy walk's and r can be compared near-
@@ -35,7 +35,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "data"))
 
 from fetch_backtest_data import load_cached, load_watchlist
 from swingbot.core.backtesting.backtest import (ALL_STRATEGIES, _plan_series,
-                                               _trade_plan_at, run_backtest)
+                                               _v1_plan_levels, run_backtest)
 from swingbot.core.planning.plan_engine import PlanStatus, TradePlanV2, simulate_exit
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 
@@ -45,9 +45,9 @@ R_TOL = 1e-6  # both sides round(r, 3) from the same unrounded inputs
 
 def _plan_from_unrounded(df, i, t, ticker, strategy, horizon_key, series):
     """Market-entry plan built from the same unrounded entry/stop/tp
-    _trade_plan_at would hand run_backtest's loop at this signal bar."""
+    _v1_plan_levels would hand run_backtest's loop at this signal bar."""
     atr_series, swing_high_series, swing_low_series, volume_ratio_series, entry_levels = series
-    entry, stop_loss, take_profit = _trade_plan_at(
+    entry, stop_loss, take_profit = _v1_plan_levels(
         df, i, t.direction, strategy, horizon_key, atr_series,
         swing_high_series, swing_low_series, volume_ratio_series, entry_levels,
     )

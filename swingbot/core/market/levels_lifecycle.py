@@ -27,12 +27,13 @@ than trusting the convention.
 
 WIRING NOTE (read before adding a consumer)
 -------------------------------------------
-There are two plan paths: `backtest._trade_plan_at` (what the backtest sizes
-through) and `plan_engine.build_strategy_plan` (what live builds through).
+There are two plan paths: `backtest._v1_plan_levels` (the frozen v1 backtest
+instrument) and `builders.build_strategy_plan` (what live builds through, and,
+since v137, what every replay under the v2 backtest instrument builds through).
 edge-engine-v4's `DATA_DRIVEN_STOPS_ENABLED` scored exactly 0.0000 and burned
-its pre-registered validation shot because it reached only the second one. Any
-consumer added here must be routed through BOTH or it is unmeasurable by
-construction.
+its pre-registered validation shot because it reached only the second one.
+Until the v136 cutover retires v1, any consumer added here must be routed
+through BOTH or the v1 numbers cannot see it.
 """
 from __future__ import annotations
 

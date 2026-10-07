@@ -60,6 +60,7 @@ Important limitations (stated plainly, not buried):
 This is a directional sanity check, not a guarantee of future performance.
 """
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import numpy as np
 from swingbot.core.planning.exit_sim import simulate_exit
@@ -74,6 +75,9 @@ from swingbot.core.market.strategy import HORIZONS, MIN_BARS, SR_VOLUME_MULTIPLE
 from swingbot.core.market.strategy_types import (  # noqa: F401
     BREAKEVEN_TRIGGER_FRACTION, SHORT_STRATEGIES, STRATEGY_GATES,
 )
+
+if TYPE_CHECKING:
+    from swingbot.core.backtesting.instrument.contract import InstrumentSpec
 
 ENTRY_SHIFT = 0
 
@@ -137,12 +141,12 @@ def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
 
 
 def _plan_series(df: pd.DataFrame, strategy: str, horizon_key: str):
-    """The per-strategy series `_trade_plan_at` reads, computed once per run.
+    """The per-strategy series `_v1_plan_levels` reads, computed once per run.
 
     Returns (atr, swing_high, swing_low, volume_ratio, elliott_entry_levels);
     the members a strategy does not use are None. scripts/reports/parity_exits.py
     and parity_sizing.py call this too, so their reconstructions hand
-    `_trade_plan_at` bit-identical inputs to run_backtest's own loop -- they
+    `_v1_plan_levels` bit-identical inputs to run_backtest's own loop -- they
     used to carry copies of this block that could drift from it.
     """
     atr_series = atr(df, 14)
@@ -168,7 +172,7 @@ def _plan_series(df: pd.DataFrame, strategy: str, horizon_key: str):
 
 def _short_plan_at(df, i, strategy, horizon_key, direction, entry, atr_val):
     """((stop, tp1) | None, candidates) for a v104 short -- one call site keeps
-    _trade_plan_at's complexity flat."""
+    _v1_plan_levels's complexity flat."""
     from swingbot.core.planning.short_builders import plan_short
     picked = plan_short(df, i, strategy, horizon_key, direction, entry=entry, atr_val=atr_val)
     if picked is None:
@@ -185,15 +189,21 @@ def _floored(entry, stop_loss, take_profit, strategy, horizon_key):
     return entry, stop_loss, take_profit
 
 
-def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_high_series=None, swing_low_series=None, volume_ratio_series=None, entry_levels=None):
-    """Sizing lives in plan_engine (single source of truth shared with live
-    plans); this wrapper only picks the branch from the precomputed series.
-    Parity with the original inline implementation is now narrower than the
-    module docstring below used to claim (v31): tests/test_plan_engine_sizing.py
-    locks STOP parity only -- target pricing diverged from the pre-extraction
-    arithmetic on purpose (see Task 15). Returns None when the chosen builder
-    finds no target that clears MIN_RISK_REWARD_RATIO -- no qualifying setup
-    at this bar, not a crash."""
+def _v1_plan_levels(df, i, direction, strategy, horizon_key, atr_series, swing_high_series=None, swing_low_series=None, volume_ratio_series=None, entry_levels=None):
+    """(entry, stop, target) for the FROZEN v1 instrument, or None.
+
+    v136 rule 3 retired this as a plan constructor (it carried the retired
+    constructor's name until v137): every replay under the v2 instrument builds through
+    builders.build_strategy_plan (`_live_plan_at`). It survives only because v1
+    must stay byte-identical until the v136 cutover. It differs from the live
+    builder by design: no journal-resolved stop_mult/TP2, no opex widening, no
+    level_map, and series precomputed once on the full frame. Callers:
+    run_backtest's v1 loop and the two v1 parity reports in scripts/reports/;
+    tests/backtesting/instrument/test_one_constructor_guard.py keeps it that way.
+    Do not change its arithmetic, because test_v1_golden.py pins its output. Sizing itself
+    lives in plan_engine (shared with live); this only picks the branch from the
+    precomputed series. Returns None when the chosen builder finds no target
+    that clears MIN_RISK_REWARD_RATIO -- no qualifying setup at this bar."""
     _refuse_compression(strategy)
     from swingbot.core.planning.plan_engine import (
         _atr_plan,
@@ -290,6 +300,172 @@ def _bt_plan(df, i, *, ticker, strategy, horizon_key, direction, entry, stop_los
     )
 
 
+_NO_TRADE = ("not_triggered", "no_trade")
+
+
+def _signal_masks(df, strategy, horizon_key):
+    """(bullish, bearish) entry masks, rolled by ENTRY_SHIFT when the permutation
+    test sets it -- extracted verbatim from run_backtest (v137)."""
+    bullish, bearish = _vectorized_entries(df, strategy, horizon_key)
+    if ENTRY_SHIFT:
+        bullish = pd.Series(np.roll(bullish.values, ENTRY_SHIFT), index=df.index)
+        bearish = pd.Series(np.roll(bearish.values, ENTRY_SHIFT), index=df.index)
+    return bullish, bearish
+
+
+# Builder resolvers that read LIVE state when their flag is on. Under
+# DATA_DRIVEN_STOPS_ENABLED, params._resolve_stop_mult, _resolve_tp2_r and
+# _resolve_time_stop_days read the journal. Under STALL_EXIT_ENABLED,
+# params._resolve_stall_exit_day reads it too. Under OPEX_CAUTION_ENABLED,
+# opex.stop_mult reads today's opex tier from the wall clock. Any of these is
+# lookahead inside a historical replay. Spec phase 5 gives the replay its own
+# simulated journal and session calendar, which lifts this guard.
+_LIVE_STATE_FLAGS = ("DATA_DRIVEN_STOPS_ENABLED", "STALL_EXIT_ENABLED", "OPEX_CAUTION_ENABLED")
+
+
+def _refuse_live_state_flags(instrument) -> None:
+    """Fail fast when a v2 replay would read the live journal or the wall clock."""
+    from swingbot import config
+    on = [name for name in _LIVE_STATE_FLAGS if getattr(config, name, False)]
+    if on:
+        raise ValueError(f"instrument {instrument.version} replay refuses lookahead: "
+                         f"{', '.join(on)} on would read the live journal / wall clock "
+                         "inside a historical replay (lifted by v136 phase 5)")
+
+
+def _uses_live_constructor(instrument, exit_model, tp2_mode) -> bool:
+    """True under an instrument whose plans come from the live constructor (v2).
+    There it refuses the two v1-only knobs: the frozen v1 exit loop, and
+    tp2_mode, which the live path does not have (it builds TP2 with no
+    level_map, so tp2_mode="levels" would make the replay plan differ from the
+    plan live issues)."""
+    if instrument is None or not instrument.live_constructor:
+        return False
+    if exit_model != "v2":
+        raise ValueError(f"instrument {instrument.version} needs exit_model='v2'; "
+                         "the v1 exit loop is frozen v1 code")
+    if tp2_mode != "none":
+        raise ValueError(f"instrument {instrument.version} builds TP2 exactly as live; "
+                         f"tp2_mode={tp2_mode!r} is a v1 knob")
+    _refuse_live_state_flags(instrument)
+    return True
+
+
+def _live_plan_at(df, i, *, ticker, strategy, horizon_key, direction):
+    """The v2 instrument's only plan constructor (v136 rule 3): exactly the call
+    scanning/strategy_pass.build_strategy_plan_at makes on a completed frame
+    ending at bar i -- no level_map, no injected overrides -- so the backtest
+    inherits every builder rule (data-driven stops, the stall-exit day, the
+    reward floor, the plan shape). The builder's resolvers that depend on the
+    journal or the clock are unreachable here: _refuse_live_state_flags refuses
+    the run when any of their flags is on (spec phase 5's simulated journal lifts that)."""
+    from swingbot.core.planning.builders import build_strategy_plan
+    window = df.iloc[:i + 1]
+    return build_strategy_plan(window, len(window) - 1, ticker=ticker, strategy=strategy,
+                               horizon_key=horizon_key, direction=direction)
+
+
+def _live_trade(df, i, plan, res, horizon_key, asof) -> BacktestTrade:
+    """One v2-instrument trade row, in exactly the shape the v1 instrument's
+    exit_model="v2" branch writes (planned entry; fills arrive in phase 2)."""
+    entry, stop_loss, take_profit = plan.trigger_price, plan.stop_loss, plan.tp1
+    risk_per_share = abs(entry - stop_loss)
+    exit_i = res.exit_index
+    return BacktestTrade(
+        entry_date=str(df.index[i].date()), exit_date=str(df.index[exit_i].date()),
+        direction=plan.direction, entry=round(entry, 4), stop_loss=round(stop_loss, 4),
+        take_profit=round(take_profit, 4), outcome=res.outcome,
+        exit_price=round(res.legs[-1]["exit_price"], 4),
+        return_pct=round(res.r_total * (risk_per_share / entry) * 100, 3),
+        r_multiple=round(res.r_total, 3), holding_days=exit_i - i,
+        runner_outcome=res.runner_outcome,
+        context=entry_context(df.iloc[:i + 1], direction=plan.direction, horizon_key=horizon_key,
+                              stop=stop_loss, target=take_profit,
+                              asof=asof_row(asof, df.index[i]), entry=entry),
+    )
+
+
+def _replay_live_constructor(ticker, df, strategy, horizon_key, *, one_at_a_time, scale_out, asof):
+    """The v2 instrument's replay: same signals, warm-up and one-at-a-time rule
+    as the v1 loop, but every plan comes from _live_plan_at and every trade is
+    walked by simulate_exit. Returns (total_signals, trades, runner_counts)."""
+    bullish, bearish = _signal_masks(df, strategy, horizon_key)
+    min_bars = MIN_BARS[horizon_key]
+    trades, runner_counts, total_signals, open_until = [], {}, 0, -1
+    for i in np.where(bullish.values | bearish.values)[0]:
+        if i < min_bars:
+            continue
+        total_signals += 1
+        if one_at_a_time and i <= open_until:
+            continue
+        direction = "bullish" if bullish.values[i] else "bearish"
+        plan = _live_plan_at(df, i, ticker=ticker, strategy=strategy,
+                             horizon_key=horizon_key, direction=direction)
+        if plan is None:
+            continue
+        res = simulate_exit(df, i, plan, scale_out=scale_out)
+        if res.outcome in _NO_TRADE:
+            continue
+        open_until = res.exit_index
+        if res.runner_outcome:
+            runner_counts[res.runner_outcome] = runner_counts.get(res.runner_outcome, 0) + 1
+        trades.append(_live_trade(df, i, plan, res, horizon_key, asof))
+    return total_signals, trades, runner_counts
+
+
+def _outcome_buckets(trades):
+    """(evaluated, wins, losses, scratches, timeouts): the four-outcome taxonomy
+    in the module docstring; evaluated is win+loss only."""
+    by_outcome = {"win": [], "loss": [], "scratch": [], "timeout": []}
+    for t in trades:
+        by_outcome.setdefault(t.outcome, []).append(t)
+    evaluated = [t for t in trades if t.outcome in ("win", "loss")]
+    return (evaluated, by_outcome["win"], by_outcome["loss"],
+            by_outcome["scratch"], by_outcome["timeout"])
+
+
+def _mean_or_none(values):
+    return float(np.mean(values)) if values else None
+
+
+def _max_drawdown_pct(trades):
+    """Peak-to-trough % of the sequentially compounded equity curve, or None."""
+    if not trades:
+        return None
+    equity = [1.0]
+    for t in trades:
+        equity.append(equity[-1] * (1 + t.return_pct / 100))
+    equity = np.array(equity)
+    running_max = np.maximum.accumulate(equity)
+    drawdowns = (equity - running_max) / running_max
+    return float(drawdowns.min() * 100)
+
+
+def _summarize(ticker, strategy, horizon_key, total_signals, trades, runner_counts):
+    """The BacktestSummary for one run, shared by the v1 loop and the v2 replay
+    (extracted from run_backtest, behaviour pinned by test_v1_golden.py). win_rate is over win+loss;
+    expectancy_r is over ALL closed trades -- the number gated on."""
+    evaluated, wins, losses, scratches, timeouts = _outcome_buckets(trades)
+    return BacktestSummary(
+        ticker=ticker, strategy=strategy, horizon_key=horizon_key,
+        total_signals=total_signals, evaluated=len(evaluated),
+        wins=len(wins), losses=len(losses), timeouts=len(timeouts),
+        scratches=len(scratches),
+        win_rate=len(wins) / len(evaluated) * 100 if evaluated else None,
+        avg_return_pct=_mean_or_none([t.return_pct for t in evaluated]),
+        avg_r_multiple=_mean_or_none([t.r_multiple for t in evaluated]),
+        expectancy_r=_mean_or_none([t.r_multiple for t in trades]),
+        max_drawdown_pct=_max_drawdown_pct(trades),
+        avg_holding_days=_mean_or_none([t.holding_days for t in evaluated]),
+        trades=trades,
+        runner_tp2=runner_counts.get("runner_tp2", 0),
+        runner_trail=runner_counts.get("runner_trail", 0),
+        runner_be=runner_counts.get("runner_be", 0),
+        runner_timeout=runner_counts.get("runner_timeout", 0),
+        avg_win_r=_mean_or_none([t.r_multiple for t in wins]),
+    )
+
+
 def run_backtest(
     ticker: str,
     df: pd.DataFrame,
@@ -301,6 +477,7 @@ def run_backtest(
     tp2_mode: str = "none",
     frictions: bool = True,
     asof=None,
+    instrument: "InstrumentSpec | None" = None,
 ) -> BacktestSummary:
     """
     Run a backtest for one (ticker, strategy, horizon) combination.
@@ -325,8 +502,20 @@ def run_backtest(
 
     ``asof`` is this ticker's per-date cross-sectional frame; without it the
     four cross-sectional context features are recorded as ``None``.
+
+    ``instrument`` (v136/v137) is the backtest contract from
+    ``instrument.contract.resolve``. None is the v1 instrument: today's
+    frozen behaviour, pinned byte for byte by
+    tests/backtesting/instrument/test_v1_golden.py. Under v2 every plan is
+    built by builders.build_strategy_plan on the frame truncated at its signal
+    bar (``_live_plan_at``, the live scan's own call). v2 requires
+    ``exit_model="v2"`` and ``tp2_mode="none"``. It refuses to run with
+    DATA_DRIVEN_STOPS_ENABLED, STALL_EXIT_ENABLED or OPEX_CAUTION_ENABLED on,
+    because the live journal or the wall clock is lookahead in a replay (phase 5
+    lifts this). It ignores ``frictions``; costs arrive in v136 phase 2.
     """
     _refuse_compression(strategy)
+    live = _uses_live_constructor(instrument, exit_model, tp2_mode)
     min_bars = MIN_BARS[horizon_key]
     if len(df) < min_bars + 10:
         return BacktestSummary(
@@ -336,10 +525,13 @@ def run_backtest(
             expectancy_r=None, max_drawdown_pct=None, avg_holding_days=None,
         )
 
-    bullish_entries, bearish_entries = _vectorized_entries(df, strategy, horizon_key)
-    if ENTRY_SHIFT:
-        bullish_entries = pd.Series(np.roll(bullish_entries.values, ENTRY_SHIFT), index=df.index)
-        bearish_entries = pd.Series(np.roll(bearish_entries.values, ENTRY_SHIFT), index=df.index)
+    if live:
+        total_signals, trades, runner_counts = _replay_live_constructor(
+            ticker, df, strategy, horizon_key, one_at_a_time=one_at_a_time,
+            scale_out=scale_out, asof=asof)
+        return _summarize(ticker, strategy, horizon_key, total_signals, trades, runner_counts)
+
+    bullish_entries, bearish_entries = _signal_masks(df, strategy, horizon_key)
     (atr_series, swing_high_series, swing_low_series,
      volume_ratio_series, entry_levels) = _plan_series(df, strategy, horizon_key)
 
@@ -367,7 +559,7 @@ def run_backtest(
         if one_at_a_time and i <= _open_until:
             continue
         direction = "bullish" if bullish_entries.values[i] else "bearish"
-        plan_at = _trade_plan_at(
+        plan_at = _v1_plan_levels(
             df, i, direction, strategy, horizon_key, atr_series,
             swing_high_series, swing_low_series, volume_ratio_series, entry_levels
         )
@@ -508,45 +700,7 @@ def run_backtest(
                                   asof=asof_row(asof, df.index[i]), entry=entry),
         ))
 
-    evaluated_trades = [t for t in trades if t.outcome in ("win", "loss")]
-    wins      = [t for t in evaluated_trades if t.outcome == "win"]
-    losses    = [t for t in evaluated_trades if t.outcome == "loss"]
-    scratches = [t for t in trades if t.outcome == "scratch"]
-    timeouts  = [t for t in trades if t.outcome == "timeout"]
-
-    win_rate = len(wins) / len(evaluated_trades) * 100 if evaluated_trades else None
-    avg_return_pct   = float(np.mean([t.return_pct   for t in evaluated_trades])) if evaluated_trades else None
-    avg_r_multiple   = float(np.mean([t.r_multiple   for t in evaluated_trades])) if evaluated_trades else None
-    avg_holding_days = float(np.mean([t.holding_days for t in evaluated_trades])) if evaluated_trades else None
-
-    # Expectancy over ALL closed trades -- wins, losses, scratches (~0R) and
-    # timeouts (marked to market). This is the "does it make money" number.
-    expectancy_r = float(np.mean([t.r_multiple for t in trades])) if trades else None
-
-    max_drawdown_pct = None
-    if trades:
-        equity = [1.0]
-        for t in trades:
-            equity.append(equity[-1] * (1 + t.return_pct / 100))
-        equity = np.array(equity)
-        running_max = np.maximum.accumulate(equity)
-        drawdowns = (equity - running_max) / running_max
-        max_drawdown_pct = float(drawdowns.min() * 100)
-
-    return BacktestSummary(
-        ticker=ticker, strategy=strategy, horizon_key=horizon_key,
-        total_signals=total_signals, evaluated=len(evaluated_trades),
-        wins=len(wins), losses=len(losses), timeouts=len(timeouts),
-        scratches=len(scratches),
-        win_rate=win_rate, avg_return_pct=avg_return_pct, avg_r_multiple=avg_r_multiple,
-        expectancy_r=expectancy_r, max_drawdown_pct=max_drawdown_pct,
-        avg_holding_days=avg_holding_days, trades=trades,
-        runner_tp2=runner_counts.get("runner_tp2", 0),
-        runner_trail=runner_counts.get("runner_trail", 0),
-        runner_be=runner_counts.get("runner_be", 0),
-        runner_timeout=runner_counts.get("runner_timeout", 0),
-        avg_win_r=float(np.mean([t.r_multiple for t in wins])) if wins else None,
-    )
+    return _summarize(ticker, strategy, horizon_key, total_signals, trades, runner_counts)
 
 
 ALL_STRATEGIES = (
@@ -577,6 +731,7 @@ def run_backtest_daterange(
     scale_out: bool = False,
     tp2_mode: str = "none",
     asof=None,
+    instrument: "InstrumentSpec | None" = None,
 ) -> BacktestSummary:
     """
     Same as run_backtest() but only evaluates signals whose entry_date falls
@@ -588,10 +743,11 @@ def run_backtest_daterange(
     walk-forward harness, which has to measure folds under the same exit
     model the E22 friction-adjusted baseline was measured with. Their
     defaults match run_backtest's, so every existing caller is unaffected.
+    ``instrument`` passes straight through (run_backtest's docstring).
     """
     summary = run_backtest(ticker, df, strategy, horizon_key, frictions=frictions,
                              exit_model=exit_model, scale_out=scale_out,
-                             tp2_mode=tp2_mode, asof=asof)
+                             tp2_mode=tp2_mode, asof=asof, instrument=instrument)
     if date_from or date_to:
         from_dt = date_from or "0000-01-01"
         to_dt   = date_to   or "9999-12-31"
