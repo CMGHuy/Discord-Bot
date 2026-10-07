@@ -394,10 +394,12 @@ def _stop_mismatch(trade, plan_at):
 def _production_plan(frame, idx, direction, horizon_key):
     """(entry, stop, target) of the live constructor at bar idx, or None when it
     finds no qualifying plan. v137: replaced the frozen v1 plan path
-    (backtest._v1_plan_levels) here. On the full frame at idx the Fibonacci branch reads the same rolling swings,
-    fib_level_stop_at, lifecycle step and reward floor, so v101's numbers do not
-    move (tests/scripts/test_measure_fib_diagnostic.py pins the equivalence)."""
-    plan = build_strategy_plan(frame, idx, ticker="v101-diagnostic", strategy=STRATEGY,
+    (backtest._v1_plan_levels) here. Called on frame.iloc[:idx+1] exactly as the
+    live scan does, so the equivalence cases also prove truncation-invariance:
+    the Fibonacci branch reads the same rolling swings, fib_level_stop_at,
+    lifecycle step and reward floor, so v101's numbers do not move
+    (tests/scripts/test_measure_fib_diagnostic.py pins the equivalence)."""
+    plan = build_strategy_plan(frame.iloc[:idx + 1], idx, ticker="v101-diagnostic", strategy=STRATEGY,
                                horizon_key=horizon_key, direction=direction)
     return None if plan is None else (plan.trigger_price, plan.stop_loss, plan.tp1)
 

@@ -4,7 +4,7 @@
 Compares `backtest._v1_plan_levels` (CURRENT -- it already delegates to
 `plan_engine`, see swingbot/core/backtesting/backtest.py) against
 `tests.fixtures.legacy_trade_plan_at.legacy_trade_plan_at`, a FROZEN copy of
-`_v1_plan_levels` as it stood pre-extraction (commit ac91654, before Task 14
+`_v1_plan_levels` (under its pre-v137 name) as it stood pre-extraction (commit ac91654, before Task 14
 rewired it to call plan_engine). See that module's docstring for why it must
 stay independent of plan_engine.py.
 

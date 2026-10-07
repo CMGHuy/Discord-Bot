@@ -61,7 +61,7 @@ Only VWAP and Break & Retest were re-derived under current arithmetic (v84).
 
 Entry is the signal bar's close (`STRATEGY_ENTRY_TYPE` is empty, so every
 strategy uses a market entry at the trigger price). `build_strategy_plan`
-(live) and `_trade_plan_at` (backtest) share the builders in
+(live) and `_v1_plan_levels` (backtest, the frozen v1 instrument's path) share the builders in
 `swingbot/core/planning/builders.py`.
 
 | Family | Strategies | Stop | TP1 candidates |
@@ -238,7 +238,7 @@ least one `cells` pair admits, in `HORIZONS` order, read at call time. With no
 `min_reward_pct` has one; today only `1w` (2.0% of entry). `clears(entry, tp1,
 strategy, horizon_key)` is True when TP1 sits at least that far from entry
 (either direction); a horizon without the key always clears. Both
-`build_strategy_plan` and `backtest._trade_plan_at` call it, so live and
+`build_strategy_plan` and `backtest._v1_plan_levels` (the frozen v1 instrument's path) call it, so live and
 backtest cannot diverge. It gates strategy plans only; `config.MIN_REWARD_PCT`
 still gates confluence scenarios.
 

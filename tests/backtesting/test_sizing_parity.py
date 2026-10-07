@@ -3,7 +3,7 @@
 Compares `backtest._v1_plan_levels` (CURRENT -- it already delegates to
 `plan_engine`, see swingbot/core/backtesting/backtest.py) against
 `tests.fixtures.legacy_trade_plan_at.legacy_trade_plan_at`, a FROZEN copy of
-`_v1_plan_levels` as it stood pre-extraction (commit ac91654, before Task 14
+`_trade_plan_at` (now `_v1_plan_levels`) as it stood pre-extraction (commit ac91654, before Task 14
 rewired it to call plan_engine). That frozen copy is the only remaining
 independent "old" implementation -- tests/test_plan_engine_sizing.py already
 compares plan_engine against the *current* (post-delegation)

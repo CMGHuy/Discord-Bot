@@ -443,7 +443,7 @@ def _max_drawdown_pct(trades):
 
 def _summarize(ticker, strategy, horizon_key, total_signals, trades, runner_counts):
     """The BacktestSummary for one run, shared by the v1 loop and the v2 replay
-    (extracted verbatim from run_backtest, v137). win_rate is over win+loss;
+    (extracted from run_backtest, behaviour pinned by test_v1_golden.py). win_rate is over win+loss;
     expectancy_r is over ALL closed trades -- the number gated on."""
     evaluated, wins, losses, scratches, timeouts = _outcome_buckets(trades)
     return BacktestSummary(
