@@ -182,6 +182,20 @@ def stratum_table(baseline, component) -> list:
 BOOTSTRAP_RESAMPLES = 10_000
 ALPHA = 0.05
 
+#: Resampling units the cluster bootstrap accepts (v136 §4). "ticker" is
+#: instrument v1 and stays the default, byte-identical; "week" is the v2 unit
+#: (ISO week of entry date, across every ticker). This module never reads the
+#: instrument contract: phase 6 maps --instrument v2 to cluster="week".
+CLUSTER_UNITS = ("ticker", "week")
+
+#: The results-doc wording per unit; empty for ticker so v1 docs never change.
+_CLUSTER_NOTES = {"ticker": "", "week": ", clustered by ISO week of entry date"}
+
+
+def _check_cluster(cluster: str) -> None:
+    if cluster not in CLUSTER_UNITS:
+        raise ValueError(f"cluster must be one of {CLUSTER_UNITS}, got {cluster!r}")
+
 
 @dataclass(frozen=True)
 class BootstrapResult:
@@ -224,7 +238,7 @@ def _group_by_ticker(trades) -> dict:
 
 def cluster_bootstrap(baseline, component, statistic, *,
                       n_resamples: int = BOOTSTRAP_RESAMPLES,
-                      seed: int = 42) -> np.ndarray:
+                      seed: int = 42, cluster: str = "ticker") -> np.ndarray:
     """Resample TICKERS with replacement, recomputing `statistic` on each
     draw. Both arms are resampled with the SAME ticker draw, so the pairing
     between arms survives -- resampling them independently would break the
@@ -233,7 +247,17 @@ def cluster_bootstrap(baseline, component, statistic, *,
     Draws where the statistic is undefined (an arm with no decided trade)
     are dropped, not zero-filled: a missing statistic is missing data, and
     zero is a specific, wrong claim about it.
+
+    ``cluster="week"`` resamples ISO weeks of entry date instead (v136 §4,
+    instrument v2) through ``instrument.stats.week_cluster_bootstrap``, with
+    the same pairing and draw-dropping contract. The ticker body below is
+    instrument v1 and must stay byte-identical.
     """
+    _check_cluster(cluster)
+    if cluster == "week":
+        from .instrument.stats import week_cluster_bootstrap  # lazy: no cycle
+        return week_cluster_bootstrap(baseline, component, statistic,
+                                      n_resamples=n_resamples, seed=seed)
     b_by, c_by = _group_by_ticker(baseline), _group_by_ticker(component)
     tickers = sorted(set(b_by) | set(c_by))
     if not tickers:
@@ -255,7 +279,7 @@ def cluster_bootstrap(baseline, component, statistic, *,
 
 def bootstrap_delta(baseline, component, statistic, *,
                     n_resamples: int = BOOTSTRAP_RESAMPLES,
-                    seed: int = 42) -> BootstrapResult:
+                    seed: int = 42, cluster: str = "ticker") -> BootstrapResult:
     """Point estimate on the real data, interval and one-sided p from the
     ticker-cluster bootstrap.
 
@@ -265,7 +289,7 @@ def bootstrap_delta(baseline, component, statistic, *,
     """
     point = statistic(baseline, component)
     draws = cluster_bootstrap(baseline, component, statistic,
-                              n_resamples=n_resamples, seed=seed)
+                              n_resamples=n_resamples, seed=seed, cluster=cluster)
     if point is None or draws.size == 0:
         return BootstrapResult(point, None, None, None, n_resamples, seed)
     lo, hi = (float(np.percentile(draws, 100 * ALPHA / 2)),
@@ -349,7 +373,7 @@ def mde_paired(baseline, component, statistic, *, observed_n: int,
                target_n: int, power: float = MDE_POWER,
                alpha: float = ALPHA,
                n_resamples: int = BOOTSTRAP_RESAMPLES,
-               seed: int = 42) -> float | None:
+               seed: int = 42, cluster: str = "ticker") -> float | None:
     """Return an MDE from the paired ticker-cluster bootstrap SE.
 
     ``mde_win_rate`` and ``acceptance_harvest.mde_expectancy_r`` assume
@@ -366,7 +390,7 @@ def mde_paired(baseline, component, statistic, *, observed_n: int,
     if z_alpha is None or z_power is None:
         raise ValueError(f"no tabulated z for alpha={alpha}, power={power}")
     draws = cluster_bootstrap(baseline, component, statistic,
-                              n_resamples=n_resamples, seed=seed)
+                              n_resamples=n_resamples, seed=seed, cluster=cluster)
     if draws.size < 2:
         return None
     scale = float(np.sqrt(observed_n / target_n))
@@ -411,6 +435,7 @@ class AcceptanceResult:
     split: dict
     seed: int = 42          # recorded so a results doc is reproducible
     version: int = VERSION
+    cluster: str = "ticker"  # bootstrap resampling unit (v136 §4)
 
     def clause(self, name: str) -> ClauseResult:
         for c in self.clauses:
@@ -452,9 +477,10 @@ def population_split(baseline, component) -> dict:
             "is_subset": not added and not changed and bool(removed)}
 
 
-def _clause_win_rate(baseline, component, n_resamples, seed) -> ClauseResult:
+def _clause_win_rate(baseline, component, n_resamples, seed,
+                     cluster: str = "ticker") -> ClauseResult:
     res = bootstrap_delta(baseline, component, delta_standardised_win_rate,
-                          n_resamples=n_resamples, seed=seed)
+                          n_resamples=n_resamples, seed=seed, cluster=cluster)
     if res.point is None or res.p_greater_than_zero is None:
         return ClauseResult("win_rate", "FAIL",
                             "no decided trades in one arm", None, 0.0)
@@ -465,9 +491,10 @@ def _clause_win_rate(baseline, component, n_resamples, seed) -> ClauseResult:
         f"p={res.p_greater_than_zero:.4f}", res.point, 0.0)
 
 
-def _clause_profit_floor(baseline, component, n_resamples, seed) -> ClauseResult:
+def _clause_profit_floor(baseline, component, n_resamples, seed,
+                         cluster: str = "ticker") -> ClauseResult:
     res = bootstrap_delta(baseline, component, delta_expectancy_r,
-                          n_resamples=n_resamples, seed=seed)
+                          n_resamples=n_resamples, seed=seed, cluster=cluster)
     if res.point is None or res.lo is None:
         return ClauseResult("profit_floor", "FAIL",
                             "no closed trades in one arm", None,
@@ -559,7 +586,7 @@ def _clause_mechanism(split: dict) -> ClauseResult:
 def evaluate(baseline, component, *, stage: str,
              permutation_p: float | None = None,
              n_resamples: int = BOOTSTRAP_RESAMPLES,
-             seed: int = 42) -> AcceptanceResult:
+             seed: int = 42, cluster: str = "ticker") -> AcceptanceResult:
     """The gate. Every applicable clause must PASS.
 
     A SKIPPED clause never blocks a PASS, but it is always reported -- a
@@ -567,10 +594,11 @@ def evaluate(baseline, component, *, stage: str,
     """
     if stage not in STAGES:
         raise ValueError(f"stage must be one of {STAGES}, got {stage!r}")
+    _check_cluster(cluster)
     split = population_split(baseline, component)
     clauses = (
-        _clause_win_rate(baseline, component, n_resamples, seed),
-        _clause_profit_floor(baseline, component, n_resamples, seed),
+        _clause_win_rate(baseline, component, n_resamples, seed, cluster),
+        _clause_profit_floor(baseline, component, n_resamples, seed, cluster),
         _clause_geometry(baseline, component),
         _clause_volume(baseline, component),
         _clause_permutation(stage, permutation_p),
@@ -581,11 +609,11 @@ def evaluate(baseline, component, *, stage: str,
                             strata=stratum_table(baseline, component),
                             split={k: len(v) if isinstance(v, list) else v
                                    for k, v in split.items()},
-                            seed=seed)
+                            seed=seed, cluster=cluster)
 
 
 def render_json(result: AcceptanceResult) -> dict:
-    return {
+    out = {
         "acceptance_version": result.version,
         "stage": result.stage,
         "verdict": result.verdict,
@@ -596,6 +624,9 @@ def render_json(result: AcceptanceResult) -> dict:
         "strata": [{**r, "stratum": list(r["stratum"])} for r in result.strata],
         "split": result.split,
     }
+    if result.cluster != "ticker":   # v1 output stays key-for-key identical
+        out["cluster"] = result.cluster
+    return out
 
 
 def _fmt_pct(value) -> str:
@@ -619,7 +650,7 @@ def render_markdown(result: AcceptanceResult, *, title: str, window: str,
         "",
         f"Procedure: **acceptance v{result.version}** "
         f"(`swingbot/core/backtesting/acceptance.py`), "
-        f"bootstrap seed {result.seed}.",
+        f"bootstrap seed {result.seed}{_CLUSTER_NOTES[result.cluster]}.",
         f"**Window:** {window}",
         "",
         "## Clauses",
