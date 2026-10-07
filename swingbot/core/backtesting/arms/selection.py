@@ -63,10 +63,13 @@ def removed_disclosure(baseline, component):
 
 
 def evaluate_cell(value, baseline, component, *, resolvable, n_resamples, seed,
-                  mechanism=None):
-    """Score only clauses 2–4 and 6 plus the preceding MDE refusal."""
+                  mechanism=None, cluster='ticker'):
+    """Score only clauses 2–4 and 6 plus the preceding MDE refusal.
+
+    ``cluster`` is the bootstrap unit (v136 §4): 'ticker' for instrument v1,
+    'week' for v2."""
     result = acceptance.evaluate(baseline, component, stage='walkforward',
-                                 n_resamples=n_resamples, seed=seed)
+                                 n_resamples=n_resamples, seed=seed, cluster=cluster)
     if mechanism is not None:
         result = with_clause(result, mechanism)
     failed = [name for name in ELIGIBILITY_CLAUSES if result.clause(name).verdict != 'PASS']
