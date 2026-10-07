@@ -71,3 +71,29 @@ def week_cluster_bootstrap(baseline, component, statistic, *,
         if value is not None:
             out.append(value)
     return np.asarray(out, dtype=float)
+
+
+def _checked_p(value) -> float:
+    p = float(value)
+    if not 0.0 <= p <= 1.0:   # also refuses NaN: every comparison is False
+        raise ValueError(f"p-value must lie in [0, 1], got {value!r}")
+    return p
+
+
+def bh_qvalues(pvalues) -> list:
+    """Benjamini-Hochberg step-up q-values, aligned with the input.
+
+    ``q_(k) = min over j >= k of (m * p_(j) / j)``, capped at 1. ``None``
+    (a pre-registration with no recorded p) passes through as ``None`` and
+    does not count toward ``m``. Reported, never gating (v136 §4)."""
+    values = list(pvalues)
+    present = sorted(((i, _checked_p(p)) for i, p in enumerate(values)
+                      if p is not None), key=lambda item: item[1])
+    out = [None] * len(values)
+    m = len(present)
+    running = 1.0
+    for rank in range(m, 0, -1):
+        index, p = present[rank - 1]
+        running = min(running, p * m / rank)
+        out[index] = running
+    return out
