@@ -152,6 +152,18 @@ interpreting any backtest, grid, or validation result.
   budget exists to prevent. Reopening one needs a *new* pre-registered
   hypothesis and its own shot, never a re-read of the old table.
 
+**Pre-registration ledger (v136 §4).** `docs/superpowers/results/preregistration-ledger.jsonl`
+holds one row per pre-registration: `id, date, hypothesis, instrument, n,
+exp_r, p, verdict, record`. Every new verdict appends its row with
+`python scripts/reports/preregistration_ledger.py --id … --instrument v1|v2
+--verdict … --record …`, which prints the Benjamini–Hochberg q-value across
+every ledger p-value. **Reported, never gating:** no threshold in this file
+reads it, and a weak q never reopens or re-runs anything. Rows are never
+edited; a re-measurement is a new pre-registration with a new id. The
+2026-10-06 backfill (v138) covers every row of the table below plus v118 and
+v119 (v124 and v127 are exempt: no spent budget or no enum verdict); `n`/`exp_r` are the decisive population the record names and `null`
+where it names none, and `p` is `null` wherever no p-value was recorded.
+
 **The v72 procedure change does not reopen anything below.** A better
 instrument is not a new hypothesis. Every row in this table stays closed,
 and the features shipped on-by-default under the old gates

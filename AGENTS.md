@@ -141,7 +141,12 @@ question with the budget intact, and a fold-test consistency gate (≥ 2 of 3 fo
 years improving, none worse than −1.0pp, N ≥ 30 per fold). The absolute
 `win_rate >= 50` floor no longer gates acceptance; it survives only as a
 strategy-badge threshold. `Edge: harvest` features are out of scope for this
-funnel and must name the gate they use instead.
+funnel and must name the gate they use instead. Every pre-registration verdict
+appends one row to `docs/superpowers/results/preregistration-ledger.jsonl` with
+`python scripts/reports/preregistration_ledger.py`, which prints a
+Benjamini–Hochberg q-value across the ledger; the q-value is reported, never
+gating, and ledger rows are never edited. v124 and v127 are exempt from the
+backfill (no spent budget or no enum verdict).
 
 **Never quote a pooled figure (ExpR, win rate, N, badge tier) from a document.**
 Re-derive it from the live book. A dev database's `journal_entries`, `trades`
