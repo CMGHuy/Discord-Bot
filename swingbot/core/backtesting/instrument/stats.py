@@ -12,8 +12,11 @@ for ``cluster="week"`` without an import cycle.
 """
 from __future__ import annotations
 
+import json
+import math
 from collections import defaultdict
 from datetime import date
+from pathlib import Path
 
 import numpy as np
 
@@ -97,3 +100,111 @@ def bh_qvalues(pvalues) -> list:
         running = min(running, p * m / rank)
         out[index] = running
     return out
+
+
+# --------------------------------------------------------------------------
+# Pre-registration ledger (v136 §4). A git-tracked record, not a runtime
+# store: no Postgres, no Alembic. One row per pre-registration.
+# --------------------------------------------------------------------------
+
+LEDGER_PATH = (Path(__file__).resolve().parents[4] / "docs" / "superpowers"
+               / "results" / "preregistration-ledger.jsonl")
+LEDGER_FIELDS = ("id", "date", "hypothesis", "instrument", "n", "exp_r", "p",
+                 "verdict", "record")
+VERDICTS = ("PASS", "FAIL", "NO-LIFT", "UNMEASURABLE", "WITHDRAWN", "OPEN")
+INSTRUMENTS = ("v1", "v2")
+
+
+def _text(value) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _iso_date(value) -> bool:
+    if not isinstance(value, str) or len(value) != 10:
+        return False
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _count(value) -> bool:
+    return value is None or (type(value) is int and value >= 0)
+
+
+def _real(value) -> bool:
+    return value is None or (type(value) in (int, float) and math.isfinite(value))
+
+
+def _probability(value) -> bool:
+    return value is None or (_real(value) and 0.0 <= value <= 1.0)
+
+
+_FIELD_CHECKS = {
+    "id": _text, "date": _iso_date, "hypothesis": _text,
+    "instrument": INSTRUMENTS.__contains__, "n": _count, "exp_r": _real,
+    "p": _probability, "verdict": VERDICTS.__contains__, "record": _text,
+}
+
+
+def validate_ledger_row(row) -> None:
+    """Raise ValueError unless ``row`` has exactly LEDGER_FIELDS, each valid."""
+    if not isinstance(row, dict):
+        raise ValueError("a ledger row must be a JSON object")
+    missing = sorted(set(LEDGER_FIELDS) - set(row))
+    extra = sorted(set(row) - set(LEDGER_FIELDS))
+    if missing or extra:
+        raise ValueError(f"ledger row {row.get('id')!r}: missing {missing}, "
+                         f"extra {extra}")
+    bad = [name for name in LEDGER_FIELDS if not _FIELD_CHECKS[name](row[name])]
+    if bad:
+        raise ValueError(f"ledger row {row.get('id')!r}: invalid field(s) {bad}")
+
+
+def _parse_line(text: str, lineno: int, seen: set) -> dict:
+    try:
+        row = json.loads(text)
+        validate_ledger_row(row)
+    except ValueError as exc:   # json.JSONDecodeError is a ValueError
+        raise ValueError(f"ledger line {lineno}: {exc}") from exc
+    if row["id"] in seen:
+        raise ValueError(f"ledger line {lineno}: duplicate id {row['id']!r}")
+    seen.add(row["id"])
+    return row
+
+
+def load_ledger(path=LEDGER_PATH) -> list:
+    """Every row, validated, in file order. An absent file is an empty ledger."""
+    path = Path(path)
+    if not path.exists():
+        return []
+    seen: set = set()
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return [_parse_line(line, n, seen) for n, line in enumerate(lines, start=1)
+            if line.strip()]
+
+
+def append_ledger_row(row: dict, path=LEDGER_PATH) -> list:
+    """Validate, refuse a duplicate id, append one LF line. Returns every row.
+
+    A row is never edited in place: a re-measurement is a new
+    pre-registration with a new id."""
+    validate_ledger_row(row)
+    path = Path(path)
+    rows = load_ledger(path)
+    if any(existing["id"] == row["id"] for existing in rows):
+        raise ValueError(f"duplicate id {row['id']!r}: the ledger already "
+                         "holds this pre-registration")
+    ordered = {name: row[name] for name in LEDGER_FIELDS}
+    lead = "\n" if path.exists() and path.read_bytes()[-1:] not in (b"", b"\n") else ""
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(lead + json.dumps(ordered, ensure_ascii=False) + "\n")
+    return rows + [ordered]
+
+
+def ledger_qvalues(rows) -> dict:
+    """``id -> BH q-value`` across every row's p (None where p is null)."""
+    rows = list(rows)
+    return dict(zip((row["id"] for row in rows),
+                    bh_qvalues(row["p"] for row in rows)))
