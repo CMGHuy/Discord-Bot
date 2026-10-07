@@ -177,6 +177,8 @@ beyond simply waiting.
 | Stage 3 FAIL | Closed, budget spent, recorded as-is. |
 | Stage 3 PASS | Closed PASS, recorded. A live ARMED lifecycle is brainstormed and specced next. |
 
+**Outcome (2026-10-07):** NO_ELIGIBLE_CELL at Stage 1; the live ARMED lifecycle is not written.
+
 ## 5. Dependencies
 
 - **v121 must be merged** (`confirmed_pivots`). Implementation starts by
