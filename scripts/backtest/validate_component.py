@@ -147,7 +147,7 @@ _SKELETON_CLAUSES = {
 
 def _write_skeleton(args, stage):
     if not args.out_md and not args.out_json: return
-    gate = getattr(args, "gate", "win_rate")
+    gate = args.gate
     clauses = tuple(ClauseResult(name, "PENDING", "not yet run", None, threshold) for name, threshold in _SKELETON_CLAUSES[gate])
     version = {"version": HARVEST_VERSION} if gate == "harvest" else {}
     result = AcceptanceResult(stage=stage, verdict="PENDING", seed=args.seed, clauses=clauses, strata=[], split={"removed": 0,"changed": 0,"unchanged": 0,"added": 0,"is_subset": False}, **version)
@@ -155,8 +155,17 @@ def _write_skeleton(args, stage):
     if args.out_md: Path(args.out_md).parent.mkdir(parents=True, exist_ok=True); Path(args.out_md).write_text(markdown, encoding="utf-8")
     if args.out_json: Path(args.out_json).parent.mkdir(parents=True, exist_ok=True); Path(args.out_json).write_text(json.dumps(render_json(result), indent=1), encoding="utf-8")
 
+_CLAUSE_VERDICTS = ("PASS", "FAIL", "SKIPPED", "PENDING")
+_CLAUSE_FIELDS = {field.name for field in dataclasses.fields(ClauseResult)}
+
 def load_clause(path):
-    return ClauseResult(**json.loads(Path(path).read_text(encoding="utf-8")))
+    blob = json.loads(Path(path).read_text(encoding="utf-8"))
+    unknown = set(blob) - _CLAUSE_FIELDS
+    if unknown:
+        raise ValueError(f"--mechanism-json {path}: unknown keys {sorted(unknown)}")
+    if blob.get("verdict") not in _CLAUSE_VERDICTS:
+        raise ValueError(f"--mechanism-json {path}: verdict must be one of {_CLAUSE_VERDICTS}, got {blob.get('verdict')!r}")
+    return ClauseResult(**blob)
 
 def with_mechanism_clause(result, clause):
     """Swap a precomputed v72 clause 6 (v128's frozen baseline reading) into a gate result and recompute the verdict."""
@@ -166,17 +175,15 @@ def with_mechanism_clause(result, clause):
 
 def _evaluate(args, baseline, component, stage):
     common = dict(stage=stage, permutation_p=args.permutation_p, n_resamples=args.resamples, seed=args.seed)
-    return evaluate_harvest(baseline, component, **common) if getattr(args, "gate", "win_rate") == "harvest" else evaluate(baseline, component, **common)
+    return evaluate_harvest(baseline, component, **common) if args.gate == "harvest" else evaluate(baseline, component, **common)
 
 def _run_gate(args, stage):
     baseline, component = load_arms(args.arms); _write_skeleton(args, stage)
     result = _evaluate(args, baseline, component, stage)
     try:
-        mechanism = _cell_mechanism(args, args.arms, baseline, component, None)
+        mechanism = load_clause(args.mechanism_json) if args.mechanism_json else _cell_mechanism(args, args.arms, baseline, component, None)
     except dryup_clauses.NotADryupArm:
         return _refuse_not_dryup()
-    if getattr(args, "mechanism_json", None):
-        mechanism = load_clause(args.mechanism_json)
     if mechanism is not None:
         result = with_mechanism_clause(result, mechanism)
     markdown = render_markdown(result, title=args.title, window=args.window, notes=_notes(args)); print(markdown)
@@ -315,6 +322,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.mechanism_json and args.gate == "harvest":
         parser.error("--mechanism-json replaces v72 clause 6; the v92 harvest gate has no mechanism clause")
+    if args.dryup_mechanism and args.gate == "harvest":
+        parser.error("--dryup-mechanism scores v72 clause 6; the v92 harvest gate has no mechanism clause")
     if args.stage == "selection":
         return stage_selection(args)
     if args.arms is None:

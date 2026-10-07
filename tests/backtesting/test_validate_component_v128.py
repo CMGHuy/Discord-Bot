@@ -86,3 +86,44 @@ def test_mechanism_json_with_the_harvest_gate_is_rejected(tmp_path):
         _run("--stage", "validation", "--gate", "harvest", "--arms", str(write_arms(tmp_path)),
              "--title", "t", "--window", "w", "--mechanism-json", str(tmp_path / "m.json"))
     assert exc.value.code == 2
+
+
+def test_dryup_mechanism_with_the_harvest_gate_is_rejected(tmp_path):
+    with pytest.raises(SystemExit) as exc:
+        _run("--stage", "validation", "--gate", "harvest", "--arms", str(write_arms(tmp_path)),
+             "--title", "t", "--window", "w", "--dryup-mechanism")
+    assert exc.value.code == 2
+
+
+def test_mechanism_json_wins_over_dryup_mechanism_on_a_non_dryup_arm(tmp_path):
+    injected = tmp_path / "mechanism.json"
+    injected.write_text(json.dumps({"name": "mechanism", "verdict": "FAIL", "detail": "json wins"}), encoding="utf-8")
+    out = tmp_path / "v.json"
+    rc = _run("--stage", "validation", "--arms", str(write_arms(tmp_path)), "--title", "t", "--window", "w",
+              "--permutation-p", "0.01", "--resamples", "200", "--dryup-mechanism",
+              "--mechanism-json", str(injected), "--out-json", str(out))
+    blob = json.loads(out.read_text(encoding="utf-8"))
+    assert rc == 1 and next(c for c in blob["clauses"] if c["name"] == "mechanism")["detail"] == "json wins"
+
+
+@pytest.mark.parametrize("body", [
+    {"name": "mechanism", "verdict": "MAYBE", "detail": "x"},
+    {"name": "mechanism", "verdict": "PASS", "detail": "x", "extra": 1},
+])
+def test_load_clause_rejects_a_bad_file_with_a_clear_error(tmp_path, body):
+    path = tmp_path / "bad.json"
+    path.write_text(json.dumps(body), encoding="utf-8")
+    with pytest.raises(ValueError, match="mechanism-json"):
+        vc.load_clause(path)
+
+
+def test_harvest_skeleton_names_the_four_pending_clauses_and_version(tmp_path):
+    from types import SimpleNamespace
+    from swingbot.core.backtesting.acceptance_harvest import HARVEST_VERSION
+    out = tmp_path / "skel.json"
+    vc._write_skeleton(SimpleNamespace(gate="harvest", seed=1, title="t", window="w", out_md=None,
+                                       out_json=str(out)), "validation")
+    blob = json.loads(out.read_text(encoding="utf-8"))
+    assert [(c["name"], c["verdict"]) for c in blob["clauses"]] == [
+        ("expectancy_gain", "PENDING"), ("win_rate_floor", "PENDING"), ("volume", "PENDING"), ("permutation", "PENDING")]
+    assert blob["acceptance_version"] == HARVEST_VERSION
