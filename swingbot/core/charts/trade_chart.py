@@ -1097,6 +1097,15 @@ def generate_trade_chart(
     return path
 
 
+def _display_params():
+    """v128: /strategycharts is display, not signal -- it keeps every unfilled
+    FVG whatever FVG_LEVELS_MODE says. Every other knob stays live config."""
+    import dataclasses
+
+    from swingbot.scan_params import ScanParams
+    return dataclasses.replace(ScanParams.from_config(), fvg_levels_mode="all")
+
+
 def generate_all_strategy_charts(
     ticker: str,
     df: pd.DataFrame,
@@ -1125,7 +1134,7 @@ def generate_all_strategy_charts(
     current_price = float(df["Close"].iloc[-1])
 
     try:
-        all_candidates = levels.collect_candidate_levels(df, h, current_price)
+        all_candidates = levels.collect_candidate_levels(df, h, current_price, params=_display_params())
     except Exception:
         all_candidates = []
 

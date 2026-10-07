@@ -176,6 +176,24 @@ def volume_profile_nodes(df: pd.DataFrame, lookback_days: int = 180,
     return {"hvn": hvn, "lvn": lvn}
 
 
+def _fvg_candidates(df: pd.DataFrame, params) -> list:
+    """Fair Value Gap candidates under v128's FVG_LEVELS_MODE.
+
+    Both ScanParams reads sit OUTSIDE the try, as AVWAP's flag check below
+    does, so a renamed field fails loudly instead of silently dropping this
+    source forever. "off" emits nothing: the FVG family then loses both its
+    confluence vote and its candidate prices. Charts draw gaps from
+    fvg.find_fair_value_gaps_detailed and never see this filter."""
+    mode = params.fvg_levels_mode
+    k = params.fvg_displacement_atr_k
+    if mode == "off":
+        return []
+    try:
+        return find_fair_value_gaps(df, mode=mode, k=k)
+    except Exception:
+        return []
+
+
 def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
                               trendline_candidates: list | None = None,
                               params=None) -> list:
@@ -203,6 +221,9 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
     behavior for every other caller.
     """
     candidates = []
+    if params is None:
+        from swingbot.scan_params import ScanParams
+        params = ScanParams.from_config()
     close = df["Close"]
 
     try:
@@ -319,15 +340,12 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
     except Exception:
         pass
 
-    try:
-        # Fair Value Gaps (see fvg.py) -- unfilled 3-candle imbalance
-        # zones, a widely-used price-action concept distinct from every
-        # other source here (none of the others look at *gaps* between
-        # candles). Only still-unfilled gaps count, so this is a live,
-        # currently-relevant level, not a historical curiosity.
-        candidates.extend(find_fair_value_gaps(df))
-    except Exception:
-        pass
+    # Fair Value Gaps (see fvg.py) -- unfilled 3-candle imbalance zones, a
+    # widely-used price-action concept distinct from every other source here
+    # (none of the others look at *gaps* between candles). Only still-unfilled
+    # gaps count. v128: which gaps count is params.fvg_levels_mode, read
+    # outside any try -- see _fvg_candidates.
+    candidates.extend(_fvg_candidates(df, params))
 
     try:
         # Volume Profile High Volume Node (see strategy.compute_hvn_level)
@@ -369,10 +387,6 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
     # The flag check sits OUTSIDE the try so a missing/renamed config
     # Field fails loudly instead of silently turning this source off
     # forever.
-    if params is None:
-        from swingbot.scan_params import ScanParams
-        params = ScanParams.from_config()
-
     if params.avwap_levels_enabled:
         try:
             from swingbot.core.edge.factors import anchored_vwap, avwap_anchors
