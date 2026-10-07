@@ -130,3 +130,18 @@ def test_ledger_qvalues_maps_ids_to_bh_q():
     rows = [_row(id="a", p=0.01), _row(id="b", p=None), _row(id="c", p=0.04)]
     assert stats.ledger_qvalues(rows) == {
         "a": pytest.approx(0.02), "b": None, "c": pytest.approx(0.04)}
+
+
+@pytest.mark.parametrize("sep", ["\u2028", "\u0085", "\x0b", "\x0c"])
+def test_unicode_line_separators_in_text_round_trip(tmp_path, sep):
+    path = tmp_path / "ledger.jsonl"
+    stats.append_ledger_row(_row(id="a", hypothesis=f"x{sep}y"), path=path)
+    stats.append_ledger_row(_row(id="b"), path=path)
+    rows = stats.load_ledger(path)
+    assert [r["id"] for r in rows] == ["a", "b"]
+    assert rows[0]["hypothesis"] == f"x{sep}y"
+
+
+def test_iso_week_date_is_refused():
+    with pytest.raises(ValueError, match="'date'"):
+        stats.validate_ledger_row(_row(date="2026-W41-1"))

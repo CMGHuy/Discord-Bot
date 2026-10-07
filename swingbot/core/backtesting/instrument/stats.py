@@ -123,10 +123,9 @@ def _iso_date(value) -> bool:
     if not isinstance(value, str) or len(value) != 10:
         return False
     try:
-        date.fromisoformat(value)
+        return date.fromisoformat(value).isoformat() == value
     except ValueError:
         return False
-    return True
 
 
 def _count(value) -> bool:
@@ -180,7 +179,7 @@ def load_ledger(path=LEDGER_PATH) -> list:
     if not path.exists():
         return []
     seen: set = set()
-    lines = path.read_text(encoding="utf-8").splitlines()
+    lines = path.read_text(encoding="utf-8").split("\n")
     return [_parse_line(line, n, seen) for n, line in enumerate(lines, start=1)
             if line.strip()]
 
