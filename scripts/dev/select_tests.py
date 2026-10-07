@@ -262,6 +262,11 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("docs/deploy/DEPLOY_HETZNER.md", ("tests/scripts/test_backup_db.py",)),
     # Every testrun.py command line deploy.yml runs is parsed for real.
     (".github/workflows/", ("tests/dev/test_testrun_ci_invocations.py",)),
+    # The pre-registration ledger is loaded and validated row by row.
+    ("docs/superpowers/results/preregistration-ledger.jsonl",
+     ("tests/backtesting/test_preregistration_ledger_file.py",
+      "tests/backtesting/test_instrument_stats_ledger.py",
+      "tests/scripts/test_preregistration_ledger_cli.py")),
 )
 
 # Known to affect no test. Distinct from "unplaceable", which widens: silence
