@@ -39,6 +39,9 @@ _OPEX = "OPEX adjustment needs the calendar-aware live scan date path; replay ha
 _RS = "Relative strength is cross-sectional and evaluated in scanning/engine.py, which no replay runs."
 _DCB = "Measured through its dedicated DCB harness (replay_scenarios takes dcb_params, not config)."
 _TIGHTEN = "Only active when ADAPTIVE_RUNNER_TRAIL_ENABLED=true; a lone perturbation at the default is inert by design."
+_FVG = ("v128: level-map source read in levels.collect_candidate_levels, which both replay engines "
+        "reach -- confluence through levels_asof/count_confirming_strategies, strategy through "
+        "build_level_map (TP2) and apply_level_lifecycle. Not verified on the v74 fixture.")
 _DRYUP = ("v122 pullback dry-up gate (edge/gates.py), applied before plan construction in "
           "StrategyEngine._gated_plan and backtest_scenarios._dryup_kept. Inert unless "
           "PULLBACK_DRYUP_SCOPE != off and PULLBACK_DRYUP_MAX_RATIO > 0 together, so a lone "
@@ -61,6 +64,9 @@ REGISTRY: dict[str, Reach] = {
     "ADAPTIVE_RUNNER_TRAIL_ENABLED": Reach(REACHABLE, "Post-TP1 runner trail in simulate_exit. Not observable on the v74 fixture since the v104 stop ceiling (verified 2026-09-28): its one trade past TIGHTEN_TRIGGER_R was a lifecycle-widened plan. Covered by tests/planning/test_exit_sim_scaleout.py.", CS),
     "TIGHTEN_TRIGGER_R": Reach(REACHABLE, _TIGHTEN, CS),
     "TIGHTEN_ATR_MULT": Reach(REACHABLE, _TIGHTEN, CS),
+    "FVG_LEVELS_MODE": Reach(REACHABLE, _FVG, CS),
+    "FVG_DISPLACEMENT_ATR_K": Reach(REACHABLE, _FVG + " Read only when FVG_LEVELS_MODE=displacement; "
+                                    "a lone perturbation at the default mode is inert by design.", CS),
     "PULLBACK_DRYUP_SCOPE": Reach(REACHABLE, _DRYUP, CS),
     "PULLBACK_DRYUP_MAX_RATIO": Reach(REACHABLE, _DRYUP, CS),
     "SHORT_UNIVERSE_RESEARCH_MODE": Reach(REACHABLE, (
