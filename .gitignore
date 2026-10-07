@@ -148,6 +148,10 @@ data/v82/
 data/v88/
 # v90 rejection-only armed-entries replay output (large, regenerable)
 data/v90/
+# v127 structure-break armed-entries replay output (large, regenerable)
+data/v127/
+# scan snapshot written by local scans -- runtime state, never committed
+data/scan_snapshots.json
 
 # claude plugin eval run artefacts (HTML reports, aggregate json) -- never committed
 .claude/skills/*/evals/results/
