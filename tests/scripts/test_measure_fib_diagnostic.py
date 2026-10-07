@@ -500,7 +500,7 @@ def _fib_cases():
 @pytest.mark.parametrize(("ticker", "strategy", "horizon"), _fib_cases())
 def test_production_plan_reproduces_the_v1_backtest_plan_at_every_fib_signal(
         monkeypatch, ticker, strategy, horizon):
-    """v137 IC5: moving this closed diagnostic off backtest._trade_plan_at onto
+    """v137 IC5: moving this closed diagnostic off backtest._v1_plan_levels onto
     build_strategy_plan must not move v101's numbers. On the full frame at the
     same bar both read the same rolling swings, fib_level_stop_at, lifecycle
     step and reward floor; this pins that on every fixture Fibonacci signal."""
@@ -518,7 +518,7 @@ def test_production_plan_reproduces_the_v1_backtest_plan_at_every_fib_signal(
         if i < bt.MIN_BARS[horizon]:
             continue
         direction = "bullish" if bullish.values[i] else "bearish"
-        expected = bt._trade_plan_at(frame, i, direction, strategy, horizon, atr_s, sh_s, sl_s)
+        expected = bt._v1_plan_levels(frame, i, direction, strategy, horizon, atr_s, sh_s, sl_s)
         assert mfd._production_plan(frame, int(i), direction, horizon) == expected, (ticker, horizon, i)
         compared += expected is not None
     assert compared, f"no Fibonacci plan built on {ticker}/{horizon}"

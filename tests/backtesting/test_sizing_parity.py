@@ -1,13 +1,13 @@
 """Task 13: full-corpus sizing-parity harness (pytest side).
 
-Compares `backtest._trade_plan_at` (CURRENT -- it already delegates to
+Compares `backtest._v1_plan_levels` (CURRENT -- it already delegates to
 `plan_engine`, see swingbot/core/backtesting/backtest.py) against
 `tests.fixtures.legacy_trade_plan_at.legacy_trade_plan_at`, a FROZEN copy of
-`_trade_plan_at` as it stood pre-extraction (commit ac91654, before Task 14
+`_v1_plan_levels` as it stood pre-extraction (commit ac91654, before Task 14
 rewired it to call plan_engine). That frozen copy is the only remaining
 independent "old" implementation -- tests/test_plan_engine_sizing.py already
 compares plan_engine against the *current* (post-delegation)
-`backtest._trade_plan_at`, which is plan_engine calling itself through one
+`backtest._v1_plan_levels`, which is plan_engine calling itself through one
 layer of indirection and can no longer prove extraction correctness on its
 own.
 
@@ -18,7 +18,7 @@ fixed per-strategy reward:risk ratio, and the frozen module (deliberately;
 see its own docstring) was never taught the new selector. Comparing tp1
 would just assert a known, designed-in divergence forever. Stop derivation
 is genuinely unchanged by v31 and remains a real, meaningful check. A bar
-where the new selector finds no qualifying target (`_trade_plan_at` returns
+where the new selector finds no qualifying target (`_v1_plan_levels` returns
 None) is skipped, not compared -- the frozen side has no such concept.
 
 Runs on the frozen fixture cases in tests/fixtures/ohlcv_parity.py -- every
@@ -43,7 +43,7 @@ TOLERANCE = 1e-6
 def _lifecycle_off(monkeypatch):
     """Pin the level-lifecycle flag OFF for this module.
 
-    This harness compares the CURRENT `_trade_plan_at` against
+    This harness compares the CURRENT `_v1_plan_levels` against
     `legacy_trade_plan_at`, a frozen pre-extraction copy. The level lifecycle
     (P1) is a deliberate behaviour change made long after that freeze -- the
     frozen copy cannot have it and must never be taught it, or it stops being
@@ -88,7 +88,7 @@ def test_sizing_parity(ticker, strategy, horizon_key):
             df, i, direction, strategy, horizon_key, atr_series,
             swing_high_series, swing_low_series, volume_ratio_series, entry_levels,
         )
-        new_plan = backtest._trade_plan_at(
+        new_plan = backtest._v1_plan_levels(
             df, i, direction, strategy, horizon_key, atr_series,
             swing_high_series, swing_low_series, volume_ratio_series, entry_levels,
         )

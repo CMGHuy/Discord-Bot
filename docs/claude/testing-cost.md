@@ -287,11 +287,12 @@ both, MACD 4w, EMA Crossover 3m, Elliott Wave 3m. `RSI Divergence` never skips.
 `scripts/data/fetch_backtest_data.py` and 66 moves without anything being wrong.
 
 **Why deleting them would be expensive.** `test_sizing_parity.py` compares the
-current `backtest._trade_plan_at` against `tests/fixtures/legacy_trade_plan_at.py`
+current `backtest._v1_plan_levels` (the frozen v1 instrument's plan path,
+`_trade_plan_at` until v137) against `tests/fixtures/legacy_trade_plan_at.py`
 — a frozen pre-extraction copy, and per that file's own docstring the *only
 remaining independent old implementation*. `test_plan_engine_sizing.py` looks
 like it covers the same ground and does not: it compares `plan_engine` against
-the post-delegation `_trade_plan_at`, which is `plan_engine` calling itself
+the post-delegation `_v1_plan_levels`, which is `plan_engine` calling itself
 through one layer of indirection. Drop the parity file and nothing proves the
 extraction preserved sizing behaviour.
 

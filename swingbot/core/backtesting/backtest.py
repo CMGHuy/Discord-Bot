@@ -141,12 +141,12 @@ def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
 
 
 def _plan_series(df: pd.DataFrame, strategy: str, horizon_key: str):
-    """The per-strategy series `_trade_plan_at` reads, computed once per run.
+    """The per-strategy series `_v1_plan_levels` reads, computed once per run.
 
     Returns (atr, swing_high, swing_low, volume_ratio, elliott_entry_levels);
     the members a strategy does not use are None. scripts/reports/parity_exits.py
     and parity_sizing.py call this too, so their reconstructions hand
-    `_trade_plan_at` bit-identical inputs to run_backtest's own loop -- they
+    `_v1_plan_levels` bit-identical inputs to run_backtest's own loop -- they
     used to carry copies of this block that could drift from it.
     """
     atr_series = atr(df, 14)
@@ -172,7 +172,7 @@ def _plan_series(df: pd.DataFrame, strategy: str, horizon_key: str):
 
 def _short_plan_at(df, i, strategy, horizon_key, direction, entry, atr_val):
     """((stop, tp1) | None, candidates) for a v104 short -- one call site keeps
-    _trade_plan_at's complexity flat."""
+    _v1_plan_levels's complexity flat."""
     from swingbot.core.planning.short_builders import plan_short
     picked = plan_short(df, i, strategy, horizon_key, direction, entry=entry, atr_val=atr_val)
     if picked is None:
@@ -189,15 +189,21 @@ def _floored(entry, stop_loss, take_profit, strategy, horizon_key):
     return entry, stop_loss, take_profit
 
 
-def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_high_series=None, swing_low_series=None, volume_ratio_series=None, entry_levels=None):
-    """Sizing lives in plan_engine (single source of truth shared with live
-    plans); this wrapper only picks the branch from the precomputed series.
-    Parity with the original inline implementation is now narrower than the
-    module docstring below used to claim (v31): tests/test_plan_engine_sizing.py
-    locks STOP parity only -- target pricing diverged from the pre-extraction
-    arithmetic on purpose (see Task 15). Returns None when the chosen builder
-    finds no target that clears MIN_RISK_REWARD_RATIO -- no qualifying setup
-    at this bar, not a crash."""
+def _v1_plan_levels(df, i, direction, strategy, horizon_key, atr_series, swing_high_series=None, swing_low_series=None, volume_ratio_series=None, entry_levels=None):
+    """(entry, stop, target) for the FROZEN v1 instrument, or None.
+
+    v136 rule 3 retired this as a plan constructor (it carried the retired
+    constructor's name until v137): every replay under the v2 instrument builds through
+    builders.build_strategy_plan (`_live_plan_at`). It survives only because v1
+    must stay byte-identical until the v136 cutover. It differs from the live
+    builder by design: no journal-resolved stop_mult/TP2, no opex widening, no
+    level_map, and series precomputed once on the full frame. Callers:
+    run_backtest's v1 loop and the two v1 parity reports in scripts/reports/;
+    tests/backtesting/instrument/test_one_constructor_guard.py keeps it that way.
+    Do not change its arithmetic, because test_v1_golden.py pins its output. Sizing itself
+    lives in plan_engine (shared with live); this only picks the branch from the
+    precomputed series. Returns None when the chosen builder finds no target
+    that clears MIN_RISK_REWARD_RATIO -- no qualifying setup at this bar."""
     _refuse_compression(strategy)
     from swingbot.core.planning.plan_engine import (
         _atr_plan,
@@ -553,7 +559,7 @@ def run_backtest(
         if one_at_a_time and i <= _open_until:
             continue
         direction = "bullish" if bullish_entries.values[i] else "bearish"
-        plan_at = _trade_plan_at(
+        plan_at = _v1_plan_levels(
             df, i, direction, strategy, horizon_key, atr_series,
             swing_high_series, swing_low_series, volume_ratio_series, entry_levels
         )

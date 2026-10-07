@@ -4,7 +4,7 @@ Only a horizon carrying "min_reward_pct" in strategy_types.HORIZONS has one
 (today: 1w = 2.0%). Every legacy horizon has none -- exactly as before v113,
 when no reward floor gated strategy plans at all (config.MIN_REWARD_PCT gates
 only confluence scenarios, and still does). build_strategy_plan and
-backtest._trade_plan_at both call clears(), so live and backtest cannot diverge.
+backtest._v1_plan_levels both call clears(), so live and backtest cannot diverge.
 
 DROPS / PASSES count every decision per (strategy, horizon) in this process so
 measure_v113 can report a floor-drop rate; call reset() before a measured run.

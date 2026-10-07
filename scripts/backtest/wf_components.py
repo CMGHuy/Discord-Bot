@@ -72,9 +72,10 @@ INERT_COMPONENTS = {
         "closed; reopening it needs a genuinely new mechanism, not another "
         "grid.",
     "DATA_DRIVEN_STOPS_ENABLED":
-        "E31/E32 reach plan_engine.build_strategy_plan only; the backtest "
-        "sizes through backtest._trade_plan_at, which takes no stop_mult/"
-        "tp2_r. Needs those threaded through run_backtest first.",
+        "E31/E32 reach plan_engine.build_strategy_plan only; the v1 "
+        "backtest instrument sizes through backtest._v1_plan_levels, which "
+        "takes no stop_mult/tp2_r. Measurable only under the v2 instrument "
+        "(v136/v137), where run_backtest builds through build_strategy_plan.",
     "REGIME_GATES_ENABLED":
         "The wiring objection is FIXED (P0: market_context.attach/get now "
         "supplies entries_for with a ctx_regime series in both the backtest "

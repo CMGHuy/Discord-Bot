@@ -78,7 +78,7 @@ def test_v2_builds_every_plan_on_the_frame_truncated_at_its_signal_bar(monkeypat
         return real(df, index, **kwargs)
 
     monkeypatch.setattr(builders, "build_strategy_plan", spy)
-    monkeypatch.setattr(bt, "_trade_plan_at", _forbidden)
+    monkeypatch.setattr(bt, "_v1_plan_levels", _forbidden)
     summary = _run(frame, **V2_EXIT, instrument=resolve("v2"))
     assert summary.trades, "fixture case must trade under v2 or this proves nothing"
     assert calls and all(length == index + 1 for length, index in calls)

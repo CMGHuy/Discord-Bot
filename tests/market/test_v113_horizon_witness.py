@@ -2,7 +2,7 @@
 
 The golden (tests/fixtures/v113/horizon_witness.json) was written by this
 module's __main__ BEFORE any v113 code landed (Task V113-1). Every later v113
-task must leave it byte-identical: entries, backtest sizing (_trade_plan_at),
+task must leave it byte-identical: entries, backtest sizing (_v1_plan_levels),
 live sizing (build_strategy_plan) and the v2 exit, for every legacy strategy x
 horizon x direction on the frozen TSLA fixture.
 
@@ -64,9 +64,9 @@ def _r(value):
 
 
 def _bt(df, i, direction, strategy, horizon, series) -> list:
-    from swingbot.core.backtesting.backtest import _trade_plan_at
+    from swingbot.core.backtesting.backtest import _v1_plan_levels
 
-    picked = _trade_plan_at(df, i, direction, strategy, horizon, *series)
+    picked = _v1_plan_levels(df, i, direction, strategy, horizon, *series)
     return [None, None, None] if picked is None else [_r(value) for value in picked]
 
 

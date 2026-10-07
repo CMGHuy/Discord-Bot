@@ -393,8 +393,8 @@ def _stop_mismatch(trade, plan_at):
 
 def _production_plan(frame, idx, direction, horizon_key):
     """(entry, stop, target) of the live constructor at bar idx, or None when it
-    finds no qualifying plan. v137: replaced backtest._trade_plan_at here. On the
-    full frame at idx the Fibonacci branch reads the same rolling swings,
+    finds no qualifying plan. v137: replaced the frozen v1 plan path
+    (backtest._v1_plan_levels) here. On the full frame at idx the Fibonacci branch reads the same rolling swings,
     fib_level_stop_at, lifecycle step and reward floor, so v101's numbers do not
     move (tests/scripts/test_measure_fib_diagnostic.py pins the equivalence)."""
     plan = build_strategy_plan(frame, idx, ticker="v101-diagnostic", strategy=STRATEGY,

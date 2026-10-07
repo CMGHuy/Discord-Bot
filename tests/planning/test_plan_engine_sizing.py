@@ -1,5 +1,5 @@
 """Parity + golden tests for the sizing builders extracted from
-backtest._trade_plan_at into plan_engine (Tasks 8-13)."""
+backtest._v1_plan_levels into plan_engine (Tasks 8-13)."""
 import numpy as np
 import pytest
 
@@ -29,15 +29,15 @@ I = 79  # reference bar
 def _lifecycle_off(monkeypatch):
     """Pin the level-lifecycle flag OFF for this module.
 
-    These are parity tests between `backtest._trade_plan_at` and the bare
+    These are parity tests between `backtest._v1_plan_levels` and the bare
     sizing builders it delegates to (`_atr_plan`, `_fibonacci_plan`, ...).
     The lifecycle deliberately POST-PROCESSES a builder's output --
-    `_trade_plan_at` calls `apply_level_lifecycle` after sizing -- so with
+    `_v1_plan_levels` calls `apply_level_lifecycle` after sizing -- so with
     LEVEL_LIFECYCLE_STOPS_ENABLED default-on (2026-08-08) the two sides
     legitimately differ and the parity assertion stops meaning anything.
 
     Pinning the flag keeps these tests proving what they were written to
-    prove: that the builders extracted out of `_trade_plan_at` are faithful.
+    prove: that the builders extracted out of `_v1_plan_levels` are faithful.
     Agreement between the two plan paths WITH the lifecycle on is a different
     property, covered by tests/market/test_levels_lifecycle_wiring.py.
     """
@@ -112,9 +112,9 @@ def test_atr_plan_target_is_an_atr_band_at_or_past_the_floor(horizon_key, strate
 @pytest.mark.parametrize("direction", ["bullish", "bearish"])
 def test_fibonacci_parity(df, atr_series, direction):
     # v31 Task 8: tp is no longer parity-matched against
-    # backtest._trade_plan_at's old per-strategy fixed reward:risk
+    # backtest._v1_plan_levels's old per-strategy fixed reward:risk
     # arithmetic (replaced by select_structural_target against real fib
-    # levels). At the time this test was written, backtest._trade_plan_at
+    # levels). At the time this test was written, backtest._v1_plan_levels
     # itself was not yet updated (that landed in Task 12) -- it still
     # unconditionally unpacked _fibonacci_plan's return as a 2-tuple, which
     # raised whenever the builder declined (returned
@@ -193,7 +193,7 @@ def test_fib_candidates_1_0_extension_flag(df, atr_series, monkeypatch):
 @pytest.mark.parametrize("ratio", [0.5, 1.0, 2.5, np.nan])
 def test_sr_parity(df, atr_series, ratio):
     # v31 Task 10: same pattern as Tasks 8-9 -- tp is no longer
-    # parity-matched against backtest._trade_plan_at's old volume-strength
+    # parity-matched against backtest._v1_plan_levels's old volume-strength
     # arithmetic (backtest.py doesn't thread candidate_levels yet; Task 12).
     # STOP is unchanged (doesn't depend on volume_ratio at all) so it's
     # checked against the same fixed-percent formula directly; tp against
@@ -230,7 +230,7 @@ def test_sr_target_is_structure_or_band_never_a_risk_multiple(df, atr_series):
 @pytest.mark.parametrize("direction", ["bullish", "bearish"])
 def test_elliott_parity(df, atr_series, direction):
     # v31 Task 9: same pattern as test_fibonacci_parity -- tp is no longer
-    # parity-matched against backtest._trade_plan_at's old R:R-override
+    # parity-matched against backtest._v1_plan_levels's old R:R-override
     # arithmetic (backtest.py only extracts entry_levels[i]["wave2"] today
     # and doesn't thread candidate_levels; that's Task 12). STOP is checked
     # against a hand-computed golden value; tp against the RR band.

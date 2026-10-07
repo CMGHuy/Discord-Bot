@@ -4,7 +4,7 @@ import math
 import pytest
 
 from swingbot import config
-from swingbot.core.backtesting.backtest import _plan_series, _trade_plan_at
+from swingbot.core.backtesting.backtest import _plan_series, _v1_plan_levels
 from swingbot.core.market import entry_filters as ef
 from swingbot.core.planning.builders import _fibonacci_plan, build_strategy_plan
 from tests.market.test_fib_sr_confluence import _bull_signal_frame
@@ -60,7 +60,7 @@ def test_backtest_and_live_build_the_same_level_stop_plan(monkeypatch):
     )
     checked = 0
     for index in [i for i in range(len(df)) if not math.isnan(helper.iloc[i])]:
-        backtest_plan = _trade_plan_at(
+        backtest_plan = _v1_plan_levels(
             df, index, "bullish", "Fibonacci", "4w", atr_series, swing_high,
             swing_low, volume_ratio, entry_levels,
         )
