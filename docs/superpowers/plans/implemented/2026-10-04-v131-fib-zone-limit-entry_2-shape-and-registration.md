@@ -1,6 +1,6 @@
 # v131 Fibonacci Limit — Part 2: plan-shape field and registration
 
-Index, Global Constraints, Review Focus and `## Parallelisation`: `2026-10-04-v131-fib-zone-limit-entry_0-index.md`. Spec: `docs/superpowers/specs/2026-10-04-v131-fib-zone-limit-entry-design.md`.
+Index, Global Constraints, Review Focus and `## Parallelisation`: `2026-10-04-v131-fib-zone-limit-entry_0-index.md`. Spec: `docs/superpowers/specs/implemented/2026-10-04-v131-fib-zone-limit-entry-design.md`.
 
 Same worktree and branch as Part 1 (`<worktree>` = the absolute path of `.claude/worktrees/2026-10-04-v131-fib-zone-limit-entry`); `python scripts/dev/testrun.py ...` means `python <worktree>/scripts/dev/testrun.py ...`. Line numbers are `main`'s; after Part 1 they hold for `builders.py`, `backtest.py`, `params.py` and `strategy_types.py` (Part 1 did not touch them) — `entry_filters.py` is shifted by V131-02, so its anchors below are quoted text.
 

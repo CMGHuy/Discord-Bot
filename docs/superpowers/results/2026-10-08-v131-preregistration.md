@@ -1,7 +1,7 @@
 # v131 pre-registration — Fibonacci Limit (resting buy limit inside the retracement zone)
 
-Spec: `docs/superpowers/specs/2026-10-04-v131-fib-zone-limit-entry-design.md` (last changed in `5e6d5870`).
-Plan index: `docs/superpowers/plans/2026-10-04-v131-fib-zone-limit-entry_0-index.md`.
+Spec: `docs/superpowers/specs/implemented/2026-10-04-v131-fib-zone-limit-entry-design.md` (last changed in `5e6d5870`).
+Plan index: `docs/superpowers/plans/implemented/2026-10-04-v131-fib-zone-limit-entry_0-index.md`.
 
 Committed before any v131 number existed. No v131 result JSON, `data/v131_*.json` or registry row exists at this commit. This document contains no performance figure; the only figures quoted are the spec's v103 reference numbers.
 

@@ -1,6 +1,6 @@
 # v131 Fibonacci Limit — Part 3: measurement script
 
-Index, Global Constraints, Review Focus and `## Parallelisation`: `2026-10-04-v131-fib-zone-limit-entry_0-index.md`. Spec: `docs/superpowers/specs/2026-10-04-v131-fib-zone-limit-entry-design.md`.
+Index, Global Constraints, Review Focus and `## Parallelisation`: `2026-10-04-v131-fib-zone-limit-entry_0-index.md`. Spec: `docs/superpowers/specs/implemented/2026-10-04-v131-fib-zone-limit-entry-design.md`.
 
 Same worktree and branch as Parts 1–2 (`<worktree>` = the absolute path of `.claude/worktrees/2026-10-04-v131-fib-zone-limit-entry`); `python scripts/dev/testrun.py ...` means `python <worktree>/scripts/dev/testrun.py ...`. **Never run a command containing the substring `eval` in the worktree** — the script's `evaluate` subcommand is exercised only through the unit tests here and runs for real on `main` in V131-10.
 

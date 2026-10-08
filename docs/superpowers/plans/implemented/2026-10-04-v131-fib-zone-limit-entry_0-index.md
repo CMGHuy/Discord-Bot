@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** `docs/superpowers/specs/2026-10-04-v131-fib-zone-limit-entry-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-04-v131-fib-zone-limit-entry-design.md`
 **Bump:** none (measurement plus a plan-shape field and a masked strategy entry that no live path reaches; live wiring is a follow-on spec)
 **Edge:** expectancy — a better entry price on the same stop raises R per win; the measurement decides whether adverse selection eats it
 **Progress:** Closed 2026-10-08. V131-01 … V131-10 done; V131-11 skipped: closed at Stage 1; V131-12 done; V131-13 done: full suite 7024 passed, 3 failed, 0 xfailed (DB tests ran). One failure was v131's (closed-table row had no ledger row; fixed in 2bec94a2, ledger tests re-run green). The other two are not v131's: test_pnl_calendar belongs to another session's uncommitted pnl_calendar.py edit, and test_short_lane_admission failed on a transient yfinance fetch and passes on main and at the pre-merge commit. The full suite was not re-run after the ledger fix.
@@ -27,7 +27,7 @@
 | 3 — Measurement script | `2026-10-04-v131-fib-zone-limit-entry_3-measurement-script.md` | V131-06 … V131-08 | same branch, then merge to `main` |
 | 4 — Pre-registration, runs, close-out | `2026-10-04-v131-fib-zone-limit-entry_4-runs-and-close-out.md` | V131-09 … V131-13 | `main` |
 
-`grep -n "^### Task" docs/superpowers/plans/2026-10-04-v131-*` lists every task; `grep -n "^# Phase" docs/superpowers/plans/2026-10-04-v131-*` lists the phases.
+`grep -n "^### Task" docs/superpowers/plans/implemented/2026-10-04-v131-*` lists every task; `grep -n "^# Phase" docs/superpowers/plans/implemented/2026-10-04-v131-*` lists the phases.
 
 **Worktree.** Phases 0–3 run on branch `2026-10-04-v131-fib-zone-limit-entry` in `.claude/worktrees/2026-10-04-v131-fib-zone-limit-entry` (load `worktree-lifecycle` before creating it). Name the worktree path in every subagent dispatch, and check `git -C E:/Documents/Private/Projects/Discord-Bot status --short` after each task: a subagent editing the main tree by mistake is a known failure here. V131-08 merges to `main`; Phases 4–6 run on `main`, because `require_committed` reads `main`'s index.
 

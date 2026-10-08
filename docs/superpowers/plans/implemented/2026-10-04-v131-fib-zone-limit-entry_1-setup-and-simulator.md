@@ -1,6 +1,6 @@
 # v131 Fibonacci Limit — Part 1: witness, setup function, simulator
 
-Index, Global Constraints, Review Focus and `## Parallelisation`: `2026-10-04-v131-fib-zone-limit-entry_0-index.md`. Spec: `docs/superpowers/specs/2026-10-04-v131-fib-zone-limit-entry-design.md`.
+Index, Global Constraints, Review Focus and `## Parallelisation`: `2026-10-04-v131-fib-zone-limit-entry_0-index.md`. Spec: `docs/superpowers/specs/implemented/2026-10-04-v131-fib-zone-limit-entry-design.md`.
 
 All of Part 1 runs in the worktree `.claude/worktrees/2026-10-04-v131-fib-zone-limit-entry` on branch `2026-10-04-v131-fib-zone-limit-entry` (`<worktree>` below is its absolute path). Paths in **Files:** are relative to that worktree; pass absolute worktree paths to every tool. `python <worktree>/scripts/dev/testrun.py file <test path>` runs against the worktree (testrun resolves the repo from its own location), so `python scripts/dev/testrun.py ...` below always means the worktree's copy.
 

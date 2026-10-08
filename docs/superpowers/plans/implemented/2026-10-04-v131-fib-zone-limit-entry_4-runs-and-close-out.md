@@ -1,6 +1,6 @@
 # v131 Fibonacci Limit — Part 4: pre-registration, runs, close-out
 
-Index, Global Constraints, Review Focus and `## Parallelisation`: `2026-10-04-v131-fib-zone-limit-entry_0-index.md`. Spec: `docs/superpowers/specs/2026-10-04-v131-fib-zone-limit-entry-design.md`.
+Index, Global Constraints, Review Focus and `## Parallelisation`: `2026-10-04-v131-fib-zone-limit-entry_0-index.md`. Spec: `docs/superpowers/specs/implemented/2026-10-04-v131-fib-zone-limit-entry-design.md`.
 
 Everything in Part 4 runs on `main` in the main tree (`E:/Documents/Private/Projects/Discord-Bot`), after V131-08's merge. `$D` is the UTC date the task starts (`date -u +%F`), fixed once per task and reused in every filename that task writes. `$P` is the committed pre-registration, `docs/superpowers/results/<V131-09's $D>-v131-preregistration.md`.
 
@@ -39,7 +39,7 @@ The last command needs the local Postgres the watchlist table lives in (the same
 2. **`## The measurement (verbatim from the spec)`** — the spec's section copied byte for byte between two marker lines. Generate it, do not retype it:
 
 ```bash
-awk '/^## The measurement \(`scripts\/backtest\/measure_fib_limit.py`\)/{f=1} /^## Testing$/{f=0} f' docs/superpowers/specs/2026-10-04-v131-fib-zone-limit-entry-design.md > /tmp/v131_quote.md
+awk '/^## The measurement \(`scripts\/backtest\/measure_fib_limit.py`\)/{f=1} /^## Testing$/{f=0} f' docs/superpowers/specs/implemented/2026-10-04-v131-fib-zone-limit-entry-design.md > /tmp/v131_quote.md
 ```
 
    Paste `/tmp/v131_quote.md` between `<!-- spec-quote-begin -->` and `<!-- spec-quote-end -->`.
@@ -232,7 +232,7 @@ On a pass, commit `swingbot/core/backtesting/validation_registry.json` in its ow
 ### Task V131-12: Close out the results
 
 **Files:**
-- Modify: `docs/strategy-types/fibonacci.md` (one line), `docs/superpowers/plans/2026-10-04-v131-fib-zone-limit-entry_0-index.md` (a `**Progress:**` line under the header)
+- Modify: `docs/strategy-types/fibonacci.md` (one line), `docs/superpowers/plans/implemented/2026-10-04-v131-fib-zone-limit-entry_0-index.md` (a `**Progress:**` line under the header)
 
 **Interfaces:**
 - Consumes: V131-10's and (if run) V131-11's committed documents and row.
@@ -247,7 +247,7 @@ On a pass, commit `swingbot/core/backtesting/validation_registry.json` in its ow
 - [ ] **Step 4: Commit.**
 
 ```bash
-git add docs/strategy-types/fibonacci.md docs/superpowers/plans/2026-10-04-v131-fib-zone-limit-entry_0-index.md
+git add docs/strategy-types/fibonacci.md docs/superpowers/plans/implemented/2026-10-04-v131-fib-zone-limit-entry_0-index.md
 git commit -m "docs(v131): close out the results -- strategy page and plan progress
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
