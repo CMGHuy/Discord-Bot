@@ -40,7 +40,7 @@ LOOKBACK_BARS = 100
 # freshest few, not every unfilled gap ever formed in the window.
 MAX_GAPS_PER_SIDE = 3
 
-# v128 (docs/superpowers/specs/2026-10-02-v128-fvg-displacement-audit-design.md).
+# v128 (docs/superpowers/specs/implemented/2026-10-02-v128-fvg-displacement-audit-design.md).
 # Which unfilled gaps reach levels.py: every one ("all", the pre-v128
 # behaviour), only displacement gaps, or none. The filter runs AFTER
 # find_fair_value_gaps_detailed's freshest-3-per-side truncation, so

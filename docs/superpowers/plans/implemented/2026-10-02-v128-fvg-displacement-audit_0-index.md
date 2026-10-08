@@ -97,3 +97,7 @@ Verified symbols (`git grep -n`, 2026-10-02 `main` at `d43c1994` (verified as v1
 - **V128-12 waits on v122:** it consumes `arm_pair_permutation` from v122's V122-10. That is a cross-plan contract, so nothing in v128 may run it early.
 - **V128-14 after the last stage that ran:** it consumes the stage results. **V128-15 last:** the one full-suite run, then the release bump (working-conventions: the bump goes after green).
 - **Cross-plan edge:** v122's V122-8/V122-9 also edit `scripts/backtest/validate_component.py` (its `main()` argument line and `_run_gate`). If v122 is being implemented concurrently, V128-4 must not run at the same time as those tasks. Whichever merges second resolves the conflict in `main()`'s parser line and keeps both flags.
+
+## Progress
+
+Closed 2026-10-08. V128-1..V128-9, V128-14 and V128-15 done; V128-10..V128-13 deliberately not run: **REFUSED at Stage 0 under both gates, VALIDATION budget intact** (results: `docs/superpowers/results/2026-10-02-v128-fvg-stage0.md`). The code merged inert (`FVG_LEVELS_MODE` default `all`, bot 2.2.1), so this closes to `implemented/`, not `no-lift/`. `Bump: bot patch` was delivered. `Edge: expectancy` is the target class; the measured result is no lift.

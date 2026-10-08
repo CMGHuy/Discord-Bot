@@ -1,8 +1,8 @@
 # v128 pre-registration — FVG lift audit: all vs off vs displacement-only
 
 **Status:** frozen before any arm was produced. Recorded at worktree HEAD `59fc9314` on `2026-10-07 17:19` UTC.
-**Spec:** `docs/superpowers/specs/2026-10-02-v128-fvg-displacement-audit-design.md`
-**Plan:** `docs/superpowers/plans/2026-10-02-v128-fvg-displacement-audit_0-index.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-02-v128-fvg-displacement-audit-design.md`
+**Plan:** `docs/superpowers/plans/implemented/2026-10-02-v128-fvg-displacement-audit_0-index.md`
 **Edge:** expectancy. Not a re-run of any closed row: FVG has never been lift-tested (v49 measured redundancy only).
 
 ## Claim
