@@ -1,0 +1,23 @@
+{
+ "stage": 0,
+ "arm": "B",
+ "verdict": "UNDERPOWERED",
+ "mde_ceiling_r": 0.1,
+ "power": 0.8,
+ "cells": [
+  {
+   "cell": "b0",
+   "observed_n": 168,
+   "target_n": 84,
+   "mde_r": 0.17554995782704286,
+   "powered": false
+  },
+  {
+   "cell": "b0.25",
+   "observed_n": 168,
+   "target_n": 84,
+   "mde_r": 0.09468295906267529,
+   "powered": true
+  }
+ ]
+}
