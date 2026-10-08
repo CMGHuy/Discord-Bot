@@ -1352,6 +1352,9 @@ export interface CalendarFilters {
  *  `auto_lesson`) is absent for an unjournaled trade. */
 export interface CalendarTrade {
   trade_id: string;
+  /** Present for plan-backed trades; the Trades detail route keys on it. */
+  plan_id: string | null;
+  opened_at: string | null;
   ticker: string;
   strategy: string;
   horizon: string | null;
@@ -1396,6 +1399,7 @@ export interface CalendarDayTrades {
   losers: number;
   total_r: number | null;
   total_ccy: number | null;
+  win_rate: number | null;
   avg_trade_r: number | null;
   worst_drawdown_r: number | null;
   contributors: Array<{ ticker: string | null; r: number }>;

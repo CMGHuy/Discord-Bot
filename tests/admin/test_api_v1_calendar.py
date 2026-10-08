@@ -177,12 +177,14 @@ def test_day_trade_shape_carries_the_journal_join(seed, logged_in):
     assert_shape(body, {
         "as_of": str, "date": str, "trades": list, "trade_count": int, "winners": int,
         "losers": int, "total_r": NULLABLE_NUMBER,
-        "total_ccy": NULLABLE_NUMBER, "avg_trade_r": NULLABLE_NUMBER,
+        "total_ccy": NULLABLE_NUMBER, "win_rate": NULLABLE_NUMBER,
+        "avg_trade_r": NULLABLE_NUMBER,
         "worst_drawdown_r": NULLABLE_NUMBER, "contributors": list,
         "detractors": list,
     })
     assert_shape(body["trades"][0], {
         "trade_id": str, "ticker": str, "strategy": str,
+        "plan_id": NULLABLE_STR, "opened_at": NULLABLE_STR,
         "horizon": NULLABLE_STR, "direction": NULLABLE_STR, "day": str,
         "closed_at": NULLABLE_STR, "outcome": NULLABLE_STR,
         "pnl_amount": NULLABLE_NUMBER, "r_multiple": NULLABLE_NUMBER,

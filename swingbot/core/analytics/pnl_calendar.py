@@ -98,11 +98,15 @@ def joined_rows(trades: list[dict], entries: list[dict]) -> list[dict]:
 
         rows.append({
             "trade_id": t.get("id"),
+            # The Trades detail route is keyed by plan id when the trade has
+            # one (that is the id the Trades list shows), else by trade id.
+            "plan_id": t.get("plan_id"),
             "ticker": t.get("ticker"),
             "strategy": primary_strategy_label(t),
             "horizon": t.get("horizon_key"),
             "direction": t.get("direction"),
             "day": day,
+            "opened_at": t.get("opened_at"),
             "closed_at": t.get("closed_at"),
             "outcome": entry.get("outcome") or t.get("status"),
             "pnl_amount": _float_or_none(t.get("realized_pnl_amount")),

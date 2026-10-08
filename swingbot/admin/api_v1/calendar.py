@@ -130,6 +130,7 @@ def calendar_pnl_day():
 
     Ordered by close time so the drawer reads as the day happened.
     """
+    from swingbot.core.analytics import metrics
     from swingbot.core.analytics import pnl_calendar as pc
 
     _reject_unknown_params()
@@ -181,6 +182,7 @@ def calendar_pnl_day():
             if any(r["pnl_amount"] is not None for r in day_rows)
             else None
         ),
+        "win_rate": metrics.win_rate([{"status": r["outcome"]} for r in day_rows]),
         "avg_trade_r": round(sum(measured) / len(measured), 2) if measured else None,
         "worst_drawdown_r": round(worst_drawdown, 2) if measured else None,
         "contributors": leaders(winners),

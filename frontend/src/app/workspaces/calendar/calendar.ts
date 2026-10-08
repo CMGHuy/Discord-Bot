@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import { CalendarDay, CalendarTrade, CalendarWeekday } from '../../api/models';
 import { CalendarMetric, CalendarStore } from '../../stores/calendar.store';
@@ -6,7 +7,7 @@ import { ConnectionStore } from '../../stores/connection.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { Viewport, ViewportService } from '../../ui/breakpoints';
-import { ABSENT, money, rMultiple } from '../../ui/format';
+import { ABSENT, dateTime, money, rMultiple } from '../../ui/format';
 import { ControlRow, Drawer, Panel } from '../../ui/layout';
 import { MetricCard } from '../../ui/metric-card';
 import { isInline } from '../../ui/priority';
@@ -21,7 +22,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 @Component({
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow, Drawer, MetricCard, Panel, SectionHead, Select, StatTile, Async],
+  imports: [Button, ControlRow, Drawer, MetricCard, Panel, RouterLink, SectionHead, Select, StatTile, Async],
   // v54 D1: "how am I doing this month?" -- hero totals, room to breathe --
   // so this workspace defaults to the presentation register. On the host
   // (a static class, not a template wrapper) because :host IS the grid
@@ -234,6 +235,8 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       } @else if (store.dayDetail(); as detail) {
         <div class="day-summary">
           <sb-stat-tile label="Total" [value]="rLabel(detail.total_r)" [sample]="detail.trade_count" />
+          <sb-stat-tile label="Total P&L" [value]="ccyLabel(detail.total_ccy)" [sample]="detail.trade_count" />
+          <sb-stat-tile label="Win rate" [value]="winRateLabel(detail.win_rate)" [sample]="detail.trade_count" />
           <sb-stat-tile label="Winners" [value]="detail.winners.toString()" [sample]="detail.trade_count" tone="pos" />
           <sb-stat-tile label="Losers" [value]="detail.losers.toString()" [sample]="detail.trade_count" tone="neg" />
           <sb-stat-tile label="Average trade" [value]="rLabel(detail.avg_trade_r)" [sample]="detail.trade_count" />
@@ -257,12 +260,15 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
           <article class="day-row">
             <header>
               <strong>{{ trade.ticker }}</strong>
+              <a class="trade-id" [routerLink]="['/trades', trade.plan_id ?? trade.trade_id]"
+                 (click)="store.closeDay()">{{ shortTradeId(trade) }}</a>
               <span class="meta">{{ trade.strategy }} · {{ trade.horizon }}</span>
               <span class="amount" [class.pos]="(trade.pnl_amount ?? 0) >= 0"
                     [class.neg]="(trade.pnl_amount ?? 0) < 0">
                 {{ tradeValue(trade) }}
               </span>
             </header>
+            <p class="meta">Opened {{ dateTime(trade.opened_at) }} · Closed {{ dateTime(trade.closed_at) }}</p>
             <p class="meta">
               {{ trade.outcome }} · {{ rLabel(trade.r_multiple) }}
               @if (trade.mfe_r !== null) { · MFE {{ rLabel(trade.mfe_r) }} }
@@ -427,6 +433,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
        for P&L direction, which is exactly what this grid shows. */
     .cell.pos { background: color-mix(in srgb, var(--pos) calc(var(--heat, 0) * 55%), transparent); }
     .cell.neg { background: color-mix(in srgb, var(--neg) calc(var(--heat, 0) * 55%), transparent); }
+    .trade-id { font-family: var(--font-mono, monospace); font-size: var(--text-caption, 12px); margin-left: var(--space-6); }
     .cell.selected { outline: 2px solid var(--accent); outline-offset: -2px; }
 
     /* align-items/padding/colour/font override the link variant's defaults
@@ -684,6 +691,23 @@ export class Calendar {
     return trade.pnl_amount === null
       ? ABSENT
       : money(trade.pnl_amount, this.currency(), 2);
+  }
+
+  protected readonly dateTime = dateTime;
+
+  /** Same last-six rule as the Trades list's # column, so the id on the
+   *  drawer is the id on the row it links to. */
+  protected shortTradeId(trade: CalendarTrade): string {
+    const id = trade.plan_id ?? trade.trade_id;
+    return id.length > 6 ? id.slice(-6) : id;
+  }
+
+  protected ccyLabel(value: number | null): string {
+    return value === null ? ABSENT : money(value, this.currency(), 2);
+  }
+
+  protected winRateLabel(value: number | null): string {
+    return value === null ? ABSENT : `${value.toFixed(0)}%`;
   }
 
   protected rLabel(value: number | null): string {
