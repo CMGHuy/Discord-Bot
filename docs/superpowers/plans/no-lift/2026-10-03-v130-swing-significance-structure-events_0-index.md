@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read a part file whole** — pull one task: `/task-brief V130-2` or `grep -n "^### Task V130-2" -A 180 docs/superpowers/plans/2026-10-03-v130-swing-significance-structure-events_1-tiers-events-snapshot.md`.
 
-**Bump:** bot patch (only if the verdict is "more informative" and the branch merges; otherwise none — see V130-8)
+**Bump:** none (measurement closed not-more-informative; no code reached main)
 **Edge:** none (integrity)
 **Spec:** [`docs/superpowers/specs/2026-10-03-v130-swing-significance-structure-events-design.md`](../specs/2026-10-03-v130-swing-significance-structure-events-design.md)
 **Progress:** planning complete; implementation not started. Blocked on v121 merging to `main` (see Preconditions).
@@ -104,3 +104,10 @@ Implementation happens in a worktree created with the `worktree-lifecycle` skill
 - **Sequential:** V130-4 after V130-3 (imports `major_structure_features`, `MAJOR_KEYS`). V130-6 after V130-4 (buckets the keys the snapshot now emits) — it also needs V130-1's `pivot_tiers` and the fixtures file.
 - **Sequential tail:** V130-7 after V130-6 (runs the report). V130-8 last (the one full-suite run, then the verdict-dependent close-out).
 - **Cross-plan:** v122 and v123 also consume `structure.py` after v121. They append different functions; whichever lands second rebases. v125 (`location-plan-provenance-context`) appends nine keys to `FEATURE_KEYS` and is also written against the 34-key tuple. If v125 merged first, the Preconditions count is 43, not 34: shift every `34`/`42` literal in V130-4 (the witness length, the key-order test, the `[20:34]` edit is then already made by v125 or no longer needed) by nine, all together, and say so in the commit body.
+
+## Close-out (2026-10-08)
+
+TRAIN verdict: **not more informative** (confluence-sourced; spread k3 -0.002417, major -0.169736; 12207 closed trades; `major_spread_larger` FAIL). Results: `docs/superpowers/results/2026-10-03-v130-structure-tier.{txt,json}`. The run used the 72 cached local-watchlist tickers passed via `--tickers` because the configured DB host was unavailable, not a DB-resolved universe.
+
+Branch `2026-10-03-v130-swing-significance-structure-events` is deliberately left unmerged (a considered decision) and must not be deleted. Its full suite was 5564 passed, 2 failed: the v1 byte-identical golden tests in `tests/backtesting/instrument/` fail because v130 added major-tier keys to `entry_context`; the golden was not regenerated since nothing reaches main. No release, no follow-on spec.
+

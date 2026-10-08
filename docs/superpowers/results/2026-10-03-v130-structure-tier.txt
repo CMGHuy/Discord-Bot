@@ -1,0 +1,180 @@
+[1/72] 1.4%
+[2/72] 2.8%
+[3/72] 4.2%
+[4/72] 5.6%
+[5/72] 6.9%
+[6/72] 8.3%
+[7/72] 9.7%
+[8/72] 11.1%
+[9/72] 12.5%
+[10/72] 13.9%
+[11/72] 15.3%
+[12/72] 16.7%
+[13/72] 18.1%
+[14/72] 19.4%
+[15/72] 20.8%
+[16/72] 22.2%
+[17/72] 23.6%
+[18/72] 25.0%
+[19/72] 26.4%
+[20/72] 27.8%
+[21/72] 29.2%
+[22/72] 30.6%
+[23/72] 31.9%
+[24/72] 33.3%
+[25/72] 34.7%
+[26/72] 36.1%
+[27/72] 37.5%
+[28/72] 38.9%
+[29/72] 40.3%
+[30/72] 41.7%
+[31/72] 43.1%
+[32/72] 44.4%
+[33/72] 45.8%
+[34/72] 47.2%
+[35/72] 48.6%
+[36/72] 50.0%
+[37/72] 51.4%
+[38/72] 52.8%
+[39/72] 54.2%
+[40/72] 55.6%
+[41/72] 56.9%
+[42/72] 58.3%
+[43/72] 59.7%
+[44/72] 61.1%
+[45/72] 62.5%
+[46/72] 63.9%
+[47/72] 65.3%
+[48/72] 66.7%
+[49/72] 68.1%
+[50/72] 69.4%
+[51/72] 70.8%
+[52/72] 72.2%
+[53/72] 73.6%
+[54/72] 75.0%
+[55/72] 76.4%
+[56/72] 77.8%
+[57/72] 79.2%
+[58/72] 80.6%
+[59/72] 81.9%
+[60/72] 83.3%
+[61/72] 84.7%
+[62/72] 86.1%
+[63/72] 87.5%
+[64/72] 88.9%
+[65/72] 90.3%
+[66/72] 91.7%
+[67/72] 93.1%
+[68/72] 94.4%
+[69/72] 95.8%
+[70/72] 97.2%
+[71/72] 98.6%
+[72/72] 100.0%
+v130 structure-tier report -- DESCRIPTIVE ONLY. The verdict decides whether a follow-on spec is written, never its thresholds. No inferential statistic is printed.
+closed trades: 12207
+
+== Table 1: structure_aligned (k=3) vs structure_aligned_major ==
+confluence bearish  True   k3 N= 1319  WR  34.95%  ExpR -0.0661         | major N=  836  WR  26.52%  ExpR -0.1913
+confluence bearish  False  k3 N= 2524  WR  33.24%  ExpR +0.0034         | major N= 2997  WR  35.92%  ExpR +0.0272
+confluence bearish  None   k3 N=    5  thin                             | major N=   15  thin
+confluence bullish  True   k3 N= 1303  WR  39.23%  ExpR +0.1948         | major N=  890  WR  33.04%  ExpR +0.0504
+confluence bullish  False  k3 N= 2811  WR  35.99%  ExpR +0.1221         | major N= 3212  WR  38.20%  ExpR +0.1739
+confluence bullish  None   k3 N=    5  thin                             | major N=   17  thin
+strategy   bearish  True   k3 N=  198  WR  38.69%  ExpR +0.1533         | major N=  330  WR  36.22%  ExpR +0.1408
+strategy   bearish  False  k3 N=  447  WR  33.16%  ExpR +0.3683         | major N=  315  WR  33.68%  ExpR +0.4715
+strategy   bearish  None   k3 N=    0  thin                             | major N=    0  thin
+strategy   bullish  True   k3 N= 1348  WR  36.15%  ExpR +0.1679         | major N= 1772  WR  40.13%  ExpR +0.3025
+strategy   bullish  False  k3 N= 2247  WR  44.74%  ExpR +0.4331         | major N= 1823  WR  42.75%  ExpR +0.3640
+strategy   bullish  None   k3 N=    0  thin                             | major N=    0  thin
+
+== Table 2: struct_event_last x bars ago ==
+confluence bearish  None               N=   21  thin
+confluence bearish  bos_against 0-5    N=  243  WR  26.85%  ExpR -0.0826
+confluence bearish  bos_against 21+    N=  616  WR  30.55%  ExpR -0.1119
+confluence bearish  bos_against 6-20   N=  424  WR  33.93%  ExpR +0.0523
+confluence bearish  bos_with 0-5       N=  330  WR  42.81%  ExpR +0.1512
+confluence bearish  bos_with 21+       N=  782  WR  32.05%  ExpR -0.0493
+confluence bearish  bos_with 6-20      N=  491  WR  34.51%  ExpR -0.0543
+confluence bearish  choch_against 0-5  N=   75  WR   8.45%  ExpR -0.7041
+confluence bearish  choch_against 21+  N=  200  WR  49.38%  ExpR +0.3284
+confluence bearish  choch_against 6-20 N=  105  WR  27.59%  ExpR -0.0514
+confluence bearish  choch_with 0-5     N=  111  WR  17.00%  ExpR -0.5537
+confluence bearish  choch_with 21+     N=  276  WR  37.40%  ExpR +0.1582
+confluence bearish  choch_with 6-20    N=  174  WR  48.67%  ExpR +0.0685
+confluence bullish  None               N=   29  thin
+confluence bullish  bos_against 0-5    N=  273  WR  32.92%  ExpR +0.0463
+confluence bullish  bos_against 21+    N=  716  WR  29.16%  ExpR -0.0653
+confluence bullish  bos_against 6-20   N=  448  WR  31.44%  ExpR -0.0306
+confluence bullish  bos_with 0-5       N=  361  WR  48.06%  ExpR +0.3751
+confluence bullish  bos_with 21+       N=  777  WR  42.04%  ExpR +0.3598
+confluence bullish  bos_with 6-20      N=  441  WR  39.32%  ExpR +0.0788
+confluence bullish  choch_against 0-5  N=   90  WR  34.29%  ExpR +0.0756
+confluence bullish  choch_against 21+  N=  263  WR  26.78%  ExpR -0.1610
+confluence bullish  choch_against 6-20 N=  244  WR  36.10%  ExpR +0.0357
+confluence bullish  choch_with 0-5     N=  127  WR  48.11%  ExpR +0.8682
+confluence bullish  choch_with 21+     N=  212  WR  42.70%  ExpR +0.2493
+confluence bullish  choch_with 6-20    N=  138  WR  51.30%  ExpR +0.5090
+strategy   bearish  bos_against 0-5    N=   61  WR  67.74%  ExpR +2.0725
+strategy   bearish  bos_against 21+    N=    7  thin
+strategy   bearish  bos_against 6-20   N=   48  WR  63.16%  ExpR +0.6334
+strategy   bearish  bos_with 0-5       N=   41  WR  25.93%  ExpR -0.1053
+strategy   bearish  bos_with 21+       N=  272  WR  30.31%  ExpR -0.0202
+strategy   bearish  bos_with 6-20      N=   86  WR  43.59%  ExpR +0.2685
+strategy   bearish  choch_against 0-5  N=   41  WR  32.26%  ExpR +1.0693
+strategy   bearish  choch_against 21+  N=    9  thin
+strategy   bearish  choch_against 6-20 N=   25  thin
+strategy   bearish  choch_with 0-5     N=    2  thin
+strategy   bearish  choch_with 21+     N=   49  WR  10.20%  ExpR -0.6709
+strategy   bearish  choch_with 6-20    N=    4  thin
+strategy   bullish  bos_against 0-5    N=  378  WR  35.42%  ExpR +0.0293
+strategy   bullish  bos_against 21+    N=  166  WR  51.18%  ExpR +0.4686
+strategy   bullish  bos_against 6-20   N=  191  WR  46.56%  ExpR +0.2772
+strategy   bullish  bos_with 0-5       N=  242  WR  43.09%  ExpR +0.4437
+strategy   bullish  bos_with 21+       N= 1429  WR  44.13%  ExpR +0.4755
+strategy   bullish  bos_with 6-20      N=  314  WR  40.00%  ExpR +0.2459
+strategy   bullish  choch_against 0-5  N=  211  WR  12.23%  ExpR -0.2596
+strategy   bullish  choch_against 21+  N=   89  WR  32.50%  ExpR -0.0196
+strategy   bullish  choch_against 6-20 N=  169  WR  41.72%  ExpR +0.3235
+strategy   bullish  choch_with 0-5     N=   52  WR  41.30%  ExpR +0.3118
+strategy   bullish  choch_with 21+     N=  277  WR  51.30%  ExpR +0.6366
+strategy   bullish  choch_with 6-20    N=   77  WR  31.82%  ExpR +0.0381
+
+== Table 3: last_sl_reaction_atr (bullish trades)  edges=[2.366858, 3.108648, 3.995185, 5.371429] ==
+confluence bullish  None               N= 1227  WR  32.55%  ExpR +0.0673
+confluence bullish  Q1                 N=  548  WR  34.75%  ExpR +0.0559
+confluence bullish  Q2                 N=  513  WR  31.72%  ExpR +0.0453
+confluence bullish  Q3                 N=  580  WR  45.63%  ExpR +0.3603
+confluence bullish  Q4                 N=  537  WR  37.84%  ExpR +0.1915
+confluence bullish  Q5                 N=  714  WR  42.59%  ExpR +0.2063
+strategy   bullish  None               N= 1432  WR  38.36%  ExpR +0.2180
+strategy   bullish  Q1                 N=  457  WR  43.73%  ExpR +0.4346
+strategy   bullish  Q2                 N=  501  WR  49.62%  ExpR +0.5453
+strategy   bullish  Q3                 N=  432  WR  46.60%  ExpR +0.4523
+strategy   bullish  Q4                 N=  474  WR  38.78%  ExpR +0.2850
+strategy   bullish  Q5                 N=  299  WR  36.29%  ExpR +0.2846
+
+== Table 3: last_sh_reaction_atr (bearish trades)  edges=[2.501788, 3.228203, 4.103589, 5.487258] ==
+confluence bearish  None               N= 1011  WR  30.45%  ExpR -0.0122
+confluence bearish  Q1                 N=  479  WR  37.59%  ExpR +0.1713
+confluence bearish  Q2                 N=  599  WR  25.10%  ExpR -0.2619
+confluence bearish  Q3                 N=  587  WR  40.97%  ExpR +0.0144
+confluence bearish  Q4                 N=  551  WR  32.93%  ExpR -0.0847
+confluence bearish  Q5                 N=  621  WR  38.81%  ExpR +0.0722
+strategy   bearish  None               N=  329  WR  35.96%  ExpR +0.5613
+strategy   bearish  Q1                 N=  152  WR  40.00%  ExpR +0.0774
+strategy   bearish  Q2                 N=   29  thin
+strategy   bearish  Q3                 N=   45  WR  29.27%  ExpR +0.2030
+strategy   bearish  Q4                 N=   79  WR  14.06%  ExpR -0.4262
+strategy   bearish  Q5                 N=   11  thin
+
+== Table 4: tier census (daily frames; identical for every horizon) ==
+{'pivots': 12597, 'major': 6116, 'major_share_pct': 48.55, 'median_bars_to_major': 5.0}
+
+== VERDICT (confluence-sourced, pre-registered): not more informative ==
+all_four_buckets_n30: PASS
+major_spread_larger: FAIL
+same_sign_both_directions: PASS
+spread k3    {'n_aligned': 2622, 'n_not_aligned': 5335, 'thin': False, 'spread': -0.002417}
+spread major {'n_aligned': 1726, 'n_not_aligned': 6209, 'thin': False, 'spread': -0.169736}
+spread major bullish {'n_aligned': 890, 'n_not_aligned': 3212, 'thin': False, 'spread': -0.123457}
+spread major bearish {'n_aligned': 836, 'n_not_aligned': 2997, 'thin': False, 'spread': -0.218499}

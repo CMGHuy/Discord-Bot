@@ -1,7 +1,7 @@
 # v130 — Swing significance tiers and BOS/CHoCH events in the entry snapshot
 
 **Version:** ui 1.21.1 · bot 2.0.0 (at writing)
-**Bump:** bot patch (new fields on stored trade records; no alert, gate or exit changes)
+**Bump:** none (measurement closed not-more-informative; no code reached main)
 **Edge:** none (integrity) — measurement only; its verdict decides whether a follow-on `expectancy` spec (a major-structure gate or a CHoCH cooldown) gets written
 
 ## Why
