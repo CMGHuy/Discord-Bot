@@ -1,6 +1,6 @@
 # v129 — Acceptance-failure exits: pre-registration
 
-Written before any measurement. Spec: `docs/superpowers/specs/2026-10-03-v129-acceptance-failure-exits-design.md`.
+Written before any measurement. Spec: `docs/superpowers/specs/implemented/2026-10-03-v129-acceptance-failure-exits-design.md`.
 Gate: the v92 harvest gate (`acceptance_harvest.evaluate_harvest`). The v72 funnel is not used: this is an exit-only (`Edge: harvest`) change.
 
 ## Claim

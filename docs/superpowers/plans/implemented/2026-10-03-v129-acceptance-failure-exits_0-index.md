@@ -3,8 +3,8 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read a part file whole** — pull one task: `grep -n "^### Task V129-4" -A 200 docs/superpowers/plans/2026-10-03-v129-acceptance-failure-exits_1-plan-and-exit-code.md`.
 
 **Bump:** bot patch
-**Edge:** harvest
-**Spec:** [`docs/superpowers/specs/2026-10-03-v129-acceptance-failure-exits-design.md`](../specs/2026-10-03-v129-acceptance-failure-exits-design.md)
+**Edge:** harvest — predicted; measured no lift, both arms closed without spending VALIDATION (arm Z NO_ELIGIBLE_CELL at Stage 1, arm B UNDERPOWERED at Stage 0)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-03-v129-acceptance-failure-exits-design.md`](../../specs/implemented/2026-10-03-v129-acceptance-failure-exits-design.md)
 
 **Goal:** Judge confluence and Break & Retest trades by acceptance (a daily close beyond their level) instead of an intrabar touch, behind an inert flag, and measure both arms once through the v92 harvest gate.
 
