@@ -1,0 +1,422 @@
+{
+ "universe_n": 74,
+ "stage1": {
+  "cells": {
+   "L0.5|N3": {
+    "stats": {
+     "n": 3300,
+     "wins": 1150,
+     "losses": 2150,
+     "win_rate": 34.84848484848485,
+     "expectancy_r": 0.22861373190098028,
+     "scratch_timeout_share": 0.22933208780943484
+    },
+    "lower_bound": 0.16986753489082726,
+    "tier1": {
+     "clears": false,
+     "clauses": {
+      "wr": false,
+      "exp_r": true,
+      "n": true,
+      "scratch": true
+     }
+    },
+    "tier2": {
+     "clears": true,
+     "clauses": {
+      "exp_r": true,
+      "lower_bound": true,
+      "n": true,
+      "scratch": true
+     }
+    },
+    "tier": 2
+   },
+   "L0.5|N5": {
+    "stats": {
+     "n": 4018,
+     "wins": 1381,
+     "losses": 2637,
+     "win_rate": 34.370333499253356,
+     "expectancy_r": 0.2083694562283067,
+     "scratch_timeout_share": 0.22522175086772078
+    },
+    "lower_bound": 0.16095217726602273,
+    "tier1": {
+     "clears": false,
+     "clauses": {
+      "wr": false,
+      "exp_r": true,
+      "n": true,
+      "scratch": true
+     }
+    },
+    "tier2": {
+     "clears": true,
+     "clauses": {
+      "exp_r": true,
+      "lower_bound": true,
+      "n": true,
+      "scratch": true
+     }
+    },
+    "tier": 2
+   },
+   "L0.5|N10": {
+    "stats": {
+     "n": 5038,
+     "wins": 1679,
+     "losses": 3359,
+     "win_rate": 33.3267169511711,
+     "expectancy_r": 0.18414091680814906,
+     "scratch_timeout_share": 0.22241086587436332
+    },
+    "lower_bound": 0.13758930893841856,
+    "tier1": {
+     "clears": false,
+     "clauses": {
+      "wr": false,
+      "exp_r": true,
+      "n": true,
+      "scratch": true
+     }
+    },
+    "tier2": {
+     "clears": true,
+     "clauses": {
+      "exp_r": true,
+      "lower_bound": true,
+      "n": true,
+      "scratch": true
+     }
+    },
+    "tier": 2
+   },
+   "L0.618|N3": {
+    "stats": {
+     "n": 2107,
+     "wins": 755,
+     "losses": 1352,
+     "win_rate": 35.83293782629331,
+     "expectancy_r": 0.19900823661550007,
+     "scratch_timeout_share": 0.21115687008611006
+    },
+    "lower_bound": 0.12042328336961983,
+    "tier1": {
+     "clears": false,
+     "clauses": {
+      "wr": false,
+      "exp_r": true,
+      "n": true,
+      "scratch": true
+     }
+    },
+    "tier2": {
+     "clears": true,
+     "clauses": {
+      "exp_r": true,
+      "lower_bound": true,
+      "n": true,
+      "scratch": true
+     }
+    },
+    "tier": 2
+   },
+   "L0.618|N5": {
+    "stats": {
+     "n": 2713,
+     "wins": 963,
+     "losses": 1750,
+     "win_rate": 35.49576115001843,
+     "expectancy_r": 0.20642558139534903,
+     "scratch_timeout_share": 0.21133720930232558
+    },
+    "lower_bound": 0.1340673845072397,
+    "tier1": {
+     "clears": false,
+     "clauses": {
+      "wr": false,
+      "exp_r": true,
+      "n": true,
+      "scratch": true
+     }
+    },
+    "tier2": {
+     "clears": true,
+     "clauses": {
+      "exp_r": true,
+      "lower_bound": true,
+      "n": true,
+      "scratch": true
+     }
+    },
+    "tier": 2
+   },
+   "L0.618|N10": {
+    "stats": {
+     "n": 3646,
+     "wins": 1275,
+     "losses": 2371,
+     "win_rate": 34.969829950630825,
+     "expectancy_r": 0.2004694186297813,
+     "scratch_timeout_share": 0.2120164253295872
+    },
+    "lower_bound": 0.1396310062841771,
+    "tier1": {
+     "clears": false,
+     "clauses": {
+      "wr": false,
+      "exp_r": true,
+      "n": true,
+      "scratch": true
+     }
+    },
+    "tier2": {
+     "clears": true,
+     "clauses": {
+      "exp_r": true,
+      "lower_bound": true,
+      "n": true,
+      "scratch": true
+     }
+    },
+    "tier": 2
+   }
+  },
+  "plateau_tier1": [],
+  "plateau_tier2": [
+   "L0.5|N3",
+   "L0.5|N5",
+   "L0.5|N10",
+   "L0.618|N3",
+   "L0.618|N5",
+   "L0.618|N10"
+  ],
+  "winner": "L0.5|N3",
+  "winner_tier": 2,
+  "profit_clauses": {
+   "a_expr_beats_reference": false,
+   "b_fills_half_of_reference": true,
+   "c_wr_within_2pp": false
+  },
+  "passes": false
+ },
+ "stage2": null,
+ "proceed_to_holdout": false,
+ "closed_at": "stage1",
+ "winner": null,
+ "tier": null,
+ "reference": {
+  "stats": {
+   "n": 1119,
+   "wins": 413,
+   "losses": 706,
+   "win_rate": 36.907953529937444,
+   "expectancy_r": 0.2590409777138757,
+   "scratch_timeout_share": 0.19554277498202732
+  },
+  "trades": 1391,
+  "fills": 1391,
+  "early_stop_share": 0.400431344356578,
+  "cap_bind_share": 0.9805895039539899,
+  "horizon_concentration": {
+   "by_horizon": {
+    "2m": 162,
+    "2w": 251,
+    "3m": 109,
+    "4m": 93,
+    "4w": 490,
+    "5m": 92,
+    "6m": 71,
+    "7m": 46,
+    "8m": 38,
+    "9m": 39
+   },
+   "top2_share": 0.5327102803738317,
+   "over_line": false
+  },
+  "total_r": 360.326
+ },
+ "disclosures": {
+  "L0.5|N3": {
+   "fills": 4282,
+   "early_stop_share": 0.4413825315273237,
+   "cap_bind_share": 0.978514712751051,
+   "horizon_concentration": {
+    "by_horizon": {
+     "2m": 330,
+     "2w": 2339,
+     "3m": 167,
+     "4m": 107,
+     "4w": 1059,
+     "5m": 102,
+     "6m": 58,
+     "7m": 46,
+     "8m": 39,
+     "9m": 35
+    },
+    "top2_share": 0.7935544138253152,
+    "over_line": false
+   },
+   "total_r": 978.924,
+   "orders": {
+    "placed": 16029,
+    "filled": 4282,
+    "expired": 10256,
+    "cancelled": 1491,
+    "same_bar_new_high": 34
+   },
+   "fill_rate": 0.2671408072867927
+  },
+  "L0.5|N5": {
+   "fills": 5186,
+   "early_stop_share": 0.4490937138449672,
+   "cap_bind_share": 0.9809101426918627,
+   "horizon_concentration": {
+    "by_horizon": {
+     "2m": 473,
+     "2w": 2608,
+     "3m": 241,
+     "4m": 153,
+     "4w": 1334,
+     "5m": 131,
+     "6m": 87,
+     "7m": 61,
+     "8m": 53,
+     "9m": 45
+    },
+    "top2_share": 0.7601234091785577,
+    "over_line": false
+   },
+   "total_r": 1080.604,
+   "orders": {
+    "placed": 15981,
+    "filled": 5186,
+    "expired": 8449,
+    "cancelled": 2346,
+    "same_bar_new_high": 36
+   },
+   "fill_rate": 0.32451035604780676
+  },
+  "L0.5|N10": {
+   "fills": 6479,
+   "early_stop_share": 0.4616453156351289,
+   "cap_bind_share": 0.983330760919895,
+   "horizon_concentration": {
+    "by_horizon": {
+     "2m": 698,
+     "2w": 2817,
+     "3m": 396,
+     "4m": 262,
+     "4w": 1682,
+     "5m": 203,
+     "6m": 146,
+     "7m": 109,
+     "8m": 94,
+     "9m": 72
+    },
+    "top2_share": 0.6943972835314092,
+    "over_line": false
+   },
+   "total_r": 1193.049,
+   "orders": {
+    "placed": 15915,
+    "filled": 6479,
+    "expired": 5752,
+    "cancelled": 3684,
+    "same_bar_new_high": 36
+   },
+   "fill_rate": 0.4071002199183161
+  },
+  "L0.618|N3": {
+   "fills": 2671,
+   "early_stop_share": 0.4571321602396106,
+   "cap_bind_share": 0.9243728940471734,
+   "horizon_concentration": {
+    "by_horizon": {
+     "2m": 124,
+     "2w": 1843,
+     "3m": 61,
+     "4m": 40,
+     "4w": 546,
+     "5m": 23,
+     "6m": 14,
+     "7m": 12,
+     "8m": 5,
+     "9m": 3
+    },
+    "top2_share": 0.8944215649569449,
+    "over_line": true
+   },
+   "total_r": 531.551,
+   "orders": {
+    "placed": 16611,
+    "filled": 2671,
+    "expired": 12299,
+    "cancelled": 1641,
+    "same_bar_new_high": 13
+   },
+   "fill_rate": 0.16079706218770695
+  },
+  "L0.618|N5": {
+   "fills": 3440,
+   "early_stop_share": 0.45726744186046514,
+   "cap_bind_share": 0.9348837209302325,
+   "horizon_concentration": {
+    "by_horizon": {
+     "2m": 214,
+     "2w": 2201,
+     "3m": 103,
+     "4m": 65,
+     "4w": 758,
+     "5m": 42,
+     "6m": 23,
+     "7m": 17,
+     "8m": 9,
+     "9m": 8
+    },
+    "top2_share": 0.8601744186046512,
+    "over_line": true
+   },
+   "total_r": 710.104,
+   "orders": {
+    "placed": 16565,
+    "filled": 3440,
+    "expired": 10475,
+    "cancelled": 2650,
+    "same_bar_new_high": 14
+   },
+   "fill_rate": 0.2076667672804105
+  },
+  "L0.618|N10": {
+   "fills": 4627,
+   "early_stop_share": 0.4650961746271882,
+   "cap_bind_share": 0.9470499243570348,
+   "horizon_concentration": {
+    "by_horizon": {
+     "2m": 398,
+     "2w": 2547,
+     "3m": 197,
+     "4m": 116,
+     "4w": 1145,
+     "5m": 86,
+     "6m": 57,
+     "7m": 33,
+     "8m": 27,
+     "9m": 21
+    },
+    "top2_share": 0.7979252215258267,
+    "over_line": false
+   },
+   "total_r": 927.572,
+   "orders": {
+    "placed": 16495,
+    "filled": 4627,
+    "expired": 7551,
+    "cancelled": 4317,
+    "same_bar_new_high": 15
+   },
+   "fill_rate": 0.280509245225826
+  }
+ }
+}
