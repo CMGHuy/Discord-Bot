@@ -10,13 +10,18 @@ own close, which no scan knew: it describes, it can never gate.
 """
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
+
+from swingbot.core.analytics import metrics
 
 FORMS: tuple[str, ...] = ("same_day", "prior_day", "trailing_5d")
 # Fixed before any number was read. Redrawing these after seeing a table is
 # the exact move the one-shot discipline exists to prevent.
 BUCKETS: tuple[str, ...] = ("< -1%", "-1% .. 0", "0 .. +1%", "> +1%")
 MIN_DAYS = 10            # below this a bucket shows counts and no rate
+BOOTSTRAP_N = 2000
+BOOTSTRAP_SEED = 42
 
 
 def bucket_of(ret: float | None) -> str | None:
@@ -64,3 +69,87 @@ def days_in(days: dict, form: str, bucket: str, regime: str | None = None) -> li
     return [day for day, market in days.items()
             if bucket_of(market[form]) == bucket
             and (regime is None or market["regime"] == regime)]
+
+
+def _by_day(rows: list[dict], direction: str) -> dict[str, list[dict]]:
+    out: dict[str, list[dict]] = {}
+    for row in rows:
+        if row.get("direction") == direction and row.get("day"):
+            out.setdefault(row["day"], []).append(row)
+    return out
+
+
+def _day_arrays(by_day: dict, day_list: list[str]):
+    """Per-day (wins, decided, r_sum, r_count) -- what a day resample re-sums."""
+    wins, decided, r_sum, r_count = [], [], [], []
+    for day in day_list:
+        rows = by_day[day]
+        rs = [row["r"] for row in rows if row.get("r") is not None]
+        wins.append(sum(1 for row in rows if row["outcome"] == "win"))
+        decided.append(sum(1 for row in rows if row["outcome"] in ("win", "loss")))
+        r_sum.append(sum(rs))
+        r_count.append(len(rs))
+    return tuple(np.array(a, dtype=float) for a in (wins, decided, r_sum, r_count))
+
+
+def _interval(numer: np.ndarray, denom: np.ndarray, scale: float, rng) -> list[float] | None:
+    """95% percentile interval of sum(numer)/sum(denom) over resampled DAYS.
+
+    Trades opened on one day share that day's market, so the day is the unit
+    that is exchangeable -- resampling trades would count one green day ten
+    times and call it ten confirmations.
+    """
+    n_days = len(numer)
+    idx = rng.integers(0, n_days, size=(BOOTSTRAP_N, n_days))
+    dens = denom[idx].sum(axis=1)
+    nums = numer[idx].sum(axis=1)
+    values = nums[dens > 0] / dens[dens > 0] * scale
+    if not len(values):
+        return None
+    lo, hi = np.percentile(values, [2.5, 97.5])
+    return [round(float(lo), 2), round(float(hi), 2)]
+
+
+def _bucket_row(bucket: str, by_day: dict, day_list: list[str], intervals: bool, rng) -> dict:
+    rows = [row for day in day_list for row in by_day[day]]
+    out = {"bucket": bucket, "n": len(rows), "days": len(day_list), "win_rate": None,
+           "exp_r": None, "win_rate_ci": None, "exp_r_ci": None}
+    if len(day_list) < MIN_DAYS:
+        return out
+    rs = [row["r"] for row in rows if row.get("r") is not None]
+    win_rate = metrics.win_rate([{"status": row["outcome"]} for row in rows])
+    out["win_rate"] = None if win_rate is None else round(win_rate, 2)
+    out["exp_r"] = round(sum(rs) / len(rs), 4) if rs else None
+    if intervals:
+        wins, decided, r_sum, r_count = _day_arrays(by_day, day_list)
+        out["win_rate_ci"] = _interval(wins, decided, 100.0, rng)
+        out["exp_r_ci"] = _interval(r_sum, r_count, 1.0, rng)
+    return out
+
+
+def trade_table(rows: list[dict], days: dict, form: str, *, direction: str = "bullish",
+                regime: str | None = None, intervals: bool = True) -> list[dict]:
+    """One row per bucket for trades OPENED on days in that bucket."""
+    by_day = _by_day(rows, direction)
+    rng = np.random.default_rng(BOOTSTRAP_SEED)
+    return [_bucket_row(bucket, by_day,
+                        [day for day in days_in(days, form, bucket, regime) if day in by_day],
+                        intervals, rng)
+            for bucket in BUCKETS]
+
+
+def day_rank_correlation(rows: list[dict], days: dict, form: str, *,
+                         direction: str = "bullish") -> float | None:
+    """Spearman rho between a day's market return and its mean trade R."""
+    pairs = []
+    for day, day_rows in _by_day(rows, direction).items():
+        rs = [row["r"] for row in day_rows if row.get("r") is not None]
+        market = days.get(day, {}).get(form)
+        if rs and market is not None:
+            pairs.append((market, sum(rs) / len(rs)))
+    if len(pairs) < MIN_DAYS:
+        return None
+    x = pd.Series([p[0] for p in pairs]).rank()
+    y = pd.Series([p[1] for p in pairs]).rank()
+    rho = x.corr(y)
+    return None if rho != rho else round(float(rho), 3)
