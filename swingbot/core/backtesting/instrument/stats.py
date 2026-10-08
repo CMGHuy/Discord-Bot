@@ -111,8 +111,11 @@ LEDGER_PATH = (Path(__file__).resolve().parents[4] / "docs" / "superpowers"
                / "results" / "preregistration-ledger.jsonl")
 LEDGER_FIELDS = ("id", "date", "hypothesis", "instrument", "n", "exp_r", "p",
                  "verdict", "record")
-VERDICTS = ("PASS", "FAIL", "NO-LIFT", "UNMEASURABLE", "WITHDRAWN", "OPEN")
-INSTRUMENTS = ("v1", "v2")
+#: v140 appends the idea screen's three verdicts and its instrument; existing
+#: rows are untouched (a ledger row is never edited).
+VERDICTS = ("PASS", "FAIL", "NO-LIFT", "UNMEASURABLE", "WITHDRAWN", "OPEN",
+            "SCREEN-PASS", "SCREEN-FAIL", "SCREEN-UNDERPOWERED")
+INSTRUMENTS = ("v1", "v2", "screen-v1")
 
 
 def _text(value) -> bool:
