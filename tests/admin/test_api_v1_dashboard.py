@@ -304,6 +304,39 @@ def test_open_pnl_amount_sums_shares_times_move(seed, logged_in, monkeypatch):
     assert logged_in.get("/api/v1/dashboard").get_json()["open_pnl_amount"] == 80.0
 
 
+def test_open_pnl_card_matches_the_positions_table(seed, logged_in, monkeypatch):
+    """The card prices the book the Positions table shows: a trade whose plan
+    is still PENDING is not a position, and a partial runner counts only its
+    remaining shares (production showed +6.44 over 8 trades against a table
+    of 5 positions worth ~+8)."""
+    import swingbot.admin.dashboard as dash
+    from tests.admin.test_api_v1_trades import _plan, _trade
+
+    active_id, pending_id, partial_id = (
+        "11111111-1111-4111-8111-111111111111",
+        "22222222-2222-4222-8222-222222222222",
+        "33333333-3333-4333-8333-333333333333")
+    partial_plan = _plan(partial_id, status="PARTIAL")
+    partial_plan["legs_realized"] = [{"fraction": 0.5}]
+    trades = []
+    for tid, pid, ticker in (("a" * 16, active_id, "AAA"),
+                             ("b" * 16, pending_id, "BBB"),
+                             ("c" * 16, partial_id, "CCC")):
+        t = _trade(tid, plan_id=pid, ticker=ticker, status="open")
+        t.update(entry=100.0, shares=10)
+        trades.append(t)
+    seed(plans=[_plan(active_id, status="ACTIVE"), _plan(pending_id, status="PENDING"),
+                partial_plan], trades=trades)
+
+    monkeypatch.setattr(dash, "prefetch_prices", lambda tickers: None)
+    monkeypatch.setattr(dash, "get_current_price", lambda ticker: 110.0)
+
+    body = logged_in.get("/api/v1/dashboard").get_json()
+
+    assert body["open_trades"] == 2
+    assert body["open_pnl_amount"] == 150.0   # 10 sh x +10, plus 5 sh x +10
+
+
 # ---------------------------------------------------------------------------
 # SR4 — the rename itself
 # ---------------------------------------------------------------------------

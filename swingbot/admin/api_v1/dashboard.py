@@ -179,6 +179,31 @@ def _total_or_none(values: list[float]) -> float | None:
     return round(sum(values), 2) if values else None
 
 
+def _live_positions(open_trades: list[dict]) -> list[dict]:
+    """The open trades that are actually held, sized as they are held now.
+
+    The trade log says "open" for a trade whose plan is still PENDING (not
+    filled), and keeps the ORIGINAL share count after a TP1 partial. The
+    Positions table keys off the plan, so the card has to as well or its
+    figures describe a different book than the table under it: PENDING
+    plans are dropped and a partial runner is sized at its remaining shares.
+    A trade with no plan (legacy) is kept as-is.
+    """
+    from swingbot.admin.api_v1.trades import _open_shares
+    from swingbot.core.planning.plan_store import PlanStore
+
+    plans = {p.get("plan_id"): p for p in PlanStore().records()}
+    live = []
+    for trade in open_trades:
+        plan = plans.get(trade.get("plan_id"))
+        if plan is None:
+            live.append(trade)
+        elif plan.get("status") in ("ACTIVE", "PARTIAL"):
+            remaining = _open_shares(trade.get("shares"), plan.get("legs_realized") or [])
+            live.append({**trade, "shares": remaining})
+    return live
+
+
 @api_v1.route("/dashboard", methods=["GET"])
 @require_auth
 def dashboard():
@@ -189,7 +214,8 @@ def dashboard():
     # Open-side figures (open_pnl_pct, the open_trades chip, avg_confidence)
     # must live on the same ledger as `realized` below -- unfiltered here
     # would blend weak-ledger open positions into a main-ledger P&L card.
-    open_trades = [t for t in all_raw if t.get("status") == "open" and is_main(t)]
+    open_trades = _live_positions(
+        [t for t in all_raw if t.get("status") == "open" and is_main(t)])
 
     # win_rate/expectancy_r/payoff_ratio must scope with `mode` the same way
     # `_realized`/`_lifecycle_counts` already do -- get_stats' own `trades`
