@@ -9,6 +9,7 @@ the single place the confirmation lag lives. ``k`` is frozen at 3.
 """
 from __future__ import annotations
 
+import bisect
 import math
 
 import numpy as np
@@ -236,3 +237,89 @@ def structure_features(df: pd.DataFrame, direction: str) -> dict:
                pullback_vol_ratio=pullback_vol_ratio(df, direction))
     out.update(leg_shape_features(df, direction, atr_value))
     return out
+
+# swingbot/core/market/structure.py -- append
+# --- v130: swing significance tiers and BOS/CHoCH events -------------------
+SWING_MAJOR_ATR_M = 2.0     # frozen; a follow-on that searches it pre-registers its own grid
+TIER_COLUMNS = ("kind", "pos", "price", "major_pos")
+MAJOR_COLUMNS = ("last_msh_pos", "last_msh", "prior_msh_pos", "prior_msh",
+                 "last_msl_pos", "last_msl", "prior_msl_pos", "prior_msl")
+
+
+def _first_true(mask: np.ndarray) -> int | None:
+    hits = np.flatnonzero(mask)
+    return int(hits[0]) if len(hits) else None
+
+
+def _major_bar(ext: np.ndarray, opp: np.ndarray, close: np.ndarray, i: int,
+               ref: float | None, atr_at: float, k: int) -> int | None:
+    """First bar ``j >= i + k`` at which the swing low at ``i`` is major, else None.
+
+    Low-side form; a swing high is passed with every array negated. ``ext`` is
+    the pivot's own extreme series, ``opp`` the opposite one, ``ref`` the
+    reference swing's price. An undercut on any bar ``i+1 .. j`` disqualifies."""
+    if ref is None or not atr_at > 0:
+        return None
+    start = i + k
+    reaction = np.fmax.accumulate(opp[i:])[k:] - ext[i]
+    hit = _first_true((close[start:] > ref) & (reaction >= SWING_MAJOR_ATR_M * atr_at))
+    if hit is None:
+        return None
+    j = start + hit
+    return None if (ext[i + 1:j + 1] < ext[i]).any() else j
+
+
+def _side_tiers(kind: str, own: np.ndarray, other: np.ndarray, ext: np.ndarray, opp: np.ndarray,
+                close: np.ndarray, atr14: np.ndarray, k: int) -> list[tuple]:
+    rows = []
+    for i in own:
+        before = int(np.searchsorted(other, i))          # reference pivots strictly before i
+        ref = float(opp[other[before - 1]]) if before else None
+        rows.append((kind, int(i), abs(float(ext[i])), _major_bar(ext, opp, close, int(i), ref, atr14[i], k)))
+    return rows
+
+
+def _tiers(df: pd.DataFrame, atr14: np.ndarray, k: int = PIVOT_K) -> pd.DataFrame:
+    sh, sl = pivot_confirmations(df, k)
+    sh_pos, sl_pos = np.flatnonzero(sh) - k, np.flatnonzero(sl) - k
+    high, low, close = (df[c].to_numpy(float) for c in ("High", "Low", "Close"))
+    rows = (_side_tiers("sl", sl_pos, sh_pos, low, high, close, atr14, k)
+            + _side_tiers("sh", sh_pos, sl_pos, -high, -low, -close, atr14, k))
+    table = pd.DataFrame(rows, columns=list(TIER_COLUMNS)).astype({"major_pos": float})
+    return table.sort_values(["pos", "kind"], kind="stable").reset_index(drop=True)
+
+
+def pivot_tiers(df: pd.DataFrame) -> pd.DataFrame:
+    """One row per confirmed k=3 pivot: ``kind`` ("sh"/"sl"), ``pos``, ``price``
+    and ``major_pos`` -- the bar it became major at (NaN = still minor). A
+    row's ``major_pos`` reads only bars ``<= major_pos``, so it never changes
+    once set, whatever is appended to the frame."""
+    return _tiers(df, atr(df, 14).to_numpy(float))
+
+
+def _known_majors(n: int, side: pd.DataFrame) -> list[np.ndarray]:
+    """Per bar: (last_pos, last_price, prior_pos, prior_price) of the pivots that
+    are major AS OF that bar, ordered by pivot index (not by when they qualified)."""
+    out = [np.full(n, np.nan) for _ in range(4)]
+    known: list[tuple[int, float]] = []
+    for pos, price, bar in sorted(zip(side["pos"], side["price"], side["major_pos"].astype(int)),
+                                  key=lambda row: row[2]):
+        bisect.insort(known, (int(pos), float(price)))
+        out[0][bar:], out[1][bar:] = known[-1]
+        if len(known) > 1:
+            out[2][bar:], out[3][bar:] = known[-2]
+    return out
+
+
+def _major_table(df: pd.DataFrame, atr14: np.ndarray) -> pd.DataFrame:
+    tiers = _tiers(df, atr14)
+    majors = tiers[tiers["major_pos"].notna()]
+    columns = (_known_majors(len(df), majors[majors["kind"] == "sh"])
+               + _known_majors(len(df), majors[majors["kind"] == "sl"]))
+    return pd.DataFrame(dict(zip(MAJOR_COLUMNS, columns)), index=df.index)
+
+
+def major_pivots(df: pd.DataFrame) -> pd.DataFrame:
+    """Per bar ``t``: positional index and price of the last two major swing
+    highs and lows known at ``t`` (NaN where fewer exist). Truncation-stable."""
+    return _major_table(df, atr(df, 14).to_numpy(float))
