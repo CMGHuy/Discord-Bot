@@ -129,6 +129,21 @@ def test_cell_rows_score_fills_and_count_orders_inside_the_window():
     assert out["orders"] == {"placed": 3, "filled": 1, "expired": 1, "cancelled": 1, "same_bar_new_high": 0}
 
 
+def test_stop_atr_is_the_atr_at_the_signal_bar_not_the_fill_bar():
+    import numpy as np
+    import pandas as pd
+    from swingbot.core.market.indicators import atr
+    index = pd.bdate_range("2025-12-01", periods=60)
+    spread = np.where(np.arange(60) < 21, 1.0, 6.0)         # range widens after the signal bar
+    frame = pd.DataFrame({"Open": 100.0, "High": 100.0 + spread, "Low": 100.0 - spread,
+                          "Close": 100.0, "Volume": 1e6}, index=index)
+    atr_series = atr(frame, 14)
+    assert atr_series.iloc[20] != pytest.approx(atr_series.iloc[22])
+    row = mf.limit_row("T", "2w", _trade(frame, 20, 24, outcome="loss", r=-1.0), _order(frame, 20, 22),
+                       frame, atr_series)
+    assert row["context"]["stop_atr"] == pytest.approx(round(1.0 / atr_series.iloc[20], 6))
+
+
 def test_holdout_dated_rows_never_reach_a_train_collect():
     frame = _frame()
     collected = mf.collect_horizon({"T": frame}, {}, "2w", mf.TRAIN, run_fn=_fake_run(frame))
