@@ -9,6 +9,8 @@ never touches a stop; the flag-on arm transforms (Z, B) live here too.
 """
 from __future__ import annotations
 
+import math
+
 from swingbot import config
 from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, planned_loss_pct
 
@@ -37,18 +39,28 @@ def disaster_stop(entry, level, atr_val, m, direction) -> float:
     when farther -- max(level - m*atr, entry*(1 - 0.02)) for a bullish plan."""
     cap = entry * HARD_MAX_PLANNED_LOSS_PCT / 100.0
     if direction == "bullish":
-        return max(level - m * atr_val, entry - cap)
-    return min(level + m * atr_val, entry + cap)
+        return max(level - m * atr_val, _inside_cap(entry, entry - cap))
+    return min(level + m * atr_val, _inside_cap(entry, entry + cap))
+
+
+def _inside_cap(entry, stop) -> float:
+    """Nudge `stop` toward entry by single ulps until planned_loss_pct is at
+    most the cap exactly -- entry*0.98 can land 1 ulp past 2.0%, which
+    plan_manager's strict risk_cap comparison would reject."""
+    while planned_loss_pct(entry, stop) > HARD_MAX_PLANNED_LOSS_PCT:
+        stop = math.nextafter(stop, entry)
+    return stop
 
 
 def confluence_eligible(entry, level, direction) -> bool:
     """Arm Z applies only when the level sits on the stop side of entry and
-    within the 2% cap -- exactly the plans _clamp_stop_to_hard_cap did NOT
-    move. The rest keep today's stop and get no acceptance exit."""
+    within the 2% cap (1e-9 tolerance, as entry_filters does) -- exactly the
+    plans _clamp_stop_to_hard_cap did NOT move. The rest keep today's stop and
+    get no acceptance exit."""
     if level is None or entry is None or entry <= 0:
         return False
     on_stop_side = level < entry if direction == "bullish" else level > entry
-    return on_stop_side and planned_loss_pct(entry, level) <= HARD_MAX_PLANNED_LOSS_PCT
+    return on_stop_side and planned_loss_pct(entry, level) <= HARD_MAX_PLANNED_LOSS_PCT + 1e-9
 
 
 def apply_arm_z(plan, atr_val, m, b) -> bool:

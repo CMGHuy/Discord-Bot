@@ -87,6 +87,29 @@ def test_confluence_eligible_boundary_and_wrong_side():
     assert not al.confluence_eligible(100.0, None, "bullish")
 
 
+ODD_ENTRIES = (123.45, 17.31, 987.65, 3.07, 456.789)
+
+
+@pytest.mark.parametrize("entry", ODD_ENTRIES)
+@pytest.mark.parametrize("direction", ["bullish", "bearish"])
+def test_capped_disaster_stop_never_exceeds_the_hard_cap(entry, direction):
+    """A far level is pulled to the cap; float noise must not leave the loss
+    at 2.0000000000000004% (plan_manager's strict risk_cap would reject it)."""
+    from swingbot.core.risk_limits import planned_loss_pct
+    level = entry * (0.9 if direction == "bullish" else 1.1)
+    stop = al.disaster_stop(entry, level, 1.0, 5.0, direction)
+    assert planned_loss_pct(entry, stop) <= 2.0
+    expected = entry * (0.98 if direction == "bullish" else 1.02)
+    assert stop == pytest.approx(expected, abs=1e-9)
+
+
+@pytest.mark.parametrize("entry", ODD_ENTRIES)
+def test_confluence_eligible_boundary_survives_float_noise(entry):
+    assert al.confluence_eligible(entry, entry * 0.98, "bullish")
+    assert al.confluence_eligible(entry, entry * 1.02, "bearish")
+    assert not al.confluence_eligible(entry, entry * 0.9795, "bullish")
+
+
 def test_atr_at_falls_back_on_short_history():
     df = make_ohlcv([100.0] * 5)                 # < 14 bars: ATR14 is NaN
     assert al.atr_at(df, 4, 100.0) == pytest.approx(2.0)   # 2% of entry

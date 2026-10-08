@@ -441,8 +441,12 @@ def _runner_phase(df, ctx, tp1_index, trace=None):
     if acceptance_exit(ctx.plan, float(ctx.close[tp1_index])):
         # v129: the TP1 bar itself closed through the threshold -- TP1 banked
         # first (stop -> target -> acceptance), the remainder exits at that
-        # close. Later runner bars need no check: the runner stop sits on the
-        # profit side of entry, the threshold on the loss side.
+        # close. Later runner bars are not checked: the arm-Z/B thresholds sit
+        # on the stop side of entry (level -/+ b*ATR) and the runner stop on
+        # the profit side, so a later close past the threshold would already
+        # have hit the runner stop. Nothing enforces that for an arbitrary
+        # threshold; a plan whose threshold sits on the profit side of entry
+        # would need a per-bar check here.
         return float(ctx.close[tp1_index]), tp1_index, "acceptance_exit"
     from swingbot.core.market.indicators import atr as atr_indicator
     floor = runner_floor(ctx.entry_price, ctx.plan.tp1)
