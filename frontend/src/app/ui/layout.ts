@@ -343,7 +343,8 @@ export class ControlRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FocusTrap],
   template: `
-    <dialog #dialog class="drawer elev-overlay" (close)="closed.emit()" (cancel)="closed.emit()">
+    <dialog #dialog class="drawer elev-overlay" (close)="closed.emit()" (cancel)="closed.emit()"
+            (click)="onDialogClick($event)">
       <!-- Only present while open, so sbFocusTrap's constructor/ngOnDestroy
            pair runs on exactly open and close -- see focus-trap.ts. -->
       @if (open()) {
@@ -423,6 +424,18 @@ export class Drawer {
       if (this.open() && !element.open) element.showModal();
       else if (!this.open() && element.open) element.close();
     });
+  }
+
+  /** A click on the scrim lands on the dialog element itself; one inside the
+   *  panel lands on a descendant. Checking the rect too keeps a click on the
+   *  dialog's own (padding-free) surface from closing it. */
+  protected onDialogClick(event: MouseEvent): void {
+    const element = this.dialog().nativeElement;
+    if (event.target !== element) return;
+    const box = element.getBoundingClientRect();
+    const inside = event.clientX >= box.left && event.clientX <= box.right
+      && event.clientY >= box.top && event.clientY <= box.bottom;
+    if (!inside) this.dismiss();
   }
 
   protected dismiss(): void {
