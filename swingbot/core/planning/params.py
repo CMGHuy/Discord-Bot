@@ -55,6 +55,10 @@ EXIT_V2_PARAMS: dict[str, dict] = {
 # because a resting bracket is never edited). A strategy not listed gets
 # today's shape (builders.plan_shape_for). Read by the live builder and the
 # backtest alike.
+# v131: an optional "limit_price" key names a builders.LIMIT_PRICERS entry. With
+# it, entry is the pricer's frozen limit price and stop and targets are sized
+# from that price (builders.plan_entry_reference, backtest._limit_plan_at);
+# without it, nothing about the plan changes.
 PLAN_SHAPES: dict[str, dict] = {
     # v113 §3: sell limit at the signal close, good for one bar; one target for
     # the whole position; no break-even move (amendment 3).

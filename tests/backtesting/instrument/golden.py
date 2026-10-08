@@ -55,6 +55,8 @@ def golden_records(**extra):
             summary = dataclasses.asdict(
                 bt.run_backtest(ticker, frame, strategy, horizon, **kwargs, **extra))
             trades = summary.pop("trades")
+            # v131 field: pinned empty for every pre-v131 strategy, kept out of the golden bytes.
+            assert summary.pop("limit_orders") == []
             case = [ticker, strategy, horizon, name]
             yield {"case": case, "summary": summary}
             for k, trade in enumerate(trades):

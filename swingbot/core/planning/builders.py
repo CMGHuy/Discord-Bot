@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -258,6 +259,69 @@ _STRUCTURAL_BRANCHES.update({name: _short_branch for name in SHORT_STRATEGIES})
 _STRUCTURAL_BRANCHES[COMPRESSION_SHORT] = _compression_branch
 
 
+# --- v131: resting-limit pricing (PLAN_SHAPES' optional "limit_price") ------
+#
+# A strategy whose PLAN_SHAPES entry names a registered pricer is traded as a
+# resting limit order priced at its alert bar: entry is the pricer's price, and
+# stop and targets are sized from it by the strategy's own branch. A strategy
+# without the key resolves to None everywhere below and builds exactly the
+# plan it always built (tests/backtesting/test_v131_witness.py).
+
+
+@dataclass(frozen=True)
+class LimitPricer:
+    """`price` and `cancel_level` are (df, index, horizon_key, direction) ->
+    float | None, frozen at bar `index` from bars <= index only. A None price
+    means no order. `strict_fill`: the limit fills only on a strict
+    trade-through, never on an exact touch."""
+    price: Callable
+    cancel_level: Callable
+    strict_fill: bool = True
+
+
+LIMIT_PRICERS: dict[str, LimitPricer] = {}
+
+
+def limit_pricer_for(strategy: str) -> LimitPricer | None:
+    """The strategy's registered pricer, or None when its shape names none. A
+    name with no registered pricer is a configuration error and raises."""
+    name = plan_shape_for(strategy).get("limit_price")
+    return None if name is None else LIMIT_PRICERS[name]
+
+
+def plan_entry_reference(df, index, strategy, horizon_key, direction) -> float | None:
+    """The price a strategy plan is sized and triggered from: the registered
+    limit price for a resting-limit strategy (None = no order at this bar),
+    otherwise strategy_entry_reference, unchanged."""
+    pricer = limit_pricer_for(strategy)
+    if pricer is None:
+        return strategy_entry_reference(df, index, strategy)
+    price = pricer.price(df, index, horizon_key, direction)
+    return None if price is None else float(price)
+
+
+def limit_order_fields(df, index, strategy, horizon_key, direction) -> dict:
+    """TradePlanV2 keyword overrides for a resting-limit strategy: the frozen
+    cancel level and the strict-fill flag. Empty for every other strategy,
+    so the plan keeps its dataclass defaults."""
+    pricer = limit_pricer_for(strategy)
+    if pricer is None:
+        return {}
+    level = pricer.cancel_level(df, index, horizon_key, direction)
+    return {"limit_cancel_level": None if level is None else float(level),
+            "limit_strict_fill": pricer.strict_fill}
+
+
+def size_strategy_plan(df, index, strategy, horizon_key, direction, entry, atr_val):
+    """(stop, tp1, candidates) from the strategy's own sizing branch, priced
+    from `entry`, or None. backtest._limit_plan_at sizes resting-limit plans
+    through this, the same branch build_strategy_plan dispatches to."""
+    branch = _STRUCTURAL_BRANCHES.get(strategy, _atr_branch)
+    picked = branch(_BranchInputs(df, index, strategy, horizon_key, direction, entry,
+                                  atr_val, None, None))
+    return None if picked is None else picked[:3]
+
+
 def _geometry_ok(close, stop, tp1, strategy, horizon_key) -> bool:
     """A plan needs a real stop distance and (v113 §1) must clear its horizon's
     strategy-plan reward floor -- the same check backtest._v1_plan_levels runs."""
@@ -291,7 +355,9 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     journal iff config.DATA_DRIVEN_STOPS_ENABLED -- so the flag-off path
     is bit-identical to before and never opens the journal at all."""
     from swingbot.core.market.indicators import atr as atr_indicator
-    close = strategy_entry_reference(df, index, strategy)
+    close = plan_entry_reference(df, index, strategy, horizon_key, direction)
+    if close is None:
+        return None                     # v131: a resting-limit strategy with no order here
     atr_series = atr_indicator(df, 14)
     atr_val = _safe_atr_value(close, float(atr_series.iloc[index]))
     branch = _STRUCTURAL_BRANCHES.get(strategy, _atr_branch)
@@ -350,6 +416,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         quality_score=0, quality_breakdown=[],
         badge="WEAK", badge_stats={}, status=PlanStatus.PENDING,
         hold_cap_bars=shape.get("hold_cap_bars"),
+        **limit_order_fields(df, index, strategy, horizon_key, direction),
     )
     if entry_type == "market":
         record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
@@ -525,8 +592,9 @@ def entry_type_for(strategy: str, source: str) -> str:
 
 def plan_shape_for(strategy: str) -> dict:
     """Entry type, entry-order life, TP1 fraction and break-even trigger for a
-    strategy-source plan. build_strategy_plan and backtest._bt_plan both read
-    this, so the two cannot diverge. Unlisted strategies get today's shape."""
+    strategy-source plan, plus the optional v131 "limit_price" pricer name.
+    build_strategy_plan and backtest._bt_plan both read this, so the two
+    cannot diverge. Unlisted strategies get today's shape."""
     shape = {"entry_type": entry_type_for(strategy, "strategy"),
              "expiry_bars": DEFAULT_EXPIRY_BARS, "tp1_fraction": TP1_FRACTION,
              "breakeven_trigger_fraction": BREAKEVEN_TRIGGER_FRACTION}
