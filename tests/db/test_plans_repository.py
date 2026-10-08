@@ -56,3 +56,12 @@ def test_version_moves_on_insert_update_and_delete(repo, db_conn):
     repo.delete("P1", conn=db_conn)
     assert len({empty, inserted, updated, repo.version(conn=db_conn)}) >= 3
     assert inserted != updated
+
+
+def test_v129_acceptance_fields_ride_in_the_doc(repo, db_conn):
+    """v129 used schema-evolution's ADD path: no column, no revision -- the
+    two fields live in plans.doc and must survive the repository."""
+    from tests.db_diff import diff_records
+    record = _plan("P1", acceptance_level=97.5, acceptance_close_below=97.0)
+    repo.insert(record, conn=db_conn)
+    assert diff_records(record, repo.get("P1", conn=db_conn)) == []

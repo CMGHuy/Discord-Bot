@@ -79,3 +79,20 @@ def test_a_plan_persisted_before_v64_loads_with_unstamped_sessions():
     assert back.working_stop == 100.0
     assert back.be_armed_session is None
     assert back.runner_floor_session is None
+
+def test_acceptance_fields_default_to_none_and_round_trip():
+    p = _plan()
+    assert p.acceptance_level is None
+    assert p.acceptance_close_below is None
+    stamped = _plan(acceptance_level=97.5, acceptance_close_below=97.0)
+    q = plan_from_dict(plan_to_dict(stamped))
+    assert (q.acceptance_level, q.acceptance_close_below) == (97.5, 97.0)
+
+
+def test_pre_v129_record_without_acceptance_fields_loads_as_none():
+    d = plan_to_dict(_plan())
+    d.pop("acceptance_level")
+    d.pop("acceptance_close_below")
+    q = plan_from_dict(d)
+    assert q.acceptance_level is None
+    assert q.acceptance_close_below is None

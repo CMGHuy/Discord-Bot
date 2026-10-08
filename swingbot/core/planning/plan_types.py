@@ -118,6 +118,17 @@ class TradePlanV2:
     # v87. The E29 intraday reading is deliberately NOT stored beside it: it
     # is a pure function of the archived 1h tape and this timestamp.
     issued_at: str | None = None
+    # v129: the price this trade leans on, frozen at the creating bar --
+    # confluence: the PRE-clamp stop level (supports[0] / resistances[0]);
+    # Break & Retest: the broken resistance / support. Recorded on every such
+    # plan whatever ACCEPTANCE_EXIT_ENABLED says, so the live book collects
+    # it before any decision. None for other strategies and pre-v129 rows.
+    acceptance_level: float | None = None
+    # v129: the daily CLOSE that ends the trade -- bullish: a close strictly
+    # below it; bearish: strictly above (the name keeps the bullish reading).
+    # Set only by an enabled acceptance arm (planning/acceptance_levels.py);
+    # None = no close exit. Read by exit_sim.acceptance_exit.
+    acceptance_close_below: float | None = None
     # v119 ten-session time exit (planning/time_exit.py). pending_time_notices:
     # the due / unresolved notices not yet acknowledged, one dict per notice
     # {"id", "transition", "detail", "at", "acked"}; a list because a due notice
