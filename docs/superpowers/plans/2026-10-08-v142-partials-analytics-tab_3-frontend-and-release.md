@@ -6,8 +6,8 @@
 
 ## Parallelisation
 
-- **Group B (parallel):** V142-7 and V142-8. Disjoint files. V142-7 owns `models.ts`, `api-client.ts`, `analytics.store.ts`, `stores/analytics.partials.spec.ts` and `tabs/partials.fixture.ts`. V142-8 owns `ui/line-chart.ts` and `ui/line-chart.spec.ts`. Neither consumes the other.
-- **Sequential:** V142-9 after both. It consumes `AnalyticsPartials`, `store.partials` and `PARTIALS_FIXTURE` from V142-7, and `LineChart.xLabel` from V142-8.
+- **Sequential:** V142-7, then V142-9. V142-9 consumes `AnalyticsPartials`, `store.partials` and `PARTIALS_FIXTURE` from V142-7.
+- **V142-8 is retired** (partner, 2026-10-08: the TP2 ladder is a bar list, so `LineChart` needs no `xLabel`). Its id is kept so no other task's address moves. Nothing to schedule.
 
 ### Task V142-7: Models, API client and the store's partials slice
 
@@ -281,73 +281,9 @@ EOF
 )"
 ```
 
-### Task V142-8: LineChart names its x position through an optional xLabel
+### Task V142-8: Retired -- LineChart xLabel (ladder drawn as a bar list instead)
 
-**Files:**
-- Modify: `frontend/src/app/ui/line-chart.ts` (tooltip `<strong>`, ~:114; inputs, ~:161-164)
-- Test: `frontend/src/app/ui/line-chart.spec.ts` (insert before `it('hides the tooltip on pointer leave'`)
-
-**Interfaces:**
-- Consumes: nothing.
-- Produces: `LineChart.xLabel = input<(date: string) => string>((date) => date)`. The default is the identity, so every existing caller is unchanged.
-
-- [ ] **Step 1: Write the failing spec**
-
-In `frontend/src/app/ui/line-chart.spec.ts`, insert directly before `  it('hides the tooltip on pointer leave', () => {`:
-
-```ts
-  it('names the hovered x position through xLabel', () => {
-    const fixture = render([{ name: 'cf', points: [{ date: '2000-01-16', value: 1.75 }] }]);
-    const svg = fixture.nativeElement.querySelector('svg');
-    svg.dispatchEvent(new MouseEvent('pointermove', { clientX: 0, bubbles: true }));
-    fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.tooltip strong').textContent).toBe('2000-01-16');
-    fixture.componentRef.setInput('xLabel', (date: string) => (date === '2000-01-16' ? '1.5R' : date));
-    fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.tooltip strong').textContent).toBe('1.5R');
-  });
-
-```
-
-- [ ] **Step 2: Run it to verify it fails**
-
-`npx ng test --include src/app/ui/line-chart.spec.ts`
-Expected: FAIL with `NG0303: Can't set value of the 'xLabel' input on the 'LineChart' component` (or the second `toBe('1.5R')` failing).
-
-- [ ] **Step 3: Implement**
-
-In `frontend/src/app/ui/line-chart.ts`, replace `          <strong>{{ tooltipDate() }}</strong>` with:
-
-```ts
-          <strong>{{ xLabel()(tooltipDate()!) }}</strong>
-```
-
-and directly after `  readonly valueFormat = input<(value: number) => string>((v) => v.toFixed(2));` add:
-
-```ts
-  /** How the hovered x position is named in the tooltip. Identity for a
-   *  real date axis; v142's TP2 ladder maps its synthetic dates back to R. */
-  readonly xLabel = input<(date: string) => string>((date) => date);
-```
-
-(The `<strong>` sits inside `@if (tooltipRows().length)`, which is only true while `tooltipDate()` is non-null, so the `!` is safe.)
-
-- [ ] **Step 4: Run the spec to verify it passes**
-
-`npx ng test --include src/app/ui/line-chart.spec.ts`
-Expected: 1 file passed (16 tests).
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add frontend/src/app/ui/line-chart.ts frontend/src/app/ui/line-chart.spec.ts
-git commit -m "$(cat <<'EOF'
-feat(v142): LineChart xLabel input for non-date x positions
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-EOF
-)"
-```
+Intentionally empty: no code, no test, no commit. The partner chose (2026-10-08) to draw the TP2 ladder as a `BarList` per level (V142-9), so `LineChart` keeps its date-only x axis and needs no `xLabel` input.
 
 ### Task V142-9: The Partials tab, registered as the seventh tab
 
@@ -358,8 +294,8 @@ EOF
 - Test: `frontend/src/app/workspaces/analytics/tabs/partials.spec.ts` (create), `frontend/src/app/workspaces/analytics/analytics.spec.ts` (modify)
 
 **Interfaces:**
-- Consumes: `AnalyticsPartials` and friends, `store.partials()`, `store.partialsError()`, `store.reload('partials')`, `PARTIALS_FIXTURE` (V142-7); `LineChart.xLabel` (V142-8); the existing `StatTile`, `BarList`, `ShareBar`, `Waterfall`, `LineChart`, `Histogram`, `StripPlot`, `Segmented`, `EmptyStateComponent`, `Panel`, `PanelHeader`, `PanelError`.
-- Produces: `<sb-partials-tab>` (`PartialsTab`) and its pure helpers `kpiTiles`, `funnelRows`, `outcomeSegments`, `runnerWaterfall`, `ladderDate`, `ladderSeries`, `ladderLabel`, `touchRows`, `splitRows`, `givebackBins`, `holdGroups`, `monthTrend`, `pctText`, `rText`, `DIMENSIONS`.
+- Consumes: `AnalyticsPartials` and friends, `store.partials()`, `store.partialsError()`, `store.reload('partials')`, `PARTIALS_FIXTURE` (V142-7); the existing `StatTile`, `BarList`, `ShareBar`, `Waterfall`, `LineChart`, `Histogram`, `StripPlot`, `Segmented`, `EmptyStateComponent`, `Panel`, `PanelHeader`, `PanelError`.
+- Produces: `<sb-partials-tab>` (`PartialsTab`) and its pure helpers `kpiTiles`, `funnelRows`, `outcomeSegments`, `runnerWaterfall`, `ladderRows` (one `BarRow` per TP2 level, label `TP2 at X.XR`, value `cf_exp_r`, `n`; then an `Actual` row carrying `actual_exp_r`, because `BarList` draws its `reference` marker only in `rate` mode and has no secondary-figure column), `touchRows` (the touch rate per level, a second `BarList` in `rate` mode), `splitRows`, `givebackBins`, `holdGroups`, `monthTrend`, `pctText`, `rText`, `DIMENSIONS`.
 
 - [ ] **Step 1: Write the failing specs**
 
@@ -377,8 +313,8 @@ import { AnalyticsPartials } from '../../../api/models';
 import { AnalyticsStore } from '../../../stores/analytics.store';
 import { PreferencesStore } from '../../../stores/preferences.store';
 import {
-  PartialsTab, funnelRows, givebackBins, kpiTiles, ladderDate, ladderLabel, ladderSeries,
-  monthTrend, outcomeSegments, runnerWaterfall, splitRows,
+  PartialsTab, funnelRows, givebackBins, kpiTiles, ladderRows, monthTrend, outcomeSegments,
+  runnerWaterfall, splitRows, touchRows,
 } from './partials';
 import { PARTIALS_FIXTURE } from './partials.fixture';
 
@@ -421,10 +357,13 @@ describe('partials helpers', () => {
     expect(runner.value).toBeCloseTo(0.324, 6);
   });
 
-  it('places ladder levels on dates linear in R and names them back', () => {
-    expect([1.5, 2, 4].map(ladderDate)).toEqual(['2000-01-16', '2000-01-21', '2000-02-10']);
-    expect(ladderSeries(PARTIALS_FIXTURE)[0].points.map((p) => p.value)).toEqual([1.75, 2, 2.25, 2.2175, 2.3425]);
-    expect(ladderLabel(PARTIALS_FIXTURE)('2000-01-26')).toBe('TP2 at 2.5R');
+  it('draws one ladder bar per TP2 level, then the actual setup', () => {
+    expect(ladderRows(PARTIALS_FIXTURE)).toEqual([
+      { label: 'TP2 at 1.5R', value: 1.75, n: 4 }, { label: 'TP2 at 2.0R', value: 2, n: 4 },
+      { label: 'TP2 at 2.5R', value: 2.25, n: 4 }, { label: 'TP2 at 3.0R', value: 2.2175, n: 4 },
+      { label: 'TP2 at 4.0R', value: 2.3425, n: 4 }, { label: 'Actual', value: 2.324, n: 5 }]);
+    expect(touchRows(PARTIALS_FIXTURE).map((r) => [r.label, r.value])).toEqual([
+      ['1.5R', 100], ['2.0R', 100], ['2.5R', 100], ['3.0R', 50], ['4.0R', 25]]);
   });
 
   it('labels the split rows by the share taken at TP1', () => {
@@ -448,6 +387,7 @@ describe('PartialsTab', () => {
 
   it('renders every panel from one payload, hero first among the KPIs', () => {
     const { el } = render(PARTIALS_FIXTURE);
+    expect(el.querySelector('sb-line-chart')).toBeNull();            // ladder is a bar list
     expect(el.querySelectorAll('sb-stat-tile')).toHaveLength(5);
     expect(el.querySelector('.tile.hero')?.textContent).toContain('Runner beat all-out');
     for (const selector of ['sb-share-bar', 'sb-waterfall', 'sb-histogram', 'sb-strip-plot', 'sb-segmented']) {
@@ -464,7 +404,7 @@ describe('PartialsTab', () => {
     fixture.detectChanges();
     const rows = [...el.querySelectorAll('.breakdown tbody tr')];
     expect(rows.map((r) => r.classList.contains('thin'))).toEqual([false, true]);
-    expect(el.querySelectorAll('sb-line-chart')).toHaveLength(2);    // ladder + month trend
+    expect(el.querySelectorAll('sb-line-chart')).toHaveLength(1);    // the month trend only
   });
 
   it('shows the empty state when the scope holds no partial trade', () => {
@@ -565,8 +505,6 @@ export const DIMENSIONS: SegmentOption[] = [
   { value: 'side', label: 'Side' }, { value: 'month', label: 'Month' },
 ];
 const GIVEBACK_BIN = 0.5;
-const LADDER_EPOCH = Date.UTC(2000, 0, 1);
-const DAY_MS = 86_400_000;
 
 export const pctText = (v: number | null): string => (v === null ? '—' : `${v.toFixed(1)}%`);
 export const rText = (v: number | null): string =>
@@ -613,23 +551,15 @@ export function runnerWaterfall(p: AnalyticsPartials): WaterfallStep[] {
   return [{ label: 'All-out at TP1', value: allOut }, { label: 'Runner contribution', value: actual - allOut }];
 }
 
-/** The line chart's x axis is a time scale, so each R level sits on a
- *  synthetic date linear in R (spacing stays true) and `ladderLabel` names it
- *  back in the tooltip. */
-export const ladderDate = (level: number): string =>
-  new Date(LADDER_EPOCH + Math.round(level * 10) * DAY_MS).toISOString().slice(0, 10);
-
-export function ladderSeries(p: AnalyticsPartials): LineChartSeries[] {
-  const points = p.counterfactuals.ladder
-    .filter((row) => row.cf_exp_r !== null)
-    .map((row) => ({ date: ladderDate(row.level_r), value: row.cf_exp_r as number }));
-  return [{ name: 'Counterfactual ExpR', points }];
-}
-
-export function ladderLabel(p: AnalyticsPartials): (date: string) => string {
-  const names = new Map(p.counterfactuals.ladder.map(
-    (row) => [ladderDate(row.level_r), `TP2 at ${row.level_r.toFixed(1)}R`] as const));
-  return (date: string) => names.get(date) ?? date;
+/** One bar per TP2 level: the counterfactual ExpR had TP2 sat there. The
+ *  actual setup is the last row, "Actual", so every level reads against it on
+ *  the same signed axis (BarList draws a reference marker only in rate mode). */
+export function ladderRows(p: AnalyticsPartials): BarRow[] {
+  const cf = p.counterfactuals;
+  const rows: BarRow[] = cf.ladder.map((row) => ({
+    label: `TP2 at ${row.level_r.toFixed(1)}R`, value: row.cf_exp_r, n: row.n,
+  }));
+  return [...rows, { label: 'Actual', value: cf.actual_exp_r, n: p.kpis.beat_all_out_n }];
 }
 
 export function touchRows(p: AnalyticsPartials): BarRow[] {
@@ -696,8 +626,8 @@ export function monthTrend(rows: readonly PartialsBreakdownRow[]): LineChartSeri
             <sb-share-bar label="Runner outcomes" [segments]="outcomes()" /></sb-panel>
           <sb-panel><sb-panel-header title="Does the runner pay?" [n]="p.kpis.beat_all_out_n" hint="ExpR had 100% closed at TP1, plus what holding the runner added." />
             <sb-waterfall [steps]="waterfall()" [format]="rFmt" totalLabel="Actual ExpR" /></sb-panel>
-          <sb-panel><sb-panel-header title="TP2 ladder" [n]="ladderN()" hint="Counterfactual ExpR with TP2 at each R level; the dashed line is the actual ExpR. Bars: share of runners that touched the level." />
-            <sb-line-chart [series]="ladder()" [referenceLine]="p.counterfactuals.actual_exp_r" [valueFormat]="rFmt" [xLabel]="ladderX()" />
+          <sb-panel><sb-panel-header title="TP2 ladder" [n]="ladderN()" hint="Counterfactual ExpR with TP2 at each R level; the last row is the actual ExpR. Below: share of runners that touched each level." />
+            <sb-bar-list [rows]="ladder()" [format]="rFmt" />
             <sb-bar-list [rows]="touches()" mode="rate" [format]="pctFmt" /></sb-panel>
           <sb-panel><sb-panel-header title="Split what-if" [n]="p.kpis.beat_all_out_n" hint="ExpR had a different share been taken at TP1, from each trade's own two legs." />
             <sb-bar-list [rows]="split()" [format]="rFmt" /></sb-panel>
@@ -737,8 +667,7 @@ export class PartialsTab {
   readonly funnel = computed(() => this.shape(funnelRows, []));
   readonly outcomes = computed(() => this.shape(outcomeSegments, []));
   readonly waterfall = computed(() => this.shape(runnerWaterfall, []));
-  readonly ladder = computed(() => this.shape(ladderSeries, []));
-  readonly ladderX = computed(() => this.shape(ladderLabel, (date: string) => date));
+  readonly ladder = computed(() => this.shape(ladderRows, []));
   readonly ladderN = computed(() => this.data()?.counterfactuals.ladder[0]?.n ?? 0);
   readonly touches = computed(() => this.shape(touchRows, []));
   readonly split = computed(() => this.shape(splitRows, []));
@@ -793,7 +722,7 @@ never a gate).
 npx ng test --include src/app/workspaces/analytics/tabs/partials.spec.ts --include src/app/workspaces/analytics/analytics.spec.ts
 ```
 
-Expected: 2 files passed (18 tests).
+Expected: 2 files passed (18 tests). `sb-line-chart` appears only for the month trend.
 
 - [ ] **Step 7: Commit**
 
