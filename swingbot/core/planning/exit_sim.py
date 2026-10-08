@@ -84,6 +84,29 @@ def _not_triggered(cancel_reason: str | None = None) -> ExitResult:
     )
 
 
+def acceptance_exit(plan: TradePlanV2, bar_close: float) -> bool:
+    """v129: True when the plan carries an acceptance threshold and this bar
+    CLOSED beyond it -- bullish strictly below, bearish strictly above. A
+    wick through the threshold that closes back inside is not acceptance."""
+    threshold = plan.acceptance_close_below
+    if threshold is None:
+        return False
+    if plan.direction == "bullish":
+        return bar_close < threshold
+    return bar_close > threshold
+
+
+def _acceptance_result(plan, j, close_j, entry_index, entry_price, sign, risk):
+    """The v129 acceptance exit at close[j] as a full-position leg, or None."""
+    if not acceptance_exit(plan, close_j):
+        return None
+    r = round((close_j - entry_price) * sign / risk, 3)
+    return ExitResult(outcome="loss" if r < 0 else "scratch", runner_outcome=None,
+                      entry_index=entry_index, exit_index=j, entry_price=entry_price,
+                      r_total=r, legs=[{"fraction": 1.0, "exit_price": close_j,
+                                        "r": r, "reason": "acceptance_exit"}])
+
+
 def _single_leg_exit_walk(
     df, entry_index: int, entry_price: float, plan: TradePlanV2, max_holding_days: int,
 ) -> ExitResult:
@@ -145,6 +168,11 @@ def _single_leg_exit_walk(
         if hit_target:
             outcome, exit_price, exit_index = "win", tp1, j
             break
+        # v129: acceptance exit at this bar's close, after stop and target.
+        accepted = _acceptance_result(plan, j, float(close[j]), entry_index,
+                                      entry_price, sign, risk)
+        if accepted is not None:
+            return accepted
         if reached_trigger and not stop_moved:
             stop_moved = True
 
@@ -366,9 +394,11 @@ def _pre_tp1_phase(ctx) -> ExitResult | int:
                              "breakeven_stop" if stop_moved else "stop")
         if hit_target:
             return j
-        stalled = _stall_exit(ctx, j)
-        if stalled is not None:
-            return stalled
+        early = (_acceptance_result(plan, j, float(ctx.close[j]), ctx.entry_index,
+                                    ctx.entry_price, ctx.sign, ctx.risk)
+                 or _stall_exit(ctx, j))     # v129: acceptance before stall
+        if early is not None:
+            return early
         if reached_trigger and not stop_moved:
             stop_moved = True
     exit_price = float(ctx.close[ctx.end])   # timeout before TP1
@@ -408,6 +438,12 @@ def _runner_phase(df, ctx, tp1_index, trace=None):
     """Phase 2: (exit price, exit index, runner reason) for the post-TP1 leg.
     v123: a structure rule (RUNNER_STRUCTURE_EXIT) updates after the chandelier,
     from this bar's close, effective next bar; a stall exits at the next open."""
+    if acceptance_exit(ctx.plan, float(ctx.close[tp1_index])):
+        # v129: the TP1 bar itself closed through the threshold -- TP1 banked
+        # first (stop -> target -> acceptance), the remainder exits at that
+        # close. Later runner bars need no check: the runner stop sits on the
+        # profit side of entry, the threshold on the loss side.
+        return float(ctx.close[tp1_index]), tp1_index, "acceptance_exit"
     from swingbot.core.market.indicators import atr as atr_indicator
     floor = runner_floor(ctx.entry_price, ctx.plan.tp1)
     runner_stop = checked_stop = floor
