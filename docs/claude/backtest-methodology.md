@@ -50,12 +50,36 @@ interpreting any backtest, grid, or validation result.
   break-even, the way 80% was over 76.9% — **do not restore 80% for any run
   against the current engine.**
 
+- **Stage −2: the idea screen (v140, `swingbot/core/backtesting/screen/`).**
+  Answers "does this entry predict anything, after costs, beyond its own
+  trend state?" before anyone writes a spec. Every event on the
+  point-in-time S&P 500 (2010-01-01..2019-12-31, `data/backtest_cache_ext`)
+  races one fixed trade — entry next open, stop 1.5 × ATR14, target
+  3 × ATR14, gaps through either level filled at the open, an idea-specific
+  time cap, 5 bps slippage a side plus commission — against K = 20 random
+  non-event bars from the same ticker, month and trend state
+  (`close > SMA200`). Pass rule, all four: paired ΔExpR ≥ +0.10R; lower 95%
+  bound > 0 (week-clustered bootstrap, 10,000 resamples); same sign in ≥ 7
+  of 9 calendar years, 2011–2019 (2010 is warm-up only; a year with no events counts against); N ≥ 300
+  events (below that, `SCREEN-UNDERPOWERED`, closed like a fail). Forward
+  drift and rank correlation are printed, never gating. +0.10R because
+  measured TRAIN→out-of-sample shrinkage has run 50–60% and the funnel's
+  paired MDE is 0.017–0.05R. **One shot per idea**: `screen_idea.py`
+  refuses an idea whose `screen-<name>` ledger id exists, and a changed
+  parameter is a new idea with a new name. **A fail is closed** and gets no
+  spec. **A pass buys a spec, not a verdict**: the idea then runs this
+  funnel unchanged (its 2010–2019 window overlaps only the funnel's own
+  selection window). New `Edge: expectancy` / `volume` specs adding an
+  entry strategy or filter cite the pass in their `**Screen:**` header
+  (`document-conventions.md`), enforced by
+  `tests/hooks/test_spec_screen_header.py`.
 - **The acceptance funnel.** Selection never touches scoring data, and two
   free gates stand in front of the one-shot budget. Run it with
   `python scripts/backtest/validate_component.py --stage <stage>`.
 
   | Stage | Window | Cost | Rule |
   |---|---|---|---|
+  | −2 `screen` (v140, before any spec; `scripts/backtest/screen_idea.py`) | PIT S&P 500, 2010-01-01..2019-12-31 | free, **one shot per idea** | ΔExpR ≥ +0.10R after costs vs a matched random baseline, lower 95% week-cluster bound > 0, ≥ 7 of 9 years (2011–2019) positive, N ≥ 300 — else `SCREEN-FAIL` / `SCREEN-UNDERPOWERED`, closed |
   | −1 `reachability` | pilot (2018-06..2020-12, 10 tickers) | free | a knob unreachable by replay, or zero changed outcomes, is **refused; budget intact** |
   | 0 `mde` | fold-train | free | TRAIN effect below the minimum detectable effect ⇒ **shot refused, budget intact** |
   | 1 selection | fold-train only (2018-06..2020 / ..2021 / ..2022) | free | `plateau_report()` mandatory and disqualifying — a spike, not a plateau, does not proceed |

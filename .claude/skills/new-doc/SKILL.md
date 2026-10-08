@@ -39,6 +39,10 @@ as a level, with no numbers in it. `Edge:` as one of `expectancy` /
 already-numbered spec reuses that spec's number and links back with a
 `**Spec:**` line.
 
+A spec numbered above v140 also carries `**Screen:**` under `Edge:` -- a
+`SCREEN-PASS` ledger id, a `harvest-headroom` results path, or `exempt
+(integrity)`. Which one, and why: `document-conventions.md`.
+
 ## Step 4 — Keep it addressable
 
 `### Task <id>:` one line, no prose before the colon. `# Phase N —` with

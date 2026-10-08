@@ -191,6 +191,22 @@ negative result is `Bump: none` but often `Edge: expectancy` (removing a
 negative-expectancy population is a profit improvement that ships no code),
 while a UI refresh can be `Bump: ui minor` and `Edge: none (integrity)`.
 
+**`Screen:`** — specs only, and only specs numbered **above v140** (earlier
+ones are grandfathered by number). It sits directly under `Edge:` and names
+the measured evidence that licensed the spec:
+
+| `Edge:` | `Screen:` value |
+|---|---|
+| `expectancy` or `volume`, adding an entry strategy or a filter | `<ledger-id> SCREEN-PASS` — the id must sit in `docs/superpowers/results/preregistration-ledger.jsonl` with that verdict |
+| `expectancy` moving stops/targets, or `harvest` | `harvest-headroom <path>` — a results doc quoting the measured MFE headroom (`scripts/reports/runner_headroom.py`, `analytics/exit_quality.py`) the change claims to capture; the path must exist |
+| `none (integrity)` | `exempt (integrity)` |
+
+`tests/hooks/test_spec_screen_header.py` fails a spec whose line is missing,
+cites an absent or non-`SCREEN-PASS` ledger id, cites a headroom path that
+does not exist, or says `exempt` with an `Edge:` other than `none`. A split
+spec carries the line in its `_0-index` part. Why the screen exists, its
+pass rule and its one-shot discipline: `backtest-methodology.md` § Stage −2.
+
 **`## Parallelisation`** — its own section, below.
 
 ## How long a document may be

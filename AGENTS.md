@@ -127,6 +127,16 @@ partner **trades real money off the alerts**, so a silent stop move, missing
 expiry or lost send on the alert channel is real-money divergence: that work is
 `Edge: harvest`, not cosmetics (`edge-priorities.md`).
 
+Specs numbered above v140 carry a `**Screen:**` header line under `Edge:`. An
+`expectancy` or `volume` spec adding an entry strategy or a filter cites
+`<ledger-id> SCREEN-PASS`, earned once per idea with `python
+scripts/backtest/screen_idea.py --idea <name>` (PIT S&P 500 2010-2019; a fixed
+1.5/3 ATR trade against a matched random baseline; ΔExpR ≥ +0.10R after
+costs, lower 95% bound > 0, ≥ 7 of 9 years (2011–2019) positive, N ≥ 300). A stop/target
+or `harvest` spec cites `harvest-headroom <results path>`; integrity work says
+`exempt (integrity)`. A screen fail is closed and never re-screened.
+`tests/hooks/test_spec_screen_header.py` enforces the line.
+
 Feature acceptance runs through one gate (`swingbot/core/backtesting/
 acceptance.py`), driven by `python scripts/backtest/validate_component.py
 --stage mde|walkforward|validation`. Within that gate win rate is the objective
