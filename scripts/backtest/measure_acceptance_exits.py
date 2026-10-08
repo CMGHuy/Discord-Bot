@@ -85,11 +85,20 @@ def _write_progress(path, done, total) -> None:
         pass
 
 
+def cache_universe() -> list[str]:
+    """Every ticker with a cached CSV. The pre-registered universe is 'every
+    watchlist ticker with a cached frame'; the watchlist lives in Postgres
+    (unreachable from a worktree) and the cache holds exactly those tickers,
+    so the cache listing stands in for it (partner decision, 2026-10-08)."""
+    from swingbot.core.marketdata import backtest_cache
+    return sorted(p.stem for p in Path(backtest_cache.CACHE_DIR).glob("*.csv"))
+
+
 def build_rows(arm, window, cells, *, tickers=None, workers=None) -> list:
     """Replay every cached ticker and return its rows in ticker order, so the
     output is identical whatever order the pool finishes in."""
-    from measure_arms import cached_universe
-    universe = cached_universe()[:tickers] if tickers else cached_universe()
+    universe = cache_universe()
+    universe = universe[:tickers] if tickers else universe
     tasks = [(arm, ticker, tuple(window), tuple(tuple(c) for c in cells))
              for ticker in universe]
     LOG_DIR.mkdir(exist_ok=True)

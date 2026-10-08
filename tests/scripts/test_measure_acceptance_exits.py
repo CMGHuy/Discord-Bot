@@ -111,3 +111,11 @@ def test_cli_refuses_a_partial_universe_at_stage3(tmp_path, capsys):
                      "--tickers", "3", "--preregistration", str(prereg)])
     assert code == 1
     assert "refused:partial-validation" in capsys.readouterr().err
+
+
+def test_cache_universe_lists_cached_csv_stems_sorted(tmp_path, monkeypatch):
+    for name in ("MSFT.csv", "AAPL.csv", "notes.txt"):
+        (tmp_path / name).write_text("x", encoding="utf-8")
+    from swingbot.core.marketdata import backtest_cache
+    monkeypatch.setattr(backtest_cache, "CACHE_DIR", tmp_path)
+    assert mae.cache_universe() == ["AAPL", "MSFT"]

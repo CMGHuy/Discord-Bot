@@ -14,7 +14,7 @@ harvest gate, on the same entries.
 - `level` and ATR14 are frozen at the plan's creating bar.
 
 ## Population and instrument
-- Universe: every watchlist ticker with a cached frame (`measure_arms.cached_universe()`), all `LEGACY_HORIZONS`, `scale_out=True`. Cache: the main tree's `data/backtest_cache` (via `BACKTEST_CACHE_DIR`).
+- Universe: every ticker with a cached CSV in the main tree's `data/backtest_cache` (`BACKTEST_CACHE_DIR`), all `LEGACY_HORIZONS`, `scale_out=True`. Amended 2026-10-08, before any run: the watchlist is in Postgres and unreachable from the worktree, so the driver lists the cache directory (`cache_universe()`) instead of `measure_arms.cached_universe()`. Partner-approved.
 - Arm Z entries: `replay_scenarios` with live `ScanParams`. Arm B entries: the plans `run_backtest("Break & Retest", exit_model="v2", scale_out=True, tp2_mode="levels")` builds.
 - Entries are built once with `ACCEPTANCE_EXIT_ENABLED` off and re-simulated per cell (`acceptance_replay`), so the design is paired.
 - A not-eligible arm Z plan (level beyond the 2% cap, or on the profit side of entry) keeps today's exit in both arms and stays in the population.
