@@ -32,6 +32,7 @@ Both are flagged via `hot_reloadable=False` in FIELDS below so the UI
 can say so accurately instead of over-promising.
 """
 import logging
+import math
 import os
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
@@ -1021,6 +1022,24 @@ FIELDS: list[Field] = [
                "per-anchor labels DO fold to one 'AVWAP' family (verified on 264,595 real "
                "targets, zero inflation). Full record: "
                "docs/superpowers/plans/implemented/v35-avwap-preregistration.md."),
+    Field("FVG_LEVELS_MODE", "FVG_LEVELS_MODE", "Universe & Scanning",
+          "Fair value gap level source mode",
+          type="select", default="all", options=["all", "displacement", "off"],
+          help="Which unfilled 3-candle fair value gaps (swingbot/core/market/fvg.py) reach the "
+               "candidate level map -- and with it both the FVG confluence vote and the candidate "
+               "entry/stop/target prices. all (default): every unfilled gap, unchanged from before "
+               "v128. displacement: only gaps whose middle candle's body is at least "
+               "FVG_DISPLACEMENT_ATR_K x ATR14 and closes in the gap-side third of its range. "
+               "off: no FVG candidates. Charts draw every unfilled gap whatever this says. "
+               "The default moves only if the v128 pre-registered one-shot VALIDATION passes both "
+               "the v72 and v92 gates (docs/superpowers/results/2026-10-02-v128-fvg-preregistration.md). "
+               "An unknown value falls back to all, never to off."),
+    Field("FVG_DISPLACEMENT_ATR_K", "FVG_DISPLACEMENT_ATR_K", "Universe & Scanning",
+          "FVG displacement body (x ATR14)",
+          type="float", default="1.5", min=0.1, max=5.0, step=0.25,
+          help="Read only when FVG_LEVELS_MODE=displacement: the middle candle's |close - open| must "
+               "be at least this many ATR14. v128's grid is frozen at {1.0, 1.5, 2.0}. Must be a "
+               "finite number > 0; anything else falls back to 1.5."),
     Field("PYRAMIDING_ENABLED", "PYRAMIDING_ENABLED", "Universe & Scanning",
           "Pyramid-add suggestions enabled",
           type="checkbox", default="false",
@@ -1210,6 +1229,7 @@ _SEARCH_CLASSES = {
         "FIB_TARGET_1_0_EXTENSION", "PULLBACK_DRYUP_SCOPE", "PULLBACK_DRYUP_MAX_RATIO",
         "SHORT_UNIVERSE_RESEARCH_MODE",
         "COMPRESSION_SHORT_RESEARCH_MODE",
+        "FVG_LEVELS_MODE", "FVG_DISPLACEMENT_ATR_K",
     },
     "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO", "EARNINGS_BLACKOUT_SESSIONS"},
     "live_only": {
@@ -1246,7 +1266,8 @@ _CASTERS = {
 }
 
 
-# Lower-cased mode selects; an unknown value falls back to "off" with a warning.
+# Lower-cased mode selects; an unknown value falls back to _MODE_FALLBACK's
+# entry (default "off") with a warning.
 _MODE_VALUES = {
     "PLAN_ENGINE_V2": ("off", "shadow", "on"),
     "RUNNER_STRUCTURE_EXIT": ("off", "hl_trail", "progress_stall"),
@@ -1254,7 +1275,32 @@ _MODE_VALUES = {
     "PULLBACK_DRYUP_SCOPE": ("off", "strategy", "confluence"),
     "SHORT_UNIVERSE_RESEARCH_MODE": ("off", "broad", "isolated"),
     "COMPRESSION_SHORT_RESEARCH_MODE": ("off", "broad", "isolated"),
+    "FVG_LEVELS_MODE": ("all", "displacement", "off"),
 }
+
+# v128: "off" is a signal change for FVG_LEVELS_MODE (it removes a level
+# source), so a typo must land on the pre-v128 behaviour instead.
+_MODE_FALLBACK = {"FVG_LEVELS_MODE": "all"}
+
+# Floats that must be finite and > 0. Anything else is a parse failure, so
+# _apply_env falls back to the field default and knobs.parse_knob refuses the arm.
+_POSITIVE_FLOATS = {"FVG_DISPLACEMENT_ATR_K"}
+
+
+def _cast_mode(f: Field, raw: str) -> str:
+    v = str(raw).lower()
+    if v in _MODE_VALUES[f.attr]:
+        return v
+    fallback = _MODE_FALLBACK.get(f.attr, "off")
+    log.warning("invalid %s=%r, falling back to %r", f.attr, raw, fallback)
+    return fallback
+
+
+def _cast_positive_float(raw: str) -> float:
+    value = float(raw)
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError(f"must be a finite number > 0, got {raw!r}")
+    return value
 
 
 def _cast(f: Field, raw: str):
@@ -1266,12 +1312,9 @@ def _cast(f: Field, raw: str):
     if f.attr in ("MIN_ALERT_CONFIDENCE_LEVEL", "SECONDARY_ALERT_MIN_CONFIDENCE"):
         return int(raw)
     if f.attr in _MODE_VALUES:
-        v = str(raw).lower()
-        if v not in _MODE_VALUES[f.attr]:
-            log.warning(
-                "invalid %s=%r, falling back to 'off'", f.attr, raw)
-            return "off"
-        return v
+        return _cast_mode(f, raw)
+    if f.attr in _POSITIVE_FLOATS:
+        return _cast_positive_float(raw)
     caster = _CASTERS.get(f.type)
     return caster(raw) if caster else raw
 

@@ -10,9 +10,22 @@ in a process pool and each cell is one of these.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from swingbot import config
+
+#: Mirrors swingbot.core.market.fvg.FVG_MODES (pinned equal by
+#: tests/test_config_fvg_mode.py); duplicated so this module stays import-light.
+_FVG_MODES = ("all", "displacement", "off")
+
+
+def _validate_fvg(mode, k) -> None:
+    """A replace()d ScanParams must never carry an arm the config layer would refuse."""
+    if mode not in _FVG_MODES:
+        raise ValueError(f"fvg_levels_mode must be one of {_FVG_MODES}, got {mode!r}")
+    if not isinstance(k, (int, float)) or not math.isfinite(k) or k <= 0:
+        raise ValueError(f"fvg_displacement_atr_k must be a finite number > 0, got {k!r}")
 
 
 @dataclass(frozen=True)
@@ -74,6 +87,11 @@ class ScanParams:
     pullback_dryup_max_ratio: float
     short_universe_research_mode: str = "off"   # v118 research replay only
     compression_short_research_mode: str = "off"   # v119 research replay only
+    fvg_levels_mode: str = "all"            # v128: all | displacement | off
+    fvg_displacement_atr_k: float = 1.5     # v128: read only in displacement mode
+
+    def __post_init__(self):
+        _validate_fvg(self.fvg_levels_mode, self.fvg_displacement_atr_k)
 
     @classmethod
     def from_config(cls) -> "ScanParams":
@@ -134,4 +152,6 @@ class ScanParams:
             pullback_dryup_max_ratio=config.PULLBACK_DRYUP_MAX_RATIO,
             short_universe_research_mode=config.SHORT_UNIVERSE_RESEARCH_MODE,
             compression_short_research_mode=config.COMPRESSION_SHORT_RESEARCH_MODE,
+            fvg_levels_mode=config.FVG_LEVELS_MODE,
+            fvg_displacement_atr_k=config.FVG_DISPLACEMENT_ATR_K,
         )

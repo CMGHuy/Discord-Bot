@@ -149,7 +149,8 @@ def test_validation_stage_writes_a_pending_skeleton_before_the_verdict_is_known(
             type("Args", (), {"arms": arms, "title": "t", "window": "w",
                               "permutation_p": 0.01, "resamples": 200,
                               "seed": 7, "notes": None,
-                              "out_md": str(out_md), "out_json": None})(),
+                              "out_md": str(out_md), "out_json": None,
+                              "gate": "win_rate", "mechanism_json": None})(),
             "validation")
     assert out_md.exists()
     text = out_md.read_text(encoding="utf-8")

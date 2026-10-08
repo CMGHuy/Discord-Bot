@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-08 10:01:58 UTC",
+  "generated_at": "2026-10-08 10:02:55 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.21.1",
-    "bot": "2.2.1"
+    "bot": "2.2.2"
   },
   "releases": [
     {
@@ -1452,11 +1452,24 @@
     {
       "date": "2026-10-08",
       "last_seen": "2026-10-08",
+      "commit": "b07b43e6",
+      "subject": "chore(v129): bump bot patch -- plans record acceptance_level; exits unchanged (flag off)",
+      "versions": {
+        "ui": "1.21.1",
+        "bot": "2.2.1"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-08",
+      "last_seen": "2026-10-08",
       "commit": "uncommitted",
       "subject": "working tree",
       "versions": {
         "ui": "1.21.1",
-        "bot": "2.2.1"
+        "bot": "2.2.2"
       },
       "changed": [
         "bot"
