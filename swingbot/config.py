@@ -1099,6 +1099,31 @@ FIELDS: list[Field] = [
                "only -- v92 Hypothesis 2, independent of the older, closed "
                "DATA_DRIVEN_STOPS_ENABLED flag (see the spec's provenance "
                "note). Off until its own TRAIN/VALIDATION shots judge it."),
+    Field("ACCEPTANCE_EXIT_ENABLED", "ACCEPTANCE_EXIT_ENABLED", "Exit quality",
+          "Exit level trades on a daily close beyond the level (v129)",
+          type="checkbox", default="false",
+          help="Judges a confluence / Break & Retest trade by acceptance -- a "
+               "daily CLOSE beyond its level -- instead of an intrabar touch. "
+               "Off until its one VALIDATION shot per arm passes. NOTE: live "
+               "position management (plan_manager) does not read the close "
+               "exit yet; do not flip without wiring it (v129 plan, V129-16)."),
+    Field("ACCEPTANCE_EXIT_ARMS", "ACCEPTANCE_EXIT_ARMS", "Exit quality",
+          "Acceptance-exit arms in force",
+          type="text", default="Z,B",
+          help="Comma list of Z (confluence: disaster stop + close exit) and B "
+               "(Break & Retest: close exit only). Read only when "
+               "ACCEPTANCE_EXIT_ENABLED is on; unknown letters are ignored."),
+    Field("ACCEPTANCE_DISASTER_ATR_M", "ACCEPTANCE_DISASTER_ATR_M", "Exit quality",
+          "Arm Z disaster stop (ATR beyond the level)",
+          type="float", default="1.0", min=0.25, max=3.0, step=0.25,
+          help="Interim value; replaced by the Stage 3-selected cell. Never "
+               "read while ACCEPTANCE_EXIT_ENABLED is off."),
+    Field("ACCEPTANCE_CLOSE_BUFFER_ATR", "ACCEPTANCE_CLOSE_BUFFER_ATR", "Exit quality",
+          "Close-exit buffer (ATR beyond the level)",
+          type="float", default="0.0", min=0.0, max=1.0, step=0.05,
+          help="A close beyond level -/+ this many ATR14 ends the trade. "
+               "Interim value; replaced by the Stage 3-selected cell. Never "
+               "read while ACCEPTANCE_EXIT_ENABLED is off."),
     Field("RUNNER_STRUCTURE_EXIT", "RUNNER_STRUCTURE_EXIT", "Exit quality",
           "Structure-aware runner exit (v123)",
           type="select", default="off",
