@@ -137,3 +137,27 @@ def test_per_day_rows_are_date_sorted_and_carry_outcomes():
 
 def test_per_day_rows_of_nothing_is_empty():
     assert per_day_rows([]) == []
+
+
+def test_strategy_rows_carry_direction_and_close_date(monkeypatch):
+    """v141 buckets trades by direction and, for one table, by close day."""
+    import measure_alert_density as mad
+    from swingbot.core.backtesting import backtest
+
+    trade = backtest.BacktestTrade(
+        entry_date="2021-03-01", exit_date="2021-03-05", direction="bullish",
+        entry=100.0, stop_loss=95.0, take_profit=110.0, outcome="win",
+        exit_price=110.0, return_pct=10.0, r_multiple=2.0, holding_days=4)
+
+    class _Summary:
+        trades = [trade]
+
+    monkeypatch.setattr(backtest, "run_backtest", lambda *a, **k: _Summary())
+    rows, _ = mad._entry_dates_for_ticker(
+        "AAA", None, ["2w"], "2021-01-01", "2021-12-31", gates={}, scale_out=True,
+        want_strategies=True, want_confluence=False, strategies=["RSI"])
+
+    assert len(rows) == 1
+    assert rows[0]["direction"] == "bullish"
+    assert rows[0]["closed_at"] == "2021-03-05"
+    assert rows[0]["opened_at"] == "2021-03-01"      # unchanged
