@@ -22,8 +22,7 @@ EXPECTED = {
         "model": "sonnet",
         "skills": {"no-lookahead"},
     },
-    # new-doc is slash-only (disable-model-invocation), which the agent
-    # `skills:` field cannot preload -- its rules are inlined instead.
+    # plan-writer inlines new-doc's rules rather than preloading the skill.
     "plan-writer": {
         "model": "opus",
         "skills": {"superpowers:writing-plans"},
