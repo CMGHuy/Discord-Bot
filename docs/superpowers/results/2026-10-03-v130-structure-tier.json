@@ -1,0 +1,45 @@
+{
+ "window": [
+  "2020-01-01",
+  "2023-12-31"
+ ],
+ "closed": 12207,
+ "census": {
+  "pivots": 12597,
+  "major": 6116,
+  "major_share_pct": 48.55,
+  "median_bars_to_major": 5.0
+ },
+ "verdict": "not more informative",
+ "conditions": {
+  "all_four_buckets_n30": true,
+  "major_spread_larger": false,
+  "same_sign_both_directions": true
+ },
+ "k3": {
+  "n_aligned": 2622,
+  "n_not_aligned": 5335,
+  "thin": false,
+  "spread": -0.002417
+ },
+ "major": {
+  "n_aligned": 1726,
+  "n_not_aligned": 6209,
+  "thin": false,
+  "spread": -0.169736
+ },
+ "major_by_direction": {
+  "bullish": {
+   "n_aligned": 890,
+   "n_not_aligned": 3212,
+   "thin": false,
+   "spread": -0.123457
+  },
+  "bearish": {
+   "n_aligned": 836,
+   "n_not_aligned": 2997,
+   "thin": false,
+   "spread": -0.218499
+  }
+ }
+}
