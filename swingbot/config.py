@@ -1106,7 +1106,10 @@ FIELDS: list[Field] = [
                "daily CLOSE beyond its level -- instead of an intrabar touch. "
                "Off until its one VALIDATION shot per arm passes. NOTE: live "
                "position management (plan_manager) does not read the close "
-               "exit yet; do not flip without wiring it (v129 plan, V129-16)."),
+               "exit yet; do not flip without wiring it (v129 plan, V129-16). "
+               "CLOSED, no lift: v129 arm Z NO_ELIGIBLE_CELL at Stage 1, arm B "
+               "UNDERPOWERED at Stage 0, VALIDATION unspent; see "
+               "backtest-methodology.md."),
     Field("ACCEPTANCE_EXIT_ARMS", "ACCEPTANCE_EXIT_ARMS", "Exit quality",
           "Acceptance-exit arms in force",
           type="text", default="Z,B",
