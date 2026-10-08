@@ -90,8 +90,8 @@ heading).
 | `alert-surface` | 3 | model-invocable | `known-traps.md` |
 | `schema-change` | 3 | model-invocable | `schema-evolution.md` — Step 1 reads it to pick add/rename/drop/promote |
 | `worktree-lifecycle` | 3 | model-invocable | `document-lifecycle.md`, `working-conventions.md` |
-| `close-out` | 2 | slash-only (`/close-out`) | `document-lifecycle.md`, `working-conventions.md` |
-| `new-doc` | 2 | slash-only (`/new-doc`) | `document-conventions.md` |
+| `close-out` | 2 | `/close-out`, or Claude once the plan's final task is green | `document-lifecycle.md`, `working-conventions.md` |
+| `new-doc` | 2 | `/new-doc`, or Claude right before creating a numbered spec/plan | `document-conventions.md` |
 | `deploy` | 2 | slash-only (`/deploy`) | none — Step 1 reads `docs/deploy/DEPLOY_HETZNER.md` and `docs/deploy/DOCKER.md`, not `docs/claude/` |
 | `stable-snapshot` | 2 | slash-only (`/stable-snapshot`) | none — Step 1 reads the v120 spec and `docs/deploy/DB_RESTORE.md`, not `docs/claude/` |
 | `backup-pull` | 2 | slash-only (`/backup-pull`) | none — Step 1 reads the v120 spec and `docs/deploy/DB_RESTORE.md`, not `docs/claude/` |
@@ -104,11 +104,14 @@ model-invocable and share one mechanical shape contract — a `Trigger table`
 ground: Tier 1 blocks an integrity violation (backtest re-runs, lookahead,
 pooled numbers, unmirrored prod changes), Tier 3 briefs an architectural seam
 before it's crossed (edge module boundaries, the alert surface, a schema
-change, worktree lifecycle). Tier 2 skills carry
-`disable-model-invocation: true` and no Trigger table — they are checklists
-for an explicit slash command (`/close-out`, `/new-doc`, `/deploy`,
-`/stable-snapshot`, `/backup-pull`), not things the model should decide to run
-on its own.
+change, worktree lifecycle). Tier 2 skills carry no Trigger table — they are
+checklists for an explicit slash command. `/deploy`, `/stable-snapshot` and
+`/backup-pull` also carry `disable-model-invocation: true`: the model never
+decides to run them. `/new-doc` and `/close-out` do not (the partner let
+Claude run both, 2026-10-08): Claude invokes `new-doc` right before creating a
+numbered spec or plan, and `close-out` once a plan's final full-suite task is
+green and its results are recorded. `MODEL_RUN_RITUALS` in
+`tests/hooks/test_skill_shape.py` pins the split.
 
 ## Proving a skill fires: the eval suites
 

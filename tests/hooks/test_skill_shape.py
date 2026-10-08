@@ -21,6 +21,9 @@ MAX_SKILL_LINES = 80
 # Tier 2 is slash-only and carries disable-model-invocation instead.
 TIER_1_AND_3 = {"backtest-gate", "no-lookahead", "pooled-numbers", "mirror-prod", "edge-module", "alert-surface", "schema-change", "worktree-lifecycle"}   # each skill task appends its own name
 TIER_2 = {"close-out", "new-doc", "deploy", "stable-snapshot", "backup-pull"}        # each ritual task appends its own name
+# Rituals the partner lets Claude run on its own (2026-10-08). Still checklists
+# with no Trigger table; their description names the moment they run.
+MODEL_RUN_RITUALS = {"close-out", "new-doc"}
 
 # A bare threshold in a SKILL.md is content that belongs in docs/claude/.
 # Dates, version numbers and step numbers are not thresholds.
@@ -99,9 +102,16 @@ def test_mechanical_skills_run_forked(name):
 
 
 def test_ritual_skills_are_slash_only():
-    for name in sorted(TIER_2):
+    for name in sorted(TIER_2 - MODEL_RUN_RITUALS):
         meta, _ = _read_skill(name)
         assert meta.get("disable-model-invocation") == "true"
+
+
+def test_model_run_rituals_are_invocable_and_say_when():
+    for name in sorted(MODEL_RUN_RITUALS):
+        meta, _ = _read_skill(name)
+        assert "disable-model-invocation" not in meta
+        assert f"Run as /{name}, or by Claude itself" in meta["description"]
 
 
 def test_every_skill_is_registered_in_exactly_one_tier():

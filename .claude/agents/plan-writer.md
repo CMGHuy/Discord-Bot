@@ -12,7 +12,7 @@ cannot fill from the code is a `BLOCKED:` question, not an invention.
 
 ## Conventions
 
-Inlined from the slash-only `/new-doc` skill (cannot be preloaded); full detail: `docs/claude/document-conventions.md`.
+Inlined from the `/new-doc` skill; full detail: `docs/claude/document-conventions.md`.
 
 - File: `docs/superpowers/plans/<spec's date>-v<spec's N>-<spec's name>.md` — reuses the spec's `vN`.
 - Header: `**Bump:**` level only, `**Edge:**` one of `expectancy`/`harvest`/`volume`/`none (integrity)`, `**Spec:**` link back.

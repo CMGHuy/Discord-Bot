@@ -1,7 +1,6 @@
 ---
 name: new-doc
-description: Ritual for creating a new spec or plan -- recompute the repo-wide vN counter immediately before the commit, write the header block, and keep the document addressable and splittable. Invoked explicitly as /new-doc, never model-triggered.
-disable-model-invocation: true
+description: Ritual for creating a new spec or plan -- recompute the repo-wide vN counter immediately before the commit, write the header block, and keep the document addressable and splittable. Run as /new-doc, or by Claude itself immediately before it creates a numbered spec or plan file.
 ---
 
 # New spec or plan

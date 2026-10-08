@@ -1,6 +1,6 @@
 ---
 name: close-out
-description: The plan close-out ritual -- resolve the version bump from VERSION.json, regenerate version_history.json, move the plan document to implemented/ or no-lift/, and remove its worktree. Invoked explicitly as /close-out, never model-triggered.
+description: The plan close-out ritual -- resolve the version bump from VERSION.json, regenerate version_history.json, move the plan document to implemented/ or no-lift/, and remove its worktree. Run as /close-out, or by Claude itself once a plan's final task (the full-suite run) is green and its results are recorded.
 ---
 <!-- GENERATED from .claude/skills/close-out/SKILL.md by scripts/dev/sync_codex.py -- edit the source, then re-run the script. Never edit this copy. -->
 
