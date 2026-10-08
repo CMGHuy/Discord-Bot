@@ -369,3 +369,48 @@ def structure_events(df: pd.DataFrame) -> pd.DataFrame:
     ("bos"/"choch"/None), ``event_direction`` ("bullish"/"bearish"/None) and
     ``event_pos`` (NaN if none). Truncation-stable."""
     return _events_table(df, major_pivots(df))
+
+# swingbot/core/market/structure.py -- append
+MAJOR_KEYS = ("structure_state_major", "structure_aligned_major", "major_sh_atr", "major_sl_atr",
+              "struct_event_last", "struct_event_bars_ago", "last_sl_reaction_atr", "last_sh_reaction_atr")
+
+
+def _reaction_atr(ext: np.ndarray, opp: np.ndarray, atr14: np.ndarray, pos) -> float | None:
+    """Low-side form: (max opp since the pivot - pivot extreme) / ATR14[pivot].
+    None when there is no pivot, it has been undercut, or its ATR is 0/NaN."""
+    if pd.isna(pos):
+        return None
+    i = int(pos)
+    if (ext[i + 1:] < ext[i]).any() or not atr14[i] > 0:
+        return None
+    return _num((np.fmax.reduce(opp[i:]) - ext[i]) / atr14[i])
+
+
+def _event_keys(event, t: int, direction: str) -> dict:
+    if event["event_kind"] is None:
+        return {"struct_event_last": None, "struct_event_bars_ago": None}
+    side = "with" if event["event_direction"] == direction else "against"
+    return {"struct_event_last": f"{event['event_kind']}_{side}",
+            "struct_event_bars_ago": int(t - event["event_pos"])}
+
+
+def major_structure_features(df: pd.DataFrame, direction: str) -> dict:
+    """Every MAJOR_KEYS value at ``df``'s final bar, expressed for the trade's
+    direction. Reads only ``df``; < 60 bars returns all None."""
+    out = dict.fromkeys(MAJOR_KEYS)
+    if df is None or len(df) < MIN_BARS:
+        return out
+    atr14 = atr(df, 14).to_numpy(float)
+    majors = _major_table(df, atr14)
+    last, t = majors.iloc[-1], len(df) - 1
+    state, atr_value = _major_state(last), _num(atr14[-1])
+    high, low = df["High"].to_numpy(float), df["Low"].to_numpy(float)
+    close, piv = float(df["Close"].iloc[-1]), confirmed_pivots(df).iloc[-1]
+    out.update(structure_state_major=state,
+               structure_aligned_major=None if state is None else state == ("up" if direction == "bullish" else "down"),
+               major_sh_atr=_num((last["last_msh"] - close) / atr_value) if atr_value else None,
+               major_sl_atr=_num((close - last["last_msl"]) / atr_value) if atr_value else None,
+               last_sl_reaction_atr=_reaction_atr(low, high, atr14, piv["last_sl_pos"]),
+               last_sh_reaction_atr=_reaction_atr(-high, -low, atr14, piv["last_sh_pos"]))
+    out.update(_event_keys(_events_table(df, majors).iloc[-1], t, direction))
+    return out
