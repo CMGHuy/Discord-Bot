@@ -69,6 +69,7 @@ data/v103_*.json
 data/v108_*.json
 data/v104_*.json
 data/v113_*.json
+data/v131_*.json
 data/v121_*.json
 # Same reason and same glob shape for v34's RS-gate measurement dumps
 # (data/v34_train.json, data/v34_train_rows.json, data/v34_validation.json),
