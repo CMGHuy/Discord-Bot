@@ -285,7 +285,7 @@ def _bt_plan(df, i, *, ticker, strategy, horizon_key, direction, entry, stop_los
     from swingbot.core.planning.short_builders import short_hold_cap
 
     shape = plan_shape_for(strategy)
-    return TradePlanV2(
+    plan = TradePlanV2(
         plan_id="bt", ticker=ticker, created_at=str(df.index[i].date()),
         source="strategy", strategy=strategy, horizon_key=horizon_key,
         direction=direction, entry_type=shape["entry_type"], trigger_price=entry,
@@ -298,6 +298,9 @@ def _bt_plan(df, i, *, ticker, strategy, horizon_key, direction, entry, stop_los
         quality_score=0, quality_breakdown=[],
         badge="WEAK", badge_stats={}, status=PlanStatus.ACTIVE,
     )
+    from swingbot.core.planning.acceptance_levels import stamp_strategy_acceptance
+    stamp_strategy_acceptance(plan, df, i)
+    return plan
 
 
 _NO_TRADE = ("not_triggered", "no_trade")

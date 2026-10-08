@@ -13,6 +13,7 @@ from swingbot.core.market.strategy_types import (BREAKEVEN_TRIGGER_FRACTION, COM
                                                   SHORT_STRATEGIES)
 from swingbot.core.risk_limits import (HARD_MAX_PLANNED_LOSS_PCT, capped_planned_loss_pct,
                                        planned_loss_pct)
+from .acceptance_levels import stamp_confluence_acceptance, stamp_strategy_acceptance
 from .plan_types import PlanStatus, TradePlanV2, record_transition
 from . import params as plan_params
 from . import reward_floor
@@ -359,6 +360,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     plan.time_stop_days = (time_stop_days if time_stop_days is not None
                            else plan_params._resolve_time_stop_days(strategy))
     plan.stall_exit_day = plan_params._resolve_stall_exit_day(strategy)
+    stamp_strategy_acceptance(plan, df, index)
     return plan
 
 
@@ -452,7 +454,8 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
         params = ScanParams.from_config()
     entry = scenario.entry
     is_bull = scenario.direction == "bullish"
-    stop_loss = _clamp_stop_to_hard_cap(entry, scenario.stop_loss, is_bull)
+    level = scenario.stop_loss   # v129: the pre-clamp level the trade leans on
+    stop_loss = _clamp_stop_to_hard_cap(entry, level, is_bull)
 
     if level_map is not None:
         candidates = levels.target_candidates(*level_map, scenario.direction)
@@ -495,6 +498,9 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
     plan_params.stamp_badge(plan)
     plan_params.stamp_cohort(plan, regime2_state)
     plan_params._apply_quality(plan, quality_inputs)
+    # Last, after targets, badge, cohort and quality were set from today's
+    # stop: v129 never changes entries or targets (spec § Out of scope).
+    stamp_confluence_acceptance(plan, df, level)
     return plan
 
 
