@@ -323,3 +323,49 @@ def major_pivots(df: pd.DataFrame) -> pd.DataFrame:
     """Per bar ``t``: positional index and price of the last two major swing
     highs and lows known at ``t`` (NaN where fewer exist). Truncation-stable."""
     return _major_table(df, atr(df, 14).to_numpy(float))
+
+# swingbot/core/market/structure.py -- append
+EVENT_COLUMNS = ("event_kind", "event_direction", "event_pos")
+
+
+def _major_state(row) -> str | None:
+    """v121's ``_state`` rule on the major columns of one ``major_pivots`` row."""
+    return _state({"last_sh": row["last_msh"], "prior_sh": row["prior_msh"],
+                   "last_sl": row["last_msl"], "prior_sl": row["prior_msl"]})
+
+
+def _first_breaks(close: np.ndarray, level_pos: np.ndarray, level: np.ndarray, sign: int) -> list[int]:
+    """Bars whose close is the FIRST beyond a major pivot, judged against the
+    pivot that was the last major at the bar before (so never the bar it
+    became major on). ``sign`` +1 breaks upward, -1 downward."""
+    beyond = sign * (close[1:] - level[:-1]) > 0          # NaN level -> False
+    bars, seen = [], set()
+    for bar in np.flatnonzero(beyond) + 1:
+        pivot = level_pos[bar - 1]
+        if pivot not in seen:
+            seen.add(pivot)
+            bars.append(int(bar))
+    return bars
+
+
+def _events_table(df: pd.DataFrame, majors: pd.DataFrame) -> pd.DataFrame:
+    n = len(df)
+    close = df["Close"].to_numpy(float)
+    kind, direction = np.full(n, None, dtype=object), np.full(n, None, dtype=object)
+    pos = np.full(n, np.nan)
+    ups = _first_breaks(close, majors["last_msh_pos"].to_numpy(), majors["last_msh"].to_numpy(), 1)
+    downs = _first_breaks(close, majors["last_msl_pos"].to_numpy(), majors["last_msl"].to_numpy(), -1)
+    for bar, side in sorted([(b, "bullish") for b in ups] + [(b, "bearish") for b in downs]):
+        state = _major_state(majors.iloc[bar - 1])
+        if state is None:
+            continue                                      # no structure yet: no event, pivot spent
+        against = "down" if side == "bullish" else "up"
+        kind[bar:], direction[bar:], pos[bar:] = ("choch" if state == against else "bos"), side, bar
+    return pd.DataFrame(dict(zip(EVENT_COLUMNS, (kind, direction, pos))), index=df.index)
+
+
+def structure_events(df: pd.DataFrame) -> pd.DataFrame:
+    """Per bar ``t``: the latest BOS/CHoCH at a bar ``<= t`` -- ``event_kind``
+    ("bos"/"choch"/None), ``event_direction`` ("bullish"/"bearish"/None) and
+    ``event_pos`` (NaN if none). Truncation-stable."""
+    return _events_table(df, major_pivots(df))
