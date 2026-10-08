@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-07 13:51:35 UTC",
+  "generated_at": "2026-10-08 07:38:26 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.21.1",
-    "bot": "2.2.0"
+    "bot": "2.2.1"
   },
   "releases": [
     {
@@ -1444,6 +1444,19 @@
       "versions": {
         "ui": "1.21.1",
         "bot": "2.2.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-08",
+      "last_seen": "2026-10-08",
+      "commit": "e7df674a",
+      "subject": "release(bot): 2.2.1 -- FVG level-source mode (inert, default all)",
+      "versions": {
+        "ui": "1.21.1",
+        "bot": "2.2.1"
       },
       "changed": [
         "bot"
