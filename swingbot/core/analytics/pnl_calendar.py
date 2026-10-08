@@ -32,8 +32,8 @@ CLOSED_STATUSES = frozenset({"win", "loss", "closed"})
 # matching contract update is exactly the undocumented change that test
 # exists to catch.
 ROW_KEYS = (
-    "trade_id", "ticker", "strategy", "horizon", "direction", "day",
-    "closed_at", "outcome", "pnl_amount", "r_multiple", "mfe_r", "mae_r",
+    "trade_id", "plan_id", "ticker", "strategy", "horizon", "direction", "day",
+    "opened_at", "closed_at", "outcome", "pnl_amount", "r_multiple", "mfe_r", "mae_r",
     "exit_efficiency", "tags", "auto_lesson",
 )
 
