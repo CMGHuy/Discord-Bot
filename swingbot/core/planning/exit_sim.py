@@ -16,8 +16,9 @@ from swingbot.core.risk_limits import planned_loss_pct
 from .stop_scope import plan_stop_ceiling
 from .plan_types import TradePlanV2
 from .params import RUNNER_FLOOR_FRACTION
-from .lifecycle import (at_or_beyond_stop, fill_price, limit_fill_price, limit_hit,
-                        pending_expired, pending_invalidated, stop_touched, trigger_hit)
+from .lifecycle import (at_or_beyond_stop, fill_price, limit_cancelled, limit_fill_price,
+                        limit_hit, pending_expired, pending_invalidated, stop_touched,
+                        trigger_hit)
 from .targets import _safe_atr_value
 from .time_exit import PROXY_BASIS, TIME_EXIT_REASON
 
@@ -66,8 +67,9 @@ class ExitResult:
     entry_price: float | None
     r_total: float               # sum over legs of fraction * signed_r
     legs: list                   # [{"fraction","exit_price","r","reason"}]
-    # Why a not_triggered row was excluded ("risk_cap"|"expired"|"invalidated");
-    # set only on the compression short's rows, None everywhere else.
+    # Why a not_triggered row was excluded: the compression short's
+    # "risk_cap"|"expired"|"invalidated", or a v131 cancellable limit's
+    # "expired"|"cancelled". None everywhere else.
     cancel_reason: str | None = None
 
 
@@ -572,24 +574,40 @@ def _compression_fill(df, j: int, entry_price: float, plan: TradePlanV2,
     return _walk_for(plan, scale_out)(df, j, entry_price, plan, max_holding_days)
 
 
+def _limit_unfilled(plan: TradePlanV2, cancelled: bool) -> ExitResult:
+    """An unfilled limit. Only a v131 cancellable limit says why (its
+    measurement counts expired and cancelled orders apart); every other limit
+    keeps the reason-less row it always produced."""
+    if plan.limit_cancel_level is None:
+        return _not_triggered()
+    return _not_triggered("cancelled" if cancelled else "expired")
+
+
 def _limit_entry_exit(df, signal_index: int, plan: TradePlanV2, scale_out: bool,
                       max_holding_days: int) -> ExitResult:
     """v113 §3: a resting limit at trigger_price, live for the plan's
     expiry_bars bars after the signal bar (Part A: 1, so bar t+1 only). Fills on
     the first bar that trades through it, at limit_fill_price; the fill bar is
     checked against the stop (_fill_bar_exit), then the normal exit walk runs
-    from the fill bar, so the time stop counts bars after ENTRY."""
+    from the fill bar, so the time stop counts bars after ENTRY.
+
+    v131: a bar that does not fill but trades beyond limit_cancel_level
+    cancels the order. The fill is checked first, so a bar that both fills
+    and extends the leg is a fill, and the fill-bar stop rule applies."""
     high, low, open_ = df["High"].values, df["Low"].values, df["Open"].values
     last = min(signal_index + plan.expiry_bars, len(df) - 1)
     for j in range(signal_index + 1, last + 1):
-        if not limit_hit(plan, float(high[j]), float(low[j])):
+        bar_high, bar_low = float(high[j]), float(low[j])
+        if not limit_hit(plan, bar_high, bar_low):
+            if limit_cancelled(plan, bar_high, bar_low):
+                return _limit_unfilled(plan, cancelled=True)
             continue
         entry_price = limit_fill_price(plan, float(open_[j]))
         early = _fill_bar_exit(df, j, entry_price, plan)
         if early is not None:
             return early
         return _walk_for(plan, scale_out)(df, j, entry_price, plan, max_holding_days)
-    return _not_triggered()
+    return _limit_unfilled(plan, cancelled=False)
 
 
 def _hold_cap_bars(plan: TradePlanV2, max_holding_days: int) -> int:
