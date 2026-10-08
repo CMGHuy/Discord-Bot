@@ -149,3 +149,50 @@ def test_rank_correlation_sign_and_floor():
     assert md.day_rank_correlation(rising, days, "same_day") == 1.0
     assert md.day_rank_correlation(falling, days, "same_day") == -1.0
     assert md.day_rank_correlation(rising[:9], days, "same_day") is None   # < MIN_DAYS
+
+
+def test_volume_counts_silent_days_in_the_denominator():
+    days = _days([-1.5] * 10)
+    keys = list(days)
+    counts = {keys[0]: 4, keys[1]: 2}                 # eight days never appear
+    row = md.volume_table(counts, days, "same_day")[0]
+    assert row == {"bucket": "< -1%", "days": 10, "mean": 0.6, "median": 0.0, "zero_share": 80.0}
+
+
+def test_volume_observed_restricts_the_denominator():
+    """A day with no scan is an outage, not a silent day."""
+    days = _days([-1.5] * 12)
+    keys = list(days)
+    counts = {keys[0]: 3}
+    row = md.volume_table(counts, days, "same_day", observed=set(keys[:10]))[0]
+    assert row["days"] == 10 and row["zero_share"] == 90.0
+
+
+def test_volume_below_the_day_floor_shows_days_only():
+    days = _days([-1.5] * 9)
+    row = md.volume_table({}, days, "same_day")[0]
+    assert row == {"bucket": "< -1%", "days": 9, "mean": None, "median": None, "zero_share": None}
+
+
+def test_sum_by_bucket_adds_keys_over_present_days_only():
+    days = _days([1.5, 1.5, -1.5])
+    keys = list(days)
+    values = {keys[0]: {"signals": 10, "taken": 4}, keys[2]: {"signals": 6, "taken": 1}}
+    table = {r["bucket"]: r for r in md.sum_by_bucket(values, days, "same_day")}
+    assert table["> +1%"] == {"bucket": "> +1%", "days": 1, "totals": {"signals": 10, "taken": 4}}
+    assert table["< -1%"]["totals"] == {"signals": 6, "taken": 1}
+    assert table["0 .. +1%"] == {"bucket": "0 .. +1%", "days": 0, "totals": {}}
+
+
+def test_funnel_stage_counts_reads_one_direction_and_folds_reasons():
+    snapshot = {
+        "bullish/base/base/confidence/ok": 7,
+        "bullish/base/base/confidence/min_confidence": 3,
+        "bullish/base/base/confidence/min_confluence": 2,
+        "bullish/base/base/send/ok": 4,
+        "bearish/short_universe/weak/confidence/ok": 9,
+        "malformed": 1,
+    }
+    assert md.funnel_stage_counts(snapshot) == {
+        "confidence:ok": 7, "confidence:rejected": 5, "send:ok": 4}
+    assert md.funnel_stage_counts(snapshot, "bearish") == {"confidence:ok": 9}

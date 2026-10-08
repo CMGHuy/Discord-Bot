@@ -153,3 +153,56 @@ def day_rank_correlation(rows: list[dict], days: dict, form: str, *,
     y = pd.Series([p[1] for p in pairs]).rank()
     rho = x.corr(y)
     return None if rho != rho else round(float(rho), 3)
+
+
+def volume_table(counts: dict[str, int], days: dict, form: str, *,
+                 observed: set[str] | None = None, regime: str | None = None) -> list[dict]:
+    """Alerts (or trades) per day, per bucket, over EVERY day in the bucket.
+
+    A day absent from `counts` is a zero, not a gap: the silent day is the
+    thing being measured. `observed` narrows the denominator to days the
+    source actually covered (live: days with at least one scan).
+    """
+    out = []
+    for bucket in BUCKETS:
+        day_list = [day for day in days_in(days, form, bucket, regime)
+                    if observed is None or day in observed]
+        row = {"bucket": bucket, "days": len(day_list), "mean": None, "median": None,
+               "zero_share": None}
+        if len(day_list) >= MIN_DAYS:
+            values = np.array([counts.get(day, 0) for day in day_list], dtype=float)
+            row["mean"] = round(float(values.mean()), 2)
+            row["median"] = round(float(np.median(values)), 2)
+            row["zero_share"] = round(float((values == 0).mean() * 100.0), 1)
+        out.append(row)
+    return out
+
+
+def sum_by_bucket(day_values: dict[str, dict[str, float]], days: dict, form: str, *,
+                  regime: str | None = None) -> list[dict]:
+    """Per bucket, the key-wise sum of `day_values` over the days it holds."""
+    out = []
+    for bucket in BUCKETS:
+        day_list = [day for day in days_in(days, form, bucket, regime) if day in day_values]
+        totals: dict[str, float] = {}
+        for day in day_list:
+            for key, value in day_values[day].items():
+                totals[key] = totals.get(key, 0) + value
+        out.append({"bucket": bucket, "days": len(day_list), "totals": totals})
+    return out
+
+
+def funnel_stage_counts(snapshot: dict[str, int], direction: str = "bullish") -> dict[str, int]:
+    """{"<stage>:ok"|"<stage>:rejected": n} for one direction.
+
+    Keys are ShortFunnel.snapshot()'s "direction/source/mode/stage/reason";
+    every reason other than "ok" is a rejection at that stage.
+    """
+    out: dict[str, int] = {}
+    for key, count in snapshot.items():
+        parts = key.split("/")
+        if len(parts) != 5 or parts[0] != direction:
+            continue
+        name = f"{parts[3]}:{'ok' if parts[4] == 'ok' else 'rejected'}"
+        out[name] = out.get(name, 0) + count
+    return out
