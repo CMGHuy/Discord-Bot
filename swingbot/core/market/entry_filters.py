@@ -21,7 +21,7 @@ import pandas as pd
 
 from swingbot.core.market.indicators import atr, ema, macd, rolling_vwap, rsi, elliott_wave3_entries
 from swingbot.core.market.strategy_types import (
-    FIB_TOLERANCE_PCT, HORIZONS, MACD_PERIODS_BY_HORIZON, SR_VOLUME_MULTIPLE,
+    FIB_LIMIT, FIB_TOLERANCE_PCT, HORIZONS, MACD_PERIODS_BY_HORIZON, SR_VOLUME_MULTIPLE,
     STRATEGY_GATES, admits,
 )
 from swingbot.core.risk_limits import capped_planned_loss_pct
@@ -547,6 +547,19 @@ def fib_limit_cancel_at(df, index, horizon_key, direction):
     """The frozen swing high: a bar trading above it cancels the unfilled order."""
     row = _fib_limit_row(df, index, horizon_key) if direction == "bullish" else None
     return None if row is None else float(row["swing_high"])
+
+
+def fibonacci_limit_entries(df, horizon_key, params=None):
+    """Bullish arming bars of the v131 Fibonacci Limit; never bearish. While the
+    strategy is masked (it ships masked) this returns all-False without
+    walking the order book, so the live scan pays nothing for it."""
+    off = _off(df)
+    if not admits(FIB_LIMIT, "bullish", horizon_key):
+        return off, off.copy()
+    return fibonacci_limit_setups(df, horizon_key, params)["arm"].astype(bool), off
+
+
+ENTRY_FUNCS[FIB_LIMIT] = fibonacci_limit_entries
 
 
 DEFAULT_PARAMS["EMA Crossover"] = {

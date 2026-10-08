@@ -20,6 +20,8 @@ SR_VOLUME_MULTIPLE = 1.5  # breakout day volume must exceed this x the 20-day av
 V104_SHORTS = ("Bull Trap", "Vol Expansion Breakdown", "Earnings Gap Drift")
 # v113 Part A: short-only and 1w only; masked until its 2026 holdout shot passes.
 FADE_STRATEGY = "Downtrend Overbought Fade"
+# v131: a resting buy limit inside today's Fibonacci retracement zone (masked).
+FIB_LIMIT = "Fibonacci Limit"
 # v119: bearish-only first release from a TTM squeeze; 2w only after admission.
 COMPRESSION_SHORT = "First Bearish Compression Release"
 SHORT_STRATEGIES = V104_SHORTS + (FADE_STRATEGY, COMPRESSION_SHORT)
@@ -267,6 +269,9 @@ STRATEGY_GATES: dict[str, dict] = {
     "Downtrend Overbought Fade": {"directions": ()},
     # v119 ships masked; the 2w cell is admitted only after its pre-registered shot.
     "First Bearish Compression Release": {"directions": ()},
+    # v131 ships masked, out of backtest.ALL_STRATEGIES; its measurement unmasks
+    # it through entry_filters.gate_override. Live wiring is a follow-on spec.
+    FIB_LIMIT: {"directions": ()},
     # bullish-only: N=608 WR=85.2 ExpR=+0.140 excl=28% (train, PRE-v31 -- stale)
     "RSI": {"directions": ("bullish",)},
     # bullish-only: N=259 WR=81.1 ExpR=+0.071 excl=25% (train, PRE-v31 -- stale)

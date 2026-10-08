@@ -10,8 +10,8 @@ import numpy as np
 
 from swingbot import config
 from swingbot.core.market import levels, opex
-from swingbot.core.market.strategy_types import (BREAKEVEN_TRIGGER_FRACTION, COMPRESSION_SHORT, HORIZONS,
-                                                  SHORT_STRATEGIES)
+from swingbot.core.market.strategy_types import (BREAKEVEN_TRIGGER_FRACTION, COMPRESSION_SHORT,
+                                                  FIB_LIMIT, HORIZONS, SHORT_STRATEGIES)
 from swingbot.core.risk_limits import (HARD_MAX_PLANNED_LOSS_PCT, capped_planned_loss_pct,
                                        planned_loss_pct)
 from .acceptance_levels import stamp_confluence_acceptance, stamp_strategy_acceptance
@@ -219,6 +219,45 @@ def _fib_continuation_branch(inputs):
     return _branch_result(result, candidates)
 
 
+def _fib_limit_plan(entry, atr_val, swing_low, direction, horizon_key, candidate_levels,
+                    params=None):
+    """v131: (stop, tp1) priced from the limit `entry`. Stop = swing_low -
+    STRUCTURE_BUFFER_ATR x ATR14 through _bounded_stop under FIB_LIMIT's own
+    ceiling (capped at 2% below the limit out of STRUCTURAL_STOP_SCOPE, dropped
+    inside it); TP1 = select_structural_target over the Fibonacci candidates,
+    R measured from the limit. None when bearish, dropped, or no candidate
+    reaches the floor -- no order is placed."""
+    if direction != "bullish":
+        return None
+    if params is None:
+        from swingbot.scan_params import ScanParams
+        params = ScanParams.from_config()
+    stop_loss = _bounded_stop(entry, swing_low - STRUCTURE_BUFFER_ATR * atr_val, True,
+                              FIB_LIMIT, direction, horizon_key)
+    if stop_loss is None:
+        return None
+    take_profit = select_structural_target(
+        entry, stop_loss, True, candidate_levels,
+        params.min_risk_reward_ratio, params.max_risk_reward_ratio)
+    return None if take_profit is None else (stop_loss, take_profit)
+
+
+def _fib_limit_branch(inputs):
+    """Size a v131 Fibonacci Limit order from its frozen swing low; inputs.close
+    is the limit price (plan_entry_reference)."""
+    from swingbot.core.market.entry_filters import fib_limit_anchors
+
+    horizon = HORIZONS[inputs.horizon_key]
+    window = inputs.df.iloc[max(0, inputs.index + 1 - horizon["fib_lookback"]):inputs.index + 1]
+    swing_low = float(fib_limit_anchors(window, inputs.horizon_key)["swing_low"].iloc[-1])
+    if not np.isfinite(swing_low):
+        return None
+    candidates = fib_target_candidates(inputs.df, inputs.index, horizon, inputs.close)
+    result = _fib_limit_plan(inputs.close, inputs.atr_val, swing_low, inputs.direction,
+                             inputs.horizon_key, candidates, params=inputs.scan_params)
+    return _branch_result(result, candidates)
+
+
 def _atr_branch(inputs):
     """Size all non-structural strategies from the ATR target ladder."""
     applied_stop_mult = (
@@ -257,6 +296,7 @@ _STRUCTURAL_BRANCHES = {
 }
 _STRUCTURAL_BRANCHES.update({name: _short_branch for name in SHORT_STRATEGIES})
 _STRUCTURAL_BRANCHES[COMPRESSION_SHORT] = _compression_branch
+_STRUCTURAL_BRANCHES[FIB_LIMIT] = _fib_limit_branch
 
 
 # --- v131: resting-limit pricing (PLAN_SHAPES' optional "limit_price") ------
@@ -279,7 +319,20 @@ class LimitPricer:
     strict_fill: bool = True
 
 
-LIMIT_PRICERS: dict[str, LimitPricer] = {}
+def _fib_zone_price(df, index, horizon_key, direction):
+    from swingbot.core.market.entry_filters import fib_limit_price_at
+    return fib_limit_price_at(df, index, horizon_key, direction)
+
+
+def _fib_zone_cancel(df, index, horizon_key, direction):
+    from swingbot.core.market.entry_filters import fib_limit_cancel_at
+    return fib_limit_cancel_at(df, index, horizon_key, direction)
+
+
+LIMIT_PRICERS: dict[str, LimitPricer] = {
+    # v131 Fibonacci Limit: swing_high - L x leg, cancelled above the swing high.
+    "fib_zone": LimitPricer(price=_fib_zone_price, cancel_level=_fib_zone_cancel),
+}
 
 
 def limit_pricer_for(strategy: str) -> LimitPricer | None:
