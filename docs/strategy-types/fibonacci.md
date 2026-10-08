@@ -259,6 +259,7 @@ losses.
 | v103 A | stop `b` ATR past the tested level (b ∈ 0.1/0.25/0.5), drop-don't-cap | bullish **FAILED VALIDATION** (2024-25: N=190, WR 23.2%, ExpR +0.313, lower bound −0.203). Shot spent |
 | v103 C | "Fibonacci Continuation": enter on the break of the swing extreme after a held 0.382–d_max retracement | NO-LIFT (bullish Stage 2: 6/11 folds; bearish Stage 1). Ships masked |
 | v104 | structural stop (drop, don't cap) instead of the flat 2% cap | bullish NO-LIFT at Stage 2 (1 of 3 folds qualifies); holdout shot not spent, remains available |
+| v131 | "Fibonacci Limit": a resting buy limit at swing_high − L × leg, armed ahead of the zone, strict trade-through, cancelled above the swing high (L ∈ 0.5/0.618, N ∈ 3/5/10) | no lift at Stage 1 on TRAIN: no cell beats the reference ExpR (best +0.229 vs +0.259); holdout shot not spent; ships masked |
 
 **Main open problem:** because of the 2% cap, the plan's stop no longer reflects
 Fibonacci structure. It is a flat 2% stop, often *inside* the retracement zone

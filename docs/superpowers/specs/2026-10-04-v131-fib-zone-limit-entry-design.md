@@ -2,7 +2,7 @@
 
 **Version:** ui 1.21.1 · bot 2.0.1 (at writing)
 **Bump:** none (measurement plus a plan-shape field and a masked strategy entry that no live path reaches; live wiring is a follow-on spec)
-**Edge:** expectancy — a better entry price on the same stop raises R per win; the measurement decides whether adverse selection eats it
+**Edge:** expectancy — a better entry price on the same stop raises R per win; the measurement decides whether adverse selection eats it. Prediction did not hold: adverse selection ate the price improvement -- no cell beat the reference ExpR on TRAIN (best +0.229 vs +0.259), closed NO-LIFT at Stage 1.
 
 ## Why
 

@@ -5,6 +5,7 @@
 **Spec:** `docs/superpowers/specs/2026-10-04-v131-fib-zone-limit-entry-design.md`
 **Bump:** none (measurement plus a plan-shape field and a masked strategy entry that no live path reaches; live wiring is a follow-on spec)
 **Edge:** expectancy — a better entry price on the same stop raises R per win; the measurement decides whether adverse selection eats it
+**Progress:** Closed 2026-10-08. V131-01 … V131-10 done; V131-11 skipped: closed at Stage 1; V131-12 done; V131-13 pending.
 
 **Goal:** Add a masked `Fibonacci Limit` strategy — a resting buy limit armed ahead of today's Fibonacci retracement zone, priced, stopped and targeted from the limit price, filled only on a strict trade-through and cancelled if the leg extends first — and measure it against today's `Fibonacci` through Stage 0 (volume), Stage 1 (selection with profit clauses), Stage 2 (13 anchored folds) and one 2026 holdout shot.
 
