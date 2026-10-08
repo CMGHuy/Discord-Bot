@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import collections
 import contextlib
+import gzip
 import json
 import sys
 import time
@@ -333,22 +334,261 @@ def _cmd_reproduce(args):
     _write(args.out, reproduction(load_collects(args.rows)))
 
 
+# --- Stage 1: selection on TRAIN ------------------------------------------------------
+
+def neighbours(key: str) -> list[str]:
+    """Adjacent values on one axis of the L x N grid."""
+    ratio, life = parse_cell(key)
+    i, j = L_GRID.index(ratio), N_GRID.index(life)
+    out = [cell_key(L_GRID[a], life) for a in (i - 1, i + 1) if 0 <= a < len(L_GRID)]
+    return out + [cell_key(ratio, N_GRID[b]) for b in (j - 1, j + 1) if 0 <= b < len(N_GRID)]
+
+
+def plateau(passes: dict) -> list[str]:
+    """Cells that clear a tier together with every grid neighbour."""
+    return [key for key in CELLS if passes[key] and all(passes[n] for n in neighbours(key))]
+
+
+def profit_clauses(cell_stats, cell_fills, ref_stats, ref_trades) -> dict:
+    """Stage 1's profit clauses, all required of the winner: (a) ExpR above the
+    reference arm's, (b) fills at least half the reference's trade count,
+    (c) WR no more than 2.0pp below the reference's."""
+    exp, ref_exp = cell_stats.get("expectancy_r"), ref_stats.get("expectancy_r")
+    wr, ref_wr = cell_stats.get("win_rate"), ref_stats.get("win_rate")
+    return {"a_expr_beats_reference": exp is not None and ref_exp is not None and exp > ref_exp,
+            "b_fills_half_of_reference": cell_fills >= FILLS_SHARE * ref_trades,
+            "c_wr_within_2pp": wr is not None and ref_wr is not None and wr >= ref_wr - WR_SLACK_PP}
+
+
+def stage1(merged, *, n_resamples=BOOTSTRAP_RESAMPLES, seed=BOOTSTRAP_SEED) -> dict:
+    cells = {key: funnel.score_cell(merged["cells"][key]["rows"], MIN_N_TRAIN,
+                                    n_resamples=n_resamples, seed=seed) for key in CELLS}
+    plateau1 = plateau({key: cells[key]["tier1"]["clears"] for key in CELLS})
+    plateau2 = plateau({key: cells[key]["tier2"]["clears"] for key in CELLS})
+    winner, tier = funnel._pick_winner(cells, plateau1, plateau2)
+    reference = merged["reference"]
+    clauses = None if winner is None else profit_clauses(
+        cells[winner]["stats"], len(merged["cells"][winner]["rows"]),
+        funnel.pooled(reference), len(reference))
+    return {"cells": cells, "plateau_tier1": plateau1, "plateau_tier2": plateau2,
+            "winner": winner, "winner_tier": tier, "profit_clauses": clauses,
+            "passes": clauses is not None and all(clauses.values())}
+
+
+# --- Stage 2: anchored folds ------------------------------------------------------------
+
+def fold_pick(merged, year):
+    """Re-select on 2010..year-1: the highest-ExpR cell with N >= 30 there."""
+    best = None
+    for key in CELLS:
+        stats = funnel.pooled(funnel.year_rows(merged["cells"][key]["rows"],
+                                               funnel.TRAIN_START_YEAR, year - 1))
+        if stats["n"] < MIN_N_TRAIN or stats["expectancy_r"] is None:
+            continue
+        if best is None or stats["expectancy_r"] > best[1]:
+            best = (key, stats["expectancy_r"])
+    return None if best is None else best[0]
+
+
+def stage2(merged) -> dict:
+    folds = []
+    for year in FOLD_YEARS:
+        key = fold_pick(merged, year)
+        stats = None if key is None else funnel.pooled(
+            funnel.year_rows(merged["cells"][key]["rows"], year, year))
+        folds.append({"test_year": year, "tol": key, "stats": stats})
+    return {"folds": folds, "verdict": funnel.fold_verdict(folds)}
+
+
+def evaluate(merged, *, n_resamples=BOOTSTRAP_RESAMPLES, seed=BOOTSTRAP_SEED) -> dict:
+    """Stages 1-2. Stage 2 runs only behind a Stage 1 winner that met every
+    profit clause; disclosures are reported for every cell either way."""
+    first = stage1(merged, n_resamples=n_resamples, seed=seed)
+    second = stage2(merged) if first["passes"] else None
+    proceed = second is not None and second["verdict"]["clears"]
+    closed_at = None if proceed else ("stage1" if second is None else "stage2")
+    reference = merged["reference"]
+    return {"universe_n": merged["universe_n"], "stage1": first, "stage2": second,
+            "proceed_to_holdout": proceed, "closed_at": closed_at,
+            "winner": first["winner"] if proceed else None,
+            "tier": first["winner_tier"] if proceed else None,
+            "reference": {"stats": funnel.pooled(reference), "trades": len(reference),
+                          **disclosures(reference)},
+            "disclosures": {key: disclosures(merged["cells"][key]["rows"], merged["cells"][key]["orders"])
+                            for key in CELLS}}
+
+
+# --- Stage 3: the holdout (one shot) ----------------------------------------------------
+
+def holdout_window(frames) -> tuple:
+    """2026-01-01 to the cache end at the time of the shot."""
+    return HOLDOUT_START, max(str(frame.index[-1].date()) for frame in frames.values())
+
+
+def check_shot_allowed(out_path, cache_end=None) -> None:
+    """One shot, ever: the results directory is the ledger. A single
+    sealed-thin shot may be retried once, when the cache reaches THIN_REOPEN."""
+    out = Path(out_path)
+    if out.parent.resolve() != Path(RESULTS).resolve() or not out.name.endswith("-v131-holdout.json"):
+        raise SystemExit(f"--out must be {RESULTS}/<date>-v131-holdout.json so the one-shot rule sees it")
+    if out.exists():
+        raise SystemExit(f"holdout output already exists: {out}")
+    prior = sorted(Path(RESULTS).glob("*-v131-holdout.json"))
+    if not prior:
+        return
+    statuses = [json.loads(path.read_text(encoding="utf-8")).get("status") for path in prior]
+    if statuses != ["sealed-thin"]:
+        raise SystemExit(f"the v131 holdout shot is spent ({prior[-1].name})")
+    if cache_end is not None and cache_end < THIN_REOPEN:
+        raise SystemExit(f"sealed-thin; the one retry waits for the cache to reach {THIN_REOPEN}")
+
+
+def holdout_verdict(rows, reference, tier, *, n_resamples=BOOTSTRAP_RESAMPLES,
+                    seed=BOOTSTRAP_SEED) -> dict:
+    """Fewer than 15 fills is sealed-thin (shot unspent). Otherwise the winner
+    is scored at the tier it held on TRAIN, plus profit clause (a) against the
+    reference arm on the same holdout. The badge is computed, never gating:
+    VALIDATED only for a Tier 1 winner that passes, WEAK for a Tier 2 pass."""
+    fills = len(rows)
+    if fills < MIN_HOLDOUT_FILLS:
+        return {"status": "sealed-thin", "fills": fills}
+    scored = funnel.score_cell(rows, MIN_N_VALIDATION, n_resamples=n_resamples, seed=seed)
+    reference_stats = funnel.pooled(reference)
+    clauses = dict(scored["tier1" if tier == 1 else "tier2"]["clauses"])
+    clauses["a_expr_beats_reference"] = profit_clauses(
+        scored["stats"], fills, reference_stats, len(reference))["a_expr_beats_reference"]
+    passes = all(clauses.values())
+    return {"status": "scored", "tier": tier, "fills": fills, "stats": scored["stats"],
+            "lower_bound": scored["lower_bound"], "reference": reference_stats,
+            "clauses": clauses, "passes": passes,
+            "badge": ("VALIDATED" if tier == 1 else "WEAK") if passes else None}
+
+
+def holdout_rows(winner, frames, asof_map, window, progress=None) -> tuple:
+    rows, orders, reference = [], collections.Counter(), []
+    for horizon in ALL_HZ:
+        one = cell_rows(winner, frames, asof_map, horizon, window, progress=progress)
+        rows.extend(one["rows"])
+        orders.update(one["orders"])
+        reference.extend(reference_rows(frames, asof_map, horizon, window, progress=progress))
+    return rows, dict(orders), reference
+
+
+def registry_row(payload, run_date) -> dict:
+    stats = payload["stats"]
+    return {"source": "strategy", "strategy": FIB_LIMIT, "horizon": None, "status": payload["badge"],
+            "n": stats["n"],
+            "win_rate": None if stats["win_rate"] is None else round(stats["win_rate"], 1),
+            "expectancy_r": None if stats["expectancy_r"] is None else round(stats["expectancy_r"], 3),
+            "window": f"{payload['window'][0]}..{payload['window'][1]}", "run_date": run_date}
+
+
+# --- commands (evaluate, holdout, emit-registry) -----------------------------------------
+
+def _require_reproduction(path, note) -> None:
+    """No cell is read until the reference reproduces v103, or a committed
+    note explains the difference."""
+    require_committed(path)
+    if json.loads(Path(path).read_text(encoding="utf-8")).get("matches"):
+        return
+    if note is None:
+        raise SystemExit("the reference does not reproduce v103: commit a --reproduction-note first")
+    require_committed(note)
+
+
+def _cmd_evaluate(args):
+    require_preregistration(args.preregistration)
+    require_committed(args.stage0)
+    if not json.loads(Path(args.stage0).read_text(encoding="utf-8")).get("passes"):
+        raise SystemExit("Stage 0 closed the mechanism (volume-dead); nothing to evaluate")
+    _require_reproduction(args.reproduction, args.reproduction_note)
+    _write(args.out, evaluate(load_collects(args.rows)))
+
+
+def _holdout_target(args) -> dict:
+    require_preregistration(args.preregistration)
+    require_committed(args.evaluate)
+    evaluated = json.loads(Path(args.evaluate).read_text(encoding="utf-8"))
+    if not evaluated.get("proceed_to_holdout"):
+        raise SystemExit("the mechanism did not proceed to the holdout")
+    return evaluated
+
+
+def _cmd_holdout(args):
+    evaluated = _holdout_target(args)
+    check_shot_allowed(args.out)
+    frames, asof_map = _frames(args)
+    window = holdout_window(frames)
+    check_shot_allowed(args.out, cache_end=window[1])
+    progress = Progress(2 * len(ALL_HZ) * len(frames))
+    rows, orders, reference = holdout_rows(evaluated["winner"], frames, asof_map, window, progress)
+    result = holdout_verdict(rows, reference, evaluated["tier"])
+    payload = {"candidate": evaluated["winner"], "window": list(window), "universe_n": len(frames),
+               "evaluate": str(args.evaluate), "preregistration": str(args.preregistration), **result}
+    if result["status"] == "scored":
+        payload.update(rows=rows, reference_rows=reference, disclosures=disclosures(rows, orders),
+                       reference_disclosures=disclosures(reference))
+    _write(args.out, payload)
+
+
+FEATURE_ROW_KEYS = ("ticker", "horizon_key", "entry_date", "signal_index", "fill_index", "fill_date",
+                    "fill_price", "limit_price", "stop_loss", "take_profit", "outcome", "r_multiple",
+                    "context")
+
+
+def feature_rows(merged) -> dict:
+    """Every TRAIN fill per cell with its arming-bar entry_context, for the
+    queued meta-label spec (B). Recorded only: nothing here is split, scored
+    or read by any stage."""
+    return {key: [{name: row[name] for name in FEATURE_ROW_KEYS} for row in merged["cells"][key]["rows"]]
+            for key in CELLS}
+
+
+def _cmd_features(args):
+    require_preregistration(args.preregistration)
+    merged = load_collects(args.rows)
+    payload = {"window": list(TRAIN), "universe_n": merged["universe_n"], "cells": feature_rows(merged)}
+    with gzip.open(args.out, "wt", encoding="utf-8") as handle:
+        json.dump(payload, handle, default=str)
+
+
+def _cmd_emit(args):
+    require_committed(args.holdout_json)
+    payload = json.loads(Path(args.holdout_json).read_text(encoding="utf-8"))
+    if payload.get("status") != "scored" or not payload.get("passes"):
+        raise SystemExit("refusing to emit a failing or sealed-thin holdout")
+    require_preregistration(payload["preregistration"])
+    merge_registry(args.registry, [registry_row(payload, args.run_date)])
+
+
 def _parser():
     parser = argparse.ArgumentParser(description="v131 Fibonacci Limit funnel")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    for name in ("collect", "stage0", "reproduce"):
+    for name in ("collect", "stage0", "reproduce", "evaluate", "features", "holdout"):
         command = sub.add_parser(name)
         command.add_argument("--out", required=True)
         command.add_argument("--preregistration", required=True)
-    sub.choices["collect"].add_argument("--universe")
-    sub.choices["collect"].add_argument("--tickers", help="comma-separated subset, smoke runs only")
+    for name in ("collect", "holdout"):
+        sub.choices[name].add_argument("--universe")
+        sub.choices[name].add_argument("--tickers", help="comma-separated subset, smoke runs only")
     sub.choices["collect"].add_argument("--horizon", required=True)
-    for name in ("stage0", "reproduce"):
+    for name in ("stage0", "reproduce", "evaluate", "features"):
         sub.choices[name].add_argument("--rows", nargs="+", required=True)
+    evaluate_parser = sub.choices["evaluate"]
+    evaluate_parser.add_argument("--stage0", required=True)
+    evaluate_parser.add_argument("--reproduction", required=True)
+    evaluate_parser.add_argument("--reproduction-note")
+    sub.choices["holdout"].add_argument("--evaluate", required=True)
+    emit = sub.add_parser("emit-registry")
+    emit.add_argument("--holdout-json", required=True)
+    emit.add_argument("--registry", required=True)
+    emit.add_argument("--run-date", required=True)
     return parser
 
 
-COMMANDS = {"collect": _cmd_collect, "stage0": _cmd_stage0, "reproduce": _cmd_reproduce}
+COMMANDS = {"collect": _cmd_collect, "stage0": _cmd_stage0, "reproduce": _cmd_reproduce,
+            "evaluate": _cmd_evaluate, "features": _cmd_features, "holdout": _cmd_holdout,
+            "emit-registry": _cmd_emit}
 
 
 def main(argv=None) -> int:
