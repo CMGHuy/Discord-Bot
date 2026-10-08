@@ -1,5 +1,8 @@
 from unittest.mock import patch
 
+import numpy as np
+import pytest
+
 from swingbot.core.backtesting.acceptance import ArmTrade, BootstrapResult
 from swingbot.core.backtesting import acceptance_harvest as ah
 
@@ -112,3 +115,53 @@ def test_evaluate_harvest_permutation_skipped_at_walkforward():
                                 structurally_immune_to_wr=True)
     assert result.clause("permutation").verdict == "SKIPPED"
     assert result.verdict == "PASS"
+
+
+def _pair(ticker, r_base, r_comp, outcome="win"):
+    base = _trade(ticker, r_base, outcome)
+    comp = _trade(ticker, r_comp, outcome)
+    return base, comp
+
+
+def test_mde_expectancy_r_is_unchanged_by_v129():
+    pop = [_trade(f"T{i}", 0.2 if i % 2 else -1.0) for i in range(20)]
+    assert ah.mde_expectancy_r(pop, target_n=30) == pytest.approx(0.3952139647010678, abs=1e-12)
+
+
+def test_paired_mde_matches_hand_computation():
+    # dR = [+0.1, -0.1, +0.3, +0.1]; var(ddof=1) = 0.08/3; one trade per
+    # ticker -> design effect 1; target_n 4 -> (1.6449+0.8416)*sqrt(var/4).
+    pairs = [_pair("A", 0.5, 0.6), _pair("B", -1.0, -1.1),
+             _pair("C", 0.2, 0.5), _pair("D", 1.0, 1.1)]
+    baseline = [b for b, _ in pairs]
+    component = [c for _, c in pairs]
+    expected = (1.6449 + 0.8416) * np.sqrt((0.08 / 3) / 4)
+    got = ah.mde_expectancy_r_paired(baseline, component, target_n=4)
+    assert got == pytest.approx(expected, rel=1e-9)
+    assert got == pytest.approx(0.20302187, abs=1e-6)
+
+
+def test_paired_mde_shrinks_with_target_n_and_ignores_unpaired():
+    pairs = [_pair(f"T{i}", 0.3, 0.3 + (0.2 if i % 2 else -0.1)) for i in range(20)]
+    baseline = [b for b, _ in pairs]
+    component = [c for _, c in pairs] + [_trade("ONLY_COMP", 5.0)]
+    small = ah.mde_expectancy_r_paired(baseline, component, target_n=20)
+    large = ah.mde_expectancy_r_paired(baseline, component, target_n=200)
+    assert large < small
+    assert len(ah.paired_r_deltas(baseline, component)) == 20
+
+
+def test_paired_mde_none_below_two_pairs_or_zero_target():
+    b, c = _pair("A", 0.5, 0.6)
+    assert ah.mde_expectancy_r_paired([b], [c], target_n=10) is None
+    pairs = [_pair("A", 0.5, 0.6), _pair("B", 0.1, 0.0)]
+    assert ah.mde_expectancy_r_paired([p[0] for p in pairs], [p[1] for p in pairs],
+                                      target_n=0) is None
+
+
+def test_paired_deltas_skip_untriggered_and_missing_r():
+    b1, c1 = _pair("A", 0.5, 0.6)
+    b2 = _trade("B", None, "not_triggered")
+    c2 = _trade("B", -1.0, "loss")
+    deltas = ah.paired_r_deltas([b1, b2], [c1, c2])
+    assert [(t.ticker, round(d, 9)) for t, d in deltas] == [("A", 0.1)]

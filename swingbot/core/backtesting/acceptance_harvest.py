@@ -29,6 +29,7 @@ from .acceptance import (
 
 __all__ = [
     "HARVEST_VERSION", "WIN_RATE_FLOOR_PP", "mde_expectancy_r",
+    "paired_r_deltas", "mde_expectancy_r_paired",
     "evaluate_harvest", "permutation_p_expectancy", "render_markdown",
 ]
 
@@ -76,6 +77,45 @@ def mde_expectancy_r(population, *, target_n: int, power: float = 0.80,
     if n_eff <= 0:
         return None
     return float((z_a + z_b) * np.sqrt(2.0 * variance / n_eff))
+
+
+def paired_r_deltas(baseline, component) -> list:
+    """(baseline_trade, component R - baseline R) for every pairing key that
+    is CLOSED with an R in both arms, in baseline order. v129: the paired
+    exit-only design replays the same entries under two exit rules, so the
+    per-trade CHANGE in R is the quantity whose variance matters."""
+    comp_by_key = {t.key: t for t in component
+                   if t.outcome in CLOSED and t.r_multiple is not None}
+    out = []
+    for trade in baseline:
+        if trade.outcome not in CLOSED or trade.r_multiple is None:
+            continue
+        other = comp_by_key.get(trade.key)
+        if other is not None:
+            out.append((trade, other.r_multiple - trade.r_multiple))
+    return out
+
+
+def mde_expectancy_r_paired(baseline, component, *, target_n: int,
+                            power: float = 0.80, alpha: float = ALPHA) -> float | None:
+    """v129 Stage 0: smallest ΔExpR detectable at `power` (one-sided
+    `alpha`) for a PAIRED exit-only design -- (z_a + z_b) * sqrt(var(ΔR) /
+    n_eff), var over per-trade ΔR (ddof=1), n_eff = target_n / design effect
+    of the paired baseline trades. No factor 2: the variance of a paired
+    difference already carries both arms. mde_expectancy_r (unpaired) is
+    left byte-identical so v92's closed results stay reproducible."""
+    pairs = paired_r_deltas(baseline, component)
+    if len(pairs) < 2 or target_n <= 0:
+        return None
+    z_a = _Z_ALPHA_ONE_SIDED.get(alpha)
+    z_b = _Z_POWER.get(power)
+    if z_a is None or z_b is None:
+        raise ValueError(f"no tabulated z for alpha={alpha}, power={power}")
+    variance = float(np.var([delta for _, delta in pairs], ddof=1))
+    n_eff = target_n / design_effect([trade for trade, _ in pairs])
+    if n_eff <= 0:
+        return None
+    return float((z_a + z_b) * np.sqrt(variance / n_eff))
 
 
 def _clause_expectancy_gain(baseline, component, n_resamples, seed,
