@@ -256,3 +256,28 @@ def test_summarise_pairs_each_event_with_its_null_mean():
     assert out["counters"]["dropped_window"] == 2 and out["skipped"]["empty_frame"] == 1
     assert out["event_outcomes"] == Counter(target=1, stop=1)
     assert out["drift"][5] == (1, 0.5) and out["rank"] == {}
+
+
+@pytest.mark.parametrize("flag,value", [("--start", "2013-01-01"), ("--end", "2015-12-31")])
+def test_a_non_registered_window_is_refused_on_a_real_run(tmp_path, capsys, flag, value):
+    cache, membership = _universe_fixture(tmp_path)
+    assert screen_idea.main(_argv(tmp_path, cache, membership, flag, value)) == 2
+    assert "pre-registered window" in capsys.readouterr().err
+    assert not (tmp_path / "ledger.jsonl").exists()
+    assert not (tmp_path / "results").exists()
+
+
+@pytest.mark.parametrize("flag,value", [("--start", "2013-01-01"), ("--end", "2015-12-31")])
+def test_a_non_registered_window_is_allowed_with_dry_run(tmp_path, flag, value):
+    cache, membership = _universe_fixture(tmp_path)
+    assert screen_idea.main(_argv(tmp_path, cache, membership, "--dry-run", "--tickers",
+                                  "AAA", flag, value)) == 0
+    assert not (tmp_path / "ledger.jsonl").exists()
+
+
+def test_results_doc_states_the_event_start_and_year_rule(tmp_path, capsys):
+    cache, membership = _universe_fixture(tmp_path)
+    screen_idea.main(_argv(tmp_path, cache, membership, "--dry-run", "--tickers", "AAA"))
+    out = capsys.readouterr().out
+    assert (f"events count from {screen_idea.EVENT_START}" in out
+            and f"{verdict.MIN_POSITIVE_YEARS} of {len(verdict.YEARS)} calendar years" in out)

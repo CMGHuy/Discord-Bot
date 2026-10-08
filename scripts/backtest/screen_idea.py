@@ -188,6 +188,9 @@ def refusal(args, rows) -> str | None:
         return f"window end {args.end} is after {WINDOW_END}; the screen never reads 2020+"
     if args.start > args.end:
         return f"window start {args.start} is after its end {args.end}"
+    if not args.dry_run and (args.start, args.end) != (WINDOW_START, WINDOW_END):
+        return (f"window {args.start}..{args.end} is not the pre-registered window "
+                f"{WINDOW_START}..{WINDOW_END}; a real run cannot spend the one shot on it")
     if args.tickers and not args.dry_run:
         return "--tickers is a smoke test and needs --dry-run, so it cannot spend the one shot"
     if any(row["id"] == ledger_id(args.idea) for row in rows):
@@ -253,8 +256,11 @@ def _render_head(idea, v, run) -> list:
         f"**Ledger id:** `{run['ledger_id']}` (instrument `{INSTRUMENT}`); BH q = "
         f"{_fmt(run['q'], '.4f')} across the ledger (reported, never gating).", "",
         f"**Run:** {run['date']}; window {run['start']}..{run['end']}; "
+        f"events count from {EVENT_START} (earlier bars only prime the indicators); the "
+        f"year rule is {verdict.MIN_POSITIVE_YEARS} of {len(verdict.YEARS)} calendar years "
+        f"({verdict.YEARS[0]}-{verdict.YEARS[-1]}); "
         f"`python scripts/backtest/screen_idea.py --idea {idea.name}`; null K = {null.K}, "
-        f"seed 42 per (idea, ticker); bootstrap {stats.WEEK_BOOTSTRAP_RESAMPLES:,} "
+        f"seed {null.SEED_BASE} per (idea, ticker); bootstrap {stats.WEEK_BOOTSTRAP_RESAMPLES:,} "
         f"week resamples, seed {stats.WEEK_BOOTSTRAP_SEED}.", "",
         f"**Trigger:** {idea.summary} ({idea.source}); params {params}; time cap "
         f"{idea.time_cap_bars} bars; {idea.direction} only.", "",
@@ -285,12 +291,12 @@ def _render_universe(universe, summary) -> list:
 def _render_verdict(v) -> list:
     return [f"## Verdict: {v.verdict}", "",
             "| Clause | Measured | Rule | Holds |", "|---|---|---|---|",
-            f"| ΔExpR = mean(R_event − mean R_null) | {_fmt(v.delta_exp_r)}R | ≥ +0.10R | {_yes(v.clauses['exp_r'])} |",
+            f"| ΔExpR = mean(R_event − mean R_null) | {_fmt(v.delta_exp_r)}R | ≥ {verdict.PASS_EXP_R:+.2f}R | {_yes(v.clauses['exp_r'])} |",
             f"| lower 95% bound, week-clustered bootstrap | {_fmt(v.ci_low)}R (upper {_fmt(v.ci_high)}R) | > 0 | {_yes(v.clauses['ci'])} |",
-            f"| years with mean(d) > 0 | {v.years_positive} of {len(verdict.YEARS)} | ≥ 7 | {_yes(v.clauses['years'])} |",
-            f"| kept events N | {v.n} | ≥ 300 | {_yes(v.clauses['n'])} |", "",
+            f"| years with mean(d) > 0 | {v.years_positive} of {len(verdict.YEARS)} | ≥ {verdict.MIN_POSITIVE_YEARS} | {_yes(v.clauses['years'])} |",
+            f"| kept events N | {v.n} | ≥ {verdict.MIN_N} | {_yes(v.clauses['n'])} |", "",
             f"One-sided bootstrap p (share of resamples ≤ 0): {_fmt(v.p, '.4f')}. "
-            "N < 300 is `SCREEN-UNDERPOWERED` whatever the other clauses say."]
+            f"N < {verdict.MIN_N} is `SCREEN-UNDERPOWERED` whatever the other clauses say."]
 
 
 def _mix(outcomes: Counter) -> list:
@@ -355,7 +361,7 @@ def record_path(path) -> str:
 
 def ledger_row(idea, v, record: str, day: str) -> dict:
     return {"id": ledger_id(idea.name), "date": day,
-            "hypothesis": (f"{idea.name}: {idea.summary}; fixed 1.5/3 ATR race vs K=20 "
+            "hypothesis": (f"{idea.name}: {idea.summary}; fixed {race.STOP_ATR}/{race.STOP_ATR * race.REWARD_RISK} ATR race vs K={null.K} "
                            f"matched null, cap {idea.time_cap_bars}, PIT S&P 500 "
                            "2010-2019, after costs (v140 screen)"),
             "instrument": INSTRUMENT, "n": v.n,
