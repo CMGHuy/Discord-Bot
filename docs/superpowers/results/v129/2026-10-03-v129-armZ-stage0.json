@@ -1,0 +1,51 @@
+{
+ "stage": 0,
+ "arm": "Z",
+ "verdict": "POWERED",
+ "mde_ceiling_r": 0.1,
+ "power": 0.8,
+ "cells": [
+  {
+   "cell": "m0.5_b0",
+   "observed_n": 8089,
+   "target_n": 4044,
+   "mde_r": 0.016485243683371054,
+   "powered": true
+  },
+  {
+   "cell": "m0.5_b0.25",
+   "observed_n": 8089,
+   "target_n": 4044,
+   "mde_r": 0.016484837897105097,
+   "powered": true
+  },
+  {
+   "cell": "m1_b0",
+   "observed_n": 8089,
+   "target_n": 4044,
+   "mde_r": 0.016485243683371054,
+   "powered": true
+  },
+  {
+   "cell": "m1_b0.25",
+   "observed_n": 8089,
+   "target_n": 4044,
+   "mde_r": 0.016484837897105097,
+   "powered": true
+  },
+  {
+   "cell": "m1.5_b0",
+   "observed_n": 8089,
+   "target_n": 4044,
+   "mde_r": 0.016485243683371054,
+   "powered": true
+  },
+  {
+   "cell": "m1.5_b0.25",
+   "observed_n": 8089,
+   "target_n": 4044,
+   "mde_r": 0.016484837897105097,
+   "powered": true
+  }
+ ]
+}
