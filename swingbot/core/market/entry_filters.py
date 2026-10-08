@@ -770,15 +770,32 @@ BRT_RETEST_PCT = {
 DEFAULT_PARAMS["Break & Retest"] = {"hold_tol_pct": 0.5}
 
 
+def _break_retest_levels(df, horizon_key):
+    """The broken levels Break & Retest trades against: the `sr_lookback`-bar
+    high / low as it stood `sr_lookback` bars earlier. Every value is built
+    from bars at or before its own index (shift(lookback)) -- no lookahead.
+    Shared by break_retest_entries and break_retest_level_at (v129)."""
+    lookback = HORIZONS[horizon_key]["sr_lookback"]
+    resistance = df["High"].rolling(lookback).max().shift(lookback)
+    support = df["Low"].rolling(lookback).min().shift(lookback)
+    return resistance, support
+
+
+def break_retest_level_at(df, index, horizon_key, direction):
+    """v129: the broken level a Break & Retest entry at `index` leans on --
+    resistance for a bullish retest, support for a bearish one. None while
+    the series is still warming up."""
+    resistance, support = _break_retest_levels(df, horizon_key)
+    value = float((resistance if direction == "bullish" else support).iloc[index])
+    return value if np.isfinite(value) else None
+
+
 def break_retest_entries(df, horizon_key, params=None):
     p = _params("Break & Retest", params)
-    h = HORIZONS[horizon_key]
     g = compute_shared_gates(df)
     close, high, low = df["Close"], df["High"], df["Low"]
-    lookback = h["sr_lookback"]
 
-    resistance = high.rolling(lookback).max().shift(lookback)
-    support = low.rolling(lookback).min().shift(lookback)
+    resistance, support = _break_retest_levels(df, horizon_key)
     vol_ratio = df["Volume"] / df["Volume"].rolling(20).mean()
     recent = BRT_RECENT_BARS.get(horizon_key, 10)
 
