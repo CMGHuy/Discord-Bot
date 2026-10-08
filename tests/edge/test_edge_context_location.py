@@ -54,8 +54,8 @@ def test_pre_existing_keys_are_unchanged(direction):
 
 
 def test_feature_keys_append_the_nine_v125_keys_in_order():
-    assert len(FEATURE_KEYS) == 43
-    assert FEATURE_KEYS[34:] == V125_NEW
+    assert len(FEATURE_KEYS) == 51
+    assert FEATURE_KEYS[34:43] == V125_NEW
     assert FEATURE_KEYS[:34] == tuple(dict.fromkeys(FEATURE_KEYS[:34]))     # no key moved or duplicated
     assert set(LOCATION_KEYS) | set(PROVENANCE_KEYS) == set(V125_NEW)
 

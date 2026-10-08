@@ -7,7 +7,7 @@ from swingbot import config
 from swingbot.core.edge.gates import gap_stats, stop_beyond_gap_noise
 from swingbot.core.market.indicators import adx, atr, ema, rsi
 from swingbot.core.market.location import location_features
-from swingbot.core.market.structure import structure_features
+from swingbot.core.market.structure import major_structure_features, structure_features
 from swingbot.core.planning.builders import CLAMP_HEADROOM_PCT
 from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, planned_loss_pct
 from swingbot.core.scanning.regime import _HTF_EMA_PERIOD
@@ -23,7 +23,10 @@ FEATURE_KEYS = ("stop_atr", "stop_pct", "planned_rr", "swing_high_atr", "swing_l
                 "impulse_range_decay",
                 # v125: plan provenance (plan_provenance) and location / leg / zone (market/location.py)
                 "target_capped", "stop_clamped", "zone_dist_atr", "room_atr", "range_pos", "leg_phase",
-                "zone_state", "zone_touches", "zone_departure_atr")
+                "zone_state", "zone_touches", "zone_departure_atr",
+                # v130: major-tier structure and BOS/CHoCH events
+                "structure_state_major", "structure_aligned_major", "major_sh_atr", "major_sl_atr",
+                "struct_event_last", "struct_event_bars_ago", "last_sl_reaction_atr", "last_sh_reaction_atr")
 PROVENANCE_KEYS = ("target_capped", "stop_clamped")
 CAP_TOLERANCE = 1e-6       # frozen: relative price tolerance for the synthetic-target identity
 CLAMP_TOLERANCE = 1e-6     # frozen: absolute tolerance, in percentage points, for the clamp identity
@@ -95,6 +98,7 @@ def entry_context(df, *, direction: str, horizon_key: str, stop: float, target: 
                atr_pctile_250=_pctile(atr_series), rsi_14=_number(rsi(df["Close"], 14).iloc[-1]),
                adx_14=_number(adx(df, 14).iloc[-1]), dow=int(df.index[-1].dayofweek))
     out.update(structure_features(df, direction))   # v121; all None below 60 bars
+    out.update(major_structure_features(df, direction))   # v130; all None below 60 bars
     out.update(location_features(df, direction, horizon_key))   # v125; all None below 60 bars
     volume_mean = df["Volume"].rolling(20).mean().iloc[-1]
     out["vol_ratio_20"] = _number(df["Volume"].iloc[-1] / volume_mean) if volume_mean else None
