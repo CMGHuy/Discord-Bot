@@ -3,14 +3,15 @@ from __future__ import annotations
 
 import math
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
 
 from swingbot import config
 from swingbot.core.market import levels, opex
-from swingbot.core.market.strategy_types import (BREAKEVEN_TRIGGER_FRACTION, COMPRESSION_SHORT, HORIZONS,
-                                                  SHORT_STRATEGIES)
+from swingbot.core.market.strategy_types import (BREAKEVEN_TRIGGER_FRACTION, COMPRESSION_SHORT,
+                                                  FIB_LIMIT, HORIZONS, SHORT_STRATEGIES)
 from swingbot.core.risk_limits import (HARD_MAX_PLANNED_LOSS_PCT, capped_planned_loss_pct,
                                        planned_loss_pct)
 from .acceptance_levels import stamp_confluence_acceptance, stamp_strategy_acceptance
@@ -218,6 +219,45 @@ def _fib_continuation_branch(inputs):
     return _branch_result(result, candidates)
 
 
+def _fib_limit_plan(entry, atr_val, swing_low, direction, horizon_key, candidate_levels,
+                    params=None):
+    """v131: (stop, tp1) priced from the limit `entry`. Stop = swing_low -
+    STRUCTURE_BUFFER_ATR x ATR14 through _bounded_stop under FIB_LIMIT's own
+    ceiling (capped at 2% below the limit out of STRUCTURAL_STOP_SCOPE, dropped
+    inside it); TP1 = select_structural_target over the Fibonacci candidates,
+    R measured from the limit. None when bearish, dropped, or no candidate
+    reaches the floor -- no order is placed."""
+    if direction != "bullish":
+        return None
+    if params is None:
+        from swingbot.scan_params import ScanParams
+        params = ScanParams.from_config()
+    stop_loss = _bounded_stop(entry, swing_low - STRUCTURE_BUFFER_ATR * atr_val, True,
+                              FIB_LIMIT, direction, horizon_key)
+    if stop_loss is None:
+        return None
+    take_profit = select_structural_target(
+        entry, stop_loss, True, candidate_levels,
+        params.min_risk_reward_ratio, params.max_risk_reward_ratio)
+    return None if take_profit is None else (stop_loss, take_profit)
+
+
+def _fib_limit_branch(inputs):
+    """Size a v131 Fibonacci Limit order from its frozen swing low; inputs.close
+    is the limit price (plan_entry_reference)."""
+    from swingbot.core.market.entry_filters import fib_limit_anchors
+
+    horizon = HORIZONS[inputs.horizon_key]
+    window = inputs.df.iloc[max(0, inputs.index + 1 - horizon["fib_lookback"]):inputs.index + 1]
+    swing_low = float(fib_limit_anchors(window, inputs.horizon_key)["swing_low"].iloc[-1])
+    if not np.isfinite(swing_low):
+        return None
+    candidates = fib_target_candidates(inputs.df, inputs.index, horizon, inputs.close)
+    result = _fib_limit_plan(inputs.close, inputs.atr_val, swing_low, inputs.direction,
+                             inputs.horizon_key, candidates, params=inputs.scan_params)
+    return _branch_result(result, candidates)
+
+
 def _atr_branch(inputs):
     """Size all non-structural strategies from the ATR target ladder."""
     applied_stop_mult = (
@@ -256,6 +296,83 @@ _STRUCTURAL_BRANCHES = {
 }
 _STRUCTURAL_BRANCHES.update({name: _short_branch for name in SHORT_STRATEGIES})
 _STRUCTURAL_BRANCHES[COMPRESSION_SHORT] = _compression_branch
+_STRUCTURAL_BRANCHES[FIB_LIMIT] = _fib_limit_branch
+
+
+# --- v131: resting-limit pricing (PLAN_SHAPES' optional "limit_price") ------
+#
+# A strategy whose PLAN_SHAPES entry names a registered pricer is traded as a
+# resting limit order priced at its alert bar: entry is the pricer's price, and
+# stop and targets are sized from it by the strategy's own branch. A strategy
+# without the key resolves to None everywhere below and builds exactly the
+# plan it always built (tests/backtesting/test_v131_witness.py).
+
+
+@dataclass(frozen=True)
+class LimitPricer:
+    """`price` and `cancel_level` are (df, index, horizon_key, direction) ->
+    float | None, frozen at bar `index` from bars <= index only. A None price
+    means no order. `strict_fill`: the limit fills only on a strict
+    trade-through, never on an exact touch."""
+    price: Callable
+    cancel_level: Callable
+    strict_fill: bool = True
+
+
+def _fib_zone_price(df, index, horizon_key, direction):
+    from swingbot.core.market.entry_filters import fib_limit_price_at
+    return fib_limit_price_at(df, index, horizon_key, direction)
+
+
+def _fib_zone_cancel(df, index, horizon_key, direction):
+    from swingbot.core.market.entry_filters import fib_limit_cancel_at
+    return fib_limit_cancel_at(df, index, horizon_key, direction)
+
+
+LIMIT_PRICERS: dict[str, LimitPricer] = {
+    # v131 Fibonacci Limit: swing_high - L x leg, cancelled above the swing high.
+    "fib_zone": LimitPricer(price=_fib_zone_price, cancel_level=_fib_zone_cancel),
+}
+
+
+def limit_pricer_for(strategy: str) -> LimitPricer | None:
+    """The strategy's registered pricer, or None when its shape names none. A
+    name with no registered pricer is a configuration error and raises."""
+    name = plan_shape_for(strategy).get("limit_price")
+    return None if name is None else LIMIT_PRICERS[name]
+
+
+def plan_entry_reference(df, index, strategy, horizon_key, direction) -> float | None:
+    """The price a strategy plan is sized and triggered from: the registered
+    limit price for a resting-limit strategy (None = no order at this bar),
+    otherwise strategy_entry_reference, unchanged."""
+    pricer = limit_pricer_for(strategy)
+    if pricer is None:
+        return strategy_entry_reference(df, index, strategy)
+    price = pricer.price(df, index, horizon_key, direction)
+    return None if price is None else float(price)
+
+
+def limit_order_fields(df, index, strategy, horizon_key, direction) -> dict:
+    """TradePlanV2 keyword overrides for a resting-limit strategy: the frozen
+    cancel level and the strict-fill flag. Empty for every other strategy,
+    so the plan keeps its dataclass defaults."""
+    pricer = limit_pricer_for(strategy)
+    if pricer is None:
+        return {}
+    level = pricer.cancel_level(df, index, horizon_key, direction)
+    return {"limit_cancel_level": None if level is None else float(level),
+            "limit_strict_fill": pricer.strict_fill}
+
+
+def size_strategy_plan(df, index, strategy, horizon_key, direction, entry, atr_val):
+    """(stop, tp1, candidates) from the strategy's own sizing branch, priced
+    from `entry`, or None. backtest._limit_plan_at sizes resting-limit plans
+    through this, the same branch build_strategy_plan dispatches to."""
+    branch = _STRUCTURAL_BRANCHES.get(strategy, _atr_branch)
+    picked = branch(_BranchInputs(df, index, strategy, horizon_key, direction, entry,
+                                  atr_val, None, None))
+    return None if picked is None else picked[:3]
 
 
 def _geometry_ok(close, stop, tp1, strategy, horizon_key) -> bool:
@@ -291,7 +408,9 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     journal iff config.DATA_DRIVEN_STOPS_ENABLED -- so the flag-off path
     is bit-identical to before and never opens the journal at all."""
     from swingbot.core.market.indicators import atr as atr_indicator
-    close = strategy_entry_reference(df, index, strategy)
+    close = plan_entry_reference(df, index, strategy, horizon_key, direction)
+    if close is None:
+        return None                     # v131: a resting-limit strategy with no order here
     atr_series = atr_indicator(df, 14)
     atr_val = _safe_atr_value(close, float(atr_series.iloc[index]))
     branch = _STRUCTURAL_BRANCHES.get(strategy, _atr_branch)
@@ -350,6 +469,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         quality_score=0, quality_breakdown=[],
         badge="WEAK", badge_stats={}, status=PlanStatus.PENDING,
         hold_cap_bars=shape.get("hold_cap_bars"),
+        **limit_order_fields(df, index, strategy, horizon_key, direction),
     )
     if entry_type == "market":
         record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
@@ -525,8 +645,9 @@ def entry_type_for(strategy: str, source: str) -> str:
 
 def plan_shape_for(strategy: str) -> dict:
     """Entry type, entry-order life, TP1 fraction and break-even trigger for a
-    strategy-source plan. build_strategy_plan and backtest._bt_plan both read
-    this, so the two cannot diverge. Unlisted strategies get today's shape."""
+    strategy-source plan, plus the optional v131 "limit_price" pricer name.
+    build_strategy_plan and backtest._bt_plan both read this, so the two
+    cannot diverge. Unlisted strategies get today's shape."""
     shape = {"entry_type": entry_type_for(strategy, "strategy"),
              "expiry_bars": DEFAULT_EXPIRY_BARS, "tp1_fraction": TP1_FRACTION,
              "breakeven_trigger_fraction": BREAKEVEN_TRIGGER_FRACTION}

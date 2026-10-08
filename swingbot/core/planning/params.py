@@ -5,6 +5,7 @@ import logging
 
 from swingbot import config
 from swingbot.core.backtesting.registry import Badge, decay_note, get_badge
+from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION, FIB_LIMIT
 from .plan_types import TradePlanV2
 
 log = logging.getLogger(__name__)
@@ -47,6 +48,8 @@ EXIT_V2_PARAMS: dict[str, dict] = {
     "Downtrend Overbought Fade": {"trail_atr_mult": 2.5, "tp2": False},
     # v119: one whole-position support target, no runner, fixed by spec.
     "First Bearish Compression Release": {"trail_atr_mult": 2.5, "tp2": False},
+    # v131: today's Fibonacci exits, unchanged (spec "The order and the plan").
+    FIB_LIMIT: {"trail_atr_mult": 3.0, "tp2": False},
 }
 
 # v113: the shape of a plan whose strategy is traded as resting orders placed at
@@ -55,6 +58,10 @@ EXIT_V2_PARAMS: dict[str, dict] = {
 # because a resting bracket is never edited). A strategy not listed gets
 # today's shape (builders.plan_shape_for). Read by the live builder and the
 # backtest alike.
+# v131: an optional "limit_price" key names a builders.LIMIT_PRICERS entry. With
+# it, entry is the pricer's frozen limit price and stop and targets are sized
+# from that price (builders.plan_entry_reference, backtest._limit_plan_at);
+# without it, nothing about the plan changes.
 PLAN_SHAPES: dict[str, dict] = {
     # v113 §3: sell limit at the signal close, good for one bar; one target for
     # the whole position; no break-even move (amendment 3).
@@ -65,6 +72,12 @@ PLAN_SHAPES: dict[str, dict] = {
     "First Bearish Compression Release": {"entry_type": "stop_entry", "expiry_bars": 1,
                                           "tp1_fraction": 1.0, "breakeven_trigger_fraction": 1.0,
                                           "hold_cap_bars": 10},   # hard exit 10 sessions after the fill
+    # v131: buy limit inside the retracement zone, live expiry_bars (= the
+    # setup's N, entry_filters.DEFAULT_PARAMS) bars after the arming bar;
+    # Fibonacci's own TP1 fraction and break-even trigger.
+    FIB_LIMIT: {"entry_type": "limit", "expiry_bars": 5, "tp1_fraction": TP1_FRACTION,
+                "breakeven_trigger_fraction": BREAKEVEN_TRIGGER_FRACTION,
+                "limit_price": "fib_zone"},
 }
 
 

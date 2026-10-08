@@ -131,6 +131,9 @@ class BacktestSummary:
     runner_be: int = 0
     runner_timeout: int = 0
     avg_win_r: float | None = None
+    # v131: one record per placed cancellable limit order (_record_limit_order);
+    # empty for every strategy without a PLAN_SHAPES "limit_price".
+    limit_orders: list = field(default_factory=list)
 
 
 def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
@@ -189,6 +192,29 @@ def _floored(entry, stop_loss, take_profit, strategy, horizon_key):
     return entry, stop_loss, take_profit
 
 
+def _limit_plan_at(df, i, direction, strategy, horizon_key, atr_series):
+    """v131: (entry, stop, target) for a resting-limit strategy, priced entirely
+    from its frozen limit price at bar i through the same builders helpers
+    build_strategy_plan uses; None when there is no order or no qualifying
+    target."""
+    from swingbot.core.planning.builders import plan_entry_reference, size_strategy_plan
+    from swingbot.core.planning.plan_engine import _safe_atr_value, apply_level_lifecycle
+
+    entry = plan_entry_reference(df, i, strategy, horizon_key, direction)
+    if entry is None:
+        return None
+    atr_val = _safe_atr_value(entry, float(atr_series.iloc[i]))
+    picked = size_strategy_plan(df, i, strategy, horizon_key, direction, entry, atr_val)
+    if picked is None:
+        return None
+    stop_loss, take_profit, candidates = picked
+    stop_loss, take_profit, _ = apply_level_lifecycle(
+        df, i, entry=entry, stop=stop_loss, tp1=take_profit, atr_val=atr_val,
+        direction=direction, strategy=strategy, horizon_key=horizon_key,
+        candidate_levels=candidates)
+    return _floored(entry, stop_loss, take_profit, strategy, horizon_key)
+
+
 def _v1_plan_levels(df, i, direction, strategy, horizon_key, atr_series, swing_high_series=None, swing_low_series=None, volume_ratio_series=None, entry_levels=None):
     """(entry, stop, target) for the FROZEN v1 instrument, or None.
 
@@ -205,6 +231,9 @@ def _v1_plan_levels(df, i, direction, strategy, horizon_key, atr_series, swing_h
     precomputed series. Returns None when the chosen builder finds no target
     that clears MIN_RISK_REWARD_RATIO -- no qualifying setup at this bar."""
     _refuse_compression(strategy)
+    from swingbot.core.planning.builders import limit_pricer_for
+    if limit_pricer_for(strategy) is not None:
+        return _limit_plan_at(df, i, direction, strategy, horizon_key, atr_series)
     from swingbot.core.planning.plan_engine import (
         _atr_plan,
         _elliott_plan,
@@ -280,7 +309,7 @@ def _bt_plan(df, i, *, ticker, strategy, horizon_key, direction, entry, stop_los
     builder uses (builders.plan_shape_for) -- a limit-entry strategy is
     simulated as a limit here too. expiry 5 / TP1 fraction 0.5 for every
     unlisted strategy, exactly the literals this loop carried before v113."""
-    from swingbot.core.planning.builders import plan_shape_for
+    from swingbot.core.planning.builders import limit_order_fields, plan_shape_for
     from swingbot.core.planning.plan_engine import PlanStatus, TradePlanV2
     from swingbot.core.planning.short_builders import short_hold_cap
 
@@ -297,10 +326,28 @@ def _bt_plan(df, i, *, ticker, strategy, horizon_key, direction, entry, stop_los
         hold_cap_bars=short_hold_cap(df, i, strategy),
         quality_score=0, quality_breakdown=[],
         badge="WEAK", badge_stats={}, status=PlanStatus.ACTIVE,
+        **limit_order_fields(df, i, strategy, horizon_key, direction),
     )
     from swingbot.core.planning.acceptance_levels import stamp_strategy_acceptance
     stamp_strategy_acceptance(plan, df, i)
     return plan
+
+
+def _record_limit_order(book: list, df, i, plan, res) -> None:
+    """v131: one record per placed cancellable limit order -- filled, expired
+    or cancelled -- with the fill bar's date and price and whether that bar
+    also traded beyond the cancel level. Plans without a cancel level record
+    nothing, so every other strategy's summary keeps an empty list."""
+    if plan.limit_cancel_level is None:
+        return
+    record = {"signal_date": str(df.index[i].date()), "limit_price": plan.trigger_price,
+              "cancel_level": plan.limit_cancel_level, "status": res.cancel_reason or "filled",
+              "fill_date": None, "fill_price": None, "same_bar_new_high": None}
+    if res.entry_index is not None:
+        j = res.entry_index
+        record.update(fill_date=str(df.index[j].date()), fill_price=res.entry_price,
+                      same_bar_new_high=bool(float(df["High"].values[j]) > plan.limit_cancel_level))
+    book.append(record)
 
 
 _NO_TRADE = ("not_triggered", "no_trade")
@@ -444,7 +491,8 @@ def _max_drawdown_pct(trades):
     return float(drawdowns.min() * 100)
 
 
-def _summarize(ticker, strategy, horizon_key, total_signals, trades, runner_counts):
+def _summarize(ticker, strategy, horizon_key, total_signals, trades, runner_counts,
+               limit_orders=None):
     """The BacktestSummary for one run, shared by the v1 loop and the v2 replay
     (extracted from run_backtest, behaviour pinned by test_v1_golden.py). win_rate is over win+loss;
     expectancy_r is over ALL closed trades -- the number gated on."""
@@ -466,6 +514,7 @@ def _summarize(ticker, strategy, horizon_key, total_signals, trades, runner_coun
         runner_be=runner_counts.get("runner_be", 0),
         runner_timeout=runner_counts.get("runner_timeout", 0),
         avg_win_r=_mean_or_none([t.r_multiple for t in wins]),
+        limit_orders=limit_orders or [],
     )
 
 
@@ -543,6 +592,7 @@ def run_backtest(
     n = len(df)
 
     trades: list[BacktestTrade] = []
+    limit_orders: list[dict] = []
     total_signals = 0
     runner_counts: dict[str, int] = {}
     _lm_cache_key = None
@@ -592,6 +642,7 @@ def run_backtest(
                             take_profit=take_profit, tp2=tp2,
                             trail_atr_mult=_exit_params["trail_atr_mult"])
             res = simulate_exit(df, i, plan, scale_out=scale_out)
+            _record_limit_order(limit_orders, df, i, plan, res)
             # A stop_entry plan that never triggers before expiry ("not_triggered")
             # or whose realized entry has zero/negative risk ("no_trade") produced
             # no real trade -- exit_index is None and legs is [] in both cases, so
@@ -703,7 +754,8 @@ def run_backtest(
                                   asof=asof_row(asof, df.index[i]), entry=entry),
         ))
 
-    return _summarize(ticker, strategy, horizon_key, total_signals, trades, runner_counts)
+    return _summarize(ticker, strategy, horizon_key, total_signals, trades, runner_counts,
+                      limit_orders)
 
 
 ALL_STRATEGIES = (

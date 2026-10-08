@@ -21,7 +21,7 @@ import pandas as pd
 
 from swingbot.core.market.indicators import atr, ema, macd, rolling_vwap, rsi, elliott_wave3_entries
 from swingbot.core.market.strategy_types import (
-    FIB_TOLERANCE_PCT, HORIZONS, MACD_PERIODS_BY_HORIZON, SR_VOLUME_MULTIPLE,
+    FIB_LIMIT, FIB_TOLERANCE_PCT, HORIZONS, MACD_PERIODS_BY_HORIZON, SR_VOLUME_MULTIPLE,
     STRATEGY_GATES, admits,
 )
 from swingbot.core.risk_limits import capped_planned_loss_pct
@@ -425,6 +425,141 @@ def fib_continuation_entries(df, horizon_key, params=None):
 
 
 ENTRY_FUNCS["Fibonacci Continuation"] = fib_continuation_entries
+
+
+# --- v131: Fibonacci Limit -- a resting buy limit inside the retracement zone --
+#
+# Armed at the close of bar t, from bars <= t only, while the pullback is still
+# above the order. Bullish only. Masked in STRATEGY_GATES; the v131 measurement
+# unmasks it through gate_override. The plan side (entry at the limit, stop and
+# target priced from it) lives in planning/builders.py.
+
+DEFAULT_PARAMS["Fibonacci Limit"] = {
+    "L": 0.618,   # limit sits L of the leg below the swing high; grid {0.5, 0.618}
+    "N": 5,       # order life in bars after t; grid {3, 5, 10}; == PLAN_SHAPES expiry_bars
+}
+FIB_LIMIT_MIN_RETRACE = 0.236   # the close must already be this deep into the leg
+FIB_LIMIT_MIN_AGE = 3           # the swing-high bar is at least this many bars old
+
+
+def fib_limit_anchors(df, horizon_key):
+    """Rolling swing anchors at each bar -- the same rolling `fib_lookback`
+    max High / min Low fibonacci_entries uses -- plus the swing-high bar's
+    absolute position (the leg's identity) and whether the low came first.
+    Trailing windows only: row t reads bars <= t."""
+    lookback = HORIZONS[horizon_key]["fib_lookback"]
+    high, low = df["High"], df["Low"]
+    hi_pos = _rolling_argmax_pos(high, lookback)
+    lo_pos = _rolling_argmin_pos(low, lookback)
+    bar = pd.Series(np.arange(len(df), dtype=float), index=df.index)
+    return pd.DataFrame({
+        "swing_high": high.rolling(lookback).max(),
+        "swing_low": low.rolling(lookback).min(),
+        "swing_high_idx": bar - (lookback - 1) + hi_pos,
+        "up_leg": hi_pos > lo_pos,
+    }, index=df.index)
+
+
+def _fib_limit_candidates(df, anchors, ratio):
+    """Conditions 1-4 of the v131 arming rule, per bar (no order bookkeeping)."""
+    gates = compute_shared_gates(df)
+    leg = anchors["swing_high"] - anchors["swing_low"]
+    retrace = (anchors["swing_high"] - df["Close"]) / leg.where(leg > 0)
+    age = pd.Series(np.arange(len(df), dtype=float), index=df.index) - anchors["swing_high_idx"]
+    ok = (anchors["up_leg"] & (age >= FIB_LIMIT_MIN_AGE)
+          & (retrace >= FIB_LIMIT_MIN_RETRACE) & (retrace < ratio)
+          & gates["bull_regime"] & gates["trend50_bull"]
+          & gates["atr_floor"] & gates["atr_calm"])
+    return ok.fillna(False).astype(bool)
+
+
+def _order_after_bar(order, t, bar_low, bar_high, life):
+    """The resting order still live after bar t's close, else None: it filled
+    (Low < limit, strictly), cancelled (High > the frozen swing high) or
+    reached the end of its `life` bars. Reads bar t only."""
+    if order is None:
+        return None
+    armed_at, limit, cancel = order
+    done = bar_low < limit or bar_high > cancel or t - armed_at >= life
+    return None if done else order
+
+
+def _arm_orders(candidate, leg, low, high, limit, cancel, life):
+    """Walk the bars in order. Arm at t when conditions 1-4 hold, no order is
+    live and this leg (its swing-high bar) has never armed -- an expired or
+    cancelled order never re-arms the same leg. The live-order state at t is
+    built from bars <= t, so the mask is causal."""
+    arm = np.zeros(len(candidate), dtype=bool)
+    armed_legs = set()
+    order = None
+    for t in range(len(candidate)):
+        order = _order_after_bar(order, t, low[t], high[t], life)
+        if order is None and candidate[t] and leg[t] not in armed_legs:
+            arm[t] = True
+            armed_legs.add(leg[t])
+            order = (t, limit[t], cancel[t])
+    return arm
+
+
+def fibonacci_limit_setups(df, horizon_key, params=None):
+    """v131 arming mask plus the frozen order geometry, per bar:
+    `arm`, `swing_high`, `swing_low`, `swing_high_idx` and
+    `limit_price = swing_high - L * (swing_high - swing_low)`."""
+    p = _params("Fibonacci Limit", params)
+    anchors = fib_limit_anchors(df, horizon_key)
+    limit = anchors["swing_high"] - p["L"] * (anchors["swing_high"] - anchors["swing_low"])
+    arm = _arm_orders(
+        _fib_limit_candidates(df, anchors, p["L"]).to_numpy(),
+        anchors["swing_high_idx"].to_numpy(), df["Low"].to_numpy(dtype=float),
+        df["High"].to_numpy(dtype=float), limit.to_numpy(dtype=float),
+        anchors["swing_high"].to_numpy(dtype=float), int(p["N"]))
+    return pd.DataFrame({"arm": arm, "swing_high": anchors["swing_high"],
+                         "swing_low": anchors["swing_low"],
+                         "swing_high_idx": anchors["swing_high_idx"],
+                         "limit_price": limit}, index=df.index)
+
+
+def _fib_limit_row(df, index, horizon_key):
+    """The anchors row at `index`, computed from bars <= index only; None when
+    the window is incomplete or the leg is flat."""
+    if index < 0:
+        index += len(df)
+    lookback = HORIZONS[horizon_key]["fib_lookback"]
+    window = df.iloc[max(0, index + 1 - lookback):index + 1]   # the rolling window itself
+    row = fib_limit_anchors(window, horizon_key).iloc[-1]
+    high, low = float(row["swing_high"]), float(row["swing_low"])
+    if not (np.isfinite(high) and np.isfinite(low)) or high <= low:
+        return None
+    return row
+
+
+def fib_limit_price_at(df, index, horizon_key, direction, params=None):
+    """The v131 limit price frozen at bar `index`: swing_high - L * leg.
+    Bullish only; None for bearish or an unusable window."""
+    row = _fib_limit_row(df, index, horizon_key) if direction == "bullish" else None
+    if row is None:
+        return None
+    ratio = _params("Fibonacci Limit", params)["L"]
+    return float(row["swing_high"] - ratio * (row["swing_high"] - row["swing_low"]))
+
+
+def fib_limit_cancel_at(df, index, horizon_key, direction):
+    """The frozen swing high: a bar trading above it cancels the unfilled order."""
+    row = _fib_limit_row(df, index, horizon_key) if direction == "bullish" else None
+    return None if row is None else float(row["swing_high"])
+
+
+def fibonacci_limit_entries(df, horizon_key, params=None):
+    """Bullish arming bars of the v131 Fibonacci Limit; never bearish. While the
+    strategy is masked (it ships masked) this returns all-False without
+    walking the order book, so the live scan pays nothing for it."""
+    off = _off(df)
+    if not admits(FIB_LIMIT, "bullish", horizon_key):
+        return off, off.copy()
+    return fibonacci_limit_setups(df, horizon_key, params)["arm"].astype(bool), off
+
+
+ENTRY_FUNCS[FIB_LIMIT] = fibonacci_limit_entries
 
 
 DEFAULT_PARAMS["EMA Crossover"] = {

@@ -143,6 +143,13 @@ class TradePlanV2:
     time_exit_due_date: str | None = None
     time_exit_unresolved_date: str | None = None
     time_exit_notified_date: str | None = None
+    # v131 resting limit (planning/builders.LIMIT_PRICERS): the frozen level
+    # whose trade-through cancels the still-unfilled order (bullish: a High
+    # above it; bearish: a Low below it), and whether the limit fills only on
+    # a strict trade-through (an exact touch does not fill). Defaults leave
+    # every pre-v131 plan -- including the v113 fade's limit -- unchanged.
+    limit_cancel_level: float | None = None
+    limit_strict_fill: bool = False
 
 
 def effective_stop(plan: TradePlanV2) -> float:

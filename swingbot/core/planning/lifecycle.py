@@ -155,10 +155,29 @@ def pending_invalidated(plan: TradePlanV2, bar_close: float) -> bool:
 def limit_hit(plan: TradePlanV2, bar_high: float, bar_low: float) -> bool:
     """v113: a resting LIMIT order at trigger_price trades on this bar -- a sell
     limit (bearish) when the high reaches it, a buy limit (bullish) when the
-    low does. Touching the limit exactly counts."""
+    low does. Touching the limit exactly counts, unless the plan asks for a
+    strict trade-through (v131 limit_strict_fill): then price must trade
+    beyond the limit."""
+    if plan.limit_strict_fill:
+        if plan.direction == "bullish":
+            return bar_low < plan.trigger_price
+        return bar_high > plan.trigger_price
     if plan.direction == "bullish":
         return bar_low <= plan.trigger_price
     return bar_high >= plan.trigger_price
+
+
+def limit_cancelled(plan: TradePlanV2, bar_high: float, bar_low: float) -> bool:
+    """v131: the still-unfilled limit is cancelled on this bar -- the leg
+    extended beyond its frozen limit_cancel_level (bullish: High above it;
+    bearish: Low below it). An equal print does not cancel. Plans without a
+    cancel level never cancel."""
+    level = plan.limit_cancel_level
+    if level is None:
+        return False
+    if plan.direction == "bullish":
+        return bar_high > level
+    return bar_low < level
 
 
 def limit_fill_price(plan: TradePlanV2, bar_open: float) -> float:
