@@ -157,6 +157,24 @@ the model-invocable ones self-trigger off `description`, shape-tested in
 `tests/hooks/test_skill_shape.py`. Subagents, the one-subagent-at-a-time
 default, and `.mcp.json`'s context7 provider: `docs/claude/skills-tools.md`.
 
+## Expert roles (v145)
+
+Nine role skills each hold one reviewer's lens, in four sections -- Lens,
+Checklist, Red flags, Out of scope -- and are model-invocable, so a review
+from one seat loads its checklist. The `expert-reviewer` agent applies one
+role to a target; `/panel` dispatches several, serially, and merges their
+findings. A role raises `BLOCKING`/`ADVISORY` findings with a citation; it
+never decides and never lowers a gate (`persona.md`). This table is the one
+place a role's reviewer model is recorded: `/panel` passes it as the `model`
+override and `tests/hooks/test_role_skills.py` pins it. No reviewer runs on
+haiku -- reviewing means judging.
+
+| Role | Reviewer model | Lens |
+|---|---|---|
+| `quant-researcher` | opus | Sample size, overfitting, multiple comparisons, pre-registration discipline, whether an ExpR claim holds up |
+| `risk-manager` | sonnet | 2% dollar risk, portfolio heat, correlated exposure, stop placement |
+| `financial-advisor` | sonnet | Allocation, account fit, tax drag of swing turnover, whether alert frequency and risk suit a real-money retail trader (educational, not personal advice) |
+
 ## Which agent for what (v107)
 
 Serial, one at a time. Opus (main session) decides; agents do.

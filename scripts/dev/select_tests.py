@@ -255,9 +255,11 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (".agents/", ("tests/hooks/",)),
     (".codex/", ("tests/hooks/",)),
     # backtest-methodology.md's closed table (test_guardrails); every
-    # reference doc must be named in AGENTS.md (sync_codex via test_codex_mirror).
+    # reference doc must be named in AGENTS.md (sync_codex via test_codex_mirror);
+    # skills-tools.md's roles table pins each reviewer model (test_role_skills).
     ("docs/claude/", ("tests/hooks/test_guardrails.py",
-                      "tests/hooks/test_codex_mirror.py")),
+                      "tests/hooks/test_codex_mirror.py",
+                      "tests/hooks/test_role_skills.py")),
     # The backup runbook is parsed for the commands it documents.
     ("docs/deploy/DEPLOY_HETZNER.md", ("tests/scripts/test_backup_db.py",)),
     # Every testrun.py command line deploy.yml runs is parsed for real.

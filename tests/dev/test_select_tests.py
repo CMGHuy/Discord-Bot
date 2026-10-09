@@ -431,6 +431,7 @@ def test_non_ascii_paths_are_listed_despite_core_quotepath(sel, tmp_path):
 def _with_readers(repo: pathlib.Path) -> pathlib.Path:
     """Add the tests that read repo data files rather than importing code."""
     for rel in ("tests/hooks/test_guardrails.py", "tests/hooks/test_codex_mirror.py",
+                "tests/hooks/test_role_skills.py",
                 "tests/dev/test_testrun_ci_invocations.py"):
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
         (repo / rel).write_text("X = 1\n", encoding="utf-8")
@@ -445,7 +446,8 @@ def _with_readers(repo: pathlib.Path) -> pathlib.Path:
     ("CLAUDE.md", ["tests/hooks/"]),
     ("AGENTS.md", ["tests/hooks/"]),
     ("docs/claude/backtest-methodology.md",
-     ["tests/hooks/test_codex_mirror.py", "tests/hooks/test_guardrails.py"]),
+     ["tests/hooks/test_codex_mirror.py", "tests/hooks/test_guardrails.py",
+      "tests/hooks/test_role_skills.py"]),
 ])
 def test_data_read_path_routes_to_its_readers(sel, tmp_path, path, expected):
     """Partner decision 2026-09-29: the widening rule beats the inert list."""

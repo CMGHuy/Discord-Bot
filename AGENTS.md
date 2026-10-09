@@ -223,6 +223,15 @@ also be run implicitly: `new-doc` right before creating a numbered spec or plan,
 `close-out` once a plan's final full-suite task is green. Skill text names Claude tools (`AskUserQuestion`, `Agent`, `Grep`); use
 your equivalent.
 
+Expert role skills (v145) each hold one reviewer's lens -- Lens, Checklist,
+Red flags, Out of scope -- and load when you review from that seat:
+`quant-researcher` (sample size, overfitting, multiple comparisons,
+pre-registration discipline), `risk-manager` (2% dollar risk, portfolio heat,
+correlated exposure, stops), `financial-advisor` (retail suitability, account
+fit, tax drag, alert cadence; educational, not personal financial advice).
+A role raises cited `BLOCKING`/`ADVISORY` findings; it never decides and never
+lowers a gate.
+
 ## Efficient repository navigation
 
 `.ignore` excludes `.claude/worktrees/`, `market_data/`, `data/` and `logs/`.
