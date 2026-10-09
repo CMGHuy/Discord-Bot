@@ -4,7 +4,7 @@
 **Bump:** none (a read-only measurement script and one results document; no live path changes)
 **Edge:** none (integrity) — measurement only; it is the admission test for a possible later `expectancy` spec on FVG (bullish) plans
 **Screen:** exempt (integrity)
-**Status:** spec written 2026-10-09; no plan yet.
+**Status:** spec written 2026-10-09; amended the same day before any run (eight features, replay quality score); plan written.
 
 ## Why
 
@@ -100,7 +100,7 @@ Everything is computed on `window = df.iloc[:i + 1]`, `i` the signal bar.
 
 ## Candidate features
 
-Nine features, one split each, the favourable side named here. Medians are
+Eight features, one split each, the favourable side named here. Medians are
 taken over the identified population from the feature alone, before any
 outcome is joined.
 
@@ -108,24 +108,42 @@ outcome is joined.
 |---|---|---|
 | 1 | Gap age: `i − gap.bar_index`, bars | ≤ 20 |
 | 2 | Gap height: `(top − bottom) / ATR14[i]` | ≥ 0.5 |
-| 3 | Displacement: middle candle `abs(close − open) / ATR14` at the gap bar | ≥ 1.5 |
-| 4 | Filled share: deepest penetration into the gap since it formed, as a share of its height | < 0.5 |
-| 5 | Stop distance: `abs(entry − stop_loss) / ATR14[i]` | ≥ 1.0 |
-| 6 | Quality: `plan.quality_score` | ≥ population median |
-| 7 | Trend-aligned: `close > SMA200` for a bullish plan, `close < SMA200` for a bearish one | aligned |
-| 8 | Volatility: `ATR14[i] / close[i]` | ≤ population median |
-| 9 | Earnings distance: sessions to the next earnings reaction (`earnings_calendar.next_reaction_distance`) | > 5 |
+| 3 | Displacement: `fvg.is_displacement_gap(..., 1.5)` — v128's definition, body ≥ 1.5 × ATR14 and a close in the gap-side third of the range | true |
+| 4 | Stop distance: `abs(entry − stop_loss) / ATR14[i]` | ≥ 1.0 |
+| 5 | Replay quality: `quality.score_plan` on the inputs below | ≥ population median |
+| 6 | Trend-aligned: `close > SMA200` for a bullish plan, `close < SMA200` for a bearish one | aligned |
+| 7 | Volatility: `ATR14[i] / close[i]` | ≤ population median |
+| 8 | Earnings distance: sessions to the next earnings reaction (`earnings_calendar.next_reaction_distance`) | > 5 |
 
 A feature that cannot be computed for a trade (short history, no earnings
-record) puts that trade in neither side; the count is printed per feature. A
-feature whose computable share is under 80% of the population is reported
-and cannot be a candidate.
+record, no identified gap) puts that trade in neither side; the count is
+printed per feature. A feature whose computable share is under 80% of the
+population is reported as **not tested**: it cannot be a candidate, and it
+is not closed by this diagnostic either.
+
+**Replay quality (feature 5).** `replay_scenarios` builds plans without
+`quality_inputs`, so `plan.quality_score` is 0 on every replayed plan. The
+diagnostic scores each plan itself with the live scorer, from the inputs
+that are causal on the ticker's own window: higher-timeframe bias, volume
+ratio, ATR percentile, trigger distance and confluence count, built the way
+`scanning.analyze._build_quality_inputs` builds them. Market regime,
+relative-strength percentile and breadth need the whole market at that date
+and are passed as `None` (the scorer's neutral defaults). The results
+document calls this a replay quality score and says it is not the live one.
+`replay_scenarios` itself is not changed.
+
+**Dropped before the run: share of gap filled.** The live gap finder drops a
+gap as soon as any later bar overlaps it, so every plan in this population
+sits on an untouched gap and the share is 0 by construction. It is recorded
+as not testable on this population (partner decision, 2026-10-09). Whether
+partially filled gaps should make plans at all is a different mechanism and
+would need its own spec.
 
 **Two of these revisit closed rows, and that is the partner's call, made
 here in the open.** Feature 3 reuses v128's displacement definition; v128
 tested it as a level-map filter over all confluence plans and was refused at
 Stage 0. Here it is a plan-level split on one primary's population. Feature
-9 reuses v82's exposure definition; v82 found no eligible K as a blackout on
+8 reuses v82's exposure definition; v82 found no eligible K as a blackout on
 the whole book. Neither closed row is re-run, and this diagnostic cannot
 reopen either one.
 
@@ -139,14 +157,14 @@ has all of:
 3. expectancy at least +0.10R above the unfavourable side at the same geometry;
 4. expectancy > 0 in at least 3 of the 4 calendar years 2020–2023.
 
-No feature is combined with another. No threshold is moved. Nine features at
-three geometries is 27 looks; at a 5% false-positive rate one or two chance
+No feature is combined with another. No threshold is moved. Eight features at
+three geometries is 24 looks; at a 5% false-positive rate one or two chance
 hits are expected, and the results document says so above its table.
 
 ## Reported, never gating
 
-The same table split by `fvg_role`, by plan direction, by horizon and by
-year; the whole-population row at each geometry; and the exit mix. These are
+One N / win rate / ExpR row per value of `fvg_role`, plan direction, horizon
+and year at each geometry; the whole-population row at each geometry; and the exit mix. These are
 context for whoever writes the next spec.
 
 ## What follows a result
@@ -172,7 +190,8 @@ Unit tests, on synthetic frames, for: each feature's value at a known bar;
 that truncating the frame after the signal bar changes no feature (no
 lookahead); the gap-matching tolerance and the `unidentified` path; that the
 `g125`/`g100` copies leave the original plan untouched; and the candidate
-rule on hand-built tables, one failing each clause. The replay itself runs
+rule on hand-built tables, one failing each clause. Trade rows are saved to `logs/v143-fvg-bullish-rows.json` (gitignored) so a
+rendering fault never costs a second replay. The replay itself runs
 once, through `backtest-runner`, with a flushed per-ticker progress line and
 a percent file deleted on completion (about 70 minutes at 6 workers).
 
