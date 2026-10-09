@@ -18,6 +18,7 @@ from swingbot.core.market import fvg, levels
 from swingbot.core.market.earnings_calendar import next_reaction_distance
 from swingbot.core.market.indicators import atr
 from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.planning.exit_sim import simulate_exit
 from swingbot.core.planning.quality import atr_percentile, score_plan
 from swingbot.core.scanning.regime import get_htf_bias
 
@@ -207,3 +208,47 @@ def features(df, i, plan, ctx) -> dict:
     out.update(plan_features(df, i, plan, atr_val, ctx.confluence_count))
     out["earnings_distance"] = ctx.earnings_distance
     return out
+
+
+# --- outcomes ----------------------------------------------------------------
+
+#: name -> first-target distance in R (None = the plan as built).
+GEOMETRIES = (("live", None), ("g125", 1.25), ("g100", 1.00))
+UNTRIGGERED = ("not_triggered", "no_trade")
+
+
+def geometry_plan(plan, g):
+    """`plan` itself for g=None; else a COPY with tp1 at entry +/- g x risk.
+    Stop, tp2 and every other field are unchanged; the original is never
+    mutated."""
+    if g is None:
+        return plan
+    entry = entry_reference(plan)
+    sign = 1.0 if plan.direction == "bullish" else -1.0
+    return dataclasses.replace(plan, tp1=entry + sign * g * abs(entry - plan.stop_loss))
+
+
+def outcome(df, i, plan) -> dict | None:
+    """The exit as plain JSON types, or None when the plan never triggered."""
+    res = simulate_exit(df, i, plan, scale_out=True)
+    if res.outcome in UNTRIGGERED:
+        return None
+    reason = res.legs[-1]["reason"]
+    mix = reason if len(res.legs) == 1 else f"tp1+{reason}"
+    return {"outcome": res.outcome, "r": float(res.r_total), "exit_mix": mix}
+
+
+def trade_row(df, i, plan, ctx) -> dict | None:
+    """One trade: features at the signal bar and its exit at each geometry.
+    None when the plan as built never triggered (the population rule)."""
+    live = outcome(df, i, plan)
+    if live is None:
+        return None
+    outcomes = {name: live if g is None else outcome(df, i, geometry_plan(plan, g))
+                for name, g in GEOMETRIES}
+    signal_date = str(df.index[i].date())
+    return {"ticker": plan.ticker, "horizon_key": plan.horizon_key,
+            "signal_date": signal_date, "year": signal_date[:4],
+            "direction": plan.direction,
+            "features": features(df, i, plan, ctx),
+            "outcomes": outcomes}
