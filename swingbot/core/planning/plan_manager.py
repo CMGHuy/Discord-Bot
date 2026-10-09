@@ -277,7 +277,8 @@ def _eligible_session(plan: TradePlanV2):
         signal_day = created.date()
     else:
         utc = created.astimezone(timezone.utc)
-        signal_day = utc.date() if utc.time() == datetime.min.time()             else created.astimezone(US_MARKET_TZ).date()
+        signal_day = utc.date() if utc.time() == datetime.min.time() \
+            else created.astimezone(US_MARKET_TZ).date()
     return nyse_calendar().next_session(signal_day)
 
 

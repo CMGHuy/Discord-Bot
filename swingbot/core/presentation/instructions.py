@@ -325,7 +325,9 @@ def instruction_for(plan, event, *, sizing: dict | None = None) -> Instruction:
                    "since the last ping",),
             **common)
     if transition in ("cancelled_expired", "cancelled_invalidated", "cancelled_risk_cap"):
-        if short_notice.is_compression(plan) and transition != "cancelled_invalidated":
+        if detail.get("reason_message"):
+            why = detail["reason_message"]          # v144: an outlook plan states its reason
+        elif short_notice.is_compression(plan) and transition != "cancelled_invalidated":
             why = short_notice.compression_cancel_why(plan, transition, detail)
         elif transition == "cancelled_expired":
             why = f"not triggered within {plan.expiry_bars} sessions"
