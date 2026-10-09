@@ -666,6 +666,34 @@ def analytics_exit_quality():
                     **echo(scope, len(scoped))})
 
 
+def _manual_exit_prices() -> dict[str, float]:
+    """plan_id -> the linked trade's exit price.
+
+    A manual close realises the runner as a leg on the TRADE only
+    (`TradeLog.close_trade_manual`); the plan records no leg. The Partials
+    tab reads that price for a closed runner whose plan carries none.
+    """
+    return {trade["plan_id"]: float(trade["exit_price"]) for trade in _all_trades(TradeLog())
+            if trade.get("plan_id") and trade.get("exit_price") is not None}
+
+
+@api_v1.route("/analytics/partials", methods=["GET"])
+@require_auth
+def analytics_partials():
+    """TP1->TP2 conversion and runner counterfactuals over the scoped live
+    book (spec v142). Plans, not trades: the scope's date range filters on
+    FILL date, and `n` is the filled plans in scope. Live book only -- a
+    small, non-pre-registered sample, never a gate."""
+    from swingbot.core.analytics import partials as pa
+    from swingbot.core.analytics.scope import echo
+    from swingbot.core.planning.plan_store import PlanStore
+
+    scope = _scope()
+    plans = pa.select_plans(PlanStore().all(), scope)
+    report = pa.build_report(plans, manual_exits=_manual_exit_prices())
+    return jsonify({**report, **echo(scope, len(plans))})
+
+
 @api_v1.route("/analytics/calibration", methods=["GET"])
 @require_auth
 def analytics_calibration():
