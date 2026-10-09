@@ -55,3 +55,38 @@ def test_an_unreadable_cache_is_unavailable_not_a_crash():
         raise OSError("bad csv")
 
     assert brp.main([], bars_fn=boom)["unavailable"] == 2
+
+
+def test_a_plan_whose_compute_raises_is_unavailable_and_the_rest_still_stamp(monkeypatch):
+    store = _seed()
+    real = rp.compute_runner_path
+
+    def flaky(plan, bars, *, source="live"):
+        if plan.plan_id == "p2":
+            raise ValueError("NaN bars")
+        return real(plan, bars, source=source)
+
+    store.get("p2").ticker = "AAPL"                                  # give p2 bars so it reaches compute
+    plan2 = store.get("p2")
+    plan2.ticker = "AAPL"
+    store.update(plan2)
+    monkeypatch.setattr(rp, "compute_runner_path", flaky)
+    assert brp.main(["--apply"], store=store, bars_fn=_bars) == {"stamped": 1, "skipped": 1,
+                                                                 "unavailable": 1}
+    assert store.get("p1").runner_path["source"] == "backfill"
+    assert store.get("p2").runner_path is None
+
+
+def test_a_live_stamp_landing_mid_run_is_not_overwritten(monkeypatch):
+    store = _seed()
+    real = rp.compute_runner_path
+
+    def racing(plan, bars, *, source="live"):
+        live = store.get(plan.plan_id)
+        live.runner_path = {"source": "live"}
+        store.update(live)                                           # a live close stamps meanwhile
+        return real(plan, bars, source=source)
+
+    monkeypatch.setattr(rp, "compute_runner_path", racing)
+    brp.main(["--apply"], store=store, bars_fn=_bars)
+    assert store.get("p1").runner_path == {"source": "live"}

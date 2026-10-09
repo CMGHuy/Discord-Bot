@@ -16,12 +16,15 @@ Production (after the v142 deploy):
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from swingbot.core.analytics import runner_path as rp  # noqa: E402
+
+log = logging.getLogger(__name__)
 
 
 def candidates(plans: list) -> list:
@@ -41,6 +44,27 @@ def _bars_for(ticker: str, bars_fn, frames: dict):
     return frames[ticker]
 
 
+def _compute(plan, bars_fn, frames: dict):
+    """The stamp, or None when it cannot be computed -- one malformed plan
+    (bad timestamp, NaN bars) must not abort an --apply run."""
+    try:
+        return rp.compute_runner_path(plan, _bars_for(plan.ticker, bars_fn, frames),
+                                      source="backfill")
+    except Exception:
+        log.warning("runner_path compute failed for %s", plan.plan_id, exc_info=True)
+        return None
+
+
+def _write(store, plan_id: str, path: dict) -> bool:
+    """Re-read before writing: a live close may have stamped it since the snapshot."""
+    fresh = store.get(plan_id)
+    if fresh is None or fresh.runner_path is not None:
+        return False
+    fresh.runner_path = path
+    store.update(fresh)
+    return True
+
+
 def backfill(store, bars_fn, *, apply: bool) -> dict:
     """Stamp every unstamped candidate; returns stamped / skipped / unavailable."""
     counts = {"stamped": 0, "skipped": 0, "unavailable": 0}
@@ -49,16 +73,14 @@ def backfill(store, bars_fn, *, apply: bool) -> dict:
         if plan.runner_path is not None:
             counts["skipped"] += 1
             continue
-        path = rp.compute_runner_path(plan, _bars_for(plan.ticker, bars_fn, frames),
-                                      source="backfill")
+        path = _compute(plan, bars_fn, frames)
         if path is None:
             counts["unavailable"] += 1
             print(f"  unavailable: {plan.plan_id} {plan.ticker}")
-            continue
-        counts["stamped"] += 1
-        if apply:
-            plan.runner_path = path
-            store.update(plan)
+        elif apply and not _write(store, plan.plan_id, path):
+            counts["skipped"] += 1
+        else:
+            counts["stamped"] += 1
     return counts
 
 
