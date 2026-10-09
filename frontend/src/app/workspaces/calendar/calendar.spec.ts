@@ -259,6 +259,8 @@ describe('Calendar summary strip', () => {
 
 const TRADE: CalendarTrade = {
   trade_id: 'a'.repeat(16),
+  plan_id: null,
+  opened_at: null,
   ticker: 'AAPL',
   strategy: 'EMA20',
   horizon: '4w',
