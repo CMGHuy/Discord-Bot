@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-08 10:02:55 UTC",
+  "generated_at": "2026-10-09 10:55:50 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.21.1",
+    "ui": "1.22.0",
     "bot": "2.2.2"
   },
   "releases": [
@@ -1452,8 +1452,8 @@
     {
       "date": "2026-10-08",
       "last_seen": "2026-10-08",
-      "commit": "b07b43e6",
-      "subject": "chore(v129): bump bot patch -- plans record acceptance_level; exits unchanged (flag off)",
+      "commit": "e7df674a",
+      "subject": "release(bot): 2.2.1 -- FVG level-source mode (inert, default all)",
       "versions": {
         "ui": "1.21.1",
         "bot": "2.2.1"
@@ -1465,14 +1465,27 @@
     {
       "date": "2026-10-08",
       "last_seen": "2026-10-08",
-      "commit": "uncommitted",
-      "subject": "working tree",
+      "commit": "37f57442",
+      "subject": "Merge branch 'main' into 2026-10-03-v129-acceptance-failure-exits",
       "versions": {
         "ui": "1.21.1",
         "bot": "2.2.2"
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-10-09",
+      "last_seen": "2026-10-09",
+      "commit": "a0edf802",
+      "subject": "release(ui): 1.22.0 -- Partials analytics tab: did the runner earn its keep (v142)",
+      "versions": {
+        "ui": "1.22.0",
+        "bot": "2.2.2"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]
