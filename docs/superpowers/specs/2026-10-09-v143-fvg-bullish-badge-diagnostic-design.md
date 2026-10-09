@@ -4,7 +4,7 @@
 **Bump:** none (a read-only measurement script and one results document; no live path changes)
 **Edge:** none (integrity) — measurement only; it is the admission test for a possible later `expectancy` spec on FVG (bullish) plans
 **Screen:** exempt (integrity)
-**Status:** spec written 2026-10-09; amended the same day before any run (eight features, replay quality score); plan written.
+**Status:** spec written 2026-10-09; amended the same day before any run (nine features: fill share replaced by gap-open-at-signal, replay quality score, gap matched on the map bar); plan written.
 
 ## Why
 
@@ -84,20 +84,26 @@ it differs by more than 2%, because that means the engine moved.
 
 Everything is computed on `window = df.iloc[:i + 1]`, `i` the signal bar.
 
-- **The gap.** The unfilled bullish gap from
-  `fvg.find_fair_value_gaps_detailed(window)` that made FVG a confirming
-  source: the one whose `mid` is nearest the scenario's own target
-  (`scenario.take_profit`, the level the scan clustered on, captured at plan
-  build) and within the live confluence tolerance of it
-  (`confluence_deviation_pct`, the tolerance `count_confirming_strategies`
-  uses); if none, the same test against the scenario's stop. `fvg_role` is
-  `target`, `stop`, or `unidentified`. Unidentified trades stay in the
-  population totals, are excluded from gap-geometry features, and their
-  count is printed. *Corrected before any run, 2026-10-09:* the first draft
-  matched within 0.25 × ATR14 of `plan.tp1`, which is re-selected
-  structurally and can sit far from the clustered level; a two-ticker smoke
-  run left 6 of 20 trades unidentified. The correction was made on feature
-  data only, with no outcome joined.
+- **The gap.** The bullish gap that made FVG a source of the plan's level.
+  `replay_scenarios` reuses one level map for up to `LEVEL_REFRESH_BARS`
+  bars (`levels_asof`), so the gap is looked up where the map was built:
+  `fvg.find_fair_value_gaps_detailed` on the window ending at the map bar,
+  never later than the signal bar. A level is tried only when
+  `"FVG (bullish)"` is in that level's own captured sources — the scenario's
+  target (`take_profit`, `target_sources`) first, then its stop — and on
+  that level the nearest bullish `mid` within the live confluence tolerance
+  (`confluence_deviation_pct`, as a percent of the level) is the gap.
+  `fvg_role` is `target`, `stop`, or `unidentified`. Unidentified trades
+  stay in the population totals, are excluded from gap features, and their
+  count is printed. *Corrected twice before any run, 2026-10-09, on feature
+  data only with no outcome joined:* the first draft matched within
+  0.25 × ATR14 of `plan.tp1`, which is re-selected structurally; the second
+  looked the gap up on the signal bar's window, where a gap the stale map
+  still carried had already been traded through (5 of 20 smoke rows).
+- **Gap open at the signal bar.** Whether that same gap is still returned by
+  the finder on `df.iloc[:i + 1]`. A gap filled between the map bar and the
+  signal bar is one the live scan, which builds its level map fresh, would
+  not have labelled FVG; the results document says how many trades that is.
 - **Outcomes at three geometries.** `live`: the plan as built. `g125` and
   `g100`: a copy with `tp1` moved to `entry ± g × |entry − stop_loss|` for
   `g` = 1.25 and 1.00, stop and every other field unchanged, through the
@@ -108,7 +114,7 @@ Everything is computed on `window = df.iloc[:i + 1]`, `i` the signal bar.
 
 ## Candidate features
 
-Eight features, one split each, the favourable side named here. Medians are
+Nine features, one split each, the favourable side named here. Medians are
 taken over the identified population from the feature alone, before any
 outcome is joined.
 
@@ -122,6 +128,7 @@ outcome is joined.
 | 6 | Trend-aligned: `close > SMA200` for a bullish plan, `close < SMA200` for a bearish one | aligned |
 | 7 | Volatility: `ATR14[i] / close[i]` | ≤ population median |
 | 8 | Earnings distance: sessions to the next earnings reaction (`earnings_calendar.next_reaction_distance`) | > 5 |
+| 9 | Gap open at the signal bar (see above) | open |
 
 A feature that cannot be computed for a trade (short history, no earnings
 record, no identified gap) puts that trade in neither side; the count is
@@ -143,7 +150,9 @@ document calls this a replay quality score and says it is not the live one.
 **Dropped before the run: share of gap filled.** The live gap finder drops a
 gap as soon as any later bar overlaps it, so every plan in this population
 sits on an untouched gap and the share is 0 by construction. It is recorded
-as not testable on this population (partner decision, 2026-10-09). Whether
+as not testable on this population (partner decision, 2026-10-09). Feature 9
+is its testable form on the replay, where a stale level map lets a filled
+gap keep its label. Whether
 partially filled gaps should make plans at all is a different mechanism and
 would need its own spec.
 
@@ -165,8 +174,8 @@ has all of:
 3. expectancy at least +0.10R above the unfavourable side at the same geometry;
 4. expectancy > 0 in at least 3 of the 4 calendar years 2020–2023.
 
-No feature is combined with another. No threshold is moved. Eight features at
-three geometries is 24 looks; at a 5% false-positive rate one or two chance
+No feature is combined with another. No threshold is moved. Nine features at
+three geometries is 27 looks; at a 5% false-positive rate one or two chance
 hits are expected, and the results document says so above its table.
 
 ## Reported, never gating
