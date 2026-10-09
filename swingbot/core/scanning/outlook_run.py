@@ -1,8 +1,9 @@
 """v144: the 23:30 next-session outlook -- the last closed bar, tomorrow's plans.
 
 It runs the live scan's own pieces, never copies:
-  * frames -- `closed_frames`, bars whose last row is the signal session's
-    closed bar (a cache file written before that close is refetched);
+  * frames -- `closed_frames`, always refetched after the close and cut to the
+    signal session's closed bar (a cache file's mtime proves nothing: a failed
+    refresh re-stamps a CSV that still holds a partial bar);
   * scoring -- `analyze._scan_one` with OUTLOOK_IO (no open-trade monitoring, so
     23:30 closes nothing) and `live_prices={}`, as the replay does;
   * gates -- `qualify.qualify_short_item` with no confirmation store (a once-a-
@@ -28,7 +29,7 @@ from swingbot.core.market import opex
 from swingbot.core.market.explain import build_explanation
 from swingbot.core.market.session import US_MARKET_TZ, session_close
 from swingbot.core.market.strategy import HORIZONS, LEGACY_HORIZONS
-from swingbot.core.marketdata import data_refresh, data_store
+from swingbot.core.marketdata import data_store
 from swingbot.core.planning import account as account_module
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.tracking.origin import NEXT_SESSION
@@ -57,48 +58,53 @@ def _hours_since_close(bar_date: dt.date, now: dt.datetime) -> float:
     return (now - closed_at).total_seconds() / 3600.0
 
 
-def _cached_after_close(symbol: str, hours: float):
-    """The cached daily frame only if the file was written after the close."""
-    if hours <= 0:
+def _cut_to(frame, day: dt.date):
+    """The frame up to and including `day`; None when it is empty or does not end on `day`."""
+    if frame is None or len(frame) == 0:
         return None
-    try:
-        if data_refresh.is_stale(symbol, "daily", max_age_hours=hours):
-            return None
-        return data_store.load_normalized(symbol, "daily")
-    except Exception:
-        log.debug("outlook: cache read failed for %s -- fetching", symbol, exc_info=True)
-        return None
-
-
-def _ends_on(frame, day: dt.date) -> bool:
-    return frame is not None and len(frame) > 0 and frame.index[-1].date() == day
+    cut = frame[frame.index.date <= day]
+    return cut if len(cut) > 0 and cut.index[-1].date() == day else None
 
 
 def closed_frames(symbols, bar_date: dt.date, now: dt.datetime) -> dict:
-    """{symbol: daily frame whose last bar is bar_date's closed bar}."""
-    hours = _hours_since_close(bar_date, now)
-    frames, cold = {}, []
-    for symbol in dict.fromkeys(symbols):
-        frame = _cached_after_close(symbol, hours)
-        if frame is None:
-            cold.append(symbol)
-        else:
-            frames[symbol] = frame
-    for symbol, frame in fetch._fetch_cold_frames(cold, None):
-        if frame is not None:
-            frames[symbol] = frame
-    return {symbol: frame for symbol, frame in frames.items() if _ends_on(frame, bar_date)}
+    """{symbol: daily frame whose last bar is bar_date's closed bar}.
+
+    The cache is never read: one batched refetch a night, then each frame is cut
+    at bar_date so a later bar can never reach the scan. Before the close nothing
+    is trusted at all (the last bar would be partial). Dropped symbols are logged.
+    """
+    if _hours_since_close(bar_date, now) <= 0:
+        log.warning("outlook: %s has not closed yet -- no frame is trustworthy", bar_date)
+        return {}
+    wanted = list(dict.fromkeys(symbols))
+    frames = {symbol: _cut_to(frame, bar_date) for symbol, frame in fetch._fetch_cold_frames(wanted, None)}
+    kept = {symbol: frame for symbol, frame in frames.items() if frame is not None}
+    dropped = [symbol for symbol in wanted if symbol not in kept]
+    if dropped:
+        log.warning("outlook: no closed %s bar for %d symbol(s): %s", bar_date, len(dropped), ", ".join(dropped))
+    return kept
 
 
 # --- scoring and gates ------------------------------------------------------------
 
-def _scored_items(frames: dict, spy) -> tuple[list, object, float | None]:
-    tier = opex.current_tier()
+def _target_tier(target: dt.date) -> str | None:
+    """The expiration tier of the session the plans trade (None when the flag is off).
+    `current_tier` is flag-guarded and takes its date in US market time."""
+    return opex.current_tier(dt.datetime.combine(target, dt.time(12), tzinfo=US_MARKET_TZ))
+
+
+def _rs_cache(frames: dict, spy) -> dict:
+    """In memory, as the replay does -- never data/universe/rs_cache.json, which the
+    regular base scan and the retrospective read."""
+    return {"rels": {ticker: rs_factors.relative_return(frame, spy) for ticker, frame in frames.items()}}
+
+
+def _scored_items(frames: dict, spy, tier: str | None) -> tuple[list, object, float | None]:
     params = ScanParams.from_config()
     min_confluence = opex.effective_min_confluence(params.min_target_confluence_count, tier)
     min_level = opex.effective_min_confidence_level(tier)
     hard = scan_run._hard_filters_snapshot(params)
-    rs_cache = rs_factors.refresh_rs_cache(frames, spy)
+    rs_cache = _rs_cache(frames, spy)
     breadth = rs_factors.breadth_pct_above_50ema(frames)
     regime = scan_run.get_regime(spy)
     per_ticker = fetch.map_tickers(
@@ -111,11 +117,13 @@ def _scored_items(frames: dict, spy) -> tuple[list, object, float | None]:
     return items, regime, breadth
 
 
-def _sector_inputs(tickers: list) -> tuple[dict, dict, dict]:
+def _sector_inputs(tickers: list, bar_date: dt.date, now: dt.datetime) -> tuple[dict, dict, dict]:
+    """Sector ETFs go through `closed_frames` too: the live `_fetch_frames` is cache-first
+    and would hand a mid-session partial bar to the sector RS."""
     try:
         etf_of = fetch._etf_symbol_of_sector()
         sector_of, needed = fetch._sector_etfs_for_tickers(tickers)
-        return sector_of, etf_of, (fetch._fetch_frames(needed) if needed else {})
+        return sector_of, etf_of, (closed_frames(needed, bar_date, now) if needed else {})
     except Exception:
         log.warning("outlook: sector ETFs unavailable -- ticker-only RS", exc_info=True)
         return {}, {}, {}
@@ -128,8 +136,8 @@ def _regimes(spy):
         return None
 
 
-def _context(frames: dict, spy, regime, breadth) -> qualify.QualifyContext:
-    sector_of, etf_of, sector_frames = _sector_inputs(list(frames))
+def _context(frames: dict, spy, regime, breadth, bar_date: dt.date, now: dt.datetime) -> qualify.QualifyContext:
+    sector_of, etf_of, sector_frames = _sector_inputs(list(frames), bar_date, now)
     return qualify.QualifyContext(
         frames=frames, spy=spy, sector_of=sector_of, etf_symbol_of=etf_of,
         sector_frames=sector_frames, regime=regime, regimes=_regimes(spy), breadth=breadth)
@@ -195,9 +203,12 @@ def _risk_dollars(plan) -> float | None:
 
 
 def _route(ordered: list, open_tickers: set, result: OutlookResult, frames: dict, spy) -> None:
+    """`skipped` lists only tickers that were open BEFORE this run; one issued here
+    and met again as a second item is dropped silently."""
+    issued: set = set()
     for item in ordered:
         plan, ticker = item.plan_v2, item.result.ticker
-        if plan is None:
+        if plan is None or ticker in issued:
             continue
         if ticker in open_tickers:
             if ticker not in result.skipped:
@@ -206,7 +217,7 @@ def _route(ordered: list, open_tickers: set, result: OutlookResult, frames: dict
             result.watch.append(_plan_line(item, plan))
         else:
             _issue(item, plan, result, frames, spy)
-            open_tickers.add(ticker)
+            issued.add(ticker)
 
 
 def _issue(item, plan, result: OutlookResult, frames: dict, spy) -> None:
@@ -238,6 +249,7 @@ def _hourly(ticker: str):
 
 def _card(item, plan, target, explanation, nums, df, frames, spy, trade_id, fit) -> tuple:
     chart_path, chart_filename = short_run._render_chart(item, nums, df, frames, spy, trade_id, fit)
+    short_run._stamp_risk_flags(item, frames, account_module.load_account_config())
     embed = build_embed(item, explanation, trade_log.get_stats(item.conf.level), None, chart_filename,
                         htf_info=item.htf_info, layout=config.ALERT_EMBED_LAYOUT)
     outlook_embeds.decorate_card(
@@ -267,8 +279,9 @@ def _fill(result: OutlookResult, now: dt.datetime) -> None:
         return
     result.regime_lines = outlook_context.regime_lines({s: frames.get(s) for s in REGIME_SYMBOLS})
     scan_frames = short_run._stamp_context({t: frames[t] for t in tickers if t in frames}, spy)
-    items, regime, breadth = _scored_items(scan_frames, spy)
-    accepted, result.near_misses = _verdicts(items, _context(scan_frames, spy, regime, breadth))
+    items, regime, breadth = _scored_items(scan_frames, spy, _target_tier(result.target))
+    context = _context(scan_frames, spy, regime, breadth, result.bar_date, now)
+    accepted, result.near_misses = _verdicts(items, context)
     _route(_ordered(accepted), outlook_open_tickers(), result, scan_frames, spy)
 
 

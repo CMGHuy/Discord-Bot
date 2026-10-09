@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from swingbot import config
+from swingbot.core.marketdata import data_refresh, data_store
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.scanning import outlook_run as orun
 from swingbot.core.scanning import qualify, short_run
@@ -26,26 +27,52 @@ def _frame(last):
 
 # --- closed bars ----------------------------------------------------------------
 
-def test_closed_frames_trusts_only_a_cache_written_after_the_close(monkeypatch):
-    windows = {}
-
-    def is_stale(symbol, timeframe, max_age_hours):
-        windows[symbol] = max_age_hours
-        return symbol != "WARM"
-
-    monkeypatch.setattr(orun.data_refresh, "is_stale", is_stale)
-    monkeypatch.setattr(orun.data_store, "load_normalized", lambda s, tf: _frame(FRIDAY))
-    monkeypatch.setattr(orun.fetch, "_fetch_cold_frames",
-                        lambda cold, progress: [(s, _frame(FRIDAY if s == "COLD" else FRIDAY - dt.timedelta(days=1)))
-                                                for s in cold])
-    frames = orun.closed_frames(["WARM", "COLD", "OLD", "WARM"], FRIDAY, NOW)
-    assert sorted(frames) == ["COLD", "WARM"]          # OLD's last bar is Thursday: dropped
-    assert windows["WARM"] == pytest.approx(49.5)      # Fri 16:00 ET -> Sun 21:30 UTC
+def _final(last):
+    frame = _frame(last)
+    frame["Close"] = 2.0
+    return frame
 
 
-def test_before_the_close_the_cache_is_never_read(monkeypatch):
-    monkeypatch.setattr(orun.data_refresh, "is_stale", lambda *a, **k: pytest.fail("cache consulted"))
-    assert orun._cached_after_close("AAPL", -1.0) is None
+def test_closed_frames_never_trusts_the_cache_even_with_a_fresh_mtime(monkeypatch):
+    """A failed post-close refresh stamps a fresh mtime on a CSV that still holds the
+    mid-session partial bar (data_refresh.refresh_symbol os.utime) -- mtime proves nothing."""
+    monkeypatch.setattr(data_refresh, "is_stale", lambda *a, **k: pytest.fail("cache consulted"))
+    monkeypatch.setattr(data_store, "load_normalized", lambda *a, **k: pytest.fail("cache read"))
+    fetched = []
+
+    def cold(symbols, progress):
+        fetched.append(list(symbols))
+        return [(s, _final(FRIDAY)) for s in symbols]
+
+    monkeypatch.setattr(orun.fetch, "_fetch_cold_frames", cold)
+    frames = orun.closed_frames(["AAPL", "MSFT", "AAPL"], FRIDAY, NOW)
+    assert fetched == [["AAPL", "MSFT"]]                       # one batched call, deduplicated
+    assert frames["AAPL"]["Close"].iloc[-1] == 2.0             # the refetched bar, not a partial one
+
+
+def test_closed_frames_drops_and_logs_symbols_not_ending_on_the_bar(monkeypatch, caplog):
+    monkeypatch.setattr(orun.fetch, "_fetch_cold_frames", lambda cold, progress: [
+        ("OK", _final(FRIDAY)), ("OLD", _final(FRIDAY - dt.timedelta(days=1))), ("GONE", None)])
+    with caplog.at_level("WARNING"):
+        frames = orun.closed_frames(["OK", "OLD", "GONE"], FRIDAY, NOW)
+    assert sorted(frames) == ["OK"]
+    assert "OLD" in caplog.text and "GONE" in caplog.text
+
+
+def test_bars_after_the_signal_session_never_reach_the_scan(monkeypatch):
+    """Truncation: a frame carrying bars after bar_date comes out identical to one that stops there."""
+    monkeypatch.setattr(orun.fetch, "_fetch_cold_frames", lambda cold, progress: [("AAPL", _final(FRIDAY))])
+    base = orun.closed_frames(["AAPL"], FRIDAY, NOW)["AAPL"]
+    monkeypatch.setattr(orun.fetch, "_fetch_cold_frames", lambda cold, progress: [("AAPL", _final(MONDAY))])
+    longer = orun.closed_frames(["AAPL"], FRIDAY, NOW)["AAPL"]
+    assert longer.index[-1].date() == FRIDAY
+    pd.testing.assert_frame_equal(base.loc[longer.index[0]:], longer.loc[base.index[0]:])
+
+
+def test_nothing_is_trusted_before_the_close(monkeypatch):
+    monkeypatch.setattr(orun.fetch, "_fetch_cold_frames", lambda *a: pytest.fail("fetched"))
+    mid_session = dt.datetime(2026, 10, 9, 15, 0, tzinfo=dt.timezone.utc)     # Friday 11:00 ET
+    assert orun.closed_frames(["AAPL"], FRIDAY, mid_session) == {}
 
 
 # --- the short-circuits ----------------------------------------------------------
@@ -112,7 +139,7 @@ def test_route_issues_stop_entries_lists_market_entries_and_skips_open_tickers(m
     orun._route(ordered, {"TSLA"}, result, frames={}, spy=None)
     assert issued == ["AAPL"]                           # once per ticker
     assert [line.ticker for line in result.watch] == ["MSFT"]
-    assert result.skipped == ["AAPL", "TSLA"]
+    assert result.skipped == ["TSLA"]                   # only a PREVIOUSLY open ticker; AAPL was issued here
 
 
 def test_issue_stamps_the_plan_and_logs_an_outlook_trade(monkeypatch):
@@ -178,3 +205,142 @@ def test_log_trade_passes_the_origin_through(monkeypatch):
     assert seen["origin"] == "next_session"
     short_run._log_trade(item, nums, "why", None, [])
     assert seen["origin"] is None
+
+
+# --- the scan: closed bars in, no side effects out -------------------------------------
+
+def _universe(*symbols):
+    """Frames that end on MONDAY: Friday's bar plus a later one the scan must never see."""
+    return {s: _final(MONDAY) for s in symbols}
+
+
+def _run_with(monkeypatch, captured, *, scan_tickers=("AAPL",), sector_etf="XLK"):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    monkeypatch.setattr(config, "MARKET_REGIME_TICKER", "SPY")
+    monkeypatch.setattr(orun.scan_run, "_scan_tickers", lambda: list(scan_tickers))
+    everything = _universe(*scan_tickers, "SPY", "QQQ", sector_etf)
+    monkeypatch.setattr(orun.fetch, "_fetch_cold_frames",
+                        lambda cold, progress: [(s, everything[s]) for s in cold if s in everything])
+    monkeypatch.setattr(orun.fetch, "_etf_symbol_of_sector", lambda: {"Tech": sector_etf})
+    monkeypatch.setattr(orun.fetch, "_sector_etfs_for_tickers",
+                        lambda tickers: ({t: "Tech" for t in tickers}, [sector_etf]))
+    monkeypatch.setattr(orun.fetch, "_fetch_frames", lambda *a: pytest.fail("cache-first sector fetch"))
+    monkeypatch.setattr(orun.short_run, "_stamp_context", lambda frames, spy: frames)
+    monkeypatch.setattr(orun.scan_run, "get_regime", lambda spy: "regime")
+    monkeypatch.setattr(orun.rs_factors, "refresh_rs_cache", lambda *a: pytest.fail("shared rs cache written"))
+    monkeypatch.setattr(orun.rs_factors, "atomic_write_json", lambda *a: pytest.fail("file written"))
+    monkeypatch.setattr(TradeLog, "update_open_trades", lambda *a, **k: pytest.fail("monitored open trades"))
+
+    def scan_one(ticker, df, horizons, progress, regime, min_confluence, min_level, **kwargs):
+        captured["scan"].append((ticker, df, kwargs))
+        return {"items": [_item(ticker)]}
+
+    monkeypatch.setattr(orun.analyze, "_scan_one", scan_one)
+    monkeypatch.setattr(orun.dedup, "dedup_scan_items", list)
+
+    def verdict(candidate, item, context):
+        captured["contexts"].append(context)
+        return qualify.Accepted(item)
+
+    monkeypatch.setattr(orun.qualify, "qualify_short_item", verdict)
+    monkeypatch.setattr(orun, "_issue", lambda item, plan, result, frames, spy: captured["issued"].append(
+        (item.result.ticker, frames, spy)))
+
+
+def _captured():
+    return {"scan": [], "contexts": [], "issued": []}
+
+
+def test_the_run_scans_closed_bars_only_with_no_monitoring_and_no_file_writes(monkeypatch):
+    captured = _captured()
+    _run_with(monkeypatch, captured)
+    result = orun.run_outlook(SUNDAY, now=NOW)
+    assert result.unavailable is None
+    ticker, df, kwargs = captured["scan"][0]
+    assert ticker == "AAPL" and kwargs["io"] is orun.OUTLOOK_IO and kwargs["live_prices"] == {}
+    assert df.index[-1].date() == FRIDAY and kwargs["spy_df"].index[-1].date() == FRIDAY
+    context = captured["contexts"][0]
+    assert context.confirmations is None                       # no scan-to-scan debounce
+    for frame in [*context.frames.values(), context.spy, *context.sector_frames.values()]:
+        assert frame.index[-1].date() == FRIDAY                # sector ETFs too, never a Monday bar
+    assert set(context.sector_frames) == {"XLK"}
+    assert [t for t, _, _ in captured["issued"]] == ["AAPL"]
+
+
+def test_the_outlook_io_never_monitors_open_trades():
+    assert orun.OUTLOOK_IO.monitor_scan("AAPL", None, 1.0) == ([], [])
+    assert orun.OUTLOOK_IO.monitor_open("AAPL", None, 1.0) == ([], [])
+
+
+def test_the_scan_prices_the_target_session_opex_tier(monkeypatch):
+    captured = _captured()
+    _run_with(monkeypatch, captured)
+    monkeypatch.setattr(config, "OPEX_CAUTION_ENABLED", True)
+    orun._scored_items({"AAPL": _final(FRIDAY)}, _final(FRIDAY), orun._target_tier(dt.date(2026, 10, 16)))
+    assert captured["scan"][0][2]["opex_tier_today"] == orun.opex.MONTHLY      # Fri 2026-10-16 is the monthly expiry
+
+
+def test_target_tier_follows_the_target_session_not_the_clock(monkeypatch):
+    monkeypatch.setattr(config, "OPEX_CAUTION_ENABLED", True)
+    assert orun._target_tier(dt.date(2026, 10, 16)) == orun.opex.MONTHLY
+    assert orun._target_tier(MONDAY) is None
+    monkeypatch.setattr(config, "OPEX_CAUTION_ENABLED", False)
+    assert orun._target_tier(dt.date(2026, 10, 16)) is None
+
+
+def test_the_rs_cache_is_built_in_memory(monkeypatch):
+    monkeypatch.setattr(orun.rs_factors, "relative_return", lambda frame, spy: 0.25)
+    cache = orun._rs_cache({"AAPL": object(), "MSFT": object()}, object())
+    assert cache == {"rels": {"AAPL": 0.25, "MSFT": 0.25}}
+
+
+def test_sector_etfs_resolve_on_the_closed_bar(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(orun.fetch, "_etf_symbol_of_sector", lambda: {"Tech": "XLK"})
+    monkeypatch.setattr(orun.fetch, "_sector_etfs_for_tickers", lambda tickers: ({"AAPL": "Tech"}, ["XLK"]))
+    monkeypatch.setattr(orun, "closed_frames", lambda symbols, bar, now: seen.update(args=(list(symbols), bar, now))
+                        or {"XLK": _frame(FRIDAY)})
+    sector_of, etf_of, frames = orun._sector_inputs(["AAPL"], FRIDAY, NOW)
+    assert (sector_of, etf_of, list(frames)) == ({"AAPL": "Tech"}, {"Tech": "XLK"}, ["XLK"])
+    assert seen["args"] == (["XLK"], FRIDAY, NOW)
+
+
+def test_sector_inputs_degrade_to_ticker_only_rs(monkeypatch):
+    monkeypatch.setattr(orun.fetch, "_etf_symbol_of_sector", lambda: (_ for _ in ()).throw(RuntimeError("down")))
+    assert orun._sector_inputs(["AAPL"], FRIDAY, NOW) == ({}, {}, {})
+
+
+def test_context_carries_the_gate_inputs(monkeypatch):
+    monkeypatch.setattr(orun, "_sector_inputs", lambda tickers, bar, now: ({"A": "S"}, {"S": "XLK"}, {"XLK": 1}))
+    monkeypatch.setattr(orun, "_regimes", lambda spy: "series")
+    context = orun._context({"A": 1}, "spy", "regime", 55.0, FRIDAY, NOW)
+    assert (context.sector_of, context.sector_frames, context.regimes) == ({"A": "S"}, {"XLK": 1}, "series")
+    assert (context.spy, context.regime, context.breadth, context.confirmations) == ("spy", "regime", 55.0, None)
+
+
+def test_risk_dollars_sizes_the_stop_distance(monkeypatch):
+    plan = _plan(entry_type="stop_entry", trigger_price=102.0, stop_loss=100.0)
+    monkeypatch.setattr(orun.account_module, "compute_position_size", lambda entry, stop: {"shares": 10})
+    assert orun._risk_dollars(plan) == 20.0
+    monkeypatch.setattr(orun.account_module, "compute_position_size", lambda entry, stop: {"shares": 0})
+    assert orun._risk_dollars(plan) is None
+
+    def boom(entry, stop):
+        raise ValueError("no account")
+
+    monkeypatch.setattr(orun.account_module, "compute_position_size", boom)
+    assert orun._risk_dollars(plan) is None
+
+
+def test_the_card_stamps_the_risk_flags_before_it_is_built(monkeypatch):
+    order = []
+    monkeypatch.setattr(orun.short_run, "_render_chart", lambda *a: (None, None))
+    monkeypatch.setattr(orun.short_run, "_stamp_risk_flags", lambda item, frames, cfg: order.append("flags"))
+    monkeypatch.setattr(orun.account_module, "load_account_config", lambda: {"balance": 1000.0})
+    monkeypatch.setattr(orun, "build_embed", lambda *a, **k: order.append("embed") or discord.Embed(description="x"))
+    monkeypatch.setattr(orun, "build_simple_alert", lambda item: None)
+    monkeypatch.setattr(orun, "_hourly", lambda ticker: None)
+    item = _item("AAPL")
+    item.conf.level, item.htf_info = 3, None
+    orun._card(item, _plan(entry_type="stop_entry"), MONDAY, "why", {}, None, {}, None, "T1", None)
+    assert order == ["flags", "embed"]
