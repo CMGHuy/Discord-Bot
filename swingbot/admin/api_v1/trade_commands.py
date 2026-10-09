@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 
 from flask import jsonify, request
 
+from swingbot.core.analytics import runner_path as rp
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.core.planning.plan_engine import PlanStatus, record_transition
 from swingbot.core.planning.plan_store import PlanStore
@@ -99,10 +100,13 @@ def _close_plan(store: PlanStore, plan) -> None:
         # separate processes over one trades.json, so an unlocked
         # read-modify-write here could race the scan loop.
         tl.close_trade_manual(linked["id"], reason="manual (plan close, admin UI)")
+    was_partial = plan.status == PlanStatus.PARTIAL
     # `at` is passed explicitly -- record_transition defaults it to None, and
     # the lifecycle strip's "today" counts read status_history[-1]["at"].
     record_transition(plan, PlanStatus.CLOSED, reason="manual",
                       at=datetime.now(timezone.utc).isoformat())
+    if was_partial:   # v142: a manual runner close stamps its path too; never raises
+        rp.stamp_runner_path(plan, rp.cached_daily_bars, source="live")
     store.update(plan)
     _queue_notify({"kind": "plan_transition", "plan_id": plan.plan_id,
                    "ticker": plan.ticker, "status": plan.status})
