@@ -203,6 +203,8 @@ Read before acting:
 - `docs/claude/testing-cost.md` before optimizing, timing or interpreting a
   changed test count.
 - `docs/claude/code-complexity.md` before writing or changing any function.
+- `docs/claude/model-routing.md` before writing a plan or dispatching a plan
+  task: the `**Model:**` tier rubric and the escalation ladder.
 - `docs/claude/schema-evolution.md` before changing a table's shape or the
   fields a stored record carries (add, rename, drop, promote).
 
@@ -399,6 +401,12 @@ creation from one repo-wide counter over both document filenames and git log,
 recomputed immediately before the commit (sessions race it). A plan created from
 an existing spec reuses that spec's number. Document numbers and `VERSION.json`
 release versions are independent (`document-conventions.md`).
+
+Plans numbered v146 or above stamp `**Model:** <haiku|sonnet|opus> — <reason>`
+as the first line under every `### Task`, from the rubric in
+`docs/claude/model-routing.md`; dispatch `task-implementer` at that tier.
+`tests/hooks/test_plan_model_stamp.py` enforces it; v145 and earlier are
+exempt.
 
 Never hard-code a `ui`/`bot` version in a plan, and give it no `Version:` line.
 `Bump:` states the level only: `bot patch`, `ui minor`, `none`. Numbers resolve

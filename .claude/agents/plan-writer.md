@@ -18,6 +18,7 @@ Inlined from the `/new-doc` skill; full detail: `docs/claude/document-convention
 - Header: `**Bump:**` level only, `**Edge:**` one of `expectancy`/`harvest`/`volume`/`none (integrity)`, `**Spec:**` link back.
 - A spec numbered above v140 must carry `**Screen:**` under `Edge:` (`document-conventions.md`); a spec without one is a `BLOCKED:` question, not a plan.
 - `### Task <PREFIX><n>:` headings, `# Phase` sections; over 1500 lines split into `_N` parts — never compress a task.
+- Plans numbered above v145: the first line under every `### Task` is `**Model:** <haiku|sonnet|opus> — <one-clause reason>`, from the rubric in `docs/claude/model-routing.md` (the higher tier wins).
 - `## Parallelisation`: disjoint files + no contract dependency; name every sequential-edge reason.
 - One full-suite run as the final task; verify every named symbol exists (`git grep -n`) or mark it created by an earlier task.
 - **Do not commit** — the controller reviews and commits on `main`.

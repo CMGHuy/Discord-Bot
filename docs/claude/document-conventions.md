@@ -236,6 +236,16 @@ not directly below `Screen:`, names fewer than one or more than three roles,
 or names a skill that declares no `## Lens`. A split spec carries the line in
 its `_0-index` part.
 
+**`Model:`** — plans only, and only plans numbered **v146 or above**. It is
+not a header-block line: it is the first line under every `### Task` heading,
+`**Model:** <haiku|sonnet|opus> — <one-clause reason>`, chosen from the rubric
+in `model-routing.md` (when a task matches more than one row, the higher tier
+wins). `/task-brief` copies it into the brief and the controller dispatches
+`task-implementer` at that tier; repeated review failures climb the
+escalation ladder in the same doc. `tests/hooks/test_plan_model_stamp.py`
+fails any task in such a plan, in any part, whose first non-blank line is not
+a valid stamp.
+
 **`## Parallelisation`** — its own section, below.
 
 ## How long a document may be

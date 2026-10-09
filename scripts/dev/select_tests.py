@@ -268,6 +268,8 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     # every spec past v145 a valid **Panel:** line.
     ("docs/superpowers/specs/", ("tests/hooks/test_spec_screen_header.py",
                                  "tests/hooks/test_spec_panel_header.py")),
+    # Every plan past v145 must stamp **Model:** under each ### Task.
+    ("docs/superpowers/plans/", ("tests/hooks/test_plan_model_stamp.py",)),
     # The pre-registration ledger is loaded and validated row by row.
     ("docs/superpowers/results/preregistration-ledger.jsonl",
      ("tests/backtesting/test_preregistration_ledger_file.py",
