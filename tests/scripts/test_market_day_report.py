@@ -162,4 +162,6 @@ def test_live_section_prints_no_interval_and_no_correlation():
     assert "Spearman" not in text
     assert "holdout" in text
     assert "send" in text
+    assert "all directions" in text
+    assert "bullish stages" in text
     assert "| > +1% | 12 | 12 | 100.00% " in text

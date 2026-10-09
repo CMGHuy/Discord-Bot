@@ -280,7 +280,7 @@ def _with_reached(sums: dict[str, dict[str, int]]) -> dict[str, dict[str, int]]:
 
 
 def _live_volume_block(alerts, observed, days) -> list[str]:
-    lines = ["### Alerts per scanned day", "",
+    lines = ["### Scan alerts per scanned day (all directions)", "",
              "Denominator: trading days with at least one scan. A day with no scan is an "
              "outage and is left out.", ""]
     for form in md.FORMS:
@@ -290,15 +290,15 @@ def _live_volume_block(alerts, observed, days) -> list[str]:
 
 
 def _live_cause_block(sums, days) -> list[str]:
-    lines = ["### Cause: where candidates are lost (bullish)", ""]
+    lines = ["### Scan totals (all directions) and bullish stages", ""]
     staged = _with_reached(sums)
     pairs = _stage_pairs(sums)
     for form in md.FORMS:
         table = md.sum_by_bucket(staged, days, form)
-        lines += _cause_lines(f"alerts / signals -- {FORM_NOTE[form]}", table,
+        lines += _cause_lines(f"all-direction alerts / signals -- {FORM_NOTE[form]}", table,
                               [("alerts / signals", "alerts", "signals")])
         if pairs:
-            lines += _cause_lines(f"stage pass rates -- {form}", table, pairs)
+            lines += _cause_lines(f"bullish stage pass rates -- {form}", table, pairs)
     return lines
 
 
@@ -306,8 +306,10 @@ def live_section(rows: list[dict], scans: list[dict], days: dict) -> list[str]:
     alerts, sums = scan_days(scans)
     funnel_days = sum(1 for cell in sums.values() if any(":" in key for key in cell))
     lines = ["## Live paper book", "", LIVE_WARNING, "", LEDGER_NOTE, "",
+             "Scan signals and alerts count all directions; funnel stages below select "
+             "bullish stages only.", "",
              f"Closed trades: {len(rows)}. Scanned trading days: {len(alerts)}. "
-             f"Days with a staged funnel: {funnel_days}.", ""]
+             f"Days with bullish stages: {funnel_days}.", ""]
     lines += _trade_block(rows, days, intervals=False)
     lines += _close_day_block(rows, days, intervals=False, population="live book")
     lines += _live_volume_block(alerts, set(alerts), days)

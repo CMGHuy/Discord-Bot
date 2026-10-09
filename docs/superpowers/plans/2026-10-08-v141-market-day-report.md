@@ -23,6 +23,8 @@
 7. **Day of a live event is the US/Eastern calendar date** of its UTC stamp (`swingbot.core.market.session.US_MARKET_TZ`).
 8. **v51 already saw one edge of this.** `docs/superpowers/results/2026-08-23-alert-density-train.md` found busy days carry a positive mean SPY return. That is density against SPY; this plan measures SPY against outcome and volume directly. The results file cites it.
 
+9. **Live scan totals are all-direction.** `scan_run.py` writes `signals` as all scenarios found and `alerts` as all emitted alerts. The `short_funnel` snapshot carries both directions despite its name; `funnel_stage_counts` selects bullish events. Thus the live scan-volume table cannot measure LONG openings or attribute a LONG loss to a stage. The results label totals as all-direction and report the bullish-stage day count separately.
+
 ## Global Constraints
 
 - TRAIN window `2020-01-01..2023-12-31` only. The script refuses any other window for the backtest half. VALIDATION `2024-01-01..2025-12-31` is never read.
