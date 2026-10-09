@@ -18,7 +18,7 @@ from pathlib import Path
 from swingbot.core.backtesting.instrument import stats
 
 ROOT = Path(__file__).resolve().parents[2]
-SPECS_DIR = ROOT / "docs" / "superpowers" / "specs"
+SPECS_DIR = ROOT / "docs/superpowers/specs"
 LAST_GRANDFATHERED = 140
 SCREEN_PASS = "SCREEN-PASS"
 
@@ -137,10 +137,10 @@ def test_a_missing_headroom_path_fails(tmp_path):
 
 
 def test_an_existing_headroom_path_passes_for_harvest_and_expectancy(tmp_path):
-    (tmp_path / "docs").mkdir()
-    (tmp_path / "docs" / "headroom.md").write_text("x", encoding="utf-8")
+    (tmp_path / "notes").mkdir()
+    (tmp_path / "notes" / "headroom.md").write_text("x", encoding="utf-8")
     for edge in ("harvest", "expectancy"):
-        text = _spec(edge, "harvest-headroom `docs/headroom.md`")
+        text = _spec(edge, "harvest-headroom `notes/headroom.md`")
         assert screen_problems(text, ledger=LEDGER, root=tmp_path) == []
 
 
