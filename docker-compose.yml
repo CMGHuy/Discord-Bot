@@ -108,10 +108,14 @@ services:
     # deploy/deploy.sh. The local default keeps `docker compose up --build`
     # working unchanged for development.
     image: ${SWING_BOT_IMAGE:-swing-bot:latest}
-    # Yields to the admin UI when the CPU is saturated (see `admin`'s
-    # cpu_shares). A scan takes a little longer under contention; it is a
-    # batch job, the dashboard is someone waiting.
-    cpu_shares: 512
+    # Hard cap: one of the production box's two vCPUs always stays free for
+    # the admin UI. A scan runs every 5 minutes for 2-3 of them and peaks at
+    # ~1.9 cores, which left the dashboard starved about half the time; a
+    # weight (`cpu_shares`) alone did not fix it. The scan is mostly
+    # single-threaded (SCAN_WORKERS=1), so it stretches only slightly and
+    # stays well inside its 5-minute interval. It is a batch job, the
+    # dashboard is someone waiting.
+    cpus: "1.0"
     # Kept so a developer can still build locally. The server never builds:
     # deploy.sh pulls and runs `up --no-build`.
     build: .
