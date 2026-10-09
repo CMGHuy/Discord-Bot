@@ -108,6 +108,10 @@ services:
     # deploy/deploy.sh. The local default keeps `docker compose up --build`
     # working unchanged for development.
     image: ${SWING_BOT_IMAGE:-swing-bot:latest}
+    # Yields to the admin UI when the CPU is saturated (see `admin`'s
+    # cpu_shares). A scan takes a little longer under contention; it is a
+    # batch job, the dashboard is someone waiting.
+    cpu_shares: 512
     # Kept so a developer can still build locally. The server never builds:
     # deploy.sh pulls and runs `up --no-build`.
     build: .
@@ -174,6 +178,12 @@ services:
     image: ${SWING_BOT_IMAGE:-swing-bot:latest}
     container_name: swing-bot-admin
     restart: unless-stopped
+    # Priority under CPU contention, not a cap. The production box has 2
+    # vCPUs and a scan drives the bot to ~186% of them, which starved this
+    # container and made every dashboard request ~2x slower while a scan
+    # ran. Shares only bite when the CPU is saturated: idle, both services
+    # still get everything they ask for. The bot gets the low weight below.
+    cpu_shares: 2048
     command: ["python", "admin_ui.py"]
     env_file:
       - .env
