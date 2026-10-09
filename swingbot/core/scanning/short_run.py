@@ -169,7 +169,7 @@ def _fit_trendline(df, plan, h, trend):
         return None
 
 
-def _log_trade(item, nums, explanation, fit, alerts):
+def _log_trade(item, nums, explanation, fit, alerts, origin=None):
     """Persist the plan, then the paper trade (v116 order); returns the trade id."""
     result, plan, conf = item.result, item.plan, item.conf
     plan_v2 = item.plan_v2 if config.PLAN_ENGINE_V2 == "on" and item.plan_v2 is not None else None
@@ -191,7 +191,7 @@ def _log_trade(item, nums, explanation, fit, alerts):
         cohort_label=plan_v2.cohort_label if plan_v2 is not None else None,
         cohort_stats=plan_v2.cohort_stats if plan_v2 is not None else None,
         risk_features=plan_v2.risk_features if plan_v2 is not None else None,
-        entry_context=plan_v2.entry_context if plan_v2 is not None else None)
+        entry_context=plan_v2.entry_context if plan_v2 is not None else None, origin=origin)
 
 
 def _render_chart(item, nums, df, frames, spy_df, trade_id, fit):
