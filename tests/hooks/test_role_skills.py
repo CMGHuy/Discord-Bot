@@ -22,6 +22,9 @@ ROLES = {
     "veteran-trader": "sonnet",
     "technical-analyst": "sonnet",
     "fundamental-analyst": "sonnet",
+    "staff-engineer": "opus",
+    "quant-engineer": "sonnet",
+    "senior-engineer": "sonnet",
 }
 
 SECTIONS = ("## Lens", "## Checklist", "## Red flags", "## Out of scope")

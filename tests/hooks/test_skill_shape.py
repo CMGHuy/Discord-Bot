@@ -21,7 +21,8 @@ MAX_SKILL_LINES = 80
 # Tier 2 is slash-only and carries disable-model-invocation instead.
 TIER_1_AND_3 = {"backtest-gate", "no-lookahead", "pooled-numbers", "mirror-prod", "edge-module", "alert-surface", "schema-change", "worktree-lifecycle",
                 "quant-researcher", "risk-manager", "financial-advisor",
-                "veteran-trader", "technical-analyst", "fundamental-analyst"}   # each skill task appends its own name
+                "veteran-trader", "technical-analyst", "fundamental-analyst",
+                "staff-engineer", "quant-engineer", "senior-engineer"}   # each skill task appends its own name
 TIER_2 = {"close-out", "new-doc", "deploy", "stable-snapshot", "backup-pull"}        # each ritual task appends its own name
 # Rituals the partner lets Claude run on its own (2026-10-08). Still checklists
 # with no Trigger table; their description names the moment they run.
