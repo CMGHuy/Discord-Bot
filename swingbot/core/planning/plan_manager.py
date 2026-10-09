@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 
 from swingbot import config
+from swingbot.core.analytics import runner_path as rp
 from swingbot.core.market.session import (RTH_OPEN, US_MARKET_TZ, is_quiet_hours,
                                           is_regular_session, is_tape_open, now_et,
                                           nyse_calendar, session_close, session_date)
@@ -318,7 +319,7 @@ def _daily_frame(ticker):
 class PlanManager:
     def __init__(self, store: PlanStore, price_fn, bar_count_fn=None,
                  atr_fn=None, trade_log=None, price_batch_fn=None,
-                 auction_close_fn=None, daily_frame_fn=None):
+                 auction_close_fn=None, daily_frame_fn=None, runner_bars_fn=None):
         self.store = store
         self.price_fn = price_fn            # ticker -> live float
         # Optional on purpose: the deterministic unit-test feeds only expose
@@ -335,6 +336,9 @@ class PlanManager:
         self._last_seen: dict[str, tuple[str, float]] = {}
         self._risk_cap_warned: set[str] = set()
         self.daily_frame_fn = daily_frame_fn   # ticker -> daily OHLCV (v123)
+        # v142: ticker -> cached daily bars for the runner_path stamp. Disk
+        # only (rp.cached_daily_bars in production); None = stamp null.
+        self.runner_bars_fn = runner_bars_fn
         self._structure_seen: dict[str, tuple[str, bool]] = {}
 
     def _now(self) -> str:
@@ -1006,6 +1010,7 @@ class PlanManager:
                "r": r2, "reason": reason, "closed_at": at, **(extra or {})}
         plan.legs_realized.append(leg)
         record_transition(plan, PlanStatus.CLOSED, reason=reason, at=at)
+        rp.stamp_runner_path(plan, self.runner_bars_fn, source="live")   # v142; never raises
         self._structure_seen.pop(plan.plan_id, None)
         persisted = self._persist_terminal(plan, leg, "win" if reason.startswith("tp1_") else "closed")
         return [PlanEvent(plan.plan_id, "closed",
@@ -1308,7 +1313,8 @@ def _manager() -> PlanManager:
         batch_fn = _price_batch_fn if _price_fn is _DEFAULT_PRICE_FN else None
         _MANAGER = PlanManager(PlanStore(), _price_fn, atr_fn=_live_atr,
                                bar_count_fn=_bars_since, trade_log=TradeLog(),
-                               price_batch_fn=batch_fn, daily_frame_fn=_daily_frame)
+                               price_batch_fn=batch_fn, daily_frame_fn=_daily_frame,
+                               runner_bars_fn=rp.cached_daily_bars)
     return _MANAGER
 
 
