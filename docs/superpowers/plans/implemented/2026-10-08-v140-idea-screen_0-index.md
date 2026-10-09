@@ -4,7 +4,7 @@
 
 **Bump:** none
 **Edge:** expectancy
-**Spec:** [`docs/superpowers/specs/2026-10-08-v140-idea-screen-design.md`](../specs/2026-10-08-v140-idea-screen-design.md)
+**Spec:** [`docs/superpowers/specs/2026-10-08-v140-idea-screen-design.md`](../../specs/implemented/2026-10-08-v140-idea-screen-design.md)
 
 **Goal:** Build a research-only screen that answers "does this entry predict anything, after costs, beyond its own trend state?" on the point-in-time S&P 500 members of 2010-2019 that are cached (506 of 719 at writing; the results doc discloses the live counts), make it a hard gate for new entry specs (`**Screen:**` header, enforced by a test), and screen the first batch of four published daily-bar effects once each.
 

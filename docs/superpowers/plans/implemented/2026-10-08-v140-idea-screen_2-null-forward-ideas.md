@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Header, Global Constraints, Review Focus, Frozen readings and Parallelisation live in [`_0-index`](2026-10-08-v140-idea-screen_0-index.md); every task here implicitly includes them. Work only in the worktree `E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-08-v140-idea-screen`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-08-v140-idea-screen-design.md`](../specs/2026-10-08-v140-idea-screen-design.md)
+**Spec:** [`docs/superpowers/specs/2026-10-08-v140-idea-screen-design.md`](../../specs/implemented/2026-10-08-v140-idea-screen-design.md)
 
 # Phase 2 — Group A (parallel after V140-3)
 

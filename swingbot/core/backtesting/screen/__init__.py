@@ -2,5 +2,5 @@
 
 Research tooling only -- nothing outside swingbot/core/backtesting/ imports
 this package (tests/backtesting/screen/test_import_guard.py). See
-docs/superpowers/specs/2026-10-08-v140-idea-screen-design.md.
+docs/superpowers/specs/implemented/2026-10-08-v140-idea-screen-design.md.
 """

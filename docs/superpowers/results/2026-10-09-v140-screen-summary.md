@@ -1,6 +1,6 @@
 # v140 first screen batch — summary
 
-**Spec:** `docs/superpowers/specs/2026-10-08-v140-idea-screen-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-08-v140-idea-screen-design.md`
 **Pass rule:** ΔExpR ≥ +0.10R after costs, lower 95% week-cluster bound > 0, ≥ 7 of 9 years (2011–2019) positive, N ≥ 300 (`docs/claude/backtest-methodology.md` § Stage −2).
 
 | Idea | Verdict | N | ΔExpR | 95% interval | Years positive | Record |

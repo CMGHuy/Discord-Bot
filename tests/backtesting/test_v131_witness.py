@@ -85,6 +85,22 @@ def write_golden() -> None:
     GOLDEN.write_text(json.dumps(snapshot(), separators=(",", ":"), default=str), encoding="utf-8")
 
 
+def _same(current, before):
+    """Equal, except that a float may differ in its last bits. The golden was
+    written on Windows and CI runs Linux: libm gives 91.3788433158948 and
+    91.37884331589481 for the same plan. A behaviour change moves a price by
+    far more than 1e-9 relative, which is what this still catches."""
+    if isinstance(current, float) and isinstance(before, float):
+        return current == pytest.approx(before, rel=1e-9, abs=0)
+    if isinstance(current, (list, tuple)) and isinstance(before, (list, tuple)):
+        return len(current) == len(before) and all(
+            _same(c, b) for c, b in zip(current, before))
+    if isinstance(current, dict) and isinstance(before, dict):
+        return current.keys() == before.keys() and all(
+            _same(current[k], before[k]) for k in current)
+    return current == before
+
+
 def test_golden_is_not_vacuous():
     golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
     assert len(golden["trades"]) >= 200
@@ -94,7 +110,7 @@ def test_golden_is_not_vacuous():
 def test_existing_strategies_build_the_pre_v131_plans_and_trades():
     golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
     now = snapshot()
-    assert now["trades"] == golden["trades"]
+    assert _same(now["trades"], golden["trades"])
     assert len(now["plans"]) == len(golden["plans"])
     for current, before in zip(now["plans"], golden["plans"]):
-        assert current == before, current[:5]
+        assert _same(current, before), current[:5]

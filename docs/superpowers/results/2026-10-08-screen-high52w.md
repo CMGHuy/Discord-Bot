@@ -8,7 +8,7 @@
 
 **Trade:** entry next open; stop 1.5 x ATR14; target 3.0 x ATR14; a gap through either level fills at the open; stop first on a bar touching both; costs 5.0 bps a side + 0.0200R commission.
 
-**Spec:** `docs/superpowers/specs/2026-10-08-v140-idea-screen-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-08-v140-idea-screen-design.md`
 
 ## Universe and counters
 
