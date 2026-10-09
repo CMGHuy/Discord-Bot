@@ -19,7 +19,7 @@ import { Analytics } from './analytics';
 
 /* v94 — the Analytics shell.
  *
- * This file covers exactly what the shell owns: the six tabs in the order
+ * This file covers exactly what the shell owns: the seven tabs in the order
  * the spec names them, the one scope bar above them, and the fact that a
  * scope change is written into the URL rather than kept in component state.
  * Every panel's own behaviour is tested beside it in `tabs/`, which is the
