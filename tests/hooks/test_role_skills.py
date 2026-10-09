@@ -57,7 +57,7 @@ def lens_skills(skills_dir=SKILLS_DIR):
 
 def _cases(role):
     root = SKILLS_DIR / role / "evals"
-    return sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
+    return sorted(p for p in root.iterdir() if p.is_dir() and p.name != "results") if root.is_dir() else []
 
 
 def _case_problems(role, case):

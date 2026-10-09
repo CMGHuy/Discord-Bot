@@ -1,6 +1,6 @@
 ---
 name: quant-engineer
-description: Use when reviewing a spec, plan or diff from the quant-engineer seat -- the plumbing under every backtest and replay number: lookahead, numerics, the two OHLCV caches, live/backtest parity and reproducibility -- or when the expert-reviewer agent is dispatched with role=quant-engineer. Loads no-lookahead for feature code. Not for whether a result is statistically meaningful (quant-researcher) and not for general code quality (senior-engineer).
+description: Use when reviewing a spec, plan or diff from the quant-engineer seat -- the plumbing under every backtest and replay number: lookahead, numerics, the two OHLCV caches, live/backtest parity and reproducibility (can a recorded results doc be reproduced from its command?) -- or when the expert-reviewer agent is dispatched with role=quant-engineer. Loads no-lookahead for feature code. Not for whether a result is statistically meaningful (quant-researcher) and not for general code quality (senior-engineer).
 ---
 
 # Quant engineer

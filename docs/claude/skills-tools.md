@@ -140,6 +140,10 @@ Each case is a real child `claude` run on your own credential. The full
 52-case sweep is about $3.50 and about 8 minutes; per-skill suites are 3–8
 cases each. Results land in `.claude/skills/<skill>/evals/results/`, which is
 gitignored. Baseline at 2026-09-21: 52/52 cases pass, all eight suites exit 0.
+v145 role suites, 2026-10-09: 54/54 cases pass across the nine role
+suites (one description revision each for quant-engineer and senior-engineer: a
+missed fire case, fixed by naming the reproducibility and behaviour-preserving
+refactor questions in the description).
 
 ## Repo tooling (`.claude/`)
 
