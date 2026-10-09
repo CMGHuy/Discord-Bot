@@ -4,7 +4,9 @@
 
 **Bump:** ui minor · bot patch
 **Edge:** none (integrity)
-**Spec:** [`docs/superpowers/specs/2026-10-08-v142-partials-analytics-tab-design.md`](../specs/2026-10-08-v142-partials-analytics-tab-design.md)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-08-v142-partials-analytics-tab-design.md`](../../specs/implemented/2026-10-08-v142-partials-analytics-tab-design.md)
+
+**Progress:** CLOSED 2026-10-09. All of V142-0..V142-11 done and on `main`; released as ui 1.22.0 and bot 2.2.3. Production backfill: dry run `stamped=189 skipped=0 unavailable=0`, `--apply` `stamped=189`, re-run `stamped=0 skipped=189 unavailable=0` (U=0, so no plan ids to list). Endpoint spot-check: funnel filled 493, tp1 190, runner_closed 189, tp2 74; `path_unavailable` 0, `runner_r_unavailable` 16. Two CI/build breaks outside v142 were fixed on the way, each in its own commit: the calendar day-drawer spec, and the v128 FVG witness (last-bit float drift on Linux).
 
 **Goal:** A seventh Analytics tab, **Partials**, that shows whether the runner earns its keep (TP1→TP2 conversion, runner-beat-all-out, the four counterfactuals, hold times, breakdowns) from the live book. Plans gain a `runner_path` stamp at runner close, and a one-off backfill stamps closed history from the disk cache.
 
