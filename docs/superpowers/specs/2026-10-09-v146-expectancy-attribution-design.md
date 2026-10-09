@@ -295,7 +295,12 @@ measured no; the bucket candidates stand on their own.
   written on every run (`data/` is mounted into both the bot and admin
   containers; the writer creates `data/reports/`). The module exposes
   `load_latest() -> dict | None`, returning a JSON-serialisable dict, so
-  v150 imports it rather than re-running the study. Shape:
+  v150 imports it rather than re-running the study. The four requirements in
+  v150's spec § "Cross-spec requirements on the v146 and v147 plans" are part
+  of this contract: atomic write (temp + `os.replace`), a loader importable
+  without pandas/numpy/backtesting, `verdict_of_record: {verdict, date, n}`
+  carried forward unchanged by later runs plus `looks` (the BH family size)
+  persisted beside `verdict`, and overwrite-latest retention. Shape:
   `{generated_at, verdict, seed, populations: {live: {...}, train: {...}}}`,
   each population carrying `buckets`, `factors`, `monotonicity`, with a
   `thin: true` flag on every N < 30 bucket. The name used everywhere it is

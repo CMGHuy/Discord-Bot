@@ -269,7 +269,13 @@ reads the TRAIN JSONL files and the live table, persists its latest result to
 `data/reports/gate-counterfactual.json` (`data/` is mounted into both the
 bot and admin containers), and returns it; `load_report()` returns that
 file's content as a JSON-serialisable dict (or `None` before the first run),
-so v150 serves it without importing anything else here.
+so v150 serves it without importing anything else here. The four
+requirements in v150's spec § "Cross-spec requirements on the v146 and v147
+plans" are part of this contract: atomic write (temp + `os.replace`), a
+loader importable without pandas/numpy/backtesting, per cell
+`verdict_of_record: {verdict, date, n}` plus the latest reading's
+difference, CI and q, and per row its labels (in-sample, over-cap,
+near-miss), persisted in the JSON; overwrite-latest retention.
 `scripts/reports/gate_counterfactual_report.py` stays a thin wrapper: it
 calls `build_report()` and prints the table. One row per gate × reason ×
 population, **live and TRAIN side by side, never pooled**:
