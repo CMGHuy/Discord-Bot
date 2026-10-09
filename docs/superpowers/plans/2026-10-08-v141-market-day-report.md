@@ -12,6 +12,8 @@
 
 **Tech Stack:** Python 3.11, pandas/numpy, pytest. No new dependency.
 
+**Progress:** Implementation and TRAIN result complete; final full-suite debugging rerun: 7067 passed, 3 skipped, 0 failed, 0 xfailed. The descriptive result found no candidate for a lagged rule.
+
 ## Spec corrections (the code disagrees with the spec; the plan follows the code)
 
 1. **The live half prints no interval and no rank correlation.** The live book overlaps the 2026 holdout that open pre-registrations wait on. `scripts/reports/volume_context_report.py` sets the repo precedent: "monitoring only, and no inferential statistic is printed". Live tables show counts, win rate and ExpR only. The TRAIN half keeps the day-level bootstrap and the Spearman figure.
@@ -23,9 +25,17 @@
 7. **Day of a live event is the US/Eastern calendar date** of its UTC stamp (`swingbot.core.market.session.US_MARKET_TZ`).
 8. **v51 already saw one edge of this.** `docs/superpowers/results/2026-08-23-alert-density-train.md` found busy days carry a positive mean SPY return. That is density against SPY; this plan measures SPY against outcome and volume directly. The results file cites it.
 
+9. **Live scan totals are all-direction.** `scan_run.py` writes `signals` as all scenarios found and `alerts` as all emitted alerts. The `short_funnel` snapshot carries both directions despite its name; `funnel_stage_counts` selects bullish events. Thus the live scan-volume table cannot measure LONG openings or attribute a LONG loss to a stage. The results label totals as all-direction and report the bullish-stage day count separately.
+
+10. **The live LONG-volume question cannot be answered from this dump.** The production scan row stores all-direction `signals` and `alerts` but no LONG/SHORT split, and the available staged bullish funnel covers only six scanned days. Closed trades are a closure-selected subset, not the alert-opening denominator. The result gives all-direction scan volume as context and marks live LONG openings/day and a full-period stage attribution unavailable; a later directional issuance instrument would be needed for those answers.
+
+11. **All TRAIN inputs end at 2023-12-31 before computation.** The cached ticker and SPY files extend past TRAIN. The report caps each frame after cache loading and before context, liquidity, entry-signal and replay computations, then regenerates the TRAIN result; filtering only output trade dates could leak later bars into those computations.
+
+12. **A live stage rate requires staged days.** The bullish stage table counts only scanned days that contain bullish stage events, and hides rates for any bucket with fewer than ten such days. All-direction scan totals retain all scanned days as their denominator.
+
 ## Global Constraints
 
-- TRAIN window `2020-01-01..2023-12-31` only. The script refuses any other window for the backtest half. VALIDATION `2024-01-01..2025-12-31` is never read.
+- TRAIN window `2020-01-01..2023-12-31` only. The script refuses any other window for the backtest half. No VALIDATION `2024-01-01..2025-12-31` bar enters a computation.
 - Buckets, fixed: `< -1%`, `-1% .. 0`, `0 .. +1%`, `> +1%`. Exactly `-1.0` → `-1% .. 0`; exactly `0.0` and exactly `+1.0` → `0 .. +1%`.
 - Market forms: `same_day` = return of day *t*; `prior_day` = return of day *t−1*; `trailing_5d` = close *t−1* over close *t−6*. All in percent.
 - Regime split: `regime2.regime_series` trend word (`bull`/`bear`) of day *t−1*.
@@ -35,7 +45,7 @@
 - Backtest and live are never pooled.
 - Universe for the TRAIN half: the backtest cache listing (`runner_headroom.cache_universe()`), because a worktree cannot reach the Postgres watchlist. Every run sets `BACKTEST_CACHE_DIR=E:/Documents/Private/Projects/Discord-Bot/data/backtest_cache`.
 - Every function ends below cyclomatic complexity 15 (`python -m radon cc -s -n C <files>` prints nothing).
-- Work in the worktree `.claude/worktrees/2026-10-08-v141-market-day-report/` on the branch of the same name (use the `worktree-lifecycle` skill to create it).
+- Work in a dedicated worktree. Tasks V141-1..7 used `.claude/worktrees/2026-10-08-v141-market-day-report/`; the final correction uses the attached Codex worktree on `codex/v141-market-day-completion` because the guardrail forbids cross-worktree edits from this chat.
 - Per-task check is `python scripts/dev/testrun.py file <the test file>`. The full suite runs once, in V141-8.
 
 ## File structure
@@ -73,7 +83,7 @@
   - `market_days(spy_close: pd.Series, regimes: pd.Series | None = None) -> dict[str, dict]` — `{"YYYY-MM-DD": {"same_day": float|None, "prior_day": float|None, "trailing_5d": float|None, "regime": "bull"|"bear"|None}}`
   - `days_in(days: dict, form: str, bucket: str, regime: str | None = None) -> list[str]`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/analytics/test_market_day.py`:
 
@@ -146,12 +156,12 @@ def test_days_in_filters_by_bucket_and_regime():
     assert md.days_in(days, "prior_day", "> +1%") == ["2021-03-02", "2021-03-03"]
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `python scripts/dev/testrun.py file tests/analytics/test_market_day.py`
 Expected: FAIL — `cannot import name 'market_day'`.
 
-- [ ] **Step 3: Write the module**
+- [x] **Step 3: Write the module**
 
 Create `swingbot/core/analytics/market_day.py`:
 
@@ -224,12 +234,12 @@ def days_in(days: dict, form: str, bucket: str, regime: str | None = None) -> li
             and (regime is None or market["regime"] == regime)]
 ```
 
-- [ ] **Step 4: Run it and watch it pass**
+- [x] **Step 4: Run it and watch it pass**
 
 Run: `python scripts/dev/testrun.py file tests/analytics/test_market_day.py`
 Expected: `VERDICT: PASS`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/analytics/market_day.py tests/analytics/test_market_day.py
@@ -252,7 +262,7 @@ git commit -m "feat(v141): market forms and fixed return buckets (V141-1)"
   - `trade_table(rows: list[dict], days: dict, form: str, *, direction: str = "bullish", regime: str | None = None, intervals: bool = True) -> list[dict]` — one dict per bucket, in `BUCKETS` order: `{"bucket", "n", "days", "win_rate", "exp_r", "win_rate_ci", "exp_r_ci"}`. Rates are `None` below `MIN_DAYS`; `*_ci` is `[lo, hi]` or `None`.
   - `day_rank_correlation(rows: list[dict], days: dict, form: str, *, direction: str = "bullish") -> float | None`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/analytics/test_market_day.py`:
 
@@ -342,12 +352,12 @@ def test_rank_correlation_sign_and_floor():
     assert md.day_rank_correlation(rising[:9], days, "same_day") is None   # < MIN_DAYS
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `python scripts/dev/testrun.py file tests/analytics/test_market_day.py`
 Expected: FAIL — `module 'swingbot.core.analytics.market_day' has no attribute 'trade_table'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `swingbot/core/analytics/market_day.py`, add `import numpy as np` above `import pandas as pd`, add `from swingbot.core.analytics import metrics` below it, add the two constants under `MIN_DAYS`, and append the functions:
 
@@ -441,12 +451,12 @@ def day_rank_correlation(rows: list[dict], days: dict, form: str, *,
     return None if rho != rho else round(float(rho), 3)
 ```
 
-- [ ] **Step 4: Run it and watch it pass**
+- [x] **Step 4: Run it and watch it pass**
 
 Run: `python scripts/dev/testrun.py file tests/analytics/test_market_day.py`
 Expected: `VERDICT: PASS`.
 
-- [ ] **Step 5: Complexity, then commit**
+- [x] **Step 5: Complexity, then commit**
 
 Run: `python -m radon cc -s -n C swingbot/core/analytics/market_day.py` — expected: no output.
 
@@ -470,7 +480,7 @@ git commit -m "feat(v141): per-bucket trade table with a day-level bootstrap (V1
   - `sum_by_bucket(day_values: dict[str, dict[str, float]], days: dict, form: str, *, regime: str | None = None) -> list[dict]` — per bucket `{"bucket", "days", "totals": {key: summed value}}` over the days present in `day_values`.
   - `funnel_stage_counts(snapshot: dict[str, int], direction: str = "bullish") -> dict[str, int]` — flat `{"<stage>:ok": n, "<stage>:rejected": n}` from `ShortFunnel.snapshot()` keys (`direction/source/mode/stage/reason`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/analytics/test_market_day.py`:
 
@@ -522,12 +532,12 @@ def test_funnel_stage_counts_reads_one_direction_and_folds_reasons():
     assert md.funnel_stage_counts(snapshot, "bearish") == {"confidence:ok": 9}
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `python scripts/dev/testrun.py file tests/analytics/test_market_day.py`
 Expected: FAIL — `has no attribute 'volume_table'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Append to `swingbot/core/analytics/market_day.py`:
 
@@ -585,12 +595,12 @@ def funnel_stage_counts(snapshot: dict[str, int], direction: str = "bullish") ->
     return out
 ```
 
-- [ ] **Step 4: Run it and watch it pass**
+- [x] **Step 4: Run it and watch it pass**
 
 Run: `python scripts/dev/testrun.py file tests/analytics/test_market_day.py`
 Expected: `VERDICT: PASS`.
 
-- [ ] **Step 5: Complexity, then commit**
+- [x] **Step 5: Complexity, then commit**
 
 Run: `python -m radon cc -s -n C swingbot/core/analytics/market_day.py` — expected: no output.
 
@@ -611,7 +621,7 @@ git commit -m "feat(v141): volume table, bucket sums and funnel-key parsing (V14
 - Consumes: nothing new.
 - Produces: every row from `sweep()` / `_entry_dates_for_ticker()` additionally carries `"direction": "bullish"|"bearish"` and `"closed_at": "YYYY-MM-DD"|None` (`None` for every confluence row). Existing keys are unchanged.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/scripts/test_alert_density.py`:
 
@@ -640,12 +650,12 @@ def test_strategy_rows_carry_direction_and_close_date(monkeypatch):
     assert rows[0]["opened_at"] == "2021-03-01"      # unchanged
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `python scripts/dev/testrun.py file tests/scripts/test_alert_density.py`
 Expected: FAIL — `KeyError: 'direction'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `_entry_dates_for_ticker`, the confluence `rows.append` becomes:
 
@@ -688,12 +698,12 @@ In `sweep`'s `_report`, the print becomes (a run past 15 minutes must show a per
                   f"ticker {done_tickers}/{len(tasks)})", flush=True)
 ```
 
-- [ ] **Step 4: Run it and watch it pass**
+- [x] **Step 4: Run it and watch it pass**
 
 Run: `python scripts/dev/testrun.py file tests/scripts/test_alert_density.py`
 Expected: `VERDICT: PASS`. If an existing test in that file pins the exact key set of a sweep row, add the two new keys to its expectation — the keys are additive and no v51 consumer reads rows positionally.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scripts/backtest/measure_alert_density.py tests/scripts/test_alert_density.py
@@ -716,7 +726,7 @@ git commit -m "feat(v141): sweep rows carry direction and close date; progress s
   - `build_dump(trades: list[dict], telemetry_rows: list[dict]) -> dict` — `{"trades": [...], "scans": [...]}`
   - Running the file prints exactly one line: the dump as JSON.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/scripts/test_market_day_report.py`:
 
@@ -771,12 +781,12 @@ def test_build_dump_drops_open_trades_and_is_json_serialisable():
     json.dumps(out)
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `python scripts/dev/testrun.py file tests/scripts/test_market_day_report.py`
 Expected: FAIL — `No module named 'market_day_live_dump'`.
 
-- [ ] **Step 3: Write the dump script**
+- [x] **Step 3: Write the dump script**
 
 Create `scripts/reports/market_day_live_dump.py`:
 
@@ -848,12 +858,12 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 4: Run it and watch it pass**
+- [x] **Step 4: Run it and watch it pass**
 
 Run: `python scripts/dev/testrun.py file tests/scripts/test_market_day_report.py`
 Expected: `VERDICT: PASS`. If `primary_strategy_label` needs a field `_live_trade` lacks, extend the fixture, not the function.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scripts/reports/market_day_live_dump.py tests/scripts/test_market_day_report.py
@@ -884,7 +894,7 @@ git commit -m "feat(v141): standalone read-only live dump for the market-day rep
   - `backtest_section(rows, days, raw) -> list[str]`, `live_section(rows, scans, days) -> list[str]` — markdown lines
   - CLI: `--backtest`, `--live-json PATH`, `--out PATH`, `--limit N`, `--workers N`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/scripts/test_market_day_report.py`:
 
@@ -1006,12 +1016,12 @@ def test_live_section_prints_no_interval_and_no_correlation():
     assert "| > +1% | 12 | 12 | 100.00% " in text
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `python scripts/dev/testrun.py file tests/scripts/test_market_day_report.py`
 Expected: FAIL — `No module named 'market_day_report'`.
 
-- [ ] **Step 3: Write the script**
+- [x] **Step 3: Write the script**
 
 Create `scripts/reports/market_day_report.py`:
 
@@ -1375,12 +1385,12 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 4: Run it and watch it pass**
+- [x] **Step 4: Run it and watch it pass**
 
 Run: `python scripts/dev/testrun.py file tests/scripts/test_market_day_report.py`
 Expected: `VERDICT: PASS`.
 
-- [ ] **Step 5: Smoke the real path**
+- [x] **Step 5: Smoke the real path**
 
 Run:
 
@@ -1391,7 +1401,7 @@ BACKTEST_CACHE_DIR=E:/Documents/Private/Projects/Discord-Bot/data/backtest_cache
 
 Expected: progress lines with a percent, then markdown beginning `# v141 -- market-day report` and a `SMOKE RUN` line. Tables may be mostly `—` at three tickers; that is correct. A traceback is a failure — fix it before committing.
 
-- [ ] **Step 6: Complexity, then commit**
+- [x] **Step 6: Complexity, then commit**
 
 Run: `python -m radon cc -s -n C scripts/reports/market_day_report.py scripts/reports/market_day_live_dump.py` — expected: no output.
 
@@ -1412,7 +1422,7 @@ git commit -m "feat(v141): market-day report script -- TRAIN and live halves (V1
 - Consumes: the script (V141-6) and the dump script (V141-5).
 - Produces: the results file.
 
-- [ ] **Step 1: Take the live dump (read-only on production)**
+- [x] **Step 1: Take the live dump (read-only on production)**
 
 Run from the worktree root:
 
@@ -1425,7 +1435,7 @@ git status --short data/
 
 Expected: a trade count, a scan count and the first scan's timestamp; `git status` shows nothing under `data/` (it is ignored). If the dump has zero scans, or no funnel key starts with `bullish/`, stop and report it — the live cause table would be empty and the partner should know before the report is written. This step changes nothing on production, so the mirror-back rule does not apply.
 
-- [ ] **Step 2: Run the full report through `backtest-runner`**
+- [x] **Step 2: Run the full report through `backtest-runner`**
 
 Dispatch the `backtest-runner` agent (the TRAIN sweep is long) with exactly this command, from the worktree root:
 
@@ -1440,21 +1450,21 @@ rm logs/market_day_report.log
 
 Ask it to return only: the final `wrote ...` line, the trade count from `sweep done`, and any line starting `    !`.
 
-- [ ] **Step 3: Write the reading at the top of the results file**
+- [x] **Step 3: Write the reading at the top of the results file**
 
 Open the generated file and insert, directly under the grid warning, a section `## Reading` of at most 25 lines that answers, with the table it comes from named each time:
 
 1. Do LONG trades opened on green days win more? Answer for `same_day` (descriptive) and separately for `prior_day` and `trailing_5d` (the only forms a rule could use). Quote the bucket rows and their intervals; say "no visible effect" when the intervals overlap.
 2. Does the answer survive the bull/bear split, or is it the slow regime?
-3. Does the bot open fewer LONG trades on red days? Quote mean per day and zero-day share, TRAIN and live separately.
-4. If so, which stage: fewer raw signals, or the same signals and fewer taken (TRAIN); which funnel stage (live, with its day count).
+3. Does the bot open fewer LONG trades on red days? Quote TRAIN mean per day and zero-day share. State that live LONG-specific rates are unavailable from all-direction scan telemetry, then quote live all-direction alert mean and zero-day share separately as context.
+4. If so, which stage: fewer raw signals, or the same signals and fewer taken (TRAIN); for live, give the bullish funnel day count and state whether those staged days actually identify a LONG loss.
 5. One closing line: either "candidate for a pre-registered rule: `<form>`, `<direction of effect>`" or "no candidate".
 
 Also add one line citing `docs/superpowers/results/2026-08-23-alert-density-train.md` as the earlier, related density finding.
 
 Every number in the reading is copied from a table in the same file. State nothing about VALIDATION.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/superpowers/results/*-v141-market-day.md
@@ -1468,19 +1478,19 @@ git commit -m "docs(v141): market-day report result -- TRAIN and live"
 **Files:**
 - Modify: this plan (tick the boxes); moved at close-out.
 
-- [ ] **Step 1: Full suite, once**
+- [x] **Step 1: Full suite, once**
 
 Dispatch the `test-runner` agent: `python scripts/dev/testrun.py full`. Green is `0 failed` and `0 xfailed`. If the test database is unreachable, start it first (`docker compose --profile test up -d db-test`) so the database tier runs rather than skips.
 
-- [ ] **Step 2: Complexity over everything the plan touched**
+- [x] **Step 2: Complexity over everything the plan touched**
 
 Run: `python -m radon cc -s -n C swingbot/core/analytics/market_day.py scripts/reports/market_day_report.py scripts/reports/market_day_live_dump.py`
 Expected: no output. (`scripts/backtest/measure_alert_density.py` holds legacy functions; the two this plan edited must not have got worse — compare `radon cc -s` for `_entry_dates_for_ticker` and `sweep` against `main`.)
 
-- [ ] **Step 3: Close out**
+- [x] **Step 3: Close out**
 
 Run `/close-out`. `Bump: none` — no `VERSION.json` change. The plan moves to `docs/superpowers/plans/implemented/`, the spec to `docs/superpowers/specs/implemented/`. Merge the worktree branch per the `worktree-lifecycle` skill.
 
-- [ ] **Step 4: Report to the partner**
+- [x] **Step 4: Report to the partner**
 
 Give the five answers from the results file's `## Reading`, and say whether step 2 (dashboard panel) and step 3 (pre-registered rule) of the spec now have something to build on.

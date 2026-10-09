@@ -283,6 +283,8 @@ def _entry_dates_for_ticker(ticker: str, df, horizons, date_from, date_to,
                     continue
                 rows.append({
                     "opened_at": signal_date,
+                    "closed_at": None,          # v141: the replay is not asked for an exit date
+                    "direction": plan.direction,
                     "ticker": ticker,
                     "horizon": hk,
                     "source": CONFLUENCE_SOURCE,
@@ -306,6 +308,8 @@ def _entry_dates_for_ticker(ticker: str, df, horizons, date_from, date_to,
                 for t in rbr_window_trades(summary, date_from, date_to):
                     rows.append({
                         "opened_at": t.entry_date,
+                        "closed_at": t.exit_date,
+                        "direction": t.direction,
                         "ticker": ticker,
                         "horizon": hk,
                         "source": "strategy",
@@ -337,7 +341,7 @@ def _worker(args):
     return ticker, rows, per_unit
 
 
-def load_frames(tickers, *, verbose=True):
+def load_frames(tickers, *, verbose=True, date_to=None):
     """{ticker: context-stamped frame} for every cached, liquid, clean ticker.
 
     Same exclusion sequence as run_backtest_range.run_scenario_mode, reached
@@ -348,7 +352,10 @@ def load_frames(tickers, *, verbose=True):
 
     frames, excluded = {}, {"uncached": [], "illiquid": [], "bad_data": []}
     for ticker in tickers:
-        df = rbr._with_context(rbr.load_cached(ticker))
+        raw = rbr.load_cached(ticker)
+        if raw is not None and date_to:
+            raw = raw.loc[:date_to]
+        df = rbr._with_context(raw, date_to=date_to)
         if df is None:
             excluded["uncached"].append((ticker, "not in backtest cache"))
             continue
@@ -402,7 +409,8 @@ def sweep(frames, date_from, date_to, *, horizons, gates, scale_out,
         done_tickers += 1
         for hk, population, n in per_unit:
             done_units += 1
-            print(f"[{done_units}/{total_units}] {ticker} {hk} {population} "
+            print(f"[{done_units}/{total_units} {done_units / total_units:.0%}] "
+                  f"{ticker} {hk} {population} "
                   f"trades={n} ({time.time() - t0:.0f}s elapsed, "
                   f"ticker {done_tickers}/{len(tasks)})", flush=True)
 

@@ -137,3 +137,57 @@ def test_per_day_rows_are_date_sorted_and_carry_outcomes():
 
 def test_per_day_rows_of_nothing_is_empty():
     assert per_day_rows([]) == []
+
+
+def test_strategy_rows_carry_direction_and_close_date(monkeypatch):
+    """v141 buckets trades by direction and, for one table, by close day."""
+    import measure_alert_density as mad
+    from swingbot.core.backtesting import backtest
+
+    trade = backtest.BacktestTrade(
+        entry_date="2021-03-01", exit_date="2021-03-05", direction="bullish",
+        entry=100.0, stop_loss=95.0, take_profit=110.0, outcome="win",
+        exit_price=110.0, return_pct=10.0, r_multiple=2.0, holding_days=4)
+
+    class _Summary:
+        trades = [trade]
+
+    monkeypatch.setattr(backtest, "run_backtest", lambda *a, **k: _Summary())
+    rows, _ = mad._entry_dates_for_ticker(
+        "AAA", None, ["2w"], "2021-01-01", "2021-12-31", gates={}, scale_out=True,
+        want_strategies=True, want_confluence=False, strategies=["RSI"])
+
+    assert len(rows) == 1
+    assert rows[0]["direction"] == "bullish"
+    assert rows[0]["closed_at"] == "2021-03-05"
+    assert rows[0]["opened_at"] == "2021-03-01"      # unchanged
+
+
+def test_load_frames_caps_history_before_context_and_liquidity(monkeypatch):
+    import pandas as pd
+    import measure_alert_density as mad
+    import run_backtest_range as rbr
+    from swingbot.core.marketdata import universe
+
+    raw = pd.DataFrame({"Close": [100.0, 120.0]},
+                       index=pd.to_datetime(["2023-12-29", "2024-01-02"]))
+    seen = []
+
+    monkeypatch.setattr(rbr, "load_cached", lambda ticker: raw)
+
+    def context(frame, *, date_to=None):
+        seen.append(("context", str(frame.index.max().date()), date_to))
+        return frame
+
+    def liquidity(frame):
+        seen.append(("liquidity", str(frame.index.max().date()), None))
+        return None
+
+    monkeypatch.setattr(rbr, "_with_context", context)
+    monkeypatch.setattr(universe, "liquidity_reason", liquidity)
+    monkeypatch.setattr(universe, "data_quality_issues", lambda frame, ticker: [])
+    frames, excluded = mad.load_frames(["AAA"], date_to="2023-12-31", verbose=False)
+    assert excluded == {"uncached": [], "illiquid": [], "bad_data": []}
+    assert list(frames["AAA"].index) == [pd.Timestamp("2023-12-29")]
+    assert seen == [("context", "2023-12-29", "2023-12-31"),
+                    ("liquidity", "2023-12-29", None)]

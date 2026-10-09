@@ -4,7 +4,7 @@
 **Bump:** none (a report script and a pure analytics module; nothing in the live path changes)
 **Edge:** none (integrity) — measurement only. It sets no threshold and changes no behaviour.
 **Screen:** exempt (descriptive; registers nothing and spends no budget)
-**Status:** spec written 2026-10-08; no plan yet.
+**Status:** Step 1 implemented by v141. Its TRAIN result found no stable lagged LONG outcome effect, so step 3 has no pre-registration candidate. Step 2 has no justified outcome cut to display; a LONG volume panel would first need directional issuance telemetry, which the live dump lacks.
 
 ## Why
 
