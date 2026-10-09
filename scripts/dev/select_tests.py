@@ -264,8 +264,10 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("docs/deploy/DEPLOY_HETZNER.md", ("tests/scripts/test_backup_db.py",)),
     # Every testrun.py command line deploy.yml runs is parsed for real.
     (".github/workflows/", ("tests/dev/test_testrun_ci_invocations.py",)),
-    # Every spec past v140 must carry a valid **Screen:** header line.
-    ("docs/superpowers/specs/", ("tests/hooks/test_spec_screen_header.py",)),
+    # Every spec past v140 must carry a valid **Screen:** header line, and
+    # every spec past v145 a valid **Panel:** line.
+    ("docs/superpowers/specs/", ("tests/hooks/test_spec_screen_header.py",
+                                 "tests/hooks/test_spec_panel_header.py")),
     # The pre-registration ledger is loaded and validated row by row.
     ("docs/superpowers/results/preregistration-ledger.jsonl",
      ("tests/backtesting/test_preregistration_ledger_file.py",

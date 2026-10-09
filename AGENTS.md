@@ -149,6 +149,12 @@ costs, lower 95% bound > 0, ≥ 7 of 9 years (2011–2019) positive, N ≥ 300).
 or `harvest` spec cites `harvest-headroom <results path>`; integrity work says
 `exempt (integrity)`. A screen fail is closed and never re-screened.
 `tests/hooks/test_spec_screen_header.py` enforces the line.
+Specs numbered v146 or above also carry `**Panel:**` directly below
+`**Screen:**`: one to three expert role skills (defaults by subject in
+`document-conventions.md`), run through `panel` after the spec is committed
+and again over the plan's diff before close-out, where an unresolved
+`BLOCKING` finding stops the close. `tests/hooks/test_spec_panel_header.py`
+enforces it.
 
 Feature acceptance runs through one gate (`swingbot/core/backtesting/
 acceptance.py`), driven by `python scripts/backtest/validate_component.py
