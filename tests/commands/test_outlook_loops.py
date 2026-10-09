@@ -2,6 +2,7 @@
 and the wrap-up waits for every plan of D to be terminal."""
 import asyncio
 import datetime as dt
+import logging
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -9,6 +10,7 @@ import pytest
 from swingbot import config
 from swingbot.commands.scanning import loops as loops_mod
 from swingbot.commands.scanning import outlook as outlook_cmd
+from swingbot.core.db import write_failure
 from swingbot.core.db.repositories.scheduled import scheduled_repo
 from swingbot.core.planning.plan_engine import PlanStatus, record_transition
 from swingbot.core.planning.plan_store import PlanStore
@@ -98,6 +100,7 @@ def wrap(monkeypatch):
         return answers.get(day, True)
 
     monkeypatch.setattr(loops_mod.outlook, "post_wrapup_when_terminal", post)
+    monkeypatch.setattr(loops_mod, "_wrapup_settled", set())
 
     def tick(now):
         monkeypatch.setattr(loops_mod, "_outlook_now", lambda: now)
@@ -210,3 +213,130 @@ def test_a_huge_digest_is_split_into_discord_sized_embeds():
 def test_both_loops_start_with_the_bot():
     assert loops_mod.next_session_scan in loops_mod._always_on_loops()
     assert loops_mod.next_session_wrapup in loops_mod._always_on_loops()
+
+
+# --- fix round 1 ---------------------------------------------------------------------
+
+def _raise_once(monkeypatch, name):
+    state = {"n": 0}
+    real = getattr(loops_mod, name)
+
+    def flaky(*a, **k):
+        state["n"] += 1
+        if state["n"] == 1:
+            raise RuntimeError("db down")
+        return real(*a, **k)
+    monkeypatch.setattr(loops_mod, name, flaky)
+    return state
+
+
+def test_a_failing_scan_tick_does_not_stop_the_loop(scan, monkeypatch):
+    calls, tick = scan
+    _raise_once(monkeypatch, "_scheduled_job_fired_since")
+    tick(dt.datetime(2026, 10, 11, 23, 30, tzinfo=BERLIN))     # raises inside, is swallowed
+    assert calls == []
+    tick(dt.datetime(2026, 10, 11, 23, 31, tzinfo=BERLIN))
+    assert calls == [SUNDAY]
+
+
+def test_a_failing_wrapup_tick_does_not_stop_the_loop(wrap, monkeypatch):
+    answers, asked, tick = wrap
+    _raise_once(monkeypatch, "_scheduled_job_fired_since")
+    tick(dt.datetime(2026, 10, 12, 16, 20, tzinfo=ET))
+    assert asked == []
+    tick(dt.datetime(2026, 10, 12, 16, 21, tzinfo=ET))
+    assert MONDAY in asked
+
+
+def test_a_settled_wrapup_day_costs_no_more_database_reads(wrap, monkeypatch):
+    answers, asked, tick = wrap
+    reads = []
+    real = loops_mod._scheduled_job_fired_since
+    monkeypatch.setattr(loops_mod, "_scheduled_job_fired_since",
+                        lambda job, day: reads.append(day) or real(job, day))
+    tick(dt.datetime(2026, 10, 12, 16, 20, tzinfo=ET))
+    first = len(reads)
+    tick(dt.datetime(2026, 10, 12, 16, 21, tzinfo=ET))
+    tick(dt.datetime(2026, 10, 12, 16, 22, tzinfo=ET))
+    assert len(reads) == first and first > 0
+
+
+def test_an_unfinished_earlier_day_is_retried_and_blocks_the_later_one(wrap):
+    answers, asked, tick = wrap
+    friday = dt.date(2026, 10, 9)
+    answers[friday] = False
+    tick(dt.datetime(2026, 10, 12, 16, 20, tzinfo=ET))
+    tick(dt.datetime(2026, 10, 12, 16, 21, tzinfo=ET))
+    assert asked == [friday, friday]                      # Monday never asked, never marked
+    assert scheduled_repo().fired_on("next_session_wrapup") != "2026-10-12"
+    answers[friday] = True
+    tick(dt.datetime(2026, 10, 12, 16, 22, tzinfo=ET))
+    assert asked[-2:] == [friday, MONDAY]
+
+
+def test_the_scan_logs_its_start(scan, caplog):
+    calls, tick = scan
+    with caplog.at_level(logging.INFO):
+        tick(dt.datetime(2026, 10, 11, 23, 30, tzinfo=BERLIN))
+    assert "next_session_scan: starting 2026-10-11" in caplog.text
+
+
+def test_the_outlook_marks_the_scan_running_and_clears_it_even_on_a_halt(monkeypatch):
+    channel, marks = FakeChannel(), []
+    monkeypatch.setattr(outlook_cmd, "_alerts_channel", lambda: channel)
+    monkeypatch.setattr(outlook_cmd.runstate, "_mark_running", marks.append)
+    monkeypatch.setattr(outlook_cmd.outlook_run, "run_outlook", lambda d: OutlookResult(run_date=d, target=MONDAY))
+    monkeypatch.setattr(outlook_cmd.scan_run, "_scan_lock", asyncio.Lock())
+    asyncio.run(outlook_cmd.run_next_session_outlook(SUNDAY))
+    assert marks == [True, False]
+
+    def halt(d):
+        raise write_failure.StoreWriteHalt("x")
+    marks.clear()
+    monkeypatch.setattr(outlook_cmd.outlook_run, "run_outlook", halt)
+    monkeypatch.setattr(outlook_cmd.loop_runstate, "record_store_write_failure", lambda e: None)
+    asyncio.run(outlook_cmd.run_next_session_outlook(SUNDAY))
+    assert marks == [True, False]
+
+
+def test_a_store_write_halt_still_posts_the_cards_already_issued(monkeypatch):
+    channel, sent, failures = FakeChannel(), [], []
+    cards = [("card-1", None, None, None)]
+
+    def halt(run_date):
+        raise write_failure.StoreWriteHalt("plan o2 could not be stored", alerts=cards)
+
+    async def send_alerts(destination, alerts, route_by_confidence=False):
+        sent.append(alerts)
+
+    monkeypatch.setattr(outlook_cmd, "_alerts_channel", lambda: channel)
+    monkeypatch.setattr(outlook_cmd.outlook_run, "run_outlook", halt)
+    monkeypatch.setattr(outlook_cmd, "_send_alerts", send_alerts)
+    monkeypatch.setattr(outlook_cmd.loop_runstate, "record_store_write_failure", failures.append)
+    monkeypatch.setattr(outlook_cmd.scan_run, "_scan_lock", asyncio.Lock())
+    result = asyncio.run(outlook_cmd.run_next_session_outlook(SUNDAY))
+    assert sent == [cards] and len(failures) == 1
+    assert "store write halted" in result.unavailable
+    assert "store write halted" in channel.sent[0]["embed"].description
+
+
+def test_a_failure_partway_keeps_and_posts_the_cards_already_issued(monkeypatch):
+    from swingbot.core.scanning import outlook_run
+    channel, sent = FakeChannel(), []
+
+    def fill_then_die(result, now):
+        result.alerts.append(("card-1", None, None, None))
+        result.plans.append(OutlookLine("AAPL", "bullish", "Break & Retest", 102.0, 100.5, 106.0))
+        raise RuntimeError("chart exploded")
+
+    async def send_alerts(destination, alerts, route_by_confidence=False):
+        sent.append(alerts)
+
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    monkeypatch.setattr(outlook_run, "_fill", fill_then_die)
+    monkeypatch.setattr(outlook_cmd, "_alerts_channel", lambda: channel)
+    monkeypatch.setattr(outlook_cmd, "_send_alerts", send_alerts)
+    monkeypatch.setattr(outlook_cmd.scan_run, "_scan_lock", asyncio.Lock())
+    result = asyncio.run(outlook_cmd.run_next_session_outlook(SUNDAY))
+    assert sent == [[("card-1", None, None, None)]]
+    assert "1 plan(s) already issued" in result.unavailable

@@ -746,7 +746,15 @@ async def next_session_scan():
     """v144: the 23:30 outlook, Sunday-Thursday, same minute-poll + persisted
     fired-once guard as weekend_deep_scan_task. A slot missed while the bot was
     down fires late, but never after the RTH open of the session it targets:
-    then it is marked done and logged, so it is skipped exactly once."""
+    then it is marked done and logged, so it is skipped exactly once. A failing
+    tick is logged and retried next minute -- it never stops the loop."""
+    try:
+        await _next_session_scan_tick()
+    except Exception:
+        log.exception("next_session_scan tick failed -- will retry next minute")
+
+
+async def _next_session_scan_tick():
     global _next_session_fired_date
     if not config.NEXT_SESSION_SCAN_ENABLED:
         return
@@ -760,28 +768,52 @@ async def next_session_scan():
     if not outlook_session.fire_allowed(now, run_date):
         log.warning("next_session_scan: %s's outlook skipped -- its session's RTH open has passed", run_date)
         return
+    log.info("next_session_scan: starting %s", run_date)
     try:
-        await outlook.run_next_session_outlook(run_date)
+        if await outlook.run_next_session_outlook(run_date) is None:
+            log.warning("next_session_scan: %s's slot is marked fired but nothing was posted (no alerts channel)",
+                        run_date)
     except Exception:
         log.exception("next_session_scan: outlook failed")
+
+
+_wrapup_settled: set = set()   # process-local: days whose wrap-up is done, so no per-minute DB read
 
 
 @tasks.loop(minutes=1)
 async def next_session_wrapup():
     """v144: the outlook wrap-up, 15 minutes after each session's official close
     (ET, half-day aware), posted once every outlook plan of that session is
-    terminal. A session still owing one after a restart is retried each minute."""
+    terminal. A session still owing one after a restart is retried each minute.
+    A failing tick is logged and retried -- it never stops the loop."""
+    try:
+        await _next_session_wrapup_tick()
+    except Exception:
+        log.exception("next_session_wrapup tick failed -- will retry next minute")
+
+
+async def _wrapup_finished(day: dt.date) -> bool:
+    try:
+        return await outlook.post_wrapup_when_terminal(day)
+    except Exception:
+        log.exception("next_session_wrapup: wrap-up for %s failed", day)
+        return False
+
+
+async def _next_session_wrapup_tick():
     now = _outlook_now()
     for day in outlook_session.wrapup_candidates(now):
-        if not outlook_session.wrapup_due(now, day) or _scheduled_job_fired_since('next_session_wrapup', day):
+        if day in _wrapup_settled:
             continue
-        try:
-            done = await outlook.post_wrapup_when_terminal(day)
-        except Exception:
-            log.exception("next_session_wrapup: wrap-up for %s failed", day)
+        if not outlook_session.wrapup_due(now, day):
             continue
-        if done:
-            _mark_scheduled_job_fired('next_session_wrapup', day)
+        if _scheduled_job_fired_since('next_session_wrapup', day):
+            _wrapup_settled.add(day)
+            continue
+        if not await _wrapup_finished(day):
+            break   # never mark a later day past an unfinished earlier one: ">=" would retire it silently
+        _mark_scheduled_job_fired('next_session_wrapup', day)
+        _wrapup_settled.add(day)
 
 
 @tasks.loop(minutes=1)

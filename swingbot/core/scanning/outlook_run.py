@@ -23,6 +23,7 @@ import datetime as dt
 import logging
 
 from swingbot import config
+from swingbot.core.db import write_failure
 from swingbot.core.edge import factors as rs_factors
 from swingbot.core.edge import regime2
 from swingbot.core.market import opex
@@ -295,5 +296,21 @@ def run_outlook(run_date: dt.date, *, now: dt.datetime | None = None) -> Outlook
         return result
     result.unavailable = _blocker(result)
     if result.unavailable is None:
-        _fill(result, now)
+        _fill_keeping_issued(result, now)
     return result
+
+
+def _fill_keeping_issued(result: OutlookResult, now: dt.datetime) -> None:
+    """A failure partway keeps what was already issued: those plans and trades are
+    stored, so their cards must still post. A store-write halt propagates (it
+    carries the cards); any other failure is recorded on the result."""
+    try:
+        _fill(result, now)
+    except write_failure.StoreWriteHalt:
+        raise
+    except Exception as exc:
+        if not result.alerts:
+            raise
+        log.exception("outlook run failed after %d plan(s) were issued", len(result.plans))
+        result.unavailable = (f"scan failed after {len(result.plans)} plan(s) already issued "
+                              f"({type(exc).__name__}: {exc})")[:300]

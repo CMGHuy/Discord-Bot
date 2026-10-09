@@ -14,15 +14,17 @@ import logging
 
 from swingbot import config
 from swingbot.bot_core import bot
+from swingbot.core.db import write_failure
 from swingbot.core.infra.logsetup import new_scan_id, scan_context
 from swingbot.core.infra.silent_channel import silence
 from swingbot.core.planning.plan_engine import PlanStatus
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.presentation.kinds import Kind
-from swingbot.core.scanning import outlook_embeds, outlook_run, outlook_session, scan_run
+from swingbot.core.scanning import outlook_embeds, outlook_run, outlook_session, runstate, scan_run
 from swingbot.core.scanning.outlook_types import OutlookResult
 
 from . import notices
+from . import runstate as loop_runstate
 from .alerts import _send_alerts
 
 log = logging.getLogger(__name__)
@@ -36,10 +38,21 @@ def _alerts_channel():
 def _safe_outlook(run_date) -> OutlookResult:
     try:
         return outlook_run.run_outlook(run_date)
+    except write_failure.StoreWriteHalt:
+        raise
     except Exception as exc:
         log.exception("next_session_scan: the outlook scan failed")
         return OutlookResult(run_date=run_date, target=outlook_session.target_session(run_date),
                              unavailable=f"scan failed ({type(exc).__name__}: {exc})"[:300])
+
+
+def _halted_result(run_date, halt: write_failure.StoreWriteHalt) -> OutlookResult:
+    """The store stopped recording mid-issue: the cards already built still go out
+    (a trade in the book with no alert is never silently lost)."""
+    log.error("next_session_scan: store write halt -- %s", halt)
+    loop_runstate.record_store_write_failure(halt)
+    return OutlookResult(run_date=run_date, target=outlook_session.target_session(run_date),
+                         unavailable=f"store write halted ({halt})"[:300], alerts=list(halt.alerts))
 
 
 def digest_embeds(result: OutlookResult) -> list:
@@ -55,7 +68,13 @@ async def run_next_session_outlook(run_date) -> OutlookResult | None:
         return None
     with scan_context(new_scan_id()):
         async with scan_run._scan_lock:
-            result = await asyncio.to_thread(_safe_outlook, run_date)
+            runstate._mark_running(True)
+            try:
+                result = await asyncio.to_thread(_safe_outlook, run_date)
+            except write_failure.StoreWriteHalt as halt:
+                result = _halted_result(run_date, halt)
+            finally:
+                runstate._mark_running(False)
     for embed in digest_embeds(result):
         await notices.send_guarded(channel, embed, what="outlook digest")
     if result.alerts:
