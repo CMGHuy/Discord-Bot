@@ -187,19 +187,24 @@ Serial, one at a time. Opus (main session) decides; agents do.
 
 | Work | Agent | Model |
 |---|---|---|
-| Implement one plan task from `/task-brief` | `task-implementer` | sonnet |
+| Implement one plan task from `/task-brief` | `task-implementer` | the task's `**Model:**` tier (default sonnet) |
 | Review that task's commits | `task-reviewer` | sonnet |
+| Review a spec, plan, diff or result through one expert role (via `/panel`) | `expert-reviewer` | the role's model from § Expert roles |
 | Draft a plan from an approved spec | `plan-writer` | opus |
 | Read-only production question | `prod-inspector` | haiku |
 | Backtest / grid / fold run > ~2 min | `backtest-runner` | sonnet |
 | Full or fast suite run | `test-runner` | sonnet |
 | Check a plan's symbols exist | `symbol-verifier` | haiku |
 
-Plan loop: `/task-brief` → `task-implementer` → `task-reviewer` → Opus reads
-findings → fix via `SendMessage` to the same implementer, or next task. A task
-that fails review twice is implemented by Opus directly. Brainstorming never
-goes to an agent — it needs the partner. `/gate` and `/task-brief` run forked
-on sonnet, so their tool output never reaches the Opus context.
+Plan loop: `/task-brief` → `task-implementer`, dispatched with the task's
+`**Model:**` tier as the `model` override (plans above v145; default sonnet)
+→ `task-reviewer` (always sonnet) → Opus reads findings → next task, or the
+escalation ladder in `model-routing.md`: `SendMessage` the same implementer
+once, then a fresh implementer one tier up with the findings attached, then
+Opus inline, each step logged in `.superpowers/sdd/progress.md`.
+Brainstorming never goes to an agent — it needs the partner. `/gate` and
+`/task-brief` run forked on sonnet, so their tool output never reaches the
+Opus context.
 
 For small edits (a few lines of markdown or config), work inline: every agent
 spawn is a cold start that costs more than the edit.

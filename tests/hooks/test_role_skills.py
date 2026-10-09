@@ -125,3 +125,16 @@ def test_panel_dispatches_the_expert_reviewer_serially():
     body = _body("panel")
     missing = [phrase for phrase in PANEL_PHRASES if phrase not in body]
     assert not missing, missing
+
+
+def test_close_out_stops_on_an_unresolved_blocking_finding():
+    body = _body("close-out")
+    missing = [p for p in ("/panel", "**Panel:**", "BLOCKING", "main...<branch>")
+               if p not in body]
+    assert not missing, missing
+
+
+def test_the_escalation_ladder_replaced_fails_review_twice():
+    text = _text(SKILLS_TOOLS)
+    assert "fails review twice" not in text
+    assert "model-routing.md" in text and "one tier up" in text

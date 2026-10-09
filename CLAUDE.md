@@ -128,6 +128,11 @@ task. **Full suite once per plan, as its final task.** Specs and plans are
 committed on `main`; branch only to implement. Run `/new-doc`; detail:
 `document-conventions.md`, `document-lifecycle.md`.
 
+From v146, **specs carry a `Panel:` line** (1–3 expert role skills under
+`Screen:`; `/panel` runs them after the spec commits and before close-out)
+**and plans stamp `Model:`** under every `### Task` — dispatch
+`task-implementer` at that tier and escalate per `model-routing.md`.
+
 **"Implement plan vN" with nothing more means: in a worktree.** Reuse the
 plan's existing `.claude/worktrees/` worktree if `git worktree list` shows one
 (resume at its first uncommitted task); otherwise create it, named per
@@ -160,6 +165,7 @@ Not auto-loaded — read the relevant one before starting work in that area.
 | `edge-priorities.md` | choosing what to work on — pooled numbers, the `Edge:` taxonomy |
 | `document-conventions.md` | writing any spec or plan — headers, `## Parallelisation`, split never compress |
 | `document-lifecycle.md` | closing a plan out — `implemented/`, `no-lift/`, worktree naming and removal |
+| `model-routing.md` | writing a plan or dispatching a plan task — the `Model:` tier rubric and the escalation ladder |
 | `working-conventions.md` | committing, bumping `VERSION.json`, production changes, Codex mirror |
 | `git-safety.md` | any branch deletion or force push |
 | `testing-cost.md` | optimising or timing tests, or reacting to a changed pass count |

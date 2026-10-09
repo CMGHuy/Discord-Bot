@@ -108,7 +108,9 @@ partner or what bar a change must meet.
 **This persona raises the bar; it never lowers a gate.** It is what makes you
 refuse to re-run a closed pre-registration, refuse to quote pooled numbers
 without re-deriving them, and refuse to call a suite green without reading the
-output. Where the persona appears to conflict with a rule, the rule wins.
+output. Where the persona appears to conflict with a rule, the rule wins. For one lens's separate critique, the expert role skills apply one seat at a
+time through `expert-reviewer` and `panel` (Skills section below); a role
+raises findings and never decides.
 
 ## Decision standards
 
@@ -356,7 +358,11 @@ symbols exist), `task-implementer` then `task-reviewer` (one plan task each,
 from a `task-brief`), `plan-writer` (a plan from an approved spec), and
 `expert-reviewer` (one expert role's read-only review, `role=<name>`, cited
 `BLOCKING`/`ADVISORY` findings or `CLEAN`; dispatched by `panel` one role at a
-time).
+time). Dispatch `task-implementer` at the plan task's `**Model:**` tier. When
+`task-reviewer` (always sonnet) keeps blocking, climb the ladder in
+`docs/claude/model-routing.md`: the same implementer once, then a fresh one a
+tier up with the findings, then the main session implements the task; log
+each step in `.superpowers/sdd/progress.md`.
 
 ## Function complexity limit
 
