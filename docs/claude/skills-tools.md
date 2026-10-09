@@ -225,6 +225,9 @@ in parallel parts, to disk as it goes:
 2. On `PARTS`, dispatch one `plan-writer` per part with `mode=part <N>`, the
    spec path and the index path — **all in one message**, so they run
    concurrently. This is the standing exception to serial dispatch.
+   **Commit the index as soon as phase 1 returns**
+   (`docs(vN): plan index -- parts pending`), and each part as it returns, so
+   a session that runs out of tokens leaves committed, resumable work.
 3. When all return, run the id-sequence check from
    `document-conventions.md` § The 1500-line cap against the ledger, check
    each file's line count, then review and commit.
@@ -232,6 +235,17 @@ in parallel parts, to disk as it goes:
 Every writer appends one task per tool call, so the files fill visibly; a
 part that finds a wrong shared contract returns `BLOCKED:` instead of
 diverging from the ledger.
+
+**Never more than 2 plans being written at once in one session.** A plan
+counts from its `mode=index` dispatch until all its parts are committed; a
+third waits for one to finish. Its parts still fan out in parallel.
+
+**Running out of tokens is resumed, never skipped.** Any plan whose ledger
+lists ids missing from its part files is unfinished: re-dispatch the
+`mode=part <N>` writer for each incomplete part. The writer appends from the
+first missing id and leaves tasks already on disk alone. Check for this at
+session start, before starting a new plan; an unfinished plan counts toward
+the 2-plan limit.
 
 For small edits (a few lines of markdown or config), work inline: every agent
 spawn is a cold start that costs more than the edit.

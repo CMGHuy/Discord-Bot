@@ -358,7 +358,9 @@ symbols exist), `task-implementer` then `task-reviewer` (one plan task each,
 from a `task-brief`), `plan-writer` (a plan from an approved spec, in two
 phases: `mode=index` writes the index and task ledger first, then one
 `mode=part <N>` run per part, one at a time here; each run appends task by
-task to disk rather than writing the file at the end), and
+task to disk rather than writing the file at the end; at most 2 plans in
+progress per session, and a plan cut off mid-write is resumed from its first
+missing task, never skipped or restarted), and
 `expert-reviewer` (one expert role's read-only review, `role=<name>`, cited
 `BLOCKING`/`ADVISORY` findings or `CLEAN`; dispatched by `panel` one role at a
 time). Dispatch `task-implementer` at the plan task's `**Model:**` tier. When

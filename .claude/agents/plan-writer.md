@@ -72,6 +72,16 @@ the ledger is wrong in a way another part depends on, return `BLOCKED:` —
 never change a shared contract silently. Self-review your part against the
 spec sections it covers before returning.
 
+## Resume, never restart
+
+A plan file may already exist from a run that ran out of tokens. **Before
+writing, check:** if your target file exists, list its `### Task` ids
+(`grep -n "^### Task" <file>`), delete only a trailing task that is cut off
+(no closing commit step), and append from the first ledger id that is
+missing. Never rewrite tasks that are already on disk, and never start the
+plan over. In `mode=index`, an existing index with a complete ledger means
+phase 1 is done: return `PARTS` (or carry on appending, for a single file).
+
 ## Return shape
 
 ```
