@@ -23,6 +23,19 @@ change lands with its Codex mirror in the same commit, and
 | `.claude/agents/<n>.md` | `.codex/agents/<n>.toml` | generated |
 | `.claude/settings.json` hooks | `.codex/hooks.json` | by hand |
 
+**Model tiers.** Claude names a tier (`haiku`/`sonnet`/`opus`) in agent
+frontmatter, in a plan task's `**Model:**` stamp and in the expert-role
+reviewer table. Codex uses the same tier through this map (`CODEX_TIERS` in
+`scripts/dev/sync_codex.py`, which writes it into every `.codex/agents/*.toml`).
+When dispatching a plan task or an `expert-reviewer` role, pass the mapped
+model and effort for its tier:
+
+| Tier | Codex model | Reasoning effort |
+|---|---|---|
+| `haiku` | `gpt-6-luna` | `low` |
+| `sonnet` | `gpt-6.1-sol` | `medium` |
+| `opus` | `gpt-6-astra` | `high` |
+
 Generated files come from `python scripts/dev/sync_codex.py` (`--check` lists
 drift); never edit them. Do not edit the Claude side from Codex either: when the
 partner asks Codex for a convention change, edit the Claude source, run the

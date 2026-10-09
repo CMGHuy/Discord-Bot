@@ -30,6 +30,15 @@ REFERENCE_DOCS = ROOT / "docs" / "claude"
 
 _IMPLICIT_OFF = "policy:\n  allow_implicit_invocation: false\n"
 
+# Claude model tier -> (Codex model, model_reasoning_effort). The one place a
+# tier is translated; AGENTS.md carries the same table for Model: stamps and
+# expert-role reviewers dispatched from Codex.
+CODEX_TIERS = {
+    "haiku": ("gpt-6-luna", "low"),
+    "sonnet": ("gpt-6.1-sol", "medium"),
+    "opus": ("gpt-6-astra", "high"),
+}
+
 
 def _banner(source: str) -> str:
     return (f"GENERATED from {source} by scripts/dev/sync_codex.py -- edit the "
@@ -72,9 +81,12 @@ def _agent_outputs(agent_md: pathlib.Path) -> dict:
     meta, body = _split_frontmatter(agent_md.read_text(encoding="utf-8"))
     source = agent_md.relative_to(ROOT).as_posix()
     name = meta.get("name", agent_md.stem)
+    model, effort = CODEX_TIERS[meta.get("model", "sonnet")]
     text = (f"# {_banner(source)}\n"
             f"name = {_toml_string(name)}\n"
             f"description = {_toml_string(meta.get('description', ''))}\n"
+            f"model = {_toml_string(model)}\n"
+            f"model_reasoning_effort = {_toml_string(effort)}\n"
             f"developer_instructions = {_toml_string(body.strip() + chr(10))}\n")
     return {CODEX_AGENTS / f"{agent_md.stem}.toml": text}
 

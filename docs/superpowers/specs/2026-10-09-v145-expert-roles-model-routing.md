@@ -161,6 +161,27 @@ All in the same commit as the code they describe:
 - `AGENTS.md`: condensed mirror. Run `python scripts/dev/sync_codex.py` so the
   ten new skills and the agent reach Codex.
 
+### 6. Model tiers in Codex (amendment, 2026-10-09)
+
+The partner asked that the roles and their models hold in Codex as well as
+Claude. Before this amendment, `sync_codex.py` dropped `model:`, so every Codex
+agent ran on the session default. `CODEX_TIERS` in `scripts/dev/sync_codex.py`
+now maps each Claude tier to a Codex model and reasoning effort, taken from the
+partner's local Codex model list and chosen by the partner:
+
+| Tier | Codex model | Reasoning effort |
+|---|---|---|
+| `haiku` | `gpt-6-luna` | `low` |
+| `sonnet` | `gpt-6.1-sol` | `medium` |
+| `opus` | `gpt-6-astra` | `high` |
+
+The generator writes `model` and `model_reasoning_effort` into every
+`.codex/agents/*.toml`. `AGENTS.md` carries the same table, so a `Model:` stamp
+or an expert-role reviewer tier means the same thing when Codex dispatches it.
+`tests/hooks/test_codex_mirror.py` fails if an agent's tier is unmapped, if a
+TOML lacks the mapped pair, or if `AGENTS.md` omits a tier row.
+`docs/claude/model-routing.md` (V145-7) points at this map.
+
 ## Testing
 
 - `tests/hooks/test_codex_mirror.py`: already exists and must stay green.
