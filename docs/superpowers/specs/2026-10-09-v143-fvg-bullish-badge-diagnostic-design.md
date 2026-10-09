@@ -4,7 +4,7 @@
 **Bump:** none (a read-only measurement script and one results document; no live path changes)
 **Edge:** none (integrity) — measurement only; it is the admission test for a possible later `expectancy` spec on FVG (bullish) plans
 **Screen:** exempt (integrity)
-**Status:** spec written 2026-10-09; amended the same day before any run (nine features: fill share replaced by gap-open-at-signal, replay quality score, gap matched on the map bar); plan written.
+**Status:** implemented 2026-10-09; measured once on TRAIN: NO CANDIDATE. Result: `docs/superpowers/results/2026-10-09-v143-fvg-bullish-diagnostic.md`.
 
 ## Why
 
