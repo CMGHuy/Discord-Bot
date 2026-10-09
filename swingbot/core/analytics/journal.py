@@ -35,15 +35,21 @@ class JournalStore:
 
     def entries(self, *, strategy: str | None = None, tag: str | None = None,
                 outcome: str | None = None, since: str | None = None,
-                has_note: bool | None = None) -> list[dict]:
+                has_note: bool | None = None, cohort: str | None = None) -> list[dict]:
         """Every matching entry, newest first (by `closed_at`, falling back
         to `created_at` for an entry that somehow lacks it). All filters
-        are AND-combined; omit a filter (leave it None) to not apply it."""
+        are AND-combined; omit a filter (leave it None) to not apply it.
+
+        v144: `cohort` None (the default) is the regular lane only, so every
+        pooled reader (E31/E32 overrides, digests, lessons) keeps to it;
+        origin.ALL is every entry; "next_session" is that cohort."""
         from swingbot.core.db.codec import normalise
         from swingbot.core.db.repositories.journal import journal_repo
-        return normalise(journal_repo().entries(
+        from swingbot.core.tracking.origin import in_cohort
+        rows = normalise(journal_repo().entries(
             strategy=strategy, tag=tag, outcome=outcome, since=since, has_note=has_note
         ))
+        return [entry for entry in rows if in_cohort(entry, cohort)]
 
     def set_note(self, trade_id: str, note: str) -> bool:
         """Attach/replace a free-text note on an existing entry. False (no

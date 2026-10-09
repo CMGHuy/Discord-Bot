@@ -115,7 +115,9 @@ def _soak_for(strategy: str):
     from swingbot.core.backtesting.registry import get_badge
     from swingbot.core.edge.strategy_soak import soak_verdict
     from swingbot.core.planning.plan_store import PlanStore
-    plans = [plan for plan in PlanStore().all() if plan.source == "strategy" and plan.strategy == strategy]
+    from swingbot.core.tracking.origin import is_regular
+    plans = [plan for plan in PlanStore().all()
+             if plan.source == "strategy" and plan.strategy == strategy and is_regular(plan)]
     badge = get_badge("strategy", strategy)
     return soak_verdict(plans, badge), badge
 
@@ -724,5 +726,7 @@ def analytics_plans():
     """
     from swingbot.admin.queries import _plan_lifecycle
     from swingbot.core.planning.plan_store import PlanStore
+    from swingbot.core.tracking.origin import is_regular
 
-    return jsonify({**_plan_lifecycle(PlanStore().all()), "scope": "all-time"})
+    plans = [plan for plan in PlanStore().all() if is_regular(plan)]
+    return jsonify({**_plan_lifecycle(plans), "scope": "all-time"})
