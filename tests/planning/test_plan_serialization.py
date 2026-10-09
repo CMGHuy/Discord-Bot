@@ -96,3 +96,15 @@ def test_pre_v129_record_without_acceptance_fields_loads_as_none():
     q = plan_from_dict(d)
     assert q.acceptance_level is None
     assert q.acceptance_close_below is None
+
+
+def test_runner_path_defaults_to_none_and_round_trips():
+    """v142: a pre-v142 record has no stamp and loads as None -- never inferred."""
+    assert _plan().runner_path is None
+    d = plan_to_dict(_plan())
+    d.pop("runner_path")
+    assert plan_from_dict(d).runner_path is None
+    path = {"mfe_r": 4.2, "mae_r": 1.6, "sessions_after_tp1": 2, "source": "live",
+            "ladder": {"1.5": "2026-10-05", "2.0": "2026-10-05", "2.5": "2026-10-06",
+                       "3.0": "2026-10-06", "4.0": None}}
+    assert plan_from_dict(plan_to_dict(_plan(runner_path=path))).runner_path == path

@@ -36,3 +36,13 @@ def test_plan_document_round_trips_through_the_row():
     PlanStore().add(plan)
     from tests.db_diff import diff_records
     assert diff_records(plan_to_dict(plan), PlanRepository().get("P1")) == []
+
+
+def test_runner_path_round_trips_through_the_doc():
+    """v142: the stamp rides in plans.doc (schema-evolution "add"; no Alembic)."""
+    plan = _plan()
+    plan.runner_path = {"mfe_r": 4.2, "mae_r": 1.6, "sessions_after_tp1": 2, "source": "backfill",
+                        "ladder": {"1.5": "2026-10-05", "2.0": None, "2.5": None,
+                                   "3.0": None, "4.0": None}}
+    PlanStore().add(plan)
+    assert PlanStore().get("P1").runner_path == plan.runner_path

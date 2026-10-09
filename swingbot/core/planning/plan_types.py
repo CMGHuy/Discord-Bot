@@ -150,6 +150,11 @@ class TradePlanV2:
     # every pre-v131 plan -- including the v113 fade's limit -- unchanged.
     limit_cancel_level: float | None = None
     limit_strict_fill: bool = False
+    # v142: the runner's post-TP1 path (analytics/runner_path.py), stamped at
+    # runner close -- {"mfe_r", "mae_r", "ladder", "sessions_after_tp1",
+    # "source"}. None = never stamped (pre-v142, or the bars did not cover the
+    # window); readers never infer it, the backfill writes it.
+    runner_path: dict | None = None
 
 
 def effective_stop(plan: TradePlanV2) -> float:
