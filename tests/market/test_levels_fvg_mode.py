@@ -38,9 +38,22 @@ def _families(frame, params, target=101.25):
                                               candidates=candidates)[1]
 
 
+def _same(current, before):
+    """Equal, except that a float may differ in its last bits. The witness was
+    written on Windows and CI runs Linux: numpy gives 112.1974060903146 and
+    112.19740609031459 for the same VWAP level. A behaviour change moves a level
+    by far more than 1e-9 relative, which is what this still catches."""
+    if isinstance(current, float) and isinstance(before, float):
+        return current == pytest.approx(before, rel=1e-9, abs=0)
+    if isinstance(current, (list, tuple)) and isinstance(before, (list, tuple)):
+        return len(current) == len(before) and all(
+            _same(c, b) for c, b in zip(current, before))
+    return current == before
+
+
 def test_default_mode_matches_the_pre_change_witness():
     expected = [tuple(row) for row in json.loads(WITNESS.read_text(encoding="utf-8"))]
-    assert _collect(witness_frame(), _params()) == expected
+    assert _same(_collect(witness_frame(), _params()), expected)
 
 
 def test_off_emits_no_fvg_candidate_and_leaves_every_other_source_alone():
