@@ -127,6 +127,9 @@ right before the commit. `Bump:` states a level only, never a version number.
 task. **Full suite once per plan, as its final task.** Specs and plans are
 committed on `main`; branch only to implement. Run `/new-doc`; detail:
 `document-conventions.md`, `document-lifecycle.md`.
+**Write a plan in two phases:** `plan-writer` `mode=index`, then one
+`mode=part <N>` per part, dispatched in parallel; each writer appends task by
+task to disk (`skills-tools.md` § Plan writing).
 
 From v146, **specs carry a `Panel:` line** (1–3 expert role skills under
 `Screen:`; `/panel` runs them after the spec commits and before close-out)

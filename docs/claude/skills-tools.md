@@ -187,14 +187,15 @@ haiku -- reviewing means judging.
 
 ## Which agent for what (v107)
 
-Serial, one at a time. Opus (main session) decides; agents do.
+Serial, one at a time — except plan parts (§ Plan writing below). Opus
+(main session) decides; agents do.
 
 | Work | Agent | Model |
 |---|---|---|
 | Implement one plan task from `/task-brief` | `task-implementer` | the task's `**Model:**` tier (default sonnet) |
 | Review that task's commits | `task-reviewer` | sonnet |
 | Review a spec, plan, diff or result through one expert role (via `/panel`) | `expert-reviewer` | the role's model from § Expert roles |
-| Draft a plan from an approved spec | `plan-writer` | opus |
+| Draft a plan from an approved spec — index, then parts in parallel | `plan-writer` | opus |
 | Read-only production question | `prod-inspector` | haiku |
 | Backtest / grid / fold run > ~2 min | `backtest-runner` | sonnet |
 | Full or fast suite run | `test-runner` | sonnet |
@@ -209,6 +210,28 @@ Opus inline, each step logged in `.superpowers/sdd/progress.md`.
 Brainstorming never goes to an agent — it needs the partner. `/gate` and
 `/task-brief` run forked on sonnet, so their tool output never reaches the
 Opus context.
+
+### Plan writing (two phases)
+
+Measured over nine plan-writer runs (v108–v145): wall time scales with what
+is written in one serial context — 13 min for a 70 KB plan, 51–55 min for
+170–320 KB — and tool execution is under 10% of it. So the plan is written
+in parallel parts, to disk as it goes:
+
+1. Dispatch `plan-writer` with `mode=index` and the spec path. It writes the
+   index first (header, constraints, parallelisation, a task ledger fixing
+   every cross-task file and contract). A single-file plan (≤ ~1300 lines)
+   comes back `DONE` from this one run.
+2. On `PARTS`, dispatch one `plan-writer` per part with `mode=part <N>`, the
+   spec path and the index path — **all in one message**, so they run
+   concurrently. This is the standing exception to serial dispatch.
+3. When all return, run the id-sequence check from
+   `document-conventions.md` § The 1500-line cap against the ledger, check
+   each file's line count, then review and commit.
+
+Every writer appends one task per tool call, so the files fill visibly; a
+part that finds a wrong shared contract returns `BLOCKED:` instead of
+diverging from the ledger.
 
 For small edits (a few lines of markdown or config), work inline: every agent
 spawn is a cold start that costs more than the edit.
