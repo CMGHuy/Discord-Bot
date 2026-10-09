@@ -25,6 +25,8 @@
 
 9. **Live scan totals are all-direction.** `scan_run.py` writes `signals` as all scenarios found and `alerts` as all emitted alerts. The `short_funnel` snapshot carries both directions despite its name; `funnel_stage_counts` selects bullish events. Thus the live scan-volume table cannot measure LONG openings or attribute a LONG loss to a stage. The results label totals as all-direction and report the bullish-stage day count separately.
 
+10. **The live LONG-volume question cannot be answered from this dump.** The production scan row stores all-direction `signals` and `alerts` but no LONG/SHORT split, and the available staged bullish funnel covers only six scanned days. Closed trades are a closure-selected subset, not the alert-opening denominator. The result gives all-direction scan volume as context and marks live LONG openings/day and a full-period stage attribution unavailable; a later directional issuance instrument would be needed for those answers.
+
 ## Global Constraints
 
 - TRAIN window `2020-01-01..2023-12-31` only. The script refuses any other window for the backtest half. VALIDATION `2024-01-01..2025-12-31` is never read.
@@ -1448,8 +1450,8 @@ Open the generated file and insert, directly under the grid warning, a section `
 
 1. Do LONG trades opened on green days win more? Answer for `same_day` (descriptive) and separately for `prior_day` and `trailing_5d` (the only forms a rule could use). Quote the bucket rows and their intervals; say "no visible effect" when the intervals overlap.
 2. Does the answer survive the bull/bear split, or is it the slow regime?
-3. Does the bot open fewer LONG trades on red days? Quote mean per day and zero-day share, TRAIN and live separately.
-4. If so, which stage: fewer raw signals, or the same signals and fewer taken (TRAIN); which funnel stage (live, with its day count).
+3. Does the bot open fewer LONG trades on red days? Quote TRAIN mean per day and zero-day share. State that live LONG-specific rates are unavailable from all-direction scan telemetry, then quote live all-direction alert mean and zero-day share separately as context.
+4. If so, which stage: fewer raw signals, or the same signals and fewer taken (TRAIN); for live, give the bullish funnel day count and state whether those staged days actually identify a LONG loss.
 5. One closing line: either "candidate for a pre-registered rule: `<form>`, `<direction of effect>`" or "no candidate".
 
 Also add one line citing `docs/superpowers/results/2026-08-23-alert-density-train.md` as the earlier, related density finding.
