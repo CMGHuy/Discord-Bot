@@ -360,7 +360,11 @@ phases: `mode=index` writes the index and task ledger first, then one
 `mode=part <N>` run per part, one at a time here; each run appends task by
 task to disk rather than writing the file at the end; at most 2 plans in
 progress per session, and a plan cut off mid-write is resumed from its first
-missing task, never skipped or restarted), and
+missing task, never skipped or restarted. The SessionStart hook prints
+`PLAN WIP` for such a plan: resume it before new work. Record partner
+decisions in the index's `## Handoff` section as they are made, and commit
+the index, each part and any partial files (`docs(vN): plan WIP`) as you
+go -- progress lives in the repo, never in session memory), and
 `expert-reviewer` (one expert role's read-only review, `role=<name>`, cited
 `BLOCKING`/`ADVISORY` findings or `CLEAN`; dispatched by `panel` one role at a
 time). Dispatch `task-implementer` at the plan task's `**Model:**` tier. When

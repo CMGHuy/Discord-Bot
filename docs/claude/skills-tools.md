@@ -243,9 +243,24 @@ third waits for one to finish. Its parts still fan out in parallel.
 **Running out of tokens is resumed, never skipped.** Any plan whose ledger
 lists ids missing from its part files is unfinished: re-dispatch the
 `mode=part <N>` writer for each incomplete part. The writer appends from the
-first missing id and leaves tasks already on disk alone. Check for this at
-session start, before starting a new plan; an unfinished plan counts toward
-the 2-plan limit.
+first missing id and leaves tasks already on disk alone. An unfinished plan
+counts toward the 2-plan limit.
+
+**Handing a plan to another session or account.** Progress lives in the
+repo, never in account memory: another account (or Codex) has its own
+config dir and sees none of this session's memory or context.
+- *Detection is automatic.* The SessionStart hook (`session-cursor.ps1`,
+  shared by Claude and Codex) prints `PLAN WIP` for every plan whose
+  `## Task ledger` names ids with no `### Task` on disk, with the resume
+  command. Resume those before starting anything new.
+- *Decisions go in the plan, as they are made.* Any partner answer, a
+  `BLOCKED:` resolution or a deviation from the spec is written into a
+  `## Handoff` section of the index (single file: of the plan) at once — not
+  only into the conversation. The hook points the next session at it.
+- *Commit as you go.* Index on return, each part on return, and — when the
+  usage watcher warns (≥ 90%) or the session is about to stop — the files on
+  disk right away as `docs(vN): plan WIP -- <k>/<n> tasks`. A WIP commit is
+  never reviewed or closed out; the resuming session finishes it.
 
 For small edits (a few lines of markdown or config), work inline: every agent
 spawn is a cold start that costs more than the edit.

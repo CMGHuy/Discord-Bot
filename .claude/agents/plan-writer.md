@@ -54,7 +54,9 @@ dozens of one-line greps — every call re-reads your whole context.
    the header block, goal, architecture, `## Global Constraints`,
    `## Parallelisation`, and a **task ledger** table with one row per task:
    id · title · part · `Model:` tier · files created/modified · symbols it
-   creates that a later task consumes (name, signature or shape). The ledger
+   creates that a later task consumes (name, signature or shape). Put it
+   under the exact heading `## Task ledger`, task id in the first column —
+   the SessionStart hook parses it to detect an unfinished plan. The ledger
    is the contract that lets parts be written independently — make every
    cross-task name, signature and file path final here.
    - Split plan: this is `_0-index.md`, plus a parts table (part → file,
@@ -81,6 +83,8 @@ writing, check:** if your target file exists, list its `### Task` ids
 missing. Never rewrite tasks that are already on disk, and never start the
 plan over. In `mode=index`, an existing index with a complete ledger means
 phase 1 is done: return `PARTS` (or carry on appending, for a single file).
+Read the index's `## Handoff` section first if it has one — it carries the
+partner's decisions from the session that was cut off.
 
 ## Return shape
 

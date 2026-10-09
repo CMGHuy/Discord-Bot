@@ -130,7 +130,9 @@ committed on `main`; branch only to implement. Run `/new-doc`; detail:
 **Write a plan in two phases:** `plan-writer` `mode=index`, then one
 `mode=part <N>` per part, dispatched in parallel; each writer appends task by
 task to disk. **At most 2 plans in progress per session**; a plan cut off by
-tokens is resumed from its first missing task, never skipped or restarted
+tokens is resumed from its first missing task, never skipped or restarted.
+Progress lives in the repo (ledger, `## Handoff`, WIP commits), never in
+account memory; the SessionStart `PLAN WIP` line finds it
 (`skills-tools.md` § Plan writing).
 
 From v146, **specs carry a `Panel:` line** (1–3 expert role skills under
