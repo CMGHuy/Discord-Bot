@@ -224,3 +224,29 @@ def test_is_stale_uses_the_sub_hourly_cadence(tmp_path):
     thirty_hours_ago = time.time() - 30 * 3600
     os.utime(path, (thirty_hours_ago, thirty_hours_ago))
     assert refresh_mod.is_stale("AAPL", "5min", base_dir=str(tmp_path)) is True
+
+
+def test_merge_save_survives_cached_csv_with_mixed_utc_offsets(tmp_path):
+    """A cached hourly CSV spanning a DST change has both -05:00 and -04:00
+    offsets, which read_csv returns as an object Index with no .tz -- the
+    ARM/hourly refresh crashed on it hourly in production (2026-10-09)."""
+    import io
+    import pandas as pd
+    from swingbot.core.marketdata.data_refresh import _merge_save
+
+    rows = "".join(
+        f"2026-03-{d:02d} 10:00:00{'-05:00' if d < 8 else '-04:00'},1,1,1,1,1\n"
+        for d in range(2, 14))
+    existing = pd.read_csv(io.StringIO("Datetime,Open,High,Low,Close,Volume\n" + rows),
+                           index_col=0, parse_dates=True)
+    assert not isinstance(existing.index, pd.DatetimeIndex)
+    fresh = pd.DataFrame(
+        {c: 1.0 for c in ["Open", "High", "Low", "Close", "Volume"]},
+        index=pd.date_range("2026-03-10 10:00", periods=5, freq="D",
+                            tz="America/New_York"))
+
+    merged, added = _merge_save(existing, fresh, "ARM", "1h", str(tmp_path))
+
+    assert isinstance(merged.index, pd.DatetimeIndex)
+    assert merged.index.is_unique and merged.index.is_monotonic_increasing
+    assert added == 1

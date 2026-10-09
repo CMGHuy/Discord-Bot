@@ -39,10 +39,24 @@ def adjustment_ratio(existing, fresh, symbol: str, timeframe: str):
     return ratio
 
 
+def _as_datetime_index(frame, like):
+    """read_csv returns an object Index (no .tz) when a cached file mixes UTC
+    offsets, e.g. an hourly archive spanning a DST change. Parse it to a real
+    DatetimeIndex in `like`'s timezone so the tz alignment and union work."""
+    if isinstance(frame.index, pd.DatetimeIndex):
+        return frame
+    parsed = pd.to_datetime(frame.index, utc=True)
+    tz = getattr(like.index, "tz", None)
+    frame = frame.copy()
+    frame.index = parsed.tz_convert(tz) if tz is not None else parsed.tz_localize(None)
+    return frame
+
+
 def merge_adjusted(existing, fresh, symbol: str, timeframe: str, align_tz):
     """Union cached and fresh bars after aligning a proven adjustment change."""
     if existing is None or existing.empty:
         return fresh.copy()
+    existing = _as_datetime_index(existing, fresh)
     existing, fresh = align_tz(existing, fresh)
     ratio = adjustment_ratio(existing, fresh, symbol, timeframe)
     if ratio is not None:
