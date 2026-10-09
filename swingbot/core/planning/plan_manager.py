@@ -1298,11 +1298,21 @@ def _live_atr(ticker):
     return float(atr(df, 14).iloc[-1])
 
 
+def _session_wall_clock(stamp):
+    """A plan timestamp as a naive New York wall-clock time, the frame the daily
+    bar index is dated in. Plans store tz-aware ISO strings (UTC or offset); a
+    naive string is taken as already being wall-clock."""
+    import pandas as pd
+    ts = pd.Timestamp(stamp)
+    return ts.tz_convert(US_MARKET_TZ).tz_localize(None) if ts.tzinfo is not None else ts
+
+
 def _bars_since(ticker, created_at):
     from swingbot.core.marketdata.data import get_daily_data
-    df = get_daily_data(ticker)
-    return int((df.index.tz_localize(None) > created_at).sum()) \
-        if df.index.tz is None else int((df.index > created_at).sum())
+    index = get_daily_data(ticker).index
+    if index.tz is not None:
+        index = index.tz_localize(None)
+    return int((index > _session_wall_clock(created_at)).sum())
 
 
 def _manager() -> PlanManager:
