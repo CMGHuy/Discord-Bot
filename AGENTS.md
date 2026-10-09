@@ -228,7 +228,10 @@ Red flags, Out of scope -- and load when you review from that seat:
 `quant-researcher` (sample size, overfitting, multiple comparisons,
 pre-registration discipline), `risk-manager` (2% dollar risk, portfolio heat,
 correlated exposure, stops), `financial-advisor` (retail suitability, account
-fit, tax drag, alert cadence; educational, not personal financial advice).
+fit, tax drag, alert cadence; educational, not personal financial advice),
+`veteran-trader` (fills, gaps, liquidity, regime, resting orders before the
+open), `technical-analyst` (S/R, pattern and indicator logic),
+`fundamental-analyst` (earnings, catalysts, sector and macro concentration).
 A role raises cited `BLOCKING`/`ADVISORY` findings; it never decides and never
 lowers a gate.
 

@@ -19,6 +19,9 @@ ROLES = {
     "quant-researcher": "opus",
     "risk-manager": "sonnet",
     "financial-advisor": "sonnet",
+    "veteran-trader": "sonnet",
+    "technical-analyst": "sonnet",
+    "fundamental-analyst": "sonnet",
 }
 
 SECTIONS = ("## Lens", "## Checklist", "## Red flags", "## Out of scope")
