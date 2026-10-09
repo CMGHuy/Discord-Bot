@@ -597,6 +597,40 @@ export interface AnalyticsExitQuality extends Scoped {
   min_cell_n: number;
 }
 
+/** v142 — `GET /analytics/partials` (`swingbot/core/analytics/partials.py`).
+ *  Rates are percentages 0-100; every R is on the plan's initial risk. The
+ *  scope's date range filters on FILL date and `n` is the filled plans. */
+export interface PartialsKpis {
+  tp1_rate: number | null; tp1_rate_n: number | null;
+  tp1_tp2_rate: number | null; tp1_tp2_n: number;
+  beat_all_out: number | null; beat_all_out_n: number;
+  mean_runner_delta_r: number | null;
+  median_tp1_exit_sessions: number | null; tp1_exit_n: number;
+}
+export type PartialsStage = 'filled' | 'tp1' | 'runner_closed' | 'tp2';
+export type PartialsBucket = 'tp2' | 'trail' | 'floor' | 'stall' | 'time' | 'manual' | 'no_tp2' | 'open' | 'other';
+export type PartialsDimension = 'strategy' | 'horizon' | 'side' | 'month';
+export type PartialsHoldStage = 'entry_tp1' | 'tp1_exit' | 'entry_exit';
+export interface PartialsHold { p25: number | null; median: number | null; p75: number | null; points: number[]; }
+export interface PartialsBreakdownRow extends PartialsKpis { key: string; n: number; thin: boolean; }
+export interface PartialsLadderRow { level_r: number; touch_rate: number | null; cf_exp_r: number | null; n: number; }
+export interface PartialsSplitRow { fraction: number; exp_r: number | null; n: number; }
+export interface PartialsOutcome { bucket: PartialsBucket; n: number; share: number | null; avg_runner_r: number | null; }
+export interface AnalyticsPartials extends Scoped {
+  kpis: PartialsKpis;
+  funnel: { stage: PartialsStage; n: number }[];
+  outcomes: PartialsOutcome[];
+  counterfactuals: {
+    actual_exp_r: number | null; all_out_exp_r: number | null; giveback: number[];
+    ladder: PartialsLadderRow[]; split: PartialsSplitRow[];
+    path_unavailable: number; runner_r_unavailable: number;
+  };
+  holds: Record<PartialsHoldStage, PartialsHold>;
+  breakdowns: Record<PartialsDimension, PartialsBreakdownRow[]>;
+  thin_n: number;
+  population: { filled: number; partial: number; unreadable: number };
+}
+
 export interface AnalyticsPlans {
   funnel: { posted: number; filled: number; hit_tp1: number; closed: number };
   in_flight: number;

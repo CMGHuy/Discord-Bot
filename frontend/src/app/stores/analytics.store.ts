@@ -18,6 +18,7 @@ import {
   AnalyticsExitQuality,
   AnalyticsHeatGrid,
   AnalyticsJournal,
+  AnalyticsPartials,
   AnalyticsPerformance,
   AnalyticsPlans,
   AnalyticsStrategies,
@@ -206,10 +207,10 @@ function numberOrNull(record: Record<string, unknown> | undefined, key: string):
  *  Attribution and Execution. Tabs, not sub-navigation: a second level of
  *  nav inside one of six workspaces reintroduces exactly the depth the IA
  *  change removed. */
-export type AnalyticsTab = 'overview' | 'attribution' | 'execution' | 'edge' | 'pipeline' | 'tuning';
+export type AnalyticsTab = 'overview' | 'attribution' | 'execution' | 'edge' | 'pipeline' | 'tuning' | 'partials';
 
 export const ANALYTICS_TABS: readonly AnalyticsTab[] =
-  ['overview', 'attribution', 'execution', 'edge', 'pipeline', 'tuning'] as const;
+  ['overview', 'attribution', 'execution', 'edge', 'pipeline', 'tuning', 'partials'] as const;
 
 /** Old `?tab=` values keep working (spec D1). A bookmark or a Discord link
  *  posted before v94 lands on the tab that now answers its question rather
@@ -223,7 +224,7 @@ export const LEGACY_TABS: Record<string, AnalyticsTab> = {
 export type PanelKey =
   | 'performance' | 'equityCurve' | 'byDimension' | 'heatGrid' | 'exitQuality'
   | 'journal' | 'strategies' | 'calibration' | 'plans'
-  | 'byHorizon' | 'byDirection' | 'byDow';
+  | 'byHorizon' | 'byDirection' | 'byDow' | 'partials';
 
 export const DEFAULT_SCOPE: BookScope = {
   from: null, to: null, ledger: 'main', strategy: null, horizon: null, direction: null,
@@ -391,6 +392,8 @@ interface AnalyticsSlice {
   strategies: AnalyticsStrategies | null;     strategiesError: string | null;
   calibration: AnalyticsCalibration | null;   calibrationError: string | null;
   plans: AnalyticsPlans | null;               plansError: string | null;
+  /** v142 — the Partials tab's one payload. */
+  partials: AnalyticsPartials | null;         partialsError: string | null;
 
   /** SR51 — the tracked job's grid, one row per parameter combination.
    *  Empty while it is still running, which the endpoint answers with a 200
@@ -472,6 +475,7 @@ export const AnalyticsStore = signalStore(
       strategies: null, strategiesError: null,
       calibration: null, calibrationError: null,
       plans: null, plansError: null,
+      partials: null, partialsError: null,
       gridStrategy: null,
       grid: [],
       proposing: null,
@@ -726,6 +730,8 @@ export const AnalyticsStore = signalStore(
       fetchPanel(api.analyticsCalibration(), 'calibration', 'calibrationError');
     };
     const loadPipeline = (): void => fetchPanel(api.analyticsPlans(), 'plans', 'plansError');
+    const loadPartials = (): void =>
+      fetchPanel(api.analyticsPartials(s()), 'partials', 'partialsError');
 
     /** The registry list the Tuning launcher offers. Sourced from the server
      *  rather than hardcoded: it whitelists the strategy against
@@ -855,6 +861,9 @@ export const AnalyticsStore = signalStore(
     const resolvePipeline = (): Observable<void> =>
       resolveOne(api.analyticsPlans(), 'plans', 'plansError');
 
+    const resolvePartials = (): Observable<void> =>
+      resolveOne(api.analyticsPartials(s()), 'partials', 'partialsError');
+
     const resolveTuning = (): Observable<void> => routeRequest(api.jobs(), {
       start: () => {
         patchState(store, { loading: true });
@@ -873,7 +882,7 @@ export const AnalyticsStore = signalStore(
 
     const RESOLVERS: Record<AnalyticsTab, () => Observable<void>> = {
       overview: resolveOverview, attribution: resolveAttribution, execution: resolveExecution,
-      edge: resolveEdge, pipeline: resolvePipeline, tuning: resolveTuning,
+      edge: resolveEdge, pipeline: resolvePipeline, tuning: resolveTuning, partials: resolvePartials,
     };
 
     const resolveTab = (tab: AnalyticsTab): Observable<void> => {
@@ -883,7 +892,7 @@ export const AnalyticsStore = signalStore(
 
     const LOADERS: Record<AnalyticsTab, () => void> = {
       overview: loadOverview, attribution: loadAttribution, execution: loadExecution,
-      edge: loadEdge, pipeline: loadPipeline, tuning: loadTuning,
+      edge: loadEdge, pipeline: loadPipeline, tuning: loadTuning, partials: loadPartials,
     };
 
     const load = (): void => LOADERS[store.tab()]();
@@ -916,6 +925,7 @@ export const AnalyticsStore = signalStore(
           strategies: () => fetchPanel(api.analyticsStrategies(s()), 'strategies', 'strategiesError'),
           calibration: () => fetchPanel(api.analyticsCalibration(), 'calibration', 'calibrationError'),
           plans: () => fetchPanel(api.analyticsPlans(), 'plans', 'plansError'),
+          partials: () => fetchPanel(api.analyticsPartials(s()), 'partials', 'partialsError'),
         };
         one[panel]?.();
       },

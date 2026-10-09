@@ -11,6 +11,7 @@ import {
   AnalyticsHeatGrid,
   AnalyticsExitQuality,
   AnalyticsJournal,
+  AnalyticsPartials,
   AnalyticsPerformance,
   AnalyticsPlans,
   AnalyticsRegistry,
@@ -258,6 +259,11 @@ export class ApiClient {
 
   analyticsCalibration(): Observable<AnalyticsCalibration> {
     return this.http.get<AnalyticsCalibration>(`${this.base}/analytics/calibration`);
+  }
+
+  /** v142 — the Partials tab: TP1->TP2 conversion and runner counterfactuals. */
+  analyticsPartials(scope?: Partial<BookScope> | null): Observable<AnalyticsPartials> {
+    return this.http.get<AnalyticsPartials>(`${this.base}/analytics/partials`, { params: scopeParams(scope) });
   }
 
   analyticsExitQuality(scope?: Partial<BookScope> | null): Observable<AnalyticsExitQuality> {
