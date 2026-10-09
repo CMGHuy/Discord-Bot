@@ -375,6 +375,12 @@ def _risk_cap_fields(embed, plan, d) -> None:
         inline=False)
 
 
+def _outlook_cancel_fields(embed, plan, d) -> None:
+    """v144: an outlook plan's cancellation, in the catalogue's words and code."""
+    embed.description = plan_levels_block(plan, plan.trigger_price)
+    embed.add_field(name="Why", value=f"{d['reason_message']} ({d['reason_code']})", inline=False)
+
+
 _EVENT_FIELDS = {
     "filled": _filled_fields,
     "be_moved": _be_moved_fields,
@@ -386,6 +392,13 @@ _EVENT_FIELDS = {
 }
 
 
+def _fields_for(event):
+    """The field builder for one event: a stated reason (v144) wins."""
+    if event.detail.get("reason_message"):
+        return _outlook_cancel_fields
+    return _EVENT_FIELDS.get(event.transition)
+
+
 def build_plan_event_embed(plan, event) -> discord.Embed:
     """Per-transition Discord embed for the v2 plan lifecycle (Task 72), styled
     by the v110 registry. Field text is unchanged from the pre-v110 builder."""
@@ -393,7 +406,7 @@ def build_plan_event_embed(plan, event) -> discord.Embed:
     embed = ui.push_embed(kind, plan.ticker, plan.direction, detail)
     ui.apply_chrome(embed, kind=kind, r=stripe_r, plan_id=plan.plan_id)
     embed.add_field(name="Plan (v2)", value=strategy_plan_line(plan), inline=False)
-    fields = _EVENT_FIELDS.get(event.transition)
+    fields = _fields_for(event)
     if fields is not None:
         fields(embed, plan, event.detail)
     return embed

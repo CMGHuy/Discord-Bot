@@ -18,7 +18,8 @@ from swingbot.core.db import write_failure
 from swingbot.core.infra import pitr_watch
 from swingbot.core import presentation as ui
 from swingbot.core.marketdata.watchlist import load_watchlist
-from . import notices, presence, recap, runstate
+from swingbot.core.scanning import outlook_session
+from . import notices, outlook, presence, recap, runstate
 from .alerts import _send_alerts, send_then_short
 
 log = logging.getLogger(__name__)
@@ -723,6 +724,110 @@ async def weekend_deep_scan_task():
         log.exception("weekend_deep_scan_task: deep scan failed")
 
 
+_next_session_fired_date: dt.date | None = None   # process-local fast path; persisted below
+
+
+def _outlook_now() -> dt.datetime:
+    """v144: the outlook loops' Berlin clock. A function so tests can set it
+    without replacing datetime.datetime for every module."""
+    return dt.datetime.now(SESSION_TZ)
+
+
+def _scheduled_job_fired_since(job: str, day: dt.date) -> bool:
+    """v144: True when `job` already fired for `day` or a later one (ISO dates
+    order lexically). Lets one job own a run date that is not today."""
+    from swingbot.core.db.repositories.scheduled import scheduled_repo
+    fired = scheduled_repo().fired_on(job)
+    return fired is not None and fired >= day.isoformat()
+
+
+@tasks.loop(minutes=1)
+async def next_session_scan():
+    """v144: the 23:30 outlook, Sunday-Thursday, same minute-poll + persisted
+    fired-once guard as weekend_deep_scan_task. A slot missed while the bot was
+    down fires late, but never after the RTH open of the session it targets:
+    then it is marked done and logged, so it is skipped exactly once. A failing
+    tick is logged and retried next minute -- it never stops the loop."""
+    try:
+        await _next_session_scan_tick()
+    except Exception:
+        log.exception("next_session_scan tick failed -- will retry next minute")
+
+
+async def _next_session_scan_tick():
+    global _next_session_fired_date
+    if not config.NEXT_SESSION_SCAN_ENABLED:
+        return
+    now = _outlook_now()
+    run_date = outlook_session.latest_slot_date(now, outlook_session.parse_slot(config.NEXT_SESSION_SCAN_TIME))
+    if (run_date is None or _next_session_fired_date == run_date
+            or _scheduled_job_fired_since('next_session_scan', run_date)):
+        return
+    if runstate.is_scan_paused():
+        # Not marked: the slot stays retryable after an unpause, until its session's RTH open.
+        log.info("next_session_scan: scanning is paused -- %s's outlook waits", run_date)
+        return
+    _next_session_fired_date = run_date
+    _mark_scheduled_job_fired('next_session_scan', run_date)
+    if not outlook_session.fire_allowed(now, run_date):
+        log.warning("next_session_scan: %s's outlook skipped -- its session's RTH open has passed", run_date)
+        return
+    log.info("next_session_scan: starting %s", run_date)
+    await _run_outlook_slot(run_date)
+
+
+async def _run_outlook_slot(run_date: dt.date) -> None:
+    try:
+        result = await outlook.run_next_session_outlook(run_date)
+    except Exception:
+        log.exception("next_session_scan: outlook failed")
+        return
+    if result is None:
+        log.warning("next_session_scan: %s's slot is marked fired but nothing was posted (no alerts channel)",
+                    run_date)
+    elif result.halted is not None:
+        await _halt_on_store_failure(result.halted)
+
+
+_wrapup_settled: set = set()   # process-local: days whose wrap-up is done, so no per-minute DB read
+
+
+@tasks.loop(minutes=1)
+async def next_session_wrapup():
+    """v144: the outlook wrap-up, 15 minutes after each session's official close
+    (ET, half-day aware), posted once every outlook plan of that session is
+    terminal. A session still owing one after a restart is retried each minute.
+    A failing tick is logged and retried -- it never stops the loop."""
+    try:
+        await _next_session_wrapup_tick()
+    except Exception:
+        log.exception("next_session_wrapup tick failed -- will retry next minute")
+
+
+async def _wrapup_finished(day: dt.date) -> bool:
+    try:
+        return await outlook.post_wrapup_when_terminal(day)
+    except Exception:
+        log.exception("next_session_wrapup: wrap-up for %s failed", day)
+        return False
+
+
+async def _next_session_wrapup_tick():
+    now = _outlook_now()
+    for day in outlook_session.wrapup_candidates(now):
+        if day in _wrapup_settled:
+            continue
+        if not outlook_session.wrapup_due(now, day):
+            continue
+        if _scheduled_job_fired_since('next_session_wrapup', day):
+            _wrapup_settled.add(day)
+            continue
+        if not await _wrapup_finished(day):
+            break   # never mark a later day past an unfinished earlier one: ">=" would retire it silently
+        _mark_scheduled_job_fired('next_session_wrapup', day)
+        _wrapup_settled.add(day)
+
+
 @tasks.loop(minutes=1)
 async def weekly_earnings_refresh():
     """Refresh the watchlist earnings ledger every Saturday at 03:00 Berlin.
@@ -861,7 +966,8 @@ async def pitr_watch_loop():
 def _always_on_loops() -> tuple:
     """Loops on_ready starts unconditionally, in start order."""
     return (session_scan, heartbeat, config_watcher, trade_monitor, daily_recap,
-            weekend_deep_scan_task, weekly_earnings_refresh, pitr_watch_loop)
+            weekend_deep_scan_task, weekly_earnings_refresh, pitr_watch_loop,
+            next_session_scan, next_session_wrapup)
 
 
 def _start_background_loops() -> None:

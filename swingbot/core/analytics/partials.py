@@ -18,6 +18,7 @@ import numpy as np
 from swingbot.core.analytics import metrics as m
 from swingbot.core.analytics.runner_path import (LADDER_R, close_reason, runner_leg,
                                                  session_span, tp1_leg, transition_day)
+from swingbot.core.tracking.origin import in_cohort
 
 THIN_N = 10
 SPLIT_FRACTIONS = (0.33, 0.5, 0.67)
@@ -95,6 +96,8 @@ def _in_range(day, scope) -> bool:
 
 
 def _matches(plan, scope) -> bool:
+    if not in_cohort(plan, getattr(scope, "origin", None)):
+        return False
     if scope.ledger != "both" and (plan.ledger or "main") != scope.ledger:
         return False
     wanted = ((scope.strategy, plan.strategy), (scope.horizon, plan.horizon_key),

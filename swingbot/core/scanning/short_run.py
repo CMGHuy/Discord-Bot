@@ -34,7 +34,7 @@ from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.core.planning.account import load_account_config
 from swingbot.scan_params import ScanParams
 
-from . import analyze, dedup, fetch, qualify, runstate, scan_run, short_funnel, telemetry
+from . import analyze, dedup, fetch, lane_overlap, qualify, runstate, scan_run, short_funnel, telemetry
 from .embeds import (build_embed, build_simple_alert, notify_closed_trades,
                      notify_near_close, plan_numbers_for_display)
 from .short_candidates import admitted_short_modes, extra_symbols
@@ -169,7 +169,7 @@ def _fit_trendline(df, plan, h, trend):
         return None
 
 
-def _log_trade(item, nums, explanation, fit, alerts):
+def _log_trade(item, nums, explanation, fit, alerts, origin=None):
     """Persist the plan, then the paper trade (v116 order); returns the trade id."""
     result, plan, conf = item.result, item.plan, item.conf
     plan_v2 = item.plan_v2 if config.PLAN_ENGINE_V2 == "on" and item.plan_v2 is not None else None
@@ -191,7 +191,7 @@ def _log_trade(item, nums, explanation, fit, alerts):
         cohort_label=plan_v2.cohort_label if plan_v2 is not None else None,
         cohort_stats=plan_v2.cohort_stats if plan_v2 is not None else None,
         risk_features=plan_v2.risk_features if plan_v2 is not None else None,
-        entry_context=plan_v2.entry_context if plan_v2 is not None else None)
+        entry_context=plan_v2.entry_context if plan_v2 is not None else None, origin=origin)
 
 
 def _render_chart(item, nums, df, frames, spy_df, trade_id, fit):
@@ -290,6 +290,7 @@ def _alert_for(item, frames, spy_df, account_cfg, alerts, funnel=None):
     _stamp_intraday(item)
     embed = build_embed(item, explanation, trade_log.get_stats(conf.level),
                         warning, chart_filename, htf_info=item.htf_info, layout=config.ALERT_EMBED_LAYOUT)
+    lane_overlap.append_overlap_field(embed, result.ticker)   # v144: display only
     alerts.append((embed, chart_path, item.plan_v2, build_simple_alert(item)))
     if funnel is not None:
         funnel.record_item(item, "send")

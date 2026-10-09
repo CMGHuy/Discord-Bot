@@ -137,6 +137,17 @@ FIELDS: list[Field] = [
     Field("SIGNAL_CONFIRMATION_SCANS", "SIGNAL_CONFIRMATION_SCANS", "Scanning & Session", "Confirmation scans",
           type="number", default="1", min=1, max=10, step=1,
           help="A signal must appear the same way this many consecutive scans before it's confirmed and alerted -- filters intraday flicker."),
+    Field("NEXT_SESSION_SCAN_ENABLED", "NEXT_SESSION_SCAN_ENABLED", "Scanning & Session",
+          "Next-session outlook scan", type="checkbox", default="false",
+          help="v144: at NEXT_SESSION_SCAN_TIME (Berlin), Sunday to Thursday, scan the watchlist on "
+               "the last closed daily bar and post tomorrow's stop-entry plans, each valid for that "
+               "one NYSE session only. They are a separate cohort (origin next_session), never "
+               "pooled into ExpR, win rate or badges. A wrap-up posts 15 minutes after the close."),
+    Field("NEXT_SESSION_SCAN_TIME", "NEXT_SESSION_SCAN_TIME", "Scanning & Session",
+          "Outlook scan time (Berlin, HH:MM)", default="23:30",
+          help="Europe/Berlin, 24h HH:MM. A malformed value falls back to 23:30 with a warning. "
+               "A run missed while the bot was down still fires late, but never after the RTH "
+               "open of the session it targets."),
     Field("LOG_LEVEL", "LOG_LEVEL", "Scanning & Session", "Log level",
           type="select", default="INFO", options=["DEBUG", "INFO", "WARNING", "ERROR"],
           help="DEBUG shows every signal/strategy combo evaluated; INFO shows per-scan progress and trade decisions."),
@@ -1234,6 +1245,7 @@ _SEARCH_CLASSES = {
     "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO", "EARNINGS_BLACKOUT_SESSIONS"},
     "live_only": {
         "SESSION_START_HOUR", "SESSION_END_HOUR", "SCAN_INTERVAL_MINUTES",
+        "NEXT_SESSION_SCAN_ENABLED", "NEXT_SESSION_SCAN_TIME",
         "SIGNAL_CONFIRMATION_SCANS", "NEAR_CLOSE_ALERTS_ENABLED",
         "NEAR_CLOSE_THRESHOLD_PCT", "REVERSAL_ENABLED", "REVERSAL_MIN_HOLD_HOURS",
         "REVERSAL_COOLDOWN_HOURS", "REVERSAL_MIN_CONF_MARGIN",

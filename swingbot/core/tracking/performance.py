@@ -569,7 +569,7 @@ class TradeLog:
                   explanation=None, confirmed_by=None, plan_id=None,
                   badge=None, quality_score=None, source=None,
                   trendline_fit=None, cohort_label=None, cohort_stats=None,
-                  risk_features=None, ledger=None, entry_context=None) -> str:
+                  risk_features=None, ledger=None, entry_context=None, origin=None) -> str:
         """
         The extra keyword args (confidence_score/breakdown, target/stop
         sources, explanation, confirmed_by) are optional and purely for
@@ -602,6 +602,7 @@ class TradeLog:
             "risk_features": risk_features or {},
             "source": source,       # "strategy" | "confluence" | None
             "ledger": ledger or "main",  # v93: frozen at creation
+            "origin": origin,       # v144: None = regular lane; frozen at creation
             "entry_context": entry_context or {},
             "legs": [],             # v2 two-leg realization (Task 63/64/65/66); [] for v1
             "ticker": ticker,
@@ -1143,7 +1144,7 @@ class TradeLog:
     def get_trade_by_id(self, trade_id: str) -> dict | None:
         return next((t for t in self._all() if t["id"] == trade_id), None)
 
-    def open_trade_for_ticker(self, ticker: str) -> dict | None:
+    def open_trade_for_ticker(self, ticker: str, origin: str | None = None) -> dict | None:
         """The open trade on this ticker, if there is one.
 
         The bot holds at most ONE open trade per ticker. This is deliberately
@@ -1158,10 +1159,14 @@ class TradeLog:
         A same-direction trade is only possible again once this one closes; an
         opposite-direction one only via the reversal path (core/reversal.py),
         which closes this trade first.
+
+        v144: scoped to one lane. `origin` None (the default, every pre-v144
+        caller) sees only regular trades, so an outlook trade never blocks or
+        reverses a regular one; the outlook run passes "next_session".
         """
         return next(
             (t for t in self._all()
-             if t["ticker"] == ticker and t["status"] == "open"),
+             if t["ticker"] == ticker and t["status"] == "open" and t.get("origin") == origin),
             None,
         )
 

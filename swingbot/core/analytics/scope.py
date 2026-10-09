@@ -13,9 +13,10 @@ from typing import Mapping
 
 from swingbot.core.analytics import metrics as m
 from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.tracking.origin import ORIGINS, in_cohort
 from swingbot.core.tracking.performance import primary_strategy_label
 
-SCOPE_PARAMS = ("from", "to", "ledger", "strategy", "horizon", "direction")
+SCOPE_PARAMS = ("from", "to", "ledger", "strategy", "horizon", "direction", "origin")
 LEDGERS = ("main", "weak", "both")
 DIRECTIONS = ("bullish", "bearish")
 CLOSED_STATUSES = ("win", "loss", "closed")
@@ -33,6 +34,7 @@ class BookScope:
     strategy: str | None = None
     horizon: str | None = None
     direction: str | None = None
+    origin: str | None = None      # v144: None = the regular lane (pooled); a cohort name = only it
 
 
 def _day(args: Mapping[str, str], name: str) -> str | None:
@@ -65,6 +67,7 @@ def parse_scope(args: Mapping[str, str]) -> BookScope:
         strategy=(args.get("strategy") or "").strip() or None,
         horizon=_choice(args, "horizon", tuple(HORIZONS), None),
         direction=_choice(args, "direction", DIRECTIONS, None),
+        origin=_choice(args, "origin", ORIGINS, None),
     )
 
 
@@ -79,20 +82,27 @@ def closed_only(trades: list[dict]) -> list[dict]:
     return [t for t in trades if t.get("status") in CLOSED_STATUSES]
 
 
+def _checks(scope: BookScope) -> tuple:
+    """One predicate per scope field; all must hold. The origin check comes
+    first: without `origin`, the scope is the regular lane (v144)."""
+    return (
+        lambda t: in_cohort(t, scope.origin),
+        lambda t: scope.ledger == "both" or (t.get("ledger") or "main") == scope.ledger,
+        lambda t: not scope.strategy or primary_strategy_label(t) == scope.strategy,
+        lambda t: not scope.horizon or t.get("horizon_key") == scope.horizon,
+        lambda t: not scope.direction or t.get("direction") == scope.direction,
+    )
+
+
 def select(closed: list[dict], scope: BookScope) -> list[dict]:
-    out = m.in_date_range(closed, start=scope.start, end=scope.end)
-    if scope.ledger != "both":
-        out = [t for t in out if (t.get("ledger") or "main") == scope.ledger]
-    if scope.strategy:
-        out = [t for t in out if primary_strategy_label(t) == scope.strategy]
-    if scope.horizon:
-        out = [t for t in out if t.get("horizon_key") == scope.horizon]
-    if scope.direction:
-        out = [t for t in out if t.get("direction") == scope.direction]
-    return out
+    checks = _checks(scope)
+    return [t for t in m.in_date_range(closed, start=scope.start, end=scope.end)
+            if all(check(t) for check in checks)]
 
 
 def echo(scope: BookScope, n: int) -> dict:
-    return {"scope": {"from": scope.start, "to": scope.end, "ledger": scope.ledger,
-                      "strategy": scope.strategy, "horizon": scope.horizon,
-                      "direction": scope.direction}, "n": n}
+    body = {"from": scope.start, "to": scope.end, "ledger": scope.ledger,
+            "strategy": scope.strategy, "horizon": scope.horizon, "direction": scope.direction}
+    if scope.origin is not None:
+        body["origin"] = scope.origin      # v144: only when asked, so old payloads are unchanged
+    return {"scope": body, "n": n}

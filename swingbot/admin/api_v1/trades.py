@@ -543,9 +543,10 @@ def _noted_ids() -> set:
     """
     try:
         from swingbot.core.analytics.journal import JournalStore
+        from swingbot.core.tracking.origin import ALL
         return {
             e.get("trade_id")
-            for e in JournalStore().entries()
+            for e in JournalStore().entries(cohort=ALL)
             if e.get("note")
         }
     except Exception:
@@ -571,7 +572,8 @@ def _note_for(trade_id: str | None) -> str | None:
         return None
     try:
         from swingbot.core.analytics.journal import JournalStore
-        for entry in JournalStore().entries():
+        from swingbot.core.tracking.origin import ALL
+        for entry in JournalStore().entries(cohort=ALL):
             if entry.get("trade_id") == trade_id:
                 return entry.get("note") or None
     except Exception:

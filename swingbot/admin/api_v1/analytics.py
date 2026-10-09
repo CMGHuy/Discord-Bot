@@ -115,7 +115,9 @@ def _soak_for(strategy: str):
     from swingbot.core.backtesting.registry import get_badge
     from swingbot.core.edge.strategy_soak import soak_verdict
     from swingbot.core.planning.plan_store import PlanStore
-    plans = [plan for plan in PlanStore().all() if plan.source == "strategy" and plan.strategy == strategy]
+    from swingbot.core.tracking.origin import is_regular
+    plans = [plan for plan in PlanStore().all()
+             if plan.source == "strategy" and plan.strategy == strategy and is_regular(plan)]
     badge = get_badge("strategy", strategy)
     return soak_verdict(plans, badge), badge
 
@@ -641,6 +643,7 @@ def analytics_exit_quality():
     from swingbot.core.analytics.aggregate import MIN_CELL_N
     from swingbot.core.analytics.journal import JournalStore
     from swingbot.core.analytics.scope import closed_only, echo, select
+    from swingbot.core.tracking.origin import ALL
 
     scope = _scope()
     scoped = select(closed_only(_all_trades(TradeLog())), scope)
@@ -653,7 +656,7 @@ def analytics_exit_quality():
         if (days := m._holding_days(trade)) is not None
     ][:2000]
     ids = {trade.get("id") for trade in scoped}
-    entries = [entry for entry in JournalStore().entries() if entry.get("trade_id") in ids]
+    entries = [entry for entry in JournalStore().entries(cohort=ALL) if entry.get("trade_id") in ids]
     return jsonify({"exit_reasons": m.exit_reason_split(scoped),
                     "unmapped_reasons": m.unmapped_exit_reasons(scoped),
                     "hold_by_outcome": m.hold_by_outcome(scoped),
@@ -694,6 +697,22 @@ def analytics_partials():
     return jsonify({**report, **echo(scope, len(plans))})
 
 
+@api_v1.route("/analytics/cohort", methods=["GET"])
+@require_auth
+def analytics_cohort():
+    """v144: one origin cohort's own N, fill rate (issued -> filled), win rate
+    and ExpR of its closed trades, and its cancellation-reason histogram. The
+    cohort is never folded into any other figure this API serves."""
+    from swingbot.core.analytics.cohort import cohort_report
+    from swingbot.core.planning.plan_store import PlanStore
+    from swingbot.core.tracking.origin import ORIGINS
+
+    origin = (request.args.get("origin") or "").strip()
+    if origin not in ORIGINS:
+        raise ApiError("invalid", f"origin must be one of {list(ORIGINS)}, got {origin!r}", 400)
+    return jsonify(cohort_report(PlanStore().all(), _all_trades(TradeLog()), origin))
+
+
 @api_v1.route("/analytics/calibration", methods=["GET"])
 @require_auth
 def analytics_calibration():
@@ -724,5 +743,7 @@ def analytics_plans():
     """
     from swingbot.admin.queries import _plan_lifecycle
     from swingbot.core.planning.plan_store import PlanStore
+    from swingbot.core.tracking.origin import is_regular
 
-    return jsonify({**_plan_lifecycle(PlanStore().all()), "scope": "all-time"})
+    plans = [plan for plan in PlanStore().all() if is_regular(plan)]
+    return jsonify({**_plan_lifecycle(plans), "scope": "all-time"})
