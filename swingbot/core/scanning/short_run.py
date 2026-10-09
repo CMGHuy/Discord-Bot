@@ -34,7 +34,7 @@ from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.core.planning.account import load_account_config
 from swingbot.scan_params import ScanParams
 
-from . import analyze, dedup, fetch, qualify, runstate, scan_run, short_funnel, telemetry
+from . import analyze, dedup, fetch, lane_overlap, qualify, runstate, scan_run, short_funnel, telemetry
 from .embeds import (build_embed, build_simple_alert, notify_closed_trades,
                      notify_near_close, plan_numbers_for_display)
 from .short_candidates import admitted_short_modes, extra_symbols
@@ -290,6 +290,7 @@ def _alert_for(item, frames, spy_df, account_cfg, alerts, funnel=None):
     _stamp_intraday(item)
     embed = build_embed(item, explanation, trade_log.get_stats(conf.level),
                         warning, chart_filename, htf_info=item.htf_info, layout=config.ALERT_EMBED_LAYOUT)
+    lane_overlap.append_overlap_field(embed, result.ticker)   # v144: display only
     alerts.append((embed, chart_path, item.plan_v2, build_simple_alert(item)))
     if funnel is not None:
         funnel.record_item(item, "send")

@@ -36,7 +36,7 @@ from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.scan_params import ScanParams
 
-from . import analyze, dedup, fetch, progress_store, runstate, short_funnel, strategy_pass, telemetry
+from . import analyze, dedup, fetch, lane_overlap, progress_store, runstate, short_funnel, strategy_pass, telemetry
 from .short_candidates import ShortReference, build_reference_rels, extra_candidates
 from .short_reference import completed_frame as _completed, etf_for_sector
 from .analyze import paper_trade_decision
@@ -1091,6 +1091,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
 
         embed = build_embed(item, explanation, perf_stats, warning, chart_filename,
                             htf_info=item.htf_info, layout=config.ALERT_EMBED_LAYOUT)
+        lane_overlap.append_overlap_field(embed, result.ticker)   # v144: display only
         # 4th element: the stripped-down text mirror for
         # DISCORD_CHANNEL_TRADES_SIMPLE_ID. Built here, alongside the embed,
         # because this is the only frame where the full `item` (result, conf,
