@@ -697,6 +697,22 @@ def analytics_partials():
     return jsonify({**report, **echo(scope, len(plans))})
 
 
+@api_v1.route("/analytics/cohort", methods=["GET"])
+@require_auth
+def analytics_cohort():
+    """v144: one origin cohort's own N, fill rate (issued -> filled), win rate
+    and ExpR of its closed trades, and its cancellation-reason histogram. The
+    cohort is never folded into any other figure this API serves."""
+    from swingbot.core.analytics.cohort import cohort_report
+    from swingbot.core.planning.plan_store import PlanStore
+    from swingbot.core.tracking.origin import ORIGINS
+
+    origin = (request.args.get("origin") or "").strip()
+    if origin not in ORIGINS:
+        raise ApiError("invalid", f"origin must be one of {list(ORIGINS)}, got {origin!r}", 400)
+    return jsonify(cohort_report(PlanStore().all(), _all_trades(TradeLog()), origin))
+
+
 @api_v1.route("/analytics/calibration", methods=["GET"])
 @require_auth
 def analytics_calibration():
