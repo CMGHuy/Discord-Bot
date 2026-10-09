@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Header, Global Constraints, Frozen readings, Review Focus and Parallelisation live in [`_0-index`](2026-10-09-v143-fvg-bullish-badge-diagnostic_0-index.md); every task here implicitly includes them. Work only in the worktree `E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-09-v143-fvg-bullish-badge-diagnostic`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-09-v143-fvg-bullish-badge-diagnostic-design.md`](../specs/2026-10-09-v143-fvg-bullish-badge-diagnostic-design.md)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-09-v143-fvg-bullish-badge-diagnostic-design.md`](../../specs/implemented/2026-10-09-v143-fvg-bullish-badge-diagnostic-design.md)
 
 # Phase 1 — The module `swingbot/core/backtesting/fvg_diagnostic.py`
 

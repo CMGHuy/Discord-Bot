@@ -7,7 +7,7 @@ scripts/backtest/measure_fvg_bullish_diagnostic.py.
 NO LOOKAHEAD: every feature reads df.iloc[:i + 1] only, i the signal bar.
 Only `outcome` walks forward, and it is the thing being measured.
 
-Spec: docs/superpowers/specs/2026-10-09-v143-fvg-bullish-badge-diagnostic-design.md
+Spec: docs/superpowers/specs/implemented/2026-10-09-v143-fvg-bullish-badge-diagnostic-design.md
 """
 from __future__ import annotations
 
@@ -563,7 +563,7 @@ def render(report, *, run_date: str, tickers: int, tolerance_pct=None) -> str:
         "# v143 FVG (bullish) badge diagnostic: result", "",
         f"**Run:** {run_date}, TRAIN {TRAIN[0]}..{TRAIN[1]} (signal date), {tickers} cached "
         "tickers, ten horizons. Read-only; VALIDATION never read.",
-        "**Spec:** `docs/superpowers/specs/2026-10-09-v143-fvg-bullish-badge-diagnostic-design.md`",
+        "**Spec:** `docs/superpowers/specs/implemented/2026-10-09-v143-fvg-bullish-badge-diagnostic-design.md`",
         "", *_verdict_lines(report), "",
         f"{len(FEATURES)} features at {len(names)} geometries is {looks} looks. At a 5% "
         "false-positive rate one or two chance hits are expected; a candidate below has earned "

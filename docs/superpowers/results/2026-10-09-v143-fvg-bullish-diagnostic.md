@@ -1,7 +1,7 @@
 # v143 FVG (bullish) badge diagnostic: result
 
 **Run:** 2026-10-09, TRAIN 2020-01-01..2023-12-31 (signal date), 75 cached tickers, ten horizons. Read-only; VALIDATION never read.
-**Spec:** `docs/superpowers/specs/2026-10-09-v143-fvg-bullish-badge-diagnostic-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-09-v143-fvg-bullish-badge-diagnostic-design.md`
 
 **Verdict: NO CANDIDATE.** FVG (bullish) stays WEAK.
 

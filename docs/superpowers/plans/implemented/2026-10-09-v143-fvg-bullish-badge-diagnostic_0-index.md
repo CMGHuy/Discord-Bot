@@ -4,7 +4,7 @@
 
 **Bump:** none
 **Edge:** none (integrity)
-**Spec:** [`docs/superpowers/specs/2026-10-09-v143-fvg-bullish-badge-diagnostic-design.md`](../specs/2026-10-09-v143-fvg-bullish-badge-diagnostic-design.md) (as amended in `f91a87b5`, `2a00d5a2` and `c29e2e12`: nine features, replay quality score, gap matched on the scenario's clustered level and looked up on the map bar)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-09-v143-fvg-bullish-badge-diagnostic-design.md`](../../specs/implemented/2026-10-09-v143-fvg-bullish-badge-diagnostic-design.md) (as amended in `f91a87b5`, `2a00d5a2` and `c29e2e12`: nine features, replay quality score, gap matched on the scenario's clustered level and looked up on the map bar)
 
 **Goal:** Measure once, on TRAIN 2020-01-01..2023-12-31 only, whether any of nine features knowable at the signal bar separates the "FVG (bullish)" confluence plans that work from the ones that do not, at the live geometry and at first targets of 1.25R and 1.00R. It gates nothing and changes nothing live.
 
