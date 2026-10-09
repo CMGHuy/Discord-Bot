@@ -233,7 +233,10 @@ whenever Claude would run `/<name>`: `gate` (pre-commit gate), `task-brief`
 sequence), `stable-snapshot` (pin a known-good point) and `backup-pull` (off-VM
 backup pull). `new-doc` (new spec or plan) and `close-out` (plan close-out) may
 also be run implicitly: `new-doc` right before creating a numbered spec or plan,
-`close-out` once a plan's final full-suite task is green. Skill text names Claude tools (`AskUserQuestion`, `Agent`, `Grep`); use
+`close-out` once a plan's final full-suite task is green. `panel` (dispatch
+expert role reviewers one at a time through `expert-reviewer` and merge their
+findings) may also run implicitly: right after committing a spec with a
+`**Panel:**` line, and before `close-out` of a plan built from one. Skill text names Claude tools (`AskUserQuestion`, `Agent`, `Grep`); use
 your equivalent.
 
 Expert role skills (v145) each hold one reviewer's lens -- Lens, Checklist,

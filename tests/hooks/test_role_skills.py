@@ -114,3 +114,14 @@ def test_role_ships_fire_and_no_fire_cases(role):
 def test_reviewer_model_is_recorded_in_the_roles_table(role):
     assert ROLES[role] in REVIEWER_MODELS
     assert f"| `{role}` | {ROLES[role]} |" in _text(SKILLS_TOOLS)
+
+
+PANEL_PHRASES = ("expert-reviewer", "serially", "skills-tools.md", "BLOCKING",
+                 "## Panel review", "applied", "rejected: <why>", "/close-out",
+                 "Model tiers")
+
+
+def test_panel_dispatches_the_expert_reviewer_serially():
+    body = _body("panel")
+    missing = [phrase for phrase in PANEL_PHRASES if phrase not in body]
+    assert not missing, missing
