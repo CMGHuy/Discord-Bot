@@ -141,6 +141,8 @@ class Kind(Enum):
     CONFIG_CHANGE = KindSpec(Family.SYSTEM, "CONFIG", emoji="⚙️")
     RETROSPECTIVE = KindSpec(Family.SYSTEM, "RETROSPECTIVE", emoji="📜")
     DEEP_SCAN = KindSpec(Family.SYSTEM, "WEEKEND DEEP SCAN", emoji="🔭")
+    OUTLOOK = KindSpec(Family.SYSTEM, "OUTLOOK", emoji="🌙")                 # v144: 23:30 digest
+    OUTLOOK_WRAPUP = KindSpec(Family.SYSTEM, "OUTLOOK WRAP-UP", emoji="🌅")  # v144: after D's close
 
     @property
     def family(self) -> Family:
