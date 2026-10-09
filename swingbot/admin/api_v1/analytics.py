@@ -643,6 +643,7 @@ def analytics_exit_quality():
     from swingbot.core.analytics.aggregate import MIN_CELL_N
     from swingbot.core.analytics.journal import JournalStore
     from swingbot.core.analytics.scope import closed_only, echo, select
+    from swingbot.core.tracking.origin import ALL
 
     scope = _scope()
     scoped = select(closed_only(_all_trades(TradeLog())), scope)
@@ -655,7 +656,7 @@ def analytics_exit_quality():
         if (days := m._holding_days(trade)) is not None
     ][:2000]
     ids = {trade.get("id") for trade in scoped}
-    entries = [entry for entry in JournalStore().entries() if entry.get("trade_id") in ids]
+    entries = [entry for entry in JournalStore().entries(cohort=ALL) if entry.get("trade_id") in ids]
     return jsonify({"exit_reasons": m.exit_reason_split(scoped),
                     "unmapped_reasons": m.unmapped_exit_reasons(scoped),
                     "hold_by_outcome": m.hold_by_outcome(scoped),

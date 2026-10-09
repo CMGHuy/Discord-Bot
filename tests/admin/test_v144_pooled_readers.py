@@ -37,3 +37,36 @@ def test_plan_funnel_reads_regular_plans_only(logged_in, monkeypatch):
                         lambda plans: seen.setdefault("ids", sorted(p.plan_id for p in plans)) and {})
     assert logged_in.get("/api/v1/analytics/plans").status_code == 200
     assert seen["ids"] == ["r1"]
+
+
+def test_soak_cmd_reads_regular_plans_only(monkeypatch):
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock
+
+    from swingbot.commands.stats import soak_cmd
+    from swingbot.core.planning.plan_store import PlanStore
+
+    monkeypatch.setattr(PlanStore, "all", lambda self: _plans())
+    seen = {}
+    monkeypatch.setattr("swingbot.core.backtesting.registry.get_badge", lambda *a, **k: None)
+    monkeypatch.setattr("swingbot.core.edge.strategy_soak.soak_verdict",
+                        lambda plans, badge: seen.setdefault("ids", [p.plan_id for p in plans]))
+    monkeypatch.setattr("swingbot.commands.stats.soak_lines", lambda *a, **k: ["ok"])
+    ctx = MagicMock()
+    ctx.send = AsyncMock()
+    asyncio.run(soak_cmd.callback(ctx, strategy="MACD"))
+    assert seen["ids"] == ["r1"]
+
+
+def test_exit_quality_journal_read_spans_every_lane(logged_in, monkeypatch):
+    from swingbot.core.analytics.journal import JournalStore
+    seen = {}
+    real = JournalStore.entries
+
+    def spy(self, **kw):
+        seen["cohort"] = kw.get("cohort")
+        return real(self, **kw)
+
+    monkeypatch.setattr(JournalStore, "entries", spy)
+    assert logged_in.get("/api/v1/analytics/exit-quality").status_code == 200
+    assert seen["cohort"] == "all"
