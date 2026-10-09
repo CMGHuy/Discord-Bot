@@ -126,6 +126,11 @@ task. **Full suite once per plan, as its final task.** Specs and plans are
 committed on `main`; branch only to implement. Run `/new-doc`; detail:
 `document-conventions.md`, `document-lifecycle.md`.
 
+**"Implement plan vN" with nothing more means: in a worktree.** Reuse the
+plan's existing `.claude/worktrees/` worktree if `git worktree list` shows one
+(resume at its first uncommitted task); otherwise create it, named per
+`document-lifecycle.md`. Implementing on `main` only when told so explicitly.
+
 ## Keep every function under complexity 15
 
 Every function and method you write or change ends at cyclomatic complexity

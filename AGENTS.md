@@ -375,6 +375,10 @@ its own final verification task, never per task and never again after a clean
 merge; the per-task check is the one narrow test file (or `npm test --include`
 one spec). Full cadence: `document-conventions.md`.
 
+"Implement plan vN" with nothing more means: in a worktree. Reuse the plan's
+existing `.claude/worktrees/` worktree if one exists, else create it; implement
+on `main` only when told so explicitly.
+
 Write specs and plans directly on `main` and commit them as soon as they are
 finished: no feature branch, no worktree, no approval gate for the commit. Branch
 or create a worktree only to implement a plan. When work stops being live, move
