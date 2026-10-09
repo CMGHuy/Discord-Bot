@@ -85,11 +85,19 @@ it differs by more than 2%, because that means the engine moved.
 Everything is computed on `window = df.iloc[:i + 1]`, `i` the signal bar.
 
 - **The gap.** The unfilled bullish gap from
-  `fvg.find_fair_value_gaps_detailed(window)` whose `mid` is nearest the
-  plan's `tp1`; if none lies within 0.25 × ATR14 of `tp1`, the nearest to
-  `stop_loss` within the same tolerance. `fvg_role` is `target`, `stop`, or
-  `unidentified`. Unidentified trades stay in the population totals, are
-  excluded from gap-geometry features, and their count is printed.
+  `fvg.find_fair_value_gaps_detailed(window)` that made FVG a confirming
+  source: the one whose `mid` is nearest the scenario's own target
+  (`scenario.take_profit`, the level the scan clustered on, captured at plan
+  build) and within the live confluence tolerance of it
+  (`confluence_deviation_pct`, the tolerance `count_confirming_strategies`
+  uses); if none, the same test against the scenario's stop. `fvg_role` is
+  `target`, `stop`, or `unidentified`. Unidentified trades stay in the
+  population totals, are excluded from gap-geometry features, and their
+  count is printed. *Corrected before any run, 2026-10-09:* the first draft
+  matched within 0.25 × ATR14 of `plan.tp1`, which is re-selected
+  structurally and can sit far from the clustered level; a two-ticker smoke
+  run left 6 of 20 trades unidentified. The correction was made on feature
+  data only, with no outcome joined.
 - **Outcomes at three geometries.** `live`: the plan as built. `g125` and
   `g100`: a copy with `tp1` moved to `entry ± g × |entry − stop_loss|` for
   `g` = 1.25 and 1.00, stop and every other field unchanged, through the
