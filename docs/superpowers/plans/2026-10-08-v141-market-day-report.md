@@ -12,6 +12,8 @@
 
 **Tech Stack:** Python 3.11, pandas/numpy, pytest. No new dependency.
 
+**Progress:** Implementation and TRAIN result complete; final full-suite debugging rerun: 7067 passed, 3 skipped, 0 failed, 0 xfailed. The descriptive result found no candidate for a lagged rule.
+
 ## Spec corrections (the code disagrees with the spec; the plan follows the code)
 
 1. **The live half prints no interval and no rank correlation.** The live book overlaps the 2026 holdout that open pre-registrations wait on. `scripts/reports/volume_context_report.py` sets the repo precedent: "monitoring only, and no inferential statistic is printed". Live tables show counts, win rate and ExpR only. The TRAIN half keeps the day-level bootstrap and the Spearman figure.
@@ -1420,7 +1422,7 @@ git commit -m "feat(v141): market-day report script -- TRAIN and live halves (V1
 - Consumes: the script (V141-6) and the dump script (V141-5).
 - Produces: the results file.
 
-- [ ] **Step 1: Take the live dump (read-only on production)**
+- [x] **Step 1: Take the live dump (read-only on production)**
 
 Run from the worktree root:
 
@@ -1433,7 +1435,7 @@ git status --short data/
 
 Expected: a trade count, a scan count and the first scan's timestamp; `git status` shows nothing under `data/` (it is ignored). If the dump has zero scans, or no funnel key starts with `bullish/`, stop and report it — the live cause table would be empty and the partner should know before the report is written. This step changes nothing on production, so the mirror-back rule does not apply.
 
-- [ ] **Step 2: Run the full report through `backtest-runner`**
+- [x] **Step 2: Run the full report through `backtest-runner`**
 
 Dispatch the `backtest-runner` agent (the TRAIN sweep is long) with exactly this command, from the worktree root:
 
@@ -1448,7 +1450,7 @@ rm logs/market_day_report.log
 
 Ask it to return only: the final `wrote ...` line, the trade count from `sweep done`, and any line starting `    !`.
 
-- [ ] **Step 3: Write the reading at the top of the results file**
+- [x] **Step 3: Write the reading at the top of the results file**
 
 Open the generated file and insert, directly under the grid warning, a section `## Reading` of at most 25 lines that answers, with the table it comes from named each time:
 
@@ -1462,7 +1464,7 @@ Also add one line citing `docs/superpowers/results/2026-08-23-alert-density-trai
 
 Every number in the reading is copied from a table in the same file. State nothing about VALIDATION.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/superpowers/results/*-v141-market-day.md
@@ -1476,19 +1478,19 @@ git commit -m "docs(v141): market-day report result -- TRAIN and live"
 **Files:**
 - Modify: this plan (tick the boxes); moved at close-out.
 
-- [ ] **Step 1: Full suite, once**
+- [x] **Step 1: Full suite, once**
 
 Dispatch the `test-runner` agent: `python scripts/dev/testrun.py full`. Green is `0 failed` and `0 xfailed`. If the test database is unreachable, start it first (`docker compose --profile test up -d db-test`) so the database tier runs rather than skips.
 
-- [ ] **Step 2: Complexity over everything the plan touched**
+- [x] **Step 2: Complexity over everything the plan touched**
 
 Run: `python -m radon cc -s -n C swingbot/core/analytics/market_day.py scripts/reports/market_day_report.py scripts/reports/market_day_live_dump.py`
 Expected: no output. (`scripts/backtest/measure_alert_density.py` holds legacy functions; the two this plan edited must not have got worse — compare `radon cc -s` for `_entry_dates_for_ticker` and `sweep` against `main`.)
 
-- [ ] **Step 3: Close out**
+- [x] **Step 3: Close out**
 
 Run `/close-out`. `Bump: none` — no `VERSION.json` change. The plan moves to `docs/superpowers/plans/implemented/`, the spec to `docs/superpowers/specs/implemented/`. Merge the worktree branch per the `worktree-lifecycle` skill.
 
-- [ ] **Step 4: Report to the partner**
+- [x] **Step 4: Report to the partner**
 
 Give the five answers from the results file's `## Reading`, and say whether step 2 (dashboard panel) and step 3 (pre-registered rule) of the spec now have something to build on.
