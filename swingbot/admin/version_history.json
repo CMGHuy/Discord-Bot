@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-09 10:55:50 UTC",
+  "generated_at": "2026-10-09 10:56:03 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.22.0",
-    "bot": "2.2.2"
+    "bot": "2.2.3"
   },
   "releases": [
     {
@@ -1486,6 +1486,19 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-10-09",
+      "last_seen": "2026-10-09",
+      "commit": "fb2e1398",
+      "subject": "release(bot): 2.2.3 -- runner_path stamp at runner close, backfill and /analytics/partials endpoint (v142)",
+      "versions": {
+        "ui": "1.22.0",
+        "bot": "2.2.3"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
