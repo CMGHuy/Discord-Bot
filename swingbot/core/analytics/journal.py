@@ -177,6 +177,7 @@ def build_entry(trade: dict, df) -> dict:
         "entry_context": trade.get("entry_context") or {},
         "cohort_label": trade.get("cohort_label"),
         "cohort_run_date": (trade.get("cohort_stats") or {}).get("run_date"),
+        "origin": trade.get("origin"),     # v144: copied, so pooled journal readers can drop the cohort
         "holding_days": _holding_days(trade),
         "tags": tags_for(trade, m),
         "auto_lesson": _auto_lesson(outcome, mfe_r, mae_r, exit_efficiency, r_realized),

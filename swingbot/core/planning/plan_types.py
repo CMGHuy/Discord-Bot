@@ -155,6 +155,16 @@ class TradePlanV2:
     # "source"}. None = never stamped (pre-v142, or the bars did not cover the
     # window); readers never infer it, the backfill writes it.
     runner_path: dict | None = None
+    # v144: the lane that issued this plan (tracking/origin.py). None = the
+    # regular lane; "next_session" = the 23:30 outlook. Frozen at creation.
+    origin: str | None = None
+    # v144: the one NYSE session (ISO date) an outlook plan may fill in. Set only
+    # on outlook plans; PlanManager._eligible_session reads it first. Promoted to
+    # a column (v144_001) for the per-session query.
+    valid_session: str | None = None
+    # v144: the one-line reason an outlook plan was cancelled (the catalogue
+    # message in planning/session_expiry.py). None for every other plan.
+    cancel_reason_message: str | None = None
 
 
 def effective_stop(plan: TradePlanV2) -> float:
