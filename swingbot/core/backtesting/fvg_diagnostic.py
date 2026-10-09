@@ -14,6 +14,7 @@ from __future__ import annotations
 import dataclasses
 import math
 import statistics
+from collections import Counter
 
 from swingbot.core.backtesting.acceptance import CLOSED, DECIDED
 from swingbot.core.market import fvg, levels
@@ -374,3 +375,214 @@ def candidate_failures(cell) -> list:
         ("positive in fewer than 3 of 4 years", cell["years_positive"] >= MIN_YEARS_POSITIVE),
     )
     return [name for name, ok in checks if not ok]
+
+
+# --- report (reported, never gating) -----------------------------------------
+
+CONTEXT_DIMENSIONS = ("fvg_role", "direction", "horizon_key", "year")
+
+
+def _context_value(row, dimension):
+    return row["features"]["fvg_role"] if dimension == "fvg_role" else row[dimension]
+
+
+def context_table(rows, dimension) -> dict:
+    """{value: {geometry: stats}} -- reported, never gating."""
+    values = sorted({_context_value(row, dimension) for row in rows})
+    return {value: {name: stats([r for r in rows if _context_value(r, dimension) == value], name)
+                    for name, _g in GEOMETRIES}
+            for value in values}
+
+
+def exit_mix(rows, geometry) -> dict:
+    """{exit reason: count} at one geometry, keys sorted."""
+    return dict(sorted(Counter(row["outcomes"][geometry]["exit_mix"] for row in rows
+                               if row["outcomes"].get(geometry)).items()))
+
+
+def coverage(rows, med) -> dict:
+    """{feature: computable count, share, tested} -- how much of the
+    population each feature can speak for."""
+    out = {}
+    for key, _label, _test in FEATURES:
+        computable = sum(1 for row in rows if side(row, key, med) is not None)
+        share = computable / len(rows) if rows else 0.0
+        out[key] = {"computable": computable, "not_computable": len(rows) - computable,
+                    "share": share, "tested": share >= MIN_COMPUTABLE_SHARE}
+    return out
+
+
+def gap_split(rows) -> dict:
+    """Role split and, among identified trades, gap open vs filled at the
+    signal bar."""
+    roles = Counter(row["features"]["fvg_role"] for row in rows)
+    opened = Counter(bool(row["features"]["gap_open"]) for row in rows
+                     if row["features"]["fvg_role"] != ROLE_NONE)
+    return {"target": roles[ROLE_TARGET], "stop": roles[ROLE_STOP],
+            "unidentified": roles[ROLE_NONE], "open": opened[True], "filled": opened[False]}
+
+
+def build_report(rows) -> dict:
+    """Everything the results document prints, from the trade rows."""
+    med = medians(rows)
+    cells = [feature_cell(rows, key, name, med)
+             for key, _label, _test in FEATURES for name, _g in GEOMETRIES]
+    for cell in cells:
+        cell["failures"] = candidate_failures(cell)
+    return {
+        "n": len(rows),
+        "unidentified": sum(1 for row in rows if row["features"]["fvg_role"] == ROLE_NONE),
+        "gap_split": gap_split(rows),
+        "medians": med,
+        "coverage": coverage(rows, med),
+        "population": {name: stats(rows, name) for name, _g in GEOMETRIES},
+        "cells": cells,
+        "candidates": [(c["feature"], c["geometry"]) for c in cells if not c["failures"]],
+        "context": {dim: context_table(rows, dim) for dim in CONTEXT_DIMENSIONS},
+        "exit_mix": {name: exit_mix(rows, name) for name, _g in GEOMETRIES},
+    }
+
+
+# --- rendering ---------------------------------------------------------------
+
+def _pct(value) -> str:
+    return "n/a" if value is None else f"{value:.1f}%"
+
+
+def _r(value) -> str:
+    return "n/a" if value is None else f"{value:+.3f}R"
+
+
+def _num(value) -> str:
+    return "n/a" if value is None else f"{value:.4g}"
+
+
+def _stat_cells(s) -> str:
+    return f"{s['n']} | {_pct(s['win_rate'])} | {_r(s['exp_r'])}"
+
+
+def _cell_line(cell, labels) -> str:
+    verdict = "**CANDIDATE**" if not cell["failures"] else "; ".join(cell["failures"])
+    return (f"| {labels[cell['feature']]} | {cell['geometry']} | "
+            f"{_stat_cells(cell['favourable'])} | {_stat_cells(cell['unfavourable'])} | "
+            f"{cell['years_positive']}/4 | {cell['not_computable']} "
+            f"({(1 - cell['computable_share']) * 100:.1f}%) | {verdict} |")
+
+
+def _feature_table(report) -> list:
+    labels = {key: label for key, label, _test in FEATURES}
+    head = ["| Feature (favourable side) | Geometry | N fav | WR fav | ExpR fav | "
+            "N unfav | WR unfav | ExpR unfav | Years > 0 | Not computable | Verdict |",
+            "|---|---|---|---|---|---|---|---|---|---|---|"]
+    return head + [_cell_line(cell, labels) for cell in report["cells"]]
+
+
+def _context_section(title, table) -> list:
+    names = [name for name, _g in GEOMETRIES]
+    lines = [f"### By {title}", "",
+             "| Value | " + " | ".join(f"N {n} | WR {n} | ExpR {n}" for n in names) + " |",
+             "|---|" + "---|---|---|" * len(names)]
+    lines += [f"| {value} | " + " | ".join(_stat_cells(by_geo[n]) for n in names) + " |"
+              for value, by_geo in table.items()]
+    return lines + [""]
+
+
+def _coverage_table(report) -> list:
+    labels = {key: label for key, label, _test in FEATURES}
+    lines = ["| Feature | Computable | Not computable | Share | Status |", "|---|---|---|---|---|"]
+    for key, cov in report["coverage"].items():
+        status = "tested" if cov["tested"] else "**NOT TESTED**"
+        lines.append(f"| {labels[key]} | {cov['computable']} | {cov['not_computable']} | "
+                     f"{cov['share'] * 100:.1f}% | {status} |")
+    return lines
+
+
+def not_tested(report) -> list:
+    return [key for key, cov in report["coverage"].items() if not cov["tested"]]
+
+
+def _verdict_lines(report) -> list:
+    if report["candidates"]:
+        names = ", ".join(f"{feature} @ {geometry}" for feature, geometry in report["candidates"])
+        head = (f"**Verdict: {len(report['candidates'])} CANDIDATE(S)** ({names}). "
+                "Each has earned a spec, nothing more.")
+    else:
+        head = "**Verdict: NO CANDIDATE.** FVG (bullish) stays WEAK."
+    skipped = not_tested(report)
+    if not skipped:
+        return [head]
+    return [head, "", f"**Not tested: {', '.join(skipped)}.** Computable for under 80% of the "
+            "population, so they cannot be candidates and this diagnostic does not close them."]
+
+
+def _population_lines(report) -> list:
+    """N, the unidentified share, the medians and the coverage table."""
+    n, unidentified, split = report["n"], report["unidentified"], report["gap_split"]
+    share = unidentified / n * 100 if n else 0.0
+    med = report["medians"]
+    return [
+        f"**Population N = {n}** (expected {EXPECTED_N}). **Unidentified: {unidentified} "
+        f"({share:.1f}%)** have no bullish gap, on the window the level map was built on, within "
+        "the confluence tolerance of a scenario level that carries the FVG source (target, else "
+        "stop); they stay in every total and are not computable for the four gap features.",
+        "", f"**Gap role: {split['target']} target / {split['stop']} stop / "
+        f"{split['unidentified']} unidentified. Gap at the signal bar: {split['open']} open / "
+        f"{split['filled']} filled.** A filled gap was unfilled when the replay's level map was "
+        "built (up to 4 bars earlier) and is no longer returned by the finder at the signal bar. "
+        "The live scan builds its level map fresh at every scan, so it would not have labelled "
+        "those plans FVG.",
+        "", f"Medians over the identified population: replay quality {_num(med['quality'])}, "
+        f"ATR14/close {_num(med['volatility'])}.", "",
+        "## Feature coverage", "",
+    ] + _coverage_table(report)
+
+
+def _notes(tolerance_pct) -> list:
+    return [
+        "## Notes", "",
+        "- **Replay quality score, not the live one.** `replay_scenarios` builds plans without "
+        "quality inputs, so the diagnostic scores each plan with the live scorer "
+        "(`quality.score_plan`) from what is causal on the ticker's own window: higher-timeframe "
+        "bias, volume ratio, ATR percentile, trigger distance and the target confluence count "
+        f"(strategy families within {_num(tolerance_pct)}% of the scenario target). Market "
+        "regime, relative-strength percentile and breadth are passed as None.",
+        "- **Share of gap filled: not testable on this population.** The live gap finder drops "
+        "a gap as soon as any later bar overlaps it, so every plan here sits on an untouched gap "
+        "and the share is 0 by construction. Dropped before the run (partner decision, "
+        "2026-10-09); it is neither tested nor closed. \"Gap open at the signal bar\" is its "
+        "testable form on the replay, where a level map up to 4 bars old lets a filled gap keep "
+        "its label.", "",
+    ]
+
+
+def render(report, *, run_date: str, tickers: int, tolerance_pct=None) -> str:
+    """The results document, as markdown."""
+    names = [name for name, _g in GEOMETRIES]
+    looks = len(report["cells"])
+    lines = [
+        "# v143 FVG (bullish) badge diagnostic: result", "",
+        f"**Run:** {run_date}, TRAIN {TRAIN[0]}..{TRAIN[1]} (signal date), {tickers} cached "
+        "tickers, ten horizons. Read-only; VALIDATION never read.",
+        "**Spec:** `docs/superpowers/specs/2026-10-09-v143-fvg-bullish-badge-diagnostic-design.md`",
+        "", *_verdict_lines(report), "",
+        f"{len(FEATURES)} features at {len(names)} geometries is {looks} looks. At a 5% "
+        "false-positive rate one or two chance hits are expected; a candidate below has earned "
+        "a spec, not a filter.", "",
+        *_population_lines(report), "",
+        "## Whole population", "",
+        "| Geometry | N | Win rate | ExpR |", "|---|---|---|---|",
+    ]
+    lines += [f"| {n} | {_stat_cells(report['population'][n])} |" for n in names]
+    lines += ["", "## Candidate table", "",
+              "The rule, per (feature, geometry) pair, on the favourable side: N >= 150, "
+              "win rate >= 50%, ExpR > 0, at least +0.10R above the unfavourable side, and "
+              "ExpR > 0 in 3 of the 4 years. A feature computable for under 80% of the "
+              "population is not tested.", ""]
+    lines += _feature_table(report)
+    lines += ["", *_notes(tolerance_pct), "## Reported, never gating", ""]
+    for dim, title in zip(CONTEXT_DIMENSIONS, ("gap role", "plan direction", "horizon", "year")):
+        lines += _context_section(title, report["context"][dim])
+    lines += ["### Exit mix", ""]
+    lines += [f"- **{n}:** " + ", ".join(f"{k} {v}" for k, v in report["exit_mix"][n].items())
+              for n in names]
+    return "\n".join(lines) + "\n"
