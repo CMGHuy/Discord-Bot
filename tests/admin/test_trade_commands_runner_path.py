@@ -61,3 +61,14 @@ def test_a_null_stamp_still_closes(logged_in, monkeypatch):
     assert logged_in.post(f"/api/v1/trades/{_PLAN_ID}/close").status_code == 200
     plan = PlanStore().get(_PLAN_ID)
     assert plan.status == "CLOSED" and plan.runner_path is None
+
+
+def test_an_unreadable_cache_still_closes(logged_in, monkeypatch):
+    def boom(ticker):
+        raise OSError("bad csv")
+
+    monkeypatch.setattr(rp, "cached_daily_bars", boom)
+    seed_store("plans", [_partial_record()])
+    assert logged_in.post(f"/api/v1/trades/{_PLAN_ID}/close").status_code == 200
+    plan = PlanStore().get(_PLAN_ID)
+    assert plan.status == "CLOSED" and plan.runner_path is None

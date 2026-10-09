@@ -54,6 +54,11 @@ class PartialTrade:
         return self.bucket != "open"
 
     @property
+    def pathed(self) -> bool:
+        """A runner_path stamp carrying the fields the ladder and giveback read."""
+        return bool(self.runner_path) and "ladder" in self.runner_path and "mfe_r" in self.runner_path
+
+    @property
     def measured(self) -> bool:
         """A closed runner whose runner R is known."""
         return self.closed and self.r_runner is not None
@@ -231,7 +236,7 @@ def _giveback(pathed: list[PartialTrade]) -> list[float]:
 
 def _exclusions(closed: list[PartialTrade]) -> dict:
     """Closed runners left out of a figure, counted so none vanish silently."""
-    return {"path_unavailable": sum(1 for t in closed if not t.runner_path),
+    return {"path_unavailable": sum(1 for t in closed if not t.pathed),
             "runner_r_unavailable": sum(1 for t in closed if t.r_runner is None)}
 
 
@@ -240,7 +245,7 @@ def counterfactuals(trades: list[PartialTrade]) -> dict:
     ladder and giveback further need a stamped runner_path."""
     closed = [t for t in trades if t.closed]
     measured = [t for t in closed if t.measured]
-    pathed = [t for t in measured if t.runner_path]
+    pathed = [t for t in measured if t.pathed]
     return {
         "actual_exp_r": _mean(t.blended_r for t in measured),
         "all_out_exp_r": _mean(t.r_tp1 for t in measured),

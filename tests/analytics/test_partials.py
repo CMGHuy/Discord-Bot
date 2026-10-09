@@ -185,3 +185,10 @@ def test_select_plans_filters_on_fill_date_and_plan_fields():
     assert ids(BookScope(start="2026-10-01")) == ["late", "short"]
     assert ids(BookScope(ledger="both", direction="bullish")) == ["early", "late", "weak"]
     assert ids(BookScope(strategy="MACD")) == []
+
+
+def test_a_stamp_without_ladder_or_mfe_is_path_unavailable_not_a_crash():
+    plan = _trade("S", reason="tp1_runner_tp2", runner_r=4.0, path={"source": "live"})
+    cf = pa.counterfactuals([pa.partial_trade(plan)])
+    assert cf["giveback"] == [] and cf["path_unavailable"] == 1
+    assert [row["n"] for row in cf["ladder"]] == [0] * 5
