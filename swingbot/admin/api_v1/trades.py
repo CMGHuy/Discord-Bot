@@ -609,10 +609,16 @@ def _attach_follow_scores(rows: list[dict], plans: list[dict]) -> None:
             row["follow_score"] = by_id[row["id"]]
 
 
-def build_rows() -> list[dict]:
-    """The join. Every row the collection can return, unfiltered."""
+def build_rows(trades: list[dict] | None = None) -> list[dict]:
+    """The join. Every row the collection can return, unfiltered.
+
+    `trades` is the full, unfiltered trade list when the caller has already
+    read it (the dashboard has); omitted, it is read here. Passing a filtered
+    list would silently drop rows, so only ever pass the whole log.
+    """
     plans = PlanStore().records()
-    trades = TradeLog().get_trades(status=None, limit=None, sort_by="opened_at") or []
+    if trades is None:
+        trades = TradeLog().get_trades(status=None, limit=None, sort_by="opened_at") or []
     noted = _noted_ids()
 
     by_plan_id: dict[str, dict] = {}

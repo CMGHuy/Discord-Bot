@@ -66,7 +66,7 @@ def _equity_30d() -> dict:
     return {"points": points, "change_pct": change}
 
 
-def _risk_used() -> tuple[float | None, float | None]:
+def _risk_used(all_trades: list[dict]) -> tuple[float | None, float | None]:
     """Open portfolio heat, and the cap it is measured against.
 
     Spec 3 promotes this from the Risk page because current exposure
@@ -87,13 +87,16 @@ def _risk_used() -> tuple[float | None, float | None]:
         from swingbot.core.planning import account as account_module
         cfg = account_module.load_account_config()
         balance = cfg.get("balance", cfg.get("base_balance", 0.0))
-        open_trades = TradeLog().get_trades(status="open", limit=None)
+        # Both ledgers, as the collector counted them: heat is portfolio
+        # exposure. Filtered from the caller's list -- the handler has
+        # already read the whole log, and re-reading it cost ~0.9s.
+        open_trades = [t for t in all_trades if t.get("status") == "open"]
         return heat.open_heat(open_trades, balance), cap
     except Exception:
         return None, cap
 
 
-def _lifecycle_counts(mode: str) -> dict:
+def _lifecycle_counts(mode: str, all_trades: list[dict]) -> dict:
     """The five plan-lifecycle counts the Jinja dashboard's strip showed.
 
     SR53. PENDING/ACTIVE/PARTIAL are all-time -- `_plan_rows` already counts
@@ -122,7 +125,7 @@ def _lifecycle_counts(mode: str) -> dict:
         from .trades import build_rows
 
         counts = dict(_plan_rows()["counts"])
-        rows = build_rows()
+        rows = build_rows(all_trades)
         for status in ("CLOSED", "CANCELLED"):
             matching = [r for r in rows if r["status"] == status]
             if mode != "all":
@@ -254,7 +257,7 @@ def dashboard():
         t["confidence_level"] for t in open_trades
         if t.get("confidence_level") is not None
     ]
-    heat, cap = _risk_used()
+    heat, cap = _risk_used(all_raw)
 
     return jsonify({
         # primary
@@ -277,7 +280,7 @@ def dashboard():
         "payoff_ratio": m.payoff_ratio_from_rs(scoped_rs),
         "equity_30d": _equity_30d(),
         "position_premium": dash.build_sizing_note(account_cfg),
-        "lifecycle": _lifecycle_counts(mode),
+        "lifecycle": _lifecycle_counts(mode, all_raw),
         # The Dashboard's own plan-lifecycle diagram names this number in its
         # "Expires" definition -- projected here rather than hardcoded a
         # second time in the SPA, which is exactly the kind of copy that

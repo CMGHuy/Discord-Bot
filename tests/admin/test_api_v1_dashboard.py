@@ -245,10 +245,38 @@ def test_risk_used_skips_the_full_portfolio_collector(seed, logged_in, monkeypat
         raise AssertionError("dashboard must not run the full portfolio collector")
 
     monkeypatch.setattr(growth, "_collect_portfolio_state", boom)
-    seed()
+    from tests.admin.test_api_v1_trades import _trade
+
+    main_trade = _trade("aaaaaaaaaaaaaaaa", plan_id=None, ticker="AAPL", status="open")
+    weak_trade = _trade("bbbbbbbbbbbbbbbb", plan_id=None, ticker="MSFT", status="open")
+    weak_trade["ledger"] = "weak"
+    closed = _trade("cccccccccccccccc", plan_id=None, ticker="NVDA", status="win")
+    seed(trades=[main_trade, weak_trade, closed])
+
     body = logged_in.get("/api/v1/dashboard").get_json()
-    assert body["risk_used_pct"] == heat.open_heat([], body["account_balance"] or 0.0)
+    # Heat spans BOTH ledgers' open trades (it is portfolio exposure), unlike
+    # the main-ledger-only figures beside it -- and never counts closed ones.
+    expected = heat.open_heat([main_trade, weak_trade], body["account_balance"] or 0.0)
+    assert body["risk_used_pct"] == expected
     assert body["risk_cap_pct"] is not None
+
+
+def test_dashboard_reads_the_trade_log_once(seed, logged_in, monkeypatch):
+    """The handler already loads every trade; heat must reuse that list
+    rather than re-read the whole log (~0.9s on production)."""
+    from swingbot.core.tracking.performance import TradeLog
+
+    seed()
+    calls = []
+    original = TradeLog.get_trades
+
+    def counting(self, *args, **kwargs):
+        calls.append(kwargs.get("status"))
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(TradeLog, "get_trades", counting)
+    assert logged_in.get("/api/v1/dashboard").status_code == 200
+    assert len(calls) == 1, f"get_trades called {len(calls)} times: {calls}"
 
 
 def test_open_trades_counts_open_positions(seed, logged_in):
