@@ -367,3 +367,25 @@ splice them ("overlap closes disagree").
   wrong older bars survive. Move the file away first, then refetch.
 - Weekly/monthly files differ from a fresh yfinance download by a small uniform offset
   (adjustment basis); that is not this problem and is deliberately not repaired.
+
+## Live plans are almost never VALIDATED, and the WEAK ledger is empty — both by design (2026-10-09)
+
+Two things that look broken in the live book but aren't. Don't "fix" either one.
+
+- **Confluence plans can't borrow MACD's or Volume Profile's VALIDATED badge.**
+  `get_badge` looks up the plan's `strategy` (`primary_strategy_for` → its highest-priority *level
+  source*: "FVG (bearish)", "Fib 23.6%", "Volume Profile HVN", ...). It looks that name up
+  against the registry's *entry-signal* rows (`source="strategy"`: MACD, Volume Profile, ...).
+  The two vocabularies only overlap by accident. "VWAP" is spelled the same in both, which is
+  how the 11 VALIDATED live plans of 2026-07-28..08-13 got their badge. VWAP was then re-scored
+  WEAK on 08-17. Mapping "Volume Profile HVN" → "Volume Profile" would put the entry signal's
+  ExpR +0.547 (N=32) on a group whose live ExpR was −0.30 (N=55, 2026-10-09). It would also add
+  +20 quality points (`quality.component_badge`) and digest eligibility. That changes which
+  plans rank and post, so it needs a pre-registration, not a rename. Confluence plans' own
+  evidence is the pooled `confluence/ALL` row: WEAK, ExpR −0.171, N 4641.
+- **`weak_summary()` returning n=0 is correct.** `ledger.ledger_for` sends only
+  `source == "strategy"` WEAK plans to the `weak` ledger (v93 spec §2). Confluence plans stay
+  `main` even when their badge is WEAK. The v93 strategy pass is the only writer, and it runs
+  only when `STRATEGY_ALERTS_MODE` is `live` (`scan_run._maybe_run_strategy_pass`; with `off` it
+  returns at once). Production had zero `source="strategy"` plans on 2026-10-09, so the WEAK
+  ledger is empty and every WEAK-badged trade is in the main figures.
