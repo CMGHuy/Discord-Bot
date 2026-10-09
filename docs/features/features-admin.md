@@ -69,11 +69,14 @@ position, not two rows); Strategies, Calibration and Tuning became tabs on
 Analytics; the Journal's figures moved to where they are read — excursions
 onto the trade detail's Notes tab, the weekly digest onto Analytics.
 
-**The Analytics workspace is six tabs, in the order a trader asks** (spec
+**The Analytics workspace is seven tabs, in the order a trader asks** (spec
 v94): **Overview** (am I making money), **Attribution** (where does it come
 from), **Execution** (am I executing well), **Edge** (is the edge holding,
 is the model calibrated), **Pipeline** (what is coming), **Tuning**
-(operations). One control bar under the tab strip scopes every panel —
+(operations), **Partials** (v142: does the runner earn its keep — TP1→TP2
+conversion, runner-beat-all-out, the TP2-ladder / split / giveback
+counterfactuals and hold times, from the `runner_path` stamp; live book only,
+never a gate). One control bar under the tab strip scopes every panel —
 range, ledger, strategy, horizon, direction, plus an R/%/currency unit
 toggle — and reports the closed-trade count it produced. Panels that are
 all-time by design (calibration, the strategy registry, the plan funnel)

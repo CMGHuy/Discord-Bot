@@ -57,15 +57,15 @@ function tabLabels(el: HTMLElement): string[] {
 describe('Analytics shell', () => {
   beforeEach(() => TestBed.resetTestingModule());
 
-  it('renders the six tabs and puts the scope in the URL', async () => {
+  it('renders the seven tabs and puts the scope in the URL', async () => {
     const { fixture } = create();
     fixture.detectChanges();
     const text = fixture.nativeElement.textContent as string;
-    for (const label of ['Overview', 'Attribution', 'Execution', 'Edge', 'Pipeline', 'Tuning']) {
+    for (const label of ['Overview', 'Attribution', 'Execution', 'Edge', 'Pipeline', 'Tuning', 'Partials']) {
       expect(text).toContain(label);
     }
     expect(tabLabels(fixture.nativeElement as HTMLElement)).toEqual([
-      'Overview', 'Attribution', 'Execution', 'Edge', 'Pipeline', 'Tuning',
+      'Overview', 'Attribution', 'Execution', 'Edge', 'Pipeline', 'Tuning', 'Partials',
     ]);
   });
 
@@ -83,6 +83,13 @@ describe('Analytics shell', () => {
     const { fixture } = create();
     fixture.detectChanges();
     expect((fixture.nativeElement as HTMLElement).querySelector('h1')).toBeNull();
+  });
+
+  it('mounts the Partials tab from the store', () => {
+    const { fixture } = create();
+    TestBed.inject(AnalyticsStore).setTab('partials', false);
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector('sb-partials-tab')).not.toBeNull();
   });
 
   it('mounts the tab the store says is open', () => {

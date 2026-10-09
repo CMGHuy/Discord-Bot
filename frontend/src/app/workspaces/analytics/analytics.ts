@@ -10,6 +10,7 @@ import { AttributionTab } from './tabs/attribution';
 import { EdgeTab } from './tabs/edge';
 import { ExecutionTab } from './tabs/execution';
 import { OverviewTab } from './tabs/overview';
+import { PartialsTab } from './tabs/partials';
 import { PipelineTab } from './tabs/pipeline';
 import { TuningTab } from './tabs/tuning';
 
@@ -21,7 +22,8 @@ import { TuningTab } from './tabs/tuning';
 const FALLBACK_HORIZONS = ['2w', '4w', '2m', '3m', '4m', '5m', '6m', '7m', '8m', '9m'] as const;
 
 /**
- * Analytics — six tabs in the order a trader asks (spec v94 D1), one scope
+ * Analytics — seven tabs in the order a trader asks (spec v94 D1; v142 adds
+ * Partials last), one scope
  * bar above them (D2). This file is a shell: the tab strip, the bar, and a
  * switch. Every panel lives in `tabs/`, so no file here grows back into the
  * 2,233-line component v94 replaced.
@@ -37,7 +39,7 @@ const FALLBACK_HORIZONS = ['2w', '4w', '2m', '3m', '4m', '5m', '6m', '7m', '8m',
   // the tabs are projected into this host, and a register declared six times
   // is six chances for two tabs to disagree about their own density.
   host: { class: 'register-instrument' },
-  imports: [TabBar, ScopeBar, OverviewTab, AttributionTab, ExecutionTab, EdgeTab, PipelineTab, TuningTab],
+  imports: [TabBar, ScopeBar, OverviewTab, AttributionTab, ExecutionTab, EdgeTab, PipelineTab, TuningTab, PartialsTab],
   template: `
     <sb-tab-bar [tabs]="tabs" [active]="store.tab()" (activeChange)="goToTab($event)" />
     <sb-scope-bar
@@ -53,6 +55,7 @@ const FALLBACK_HORIZONS = ['2w', '4w', '2m', '3m', '4m', '5m', '6m', '7m', '8m',
       @case ('edge') { <sb-edge-tab /> }
       @case ('pipeline') { <sb-pipeline-tab /> }
       @case ('tuning') { <sb-tuning-tab /> }
+      @case ('partials') { <sb-partials-tab /> }
     }
   `,
   styles: `:host { display: grid; gap: var(--space-14); }`,
@@ -64,6 +67,7 @@ export class Analytics {
     { id: 'overview', label: 'Overview' }, { id: 'attribution', label: 'Attribution' },
     { id: 'execution', label: 'Execution' }, { id: 'edge', label: 'Edge' },
     { id: 'pipeline', label: 'Pipeline' }, { id: 'tuning', label: 'Tuning' },
+    { id: 'partials', label: 'Partials' },
   ];
   /** The axis the server actually aggregated, falling back to the mirrored
    *  keys before the first heat-grid response. */
