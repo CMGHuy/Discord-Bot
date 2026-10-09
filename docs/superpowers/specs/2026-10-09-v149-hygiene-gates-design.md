@@ -4,7 +4,7 @@
 **Bump:** none (CI, dev tooling and docs only; nothing a user sees)
 **Edge:** none (integrity) — three guards that stop the codebase silently getting worse. They issue no signal, move no threshold and change no live path; any effect on expectancy is indirect (fewer regressions in the scan and backtest code) and is not claimed.
 **Screen:** exempt (integrity)
-**Panel:** staff-engineer, quant-engineer
+**Panel:** staff-engineer, senior-engineer
 **Status:** spec written 2026-10-09; no plan yet.
 
 ## Why
@@ -112,22 +112,37 @@ scripts.backtest.run_backtest_range:main
 
 The module part is the repo-relative path with `/` → `.` and `.py` dropped;
 the name part is radon's `Function.fullname` (`Class.method` for a method,
-bare name for a function). No line number, so a function moving within its
-file, or code above it growing, never touches the baseline. Closures are not
-keyed and not measured: radon 6.0.1 neither folds a closure's branches into
-its parent's score (radon issue #68) nor reports the closure as a top-level
-block, so neither the CLI nor the gate sees them. `code-complexity.md:40-41`
-claims the opposite; the plan corrects that sentence.
+bare name for a function). No line number, so a function moving
+within its file, or code above it growing, never touches the baseline.
 
-If two blocks ever share a key (a conditional redefinition), the gate keeps
-the higher score. There are none today.
+**Closures are measured.** radon 6.0.1 does not fold a closure's branches
+into its parent's score (radon issue #68) and its CLI omits closures from the
+listing, but the `Function` objects carry them in `.closures` (checked
+2026-10-09: a parent scoring 1 carried a closure scoring 3). The gate walks
+`Function.closures` recursively and keys each closure as
+`module:outer.inner` (`outer.inner.innermost` deeper), so wrapping branches
+in an inner function is not an escape; a closure counts toward the gate like
+any function. `code-complexity.md:40-41` claims the opposite of the CLI
+behaviour; the plan re-verifies the issue #68 statement against radon 6.0.1
+before editing that sentence, then corrects it. The plan also re-measures
+the offender count, since closures may add baseline entries.
+
+**A key collision is a visible failure**, never a silent max: the gate exits
+1 naming the key and both locations (file and line). There are none today.
+The threshold, 15, is a constant in the script; the baseline carries no
+`threshold` field.
 
 ### Files scanned
 
-`git ls-files --cached --others --exclude-standard` filtered to `*.py` under
+`git ls-files` (**tracked files only**) filtered to `*.py` under
 `swingbot/`, `scripts/`, `tests/`, plus `bot.py` and `admin_ui.py` — the
-scope `code-complexity.md:8-9` already states. Including untracked files
-means a new module is gated before its first commit. `.claude/` (hook
+scope `code-complexity.md:8-9` already states. Untracked files are excluded
+on purpose: concurrent sessions share this tree, and another session's
+half-written module must not fail this session's run. CI checks out a
+committed tree, so it is unaffected. Keys are normalised with `as_posix()`
+so Windows paths key identically. If `git` or `.git` is missing (the Docker
+image has neither) the gate prints a note and skips; CI always has `.git`
+and must never take that path. `.claude/` (hook
 scripts) stays out, as the rule never covered it. A file radon cannot parse
 fails the gate with its path (compileall in every CI shard,
 `deploy.yml:91`, catches the same thing first).
@@ -138,7 +153,6 @@ fails the gate with its path (compileall in every CI shard,
 
 ```json
 {
-  "threshold": 15,
   "functions": {
     "scripts.backtest.run_backtest_range:main": 65,
     "swingbot.core.charts.trade_chart:generate_trade_chart": 191
@@ -147,7 +161,9 @@ fails the gate with its path (compileall in every CI shard,
 ```
 
 Keys sorted, two-space indent, trailing newline, so every change is a
-one-line diff that review can read.
+one-line diff that review can read. A missing, unparseable or malformed
+baseline (not a `functions` object of string keys to integers) fails the
+gate naming its path.
 
 ### Verdicts
 
@@ -176,9 +192,11 @@ one-word way to accept any regression, which is the ratchet's whole point.
 The one legitimate way a key appears is a **move or rename** of a legacy
 offender (a pure refactor that relocates a function). The gate reports that
 as a `gone` key plus a `new` key with the same score, and prints a hint
-naming the pair. The author edits the key in the JSON by hand; the diff
-shows one key renamed with an unchanged score, which a reviewer can confirm
-in seconds. The baseline is generated once, at implementation, by a
+naming the pair. Order of operations: the author **hand-edits the
+rename first, then runs `--update`**; `--update` refuses (exit 1) while a
+`gone`/`new` pair with an equal score still exists. The diff shows one key
+renamed with an unchanged score, which a reviewer can confirm in seconds.
+Hand edits to the baseline are enforced by review, not by the script. The baseline is generated once, at implementation, by a
 `--init` flag that refuses to run if the file already exists.
 
 ### Script shape
@@ -192,35 +210,53 @@ itself):
 - `compare(current, baseline) -> list[Finding]` — pure; `Finding` is a small
   frozen dataclass (`kind`, `key`, `old`, `new`).
 - `shrink(baseline, current) -> dict[str, int]` — pure; the `--update` rule.
-- `main(argv) -> int` — `check` (default), `--update`, `--init`; prints a
-  one-line verdict in the style of `testrun.py` (`VERDICT: PASS …` /
+- `main(argv) -> int` — thin: parses the mode and dispatches to
+  `run_check`, `run_update` or `run_init` (each returns the exit code). Prints
+  a one-line verdict in the style of `testrun.py` (`VERDICT: PASS …` /
   `VERDICT: FAIL  N finding(s)` followed by at most 20 lines).
+
+### Blast radius
+
+Both new CI steps (H1's and H2's) sit in jobs that `container-healthcheck`
+lists under `needs` (`deploy.yml:547-552`), so a red gate **blocks the
+production deploy**. Urgent hotfix procedure: when a fix lowers a legacy
+function's score, run `python scripts/dev/complexity_gate.py --update` in the
+same commit, so the `improved` verdict does not block the deploy; a hotfix
+must never raise a score or add a function at 15 or above.
 
 ### Enforcement
 
 - **pytest:** `tests/dev/test_complexity_gate.py`. Fast unit tests of
-  `compare`, `shrink` and the keying against tiny source strings written to
-  `tmp_path`, plus one `@pytest.mark.slow` test that runs `measure` over the
-  real tree and asserts `compare` returns nothing. Marked `slow`
-  (`pytest.ini` markers) because ~19 s does not belong in the ~27 s `fast`
-  tier; `testrun.py full` — the pre-commit gate — runs it, and so does CI.
-- **CI:** `tests/dev/` is already in the `backend-test-misc` shard
-  (`deploy.yml:305-307`), so the slow test runs there with no edit. A
-  separate named step, `python scripts/dev/complexity_gate.py`, goes in the
-  same job after "Compile every module" (`deploy.yml:302-303`), so a
-  regression shows up as a red step named for what it is rather than one
-  failure among a suite's output. It is the same check twice in one job
-  (~19 s); the named step is the readable one.
-- `testrun.py changed` selects tests by import graph
-  (`scripts/dev/select_tests.py`), so it will not pick up the gate test for
-  an arbitrary edit. That is acceptable: `full` and CI are the gates.
+  `compare`, `shrink`, the keying and `main` (see Testing), plus one
+  `@pytest.mark.slow` test that runs `measure` over the real tree and asserts
+  `compare` returns nothing. Marked `slow` (`pytest.ini` markers) because
+  ~19 s warm does not belong in the ~27 s `fast` tier; `testrun.py full` —
+  the pre-commit gate — runs it locally. It carries a `skipif` on the `CI`
+  environment variable (set by GitHub Actions), so it never runs on CI shards.
+- **CI:** a named step, `python scripts/dev/complexity_gate.py`, goes in the
+  `backend-test-misc` job after "Compile every module" (`deploy.yml:302-303`),
+  so a regression shows up as a red step named for what it is. The duplicate
+  real-tree pytest is dropped from CI (above); the named step is the one CI
+  check. A fresh runner is the cold case (176 s measured, not the 18.8 s warm
+  figure); the plan measures the first CI run of the step and records it.
+- **`testrun.py changed` routing** (`scripts/dev/select_tests.py`): its import
+  graph will not reach the gate test, and `README.md` is `.md`, which
+  `INERT_SUFFIXES` (`select_tests.py:284-285`) treats as inert. Two
+  `DATA_READERS` rows (table at `select_tests.py:247`) fix this:
+  `README.md` → `tests/dev/test_readme_paths.py`, and
+  `scripts/dev/complexity_baseline.json` →
+  `tests/dev/test_complexity_gate.py`. The existing
+  `test_inert_path_does_not_suppress_a_real_one`
+  (`tests/dev/test_select_tests.py:274`) uses `README.md` as its inert
+  example; it switches to `docs/guides/setup.md`, and a new test pins both
+  rows.
 
 ### Docs, and their Codex mirror (one commit)
 
 - `CLAUDE.md:136-141`: replace the hand-measure wording with "enforced by
   `scripts/dev/complexity_gate.py` against `complexity_baseline.json`
   (`testrun.py full` and CI); `--update` only shrinks it". Same number of
-  lines; `CLAUDE.md` is 169 lines today and stays under 200.
+  lines; `CLAUDE.md` is 175 lines today (`wc -l`; re-measured at implementation) and stays under 200.
 - `docs/claude/code-complexity.md`: § Measuring (`:32-41`) loses "once; not a
   project dependency" and gains the gate command, the four verdicts and the
   move/rename hand-edit; § Legacy functions (`:60-64`) names the baseline as
@@ -313,9 +349,16 @@ being real root paths. The failure message lists every missing path.
 
 - H1: `tests/dev/test_complexity_gate.py` — `compare` returns each of the
   four kinds on a constructed pair; `shrink` lowers and drops, never adds or
-  raises; keying gives `Class.method`, survives a blank-line insertion above
-  a function, and takes the max on a duplicate; `--init` refuses an
-  existing file; the slow whole-tree test passes on the committed tree.
+  raises; keying gives `Class.method`, keys closures as `module:outer.inner`
+  and counts them, survives a blank-line insertion above a function; a
+  duplicate key fails with both locations (exit 1); the slow whole-tree test
+  passes on the committed tree. `main` behaviour: exit codes per mode (check
+  clean 0, check with findings 1); `--update` with `new`/`risen` findings
+  writes the shrink and exits 1; `--update` refuses while an equal-score
+  `gone`/`new` pair exists; `--init` refuses when the file exists; the
+  move/rename hint pairs the `gone` and `new` keys; an unparseable source
+  file fails naming its path; a malformed or missing baseline fails naming
+  its path.
 - H2: `npm run lint` exits 0 on the committed tree and non-zero after a
   deliberate violation (checked by hand in the task, then reverted; not a
   committed test).
@@ -354,3 +397,20 @@ being real root paths. The failure message lists every missing path.
     branch, so the whole-tree test scans the final file set. H3's helpers
     are tiny, so this is ordering hygiene, not a real dependency.
   - The full suite last, after every group.
+
+## Panel review
+
+- staff-engineer: both new CI steps gate production deploys (`deploy.yml:547-552`); state blast radius and hotfix procedure -- applied
+- staff-engineer: add `README.md` DATA_READERS row, adjust `test_inert_path_does_not_suppress_a_real_one` -- applied
+- staff-engineer: add `complexity_baseline.json` DATA_READERS row -- applied
+- staff-engineer: scan tracked files only so concurrent sessions' untracked modules cannot fail a run -- applied
+- staff-engineer: CI cold cost is ~176 s; drop the duplicate real-tree pytest from CI, keep the named step, keep it locally in `full` -- applied
+- staff-engineer: correct the `CLAUDE.md` line count to 175 -- applied
+- staff-engineer: hand-off item -- applied (reviewed by senior-engineer)
+- senior-engineer: close the closure evasion; walk `Function.closures` recursively, key as `module:outer.inner`, re-verify radon #68 before the docs edit -- applied
+- senior-engineer: key collision is a visible failure with both locations, tested -- applied
+- senior-engineer: threshold hard-coded at 15, baseline `threshold` field dropped -- applied
+- senior-engineer: rename hand-edit first, then `--update`; refuse while an equal-score gone/new pair exists; hand edits enforced by review -- applied
+- senior-engineer: missing git/`.git` skips with a note (CI always has `.git`); keys normalised with `as_posix` -- applied
+- senior-engineer: name the behaviour tests (exit codes, `--update`, `--init`, hint pairing, duplicate keys, unparseable file, malformed/missing baseline) -- applied
+- senior-engineer: thin `main` dispatching `run_check` / `run_update` / `run_init` -- applied
