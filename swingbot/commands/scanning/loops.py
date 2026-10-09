@@ -763,18 +763,30 @@ async def _next_session_scan_tick():
     if (run_date is None or _next_session_fired_date == run_date
             or _scheduled_job_fired_since('next_session_scan', run_date)):
         return
+    if runstate.is_scan_paused():
+        # Not marked: the slot stays retryable after an unpause, until its session's RTH open.
+        log.info("next_session_scan: scanning is paused -- %s's outlook waits", run_date)
+        return
     _next_session_fired_date = run_date
     _mark_scheduled_job_fired('next_session_scan', run_date)
     if not outlook_session.fire_allowed(now, run_date):
         log.warning("next_session_scan: %s's outlook skipped -- its session's RTH open has passed", run_date)
         return
     log.info("next_session_scan: starting %s", run_date)
+    await _run_outlook_slot(run_date)
+
+
+async def _run_outlook_slot(run_date: dt.date) -> None:
     try:
-        if await outlook.run_next_session_outlook(run_date) is None:
-            log.warning("next_session_scan: %s's slot is marked fired but nothing was posted (no alerts channel)",
-                        run_date)
+        result = await outlook.run_next_session_outlook(run_date)
     except Exception:
         log.exception("next_session_scan: outlook failed")
+        return
+    if result is None:
+        log.warning("next_session_scan: %s's slot is marked fired but nothing was posted (no alerts channel)",
+                    run_date)
+    elif result.halted is not None:
+        await _halt_on_store_failure(result.halted)
 
 
 _wrapup_settled: set = set()   # process-local: days whose wrap-up is done, so no per-minute DB read

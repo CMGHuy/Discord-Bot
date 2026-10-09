@@ -24,7 +24,6 @@ from swingbot.core.scanning import outlook_embeds, outlook_run, outlook_session,
 from swingbot.core.scanning.outlook_types import OutlookResult
 
 from . import notices
-from . import runstate as loop_runstate
 from .alerts import _send_alerts
 
 log = logging.getLogger(__name__)
@@ -38,9 +37,12 @@ def _alerts_channel():
 def _safe_outlook(run_date) -> OutlookResult:
     try:
         return outlook_run.run_outlook(run_date)
-    except write_failure.StoreWriteHalt:
-        raise
     except Exception as exc:
+        halt = outlook_run.as_halt(exc, [])
+        if halt is exc:
+            raise
+        if halt is not None:
+            raise halt from exc
         log.exception("next_session_scan: the outlook scan failed")
         return OutlookResult(run_date=run_date, target=outlook_session.target_session(run_date),
                              unavailable=f"scan failed ({type(exc).__name__}: {exc})"[:300])
@@ -50,9 +52,9 @@ def _halted_result(run_date, halt: write_failure.StoreWriteHalt) -> OutlookResul
     """The store stopped recording mid-issue: the cards already built still go out
     (a trade in the book with no alert is never silently lost)."""
     log.error("next_session_scan: store write halt -- %s", halt)
-    loop_runstate.record_store_write_failure(halt)
     return OutlookResult(run_date=run_date, target=outlook_session.target_session(run_date),
-                         unavailable=f"store write halted ({halt})"[:300], alerts=list(halt.alerts))
+                         unavailable=f"store write halted ({halt})"[:300], alerts=list(halt.alerts),
+                         halted=halt)   # the loop pauses scanning and tells ops (loops._halt_on_store_failure)
 
 
 def digest_embeds(result: OutlookResult) -> list:

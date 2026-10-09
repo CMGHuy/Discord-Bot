@@ -237,8 +237,8 @@ def _issue(item, plan, result: OutlookResult, frames: dict, spy) -> None:
     df = frames.get(ticker)
     fit = short_run._fit_trendline(df, scenario, horizon, item.result.trend)
     trade_id = short_run._log_trade(item, nums, explanation, fit, result.alerts, origin=NEXT_SESSION)
+    result.plans.append(_plan_line(item, plan, risk=_risk_dollars(plan)))   # persisted: counted before the card
     result.alerts.append(_card(item, plan, result.target, explanation, nums, df, frames, spy, trade_id, fit))
-    result.plans.append(_plan_line(item, plan, risk=_risk_dollars(plan)))
 
 
 def _hourly(ticker: str):
@@ -306,11 +306,27 @@ def _fill_keeping_issued(result: OutlookResult, now: dt.datetime) -> None:
     carries the cards); any other failure is recorded on the result."""
     try:
         _fill(result, now)
-    except write_failure.StoreWriteHalt:
-        raise
     except Exception as exc:
-        if not result.alerts:
+        halt = as_halt(exc, result.alerts)
+        if halt is exc:
             raise
-        log.exception("outlook run failed after %d plan(s) were issued", len(result.plans))
-        result.unavailable = (f"scan failed after {len(result.plans)} plan(s) already issued "
-                              f"({type(exc).__name__}: {exc})")[:300]
+        if halt is not None:
+            raise halt from exc
+        if not result.plans:
+            raise
+        log.exception("outlook run failed after %d plan(s) were logged", len(result.plans))
+        tickers = ", ".join(line.ticker for line in result.plans)
+        result.unavailable = (f"scan failed after {len(result.plans)} plan(s) already issued and logged "
+                              f"({tickers}); {type(exc).__name__}: {exc}")[:300]
+
+
+def as_halt(exc: BaseException, alerts) -> write_failure.StoreWriteHalt | None:
+    """The base-lane rule: any database failure halts issuance. Returns `exc`
+    itself when it already is a halt, a new halt carrying the built cards when it
+    is another database failure, None when it is not a store failure."""
+    if isinstance(exc, write_failure.StoreWriteHalt):
+        return exc
+    if write_failure.halts_issuance(exc):
+        return write_failure.StoreWriteHalt(f"outlook store write failed: {type(exc).__name__}: {exc}"[:300],
+                                            alerts=list(alerts))
+    return None

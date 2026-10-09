@@ -294,13 +294,12 @@ def test_the_outlook_marks_the_scan_running_and_clears_it_even_on_a_halt(monkeyp
         raise write_failure.StoreWriteHalt("x")
     marks.clear()
     monkeypatch.setattr(outlook_cmd.outlook_run, "run_outlook", halt)
-    monkeypatch.setattr(outlook_cmd.loop_runstate, "record_store_write_failure", lambda e: None)
     asyncio.run(outlook_cmd.run_next_session_outlook(SUNDAY))
     assert marks == [True, False]
 
 
 def test_a_store_write_halt_still_posts_the_cards_already_issued(monkeypatch):
-    channel, sent, failures = FakeChannel(), [], []
+    channel, sent = FakeChannel(), []
     cards = [("card-1", None, None, None)]
 
     def halt(run_date):
@@ -312,10 +311,9 @@ def test_a_store_write_halt_still_posts_the_cards_already_issued(monkeypatch):
     monkeypatch.setattr(outlook_cmd, "_alerts_channel", lambda: channel)
     monkeypatch.setattr(outlook_cmd.outlook_run, "run_outlook", halt)
     monkeypatch.setattr(outlook_cmd, "_send_alerts", send_alerts)
-    monkeypatch.setattr(outlook_cmd.loop_runstate, "record_store_write_failure", failures.append)
     monkeypatch.setattr(outlook_cmd.scan_run, "_scan_lock", asyncio.Lock())
     result = asyncio.run(outlook_cmd.run_next_session_outlook(SUNDAY))
-    assert sent == [cards] and len(failures) == 1
+    assert sent == [cards] and isinstance(result.halted, write_failure.StoreWriteHalt)
     assert "store write halted" in result.unavailable
     assert "store write halted" in channel.sent[0]["embed"].description
 
@@ -340,3 +338,65 @@ def test_a_failure_partway_keeps_and_posts_the_cards_already_issued(monkeypatch)
     result = asyncio.run(outlook_cmd.run_next_session_outlook(SUNDAY))
     assert sent == [[("card-1", None, None, None)]]
     assert "1 plan(s) already issued" in result.unavailable
+
+
+# --- fix round 2 ---------------------------------------------------------------------
+
+def test_a_non_halt_database_error_in_the_scan_halts_and_posts_the_cards(monkeypatch):
+    import sqlalchemy.exc as sa_exc
+    channel, sent = FakeChannel(), []
+
+    def broken(run_date):
+        raise sa_exc.OperationalError("select", {}, Exception("db gone"))
+
+    async def send_alerts(destination, alerts, route_by_confidence=False):
+        sent.append(alerts)
+
+    monkeypatch.setattr(outlook_cmd, "_alerts_channel", lambda: channel)
+    monkeypatch.setattr(outlook_cmd.outlook_run, "run_outlook", broken)
+    monkeypatch.setattr(outlook_cmd, "_send_alerts", send_alerts)
+    monkeypatch.setattr(outlook_cmd.scan_run, "_scan_lock", asyncio.Lock())
+    result = asyncio.run(outlook_cmd.run_next_session_outlook(SUNDAY))
+    assert isinstance(result.halted, write_failure.StoreWriteHalt)
+    assert "store write halted" in result.unavailable
+
+
+def test_a_halted_outlook_pauses_scanning_and_tells_ops(scan, monkeypatch):
+    calls, tick = scan
+    halted, seen = RuntimeError("halt"), []
+
+    async def run(run_date):
+        return OutlookResult(run_date=run_date, target=MONDAY, halted=halted)
+
+    async def halt_on(exc):
+        seen.append(exc)
+
+    monkeypatch.setattr(loops_mod.outlook, "run_next_session_outlook", run)
+    monkeypatch.setattr(loops_mod, "_halt_on_store_failure", halt_on)
+    tick(dt.datetime(2026, 10, 11, 23, 30, tzinfo=BERLIN))
+    assert seen == [halted]
+
+
+def test_a_paused_scan_skips_the_slot_unmarked_so_it_can_run_after_unpausing(scan, monkeypatch, caplog):
+    calls, tick = scan
+    scheduled_repo().mark("next_session_scan", "2026-10-08")
+    monkeypatch.setattr(loops_mod.runstate, "is_scan_paused", lambda: True)
+    with caplog.at_level(logging.INFO):
+        tick(dt.datetime(2026, 10, 11, 23, 30, tzinfo=BERLIN))
+    assert calls == [] and scheduled_repo().fired_on("next_session_scan") == "2026-10-08"
+    assert "paused" in caplog.text
+    monkeypatch.setattr(loops_mod.runstate, "is_scan_paused", lambda: False)
+    tick(dt.datetime(2026, 10, 11, 23, 40, tzinfo=BERLIN))
+    assert calls == [SUNDAY]
+
+
+def test_a_slot_with_no_alerts_channel_is_traceable(scan, monkeypatch, caplog):
+    calls, tick = scan
+
+    async def run(run_date):
+        return None
+
+    monkeypatch.setattr(loops_mod.outlook, "run_next_session_outlook", run)
+    with caplog.at_level(logging.WARNING):
+        tick(dt.datetime(2026, 10, 11, 23, 30, tzinfo=BERLIN))
+    assert "marked fired but nothing was posted" in caplog.text

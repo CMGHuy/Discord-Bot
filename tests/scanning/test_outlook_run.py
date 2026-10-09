@@ -344,3 +344,60 @@ def test_the_card_stamps_the_risk_flags_before_it_is_built(monkeypatch):
     item.conf.level, item.htf_info = 3, None
     orun._card(item, _plan(entry_type="stop_entry"), MONDAY, "why", {}, None, {}, None, "T1", None)
     assert order == ["flags", "embed"]
+
+
+# --- fix round 2: what was persisted, and what halts issuance -----------------------------
+
+def _issue_patches(monkeypatch, log_trade, card=lambda *a: ("card",)):
+    monkeypatch.setattr(orun, "build_explanation", lambda *a, **k: "why")
+    monkeypatch.setattr(orun.scan_run, "_earnings_in_window", lambda *a: None)
+    monkeypatch.setattr(orun, "plan_numbers_for_display", lambda plan, legacy: dict(legacy))
+    monkeypatch.setattr(orun.short_run, "_fit_trendline", lambda *a: None)
+    monkeypatch.setattr(orun.short_run, "_log_trade", log_trade)
+    monkeypatch.setattr(orun, "_card", card)
+    monkeypatch.setattr(orun, "_risk_dollars", lambda plan: 120.0)
+
+
+def _issue_one(result):
+    item = _item("AAPL")
+    item.target_confluence = item.stop_confluence = None
+    item.combined_from = []
+    plan = _plan(entry_type="stop_entry", trigger_price=102.0, stop_loss=100.5, tp1=106.0)
+    orun._issue(item, plan, result, frames={}, spy=None)
+
+
+def test_a_db_error_that_is_not_a_halt_still_halts_issuance(monkeypatch):
+    import sqlalchemy.exc as sa_exc
+    from swingbot.core.db import write_failure
+
+    def log_trade(item, nums, explanation, fit, alerts, origin=None):
+        raise sa_exc.OperationalError("insert", {}, Exception("db gone"))
+
+    _issue_patches(monkeypatch, log_trade)
+    monkeypatch.setattr(orun, "_fill", lambda result, now: _issue_one(result))
+    result = OutlookResult(run_date=SUNDAY, target=MONDAY)
+    result.alerts.append(("earlier-card",))
+    with pytest.raises(write_failure.StoreWriteHalt) as caught:
+        orun._fill_keeping_issued(result, NOW)
+    assert caught.value.alerts == [("earlier-card",)]
+    assert isinstance(caught.value.__cause__, sa_exc.OperationalError)
+
+
+def test_a_card_failure_after_the_trade_was_logged_keeps_the_result(monkeypatch):
+    def card(*a):
+        raise RuntimeError("chart exploded")
+
+    _issue_patches(monkeypatch, lambda *a, **k: "T1", card=card)
+    monkeypatch.setattr(orun, "_fill", lambda result, now: _issue_one(result))
+    result = OutlookResult(run_date=SUNDAY, target=MONDAY)
+    orun._fill_keeping_issued(result, NOW)               # does not raise: a trade is in the book
+    assert [line.ticker for line in result.plans] == ["AAPL"] and result.alerts == []
+    assert "AAPL" in result.unavailable and "logged" in result.unavailable
+
+
+def test_a_failure_before_anything_was_persisted_still_raises(monkeypatch):
+    def boom(result, now):
+        raise RuntimeError("no data")
+    monkeypatch.setattr(orun, "_fill", boom)
+    with pytest.raises(RuntimeError):
+        orun._fill_keeping_issued(OutlookResult(run_date=SUNDAY, target=MONDAY), NOW)

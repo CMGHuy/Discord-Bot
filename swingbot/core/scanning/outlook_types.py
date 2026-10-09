@@ -30,3 +30,4 @@ class OutlookResult:
     near_misses: list[OutlookLine] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     alerts: list[tuple] = field(default_factory=list)   # (embed, chart_path, plan, simple_embed)
+    halted: Exception | None = None      # a store-write halt: the poster pauses scanning for it
