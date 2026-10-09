@@ -45,9 +45,17 @@ report with a pre-registered three-way verdict per gate. It changes no gate.
 
 **In:** the RS gate (live only, see below), plan rejections (with reason)
 and compression/earnings rejects, on both the strategy and confluence paths
-and the short lane. Task 1 enumerates every block point from code (the list
-above is the starting point, not the contract) and the report covers each
-one it finds that falls under these three gates.
+and the short lane. Task 1 enumerates every rejection path from code (the
+list above is the starting point, not the contract) — including the
+throttle, heat and `risk_limits` paths — and the report covers each one it
+finds that falls under these three gates. Every path it finds that is not
+covered is listed in the plan as intentionally out of scope, with its reason.
+Known at writing: the portfolio heat cap (`scan_run.py:1052-1055`), the
+correlated-cluster cap (`scan_run.py:1066-1068`, short lane
+`short_run.py:229-234`) and the kill switch (`scan_run.py:703-716`,
+`edge/throttle.py`) are *flagged, never hidden* — the alert still posts with
+size 0 — so they reject nothing and are out of scope; `risk_limits`'
+`HARD_MAX_PLANNED_LOSS_PCT` is the `risk_cap` reason, covered.
 
 **Out:** changing any gate, threshold or default; any VALIDATION-window
 replay; any TRAIN evaluation of the RS gate; the pullback dry-up gate
@@ -66,11 +74,17 @@ JSON this spec emits).
 so the report can split blocked rows into near-misses and clear rejects.
 It is `null` where the gate decides on a category, not a number.
 
-| `gate` | `reason` values | `margin` |
-|---|---|---|
-| `rs` | `rs_blocked` | `rs_combined − RS_LAGGARD_PERCENTILE` (`rs_gate.rs_verdict`, `swingbot/core/edge/rs_gate.py:28`) |
-| `plan_rejected` | `no_qualifying_target`, `risk_cap` | `risk_cap`: planned loss % − `HARD_MAX_PLANNED_LOSS_PCT` (`swingbot/core/risk_limits.py:9`); `no_qualifying_target`: `null` |
-| `compression` | the `decide_compression_entry` reason string, `earnings_*` included | `null` |
+| `gate` | `reason` values | `margin` | near-miss band (frozen) |
+|---|---|---|---|
+| `rs` | `rs_blocked` | `rs_combined − RS_LAGGARD_PERCENTILE` (`rs_gate.rs_verdict`, `swingbot/core/edge/rs_gate.py:28`) | \|margin\| ≤ 5 percentile points |
+| `plan_rejected` | `no_qualifying_target`, `risk_cap` | `risk_cap`: planned loss % − `HARD_MAX_PLANNED_LOSS_PCT` (`swingbot/core/risk_limits.py:9`); `no_qualifying_target`: `null` | `risk_cap`: \|margin\| ≤ 0.5 pct-of-entry |
+| `compression` | the `decide_compression_entry` reason string, `earnings_*` included | `null` | none — see below |
+
+**Near-miss bands are fixed absolute cut-offs, frozen here**, never a data
+quintile. Compression decides on a category — the mode allowlist and the
+earnings-clear check (`compression_context.py:118-139`) — and exposes no
+score on a numeric scale at the gate, so it has no margin and no near-miss
+split; its rows are reported unsplit.
 
 **`no_qualifying_target` has no plan to simulate.** `build_confluence_plan`
 returned `None` — no level in the RR band exists (`analyze.py:370-379`).
@@ -82,8 +96,11 @@ enter an ExpR.
 closed and stays closed. This spec evaluates the RS rule on no historical
 window, re-runs nothing from v34 and spends no budget: RS rows come only
 from the live `gate_rejections` store, and the RS verdict is printed only
-once that store holds N ≥ 30 filled RS rows. There is no TRAIN RS row in the
-report.
+once that store holds N ≥ 30 distinct filled RS setups. There is no TRAIN RS
+row in the report. Any follow-on from a live RS verdict must be a
+**different mechanism**, never a new threshold on `rs_combined` or
+`RS_LAGGARD_PERCENTILE` — that knob is v34's, closed
+(`backtest-methodology.md` § Closed pre-registrations).
 
 ## The counterfactual simulator
 
@@ -96,11 +113,23 @@ TRAIN recorder and the live resolver.
   the live constructor on the frame truncated at the signal bar:
   `build_strategy_plan` (`swingbot/core/planning/builders.py:398`) for a
   strategy candidate, `build_confluence_plan` (`builders.py:556`) for a
-  confluence scenario. A `None` plan is `no-plan`.
+  confluence scenario. A `None` plan is `no-plan`. The truncated build
+  also derives `level_map`, `quality_inputs` and `scan_params` from the
+  truncated frame, and pins the data-driven-stops overrides (`stop_mult`,
+  `tp2_r`, `time_stop_days`) to the scan params stored on the row — never
+  resolved from the live journal at resolution time, which is what a `None`
+  override does when data-driven stops are switched on
+  (`builders.py:398-409`).
+- **Signal bar.** `signal_index` is the bar whose tz-normalised date equals
+  `signal_date` exactly — no nearest-bar fallback. Any bar after the last
+  completed session is dropped first. No exact match → `cf_status = no-data`.
 - **Walk.** `exit_sim.simulate_exit(df, signal_index, plan, scale_out=True)`
   (`swingbot/core/planning/exit_sim.py:625`) — the v2 exit model with
-  scale-out that the live book and every current backtest use, with the
-  horizon's `max_holding_days` (`strategy_types.HORIZONS`).
+  scale-out that the live book and every current backtest use, called
+  exactly as the replay calls it (`arms/strategy_engine.py:211`,
+  `backtest_scenarios.py:216`): `max_holding_days` left `None`, so it
+  resolves to the horizon's `strategy_types.HORIZONS` value
+  (`exit_sim.py:659-660`).
 - **Status.** `ExitResult.outcome == "not_triggered"` (pending expired or
   invalidated before the trigger, `exit_sim.py:693-696`) maps to
   `cf_status = no-fill`. That result carries `r_total = 0.0`
@@ -108,6 +137,23 @@ TRAIN recorder and the live resolver.
   trade. `no-fill` rows count toward fill rate and are excluded from ExpR and
   win rate. Anything else is `filled`, `cf_r = r_total`, win = TP1 touched
   (the badge definition in `backtest-methodology.md`).
+- **One population rule for both arms.** `not_triggered` / `no-fill` is
+  excluded from the ExpR and win-rate denominators in the blocked arm *and*
+  the taken arm — the TRAIN replay's taken trades and the live taken trades
+  re-walked below alike.
+- **R and sizing.** `cf_r` is per-trade risk-normalised: every trade is
+  assumed sized to risk exactly 1R, whatever its stop width. `risk_cap` rows
+  also carry a fixed-dollar-risk column — the outcome sized at the 2% dollar
+  cap — because the partner's cap limits money risked, not stop width.
+
+### Price basis
+
+Each row stores the signal-day close in its snapshot. At resolution the
+resolver compares it with the cache's close on `signal_date`: if the ratio
+differs from 1 by more than 0.5% (a split or dividend adjustment since the
+write), every stored plan level is re-anchored by that ratio and the row
+records `reanchored = true`. A missing `signal_date` bar is
+`cf_status = no-data`.
 
 ### No lookahead
 
@@ -116,8 +162,9 @@ up to and including the signal bar; the outcome reads only bars strictly
 after it (`simulate_exit`'s stop-entry scan starts at `signal_index + 1`,
 `exit_sim.py:682`). Two tests pin it: building the plan from
 `full.iloc[:signal+1]` and from the full frame yields the same plan
-(the architecture NO-LOOKAHEAD truncation test), and appending bars after the
-horizon's expiry changes no `cf_r`.
+(the architecture NO-LOOKAHEAD truncation test, with `level_map`,
+`quality_inputs` and `scan_params` built from the truncated frame), and
+appending bars after the horizon's expiry changes no `cf_r`.
 
 ## TRAIN side
 
@@ -126,7 +173,11 @@ horizon's expiry changes no `cf_r`.
 writing one JSONL row per blocked candidate: `ticker`, `strategy`,
 `horizon`, `direction`, `signal_date`, `gate`, `reason`, `margin`,
 `cf_status`, `cf_r`, `win`. Windows: TRAIN only (2020-01-01..2023-12-31);
-the flag refuses `--validation` and any `--to` past 2023-12-31.
+the flag refuses `--validation` and any `--to` past 2023-12-31. Bars come
+from the backtest cache the replay already reads
+(`swingbot/core/marketdata/backtest_cache.py`, `cache_path` at line 59),
+never the live store. A TRAIN verdict on a gate whose rule was fitted on
+TRAIN — the compression gate (v119) — is labelled **in-sample**.
 
 TRAIN mirrors the **live configuration at writing**, because the replay
 does not apply every live gate:
@@ -168,14 +219,17 @@ following `docs/claude/schema-evolution.md`:
 | `ticker`, `gate`, `strategy`, `horizon`, `signal_date` — `UNIQUE` together | the dedupe key; the insert is `ON CONFLICT DO NOTHING` |
 | `cf_status TEXT NOT NULL` (`pending`/`filled`/`no-fill`/`no-plan`/`no-data`), indexed | the resolver's `WHERE cf_status = 'pending'` |
 | `created_at`, `resolved_at` | resolver due-date and report window filters |
-| `doc JSONB`, `updated_at` | standard; `doc` holds `reason`, `margin`, `direction`, `source` (strategy / confluence / short lane), the plan snapshot (`plan_to_dict`) or the scenario inputs needed to build it, `entry_context`, `cf_r`, `win`, `exit_index` |
+| `doc JSONB`, `updated_at` | standard; `doc` holds `reason`, `margin`, `direction`, `source` (strategy / confluence / short lane), the plan snapshot (`plan_to_dict`) or the scenario inputs needed to build it, the scan params, the signal-day close, `entry_context`, heat state at block time (`heat_before`/`cap`, already computed at `analyze.py:220-221` where the plan path runs; absent elsewhere), and the outcome fields `cf_r`, `win`, `exit_index`, `last_bar_date`, `bars_sha256`, `reanchored` |
 
 Each promoted column gets its line in `schema.PROMOTION_REASONS`
 (`swingbot/core/db/schema.py:215`), the table is `register(...)`ed
 (`schema.py:28`), and a repository joins `swingbot/core/db/repositories/`.
 `strategy` for a confluence candidate is its `primary_strategy_for` label
 (`builders.py:520`). Rows are never updated except by the resolver filling
-the outcome fields once; never deleted.
+the outcome fields once; never deleted. Spot metals (`XAUUSD`, `XAGUSD`) are
+**not stored**: their bars are a future × spot ratio with no cache file of
+their own (`known-traps.md`, spot metals), and the batch path has no alias
+route for them (`swingbot/core/marketdata/data.py:99-101`).
 
 ### Write path
 
@@ -192,11 +246,20 @@ A `tasks.loop(minutes=1)` poll in `swingbot/commands/scanning/loops.py`,
 same shape as `weekly_earnings_refresh` (`loops.py:726-727`), firing once per
 weekday after the session close. It selects `pending` rows whose horizon has
 expired — signal date + the plan's pending window + `max_holding_days`
-trading bars — loads daily bars through `get_daily_data_batch`
-(`swingbot/core/marketdata/data.py:85`), runs `simulate_blocked`, and writes
-`cf_status`, `cf_r`, `win`, `resolved_at`. A ticker with too few bars after
-the signal stays `pending` up to five more sessions, then `no-data`.
-Batches are capped so one night never blocks the scan loop.
+trading bars — loads daily bars from the live `market_data/` cache through
+`data_store.load_normalized()` (`swingbot/core/marketdata/data_store.py:285`;
+on the live path since v47, `known-traps.md` § two OHLCV caches), **never** a
+`get_daily_data_batch` cold fetch. It runs `simulate_blocked` and writes
+`cf_status`, `cf_r`, `win`, `resolved_at`, plus `last_bar_date` and
+`bars_sha256` (a hash of the exact bar slice used), so any resolution can be
+reproduced. A ticker with too few bars after the signal stays `pending` up
+to five more sessions, then `no-data`. Once resolved, a row is never
+re-resolved.
+
+The work runs **off the event loop** — through the bounded child-process
+runner the scan already uses (`_run_bounded`, `scanning/fetch.py:148`) or
+`asyncio.to_thread` — with a per-night batch cap, so one night never blocks
+the scan loop.
 
 ## The report
 
@@ -215,8 +278,17 @@ population, **live and TRAIN side by side, never pooled**:
 - blocked ExpR and win rate over `filled` rows,
 - taken ExpR and win rate: the trades that reached the same gate and passed
   it, in the same scope (direction, source, window),
-- margin split: near-miss (|margin| in the gate's first quintile) vs rest,
-  reported only.
+- margin split: near-miss (inside the gate's frozen band, table above) vs
+  rest, reported only,
+- `risk_cap` rows: the fixed-dollar-risk column beside the R column, every
+  row tagged **over-cap** — a counterfactual of a trade the partner's dollar
+  rule forbids, never presented as a tradable alternative.
+
+**Distinct setups.** A setup blocked on consecutive scan days counts once:
+rows with the same ticker, gate, strategy and horizon whose signal dates
+fall within one plan's pending window collapse to one setup, and the
+earliest row is the setup row. Every N in the report, the 30 floor
+included, counts distinct setups.
 
 On the live side, taken trades are re-walked through the same
 `simulate_exit` call from their stored plan, so both arms use one
@@ -227,22 +299,51 @@ as context, never compared.
 
 Fixed here, before any row exists:
 
-- Blocked-ExpR 95% interval from a ticker-cluster bootstrap
-  (`acceptance.cluster_bootstrap`, `swingbot/core/backtesting/acceptance.py:239`,
-  `BOOTSTRAP_RESAMPLES = 10_000`, seed 42) over the blocked `filled` rows.
-- **GATE EARNS** — the interval lies entirely below taken ExpR.
-- **GATE COSTS** — the interval lies entirely above taken ExpR.
+- The statistic is the **difference** blocked ExpR − taken ExpR, with a 95%
+  interval from a **week-cluster** bootstrap that resamples both arms with
+  the same week draw (`week_cluster_bootstrap`,
+  `swingbot/core/backtesting/instrument/stats.py:57`; the paired-arm pattern
+  of `acceptance.cluster_bootstrap`, `acceptance.py:239`),
+  `BOOTSTRAP_RESAMPLES = 10_000`, seed 42, over distinct `filled` setups.
+  Weeks, not tickers, because blocks on one day share one market.
+- **GATE EARNS** — the interval lies entirely below 0 and q < 0.10.
+- **GATE COSTS** — the interval lies entirely above 0 and q < 0.10.
 - **INCONCLUSIVE** — otherwise.
-- **WAITING** — fewer than 30 `filled` blocked rows for that gate in that
-  population. The live verdict is never printed below N = 30.
+- **WAITING** — fewer than 30 distinct `filled` blocked setups for that gate
+  in that population. The live verdict is never printed below N = 30.
+
+**Multiplicity.** The cells receiving a verdict are gate × population: live
+`rs`, `risk_cap`, `compression` (its reasons pooled) and TRAIN `risk_cap`,
+`compression` — **five cells** (`no_qualifying_target` is `no-plan` and
+gets none). Benjamini–Hochberg (`bh_qvalues`, `stats.py:86`) runs across
+the five bootstrap p-values; EARNS or COSTS needs q < 0.10.
+
+**Freeze.** A cell's verdict of record is its **first** reading once
+distinct filled N ≥ 30; every later reading is descriptive only.
+`build_report()` records which reading (date, N) is of record and never
+overwrites it.
+
+**Windows.** Live rows from 2026-10 onward fall inside the 2026 holdout. The
+report records the live window exactly as seen; a follow-on screen built on
+a live verdict must name a holdout this report has not seen.
 
 Per population and per gate; the two populations are never combined into
-one verdict. The RS gate has a live verdict only (no TRAIN population).
+one verdict. The RS gate has a live verdict only (no TRAIN population), and
+TRAIN compression verdicts carry the **in-sample** label.
+
+**Limitation — portfolio state.** The blocked arm is simulated as a lone
+trade: it ignores the portfolio heat and correlated-cluster caps
+(`swingbot/core/edge/heat.py`, `swingbot/core/edge/correlation.py`). Heat at
+block time is stored where the plan path already computes it, and the
+report prints this limitation beside every live verdict.
 
 **What a verdict buys.** Nothing changes automatically. `GATE COSTS` licenses
 exactly one thing: a Stage −2 idea screen (`backtest-methodology.md`) for
 loosening that gate, under a new idea name. For `risk_cap` that screen also
-needs the partner, whose dollar-risk rule the cap is. `GATE EARNS` is
+needs the partner, whose dollar-risk rule the cap is, must state its
+drawdown and risk-of-ruin effect (`swingbot/core/edge/ruin.py`,
+`swingbot/core/analytics/risk_metrics.py`), and must keep the dollar cap
+binding through sizing, never through stop width. `GATE EARNS` is
 evidence for a later tightening screen. Neither reopens a closed row: the RS
 gate (v34) and earnings blackout (v82) rows in the closed table stay closed, and a follow-on is a new pre-registration with its own shot. This
 report itself spends no budget and appends no ledger row.
@@ -262,19 +363,31 @@ removes nothing and decides nothing.
 
 - `simulate_blocked`: a synthetic frame per outcome (win, loss, scratch,
   timeout, `no-fill` via expiry and via invalidation, `no-plan`); a
-  `no-fill` never reaches an ExpR.
-- No lookahead: the truncation test and the appended-bars test above.
+  `no-fill` never reaches an ExpR or win-rate denominator, in either arm.
+- A gap through the stop yields `cf_r < −1`.
+- Its `simulate_exit` call matches the replay's exactly (`scale_out=True`,
+  per-horizon `max_holding_days` via `None`), checked against the
+  `run_backtest_range.py` replay's result on a fixed plan.
+- Signal bar: an exact-date match is required; a missing date, or a bar
+  after the last completed session, gives `no-data`.
+- Price basis: a split-adjusted cache re-anchors the plan and sets
+  `reanchored`; a drift under 0.5% does not.
+- No lookahead: the truncation test and the appended-bars test above; the
+  truncated build ignores a changed live journal (overrides pinned).
 - Each block point writes exactly one row with the right `gate`/`reason`/
   `margin`, and a failing write leaves the scan result identical.
 - Dedupe: a second insert for the same key is a no-op; the same ticker, gate, strategy and day on two horizons is two rows.
 - Migration: up/down via `tests/db/test_migrations.py`; the table passes
   `tests/db/test_schema_contract.py` and `test_unknown_field_round_trip.py`.
 - Resolver: only expired `pending` rows are touched; `no-data` after the
-  grace window.
+  grace window; it reads `load_normalized`, never `get_daily_data_batch`;
+  a resolved row is never resolved again; `bars_sha256` is reproducible.
+- Distinct setups: consecutive-day blocks of one setup collapse to one N.
 - `--record-blocked` refuses VALIDATION dates, writes no `rs` row, and its
   `risk_cap` shadow agrees with `analyze.py:381`'s check on fixed plans.
 - Verdict rule on hand-built populations: one each for EARNS, COSTS,
-  INCONCLUSIVE and WAITING (N = 29).
+  INCONCLUSIVE and WAITING (N = 29); BH across the five cells; the first
+  reading at N ≥ 30 stays the verdict of record after later readings.
 - `build_report()` writes the file `load_report()` reads back unchanged, and
   `json.dumps(load_report())` succeeds; `load_report()` is `None` with no file.
 
@@ -307,3 +420,29 @@ removes nothing and decides nothing.
 - The TRAIN runs (`backtest-runner`, one per strategy plus confluence) need
   the recorder only and can run while the live hooks are built. The full
   suite runs once, as the plan's final task.
+
+## Panel review
+
+- quant-researcher: verdict on the bootstrap CI of the difference blocked − taken, both arms resampled together -- applied
+- quant-researcher: week-cluster bootstrap (`week_cluster_bootstrap`), not ticker -- applied
+- quant-researcher: N counts distinct setups; consecutive-day blocks collapse to the earliest row -- applied
+- quant-researcher: five verdict cells named; BH q < 0.10 required for EARNS/COSTS -- applied
+- quant-researcher: verdict of record frozen at the first reading with distinct filled N ≥ 30 -- applied
+- quant-researcher: RS follow-on must be a different mechanism, never a new `rs_combined` threshold (v34 closed) -- applied
+- quant-researcher: live rows sit in the 2026 holdout; follow-on screen names an unseen holdout -- applied
+- quant-researcher: TRAIN verdicts for TRAIN-fitted gates (compression) labelled in-sample -- applied
+- quant-researcher: one population rule — no-fill excluded from both arms' denominators -- applied
+- quant-researcher: near-miss bands frozen as absolute cut-offs (RS 5 pts, risk_cap 0.5 pct; compression has no numeric margin) -- applied
+- quant-engineer: [BLOCKING] resolver reads `data_store.load_normalized()`, never a cold fetch; TRAIN reads backtest_cache -- applied
+- quant-engineer: [BLOCKING] signal-day close stored; > 0.5% drift re-anchors levels (`reanchored`); missing bar → `no-data` -- applied
+- quant-engineer: [BLOCKING] `last_bar_date` + `bars_sha256` stored; resolver off the event loop with batch caps; never re-resolved -- applied
+- quant-engineer: truncated build derives level_map/quality_inputs/scan_params; data-driven-stops overrides pinned to stored params -- applied
+- quant-engineer: exact `signal_date` match, post-session bars dropped, mismatch → `no-data` -- applied
+- quant-engineer: spot metals XAUUSD/XAGUSD excluded from the live store -- applied
+- quant-engineer: tests for no-fill denominators and replay-identical `simulate_exit` call -- applied
+- risk-manager: R is per-trade risk-normalised; risk_cap rows add a fixed-dollar-risk column -- applied
+- risk-manager: risk_cap loosening screen states drawdown/ruin effect, keeps the dollar cap binding via sizing, needs the partner -- applied
+- risk-manager: gap-through-stop test yields R < −1 -- applied
+- risk-manager: risk_cap counterfactuals tagged over-cap, never tradable -- applied
+- risk-manager: portfolio heat/correlation limitation stated; heat stored where cheaply available -- applied
+- risk-manager: Task 1 enumerates every rejection path incl. throttle/heat/risk_limits; uncovered ones listed out of scope -- applied
