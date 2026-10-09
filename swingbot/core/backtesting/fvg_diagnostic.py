@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import dataclasses
 import math
+import statistics
 
+from swingbot.core.backtesting.acceptance import CLOSED, DECIDED
 from swingbot.core.market import fvg, levels
 from swingbot.core.market.earnings_calendar import next_reaction_distance
 from swingbot.core.market.indicators import atr
@@ -252,3 +254,123 @@ def trade_row(df, i, plan, ctx) -> dict | None:
             "direction": plan.direction,
             "features": features(df, i, plan, ctx),
             "outcomes": outcomes}
+
+
+# --- tables ------------------------------------------------------------------
+
+YEARS = ("2020", "2021", "2022", "2023")
+EXPECTED_N = 1278
+N_TOLERANCE = 0.02
+
+#: The pre-registered rule (spec § The rule). Never moved.
+MIN_N = 150
+MIN_WIN_RATE = 50.0
+MIN_GAP_R = 0.10
+MIN_YEARS_POSITIVE = 3
+MIN_COMPUTABLE_SHARE = 0.80
+#: Under the computable floor a feature is NOT TESTED: no candidate, and not
+#: closed by this diagnostic either (spec § Candidate features).
+NOT_TESTED = "not tested (computable for under 80% of the population)"
+
+#: (key, label, favourable(value, median)). One split each, the favourable
+#: side fixed here before any outcome is joined (spec § Candidate features).
+FEATURES = (
+    ("gap_age", "Gap age <= 20 bars", lambda v, m: v <= 20),
+    ("gap_height_atr", "Gap height >= 0.5 ATR14", lambda v, m: v >= 0.5),
+    ("displacement", "Displacement candle (v128 definition, k = 1.5)", lambda v, m: bool(v)),
+    ("stop_atr", "Stop distance >= 1.0 ATR14", lambda v, m: v >= 1.0),
+    ("quality", "Replay quality score >= median", lambda v, m: v >= m),
+    ("trend_aligned", "Trend-aligned (SMA200)", lambda v, m: bool(v)),
+    ("volatility", "ATR14 / close <= median", lambda v, m: v <= m),
+    ("earnings_distance", "Earnings distance > 5 sessions", lambda v, m: v > 5),
+    ("gap_open", "Gap open at the signal bar", lambda v, m: bool(v)),
+)
+MEDIAN_FEATURES = ("quality", "volatility")
+_FAVOURABLE = {key: test for key, _label, test in FEATURES}
+
+
+def population_ok(n: int) -> bool:
+    """Within 2% of the expected 1,278; outside it the engine has moved."""
+    return abs(n - EXPECTED_N) <= N_TOLERANCE * EXPECTED_N
+
+
+def stats(rows, geometry) -> dict:
+    """Badge definitions: win rate over win + loss, expectancy over closed."""
+    outs = [row["outcomes"][geometry] for row in rows if row["outcomes"].get(geometry)]
+    closed = [o for o in outs if o["outcome"] in CLOSED]
+    decided = [o for o in closed if o["outcome"] in DECIDED]
+    wins = sum(1 for o in decided if o["outcome"] == "win")
+    return {"n": len(closed),
+            "win_rate": 100.0 * wins / len(decided) if decided else None,
+            "exp_r": statistics.fmean(o["r"] for o in closed) if closed else None}
+
+
+def medians(rows) -> dict:
+    """Median of each median-split feature over the IDENTIFIED population,
+    from the feature alone."""
+    out = {}
+    for key in MEDIAN_FEATURES:
+        values = [row["features"][key] for row in rows
+                  if row["features"]["fvg_role"] != ROLE_NONE
+                  and row["features"][key] is not None]
+        out[key] = statistics.median(values) if values else None
+    return out
+
+
+def side(row, key, med) -> bool | None:
+    """True = favourable, False = unfavourable, None = not computable."""
+    value = row["features"][key]
+    median = med.get(key)
+    if value is None or (key in MEDIAN_FEATURES and median is None):
+        return None
+    return bool(_FAVOURABLE[key](value, median))
+
+
+def _positive(value) -> bool:
+    return value is not None and value > 0
+
+
+def years_positive(rows, geometry) -> int:
+    """Calendar years 2020-2023 whose expectancy is above zero. A year with
+    no closed trade is not positive."""
+    return sum(1 for year in YEARS
+               if _positive(stats([r for r in rows if r["year"] == year], geometry)["exp_r"]))
+
+
+def feature_cell(rows, key, geometry, med) -> dict:
+    """One (feature, geometry) pair: both sides, the year count, coverage."""
+    sides = [(row, side(row, key, med)) for row in rows]
+    favourable = [row for row, verdict in sides if verdict is True]
+    unfavourable = [row for row, verdict in sides if verdict is False]
+    computable = len(favourable) + len(unfavourable)
+    return {"feature": key, "geometry": geometry,
+            "favourable": stats(favourable, geometry),
+            "unfavourable": stats(unfavourable, geometry),
+            "years_positive": years_positive(favourable, geometry),
+            "computable": computable,
+            "not_computable": len(rows) - computable,
+            "computable_share": computable / len(rows) if rows else 0.0}
+
+
+def _gap_r(cell) -> float | None:
+    fav, unfav = cell["favourable"]["exp_r"], cell["unfavourable"]["exp_r"]
+    return None if fav is None or unfav is None else fav - unfav
+
+
+def candidate_failures(cell) -> list:
+    """The clauses this (feature, geometry) pair fails; [] = a candidate.
+    Under the computable floor the pair is NOT TESTED and no clause is read.
+    An empty unfavourable side fails the +0.10R clause: there is nothing to
+    be better than."""
+    if cell["computable_share"] < MIN_COMPUTABLE_SHARE:
+        return [NOT_TESTED]
+    fav, gap = cell["favourable"], _gap_r(cell)
+    checks = (
+        ("N < 150", fav["n"] >= MIN_N),
+        ("win rate < 50%", fav["win_rate"] is not None and fav["win_rate"] >= MIN_WIN_RATE),
+        ("expectancy <= 0", _positive(fav["exp_r"])),
+        ("under +0.10R above the unfavourable side",
+         gap is not None and gap >= MIN_GAP_R - 1e-9),
+        ("positive in fewer than 3 of 4 years", cell["years_positive"] >= MIN_YEARS_POSITIVE),
+    )
+    return [name for name, ok in checks if not ok]
