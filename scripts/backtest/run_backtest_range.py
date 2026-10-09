@@ -82,11 +82,13 @@ def _market_frame():
     return _SPY_CACHE["df"]
 
 
-def _with_context(df):
+def _with_context(df, *, date_to=None):
     """Stamp one frame with the ctx_* block (P0). No-op when unavailable."""
     spy = _market_frame()
     if df is None or spy is None:
         return df
+    if date_to:
+        spy = spy.loc[:date_to]
     try:
         return market_context.attach(df, spy_df=spy)
     except Exception as e:

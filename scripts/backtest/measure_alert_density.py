@@ -341,7 +341,7 @@ def _worker(args):
     return ticker, rows, per_unit
 
 
-def load_frames(tickers, *, verbose=True):
+def load_frames(tickers, *, verbose=True, date_to=None):
     """{ticker: context-stamped frame} for every cached, liquid, clean ticker.
 
     Same exclusion sequence as run_backtest_range.run_scenario_mode, reached
@@ -352,7 +352,10 @@ def load_frames(tickers, *, verbose=True):
 
     frames, excluded = {}, {"uncached": [], "illiquid": [], "bad_data": []}
     for ticker in tickers:
-        df = rbr._with_context(rbr.load_cached(ticker))
+        raw = rbr.load_cached(ticker)
+        if raw is not None and date_to:
+            raw = raw.loc[:date_to]
+        df = rbr._with_context(raw, date_to=date_to)
         if df is None:
             excluded["uncached"].append((ticker, "not in backtest cache"))
             continue

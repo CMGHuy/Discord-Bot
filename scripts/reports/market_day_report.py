@@ -180,6 +180,10 @@ def _share(numer, denom) -> str:
     return "—" if not denom else f"{numer / denom * 100:.1f}%"
 
 
+def _share_for_days(numer, denom, days: int) -> str:
+    return _share(numer, denom) if days >= md.MIN_DAYS else "—"
+
+
 def _direction_form_lines(rows, days, direction: str, label: str, form: str,
                           intervals: bool) -> list[str]:
     lines = [f"### {label} by open day -- {FORM_NOTE[form]}", ""]
@@ -217,7 +221,7 @@ def _cause_lines(title: str, table: list[dict], pairs) -> list[str]:
     for row in table:
         totals = row["totals"]
         cells = [f"{totals.get(num, 0)} / {totals.get(den, 0)} = "
-                 f"{_share(totals.get(num, 0), totals.get(den, 0))}" for _, num, den in pairs]
+                 f"{_share_for_days(totals.get(num, 0), totals.get(den, 0), row['days'])}" for _, num, den in pairs]
         lines.append(f"| {row['bucket']} | {row['days']} | " + " | ".join(cells) + " |")
     return lines + [""]
 
@@ -292,13 +296,16 @@ def _live_volume_block(alerts, observed, days) -> list[str]:
 def _live_cause_block(sums, days) -> list[str]:
     lines = ["### Scan totals (all directions) and bullish stages", ""]
     staged = _with_reached(sums)
+    stage_days = {day: cell for day, cell in staged.items()
+                  if any(":" in key for key in cell)}
     pairs = _stage_pairs(sums)
     for form in md.FORMS:
         table = md.sum_by_bucket(staged, days, form)
         lines += _cause_lines(f"all-direction alerts / signals -- {FORM_NOTE[form]}", table,
                               [("alerts / signals", "alerts", "signals")])
         if pairs:
-            lines += _cause_lines(f"bullish stage pass rates -- {form}", table, pairs)
+            stage_table = md.sum_by_bucket(stage_days, days, form)
+            lines += _cause_lines(f"bullish stage pass rates -- {form}", stage_table, pairs)
     return lines
 
 
@@ -334,8 +341,9 @@ def _backtest_inputs(limit: int | None, workers: int | None):
     spy = rbr._market_frame()
     if spy is None:
         raise SystemExit("benchmark not in the backtest cache -- run scripts/data/fetch_backtest_data.py")
+    spy = spy.loc[:TRAIN[1]]
     tickers = cache_universe()[:limit] if limit else cache_universe()
-    frames, _ = mad.load_frames(tickers)
+    frames, _ = mad.load_frames(tickers, date_to=TRAIN[1])
     swept = mad.sweep(frames, *TRAIN, horizons=list(LEGACY_HORIZONS), gates=CONFLUENCE_GATES,
                       scale_out=True, strategies=list(ALL_STRATEGIES), workers=workers)
     print("counting raw entry signals...", flush=True)

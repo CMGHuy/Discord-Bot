@@ -67,3 +67,22 @@ def test_tickers_for_run_uses_named_universe(monkeypatch):
 def test_tickers_for_run_defaults_to_watchlist(monkeypatch):
     monkeypatch.setattr(rbr, "load_watchlist", lambda: ["ZZZ", "AAA"])
     assert rbr._tickers_for_run(None) == ["AAA", "ZZZ"]
+
+
+def test_with_context_caps_benchmark_at_train_end(monkeypatch):
+    import pandas as pd
+
+    frame = pd.DataFrame({"Close": [100.0]},
+                         index=pd.to_datetime(["2023-12-29"]))
+    spy = pd.DataFrame({"Close": [100.0, 110.0]},
+                       index=pd.to_datetime(["2023-12-29", "2024-01-02"]))
+    seen = []
+    monkeypatch.setattr(rbr, "_market_frame", lambda: spy)
+
+    def attach(df, *, spy_df):
+        seen.append(str(spy_df.index.max().date()))
+        return df
+
+    monkeypatch.setattr(rbr.market_context, "attach", attach)
+    assert rbr._with_context(frame, date_to="2023-12-31") is frame
+    assert seen == ["2023-12-29"]

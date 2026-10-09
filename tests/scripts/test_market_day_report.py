@@ -165,3 +165,47 @@ def test_live_section_prints_no_interval_and_no_correlation():
     assert "all directions" in text
     assert "bullish stages" in text
     assert "| > +1% | 12 | 12 | 100.00% " in text
+
+
+def test_live_cause_counts_only_staged_days_and_suppresses_thin_rates():
+    days = _market([1.5] * 12 + [-1.5] * 3, start="2026-09-01")
+    keys = list(days)
+    scans = [{"at": f"{d}T14:00:00+00:00", "signals": 2, "alerts": 1,
+              "funnel": {"bullish/base/base/send/ok": 1} if i < 3 else {}}
+             for i, d in enumerate(keys)]
+    text = "\n".join(report.live_section([], scans, days))
+    aggregate = text.split("**all-direction alerts / signals -- same_day", 1)[1].split(
+        "**bullish stage pass rates -- same_day", 1)[0]
+    staged = text.split("**bullish stage pass rates -- same_day", 1)[1].split(
+        "**all-direction alerts / signals -- prior_day", 1)[0]
+    assert "| > +1% | 12 | 12 / 24 = 50.0% |" in aggregate
+    assert "| < -1% | 3 | 3 / 6 = — |" in aggregate
+    assert "| > +1% | 3 | 3 / 3 = — |" in staged
+
+def test_backtest_inputs_cap_cached_frames_and_spy_to_train(monkeypatch):
+    import measure_alert_density as mad
+    import run_backtest_range as rbr
+    import runner_headroom
+
+    spy = pd.DataFrame({"Close": [100.0, 110.0]},
+                       index=pd.to_datetime(["2023-12-29", "2024-01-02"]))
+    seen = {}
+    monkeypatch.setattr(rbr, "_market_frame", lambda: spy)
+    monkeypatch.setattr(runner_headroom, "cache_universe", lambda: ["AAA"])
+
+    def load_frames(tickers, *, date_to=None):
+        seen["loader"] = (tickers, date_to)
+        return {}, {}
+
+    monkeypatch.setattr(mad, "load_frames", load_frames)
+    monkeypatch.setattr(mad, "sweep", lambda *a, **k: [])
+    monkeypatch.setattr(report, "raw_signal_counts", lambda *a: {})
+
+    def spy_days(frame):
+        seen["spy_last"] = str(frame.index.max().date())
+        return {}
+
+    monkeypatch.setattr(report, "_spy_days", spy_days)
+    assert report._backtest_inputs(None, 1) == ([], {}, {})
+    assert seen == {"loader": (["AAA"], "2023-12-31"),
+                    "spy_last": "2023-12-29"}

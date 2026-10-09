@@ -161,3 +161,33 @@ def test_strategy_rows_carry_direction_and_close_date(monkeypatch):
     assert rows[0]["direction"] == "bullish"
     assert rows[0]["closed_at"] == "2021-03-05"
     assert rows[0]["opened_at"] == "2021-03-01"      # unchanged
+
+
+def test_load_frames_caps_history_before_context_and_liquidity(monkeypatch):
+    import pandas as pd
+    import measure_alert_density as mad
+    import run_backtest_range as rbr
+    from swingbot.core.marketdata import universe
+
+    raw = pd.DataFrame({"Close": [100.0, 120.0]},
+                       index=pd.to_datetime(["2023-12-29", "2024-01-02"]))
+    seen = []
+
+    monkeypatch.setattr(rbr, "load_cached", lambda ticker: raw)
+
+    def context(frame, *, date_to=None):
+        seen.append(("context", str(frame.index.max().date()), date_to))
+        return frame
+
+    def liquidity(frame):
+        seen.append(("liquidity", str(frame.index.max().date()), None))
+        return None
+
+    monkeypatch.setattr(rbr, "_with_context", context)
+    monkeypatch.setattr(universe, "liquidity_reason", liquidity)
+    monkeypatch.setattr(universe, "data_quality_issues", lambda frame, ticker: [])
+    frames, excluded = mad.load_frames(["AAA"], date_to="2023-12-31", verbose=False)
+    assert excluded == {"uncached": [], "illiquid": [], "bad_data": []}
+    assert list(frames["AAA"].index) == [pd.Timestamp("2023-12-29")]
+    assert seen == [("context", "2023-12-29", "2023-12-31"),
+                    ("liquidity", "2023-12-29", None)]
