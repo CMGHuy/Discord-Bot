@@ -234,6 +234,23 @@ def test_risk_used_is_reported_with_its_cap(seed, logged_in):
     assert body["risk_cap_pct"] is not None
 
 
+def test_risk_used_skips_the_full_portfolio_collector(seed, logged_in, monkeypatch):
+    """The landing page needs two numbers -- heat and its cap. The full
+    collector also builds correlation clusters from per-ticker market-data
+    fetches (~3.7s on production), none of which the dashboard shows."""
+    import swingbot.commands.growth as growth
+    from swingbot.core.edge import heat
+
+    def boom():
+        raise AssertionError("dashboard must not run the full portfolio collector")
+
+    monkeypatch.setattr(growth, "_collect_portfolio_state", boom)
+    seed()
+    body = logged_in.get("/api/v1/dashboard").get_json()
+    assert body["risk_used_pct"] == heat.open_heat([], body["account_balance"] or 0.0)
+    assert body["risk_cap_pct"] is not None
+
+
 def test_open_trades_counts_open_positions(seed, logged_in):
     from tests.admin.test_api_v1_trades import _trade
     seed(trades=[

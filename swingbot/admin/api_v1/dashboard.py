@@ -79,9 +79,16 @@ def _risk_used() -> tuple[float | None, float | None]:
     """
     cap = float(getattr(config, "PORTFOLIO_HEAT_CAP_PCT", 6.0))
     try:
-        from swingbot.commands.growth import _collect_portfolio_state
-        state = _collect_portfolio_state()
-        return state.get("open_heat"), float(state.get("heat_cap", cap))
+        # Not `_collect_portfolio_state`: that also builds sector heat, the
+        # throttle, the growth path and correlation clusters (one market-data
+        # fetch per open ticker, ~3.7s on production), and this page shows
+        # none of it. Heat is a pure function of the open trades and balance.
+        from swingbot.core.edge import heat
+        from swingbot.core.planning import account as account_module
+        cfg = account_module.load_account_config()
+        balance = cfg.get("balance", cfg.get("base_balance", 0.0))
+        open_trades = TradeLog().get_trades(status="open", limit=None)
+        return heat.open_heat(open_trades, balance), cap
     except Exception:
         return None, cap
 
