@@ -20,7 +20,7 @@ EXPECTED = {
     },
     "task-reviewer": {
         "model": "sonnet",
-        "skills": {"no-lookahead"},
+        "skills": {"no-lookahead", "senior-engineer"},
     },
     # plan-writer inlines new-doc's rules rather than preloading the skill.
     "plan-writer": {
@@ -34,6 +34,12 @@ EXPECTED = {
     "backtest-runner": {
         "model": "sonnet",
         "skills": {"backtest-gate"},
+    },
+    # v145: one read-only reviewer parameterised by role. It loads the role
+    # skill at run time, so it preloads none.
+    "expert-reviewer": {
+        "model": "sonnet",
+        "skills": set(),
     },
 }
 
@@ -95,3 +101,18 @@ def test_prod_inspector_is_read_only():
     assert "Write" not in meta.get("tools", "")
     for forbidden in ("restart", ".env", "docker compose up", "sed -i"):
         assert forbidden in body, f"body must name {forbidden!r} as forbidden"
+
+# v145: the nine role skills expert-reviewer must name (spec § 1).
+EXPERT_ROLES = ("quant-researcher", "staff-engineer", "veteran-trader",
+                "risk-manager", "financial-advisor", "technical-analyst",
+                "fundamental-analyst", "quant-engineer", "senior-engineer")
+
+
+def test_expert_reviewer_is_read_only_and_knows_every_role():
+    meta, body = _read_agent("expert-reviewer")
+    tools = {t.strip() for t in meta.get("tools", "").split(",")}
+    assert tools == {"Read", "Grep", "Glob", "Bash", "Skill"}
+    missing = [role for role in EXPERT_ROLES if f"`{role}`" not in body]
+    assert not missing, missing
+    for word in ("BLOCKING", "ADVISORY", "CLEAN", "UNKNOWN ROLE"):
+        assert word in body, word

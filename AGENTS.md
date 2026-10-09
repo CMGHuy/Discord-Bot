@@ -342,7 +342,10 @@ same work to them so bulk output stays out of your context:
 `test-runner` (full or fast suite), `backtest-runner` (runs past ~2 minutes),
 `prod-inspector` (read-only VM questions), `symbol-verifier` (a plan's named
 symbols exist), `task-implementer` then `task-reviewer` (one plan task each,
-from a `task-brief`), and `plan-writer` (a plan from an approved spec).
+from a `task-brief`), `plan-writer` (a plan from an approved spec), and
+`expert-reviewer` (one expert role's read-only review, `role=<name>`, cited
+`BLOCKING`/`ADVISORY` findings or `CLEAN`; dispatched by `panel` one role at a
+time).
 
 ## Function complexity limit
 
