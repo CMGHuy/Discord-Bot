@@ -5,6 +5,7 @@ import {
 } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
+import { provideRouter } from '@angular/router';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -56,6 +57,7 @@ export function seed(payload: PnlCalendar = RESPONSE): ComponentFixture<Calendar
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
+      provideRouter([]),
       provideHttpClient(
         withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor]),
       ),
@@ -284,7 +286,7 @@ describe('Calendar day drawer', () => {
     TestBed.inject(HttpTestingController)
       .expectOne((r) => r.url === '/api/v1/calendar/pnl/day')
       .flush({ as_of: '2026-08-10T12:00:00Z', date: '2026-08-03', trades, trade_count: trades.length,
-        winners: 0, losers: 0, total_r: null, total_ccy: null,
+        winners: 0, losers: 0, win_rate: null, total_r: null, total_ccy: null,
         avg_trade_r: null, worst_drawdown_r: null,
         contributors: [], detractors: [] });
     await fixture.whenStable();
