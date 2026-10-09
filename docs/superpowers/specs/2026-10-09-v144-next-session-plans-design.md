@@ -33,6 +33,11 @@ parallel lane and never changes the existing one.
   strategy, so it first runs the Stage −2 idea screen
   (`scripts/backtest/screen_idea.py`, one shot) and gets a spec only on
   `SCREEN-PASS`. It plugs into the lane built here as one more signal source.
+- **Phase 2's first screen (decided 2026-10-09):** `next_session_stop` — a
+  market-entry candidate re-expressed as a buy stop above the signal-day high
+  (sell stop below the low for shorts), valid for the next session only. If it
+  passes, a later spec lets market candidates enter this lane through it. If
+  it fails, it is closed and they stay watch-only.
 
 ## Decisions settled with the partner (2026-10-09)
 
@@ -75,15 +80,27 @@ asked for a view of *tomorrow*.
    unchanged: 2% dollar-risk cap, earnings blackout, regime, strategy masks.
    NO-LOOKAHEAD holds trivially: the run sits after the daily close and uses
    only bars that are closed.
-3. **Issue.** Each candidate that passes becomes a `TradePlanV2` in `PENDING`
-   with `origin="next_session"` and `valid_session=<D as ISO date>`. Each plan
-   keeps its strategy's own entry type (stop entry or limit). Its levels are
+3. **Issue: stop-entry candidates only.** A candidate the builder makes as a
+   `stop_entry` (today, only confluence breakouts: `builders.py`,
+   `scenario_is_breakout`) becomes a `TradePlanV2` in `PENDING` with
+   `origin="next_session"` and `valid_session=<D as ISO date>`. Its levels are
    frozen at issue.
+   **Market-entry candidates are never issued** (decided 2026-10-09). A market
+   plan is born ACTIVE at the signal close (`record_transition(...,
+   reason="market_entry")`), and that price cannot be traded at 23:30.
+   `STRATEGY_ENTRY_TYPE` is `{}`, so every strategy-source plan is a market
+   entry. Converting them to a resting order would be a new entry rule, and a
+   new entry rule needs a screen first (see Phase 2 below). They appear in the
+   digest as **watch** names with their levels and the line `market entry:
+   fills at the signal close, no resting order for tomorrow`.
+   No live limit plan exists in Phase 1: `STRATEGY_GATES` masks both limit
+   strategies with `directions: ()`.
 4. **Near-misses.** Candidates that reach the plan builder but fail a gate are
    kept in the digest with their reason (for example `risk 2.6% > 2% cap`,
    `earnings in 2 sessions`, `no qualifying target`), reusing the existing
-   `plan_v2_rejected` / `not_logged_reason` strings. Near-misses are not plans
-   and never enter the book.
+   `plan_v2_rejected` / `not_logged_reason` strings. Near-misses and watch
+   names are not plans and never enter the book. Expect early outlooks to hold
+   few plans and several watch names.
 5. **Session D.** The normal live loop advances evening plans exactly as it
    advances regular ones: fill, `risk_cap` at fill, invalidation, then
    active/partial management until an exit. Once filled, an evening plan is an
@@ -107,19 +124,26 @@ compression rule otherwise.
   it unchanged.
 - The compression short's behaviour is unchanged, and its existing tests stay
   green untouched.
-- `valid_session` and `origin` are new fields on the stored plan record. That
-  is a shape change, so it follows `schema-evolution.md`: an Alembic revision,
-  nullable columns, no upcasting at read time. Existing rows read as
-  `origin=NULL` (meaning regular) and `valid_session=NULL`.
+- `valid_session` and `origin` are new fields on the stored plan record, and
+  `origin` on the trade record too (see Independence). Under
+  `schema-evolution.md`, adding a field needs no migration: it lands in `doc`,
+  and records without it read as regular. Promotion to a real column is
+  justified only by a real SQL use. One qualifies: a `PlanRepository` query by
+  `valid_session` (wrap-up and duplicate check), indexed. That promotion is an
+  Alembic revision `v144_001` (`down_revision = "v116_002"`) with a
+  `PROMOTION_REASONS` line.
 
 ## Independence from regular plans
 
-- **The "already open" guard ignores evening plans.** `analyze.py:_decision_for`
-  receives `already_open`, and that predicate must count regular plans only.
-  Otherwise an evening plan would block tomorrow's regular plan on the same
-  ticker, which would change the existing lane. Symmetrically, the 23:30 run's
-  own "already open" check counts only `next_session` plans, so a ticker with a
-  regular plan can still get an evening one.
+- **The "already open" guard ignores evening trades.** `already_open` is a
+  trade check, not a plan check: `trade_log.open_trade_for_ticker(ticker) is
+  not None` (`scan_run.py` ~800, `short_run.py:281`). The trade record
+  therefore carries `origin`, and `open_trade_for_ticker` gains an origin
+  filter defaulting to regular-only. Otherwise a filled evening trade would
+  block tomorrow's regular plan, and steer the reversal path, on that ticker.
+  Symmetrically, the 23:30 run's duplicate check counts only `next_session`
+  plans and trades, so a ticker with a regular plan can still get an evening
+  one.
 - **No cross-cancellation.** Neither lane ever cancels or supersedes the other.
 - **Risk is surfaced, not prevented.** When a regular plan is open or pending
   on the same ticker, the evening card says
@@ -129,24 +153,32 @@ compression rule otherwise.
 
 ## Cancellation-reason catalogue
 
-The reason is computed from session D's own price data (hourly bars from the
-`market_data/` cache, falling back to the daily bar) once D has closed. Each
-reason has a code (stored in `status_history` as `reason=`) and a one-line
-message (in the wrap-up and the cancellation notice).
+Two cancellations happen **during** session D, through the existing live
+transitions, and only gain a readable message here. Two more are decided **at
+D's close** by the new expiry classifier. Each reason has a code (stored in
+`status_history` as `reason=`) and a one-line message (in the wrap-up and the
+cancellation notice).
 
-| Code | When | Message (example) |
-|---|---|---|
-| `never_triggered` | Trigger never reached in RTH | `High 101.40 stopped 0.6% (0.4 ATR) short of the 102.00 trigger` |
-| `invalidated` | Closed through the stop before the trigger (existing rule) | `Closed 95.80 through the 96.00 stop before triggering; the setup broke` |
-| `risk_cap` | Triggered, but the fill would have breached the 2% cap (existing rule) | `Gapped to 104.10 at the open; the stop distance (3.1%) is over the 2% cap` |
-| `no_session_data` | No quote for D reached the bot | `No price data for <D>; plan expired unevaluated` |
+| Code | Decided | When | Message (example) |
+|---|---|---|---|
+| `invalidated` | in session (existing `cancelled_invalidated`) | Price through the stop before the trigger | `Traded 95.80 through the 96.00 stop before triggering; the setup broke` |
+| `risk_cap` | in session (existing `cancelled_risk_cap`) | Triggered, but the fill breaches the 2% cap | `Gapped to 104.10 at the open; the stop distance (3.1%) is over the 2% cap` |
+| `never_triggered` | at close | Trigger never reached in RTH | `High 101.40 stopped 0.6% (0.4 ATR) short of the 102.00 trigger` |
+| `no_session_data` | at close | Neither an hourly nor a daily bar for D | `No price data for <D>; plan expired unevaluated` |
+
+**Data source at close.** The hourly cache cannot be trusted to be fresh at
+D's close: `market_data_refresh` wakes every `MARKET_DATA_REFRESH_MINUTES`
+(60), and `data_refresh.is_stale` uses the file mtime with
+`REFRESH_HOURS["hourly"] = 4.0`, so the CSV can miss D's last 4–5 RTH bars.
+The classifier uses the hourly cache only when it covers D's last RTH hour;
+otherwise it uses D's daily bar via the existing `PlanManager.daily_frame_fn`
+(daily bars are RTH-only, so its high/low is exactly what `never_triggered`
+needs). The classifier runs on the first poll after the close and never
+fetches. The wrap-up does not fetch either.
 
 `never_triggered` is the expected common case, so its message carries the
 distance (percent and ATR multiples) between D's extreme and the trigger. That
-makes a run of near-misses legible over time. Limit plans read the same way
-with "low" in place of "high" for a bullish buy limit, and the limit's cancel
-level (v131) when it fired first: `Leg ran past the 98.50 cancel level; limit
-withdrawn`.
+makes a run of near-misses legible over time.
 
 ## Discord surface
 
@@ -164,16 +196,31 @@ withdrawn`.
   - the ⚠ overlap line when it applies.
 
   The context line uses the existing hourly/weekly frames and is display only.
-- **Wrap-up at D's close + 15 min** (the `daily_recap` trigger shape), one
-  message: filled (with entry), cancelled (with the catalogue message), and a
+- **Wrap-up at D's close + 15 min**, with the time taken from
+  `session_close(D)` in ET (not `daily_recap`'s `SESSION_END_HOUR:15` Berlin;
+  only its minute poll and fired-once guard are reused). It posts once all of
+  D's evening plans are terminal, as one message: filled (with entry), cancelled (with the catalogue message), and a
   count line, for example `3 issued · 1 filled · 2 cancelled (never_triggered ×2)`.
 
 ## Analytics
 
 Evening plans flow into the journal like any paper trade, carrying `origin`.
-Every pooled figure (ExpR, win rate, badge tiers, edge priorities) filters to
-`origin IS NULL`, so today's numbers are byte-identical before and after this
-ships. A test pins that against a fixture book holding one evening trade. The
+Every pooled figure filters to `origin is None`, so today's numbers are
+byte-identical before and after this ships. A test pins that against a fixture
+book holding one evening trade. Where the filter goes:
+
+- **The v93 ledger rule** (`swingbot/core/tracking/ledger.py`): `is_main` and
+  `is_weak` also require `origin is None`. This covers `get_stats` (feeding
+  `track_record` in `analyze.py`), every `get_trades(ledger="main")` caller,
+  and the dashboard main-ledger stats. The dashboard's weak panel, which tests
+  `not is_main`, becomes `is_weak`.
+- **Readers the ledger rule misses**, each filtered explicitly:
+  `analytics/scope.select` (raw `ledger` compare; the admin cohort filter also
+  lives here), `JournalStore.entries()` → `params._journal_entries` (E31/E32
+  overrides), the soak verdict's `PlanStore().all()` (`stats.py`,
+  `admin/api_v1/analytics.py`), `pnl_calendar` and `snapshots`.
+- **Badges** come from the backtest registry (`registry.get_badge`), so
+  evening trades cannot move a badge tier. The
 admin analytics gain a cohort filter (`origin = next_session`) showing N,
 fill rate (issued → filled), win rate and ExpR of the filled trades, and the
 cancellation-reason histogram. Deciding whether the cohort ever pools is a
@@ -217,9 +264,20 @@ later, measured decision and is out of scope here.
 - No orders: paper trades only, as everywhere in this bot.
 - No pooling of the cohort into headline statistics.
 
-## Open point for the plan
+## Amendments (2026-10-09, before the plan)
 
-Whether hourly bars for D are fresh in `market_data/1h` by D's close + 15 min
-(the refresh has a 4h staleness window), or whether the wrap-up has to fetch
-D's hourly bars itself. The plan should check `market_data_refresh` and pick
-one.
+Plan-writing checked the spec against the code and found six errors, now fixed
+above:
+
+1. Market entries, the dominant type, were not covered. They are excluded and
+   shown as watch names, and Phase 2 screens `next_session_stop` (partner
+   decision).
+2. `already_open` is a trade check, so `origin` also goes on the trade record.
+3. No live limit plan exists, so the limit wording was dropped.
+4. `invalidated` and `risk_cap` are decided in session, not at close.
+5. The wrap-up time comes from the NYSE close, not `SESSION_END_HOUR:15`.
+6. A new field needs no migration. Only the `valid_session` promotion takes
+   one.
+
+The open point (is the hourly cache fresh at close?) is resolved: it is not,
+so the classifier falls back to the daily bar.
