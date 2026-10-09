@@ -18,8 +18,9 @@ def test_fields_and_vocabularies_are_the_plan_set():
     assert stats.LEDGER_FIELDS == ("id", "date", "hypothesis", "instrument", "n",
                                    "exp_r", "p", "verdict", "record")
     assert stats.VERDICTS == ("PASS", "FAIL", "NO-LIFT", "UNMEASURABLE",
-                              "WITHDRAWN", "OPEN")
-    assert stats.INSTRUMENTS == ("v1", "v2")
+                              "WITHDRAWN", "OPEN", "SCREEN-PASS", "SCREEN-FAIL",
+                              "SCREEN-UNDERPOWERED")
+    assert stats.INSTRUMENTS == ("v1", "v2", "screen-v1")
 
 
 def test_ledger_path_is_the_committed_results_file():
@@ -145,3 +146,15 @@ def test_unicode_line_separators_in_text_round_trip(tmp_path, sep):
 def test_iso_week_date_is_refused():
     with pytest.raises(ValueError, match="'date'"):
         stats.validate_ledger_row(_row(date="2026-W41-1"))
+
+
+@pytest.mark.parametrize("verdict", ["SCREEN-PASS", "SCREEN-FAIL", "SCREEN-UNDERPOWERED"])
+def test_a_screen_row_validates(verdict):
+    stats.validate_ledger_row(_row(id="screen-demo", instrument="screen-v1",
+                                   verdict=verdict))
+
+
+def test_the_committed_ledger_still_loads_unchanged():
+    rows = stats.load_ledger()
+    assert len(rows) >= 57
+    assert all(row["verdict"] in stats.VERDICTS for row in rows)

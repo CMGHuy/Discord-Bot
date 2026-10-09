@@ -50,12 +50,36 @@ interpreting any backtest, grid, or validation result.
   break-even, the way 80% was over 76.9% — **do not restore 80% for any run
   against the current engine.**
 
+- **Stage −2: the idea screen (v140, `swingbot/core/backtesting/screen/`).**
+  Answers "does this entry predict anything, after costs, beyond its own
+  trend state?" before anyone writes a spec. Every event on the
+  point-in-time S&P 500 (2010-01-01..2019-12-31, `data/backtest_cache_ext`)
+  races one fixed trade — entry next open, stop 1.5 × ATR14, target
+  3 × ATR14, gaps through either level filled at the open, an idea-specific
+  time cap, 5 bps slippage a side plus commission — against K = 20 random
+  non-event bars from the same ticker, month and trend state
+  (`close > SMA200`). Pass rule, all four: paired ΔExpR ≥ +0.10R; lower 95%
+  bound > 0 (week-clustered bootstrap, 10,000 resamples); same sign in ≥ 7
+  of 9 calendar years, 2011–2019 (2010 is warm-up only; a year with no events counts against); N ≥ 300
+  events (below that, `SCREEN-UNDERPOWERED`, closed like a fail). Forward
+  drift and rank correlation are printed, never gating. +0.10R because
+  measured TRAIN→out-of-sample shrinkage has run 50–60% and the funnel's
+  paired MDE is 0.017–0.05R. **One shot per idea**: `screen_idea.py`
+  refuses an idea whose `screen-<name>` ledger id exists, and a changed
+  parameter is a new idea with a new name. **A fail is closed** and gets no
+  spec. **A pass buys a spec, not a verdict**: the idea then runs this
+  funnel unchanged (its 2010–2019 window overlaps only the funnel's own
+  selection window). New `Edge: expectancy` / `volume` specs adding an
+  entry strategy or filter cite the pass in their `**Screen:**` header
+  (`document-conventions.md`), enforced by
+  `tests/hooks/test_spec_screen_header.py`.
 - **The acceptance funnel.** Selection never touches scoring data, and two
   free gates stand in front of the one-shot budget. Run it with
   `python scripts/backtest/validate_component.py --stage <stage>`.
 
   | Stage | Window | Cost | Rule |
   |---|---|---|---|
+  | −2 `screen` (v140, before any spec; `scripts/backtest/screen_idea.py`) | PIT S&P 500, 2010-01-01..2019-12-31 | free, **one shot per idea** | ΔExpR ≥ +0.10R after costs vs a matched random baseline, lower 95% week-cluster bound > 0, ≥ 7 of 9 years (2011–2019) positive, N ≥ 300 — else `SCREEN-FAIL` / `SCREEN-UNDERPOWERED`, closed |
   | −1 `reachability` | pilot (2018-06..2020-12, 10 tickers) | free | a knob unreachable by replay, or zero changed outcomes, is **refused; budget intact** |
   | 0 `mde` | fold-train | free | TRAIN effect below the minimum detectable effect ⇒ **shot refused, budget intact** |
   | 1 selection | fold-train only (2018-06..2020 / ..2021 / ..2022) | free | `plateau_report()` mandatory and disqualifying — a spike, not a plateau, does not proceed |
@@ -174,6 +198,10 @@ current defaults without a re-run.
 
 | Component | Outcome | Record |
 |---|---|---|
+| Idea screen `high52w` — close >= 0.95 x the 252-bar high with SMA50 > SMA200, first true bar after >= 20 consecutive computable false bars, fixed 1.5/3 ATR race vs a K=20 matched null, cap 60, PIT S&P 500 2010-2019, after costs (v140 Stage −2) | **SCREEN-FAIL.** N=3612 kept events, ΔExpR -0.3660R (95% [-0.4261, -0.3036]), 0 of 9 years positive; mean R_event +0.0727R vs mean R_null +0.4386R. Closed: no spec, never re-screened; a changed parameter is a new idea with a new name. | `results/2026-10-08-screen-high52w.md`, ledger `screen-high52w` |
+| Idea screen `uptrend_pullback` — close > SMA200 and Wilder RSI(2) < 10, fixed 1.5/3 ATR race vs a K=20 matched null, cap 10, PIT S&P 500 2010-2019, after costs (v140 Stage −2) | **SCREEN-PASS.** N=26912 kept events, ΔExpR +0.3672R (95% [+0.3107, +0.4261]), 9 of 9 years positive; mean R_event +0.0780R vs mean R_null -0.2892R. Has earned a spec, nothing more: it next runs the unchanged funnel (v72 for a filter, the badge path for a strategy) with live-trigger/screen-trigger parity pinned by a test. | `results/2026-10-08-screen-uptrend_pullback.md`, ledger `screen-uptrend_pullback` |
+| Idea screen `gap_volume` — open >= prior close + 1.0 x prior ATR14 on >= 2 x the 50-bar mean volume, close >= open, fixed 1.5/3 ATR race vs a K=20 matched null, cap 20, PIT S&P 500 2010-2019, after costs (v140 Stage −2) | **SCREEN-FAIL.** N=1834 kept events, ΔExpR -0.4639R (95% [-0.5505, -0.3787]), 0 of 9 years positive; mean R_event +0.1151R vs mean R_null +0.5790R. Closed: no spec, never re-screened; a changed parameter is a new idea with a new name. | `results/2026-10-09-screen-gap_volume.md`, ledger `screen-gap_volume` |
+| Idea screen `turn_of_month` — last trading day of the calendar month, fixed 1.5/3 ATR race vs a K=20 matched null, cap 4, PIT S&P 500 2010-2019, after costs (v140 Stage −2) | **SCREEN-FAIL.** N=38349 kept events, ΔExpR -0.0453R (95% [-0.1271, +0.0362]), 1 of 9 years positive; mean R_event -0.0495R vs mean R_null -0.0042R. Closed: no spec, never re-screened; a changed parameter is a new idea with a new name. | `results/2026-10-09-screen-turn_of_month.md`, ledger `screen-turn_of_month` |
 | Structure-break armed entries — MSB / HL after the zone test, one arm per touch episode (v127) | **NO_ELIGIBLE_CELL, budget intact.** Ended at Stage 1 selection; no cell selected and the rule's pick before the plateau check was none, so Stage 0/2/3 and the plateau and trigger reports never ran. 12-cell grid (MSB / HL x N in {5,10,15} x k in {0.25,0.50}) replayed over 75 cached tickers (64 with selection-window rows) against a shared 2018-06-01..2020-12-31 baseline (N=2590). All six MSB cells failed on profit and win rate: ΔExpR -0.1366R to -0.1443R and ΔWR -1.06 to -1.89pp, with alert volume 1.58-1.76x baseline (cut -58% to -76%); least-bad was `MSB-N5-k0.50` at ΔExpR -0.1366R, ΔWR -1.06pp, volume ratio 1.601. The HL cells were starved rather than inflated: 0 / 0 / 234 / 227 / 454 / 460 issued rows (volume ratio 0.000-0.178), ΔWR -3.81 to -6.38pp and ΔExpR -0.1522R to -0.1875R where defined (N5 cells empty, n/a). Reopening needs a genuinely new mechanism, not a looser threshold or another grid over these knobs. | `results/2026-10-07-v127-structure-run1.md`, `results/2026-10-07-v127-structure-stage1.md`, `results/2026-10-07-v127-structure-stage1.json` |
 | Acceptance-failure exit, arm Z — confluence disaster stop + close exit, m ∈ {0.5, 1.0, 1.5} × b ∈ {0, 0.25} (v129) | **NO_ELIGIBLE_CELL at Stage 1, budget intact.** Stage 0 was POWERED (TRAIN 2020-2023, 73 tickers, 8089 baseline rows, MDE 0.0165R against the 0.10R ceiling). At Stage 1 every cell failed `expectancy_gain`: ΔExpR +0.0043R, 95% interval [-0.0056, +0.0170], p=0.2408 (b=0) / 0.2427 (b=0.25); win-rate floor and volume passed (ΔWR +0.75pp, N 8089 → 8090). `m` never binds: the disaster stop lands on the 2% cap for all three values (0 of 8090 rows differ), so the six cells are effectively two. The close exit fired twice among 2815 eligible rows, because eligible levels sit within 2% of entry while ATR14 is about 2-6% of price and the intrabar stop wins first. Stages 2/3 never ran; VALIDATION unspent. Reopening needs a mechanism other than "exit on a daily close beyond the plan's own level ∓ b·ATR14, with the intrabar stop m·ATR14 past the level, capped at 2%". A looser MDE ceiling, another grid or another window is not a new mechanism. | `results/2026-10-03-v129-armZ.md`, `results/2026-10-03-v129-preregistration.md` |
 | Acceptance-failure exit, arm B — Break & Retest close exit at the broken level, b ∈ {0, 0.25} (v129) | **UNDERPOWERED at Stage 0, budget intact.** TRAIN 2020-2023, 168 rows per cell (50 tickers; the spec expected about 105). The b=0 cell's paired MDE is 0.1755R, over the 0.10R ceiling (b=0.25: 0.0947R, powered), which closes the arm. Stages 1-3 never ran; VALIDATION unspent. Reopening needs a mechanism other than "exit on a daily close beyond the plan's own level ∓ b·ATR14". A looser MDE ceiling, another grid or another window is not a new mechanism. | `results/2026-10-03-v129-armB.md`, `results/2026-10-03-v129-preregistration.md` |

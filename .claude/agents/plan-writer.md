@@ -16,6 +16,7 @@ Inlined from the `/new-doc` skill; full detail: `docs/claude/document-convention
 
 - File: `docs/superpowers/plans/<spec's date>-v<spec's N>-<spec's name>.md` — reuses the spec's `vN`.
 - Header: `**Bump:**` level only, `**Edge:**` one of `expectancy`/`harvest`/`volume`/`none (integrity)`, `**Spec:**` link back.
+- A spec numbered above v140 must carry `**Screen:**` under `Edge:` (`document-conventions.md`); a spec without one is a `BLOCKED:` question, not a plan.
 - `### Task <PREFIX><n>:` headings, `# Phase` sections; over 1500 lines split into `_N` parts — never compress a task.
 - `## Parallelisation`: disjoint files + no contract dependency; name every sequential-edge reason.
 - One full-suite run as the final task; verify every named symbol exists (`git grep -n`) or mark it created by an earlier task.

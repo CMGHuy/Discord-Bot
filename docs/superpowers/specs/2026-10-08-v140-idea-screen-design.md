@@ -4,7 +4,7 @@
 **Bump:** none (research tooling and methodology only; nothing in the live path changes)
 **Edge:** expectancy — the screen is a tightening, paired with its widening: four candidate entry edges from outside the bot's current feature family, each screened once
 **Screen:** exempt (this spec introduces the screen)
-**Status:** spec written 2026-10-08; no plan yet.
+**Status:** implemented 2026-10-09; first batch screened once each: 1 of 4 `SCREEN-PASS` (`uptrend_pullback`). Summary: `docs/superpowers/results/2026-10-09-v140-screen-summary.md`.
 
 ## Why
 
