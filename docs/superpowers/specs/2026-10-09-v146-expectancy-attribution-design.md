@@ -149,8 +149,13 @@ computed on the replay's `window` (`df.iloc[:i+1]`):
 - `confidence_score`, `confidence_points`, `confidence_unevaluated` —
   `score_confidence` called exactly as live (`analyze.py:953-958`) with
   `regime_trend` from `get_market_regime` (`swingbot/core/scanning/regime.py:88`)
-  on SPY sliced to the signal bar, `track_record=None` (the live book is
-  not as-of; the legacy path then makes no expectancy adjustment).
+  on SPY sliced to the signal bar. `track_record=None` is **not** neutral:
+  `_expectancy_adjustment` (`confidence.py:255-276`) falls back to an assumed
+  win rate and moves the level +1/-1 by reward:risk. The TRAIN score is
+  therefore computed with that adjustment neutralised (0 levels), a switch
+  frozen in the code before the run; the live score keeps whatever it had.
+  The R:R distribution is reported inside each tercile (§Study) so any
+  residual R:R effect is visible.
 
 `run_scenario_mode` today builds no as-of map, so `entry_context.rs_pctile`
 and `regime2_state` would be empty; it gains the same `_build_asof_map`
@@ -180,6 +185,9 @@ pure apart from one loader and one writer.
 `scripts/reports/expectancy_attribution.py` is a thin wrapper (argument
 parsing, call, print).
 
+**TRAIN replay exit model:** v2 exits with scale-out (`--exit-model v2
+--scale-out`, `run_backtest_range.py:391-392`), as live, so R units match.
+
 **Populations, never pooled.**
 
 | | Live | TRAIN |
@@ -191,23 +199,67 @@ parsing, call, print).
 VALIDATION is never read.
 
 **Per population, one N / WR / ExpR row per bucket of:**
-confidence decile (population quantiles of `confidence_score`, ties broken
-by rank), confluence count, `regime2_state`, RS quintile, and earnings
-bucket (`0-5`, `6-10`, `11-20`, `>20` sessions, `none`, `unknown`). Live
-earnings comes from `risk_features.days_to_earnings` and is `unknown` for
-every trade before I2 ships. TRAIN earnings is computed by the study with
-`sessions_to_reaction(…, source=CsvSource())` as of each signal date (the
-v82 calendar; actual report dates, which the results doc notes as a mild
-optimism the v82 row also accepted).
+confidence decile (population quantiles of `confidence_score`), confluence
+count, `regime2_state`, RS quintile, direction, horizon, and earnings bucket
+(`0-5`, `6-10`, `11-20`, `>20` sessions, `none`, `unknown`) plus an
+**earnings-inside-the-hold** flag (`sessions_to_reaction` <= the horizon's
+`max_holding_days`, `strategy_types.py:HORIZONS`, e.g. `:64`). Per decile
+also: the count of rows with >= 1 factor in `confidence_unevaluated`, and
+the R:R distribution. ExpR is also reported per confidence **level**, so a
+live NOT PREDICTIVE is not misread as "score useless" when the alert gate
+(`MIN_ALERT_CONFIDENCE_LEVEL`) already took the edge; the live range
+restriction is stated beside it.
+
+**Tie-break.** Tied scores are never split. A tied block goes wholly to the
+tercile (decile) containing its median rank; deterministic, no randomness.
+
+**Earnings definitions.** Live: `risk_features.days_to_earnings`, a
+provider point-in-time estimate, `unknown` for every trade before I2 ships.
+TRAIN: the study calls `sessions_to_reaction(…, source=CsvSource())` as of
+each signal date (v82 calendar) on *actual* report dates. The two differ and
+are never merged; any earnings screen candidate needs a point-in-time
+re-check before its Stage -2 screen.
+
+| TRAIN bucket | Knowable at signal? |
+|---|---|
+| `0-5`, `6-10` | mostly (dates are announced weeks ahead) |
+| `11-20` | partly |
+| `>20`, `none` | ex-post (date or absence learned later) |
+
+Report timing (before_open / after_close) is ex-post and can move a row
+across the `0-5` edge; stated, not corrected. TRAIN **`unknown`** = ticker
+with no earnings CSV, or signal date past the last CSV report plus a margin
+(fixed in code, default 100 calendar days); **`none`** only when coverage
+proves no report in range.
 
 **Per-factor ExpR delta.** For each factor key: ExpR of rows where it
 scored > 0, minus ExpR where it scored 0, excluding rows where it is in
 `confidence_unevaluated`. Live history before I1 comes from the backfill.
 
 **Monotonicity.** Spearman ρ(`confidence_score`, R) and top-minus-bottom
-tercile ExpR, with a 95% bootstrap CI — 10,000 resamples clustered by
-entry ISO week (the Stage −2 convention: same-week trades are not
-independent), fixed seed recorded in the output.
+tercile ExpR, with a 95% bootstrap CI via `week_cluster_bootstrap`
+(`swingbot/core/backtesting/instrument/stats.py:57`; same-week trades are
+not independent), seed recorded in the output. Tercile cut points are fixed
+once on the full sample, not recomputed per resample.
+
+**Multiple comparisons.** The results doc reports the number of looks.
+Every flagged delta or bucket gets a week-clustered CI. A bucket or factor
+becomes a screen candidate only if its BH q-value over all looks is < 0.10
+(`bh_qvalues`, `stats.py:86`, the procedure behind `ledger_qvalues`, `:208`).
+
+**Frictions and fill model.** Both populations' R must be net of frictions
+(`swingbot/core/edge/frictions.py`). The named-strategy backtest applies
+them (`backtest.py:690-743`); the confluence replay's `exit_sim` does not
+call them, so the study re-applies `apply_frictions` and `commission_r` to
+TRAIN rows and reports gross and net ExpR; the plan verifies what live
+`r_multiple` includes and states it. Results caveats name the backtest vs
+live gap-fill model differences (`exit_sim.py:541-548`).
+
+**Direction and horizon.** Every verdict table is also split by direction
+and horizon, so any lift concentrating in one is visible.
+
+**Provenance.** The results doc records the `market_data/earnings/` file set
+(hash or newest `report_date`) and the v82 calendar reference.
 
 **Buckets with N < 30** are shown greyed and enter no verdict.
 `MIN_CELL_N` (20, `aggregate.py:22`) is untouched; 30 is the
@@ -218,8 +270,9 @@ methodology's TRAIN floor.
 Computed once, at the run the plan schedules, and recorded in the results
 document. On the top-minus-bottom tercile ExpR CI:
 
-- **PREDICTIVE** — lower bound > 0 in **both** populations.
-- **WEAK** — lower bound > 0 in exactly one.
+- **PREDICTIVE** — lower bound > 0 **and** point estimate >= +0.10R in
+  **both** populations.
+- **WEAK** — that holds in exactly one.
 - **NOT PREDICTIVE** — otherwise. A CI wholly below zero is reported as
   "inverted" inside this verdict, not as a fourth one.
 
@@ -303,3 +356,23 @@ per-ticker progress and a percent file deleted on completion.
 - On **PREDICTIVE**, a Stage −2 screen spec for a confidence floor or
   confidence-weighted sizing; on any verdict, one screen spec per bad
   bucket the partner chooses to pursue.
+
+## Panel review
+
+- quant-researcher: `_expectancy_adjustment` is not neutral at `track_record=None`; TRAIN score neutralises it, frozen pre-run, R:R reported per tercile -- applied
+- quant-researcher: name `week_cluster_bootstrap` (`stats.py:57`); tercile cuts fixed once on the full sample -- applied
+- quant-researcher: tied scores never split; tied block goes to the tercile of its median rank, deterministic -- applied
+- quant-researcher: PREDICTIVE needs CI lower bound > 0 and point estimate >= +0.10R in both populations -- applied
+- quant-researcher: report looks count, week-clustered CI per flag, screen candidate only if BH q < 0.10 -- applied
+- quant-researcher: direction and horizon breakdowns -- applied
+- quant-researcher: TRAIN replay uses v2 exits with scale-out -- applied
+- quant-engineer: earnings TRAIN lookahead stated per bucket -- applied
+- quant-engineer: earnings timing (before_open/after_close) is ex-post and can move rows across the 0-5 edge -- applied
+- quant-engineer: TRAIN `unknown` vs `none` defined by CSV coverage -- applied
+- quant-engineer: live (point-in-time estimate) vs TRAIN (actual dates) earnings differ; point-in-time re-check before any earnings screen -- applied
+- quant-engineer: results doc records `market_data/earnings/` file set and v82 calendar reference -- applied
+- veteran-trader: R net of frictions stated, gross and net ExpR reported -- applied
+- veteran-trader: backtest vs live gap-fill model differences named in results caveats -- applied
+- veteran-trader: ExpR per confidence level, live range restriction noted -- applied
+- veteran-trader: earnings-inside-the-hold flag bucket -- applied
+- veteran-trader: per-decile count of rows with >= 1 unevaluated factor -- applied
