@@ -268,7 +268,7 @@ def _render_head(idea, v, run) -> list:
         f"{race.STOP_ATR * race.REWARD_RISK} x ATR14; a gap through either level "
         f"fills at the open; stop first on a bar touching both; costs "
         f"{run['slippage_bps']} bps a side + {run['commission']:.4f}R commission.", "",
-        "**Spec:** `docs/superpowers/specs/2026-10-08-v140-idea-screen-design.md`",
+        "**Spec:** `docs/superpowers/specs/implemented/2026-10-08-v140-idea-screen-design.md`",
     ]
 
 

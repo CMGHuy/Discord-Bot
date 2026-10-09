@@ -8,7 +8,7 @@
 
 v140 and earlier are grandfathered by number. A split spec carries the line
 in its _0-index part. See
-docs/superpowers/specs/2026-10-08-v140-idea-screen-design.md.
+docs/superpowers/specs/implemented/2026-10-08-v140-idea-screen-design.md.
 """
 from __future__ import annotations
 
