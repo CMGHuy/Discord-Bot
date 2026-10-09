@@ -1,10 +1,10 @@
 # v144 Next-session plans: Implementation Plan, index
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read a part whole**: pull one task with `/task-brief V144-4` or `grep -n "^### Task V144-4:" -A 400 docs/superpowers/plans/2026-10-09-v144-next-session-plans_*.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read a part whole**: pull one task with `/task-brief V144-4` or `grep -n "^### Task V144-4:" -A 400 docs/superpowers/plans/implemented/2026-10-09-v144-next-session-plans_*.md`.
 
 **Bump:** bot minor
 **Edge:** none (integrity)
-**Spec:** [`docs/superpowers/specs/2026-10-09-v144-next-session-plans-design.md`](../specs/2026-10-09-v144-next-session-plans-design.md) (as amended in `a52cc4bd`: stop-entry candidates only, market candidates as watch names, `origin` on the trade record too, invalidated/risk_cap decided in session, wrap-up time from the NYSE close, only `valid_session` promoted)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-09-v144-next-session-plans-design.md`](../../specs/implemented/2026-10-09-v144-next-session-plans-design.md) (as amended in `a52cc4bd`: stop-entry candidates only, market candidates as watch names, `origin` on the trade record too, invalidated/risk_cap decided in session, wrap-up time from the NYSE close, only `valid_session` promoted)
 
 **Goal:** At 23:30 Berlin, Sunday to Thursday, scan the watchlist on today's closed daily bar and issue tomorrow's stop-entry plans as a segregated `origin="next_session"` cohort. Each plan is valid for one NYSE session and is cancelled with a stated reason if not filled by that session's close. A wrap-up posts after the close. The regular lane is unchanged.
 
