@@ -35,6 +35,7 @@ BACKFILL_IDS = (
 EXEMPT = {
     "v124": "read-only diagnostic, four arms, no budget spent",
     "v127": "NO_ELIGIBLE_CELL at Stage 1, budget intact; verdict not in the ledger enum",
+    "v143": "read-only diagnostic, nine features at three geometries, no budget spent",
     "v140": "ledgered as screen-<idea> (instrument screen-v1), not under a v140- prefix",
     "v72": "named only as the funnel pointer in a screen row's closing sentence",
 }
