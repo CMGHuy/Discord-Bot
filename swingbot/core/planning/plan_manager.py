@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import NamedTuple
 
 from swingbot import config
@@ -30,6 +30,8 @@ from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.planning.stop_scope import plan_stop_ceiling
 from swingbot.core.planning.plan_types import breakeven_trigger, effective_stop
+from swingbot.core.planning import session_expiry
+from swingbot.core.tracking.origin import NEXT_SESSION
 
 log = logging.getLogger(__name__)
 
@@ -253,12 +255,20 @@ def maybe_pyramid(plan, price: float) -> dict | None:
 
 
 def _eligible_session(plan: TradePlanV2):
-    """The one NYSE session (a date) that may fill a stop-entry plan: the first
-    session strictly after the signal day. A date-only ``created_at`` is stored
-    as UTC midnight, so midnight (read in UTC, whatever offset the database
-    session handed it back in) is that calendar date; any other stamp is
-    converted to its ET date. None when the stamp is unreadable or the
-    calendar ends first (the caller then falls back to the normal path)."""
+    """The one NYSE session (a date) that may fill a resting one-session plan.
+
+    v144: an outlook plan names it (`valid_session`, an ISO date). Otherwise
+    v119's compression rule: the first session strictly after the signal day. A
+    date-only ``created_at`` is stored as UTC midnight, so midnight (read in UTC,
+    whatever offset the database session handed it back in) is that calendar
+    date; any other stamp is converted to its ET date. None when a stamp is
+    unreadable or the calendar ends first (the caller then falls back to the
+    normal path)."""
+    if plan.valid_session is not None:
+        try:
+            return date.fromisoformat(str(plan.valid_session))
+        except ValueError:
+            return None
     try:
         created = datetime.fromisoformat(str(plan.created_at))
     except ValueError:
@@ -267,9 +277,20 @@ def _eligible_session(plan: TradePlanV2):
         signal_day = created.date()
     else:
         utc = created.astimezone(timezone.utc)
-        signal_day = utc.date() if utc.time() == datetime.min.time() \
-            else created.astimezone(US_MARKET_TZ).date()
+        signal_day = utc.date() if utc.time() == datetime.min.time()             else created.astimezone(US_MARKET_TZ).date()
     return nyse_calendar().next_session(signal_day)
+
+
+def _has_session_window(plan: TradePlanV2) -> bool:
+    """v144: a plan that rests for one named session -- an outlook plan, or the
+    v119 compression short. Every other plan keeps its bar-count expiry."""
+    return plan.valid_session is not None or plan.strategy == COMPRESSION_SHORT
+
+
+def _cached_hourly(ticker):
+    """v144: the hourly cache on disk (never a fetch); session_expiry judges coverage."""
+    from swingbot.core.marketdata.data_store import load_from_disk
+    return load_from_disk(ticker, "hourly")
 
 
 def _due_auction_passed(notice: dict, now=None) -> bool:
@@ -319,7 +340,8 @@ def _daily_frame(ticker):
 class PlanManager:
     def __init__(self, store: PlanStore, price_fn, bar_count_fn=None,
                  atr_fn=None, trade_log=None, price_batch_fn=None,
-                 auction_close_fn=None, daily_frame_fn=None, runner_bars_fn=None):
+                 auction_close_fn=None, daily_frame_fn=None, runner_bars_fn=None,
+                 hourly_frame_fn=None):
         self.store = store
         self.price_fn = price_fn            # ticker -> live float
         # Optional on purpose: the deterministic unit-test feeds only expose
@@ -340,6 +362,9 @@ class PlanManager:
         # only (rp.cached_daily_bars in production); None = stamp null.
         self.runner_bars_fn = runner_bars_fn
         self._structure_seen: dict[str, tuple[str, bool]] = {}
+        # v144: ticker -> hourly bars from disk, for the outlook expiry reason
+        # (session_expiry). None = hourly unused, the daily bar decides.
+        self.hourly_frame_fn = hourly_frame_fn
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
@@ -600,7 +625,7 @@ class PlanManager:
                         plan_id=plan.plan_id, badge=plan.badge,
                         quality_score=plan.quality_score, source=plan.source,
                         cohort_label=plan.cohort_label, cohort_stats=plan.cohort_stats,
-                        risk_features=plan.risk_features)
+                        risk_features=plan.risk_features, origin=plan.origin)
                 event.detail["trade_id"] = trade_id
             elif event.transition == "tp1_partial":
                 self.trade_log.append_leg_by_plan(plan.plan_id, event.detail)
@@ -661,7 +686,7 @@ class PlanManager:
 
     def _step(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
         if plan.status == PlanStatus.PENDING:
-            return self._step_pending(plan, price, now)
+            return self._annotate_outlook(plan, self._step_pending(plan, price, now))
         if self._past_time_exit_close(plan, now):
             # v119: from the due session's official close on, the paper close
             # is owned by the time rule alone. A later print -- an extended-hours
@@ -682,19 +707,18 @@ class PlanManager:
             return events
         return events + self._compression_time_events(plan, now)
 
-    def _compression_window(self, plan: TradePlanV2, now) -> list[PlanEvent] | None:
-        """v119: the compression short's resting sell-stop lives for exactly one
-        regular session, the first NYSE session after the signal day (counted on
-        the session calendar, so a holiday in between is not an expiry). None =
-        the eligible session is open, run the normal fill checks; a list (maybe
-        empty) = nothing further to do this poll.
+    def _session_window(self, plan: TradePlanV2, now) -> list[PlanEvent] | None:
+        """v119, generalised in v144: a resting one-session plan (an outlook plan
+        or the compression short) lives for exactly its eligible session, counted
+        on the session calendar. None = the session is open, run the normal fill
+        checks; a list (maybe empty) = nothing further to do this poll.
 
-        The window ends at the eligible session's official close (13:00 ET on a
-        half-day, see session_close). Delivery of the expiry is at-least-once
-        and may be delayed to the next poll that runs with a price (quiet hours
-        or a missing quote); ``expires_at`` still records the real close. The
-        plan turns CANCELLED on that poll, so the event is emitted once, and
-        the pending notice is re-sent until acknowledged."""
+        The window ends at the session's official close (13:00 ET on a half-day,
+        see session_close). Delivery of the expiry is at-least-once and may be
+        delayed to the next poll that runs with a price (quiet hours or a missing
+        quote); ``expires_at`` still records the real close. The plan turns
+        CANCELLED on that poll, so the event is emitted once, and the pending
+        notice is re-sent until acknowledged."""
         eligible = _eligible_session(plan)
         if eligible is None:
             return None
@@ -704,18 +728,59 @@ class PlanManager:
             return []                    # same-bar / pre-open prints never fill
         if et.date() == eligible and et.time() < close:
             return None
+        return self._expire_window(plan, eligible, close)
+
+    def _expire_window(self, plan: TradePlanV2, eligible, close) -> list[PlanEvent]:
         closed_at = datetime.combine(eligible, close, tzinfo=US_MARKET_TZ).isoformat()
-        record_transition(plan, PlanStatus.CANCELLED, reason="expired", at=closed_at)
+        reason, extra = self._window_reason(plan, eligible)
+        record_transition(plan, PlanStatus.CANCELLED, reason=reason, at=closed_at)
         self.store.update(plan)
         return [PlanEvent(plan.plan_id, "cancelled_expired", {
             "bars_waited": 1, "cancel_resting_order": True,
-            "eligible_session": eligible.isoformat(), "expires_at": closed_at})]
+            "eligible_session": eligible.isoformat(), "expires_at": closed_at, **extra})]
+
+    def _window_reason(self, plan: TradePlanV2, eligible) -> tuple[str, dict]:
+        """("expired", {}) for the compression short, unchanged; for an outlook
+        plan the session_expiry verdict from D's own bars."""
+        if plan.origin != NEXT_SESSION:
+            return "expired", {}
+        verdict = session_expiry.classify_expiry(
+            plan, eligible, hourly=self._frame_or_none(self.hourly_frame_fn, plan.ticker),
+            daily=self._frame_or_none(self.daily_frame_fn, plan.ticker))
+        plan.cancel_reason_message = verdict.message
+        return verdict.code, {session_expiry.REASON_CODE: verdict.code,
+                              session_expiry.REASON_MESSAGE: verdict.message}
+
+    @staticmethod
+    def _frame_or_none(fn, ticker):
+        if fn is None:
+            return None
+        try:
+            return fn(ticker)
+        except Exception:
+            log.debug("outlook expiry: no frame for %s", ticker, exc_info=True)
+            return None
+
+    def _annotate_outlook(self, plan: TradePlanV2, events: list[PlanEvent]) -> list[PlanEvent]:
+        """v144: an outlook plan's in-session cancellation (invalidated / risk_cap)
+        gains its catalogue code and message, on the event and the plan."""
+        if plan.origin != NEXT_SESSION:
+            return events
+        for event in events:
+            message = session_expiry.in_session_message(plan, event.transition, event.detail)
+            if message is None:
+                continue
+            plan.cancel_reason_message = message
+            event.detail[session_expiry.REASON_CODE] = session_expiry.code_for(event.transition)
+            event.detail[session_expiry.REASON_MESSAGE] = message
+            self.store.update(plan)
+        return events
 
     def _step_pending(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
         is_bull = plan.direction == "bullish"
 
-        if plan.strategy == COMPRESSION_SHORT:
-            window = self._compression_window(plan, now)
+        if _has_session_window(plan):
+            window = self._session_window(plan, now)
             if window is not None:
                 return window
         elif self.bar_count_fn is not None:
@@ -1324,7 +1389,8 @@ def _manager() -> PlanManager:
         _MANAGER = PlanManager(PlanStore(), _price_fn, atr_fn=_live_atr,
                                bar_count_fn=_bars_since, trade_log=TradeLog(),
                                price_batch_fn=batch_fn, daily_frame_fn=_daily_frame,
-                               runner_bars_fn=rp.cached_daily_bars)
+                               runner_bars_fn=rp.cached_daily_bars,
+                               hourly_frame_fn=_cached_hourly)
     return _MANAGER
 
 
