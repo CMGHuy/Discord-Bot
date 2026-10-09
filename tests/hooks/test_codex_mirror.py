@@ -47,6 +47,25 @@ def test_generated_agent_toml_parses_and_keeps_the_prompt():
         assert data["developer_instructions"].strip() == body.strip()
 
 
+def test_generated_agent_toml_carries_the_codex_tier_of_the_claude_model():
+    """A Claude `model:` tier must reach Codex as a model and reasoning effort;
+    without it every Codex agent silently runs on the session default."""
+    import tomllib
+    for agent in (_ROOT / ".claude" / "agents").glob("*.md"):
+        meta, _ = sync_codex._split_frontmatter(agent.read_text(encoding="utf-8"))
+        assert meta.get("model") in sync_codex.CODEX_TIERS, agent.name
+        toml = _ROOT / ".codex" / "agents" / f"{agent.stem}.toml"
+        data = tomllib.loads(toml.read_text(encoding="utf-8"))
+        model, effort = sync_codex.CODEX_TIERS[meta["model"]]
+        assert (data["model"], data["model_reasoning_effort"]) == (model, effort)
+
+
+def test_agents_md_documents_every_codex_tier():
+    agents_md = (_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    for tier, (model, effort) in sync_codex.CODEX_TIERS.items():
+        assert f"| `{tier}` | `{model}` | `{effort}` |" in agents_md, tier
+
+
 def test_codex_hooks_mirror_the_claude_guardrail_and_session_hooks():
     claude = json.loads((_ROOT / ".claude" / "settings.json").read_text())["hooks"]
     codex = json.loads((_ROOT / ".codex" / "hooks.json").read_text())["hooks"]

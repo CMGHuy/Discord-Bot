@@ -41,7 +41,11 @@ already-numbered spec reuses that spec's number and links back with a
 
 A spec numbered above v140 also carries `**Screen:**` under `Edge:` -- a
 `SCREEN-PASS` ledger id, a `harvest-headroom` results path, or `exempt
-(integrity)`. Which one, and why: `document-conventions.md`.
+(integrity)`. From v146 a spec carries `**Panel:**` directly below
+`Screen:`: one to three role skills, defaulting by `Edge:` from the table in
+`document-conventions.md`, overridable by the author. From v146 a plan's
+first line under every `### Task` is `**Model:**`, per
+`docs/claude/model-routing.md`. Which value, and why: `document-conventions.md`.
 
 ## Step 4 — Keep it addressable
 
@@ -66,7 +70,7 @@ next session from re-deriving the dependency graph.
 
 Specs and plans are written and committed on `main`, never a branch --
 branch only to implement one. If the number collided while you were
-writing, rename before your own commit, never after one has landed.
+writing, rename before your own commit, never after one has landed. A spec with a `**Panel:**` line then gets `/panel` before the partner reviews it.
 
 ## The gate
 

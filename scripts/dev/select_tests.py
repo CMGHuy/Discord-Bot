@@ -255,15 +255,21 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (".agents/", ("tests/hooks/",)),
     (".codex/", ("tests/hooks/",)),
     # backtest-methodology.md's closed table (test_guardrails); every
-    # reference doc must be named in AGENTS.md (sync_codex via test_codex_mirror).
+    # reference doc must be named in AGENTS.md (sync_codex via test_codex_mirror);
+    # skills-tools.md's roles table pins each reviewer model (test_role_skills).
     ("docs/claude/", ("tests/hooks/test_guardrails.py",
-                      "tests/hooks/test_codex_mirror.py")),
+                      "tests/hooks/test_codex_mirror.py",
+                      "tests/hooks/test_role_skills.py")),
     # The backup runbook is parsed for the commands it documents.
     ("docs/deploy/DEPLOY_HETZNER.md", ("tests/scripts/test_backup_db.py",)),
     # Every testrun.py command line deploy.yml runs is parsed for real.
     (".github/workflows/", ("tests/dev/test_testrun_ci_invocations.py",)),
-    # Every spec past v140 must carry a valid **Screen:** header line.
-    ("docs/superpowers/specs/", ("tests/hooks/test_spec_screen_header.py",)),
+    # Every spec past v140 must carry a valid **Screen:** header line, and
+    # every spec past v145 a valid **Panel:** line.
+    ("docs/superpowers/specs/", ("tests/hooks/test_spec_screen_header.py",
+                                 "tests/hooks/test_spec_panel_header.py")),
+    # Every plan past v145 must stamp **Model:** under each ### Task.
+    ("docs/superpowers/plans/", ("tests/hooks/test_plan_model_stamp.py",)),
     # The pre-registration ledger is loaded and validated row by row.
     ("docs/superpowers/results/preregistration-ledger.jsonl",
      ("tests/backtesting/test_preregistration_ledger_file.py",

@@ -207,6 +207,45 @@ does not exist, or says `exempt` with an `Edge:` other than `none`. A split
 spec carries the line in its `_0-index` part. Why the screen exists, its
 pass rule and its one-shot discipline: `backtest-methodology.md` § Stage −2.
 
+**`Panel:`** — specs only, and only specs numbered **v146 or above** (v145 and
+earlier are exempt by number and never retrofitted). It sits directly under
+`Screen:` and names one to three expert role skills (`skills-tools.md`
+§ Expert roles), comma-separated:
+`**Panel:** quant-researcher, veteran-trader, technical-analyst`. `/new-doc`
+suggests the default for the spec's subject; the author may override it, and
+the header records the final choice.
+
+| Spec is about… | Default panel |
+|---|---|
+| New entry strategy or filter (`Edge: expectancy`) | quant-researcher, veteran-trader, technical-analyst |
+| Exits, sizing, stops (`Edge: harvest`) | risk-manager, veteran-trader, quant-researcher |
+| Alert volume or cadence (`Edge: volume`) | veteran-trader, financial-advisor, risk-manager |
+| Earnings, catalysts, sector filters | fundamental-analyst, quant-researcher, risk-manager |
+| Infra, schema, ops (`Edge: none (integrity)`) | staff-engineer, quant-engineer |
+| Admin UI | staff-engineer, financial-advisor |
+
+The panel runs through the `panel` skill at two fixed points. **Spec review:**
+after the spec is committed and before the partner reviews it, the roles run
+serially; Opus merges their findings, revises the spec, and records each
+finding's outcome (`applied` / `rejected: <why>`) in a `## Panel review`
+section of the spec. **Pre-close-out:** the same panel reviews the plan's full
+diff (`main...<branch>`) and its recorded results, and an unresolved
+`BLOCKING` finding stops `/close-out`. Any other time, `/panel` runs on demand.
+`tests/hooks/test_spec_panel_header.py` fails a spec whose line is missing, is
+not directly below `Screen:`, names fewer than one or more than three roles,
+or names a skill that declares no `## Lens`. A split spec carries the line in
+its `_0-index` part.
+
+**`Model:`** — plans only, and only plans numbered **v146 or above**. It is
+not a header-block line: it is the first line under every `### Task` heading,
+`**Model:** <haiku|sonnet|opus> — <one-clause reason>`, chosen from the rubric
+in `model-routing.md` (when a task matches more than one row, the higher tier
+wins). `/task-brief` copies it into the brief and the controller dispatches
+`task-implementer` at that tier; repeated review failures climb the
+escalation ladder in the same doc. `tests/hooks/test_plan_model_stamp.py`
+fails any task in such a plan, in any part, whose first non-blank line is not
+a valid stamp.
+
 **`## Parallelisation`** — its own section, below.
 
 ## How long a document may be

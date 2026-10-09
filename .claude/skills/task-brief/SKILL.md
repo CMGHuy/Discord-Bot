@@ -120,7 +120,10 @@ in the brief and do not start a backtest.
 
 ## Step 5 — Emit the brief
 
-Task id and title, files to create/modify (corrected paths), interfaces, the TDD
-steps verbatim from the plan, then a **Preflight** section listing every 3a-3h
-result with the corrections made. Flag anything you could not verify rather than
+Task id and title, then the task's `**Model:**` line verbatim (plans numbered
+above v145 — if it is missing there, say so in Preflight rather than guessing a
+tier; the controller dispatches `task-implementer` at that tier), files to
+create/modify (corrected paths), interfaces, the TDD steps verbatim from the
+plan, then a **Preflight** section listing every 3a-3h result with the
+corrections made. Flag anything you could not verify rather than
 guessing.

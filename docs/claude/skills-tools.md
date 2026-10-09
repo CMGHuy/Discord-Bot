@@ -140,6 +140,10 @@ Each case is a real child `claude` run on your own credential. The full
 52-case sweep is about $3.50 and about 8 minutes; per-skill suites are 3–8
 cases each. Results land in `.claude/skills/<skill>/evals/results/`, which is
 gitignored. Baseline at 2026-09-21: 52/52 cases pass, all eight suites exit 0.
+v145 role suites, 2026-10-09: 54/54 cases pass across the nine role
+suites (one description revision each for quant-engineer and senior-engineer: a
+missed fire case, fixed by naming the reproducibility and behaviour-preserving
+refactor questions in the description).
 
 ## Repo tooling (`.claude/`)
 
@@ -157,25 +161,54 @@ the model-invocable ones self-trigger off `description`, shape-tested in
 `tests/hooks/test_skill_shape.py`. Subagents, the one-subagent-at-a-time
 default, and `.mcp.json`'s context7 provider: `docs/claude/skills-tools.md`.
 
+## Expert roles (v145)
+
+Nine role skills each hold one reviewer's lens, in four sections -- Lens,
+Checklist, Red flags, Out of scope -- and are model-invocable, so a review
+from one seat loads its checklist. The `expert-reviewer` agent applies one
+role to a target; `/panel` dispatches several, serially, and merges their
+findings. A role raises `BLOCKING`/`ADVISORY` findings with a citation; it
+never decides and never lowers a gate (`persona.md`). This table is the one
+place a role's reviewer model is recorded: `/panel` passes it as the `model`
+override and `tests/hooks/test_role_skills.py` pins it. No reviewer runs on
+haiku -- reviewing means judging.
+
+| Role | Reviewer model | Lens |
+|---|---|---|
+| `quant-researcher` | opus | Sample size, overfitting, multiple comparisons, pre-registration discipline, whether an ExpR claim holds up |
+| `risk-manager` | sonnet | 2% dollar risk, portfolio heat, correlated exposure, stop placement |
+| `financial-advisor` | sonnet | Allocation, account fit, tax drag of swing turnover, whether alert frequency and risk suit a real-money retail trader (educational, not personal advice) |
+| `veteran-trader` | sonnet | Tradeability: fills, gaps, liquidity, regime, whether an alert is actionable before the open |
+| `technical-analyst` | sonnet | S/R, pattern and indicator logic: correct in code and true to how the setup is traded |
+| `fundamental-analyst` | sonnet | Earnings, catalysts, sector and macro concentration: the bot's blind spot |
+| `staff-engineer` | opus | Cross-cutting design: seams, migrations, VM ops, blast radius, long-run cost |
+| `quant-engineer` | sonnet | Backtest and data plumbing: lookahead (loads `no-lookahead`), numerics, the two OHLCV caches, reproducibility |
+| `senior-engineer` | sonnet | Code-level quality, the complexity limit, reads like its surroundings; `task-reviewer` preloads it |
+
 ## Which agent for what (v107)
 
 Serial, one at a time. Opus (main session) decides; agents do.
 
 | Work | Agent | Model |
 |---|---|---|
-| Implement one plan task from `/task-brief` | `task-implementer` | sonnet |
+| Implement one plan task from `/task-brief` | `task-implementer` | the task's `**Model:**` tier (default sonnet) |
 | Review that task's commits | `task-reviewer` | sonnet |
+| Review a spec, plan, diff or result through one expert role (via `/panel`) | `expert-reviewer` | the role's model from § Expert roles |
 | Draft a plan from an approved spec | `plan-writer` | opus |
 | Read-only production question | `prod-inspector` | haiku |
 | Backtest / grid / fold run > ~2 min | `backtest-runner` | sonnet |
 | Full or fast suite run | `test-runner` | sonnet |
 | Check a plan's symbols exist | `symbol-verifier` | haiku |
 
-Plan loop: `/task-brief` → `task-implementer` → `task-reviewer` → Opus reads
-findings → fix via `SendMessage` to the same implementer, or next task. A task
-that fails review twice is implemented by Opus directly. Brainstorming never
-goes to an agent — it needs the partner. `/gate` and `/task-brief` run forked
-on sonnet, so their tool output never reaches the Opus context.
+Plan loop: `/task-brief` → `task-implementer`, dispatched with the task's
+`**Model:**` tier as the `model` override (plans above v145; default sonnet)
+→ `task-reviewer` (always sonnet) → Opus reads findings → next task, or the
+escalation ladder in `model-routing.md`: `SendMessage` the same implementer
+once, then a fresh implementer one tier up with the findings attached, then
+Opus inline, each step logged in `.superpowers/sdd/progress.md`.
+Brainstorming never goes to an agent — it needs the partner. `/gate` and
+`/task-brief` run forked on sonnet, so their tool output never reaches the
+Opus context.
 
 For small edits (a few lines of markdown or config), work inline: every agent
 spawn is a cold start that costs more than the edit.

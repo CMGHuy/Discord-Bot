@@ -23,6 +23,19 @@ change lands with its Codex mirror in the same commit, and
 | `.claude/agents/<n>.md` | `.codex/agents/<n>.toml` | generated |
 | `.claude/settings.json` hooks | `.codex/hooks.json` | by hand |
 
+**Model tiers.** Claude names a tier (`haiku`/`sonnet`/`opus`) in agent
+frontmatter, in a plan task's `**Model:**` stamp and in the expert-role
+reviewer table. Codex uses the same tier through this map (`CODEX_TIERS` in
+`scripts/dev/sync_codex.py`, which writes it into every `.codex/agents/*.toml`).
+When dispatching a plan task or an `expert-reviewer` role, pass the mapped
+model and effort for its tier:
+
+| Tier | Codex model | Reasoning effort |
+|---|---|---|
+| `haiku` | `gpt-6-luna` | `low` |
+| `sonnet` | `gpt-6.1-sol` | `medium` |
+| `opus` | `gpt-6-astra` | `high` |
+
 Generated files come from `python scripts/dev/sync_codex.py` (`--check` lists
 drift); never edit them. Do not edit the Claude side from Codex either: when the
 partner asks Codex for a convention change, edit the Claude source, run the
@@ -95,7 +108,9 @@ partner or what bar a change must meet.
 **This persona raises the bar; it never lowers a gate.** It is what makes you
 refuse to re-run a closed pre-registration, refuse to quote pooled numbers
 without re-deriving them, and refuse to call a suite green without reading the
-output. Where the persona appears to conflict with a rule, the rule wins.
+output. Where the persona appears to conflict with a rule, the rule wins. For one lens's separate critique, the expert role skills apply one seat at a
+time through `expert-reviewer` and `panel` (Skills section below); a role
+raises findings and never decides.
 
 ## Decision standards
 
@@ -136,6 +151,12 @@ costs, lower 95% bound > 0, ≥ 7 of 9 years (2011–2019) positive, N ≥ 300).
 or `harvest` spec cites `harvest-headroom <results path>`; integrity work says
 `exempt (integrity)`. A screen fail is closed and never re-screened.
 `tests/hooks/test_spec_screen_header.py` enforces the line.
+Specs numbered v146 or above also carry `**Panel:**` directly below
+`**Screen:**`: one to three expert role skills (defaults by subject in
+`document-conventions.md`), run through `panel` after the spec is committed
+and again over the plan's diff before close-out, where an unresolved
+`BLOCKING` finding stops the close. `tests/hooks/test_spec_panel_header.py`
+enforces it.
 
 Feature acceptance runs through one gate (`swingbot/core/backtesting/
 acceptance.py`), driven by `python scripts/backtest/validate_component.py
@@ -184,6 +205,8 @@ Read before acting:
 - `docs/claude/testing-cost.md` before optimizing, timing or interpreting a
   changed test count.
 - `docs/claude/code-complexity.md` before writing or changing any function.
+- `docs/claude/model-routing.md` before writing a plan or dispatching a plan
+  task: the `**Model:**` tier rubric and the escalation ladder.
 - `docs/claude/schema-evolution.md` before changing a table's shape or the
   fields a stored record carries (add, rename, drop, promote).
 
@@ -220,8 +243,26 @@ whenever Claude would run `/<name>`: `gate` (pre-commit gate), `task-brief`
 sequence), `stable-snapshot` (pin a known-good point) and `backup-pull` (off-VM
 backup pull). `new-doc` (new spec or plan) and `close-out` (plan close-out) may
 also be run implicitly: `new-doc` right before creating a numbered spec or plan,
-`close-out` once a plan's final full-suite task is green. Skill text names Claude tools (`AskUserQuestion`, `Agent`, `Grep`); use
+`close-out` once a plan's final full-suite task is green. `panel` (dispatch
+expert role reviewers one at a time through `expert-reviewer` and merge their
+findings) may also run implicitly: right after committing a spec with a
+`**Panel:**` line, and before `close-out` of a plan built from one. Skill text names Claude tools (`AskUserQuestion`, `Agent`, `Grep`); use
 your equivalent.
+
+Expert role skills (v145) each hold one reviewer's lens -- Lens, Checklist,
+Red flags, Out of scope -- and load when you review from that seat:
+`quant-researcher` (sample size, overfitting, multiple comparisons,
+pre-registration discipline), `risk-manager` (2% dollar risk, portfolio heat,
+correlated exposure, stops), `financial-advisor` (retail suitability, account
+fit, tax drag, alert cadence; educational, not personal financial advice),
+`veteran-trader` (fills, gaps, liquidity, regime, resting orders before the
+open), `technical-analyst` (S/R, pattern and indicator logic),
+`fundamental-analyst` (earnings, catalysts, sector and macro concentration),
+`staff-engineer` (seams, migrations, VM ops, blast radius),
+`quant-engineer` (lookahead, numerics, the two OHLCV caches, reproducibility),
+`senior-engineer` (code-level quality and the complexity limit).
+A role raises cited `BLOCKING`/`ADVISORY` findings; it never decides and never
+lowers a gate.
 
 ## Efficient repository navigation
 
@@ -314,7 +355,14 @@ same work to them so bulk output stays out of your context:
 `test-runner` (full or fast suite), `backtest-runner` (runs past ~2 minutes),
 `prod-inspector` (read-only VM questions), `symbol-verifier` (a plan's named
 symbols exist), `task-implementer` then `task-reviewer` (one plan task each,
-from a `task-brief`), and `plan-writer` (a plan from an approved spec).
+from a `task-brief`), `plan-writer` (a plan from an approved spec), and
+`expert-reviewer` (one expert role's read-only review, `role=<name>`, cited
+`BLOCKING`/`ADVISORY` findings or `CLEAN`; dispatched by `panel` one role at a
+time). Dispatch `task-implementer` at the plan task's `**Model:**` tier. When
+`task-reviewer` (always sonnet) keeps blocking, climb the ladder in
+`docs/claude/model-routing.md`: the same implementer once, then a fresh one a
+tier up with the findings, then the main session implements the task; log
+each step in `.superpowers/sdd/progress.md`.
 
 ## Function complexity limit
 
@@ -359,6 +407,12 @@ creation from one repo-wide counter over both document filenames and git log,
 recomputed immediately before the commit (sessions race it). A plan created from
 an existing spec reuses that spec's number. Document numbers and `VERSION.json`
 release versions are independent (`document-conventions.md`).
+
+Plans numbered v146 or above stamp `**Model:** <haiku|sonnet|opus> — <reason>`
+as the first line under every `### Task`, from the rubric in
+`docs/claude/model-routing.md`; dispatch `task-implementer` at that tier.
+`tests/hooks/test_plan_model_stamp.py` enforces it; v145 and earlier are
+exempt.
 
 Never hard-code a `ui`/`bot` version in a plan, and give it no `Version:` line.
 `Bump:` states the level only: `bot patch`, `ui minor`, `none`. Numbers resolve
