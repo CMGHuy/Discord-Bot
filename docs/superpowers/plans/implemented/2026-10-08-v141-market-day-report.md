@@ -1,10 +1,10 @@
 # v141 — Market-day report: Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task, never the file: `grep -n "^### Task V141-3" -A 200 docs/superpowers/plans/2026-10-08-v141-market-day-report.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task, never the file: `grep -n "^### Task V141-3" -A 200 docs/superpowers/plans/implemented/2026-10-08-v141-market-day-report.md`.
 
 **Bump:** none
 **Edge:** none (integrity) — measurement only
-**Spec:** [`docs/superpowers/specs/2026-10-08-v141-market-day-report-design.md`](../specs/2026-10-08-v141-market-day-report-design.md)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-08-v141-market-day-report-design.md`](../../specs/implemented/2026-10-08-v141-market-day-report-design.md)
 
 **Goal:** One reproducible report that says whether LONG win rate, ExpR and alert volume move with the SPY daily return, on TRAIN backtest trades and on the live paper book, and at which stage volume is lost.
 
