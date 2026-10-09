@@ -127,9 +127,10 @@ right before the commit. `Bump:` states a level only, never a version number.
 task. **Full suite once per plan, as its final task.** Specs and plans are
 committed on `main`; branch only to implement. Run `/new-doc`; detail:
 `document-conventions.md`, `document-lifecycle.md`.
-**Write a plan in two phases:** `plan-writer` `mode=index`, then one
+**Write a plan in two phases** after `plan-briefer` (Sonnet) gathers the code
+into one brief: `plan-writer` `mode=index`, then one
 `mode=part <N>` per part, dispatched in parallel; each writer appends task by
-task to disk. **At most 2 plans in progress per session**; a plan cut off by
+task to disk; `scripts/dev/plan_lint.py` must pass. **At most 2 plans in progress per session**; a plan cut off by
 tokens is resumed from its first missing task, never skipped or restarted.
 Progress lives in the repo (ledger, `## Handoff`, WIP commits), never in
 account memory; the SessionStart `PLAN WIP` line finds it

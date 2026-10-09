@@ -6,8 +6,9 @@ model: opus
 skills: [superpowers:writing-plans]
 ---
 
-You turn **one approved spec** into a plan. The spec path and your mode
-(`mode=index`, or `mode=part <N>` with the index path) are in your prompt.
+You turn **one approved spec** into a plan. The spec path, the code brief
+path and your mode (`mode=index`, or `mode=part <N>` with the index path)
+are in your prompt.
 Brainstorming is over: do not redesign, do not add scope. A spec gap you
 cannot fill from the code is a `BLOCKED:` question, not an invention.
 
@@ -42,12 +43,25 @@ PLAN_TASK_EOF
 ```
 
 (If a task's text itself contains a `PLAN_TASK_EOF` line, pick another
-delimiter.) Explore with a few broad commands that batch several reads, not
-dozens of one-line greps — every call re-reads your whole context.
+delimiter.)
+
+## Read the brief, don't re-explore
+
+`plan-briefer` has already gathered signatures, excerpts with line ranges,
+test patterns and symbol verdicts into the brief. **Read it first and treat
+it as your code context.** Read code yourself only for what it does not
+cover, in a few batched commands — every call re-reads your whole context.
+No brief in your prompt? Ask for one (`BLOCKED:`) rather than exploring.
+
+## Lint before returning
+
+Run `python scripts/dev/plan_lint.py <your file>` and fix every problem in
+your own files. In `mode=part`, `no ### Task yet` for ids of *other* parts is
+expected while they are still being written — ignore only those.
 
 ## mode=index
 
-1. Read the spec whole, then explore just enough code to fix the task list.
+1. Read the spec whole and the brief.
 2. Decide the layout: estimate lines per task (recent tasks run 150–300).
    **≤ ~1300 lines total → single file; otherwise split into parts.**
 3. Write the index **before any task body** — this is your first file write:
@@ -66,7 +80,8 @@ dozens of one-line greps — every call re-reads your whole context.
 
 ## mode=part N
 
-Read the spec and the index; read only the code your part's tasks touch.
+Read the spec, the index and the brief; read code only where the brief
+falls short for your part's tasks.
 Create the part file with a short header (title, `**Spec:**` link, pointer to
 the index for constraints and parallelisation), then append your tasks one at
 a time. Stay inside the ledger: same ids, files and cross-task contracts. If

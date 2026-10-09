@@ -35,6 +35,12 @@ EXPECTED = {
         "model": "sonnet",
         "skills": {"backtest-gate"},
     },
+    # The code brief plan-writer reads instead of exploring (skills-tools.md,
+    # Plan writing). Sonnet: it reads and excerpts, it does not design.
+    "plan-briefer": {
+        "model": "sonnet",
+        "skills": set(),
+    },
     # v145: one read-only reviewer parameterised by role. It loads the role
     # skill at run time, so it preloads none.
     "expert-reviewer": {

@@ -195,6 +195,7 @@ Serial, one at a time — except plan parts (§ Plan writing below). Opus
 | Implement one plan task from `/task-brief` | `task-implementer` | the task's `**Model:**` tier (default sonnet) |
 | Review that task's commits | `task-reviewer` | sonnet |
 | Review a spec, plan, diff or result through one expert role (via `/panel`) | `expert-reviewer` | the role's model from § Expert roles |
+| Gather a plan's code context into one brief | `plan-briefer` | sonnet |
 | Draft a plan from an approved spec — index, then parts in parallel | `plan-writer` | opus |
 | Read-only production question | `prod-inspector` | haiku |
 | Backtest / grid / fold run > ~2 min | `backtest-runner` | sonnet |
@@ -218,19 +219,27 @@ is written in one serial context — 13 min for a 70 KB plan, 51–55 min for
 170–320 KB — and tool execution is under 10% of it. So the plan is written
 in parallel parts, to disk as it goes:
 
-1. Dispatch `plan-writer` with `mode=index` and the spec path. It writes the
+0. Dispatch `plan-briefer` with the spec path and
+   `.superpowers/briefs/<plan base>.md`. Exploration was most of the old
+   cost — 50–390 one-line Opus turns per run, each re-reading a growing
+   context, repeated by every part writer. On Sonnet, once, it is one file
+   every writer reads. The brief is gitignored but in the shared working
+   tree, so a resuming session or account reuses it (re-brief if missing).
+1. Dispatch `plan-writer` with `mode=index`, the spec path and the brief path. It writes the
    index first (header, constraints, parallelisation, a task ledger fixing
    every cross-task file and contract). A single-file plan (≤ ~1300 lines)
    comes back `DONE` from this one run.
 2. On `PARTS`, dispatch one `plan-writer` per part with `mode=part <N>`, the
-   spec path and the index path — **all in one message**, so they run
+   spec, index and brief paths — **all in one message**, so they run
    concurrently. This is the standing exception to serial dispatch.
    **Commit the index as soon as phase 1 returns**
    (`docs(vN): plan index -- parts pending`), and each part as it returns, so
    a session that runs out of tokens leaves committed, resumable work.
-3. When all return, run the id-sequence check from
-   `document-conventions.md` § The 1500-line cap against the ledger, check
-   each file's line count, then review and commit.
+3. When all return, run `python scripts/dev/plan_lint.py <index>` — header,
+   ledger vs tasks, `Model:` lines, the 1500-line cap, `Modify:` paths,
+   placeholders, in one call. It must print `PASS`; then review and commit.
+   Writers run it on their own files before returning, so it replaces the
+   validation scripts they used to improvise.
 
 Every writer appends one task per tool call, so the files fill visibly; a
 part that finds a wrong shared contract returns `BLOCKED:` instead of
