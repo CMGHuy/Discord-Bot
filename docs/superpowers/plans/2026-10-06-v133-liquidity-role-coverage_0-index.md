@@ -130,3 +130,10 @@ None of these changes a spec definition, constant, bucket edge or verdict clause
 
 - `swingbot/core/edge/context.py` is also edited by v130's snapshot task (V130-4), which appends eight keys to `FEATURE_KEYS`. **Do not run V133-5 beside it in the same tree.** v125 has already merged (the tuple has 43 keys at writing); v130 has no branch yet. Whichever of v130 and v133 lands second rebases its tuple edit; the keys do not overlap. If v130 landed first, the Preconditions count is 51: V133-5's tests are written against `FEATURE_KEYS[-10:]` and a witness captured at implementation time, so nothing else shifts.
 - `swingbot/core/backtesting/backtest_scenarios.py` and `scripts/reports/volume_context_report.py` (V133-6) are shared with every open measurement plan. The edits are additive keyword parameters; rebase rather than merge by hand if either file moved.
+
+## Cross-plan coordination (audit 2026-10-10)
+
+- **v146 (V146-7) — V133-6:** if `replay_scenarios_detailed` exists in `backtest_scenarios.py` (v146 merged), V133-6 drops `confluence_counts` and `_note_votes` and reads the vote count from `ReplayHit.target_confluence[0]` inside `confluence_rows`; otherwise as written. Frozen reading 9 then holds through `ReplayHit` instead of the out-parameter.
+- **v137/v157 instrument golden — V133-5:** the ten new context keys would turn `tests/backtesting/instrument/test_v1_golden.py` red. V133-5 Step 6 asserts-and-drops them in `golden.py:golden_records` (the v131 `limit_orders` precedent); the fixture `tests/fixtures/instrument/v1_golden.jsonl` (exactly the 43 current `FEATURE_KEYS`) is never regenerated. v157 FC6 edits the same function for `signal_date`: keep both.
+- **v158 (`--instrument`) — V133-9:** append `--instrument v1` to the measurement command if the script's `--help` lists it; the record names the instrument.
+- **Generic rules:** the swallowed-error ratchet (owner v148) applies to no task here — no task adds an `except Exception` handler. The complexity gate (owner v149, full text in v149's plan) applies only if a task splits, moves or renames a legacy function; none here does (V133-6 adds new helpers only).

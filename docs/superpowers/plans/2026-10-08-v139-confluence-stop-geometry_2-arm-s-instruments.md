@@ -842,6 +842,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Files:**
 - Create: `scripts/backtest/measure_confluence_stop.py`
 - Create: `tests/scripts/test_measure_confluence_stop.py`
+- Modify (only if v158 merged): `tests/backtesting/instrument/test_date_literal_guard.py` (`ALLOW`, one entry)
 
 **Interfaces:**
 - Consumes: `confluence_stop_replay.replay_entries` / `census` / `C_STEPS` / `cell_key` (V139-8), `confluence_stop_funnel` (V139-9), `measure_arms.cached_universe` / `load_frame` (V139-3), `backtest_scenarios._resolve_replay_workers`, `LEGACY_HORIZONS`.
@@ -1225,6 +1226,14 @@ time python scripts/backtest/measure_confluence_stop.py --stage -1 --tickers 3 -
 ```
 
 Record the wall time per ticker and the universe size (`python -c "import sys; sys.path[:0]=['scripts/backtest','scripts/data']; import measure_arms as m; print(len(m.cached_universe()))"` with the same two variables set). The full census runs about that per-ticker time × universe size ÷ workers. The stage 0 rows run adds the exit walks, roughly 1.2–1.5× the census. Note both estimates in the commit body: V139-11 and V139-12 hand them to `backtest-runner`. Then `rm -r logs/v139-smoke`. Do **not** run stage 0 here: that would read TRAIN outcomes before the pre-registration is committed.
+
+**Cross-plan (audit 2026-10-10):** if `tests/backtesting/instrument/test_date_literal_guard.py` exists (v158 merged), add this entry to its `ALLOW` dict (rel path → one-line reason), keeping every entry already there:
+
+```python
+    "scripts/backtest/measure_confluence_stop.py": "v139 one-shot pre-registered measurement; windows frozen in its record",
+```
+
+then run `python scripts/dev/testrun.py file tests/backtesting/instrument/test_date_literal_guard.py` (expect `0 failed`) and add the guard file to Step 7's `git add`. Otherwise skip this.
 
 - [ ] **Step 6: Complexity**
 

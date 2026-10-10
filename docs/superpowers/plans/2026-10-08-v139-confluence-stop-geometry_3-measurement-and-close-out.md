@@ -44,6 +44,8 @@
   - Arm S's Stage −1 verdict, consumed by V139-12.
   - Arm D's reachability verdict, consumed by V139-14.
 
+**Cross-plan (audit 2026-10-10):** (a) **Instrument pin:** before the first command, run `--help` on each script this task calls (`measure_confluence_stop.py`, `measure_arms.py`, `validate_component.py`, `permutation_test.py`); for every one that lists `--instrument` (v158 merged), append `--instrument v1` to each of its commands here, and the result record names the instrument `v1`. (b) **No merge of `main` into the worktree** between the V139-11 pre-registration commit and the last stage run: `measure_arms.py` stamps `code_hash()` over `swingbot/*.py`, so a merge mid-funnel makes the judges refuse the arms. (c) The record written in Step 2 names the fill/cost instrument for each arm (lines added below), and, per the partner decision, discloses the v2 reading for arm S when v157 has merged.
+
 - [ ] **Step 1: Confirm neither arm is a closed row**
 
 Invoke `backtest-gate`. Run `grep -n "structural stop\|clamp\|v104\|v114\|v129\|v103\|v101" docs/claude/backtest-methodology.md`. The spec's § Not a re-run argues why v104 Part A, v129 arm Z, v103 A, v101 and v114 are not this hypothesis. Confirm that no **other** row of "Closed pre-registrations — do not re-run these" closes a structural confluence stop sized to dollar risk, or a confluence drop by structural stop distance. If one does, stop and ask the partner (`AskUserQuestion`, one question).
@@ -67,6 +69,8 @@ Plan: `docs/superpowers/plans/2026-10-08-v139-confluence-stop-geometry_0-index.m
 ## Arm S — structural stop, dollar sizing
 - Rule: <spec § Arm S, the three bullets, verbatim>. Arm S never adds or removes a plan (plan index, Spec correction 8); the replay asserts it.
 - Gate: the v92 harvest gate, paired, exactly as v129 ran it (constants imported from `acceptance_exit_funnel.py`), bootstrap clustered by ISO week (instrument v2).
+- Fills and costs: instrument v1, as pre-registered (`--instrument v1` pinned on every command when the scripts accept the flag). "instrument v2" in the Gate line above names v129's ISO-week bootstrap design, not the v157 fill/cost instrument.
+- Disclosure only (partner decision 2026-10-10): if `swingbot/core/planning/exit_sim_v2.py` exists when Stage 1 runs (v157 merged), the Stage-1 TRAIN paired ΔExpR is also reported with `instrument=resolve("v2")` fills and costs. It never gates, never selects a cell, and is labelled "v2 disclosure, non-gating" wherever it appears.
 - Universe: every ticker with a cached CSV in the main tree's `data/backtest_cache` (`BACKTEST_CACHE_DIR`, `MEASURE_ARMS_UNIVERSE=cache`; the v129 precedent, partner-approved 2026-10-08), all `LEGACY_HORIZONS`, `replay_scenarios` with live `ScanParams`, `scale_out=True`.
 - Windows: TRAIN 2020-01-01..2023-12-31; VALIDATION 2024-01-01..2025-12-31, one shot.
 - Stage −1: the census (plans only, no exit simulated). `refused:zero-diff` when no cell changes any plan. Identical adjacent cells are reported and put to the partner before Stage 0.
@@ -79,6 +83,7 @@ Plan: `docs/superpowers/plans/2026-10-08-v139-confluence-stop-geometry_0-index.m
 ## Arm D — no plan beyond the ceiling
 - Rule: <spec § Arm D, the two bullets, verbatim>.
 - Gate: the standard v72 funnel through `measure_arms.py --knob CONFLUENCE_STOP_DROP_PCT=c` and `validate_component.py` (`--gate win_rate`, all six clauses at Stage 3), instrument v1 (ticker bootstrap).
+- Fills and costs: instrument v1 (`--instrument v1` pinned on every command when the scripts accept the flag).
 - Population: the pooled book (`DEFAULT_ENGINES` = confluence + strategy; the knob reaches only confluence rows). Clause 3's volume cut is measured on the pooled book; the confluence-only cut is disclosed. A cut past `VOLUME_MAX_CUT_PCT` (25%) fails clause 3, recorded and not rescued.
 - Universe: as arm S (`MEASURE_ARMS_UNIVERSE=cache`), stamped by `measure_arms.py` and checked by every judge.
 - Windows (`windows.STAGES`): pilot 2018-06-01..2020-12-31 (first 10 tickers); fold-train selection 2018-06-01..2022-12-31; walk-forward test years 2021/2022/2023; VALIDATION 2024-01-01..2025-12-31, one shot.
@@ -177,6 +182,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: `stageM1.json` (`REACHABLE`) and the committed record.
 - Produces: `stage1.json` (`selected`) and `stage2.json`, which V139-13 consumes.
 
+**Cross-plan (audit 2026-10-10):** (a) **Instrument pin:** before the first command, run `--help` on each script this task calls (`measure_confluence_stop.py`, `measure_arms.py`, `validate_component.py`, `permutation_test.py`); for every one that lists `--instrument` (v158 merged), append `--instrument v1` to each of its commands here, and the result record names the instrument `v1`. (b) **No merge of `main` into the worktree** between the V139-11 pre-registration commit and the last stage run: `measure_arms.py` stamps `code_hash()` over `swingbot/*.py`, so a merge mid-funnel makes the judges refuse the arms. (c) **Partner decision (arm S on v1, v2 disclosed):** arm S runs on v1 as pre-registered, with `--instrument v1` pinned when the flag exists. If `swingbot/core/planning/exit_sim_v2.py` exists (v157 merged), also report the Stage-1 TRAIN paired ΔExpR with `instrument=resolve("v2")` fills and costs (`swingbot/core/backtesting/instrument/contract.py:resolve`), as a disclosure only — it never gates and is labelled as such in the record. Compute it after Step 3, on the same TRAIN plans, into a separate file (`docs/superpowers/results/v139/2026-10-08-v139-armS-stage1-v2-disclosure.json`, added to Step 5's commit) that no later stage reads; Stage 2 and Stage 3 consume only the v1 `stage1.json`.
+
 Skip this task if V139-11 closed arm S.
 
 - [ ] **Step 1: Stage 0 (the TRAIN replay, the long run)**
@@ -244,6 +251,8 @@ Add only the files that exist: a stage that never ran has no file.
 **Interfaces:**
 - Consumes: arm S's `stage1.json` and `stage2.json` (`PASS`), and the committed record.
 - Produces: arm S's final verdict and result record, which V139-16 consumes.
+
+**Cross-plan (audit 2026-10-10):** (a) **Instrument pin:** before the first command, run `--help` on each script this task calls (`measure_confluence_stop.py`, `measure_arms.py`, `validate_component.py`, `permutation_test.py`); for every one that lists `--instrument` (v158 merged), append `--instrument v1` to each of its commands here, and the result record names the instrument `v1`. (b) **No merge of `main` into the worktree** between the V139-11 pre-registration commit and the last stage run: `measure_arms.py` stamps `code_hash()` over `swingbot/*.py`, so a merge mid-funnel makes the judges refuse the arms. If V139-12 wrote the v2 disclosure file, the Step 4 record quotes it in its own subsection headed "v2 disclosure (non-gating)"; it never enters the verdict.
 
 If arm S closed earlier, skip Steps 1–3 and write the record (Step 4) for the stage it ended at.
 
@@ -316,6 +325,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `measure_arms.py --stage {selection,walkforward} --knob A=v --out P --preregistration P`
   - `validate_component.py --stage {mde,selection,walkforward} [--arms P] --title T --window W [--train-effect-pp X] [--grid-arms V=P] [--mde-refused V] [--out-json P]`
 - Produces: arm D's selected c and walk-forward verdict, which V139-15 consumes.
+
+**Cross-plan (audit 2026-10-10):** (a) **Instrument pin:** before the first command, run `--help` on each script this task calls (`measure_confluence_stop.py`, `measure_arms.py`, `validate_component.py`, `permutation_test.py`); for every one that lists `--instrument` (v158 merged), append `--instrument v1` to each of its commands here, and the result record names the instrument `v1`. (b) **No merge of `main` into the worktree** between the V139-11 pre-registration commit and the last stage run: `measure_arms.py` stamps `code_hash()` over `swingbot/*.py`, so a merge mid-funnel makes the judges refuse the arms.
 
 Skip this task if V139-11 closed arm D. **Stop on the first refusing or failing stage:** append its numbers to `...-armD.md`, commit (Step 6) and go to V139-15 Step 4.
 
@@ -406,6 +417,8 @@ Add only the files that exist.
 - Consumes: arm D's Stage 2 `PASS` (V139-14), the committed record, `permutation_test.py --arms P --n 200 --seed 42`, `validate_component.py --stage validation --arms P --permutation-p p --title T --window W --out-md P --out-json P`.
 - Produces: arm D's final verdict and its complete result record, which V139-16 consumes.
 
+**Cross-plan (audit 2026-10-10):** (a) **Instrument pin:** before the first command, run `--help` on each script this task calls (`measure_confluence_stop.py`, `measure_arms.py`, `validate_component.py`, `permutation_test.py`); for every one that lists `--instrument` (v158 merged), append `--instrument v1` to each of its commands here, and the result record names the instrument `v1`. (b) **No merge of `main` into the worktree** between the V139-11 pre-registration commit and the last stage run: `measure_arms.py` stamps `code_hash()` over `swingbot/*.py`, so a merge mid-funnel makes the judges refuse the arms.
+
 If arm D closed earlier, skip Steps 1–3 and finish the record (Step 4) for the stage it ended at.
 
 - [ ] **Step 1: Pre-flight**
@@ -486,11 +499,13 @@ Sequential: V139-16 records both arms (closed table and ledger, one commit). V13
 - Consumes: `docs/superpowers/results/2026-10-08-v139-armS.md`, `...-armD.md` and the stage files.
 - Produces: the closed-table rows, the ledger rows and the final config text that V139-17 verifies.
 
+**Cross-plan (audit 2026-10-10):** no merge of `main` into the worktree before this task commits (the arms' `code_hash()` stamps must still match if a judge output is re-read); the merge happens in V139-17. The ledger rows' `--instrument` values stay as written below (they name each arm's gate instrument from the record).
+
 Both knob defaults stay **0** in every outcome (index, Spec correction 7). `tests/backtesting/test_preregistration_ledger_file.py` fails when a closed-table row has no ledger row, so Steps 1 and 2 land in one commit.
 
 - [ ] **Step 1: One row per arm in the closed table**
 
-Invoke `pooled-numbers`. Append two rows to "Closed pre-registrations — do not re-run these" in `docs/claude/backtest-methodology.md`, in the table's columns (Component | Outcome | Record).
+Invoke `pooled-numbers`. Insert two rows directly under the header separator of "Closed pre-registrations — do not re-run these" in `docs/claude/backtest-methodology.md` (newest first), in the table's columns (Component | Outcome | Record).
 
 - **Component:**
   - `Confluence structural stop, arm S — keep the confluence level as the stop up to c ∈ {3, 4, 5}% less 0.25 headroom, target re-chosen, sized to fixed dollar risk (v139)`

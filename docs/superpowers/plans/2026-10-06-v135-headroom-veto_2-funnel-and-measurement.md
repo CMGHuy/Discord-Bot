@@ -13,6 +13,7 @@ v122 built the Stage 1 judge, the clause-6 baseline reading for its own predicat
 **Files:**
 - Modify: `swingbot/core/backtesting/backtest_scenarios.py` (new `bucket_bar`, new `scenarios_at`, and the head of the loop in `replay_scenarios`)
 - Modify: `tests/backtesting/test_backtest_scenarios.py` (append tests)
+- Modify: `tests/scripts/test_fvg_attribution.py` (`test_replay_still_has_the_shape_the_recorder_patches`, Step 3)
 
 **Interfaces:**
 - Consumes: `levels_asof`, `LEVEL_REFRESH_BARS`, `scenario_gate_inputs`, `dead_cat_bounce`, `levels.build_scenarios`, `levels.atr_floor_pct` (all already imported in the module); `_headroom_kept` (V135-5); the V135-3 witness.
@@ -20,6 +21,16 @@ v122 built the Stage 1 judge, the clause-6 baseline reading for its own predicat
   - `backtest_scenarios.bucket_bar(index: int, horizon_key: str) -> int`: the bar whose as-of map the replay loop has cached for `index`'s bucket
   - `backtest_scenarios.scenarios_at(ticker, df, i, horizon_key, params, cache, dcb_params=None) -> tuple`: `(window, price, supports, resistances, scenarios)` at bar `i`, before any admission gate
 - Why: V135-10 must rebuild, for one baseline confluence trade, the exact scenario and the exact support/resistance lists the replay had at that bar. Extracting the replay's own code is the only way that rebuild cannot drift from it. `scripts/backtest/measure_fib_anchor_diagnostic.py` holds an older private copy of the bucket rule (`bucket_bar`, `scenario_map`); it is left alone.
+
+**Cross-plan (audit 2026-10-10):** v146 V146-7 may have moved `replay_scenarios`' body into `replay_scenarios_detailed` and helpers. Check `git grep -n "def replay_scenarios_detailed\|def _bar_scenarios" -- swingbot/core/backtesting/backtest_scenarios.py`. **If both exist (v146 merged),** Step 3's `replay_scenarios` replacement does not apply: `scenarios_at` takes `_bar_scenarios`' pre-gate body (everything from `window = df.iloc[:i + 1]` through the `levels.build_scenarios(...)` call, with `scope.ticker` / `scope.horizon_key` / `scope.params` / `scope.h` read as the plain arguments), and `_bar_scenarios` becomes
+
+```python
+    window, price, supports, resistances, scenarios = scenarios_at(
+        scope.ticker, df, i, scope.horizon_key, scope.params, cache, dcb_params)
+    return window, price, (supports, resistances), _headroom_kept(_dryup_kept(scenarios, window), supports, resistances)
+```
+
+(it applies the dry-up and headroom gates, so it cannot simply wrap `scenarios_at`). Step 4's radon line then greps `_bar_scenarios|scenarios_at|bucket_bar` and expects all below 15. **Otherwise** as written. The Complexity gate (owner v149) applies to this extraction: if `scripts/dev/complexity_gate.py` exists, finish Step 4 with `python scripts/dev/complexity_gate.py`, then `--update`, and commit `scripts/dev/complexity_baseline.json` in Step 5 (`improved` expected; `new`/`risen` never).
 
 - [ ] **Step 1: Invoke `no-lookahead`, then write the failing tests** (append to `tests/backtesting/test_backtest_scenarios.py`)
 
@@ -128,15 +139,25 @@ In `replay_scenarios`, replace everything from `window = df.iloc[:i + 1]` throug
 
 Leave the lines above the loop (`h = HORIZONS[horizon_key]`, `warmup`, `cooldown`, `cache`, `out`, `last_accepted`) and the whole `for sc in scenarios:` body untouched: the body still reads `window`, `h`, `price`, `supports`, `resistances` and `i`. Move the two explanatory comments about the re-split into `scenarios_at`'s docstring rather than keeping a duplicate.
 
+The recorder shape test reads `replay_scenarios`' own source, which no longer holds the `levels_asof(...)` call after this extraction. In `tests/scripts/test_fvg_attribution.py` (about lines 109-113), rewrite `test_replay_still_has_the_shape_the_recorder_patches` to read the whole module (v146 V146-7 makes the same update; if it is already updated this way, keep it):
+
+```python
+def test_replay_still_has_the_shape_the_recorder_patches():
+    src = inspect.getsource(bs)
+    assert "levels_asof(" in src
+    assert "build_confluence_plan(" in src
+    assert getattr(bs, "REPLAY_CONFLUENCE_TOLERANCE_PCT", 5.0) == 5.0 == fa.VOTE_TOLERANCE_PCT
+```
+
 - [ ] **Step 4: Run the narrow tests, both witnesses and radon**
 
-Run: `python scripts/dev/testrun.py file tests/backtesting/test_backtest_scenarios.py`, then `... file tests/backtesting/test_headroom_witness.py`, `... file tests/backtesting/test_pullback_dryup_witness.py`, `... file tests/backtesting/arms/test_confluence_engine.py`, `... file tests/backtesting/test_armed_replay.py`, then `python -m radon cc -s swingbot/core/backtesting/backtest_scenarios.py | grep -E "replay_scenarios|scenarios_at|bucket_bar"`
+Run: `python scripts/dev/testrun.py file tests/backtesting/test_backtest_scenarios.py`, then `... file tests/backtesting/test_headroom_witness.py`, `... file tests/backtesting/test_pullback_dryup_witness.py`, `... file tests/backtesting/arms/test_confluence_engine.py`, `... file tests/backtesting/test_armed_replay.py`, `... file tests/scripts/test_fvg_attribution.py`, then `python -m radon cc -s swingbot/core/backtesting/backtest_scenarios.py | grep -E "replay_scenarios|scenarios_at|bucket_bar"`
 Expected: all PASS with both witnesses byte-identical. `replay_scenarios` drops to C (14) or lower (it lost the `dcb_params` branch), `scenarios_at` A or B, `bucket_bar` A. A witness failure means the extraction changed behaviour: fix the extraction.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add swingbot/core/backtesting/backtest_scenarios.py tests/backtesting/test_backtest_scenarios.py
+git add swingbot/core/backtesting/backtest_scenarios.py tests/backtesting/test_backtest_scenarios.py tests/scripts/test_fvg_attribution.py
 git commit -m "refactor(v135): extract scenarios_at from replay_scenarios, byte-identical"
 ```
 
@@ -852,6 +873,8 @@ Every command in this phase runs in the worktree. Each bash block starts by sett
 - Consumes: every code task committed on the branch (V135-1..V135-11) and a clean `git status --short -- swingbot/ scripts/backtest/`.
 - Produces: the frozen rule V135-13 and V135-14 execute and quote. It is committed before any arm file exists.
 
+**Cross-plan (audit 2026-10-10):** (a) **Instrument pin:** if `python scripts/backtest/measure_arms.py --help` lists `--instrument` (v158 merged), the record's `## Instrument` section adds one line: "Arms are produced with `--instrument v1` (fills and costs of the v1 instrument); every measurement command in V135-13/14 carries it." Otherwise it states "instrument: v1 (the only one; `--instrument` not present at pre-registration)". (b) From this commit until the last stage of V135-14 has run, **do not merge `main` into the worktree**: `measure_arms.py` stamps `code_hash()` over `swingbot/*.py`, and a merge between stages makes the judge refuse the arms.
+
 - [ ] **Step 1: Invoke `backtest-gate`, confirm the tree is clean, then write the record**
 
 Run `git status --short -- swingbot/ scripts/backtest/` (must print nothing) and `ls logs/v135 2>/dev/null` (must print nothing: no arm exists yet). Then write:
@@ -921,6 +944,8 @@ Record the commit hash; both results docs quote it.
   - `validate_component.py --stage {reachability,mde,selection,walkforward,validation} [--arms P] --title T --window W [--train-effect-pp X] [--grid-arms V=P] [--mde-refused V] [--headroom-mechanism] [--permutation-p P] [--out-md P] [--out-json P]`
   - `permutation_test.py --arms P --n 200 --seed 42`
 - Produces: a verdict for the confluence component: `ship candidate h=<x>`, or closed at a named stage with its numbers.
+
+**Cross-plan (audit 2026-10-10):** (a) **Instrument pin:** before the first command, run `python scripts/backtest/measure_arms.py --help` and `python scripts/backtest/validate_component.py --help`; if either lists `--instrument` (v158 merged), append `--instrument v1` to every command of that script in this task, and the results doc names the instrument `v1`. (b) **No merge of `main` into the worktree** between the V135-12 pre-registration commit and the last stage run: `measure_arms.py` stamps `code_hash()` over `swingbot/*.py`, so a merge mid-funnel makes the judge refuse the arms.
 
 **Rules for every step.** Invoke `backtest-gate` before each command. Confirm `git status --short -- swingbot/ scripts/backtest/` is empty before each producer run and make no edit there while it runs. Dispatch every `measure_arms.py` run to the `backtest-runner` subagent, **one invocation per dispatch, never two at once**, naming the worktree; its progress is the percent line in `logs/measure_arms.*.progress`. The Stage 1 judge prints its own `headroom readings: N/M tickers (P%)` line; if it is expected to run long, dispatch it to `backtest-runner` too. **Stop on the first refusing or failing stage**: append the numbers to the results doc, write its observations (Step 6), commit (Step 7) and go to V135-14. Never re-run a stage to get a different answer.
 
@@ -1024,6 +1049,8 @@ git commit -m "docs(v135): confluence component funnel result"
 **Interfaces:**
 - Consumes: the V135-12 record. This task starts only after V135-13's commit, never while a confluence shot runs. The confluence result changes no rule here: the budgets are separate and never pooled.
 - Produces: a verdict for the strategy component.
+
+**Cross-plan (audit 2026-10-10):** (a) **Instrument pin:** before the first command, run `python scripts/backtest/measure_arms.py --help` and `python scripts/backtest/validate_component.py --help`; if either lists `--instrument` (v158 merged), append `--instrument v1` to every command of that script in this task, and the results doc names the instrument `v1`. (b) **No merge of `main` into the worktree** between the V135-12 pre-registration commit and the last stage run: `measure_arms.py` stamps `code_hash()` over `swingbot/*.py`, so a merge mid-funnel makes the judge refuse the arms.
 
 **Rules for every step:** the same as V135-13. `backtest-gate` before each command, a clean `swingbot/` and `scripts/backtest/` before each producer run, one `measure_arms.py` invocation per `backtest-runner` dispatch, stop on the first refusing or failing stage. The strategy clause-6 reading replays every in-scope cell, so the Stage 0 disclosure and the Stage 1 judge are the slow commands here: dispatch them to `backtest-runner` and read the `headroom readings: N/M tickers (P%)` line for progress.
 
@@ -1130,6 +1157,8 @@ git commit -m "docs(v135): strategy component funnel result"
 - Consumes: the V135-13 and V135-14 verdicts.
 - Produces: shipped defaults, or nothing (the gate stays inert).
 
+**Cross-plan (audit 2026-10-10):** do not merge `main` into the worktree before this task's verdict is read from both components' records (the arms' `code_hash()` stamps must still match while any judge may re-read them); the merge happens only in V135-17.
+
 - [ ] **Step 1: Branch on the verdicts**
 
 - **Neither passed:** the defaults stay `off` / `0`. Skip to V135-16.
@@ -1213,7 +1242,7 @@ A conflict-free merge is not re-tested. If the merge resolved conflicts (most li
 
 - [ ] **Step 2: Add the two rows to the closed-pre-registrations table**
 
-In `docs/claude/backtest-methodology.md`, insert at the top of the "Closed pre-registrations — do not re-run these" table (above the v122 rows) one row per component, with the measured numbers copied from the results docs (`pooled-numbers`: read them from the files, never from memory):
+In `docs/claude/backtest-methodology.md`, insert directly under the "Closed pre-registrations — do not re-run these" table's header separator (newest first) one row per component, with the measured numbers copied from the results docs (`pooled-numbers`: read them from the files, never from memory):
 
 ```markdown
 | Headroom veto, confluence scope (every confluence scenario, both directions; `HEADROOM_MIN_R` threshold), `h ∈ {0.5, 0.75, 1.0}` (v135) | **<PASS at VALIDATION / NO-LIFT at Stage n / FAILED at Stage 3>; VALIDATION <spent / not spent, remains available>.** <universe size, horizons, both engines; baseline → component rows per cell; fold-train ΔWR and paired MDE per cell; ΔExpR per cell; removed / replacement counts and cut % per cell; baseline-reading flagged WR vs retained WR and flagged ExpR per cell; `no_map` and `unreadable` shares; per-direction removals and the one-direction statement; top-two horizon shares; for stages reached: Stage 1 verdict, fold rows, permutation p and the six clauses>. `HEADROOM_SCOPE` <stays `off`; code remains inert / is `confluence` at `h=<x>`>. Reopening needs a mechanism other than "an opposing level with ≥ 2 source families nearer than `h ∈ {0.5, 0.75, 1.0}` × risk". | `results/2026-10-06-v135-preregistration.md`, `results/2026-10-06-v135-confluence.md` |

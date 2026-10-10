@@ -1019,7 +1019,7 @@ git commit -m "feat(v147): record live RS, plan-rejected and compression blocks 
 
 **Model:** opus — due-date arithmetic over the NYSE calendar, the grace counter, the intraday price-basis bridge and the read-only-from-the-live-cache rule together decide whether every live blocked row is resolved once and reproducibly.
 
-**Cross-plan (audit 2026-10-10):** swallowed-error ratchet (owner v148). Its repo-wide count covers all of `swingbot/**/*.py`, not only the converted scopes, so `_safe_resolve`'s new handler in `gate_resolver.py` counts too. If `tests/infra/test_swallowed_ratchet.py` exists (v148 merged), write it `except Exception as exc:` with first statement `swallowed(log, "backtest.gate_resolve_row", exc, level=logging.DEBUG)` (import from `swingbot.core.infra.swallowed`), keeping the existing log line, and also run `python scripts/dev/testrun.py file tests/infra/test_swallowed_ratchet.py` (PASS; never raise `BASELINE`). If v148 is not merged, write it as planned.
+**Cross-plan (audit 2026-10-10):** swallowed-error ratchet (owner v148). Its repo-wide count covers all of `swingbot/**/*.py`, not only the converted scopes, so `_safe_resolve`'s new handler in `gate_resolver.py` counts too. If `tests/infra/test_swallowed_ratchet.py` exists (v148 merged), write it `except Exception as exc:` with first statement `swallowed(log, "ops.gate_resolve_row", exc, level=logging.DEBUG)` (import from `swingbot.core.infra.swallowed`), keeping the existing log line, and also run `python scripts/dev/testrun.py file tests/infra/test_swallowed_ratchet.py` (PASS; never raise `BASELINE`). If v148 is not merged, write it as planned.
 
 **Files:**
 - Create: `swingbot/core/backtesting/gate_resolver.py`

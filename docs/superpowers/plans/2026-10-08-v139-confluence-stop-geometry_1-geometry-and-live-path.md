@@ -199,10 +199,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task V139-2: The two inert knobs, `ScanParams` and the reachability rows
 
 **Files:**
-- Modify: `swingbot/config.py` (two `Field`s after `CLAMP_STOP_TO_HARD_CAP`, ~line 172; `_SEARCH_CLASSES["searchable"]`, ~line 1213)
+- Modify: `swingbot/config.py` (two `Field`s after `CLAMP_STOP_TO_HARD_CAP`, ~line 186; `_SEARCH_CLASSES["searchable"]`, ~lines 1237-1262)
 - Modify: `swingbot/scan_params.py` (two fields after `fvg_displacement_atr_k`, ~line 91; two `from_config` lines)
 - Modify: `swingbot/core/backtesting/arms/reachability.py` (two `REGISTRY` rows)
-- Modify: `.env.example` (after `CLAMP_STOP_TO_HARD_CAP=true`, ~line 96)
+- Modify: `.env.example` (after `CLAMP_STOP_TO_HARD_CAP=true`, ~line 102)
 - Modify: `tests/market/test_v115_strategy_work_off.py` (`FLAGS_OFF`)
 - Create: `tests/test_config_v139_confluence_stop.py`
 
@@ -734,6 +734,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `confluence_stop_dropped(scenario, level_map=None, params=None) -> bool`, consumed by V139-7.
   - Confluence plans carrying `stop_ceiling_pct` (V139-6, V139-8).
 
+**Cross-plan (audit 2026-10-10):** complexity gate (owner v149). If `scripts/dev/complexity_gate.py` exists (v149 merged), this task's extraction of `_confluence_candidates` finishes with `python scripts/dev/complexity_gate.py` after Step 6, then `--update`, and Step 7 commits `scripts/dev/complexity_baseline.json` with it (`gone`/`improved` expected; `new`/`risen` never).
+
 `build_confluence_plan` is at C(14). The drop branch adds one. Extracting `_confluence_candidates` removes two (the `if level_map` and the conditional expression), so the function ends at 13 (index, Spec correction 2).
 
 - [ ] **Step 1: Write the failing tests**
@@ -1096,6 +1098,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: `builders.confluence_stop_dropped` (V139-5), `stop_scope.plan_stop_ceiling` / `risk_sizing_ok` (V139-6).
 - Produces: new `item.plan_v2_rejected` values `"stop_beyond_confluence_ceiling"` and `"risk_sizing"`. `"risk_cap"` and `"no_qualifying_target"` keep their meaning.
+
+**Cross-plan (audit 2026-10-10):** v147 may have rewritten the risk-cap block in `attach_plan_v2` (`swingbot/core/scanning/analyze.py`) to compute `loss_pct = planned_loss_pct(...)` and call `_reject_plan(..., plan=plan, margin=...)`. Check `git grep -n "loss_pct =\|_reject_plan(.*plan=plan" -- swingbot/core/scanning/analyze.py`. **If both exist (v147 merged),** keep v147's `loss_pct` assignment and its `_reject_plan(..., plan=plan, margin=…)` call; in Step 3 replace only the comparison and the margin base with the ceiling: `ceiling = plan_stop_ceiling(plan)`, `if loss_pct > ceiling + 1e-9:`, `margin=loss_pct - ceiling` (keeping v147's other arguments), and pass v147's extra keywords to the new `"risk_sizing"` rejection only if its `_reject_plan` requires them. The import step's "only use of `HARD_MAX_PLANNED_LOSS_PCT`" grep may then find a v147 use: remove the import only if no use remains after the edit. **Otherwise** as written.
 
 Index Spec corrections 4 and 5. With both knobs at 0, `plan_stop_ceiling` returns 2.0 for every confluence plan and `risk_sizing_ok` is never called, so the live scan is unchanged.
 
