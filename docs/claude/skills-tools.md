@@ -196,7 +196,7 @@ Serial, one at a time — except plan parts (§ Plan writing below). Opus
 | Review that task's commits | `task-reviewer` | sonnet |
 | Review a spec, plan, diff or result through one expert role (via `/panel`) | `expert-reviewer` | the role's model from § Expert roles |
 | Gather a plan's code context into one brief | `plan-briefer` | sonnet |
-| Draft a plan from an approved spec — index, then parts in parallel | `plan-writer` | opus |
+| Draft a plan from an approved spec — index, then parts two at a time | `plan-writer` | opus |
 | Read-only production question | `prod-inspector` | haiku |
 | Backtest / grid / fold run > ~2 min | `backtest-runner` | sonnet |
 | Full or fast suite run | `test-runner` | sonnet |
@@ -217,7 +217,7 @@ Opus context.
 Measured over nine plan-writer runs (v108–v145): wall time scales with what
 is written in one serial context — 13 min for a 70 KB plan, 51–55 min for
 170–320 KB — and tool execution is under 10% of it. So the plan is written
-in parallel parts, to disk as it goes:
+in parts, two at a time, to disk as it goes:
 
 0. Dispatch `plan-briefer` with the spec path and
    `.superpowers/briefs/<plan base>.md`. Exploration was most of the old
@@ -230,8 +230,12 @@ in parallel parts, to disk as it goes:
    every cross-task file and contract). A single-file plan (≤ ~1300 lines)
    comes back `DONE` from this one run.
 2. On `PARTS`, dispatch one `plan-writer` per part with `mode=part <N>`, the
-   spec, index and brief paths — **all in one message**, so they run
-   concurrently. This is the standing exception to serial dispatch.
+   spec, index and brief paths — **at most 2 part writers at once**: two in
+   one message, the next pair only when both have returned (a part that
+   returns `BLOCKED:` frees its slot). This is the standing exception to
+   serial dispatch, and it stops at two: four Opus writers at once drain the
+   5h window before any part is committed. A resume counts the same —
+   incomplete parts are re-dispatched two at a time.
    **Commit the index as soon as phase 1 returns**
    (`docs(vN): plan index -- parts pending`), and each part as it returns, so
    a session that runs out of tokens leaves committed, resumable work.
@@ -247,7 +251,8 @@ diverging from the ledger.
 
 **Never more than 2 plans being written at once in one session.** A plan
 counts from its `mode=index` dispatch until all its parts are committed; a
-third waits for one to finish. Its parts still fan out in parallel.
+third waits for one to finish. The 2-writer cap is per session, not per
+plan: two plans in progress share the same two slots.
 
 **Running out of tokens is resumed, never skipped.** Any plan whose ledger
 lists ids missing from its part files is unfinished: re-dispatch the

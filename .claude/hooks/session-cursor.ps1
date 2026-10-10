@@ -74,7 +74,7 @@ try {
             if ($missing.Count -eq 0) { continue }
             $span = if ($missing.Count -gt 1) { "$($missing[0])..$($missing[-1])" } else { $missing[0] }
             Emit ("PLAN WIP : {0} -- {1}/{2} tasks written, missing {3}" -f $g.Name, ($ledger.Count - $missing.Count), $ledger.Count, $span)
-            Emit  "           Resume it before any new plan: plan-writer mode=part <N> per incomplete part (skills-tools.md, Plan writing)."
+            Emit  "           Resume it before any new plan: plan-writer mode=part <N> per incomplete part, at most 2 at once (skills-tools.md, Plan writing)."
             if ($handoff) { Emit "           Handoff notes: '## Handoff' in $handoff - read them first." }
         }
     }
