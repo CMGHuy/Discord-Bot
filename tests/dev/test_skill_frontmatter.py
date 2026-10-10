@@ -76,6 +76,8 @@ def test_blank_frontmatter_lines_are_skipped():
 @pytest.mark.parametrize("line, reason", [
     ("description: whether a setup is tradeable: fills and gaps", "': '"),
     ("description: follows the ### Task ids convention", "' #'"),
+    ("description: # not a comment", "' #'"),
+    ("description:\t# tab then a comment", "' #'"),
     ('description: "an unescaped "inner" quote"', "after the closing quote"),
     ('description: "closed" and then more', "after the closing quote"),
     ('description: "never closed', "no closing quote"),
