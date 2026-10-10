@@ -86,5 +86,6 @@ At most two implementers at once (CLAUDE.md). The natural pairs: FC2 ‖ FC3, th
 
 | Part file | Tasks | Scope |
 |---|---|---|
-| `2026-10-10-v157-instrument-v2-fills-costs_1-contract-fills-walk.md` | Phase A: FC1, FC2, FC3; Phase B: FC4, FC5 | Contract values, the pure `fills`/`costs` modules, the v2 walker and its entries behind the `simulate_exit` seam |
+| `2026-10-10-v157-instrument-v2-fills-costs_1-contract-fills-walk.md` | Phase A: FC1, FC2, FC3; Phase B: FC4 | Contract values, the pure `fills`/`costs` modules, the v2 walker |
+| `2026-10-10-v157-instrument-v2-fills-costs_1b-entries-seam.md` | Phase B: FC5 | The v2 entries and the `simulate_exit` seam (split from part 1 for the line cap) |
 | `2026-10-10-v157-instrument-v2-fills-costs_2-threading-suite.md` | Phase C: FC6, FC7, FC8; Phase D: FC9 | Instrument threaded into the backtest replay, the arms engines and `backtest_wf`; `signal_date`; the final full suite |
