@@ -26,7 +26,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from skill_frontmatter import (  # noqa: E402
     FrontmatterError, parse_frontmatter, quote_value)
 
-ROOT =pathlib.Path(__file__).resolve().parent.parent.parent
+ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 CLAUDE_SKILLS = ROOT / ".claude" / "skills"
 CLAUDE_AGENTS = ROOT / ".claude" / "agents"
 CODEX_SKILLS = ROOT / ".agents" / "skills"

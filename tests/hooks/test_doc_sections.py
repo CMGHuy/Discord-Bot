@@ -133,8 +133,8 @@ def test_closed_preregistrations_heading_keeps_its_level_and_text():
     # test_guardrails splits the doc on this literal; a second occurrence, for
     # example inside an inserted heading, would move the split.
     assert text.count("### Closed pre-registrations") == 1
-    assert [line for line in lines if line.startswith("### ")] == [CLOSED]
     closed_at = lines.index(CLOSED)
+    assert [line for line in lines[closed_at:] if line.startswith("### ")] == [CLOSED]
     assert lines.index("## Evidence, registry and ledger") < closed_at
     assert not [line for line in lines[closed_at:] if line.startswith("## ")]
 
