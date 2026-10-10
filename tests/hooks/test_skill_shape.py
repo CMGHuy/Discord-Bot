@@ -6,10 +6,16 @@ mechanical. See docs/superpowers/specs/implemented/2026-09-18-v96-claude-skills-
 """
 import pathlib
 import re
+import sys
 
 import pytest
 
 _REPO_ROOT = pathlib.Path(__file__).parent.parent.parent
+# scripts/dev has no __init__.py: put it on sys.path, then import the helper.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "scripts" / "dev"))
+
+from skill_frontmatter import FrontmatterError, parse_frontmatter  # noqa: E402
+
 SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 
 # Predate v96's 80-line budget. Not exemptions to copy -- the list never grows.
@@ -48,18 +54,11 @@ def _skill_dirs():
 
 
 def _read_skill(name):
-    """Return (frontmatter dict, body) for one skill. Frontmatter is the
-    simple `key: value` subset this repo's skills actually use."""
+    """Return (frontmatter dict, body) for one skill, through the strict
+    reader the Codex mirror also uses: frontmatter the real loader rejects
+    raises FrontmatterError here instead of passing quietly."""
     text = (SKILLS_DIR / name / "SKILL.md").read_text(encoding="utf-8")
-    if not text.startswith("---"):
-        return {}, text
-    _, fm, body = text.split("---", 2)
-    meta = {}
-    for line in fm.strip().splitlines():
-        if ":" in line:
-            k, v = line.split(":", 1)
-            meta[k.strip()] = v.strip()
-    return meta, body
+    return parse_frontmatter(text)
 
 
 @pytest.mark.parametrize("path", _skill_dirs(), ids=lambda p: p.name)
@@ -147,3 +146,21 @@ def test_backup_skills_match_the_v120_final_fixes():
     assert "main tree's `backups/" in snap and "main tree's `backups/" in pull
     # FAIL wording matches the script's stderr line
     assert "pull_backups: FAIL" in pull
+
+
+# v154: the reader is scripts/dev/skill_frontmatter.py, which rejects what the
+# real loader rejects. The fixture is the frontmatter six role skills shipped
+# with in v145 -- they listed under their title-cased name and never triggered
+# while the old colon splitter here kept the suite green.
+BROKEN_FIXTURE = _REPO_ROOT / "tests" / "hooks" / "fixtures" / "broken_frontmatter_SKILL.md"
+
+
+def test_the_reader_rejects_the_frontmatter_that_shipped_broken():
+    with pytest.raises(FrontmatterError, match="frontmatter line 3"):
+        parse_frontmatter(BROKEN_FIXTURE.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("path", _skill_dirs(), ids=lambda p: p.name)
+def test_every_description_is_read_without_its_quotes(path):
+    description = _read_skill(path.name)[0]["description"]
+    assert description and description[0] != '"' and description[-1] != '"'

@@ -5,10 +5,16 @@ the v107 spec cannot drift silently. See
 docs/superpowers/specs/2026-09-27-v107-token-budget-agents.md
 """
 import pathlib
+import sys
 
 import pytest
 
 _REPO_ROOT = pathlib.Path(__file__).parent.parent.parent
+# scripts/dev has no __init__.py: put it on sys.path, then import the helper.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "scripts" / "dev"))
+
+from skill_frontmatter import parse_frontmatter  # noqa: E402
+
 AGENTS_DIR = _REPO_ROOT / ".claude" / "agents"
 
 # Each v107 agent task appends its own entry.
@@ -59,19 +65,11 @@ def _agent_files():
 
 
 def _read_agent(name):
-    """Return (frontmatter dict, body) -- the simple `key: value` subset,
-    plus YAML `- item` lines collected under the preceding list key."""
+    """Return (frontmatter dict, body) for one agent, through the strict
+    reader skills use. `- item` lines fold into the key above them, joined
+    with ", "; an inline `[a, b]` list stays that literal text."""
     text = (AGENTS_DIR / f"{name}.md").read_text(encoding="utf-8")
-    _, fm, body = text.split("---", 2)
-    meta, key = {}, None
-    for line in fm.strip().splitlines():
-        stripped = line.strip()
-        if stripped.startswith("- ") and key:
-            meta[key] = ", ".join(filter(None, [meta[key], stripped[2:]]))
-        elif ":" in line and not line.startswith(" "):
-            key, v = (s.strip() for s in line.split(":", 1))
-            meta[key] = v
-    return meta, body
+    return parse_frontmatter(text)
 
 
 def _skills(meta):
@@ -122,3 +120,16 @@ def test_expert_reviewer_is_read_only_and_knows_every_role():
     assert not missing, missing
     for word in ("BLOCKING", "ADVISORY", "CLEAN", "UNKNOWN ROLE"):
         assert word in body, word
+
+
+# v154: agents are read through the same strict reader as skills.
+@pytest.mark.parametrize("path", _agent_files(), ids=lambda p: p.stem)
+def test_every_agent_description_is_read_without_its_quotes(path):
+    description = _read_agent(path.stem)[0]["description"]
+    assert description and description[0] != '"' and description[-1] != '"'
+
+
+def test_dash_item_skills_fold_into_one_value():
+    meta, _ = parse_frontmatter(
+        "---\nname: x\nskills:\n  - no-lookahead\n  - senior-engineer\n---\n")
+    assert _skills(meta) == {"no-lookahead", "senior-engineer"}
