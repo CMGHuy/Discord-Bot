@@ -4,15 +4,21 @@ the mistake rather than relying on CLAUDE.md having been recalled.
 Rules encode what CLAUDE.md and .ignore already state. If a rule and
 CLAUDE.md ever disagree, CLAUDE.md wins and the rule is what gets fixed.
 
-Design: evaluate() reads no files and spawns no subprocesses -- os.path.getsize
-and os.getcwd() are the only OS calls -- so the whole rule set is unit-tested in
-tests/hooks/test_guardrails.py without a live session. Anything unrecognised
-returns None -- silent allow. A guardrail that blocks legitimate work costs more
-than the habit it prevents.
+Design: evaluate() spawns no subprocesses. Its only file reads are the
+idea-screen lookups (_screen_ledger_row reads the pre-registration ledger,
+_screen_results_doc globs the results docs), and both go through module-level
+constants (SCREEN_LEDGER_PATH, SCREEN_RESULTS_DIR) that tests point at
+tmp_path. Otherwise os.path.getsize and os.getcwd() are the only OS calls, so
+the whole rule set is unit-tested in tests/hooks/test_guardrails.py without a
+live session. Anything unrecognised returns None -- silent allow, and a
+missing or unreadable ledger reads as "no row". A guardrail that blocks
+legitimate work costs more than the habit it prevents.
 """
+import glob
 import json
 import os
 import re
+import shlex
 import sys
 
 
@@ -283,6 +289,166 @@ def _rule_closed_preregistration(ti: dict):
         "say so to the human partner and let them authorise it -- do not clear "
         "this yourself."
     )
+
+
+# The idea screen's one-shot rule (backtest-methodology.md "Funnel stages").
+# screen_idea.py refuses a second real run of an id already in the ledger it
+# is given; these helpers read a Bash command the way a shell would, so
+# _rule_screen_rerun can close the ways round that refusal. The paths are
+# module globals read at call time, so tests point them at tmp_path; the drift
+# test pins SCREEN_LEDGER_PATH to stats.LEDGER_PATH because this hook stays
+# stdlib-only and cannot import swingbot.
+_HOOK_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+SCREEN_RESULTS_DIR = os.path.join(_HOOK_REPO_ROOT, "docs", "superpowers", "results")
+SCREEN_LEDGER_PATH = os.path.join(SCREEN_RESULTS_DIR, "preregistration-ledger.jsonl")
+_SCREEN_SEPARATORS = frozenset({"&&", "||", ";", "|", "&"})
+_SCREEN_OPTIONS = ("--idea", "--cache-dir", "--membership", "--start", "--end",
+                   "--date", "--ledger", "--results-dir", "--tickers", "--dry-run")
+_SCREEN_VALUE_KEYS = {"--idea": "idea", "--ledger": "ledger",
+                      "--results-dir": "results_dir"}
+
+
+def _line_tokens(line: str) -> list[str] | None:
+    """shlex tokens of one shell line, or None when it cannot be tokenised."""
+    lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    try:
+        return list(lexer)
+    except ValueError:
+        return None
+
+
+def _split_on_separators(tokens: list[str]) -> list[list[str]]:
+    """`tokens` cut at every _SCREEN_SEPARATORS token; empty pieces dropped."""
+    segments, current = [], []
+    for tok in tokens:
+        if tok in _SCREEN_SEPARATORS:
+            segments.append(current)
+            current = []
+        else:
+            current.append(tok)
+    segments.append(current)
+    return [seg for seg in segments if seg]
+
+
+def _command_segments(cmd: str) -> list[list[str]] | None:
+    """Shell segments of `cmd` as token lists, or None when a line that
+    mentions screen_idea cannot be tokenised (any other such line is skipped)."""
+    joined = cmd.replace("\\\r\n", " ").replace("\\\n", " ")
+    segments = []
+    for line in joined.splitlines():
+        tokens = _line_tokens(line)
+        if tokens is None:
+            if "screen_idea" in line:
+                return None
+            continue
+        segments.extend(_split_on_separators(tokens))
+    return segments
+
+
+def _is_screen_token(tok: str) -> bool:
+    """The screen script as a path (any separator) or as a module name."""
+    norm = tok.replace("\\", "/")
+    return (norm.endswith("screen_idea.py") or norm == "screen_idea"
+            or norm.endswith(".screen_idea"))
+
+
+def _is_wrapped_screen(tok: str) -> bool:
+    """A single token carrying a whole screen run: an ssh or pwsh wrapper."""
+    return not _is_screen_token(tok) and "screen_idea" in tok and "--idea" in tok
+
+
+def _resolve_screen_option(name: str) -> str | None:
+    """`name` as argparse resolves it: exact, else a unique prefix."""
+    if name in _SCREEN_OPTIONS:
+        return name
+    hits = [opt for opt in _SCREEN_OPTIONS if opt.startswith(name)]
+    return hits[0] if len(hits) == 1 else None
+
+
+def _screen_option_values(tokens: list[str]):
+    """Yield (option, value) for each screen option in `tokens`; value is None
+    for --dry-run and for an option with no value after it."""
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        i += 1
+        name, eq, inline = tok.partition("=")
+        opt = _resolve_screen_option(name) if name.startswith("--") else None
+        if opt is None:
+            continue
+        if opt == "--dry-run" or eq:
+            yield opt, (inline if eq else None)
+        elif i < len(tokens) and not tokens[i].startswith("-"):
+            yield opt, tokens[i]
+            i += 1
+        else:
+            yield opt, None
+
+
+def _screen_flags(tokens: list[str]) -> dict | None:
+    """The screen flags of one segment, read after its first screen token;
+    None when the segment does not run the screen."""
+    start = next((i for i, tok in enumerate(tokens) if _is_screen_token(tok)), None)
+    if start is None:
+        return None
+    flags = {"idea": None, "dry_run": False, "tickers": False,
+             "ledger": None, "results_dir": None}
+    for opt, value in _screen_option_values(tokens[start + 1:]):
+        if opt == "--dry-run":
+            flags["dry_run"] = True
+        elif opt == "--tickers":
+            flags["tickers"] = bool(value)
+        elif opt in _SCREEN_VALUE_KEYS:
+            flags[_SCREEN_VALUE_KEYS[opt]] = value
+    return flags
+
+
+def _same_repo_path(value: str, target: str) -> bool:
+    """`value`, resolved against the repo root, names `target`."""
+    resolved = os.path.join(_HOOK_REPO_ROOT, value)
+    return (os.path.normcase(os.path.normpath(resolved))
+            == os.path.normcase(os.path.normpath(target)))
+
+
+def _is_default_ledger(value: str) -> bool:
+    return _same_repo_path(value, SCREEN_LEDGER_PATH)
+
+
+def _is_default_results_dir(value: str) -> bool:
+    return _same_repo_path(value, SCREEN_RESULTS_DIR)
+
+
+def _json_row(line: str) -> dict | None:
+    try:
+        row = json.loads(line)
+    except ValueError:
+        return None
+    return row if isinstance(row, dict) else None
+
+
+def _screen_ledger_row(idea: str) -> dict | None:
+    """The ledger row whose id is exactly screen-<idea>, or None. A missing or
+    unreadable ledger reads as no row; a malformed line is skipped."""
+    want = f"screen-{idea}"
+    try:
+        with open(SCREEN_LEDGER_PATH, encoding="utf-8") as fh:
+            lines = fh.readlines()
+    except OSError:
+        return None
+    for line in lines:
+        row = _json_row(line)
+        if row is not None and row.get("id") == want:
+            return row
+    return None
+
+
+def _screen_results_doc(idea: str) -> str | None:
+    """The first `*-screen-<idea>.md` in SCREEN_RESULTS_DIR, or None."""
+    pattern = os.path.join(glob.escape(SCREEN_RESULTS_DIR),
+                           f"*-screen-{glob.escape(idea)}.md")
+    hits = sorted(glob.glob(pattern))
+    return hits[0] if hits else None
 
 
 # docs/superpowers/{specs,plans}/ have two unconditional shape rules

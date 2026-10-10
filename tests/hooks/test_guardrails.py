@@ -4,7 +4,9 @@ import os
 import pathlib
 import re
 
-_REPO_ROOT = pathlib.Path(__file__).parent.parent.parent
+import pytest
+
+_REPO_ROOT =pathlib.Path(__file__).parent.parent.parent
 _SPEC = importlib.util.spec_from_file_location(
     "guardrails",
     _REPO_ROOT / ".claude" / "hooks" / "guardrails.py",
@@ -518,3 +520,169 @@ def test_apply_patch_on_claude_setup_warns():
 
 def test_apply_patch_with_no_patch_text_fails_open():
     assert evaluate({"tool_name": "apply_patch", "tool_input": {}}) is None
+
+
+# --- v155: idea-screen helpers (_rule_screen_rerun's building blocks) -------
+
+_SCREEN = "python scripts/backtest/screen_idea.py"
+
+
+def test_screen_ledger_path_matches_stats_ledger_path():
+    """The hook is stdlib-only, so it carries its own copy of the ledger path;
+    this pins it to the one screen_idea.py actually defaults to."""
+    from swingbot.core.backtesting.instrument import stats
+    assert (pathlib.Path(guardrails.SCREEN_LEDGER_PATH).resolve()
+            == stats.LEDGER_PATH.resolve())
+
+
+def test_screen_results_dir_holds_the_ledger():
+    assert (pathlib.Path(guardrails.SCREEN_LEDGER_PATH).parent
+            == pathlib.Path(guardrails.SCREEN_RESULTS_DIR))
+
+
+def test_command_segments_split_on_separators_and_newlines():
+    segs = guardrails._command_segments("cd x && ls -la; echo a | wc -l\ngit status")
+    assert segs == [["cd", "x"], ["ls", "-la"], ["echo", "a"], ["wc", "-l"],
+                    ["git", "status"]]
+
+
+def test_command_segments_join_backslash_continuations():
+    segs = guardrails._command_segments(f"{_SCREEN} \\\n  --idea gap_volume \\\n  --dry-run")
+    assert segs == [["python", "scripts/backtest/screen_idea.py", "--idea",
+                     "gap_volume", "--dry-run"]]
+
+
+def test_command_segments_keep_a_quoted_string_whole():
+    segs = guardrails._command_segments('bash x.sh "cd /opt && python y.py"')
+    assert segs == [["bash", "x.sh", "cd /opt && python y.py"]]
+
+
+def test_an_untokenisable_screen_line_gives_none():
+    assert guardrails._command_segments(f"{_SCREEN} --idea 'gap_volume") is None
+
+
+def test_an_untokenisable_unrelated_line_is_skipped():
+    assert guardrails._command_segments("echo 'oops\ngit status") == [["git", "status"]]
+
+
+def test_screen_tokens_cover_paths_and_module_names():
+    for tok in ("scripts/backtest/screen_idea.py", "scripts\\backtest\\screen_idea.py",
+                "screen_idea.py", "screen_idea", "scripts.backtest.screen_idea"):
+        assert guardrails._is_screen_token(tok), tok
+    for tok in ("screen_idea_notes.md", "tests/test_screen_idea_x.py", "screen"):
+        assert not guardrails._is_screen_token(tok), tok
+
+
+def test_a_wrapped_screen_needs_both_the_name_and_the_idea_flag():
+    assert guardrails._is_wrapped_screen(
+        f"cd /opt/swing-bot && {_SCREEN} --idea gap_volume")
+    assert not guardrails._is_wrapped_screen("docs mention screen_idea.py only")
+    assert not guardrails._is_wrapped_screen("scripts/backtest/screen_idea.py")
+
+
+def test_screen_flags_is_none_for_a_segment_without_the_script():
+    assert guardrails._screen_flags(["git", "status"]) is None
+
+
+def test_screen_flags_read_both_idea_spellings():
+    space = guardrails._screen_flags(["python", "screen_idea.py", "--idea", "gap_volume"])
+    equals = guardrails._screen_flags(["python", "screen_idea.py", "--idea=gap_volume"])
+    assert space["idea"] == equals["idea"] == "gap_volume"
+
+
+def test_screen_flags_read_every_checked_option():
+    flags = guardrails._screen_flags(
+        ["python", "-m", "scripts.backtest.screen_idea", "--idea", "x",
+         "--tickers", "AAPL,MSFT", "--dry-run", "--ledger", "l.jsonl",
+         "--results-dir=r"])
+    assert flags == {"idea": "x", "dry_run": True, "tickers": True,
+                     "ledger": "l.jsonl", "results_dir": "r"}
+
+
+def test_screen_flags_resolve_unique_abbreviations_like_argparse():
+    flags = guardrails._screen_flags(
+        ["python", "screen_idea.py", "--id", "x", "--dry", "--led", "l.jsonl",
+         "--res=r"])
+    assert flags == {"idea": "x", "dry_run": True, "tickers": False,
+                     "ledger": "l.jsonl", "results_dir": "r"}
+
+
+def test_screen_flags_ignore_an_ambiguous_abbreviation():
+    flags = guardrails._screen_flags(["python", "screen_idea.py", "--idea", "x", "--d"])
+    assert flags["dry_run"] is False
+
+
+def test_screen_flags_ignore_tokens_before_the_script():
+    flags = guardrails._screen_flags(["X=--dry-run", "python", "screen_idea.py",
+                                      "--idea", "x"])
+    assert flags["dry_run"] is False
+
+
+def test_an_empty_tickers_value_is_no_tickers():
+    flags = guardrails._screen_flags(["python", "screen_idea.py", "--idea", "x",
+                                      "--tickers=", "--dry-run"])
+    assert flags["tickers"] is False
+
+
+@pytest.fixture
+def screen_repo(tmp_path, monkeypatch):
+    """A throwaway repo root holding an empty results dir, with the hook's
+    screen constants pointed at it. Never the real ledger."""
+    results = tmp_path / "docs" / "superpowers" / "results"
+    results.mkdir(parents=True)
+    monkeypatch.setattr(guardrails, "_HOOK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(guardrails, "SCREEN_RESULTS_DIR", str(results))
+    monkeypatch.setattr(guardrails, "SCREEN_LEDGER_PATH",
+                        str(results / "preregistration-ledger.jsonl"))
+    return results
+
+
+def _ledger_rows(results, *rows):
+    (results / "preregistration-ledger.jsonl").write_text(
+        "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+
+
+def test_default_ledger_matches_relative_and_absolute_spellings(screen_repo):
+    assert guardrails._is_default_ledger(
+        "docs/superpowers/results/preregistration-ledger.jsonl")
+    assert guardrails._is_default_ledger(
+        "./docs/superpowers/results/../results/preregistration-ledger.jsonl")
+    assert guardrails._is_default_ledger(str(screen_repo / "preregistration-ledger.jsonl"))
+    assert not guardrails._is_default_ledger("fresh.jsonl")
+
+
+def test_default_results_dir_matches_relative_and_absolute_spellings(screen_repo):
+    assert guardrails._is_default_results_dir("docs/superpowers/results")
+    assert guardrails._is_default_results_dir("docs/superpowers/results/")
+    assert guardrails._is_default_results_dir(str(screen_repo))
+    assert not guardrails._is_default_results_dir("elsewhere")
+
+
+def test_ledger_row_matches_the_exact_id_only(screen_repo):
+    _ledger_rows(screen_repo,
+                 {"id": "screen-gap_volume_v2", "date": "2026-10-01"},
+                 {"id": "screen-gap_volume", "date": "2026-10-02"})
+    assert guardrails._screen_ledger_row("gap_volume")["date"] == "2026-10-02"
+    assert guardrails._screen_ledger_row("gap") is None
+
+
+def test_ledger_row_skips_malformed_lines(screen_repo):
+    (screen_repo / "preregistration-ledger.jsonl").write_text(
+        'not json\n[1, 2]\n{"id": "screen-x", "date": "d"}\n', encoding="utf-8")
+    assert guardrails._screen_ledger_row("x") == {"id": "screen-x", "date": "d"}
+
+
+def test_a_missing_ledger_reads_as_no_row(screen_repo):
+    assert guardrails._screen_ledger_row("x") is None
+
+
+def test_results_doc_is_found_whatever_its_date(screen_repo):
+    doc = screen_repo / "2026-10-09-screen-turn_of_month.md"
+    doc.write_text("# result\n", encoding="utf-8")
+    assert guardrails._screen_results_doc("turn_of_month") == str(doc)
+    assert guardrails._screen_results_doc("month") is None
+
+
+def test_a_missing_results_dir_reads_as_no_doc(screen_repo, monkeypatch):
+    monkeypatch.setattr(guardrails, "SCREEN_RESULTS_DIR", str(screen_repo / "absent"))
+    assert guardrails._screen_results_doc("x") is None
