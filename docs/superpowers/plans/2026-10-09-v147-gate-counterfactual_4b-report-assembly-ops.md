@@ -750,7 +750,8 @@ def test_the_installer_is_idempotent_against_a_fake_crontab(tmp_path):
     fake = bindir / "crontab"
     fake.write_text('#!/usr/bin/env bash\n'
                     'if [ "$1" = "-l" ]; then [ -f "$FAKE_CRONTAB" ] && cat "$FAKE_CRONTAB" || exit 1;\n'
-                    'elif [ "$1" = "-" ]; then cat > "$FAKE_CRONTAB"; fi\n', encoding="utf-8")
+                    'elif [ "$1" = "-" ]; then cat > "$FAKE_CRONTAB.new" && mv "$FAKE_CRONTAB.new" "$FAKE_CRONTAB"; fi\n',
+                    encoding="utf-8")   # buffer like the real crontab: `-l | ... | -` must not truncate mid-read
     fake.chmod(0o755)
     store.write_text("0 1 * * * echo keep-me\n", encoding="utf-8")
     env = {**os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}", "FAKE_CRONTAB": str(store)}
@@ -901,4 +902,204 @@ git add scripts/ops/gate_counterfactual_progress.py scripts/ops/install_gate_cou
 git update-index --chmod=+x scripts/ops/install_gate_counterfactual_cron.sh
 git commit -m "feat(v147): weekly gate-counterfactual progress check and cron installer (V147-16)"
 ```
+
+### Task V147-17: TRAIN runs and results doc
+
+**Model:** sonnet — runs two pre-specified TRAIN commands through `backtest-runner` and records their output verbatim; no judgement beyond reading the report it prints.
+
+**Files:**
+- Create: `docs/superpowers/results/2026-10-09-v147-gate-counterfactual.md`
+
+**Interfaces:**
+- Consumes: `run_backtest_range.py --train --scenarios --scale-out --record-blocked PATH` (V147-5; confluence `no_qualifying_target` + `risk_cap` shadow rows); `measure_arms.py --record-blocked PATH` (V147-6; defaults to the TRAIN window; compression rows, `in_sample: true`); `scripts/reports/gate_counterfactual_report.py --train … --no-live --no-write --json …` (V147-15).
+- Produces: the TRAIN reading of record-to-be, as a results doc. It appends **no** ledger row and spends **no** budget (spec § What a verdict buys); the RS gate has no TRAIN run (v34 closed).
+
+**Rules:**
+- Invoke the `backtest-gate` skill before the first command. Windows: TRAIN 2020-01-01..2023-12-31 only; never `--validation` (both recorders refuse it).
+- Both runs go to the `backtest-runner` agent, one dispatch per run, with flushed progress (and a percent file past 15 minutes). Rows land in `logs/` (gitignored); only the results doc is committed.
+- The TRAIN reading here is printed with `--no-write`: it is a reading, not the verdict of record. The verdict of record is frozen by the first production `build_report()` run that sees these files in `data/reports/inputs/` (copied at close-out, V147-18).
+- TRAIN compression is expected to carry the note `"no TRAIN taken arm — no as-of earnings archive"` instead of a verdict (controller decision at the top of Part 4). Record whatever the run shows; if the taken arm is unexpectedly non-empty, record that too and flag it to the controller rather than explaining it away.
+
+- [ ] **Step 1: Check the backtest cache**
+
+Run: `python -c "from pathlib import Path; print(len(list(Path('data/backtest_cache').glob('*.csv'))))"`
+Expected: a count above 0 (the brief's runs used 75 cached tickers). If 0, run `python scripts/data/fetch_backtest_data.py` once (network) first.
+
+- [ ] **Step 2: Confluence TRAIN run (backtest-runner)**
+
+Dispatch `backtest-runner` with:
+
+```bash
+python scripts/backtest/run_backtest_range.py --train --scenarios --scale-out --record-blocked logs/v147-blocked-confluence.jsonl
+```
+
+Expected: exit 0; the printed scenario table is the same table the replay prints without the flag (V147-5 pins byte-identity); the file holds `plan_rejected` rows only (`no_qualifying_target` blocked, `risk_cap` blocked, `taken`), no `rs` and no `compression` row.
+
+- [ ] **Step 3: Compression TRAIN run (backtest-runner)**
+
+Dispatch `backtest-runner` with:
+
+```bash
+python scripts/backtest/measure_arms.py --record-blocked logs/v147-blocked-compression.jsonl
+```
+
+Expected: exit 0; every row `gate == "compression"`, `source == "strategy"`, `in_sample == true`, `margin == null`.
+
+- [ ] **Step 4: Count the rows**
+
+Run:
+
+```bash
+python - <<'EOF'
+import json
+from collections import Counter
+for path in ("logs/v147-blocked-confluence.jsonl", "logs/v147-blocked-compression.jsonl"):
+    rows = [json.loads(line) for line in open(path, encoding="utf-8") if line.strip()]
+    counts = Counter((r["gate"], r["reason"], r["arm"], r["cf_status"]) for r in rows)
+    print(f"## {path}: {len(rows)} rows, signal dates {min(r['signal_date'] for r in rows)}..{max(r['signal_date'] for r in rows)}")
+    print("| gate | reason | arm | cf_status | rows |\n|---|---|---|---|---|")
+    for (gate, reason, arm, status), n in sorted(counts.items(), key=lambda kv: tuple(map(str, kv[0]))):
+        print(f"| {gate} | {reason} | {arm} | {status} | {n} |")
+    assert not any(r["gate"] == "rs" for r in rows), "a TRAIN rs row: stop, v34 is closed"
+EOF
+```
+
+Expected: two markdown tables; the assertion holds. Keep the output for Step 6.
+
+- [ ] **Step 5: The TRAIN reading**
+
+Run:
+
+```bash
+python scripts/reports/gate_counterfactual_report.py --train logs/v147-blocked-confluence.jsonl logs/v147-blocked-compression.jsonl --no-live --no-write --json logs/v147-train-report.json
+```
+
+Expected: exit 0; the header line says `reading only (--no-write): not a verdict of record`; the live cells read `WAITING (0/30 …)`; the `rs` × `train` cell reads `no TRAIN population`; the limitations block is printed. Then render the tables for the doc:
+
+```bash
+python - <<'EOF'
+import json
+result = json.load(open("logs/v147-train-report.json", encoding="utf-8"))
+num = lambda v, spec="+.3f": "-" if v is None else format(v, spec)
+print("| gate | population | verdict | distinct filled N | taken N | difference | 95% CI | q | note |\n|---|---|---|---|---|---|---|---|---|")
+for c in result["cells"]:
+    latest = c["latest"] or {}
+    print(f"| {c['gate']} | {c['population']} | {c['verdict']}{' (in-sample)' if c['in_sample'] else ''} | {c['n']} | "
+          f"{c.get('taken_n', 0)} | {num(latest.get('difference'))} | [{num(latest.get('ci_low'))}, {num(latest.get('ci_high'))}] | "
+          f"{num(latest.get('q'), '.3f')} | {c['note'] or ''} |")
+print()
+print("| gate | reason | pop | blocked N | no-plan N | fill rate | blocked ExpR | blocked WR | taken ExpR | taken WR | near-miss N / ExpR | rest N / ExpR | $risk (x 2% cap) | labels |")
+print("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+for r in result["rows"]:
+    labels = " ".join(x for x, on in (("over-cap", r["over_cap"]), ("in-sample", r["in_sample"])) if on)
+    print(f"| {r['gate']} | {r['reason']} | {r['population']} | {r['blocked_n']} | {r['no_plan_n']} | {num(r['fill_rate'], '.1%')} | "
+          f"{num(r['blocked_exp_r'])} | {num(r['blocked_win_rate'], '.1%')} | {num(r['taken_exp_r'])} | {num(r['taken_win_rate'], '.1%')} | "
+          f"{r['near_miss_n'] if r['near_miss_n'] is not None else '-'} / {num(r['near_miss_exp_r'])} | "
+          f"{r['rest_n'] if r['rest_n'] is not None else '-'} / {num(r['rest_exp_r'])} | {num(r['dollar_risk'])} | {labels} |")
+EOF
+```
+
+- [ ] **Step 6: Write the results doc**
+
+Create `docs/superpowers/results/2026-10-09-v147-gate-counterfactual.md` with exactly these sections, filling each from the named step's output (no number from memory or from another document):
+
+```markdown
+# v147 gate counterfactual: TRAIN reading
+
+**Run:** <date of Steps 2-3>, TRAIN 2020-01-01..2023-12-31 (signal date), <ticker count from Step 1> cached tickers. VALIDATION never read. No RS row (live-only; v34 closed).
+**Spec:** `docs/superpowers/specs/2026-10-09-v147-gate-counterfactual-design.md`
+**Plan:** `docs/superpowers/plans/2026-10-09-v147-gate-counterfactual_0-index.md`
+
+**Status: a TRAIN reading, not a verdict of record.** The verdict of record is frozen by the first production `build_report()` run that reads these files from `data/reports/inputs/`. This document appends no ledger row and spends no budget.
+
+## Commands
+
+    python scripts/backtest/run_backtest_range.py --train --scenarios --scale-out --record-blocked logs/v147-blocked-confluence.jsonl
+    python scripts/backtest/measure_arms.py --record-blocked logs/v147-blocked-compression.jsonl
+    python scripts/reports/gate_counterfactual_report.py --train logs/v147-blocked-confluence.jsonl logs/v147-blocked-compression.jsonl --no-live --no-write --json logs/v147-train-report.json
+
+## Rows recorded
+
+<Step 4's two tables, verbatim>
+
+## Cells (gate x population, never pooled; BH over the fixed five-cell family)
+
+<Step 5's cells table, verbatim>
+
+## Rows (gate x reason x population)
+
+<Step 5's rows table, verbatim>
+
+## Reading
+
+- `risk_cap` (TRAIN shadow of the plan-time 2% cap; every row over-cap, never a tradable alternative): <the cell's verdict or note, its N, difference, CI and q, in one sentence>.
+- `compression` (TRAIN, in-sample): <the cell's verdict or note; if the note is the empty-taken-arm note, say the TRAIN gate cannot be read until an as-of earnings archive exists>.
+- `no_qualifying_target`: <blocked N and no-plan N; no verdict by construction>.
+
+## Limitations
+
+<the `limitations` list from logs/v147-train-report.json, one bullet each, verbatim>
+
+## What this licenses
+
+Nothing changes automatically. A `GATE COSTS` reading of record licenses exactly one Stage -2 screen for loosening that gate under a new idea name; for `risk_cap` that screen also needs the partner, must state its drawdown and risk-of-ruin effect, and must keep the dollar cap binding through sizing, never through stop width. A `GATE EARNS` reading is evidence for a later tightening screen. Neither reopens a closed row.
+```
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add docs/superpowers/results/2026-10-09-v147-gate-counterfactual.md
+git commit -m "docs(v147): TRAIN gate-counterfactual reading (V147-17)"
+```
+
+### Task V147-18: Full suite
+
+**Model:** haiku — runs the suite through the `test-runner` agent and reports a one-line verdict; no code is written.
+
+**Files:** none (a fix found here goes back to the task that owns the file, as its own commit).
+
+**Interfaces:**
+- Consumes: every earlier task, V147-1..V147-17, committed on the plan's worktree branch.
+- Produces: the green full-suite verdict that unlocks close-out.
+
+- [ ] **Step 1: Complexity over every file this plan created or changed**
+
+Run:
+
+```bash
+python -m radon cc -s -n C swingbot/core/backtesting/gate_counterfactual.py swingbot/core/backtesting/blocked_recorder.py swingbot/core/backtesting/gate_resolver.py swingbot/core/scanning/rejection_recorder.py swingbot/core/db/repositories/gate_rejections.py swingbot/core/infra/gate_counterfactual_store.py swingbot/core/analytics/gate_counterfactual_report.py swingbot/core/analytics/gate_counterfactual_inputs.py scripts/reports/gate_counterfactual_report.py scripts/ops/gate_counterfactual_progress.py
+```
+
+Expected: no output. Then, for the legacy hot paths the hooks touched, compare against `main` (they may not get worse; index § Global Constraints):
+
+```bash
+python -m radon cc -s swingbot/core/scanning/scan_run.py swingbot/core/scanning/strategy_pass.py swingbot/core/scanning/short_run.py swingbot/core/scanning/analyze.py swingbot/core/backtesting/backtest_scenarios.py swingbot/core/backtesting/arms/strategy_engine.py scripts/backtest/run_backtest_range.py scripts/backtest/measure_arms.py swingbot/commands/scanning/loops.py | grep -E " (F|E|D|C) "
+```
+
+Expected: `_sync_run_scan` F(100), `run_backtest_range.main` F(65), `run_scenario_mode` C(19), `_scan_one` E(36), `build_decision_context` D(24) at the same grades and numbers as on `main` (`git stash`-free check: run the same command in the main tree); every other function changed by this plan below C.
+
+- [ ] **Step 2: Syntax pass**
+
+Run: `python -m py_compile bot.py admin_ui.py $(git ls-files 'swingbot/*.py' 'scripts/*.py')`
+Expected: no output.
+
+- [ ] **Step 3: Full suite (test-runner agent)**
+
+Dispatch the `test-runner` agent with: `python scripts/dev/testrun.py full`
+Expected: `0 failed` and `0 xfailed`. A changed pass count is not a failure (`docs/claude/testing-cost.md`). Any failure: fix it in the owning task's files, re-run that file narrowly (`python scripts/dev/testrun.py file <test>`), commit, then re-run this step.
+
+- [ ] **Step 4: Alembic head**
+
+Run: `python -m alembic heads`
+Expected: exactly one head, `v147_001` (or a later revision if another plan merged on top of it since V147-7).
+
+- [ ] **Step 5: Hand the close-out list to the controller**
+
+No commit in this task. Report the verdict line plus these close-out items, none of which this plan's tasks perform:
+
+1. `/panel quant-researcher,quant-engineer,risk-manager` over `main...<branch>` (the spec's `Panel:` line), before `/close-out`.
+2. After merge and deploy (`mirror-prod`): install the weekly progress cron — `bash scripts/ops/ssh-hetzner.sh "bash -s" < scripts/ops/install_gate_counterfactual_cron.sh` — and confirm the first line lands in `/opt/swing-bot/logs/gate-counterfactual.log` with a manual run (`bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python scripts/ops/gate_counterfactual_progress.py"`).
+3. After deploy: copy `logs/v147-blocked-confluence.jsonl` and `logs/v147-blocked-compression.jsonl` to `/opt/swing-bot/data/reports/inputs/` on the VM (through `ssh-hetzner.sh`, piping stdin), then run `python scripts/reports/gate_counterfactual_report.py` there once; that first written run freezes the TRAIN cells' verdicts of record. Mirror the copy step into the results doc (V147-17) as a dated line.
+4. For v150: its gate step greps `os.replace` in `swingbot/core/analytics/gate_counterfactual_report.py`; in v147 the atomic write lives in `swingbot/core/infra/gate_counterfactual_store.py` (via `jsonio.atomic_write_json`). v150's grep must target the infra store; v147 does not edit v150's files.
+5. Bump: bot patch (index header), through `/close-out`.
 

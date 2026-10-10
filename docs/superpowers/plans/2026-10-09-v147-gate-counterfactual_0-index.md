@@ -130,7 +130,7 @@ Promoted: `ticker, gate, strategy, horizon, signal_date, cf_status, created_at, 
 - **Group A, after V147-3, parallel (disjoint files, no shared symbol):** V147-4, V147-7, V147-8, V147-13.
 - **After V147-4, parallel:** V147-5 (`backtest_scenarios.py`, `run_backtest_range.py`) and V147-6 (`arms/strategy_engine.py`, `arms/compression_research.py`, `measure_arms.py`): disjoint files, both only consume V147-4's functions.
 - **Sequential after V147-7:** V147-9 (consumes the repository) → V147-10 (consumes `record_*` and edits four scanning files that share the merge path; one task). V147-11 needs V147-3 + V147-7; it may run beside V147-9/-10 (disjoint files). V147-12 needs V147-11 (`resolve_due`).
-- **Group B:** V147-14 needs V147-3 + V147-7 (may run beside V147-13: disjoint files). V147-15 needs V147-8, V147-13, V147-14 (edits V147-13's file: a sequential edge). V147-16 needs V147-7 only and may run any time after it.
+- **Group B:** V147-14 needs V147-3 + V147-4 + V147-7 (it builds rows with `blocked_recorder.gate_row`; may run beside V147-13: disjoint files). V147-15 needs V147-8, V147-13, V147-14 (edits V147-13's file: a sequential edge). V147-16 needs V147-7, V147-13 and V147-14 (the progress script counts distinct filled setups with `cell_key`/`distinct_setups` over `live_blocked_rows`); disjoint files from V147-15, so it may run beside it.
 - **V147-17** needs V147-5, V147-6 and V147-15 (the TRAIN runs need only the recorders and can start, via `backtest-runner`, while Part 3 is built; the results doc needs V147-15). **V147-18** is last.
 - At most 2 implementers at once (controller rule).
 

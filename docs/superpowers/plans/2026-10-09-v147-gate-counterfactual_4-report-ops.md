@@ -37,7 +37,7 @@ All commands run inside the plan's worktree `.claude/worktrees/2026-10-09-v147-g
 - Modify (only if Step 0 finds v146's copy): `swingbot/core/backtesting/instrument/stats.py` and the v146 module that holds it
 
 **Interfaces:**
-- Consumes: `stats.week_cluster_bootstrap(baseline, component, statistic, *, n_resamples, seed)` (groups by `getattr(obj, "entry_date")`, same week draw for both arms, drops `None` draws) and `stats.bh_qvalues(pvalues)` (exist, `swingbot/core/backtesting/instrument/stats.py:57/86`); `session.nyse_calendar().sessions_between(asof, target)` (exists, `swingbot/core/market/session.py:192/220`); `params.DEFAULT_EXPIRY_BARS = 5` (exists, `swingbot/core/planning/params.py:21`); `blocked_recorder.gate_row(...)` (V147-4; tests only).
+- Consumes: `stats.week_cluster_bootstrap(baseline, component, statistic, *, n_resamples, seed)` (groups by `getattr(obj, "entry_date")`, same week draw for both arms, drops `None` draws) and `stats.bh_qvalues(pvalues)` (exist, `swingbot/core/backtesting/instrument/stats.py:57/86`); `session.nyse_calendar().sessions_between(asof, target)` (exists, `swingbot/core/market/session.py:192/220`); `params.DEFAULT_EXPIRY_BARS = 5` (exists, `swingbot/core/planning/params.py:21`); no V147-4 symbol (the tests build the index's shared row shape locally, so V147-13 stays parallel with V147-4 as the index schedules it).
 - Produces (ledger): `VERDICT_FLOOR = 30`, `Q_MAX = 0.10`, `BOOTSTRAP_RESAMPLES = 10_000`, `BOOTSTRAP_SEED = 42`, `NEAR_MISS_BANDS = {"rs": 5.0, "risk_cap": 0.5}`, `CELLS` (the five verdict cells, in order), `two_sided_bootstrap_p(draws) -> float`, `distinct_setups(rows) -> list[dict]`, `arm_stats(rows) -> dict` (`n, filled_n, no_fill_n, no_plan_n, no_data_n, fill_rate, exp_r, win_rate`), `difference_reading(blocked, taken, *, seed=BOOTSTRAP_SEED) -> dict | None` (`difference, ci_low, ci_high, p`), `classify(reading, q, n) -> str`, `cell_key(row) -> str`. Additive, consumed by V147-15/-16: `EARNS = "GATE EARNS"`, `COSTS = "GATE COSTS"`, `INCONCLUSIVE`, `WAITING`, `VERDICTS`, `CELL_GATE` (cell key → the row `gate` field its taken arm carries), `family_qvalues(pvalues) -> list[float]` (BH over the fixed five-cell family, `None` → 1.0).
 
 **Rules fixed here (spec § Pre-registered verdict, index § Global Constraints):**
@@ -68,9 +68,15 @@ from pathlib import Path
 import pytest
 
 from swingbot.core.analytics import gate_counterfactual_report as gcr
-from swingbot.core.backtesting.blocked_recorder import gate_row
 
 REPO = Path(__file__).resolve().parents[2]
+
+
+def gate_row(**fields) -> dict:
+    """The shared gate-row shape (index), built locally so V147-13 does not wait on V147-4."""
+    row = {"planned_loss_pct": None, "dollar_risk": None, "in_sample": False, **fields}
+    row["entry_date"] = row["signal_date"]
+    return row
 
 
 @pytest.fixture(autouse=True)
