@@ -84,6 +84,7 @@ its spec** (`**Screen:**` header from v141). Detail: `edge-priorities.md`,
   `tail` `.superpowers/sdd/progress.md`, never `cat` it.
 - **`swingbot/core/` is eleven packages, no flat modules** — map:
   `architecture.md`.
+- **Read a `docs/claude/` file by section, not whole:** `python scripts/dev/doc_section.py <doc> [<heading> ...]` (no heading lists them; exit code 2 means read the file).
 - **Don't re-run the full suite to check a local change** — use
   `python scripts/dev/testrun.py changed` (diff-selected; widens when unsure)
   or `... file tests/test_foo.py` (~7s), or `... fast` (~27s). One-line
