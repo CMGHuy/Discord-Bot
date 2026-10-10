@@ -5,7 +5,7 @@
 **Edge:** none (integrity) — it guards how a hypothesis is screened and recorded. It adds no strategy, sets no threshold and runs no measurement itself.
 **Screen:** exempt (integrity)
 **Panel:** quant-researcher, quant-engineer
-**Status:** spec written 2026-10-10; panel review applied; no plan yet.
+**Status:** implemented 2026-10-10 (Bump: none, Edge: none held); pre-close-out panel finding applied (dry run capped at 3 --tickers).
 **Depends on:** v154 (the strict frontmatter helper and quoted descriptions new skills are written against). Builds on v136 (ledger) and v140 (idea screen).
 
 ## Why

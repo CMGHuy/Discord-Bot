@@ -2,7 +2,7 @@
 
 > Part of the v155 plan. Header, Global Constraints, the decisions fixed by the index, the cross-task contracts C1 to C5, the parallelisation map and the `## Results` table are in [`_0-index`](2026-10-10-v155-research-ritual-skills_0-index.md). **Never read this file whole**: `/task-brief V155-3` or `grep -n "^### Task V155-3" -A 250 <this file>`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-10-v155-research-ritual-skills-design.md`](../specs/2026-10-10-v155-research-ritual-skills-design.md), sections 2 to 4, the Codex mirror section and Testing.
+**Spec:** [`docs/superpowers/specs/2026-10-10-v155-research-ritual-skills-design.md`](../../specs/implemented/2026-10-10-v155-research-ritual-skills-design.md), sections 2 to 4, the Codex mirror section and Testing.
 
 This part covers tasks V155-3 to V155-6: the slash-only skills `/screen`, `/prereg` and `/data-check`, each registered in `tests/hooks/test_skill_shape.py`, listed in the `docs/claude/skills-tools.md` skills table, named in `AGENTS.md` and mirrored by `scripts/dev/sync_codex.py`; then the one full-suite run.
 
