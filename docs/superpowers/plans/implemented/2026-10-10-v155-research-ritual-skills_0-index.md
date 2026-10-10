@@ -5,7 +5,7 @@
 **Bump:** none
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
-**Spec:** [`docs/superpowers/specs/2026-10-10-v155-research-ritual-skills-design.md`](../specs/2026-10-10-v155-research-ritual-skills-design.md)
+**Spec:** [`docs/superpowers/specs/2026-10-10-v155-research-ritual-skills-design.md`](../../specs/implemented/2026-10-10-v155-research-ritual-skills-design.md)
 **Brief:** `.superpowers/briefs/2026-10-10-v155-research-ritual-skills.md` (line numbers from `main` @ `2b612ca6`)
 
 **Goal:** Put a hook behind the idea screen's one-shot rule (`_rule_screen_rerun` in `.claude/hooks/guardrails.py`) and give the idea screen, the pre-registration and the data check each a slash-only ritual skill (`/screen`, `/prereg`, `/data-check`), mirrored to Codex.

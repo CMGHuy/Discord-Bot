@@ -5,7 +5,7 @@
 **Bump:** none
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
-**Spec:** [`docs/superpowers/specs/2026-10-10-v155-research-ritual-skills-design.md`](../specs/2026-10-10-v155-research-ritual-skills-design.md)
+**Spec:** [`docs/superpowers/specs/2026-10-10-v155-research-ritual-skills-design.md`](../../specs/implemented/2026-10-10-v155-research-ritual-skills-design.md)
 **Index:** [`2026-10-10-v155-research-ritual-skills_0-index.md`](2026-10-10-v155-research-ritual-skills_0-index.md) -- Global Constraints, Decisions, `## Parallelisation`, the task ledger and contracts C1-C2 live there and bind every task below.
 
 Tasks: V155-1, V155-2 (spec § 1 and the hook half of § Testing).
