@@ -7,11 +7,19 @@ description: "Use when editing or reviewing entry-signal, feature or indicator c
 
 ## Step 1 — Read the authority
 
-`docs/claude/architecture.md` for the NO-LOOKAHEAD rule itself and the
-entry-signal single source both the live scanner and the backtest read from.
-Then `docs/claude/known-traps.md` for the two OHLCV caches, which is where a
-lookahead bug usually enters — a feature computed against the wrong one sees
-a bar it should not yet know about. This skill does not restate either.
+```bash
+python scripts/dev/doc_section.py docs/claude/architecture.md "NO-LOOKAHEAD" "Entry-signal single source"
+python scripts/dev/doc_section.py docs/claude/known-traps.md "Two OHLCV caches" "Full-history cache" "Scan parameter and replay gate parity"
+```
+
+The first prints the NO-LOOKAHEAD rule itself and the entry-signal single
+source both the live scanner and the backtest read from. The second prints
+the two OHLCV caches, which is where a lookahead bug usually enters — a
+feature computed against the wrong one sees a bar it should not yet know
+about.
+**Whole file instead when:** a change crosses more than one `swingbot/core` package.
+Exit code 2 from `doc_section.py` means read the whole file. This skill does
+not restate either.
 
 ## Step 2 — Name the bar
 

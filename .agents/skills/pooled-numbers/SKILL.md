@@ -8,9 +8,16 @@ description: "Use when about to state a pooled expectancy, ExpR, win rate, sampl
 
 ## Step 1 — Read the authority
 
-`docs/claude/edge-priorities.md` for what "pooled" means here and why
-expectancy leads win rate. `docs/claude/backtest-methodology.md` for which
-window a figure belongs to and how a badge tier is scored. This skill does
+`docs/claude/edge-priorities.md`, whole, for what "pooled" means here and why
+expectancy leads win rate. Then which window a figure belongs to and how a
+badge tier is scored:
+
+```bash
+python scripts/dev/doc_section.py docs/claude/backtest-methodology.md "Windows" "Badge scoring"
+```
+
+**Whole file instead when:** a badge tier is being assigned or changed.
+Exit code 2 from `doc_section.py` means read the whole file. This skill does
 not restate either.
 
 ## Step 2 — Every pooled figure in a document is stale until re-derived

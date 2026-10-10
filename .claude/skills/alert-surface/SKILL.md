@@ -7,9 +7,15 @@ description: "Use when editing the alert surface -- swingbot/core/scanning/engin
 
 ## Step 1 — Read the authority
 
-`docs/claude/known-traps.md`, in full -- it is the shortest path to not
-breaking this area. This skill does not restate any of it; nothing here
-substitutes for reading it.
+```bash
+python scripts/dev/doc_section.py docs/claude/known-traps.md "Two OHLCV caches" "Full-history cache" "Legacy shims" "Measured-empty tables" "Scan parameter and replay gate parity" "The market_data cache never self-heals"
+```
+
+Those sections of `docs/claude/known-traps.md` are the shortest path to not
+breaking this area.
+**Whole file instead when:** editing `scan_embeds` or a legacy shim.
+Exit code 2 from `doc_section.py` means read the whole file. This skill does
+not restate any of it; nothing here substitutes for reading it.
 
 ## Step 2 — An empty table is an answer
 
