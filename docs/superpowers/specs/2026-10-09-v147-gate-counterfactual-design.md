@@ -5,7 +5,7 @@
 **Edge:** none (integrity) — measurement only; admission evidence for a later expectancy screen that loosens or tightens a gate
 **Screen:** exempt (descriptive; registers nothing and spends no budget)
 **Panel:** quant-researcher, quant-engineer, risk-manager
-**Status:** spec written 2026-10-09; no plan yet.
+**Status:** spec written 2026-10-09; plan written 2026-10-10 (`plans/2026-10-09-v147-gate-counterfactual_0-index.md`).
 
 ## Why
 
