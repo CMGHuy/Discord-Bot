@@ -66,6 +66,13 @@ tracks **paper trades only** and never places orders. The stack is Python 3.11+,
 discord.py, pandas/numpy, yfinance, mplfinance, pytest, JSON persistence and an
 Angular SPA served by Flask's `/api/v1/*` API.
 
+**eToro roadmap:** next, trade plans may be issued to an eToro **demo** account
+via the Public API alongside bomeo-capital.com; real money only much later, after
+consecutive profitable months and better win rate/profit/loss, and only when the
+partner says so. Until then demo only, never `account: real`. Keys are
+`ETORO_USER_KEY` / `ETORO_API_KEY` in `.env`, unused so far. Detail:
+`docs/claude/etoro-roadmap.md`.
+
 **"Production" always means the Hetzner VM** (`docs/deploy/DEPLOY_HETZNER.md`),
 never this dev machine. Do not deploy, SSH to production or make live changes
 unless the user explicitly asks. **Always connect through
@@ -236,6 +243,7 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 | Changing the Postgres schema, a store's read/write path or a migration | `schema-change` |
 | About to change anything on the Hetzner VM | `mirror-prod` |
 | Creating, merging or removing a git worktree | `worktree-lifecycle` |
+| Using the eToro Public API MCP (portfolio, instruments, real or demo trades) -- outside swingbot's paper-only scope | `etoro-public-api-operations` |
 
 Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
 whenever Claude would run `/<name>`: `gate` (pre-commit gate), `task-brief`

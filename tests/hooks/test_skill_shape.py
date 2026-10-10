@@ -15,6 +15,11 @@ SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 # Predate v96's 80-line budget. Not exemptions to copy -- the list never grows.
 GRANDFATHERED = {"gate", "task-brief"}
 
+# Third-party skills kept verbatim from their vendor (partner-approved
+# exception, 2026-10-10): exempt from the line budget and threshold rules,
+# since trimming would fork the vendor file. Never add repo-authored skills.
+VENDORED = {"etoro-public-api-operations"}
+
 MAX_SKILL_LINES = 80
 
 # Tier 1 and Tier 3 are model-invocable, so they carry a trigger table.
@@ -66,7 +71,7 @@ def test_every_skill_declares_name_and_description(path):
 
 def _new_skill_dirs():
     """Skills the v96 budget and no-restatement rules apply to."""
-    return [p for p in _skill_dirs() if p.name not in GRANDFATHERED]
+    return [p for p in _skill_dirs() if p.name not in GRANDFATHERED | VENDORED]
 
 
 @pytest.mark.parametrize("path", _new_skill_dirs(), ids=lambda p: p.name)
@@ -119,7 +124,7 @@ def test_model_run_rituals_are_invocable_and_say_when():
 
 def test_every_skill_is_registered_in_exactly_one_tier():
     on_disk = {p.name for p in _skill_dirs()}
-    assert on_disk == GRANDFATHERED | TIER_1_AND_3 | TIER_2
+    assert on_disk == GRANDFATHERED | VENDORED | TIER_1_AND_3 | TIER_2
     assert not (TIER_1_AND_3 & TIER_2)
 
 
